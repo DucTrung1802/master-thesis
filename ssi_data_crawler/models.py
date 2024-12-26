@@ -1,7 +1,7 @@
-from dataclasses import dataclass
+from pydantic import BaseModel, Field
 import datetime
 from enum import Enum
-from typing import List
+from typing import List, Literal
 
 
 class Market_3(Enum):
@@ -101,63 +101,55 @@ class TradingSession(Enum):
     HALT = "Market Halt"
 
 
+class BaseInputModel(BaseModel):
+    pageIndex: int = Field(default=1, ge=1, le=10)
+    pageSize: Literal[10, 20, 50, 100, 1000] = 10
+
+
 # Base Models
-@dataclass
-class BaseOutputModel:
+class BaseOutputModel(BaseModel):
     message: str
     status: int
     totalRecord: int
 
 
 # POST AccessToken Models
-@dataclass
-class AccessTokenInputModel:
+class AccessTokenInputModel(BaseModel):
     consumerID: str
     consumerSecret: str
 
 
-@dataclass
-class AccessTokenDataModel:
+class AccessTokenDataModel(BaseModel):
     accessToken: str
 
 
-@dataclass
-class AccessTokenOutputModel(BaseOutputModel):
+class AccessTokenOutputModel(BaseModel, BaseOutputModel):
     data: AccessTokenDataModel
 
 
 # GET Securities Models
-@dataclass
-class SecuritiesInputModel:
-    market: Market_4
-    pageIndex: int = 1
-    pageSize: int = 10
+class SecuritiesInputModel(BaseModel, BaseInputModel):
+    market: Market_5
 
 
-@dataclass
-class SecuritiesDataModel:
+class SecuritiesDataModel(BaseModel):
     market: Market_4
     symbol: str
     stockName: str
     stockEnName: str
 
 
-@dataclass
-class SecuritiesOutputModel(BaseOutputModel):
+class SecuritiesOutputModel(BaseModel, BaseOutputModel):
     data: List[SecuritiesDataModel]
 
 
 # GET SecuritiesDetails Models
-@dataclass
-class SecuritiesDetailsInputModel:
+class SecuritiesDetailsInputModel(BaseModel, BaseInputModel):
     market: Market_4
     symbol: str
-    pageIndex: int = 1
-    pageSize: int = 10
 
 
-@dataclass
-class SecuritiesDetailsDataRepeatedInfoModel:
+class SecuritiesDetailsDataRepeatedInfoModel(BaseModel):
     isin: str
     symbol: str
     symbolName: str
@@ -189,35 +181,28 @@ class SecuritiesDetailsDataRepeatedInfoModel:
     tickIncrement4: int
 
 
-@dataclass
-class SecuritiesDetailsDataModel:
+class SecuritiesDetailsDataModel(BaseModel):
     RType: str
     reportDate: str  # dd/MM/yyyy
     totalNoSym: int
     repeatedinfoList: List[SecuritiesDetailsDataRepeatedInfoModel]
 
 
-@dataclass
-class SecuritiesDetailsOutputModel(BaseOutputModel):
+class SecuritiesDetailsOutputModel(BaseModel, BaseOutputModel):
     data: List[SecuritiesDetailsDataModel]
 
 
 # GET IndexComponents
-@dataclass
-class IndexComponentsInputModel:
+class IndexComponentsInputModel(BaseModel, BaseInputModel):
     indexCode: str
-    pageIndex: int = 1
-    pageSize: int = 10
 
 
-@dataclass
-class IndexComponentsDataIndexComponentModel:
+class IndexComponentsDataIndexComponentModel(BaseModel):
     isin: str
     stockSymbol: str
 
 
-@dataclass
-class IndexComponentsDataModel:
+class IndexComponentsDataModel(BaseModel):
     indexCode: str
     indexName: str
     exchange: Exchange_2
@@ -225,44 +210,34 @@ class IndexComponentsDataModel:
     indexComponent: List[IndexComponentsDataIndexComponentModel]
 
 
-@dataclass
-class IndexComponentsOutputModel(BaseOutputModel):
+class IndexComponentsOutputModel(BaseModel, BaseOutputModel):
     data: List[IndexComponentsDataModel]
 
 
 # GET IndexList
-@dataclass
-class IndexListInputModel:
+class IndexListInputModel(BaseModel, BaseInputModel):
     exchange: Exchange_5
-    pageIndex: int = 1
-    pageSize: int = 10
 
 
-@dataclass
-class IndexListDataModel:
+class IndexListDataModel(BaseModel):
     indexCode: str
     indexName: str
     exchange: Exchange_5
 
 
-@dataclass
-class IndexListOutputModel(BaseOutputModel):
+class IndexListOutputModel(BaseModel, BaseOutputModel):
     data: List[IndexListDataModel]
 
 
 # GET DailyOhlc
-@dataclass
-class DailyOhlcInputModel:
+class DailyOhlcInputModel(BaseModel, BaseInputModel):
     symbol: str
     fromDate: datetime
     toDate: datetime
-    pageIndex: int = 1
-    pageSize: int = 10
     ascending: bool
 
 
-@dataclass
-class DailyOhlcDataModel:
+class DailyOhlcDataModel(BaseModel):
     symbol: str
     market: Market_5
     tradingDate: datetime
@@ -275,25 +250,20 @@ class DailyOhlcDataModel:
     value: float
 
 
-@dataclass
-class DailyOhlcOutputModel(BaseOutputModel):
+class DailyOhlcOutputModel(BaseModel, BaseOutputModel):
     data: List[DailyOhlcDataModel]
 
 
 # GET IntradayOhlc
-@dataclass
-class IntradayOhlcInputModel:
+class IntradayOhlcInputModel(BaseModel, BaseInputModel):
     symbol: str
     fromDate: datetime
     toDate: datetime
-    pageIndex: int = 1
-    pageSize: int = 10
     ascending: bool
     resollution: int = 1
 
 
-@dataclass
-class IntradayOhlcDataModel:
+class IntradayOhlcDataModel(BaseModel):
     symbol: str
     market: Market_3
     tradingDate: datetime
@@ -305,24 +275,19 @@ class IntradayOhlcDataModel:
     volume: int
 
 
-@dataclass
-class IntradayOhlcOutputModel(BaseOutputModel):
+class IntradayOhlcOutputModel(BaseModel, BaseOutputModel):
     data: List[IntradayOhlcDataModel]
 
 
 # GET DailyIndex
-@dataclass
-class DailyIndexInputModel:
+class DailyIndexInputModel(BaseModel, BaseInputModel):
     indexId: str
     fromDate: datetime
     toDate: datetime
-    pageIndex: int = 1
-    pageSize: int = 10
     ascending: bool
 
 
-@dataclass
-class DailyIndexDataModel:
+class DailyIndexDataModel(BaseModel):
     indexCode: str
     indexValue: float
     tradingDate: datetime
@@ -346,24 +311,19 @@ class DailyIndexDataModel:
     tradingSession: TradingSession
 
 
-@dataclass
-class DailyIndexOutputModel(BaseOutputModel):
+class DailyIndexOutputModel(BaseModel, BaseOutputModel):
     data: List[DailyIndexDataModel]
 
 
 # GET DailyStockPrice
-@dataclass
-class DailyStockPriceInputModel:
+class DailyStockPriceInputModel(BaseModel, BaseInputModel):
     symbol: str
     fromDate: datetime
     toDate: datetime
-    pageIndex: int = 1
-    pageSize: int = 10
     market: Market_5
 
 
-@dataclass
-class DailyStockPriceDataModel:
+class DailyStockPriceDataModel(BaseModel):
     symbol: str
     tradingDate: datetime
     time: datetime
@@ -397,6 +357,5 @@ class DailyStockPriceDataModel:
     totalTradedValue: int
 
 
-@dataclass
-class DailyStockPriceOutputModel:
+class DailyStockPriceOutputModel(BaseModel):
     data: List[DailyStockPriceDataModel]
