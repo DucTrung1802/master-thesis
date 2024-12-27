@@ -12,12 +12,12 @@ def md_access_token():
 
 
 def md_get_securities_list():
-    req = model.securities("HNX", 1, 100)
+    req = model.securities("HOSE", 1, 100)
     print(client.securities(config, req))
 
 
 def md_get_securities_details():
-    req = model.securities_details("HNX", "ACB", 1, 100)
+    req = model.securities_details("HOSE", "FPT", 1, 100)
     print(client.securities_details(config, req))
 
 
@@ -32,7 +32,7 @@ def md_get_index_list():
 def md_get_daily_OHLC():
     print(
         client.daily_ohlc(
-            config, model.daily_ohlc("ssi", "15/10/2020", "15/10/2020", 1, 100, True)
+            config, model.daily_ohlc("fpt", "26/12/2024", "26/12/2024", 1, 100, True)
         )
     )
 
@@ -61,7 +61,9 @@ def md_get_stock_price():
     print(
         client.daily_stock_price(
             config,
-            model.daily_stock_price("fpt", "24/12/2024", "24/12/2024", 10, 1000, "hose"),
+            model.daily_stock_price(
+                "fpt", "24/12/2024", "24/12/2024", 10, 1000, "hose"
+            ),
         )
     )
 
@@ -69,6 +71,7 @@ def md_get_stock_price():
 def main():
 
     while True:
+        print("10  - Get Access Token")
         print("11  - Securities List")
         print("12  - Securities Details")
         print("13  - Index Components")
@@ -79,7 +82,9 @@ def main():
         print("18  - Stock price")
         value = input("Enter your choice: ")
 
-        if value == "11":
+        if value == "10":
+            md_access_token()
+        elif value == "11":
             md_get_securities_list()
         elif value == "12":
             md_get_securities_details()
