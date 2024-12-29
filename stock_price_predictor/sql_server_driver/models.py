@@ -44,3 +44,10 @@ class Column:
     columnName: str
     dataType: DataType
     nullable: bool
+
+
+@dataclass
+class DataModel:
+    columnName: str
+    value: str | int | float
+    dataType: DataType

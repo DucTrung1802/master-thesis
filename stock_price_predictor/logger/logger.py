@@ -1,6 +1,6 @@
 from enum import Enum
 import logging
-from helper.models import Context
+from stock_price_predictor.helper.models import Context
 
 
 class LogType(Enum):
@@ -20,6 +20,7 @@ class Logger:
             filename=f"{file_name}.log",
             level=level.value,
             format="%(asctime)s - %(levelname)s - %(message)s",
+            encoding="utf-8",
         )
         self._logger = logging.getLogger()
 

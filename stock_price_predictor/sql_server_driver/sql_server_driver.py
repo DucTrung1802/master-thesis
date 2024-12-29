@@ -1,7 +1,7 @@
 import pyodbc
-from .models import *
-from logger.logger import Logger
-from helper.helper import Helper
+from stock_price_predictor.sql_server_driver.models import *
+from stock_price_predictor.logger.logger import Logger
+from stock_price_predictor.helper.helper import Helper
 
 
 class SqlServerDriver(Helper):
@@ -59,6 +59,7 @@ class SqlServerDriver(Helper):
                 ELSE 'False' 
             END AS Result;
         """
+        self._logger.log_debug(context=self.get_context(), messsage=f"\n{query}")
         self._cursor.execute(query)
 
         result = self._cursor.fetchall()
@@ -79,11 +80,13 @@ class SqlServerDriver(Helper):
         query = f"""
             CREATE DATABASE [{new_database_name}];
         """
+        self._logger.log_debug(context=self.get_context(), messsage=f"\n{query}")
         self._cursor.execute(query)
 
         query = f"""
             USE [{new_database_name}];
         """
+        self._logger.log_debug(context=self.get_context(), messsage=f"\n{query}")
         self._cursor.execute(query)
 
         self._current_database = new_database_name
@@ -102,6 +105,7 @@ class SqlServerDriver(Helper):
                 ELSE 'False'
             END AS Result;
         """
+        self._logger.log_debug(context=self.get_context(), messsage=f"\n{query}")
         self._cursor.execute(query)
 
         result = self._cursor.fetchall()
@@ -165,25 +169,41 @@ class SqlServerDriver(Helper):
         key_column, *other_columns = sorted(
             columns, key=lambda x: x.columnName != key_column_name
         )
+        key_column_in_query = f"{key_column.columnName} {key_column.dataType} IDENTITY(1,1) PRIMARY KEY NOT NULL,"
+        other_columns_in_query = ",\n\t".join(
+            [
+                f"{column.columnName} {column.dataType} {'NULL' if column.nullable else 'NOT NULL'}"
+                for column in other_columns
+            ]
+        )
 
         if not has_foreign_keys:
 
             query = f"""USE {database_name};
             
 CREATE TABLE {table_name} (
-    {f"{key_column.columnName} {key_column.dataType} PRIMARY KEY NOT NULL,"}
-    {',\n    '.join([f"{column.columnName} {column.dataType} {'NULL' if column.nullable else 'NOT NULL'}" for column in other_columns])}
+    {key_column_in_query}
+    {other_columns_in_query}
 );"""
 
         else:
+
+            foreign_keys_in_query = ",\n\t".join(
+                [
+                    f"FOREIGN KEY ({foreign_key.name}) REFERENCES {foreign_key.tableToRefer}({foreign_key.columnToRefer})"
+                    for foreign_key in foreign_keys
+                ]
+            )
+
             query = f"""USE {database_name};
             
 CREATE TABLE {table_name} (
-    {f"{key_column.columnName} {key_column.dataType} PRIMARY KEY NOT NULL,"}
-    {',\n    '.join([f"{column.columnName} {column.dataType} {'NULL' if column.nullable else 'NOT NULL'}" for column in other_columns])}
-    {',\n    '.join([f"FOREIGN KEY ({foreign_key.name}) REFERENCES {foreign_key.tableToRefer}({foreign_key.columnToRefer})" for foreign_key in foreign_keys])}
+    {key_column_in_query}
+    {other_columns_in_query}
+    {foreign_keys_in_query}
 );"""
 
+        self._logger.log_debug(context=self.get_context(), messsage=f"\n{query}")
         self._cursor.execute(query)
 
         self._logger.log_info(
@@ -192,3 +212,53 @@ CREATE TABLE {table_name} (
         )
 
         return True
+
+    def format_value(self, value, data_type: DataType):
+        """Format value based on its data type for SQL query."""
+        if data_type in [DataType.NVARCHAR]:
+            return f"N'{value}'"
+        elif data_type in [DataType.DATETIME]:
+            return f"CAST ('{value}' AS DATETIME)"
+        return str(value)
+
+    def insert_data(
+        self, database_name: str, table_name: str, data_models: List[DataModel]
+    ):
+        # Check whether database already exists
+        if not self.check_database_exists(database_name):
+            self._logger.log_info(
+                context=self.get_context(),
+                messsage=f'Datbase "{database_name}" does not exist yet. Cannot insert data.',
+            )
+            return False
+
+        # Check whether table already exists
+        if not self.check_table_exists(
+            database_name=database_name, table_name=table_name
+        ):
+            self._logger.log_info(
+                context=self.get_context(),
+                messsage=f'Table "{database_name}.dbo.{table_name}" does not exist yet. Cannot insert data',
+            )
+            return False
+
+        column_names_in_query = ",\n\t".join(
+            [f"[{data_model.columnName}]" for data_model in data_models]
+        )
+        values_in_query = ",\n\t".join(
+            self.format_value(data_model.value, data_model.dataType)
+            for data_model in data_models
+        )
+
+        query = f"""INSERT INTO [{database_name}].[dbo].[{table_name}]
+(
+    {column_names_in_query}
+)
+VALUES
+(
+    {values_in_query}
+)
+"""
+
+        self._logger.log_debug(context=self.get_context(), messsage=f"\n{query}")
+        self._cursor.execute(query)
