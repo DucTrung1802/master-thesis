@@ -1,29 +1,51 @@
-import os
 import pyodbc
-from models import *
-import inspect
+from .models import *
+from logger.logger import Logger
+from helper.helper import Helper
 
 
-class SqlServerDriver:
+class SqlServerDriver(Helper):
 
-    def __init__(self, _authentication: SqlServerAuthentication):
+    def __init__(self, _logger: Logger, _authentication: SqlServerAuthentication):
+        self._logger = _logger
         self._authentication = _authentication
 
         try:
+            self._logger.log_info(
+                context=self.get_context(),
+                messsage=f"Start to connect to SQL Server.",
+            )
+
             _connection_string = f"DRIVER={self._authentication.driver};SERVER={self._authentication.server};DATABASE={self._authentication.database};UID={self._authentication.login};PWD={self._authentication.password}"
             self._connection = pyodbc.connect(_connection_string, autocommit=True)
             self._cursor = self._connection.cursor()
             self._current_database = None
-            print(f"Connected to SQL Server.")
+
+            self._logger.log_info(
+                context=self.get_context(),
+                messsage=f"Connected to SQL Server.",
+            )
+
         except Exception as e:
-            print(f"Error connecting to SQL Server: {e}.")
+            self._logger.log_error(
+                context=self.get_context(),
+                messsage=f"Error connecting to SQL Server: {e}.",
+            )
 
     def close_connection(self):
         if "connection" in locals():
             self._connection.close()
+            self._logger.log_info(
+                context=self.get_context(),
+                messsage=f"Closed connection to SQL Server.",
+            )
 
     def set_current_database(self, current_database: str):
         self._current_database = current_database
+        self._logger.log_info(
+            context=self.get_context(),
+            messsage=f"Set current database name as {current_database}",
+        )
 
     def get_current_database(self):
         return self._current_database
@@ -42,14 +64,16 @@ class SqlServerDriver:
         result = self._cursor.fetchall()
 
         if result[0][0] == "True":
-            print(f'Database "{database_name}" already exists.')
             return True
         else:
-            print(f'Database "{database_name}" does not exist yet.')
             return False
 
     def create_new_database(self, new_database_name: str):
         if self.check_database_exists(new_database_name):
+            self._logger.log_info(
+                context=self.get_context(),
+                messsage=f'Table "{new_database_name}" already exists.',
+            )
             return False
 
         query = f"""
@@ -64,7 +88,10 @@ class SqlServerDriver:
 
         self._current_database = new_database_name
 
-        print(f'Created database with name "{new_database_name}".')
+        self._logger.log_info(
+            context=self.get_context(),
+            messsage=f'Created database with name "{new_database_name}".',
+        )
 
         return True
 
@@ -80,10 +107,8 @@ class SqlServerDriver:
         result = self._cursor.fetchall()
 
         if result[0][0] == "True":
-            print(f'Table "{database_name}.dbo.{table_name}" already exists.')
             return True
         else:
-            print(f'Table "{database_name}.dbo.{table_name}" does not exist yet.')
             return False
 
     def create_table(
@@ -96,11 +121,18 @@ class SqlServerDriver:
     ):
         # Check whether database already exists
         if not self.check_database_exists(database_name):
-            print(f"Cannot create table.")
+            self._logger.log_info(
+                context=self.get_context(),
+                messsage=f'Datbase "{database_name}" does not exist yet. Cannot create table.',
+            )
             return False
 
         # Check whether table already exists
         if self.check_table_exists(database_name=database_name, table_name=table_name):
+            self._logger.log_info(
+                context=self.get_context(),
+                messsage=f'Table "{database_name}.dbo.{table_name}" already exists.',
+            )
             return False
 
         has_foreign_keys = False
@@ -110,6 +142,10 @@ class SqlServerDriver:
                 if not self.check_table_exists(
                     database_name=database_name, table_name=foreign_key.tableToRefer
                 ):
+                    self._logger.log_info(
+                        context=self.get_context(),
+                        messsage=f'Foreign table "{database_name}.dbo.{foreign_key.tableToRefer}" does not exists. Cannot refer to it.',
+                    )
                     return False
 
             has_foreign_keys = True
@@ -119,8 +155,9 @@ class SqlServerDriver:
             column.columnName == key_column_name for column in columns
         )
         if not key_column_exists:
-            print(
-                f"Key column '{key_column_name}' does not exist in the provided columns."
+            self._logger.log_info(
+                context=self.get_context(),
+                messsage=f"Key column '{key_column_name}' does not exist in the provided columns.",
             )
             return False
 
@@ -148,90 +185,10 @@ CREATE TABLE {table_name} (
 );"""
 
         self._cursor.execute(query)
-        print(f"Table '{database_name}.dbo.{table_name}' is created successfully.")
+
+        self._logger.log_info(
+            context=self.get_context(),
+            messsage=f"Table '{database_name}.dbo.{table_name}' is created successfully.",
+        )
 
         return True
-
-
-def main():
-
-    sql_server_authentication = SqlServerAuthentication(
-        server=os.getenv("sql_server_server"),
-        login=os.getenv("sql_server_login"),
-        password=os.getenv("sql_server_password"),
-    )
-    sql_server_driver = SqlServerDriver(sql_server_authentication)
-
-    sql_server_driver.create_new_database("SSI_STOCKS")
-
-    market_table_columns: List[Column] = [
-        Column(columnName="ID", dataType=DataType.INT(), nullable=False),
-        Column(columnName="Symbol", dataType=DataType.NVARCHAR(5), nullable=False),
-        Column(columnName="Name", dataType=DataType.NVARCHAR(200), nullable=False),
-        Column(columnName="EnName", dataType=DataType.NVARCHAR(200), nullable=False),
-        Column(columnName="CreateDate", dataType=DataType.DATETIME(), nullable=False),
-        Column(columnName="UpdateDate", dataType=DataType.DATETIME(), nullable=True),
-        Column(columnName="DeleteDate", dataType=DataType.DATETIME(), nullable=True),
-    ]
-
-    sql_server_driver.create_table(
-        database_name="SSI_STOCKS",
-        table_name="Market",
-        columns=market_table_columns,
-        key_column_name="ID",
-    )
-
-    security_type_table_columns: List[Column] = [
-        Column(columnName="ID", dataType=DataType.INT(), nullable=False),
-        Column(columnName="Symbol", dataType=DataType.NVARCHAR(2), nullable=False),
-        Column(columnName="Name", dataType=DataType.NVARCHAR(30), nullable=False),
-        Column(columnName="CreateDate", dataType=DataType.DATETIME(), nullable=False),
-        Column(columnName="UpdateDate", dataType=DataType.DATETIME(), nullable=True),
-        Column(columnName="DeleteDate", dataType=DataType.DATETIME(), nullable=True),
-    ]
-
-    sql_server_driver.create_table(
-        database_name="SSI_STOCKS",
-        table_name="SecurityType",
-        columns=security_type_table_columns,
-        key_column_name="ID",
-    )
-
-    security_table_columns: List[Column] = [
-        Column(columnName="ID", dataType=DataType.INT(), nullable=False),
-        Column(columnName="Symbol", dataType=DataType.NVARCHAR(12), nullable=False),
-        Column(columnName="Name", dataType=DataType.NVARCHAR(200), nullable=False),
-        Column(columnName="EnName", dataType=DataType.NVARCHAR(200), nullable=False),
-        Column(columnName="ListedShare", dataType=DataType.BIGINT(), nullable=False),
-        Column(
-            columnName="MarketCapitalization",
-            dataType=DataType.BIGINT(),
-            nullable=False,
-        ),
-        Column(columnName="Market_ID", dataType=DataType.INT(), nullable=False),
-        Column(columnName="SecurityType_ID", dataType=DataType.INT(), nullable=False),
-        Column(columnName="CreateDate", dataType=DataType.DATETIME(), nullable=False),
-        Column(columnName="UpdateDate", dataType=DataType.DATETIME(), nullable=True),
-        Column(columnName="DeleteDate", dataType=DataType.DATETIME(), nullable=True),
-    ]
-
-    security_table_foreign_keys: List[ForeignKey] = [
-        ForeignKey(name="Market_ID", tableToRefer="Market", columnToRefer="ID"),
-        ForeignKey(
-            name="SecurityType_ID", tableToRefer="SecurityType", columnToRefer="ID"
-        ),
-    ]
-
-    sql_server_driver.create_table(
-        database_name="SSI_STOCKS",
-        table_name="Security",
-        columns=security_table_columns,
-        key_column_name="ID",
-        foreign_keys=security_table_foreign_keys,
-    )
-
-    sql_server_driver.close_connection()
-
-
-if __name__ == "__main__":
-    main()

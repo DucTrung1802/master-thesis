@@ -1,5 +1,6 @@
 from enum import Enum
 import logging
+from helper.models import Context
 
 
 class LogType(Enum):
@@ -22,14 +23,14 @@ class Logger:
         )
         self._logger = logging.getLogger()
 
-    def log_debug(self, class_name: str, method_name: str, messsage: str):
-        self._logger.debug(f"{class_name} - {method_name} - {messsage}")
+    def log_debug(self, context: Context, messsage: str):
+        self._logger.debug(f"{context.className} - {context.methodName} - {messsage}")
 
-    def log_info(self, class_name: str, method_name: str, messsage: str):
-        self._logger.info(f"{class_name} - {method_name} - {messsage}")
+    def log_info(self, context: Context, messsage: str):
+        self._logger.info(f"{context.className} - {context.methodName} - {messsage}")
 
-    def log_warning(self, class_name: str, method_name: str, messsage: str):
-        self._logger.warning(f"{class_name} - {method_name} - {messsage}")
+    def log_warning(self, context: Context, messsage: str):
+        self._logger.warning(f"{context.className} - {context.methodName} - {messsage}")
 
-    def log_error(self, class_name: str, method_name: str, messsage: str):
-        self._logger.error(f"{class_name} - {method_name} - {messsage}")
+    def log_error(self, context: Context, messsage: str):
+        self._logger.error(f"{context.className} - {context.methodName} - {messsage}")
