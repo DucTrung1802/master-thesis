@@ -18,21 +18,18 @@ class Logger:
         logging.basicConfig(
             filename=f"{file_name}.log",
             level=level.value,
-            format="%(asctime)s - %(name)s - %(levelname)s - %(funcName)s - %(message)s",
+            format="%(asctime)s - %(levelname)s - %(message)s",
         )
+        self._logger = logging.getLogger()
 
-    def log_debug(self, messsage: str, module_name: str = None):
-        self._logger = logging.getLogger(module_name)
-        self._logger.debug(messsage)
+    def log_debug(self, class_name: str, method_name: str, messsage: str):
+        self._logger.debug(f"{class_name} - {method_name} - {messsage}")
 
-    def log_info(self, messsage: str, module_name: str = None):
-        self._logger = logging.getLogger(module_name)
-        self._logger.info(messsage)
+    def log_info(self, class_name: str, method_name: str, messsage: str):
+        self._logger.info(f"{class_name} - {method_name} - {messsage}")
 
-    def log_warning(self, messsage: str, module_name: str = None):
-        self._logger = logging.getLogger(module_name)
-        self._logger.warning(messsage)
+    def log_warning(self, class_name: str, method_name: str, messsage: str):
+        self._logger.warning(f"{class_name} - {method_name} - {messsage}")
 
-    def log_error(self, messsage: str, module_name: str = None):
-        self._logger = logging.getLogger(module_name)
-        self._logger.error(messsage)
+    def log_error(self, class_name: str, method_name: str, messsage: str):
+        self._logger.error(f"{class_name} - {method_name} - {messsage}")
