@@ -1,6 +1,6 @@
-2024-12-29 17:44:41,787 - INFO - SqlServerDriver - __init__ - Start to connect to SQL Server.
-2024-12-29 17:44:41,809 - INFO - SqlServerDriver - __init__ - Connected to SQL Server.
-2024-12-29 17:44:41,809 - DEBUG - SqlServerDriver - check_database_exists - 
+2024-12-29 22:44:18,535 - INFO - SqlServerDriver - __init__ - Start to connect to SQL Server.
+2024-12-29 22:44:18,557 - INFO - SqlServerDriver - __init__ - Connected to SQL Server.
+2024-12-29 22:44:18,557 - DEBUG - SqlServerDriver - check_database_exists - 
 
             SELECT 
             CASE 
@@ -9,16 +9,16 @@
                 ELSE 'False' 
             END AS Result;
         
-2024-12-29 17:44:41,810 - DEBUG - SqlServerDriver - create_new_database - 
+2024-12-29 22:44:18,557 - DEBUG - SqlServerDriver - create_new_database - 
 
             CREATE DATABASE [SSI_STOCKS];
         
-2024-12-29 17:44:41,916 - DEBUG - SqlServerDriver - create_new_database - 
+2024-12-29 22:44:18,642 - DEBUG - SqlServerDriver - create_new_database - 
 
             USE [SSI_STOCKS];
         
-2024-12-29 17:44:41,916 - INFO - SqlServerDriver - create_new_database - Created database with name "SSI_STOCKS".
-2024-12-29 17:44:41,916 - DEBUG - SqlServerDriver - check_database_exists - 
+2024-12-29 22:44:18,643 - INFO - SqlServerDriver - create_new_database - Created database with name "SSI_STOCKS".
+2024-12-29 22:44:18,643 - DEBUG - SqlServerDriver - check_database_exists - 
 
             SELECT 
             CASE 
@@ -27,14 +27,14 @@
                 ELSE 'False' 
             END AS Result;
         
-2024-12-29 17:44:41,932 - DEBUG - SqlServerDriver - check_table_exists - 
+2024-12-29 22:44:18,657 - DEBUG - SqlServerDriver - check_table_exists - 
 
             SELECT CASE 
                 WHEN OBJECT_ID('SSI_STOCKS.dbo.Market', 'U') IS NOT NULL THEN 'True'
                 ELSE 'False'
             END AS Result;
         
-2024-12-29 17:44:41,933 - DEBUG - SqlServerDriver - create_table - 
+2024-12-29 22:44:18,657 - DEBUG - SqlServerDriver - create_table - 
 USE SSI_STOCKS;
             
 CREATE TABLE Market (
@@ -46,8 +46,8 @@ CREATE TABLE Market (
 	UpdateDate DATETIME NULL,
 	DeleteDate DATETIME NULL
 );
-2024-12-29 17:44:41,940 - INFO - SqlServerDriver - create_table - Table 'SSI_STOCKS.dbo.Market' is created successfully.
-2024-12-29 17:44:41,940 - DEBUG - SqlServerDriver - check_database_exists - 
+2024-12-29 22:44:18,660 - INFO - SqlServerDriver - create_table - Table 'SSI_STOCKS.dbo.Market' is created successfully.
+2024-12-29 22:44:18,660 - DEBUG - SqlServerDriver - check_database_exists - 
 
             SELECT 
             CASE 
@@ -56,14 +56,14 @@ CREATE TABLE Market (
                 ELSE 'False' 
             END AS Result;
         
-2024-12-29 17:44:41,941 - DEBUG - SqlServerDriver - check_table_exists - 
+2024-12-29 22:44:18,661 - DEBUG - SqlServerDriver - check_table_exists - 
 
             SELECT CASE 
                 WHEN OBJECT_ID('SSI_STOCKS.dbo.SecurityType', 'U') IS NOT NULL THEN 'True'
                 ELSE 'False'
             END AS Result;
         
-2024-12-29 17:44:41,943 - DEBUG - SqlServerDriver - create_table - 
+2024-12-29 22:44:18,661 - DEBUG - SqlServerDriver - create_table - 
 USE SSI_STOCKS;
             
 CREATE TABLE SecurityType (
@@ -74,8 +74,8 @@ CREATE TABLE SecurityType (
 	UpdateDate DATETIME NULL,
 	DeleteDate DATETIME NULL
 );
-2024-12-29 17:44:41,945 - INFO - SqlServerDriver - create_table - Table 'SSI_STOCKS.dbo.SecurityType' is created successfully.
-2024-12-29 17:44:41,945 - DEBUG - SqlServerDriver - check_database_exists - 
+2024-12-29 22:44:18,663 - INFO - SqlServerDriver - create_table - Table 'SSI_STOCKS.dbo.SecurityType' is created successfully.
+2024-12-29 22:44:18,663 - DEBUG - SqlServerDriver - check_database_exists - 
 
             SELECT 
             CASE 
@@ -84,28 +84,28 @@ CREATE TABLE SecurityType (
                 ELSE 'False' 
             END AS Result;
         
-2024-12-29 17:44:41,945 - DEBUG - SqlServerDriver - check_table_exists - 
+2024-12-29 22:44:18,663 - DEBUG - SqlServerDriver - check_table_exists - 
 
             SELECT CASE 
                 WHEN OBJECT_ID('SSI_STOCKS.dbo.Security', 'U') IS NOT NULL THEN 'True'
                 ELSE 'False'
             END AS Result;
         
-2024-12-29 17:44:41,945 - DEBUG - SqlServerDriver - check_table_exists - 
+2024-12-29 22:44:18,663 - DEBUG - SqlServerDriver - check_table_exists - 
 
             SELECT CASE 
                 WHEN OBJECT_ID('SSI_STOCKS.dbo.Market', 'U') IS NOT NULL THEN 'True'
                 ELSE 'False'
             END AS Result;
         
-2024-12-29 17:44:41,945 - DEBUG - SqlServerDriver - check_table_exists - 
+2024-12-29 22:44:18,664 - DEBUG - SqlServerDriver - check_table_exists - 
 
             SELECT CASE 
                 WHEN OBJECT_ID('SSI_STOCKS.dbo.SecurityType', 'U') IS NOT NULL THEN 'True'
                 ELSE 'False'
             END AS Result;
         
-2024-12-29 17:44:41,945 - DEBUG - SqlServerDriver - create_table - 
+2024-12-29 22:44:18,664 - DEBUG - SqlServerDriver - create_table - 
 USE SSI_STOCKS;
             
 CREATE TABLE Security (
@@ -123,8 +123,8 @@ CREATE TABLE Security (
     FOREIGN KEY (Market_ID) REFERENCES Market(ID),
 	FOREIGN KEY (SecurityType_ID) REFERENCES SecurityType(ID)
 );
-2024-12-29 17:44:41,950 - INFO - SqlServerDriver - create_table - Table 'SSI_STOCKS.dbo.Security' is created successfully.
-2024-12-29 17:44:41,950 - DEBUG - SqlServerDriver - check_database_exists - 
+2024-12-29 22:44:18,668 - INFO - SqlServerDriver - create_table - Table 'SSI_STOCKS.dbo.Security' is created successfully.
+2024-12-29 22:44:18,668 - DEBUG - SqlServerDriver - check_database_exists - 
 
             SELECT 
             CASE 
@@ -133,14 +133,14 @@ CREATE TABLE Security (
                 ELSE 'False' 
             END AS Result;
         
-2024-12-29 17:44:41,950 - DEBUG - SqlServerDriver - check_table_exists - 
+2024-12-29 22:44:18,668 - DEBUG - SqlServerDriver - check_table_exists - 
 
             SELECT CASE 
                 WHEN OBJECT_ID('SSI_STOCKS.dbo.Market', 'U') IS NOT NULL THEN 'True'
                 ELSE 'False'
             END AS Result;
         
-2024-12-29 17:44:41,951 - DEBUG - SqlServerDriver - insert_data - 
+2024-12-29 22:44:18,668 - DEBUG - SqlServerDriver - insert_data - 
 INSERT INTO [SSI_STOCKS].[dbo].[Market]
 (
     [Symbol],
@@ -153,6 +153,7 @@ VALUES
     N'HNX',
 	N'Sở Giao dịch Chứng khoán Hà Nội',
 	N'Hanoi Stock Exchange',
-	CAST ('2024-12-29 17:44:41' AS DATETIME)
+	CAST ('2024-12-29 22:44:18' AS DATETIME)
 )
+
 

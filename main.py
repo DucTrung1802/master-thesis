@@ -82,7 +82,8 @@ def main():
         foreign_keys=security_table_foreign_keys,
     )
 
-    merket_data_models: List[DataModel] = [
+    records = []
+    market_data_models: List[DataModel] = [
         DataModel(columnName="Symbol", value="HNX", dataType=DataType.NVARCHAR),
         DataModel(
             columnName="Name",
@@ -100,11 +101,12 @@ def main():
             dataType=DataType.DATETIME,
         ),
     ]
+    records.append(Record(market_data_models))
 
     sql_server_driver.insert_data(
         database_name="SSI_STOCKS",
         table_name="Market",
-        data_models=merket_data_models,
+        records=records,
     )
 
     sql_server_driver.close_connection()

@@ -51,3 +51,8 @@ class DataModel:
     columnName: str
     value: str | int | float
     dataType: DataType
+
+
+@dataclass
+class Record:
+    dataModelList: List[DataModel]

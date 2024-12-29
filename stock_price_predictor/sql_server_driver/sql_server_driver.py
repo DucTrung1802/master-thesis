@@ -221,9 +221,15 @@ CREATE TABLE {table_name} (
             return f"CAST ('{value}' AS DATETIME)"
         return str(value)
 
-    def insert_data(
-        self, database_name: str, table_name: str, data_models: List[DataModel]
-    ):
+    def insert_data(self, database_name: str, table_name: str, records: List[Record]):
+        # Check whether records has at least one record
+        if not records or not isinstance(records, List) or not len(records) > 0:
+            self._logger.log_warning(
+                context=self.get_context(),
+                messsage=f"'Invalid data for 'records'.",
+            )
+            return False
+
         # Check whether database already exists
         if not self.check_database_exists(database_name):
             self._logger.log_info(
@@ -243,21 +249,22 @@ CREATE TABLE {table_name} (
             return False
 
         column_names_in_query = ",\n\t".join(
-            [f"[{data_model.columnName}]" for data_model in data_models]
+            [f"[{data_model.columnName}]" for data_model in records[0].dataModelList]
         )
-        values_in_query = ",\n\t".join(
-            self.format_value(data_model.value, data_model.dataType)
-            for data_model in data_models
-        )
+
+        new_values = ""
+        for record in records:
+            value = f"""VALUES
+(
+    {",\n\t".join(self.format_value(data_model.value, data_model.dataType) for data_model in record.dataModelList)}
+)\n"""
+            new_values += value
 
         query = f"""INSERT INTO [{database_name}].[dbo].[{table_name}]
 (
     {column_names_in_query}
 )
-VALUES
-(
-    {values_in_query}
-)
+{new_values}
 """
 
         self._logger.log_debug(context=self.get_context(), messsage=f"\n{query}")
