@@ -3,6 +3,28 @@ from enum import Enum
 from typing import List
 
 
+from enum import Enum
+
+
+class Operator(Enum):
+    EQUAL_TO = "="
+    GREATER_THAN = ">"
+    LESS_THAN = "<"
+    GREATER_THAN_OR_EQUAL_TO = ">="
+    LESS_THAN_OR_EQUAL_TO = "<="
+    NOT_EQUAL_TO = "<>"
+    ALL = "ALL"
+    AND = "AND"
+    OR = "OR"
+    NOT = "NOT"
+    EXISTS = "EXISTS"
+    IN = "IN"
+    LIKE = "LIKE"
+    SOME = "SOME"
+    ANY = "ANY"
+    BETWEEN = "BETWEEN"
+
+
 @dataclass
 class SqlServerAuthentication:
     server: str
@@ -56,3 +78,11 @@ class DataModel:
 @dataclass
 class Record:
     dataModelList: List[DataModel]
+
+
+@dataclass
+class Condition:
+    column: str
+    operator: Operator
+    value: str | int | float  # Need to upgrade to avoid SQL injection
+    dataType: DataType

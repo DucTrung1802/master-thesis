@@ -1,3 +1,4 @@
+import datetime
 import pyodbc
 from stock_price_predictor.sql_server_driver.models import *
 from stock_price_predictor.logger.logger import Logger
@@ -218,7 +219,7 @@ CREATE TABLE {table_name} (
         if data_type in [DataType.NVARCHAR]:
             return f"N'{value}'"
         elif data_type in [DataType.DATETIME]:
-            return f"CAST ('{value}' AS DATETIME)"
+            return f"CAST ('{value.replace(microsecond=0)}' AS DATETIME)"
         return str(value)
 
     def insert_data(self, database_name: str, table_name: str, records: List[Record]):
@@ -269,3 +270,94 @@ CREATE TABLE {table_name} (
 
         self._logger.log_debug(context=self.get_context(), messsage=f"\n{query}")
         self._cursor.execute(query)
+        self._logger.log_info(
+            context=self.get_context(),
+            messsage=f"Inserted {len(records)} records into [{database_name}].[dbo].[{table_name}]",
+        )
+
+    def _internal_update_data(
+        self,
+        database_name: str,
+        table_name: str,
+        record: Record,
+        conditions: List[Condition],
+    ):
+        # Check whether records has at least one record
+        if not record or not isinstance(record, Record):
+            self._logger.log_warning(
+                context=self.get_context(),
+                messsage=f"'Invalid data for 'record'.",
+            )
+            return False
+
+        # Check whether database already exists
+        if not self.check_database_exists(database_name):
+            self._logger.log_info(
+                context=self.get_context(),
+                messsage=f'Datbase "{database_name}" does not exist yet. Cannot insert data.',
+            )
+            return False
+
+        # Check whether table already exists
+        if not self.check_table_exists(
+            database_name=database_name, table_name=table_name
+        ):
+            self._logger.log_info(
+                context=self.get_context(),
+                messsage=f'Table "{database_name}.dbo.{table_name}" does not exist yet. Cannot insert data',
+            )
+            return False
+
+        query = f"""UPDATE [{database_name}].[dbo].[{table_name}]
+SET {",\n\t".join(f"{data_model.columnName} = {self.format_value(data_model.value, data_model.dataType)}" for data_model in record.dataModelList)}\n
+WHERE {" AND ".join(f"{condition.column} {condition.operator.value} {self.format_value(condition.value, condition.dataType)}" for condition in conditions)}
+"""
+
+        self._logger.log_debug(context=self.get_context(), messsage=f"\n{query}")
+        self._cursor.execute(query)
+
+    def update_data(
+        self,
+        database_name: str,
+        table_name: str,
+        record: Record,
+        conditions: List[Condition],
+    ):
+        self._internal_update_data(
+            database_name=database_name,
+            table_name=table_name,
+            record=record,
+            conditions=conditions,
+        )
+        self._logger.log_info(
+            context=self.get_context(),
+            messsage=f"Updated [{database_name}].[dbo].[{table_name}].",
+        )
+
+    def detele_data(
+        self,
+        database_name: str,
+        table_name: str,
+        conditions: List[Condition],
+    ):
+        record: Record = Record(
+            [
+                DataModel(
+                    columnName="DeleteDate",
+                    value=datetime.datetime.now(),
+                    dataType=DataType.DATETIME,
+                )
+            ]
+        )
+
+        self._internal_update_data(
+            database_name=database_name,
+            table_name=table_name,
+            record=record,
+            conditions=conditions,
+        )
+
+        self._logger.log_info(
+            context=self.get_context(),
+            messsage=f"Mark 'Deleted' for some records in [{database_name}].[dbo].[{table_name}].",
+        )

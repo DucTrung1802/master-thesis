@@ -5,7 +5,7 @@ from stock_price_predictor.sql_server_driver.sql_server_driver import *
 
 
 def main():
-    logger = Logger(file_name="stock_price_predictor", level=LogType.DEBUG)
+    logger = Logger(file_name="stock_price_predictor", level=LogType.INFO)
 
     sql_server_authentication = SqlServerAuthentication(
         server=os.getenv("sql_server_server"),
@@ -82,7 +82,7 @@ def main():
         foreign_keys=security_table_foreign_keys,
     )
 
-    records = []
+    market_records = []
     market_data_models: List[DataModel] = [
         DataModel(columnName="Symbol", value="HNX", dataType=DataType.NVARCHAR),
         DataModel(
@@ -97,16 +97,44 @@ def main():
         ),
         DataModel(
             columnName="CreateDate",
-            value=datetime.datetime.now().replace(microsecond=0),
+            value=datetime.datetime.now(),
             dataType=DataType.DATETIME,
         ),
     ]
-    records.append(Record(market_data_models))
+    market_records.append(Record(market_data_models))
 
     sql_server_driver.insert_data(
         database_name="SSI_STOCKS",
         table_name="Market",
-        records=records,
+        records=market_records,
+    )
+
+    market_record_to_update: Record = Record(
+        [
+            DataModel(
+                columnName="UpdateDate",
+                value=datetime.datetime.now(),
+                dataType=DataType.DATETIME,
+            )
+        ]
+    )
+    market_record_to_update_conditions: List[Condition] = [
+        Condition(
+            column="ID", operator=Operator.EQUAL_TO, value=1, dataType=DataType.INT
+        )
+    ]
+
+    sql_server_driver.update_data(
+        database_name="SSI_STOCKS",
+        table_name="Market",
+        record=market_record_to_update,
+        conditions=market_record_to_update_conditions,
+    )
+
+    sql_server_driver.detele_data(
+        database_name="SSI_STOCKS",
+        table_name="Market",
+        conditions=market_record_to_update_conditions,
     )
 
     sql_server_driver.close_connection()

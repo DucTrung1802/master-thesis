@@ -25,13 +25,15 @@ class Logger:
         self._logger = logging.getLogger()
 
     def log_debug(self, context: Context, messsage: str):
-        self._logger.debug(f"{context.className} - {context.methodName} - {messsage}")
+        self._logger.debug(f"{context.className} - {context.methodName}() - {messsage}")
 
     def log_info(self, context: Context, messsage: str):
-        self._logger.info(f"{context.className} - {context.methodName} - {messsage}")
+        self._logger.info(f"{context.className} - {context.methodName}() - {messsage}")
 
     def log_warning(self, context: Context, messsage: str):
-        self._logger.warning(f"{context.className} - {context.methodName} - {messsage}")
+        self._logger.warning(
+            f"{context.className} - {context.methodName}() - {messsage}"
+        )
 
     def log_error(self, context: Context, messsage: str):
-        self._logger.error(f"{context.className} - {context.methodName} - {messsage}")
+        self._logger.error(f"{context.className} - {context.methodName}() - {messsage}")
