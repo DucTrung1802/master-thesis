@@ -1,7 +1,7 @@
 import datetime
 import os
-from stock_price_predictor.logger.logger import *
-from stock_price_predictor.sql_server_driver.sql_server_driver import *
+from stock_price_predictor_system.logger.logger import *
+from stock_price_predictor_system.sql_server_driver.sql_server_driver import *
 
 
 def main():
