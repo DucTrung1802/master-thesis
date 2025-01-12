@@ -1,21 +1,17 @@
 import datetime
 import pyodbc
-from stock_price_predictor.sql_server_driver.models import *
-from stock_price_predictor.logger.logger import Logger
-from stock_price_predictor.helper.helper import Helper
+from .models import *
+from ..logger.logger import Logger
 
 
-class SqlServerDriver(Helper):
+class SqlServerDriver:
 
     def __init__(self, _logger: Logger, _authentication: SqlServerAuthentication):
         self._logger = _logger
         self._authentication = _authentication
 
         try:
-            self._logger.log_info(
-                context=self.get_context(),
-                messsage=f"Start to connect to SQL Server.",
-            )
+            self._logger.log_info(f"Start to connect to SQL Server.")
 
             _connection_string = f"DRIVER={self._authentication.driver};SERVER={self._authentication.server};DATABASE={self._authentication.database};UID={self._authentication.login};PWD={self._authentication.password}"
             self._connection = pyodbc.connect(_connection_string, autocommit=True)
@@ -23,29 +19,25 @@ class SqlServerDriver(Helper):
             self._current_database = None
 
             self._logger.log_info(
-                context=self.get_context(),
-                messsage=f"Connected to SQL Server.",
+                f"Connected to SQL Server.",
             )
 
         except Exception as e:
             self._logger.log_error(
-                context=self.get_context(),
-                messsage=f"Error connecting to SQL Server: {e}.",
+                f"Error connecting to SQL Server: {e}.",
             )
 
     def close_connection(self):
         if "connection" in locals():
             self._connection.close()
             self._logger.log_info(
-                context=self.get_context(),
-                messsage=f"Closed connection to SQL Server.",
+                f"Closed connection to SQL Server.",
             )
 
     def set_current_database(self, current_database: str):
         self._current_database = current_database
         self._logger.log_info(
-            context=self.get_context(),
-            messsage=f"Set current database name as {current_database}",
+            f"Set current database name as {current_database}",
         )
 
     def get_current_database(self):
@@ -60,7 +52,7 @@ class SqlServerDriver(Helper):
                 ELSE 'False' 
             END AS Result;
         """
-        self._logger.log_debug(context=self.get_context(), messsage=f"\n{query}")
+        self._logger.log_debug(f"\n{query}")
         self._cursor.execute(query)
 
         result = self._cursor.fetchall()
@@ -73,28 +65,26 @@ class SqlServerDriver(Helper):
     def create_new_database(self, new_database_name: str):
         if self.check_database_exists(new_database_name):
             self._logger.log_info(
-                context=self.get_context(),
-                messsage=f'Table "{new_database_name}" already exists.',
+                f'Table "{new_database_name}" already exists.',
             )
             return False
 
         query = f"""
             CREATE DATABASE [{new_database_name}];
         """
-        self._logger.log_debug(context=self.get_context(), messsage=f"\n{query}")
+        self._logger.log_debug(f"\n{query}")
         self._cursor.execute(query)
 
         query = f"""
             USE [{new_database_name}];
         """
-        self._logger.log_debug(context=self.get_context(), messsage=f"\n{query}")
+        self._logger.log_debug(f"\n{query}")
         self._cursor.execute(query)
 
         self._current_database = new_database_name
 
         self._logger.log_info(
-            context=self.get_context(),
-            messsage=f'Created database with name "{new_database_name}".',
+            f'Created database with name "{new_database_name}".',
         )
 
         return True
@@ -106,7 +96,7 @@ class SqlServerDriver(Helper):
                 ELSE 'False'
             END AS Result;
         """
-        self._logger.log_debug(context=self.get_context(), messsage=f"\n{query}")
+        self._logger.log_debug(f"\n{query}")
         self._cursor.execute(query)
 
         result = self._cursor.fetchall()
@@ -127,16 +117,14 @@ class SqlServerDriver(Helper):
         # Check whether database already exists
         if not self.check_database_exists(database_name):
             self._logger.log_info(
-                context=self.get_context(),
-                messsage=f'Datbase "{database_name}" does not exist yet. Cannot create table.',
+                f'Datbase "{database_name}" does not exist yet. Cannot create table.',
             )
             return False
 
         # Check whether table already exists
         if self.check_table_exists(database_name=database_name, table_name=table_name):
             self._logger.log_info(
-                context=self.get_context(),
-                messsage=f'Table "{database_name}.dbo.{table_name}" already exists.',
+                f'Table "{database_name}.dbo.{table_name}" already exists.',
             )
             return False
 
@@ -148,8 +136,7 @@ class SqlServerDriver(Helper):
                     database_name=database_name, table_name=foreign_key.tableToRefer
                 ):
                     self._logger.log_info(
-                        context=self.get_context(),
-                        messsage=f'Foreign table "{database_name}.dbo.{foreign_key.tableToRefer}" does not exists. Cannot refer to it.',
+                        f'Foreign table "{database_name}.dbo.{foreign_key.tableToRefer}" does not exists. Cannot refer to it.',
                     )
                     return False
 
@@ -161,8 +148,7 @@ class SqlServerDriver(Helper):
         )
         if not key_column_exists:
             self._logger.log_info(
-                context=self.get_context(),
-                messsage=f"Key column '{key_column_name}' does not exist in the provided columns.",
+                f"Key column '{key_column_name}' does not exist in the provided columns.",
             )
             return False
 
@@ -204,12 +190,11 @@ CREATE TABLE {table_name} (
     {foreign_keys_in_query}
 );"""
 
-        self._logger.log_debug(context=self.get_context(), messsage=f"\n{query}")
+        self._logger.log_debug(f"\n{query}")
         self._cursor.execute(query)
 
         self._logger.log_info(
-            context=self.get_context(),
-            messsage=f"Table '{database_name}.dbo.{table_name}' is created successfully.",
+            f"Table '{database_name}.dbo.{table_name}' is created successfully.",
         )
 
         return True
@@ -226,16 +211,14 @@ CREATE TABLE {table_name} (
         # Check whether records has at least one record
         if not records or not isinstance(records, List) or not len(records) > 0:
             self._logger.log_warning(
-                context=self.get_context(),
-                messsage=f"'Invalid data for 'records'.",
+                f"'Invalid data for 'records'.",
             )
             return False
 
         # Check whether database already exists
         if not self.check_database_exists(database_name):
             self._logger.log_info(
-                context=self.get_context(),
-                messsage=f'Datbase "{database_name}" does not exist yet. Cannot insert data.',
+                f'Datbase "{database_name}" does not exist yet. Cannot insert data.',
             )
             return False
 
@@ -244,8 +227,7 @@ CREATE TABLE {table_name} (
             database_name=database_name, table_name=table_name
         ):
             self._logger.log_info(
-                context=self.get_context(),
-                messsage=f'Table "{database_name}.dbo.{table_name}" does not exist yet. Cannot insert data',
+                f'Table "{database_name}.dbo.{table_name}" does not exist yet. Cannot insert data',
             )
             return False
 
@@ -268,11 +250,10 @@ CREATE TABLE {table_name} (
 {new_values}
 """
 
-        self._logger.log_debug(context=self.get_context(), messsage=f"\n{query}")
+        self._logger.log_debug(f"\n{query}")
         self._cursor.execute(query)
         self._logger.log_info(
-            context=self.get_context(),
-            messsage=f"Inserted {len(records)} records into [{database_name}].[dbo].[{table_name}]",
+            f"Inserted {len(records)} records into [{database_name}].[dbo].[{table_name}]",
         )
 
     def _internal_update_data(
@@ -285,16 +266,14 @@ CREATE TABLE {table_name} (
         # Check whether records has at least one record
         if not record or not isinstance(record, Record):
             self._logger.log_warning(
-                context=self.get_context(),
-                messsage=f"'Invalid data for 'record'.",
+                f"'Invalid data for 'record'.",
             )
             return False
 
         # Check whether database already exists
         if not self.check_database_exists(database_name):
             self._logger.log_info(
-                context=self.get_context(),
-                messsage=f'Datbase "{database_name}" does not exist yet. Cannot insert data.',
+                f'Datbase "{database_name}" does not exist yet. Cannot insert data.',
             )
             return False
 
@@ -303,8 +282,7 @@ CREATE TABLE {table_name} (
             database_name=database_name, table_name=table_name
         ):
             self._logger.log_info(
-                context=self.get_context(),
-                messsage=f'Table "{database_name}.dbo.{table_name}" does not exist yet. Cannot insert data',
+                f'Table "{database_name}.dbo.{table_name}" does not exist yet. Cannot insert data',
             )
             return False
 
@@ -313,7 +291,7 @@ SET {",\n\t".join(f"{data_model.columnName} = {self.format_value(data_model.valu
 WHERE {" AND ".join(f"{condition.column} {condition.operator.value} {self.format_value(condition.value, condition.dataType)}" for condition in conditions)}
 """
 
-        self._logger.log_debug(context=self.get_context(), messsage=f"\n{query}")
+        self._logger.log_debug(f"\n{query}")
         self._cursor.execute(query)
 
     def update_data(
@@ -330,8 +308,7 @@ WHERE {" AND ".join(f"{condition.column} {condition.operator.value} {self.format
             conditions=conditions,
         )
         self._logger.log_info(
-            context=self.get_context(),
-            messsage=f"Updated [{database_name}].[dbo].[{table_name}].",
+            f"Updated [{database_name}].[dbo].[{table_name}].",
         )
 
     def detele_data(
@@ -358,6 +335,5 @@ WHERE {" AND ".join(f"{condition.column} {condition.operator.value} {self.format
         )
 
         self._logger.log_info(
-            context=self.get_context(),
-            messsage=f"Mark 'Deleted' for some records in [{database_name}].[dbo].[{table_name}].",
+            f"Mark 'Deleted' for some records in [{database_name}].[dbo].[{table_name}].",
         )
