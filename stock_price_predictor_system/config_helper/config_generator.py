@@ -34,18 +34,9 @@ author = Trung Ly Duc
 version = 0.1.0
 
 [sql_server_database]
-host = localhost
-port = 5432
-username = admin
+server_name = localhost
+login = admin
 password = secretpassword
-database_name = my_database
-
-[influx_database]
-host = localhost
-port = 5432
-username = admin
-password = secretpassword
-database_name = my_database
 """
         with open(config_file_path, "w") as config_file:
             config_file.write(content.strip())
