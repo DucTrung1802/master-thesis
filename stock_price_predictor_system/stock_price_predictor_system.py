@@ -1,10 +1,16 @@
 import os
+from .helper.helper import Helper
+from .config_helper.config_generator import ConfigGenerator
+from .logger.logger import Logger
 
 
-class StockPricePredictorSystem:
+class StockPricePredictorSystem(Helper):
 
     def __init__(self):
-        pass
+        self._logger = Logger(
+            f"stock_price_predictor_{self.get_today()}",
+        )
+        self._config_generator = ConfigGenerator(self._logger)
 
     def _print_banner(self):
         banner = r"""    
@@ -25,10 +31,14 @@ Created by Trung Ly Duc
 
     def _print_menu(self):
         self._print_banner()
-        print("[1] Start crawling data")
-        print("[2] Train prediction model")
-        print("[3] Predict stock prices")
+        print("[1] Generate configuration file .config")
+        print("[2] Start crawling data")
+        print("[3] Train prediction model")
+        print("[4] Predict stock prices")
         print("[x] Exit")
+
+    def _generate_sample_config(self):
+        self._config_generator._generate_config_template()
 
     def _crawl_data(self):
         print("Starting the data crawling process...")
@@ -56,7 +66,18 @@ Created by Trung Ly Duc
 
             if choice == "1":
                 self._clear_console()
-                self._crawl_data()
+                if not self._config_generator.generate_config_template():
+                    generate_choice = input(
+                        "Configuration has been generated before, do you want to re-generate and overwrite current configuration? [y/n]\nEnter your choice: "
+                    ).strip()
+                    if generate_choice.lower() == "y":
+                        self._config_generator.generate_config_template(overwrite=True)
+                        print("Configuration has been overwritten successfully.")
+                    elif generate_choice.lower() == "n":
+                        print("Canceled re-generating configiuration file.")
+                else:
+                    print("Configuration has been generated successfully.")
+
                 input("Press Enter to return to the menu...")
             elif choice == "2":
                 self._clear_console()
@@ -67,7 +88,7 @@ Created by Trung Ly Duc
                 self._predict_prices()
                 input("Press Enter to return to the menu...")
             elif choice.lower() == "x":
-                print("Exiting the system. Goodbye!")
+                print("Exiting the system...")
                 break
             else:
                 self._clear_console()

@@ -8,8 +8,8 @@ class ConfigGenerator(Helper):
     def __init__(self, _logger: Logger):
         self._logger = _logger
 
-    def _generate_config_template(self, overwrite=False):
-        config_file_path = os.path.join(self.get_grandparent_folder(), ".config")
+    def generate_config_template(self, overwrite=False):
+        config_file_path = ".config"
 
         if os.path.isfile(config_file_path):
             if not overwrite:

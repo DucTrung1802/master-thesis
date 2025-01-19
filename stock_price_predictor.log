@@ -1,9 +1,0 @@
-2025-01-12 12:06:31,620 - INFO - SqlServerDriver - __init__() - Start to connect to SQL Server.
-2025-01-12 12:06:31,644 - INFO - SqlServerDriver - __init__() - Connected to SQL Server.
-2025-01-12 12:06:31,668 - INFO - SqlServerDriver - create_new_database() - Table "SSI_STOCKS" already exists.
-2025-01-12 12:06:31,669 - INFO - SqlServerDriver - create_table() - Table "SSI_STOCKS.dbo.Market" already exists.
-2025-01-12 12:06:31,673 - INFO - SqlServerDriver - create_table() - Table "SSI_STOCKS.dbo.SecurityType" already exists.
-2025-01-12 12:06:31,675 - INFO - SqlServerDriver - create_table() - Table "SSI_STOCKS.dbo.Security" already exists.
-2025-01-12 12:06:31,678 - INFO - SqlServerDriver - insert_data() - Inserted 1 records into [SSI_STOCKS].[dbo].[Market]
-2025-01-12 12:06:31,681 - INFO - SqlServerDriver - update_data() - Updated [SSI_STOCKS].[dbo].[Market].
-2025-01-12 12:06:31,685 - INFO - SqlServerDriver - detele_data() - Mark 'Deleted' for some records in [SSI_STOCKS].[dbo].[Market].

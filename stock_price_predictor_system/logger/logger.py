@@ -15,11 +15,12 @@ class LogType(Enum):
 
 class Logger:
 
-    def __init__(self, file_name: str, level: LogType):
+    def __init__(self, file_name: str, level: LogType = LogType.INFO):
         logging.basicConfig(
             filename=f"{file_name}.log",
             level=level.value,
             format="%(asctime)s - %(levelname)s - %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
             encoding="utf-8",
         )
         self._logger = logging.getLogger()
