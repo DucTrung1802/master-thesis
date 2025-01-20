@@ -6,26 +6,38 @@ from ..logger.logger import Logger
 
 class SqlServerDriver:
 
-    def __init__(self, _logger: Logger, _authentication: SqlServerAuthentication):
+    def __init__(self, _logger: Logger):
         self._logger = _logger
+        self._connected = False
+
+    def open_connection(self, _authentication: SqlServerAuthentication):
         self._authentication = _authentication
 
         try:
+            print("\nStart to connect to SQL Server.")
             self._logger.log_info(f"Start to connect to SQL Server.")
 
             _connection_string = f"DRIVER={self._authentication.driver};SERVER={self._authentication.server};DATABASE={self._authentication.database};UID={self._authentication.login};PWD={self._authentication.password}"
-            self._connection = pyodbc.connect(_connection_string, autocommit=True)
+            self._connection = pyodbc.connect(
+                _connection_string, autocommit=True, timeout=10
+            )
             self._cursor = self._connection.cursor()
             self._current_database = None
 
+            print("Connected to SQL Server.")
             self._logger.log_info(
                 f"Connected to SQL Server.",
             )
 
+            self._connected = True
+            return True
+
         except Exception as e:
-            self._logger.log_error(
-                f"Error connecting to SQL Server: {e}.",
-            )
+            print(f"Error connecting to SQL Server: {e}.")
+            self._logger.log_error(f"Error connecting to SQL Server: {e}.")
+
+            self._connected = False
+            return False
 
     def close_connection(self):
         if "connection" in locals():
@@ -64,6 +76,9 @@ class SqlServerDriver:
 
     def create_new_database(self, new_database_name: str):
         if self.check_database_exists(new_database_name):
+            print(
+                f'Table "{new_database_name}" already exists.',
+            )
             self._logger.log_info(
                 f'Table "{new_database_name}" already exists.',
             )
@@ -83,6 +98,9 @@ class SqlServerDriver:
 
         self._current_database = new_database_name
 
+        print(
+            f'Created database with name "{new_database_name}".',
+        )
         self._logger.log_info(
             f'Created database with name "{new_database_name}".',
         )
@@ -116,6 +134,9 @@ class SqlServerDriver:
     ):
         # Check whether database already exists
         if not self.check_database_exists(database_name):
+            print(
+                f'Datbase "{database_name}" does not exist yet. Cannot create table.',
+            )
             self._logger.log_info(
                 f'Datbase "{database_name}" does not exist yet. Cannot create table.',
             )
@@ -123,6 +144,9 @@ class SqlServerDriver:
 
         # Check whether table already exists
         if self.check_table_exists(database_name=database_name, table_name=table_name):
+            print(
+                f'Table "{database_name}.dbo.{table_name}" already exists.',
+            )
             self._logger.log_info(
                 f'Table "{database_name}.dbo.{table_name}" already exists.',
             )
@@ -135,6 +159,9 @@ class SqlServerDriver:
                 if not self.check_table_exists(
                     database_name=database_name, table_name=foreign_key.tableToRefer
                 ):
+                    print(
+                        f'Foreign table "{database_name}.dbo.{foreign_key.tableToRefer}" does not exists. Cannot refer to it.',
+                    )
                     self._logger.log_info(
                         f'Foreign table "{database_name}.dbo.{foreign_key.tableToRefer}" does not exists. Cannot refer to it.',
                     )
@@ -147,6 +174,9 @@ class SqlServerDriver:
             column.columnName == key_column_name for column in columns
         )
         if not key_column_exists:
+            print(
+                f"Key column '{key_column_name}' does not exist in the provided columns.",
+            )
             self._logger.log_info(
                 f"Key column '{key_column_name}' does not exist in the provided columns.",
             )
@@ -193,6 +223,9 @@ CREATE TABLE {table_name} (
         self._logger.log_debug(f"\n{query}")
         self._cursor.execute(query)
 
+        print(
+            f"Table '{database_name}.dbo.{table_name}' is created successfully.",
+        )
         self._logger.log_info(
             f"Table '{database_name}.dbo.{table_name}' is created successfully.",
         )
@@ -210,6 +243,9 @@ CREATE TABLE {table_name} (
     def insert_data(self, database_name: str, table_name: str, records: List[Record]):
         # Check whether records has at least one record
         if not records or not isinstance(records, List) or not len(records) > 0:
+            print(
+                f"'Invalid data for 'records'.",
+            )
             self._logger.log_warning(
                 f"'Invalid data for 'records'.",
             )
@@ -217,6 +253,9 @@ CREATE TABLE {table_name} (
 
         # Check whether database already exists
         if not self.check_database_exists(database_name):
+            print(
+                f'Datbase "{database_name}" does not exist yet. Cannot insert data.',
+            )
             self._logger.log_info(
                 f'Datbase "{database_name}" does not exist yet. Cannot insert data.',
             )
@@ -226,6 +265,9 @@ CREATE TABLE {table_name} (
         if not self.check_table_exists(
             database_name=database_name, table_name=table_name
         ):
+            print(
+                f'Table "{database_name}.dbo.{table_name}" does not exist yet. Cannot insert data',
+            )
             self._logger.log_info(
                 f'Table "{database_name}.dbo.{table_name}" does not exist yet. Cannot insert data',
             )
@@ -252,6 +294,10 @@ CREATE TABLE {table_name} (
 
         self._logger.log_debug(f"\n{query}")
         self._cursor.execute(query)
+
+        print(
+            f"Inserted {len(records)} records into [{database_name}].[dbo].[{table_name}]",
+        )
         self._logger.log_info(
             f"Inserted {len(records)} records into [{database_name}].[dbo].[{table_name}]",
         )
@@ -265,6 +311,9 @@ CREATE TABLE {table_name} (
     ):
         # Check whether records has at least one record
         if not record or not isinstance(record, Record):
+            print(
+                f"'Invalid data for 'record'.",
+            )
             self._logger.log_warning(
                 f"'Invalid data for 'record'.",
             )
@@ -272,6 +321,9 @@ CREATE TABLE {table_name} (
 
         # Check whether database already exists
         if not self.check_database_exists(database_name):
+            print(
+                f'Datbase "{database_name}" does not exist yet. Cannot insert data.',
+            )
             self._logger.log_info(
                 f'Datbase "{database_name}" does not exist yet. Cannot insert data.',
             )
@@ -281,6 +333,9 @@ CREATE TABLE {table_name} (
         if not self.check_table_exists(
             database_name=database_name, table_name=table_name
         ):
+            print(
+                f'Table "{database_name}.dbo.{table_name}" does not exist yet. Cannot insert data',
+            )
             self._logger.log_info(
                 f'Table "{database_name}.dbo.{table_name}" does not exist yet. Cannot insert data',
             )
@@ -306,6 +361,10 @@ WHERE {" AND ".join(f"{condition.column} {condition.operator.value} {self.format
             table_name=table_name,
             record=record,
             conditions=conditions,
+        )
+
+        print(
+            f"Updated [{database_name}].[dbo].[{table_name}].",
         )
         self._logger.log_info(
             f"Updated [{database_name}].[dbo].[{table_name}].",
@@ -334,6 +393,40 @@ WHERE {" AND ".join(f"{condition.column} {condition.operator.value} {self.format
             conditions=conditions,
         )
 
+        print(
+            f"Mark 'Deleted' for some records in [{database_name}].[dbo].[{table_name}].",
+        )
         self._logger.log_info(
             f"Mark 'Deleted' for some records in [{database_name}].[dbo].[{table_name}].",
         )
+
+    def purge_data(
+        self,
+        database_name: str,
+        table_name: str,
+    ):
+        if not self.check_database_exists(database_name):
+            print(
+                f"Cannot purge table '{table_name}' since database {database_name} does not exist."
+            )
+            self._logger.log_warning(
+                f"Cannot purge table '{table_name}' since database {database_name} does not exist."
+            )
+            return False
+
+        if not self.check_table_exists(table_name):
+            print(
+                f"Cannot purge table '{table_name}' since table {table_name} does not exist."
+            )
+            self._logger.log_warning(
+                f"Cannot purge table '{table_name}' since table {table_name} does not exist."
+            )
+
+        query = f"DELETE FROM [{database_name}].[dbo].[{table_name}]"
+
+        self._cursor.execute(query)
+
+        print(f"Successfully purge data from table '{table_name}'.")
+        self._logger.log_info(f"Successfully purge data from table '{table_name}'.")
+
+        return True
