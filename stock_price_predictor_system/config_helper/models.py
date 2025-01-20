@@ -13,6 +13,6 @@ class SqlServerConfig(BaseModel):
     password: str = Field(...)
 
 
-class Config(BaseModel):
+class ConfigModel(BaseModel):
     general: GeneralConfig
     sql_server: SqlServerConfig
