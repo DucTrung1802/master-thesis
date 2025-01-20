@@ -7,6 +7,7 @@ from .config_helper.models import ConfigModel
 from .logger.logger import Logger
 from .sql_server_driver.models import *
 from .sql_server_driver.sql_server_driver import SqlServerDriver
+from .ssi_data_crawler.ssi_data_crawler import SsiDataCrawler
 
 
 class StockPricePredictorSystem(Helper):
@@ -19,6 +20,8 @@ class StockPricePredictorSystem(Helper):
         self._config: ConfigModel = None
 
         self._sql_server_driver = SqlServerDriver(self._logger)
+
+        self._ssi_data_crawler = SsiDataCrawler(self._logger)
 
     def _print_banner(self):
         banner = r"""    
@@ -197,18 +200,30 @@ Created by Trung Ly Duc
 
             return False
 
+    def _create_influx_database_schemas(self):
+        return True
+
     def _create_database_schemas(self):
         print("\nCreating database schema...")
         self._logger.log_info("Creating database schema...")
 
         successful = True
         successful &= self._create_sql_server_database_schemas()
+        successful &= self._create_influx_database_schemas()
 
         return successful
 
-    def _inner_crawl_data(self):
-        print("\nStart crawling data")
-        self._logger.log_info("Start crawling data")
+    def _crawl_sql_server_data(self):
+        print("\nStart crawling SQL Server data")
+        self._logger.log_info("Start crawling SQL Server data")
+        self._ssi_data_crawler.crawl_tabular_data(
+            self._config.ssi_crawler_info, self._sql_server_driver
+        )
+
+    def _crawl_influx_data(self):
+        print("\nStart crawling Influx data")
+        self._logger.log_info("Start crawling Influx data")
+        self._ssi_data_crawler.crawl_time_series_data()
 
     def _crawl_data(self):
         self._config = self._load_config()
@@ -228,9 +243,11 @@ Created by Trung Ly Duc
 
         print("\nSuccessfully created all database schemas.")
 
-        # self._inner_crawl_data()
+        self._crawl_sql_server_data()
 
-        # print("Crawling data has been completed.")
+        self._crawl_influx_data()
+
+        print("Crawling data has been completed.")
 
     def _confirm_action(self) -> bool:
         self._clear_console()

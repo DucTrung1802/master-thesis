@@ -7,6 +7,14 @@ class GeneralConfig(BaseModel):
     version: str = Field(default="0.1.0")
 
 
+class SsiCrawlerInfoConfig(BaseModel):
+    auth_type: str = Field(default="Bearer")
+    consumerID: str = Field(...)
+    consumerSecret: str = Field(...)
+    url: str = Field(default="https://fc-data.ssi.com.vn/")
+    stream_url: str = Field(default="https://fc-datahub.ssi.com.vn")
+
+
 class SqlServerConfig(BaseModel):
     server_name: str = Field(...)
     login: str = Field(...)
@@ -15,4 +23,5 @@ class SqlServerConfig(BaseModel):
 
 class ConfigModel(BaseModel):
     general: GeneralConfig
+    ssi_crawler_info: SsiCrawlerInfoConfig
     sql_server: SqlServerConfig

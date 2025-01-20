@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 import datetime
 from enum import Enum
 from typing import List, Literal
@@ -19,7 +19,7 @@ class Market_3(Enum):
     UPCOM = "UPCOM"  # Unlisted Public Company Market
 
 
-class Market_4(Market_3):
+class Market_4(Enum):
     """
     Represents Market_3.
     Add DER.
@@ -31,10 +31,14 @@ class Market_4(Market_3):
         DER: Derivatives Market.
     """
 
+    HOSE = Market_3.HOSE.value
+    HNX = Market_3.HNX.value
+    UPCOM = Market_3.UPCOM.value
+
     DER = "DER"  # Derivatives Market
 
 
-class Market_5(Market_4):
+class Market_5(Enum):
     """
     Represents Market_4.
     Add BOND.
@@ -46,6 +50,11 @@ class Market_5(Market_4):
         DER: Derivatives Market.
         BOND: Bond Market.
     """
+
+    HOSE = Market_4.HOSE.value
+    HNX = Market_4.HNX.value
+    UPCOM = Market_4.UPCOM.value
+    DER = Market_4.DER.value
 
     BOND = "BOND"  # Bond Market
 
@@ -63,7 +72,7 @@ class Exchange_2(Enum):
     HNX = "HNX"  # Hanoi Stock Exchange
 
 
-class Exchange_5(Exchange_2):
+class Exchange_5(Enum):
     """
     Represents Exchange_2.
     Add HNXBOND, UPCOM, DER
@@ -75,6 +84,9 @@ class Exchange_5(Exchange_2):
         UPCOM: Unlisted Public Company Market.
         DER: Derivatives Market.
     """
+
+    HOSE = Exchange_2.HOSE.value
+    HNX = Exchange_2.HNX.value
 
     HNXBOND = "HNXBOND"
     UPCOM = "UPCOM"
@@ -123,13 +135,21 @@ class AccessTokenDataModel(BaseModel):
     accessToken: str
 
 
-class AccessTokenOutputModel(BaseModel, BaseOutputModel):
+class AccessTokenOutputModel(BaseOutputModel):
     data: AccessTokenDataModel
 
 
 # GET Securities Models
-class SecuritiesInputModel(BaseModel, BaseInputModel):
-    market: Market_5
+class SecuritiesInputModel(BaseInputModel):
+    market: str = Field(...)
+
+    @field_validator("market")
+    def validate_market(cls, value):
+        if value not in [m.value for m in Market_5]:
+            raise ValueError(
+                f"'{value}' is not a valid Market_5 value. Allowed values: {[m.value for m in Market_5]}"
+            )
+        return value
 
 
 class SecuritiesDataModel(BaseModel):
@@ -139,17 +159,19 @@ class SecuritiesDataModel(BaseModel):
     stockEnName: str
 
 
-class SecuritiesOutputModel(BaseModel, BaseOutputModel):
+class SecuritiesOutputModel(BaseOutputModel):
     data: List[SecuritiesDataModel]
 
 
 # GET SecuritiesDetails Models
-class SecuritiesDetailsInputModel(BaseModel, BaseInputModel):
+class SecuritiesDetailsInputModel(BaseInputModel):
     market: Market_4
     symbol: str
 
 
 class SecuritiesDetailsDataRepeatedInfoModel(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     isin: str
     symbol: str
     symbolName: str
@@ -188,12 +210,12 @@ class SecuritiesDetailsDataModel(BaseModel):
     repeatedinfoList: List[SecuritiesDetailsDataRepeatedInfoModel]
 
 
-class SecuritiesDetailsOutputModel(BaseModel, BaseOutputModel):
+class SecuritiesDetailsOutputModel(BaseOutputModel):
     data: List[SecuritiesDetailsDataModel]
 
 
 # GET IndexComponents
-class IndexComponentsInputModel(BaseModel, BaseInputModel):
+class IndexComponentsInputModel(BaseInputModel):
     indexCode: str
 
 
@@ -210,12 +232,12 @@ class IndexComponentsDataModel(BaseModel):
     indexComponent: List[IndexComponentsDataIndexComponentModel]
 
 
-class IndexComponentsOutputModel(BaseModel, BaseOutputModel):
+class IndexComponentsOutputModel(BaseOutputModel):
     data: List[IndexComponentsDataModel]
 
 
 # GET IndexList
-class IndexListInputModel(BaseModel, BaseInputModel):
+class IndexListInputModel(BaseInputModel):
     exchange: Exchange_5
 
 
@@ -225,12 +247,14 @@ class IndexListDataModel(BaseModel):
     exchange: Exchange_5
 
 
-class IndexListOutputModel(BaseModel, BaseOutputModel):
+class IndexListOutputModel(BaseOutputModel):
     data: List[IndexListDataModel]
 
 
 # GET DailyOhlc
-class DailyOhlcInputModel(BaseModel, BaseInputModel):
+class DailyOhlcInputModel(BaseInputModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     symbol: str
     fromDate: datetime
     toDate: datetime
@@ -238,6 +262,8 @@ class DailyOhlcInputModel(BaseModel, BaseInputModel):
 
 
 class DailyOhlcDataModel(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     symbol: str
     market: Market_5
     tradingDate: datetime
@@ -250,12 +276,14 @@ class DailyOhlcDataModel(BaseModel):
     value: float
 
 
-class DailyOhlcOutputModel(BaseModel, BaseOutputModel):
+class DailyOhlcOutputModel(BaseOutputModel):
     data: List[DailyOhlcDataModel]
 
 
 # GET IntradayOhlc
-class IntradayOhlcInputModel(BaseModel, BaseInputModel):
+class IntradayOhlcInputModel(BaseInputModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     symbol: str
     fromDate: datetime
     toDate: datetime
@@ -264,6 +292,8 @@ class IntradayOhlcInputModel(BaseModel, BaseInputModel):
 
 
 class IntradayOhlcDataModel(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     symbol: str
     market: Market_3
     tradingDate: datetime
@@ -275,12 +305,14 @@ class IntradayOhlcDataModel(BaseModel):
     volume: int
 
 
-class IntradayOhlcOutputModel(BaseModel, BaseOutputModel):
+class IntradayOhlcOutputModel(BaseOutputModel):
     data: List[IntradayOhlcDataModel]
 
 
 # GET DailyIndex
-class DailyIndexInputModel(BaseModel, BaseInputModel):
+class DailyIndexInputModel(BaseInputModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     indexId: str
     fromDate: datetime
     toDate: datetime
@@ -288,6 +320,8 @@ class DailyIndexInputModel(BaseModel, BaseInputModel):
 
 
 class DailyIndexDataModel(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     indexCode: str
     indexValue: float
     tradingDate: datetime
@@ -311,12 +345,14 @@ class DailyIndexDataModel(BaseModel):
     tradingSession: TradingSession
 
 
-class DailyIndexOutputModel(BaseModel, BaseOutputModel):
+class DailyIndexOutputModel(BaseOutputModel):
     data: List[DailyIndexDataModel]
 
 
 # GET DailyStockPrice
-class DailyStockPriceInputModel(BaseModel, BaseInputModel):
+class DailyStockPriceInputModel(BaseInputModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     symbol: str
     fromDate: datetime
     toDate: datetime
@@ -324,6 +360,8 @@ class DailyStockPriceInputModel(BaseModel, BaseInputModel):
 
 
 class DailyStockPriceDataModel(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     symbol: str
     tradingDate: datetime
     time: datetime
