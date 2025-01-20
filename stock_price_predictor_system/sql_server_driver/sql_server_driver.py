@@ -10,6 +10,9 @@ class SqlServerDriver:
         self._logger = _logger
         self._connected = False
 
+    def get_connection_status(self):
+        return self._connected
+
     def open_connection(self, _authentication: SqlServerAuthentication):
         self._authentication = _authentication
 
@@ -414,7 +417,7 @@ WHERE {" AND ".join(f"{condition.column} {condition.operator.value} {self.format
             )
             return False
 
-        if not self.check_table_exists(table_name):
+        if not self.check_table_exists(database_name, table_name):
             print(
                 f"Cannot purge table '{table_name}' since table {table_name} does not exist."
             )

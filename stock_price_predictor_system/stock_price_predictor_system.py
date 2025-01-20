@@ -238,18 +238,18 @@ Created by Trung Ly Duc
             "You are going to perform an irreversible action. Please retype the following string to continue."
         )
         self._logger.log_info("Prompting for confirmation.")
-        confirm_string = self.generate_lower_string()
+        confirm_string = self.generate_lower_string(3)
         input_string = input(f"{confirm_string}\nInput: ")
 
         if input_string == confirm_string:
             print("Confirm action successfully. Wait a second...")
             self._logger.log_info("Confirm action successfully. Wait a second...")
-            time.sleep(2)
+            time.sleep(1)
             return True
 
         print("Confirm action failed. Wait a second...")
         self._logger.log_info("Confirm action failed. Wait a second...")
-        time.sleep(2)
+        time.sleep(1)
         return False
 
     def _purge_sql_server_data(self):
@@ -260,6 +260,21 @@ Created by Trung Ly Duc
         print("Start purging all SQL Server data...")
         self._logger.log_info("Start purging all SQL Server data...")
 
+        self._sql_server_driver.purge_data(
+            database_name="SSI_STOCKS", table_name="Market"
+        )
+        self._sql_server_driver.purge_data(
+            database_name="SSI_STOCKS", table_name="Security"
+        )
+        self._sql_server_driver.purge_data(
+            database_name="SSI_STOCKS", table_name="SecurityType"
+        )
+
+        print("Finish purging all SQL Server data.")
+        self._logger.log_info("Finish purging all SQL Server data.")
+
+        return True
+
     def _purge_influx_data(self):
         if not self._confirm_action():
             return
@@ -269,6 +284,20 @@ Created by Trung Ly Duc
         self._logger.log_info("Start purging all SQL Server data...")
 
     def _purge_all_data(self):
+        self._config = self._load_config()
+
+        if not self._config:
+            return
+
+        print("Successfully loaded .config configuration file.")
+
+        if not self._validate_config(self._config):
+            return
+
+        print("\nSuccessfully validated .config configuration file.")
+
+        input("\nPress Enter to continue...")
+
         while True:
             self._clear_console()
             print(
@@ -297,6 +326,9 @@ Created by Trung Ly Duc
                     self._clear_console()
                     print("Invalid choice. Please try again.")
                     input("\nPress Enter to return to the menu...")
+                    continue
+
+        input("\nPress Enter to return to the menu...")
 
     def _train_model(self):
         print("\nTraining the prediction model...")
