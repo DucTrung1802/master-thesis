@@ -1,7 +1,7 @@
-from pydantic import BaseModel, ConfigDict, Field, field_validator
-import datetime
+from dataclasses import dataclass, field
+from datetime import datetime
 from enum import Enum
-from typing import List, Literal
+from typing import List, Literal, Optional
 
 
 class Market_3(Enum):
@@ -113,65 +113,65 @@ class TradingSession(Enum):
     HALT = "Market Halt"
 
 
-class BaseInputModel(BaseModel):
-    pageIndex: int = Field(default=1, ge=1, le=10)
+@dataclass(kw_only=True)
+class BaseInputModel:
+    pageIndex: int = field(default=1, metadata={"ge": 1, "le": 10})
     pageSize: Literal[10, 20, 50, 100, 1000] = 10
 
 
 # Base Models
-class BaseOutputModel(BaseModel):
+@dataclass(kw_only=True)
+class BaseOutputModel:
     message: str
     status: int
     totalRecord: int
 
 
 # POST AccessToken Models
-class AccessTokenInputModel(BaseModel):
+@dataclass
+class AccessTokenInputModel:
     consumerID: str
     consumerSecret: str
 
 
-class AccessTokenDataModel(BaseModel):
+@dataclass
+class AccessTokenDataModel:
     accessToken: str
 
 
+@dataclass
 class AccessTokenOutputModel(BaseOutputModel):
     data: AccessTokenDataModel
 
 
 # GET Securities Models
+@dataclass
 class SecuritiesInputModel(BaseInputModel):
-    market: str = Field(...)
-
-    @field_validator("market")
-    def validate_market(cls, value):
-        if value not in [m.value for m in Market_5]:
-            raise ValueError(
-                f"'{value}' is not a valid Market_5 value. Allowed values: {[m.value for m in Market_5]}"
-            )
-        return value
+    market: Optional[str] = None
 
 
-class SecuritiesDataModel(BaseModel):
+@dataclass
+class SecuritiesDataModel:
     market: Market_4
     symbol: str
     stockName: str
     stockEnName: str
 
 
+@dataclass
 class SecuritiesOutputModel(BaseOutputModel):
     data: List[SecuritiesDataModel]
 
 
 # GET SecuritiesDetails Models
+@dataclass
 class SecuritiesDetailsInputModel(BaseInputModel):
     market: Market_4
     symbol: str
 
 
-class SecuritiesDetailsDataRepeatedInfoModel(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
+@dataclass
+class SecuritiesDetailsDataRepeatedInfoModel:
     isin: str
     symbol: str
     symbolName: str
@@ -203,28 +203,33 @@ class SecuritiesDetailsDataRepeatedInfoModel(BaseModel):
     tickIncrement4: int
 
 
-class SecuritiesDetailsDataModel(BaseModel):
+@dataclass
+class SecuritiesDetailsDataModel:
     RType: str
     reportDate: str  # dd/MM/yyyy
     totalNoSym: int
     repeatedinfoList: List[SecuritiesDetailsDataRepeatedInfoModel]
 
 
+@dataclass
 class SecuritiesDetailsOutputModel(BaseOutputModel):
     data: List[SecuritiesDetailsDataModel]
 
 
 # GET IndexComponents
+@dataclass
 class IndexComponentsInputModel(BaseInputModel):
     indexCode: str
 
 
-class IndexComponentsDataIndexComponentModel(BaseModel):
+@dataclass
+class IndexComponentsDataIndexComponentModel:
     isin: str
     stockSymbol: str
 
 
-class IndexComponentsDataModel(BaseModel):
+@dataclass
+class IndexComponentsDataModel:
     indexCode: str
     indexName: str
     exchange: Exchange_2
@@ -232,38 +237,40 @@ class IndexComponentsDataModel(BaseModel):
     indexComponent: List[IndexComponentsDataIndexComponentModel]
 
 
+@dataclass
 class IndexComponentsOutputModel(BaseOutputModel):
     data: List[IndexComponentsDataModel]
 
 
 # GET IndexList
+@dataclass
 class IndexListInputModel(BaseInputModel):
     exchange: Exchange_5
 
 
-class IndexListDataModel(BaseModel):
+@dataclass
+class IndexListDataModel:
     indexCode: str
     indexName: str
     exchange: Exchange_5
 
 
+@dataclass
 class IndexListOutputModel(BaseOutputModel):
     data: List[IndexListDataModel]
 
 
 # GET DailyOhlc
+@dataclass
 class DailyOhlcInputModel(BaseInputModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
     symbol: str
     fromDate: datetime
     toDate: datetime
     ascending: bool
 
 
-class DailyOhlcDataModel(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
+@dataclass
+class DailyOhlcDataModel:
     symbol: str
     market: Market_5
     tradingDate: datetime
@@ -276,14 +283,14 @@ class DailyOhlcDataModel(BaseModel):
     value: float
 
 
+@dataclass
 class DailyOhlcOutputModel(BaseOutputModel):
     data: List[DailyOhlcDataModel]
 
 
 # GET IntradayOhlc
+@dataclass
 class IntradayOhlcInputModel(BaseInputModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
     symbol: str
     fromDate: datetime
     toDate: datetime
@@ -291,9 +298,8 @@ class IntradayOhlcInputModel(BaseInputModel):
     resollution: int = 1
 
 
-class IntradayOhlcDataModel(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
+@dataclass
+class IntradayOhlcDataModel:
     symbol: str
     market: Market_3
     tradingDate: datetime
@@ -305,23 +311,22 @@ class IntradayOhlcDataModel(BaseModel):
     volume: int
 
 
+@dataclass
 class IntradayOhlcOutputModel(BaseOutputModel):
     data: List[IntradayOhlcDataModel]
 
 
 # GET DailyIndex
+@dataclass
 class DailyIndexInputModel(BaseInputModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
     indexId: str
     fromDate: datetime
     toDate: datetime
     ascending: bool
 
 
-class DailyIndexDataModel(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
+@dataclass
+class DailyIndexDataModel:
     indexCode: str
     indexValue: float
     tradingDate: datetime
@@ -345,23 +350,22 @@ class DailyIndexDataModel(BaseModel):
     tradingSession: TradingSession
 
 
+@dataclass
 class DailyIndexOutputModel(BaseOutputModel):
     data: List[DailyIndexDataModel]
 
 
 # GET DailyStockPrice
+@dataclass
 class DailyStockPriceInputModel(BaseInputModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
     symbol: str
     fromDate: datetime
     toDate: datetime
     market: Market_5
 
 
-class DailyStockPriceDataModel(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
+@dataclass
+class DailyStockPriceDataModel:
     symbol: str
     tradingDate: datetime
     time: datetime
@@ -395,5 +399,6 @@ class DailyStockPriceDataModel(BaseModel):
     totalTradedValue: int
 
 
-class DailyStockPriceOutputModel(BaseModel):
+@dataclass
+class DailyStockPriceOutputModel(BaseOutputModel):
     data: List[DailyStockPriceDataModel]

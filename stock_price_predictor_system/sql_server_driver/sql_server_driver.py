@@ -1,5 +1,6 @@
 import datetime
 import pyodbc
+from typing import List, Tuple
 from .models import *
 from ..logger.logger import Logger
 
@@ -80,10 +81,10 @@ class SqlServerDriver:
     def create_new_database(self, new_database_name: str):
         if self.check_database_exists(new_database_name):
             print(
-                f'Table "{new_database_name}" already exists.',
+                f"Database [{new_database_name}] already exists.",
             )
             self._logger.log_info(
-                f'Table "{new_database_name}" already exists.',
+                f"Database [{new_database_name}] already exists.",
             )
             return False
 
@@ -102,10 +103,10 @@ class SqlServerDriver:
         self._current_database = new_database_name
 
         print(
-            f'Created database with name "{new_database_name}".',
+            f"Created database with name [{new_database_name}].",
         )
         self._logger.log_info(
-            f'Created database with name "{new_database_name}".',
+            f"Created database with name [{new_database_name}].",
         )
 
         return True
@@ -138,20 +139,20 @@ class SqlServerDriver:
         # Check whether database already exists
         if not self.check_database_exists(database_name):
             print(
-                f'Datbase "{database_name}" does not exist yet. Cannot create table.',
+                f"Datbase [{database_name}] does not exist yet. Cannot create table.",
             )
             self._logger.log_info(
-                f'Datbase "{database_name}" does not exist yet. Cannot create table.',
+                f"Datbase [{database_name}] does not exist yet. Cannot create table.",
             )
             return False
 
         # Check whether table already exists
         if self.check_table_exists(database_name=database_name, table_name=table_name):
             print(
-                f'Table "{database_name}.dbo.{table_name}" already exists.',
+                f"Table [{database_name}].[dbo].[{table_name}] already exists.",
             )
             self._logger.log_info(
-                f'Table "{database_name}.dbo.{table_name}" already exists.',
+                f"Table [{database_name}].[dbo].[{table_name}] already exists.",
             )
             return False
 
@@ -163,10 +164,10 @@ class SqlServerDriver:
                     database_name=database_name, table_name=foreign_key.tableToRefer
                 ):
                     print(
-                        f'Foreign table "{database_name}.dbo.{foreign_key.tableToRefer}" does not exists. Cannot refer to it.',
+                        f"Foreign table [{database_name}].[dbo].[{foreign_key.tableToRefer}] does not exists. Cannot refer to it.",
                     )
                     self._logger.log_info(
-                        f'Foreign table "{database_name}.dbo.{foreign_key.tableToRefer}" does not exists. Cannot refer to it.',
+                        f"Foreign table [{database_name}].[dbo].[{foreign_key.tableToRefer}] does not exists. Cannot refer to it.",
                     )
                     return False
 
@@ -227,10 +228,10 @@ CREATE TABLE {table_name} (
         self._cursor.execute(query)
 
         print(
-            f"Table '{database_name}.dbo.{table_name}' is created successfully.",
+            f"Table [{database_name}].[dbo].[{table_name}] is created successfully.",
         )
         self._logger.log_info(
-            f"Table '{database_name}.dbo.{table_name}' is created successfully.",
+            f"Table [{database_name}].[dbo].[{table_name}] is created successfully.",
         )
 
         return True
@@ -257,10 +258,10 @@ CREATE TABLE {table_name} (
         # Check whether database already exists
         if not self.check_database_exists(database_name):
             print(
-                f'Datbase "{database_name}" does not exist yet. Cannot insert data.',
+                f"Datbase [{database_name}] does not exist yet. Cannot insert data.",
             )
             self._logger.log_info(
-                f'Datbase "{database_name}" does not exist yet. Cannot insert data.',
+                f"Datbase [{database_name}] does not exist yet. Cannot insert data.",
             )
             return False
 
@@ -269,10 +270,10 @@ CREATE TABLE {table_name} (
             database_name=database_name, table_name=table_name
         ):
             print(
-                f'Table "{database_name}.dbo.{table_name}" does not exist yet. Cannot insert data',
+                f"Table [{database_name}].[dbo].[{table_name}] does not exist yet. Cannot insert data",
             )
             self._logger.log_info(
-                f'Table "{database_name}.dbo.{table_name}" does not exist yet. Cannot insert data',
+                f"Table [{database_name}].[dbo].[{table_name}] does not exist yet. Cannot insert data",
             )
             return False
 
@@ -299,10 +300,10 @@ CREATE TABLE {table_name} (
         self._cursor.execute(query)
 
         print(
-            f"Inserted {len(records)} records into [{database_name}].[dbo].[{table_name}]",
+            f"Inserted {len(records)} records into table [{database_name}].[dbo].[{table_name}]",
         )
         self._logger.log_info(
-            f"Inserted {len(records)} records into [{database_name}].[dbo].[{table_name}]",
+            f"Inserted {len(records)} records into table [{database_name}].[dbo].[{table_name}]",
         )
 
     def _internal_update_data(
@@ -325,10 +326,10 @@ CREATE TABLE {table_name} (
         # Check whether database already exists
         if not self.check_database_exists(database_name):
             print(
-                f'Datbase "{database_name}" does not exist yet. Cannot insert data.',
+                f"Datbase [{database_name}] does not exist yet. Cannot insert data.",
             )
             self._logger.log_info(
-                f'Datbase "{database_name}" does not exist yet. Cannot insert data.',
+                f"Datbase [{database_name}] does not exist yet. Cannot insert data.",
             )
             return False
 
@@ -337,10 +338,10 @@ CREATE TABLE {table_name} (
             database_name=database_name, table_name=table_name
         ):
             print(
-                f'Table "{database_name}.dbo.{table_name}" does not exist yet. Cannot insert data',
+                f"Table [{database_name}].[dbo].[{table_name}] does not exist yet. Cannot insert data",
             )
             self._logger.log_info(
-                f'Table "{database_name}.dbo.{table_name}" does not exist yet. Cannot insert data',
+                f"Table [{database_name}].[dbo].[{table_name}] does not exist yet. Cannot insert data",
             )
             return False
 
@@ -424,6 +425,7 @@ WHERE {" AND ".join(f"{condition.column} {condition.operator.value} {self.format
             self._logger.log_warning(
                 f"Cannot purge table '{table_name}' since table {table_name} does not exist."
             )
+            return False
 
         query = f"DELETE FROM [{database_name}].[dbo].[{table_name}]"
 
@@ -433,3 +435,94 @@ WHERE {" AND ".join(f"{condition.column} {condition.operator.value} {self.format
         self._logger.log_info(f"Successfully purge data from table '{table_name}'.")
 
         return True
+
+    def retrieve_data(
+        self,
+        database_name: str,
+        table_name: str,
+        columns: List[str] = None,
+        limit: int = None,
+    ) -> List[Tuple]:
+        # region Validate inputs
+        # Validate the database
+        if not self.check_database_exists(database_name):
+            print(
+                f"Cannot retrieve data from table [{database_name}].[dbo].[{table_name}] since database [{database_name}] does not exist."
+            )
+            self._logger.log_warning(
+                f"Cannot retrieve data from table [{database_name}].[dbo].[{table_name}] since database [{database_name}] does not exist."
+            )
+            return None
+
+        # Validate the table
+        if not self.check_table_exists(database_name, table_name):
+            print(
+                f"Cannot retrieve data from table [{database_name}].[dbo].[{table_name}] since table [{database_name}].[dbo].[{table_name}] does not exist."
+            )
+            self._logger.log_warning(
+                f"Cannot retrieve data from table [{database_name}].[dbo].[{table_name}] since table [{database_name}].[dbo].[{table_name}] does not exist."
+            )
+            return None
+
+        # Validate columns to be retrieved
+        if columns and (not isinstance(columns, List) or len(columns) < 1):
+            print(
+                f"Invalid columns to retrieve data from table [{database_name}].[dbo].[{table_name}]. 'columns' value will not be applied."
+            )
+            self._logger.log_warning(
+                f"Invalid columns to retrieve data from table [{database_name}].[dbo].[{table_name}]. 'columns' value will not be applied."
+            )
+            columns = None
+
+        # Validate limit value
+        if limit and (not isinstance(limit, int) or limit < 0):
+            print(
+                f"Invalid 'limit' value in SELECT query from table [{database_name}].[dbo].[{table_name}]. 'limit' value will not be applied."
+            )
+            self._logger.log_warning(
+                f"Invalid 'limit' value in SELECT query from table [{database_name}].[dbo].[{table_name}]. 'limit' value will not be applied."
+            )
+            limit = None
+        # endregion
+
+        columns_string = ""
+        if not columns:
+            columns_string = "*"
+        else:
+            columns_string = ",".join(columns)
+
+        query = ""
+        if limit:
+            query = f"SELECT TOP ({limit}) {columns_string} FROM [{database_name}].[dbo].[{table_name}]"
+
+        else:
+            query = (
+                f"SELECT {columns_string} FROM [{database_name}].[dbo].[{table_name}]"
+            )
+
+        self._cursor.fetchall()
+
+        try:
+            self._cursor.execute(query)
+
+            result = self._cursor.fetchall()
+            print(result)
+
+            print(
+                f"Successfully retrieved data from table '[{database_name}].[dbo].[{table_name}]'. Retrieved {len(result)} records."
+            )
+            self._logger.log_info(
+                f"Successfully retrieved data from table '[{database_name}].[dbo].[{table_name}]'. Retrieved {len(result)} records."
+            )
+
+            return result
+
+        except Exception as e:
+            print(
+                f"Cannot retrieve data with columns: {columns} from table '[{database_name}].[dbo].[{table_name}]'\nError: {e}."
+            )
+            self._logger.log_error(
+                f"Cannot retrieve data with columns: {columns} from table '[{database_name}].[dbo].[{table_name}]'\nError: {e}."
+            )
+
+            return None
