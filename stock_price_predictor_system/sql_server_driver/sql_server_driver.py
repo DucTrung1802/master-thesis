@@ -281,20 +281,20 @@ CREATE TABLE {table_name} (
             [f"[{data_model.columnName}]" for data_model in records[0].dataModelList]
         )
 
-        new_values = ""
-        for record in records:
-            value = f"""VALUES
-(
-    {",\n\t".join(self.format_value(data_model.value, data_model.dataType) for data_model in record.dataModelList)}
-)\n"""
-            new_values += value
+        new_values = ",\n".join(
+            f"""(
+            {", ".join(self.format_value(data_model.value, data_model.dataType) for data_model in record.dataModelList)}
+            )"""
+            for record in records
+        )
 
         query = f"""INSERT INTO [{database_name}].[dbo].[{table_name}]
-(
-    {column_names_in_query}
-)
-{new_values}
-"""
+        (
+            {column_names_in_query}
+        )
+        VALUES
+        {new_values}
+        """
 
         self._logger.log_debug(f"\n{query}")
         self._cursor.execute(query)
@@ -506,7 +506,6 @@ WHERE {" AND ".join(f"{condition.column} {condition.operator.value} {self.format
             self._cursor.execute(query)
 
             result = self._cursor.fetchall()
-            print(result)
 
             print(
                 f"Successfully retrieved data from table '[{database_name}].[dbo].[{table_name}]'. Retrieved {len(result)} records."

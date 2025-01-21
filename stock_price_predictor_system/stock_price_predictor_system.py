@@ -213,16 +213,16 @@ Created by Trung Ly Duc
 
         return successful
 
-    def _crawl_sql_server_data(self):
-        print("\nStart crawling SQL Server data")
-        self._logger.log_info("Start crawling SQL Server data")
+    def _crawl_tabular_data(self):
+        print("\nStart crawling tabular data. Please wait...")
+        self._logger.log_info("Start crawling tabular data. Please wait...")
         self._ssi_data_crawler.crawl_tabular_data(
             self._config.ssi_crawler_info, self._sql_server_driver
         )
 
-    def _crawl_influx_data(self):
-        print("\nStart crawling Influx data")
-        self._logger.log_info("Start crawling Influx data")
+    def _crawl_time_series_data(self):
+        print("\nStart crawling time series data. Please wait...")
+        self._logger.log_info("Start crawling time series data. Please wait...")
         self._ssi_data_crawler.crawl_time_series_data()
 
     def _crawl_data(self):
@@ -243,11 +243,11 @@ Created by Trung Ly Duc
 
         print("\nSuccessfully created all database schemas.")
 
-        self._crawl_sql_server_data()
+        self._crawl_tabular_data()
 
-        self._crawl_influx_data()
+        self._crawl_time_series_data()
 
-        print("Crawling data has been completed.")
+        print("\nCrawling data has been completed.")
 
     def _confirm_action(self) -> bool:
         self._clear_console()
