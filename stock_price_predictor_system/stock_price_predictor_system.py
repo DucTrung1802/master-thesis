@@ -145,18 +145,18 @@ Created by Trung Ly Duc
                     columnName="Symbol", dataType=DataType.NVARCHAR(12), nullable=False
                 ),
                 Column(
-                    columnName="Name", dataType=DataType.NVARCHAR(200), nullable=False
+                    columnName="Name", dataType=DataType.NVARCHAR(200), nullable=True
                 ),
                 Column(
-                    columnName="EnName", dataType=DataType.NVARCHAR(200), nullable=False
+                    columnName="EnName", dataType=DataType.NVARCHAR(200), nullable=True
                 ),
                 Column(
-                    columnName="ListedShare", dataType=DataType.BIGINT(), nullable=False
+                    columnName="ListedShare", dataType=DataType.BIGINT(), nullable=True
                 ),
                 Column(
                     columnName="MarketCapitalization",
                     dataType=DataType.BIGINT(),
-                    nullable=False,
+                    nullable=True,
                 ),
                 Column(columnName="Market_ID", dataType=DataType.INT(), nullable=False),
                 Column(
