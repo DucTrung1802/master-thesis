@@ -179,8 +179,207 @@ class SsiDataCrawler:
             f"Successfully inserted {len(market_record_list)} in [{database_name}].[dbo].[{table_name}]."
         )
 
-    def _create_all_security_types_data(self):
-        pass
+    def _retrieve_all_security_type_data(self):
+        return self._sql_server_driver.retrieve_data(
+            database_name="SSI_STOCKS", table_name="SecurityType"
+        )
+
+    def _create_all_security_type_data(self):
+
+        # Retrieve all security type data
+        all_security_type_data = self._retrieve_all_security_type_data()
+
+        # Check if all market data had been created
+        is_seven_elements = len(all_security_type_data) == 7
+
+        symbols = [item[1] for item in all_security_type_data]
+        expected_symbols = {"ST", "CW", "FU", "EF", "BO", "OF", "MF"}
+        is_correct_symbols = set(symbols) == expected_symbols
+
+        if is_seven_elements and is_correct_symbols:
+            print(
+                "All security type data has been created before. No need to create security type data."
+            )
+            self._logger.log_info(
+                "All security type data has been created before. No need to create security type data."
+            )
+            return
+
+        self._sql_server_driver.purge_data(
+            database_name="SSI_STOCKS", table_name="SecurityType"
+        )
+
+        security_type_record_1: Record = Record(
+            [
+                DataModel(columnName="Symbol", value="ST", dataType=DataType.NVARCHAR),
+                DataModel(
+                    columnName="Name",
+                    value="Cổ phiếu",
+                    dataType=DataType.NVARCHAR,
+                ),
+                DataModel(
+                    columnName="EnName",
+                    value="Stock",
+                    dataType=DataType.NVARCHAR,
+                ),
+                DataModel(
+                    columnName="CreateDate",
+                    value=datetime.now(),
+                    dataType=DataType.DATETIME,
+                ),
+            ]
+        )
+
+        security_type_record_2: Record = Record(
+            [
+                DataModel(columnName="Symbol", value="CW", dataType=DataType.NVARCHAR),
+                DataModel(
+                    columnName="Name",
+                    value="Chứng quyền có bảo đảm",
+                    dataType=DataType.NVARCHAR,
+                ),
+                DataModel(
+                    columnName="EnName",
+                    value="Covered Warrant",
+                    dataType=DataType.NVARCHAR,
+                ),
+                DataModel(
+                    columnName="CreateDate",
+                    value=datetime.now(),
+                    dataType=DataType.DATETIME,
+                ),
+            ]
+        )
+
+        security_type_record_3: Record = Record(
+            [
+                DataModel(columnName="Symbol", value="FU", dataType=DataType.NVARCHAR),
+                DataModel(
+                    columnName="Name",
+                    value="Hợp đồng tương lai",
+                    dataType=DataType.NVARCHAR,
+                ),
+                DataModel(
+                    columnName="EnName",
+                    value="Futures",
+                    dataType=DataType.NVARCHAR,
+                ),
+                DataModel(
+                    columnName="CreateDate",
+                    value=datetime.now(),
+                    dataType=DataType.DATETIME,
+                ),
+            ]
+        )
+
+        security_type_record_4: Record = Record(
+            [
+                DataModel(columnName="Symbol", value="EF", dataType=DataType.NVARCHAR),
+                DataModel(
+                    columnName="Name",
+                    value="Quỹ hoán đổi danh mục",
+                    dataType=DataType.NVARCHAR,
+                ),
+                DataModel(
+                    columnName="EnName",
+                    value="Exchange Traded Fund",
+                    dataType=DataType.NVARCHAR,
+                ),
+                DataModel(
+                    columnName="CreateDate",
+                    value=datetime.now(),
+                    dataType=DataType.DATETIME,
+                ),
+            ]
+        )
+
+        security_type_record_5: Record = Record(
+            [
+                DataModel(columnName="Symbol", value="BO", dataType=DataType.NVARCHAR),
+                DataModel(
+                    columnName="Name",
+                    value="Trái phiếu",
+                    dataType=DataType.NVARCHAR,
+                ),
+                DataModel(
+                    columnName="EnName",
+                    value="BOND",
+                    dataType=DataType.NVARCHAR,
+                ),
+                DataModel(
+                    columnName="CreateDate",
+                    value=datetime.now(),
+                    dataType=DataType.DATETIME,
+                ),
+            ]
+        )
+
+        security_type_record_6: Record = Record(
+            [
+                DataModel(columnName="Symbol", value="OF", dataType=DataType.NVARCHAR),
+                DataModel(
+                    columnName="Name",
+                    value="Quỹ mở",
+                    dataType=DataType.NVARCHAR,
+                ),
+                DataModel(
+                    columnName="EnName",
+                    value="Open-ended Funds",
+                    dataType=DataType.NVARCHAR,
+                ),
+                DataModel(
+                    columnName="CreateDate",
+                    value=datetime.now(),
+                    dataType=DataType.DATETIME,
+                ),
+            ]
+        )
+
+        security_type_record_7: Record = Record(
+            [
+                DataModel(columnName="Symbol", value="MF", dataType=DataType.NVARCHAR),
+                DataModel(
+                    columnName="Name",
+                    value="Quỹ tương hỗ",
+                    dataType=DataType.NVARCHAR,
+                ),
+                DataModel(
+                    columnName="EnName",
+                    value="Mutual Fund",
+                    dataType=DataType.NVARCHAR,
+                ),
+                DataModel(
+                    columnName="CreateDate",
+                    value=datetime.now(),
+                    dataType=DataType.DATETIME,
+                ),
+            ]
+        )
+
+        security_type_record_list = [
+            security_type_record_1,
+            security_type_record_2,
+            security_type_record_3,
+            security_type_record_4,
+            security_type_record_5,
+            security_type_record_6,
+            security_type_record_7,
+        ]
+
+        database_name = "SSI_STOCKS"
+        table_name = "SecurityType"
+        self._sql_server_driver.insert_data(
+            database_name=database_name,
+            table_name=table_name,
+            records=security_type_record_list,
+        )
+
+        print(
+            f"Successfully inserted {len(security_type_record_list)} in [{database_name}].[dbo].[{table_name}]."
+        )
+        self._logger.log_info(
+            f"Successfully inserted {len(security_type_record_list)} in [{database_name}].[dbo].[{table_name}]."
+        )
 
     def _crawl_all_securities_data(self):
         securities_input_model = SecuritiesInputModel(pageIndex=1, pageSize=100)
@@ -205,7 +404,7 @@ class SsiDataCrawler:
         self._create_all_market_data()
 
         # Create all security types data
-        self._create_all_security_types_data()
+        self._create_all_security_type_data()
 
         # Crawl all securities data
         # self._crawl_all_securities_data()

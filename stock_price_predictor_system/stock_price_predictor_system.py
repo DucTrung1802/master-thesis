@@ -115,6 +115,9 @@ Created by Trung Ly Duc
                     columnName="Name", dataType=DataType.NVARCHAR(30), nullable=False
                 ),
                 Column(
+                    columnName="EnName", dataType=DataType.NVARCHAR(30), nullable=False
+                ),
+                Column(
                     columnName="CreateDate",
                     dataType=DataType.DATETIME(),
                     nullable=False,
