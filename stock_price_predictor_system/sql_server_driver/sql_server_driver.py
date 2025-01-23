@@ -50,6 +50,16 @@ class SqlServerDriver:
                 f"Closed connection to SQL Server.",
             )
 
+    def _execute_query(self, query: str):
+        try:
+            self._cursor.execute(query)
+
+        except Exception as e:
+            print(f"Error executing query:\n{query}")
+            print(f"Error detail: {e}")
+            self._logger.log_error(f"Error executing query:\n{query}")
+            self._logger.log_error(f"Error detail: {e}")
+
     def set_current_database(self, current_database: str):
         self._current_database = current_database
         self._logger.log_info(
@@ -69,7 +79,7 @@ class SqlServerDriver:
             END AS Result;
         """
         self._logger.log_debug(f"\n{query}")
-        self._cursor.execute(query)
+        self._execute_query(query)
 
         result = self._cursor.fetchall()
 
@@ -92,13 +102,13 @@ class SqlServerDriver:
             CREATE DATABASE [{new_database_name}];
         """
         self._logger.log_debug(f"\n{query}")
-        self._cursor.execute(query)
+        self._execute_query(query)
 
         query = f"""
             USE [{new_database_name}];
         """
         self._logger.log_debug(f"\n{query}")
-        self._cursor.execute(query)
+        self._execute_query(query)
 
         self._current_database = new_database_name
 
@@ -119,7 +129,7 @@ class SqlServerDriver:
             END AS Result;
         """
         self._logger.log_debug(f"\n{query}")
-        self._cursor.execute(query)
+        self._execute_query(query)
 
         result = self._cursor.fetchall()
 
@@ -225,7 +235,7 @@ CREATE TABLE {table_name} (
 );"""
 
         self._logger.log_debug(f"\n{query}")
-        self._cursor.execute(query)
+        self._execute_query(query)
 
         print(
             f"Table [{database_name}].[dbo].[{table_name}] is created successfully.",
@@ -243,6 +253,86 @@ CREATE TABLE {table_name} (
         elif data_type in [DataType.DATETIME]:
             return f"CAST ('{value.replace(microsecond=0)}' AS DATETIME)"
         return str(value)
+
+    def _add_join(self, join_model: JoinModel) -> str:
+
+        if not join_model:
+            print(f"Invalid join model.")
+            self._logger.log_error(f"Invalid join model.")
+            return None
+
+        # Check database existence
+        if not self.check_database_exists(join_model.database):
+            print(f"Add join - Database [{join_model.database}] does not exist.")
+            self._logger.log_error(
+                f"Add join - Database [{join_model.database}] does not exist."
+            )
+            return None
+
+        # Validat join combination list
+        if (
+            not join_model.join_combination_list
+            or not isinstance(join_model.join_combination_list, List)
+            or len(join_model.join_combination_list) <= 0
+        ):
+            print(f"Invalid join combination list. Found no join combinations.")
+            self._logger.log_error(
+                f"Invalid join combination list. Found no join combinations."
+            )
+            return None
+
+        # Check tables existence
+        for join_combination in join_model.join_combination_list:
+
+            left_table_exist = self.check_table_exists(
+                database_name=join_model.database,
+                table_name=join_combination.table_left,
+            )
+            if not left_table_exist:
+                print(
+                    f"Add join - Table [{join_model.database}].[dbo].[{join_combination.table_left}] does not exist."
+                )
+                self._logger.log_error(
+                    f"Add join - Table [{join_model.database}].[dbo].[{join_combination.table_left}] does not exist."
+                )
+                return None
+
+            right_table_exist = self.check_table_exists(
+                database_name=join_model.database,
+                table_name=join_combination.table_right,
+            )
+            if not right_table_exist:
+                print(
+                    f"Add join - Table [{join_model.database}].[dbo].[{join_combination.table_right}] does not exist."
+                )
+                self._logger.log_error(
+                    f"Add join - Table [{join_model.database}].[dbo].[{join_combination.table_rightF}] does not exist."
+                )
+                return None
+
+        # Compose query
+        database = join_model.database
+        table = join_model.table
+        query = f"FROM {database}.dbo.{table}\n"
+        query += "\n".join(
+            f"{join_combination.join_type.value} JOIN {database}.dbo.{join_combination.table_right} "
+            f"ON {join_combination.table_left}.{join_combination.column_left} = "
+            f"{join_combination.table_right}.{join_combination.column_right}"
+            for join_combination in join_model.join_combination_list
+        )
+
+        return query
+
+    def _add_condition(self, condition_list: List[Condition]):
+        if (
+            condition_list
+            and isinstance(condition_list, List)
+            and len(condition_list) > 0
+        ):
+            query += f"""WHERE {" AND ".join(f"{condition.column} {condition.operator.value} {self.format_value(condition.value, condition.dataType)}" for condition in condition_list)}"""
+            return query
+
+        return None
 
     def insert_data(self, database_name: str, table_name: str, records: List[Record]):
         # Check whether records has at least one record
@@ -297,7 +387,7 @@ CREATE TABLE {table_name} (
         """
 
         self._logger.log_debug(f"\n{query}")
-        self._cursor.execute(query)
+        self._execute_query(query)
 
         print(
             f"Inserted {len(records)} records into table [{database_name}].[dbo].[{table_name}]",
@@ -311,7 +401,8 @@ CREATE TABLE {table_name} (
         database_name: str,
         table_name: str,
         record: Record,
-        conditions: List[Condition],
+        join_model: JoinModel = None,
+        condition_list: List[Condition] = None,
     ):
         # Check whether records has at least one record
         if not record or not isinstance(record, Record):
@@ -346,25 +437,34 @@ CREATE TABLE {table_name} (
             return False
 
         query = f"""UPDATE [{database_name}].[dbo].[{table_name}]
-SET {",\n\t".join(f"{data_model.columnName} = {self.format_value(data_model.value, data_model.dataType)}" for data_model in record.dataModelList)}\n
-WHERE {" AND ".join(f"{condition.column} {condition.operator.value} {self.format_value(condition.value, condition.dataType)}" for condition in conditions)}
+SET {",\n\t".join(f"{data_model.columnName} = {self.format_value(data_model.value, data_model.dataType)}" for data_model in record.dataModelList)}
 """
 
+        join_query = self._add_join(current_query=query, join_model=join_model)
+        if join_query:
+            query += join_query
+
+        condition_query = self._add_condition(condition_list=condition_list)
+        if condition_query:
+            query += condition_query
+
         self._logger.log_debug(f"\n{query}")
-        self._cursor.execute(query)
+        self._execute_query(query)
 
     def update_data(
         self,
         database_name: str,
         table_name: str,
         record: Record,
-        conditions: List[Condition],
+        join_model: JoinModel = None,
+        condition_list: List[Condition] = None,
     ):
         self._internal_update_data(
             database_name=database_name,
             table_name=table_name,
             record=record,
-            conditions=conditions,
+            join_model=join_model,
+            condition_list=condition_list,
         )
 
         print(
@@ -378,7 +478,7 @@ WHERE {" AND ".join(f"{condition.column} {condition.operator.value} {self.format
         self,
         database_name: str,
         table_name: str,
-        conditions: List[Condition],
+        condition_list: List[Condition],
     ):
         record: Record = Record(
             [
@@ -394,7 +494,7 @@ WHERE {" AND ".join(f"{condition.column} {condition.operator.value} {self.format
             database_name=database_name,
             table_name=table_name,
             record=record,
-            conditions=conditions,
+            condition_list=condition_list,
         )
 
         print(
@@ -429,7 +529,7 @@ WHERE {" AND ".join(f"{condition.column} {condition.operator.value} {self.format
 
         query = f"DELETE FROM [{database_name}].[dbo].[{table_name}]"
 
-        self._cursor.execute(query)
+        self._execute_query(query)
 
         print(f"Successfully purge data from table '{table_name}'.")
         self._logger.log_info(f"Successfully purge data from table '{table_name}'.")
@@ -503,7 +603,7 @@ WHERE {" AND ".join(f"{condition.column} {condition.operator.value} {self.format
         self._cursor.fetchall()
 
         try:
-            self._cursor.execute(query)
+            self._execute_query(query)
 
             result = self._cursor.fetchall()
 

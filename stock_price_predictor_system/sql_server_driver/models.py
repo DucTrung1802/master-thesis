@@ -25,6 +25,14 @@ class Operator(Enum):
     BETWEEN = "BETWEEN"
 
 
+class JoinType(Enum):
+    INNER_JOIN = "INNER JOIN"
+    LEFT_OUTER_JOIN = "LEFT OUTER JOIN"
+    RIGHT_OUTER_JOIN = "RIGHT OUTER JOIN"
+    FULL_OUTER_JOIN = "FULL OUTER JOIN"
+    CROSS_JOIN = "CROSS JOIN"
+
+
 @dataclass
 class SqlServerAuthentication:
     server: str
@@ -86,3 +94,19 @@ class Condition:
     operator: Operator
     value: str | int | float  # Need to upgrade to avoid SQL injection
     dataType: DataType
+
+
+@dataclass
+class JoinCombination:
+    join_type: JoinType
+    table_left: str
+    table_right: str
+    column_left: str
+    column_right: str
+
+
+@dataclass
+class JoinModel:
+    database: str
+    table: str
+    join_combination_list: List[JoinCombination]
