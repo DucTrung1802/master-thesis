@@ -1,116 +1,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime
-from enum import Enum
 from typing import List, Literal, Optional
-
-
-class Market_3(Enum):
-    """
-    Represents 03 base financial markets in Vietnam.
-
-    Attributes:
-        HOSE: Ho Chi Minh City Stock Exchange.
-        HNX: Hanoi Stock Exchange.
-        UPCOM: Unlisted Public Company Market.
-    """
-
-    HOSE = "HOSE"  # Ho Chi Minh City Stock Exchange
-    HNX = "HNX"  # Hanoi Stock Exchange
-    UPCOM = "UPCOM"  # Unlisted Public Company Market
-
-
-class Market_4(Enum):
-    """
-    Represents Market_3.
-    Add DER.
-
-    Attributes:
-        HOSE: Ho Chi Minh City Stock Exchange.
-        HNX: Hanoi Stock Exchange.
-        UPCOM: Unlisted Public Company Market.
-        DER: Derivatives Market.
-    """
-
-    HOSE = Market_3.HOSE.value
-    HNX = Market_3.HNX.value
-    UPCOM = Market_3.UPCOM.value
-
-    DER = "DER"  # Derivatives Market
-
-
-class Market_5(Enum):
-    """
-    Represents Market_4.
-    Add BOND.
-
-    Attributes:
-        HOSE: Ho Chi Minh City Stock Exchange.
-        HNX: Hanoi Stock Exchange.
-        UPCOM: Unlisted Public Company Market.
-        DER: Derivatives Market.
-        BOND: Bond Market.
-    """
-
-    HOSE = Market_4.HOSE.value
-    HNX = Market_4.HNX.value
-    UPCOM = Market_4.UPCOM.value
-    DER = Market_4.DER.value
-
-    BOND = "BOND"  # Bond Market
-
-
-class Exchange_2(Enum):
-    """
-    Represents 02 base financial markets in Vietnam.
-
-    Attributes:
-        HOSE: Ho Chi Minh City Stock Exchange.
-        HNX: Hanoi Stock Exchange.
-    """
-
-    HOSE = "HOSE"  # Ho Chi Minh City Stock Exchange
-    HNX = "HNX"  # Hanoi Stock Exchange
-
-
-class Exchange_5(Enum):
-    """
-    Represents Exchange_2.
-    Add HNXBOND, UPCOM, DER
-
-    Attributes:
-        HOSE: Ho Chi Minh City Stock Exchange.
-        HNX: Hanoi Stock Exchange.
-        HNXBOND: Hanoi Stock Bond Market.
-        UPCOM: Unlisted Public Company Market.
-        DER: Derivatives Market.
-    """
-
-    HOSE = Exchange_2.HOSE.value
-    HNX = Exchange_2.HNX.value
-
-    HNXBOND = "HNXBOND"
-    UPCOM = "UPCOM"
-    DER = "DER"
-
-
-class SecurityType(Enum):
-    ST = "Stock"
-    CW = "Covered Warrant"
-    FU = "Futures"
-    EF = "ETF"
-    BO = "BOND"
-    OF = "OEF"
-    MF = "Mutual Fund"
-
-
-class TradingSession(Enum):
-    ATO = "Opening Call Auction"
-    LO = "Continuous Trading"
-    ATC = "Closing All Auction"
-    PT = "Putthrough"
-    C = "Market Close"
-    BREAK = "Lunch Break"
-    HALT = "Market Halt"
+from .enums import *
 
 
 @dataclass(kw_only=True)
@@ -152,7 +43,7 @@ class SecuritiesInputModel(BaseInputModel):
 
 @dataclass
 class SecuritiesDataModel:
-    market: Market_4
+    market: int
     symbol: str
     stockName: str
     stockEnName: str
@@ -166,7 +57,7 @@ class SecuritiesOutputModel(BaseOutputModel):
 # GET SecuritiesDetails Models
 @dataclass
 class SecuritiesDetailsInputModel(BaseInputModel):
-    market: Market_4
+    market: int
     symbol: str
 
 
@@ -177,8 +68,8 @@ class SecuritiesDetailsDataRepeatedInfoModel:
     symbolName: str
     symbolEngName: str
     secType: SecurityType
-    marketId: Market_5
-    exchange: Market_5
+    marketId: int
+    exchange: int
     issuer: str
     lotSize: int
     issueDate: datetime
@@ -232,7 +123,7 @@ class IndexComponentsDataIndexComponentModel:
 class IndexComponentsDataModel:
     indexCode: str
     indexName: str
-    exchange: Exchange_2
+    exchange: int
     totalSymbolNo: int
     indexComponent: List[IndexComponentsDataIndexComponentModel]
 
@@ -245,14 +136,14 @@ class IndexComponentsOutputModel(BaseOutputModel):
 # GET IndexList
 @dataclass
 class IndexListInputModel(BaseInputModel):
-    exchange: Exchange_5
+    exchange: int
 
 
 @dataclass
 class IndexListDataModel:
     indexCode: str
     indexName: str
-    exchange: Exchange_5
+    exchange: int
 
 
 @dataclass
@@ -272,7 +163,7 @@ class DailyOhlcInputModel(BaseInputModel):
 @dataclass
 class DailyOhlcDataModel:
     symbol: str
-    market: Market_5
+    market: int
     tradingDate: datetime
     time: datetime
     open: int
@@ -301,7 +192,7 @@ class IntradayOhlcInputModel(BaseInputModel):
 @dataclass
 class IntradayOhlcDataModel:
     symbol: str
-    market: Market_3
+    market: int
     tradingDate: datetime
     time: datetime
     open: int
@@ -361,7 +252,7 @@ class DailyStockPriceInputModel(BaseInputModel):
     symbol: str
     fromDate: datetime
     toDate: datetime
-    market: Market_5
+    market: int
 
 
 @dataclass

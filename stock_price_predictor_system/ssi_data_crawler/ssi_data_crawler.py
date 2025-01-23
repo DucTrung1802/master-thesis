@@ -1,10 +1,13 @@
 import datetime
 from ssi_fc_data.fc_md_client import MarketDataClient
+import math
+import time
 from .models import *
 from ..logger.logger import Logger
 from ..config_helper.models import SsiCrawlerInfoConfig
 from ..sql_server_driver.sql_server_driver import SqlServerDriver
 from ..sql_server_driver.models import *
+from .enums import *
 
 
 class SsiDataCrawler:
@@ -14,6 +17,15 @@ class SsiDataCrawler:
         self._config: SsiCrawlerInfoConfig = None
         self._client: MarketDataClient = None
         self._sql_server_driver: SqlServerDriver = None
+
+    # Wrapper
+    def _get_securities(self, securities_input_model: SecuritiesInputModel):
+        print(
+            f"\nCrawling security data from API. PageIndex: {securities_input_model.pageIndex}. PageSize: {securities_input_model.pageSize}."
+        )
+        result = self._client.securities(self._config, securities_input_model)
+        time.sleep(2)
+        return result
 
     def _retrieve_all_market_data(self):
         return self._sql_server_driver.retrieve_data(
@@ -381,15 +393,126 @@ class SsiDataCrawler:
             f"Successfully inserted {len(security_type_record_list)} in [{database_name}].[dbo].[{table_name}]."
         )
 
-    def _crawl_all_securities_data(self):
-        securities_input_model = SecuritiesInputModel(pageIndex=1, pageSize=100)
-        response = self._client.securities(self._config, securities_input_model)
+    def _create_and_truncate_temp_security_table(self):
+        database_name = "SSI_STOCKS"
+        temp_security_table_name = "TempSecurity"
 
+        if not self._sql_server_driver.check_database_exists(
+            database_name=database_name
+        ):
+            print(
+                f"Database [{database_name}] does not exist. Cannot create {temp_security_table_name} table."
+            )
+            self._logger.log_error(
+                f"Database [{database_name}] does not exist. Cannot create {temp_security_table_name} table."
+            )
+            return False
+
+        if not self._sql_server_driver.check_table_exists(
+            database_name=database_name, table_name=temp_security_table_name
+        ):
+            temp_security_columns: List[Column] = [
+                Column(columnName="ID", dataType=DataType.INT(), nullable=False),
+                Column(
+                    columnName="Symbol", dataType=DataType.NVARCHAR(12), nullable=False
+                ),
+                Column(
+                    columnName="Name", dataType=DataType.NVARCHAR(200), nullable=True
+                ),
+                Column(
+                    columnName="EnName", dataType=DataType.NVARCHAR(200), nullable=True
+                ),
+                Column(columnName="Market_ID", dataType=DataType.INT(), nullable=False),
+            ]
+
+            self._sql_server_driver.create_table(
+                database_name=database_name,
+                table_name=temp_security_table_name,
+                columns=temp_security_columns,
+                key_column_name="ID",
+            )
+
+        self._sql_server_driver.truncate_table(
+            database_name=database_name, table_name=temp_security_table_name
+        )
+
+        return True
+
+    def _crawl_all_securities_data(self):
+
+        page_size = 100
+
+        # Crawl to know the total number of record
+        securities_input_model = SecuritiesInputModel()
+        response = self._get_securities(securities_input_model)
         securities_output_model = SecuritiesOutputModel(**response)
 
-        securities_data_model_list = securities_output_model.data
+        # Process if no records were found
+        if securities_output_model.totalRecord == 0:
+            print("Successfully crawl securities data but no records were found.")
+            self._logger.log_info(
+                "Successfully crawl securities data but no records were found."
+            )
+            return False
 
-        print(securities_output_model)
+        total_record = securities_output_model.totalRecord
+        number_of_page = math.ceil(total_record / page_size)
+
+        # Create temp table for joining security data
+        if not self._create_and_truncate_temp_security_table():
+            return False
+
+        # Crawl all securities
+        for i in range(1, number_of_page + 1):
+            securities_input_model = SecuritiesInputModel(
+                pageIndex=i, pageSize=page_size
+            )
+            response = self._get_securities(securities_input_model)
+            securities_output_model = SecuritiesOutputModel(**response)
+            securities_data_model = [
+                SecuritiesDataModel(
+                    market=MarketCode.get_market_code(security_data_model["Market"]),
+                    symbol=security_data_model["Symbol"],
+                    stockName=security_data_model["StockName"],
+                    stockEnName=security_data_model["StockEnName"],
+                )
+                for security_data_model in securities_output_model.data
+            ]
+
+            # Insert data to temp security table
+            security_record_list = [
+                Record(
+                    [
+                        DataModel(
+                            columnName="Symbol",
+                            dataType=DataType.NVARCHAR,
+                            value=security.symbol,
+                        ),
+                        DataModel(
+                            columnName="Name",
+                            dataType=DataType.NVARCHAR,
+                            value=security.stockName,
+                        ),
+                        DataModel(
+                            columnName="EnName",
+                            dataType=DataType.NVARCHAR,
+                            value=security.stockEnName,
+                        ),
+                        DataModel(
+                            columnName="Market_ID",
+                            dataType=DataType.INT,
+                            value=security.market,
+                        ),
+                    ]
+                )
+                for security in securities_data_model
+            ]
+
+            self._sql_server_driver.insert_data(
+                database_name="SSI_STOCKS",
+                table_name="TempSecurity",
+                records=security_record_list,
+            )
 
     def crawl_tabular_data(
         self,
@@ -407,7 +530,7 @@ class SsiDataCrawler:
         self._create_all_security_type_data()
 
         # Crawl all securities data
-        # self._crawl_all_securities_data()
+        self._crawl_all_securities_data()
 
     def crawl_time_series_data(self):
         pass

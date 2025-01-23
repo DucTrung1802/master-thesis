@@ -53,12 +53,14 @@ class SqlServerDriver:
     def _execute_query(self, query: str):
         try:
             self._cursor.execute(query)
+            return True
 
         except Exception as e:
             print(f"Error executing query:\n{query}")
             print(f"Error detail: {e}")
             self._logger.log_error(f"Error executing query:\n{query}")
             self._logger.log_error(f"Error detail: {e}")
+            return False
 
     def set_current_database(self, current_database: str):
         self._current_database = current_database
@@ -79,7 +81,8 @@ class SqlServerDriver:
             END AS Result;
         """
         self._logger.log_debug(f"\n{query}")
-        self._execute_query(query)
+        if not self._execute_query(query):
+            return
 
         result = self._cursor.fetchall()
 
@@ -102,13 +105,15 @@ class SqlServerDriver:
             CREATE DATABASE [{new_database_name}];
         """
         self._logger.log_debug(f"\n{query}")
-        self._execute_query(query)
+        if not self._execute_query(query):
+            return
 
         query = f"""
             USE [{new_database_name}];
         """
         self._logger.log_debug(f"\n{query}")
-        self._execute_query(query)
+        if not self._execute_query(query):
+            return
 
         self._current_database = new_database_name
 
@@ -129,7 +134,8 @@ class SqlServerDriver:
             END AS Result;
         """
         self._logger.log_debug(f"\n{query}")
-        self._execute_query(query)
+        if not self._execute_query(query):
+            return
 
         result = self._cursor.fetchall()
 
@@ -235,7 +241,8 @@ CREATE TABLE {table_name} (
 );"""
 
         self._logger.log_debug(f"\n{query}")
-        self._execute_query(query)
+        if not self._execute_query(query):
+            return
 
         print(
             f"Table [{database_name}].[dbo].[{table_name}] is created successfully.",
@@ -246,10 +253,33 @@ CREATE TABLE {table_name} (
 
         return True
 
+    def truncate_table(self, database_name: str, table_name: str):
+        if not self.check_database_exists(database_name):
+            print(
+                f"Cannot truncate table [{database_name}].[dbo].[{table_name}] since database [{database_name}] does not exist."
+            )
+            self._logger.log_error(
+                f"Cannot truncate table [{database_name}].[dbo].[{table_name}] since database [{database_name}] does not exist."
+            )
+            return False
+
+        if not self.check_table_exists(database_name, table_name):
+            print(
+                f"Cannot truncate table [{database_name}].[dbo].[{table_name}] since table does not exist."
+            )
+            self._logger.log_error(
+                f"Cannot truncate table [{database_name}].[dbo].[{table_name}] since table does not exist."
+            )
+            return False
+
+        query = f"""TRUNCATE TABLE [{database_name}].[dbo].[{table_name}]"""
+        if not self._execute_query(query):
+            return
+
     def format_value(self, value, data_type: DataType):
         """Format value based on its data type for SQL query."""
         if data_type in [DataType.NVARCHAR]:
-            return f"N'{value}'"
+            return f"N'{value.replace("'", "''") if value else value}'"
         elif data_type in [DataType.DATETIME]:
             return f"CAST ('{value.replace(microsecond=0)}' AS DATETIME)"
         return str(value)
@@ -367,27 +397,28 @@ CREATE TABLE {table_name} (
             )
             return False
 
-        column_names_in_query = ",\n\t".join(
+        column_names_in_query = ",\n    ".join(
             [f"[{data_model.columnName}]" for data_model in records[0].dataModelList]
         )
 
         new_values = ",\n".join(
             f"""(
-            {", ".join(self.format_value(data_model.value, data_model.dataType) for data_model in record.dataModelList)}
-            )"""
+    {", ".join(self.format_value(data_model.value, data_model.dataType) for data_model in record.dataModelList)}
+)"""
             for record in records
         )
 
         query = f"""INSERT INTO [{database_name}].[dbo].[{table_name}]
-        (
-            {column_names_in_query}
-        )
-        VALUES
-        {new_values}
-        """
+(
+    {column_names_in_query}
+)
+VALUES
+{new_values}
+"""
 
         self._logger.log_debug(f"\n{query}")
-        self._execute_query(query)
+        if not self._execute_query(query):
+            return
 
         print(
             f"Inserted {len(records)} records into table [{database_name}].[dbo].[{table_name}]",
@@ -449,7 +480,8 @@ SET {",\n\t".join(f"{data_model.columnName} = {self.format_value(data_model.valu
             query += condition_query
 
         self._logger.log_debug(f"\n{query}")
-        self._execute_query(query)
+        if not self._execute_query(query):
+            return
 
     def update_data(
         self,
@@ -529,7 +561,8 @@ SET {",\n\t".join(f"{data_model.columnName} = {self.format_value(data_model.valu
 
         query = f"DELETE FROM [{database_name}].[dbo].[{table_name}]"
 
-        self._execute_query(query)
+        if not self._execute_query(query):
+            return
 
         print(f"Successfully purge data from table '{table_name}'.")
         self._logger.log_info(f"Successfully purge data from table '{table_name}'.")
@@ -603,7 +636,8 @@ SET {",\n\t".join(f"{data_model.columnName} = {self.format_value(data_model.valu
         self._cursor.fetchall()
 
         try:
-            self._execute_query(query)
+            if not self._execute_query(query):
+                return
 
             result = self._cursor.fetchall()
 
