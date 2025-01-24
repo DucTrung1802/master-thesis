@@ -451,7 +451,7 @@ class SsiDataCrawler(Helper):
         # Crawl to know the total number of record
         securities_input_model = SecuritiesInputModel()
         print("\nCrawling to know the total number of records.")
-        self._logger.log_info("Crawl to know the total number of records.")
+        self._logger.log_info("Crawling to know the total number of records.")
         response = self._get_securities(securities_input_model)
         securities_output_model = SecuritiesOutputModel(**response)
 
@@ -464,6 +464,9 @@ class SsiDataCrawler(Helper):
             return False
 
         total_record = securities_output_model.totalRecord
+        print(f"Total records found: {total_record}")
+        self._logger.log_info(f"Total records found: {total_record}")
+
         number_of_page = math.ceil(total_record / page_size)
 
         # Create temp table for joining security data
