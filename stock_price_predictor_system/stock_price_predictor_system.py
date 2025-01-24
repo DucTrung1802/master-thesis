@@ -162,7 +162,7 @@ Created by Trung Ly Duc
                 Column(
                     columnName="SecurityType_ID",
                     dataType=DataType.INT(),
-                    nullable=False,
+                    nullable=True,
                 ),
                 Column(
                     columnName="CreateDate",
@@ -173,7 +173,7 @@ Created by Trung Ly Duc
                     columnName="UpdateDate", dataType=DataType.DATETIME(), nullable=True
                 ),
                 Column(
-                    columnName="DeleteDate", dataType=DataType.DATETIME(), nullable=True
+                    columnName="DelistDate", dataType=DataType.DATETIME(), nullable=True
                 ),
             ]
 
@@ -229,6 +229,8 @@ Created by Trung Ly Duc
         self._ssi_data_crawler.crawl_time_series_data()
 
     def _crawl_data(self):
+        succesful = True
+
         self._config = self._load_config()
 
         if not self._config:

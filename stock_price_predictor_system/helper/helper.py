@@ -10,6 +10,10 @@ class Helper:
         return datetime.now().strftime("%Y-%m-%d")
 
     @staticmethod
+    def get_current_timestamp():
+        return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    @staticmethod
     def generate_lower_string(length: int = 10):
         if not length or length <= 0:
             length = 10

@@ -31,6 +31,10 @@ class DataType:
     def DATETIME(cls):
         return "DATETIME"
 
+    @classmethod
+    def RAW(cls):
+        return "RAW"
+
 
 @dataclass
 class ForeignKey:
@@ -80,3 +84,31 @@ class JoinModel:
     database: str
     table: str
     join_combination_list: List[JoinCombination]
+
+
+@dataclass
+class ColumnToUpdate:
+    target_column: str
+    source_column: str = None
+    value: str | int | float = None  # Need to upgrade to avoid SQL injection
+    dataType: DataType = None
+
+
+@dataclass
+class ActionInMerge:
+    pass
+
+
+@dataclass
+class InsertInMerge(ActionInMerge):
+    column_to_update_list: List[ColumnToUpdate]
+
+
+@dataclass
+class UpdateInMerge(ActionInMerge):
+    column_to_update_list: List[ColumnToUpdate]
+
+
+@dataclass
+class DeleteInMerge(ActionInMerge):
+    pass

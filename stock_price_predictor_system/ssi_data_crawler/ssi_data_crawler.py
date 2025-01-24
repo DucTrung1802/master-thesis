@@ -7,10 +7,11 @@ from ..logger.logger import Logger
 from ..config_helper.models import SsiCrawlerInfoConfig
 from ..sql_server_driver.sql_server_driver import SqlServerDriver
 from ..sql_server_driver.models import *
+from ..helper.helper import Helper
 from .enums import *
 
 
-class SsiDataCrawler:
+class SsiDataCrawler(Helper):
 
     def __init__(self, _logger: Logger):
         self._logger = _logger
@@ -20,9 +21,6 @@ class SsiDataCrawler:
 
     # Wrapper
     def _get_securities(self, securities_input_model: SecuritiesInputModel):
-        print(
-            f"\nCrawling security data from API. PageIndex: {securities_input_model.pageIndex}. PageSize: {securities_input_model.pageSize}."
-        )
         result = self._client.securities(self._config, securities_input_model)
         time.sleep(2)
         return result
@@ -51,7 +49,7 @@ class SsiDataCrawler:
             self._logger.log_info(
                 "All market data has been created before. No need to create market data."
             )
-            return
+            return True
 
         self._sql_server_driver.purge_data(
             database_name="SSI_STOCKS", table_name="Market"
@@ -72,7 +70,7 @@ class SsiDataCrawler:
                 ),
                 DataModel(
                     columnName="CreateDate",
-                    value=datetime.now(),
+                    value=datetime.now().replace(microsecond=0),
                     dataType=DataType.DATETIME,
                 ),
             ]
@@ -95,7 +93,7 @@ class SsiDataCrawler:
                 ),
                 DataModel(
                     columnName="CreateDate",
-                    value=datetime.now(),
+                    value=datetime.now().replace(microsecond=0),
                     dataType=DataType.DATETIME,
                 ),
             ]
@@ -118,7 +116,7 @@ class SsiDataCrawler:
                 ),
                 DataModel(
                     columnName="CreateDate",
-                    value=datetime.now(),
+                    value=datetime.now().replace(microsecond=0),
                     dataType=DataType.DATETIME,
                 ),
             ]
@@ -139,7 +137,7 @@ class SsiDataCrawler:
                 ),
                 DataModel(
                     columnName="CreateDate",
-                    value=datetime.now(),
+                    value=datetime.now().replace(microsecond=0),
                     dataType=DataType.DATETIME,
                 ),
             ]
@@ -162,7 +160,7 @@ class SsiDataCrawler:
                 ),
                 DataModel(
                     columnName="CreateDate",
-                    value=datetime.now(),
+                    value=datetime.now().replace(microsecond=0),
                     dataType=DataType.DATETIME,
                 ),
             ]
@@ -190,6 +188,8 @@ class SsiDataCrawler:
         self._logger.log_info(
             f"Successfully inserted {len(market_record_list)} in [{database_name}].[dbo].[{table_name}]."
         )
+
+        return True
 
     def _retrieve_all_security_type_data(self):
         return self._sql_server_driver.retrieve_data(
@@ -236,7 +236,7 @@ class SsiDataCrawler:
                 ),
                 DataModel(
                     columnName="CreateDate",
-                    value=datetime.now(),
+                    value=datetime.now().replace(microsecond=0),
                     dataType=DataType.DATETIME,
                 ),
             ]
@@ -257,7 +257,7 @@ class SsiDataCrawler:
                 ),
                 DataModel(
                     columnName="CreateDate",
-                    value=datetime.now(),
+                    value=datetime.now().replace(microsecond=0),
                     dataType=DataType.DATETIME,
                 ),
             ]
@@ -278,7 +278,7 @@ class SsiDataCrawler:
                 ),
                 DataModel(
                     columnName="CreateDate",
-                    value=datetime.now(),
+                    value=datetime.now().replace(microsecond=0),
                     dataType=DataType.DATETIME,
                 ),
             ]
@@ -299,7 +299,7 @@ class SsiDataCrawler:
                 ),
                 DataModel(
                     columnName="CreateDate",
-                    value=datetime.now(),
+                    value=datetime.now().replace(microsecond=0),
                     dataType=DataType.DATETIME,
                 ),
             ]
@@ -320,7 +320,7 @@ class SsiDataCrawler:
                 ),
                 DataModel(
                     columnName="CreateDate",
-                    value=datetime.now(),
+                    value=datetime.now().replace(microsecond=0),
                     dataType=DataType.DATETIME,
                 ),
             ]
@@ -341,7 +341,7 @@ class SsiDataCrawler:
                 ),
                 DataModel(
                     columnName="CreateDate",
-                    value=datetime.now(),
+                    value=datetime.now().replace(microsecond=0),
                     dataType=DataType.DATETIME,
                 ),
             ]
@@ -362,7 +362,7 @@ class SsiDataCrawler:
                 ),
                 DataModel(
                     columnName="CreateDate",
-                    value=datetime.now(),
+                    value=datetime.now().replace(microsecond=0),
                     dataType=DataType.DATETIME,
                 ),
             ]
@@ -423,14 +423,20 @@ class SsiDataCrawler:
                     columnName="EnName", dataType=DataType.NVARCHAR(200), nullable=True
                 ),
                 Column(columnName="Market_ID", dataType=DataType.INT(), nullable=False),
+                Column(
+                    columnName="CreateDate",
+                    dataType=DataType.DATETIME(),
+                    nullable=False,
+                ),
             ]
 
-            self._sql_server_driver.create_table(
+            if not self._sql_server_driver.create_table(
                 database_name=database_name,
                 table_name=temp_security_table_name,
                 columns=temp_security_columns,
                 key_column_name="ID",
-            )
+            ):
+                return False
 
         self._sql_server_driver.truncate_table(
             database_name=database_name, table_name=temp_security_table_name
@@ -444,6 +450,8 @@ class SsiDataCrawler:
 
         # Crawl to know the total number of record
         securities_input_model = SecuritiesInputModel()
+        print("\nCrawling to know the total number of records.")
+        self._logger.log_info("Crawl to know the total number of records.")
         response = self._get_securities(securities_input_model)
         securities_output_model = SecuritiesOutputModel(**response)
 
@@ -462,10 +470,16 @@ class SsiDataCrawler:
         if not self._create_and_truncate_temp_security_table():
             return False
 
-        # Crawl all securities
+        # Crawl all securities to temp table
         for i in range(1, number_of_page + 1):
             securities_input_model = SecuritiesInputModel(
                 pageIndex=i, pageSize=page_size
+            )
+            print(
+                f"\nCrawling security data from API. PageIndex: {securities_input_model.pageIndex}/{number_of_page}. PageSize: {securities_input_model.pageSize}."
+            )
+            self._logger.log_info(
+                f"Crawling security data from API. PageIndex: {securities_input_model.pageIndex}/{number_of_page}. PageSize: {securities_input_model.pageSize}."
             )
             response = self._get_securities(securities_input_model)
             securities_output_model = SecuritiesOutputModel(**response)
@@ -503,6 +517,11 @@ class SsiDataCrawler:
                             dataType=DataType.INT,
                             value=security.market,
                         ),
+                        DataModel(
+                            columnName="CreateDate",
+                            dataType=DataType.DATETIME,
+                            value=self.get_current_timestamp(),
+                        ),
                     ]
                 )
                 for security in securities_data_model
@@ -513,6 +532,49 @@ class SsiDataCrawler:
                 table_name="TempSecurity",
                 records=security_record_list,
             )
+
+        # Merge temp security table to security table
+        self._sql_server_driver.merger_table(
+            database_name="SSI_STOCKS",
+            source_table="TempSecurity",
+            target_table="Security",
+            matching_column="Symbol",
+            action_when_match=UpdateInMerge(
+                [
+                    ColumnToUpdate(source_column="Name", target_column="Name"),
+                    ColumnToUpdate(source_column="EnName", target_column="EnName"),
+                    ColumnToUpdate(
+                        source_column="Market_ID", target_column="Market_ID"
+                    ),
+                    ColumnToUpdate(
+                        source_column="CreateDate",
+                        target_column="UpdateDate",
+                    ),
+                ]
+            ),
+            action_when_not_match_by_target=InsertInMerge(
+                [
+                    ColumnToUpdate(target_column="Symbol", source_column="Symbol"),
+                    ColumnToUpdate(target_column="Name", source_column="Name"),
+                    ColumnToUpdate(target_column="EnName", source_column="EnName"),
+                    ColumnToUpdate(
+                        target_column="Market_ID", source_column="Market_ID"
+                    ),
+                    ColumnToUpdate(
+                        target_column="CreateDate", source_column="CreateDate"
+                    ),
+                ]
+            ),
+            action_when_not_match_by_source=UpdateInMerge(
+                [
+                    ColumnToUpdate(
+                        target_column="DelistDate",
+                        dataType=DataType.DATETIME,
+                        value=self.get_current_timestamp(),
+                    )
+                ]
+            ),
+        )
 
     def crawl_tabular_data(
         self,

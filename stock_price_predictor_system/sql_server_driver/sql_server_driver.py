@@ -276,12 +276,121 @@ CREATE TABLE {table_name} (
         if not self._execute_query(query):
             return
 
+    def _parse_action_when_merge(self, action: ActionInMerge):
+        if not action:
+            print("Invalid action.")
+            self._logger.log_error("Invalid action.")
+            return None
+
+        if isinstance(action, InsertInMerge):
+            return f"""INSERT ({", ".join([column_pair.target_column for column_pair in action.column_to_update_list])})
+    VALUES ({", ".join([f"S.{column_pair.source_column}" if column_pair.source_column else self.format_value(column_pair.value, column_pair.dataType) for column_pair in action.column_to_update_list])})"""
+
+        elif isinstance(action, UpdateInMerge):
+            return f"UPDATE SET {", ".join([f"T.{column_pair.target_column} = S.{column_pair.source_column}" if column_pair.source_column else f"T.{column_pair.target_column} = {self.format_value(column_pair.value, column_pair.dataType)}" for column_pair in action.column_to_update_list])}"
+
+        elif isinstance(action, DeleteInMerge):
+            return "DELETE"
+
+        else:
+            print(
+                f"Invalid action type: {type(action)}. Must be InsertInMerge or UpdateInMerge or DeleteInMerge."
+            )
+            self._logger.log_error(
+                f"Invalid action type: {type(action)}. Must be InsertInMerge or UpdateInMerge or DeleteInMerge."
+            )
+            return None
+
+    def merger_table(
+        self,
+        database_name: str,
+        source_table: str,
+        target_table: str,
+        matching_column: str,
+        action_when_match: ActionInMerge,
+        action_when_not_match_by_target: ActionInMerge,
+        action_when_not_match_by_source: ActionInMerge,
+    ):
+        if not self.check_database_exists(database_name):
+            print(
+                f"Cannot merge table [{database_name}].[dbo].[{source_table}] to [{database_name}].[dbo].[{target_table}] since database [{database_name}] does not exist."
+            )
+            self._logger.log_error(
+                f"Cannot merge table [{database_name}].[dbo].[{source_table}] to [{database_name}].[dbo].[{target_table}] since database [{database_name}] does not exist."
+            )
+            return False
+
+        if not self.check_table_exists(database_name, source_table):
+            print(
+                f"Cannot merge table [{database_name}].[dbo].[{source_table}] to [{database_name}].[dbo].[{target_table}] since source table does not exist."
+            )
+            self._logger.log_error(
+                f"Cannot merge table [{database_name}].[dbo].[{source_table}] to [{database_name}].[dbo].[{target_table}] since source table does not exist."
+            )
+            return False
+
+        if not self.check_table_exists(database_name, target_table):
+            print(
+                f"Cannot merge table [{database_name}].[dbo].[{source_table}] to [{database_name}].[dbo].[{target_table}] since target table does not exist."
+            )
+            self._logger.log_error(
+                f"Cannot merge table [{database_name}].[dbo].[{source_table}] to [{database_name}].[dbo].[{target_table}] since target table does not exist."
+            )
+            return False
+
+        parsed_action_when_match = self._parse_action_when_merge(action_when_match)
+
+        parsed_action_when_not_match_by_target = self._parse_action_when_merge(
+            action_when_not_match_by_target
+        )
+
+        parsed_action_when_not_match_by_source = self._parse_action_when_merge(
+            action_when_not_match_by_source
+        )
+
+        if not (
+            parsed_action_when_match
+            or parsed_action_when_not_match_by_target
+            or parsed_action_when_not_match_by_source
+        ):
+            print(
+                f"This merge query from table [{database_name}].[dbo].[{source_table}] to table [{database_name}].[dbo].[{target_table}] does nothing. Return immediately."
+            )
+            self._logger.log_warning(
+                f"This merge query from table [{database_name}].[dbo].[{source_table}] to table [{database_name}].[dbo].[{target_table}] does nothing. Return immediately."
+            )
+            return False
+
+        query = f"""MERGE INTO [{database_name}].[dbo].[{target_table}] AS T
+USING [{database_name}].[dbo].[{source_table}] AS S
+ON (T.{matching_column} = S.{matching_column})
+WHEN MATCHED THEN
+    {parsed_action_when_match}
+WHEN NOT MATCHED BY TARGET THEN
+    {parsed_action_when_not_match_by_target}
+WHEN NOT MATCHED BY SOURCE THEN
+    {parsed_action_when_not_match_by_source};
+"""
+
+        self._logger.log_debug(f"\n{query}")
+        if not self._execute_query(query):
+            return False
+
+        print(
+            f"Merged table [{database_name}].[dbo].[{source_table}] to table [{database_name}].[dbo].[{target_table}].",
+        )
+        self._logger.log_info(
+            f"Merged table [{database_name}].[dbo].[{source_table}] to table [{database_name}].[dbo].[{target_table}].",
+        )
+
+        return True
+
     def format_value(self, value, data_type: DataType):
         """Format value based on its data type for SQL query."""
         if data_type in [DataType.NVARCHAR]:
             return f"N'{value.replace("'", "''") if value else value}'"
         elif data_type in [DataType.DATETIME]:
-            return f"CAST ('{value.replace(microsecond=0)}' AS DATETIME)"
+            return f"CAST ('{value}' AS DATETIME)"
         return str(value)
 
     def _add_join(self, join_model: JoinModel) -> str:
