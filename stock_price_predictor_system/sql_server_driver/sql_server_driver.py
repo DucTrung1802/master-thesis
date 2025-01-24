@@ -242,7 +242,7 @@ CREATE TABLE {table_name} (
 
         self._logger.log_debug(f"\n{query}")
         if not self._execute_query(query):
-            return
+            return False
 
         print(
             f"Table [{database_name}].[dbo].[{table_name}] is created successfully.",
@@ -418,7 +418,7 @@ VALUES
 
         self._logger.log_debug(f"\n{query}")
         if not self._execute_query(query):
-            return
+            return False
 
         print(
             f"Inserted {len(records)} records into table [{database_name}].[dbo].[{table_name}]",
@@ -426,6 +426,8 @@ VALUES
         self._logger.log_info(
             f"Inserted {len(records)} records into table [{database_name}].[dbo].[{table_name}]",
         )
+
+        return True
 
     def _internal_update_data(
         self,
@@ -480,8 +482,8 @@ SET {",\n\t".join(f"{data_model.columnName} = {self.format_value(data_model.valu
             query += condition_query
 
         self._logger.log_debug(f"\n{query}")
-        if not self._execute_query(query):
-            return
+
+        return self._execute_query(query)
 
     def update_data(
         self,
@@ -491,13 +493,14 @@ SET {",\n\t".join(f"{data_model.columnName} = {self.format_value(data_model.valu
         join_model: JoinModel = None,
         condition_list: List[Condition] = None,
     ):
-        self._internal_update_data(
+        if not self._internal_update_data(
             database_name=database_name,
             table_name=table_name,
             record=record,
             join_model=join_model,
             condition_list=condition_list,
-        )
+        ):
+            return False
 
         print(
             f"Updated [{database_name}].[dbo].[{table_name}].",
@@ -505,6 +508,8 @@ SET {",\n\t".join(f"{data_model.columnName} = {self.format_value(data_model.valu
         self._logger.log_info(
             f"Updated [{database_name}].[dbo].[{table_name}].",
         )
+
+        return True
 
     def detele_data(
         self,
@@ -522,12 +527,13 @@ SET {",\n\t".join(f"{data_model.columnName} = {self.format_value(data_model.valu
             ]
         )
 
-        self._internal_update_data(
+        if not self._internal_update_data(
             database_name=database_name,
             table_name=table_name,
             record=record,
             condition_list=condition_list,
-        )
+        ):
+            return False
 
         print(
             f"Mark 'Deleted' for some records in [{database_name}].[dbo].[{table_name}].",
@@ -535,6 +541,8 @@ SET {",\n\t".join(f"{data_model.columnName} = {self.format_value(data_model.valu
         self._logger.log_info(
             f"Mark 'Deleted' for some records in [{database_name}].[dbo].[{table_name}].",
         )
+
+        return True
 
     def purge_data(
         self,
@@ -562,7 +570,7 @@ SET {",\n\t".join(f"{data_model.columnName} = {self.format_value(data_model.valu
         query = f"DELETE FROM [{database_name}].[dbo].[{table_name}]"
 
         if not self._execute_query(query):
-            return
+            return False
 
         print(f"Successfully purge data from table '{table_name}'.")
         self._logger.log_info(f"Successfully purge data from table '{table_name}'.")
