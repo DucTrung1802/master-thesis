@@ -2,7 +2,8 @@ import datetime
 from ssi_fc_data.fc_md_client import MarketDataClient
 import math
 import time
-from .models import *
+from .api_models import *
+from .database_model import *
 from ..logger.logger import Logger
 from ..config_helper.models import SsiCrawlerInfoConfig
 from ..sql_server_driver.sql_server_driver import SqlServerDriver
@@ -579,6 +580,25 @@ class SsiDataCrawler(Helper):
             ),
         )
 
+    def _retrieve_all_security_data(self) -> List[Security]:
+
+        not_delisted_condition = Condition(
+            column="DelistDate",
+            operator=Operator.IS,
+            value="NULL",
+            dataType=DataType.RAW,
+        )
+
+        security_list = self._sql_server_driver.retrieve_data(
+            database_name="SSI_STOCKS",
+            table_name="Security",
+            condition_list=not_delisted_condition,
+        )
+
+        return [
+            Security(**dict(zip(Security.get_key_list(), row))) for row in security_list
+        ]
+
     def crawl_tabular_data(
         self,
         config: SsiCrawlerInfoConfig,
@@ -598,9 +618,4 @@ class SsiDataCrawler(Helper):
         self._crawl_all_securities_data()
 
     def crawl_time_series_data(self):
-        pass
-
-    def retrieve_securities_list(
-        self, securities_list_input_model: SecuritiesInputModel
-    ):
         pass
