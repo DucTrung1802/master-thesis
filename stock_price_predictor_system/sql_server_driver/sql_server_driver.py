@@ -9,10 +9,6 @@ class SqlServerDriver:
 
     def __init__(self, _logger: Logger):
         self._logger = _logger
-        self._connected = False
-
-    def get_connection_status(self):
-        return self._connected
 
     def open_connection(self, _authentication: SqlServerAuthentication):
         self._authentication = _authentication
@@ -33,14 +29,12 @@ class SqlServerDriver:
                 f"Connected to SQL Server.",
             )
 
-            self._connected = True
             return True
 
         except Exception as e:
             print(f"Error connecting to SQL Server: {e}.")
             self._logger.log_error(f"Error connecting to SQL Server: {e}.")
 
-            self._connected = False
             return False
 
     def close_connection(self):
