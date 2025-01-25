@@ -452,7 +452,7 @@ WHEN NOT MATCHED BY SOURCE THEN
         # Compose query
         database = join_model.database
         table = join_model.table
-        query = f"FROM {database}.dbo.{table}\n"
+        query = f"\nFROM {database}.dbo.{table}\n"
         query += "\n".join(
             f"{join_combination.join_type.value} JOIN {database}.dbo.{join_combination.table_right} "
             f"ON {join_combination.table_left}.{join_combination.column_left} = "
@@ -463,12 +463,15 @@ WHEN NOT MATCHED BY SOURCE THEN
         return query
 
     def _add_condition(self, condition_list: List[Condition]):
+        if condition_list and isinstance(condition_list, Condition):
+            condition_list = [condition_list]
+
         if (
             condition_list
             and isinstance(condition_list, List)
             and len(condition_list) > 0
         ):
-            query += f"""WHERE {" AND ".join(f"{condition.column} {condition.operator.value} {self.format_value(condition.value, condition.dataType)}" for condition in condition_list)}"""
+            query = f"""\nWHERE {" AND ".join(f"{condition.column} {condition.operator.value} {self.format_value(condition.value, condition.dataType)}" for condition in condition_list)}"""
             return query
 
         return None
@@ -692,6 +695,7 @@ SET {",\n\t".join(f"{data_model.columnName} = {self.format_value(data_model.valu
         table_name: str,
         columns: List[str] = None,
         limit: int = None,
+        condition_list: List[Condition] = None,
     ) -> List[Tuple]:
         # region Validate inputs
         # Validate the database
@@ -749,6 +753,10 @@ SET {",\n\t".join(f"{data_model.columnName} = {self.format_value(data_model.valu
             query = (
                 f"SELECT {columns_string} FROM [{database_name}].[dbo].[{table_name}]"
             )
+
+        condition_query = self._add_condition(condition_list=condition_list)
+        if condition_query:
+            query += condition_query
 
         self._cursor.fetchall()
 

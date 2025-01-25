@@ -12,12 +12,14 @@ class Operator(Enum):
     AND = "AND"
     OR = "OR"
     NOT = "NOT"
-    EXISTS = "EXISTS"
     IN = "IN"
+    NOT_IN = "NOT IN"
     LIKE = "LIKE"
     SOME = "SOME"
     ANY = "ANY"
     BETWEEN = "BETWEEN"
+    IS = "IS"
+    IS_NOT = "IS NOT"
 
 
 class JoinType(Enum):
