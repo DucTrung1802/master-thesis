@@ -1,7 +1,7 @@
 import datetime
 import pyodbc
 from typing import List, Tuple
-from .models import *
+from .model import *
 from ..logger.logger import Logger
 
 

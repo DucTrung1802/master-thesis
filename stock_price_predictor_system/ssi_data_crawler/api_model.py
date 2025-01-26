@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import List, Literal, Optional
-from .enums import *
+from .enum import *
 
 
 @dataclass(kw_only=True)

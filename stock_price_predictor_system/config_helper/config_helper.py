@@ -3,7 +3,7 @@ import configparser
 from pydantic import ValidationError
 from ..helper.helper import Helper
 from ..logger.logger import Logger
-from .models import *
+from .model import *
 
 
 class ConfigHelper(Helper):

@@ -2,23 +2,44 @@ import datetime
 from ssi_fc_data.fc_md_client import MarketDataClient
 import math
 import time
-from .api_models import *
+
+from .api_model import *
+
 from .database_model import *
+
 from ..logger.logger import Logger
-from ..config_helper.models import SsiCrawlerInfoConfig
+
+from ..config_helper.model import SsiCrawlerInfoConfig
+
 from ..sql_server_driver.sql_server_driver import SqlServerDriver
-from ..sql_server_driver.models import *
+from ..sql_server_driver.model import *
+
 from ..helper.helper import Helper
-from .enums import *
+
+from .enum import *
 
 
 class SsiDataCrawler(Helper):
 
     def __init__(self, _logger: Logger):
         self._logger = _logger
+
         self._config: SsiCrawlerInfoConfig = None
         self._client: MarketDataClient = None
+
         self._sql_server_driver: SqlServerDriver = None
+
+    def add_crawler_config(self, add_crawler_config: SsiCrawlerInfoConfig):
+        self._config = add_crawler_config
+        self._client = MarketDataClient(self._config)
+
+    def _is_initialized(self) -> bool:
+        return (
+            self._config
+            and self._client
+            and isinstance(self._config, SsiCrawlerInfoConfig)
+            and isinstance(self._client, MarketDataClient)
+        )
 
     # Wrapper
     def _get_securities(self, securities_input_model: SecuritiesInputModel):
@@ -177,11 +198,12 @@ class SsiDataCrawler(Helper):
 
         database_name = "SSI_STOCKS"
         table_name = "Market"
-        self._sql_server_driver.insert_data(
+        if not self._sql_server_driver.insert_data(
             database_name=database_name,
             table_name=table_name,
             records=market_record_list,
-        )
+        ):
+            return False
 
         print(
             f"Successfully inserted {len(market_record_list)} in [{database_name}].[dbo].[{table_name}]."
@@ -599,23 +621,37 @@ class SsiDataCrawler(Helper):
             Security(**dict(zip(Security.get_key_list(), row))) for row in security_list
         ]
 
-    def crawl_tabular_data(
-        self,
-        config: SsiCrawlerInfoConfig,
-        sql_server_driver: SqlServerDriver,
-    ):
-        self._config = config
-        self._client = MarketDataClient(config)
+    def crawl_tabular_data(self, sql_server_driver: SqlServerDriver) -> bool:
+        if not self._is_initialized():
+            print(
+                "\nClient is not initialized. Cannot crawl data. Double check configuration and try again."
+            )
+            self._logger.log_error(
+                "Client is not initialized. Cannot crawl data. Double check configuration and try again."
+            )
+            return False
+
         self._sql_server_driver = sql_server_driver
 
         # Create all markets data
-        self._create_all_market_data()
+        if not self._create_all_market_data():
+            print("\nCannot create all markets.")
+            self._logger.log_error("Cannot create all markets.")
+            return False
 
         # Create all security types data
-        self._create_all_security_type_data()
+        if not self._create_all_security_type_data():
+            print("\nCannot create all security types.")
+            self._logger.log_error("Cannot create all security types.")
+            return False
 
         # Crawl all securities data
-        self._crawl_all_securities_data()
+        if not self._crawl_all_securities_data():
+            print("\nCannot crawl all securities data.")
+            self._logger.log_error("Cannot crawl all securities data.")
+            return False
 
-    def crawl_time_series_data(self):
-        pass
+        return True
+
+    def crawl_time_series_data(self) -> bool:
+        return True

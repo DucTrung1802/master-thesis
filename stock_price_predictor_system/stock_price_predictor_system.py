@@ -1,12 +1,17 @@
 import os
 from typing import List
 import time
-from .helper.helper import Helper
-from .config_helper.config_helper import ConfigHelper
-from .config_helper.models import ConfigModel
+
 from .logger.logger import Logger
-from .sql_server_driver.models import *
+
+from .helper.helper import Helper
+
+from .config_helper.config_helper import ConfigHelper
+from .config_helper.model import ConfigModel
+
+from .sql_server_driver.model import *
 from .sql_server_driver.sql_server_driver import SqlServerDriver
+
 from .ssi_data_crawler.ssi_data_crawler import SsiDataCrawler
 
 
@@ -19,7 +24,8 @@ class StockPricePredictorSystem(Helper):
         self._config_helper = ConfigHelper(self._logger)
         self._config: ConfigModel = None
 
-        self._sql_server_driver = SqlServerDriver(self._logger)
+        self._tabular_database_driver = SqlServerDriver(self._logger)
+        self._time_series_database_driver = None
 
         self._ssi_data_crawler = SsiDataCrawler(self._logger)
 
@@ -53,6 +59,7 @@ Created by Trung Ly Duc
         self._logger.log_info("Validating configuration file...")
 
         successful = True
+
         successful &= self._sql_server_driver.open_connection(
             SqlServerAuthentication(
                 server=_config.sql_server.server_name,
@@ -203,34 +210,32 @@ Created by Trung Ly Duc
 
             return False
 
-    def _create_influx_database_schemas(self):
-        return True
-
     def _create_database_schemas(self):
         print("\nCreating database schema...")
         self._logger.log_info("Creating database schema...")
 
         successful = True
         successful &= self._create_sql_server_database_schemas()
-        successful &= self._create_influx_database_schemas()
 
         return successful
 
-    def _crawl_tabular_data(self):
+    def _add_api_config_for_crawler(self, api_crawler_config: SsiDataCrawler):
+        self._ssi_data_crawler.add_crawler_config(api_crawler_config)
+
+    def _crawl_tabular_data(self) -> bool:
         print("\nStart crawling tabular data. Please wait...")
         self._logger.log_info("Start crawling tabular data. Please wait...")
-        self._ssi_data_crawler.crawl_tabular_data(
-            self._config.ssi_crawler_info, self._sql_server_driver
-        )
+        if not self._ssi_data_crawler.crawl_tabular_data(self._sql_server_driver):
+            print("\nCannot crawl tabular data.")
+            self._logger.log_error("\nCannot crawl tabular data.")
+            return False
 
-    def _crawl_time_series_data(self):
-        print("\nStart crawling time series data. Please wait...")
-        self._logger.log_info("Start crawling time series data. Please wait...")
-        self._ssi_data_crawler.crawl_time_series_data()
+        return True
+
+    def _crawl_time_series_data(self) -> bool:
+        return True
 
     def _crawl_data(self):
-        succesful = True
-
         self._config = self._load_config()
 
         if not self._config:
@@ -248,7 +253,9 @@ Created by Trung Ly Duc
 
         print("\nSuccessfully created all database schemas.")
 
-        self._crawl_tabular_data()
+        self._add_api_config_for_crawler(self._config.ssi_crawler_info)
+
+        # self._crawl_tabular_data()
 
         self._crawl_time_series_data()
 
@@ -274,13 +281,13 @@ Created by Trung Ly Duc
         time.sleep(1)
         return False
 
-    def _purge_sql_server_data(self):
+    def _purge_tabular_data(self):
         if not self._confirm_action():
             return
 
         self._clear_console()
-        print("Start purging all SQL Server data...")
-        self._logger.log_info("Start purging all SQL Server data...")
+        print("Start purging all tabular data...")
+        self._logger.log_info("Start purging all tabular data...")
 
         self._sql_server_driver.purge_data(
             database_name="SSI_STOCKS", table_name="Market"
@@ -296,14 +303,6 @@ Created by Trung Ly Duc
         self._logger.log_info("Finish purging all SQL Server data.")
 
         return True
-
-    def _purge_influx_data(self):
-        if not self._confirm_action():
-            return
-
-        self._clear_console()
-        print("Start purging all Influx data...")
-        self._logger.log_info("Start purging all SQL Server data...")
 
     def _purge_all_data(self):
         self._config = self._load_config()
@@ -325,8 +324,8 @@ Created by Trung Ly Duc
             print(
                 "\nWARNING: Once you delete data, there is no going back. Please be certain.\n"
             )
-            print("[1] Purge data in SQL Server Database")
-            print("[2] Purge data in Influx Database")
+            print("[1] Purge tabular data")
+            print("[2] Purge time series data")
             print("[0] Go back")
 
             choice = input("Enter your choice: ").strip()
@@ -334,11 +333,10 @@ Created by Trung Ly Duc
             match (choice):
 
                 case "1":
-                    self._purge_sql_server_data()
+                    self._purge_tabular_data()
                     break
 
                 case "2":
-                    self._purge_influx_data()
                     break
 
                 case "0":
