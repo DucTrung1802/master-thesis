@@ -11,8 +11,11 @@ from ..logger.logger import Logger
 
 from ..config_helper.model import SsiCrawlerInfoConfig
 
-from ..sql_server_driver.sql_server_driver import SqlServerDriver
-from ..sql_server_driver.model import *
+from ..relational_database_driver.relational_database_driver import (
+    RelationalDatabaseDriver,
+)
+from ..relational_database_driver.sql_server_driver import SqlServerDriver
+from ..relational_database_driver.model import *
 
 from ..helper.helper import Helper
 
@@ -27,7 +30,7 @@ class SsiDataCrawler(Helper):
         self._config: SsiCrawlerInfoConfig = None
         self._client: MarketDataClient = None
 
-        self._sql_server_driver: SqlServerDriver = None
+        self._relational_database_driver: SqlServerDriver = None
 
     def add_crawler_config(self, add_crawler_config: SsiCrawlerInfoConfig):
         self._config = add_crawler_config
@@ -48,7 +51,7 @@ class SsiDataCrawler(Helper):
         return result
 
     def _retrieve_all_market_data(self):
-        return self._sql_server_driver.retrieve_data(
+        return self._relational_database_driver.select(
             database_name="SSI_STOCKS", table_name="Market"
         )
 
@@ -73,7 +76,7 @@ class SsiDataCrawler(Helper):
             )
             return True
 
-        self._sql_server_driver.purge_data(
+        self._relational_database_driver.delete(
             database_name="SSI_STOCKS", table_name="Market"
         )
 
@@ -198,7 +201,7 @@ class SsiDataCrawler(Helper):
 
         database_name = "SSI_STOCKS"
         table_name = "Market"
-        if not self._sql_server_driver.insert_data(
+        if not self._relational_database_driver.insert(
             database_name=database_name,
             table_name=table_name,
             records=market_record_list,
@@ -215,11 +218,11 @@ class SsiDataCrawler(Helper):
         return True
 
     def _retrieve_all_security_type_data(self):
-        return self._sql_server_driver.retrieve_data(
+        return self._relational_database_driver.select(
             database_name="SSI_STOCKS", table_name="SecurityType"
         )
 
-    def _create_all_security_type_data(self):
+    def _create_all_security_type_data(self) -> bool:
 
         # Retrieve all security type data
         all_security_type_data = self._retrieve_all_security_type_data()
@@ -238,12 +241,17 @@ class SsiDataCrawler(Helper):
             self._logger.log_info(
                 "All security type data has been created before. No need to create security type data."
             )
-            return
+            return True
 
-        self._sql_server_driver.purge_data(
+        # Truncate former security type data
+        if not self._relational_database_driver.truncate_table(
             database_name="SSI_STOCKS", table_name="SecurityType"
-        )
+        ):
+            print("\nCannot truncate former security type data.")
+            self._logger.log_error("Cannot truncate former security type data.")
+            return False
 
+        # Create new security type data
         security_type_record_1: Record = Record(
             [
                 DataModel(columnName="Symbol", value="ST", dataType=DataType.NVARCHAR),
@@ -403,7 +411,7 @@ class SsiDataCrawler(Helper):
 
         database_name = "SSI_STOCKS"
         table_name = "SecurityType"
-        self._sql_server_driver.insert_data(
+        self._relational_database_driver.insert(
             database_name=database_name,
             table_name=table_name,
             records=security_type_record_list,
@@ -416,11 +424,13 @@ class SsiDataCrawler(Helper):
             f"Successfully inserted {len(security_type_record_list)} in [{database_name}].[dbo].[{table_name}]."
         )
 
+        return True
+
     def _create_and_truncate_temp_security_table(self):
         database_name = "SSI_STOCKS"
         temp_security_table_name = "TempSecurity"
 
-        if not self._sql_server_driver.check_database_exists(
+        if not self._relational_database_driver.check_database_exist(
             database_name=database_name
         ):
             print(
@@ -431,7 +441,7 @@ class SsiDataCrawler(Helper):
             )
             return False
 
-        if not self._sql_server_driver.check_table_exists(
+        if not self._relational_database_driver.check_table_exist(
             database_name=database_name, table_name=temp_security_table_name
         ):
             temp_security_columns: List[Column] = [
@@ -453,7 +463,7 @@ class SsiDataCrawler(Helper):
                 ),
             ]
 
-            if not self._sql_server_driver.create_table(
+            if not self._relational_database_driver.create_table(
                 database_name=database_name,
                 table_name=temp_security_table_name,
                 columns=temp_security_columns,
@@ -461,7 +471,7 @@ class SsiDataCrawler(Helper):
             ):
                 return False
 
-        self._sql_server_driver.truncate_table(
+        self._relational_database_driver.truncate_table(
             database_name=database_name, table_name=temp_security_table_name
         )
 
@@ -553,14 +563,14 @@ class SsiDataCrawler(Helper):
                 for security in securities_data_model
             ]
 
-            self._sql_server_driver.insert_data(
+            self._relational_database_driver.insert(
                 database_name="SSI_STOCKS",
                 table_name="TempSecurity",
                 records=security_record_list,
             )
 
         # Merge temp security table to security table
-        self._sql_server_driver.merger_table(
+        self._relational_database_driver.merge(
             database_name="SSI_STOCKS",
             source_table="TempSecurity",
             target_table="Security",
@@ -602,6 +612,8 @@ class SsiDataCrawler(Helper):
             ),
         )
 
+        return True
+
     def _retrieve_all_security_data(self) -> List[Security]:
 
         not_delisted_condition = Condition(
@@ -611,7 +623,7 @@ class SsiDataCrawler(Helper):
             dataType=DataType.RAW,
         )
 
-        security_list = self._sql_server_driver.retrieve_data(
+        security_list = self._relational_database_driver.select(
             database_name="SSI_STOCKS",
             table_name="Security",
             condition_list=not_delisted_condition,
@@ -621,7 +633,9 @@ class SsiDataCrawler(Helper):
             Security(**dict(zip(Security.get_key_list(), row))) for row in security_list
         ]
 
-    def crawl_tabular_data(self, sql_server_driver: SqlServerDriver) -> bool:
+    def crawl_relational_data(
+        self, _relational_database_driver: RelationalDatabaseDriver
+    ) -> bool:
         if not self._is_initialized():
             print(
                 "\nClient is not initialized. Cannot crawl data. Double check configuration and try again."
@@ -631,7 +645,7 @@ class SsiDataCrawler(Helper):
             )
             return False
 
-        self._sql_server_driver = sql_server_driver
+        self._relational_database_driver = _relational_database_driver
 
         # Create all markets data
         if not self._create_all_market_data():

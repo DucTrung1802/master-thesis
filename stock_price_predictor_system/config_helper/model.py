@@ -15,13 +15,20 @@ class SsiCrawlerInfoConfig(BaseModel):
     stream_url: str = Field(default="https://fc-datahub.ssi.com.vn")
 
 
-class SqlServerConfig(BaseModel):
+class RelationalDatabaseConfig(BaseModel):
     server_name: str = Field(...)
     login: str = Field(...)
     password: str = Field(...)
 
 
+class TimeSeriesDatabaseConfig(BaseModel):
+    url: str = Field(...)
+    org: str = Field(...)
+    token: str = Field(...)
+
+
 class ConfigModel(BaseModel):
     general: GeneralConfig
     ssi_crawler_info: SsiCrawlerInfoConfig
-    sql_server: SqlServerConfig
+    relational_database: RelationalDatabaseConfig
+    time_series_database: TimeSeriesDatabaseConfig

@@ -9,8 +9,11 @@ from .helper.helper import Helper
 from .config_helper.config_helper import ConfigHelper
 from .config_helper.model import ConfigModel
 
-from .sql_server_driver.model import *
-from .sql_server_driver.sql_server_driver import SqlServerDriver
+from .relational_database_driver.relational_database_driver import (
+    RelationalDatabaseDriver,
+)
+from .relational_database_driver.sql_server_driver import SqlServerDriver
+from .relational_database_driver.model import *
 
 from .ssi_data_crawler.ssi_data_crawler import SsiDataCrawler
 
@@ -24,7 +27,9 @@ class StockPricePredictorSystem(Helper):
         self._config_helper = ConfigHelper(self._logger)
         self._config: ConfigModel = None
 
-        self._tabular_database_driver = SqlServerDriver(self._logger)
+        self._relational_database_driver: RelationalDatabaseDriver = SqlServerDriver(
+            self._logger
+        )
         self._time_series_database_driver = None
 
         self._ssi_data_crawler = SsiDataCrawler(self._logger)
@@ -60,23 +65,23 @@ Created by Trung Ly Duc
 
         successful = True
 
-        successful &= self._sql_server_driver.open_connection(
+        successful &= self._relational_database_driver.open_connection(
             SqlServerAuthentication(
-                server=_config.sql_server.server_name,
-                login=_config.sql_server.login,
-                password=_config.sql_server.password,
+                server=_config.relational_database.server_name,
+                login=_config.relational_database.login,
+                password=_config.relational_database.password,
             )
         )
 
         return successful
 
-    def _create_sql_server_database_schemas(self):
-        print("\nStart creating SQL Server Database Schemas.")
-        self._logger.log_info("Start creating SQL Server Database Schemas.")
+    def _create_relational_database_schemas(self):
+        print("\nStart creating relational database schemas.")
+        self._logger.log_info("Start creating relational database schemas.")
 
         try:
-            # region Create SQL Server database
-            self._sql_server_driver.create_new_database("SSI_STOCKS")
+            # region Create relational database
+            self._relational_database_driver.create_database("SSI_STOCKS")
             # endregion
 
             # region Create Market Table
@@ -104,7 +109,7 @@ Created by Trung Ly Duc
                 ),
             ]
 
-            self._sql_server_driver.create_table(
+            self._relational_database_driver.create_table(
                 database_name="SSI_STOCKS",
                 table_name="Market",
                 columns=market_table_columns,
@@ -137,7 +142,7 @@ Created by Trung Ly Duc
                 ),
             ]
 
-            self._sql_server_driver.create_table(
+            self._relational_database_driver.create_table(
                 database_name="SSI_STOCKS",
                 table_name="SecurityType",
                 columns=security_type_table_columns,
@@ -193,7 +198,7 @@ Created by Trung Ly Duc
                 ),
             ]
 
-            self._sql_server_driver.create_table(
+            self._relational_database_driver.create_table(
                 database_name="SSI_STOCKS",
                 table_name="Security",
                 columns=security_table_columns,
@@ -205,8 +210,10 @@ Created by Trung Ly Duc
             return True
 
         except Exception as e:
-            print(f"Error creating schemas in SQL Server: {e}.")
-            self._logger.log_error(f"Error creating schemas in SQL Server: {e}.")
+            print(f"Error creating schemas in relational database: {e}.")
+            self._logger.log_error(
+                f"Error creating schemas in relational database: {e}."
+            )
 
             return False
 
@@ -215,19 +222,21 @@ Created by Trung Ly Duc
         self._logger.log_info("Creating database schema...")
 
         successful = True
-        successful &= self._create_sql_server_database_schemas()
+        successful &= self._create_relational_database_schemas()
 
         return successful
 
     def _add_api_config_for_crawler(self, api_crawler_config: SsiDataCrawler):
         self._ssi_data_crawler.add_crawler_config(api_crawler_config)
 
-    def _crawl_tabular_data(self) -> bool:
-        print("\nStart crawling tabular data. Please wait...")
-        self._logger.log_info("Start crawling tabular data. Please wait...")
-        if not self._ssi_data_crawler.crawl_tabular_data(self._sql_server_driver):
-            print("\nCannot crawl tabular data.")
-            self._logger.log_error("\nCannot crawl tabular data.")
+    def _crawl_relational_data(self) -> bool:
+        print("\nStart crawling relational data. Please wait...")
+        self._logger.log_info("Start crawling relational data. Please wait...")
+        if not self._ssi_data_crawler.crawl_relational_data(
+            self._relational_database_driver
+        ):
+            print("\nCannot crawl relational data.")
+            self._logger.log_error("\nCannot crawl relational data.")
             return False
 
         return True
@@ -255,9 +264,9 @@ Created by Trung Ly Duc
 
         self._add_api_config_for_crawler(self._config.ssi_crawler_info)
 
-        # self._crawl_tabular_data()
+        self._crawl_relational_data()
 
-        self._crawl_time_series_data()
+        # self._crawl_time_series_data()
 
         print("\nCrawling data has been completed.")
 
@@ -281,26 +290,26 @@ Created by Trung Ly Duc
         time.sleep(1)
         return False
 
-    def _purge_tabular_data(self):
+    def _purge_relational_data(self):
         if not self._confirm_action():
             return
 
         self._clear_console()
-        print("Start purging all tabular data...")
-        self._logger.log_info("Start purging all tabular data...")
+        print("Start purging all relational data...")
+        self._logger.log_info("Start purging all relational data...")
 
-        self._sql_server_driver.purge_data(
+        self._relational_database_driver.delete(
             database_name="SSI_STOCKS", table_name="Market"
         )
-        self._sql_server_driver.purge_data(
+        self._relational_database_driver.delete(
             database_name="SSI_STOCKS", table_name="Security"
         )
-        self._sql_server_driver.purge_data(
+        self._relational_database_driver.delete(
             database_name="SSI_STOCKS", table_name="SecurityType"
         )
 
-        print("Finish purging all SQL Server data.")
-        self._logger.log_info("Finish purging all SQL Server data.")
+        print("Finish purging all relational data.")
+        self._logger.log_info("Finish purging all relational data.")
 
         return True
 
@@ -324,7 +333,7 @@ Created by Trung Ly Duc
             print(
                 "\nWARNING: Once you delete data, there is no going back. Please be certain.\n"
             )
-            print("[1] Purge tabular data")
+            print("[1] Purge relational data")
             print("[2] Purge time series data")
             print("[0] Go back")
 
@@ -333,7 +342,7 @@ Created by Trung Ly Duc
             match (choice):
 
                 case "1":
-                    self._purge_tabular_data()
+                    self._purge_relational_data()
                     break
 
                 case "2":
