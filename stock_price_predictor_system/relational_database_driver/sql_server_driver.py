@@ -43,6 +43,8 @@ class SqlServerDriver(RelationalDatabaseDriver):
     def close_connection(self):
         if "connection" in locals():
             self._connection.close()
+
+            print("\nClosed connection to SQL Server.")
             self._logger.log_info(
                 f"Closed connection to SQL Server.",
             )

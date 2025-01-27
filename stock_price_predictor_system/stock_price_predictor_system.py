@@ -15,6 +15,12 @@ from .relational_database_driver.relational_database_driver import (
 from .relational_database_driver.sql_server_driver import SqlServerDriver
 from .relational_database_driver.model import *
 
+from .time_series_database_driver.time_series_database_driver import (
+    TimeSeriesDatabaseDriver,
+)
+from .time_series_database_driver.influxdb_driver import InfluxdbDriver
+from .time_series_database_driver.model import *
+
 from .ssi_data_crawler.ssi_data_crawler import SsiDataCrawler
 
 
@@ -30,7 +36,9 @@ class StockPricePredictorSystem(Helper):
         self._relational_database_driver: RelationalDatabaseDriver = SqlServerDriver(
             self._logger
         )
-        self._time_series_database_driver = None
+        self._time_series_database_driver: TimeSeriesDatabaseDriver = InfluxdbDriver(
+            self._logger
+        )
 
         self._ssi_data_crawler = SsiDataCrawler(self._logger)
 
@@ -70,6 +78,14 @@ Created by Trung Ly Duc
                 server=_config.relational_database.server_name,
                 login=_config.relational_database.login,
                 password=_config.relational_database.password,
+            )
+        )
+
+        successful &= self._time_series_database_driver.open_connection(
+            InfluxdbAuthentication(
+                url=_config.time_series_database.url,
+                org=_config.time_series_database.org,
+                token=_config.time_series_database.token,
             )
         )
 
@@ -242,6 +258,22 @@ Created by Trung Ly Duc
         return True
 
     def _crawl_time_series_data(self) -> bool:
+
+        point_component = PointComponent(
+            measurement="my_measurement",
+            tags={"name": "Trung"},
+            fields={"age": 24},
+            time=datetime(2025, 1, 1, 0, 0, 7),
+        )
+
+        write_component = WriteComponent(
+            bucket="root", point_component_list=point_component
+        )
+
+        if not self._time_series_database_driver.write(write_component):
+            print("\nCannot write time series data.")
+            return False
+
         return True
 
     def _crawl_data(self):
@@ -264,9 +296,9 @@ Created by Trung Ly Duc
 
         self._add_api_config_for_crawler(self._config.ssi_crawler_info)
 
-        self._crawl_relational_data()
+        # self._crawl_relational_data()
 
-        # self._crawl_time_series_data()
+        self._crawl_time_series_data()
 
         print("\nCrawling data has been completed.")
 
