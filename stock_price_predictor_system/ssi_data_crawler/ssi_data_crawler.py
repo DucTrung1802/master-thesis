@@ -17,6 +17,12 @@ from ..relational_database_driver.relational_database_driver import (
 from ..relational_database_driver.sql_server_driver import SqlServerDriver
 from ..relational_database_driver.model import *
 
+from ..time_series_database_driver.time_series_database_driver import (
+    TimeSeriesDatabaseDriver,
+)
+from ..time_series_database_driver.influxdb_driver import InfluxdbDriver
+from ..time_series_database_driver.model import *
+
 from ..helper.helper import Helper
 
 from .enum import *
@@ -30,7 +36,8 @@ class SsiDataCrawler(Helper):
         self._config: SsiCrawlerInfoConfig = None
         self._client: MarketDataClient = None
 
-        self._relational_database_driver: SqlServerDriver = None
+        self._relational_database_driver: RelationalDatabaseDriver = None
+        self._time_series_database_driver: TimeSeriesDatabaseDriver = None
 
     def add_crawler_config(self, add_crawler_config: SsiCrawlerInfoConfig):
         self._config = add_crawler_config
@@ -645,6 +652,11 @@ class SsiDataCrawler(Helper):
             )
             return False
 
+        if not isinstance(_relational_database_driver, RelationalDatabaseDriver):
+            print('\nInvalid "_relational_database_driver".')
+            self._logger.log_error('Invalid "_relational_database_driver".')
+            return False
+
         self._relational_database_driver = _relational_database_driver
 
         # Create all markets data
@@ -667,5 +679,32 @@ class SsiDataCrawler(Helper):
 
         return True
 
-    def crawl_time_series_data(self) -> bool:
+    def crawl_time_series_data(
+        self, _time_series_database_driver: TimeSeriesDatabaseDriver
+    ) -> bool:
+        if not self._is_initialized():
+            print(
+                "\nClient is not initialized. Cannot crawl data. Double check configuration and try again."
+            )
+            self._logger.log_error(
+                "Client is not initialized. Cannot crawl data. Double check configuration and try again."
+            )
+            return False
+
+        if not isinstance(_time_series_database_driver, TimeSeriesDatabaseDriver):
+            print('\nInvalid "_time_series_database_driver".')
+            self._logger.log_error('Invalid "_time_series_database_driver".')
+            return False
+
+        self._time_series_database_driver = _time_series_database_driver
+
+        read_component = ReadComponent(
+            bucket="root",
+            start_time=datetime(2025, 1, 28, 2, 27, 0),
+            end_time=datetime(2025, 1, 28, 3, 27, 0),
+            measurement="go_info",
+        )
+
+        records = self._time_series_database_driver.read(read_component)
+
         return True

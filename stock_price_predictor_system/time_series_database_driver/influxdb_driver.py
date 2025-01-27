@@ -1,3 +1,4 @@
+from datetime import timezone
 from influxdb_client import InfluxDBClient, WriteApi, QueryApi, Point
 from influxdb_client.client.write_api import SYNCHRONOUS
 from typing import List
@@ -125,5 +126,58 @@ class InfluxdbDriver(TimeSeriesDatabaseDriver):
             self._logger.log_error(f"Cannot write query. Error: {e}")
             return False
 
-    def read(self) -> List:
-        pass
+    def read(self, read_component: ReadComponent) -> List:
+        start_time = None
+        end_time = None
+
+        if not self.check_bucket_exist(read_component.bucket):
+            return False
+
+        if not read_component.start_time:
+            print(f'\n"start_time" is invalid.')
+            self._logger.log_error(f'"start_time" is invalid.')
+            return []
+
+        if isinstance(read_component.start_time, TimeInterval):
+            start_time = read_component.start_time.format_time()
+
+        elif isinstance(read_component.start_time, datetime):
+            # Convert start_time and end_time to UTC
+            start_time = read_component.start_time.astimezone(timezone.utc).strftime(
+                "%Y-%m-%dT%H:%M:%SZ"
+            )
+            end_time = read_component.end_time.astimezone(timezone.utc).strftime(
+                "%Y-%m-%dT%H:%M:%SZ"
+            )
+
+        else:
+            print('\nUnsupport type of "start_time".')
+            self._logger.log_error('Unsupport type of "start_time".')
+            return False
+
+        query = f"""from(bucket: "{read_component.bucket}")
+  |> range(start: {start_time}{f", stop: {end_time}" if end_time else ""})
+  |> filter(fn: (r) => r["_measurement"] == "{read_component.measurement}")"""
+
+        try:
+            table_list = self._reader.query(query=query)
+
+            number_of_record = 0
+            records = []
+            if len(table_list):
+                records = table_list[0].records
+                number_of_record = len(records)
+
+            print(
+                f'\nSuccessfully read {number_of_record} records from bucket: "{read_component.bucket}".'
+            )
+            self._logger.log_info(
+                f'Successfully read {number_of_record} records from bucket: "{read_component.bucket}".'
+            )
+
+            return records
+
+        except Exception as e:
+            print(f"\nCannot read query. Error: {e}")
+            self._logger.log_error(f"Cannot read query. Error: {e}")
+            return False

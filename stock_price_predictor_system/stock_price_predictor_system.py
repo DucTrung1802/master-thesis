@@ -258,20 +258,13 @@ Created by Trung Ly Duc
         return True
 
     def _crawl_time_series_data(self) -> bool:
-
-        point_component = PointComponent(
-            measurement="my_measurement",
-            tags={"name": "Trung"},
-            fields={"age": 24},
-            time=datetime(2025, 1, 1, 0, 0, 7),
-        )
-
-        write_component = WriteComponent(
-            bucket="root", point_component_list=point_component
-        )
-
-        if not self._time_series_database_driver.write(write_component):
-            print("\nCannot write time series data.")
+        print("\nStart crawling time series data. Please wait...")
+        self._logger.log_info("Start crawling time series data. Please wait...")
+        if not self._ssi_data_crawler.crawl_time_series_data(
+            self._time_series_database_driver
+        ):
+            print("\nCannot crawl time series data.")
+            self._logger.log_error("\nCannot crawl time series data.")
             return False
 
         return True
