@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import List, Literal, Optional
+from typing import List, Literal, Optional, Union
 from .enum import *
 
 
@@ -250,9 +250,26 @@ class DailyIndexOutputModel(BaseOutputModel):
 @dataclass
 class DailyStockPriceInputModel(BaseInputModel):
     symbol: str
-    fromDate: datetime
-    toDate: datetime
+    fromDate: Union[str, datetime]
+    toDate: Union[str, datetime]
     market: int
+
+    def __post_init__(self):
+        # Handle `fromDate`
+        if isinstance(self.fromDate, str):
+            self.fromDate = datetime.strptime(self.fromDate, "%Y-%m-%d").strftime(
+                "%d/%m/%Y"
+            )
+        elif isinstance(self.fromDate, datetime):
+            self.fromDate = self.fromDate.strftime("%d/%m/%Y")
+
+        # Handle `toDate`
+        if isinstance(self.toDate, str):
+            self.toDate = datetime.strptime(self.toDate, "%Y-%m-%d").strftime(
+                "%d/%m/%Y"
+            )
+        elif isinstance(self.toDate, datetime):
+            self.toDate = self.toDate.strftime("%d/%m/%Y")
 
 
 @dataclass

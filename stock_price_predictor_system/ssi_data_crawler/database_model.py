@@ -47,3 +47,14 @@ class Security:
     @classmethod
     def get_key_list(cls):
         return [field.name for field in cls.__dataclass_fields__.values()]
+
+
+@dataclass(kw_only=True)
+class CrawlCheckpoint:
+    ID: int
+    CurrentStartInterval: datetime
+    CurrentSymbol: str
+
+    @classmethod
+    def get_key_list(cls):
+        return [field.name for field in cls.__dataclass_fields__.values()]

@@ -23,6 +23,8 @@ from .time_series_database_driver.model import *
 
 from .ssi_data_crawler.ssi_data_crawler import SsiDataCrawler
 
+from .constant import *
+
 
 class StockPricePredictorSystem(Helper):
 
@@ -97,7 +99,7 @@ Created by Trung Ly Duc
 
         try:
             # region Create relational database
-            self._relational_database_driver.create_database("SSI_STOCKS")
+            self._relational_database_driver.create_database(RELATIONAL_DATABASE_NAME)
             # endregion
 
             # region Create Market Table
@@ -126,7 +128,7 @@ Created by Trung Ly Duc
             ]
 
             self._relational_database_driver.create_table(
-                database_name="SSI_STOCKS",
+                database_name=RELATIONAL_DATABASE_NAME,
                 table_name="Market",
                 columns=market_table_columns,
                 key_column_name="ID",
@@ -159,7 +161,7 @@ Created by Trung Ly Duc
             ]
 
             self._relational_database_driver.create_table(
-                database_name="SSI_STOCKS",
+                database_name=RELATIONAL_DATABASE_NAME,
                 table_name="SecurityType",
                 columns=security_type_table_columns,
                 key_column_name="ID",
@@ -215,11 +217,34 @@ Created by Trung Ly Duc
             ]
 
             self._relational_database_driver.create_table(
-                database_name="SSI_STOCKS",
+                database_name=RELATIONAL_DATABASE_NAME,
                 table_name="Security",
                 columns=security_table_columns,
                 key_column_name="ID",
                 foreign_keys=security_table_foreign_keys,
+            )
+            # endregion
+
+            # region Create CrawlCheckpoint Table
+            crawl_checkpoint_table_columns: List[Column] = [
+                Column(columnName="ID", dataType=DataType.INT(), nullable=False),
+                Column(
+                    columnName="CurrentStartInterval",
+                    dataType=DataType.DATETIME(),
+                    nullable=False,
+                ),
+                Column(
+                    columnName="CurrentSymbol",
+                    dataType=DataType.NVARCHAR(12),
+                    nullable=False,
+                ),
+            ]
+
+            self._relational_database_driver.create_table(
+                database_name=RELATIONAL_DATABASE_NAME,
+                table_name="CrawlCheckpoint",
+                columns=crawl_checkpoint_table_columns,
+                key_column_name="ID",
             )
             # endregion
 
@@ -242,15 +267,24 @@ Created by Trung Ly Duc
 
         return successful
 
-    def _add_api_config_for_crawler(self, api_crawler_config: SsiDataCrawler):
+    def _initialize_config_and_driver(
+        self,
+        api_crawler_config: SsiDataCrawler,
+        relational_database_driver: RelationalDatabaseDriver,
+        time_series_database_driver: TimeSeriesDatabaseDriver,
+    ):
         self._ssi_data_crawler.add_crawler_config(api_crawler_config)
+        self._ssi_data_crawler.add_relational_database_driver(
+            relational_database_driver
+        )
+        self._ssi_data_crawler.add_time_series_database_driver(
+            time_series_database_driver
+        )
 
     def _crawl_relational_data(self) -> bool:
         print("\nStart crawling relational data. Please wait...")
         self._logger.log_info("Start crawling relational data. Please wait...")
-        if not self._ssi_data_crawler.crawl_relational_data(
-            self._relational_database_driver
-        ):
+        if not self._ssi_data_crawler.crawl_relational_data():
             print("\nCannot crawl relational data.")
             self._logger.log_error("\nCannot crawl relational data.")
             return False
@@ -260,9 +294,7 @@ Created by Trung Ly Duc
     def _crawl_time_series_data(self) -> bool:
         print("\nStart crawling time series data. Please wait...")
         self._logger.log_info("Start crawling time series data. Please wait...")
-        if not self._ssi_data_crawler.crawl_time_series_data(
-            self._time_series_database_driver
-        ):
+        if not self._ssi_data_crawler.crawl_time_series_data():
             print("\nCannot crawl time series data.")
             self._logger.log_error("\nCannot crawl time series data.")
             return False
@@ -287,11 +319,29 @@ Created by Trung Ly Duc
 
         print("\nSuccessfully created all database schemas.")
 
-        self._add_api_config_for_crawler(self._config.ssi_crawler_info)
+        self._initialize_config_and_driver(
+            api_crawler_config=self._config.ssi_crawler_info,
+            relational_database_driver=self._relational_database_driver,
+            time_series_database_driver=self._time_series_database_driver,
+        )
 
-        # self._crawl_relational_data()
+        print(
+            f'\n"ENABLE_CRAWL_RELATIONAL_DATABASE" is {ENABLE_CRAWL_RELATIONAL_DATABASE}.'
+        )
+        self._logger.log_info(
+            f'"ENABLE_CRAWL_RELATIONAL_DATABASE" is {ENABLE_CRAWL_RELATIONAL_DATABASE}.'
+        )
+        if ENABLE_CRAWL_RELATIONAL_DATABASE:
+            self._crawl_relational_data()
 
-        self._crawl_time_series_data()
+        print(
+            f'\n"ENABLE_CRAWL_TIME_SERIES_DATABASE" is {ENABLE_CRAWL_TIME_SERIES_DATABASE}.'
+        )
+        self._logger.log_info(
+            f'"ENABLE_CRAWL_TIME_SERIES_DATABASE" is {ENABLE_CRAWL_TIME_SERIES_DATABASE}.'
+        )
+        if ENABLE_CRAWL_TIME_SERIES_DATABASE:
+            self._crawl_time_series_data()
 
         print("\nCrawling data has been completed.")
 
@@ -324,13 +374,13 @@ Created by Trung Ly Duc
         self._logger.log_info("Start purging all relational data...")
 
         self._relational_database_driver.delete(
-            database_name="SSI_STOCKS", table_name="Market"
+            database_name=RELATIONAL_DATABASE_NAME, table_name="Market"
         )
         self._relational_database_driver.delete(
-            database_name="SSI_STOCKS", table_name="Security"
+            database_name=RELATIONAL_DATABASE_NAME, table_name="Security"
         )
         self._relational_database_driver.delete(
-            database_name="SSI_STOCKS", table_name="SecurityType"
+            database_name=RELATIONAL_DATABASE_NAME, table_name="SecurityType"
         )
 
         print("Finish purging all relational data.")

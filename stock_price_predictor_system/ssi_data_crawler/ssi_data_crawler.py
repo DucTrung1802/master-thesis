@@ -14,18 +14,18 @@ from ..config_helper.model import SsiCrawlerInfoConfig
 from ..relational_database_driver.relational_database_driver import (
     RelationalDatabaseDriver,
 )
-from ..relational_database_driver.sql_server_driver import SqlServerDriver
 from ..relational_database_driver.model import *
 
 from ..time_series_database_driver.time_series_database_driver import (
     TimeSeriesDatabaseDriver,
 )
-from ..time_series_database_driver.influxdb_driver import InfluxdbDriver
 from ..time_series_database_driver.model import *
 
 from ..helper.helper import Helper
 
 from .enum import *
+
+from ..constant import *
 
 
 class SsiDataCrawler(Helper):
@@ -39,9 +39,249 @@ class SsiDataCrawler(Helper):
         self._relational_database_driver: RelationalDatabaseDriver = None
         self._time_series_database_driver: TimeSeriesDatabaseDriver = None
 
+    # region Public methods
+
     def add_crawler_config(self, add_crawler_config: SsiCrawlerInfoConfig):
         self._config = add_crawler_config
         self._client = MarketDataClient(self._config)
+
+    def add_relational_database_driver(
+        self,
+        relational_database_driver: RelationalDatabaseDriver,
+    ):
+        self._relational_database_driver = relational_database_driver
+
+    def add_time_series_database_driver(
+        self, time_series_database_driver: TimeSeriesDatabaseDriver
+    ):
+        self._time_series_database_driver = time_series_database_driver
+
+    def crawl_relational_data(self) -> bool:
+        if not self._is_initialized():
+            print(
+                "\nClient is not initialized. Cannot crawl data. Double check configuration and try again."
+            )
+            self._logger.log_error(
+                "Client is not initialized. Cannot crawl data. Double check configuration and try again."
+            )
+            return False
+
+        if not isinstance(self._relational_database_driver, RelationalDatabaseDriver):
+            print('\nInvalid "_relational_database_driver".')
+            self._logger.log_error('Invalid "_relational_database_driver".')
+            return False
+
+        # Create all markets data
+        if not self._create_all_market_data():
+            print("\nCannot create all markets.")
+            self._logger.log_error("Cannot create all markets.")
+            return False
+
+        # Create all security types data
+        if not self._create_all_security_type_data():
+            print("\nCannot create all security types.")
+            self._logger.log_error("Cannot create all security types.")
+            return False
+
+        # Crawl all securities data
+        if not self._crawl_all_securities_data():
+            print("\nCannot crawl all securities data.")
+            self._logger.log_error("Cannot crawl all securities data.")
+            return False
+
+        return True
+
+    def crawl_time_series_data(self) -> bool:
+        if not self._is_initialized():
+            print(
+                "\nClient is not initialized. Cannot crawl data. Double check configuration and try again."
+            )
+            self._logger.log_error(
+                "Client is not initialized. Cannot crawl data. Double check configuration and try again."
+            )
+            return False
+
+        if not isinstance(self._time_series_database_driver, TimeSeriesDatabaseDriver):
+            print('\nInvalid "_time_series_database_driver".')
+            self._logger.log_error('Invalid "_time_series_database_driver".')
+            return False
+
+        all_securities = self._retrieve_all_security_data()
+
+        all_security_symbols = [security.Symbol for security in all_securities]
+
+        start_interval = DEFAULT_CRAWL_DATA_START_DATE
+        checkpoint_symbol = None
+        found_checkpoint_symbol = False
+
+        crawl_checkpoint = self._get_time_series_data_crawl_checkpoint()
+
+        if (
+            crawl_checkpoint
+            and crawl_checkpoint.CurrentStartInterval
+            and crawl_checkpoint.CurrentSymbol in all_security_symbols
+        ):
+            start_interval = crawl_checkpoint.CurrentStartInterval
+            checkpoint_symbol = crawl_checkpoint.CurrentSymbol
+
+        while start_interval < datetime.now():
+            end_interval = start_interval + CRAWL_DATA_TIME_INTERVAL - timedelta(days=1)
+
+            print(
+                f"\nCrawling data in interval {start_interval.strftime("%d/%m/%Y")} - {end_interval.strftime("%d/%m/%Y")}."
+            )
+            self._logger.log_info(
+                f"Crawling data in interval {start_interval.strftime("%d/%m/%Y")} - {end_interval.strftime("%d/%m/%Y")}."
+            )
+
+            for symbol in all_security_symbols:
+                if (
+                    checkpoint_symbol
+                    and symbol != checkpoint_symbol
+                    and not found_checkpoint_symbol
+                ):
+                    continue
+
+                found_checkpoint_symbol = True
+
+                print(f"\nCrawling data for security: {symbol}")
+                self._logger.log_info(f"Crawling data for security: {symbol}")
+
+                daily_stock_price_input_model = DailyStockPriceInputModel(
+                    symbol=symbol,
+                    fromDate=start_interval,
+                    toDate=end_interval,
+                    market=None,
+                    pageIndex=1,
+                    pageSize=50,
+                )
+
+                response = self._get_daily_stock_price(daily_stock_price_input_model)
+                daily_stock_price_output_model = DailyStockPriceOutputModel(**response)
+
+                # Process if no records were found
+                if daily_stock_price_output_model.totalRecord == 0:
+                    print(
+                        f"\nSuccessfully crawl daily stock price data from {start_interval.strftime("%d/%m/%Y")} to {end_interval.strftime("%d/%m/%Y")} but no records were found. Skip to next stock."
+                    )
+                    self._logger.log_info(
+                        f"Successfully crawl daily stock price data from {start_interval.strftime("%d/%m/%Y")} to {end_interval.strftime("%d/%m/%Y")} but no records were found. Skip to next stock."
+                    )
+
+                    self._set_time_series_data_crawl_checkpoint(start_interval, symbol)
+                    continue
+
+                daily_stock_price_data_model_list = [
+                    DailyStockPriceDataModel(
+                        symbol=daily_stock_price_data_model["Symbol"],
+                        tradingDate=datetime.strptime(
+                            daily_stock_price_data_model["TradingDate"], "%d/%m/%Y"
+                        ),
+                        time=daily_stock_price_data_model[
+                            "Time"
+                        ],  # Assuming `Time` is None
+                        priceChange=int(
+                            float(daily_stock_price_data_model["PriceChange"])
+                        ),
+                        perPriceChange=float(
+                            daily_stock_price_data_model["PerPriceChange"]
+                        ),
+                        ceilingPrice=int(
+                            float(daily_stock_price_data_model["CeilingPrice"])
+                        ),
+                        floorPrice=int(
+                            float(daily_stock_price_data_model["FloorPrice"])
+                        ),
+                        refPrice=int(float(daily_stock_price_data_model["RefPrice"])),
+                        openPrice=int(float(daily_stock_price_data_model["OpenPrice"])),
+                        highestPrice=int(
+                            float(daily_stock_price_data_model["HighestPrice"])
+                        ),
+                        lowestPrice=int(
+                            float(daily_stock_price_data_model["LowestPrice"])
+                        ),
+                        closePrice=int(
+                            float(daily_stock_price_data_model["ClosePrice"])
+                        ),
+                        averagePrice=int(
+                            float(daily_stock_price_data_model["AveragePrice"])
+                        ),
+                        closePriceAdjusted=int(
+                            float(daily_stock_price_data_model["ClosePriceAdjusted"])
+                        ),
+                        totalMatchVol=int(
+                            float(daily_stock_price_data_model["TotalMatchVol"])
+                        ),
+                        totalMatchVal=int(
+                            float(daily_stock_price_data_model["TotalMatchVal"])
+                        ),
+                        totalDealVal=int(
+                            float(daily_stock_price_data_model["TotalDealVal"])
+                        ),
+                        totalDealVol=int(
+                            float(daily_stock_price_data_model["TotalDealVol"])
+                        ),
+                        foreignBuyVolTotal=int(
+                            float(daily_stock_price_data_model["ForeignBuyVolTotal"])
+                        ),
+                        foreignCurrentRoom=int(
+                            float(daily_stock_price_data_model["ForeignCurrentRoom"])
+                        ),
+                        foreignSellVolTotal=int(
+                            float(daily_stock_price_data_model["ForeignSellVolTotal"])
+                        ),
+                        foreignBuyValTotal=int(
+                            float(daily_stock_price_data_model["ForeignBuyValTotal"])
+                        ),
+                        foreignSellValTotal=int(
+                            float(daily_stock_price_data_model["ForeignSellValTotal"])
+                        ),
+                        totalBuyTrade=int(
+                            float(daily_stock_price_data_model["TotalBuyTrade"])
+                        ),
+                        totalBuyTradeVol=int(
+                            float(daily_stock_price_data_model["TotalBuyTradeVol"])
+                        ),
+                        totalSellTrade=int(
+                            float(daily_stock_price_data_model["TotalSellTrade"])
+                        ),
+                        totalSellTradeVol=int(
+                            float(daily_stock_price_data_model["TotalSellTradeVol"])
+                        ),
+                        netBuySellVol=int(
+                            float(daily_stock_price_data_model["NetBuySellVol"])
+                        ),
+                        netBuySellVal=int(
+                            float(daily_stock_price_data_model["NetBuySellVal"])
+                        ),
+                        totalTradedVol=int(
+                            float(daily_stock_price_data_model["TotalTradedVol"])
+                        ),
+                        totalTradedValue=int(
+                            float(daily_stock_price_data_model["TotalTradedValue"])
+                        ),
+                    )
+                    for daily_stock_price_data_model in daily_stock_price_output_model.data
+                ]
+
+                if not self._save_daily_stock_price(daily_stock_price_data_model_list):
+                    print(
+                        f"\nCannot save daily stock price. Stock: {symbol}. Interval: {start_interval.strftime("%d/%m/%Y")} - {end_interval.strftime("%d/%m/%Y")}."
+                    )
+                    self._logger.log_error(
+                        f"Cannot save daily stock price. Stock: {symbol}. Interval: {start_interval.strftime("%d/%m/%Y")} - {end_interval.strftime("%d/%m/%Y")}."
+                    )
+                    return False
+
+                self._set_time_series_data_crawl_checkpoint(start_interval, symbol)
+
+            start_interval += CRAWL_DATA_TIME_INTERVAL
+
+        return True
+
+    # endregion
+
+    # region Private methods
 
     def _is_initialized(self) -> bool:
         return (
@@ -54,12 +294,21 @@ class SsiDataCrawler(Helper):
     # Wrapper
     def _get_securities(self, securities_input_model: SecuritiesInputModel):
         result = self._client.securities(self._config, securities_input_model)
-        time.sleep(2)
+        time.sleep(COOL_DOWN_BETWEEN_API_CALL)
+        return result
+
+    def _get_daily_stock_price(
+        self, daily_stock_price_input_model: DailyStockPriceInputModel
+    ):
+        result = self._client.daily_stock_price(
+            self._config, daily_stock_price_input_model
+        )
+        time.sleep(COOL_DOWN_BETWEEN_API_CALL)
         return result
 
     def _retrieve_all_market_data(self):
         return self._relational_database_driver.select(
-            database_name="SSI_STOCKS", table_name="Market"
+            database_name=RELATIONAL_DATABASE_NAME, table_name="Market"
         )
 
     def _create_all_market_data(self):
@@ -84,7 +333,7 @@ class SsiDataCrawler(Helper):
             return True
 
         self._relational_database_driver.delete(
-            database_name="SSI_STOCKS", table_name="Market"
+            database_name=RELATIONAL_DATABASE_NAME, table_name="Market"
         )
 
         market_record_1: Record = Record(
@@ -206,7 +455,7 @@ class SsiDataCrawler(Helper):
             market_record_5,
         ]
 
-        database_name = "SSI_STOCKS"
+        database_name = RELATIONAL_DATABASE_NAME
         table_name = "Market"
         if not self._relational_database_driver.insert(
             database_name=database_name,
@@ -226,7 +475,7 @@ class SsiDataCrawler(Helper):
 
     def _retrieve_all_security_type_data(self):
         return self._relational_database_driver.select(
-            database_name="SSI_STOCKS", table_name="SecurityType"
+            database_name=RELATIONAL_DATABASE_NAME, table_name="SecurityType"
         )
 
     def _create_all_security_type_data(self) -> bool:
@@ -252,7 +501,7 @@ class SsiDataCrawler(Helper):
 
         # Truncate former security type data
         if not self._relational_database_driver.truncate_table(
-            database_name="SSI_STOCKS", table_name="SecurityType"
+            database_name=RELATIONAL_DATABASE_NAME, table_name="SecurityType"
         ):
             print("\nCannot truncate former security type data.")
             self._logger.log_error("Cannot truncate former security type data.")
@@ -416,7 +665,7 @@ class SsiDataCrawler(Helper):
             security_type_record_7,
         ]
 
-        database_name = "SSI_STOCKS"
+        database_name = RELATIONAL_DATABASE_NAME
         table_name = "SecurityType"
         self._relational_database_driver.insert(
             database_name=database_name,
@@ -434,7 +683,7 @@ class SsiDataCrawler(Helper):
         return True
 
     def _create_and_truncate_temp_security_table(self):
-        database_name = "SSI_STOCKS"
+        database_name = RELATIONAL_DATABASE_NAME
         temp_security_table_name = "TempSecurity"
 
         if not self._relational_database_driver.check_database_exist(
@@ -504,8 +753,12 @@ class SsiDataCrawler(Helper):
             return False
 
         total_record = securities_output_model.totalRecord
-        print(f"Total records found: {total_record}")
-        self._logger.log_info(f"Total records found: {total_record}")
+        print(
+            f"\nSuccessfully crawl securities data. Total records found: {total_record}"
+        )
+        self._logger.log_info(
+            f"Successfully crawl securities data. Total records found: {total_record}"
+        )
 
         number_of_page = math.ceil(total_record / page_size)
 
@@ -571,14 +824,14 @@ class SsiDataCrawler(Helper):
             ]
 
             self._relational_database_driver.insert(
-                database_name="SSI_STOCKS",
+                database_name=RELATIONAL_DATABASE_NAME,
                 table_name="TempSecurity",
                 records=security_record_list,
             )
 
         # Merge temp security table to security table
         self._relational_database_driver.merge(
-            database_name="SSI_STOCKS",
+            database_name=RELATIONAL_DATABASE_NAME,
             source_table="TempSecurity",
             target_table="Security",
             matching_column="Symbol",
@@ -631,7 +884,7 @@ class SsiDataCrawler(Helper):
         )
 
         security_list = self._relational_database_driver.select(
-            database_name="SSI_STOCKS",
+            database_name=RELATIONAL_DATABASE_NAME,
             table_name="Security",
             condition_list=not_delisted_condition,
         )
@@ -640,71 +893,117 @@ class SsiDataCrawler(Helper):
             Security(**dict(zip(Security.get_key_list(), row))) for row in security_list
         ]
 
-    def crawl_relational_data(
-        self, _relational_database_driver: RelationalDatabaseDriver
+    def _save_daily_stock_price(
+        self, daily_stock_price_data_model_list: List[DailyStockPriceDataModel]
     ) -> bool:
-        if not self._is_initialized():
-            print(
-                "\nClient is not initialized. Cannot crawl data. Double check configuration and try again."
-            )
+        if not daily_stock_price_data_model_list:
+            print('\nInvalid "daily_stock_price_data_model_list". Cannot save data.')
             self._logger.log_error(
-                "Client is not initialized. Cannot crawl data. Double check configuration and try again."
+                'Invalid "daily_stock_price_data_model_list". Cannot save data.'
             )
             return False
 
-        if not isinstance(_relational_database_driver, RelationalDatabaseDriver):
-            print('\nInvalid "_relational_database_driver".')
-            self._logger.log_error('Invalid "_relational_database_driver".')
-            return False
-
-        self._relational_database_driver = _relational_database_driver
-
-        # Create all markets data
-        if not self._create_all_market_data():
-            print("\nCannot create all markets.")
-            self._logger.log_error("Cannot create all markets.")
-            return False
-
-        # Create all security types data
-        if not self._create_all_security_type_data():
-            print("\nCannot create all security types.")
-            self._logger.log_error("Cannot create all security types.")
-            return False
-
-        # Crawl all securities data
-        if not self._crawl_all_securities_data():
-            print("\nCannot crawl all securities data.")
-            self._logger.log_error("Cannot crawl all securities data.")
-            return False
-
-        return True
-
-    def crawl_time_series_data(
-        self, _time_series_database_driver: TimeSeriesDatabaseDriver
-    ) -> bool:
-        if not self._is_initialized():
-            print(
-                "\nClient is not initialized. Cannot crawl data. Double check configuration and try again."
+        point_component_list = [
+            PointComponent(
+                measurement=MEASUREMENT_NAME,
+                tags={"symbol": daily_stock_price_data_model.symbol},
+                fields={
+                    "price_change": daily_stock_price_data_model.priceChange,
+                    "per_price_change": daily_stock_price_data_model.perPriceChange,
+                    "ceiling_price": daily_stock_price_data_model.ceilingPrice,
+                    "floor_price": daily_stock_price_data_model.floorPrice,
+                    "ref_price": daily_stock_price_data_model.refPrice,
+                    "open_price": daily_stock_price_data_model.openPrice,
+                    "highest_price": daily_stock_price_data_model.highestPrice,
+                    "lowest_price": daily_stock_price_data_model.lowestPrice,
+                    "close_price": daily_stock_price_data_model.closePrice,
+                    "average_price": daily_stock_price_data_model.averagePrice,
+                    "close_price_adjusted": daily_stock_price_data_model.closePriceAdjusted,
+                    "total_match_vol": daily_stock_price_data_model.totalMatchVol,
+                    "total_match_val": daily_stock_price_data_model.totalMatchVal,
+                    "total_deal_val": daily_stock_price_data_model.totalDealVal,
+                    "total_deal_vol": daily_stock_price_data_model.totalDealVol,
+                    "foreign_buy_vol_total": daily_stock_price_data_model.foreignBuyVolTotal,
+                    "foreign_current_room": daily_stock_price_data_model.foreignCurrentRoom,
+                    "foreign_sell_vol_total": daily_stock_price_data_model.foreignSellVolTotal,
+                    "foreign_buy_val_total": daily_stock_price_data_model.foreignBuyValTotal,
+                    "foreign_sell_val_total": daily_stock_price_data_model.foreignSellValTotal,
+                    "total_buy_trade": daily_stock_price_data_model.totalBuyTrade,
+                    "total_buy_trade_vol": daily_stock_price_data_model.totalBuyTradeVol,
+                    "total_sell_trade": daily_stock_price_data_model.totalSellTrade,
+                    "total_sell_trade_vol": daily_stock_price_data_model.totalSellTradeVol,
+                    "net_buy_sell_vol": daily_stock_price_data_model.netBuySellVol,
+                    "net_buy_sell_val": daily_stock_price_data_model.netBuySellVal,
+                    "total_traded_vol": daily_stock_price_data_model.totalTradedVol,
+                    "total_traded_value": daily_stock_price_data_model.totalTradedValue,
+                },
+                time=daily_stock_price_data_model.tradingDate,
             )
-            self._logger.log_error(
-                "Client is not initialized. Cannot crawl data. Double check configuration and try again."
-            )
-            return False
+            for daily_stock_price_data_model in daily_stock_price_data_model_list
+        ]
 
-        if not isinstance(_time_series_database_driver, TimeSeriesDatabaseDriver):
-            print('\nInvalid "_time_series_database_driver".')
-            self._logger.log_error('Invalid "_time_series_database_driver".')
-            return False
-
-        self._time_series_database_driver = _time_series_database_driver
-
-        read_component = ReadComponent(
-            bucket="root",
-            start_time=datetime(2025, 1, 28, 2, 27, 0),
-            end_time=datetime(2025, 1, 28, 3, 27, 0),
-            measurement="go_info",
+        write_component = WriteComponent(
+            bucket=BUCKET_NAME, point_component_list=point_component_list
         )
 
-        records = self._time_series_database_driver.read(read_component)
+        if not self._time_series_database_driver.write(write_component):
+            print(f"\nCannot write points to bucket {BUCKET_NAME}.")
+            self._logger.log_error(f"Cannot write points to bucket {BUCKET_NAME}.")
+            return False
 
         return True
+
+    def _set_time_series_data_crawl_checkpoint(
+        self, start_interval: datetime, symbol: str
+    ) -> bool:
+
+        record = Record(
+            [
+                DataModel(
+                    columnName="CurrentStartInterval",
+                    value=start_interval,
+                    dataType=DataType.DATETIME,
+                ),
+                DataModel(
+                    columnName="CurrentSymbol", value=symbol, dataType=DataType.NVARCHAR
+                ),
+            ]
+        )
+
+        if not self._get_time_series_data_crawl_checkpoint():
+            self._relational_database_driver.insert(
+                database_name=RELATIONAL_DATABASE_NAME,
+                table_name="CrawlCheckpoint",
+                records=[record],
+            )
+        else:
+            condition = Condition(
+                column="ID", operator=Operator.EQUAL_TO, value=1, dataType=DataType.INT
+            )
+
+            self._relational_database_driver.update(
+                database_name=RELATIONAL_DATABASE_NAME,
+                table_name="CrawlCheckpoint",
+                record=record,
+                condition_list=[condition],
+            )
+
+    def _get_time_series_data_crawl_checkpoint(self) -> CrawlCheckpoint:
+        condition = Condition(
+            column="ID", operator=Operator.EQUAL_TO, value=1, dataType=DataType.INT
+        )
+
+        result = self._relational_database_driver.select(
+            database_name=RELATIONAL_DATABASE_NAME,
+            table_name="CrawlCheckpoint",
+            condition_list=[condition],
+        )
+
+        if result:
+            return CrawlCheckpoint(
+                **dict(zip(CrawlCheckpoint.get_key_list(), result[0]))
+            )
+
+        return None
+
+    # endregion

@@ -489,13 +489,15 @@ VALUES
 SET {",\n\t".join(f"{data_model.columnName} = {self._format_value(data_model.value, data_model.dataType)}" for data_model in record.dataModelList)}
 """
 
-        join_query = self._add_join(current_query=query, join_model=join_model)
-        if join_query:
-            query += join_query
+        if join_model:
+            join_query = self._add_join(join_model=join_model)
+            if join_query:
+                query += join_query
 
-        condition_query = self._add_condition(condition_list=condition_list)
-        if condition_query:
-            query += condition_query
+        if condition_list:
+            condition_query = self._add_condition(condition_list=condition_list)
+            if condition_query:
+                query += condition_query
 
         self._logger.log_debug(f"\n{query}")
 
@@ -505,7 +507,7 @@ SET {",\n\t".join(f"{data_model.columnName} = {self._format_value(data_model.val
         self,
         database_name: str,
         table_name: str,
-        condition_list: List[Condition],
+        condition_list: List[Condition] = None,
     ):
         if not self.check_database_exist(database_name):
             print(
@@ -527,10 +529,10 @@ SET {",\n\t".join(f"{data_model.columnName} = {self._format_value(data_model.val
 
         query = f"DELETE FROM [{database_name}].[dbo].[{table_name}]"
 
-        conditions = self._add_condition(condition_list)
-
-        if conditions:
-            query += conditions
+        if condition_list:
+            conditions = self._add_condition(condition_list)
+            if conditions:
+                query += conditions
 
         if not self._execute_query(query):
             return False
