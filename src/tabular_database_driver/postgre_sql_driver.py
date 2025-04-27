@@ -32,6 +32,10 @@ class PostgreSQLDriver(TabularDatabaseDriverInterface):
                 port=connection_model.port,
                 database=self._current_database,
             )
+
+            # Set autocommit to True to allow database creation without a transaction block
+            self.connection.autocommit = True
+
             self.cursor = self.connection.cursor()
             self.logger.log_info(
                 f"Connection to PostgreSQL established. Database: {self._current_database}"
@@ -40,20 +44,29 @@ class PostgreSQLDriver(TabularDatabaseDriverInterface):
             self.logger.log_error(f"Error connecting to PostgreSQL: {e}")
             raise ValueError(f"Error executing query: {e}")
 
-    # def disconnect(self) -> DatabaseExecutionStatus:
-    #     """Close the connection to the PostgreSQL database."""
-    #     if self.cursor:
-    #         self.cursor.close()
-    #     if self.connection:
-    #         self.connection.close()
-    #     self.logger.log_info("PostgreSQL connection closed.")
+    def disconnect(self) -> DatabaseExecutionStatus:
+        """Close the connection to the PostgreSQL database."""
+        if self.cursor:
+            self.cursor.close()
+        if self.connection:
+            self.connection.close()
+        self.logger.log_info("PostgreSQL connection closed.")
 
-    # def execute_query(self, query: str):
-    #     """Execute a SQL query on the PostgreSQL database."""
-    #     try:
-    #         self.cursor.execute(query)
-    #     except Exception as e:
-    #         raise ValueError(f"Error executing query: {e}")
+    def create_database(self, database_name: str) -> DatabaseExecutionStatus:
+        """Create a new database in PostgreSQL."""
+        try:
+            query = f"CREATE DATABASE {database_name};"
+            self.cursor.execute(query)
+            self.logger.log_info(f'Database "{database_name}" created successfully.')
+            return DatabaseExecutionStatus.SUCCESS
+        except Exception as e:
+            message = str(e)
+            if "already exists" in message:
+                self.logger.log_info(f'Database "{database_name}" already exists.')
+                return DatabaseExecutionStatus.ALREADY_EXISTS
+            else:
+                self.logger.log_error(f"Error creating database: {e}")
+                return DatabaseExecutionStatus.ERROR
 
     # def fetch_results(self) -> list:
     #     """Fetch results from the last executed query."""
@@ -62,14 +75,3 @@ class PostgreSQLDriver(TabularDatabaseDriverInterface):
     #     except Exception as e:
     #         self.logger.log_error(f"Error fetching results: {e}")
     #         return []
-
-    # def create_database(self, database_name: str) -> DatabaseExecutionStatus:
-    #     """Create a new database in PostgreSQL."""
-    #     try:
-    #         query = f"CREATE DATABASE {database_name};"
-    #         self.execute_query(query)
-    #         self.logger.log_info(f"Database {database_name} created successfully.")
-    #         return DatabaseExecutionStatus.SUCCESS
-    #     except Exception as e:
-    #         self.logger.log_error(f"Error creating database: {e}")
-    #         return DatabaseExecutionStatus.ERROR
