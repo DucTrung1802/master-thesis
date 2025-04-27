@@ -5,6 +5,10 @@ from utils.enums import DatabaseExecutionStatus
 from models.tabular_database_driver_models.base_tabular_database_connection_model import (
     BaseTabularDatabaseModel,
 )
+from models.tabular_database_driver_models.tabular_database_driver_models import (
+    Column,
+    ForeignKey,
+)
 
 
 class TabularDatabaseDriverInterface(ABC):
@@ -38,6 +42,18 @@ class TabularDatabaseDriverInterface(ABC):
     @abstractmethod
     def drop_schema(self, schema_name: str) -> DatabaseExecutionStatus:
         """Drop an existing schema."""
+        pass
+
+    @abstractmethod
+    def create_table(
+        self,
+        schema_name: str,
+        table_name: str,
+        columns: List[Column],
+        key_column_name: str,
+        foreign_keys: List[ForeignKey] = None,
+    ) -> DatabaseExecutionStatus:
+        """Create a new table in the current database."""
         pass
 
     # @abstractmethod

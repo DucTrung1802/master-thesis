@@ -1,4 +1,5 @@
 import psycopg2
+from typing import List
 
 from logger.logger import Logger
 from tabular_database_driver.tabular_database_driver_interface import (
@@ -6,6 +7,10 @@ from tabular_database_driver.tabular_database_driver_interface import (
 )
 from models.tabular_database_driver_models.postgre_sql_connection_model import (
     PostgreSQLConnectionModel,
+)
+from models.tabular_database_driver_models.tabular_database_driver_models import (
+    Column,
+    ForeignKey,
 )
 from utils.enums import DatabaseExecutionStatus
 
@@ -119,6 +124,49 @@ class PostgreSQLDriver(TabularDatabaseDriverInterface):
                 return DatabaseExecutionStatus.OTHER_OBJECT_DEPEND
             else:
                 self.logger.log_error(f"Error dropping schema: {e}")
+                return DatabaseExecutionStatus.ERROR
+
+    def create_table(
+        self,
+        schema_name: str,
+        table_name: str,
+        columns: List[Column],
+        key_column_name: str,
+        foreign_keys: List[ForeignKey] = None,
+    ):
+        """Create a new table in the current database."""
+        try:
+            column_definitions = ", ".join(
+                [
+                    f"{col.name} {col.data_type} {"NOT NULL" if not col.nullable else ""}"
+                    for col in columns
+                ]
+            )
+            primary_key_definition = f"PRIMARY KEY ({key_column_name})"
+            foreign_key_definitions = [
+                f"FOREIGN KEY ({fk.column_name}) REFERENCES {fk.ref_table}({fk.ref_column})"
+                for fk in foreign_keys or []
+            ]
+
+            # Build all constraints together
+            table_constraints = [primary_key_definition] + foreign_key_definitions
+
+            query = f"""
+                CREATE TABLE {schema_name}.{table_name} (
+                    {column_definitions},
+                    {', '.join(table_constraints)}
+                );
+            """
+            self.cursor.execute(query)
+            self.logger.log_info(f'Table "{table_name}" created successfully.')
+            return DatabaseExecutionStatus.SUCCESS
+        except Exception as e:
+            message = str(e)
+            if "already exists" in message:
+                self.logger.log_warning(f'Table "{table_name}" already exists.')
+                return DatabaseExecutionStatus.ALREADY_EXISTS
+            else:
+                self.logger.log_error(f"Error creating table: {e}")
                 return DatabaseExecutionStatus.ERROR
 
     # def fetch_results(self) -> list:
