@@ -38,7 +38,7 @@ class PostgreSQLDriver(TabularDatabaseDriverInterface):
 
             self.cursor = self.connection.cursor()
             self.logger.log_info(
-                f"Connection to PostgreSQL established. Database: {self._current_database}"
+                f'Connection to PostgreSQL established. Database: "{self._current_database}"'
             )
         except Exception as e:
             self.logger.log_error(f"Error connecting to PostgreSQL: {e}")
@@ -62,13 +62,13 @@ class PostgreSQLDriver(TabularDatabaseDriverInterface):
         except Exception as e:
             message = str(e)
             if "already exists" in message:
-                self.logger.log_info(f'Database "{database_name}" already exists.')
+                self.logger.log_warning(f'Database "{database_name}" already exists.')
                 return DatabaseExecutionStatus.ALREADY_EXISTS
             else:
                 self.logger.log_error(f"Error creating database: {e}")
                 return DatabaseExecutionStatus.ERROR
 
-    def drop_database(self, database_name):
+    def drop_database(self, database_name: str):
         """Drop an existing database in PostgreSQL."""
         try:
             query = f"DROP DATABASE {database_name};"
@@ -78,10 +78,47 @@ class PostgreSQLDriver(TabularDatabaseDriverInterface):
         except Exception as e:
             message = str(e)
             if "does not exist" in message:
-                self.logger.log_info(f'Database "{database_name}" does not exist.')
+                self.logger.log_warning(f'Database "{database_name}" does not exist.')
                 return DatabaseExecutionStatus.DOES_NOT_EXIST
             else:
                 self.logger.log_error(f"Error dropping database: {e}")
+                return DatabaseExecutionStatus.ERROR
+
+    def create_schema(self, schema_name: str):
+        """Create a new schema in the current database."""
+        try:
+            query = f"CREATE SCHEMA {schema_name};"
+            self.cursor.execute(query)
+            self.logger.log_info(f'Schema "{schema_name}" created successfully.')
+            return DatabaseExecutionStatus.SUCCESS
+        except Exception as e:
+            message = str(e)
+            if "already exists" in message:
+                self.logger.log_warning(f'Schema "{schema_name}" already exists.')
+                return DatabaseExecutionStatus.ALREADY_EXISTS
+            else:
+                self.logger.log_error(f"Error creating schema: {e}")
+                return DatabaseExecutionStatus.ERROR
+
+    def drop_schema(self, schema_name: str):
+        """Drop an existing schema in the current database."""
+        try:
+            query = f"DROP SCHEMA {schema_name};"
+            self.cursor.execute(query)
+            self.logger.log_info(f'Schema "{schema_name}" dropped successfully.')
+            return DatabaseExecutionStatus.SUCCESS
+        except Exception as e:
+            message = str(e)
+            if "does not exist" in message:
+                self.logger.log_warning(f'Schema "{schema_name}" does not exist.')
+                return DatabaseExecutionStatus.DOES_NOT_EXIST
+            elif "other objects" in message:
+                self.logger.log_warning(
+                    f'Schema "{schema_name}" contains other objects. Cannot be dropped.'
+                )
+                return DatabaseExecutionStatus.OTHER_OBJECT_DEPEND
+            else:
+                self.logger.log_error(f"Error dropping schema: {e}")
                 return DatabaseExecutionStatus.ERROR
 
     # def fetch_results(self) -> list:
