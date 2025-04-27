@@ -1,3 +1,4 @@
+import os
 from enum import Enum
 import inspect
 import logging
@@ -14,6 +15,8 @@ class LogType(Enum):
 class Logger:
 
     def __init__(self, file_name: str, level: LogType = LogType.INFO):
+        self._create_log_file_if_not_exists(file_name)
+
         logging.basicConfig(
             filename=f"{file_name}.log",
             level=level.value,
@@ -22,6 +25,28 @@ class Logger:
             encoding="utf-8",
         )
         self._logger = logging.getLogger()
+
+    def _create_log_file_if_not_exists(self, file_name: str):
+        """
+        Helper method to create the log file and directory if they do not exist.
+        Args:
+            file_name (str): The name of the log file.
+        """
+        directory = os.path.dirname(
+            file_name
+        )  # Get the directory part of the file path
+        if directory and not os.path.exists(directory):  # Check if directory exists
+            try:
+                os.makedirs(directory)  # Create the directory if it doesn't exist
+            except Exception as e:
+                print(f"Error creating directory: {e}")
+                return
+
+        try:
+            with open(f"{file_name}.log", "a"):
+                pass
+        except Exception as e:
+            print(f"Error creating log file: {e}")
 
     def _get_caller_context(self):
         """
