@@ -9,5 +9,6 @@ class DatabaseExecutionStatus(Enum):
     SUCCESS = "success"
     ALREADY_EXISTS = "already_exists"
     DOES_NOT_EXIST = "does_not_exist"
+    OTHER_OBJECT_DEPEND = "other_object_depend"
 
     ERROR = "error"
