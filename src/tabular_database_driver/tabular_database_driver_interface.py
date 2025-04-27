@@ -25,10 +25,10 @@ class TabularDatabaseDriverInterface(ABC):
         """Create a new database."""
         pass
 
-    # @abstractmethod
-    # def drop_database(self, database_name: str) -> DatabaseExecutionStatus:
-    #     """Drop an existing database."""
-    #     pass
+    @abstractmethod
+    def drop_database(self, database_name: str) -> DatabaseExecutionStatus:
+        """Drop an existing database."""
+        pass
 
     # @abstractmethod
     # def fetch_results(self) -> List:

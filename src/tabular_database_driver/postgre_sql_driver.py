@@ -68,6 +68,22 @@ class PostgreSQLDriver(TabularDatabaseDriverInterface):
                 self.logger.log_error(f"Error creating database: {e}")
                 return DatabaseExecutionStatus.ERROR
 
+    def drop_database(self, database_name):
+        """Drop an existing database in PostgreSQL."""
+        try:
+            query = f"DROP DATABASE {database_name};"
+            self.cursor.execute(query)
+            self.logger.log_info(f'Database "{database_name}" dropped successfully.')
+            return DatabaseExecutionStatus.SUCCESS
+        except Exception as e:
+            message = str(e)
+            if "does not exist" in message:
+                self.logger.log_info(f'Database "{database_name}" does not exist.')
+                return DatabaseExecutionStatus.DOES_NOT_EXIST
+            else:
+                self.logger.log_error(f"Error dropping database: {e}")
+                return DatabaseExecutionStatus.ERROR
+
     # def fetch_results(self) -> list:
     #     """Fetch results from the last executed query."""
     #     try:
