@@ -26,6 +26,11 @@ class TabularDatabaseDriverInterface(ABC):
         pass
 
     # @abstractmethod
+    # def drop_database(self, database_name: str) -> DatabaseExecutionStatus:
+    #     """Drop an existing database."""
+    #     pass
+
+    # @abstractmethod
     # def fetch_results(self) -> List:
     #     """Fetch results from the last executed query."""
     #     pass

@@ -57,11 +57,16 @@ class PostgreSQLDriver(TabularDatabaseDriverInterface):
         try:
             query = f"CREATE DATABASE {database_name};"
             self.cursor.execute(query)
-            self.logger.log_info(f"Database {database_name} created successfully.")
+            self.logger.log_info(f'Database "{database_name}" created successfully.')
             return DatabaseExecutionStatus.SUCCESS
         except Exception as e:
-            self.logger.log_error(f"Error creating database: {e}")
-            return DatabaseExecutionStatus.ERROR
+            message = str(e)
+            if "already exists" in message:
+                self.logger.log_info(f'Database "{database_name}" already exists.')
+                return DatabaseExecutionStatus.ALREADY_EXISTS
+            else:
+                self.logger.log_error(f"Error creating database: {e}")
+                return DatabaseExecutionStatus.ERROR
 
     # def fetch_results(self) -> list:
     #     """Fetch results from the last executed query."""
