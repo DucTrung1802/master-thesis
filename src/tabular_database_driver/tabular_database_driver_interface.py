@@ -15,22 +15,17 @@ class TabularDatabaseDriverInterface(ABC):
         """Establish a connection to the database."""
         pass
 
-    # @abstractmethod
-    # def disconnect(self) -> DatabaseExecutionStatus:
-    #     """Close the connection to the database."""
-    #     pass
+    @abstractmethod
+    def disconnect(self) -> DatabaseExecutionStatus:
+        """Close the connection to the database."""
+        pass
 
-    # @abstractmethod
-    # def execute_query(self, query: str) -> DatabaseExecutionStatus:
-    #     """Execute a SQL query on the database."""
-    #     pass
+    @abstractmethod
+    def create_database(self, database_name: str) -> DatabaseExecutionStatus:
+        """Create a new database."""
+        pass
 
     # @abstractmethod
     # def fetch_results(self) -> List:
     #     """Fetch results from the last executed query."""
-    #     pass
-
-    # @abstractmethod
-    # def create_database(self, database_name: str) -> DatabaseExecutionStatus:
-    #     """Create a new database."""
     #     pass
