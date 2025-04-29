@@ -56,6 +56,11 @@ class TabularDatabaseDriverInterface(ABC):
         """Create a new table in the current database."""
         pass
 
+    @abstractmethod
+    def drop_table(self, schema_name: str, table_name: str) -> DatabaseExecutionStatus:
+        """Drop an existing table."""
+        pass
+
     # @abstractmethod
     # def fetch_results(self) -> List:
     #     """Fetch results from the last executed query."""
