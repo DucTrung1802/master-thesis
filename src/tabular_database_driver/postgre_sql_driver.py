@@ -169,6 +169,22 @@ class PostgreSQLDriver(TabularDatabaseDriverInterface):
                 self.logger.log_error(f"Error creating table: {e}")
                 return DatabaseExecutionStatus.ERROR
 
+    def drop_table(self, schema_name: str, table_name: str):
+        """Drop an existing table in the current database."""
+        try:
+            query = f"DROP TABLE {schema_name}.{table_name};"
+            self.cursor.execute(query)
+            self.logger.log_info(f'Table "{table_name}" dropped successfully.')
+            return DatabaseExecutionStatus.SUCCESS
+        except Exception as e:
+            message = str(e)
+            if "does not exist" in message:
+                self.logger.log_warning(f'Table "{table_name}" does not exist.')
+                return DatabaseExecutionStatus.DOES_NOT_EXIST
+            else:
+                self.logger.log_error(f"Error dropping table: {e}")
+                return DatabaseExecutionStatus.ERROR
+
     # def fetch_results(self) -> list:
     #     """Fetch results from the last executed query."""
     #     try:
