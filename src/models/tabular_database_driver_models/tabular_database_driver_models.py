@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from typing import List
 
+from utils.enums import SqlOperator, SqlJoinType
+
 
 @dataclass
 class DataType:
@@ -69,4 +71,28 @@ class DataModel:
 
 @dataclass
 class Record:
-    dataModelList: List[DataModel]
+    data_model_list: List[DataModel]
+
+
+@dataclass
+class Condition:
+    column: str
+    operator: SqlOperator
+    value: str | int | float  # Need to upgrade to avoid SQL injection
+    data_type: DataType
+
+
+@dataclass
+class JoinCombination:
+    join_type: SqlJoinType
+    table_left: str
+    table_right: str
+    column_left: str
+    column_right: str
+
+
+@dataclass
+class JoinModel:
+    database: str
+    table: str
+    join_combinations: List[JoinCombination]

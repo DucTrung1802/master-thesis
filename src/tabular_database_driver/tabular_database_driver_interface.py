@@ -68,6 +68,18 @@ class TabularDatabaseDriverInterface(ABC):
         """Insert records into a table."""
         pass
 
+    @abstractmethod
+    def update(
+        self,
+        schema_name: str,
+        table_name: str,
+        update_record: Record,
+        join_model: JoinModel = None,
+        conditions: List[Condition] = None,
+    ):
+        """Update records in a table."""
+        pass
+
     # @abstractmethod
     # def fetch_results(self) -> List:
     #     """Fetch results from the last executed query."""
