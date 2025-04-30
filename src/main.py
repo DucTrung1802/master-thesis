@@ -75,6 +75,18 @@ def main():
             ),
         ],
     )
+    my_sql_driver.delete(
+        schema_name="test_schema",
+        table_name="test_table",
+        conditions=[
+            Condition(
+                column="name",
+                operator=SqlOperator.EQUAL_TO,
+                value="Jane Doe",
+                data_type=DataType.VARCHAR,
+            ),
+        ],
+    )
     # my_sql_driver.drop_table(schema_name="test_schema", table_name="test_table")
     # my_sql_driver.drop_schema(schema_name="test_schema")
     # my_sql_driver.drop_database(database_name="test_db")
