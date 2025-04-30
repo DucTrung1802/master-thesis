@@ -93,7 +93,14 @@ class TabularDatabaseDriverInterface(ABC):
         """Delete records from a table."""
         pass
 
-    # @abstractmethod
-    # def fetch_results(self) -> List:
-    #     """Fetch results from the last executed query."""
-    #     pass
+    @abstractmethod
+    def select(
+        self,
+        schema_name: str,
+        table_name: str,
+        columns: List[str],
+        join_model: JoinModel = None,
+        conditions: List[Condition] = None,
+    ) -> DatabaseExecutionStatus:
+        """Select records from a table."""
+        pass

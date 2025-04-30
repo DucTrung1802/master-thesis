@@ -68,10 +68,18 @@ class PostgreSQLDriver(TabularDatabaseDriverInterface):
         self._logger.log_debug(f"Executing query:\n{query.strip()}")
         self._cursor.execute(query)
 
+    def fetch_result(self) -> list:
+        """Fetch results from the last executed query."""
+        try:
+            return self._cursor.fetchall()
+        except Exception as e:
+            self._logger.log_error(f"Error fetching results: {e}")
+            return []
+
     def create_database(self, database_name: str) -> DatabaseExecutionStatus:
         """Create a new database in PostgreSQL and change to this new database."""
         try:
-            query = f"CREATE DATABASE {database_name};"
+            query = f"CREATE DATABASE {database_name}"
             self.execute_query(query)
             self._logger.log_info(f'Database "{database_name}" created successfully.')
             self.change_database(database_name)
@@ -89,7 +97,7 @@ class PostgreSQLDriver(TabularDatabaseDriverInterface):
     def drop_database(self, database_name: str):
         """Drop an existing database in PostgreSQL."""
         try:
-            query = f"DROP DATABASE {database_name};"
+            query = f"DROP DATABASE {database_name}"
             self.execute_query(query)
             self._logger.log_info(f'Database "{database_name}" dropped successfully.')
             return DatabaseExecutionStatus.SUCCESS
@@ -119,7 +127,7 @@ class PostgreSQLDriver(TabularDatabaseDriverInterface):
     def create_schema(self, schema_name: str):
         """Create a new schema in the current database."""
         try:
-            query = f"CREATE SCHEMA {schema_name};"
+            query = f"CREATE SCHEMA {schema_name}"
             self.execute_query(query)
             self._logger.log_info(f'Schema "{schema_name}" created successfully.')
             return DatabaseExecutionStatus.SUCCESS
@@ -135,7 +143,7 @@ class PostgreSQLDriver(TabularDatabaseDriverInterface):
     def drop_schema(self, schema_name: str):
         """Drop an existing schema in the current database."""
         try:
-            query = f"DROP SCHEMA {schema_name};"
+            query = f"DROP SCHEMA {schema_name}"
             self.execute_query(query)
             self._logger.log_info(f'Schema "{schema_name}" dropped successfully.')
             return DatabaseExecutionStatus.SUCCESS
@@ -163,7 +171,7 @@ class PostgreSQLDriver(TabularDatabaseDriverInterface):
     ):
         """Create a new table in the current database."""
         try:
-            column_definitions = ", ".join(
+            column_definitions = ",\n    ".join(
                 [
                     f"{col.name} {"SERIAL" if col.name == primary_key else col.data_type} {"NOT NULL" if not col.nullable else ""}"
                     for col in columns
@@ -179,11 +187,11 @@ class PostgreSQLDriver(TabularDatabaseDriverInterface):
             table_constraints = [primary_key_definition] + foreign_key_definitions
 
             query = f"""
-                CREATE TABLE {schema_name}.{table_name} (
-                    {column_definitions},
-                    {', '.join(table_constraints)}
-                );
-            """
+CREATE TABLE {schema_name}.{table_name} (
+    {column_definitions},
+    {', '.join(table_constraints)}
+)
+"""
             self.execute_query(query)
             self._logger.log_info(
                 f'Table "{schema_name}.{table_name}" created successfully.'
@@ -203,7 +211,7 @@ class PostgreSQLDriver(TabularDatabaseDriverInterface):
     def drop_table(self, schema_name: str, table_name: str):
         """Drop an existing table in the current database."""
         try:
-            query = f"DROP TABLE {schema_name}.{table_name};"
+            query = f"DROP TABLE {schema_name}.{table_name}"
             self.execute_query(query)
             self._logger.log_info(
                 f'Table "{schema_name}.{table_name}" dropped successfully.'
@@ -235,7 +243,12 @@ class PostgreSQLDriver(TabularDatabaseDriverInterface):
                         for col in record.data_model_list
                     ]
                 )
-                query = f"INSERT INTO {schema_name}.{table_name} ({columns}) VALUES ({values});"
+                query = f"""
+INSERT INTO 
+    {schema_name}.{table_name} ({columns})
+VALUES
+    ({values})
+"""
                 self.execute_query(query)
             self._logger.log_info(
                 f'Insert {len(records)} record(s) into table "{schema_name}.{table_name}" successfully.'
@@ -255,17 +268,22 @@ class PostgreSQLDriver(TabularDatabaseDriverInterface):
     ):
         """Update records in a table."""
         try:
-            set_clause = ", ".join(
+            set_clause = ",\n    ".join(
                 [
                     f"{col.column_name} = {format_value(col.value, col.data_type)}"
                     for col in update_record.data_model_list
                 ]
             )
-            where_clause = " AND ".join(
-                [
-                    f"{cond.column} {cond.operator.value} {format_value(cond.value, cond.data_type)}"
-                    for cond in conditions or []
-                ]
+            where_clause = (
+                "WHERE\n    "
+                + "\n    AND ".join(
+                    [
+                        f"{cond.column} {cond.operator.value} {format_value(cond.value, cond.data_type)}"
+                        for cond in conditions or []
+                    ]
+                )
+                if conditions
+                else ""
             )
             join_clause = (
                 f"JOIN {join_model.table_right} ON {join_model.table_left}.{join_model.column_left} = {join_model.table_right}.{join_model.column_right}"
@@ -274,10 +292,11 @@ class PostgreSQLDriver(TabularDatabaseDriverInterface):
             )
 
             query = f"""
-                UPDATE {schema_name}.{table_name}
-                SET {set_clause} {f"\n                {join_clause}" if join_clause else ""}
-                WHERE {where_clause};
-            """
+UPDATE {schema_name}.{table_name}
+SET
+    {set_clause} {f"\n    {join_clause}" if join_clause else ""}
+{where_clause}
+"""
             self.execute_query(query)
             number_of_records_updated = (
                 int(self._cursor.statusmessage.split()[-1])
@@ -301,11 +320,16 @@ class PostgreSQLDriver(TabularDatabaseDriverInterface):
     ):
         """Delete records in a table."""
         try:
-            where_clause = " AND ".join(
-                [
-                    f"{cond.column} {cond.operator.value} {format_value(cond.value, cond.data_type)}"
-                    for cond in conditions or []
-                ]
+            where_clause = (
+                "WHERE\n    "
+                + "\n    AND ".join(
+                    [
+                        f"{cond.column} {cond.operator.value} {format_value(cond.value, cond.data_type)}"
+                        for cond in conditions or []
+                    ]
+                )
+                if conditions
+                else ""
             )
             join_clause = (
                 f"JOIN {join_model.table_right} ON {join_model.table_left}.{join_model.column_left} = {join_model.table_right}.{join_model.column_right}"
@@ -314,8 +338,9 @@ class PostgreSQLDriver(TabularDatabaseDriverInterface):
             )
 
             query = f"""
-                DELETE FROM {schema_name}.{table_name} {f"\n                {join_clause}" if join_clause else ""}
-                WHERE {where_clause};
+DELETE FROM {schema_name}.{table_name}
+{f"\n    {join_clause}" if join_clause else ""}
+{where_clause}
             """
             self.execute_query(query)
             number_of_records_updated = (
@@ -331,10 +356,50 @@ class PostgreSQLDriver(TabularDatabaseDriverInterface):
             self._logger.log_error(f"Error deleting records: {e}")
             return DatabaseExecutionStatus.ERROR
 
-    # def fetch_results(self) -> list:
-    #     """Fetch results from the last executed query."""
-    #     try:
-    #         return self._cursor.fetchall()
-    #     except Exception as e:
-    #         self._logger.log_error(f"Error fetching results: {e}")
-    #         return []
+    def select(
+        self,
+        schema_name: str,
+        table_name: str,
+        columns: List[str] = None,
+        join_model: JoinModel = None,
+        conditions: List[Condition] = None,
+    ) -> List:
+        """Select records from a table."""
+        try:
+            if not isinstance(columns, List):
+                columns = [columns]
+
+            columns_clause = ",\n    ".join(columns) if columns else "*"
+            where_clause = (
+                "WHERE\n    "
+                + "\n    AND ".join(
+                    [
+                        f"{cond.column} {cond.operator.value} {format_value(cond.value, cond.data_type)}"
+                        for cond in conditions or []
+                    ]
+                )
+                if conditions
+                else ""
+            )
+            join_clause = (
+                f"JOIN {join_model.table_right} ON {join_model.table_left}.{join_model.column_left} = {join_model.table_right}.{join_model.column_right}"
+                if join_model
+                else ""
+            )
+
+            query = f"""
+SELECT
+    {columns_clause}
+FROM
+    {schema_name}.{table_name} {f"\n    {join_clause}" if join_clause else ""}
+{where_clause}
+"""
+            self.execute_query(query)
+            results = self.fetch_result()
+            self._logger.log_info(
+                f'Selected {len(results)} records from table "{schema_name}.{table_name}" successfully.'
+            )
+            return results
+        except Exception as e:
+            self._logger.log_error(f"Error selecting records: {e}")
+            return []
