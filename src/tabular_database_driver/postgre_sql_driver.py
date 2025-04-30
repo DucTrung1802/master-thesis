@@ -292,6 +292,45 @@ class PostgreSQLDriver(TabularDatabaseDriverInterface):
             self._logger.log_error(f"Error updating records: {e}")
             return DatabaseExecutionStatus.ERROR
 
+    def delete(
+        self,
+        schema_name: str,
+        table_name: str,
+        join_model: JoinModel = None,
+        conditions: List[Condition] = None,
+    ):
+        """Delete records in a table."""
+        try:
+            where_clause = " AND ".join(
+                [
+                    f"{cond.column} {cond.operator.value} {format_value(cond.value, cond.data_type)}"
+                    for cond in conditions or []
+                ]
+            )
+            join_clause = (
+                f"JOIN {join_model.table_right} ON {join_model.table_left}.{join_model.column_left} = {join_model.table_right}.{join_model.column_right}"
+                if join_model
+                else ""
+            )
+
+            query = f"""
+                DELETE FROM {schema_name}.{table_name} {f"\n                {join_clause}" if join_clause else ""}
+                WHERE {where_clause};
+            """
+            self.execute_query(query)
+            number_of_records_updated = (
+                int(self._cursor.statusmessage.split()[-1])
+                if self._cursor.statusmessage.startswith("DELETE")
+                else 0
+            )
+            self._logger.log_info(
+                f'Delete {number_of_records_updated} records in table "{schema_name}.{table_name}" successfully.'
+            )
+            return DatabaseExecutionStatus.SUCCESS
+        except Exception as e:
+            self._logger.log_error(f"Error deleting records: {e}")
+            return DatabaseExecutionStatus.ERROR
+
     # def fetch_results(self) -> list:
     #     """Fetch results from the last executed query."""
     #     try:

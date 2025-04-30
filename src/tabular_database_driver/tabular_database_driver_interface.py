@@ -64,7 +64,9 @@ class TabularDatabaseDriverInterface(ABC):
         pass
 
     @abstractmethod
-    def insert(self, schema_name: str, table_name: str, records: List[Record]):
+    def insert(
+        self, schema_name: str, table_name: str, records: List[Record]
+    ) -> DatabaseExecutionStatus:
         """Insert records into a table."""
         pass
 
@@ -76,8 +78,19 @@ class TabularDatabaseDriverInterface(ABC):
         update_record: Record,
         join_model: JoinModel = None,
         conditions: List[Condition] = None,
-    ):
+    ) -> DatabaseExecutionStatus:
         """Update records in a table."""
+        pass
+
+    @abstractmethod
+    def delete(
+        self,
+        schema_name: str,
+        table_name: str,
+        join_model: JoinModel = None,
+        conditions: List[Condition] = None,
+    ) -> DatabaseExecutionStatus:
+        """Delete records from a table."""
         pass
 
     # @abstractmethod
