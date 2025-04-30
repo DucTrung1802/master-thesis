@@ -58,3 +58,15 @@ class Column:
     name: str
     data_type: DataType
     nullable: bool
+
+
+@dataclass
+class DataModel:
+    column_name: str
+    value: str | int | float
+    data_type: DataType
+
+
+@dataclass
+class Record:
+    dataModelList: List[DataModel]
