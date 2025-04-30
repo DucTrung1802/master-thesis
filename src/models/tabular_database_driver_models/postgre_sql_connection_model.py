@@ -8,7 +8,7 @@ from models.tabular_database_driver_models.base_tabular_database_connection_mode
 @dataclass
 class PostgreSQLConnectionModel(BaseTabularDatabaseModel):
     port: int = 5432
-    database: str = None
+    database: str = "postgres"
 
     def __post_init__(self):
         super().__post_init__()
