@@ -11,6 +11,7 @@ from models.tabular_database_driver_models.postgre_sql_connection_model import (
 from models.tabular_database_driver_models.tabular_database_driver_models import *
 from utils.enums import DatabaseExecutionStatus
 from utils.constants import *
+from utils.utils import *
 
 
 class PostgreSQLDriver(TabularDatabaseDriverInterface):
@@ -223,7 +224,7 @@ class PostgreSQLDriver(TabularDatabaseDriverInterface):
         """Insert records into a table."""
         try:
             for record in records:
-                columns = ", ".join([col.column_name for col in record.dataModelList])
+                columns = ", ".join([col.column_name for col in record.data_model_list])
                 values = ", ".join(
                     [
                         (
@@ -231,11 +232,10 @@ class PostgreSQLDriver(TabularDatabaseDriverInterface):
                             if isinstance(col.value, str)
                             else str(col.value)
                         )
-                        for col in record.dataModelList
+                        for col in record.data_model_list
                     ]
                 )
                 query = f"INSERT INTO {schema_name}.{table_name} ({columns}) VALUES ({values});"
-                print(query)
                 self.execute_query(query)
             self._logger.log_info(
                 f'Insert {len(records)} record(s) into table "{schema_name}.{table_name}" successfully.'
@@ -243,6 +243,53 @@ class PostgreSQLDriver(TabularDatabaseDriverInterface):
             return DatabaseExecutionStatus.SUCCESS
         except Exception as e:
             self._logger.log_error(f"Error inserting records: {e}")
+            return DatabaseExecutionStatus.ERROR
+
+    def update(
+        self,
+        schema_name: str,
+        table_name: str,
+        update_record: Record,
+        join_model: JoinModel = None,
+        conditions: List[Condition] = None,
+    ):
+        """Update records in a table."""
+        try:
+            set_clause = ", ".join(
+                [
+                    f"{col.column_name} = {format_value(col.value, col.data_type)}"
+                    for col in update_record.data_model_list
+                ]
+            )
+            where_clause = " AND ".join(
+                [
+                    f"{cond.column} {cond.operator.value} {format_value(cond.value, cond.data_type)}"
+                    for cond in conditions or []
+                ]
+            )
+            join_clause = (
+                f"JOIN {join_model.table_right} ON {join_model.table_left}.{join_model.column_left} = {join_model.table_right}.{join_model.column_right}"
+                if join_model
+                else ""
+            )
+
+            query = f"""
+                UPDATE {schema_name}.{table_name}
+                SET {set_clause} {f"\n                {join_clause}" if join_clause else ""}
+                WHERE {where_clause};
+            """
+            self.execute_query(query)
+            number_of_records_updated = (
+                int(self._cursor.statusmessage.split()[-1])
+                if self._cursor.statusmessage.startswith("UPDATE")
+                else 0
+            )
+            self._logger.log_info(
+                f'Updated {number_of_records_updated} records in table "{schema_name}.{table_name}" successfully.'
+            )
+            return DatabaseExecutionStatus.SUCCESS
+        except Exception as e:
+            self._logger.log_error(f"Error updating records: {e}")
             return DatabaseExecutionStatus.ERROR
 
     # def fetch_results(self) -> list:
