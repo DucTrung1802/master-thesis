@@ -10,6 +10,7 @@ import csv
 
 import os
 import time
+from typing import List, Tuple
 
 from logger.logger import Logger
 from utils.constants import *
@@ -89,6 +90,34 @@ class WebScraper:
         self.web_driver.get(url)
         self._update_bs4_parser()
 
+    def _extract_tbl_macro_data(self) -> Tuple[List, List]:
+        # Extract data from the table
+        table = self.bs4_parser.find("table", id="tbl-macro-data")
+
+        # Extract headers
+        headers = []
+        thead = table.find("thead")
+        if thead:
+            header_row = thead.find_all("tr")[
+                -1
+            ]  # use the last row if rowspan is present
+            headers = [th.get_text(strip=True) for th in header_row.find_all("th")]
+
+        # Extract rows
+        rows = []
+        tbody = table.find("tbody")
+        for tr in tbody.find_all("tr"):
+            # Skip group title rows
+            if tr.get("class") and "group" in tr.get("class"):
+                continue
+            row = []
+            for td in tr.find_all(["td"]):
+                text = td.get_text(strip=True)
+                row.append(text)
+            rows.append(row)
+
+        return (headers, rows)
+
     def _scrape_macroeconomics_data_gdp_by_year(self, file_path: str, year: int):
         # Select time unit
         time_unit_element = self.web_driver.find_element(
@@ -138,30 +167,7 @@ class WebScraper:
 
         self._update_bs4_parser()
 
-        # Extract data from the table
-        table = self.bs4_parser.find("table", id="tbl-macro-data")
-
-        # Extract headers
-        headers = []
-        thead = table.find("thead")
-        if thead:
-            header_row = thead.find_all("tr")[
-                -1
-            ]  # use the last row if rowspan is present
-            headers = [th.get_text(strip=True) for th in header_row.find_all("th")]
-
-        # Extract rows
-        rows = []
-        tbody = table.find("tbody")
-        for tr in tbody.find_all("tr"):
-            # Skip group title rows
-            if tr.get("class") and "group" in tr.get("class"):
-                continue
-            row = []
-            for td in tr.find_all(["td"]):
-                text = td.get_text(strip=True)
-                row.append(text)
-            rows.append(row)
+        headers, rows = self._extract_tbl_macro_data()
 
         # Write to CSV
         with open(file_path, "w", newline="", encoding="utf-8") as f:
@@ -191,11 +197,17 @@ class WebScraper:
             else:
                 self._scrape_macroeconomics_data_gdp_by_year(file_path, year)
 
+    def _scrape_macroeconomics_data_cpi(self):
+        pass
+
     def scrape_macroeconomics_data(self):
         self.logger.log_info("Start scraping macroeconomics data.")
 
         # GDP
         self._scrape_macroeconomics_data_gdp()
+
+        # CPI
+        self._scrape_macroeconomics_data_cpi()
 
     def scrape_stock_market_data(self):
         self.logger.log_info("Start scraping stock market data.")
