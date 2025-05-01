@@ -197,8 +197,84 @@ class WebScraper:
             else:
                 self._scrape_macroeconomics_data_gdp_by_year(file_path, year)
 
+    def _scrape_macroeconomics_data_cpi_by_year(self, file_path: str, year: int):
+        # Select time unit
+        time_unit_element = self.web_driver.find_element(
+            by=By.XPATH,
+            value="""//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[1]/select""",
+        )
+        time_unit_select_element = Select(time_unit_element)
+        time_unit_select_element.select_by_visible_text("Tháng")
+
+        # Select time period
+        from_month_element = self.web_driver.find_element(
+            by=By.XPATH,
+            value="""//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[2]/select""",
+        )
+        from_month_select_element = Select(from_month_element)
+        from_month_select_element.select_by_visible_text("1")
+
+        from_year_element = self.web_driver.find_element(
+            by=By.XPATH,
+            value="""//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[3]/select""",
+        )
+        from_year_select_element = Select(from_year_element)
+        from_year_select_element.select_by_visible_text(str(year))
+
+        to_month_element = self.web_driver.find_element(
+            by=By.XPATH,
+            value="""//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[4]/select""",
+        )
+        to_month_select_element = Select(to_month_element)
+        to_month_select_element.select_by_visible_text("12")
+
+        to_year_element = self.web_driver.find_element(
+            by=By.XPATH,
+            value="""//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[5]/select""",
+        )
+        to_year_select_element = Select(to_year_element)
+        to_year_select_element.select_by_visible_text(str(year))
+
+        # View data in 01 year period
+        view_button_element = self.web_driver.find_element(
+            by=By.XPATH,
+            value="""//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/button""",
+        )
+        view_button_element.click()
+
+        time.sleep(2)
+
+        self._update_bs4_parser()
+
+        headers, rows = self._extract_tbl_macro_data()
+
+        # Write to CSV
+        with open(file_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(headers)
+            writer.writerows(rows)
+
     def _scrape_macroeconomics_data_cpi(self):
-        pass
+        self.logger.log_info("Start scraping macroeconomics data for CPI.")
+
+        self._navigate_to_url(MACROECONOMICS_INDICATORS.get("CPI").get("URL"))
+
+        # Scrape data each year from 2000 to now
+        start_year = SCRAPER_START_DATE.year
+        current_year = datetime.now().year
+
+        for year in range(start_year, current_year + 1):
+            self.logger.log_info(f"Scraping data for year: {year}")
+
+            # Check if the file already exists
+            folder_path = MACROECONOMICS_INDICATORS.get("CPI").get("FOLDER")
+            file_name = MACROECONOMICS_INDICATORS.get("CPI").get("FILENAME")
+            file_path = f"{folder_path}/{file_name}_{year}.csv"
+            if os.path.exists(file_path):
+                self.logger.log_info(f"File already exists: {file_path}")
+                continue
+            else:
+                self._scrape_macroeconomics_data_cpi_by_year(file_path, year)
 
     def scrape_macroeconomics_data(self):
         self.logger.log_info("Start scraping macroeconomics data.")
