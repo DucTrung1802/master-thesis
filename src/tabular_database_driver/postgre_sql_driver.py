@@ -21,11 +21,11 @@ class PostgreSQLDriver(TabularDatabaseDriverInterface):
         self._cursor = None
         self._connection_model: PostgreSQLConnectionModel = PostgreSQLConnectionModel(
             logger=logger,
-            host=POSTGRESQL_DEFAULT_HOST,
-            user=POSTGRESQL_DEFAULT_USER,
-            password=POSTGRESQL_DEFAULT_PASSWORD,
-            port=POSTGRESQL_DEFAULT_PORT,
-            database=POSTGRESQL_DEFAULT_DATABASE,
+            host=POSTGRES.get("HOST"),
+            user=POSTGRES.get("USER"),
+            password=POSTGRES.get("PASSWORD"),
+            port=POSTGRES.get("PORT"),
+            database=POSTGRES.get("DATABASE"),
         )
 
     def connect(
