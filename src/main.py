@@ -6,6 +6,7 @@ from web_scraper.web_scraper import WebScraper
 def main():
     my_logger = Logger(file_name=LOG_FILE_BASE)
     my_web_scraper = WebScraper(my_logger)
+    my_web_scraper.start_scraping()
 
 
 if __name__ == "__main__":
