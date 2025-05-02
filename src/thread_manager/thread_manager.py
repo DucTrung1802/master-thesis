@@ -1,5 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
-from typing import List
+from typing import List, Set
 from logger.logger import Logger
 
 from models.thread_manager_models.task import *
@@ -8,9 +8,23 @@ from models.thread_manager_models.task import *
 class ThreadManager:
     def __init__(self, logger: Logger):
         self._logger = logger
+        self._task_name_set: Set[str] = Set()
         self._task_list: List[Task] = []
 
     def _validate_task(self, task: Task) -> bool:
+        if not task.name:
+            self._logger.log_error(f"The name provided for task must not be empty.")
+            raise ValueError(f"The name provided for task must not be empty.")
+
+        task_name = str.lower(task.name)
+        if task_name in self._task_name_set:
+            self._logger.log_error(
+                f'The name "{task_name}" (ignore_case) must be unique for each function.'
+            )
+            raise ValueError(
+                f'The name "{task_name}" (ignore_case) must be unique for each function.'
+            )
+
         if not callable(task.func):
             self._logger.log_error(
                 f"The function provided for task '{task.name}' is not callable."
@@ -36,7 +50,27 @@ class ThreadManager:
         if not self._validate_task(task):
             return
 
+        self._task_name_set.add(task.name)
         self._task_list.append(task)
+
+    def remove_task(self, task_name: str):
+        if task_name in self._task_name_set:
+            try:
+                self._task_name_set.remove()
+                self._task_list = [
+                    task for task in self._task_list if task.name != task_name
+                ]
+                self._logger.log_info(
+                    f'Removed task with name "{task_name}" from task list.'
+                )
+            except KeyError as e:
+                self._logger.log_warning(
+                    f'Task with name "{task_name}" does not exist in the task list.'
+                )
+                return
+
+    def get_current_number_of_task(self):
+        return len(self._task_name_set)
 
     def execute(self):
         if not self._task_list:
