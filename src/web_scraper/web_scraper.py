@@ -570,6 +570,52 @@ class WebScraper:
             writer.writerow(headers)
             writer.writerows(rows)
 
+    def _scrape_macroeconomics_data_population_unemployment(self):
+        self.logger.log_info(
+            "Start scraping macroeconomics data for POPULATION_UNEMPLOYMENT."
+        )
+
+        self._navigate_to_url(
+            MACROECONOMICS_INDICATORS["POPULATION_UNEMPLOYMENT"]["URL"]
+        )
+        time.sleep(SCRAPER_BASE_WAIT_TIME)
+
+        start_year = SCRAPER_START_DATE.year
+        current_year = datetime.now().year
+
+        folder_path = MACROECONOMICS_INDICATORS["POPULATION_UNEMPLOYMENT"]["FOLDER"]
+        file_name = MACROECONOMICS_INDICATORS["POPULATION_UNEMPLOYMENT"]["FILENAME"]
+
+        file_path = f"{folder_path}/{file_name}_{start_year}_{current_year}.csv"
+        if os.path.exists(file_path):
+            self.logger.log_info(f"File already exists: {file_path}")
+            return
+
+        self.logger.log_info(
+            f"Scraping POPULATION_UNEMPLOYMENT data from {start_year} to {current_year}."
+        )
+
+        xpaths = {
+            "from_year": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[2]/select',
+            "to_year": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[3]/select',
+            "view_button": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/button',
+        }
+
+        self._select_dropdown_by_text(xpaths["from_year"], str(start_year))
+        self._select_dropdown_by_text(xpaths["to_year"], str(current_year))
+
+        self._click_element(xpaths["view_button"])
+        time.sleep(SCRAPER_BASE_WAIT_TIME + 2)
+
+        self._update_bs4_parser()
+
+        headers, rows = self._extract_tbl_macro_data()
+
+        with open(file_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(headers)
+            writer.writerows(rows)
+
     def scrape_macroeconomics_data(self):
         self.logger.log_info("Start scraping macroeconomics data.")
 
@@ -599,6 +645,9 @@ class WebScraper:
 
         # Retail
         self._scrape_macroeconomics_data_retail()
+
+        # Population
+        self._scrape_macroeconomics_data_population_unemployment()
 
     def scrape_stock_market_data(self):
         self.logger.log_info("Start scraping stock market data.")
