@@ -6,6 +6,7 @@ from datetime import datetime
 LOG_DIR = "logs"
 LOG_FILE_BASE = f"{LOG_DIR}/app"
 
+
 # ===========================
 # POSTGRESQL CONFIGURATION
 # ===========================
@@ -18,11 +19,13 @@ POSTGRES = {
     "SCHEMA": "public",
 }
 
+
 # ===========================
 # SCRAPER CONFIGURATION
 # ===========================
 SCRAPER_START_DATE = datetime(2000, 1, 1)
 SCRAPER_RAW_DATA_DIR = "raw_data"
+SCRAPER_BASE_WAIT_TIME = 1  # seconds
 
 # ===========================
 # MACROECONOMICS CONFIGURATION

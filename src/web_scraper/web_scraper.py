@@ -89,6 +89,7 @@ class WebScraper:
     def _navigate_to_url(self, url: str):
         self.logger.log_info(f'Navigating to URL: "{url}"')
         self.web_driver.get(url)
+        time.sleep(SCRAPER_BASE_WAIT_TIME)
         self._update_bs4_parser()
 
     def _select_dropdown_by_text(self, xpath: str, text: str):
@@ -177,8 +178,7 @@ class WebScraper:
 
         # Click view button
         self._click_element(xpaths["view_button"])
-
-        time.sleep(1)
+        time.sleep(SCRAPER_BASE_WAIT_TIME)
 
         self._update_bs4_parser()
 
@@ -224,8 +224,7 @@ class WebScraper:
         self._select_dropdown_by_text(xpaths["to_year"], str(current_year))
 
         self._click_element(xpaths["view_button"])
-
-        time.sleep(1)
+        time.sleep(SCRAPER_BASE_WAIT_TIME)
 
         self._update_bs4_parser()
 
@@ -273,8 +272,7 @@ class WebScraper:
         self._input_text(xpaths["to_date"], input_current_date)
 
         self._click_element(xpaths["view_button"])
-
-        time.sleep(1)
+        time.sleep(SCRAPER_BASE_WAIT_TIME)
 
         self._update_bs4_parser()
 
@@ -284,6 +282,53 @@ class WebScraper:
             writer = csv.writer(f)
             writer.writerow(headers)
             writer.writerows(rows)
+
+    def _scrape_macroeconomics_data_interest_rate(self):
+        self.logger.log_info("Start scraping macroeconomics data for INTEREST_RATE.")
+
+        start_year = SCRAPER_START_DATE.year
+        current_year = datetime.now().year
+
+        folder_path = MACROECONOMICS_INDICATORS["INTEREST_RATE"]["FOLDER"]
+        file_name = MACROECONOMICS_INDICATORS["INTEREST_RATE"]["FILENAME"]
+
+        xpaths = {
+            "from_date": '//*[@id="txtFromTradeDate"]/input',
+            "to_date": '//*[@id="txtToTradeDate"]/input',
+            "view_button": '//*[@id="macro-content"]/div/div/div[3]/div/div[3]/div/button',
+        }
+
+        for year in range(start_year, current_year + 1):
+            file_path = f"{folder_path}/{file_name}_{year}.csv"
+            if os.path.exists(file_path):
+                self.logger.log_info(f"File already exists: {file_path}")
+                continue
+
+            self.logger.log_info(f"Scraping INTEREST_RATE data in {year}.")
+
+            self._navigate_to_url(MACROECONOMICS_INDICATORS["INTEREST_RATE"]["URL"])
+            time.sleep(SCRAPER_BASE_WAIT_TIME + 2)
+
+            interest_rate_tab_xpath = (
+                '//*[@id="macro-content"]/div/div/div[3]/div/div[1]/a[2]'
+            )
+            self._click_element(interest_rate_tab_xpath)
+            time.sleep(SCRAPER_BASE_WAIT_TIME + 2)
+
+            self._input_text(xpaths["from_date"], f"01/01/{year}")
+            self._input_text(xpaths["to_date"], f"31/12/{year}")
+
+            self._click_element(xpaths["view_button"])
+            time.sleep(SCRAPER_BASE_WAIT_TIME + 2)
+
+            self._update_bs4_parser()
+
+            headers, rows = self._extract_tbl_macro_data()
+
+            with open(file_path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(headers)
+                writer.writerows(rows)
 
     def scrape_macroeconomics_data(self):
         self.logger.log_info("Start scraping macroeconomics data.")
@@ -296,6 +341,9 @@ class WebScraper:
 
         # Exchange rate
         self._scrape_macroeconomics_data_exchange_rate()
+
+        # Interest rate
+        self._scrape_macroeconomics_data_interest_rate()
 
     def scrape_stock_market_data(self):
         self.logger.log_info("Start scraping stock market data.")
