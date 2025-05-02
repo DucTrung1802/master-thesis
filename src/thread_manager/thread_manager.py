@@ -9,7 +9,7 @@ class ThreadManager:
     def __init__(self, logger: Logger):
         self._logger = logger
         self._task_name_set: Set[str] = set()
-        self._task_list: List[Task] = []
+        self._task_list: List[Task] = list()
 
     def _validate_task(self, task: Task) -> bool:
         if not task.name:
@@ -70,8 +70,8 @@ class ThreadManager:
                 return
 
     def remove_all_tasks(self):
-        self._task_name_set = Set()
-        self._task_list = List()
+        self._task_name_set = set()
+        self._task_list = list()
 
     def get_current_number_of_task(self):
         return len(self._task_name_set)
