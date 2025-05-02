@@ -71,21 +71,16 @@ MACROECONOMICS_INDICATORS = {
     "M2": {
         "FOLDER": f"{SCRAPER_MACROECONOMICS_DIR}/m2",
         "FILENAME": "macroeconomics_m2",
-        "URL": "https://finance.vietstock.vn/du-lieu-vi-mo/47/ban-le.htm",
+        "URL": "https://finance.vietstock.vn/du-lieu-vi-mo/51/tin-dung.htm",
     },
     "RETAIL": {
         "FOLDER": f"{SCRAPER_MACROECONOMICS_DIR}/retail",
         "FILENAME": "macroeconomics_retail",
         "URL": "https://finance.vietstock.vn/du-lieu-vi-mo/47/ban-le.htm",
     },
-    "POPULATION": {
-        "FOLDER": f"{SCRAPER_MACROECONOMICS_DIR}/population",
+    "POPULATION_UNEMPLOYMENT": {
+        "FOLDER": f"{SCRAPER_MACROECONOMICS_DIR}/population_unemployment",
         "FILENAME": "macroeconomics_population",
-        "URL": "https://finance.vietstock.vn/du-lieu-vi-mo/55-56/dan-so-va-lao-dong.htm",
-    },
-    "UNEMPLOYMENT": {
-        "FOLDER": f"{SCRAPER_MACROECONOMICS_DIR}/unemployment",
-        "FILENAME": "macroeconomics_unemployment",
         "URL": "https://finance.vietstock.vn/du-lieu-vi-mo/55-56/dan-so-va-lao-dong.htm",
     },
 }
