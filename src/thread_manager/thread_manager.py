@@ -69,6 +69,10 @@ class ThreadManager:
                 )
                 return
 
+    def remove_all_tasks(self):
+        self._task_name_set = Set()
+        self._task_list = List()
+
     def get_current_number_of_task(self):
         return len(self._task_name_set)
 
