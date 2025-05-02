@@ -53,14 +53,9 @@ MACROECONOMICS_INDICATORS = {
         "FILENAME": "macroeconomics_interest_rate",
         "URL": "https://finance.vietstock.vn/du-lieu-vi-mo/53-64/ty-gia-lai-suat.htm",
     },
-    "EXPORT": {
-        "FOLDER": f"{SCRAPER_MACROECONOMICS_DIR}/export",
-        "FILENAME": "macroeconomics_export",
-        "URL": "https://finance.vietstock.vn/du-lieu-vi-mo/48-49/xuat-nhap-khau.htm",
-    },
-    "IMPORT": {
-        "FOLDER": f"{SCRAPER_MACROECONOMICS_DIR}/import",
-        "FILENAME": "macroeconomics_import",
+    "EXPORT_IMPORT": {
+        "FOLDER": f"{SCRAPER_MACROECONOMICS_DIR}/export_import",
+        "FILENAME": "macroeconomics_export_import",
         "URL": "https://finance.vietstock.vn/du-lieu-vi-mo/48-49/xuat-nhap-khau.htm",
     },
     "IPI": {
