@@ -71,7 +71,7 @@ MACROECONOMICS_INDICATORS = {
     "M2": {
         "FOLDER": f"{SCRAPER_MACROECONOMICS_DIR}/m2",
         "FILENAME": "macroeconomics_m2",
-        "URL": "https://finance.vietstock.vn/du-lieu-vi-mo/47/ban-le.htm",
+        "URL": "https://finance.vietstock.vn/du-lieu-vi-mo/51/tin-dung.htm",
     },
     "RETAIL": {
         "FOLDER": f"{SCRAPER_MACROECONOMICS_DIR}/retail",
