@@ -8,6 +8,11 @@ LOG_FILE_BASE = f"{LOG_DIR}/app"
 
 
 # ===========================
+# THREAD MANAGER CONFIGURATION
+# ===========================
+THREAD_MANAGER_POWER = 50  # unit: %
+
+# ===========================
 # POSTGRESQL CONFIGURATION
 # ===========================
 POSTGRES = {

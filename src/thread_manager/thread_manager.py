@@ -1,13 +1,36 @@
+import os
 from concurrent.futures import ThreadPoolExecutor
 from typing import List, Set
 from logger.logger import Logger
 
+from utils.constants import THREAD_MANAGER_POWER
 from models.thread_manager_models.task import *
 
 
 class ThreadManager:
-    def __init__(self, logger: Logger):
+    def __init__(self, logger: Logger, power=THREAD_MANAGER_POWER):
         self._logger = logger
+
+        try:
+            power = int(power)
+            if 0 < power <= 100:
+                self._power = power
+                self._logger.log_info(
+                    f"Power of ThreadManager is set at {self._power} %."
+                )
+            else:
+                self._logger.log_warning(
+                    f'Power of ThreadManager is invalid: "{power}". Power is set as default: 50%.'
+                )
+        except:
+            self._logger.log_warning(
+                f'Power of ThreadManager is invalid: "{power}". Power is set as default: 50%.'
+            )
+
+        self._max_workers = int(os.process_cpu_count() * self._power / 100)
+        self._logger.log_info(f"Total logical processors: {os.process_cpu_count()}.")
+        self._logger.log_info(f"The number of max workers is {self._max_workers}.")
+
         self._task_name_set: Set[str] = set()
         self._task_list: List[Task] = list()
 
@@ -84,7 +107,7 @@ class ThreadManager:
             self._logger.log_info("No tasks to execute.")
             return successful_tasks, failed_tasks
 
-        with ThreadPoolExecutor() as executor:
+        with ThreadPoolExecutor(max_workers=self._max_workers) as executor:
             self._logger.log_info(f"Executing {len(self._task_list)} tasks...")
 
             future_to_task = {
