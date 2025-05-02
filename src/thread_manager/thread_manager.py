@@ -8,8 +8,8 @@ from models.thread_manager_models.task import *
 class ThreadManager:
     def __init__(self, logger: Logger):
         self._logger = logger
-        self._task_name_set: Set[str] = Set()
-        self._task_list: List[Task] = []
+        self._task_name_set: Set[str] = set()
+        self._task_list: List[Task] = list()
 
     def _validate_task(self, task: Task) -> bool:
         if not task.name:
@@ -70,16 +70,19 @@ class ThreadManager:
                 return
 
     def remove_all_tasks(self):
-        self._task_name_set = Set()
-        self._task_list = List()
+        self._task_name_set = set()
+        self._task_list = list()
 
     def get_current_number_of_task(self):
         return len(self._task_name_set)
 
     def execute(self):
+        successful_tasks = []
+        failed_tasks = []
+
         if not self._task_list:
             self._logger.log_info("No tasks to execute.")
-            return
+            return successful_tasks, failed_tasks
 
         with ThreadPoolExecutor() as executor:
             self._logger.log_info(f"Executing {len(self._task_list)} tasks...")
@@ -92,13 +95,28 @@ class ThreadManager:
                 task = future_to_task[future]
                 try:
                     result = future.result()
+                    successful_tasks.append((task.name, result))
                     self._logger.log_info(
                         f"Task '{task.name}' completed with result: {result}"
                     )
                 except Exception as e:
+                    failed_tasks.append((task.name, str(e)))
                     self._logger.log_error(
                         f"Task '{task.name}' failed with exception: {e}"
                     )
 
-            # Log after all tasks are done
-            self._logger.log_info("All tasks have been completed.")
+            self._logger.log_info(
+                f"All {len(self._task_name_set)} tasks have been executed."
+            )
+
+            successful_names = [name for name, _ in successful_tasks]
+            failed_names = [name for name, _ in failed_tasks]
+
+            self._logger.log_info(
+                f"Successful Tasks ({len(successful_names)}/{len(self._task_name_set)}) : {successful_names}"
+            )
+            self._logger.log_info(
+                f"Failed Tasks ({len(failed_names)}/{len(self._task_name_set)}): {failed_names}"
+            )
+
+        return successful_tasks, failed_tasks
