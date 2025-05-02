@@ -144,7 +144,7 @@ class WebScraper:
 
         self._navigate_to_url(MACROECONOMICS_INDICATORS["GDP"]["URL"])
         time.sleep(SCRAPER_BASE_WAIT_TIME)
-        
+
         start_year = SCRAPER_START_DATE.year
         current_year = datetime.now().year
 
@@ -196,7 +196,7 @@ class WebScraper:
 
         self._navigate_to_url(MACROECONOMICS_INDICATORS["CPI"]["URL"])
         time.sleep(SCRAPER_BASE_WAIT_TIME)
-        
+
         start_year = SCRAPER_START_DATE.year
         current_year = datetime.now().year
 
@@ -242,7 +242,7 @@ class WebScraper:
 
         self._navigate_to_url(MACROECONOMICS_INDICATORS["EXCHANGE_RATE"]["URL"])
         time.sleep(SCRAPER_BASE_WAIT_TIME)
-        
+
         start_date = SCRAPER_START_DATE
         start_year = start_date.year
         input_start_date = start_date.strftime("%d/%m/%Y")
@@ -416,7 +416,7 @@ class WebScraper:
         self._select_dropdown_by_text(xpaths["to_year"], str(current_year))
 
         self._click_element(xpaths["view_button"])
-        time.sleep(SCRAPER_BASE_WAIT_TIME + 1)
+        time.sleep(SCRAPER_BASE_WAIT_TIME + 2)
 
         self._update_bs4_parser()
 
@@ -426,6 +426,55 @@ class WebScraper:
             writer = csv.writer(f)
             writer.writerow(headers)
             writer.writerows(rows)
+
+    def _scrape_macroeconomics_data_fdi(self):
+        self.logger.log_info("Start scraping macroeconomics data for FDI.")
+
+        start_year = 2001
+        current_year = datetime.now().year
+
+        folder_path = MACROECONOMICS_INDICATORS["FDI"]["FOLDER"]
+        file_name = MACROECONOMICS_INDICATORS["FDI"]["FILENAME"]
+
+        xpaths = {
+            "time_unit": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[1]/select',
+            "from_month": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[2]/select',
+            "from_year": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[3]/select',
+            "to_month": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[4]/select',
+            "to_year": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[5]/select',
+            "view_button": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/button',
+        }
+
+        self._navigate_to_url(MACROECONOMICS_INDICATORS["FDI"]["URL"])
+        time.sleep(SCRAPER_BASE_WAIT_TIME)
+
+        for year in range(start_year, current_year + 1, 5):
+            from_year = year
+            to_year = year + 4 if year + 4 <= current_year else current_year
+            file_path = f"{folder_path}/{file_name}_{from_year}_{to_year}.csv"
+            if os.path.exists(file_path):
+                self.logger.log_info(f"File already exists: {file_path}")
+                continue
+
+            self.logger.log_info(f"Scraping FDI data from {from_year} to {to_year}.")
+
+            self._select_dropdown_by_text(xpaths["time_unit"], "Tháng")
+            self._select_dropdown_by_text(xpaths["from_month"], "1")
+            self._select_dropdown_by_text(xpaths["from_year"], str(from_year))
+            self._select_dropdown_by_text(xpaths["to_month"], "12")
+            self._select_dropdown_by_text(xpaths["to_year"], str(to_year))
+
+            self._click_element(xpaths["view_button"])
+            time.sleep(SCRAPER_BASE_WAIT_TIME + 2)
+
+            self._update_bs4_parser()
+
+            headers, rows = self._extract_tbl_macro_data()
+
+            with open(file_path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(headers)
+                writer.writerows(rows)
 
     def scrape_macroeconomics_data(self):
         self.logger.log_info("Start scraping macroeconomics data.")
@@ -447,6 +496,9 @@ class WebScraper:
 
         # IPI
         self._scrape_macroeconomics_data_ipi()
+
+        # FDI
+        self._scrape_macroeconomics_data_fdi()
 
     def scrape_stock_market_data(self):
         self.logger.log_info("Start scraping stock market data.")
