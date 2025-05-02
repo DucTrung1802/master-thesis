@@ -97,6 +97,13 @@ class WebScraper:
         )
         Select(element).select_by_visible_text(text)
 
+    def _input_text(self, xpath: str, value: str):
+        input_element = WebDriverWait(self.web_driver, 10).until(
+            EC.element_to_be_clickable((By.XPATH, xpath))
+        )
+        input_element.clear()
+        input_element.send_keys(value)
+
     def _click_element(self, xpath: str):
         element = WebDriverWait(self.web_driver, 10).until(
             EC.element_to_be_clickable((By.XPATH, xpath))
@@ -230,7 +237,53 @@ class WebScraper:
             writer.writerows(rows)
 
     def _scrape_macroeconomics_data_exchange_rate(self):
-        pass
+        self.logger.log_info("Start scraping macroeconomics data for EXCHANGE_RATE.")
+
+        self._navigate_to_url(MACROECONOMICS_INDICATORS["EXCHANGE_RATE"]["URL"])
+
+        start_date = SCRAPER_START_DATE
+        input_start_date = start_date.strftime("%d/%m/%Y")
+        file_name_start_date = start_date.strftime("%Y%m%d")
+
+        current_date = datetime.now().date()
+        input_current_date = current_date.strftime("%d/%m/%Y")
+        file_name_current_date = current_date.strftime("%Y%m%d")
+
+        folder_path = MACROECONOMICS_INDICATORS["EXCHANGE_RATE"]["FOLDER"]
+        file_name = MACROECONOMICS_INDICATORS["EXCHANGE_RATE"]["FILENAME"]
+
+        file_path = f"{folder_path}/{file_name}_{file_name_start_date}_{file_name_current_date}.csv"
+        if os.path.exists(file_path):
+            self.logger.log_info(f"File already exists: {file_path}")
+            return
+
+        self.logger.log_info(
+            f"Scraping EXCHANGE_RATE data from {file_name_start_date} to {file_name_current_date}."
+        )
+
+        xpaths = {
+            "time_unit": '//*[@id="macro-content"]/div/div/div[3]/div/div[3]/div/div[1]/select',
+            "from_date": '//*[@id="txtFromTradeDate"]/input',
+            "to_date": '//*[@id="txtToTradeDate"]/input',
+            "view_button": '//*[@id="macro-content"]/div/div/div[3]/div/div[3]/div/button',
+        }
+
+        self._select_dropdown_by_text(xpaths["time_unit"], "Ngày")
+        self._input_text(xpaths["from_date"], input_start_date)
+        self._input_text(xpaths["to_date"], input_current_date)
+
+        self._click_element(xpaths["view_button"])
+
+        time.sleep(1)
+
+        self._update_bs4_parser()
+
+        headers, rows = self._extract_tbl_macro_data()
+
+        with open(file_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(headers)
+            writer.writerows(rows)
 
     def scrape_macroeconomics_data(self):
         self.logger.log_info("Start scraping macroeconomics data.")
