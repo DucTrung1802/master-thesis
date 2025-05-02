@@ -242,23 +242,23 @@ class WebScraper:
         self._navigate_to_url(MACROECONOMICS_INDICATORS["EXCHANGE_RATE"]["URL"])
 
         start_date = SCRAPER_START_DATE
+        start_year = start_date.year
         input_start_date = start_date.strftime("%d/%m/%Y")
-        file_name_start_date = start_date.strftime("%Y%m%d")
 
         current_date = datetime.now().date()
+        current_year = current_date.year
         input_current_date = current_date.strftime("%d/%m/%Y")
-        file_name_current_date = current_date.strftime("%Y%m%d")
 
         folder_path = MACROECONOMICS_INDICATORS["EXCHANGE_RATE"]["FOLDER"]
         file_name = MACROECONOMICS_INDICATORS["EXCHANGE_RATE"]["FILENAME"]
 
-        file_path = f"{folder_path}/{file_name}_{file_name_start_date}_{file_name_current_date}.csv"
+        file_path = f"{folder_path}/{file_name}_{start_year}_{current_year}.csv"
         if os.path.exists(file_path):
             self.logger.log_info(f"File already exists: {file_path}")
             return
 
         self.logger.log_info(
-            f"Scraping EXCHANGE_RATE data from {file_name_start_date} to {file_name_current_date}."
+            f"Scraping EXCHANGE_RATE data from {start_year} to {current_year}."
         )
 
         xpaths = {
