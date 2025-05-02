@@ -20,9 +20,9 @@ from thread_manager.thread_manager import ThreadManager
 
 
 class WebScraper:
-    def __init__(self, logger: Logger):
+    def __init__(self, logger: Logger, power: int):
         self._logger: Logger = logger
-        self._thread_manager = ThreadManager(logger=self._logger)
+        self._thread_manager = ThreadManager(logger=self._logger, power=power)
 
         self._create_folder_raw_data()
 
@@ -210,6 +210,8 @@ class WebScraper:
             writer.writerow(headers)
             writer.writerows(rows)
 
+        web_driver.close()
+
         self._logger.log_info("Finish scraping macroeconomics data for GDP.")
 
     def _scrape_macroeconomics_data_cpi(self):
@@ -261,6 +263,8 @@ class WebScraper:
             writer = csv.writer(f)
             writer.writerow(headers)
             writer.writerows(rows)
+
+        web_driver.close()
 
         self._logger.log_info("Finish scraping macroeconomics data for CPI.")
 
@@ -317,6 +321,8 @@ class WebScraper:
             writer.writerow(headers)
             writer.writerows(rows)
 
+        web_driver.close()
+
         self._logger.log_info("Finish scraping macroeconomics data for EXCHANGE_RATE.")
 
     def _scrape_macroeconomics_data_interest_rate(self):
@@ -347,33 +353,29 @@ class WebScraper:
             web_driver, bs4_parser = self._navigate_to_url(
                 web_driver, MACROECONOMICS_INDICATORS["INTEREST_RATE"]["URL"]
             )
-            time.sleep(SCRAPER_BASE_WAIT_TIME + 2)
 
             interest_rate_tab_xpath = (
                 '//*[@id="macro-content"]/div/div/div[3]/div/div[1]/a[2]'
             )
 
             # Try to click
-            element = WebDriverWait(self.web_driver, 10).until(
+            element = WebDriverWait(web_driver, 10).until(
                 EC.element_to_be_clickable((By.XPATH, interest_rate_tab_xpath))
             )
-            self.web_driver.execute_script(
-                "arguments[0].scrollIntoView(true);", element
-            )
+            web_driver.execute_script("arguments[0].scrollIntoView(true);", element)
             try:
                 element.click()
             except Exception:
-                self.web_driver.execute_script("arguments[0].click();", element)
-            time.sleep(SCRAPER_BASE_WAIT_TIME + 2)
+                web_driver.execute_script("arguments[0].click();", element)
+            time.sleep(SCRAPER_BASE_WAIT_TIME + 1)
 
             self._input_text(web_driver, xpaths["from_date"], f"01/01/{year}")
             self._input_text(web_driver, xpaths["to_date"], f"31/12/{year}")
 
             self._click_element(web_driver, xpaths["view_button"])
-            time.sleep(SCRAPER_BASE_WAIT_TIME + 2)
+            time.sleep(SCRAPER_BASE_WAIT_TIME + 1)
 
             bs4_parser = self._update_bs4_parser(web_driver)
-            time.sleep(SCRAPER_BASE_WAIT_TIME + 2)
 
             headers, rows = self._extract_tbl_macro_data(bs4_parser)
 
@@ -381,6 +383,8 @@ class WebScraper:
                 writer = csv.writer(f)
                 writer.writerow(headers)
                 writer.writerows(rows)
+
+        web_driver.close()
 
         self._logger.log_info("Finish scraping macroeconomics data for INTEREST_RATE.")
 
@@ -436,6 +440,8 @@ class WebScraper:
             writer.writerow(headers)
             writer.writerows(rows)
 
+        web_driver.close()
+
         self._logger.log_info("Finish scraping macroeconomics data for EXPORT_IMPORT.")
 
     def _scrape_macroeconomics_data_ipi(self):
@@ -487,6 +493,8 @@ class WebScraper:
             writer = csv.writer(f)
             writer.writerow(headers)
             writer.writerows(rows)
+
+        web_driver.close()
 
         self._logger.log_info("Finish scraping macroeconomics data for IPI.")
 
@@ -545,6 +553,8 @@ class WebScraper:
                 writer.writerow(headers)
                 writer.writerows(rows)
 
+        web_driver.close()
+
         self._logger.log_info("Finish scraping macroeconomics data for FDI.")
 
     def _scrape_macroeconomics_data_m2(self):
@@ -596,6 +606,8 @@ class WebScraper:
             writer = csv.writer(f)
             writer.writerow(headers)
             writer.writerows(rows)
+
+        web_driver.close()
 
         self._logger.log_info("Finish scraping macroeconomics data for M2.")
 
@@ -651,6 +663,8 @@ class WebScraper:
             writer.writerow(headers)
             writer.writerows(rows)
 
+        web_driver.close()
+
         self._logger.log_info("Finish scraping macroeconomics data for RETAIL.")
 
     def _scrape_macroeconomics_data_population_unemployment(self):
@@ -661,7 +675,7 @@ class WebScraper:
         web_driver, bs4_parser = self._initialize_web_driver_and_bs4_parser()
 
         web_driver, bs4_parser = self._navigate_to_url(
-            MACROECONOMICS_INDICATORS["POPULATION_UNEMPLOYMENT"]["URL"]
+            web_driver, MACROECONOMICS_INDICATORS["POPULATION_UNEMPLOYMENT"]["URL"]
         )
         time.sleep(SCRAPER_BASE_WAIT_TIME)
 
@@ -700,6 +714,8 @@ class WebScraper:
             writer = csv.writer(f)
             writer.writerow(headers)
             writer.writerows(rows)
+
+        web_driver.close()
 
         self._logger.log_info(
             "Finish scraping macroeconomics data for POPULATION_UNEMPLOYMENT."

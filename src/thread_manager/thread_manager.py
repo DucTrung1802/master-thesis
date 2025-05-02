@@ -8,7 +8,7 @@ from models.thread_manager_models.task import *
 
 
 class ThreadManager:
-    def __init__(self, logger: Logger, power=THREAD_MANAGER_POWER):
+    def __init__(self, logger: Logger, power: int = THREAD_MANAGER_POWER):
         self._logger = logger
 
         try:
