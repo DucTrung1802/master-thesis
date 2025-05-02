@@ -131,43 +131,6 @@ class WebScraper:
 
         return (headers, rows)
 
-    def _scrape_macroeconomics_data_gdp_by_year(
-        self, file_path: str, from_year: int, to_year: int
-    ):
-        self.logger.log_info(f"Scraping GDP data from {from_year} to {to_year}.")
-
-        # Define XPaths
-        xpaths = {
-            "time_unit": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[1]/select',
-            "from_quarter": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[2]/select',
-            "from_year": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[3]/select',
-            "to_quarter": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[4]/select',
-            "to_year": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[5]/select',
-            "view_button": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/button',
-        }
-
-        # Select dropdown values
-        self._select_dropdown_by_text(xpaths["time_unit"], "Quý")
-        self._select_dropdown_by_text(xpaths["from_quarter"], "Q1")
-        self._select_dropdown_by_text(xpaths["from_year"], str(from_year))
-        self._select_dropdown_by_text(xpaths["to_quarter"], "Q4")
-        self._select_dropdown_by_text(xpaths["to_year"], str(to_year))
-
-        # Click view button
-        self._click_element(xpaths["view_button"])
-
-        time.sleep(1)
-
-        self._update_bs4_parser()
-
-        headers, rows = self._extract_tbl_macro_data()
-
-        # Write to CSV
-        with open(file_path, "w", newline="", encoding="utf-8") as f:
-            writer = csv.writer(f)
-            writer.writerow(headers)
-            writer.writerows(rows)
-
     def _scrape_macroeconomics_data_gdp(self):
         self.logger.log_info("Start scraping macroeconomics data for GDP.")
 
@@ -186,38 +149,35 @@ class WebScraper:
             self.logger.log_info(f"File already exists: {file_path}")
             return
 
-        self._scrape_macroeconomics_data_gdp_by_year(
-            file_path=file_path, from_year=start_year, to_year=current_year
-        )
+        self.logger.log_info(f"Scraping GDP data from {start_year} to {current_year}.")
 
-    def _scrape_macroeconomics_data_cpi_by_year(
-        self, file_path: str, from_year: int, to_year: int
-    ):
-        self.logger.log_info(f"Scraping CPI data from {from_year} to {to_year}.")
-
+        # Define XPaths
         xpaths = {
             "time_unit": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[1]/select',
-            "from_month": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[2]/select',
+            "from_quarter": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[2]/select',
             "from_year": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[3]/select',
-            "to_month": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[4]/select',
+            "to_quarter": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[4]/select',
             "to_year": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[5]/select',
             "view_button": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/button',
         }
 
-        self._select_dropdown_by_text(xpaths["time_unit"], "Tháng")
-        self._select_dropdown_by_text(xpaths["from_month"], "1")
-        self._select_dropdown_by_text(xpaths["from_year"], str(from_year))
-        self._select_dropdown_by_text(xpaths["to_month"], "12")
-        self._select_dropdown_by_text(xpaths["to_year"], str(to_year))
+        # Select dropdown values
+        self._select_dropdown_by_text(xpaths["time_unit"], "Quý")
+        self._select_dropdown_by_text(xpaths["from_quarter"], "Q1")
+        self._select_dropdown_by_text(xpaths["from_year"], str(start_year))
+        self._select_dropdown_by_text(xpaths["to_quarter"], "Q4")
+        self._select_dropdown_by_text(xpaths["to_year"], str(current_year))
 
+        # Click view button
         self._click_element(xpaths["view_button"])
 
-        time.sleep(1)  # Replace with WebDriverWait if needed
+        time.sleep(1)
 
         self._update_bs4_parser()
 
         headers, rows = self._extract_tbl_macro_data()
 
+        # Write to CSV
         with open(file_path, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             writer.writerow(headers)
@@ -239,9 +199,35 @@ class WebScraper:
             self.logger.log_info(f"File already exists: {file_path}")
             return
 
-        self._scrape_macroeconomics_data_cpi_by_year(
-            file_path=file_path, from_year=start_year, to_year=current_year
-        )
+        self.logger.log_info(f"Scraping CPI data from {start_year} to {current_year}.")
+
+        xpaths = {
+            "time_unit": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[1]/select',
+            "from_month": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[2]/select',
+            "from_year": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[3]/select',
+            "to_month": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[4]/select',
+            "to_year": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[5]/select',
+            "view_button": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/button',
+        }
+
+        self._select_dropdown_by_text(xpaths["time_unit"], "Tháng")
+        self._select_dropdown_by_text(xpaths["from_month"], "1")
+        self._select_dropdown_by_text(xpaths["from_year"], str(start_year))
+        self._select_dropdown_by_text(xpaths["to_month"], "12")
+        self._select_dropdown_by_text(xpaths["to_year"], str(current_year))
+
+        self._click_element(xpaths["view_button"])
+
+        time.sleep(1)
+
+        self._update_bs4_parser()
+
+        headers, rows = self._extract_tbl_macro_data()
+
+        with open(file_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(headers)
+            writer.writerows(rows)
 
     def _scrape_macroeconomics_data_exchange_rate(self):
         pass
