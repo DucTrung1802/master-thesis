@@ -1,6 +1,11 @@
+import os
+import zipfile
+
+from logger.logger import Logger
 from models.tabular_database_driver_models.tabular_database_driver_models import (
     DataType,
 )
+from utils.enums import FileExtension
 
 
 def format_value(value, data_type: DataType):
@@ -16,3 +21,83 @@ def format_value(value, data_type: DataType):
             return f"TIMESTAMP '{value}'"
         case _:
             return str(value)
+
+
+def remove_all_files_with_extensions(
+    logger: Logger, folder_path, extensions: list[FileExtension] = None
+):
+    """
+    Removes all files with the specified extensions from the folder.
+    If the extension list is empty, deletes all files.
+
+    Args:
+        folder_path (str): The path to the folder.
+        extensions (list[str]): List of file extensions to delete (e.g., [".csv", ".txt"]).
+        logger (Logger): Logger instance for logging.
+
+    Raises:
+        FileNotFoundError: If the folder does not exist.
+        PermissionError: If file deletion or folder access is denied.
+    """
+    try:
+        for file_name in os.listdir(folder_path):
+            file_path = os.path.join(folder_path, file_name)
+
+            if os.path.isfile(file_path):
+                _, ext = os.path.splitext(file_name)
+
+                if not extensions or ext.lower() in [
+                    e.value.lower() for e in extensions
+                ]:
+                    try:
+                        os.remove(file_path)
+                        logger.log_info(f"Deleted file: {file_path}")
+                    except PermissionError as e:
+                        logger.log_error(f"Permission denied: {file_path}. Error: {e}")
+                    except FileNotFoundError as e:
+                        logger.log_error(f"File not found: {file_path}. Error: {e}")
+
+        logger.log_info(f"Finished deleting files in {folder_path}.")
+
+    except FileNotFoundError as e:
+        logger.log_error(f"Folder not found: {folder_path}. Error: {e}")
+    except PermissionError as e:
+        logger.log_error(
+            f"Permission denied to access folder: {folder_path}. Error: {e}"
+        )
+
+
+def extract_zip_file(logger: Logger, zip_path, extract_to_folder):
+    """
+    Extracts the contents of a ZIP file to a specified folder.
+
+    Args:
+        zip_path (str): The path to the ZIP file to be extracted.
+        extract_to_folder (str): The destination folder where the files will be extracted.
+        logger (Logger): A logger instance used to log information about the extraction process.
+
+    Returns:
+        list: A list of file names that were extracted from the ZIP file.
+
+    Raises:
+        zipfile.BadZipFile: If the file is not a valid ZIP file.
+        FileNotFoundError: If the specified ZIP file does not exist.
+        PermissionError: If there are insufficient permissions to read the ZIP file or write to the destination folder.
+    """
+    with zipfile.ZipFile(zip_path, "r") as zip_ref:
+        extracted_files = zip_ref.namelist()
+        zip_ref.extractall(extract_to_folder)
+    logger.log_info(f"Extracted files: {extracted_files}")
+    return extracted_files
+
+
+def rename_first_csv_file(
+    logger: Logger, extracted_files, folder_path, target_file_path
+):
+    for extracted_file in extracted_files:
+        if extracted_file.endswith(".csv"):
+            original_path = os.path.join(folder_path, extracted_file)
+            os.rename(original_path, target_file_path)
+            logger.log_info(f"Renamed extracted file to: {target_file_path}")
+            return
+    logger.log_warning("No CSV file found in ZIP archive.")

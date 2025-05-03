@@ -95,34 +95,29 @@ MACROECONOMICS_INDICATORS = {
 # ===========================
 SCRAPER_STOCK_MARKET_DIR = f"{SCRAPER_RAW_DATA_DIR}/stock_market"
 STOCK_MARKET_INDICATORS = {
-    "VN_INDEX": {
-        "FOLDER": f"{SCRAPER_STOCK_MARKET_DIR}/vn_index",
-        "FILENAME": "stock_market_vnindex",
+    "VN_HNX_INDEX": {
+        "FOLDER": f"{SCRAPER_STOCK_MARKET_DIR}/vn_hnx_index",
+        "FILENAME": "stock_market_vn_hnx_index",
         "URL": "https://cafef.vn/du-lieu/du-lieu-download.chn",
     },
     "VN30_INDEX": {
         "FOLDER": f"{SCRAPER_STOCK_MARKET_DIR}/vn30_index",
-        "FILENAME": "stock_market_vn30index",
+        "FILENAME": "stock_market_vn30_index",
         "URL": "https://cafef.vn/du-lieu/lich-su-giao-dich-vn30index-1.chn#data",
     },
     "VN100_INDEX": {
         "FOLDER": f"{SCRAPER_STOCK_MARKET_DIR}/vn100_index",
-        "FILENAME": "stock_market_vn100index",
+        "FILENAME": "stock_market_vn100_index",
         "URL": "https://cafef.vn/du-lieu/lich-su-giao-dich-vn100-index-1.chn",
-    },
-    "HNX_INDEX": {
-        "FOLDER": f"{SCRAPER_STOCK_MARKET_DIR}/hnx_index",
-        "FILENAME": "stock_market_hnxindex",
-        "URL": "https://cafef.vn/du-lieu/du-lieu-download.chn",
     },
     "HNX30_INDEX": {
         "FOLDER": f"{SCRAPER_STOCK_MARKET_DIR}/hnx30_index",
-        "FILENAME": "stock_market_hnx30index",
+        "FILENAME": "stock_market_hnx30_index",
         "URL": "https://cafef.vn/du-lieu/lich-su-giao-dich-hnx30-index-1.chn",
     },
     "UPCOM_INDEX": {
         "FOLDER": f"{SCRAPER_STOCK_MARKET_DIR}/upcom_index",
-        "FILENAME": "stock_market_upcomindex",
+        "FILENAME": "stock_market_upcom_index",
         "URL": "https://cafef.vn/du-lieu/lich-su-giao-dich-upcom-index-1.chn",
     },
 }
