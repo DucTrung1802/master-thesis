@@ -57,3 +57,18 @@ class SqlJoinType(Enum):
     RIGHT_OUTER_JOIN = "RIGHT OUTER JOIN"
     FULL_OUTER_JOIN = "FULL OUTER JOIN"
     CROSS_JOIN = "CROSS JOIN"
+
+
+class FileExtension(Enum):
+    CSV = "csv"
+    TXT = "txt"
+    LOG = "log"
+    JSON = "json"
+    XML = "xml"
+    ZIP = "zip"
+    PDF = "pdf"
+    XLSX = "xlsx"
+    DOCX = "docx"
+    PNG = "png"
+    JPG = "jpg"
+    MP4 = "mp4"

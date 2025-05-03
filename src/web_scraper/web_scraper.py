@@ -11,16 +11,19 @@ import csv
 
 import os
 import time
+import requests
+import zipfile
 from typing import List, Tuple
 
 from logger.logger import Logger
 from utils.constants import *
+from utils.utils import *
 from models.thread_manager_models.task import *
 from thread_manager.thread_manager import ThreadManager
 
 
 class WebScraper:
-    def __init__(self, logger: Logger, power: int):
+    def __init__(self, logger: Logger, power: int = THREAD_MANAGER_POWER):
         self._logger: Logger = logger
         self._thread_manager = ThreadManager(logger=self._logger, power=power)
 
@@ -167,8 +170,6 @@ class WebScraper:
 
             start_year = SCRAPER_START_DATE.year
             current_year = datetime.now().year
-
-            self._logger.log_info(f"Scraping data from {start_year} to {current_year}.")
 
             folder_path = MACROECONOMICS_INDICATORS["GDP"]["FOLDER"]
             file_name = MACROECONOMICS_INDICATORS["GDP"]["FILENAME"]
@@ -870,11 +871,79 @@ class WebScraper:
             f"Added {number_of_task_after - number_of_task_before} macroeconomic data scraping tasks."
         )
 
+    def _scrape_stock_market_data_vn_hnx_index(self):
+        self._logger.log_info("Start scraping stock market data for VN_HNX_INDEX.")
+
+        try:
+            web_driver, bs4_parser = self._initialize_web_driver_and_bs4_parser()
+
+            web_driver, bs4_parser = self._navigate_to_url(
+                web_driver, STOCK_MARKET_INDICATORS["VN_HNX_INDEX"]["URL"]
+            )
+            time.sleep(SCRAPER_BASE_WAIT_TIME)
+
+            current_date = datetime.now()
+
+            folder_path = STOCK_MARKET_INDICATORS["VN_HNX_INDEX"]["FOLDER"]
+            file_name = STOCK_MARKET_INDICATORS["VN_HNX_INDEX"]["FILENAME"]
+
+            file_path = (
+                f"{folder_path}/{file_name}_upto_{current_date.strftime('%Y%m%d')}.csv"
+            )
+            if os.path.exists(file_path):
+                self._logger.log_info(f"File already exists: {file_path}")
+                return
+
+            # Remove all current files in folder_path
+            remove_all_files_with_extensions(self._logger, folder_path)
+
+            xpath = '//*[@id="container"]/div/div[1]/div/div/div/div[2]/div[2]/table/tbody/tr[4]/td[3]/a'
+            download_link_element = web_driver.find_element("xpath", xpath)
+            file_url = download_link_element.get_attribute("href")
+
+            zip_path = file_path.replace(".csv", ".zip")
+            self._logger.log_info(f"Downloading ZIP file from: {file_url}")
+
+            response = requests.get(file_url)
+            if response.status_code == 200:
+                with open(zip_path, "wb") as f:
+                    f.write(response.content)
+                self._logger.log_info(f"ZIP file downloaded to: {zip_path}")
+            else:
+                self._logger.log_error(
+                    f"Failed to download file. Status code: {response.status_code}"
+                )
+                return
+
+            # Extract ZIP file
+            extracted_files = extract_zip_file(self._logger, zip_path, folder_path)
+
+            # Rename the first .csv found to the target file_path
+            rename_first_csv_file(self._logger, extracted_files, folder_path, file_path)
+
+            os.remove(zip_path)
+            self._logger.log_info(f"Removed temporary ZIP file: {zip_path}")
+
+            self._logger.log_info(
+                f"Scraping VN_HNX_INDEX data upto {current_date.strftime('%d/%m/%Y')}."
+            )
+
+        finally:
+            web_driver.close()
+
+        self._logger.log_info("Finish scraping stock market data for VN_HNX_INDEX.")
+
     def add_stock_market_data_scraping_tasks(self):
         self._logger.log_info("Adding stock market data scraping tasks.")
         number_of_task_before = self._thread_manager.get_current_number_of_task()
 
-        # Add tasks here
+        # VN_HNX_INDEX
+        self._thread_manager.add_task(
+            Task(
+                self._scrape_stock_market_data_vn_hnx_index.__name__,
+                self._scrape_stock_market_data_vn_hnx_index,
+            )
+        )
 
         number_of_task_after = self._thread_manager.get_current_number_of_task()
         self._logger.log_info(
@@ -901,7 +970,7 @@ class WebScraper:
         self._logger.log_info("Adding data scraping tasks.")
         number_of_task_before = self._thread_manager.get_current_number_of_task()
 
-        self.add_macroeconomics_data_scraping_tasks()
+        # self.add_macroeconomics_data_scraping_tasks()
         self.add_stock_market_data_scraping_tasks()
         self.add_enterprise_data_scraping_tasks()
 
