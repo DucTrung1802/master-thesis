@@ -121,6 +121,19 @@ STOCK_MARKET_INDICATORS = {
         "URL": "https://cafef.vn/du-lieu/lich-su-giao-dich-upcom-index-1.chn",
     },
 }
+STOCK_MARKET_INDEX_HEADER = [
+    "date",
+    "close",
+    "adjusted_close",
+    "change",
+    "matched_volume",
+    "matched_value",
+    "negotiated_volume",
+    "negotiated_value",
+    "open",
+    "high",
+    "low",
+]
 
 # ===========================
 # ENTERPRISE CONFIGURATION

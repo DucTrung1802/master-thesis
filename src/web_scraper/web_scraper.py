@@ -129,9 +129,11 @@ class WebScraper:
         )
         element.click()
 
-    def _extract_tbl_macro_data(self, bs4_parser: BeautifulSoup) -> Tuple[List, List]:
+    def _extract_table_by_id(
+        self, bs4_parser: BeautifulSoup, id: str
+    ) -> Tuple[List, List]:
         # Extract data from the table
-        table = bs4_parser.find("table", id="tbl-macro-data")
+        table = bs4_parser.find("table", id=id)
 
         # Extract headers
         headers = []
@@ -210,7 +212,7 @@ class WebScraper:
 
             bs4_parser = self._update_bs4_parser(web_driver)
 
-            headers, rows = self._extract_tbl_macro_data(bs4_parser)
+            headers, rows = self._extract_table_by_id(bs4_parser, "tbl-macro-data")
 
             # Write to CSV
             with open(file_path, "w", newline="", encoding="utf-8") as f:
@@ -273,7 +275,7 @@ class WebScraper:
 
             bs4_parser = self._update_bs4_parser(web_driver)
 
-            headers, rows = self._extract_tbl_macro_data(bs4_parser)
+            headers, rows = self._extract_table_by_id(bs4_parser, "tbl-macro-data")
 
             with open(file_path, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
@@ -332,7 +334,7 @@ class WebScraper:
 
             bs4_parser = self._update_bs4_parser(web_driver)
 
-            headers, rows = self._extract_tbl_macro_data(bs4_parser)
+            headers, rows = self._extract_table_by_id(bs4_parser, "tbl-macro-data")
 
             with open(file_path, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
@@ -397,7 +399,7 @@ class WebScraper:
 
                 bs4_parser = self._update_bs4_parser(web_driver)
 
-                headers, rows = self._extract_tbl_macro_data(bs4_parser)
+                headers, rows = self._extract_table_by_id(bs4_parser, "tbl-macro-data")
 
                 with open(file_path, "w", newline="", encoding="utf-8") as f:
                     writer = csv.writer(f)
@@ -459,7 +461,7 @@ class WebScraper:
 
             bs4_parser = self._update_bs4_parser(web_driver)
 
-            headers, rows = self._extract_tbl_macro_data(bs4_parser)
+            headers, rows = self._extract_table_by_id(bs4_parser, "tbl-macro-data")
 
             with open(file_path, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
@@ -521,7 +523,7 @@ class WebScraper:
 
             bs4_parser = self._update_bs4_parser(web_driver)
 
-            headers, rows = self._extract_tbl_macro_data(bs4_parser)
+            headers, rows = self._extract_table_by_id(bs4_parser, "tbl-macro-data")
 
             with open(file_path, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
@@ -586,7 +588,7 @@ class WebScraper:
 
                 bs4_parser = self._update_bs4_parser(web_driver)
 
-                headers, rows = self._extract_tbl_macro_data(bs4_parser)
+                headers, rows = self._extract_table_by_id(bs4_parser, "tbl-macro-data")
 
                 with open(file_path, "w", newline="", encoding="utf-8") as f:
                     writer = csv.writer(f)
@@ -648,7 +650,7 @@ class WebScraper:
 
             bs4_parser = self._update_bs4_parser(web_driver)
 
-            headers, rows = self._extract_tbl_macro_data(bs4_parser)
+            headers, rows = self._extract_table_by_id(bs4_parser, "tbl-macro-data")
 
             with open(file_path, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
@@ -710,7 +712,7 @@ class WebScraper:
 
             bs4_parser = self._update_bs4_parser(web_driver)
 
-            headers, rows = self._extract_tbl_macro_data(bs4_parser)
+            headers, rows = self._extract_table_by_id(bs4_parser, "tbl-macro-data")
 
             with open(file_path, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
@@ -768,7 +770,7 @@ class WebScraper:
 
             bs4_parser = self._update_bs4_parser(web_driver)
 
-            headers, rows = self._extract_tbl_macro_data(bs4_parser)
+            headers, rows = self._extract_table_by_id(bs4_parser, "tbl-macro-data")
 
             with open(file_path, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
@@ -933,15 +935,62 @@ class WebScraper:
 
         self._logger.log_info("Finish scraping stock market data for VN_HNX_INDEX.")
 
+    def _scrape_stock_market_data_vn30_index(self):
+        self._logger.log_info("Start scraping stock market data for VN30_INDEX.")
+
+        try:
+            web_driver, bs4_parser = self._initialize_web_driver_and_bs4_parser()
+
+            web_driver, bs4_parser = self._navigate_to_url(
+                web_driver, STOCK_MARKET_INDICATORS["VN30_INDEX"]["URL"]
+            )
+            time.sleep(SCRAPER_BASE_WAIT_TIME)
+
+            current_date = datetime.now()
+
+            folder_path = STOCK_MARKET_INDICATORS["VN30_INDEX"]["FOLDER"]
+            file_name = STOCK_MARKET_INDICATORS["VN30_INDEX"]["FILENAME"]
+
+            file_path = (
+                f"{folder_path}/{file_name}_upto_{current_date.strftime('%Y%m%d')}.csv"
+            )
+            if os.path.exists(file_path):
+                self._logger.log_info(f"File already exists: {file_path}")
+                return
+
+            # Remove all current files in folder_path
+            remove_all_files_with_extensions(self._logger, folder_path)
+
+            max_index_xpath = '//*[@id="wraper-content-paging"]/div[11]/p'
+            max_index = int(web_driver.find_element("xpath", max_index_xpath).text)
+
+            # with open(file_path, "w", newline="", encoding="utf-8") as f:
+            #     writer = csv.writer(f)
+            #     writer.writerow(STOCK_MARKET_INDEX_HEADER)
+            #     writer.writerows(rows)
+
+        finally:
+            web_driver.close()
+
+        self._logger.log_info("Finish scraping stock market data for VN30_INDEX.")
+
     def add_stock_market_data_scraping_tasks(self):
         self._logger.log_info("Adding stock market data scraping tasks.")
         number_of_task_before = self._thread_manager.get_current_number_of_task()
 
         # VN_HNX_INDEX
+        # self._thread_manager.add_task(
+        #     Task(
+        #         self._scrape_stock_market_data_vn_hnx_index.__name__,
+        #         self._scrape_stock_market_data_vn_hnx_index,
+        #     )
+        # )
+
+        # VN30_INDEX
         self._thread_manager.add_task(
             Task(
-                self._scrape_stock_market_data_vn_hnx_index.__name__,
-                self._scrape_stock_market_data_vn_hnx_index,
+                self._scrape_stock_market_data_vn30_index.__name__,
+                self._scrape_stock_market_data_vn30_index,
             )
         )
 
