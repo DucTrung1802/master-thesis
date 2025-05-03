@@ -999,15 +999,79 @@ class WebScraper:
                 )
                 bs4_parser = self._update_bs4_parser(web_driver)
 
-            # with open(file_path, "w", newline="", encoding="utf-8") as f:
-            #     writer = csv.writer(f)
-            #     writer.writerow(STOCK_MARKET_INDEX_HEADER)
-            #     writer.writerows(rows)
-
         finally:
             web_driver.close()
 
         self._logger.log_info("Finish scraping stock market data for VN30_INDEX.")
+
+    def _scrape_stock_market_data_vn100_index(self):
+        self._logger.log_info("Start scraping stock market data for VN100_INDEX.")
+
+        try:
+            web_driver, bs4_parser = self._initialize_web_driver_and_bs4_parser()
+
+            web_driver, bs4_parser = self._navigate_to_url(
+                web_driver, STOCK_MARKET_INDICATORS["VN100_INDEX"]["URL"]
+            )
+            time.sleep(SCRAPER_BASE_WAIT_TIME)
+
+            current_date = datetime.now()
+
+            folder_path = STOCK_MARKET_INDICATORS["VN100_INDEX"]["FOLDER"]
+            file_name = STOCK_MARKET_INDICATORS["VN100_INDEX"]["FILENAME"]
+
+            file_path = (
+                f"{folder_path}/{file_name}_upto_{current_date.strftime('%Y%m%d')}.csv"
+            )
+            if os.path.exists(file_path):
+                self._logger.log_info(f"File already exists: {file_path}")
+                return
+
+            # Remove all current files in folder_path
+            remove_all_files_with_extensions(self._logger, folder_path)
+
+            # Create file and header
+            with open(file_path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(STOCK_MARKET_INDEX_HEADER)
+
+            max_index_xpath = '//*[@id="wraper-content-paging"]/div[11]/p'
+            max_index = int(web_driver.find_element("xpath", max_index_xpath).text)
+            next_page_button_xpath = '//*[@id="divStart"]/div/div[3]/div[3]'
+
+            for page in range(1, max_index + 1):
+                headers, rows = self._extract_table_by_id(
+                    bs4_parser, "owner-contents-table"
+                )
+
+                with open(file_path, "a", newline="", encoding="utf-8") as f:
+                    writer = csv.writer(f)
+                    writer.writerows(rows)
+
+                # Click next page
+
+                # Get a reference element inside the table BEFORE clicking "Next"
+                table_xpath = '//*[@id="owner-contents-table"]'
+                old_content = web_driver.find_element(
+                    By.XPATH, table_xpath
+                ).get_attribute("innerHTML")
+
+                # Click the Next button
+                self._click_element(web_driver, next_page_button_xpath)
+
+                # Wait until the content inside the table changes
+                WebDriverWait(web_driver, 10).until(
+                    lambda driver: driver.find_element(
+                        By.XPATH, table_xpath
+                    ).get_attribute("innerHTML")
+                    != old_content
+                )
+                bs4_parser = self._update_bs4_parser(web_driver)
+
+        finally:
+            web_driver.close()
+
+        self._logger.log_info("Finish scraping stock market data for VN100_INDEX.")
 
     def add_stock_market_data_scraping_tasks(self):
         self._logger.log_info("Adding stock market data scraping tasks.")
@@ -1021,11 +1085,19 @@ class WebScraper:
         #     )
         # )
 
-        # VN30_INDEX
+        # # VN30_INDEX
+        # self._thread_manager.add_task(
+        #     Task(
+        #         self._scrape_stock_market_data_vn30_index.__name__,
+        #         self._scrape_stock_market_data_vn30_index,
+        #     )
+        # )
+
+        # VN100_INDEX
         self._thread_manager.add_task(
             Task(
-                self._scrape_stock_market_data_vn30_index.__name__,
-                self._scrape_stock_market_data_vn30_index,
+                self._scrape_stock_market_data_vn100_index.__name__,
+                self._scrape_stock_market_data_vn100_index,
             )
         )
 
