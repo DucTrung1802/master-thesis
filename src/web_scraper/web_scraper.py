@@ -11,9 +11,10 @@ import csv
 
 import os
 import time
-import requests
-import zipfile
+import re
+from pathlib import Path
 from typing import List, Tuple
+
 
 from logger.logger import Logger
 from utils.constants import *
@@ -899,6 +900,7 @@ class WebScraper:
             # Remove all current files in folder_path
             remove_all_files_with_extensions(self._logger, folder_path)
 
+            # Extract download link
             xpath = '//*[@id="container"]/div/div[1]/div/div/div/div[2]/div[2]/table/tbody/tr[4]/td[3]/a'
             download_link_element = web_driver.find_element("xpath", xpath)
             download_url = download_link_element.get_attribute("href")
@@ -906,6 +908,7 @@ class WebScraper:
             zip_path = file_path.replace(".csv", ".zip")
             self._logger.log_info(f"Downloading ZIP file from: {download_url}")
 
+            # Download file
             download_file(download_url, zip_path, self._logger)
 
             # Extract ZIP file
@@ -1251,11 +1254,88 @@ class WebScraper:
             f"Added {number_of_task_after - number_of_task_before} stock market data scraping tasks."
         )
 
+    def _scrape_enterprise_data_daily_price(self):
+        self._logger.log_info("Start scraping enterprise data for DAILY_PRICE.")
+
+        try:
+            web_driver, bs4_parser = self._initialize_web_driver_and_bs4_parser()
+
+            web_driver, bs4_parser = self._navigate_to_url(
+                web_driver, ENTERPRISE_INDICATORS["DAILY_PRICE"]["URL"]
+            )
+            time.sleep(SCRAPER_BASE_WAIT_TIME)
+
+            current_date = datetime.now()
+
+            folder_path = ENTERPRISE_INDICATORS["DAILY_PRICE"]["FOLDER"]
+            file_name = ENTERPRISE_INDICATORS["DAILY_PRICE"]["FILENAME"]
+
+            file_path = (
+                f"{folder_path}/{file_name}_upto_{current_date.strftime('%Y%m%d')}.csv"
+            )
+            if os.path.exists(file_path):
+                self._logger.log_info(f"File already exists: {file_path}")
+                return
+
+            # Remove all current files in folder_path
+            remove_all_files_with_extensions(self._logger, folder_path)
+
+            # Extract download link
+            xpath = '//*[@id="container"]/div/div[1]/div/div/div/div[2]/div[2]/table/tbody/tr[2]/td[4]/a'
+            download_link_element = web_driver.find_element("xpath", xpath)
+            download_url = download_link_element.get_attribute("href")
+
+            zip_path = file_path.replace(".csv", ".zip")
+            self._logger.log_info(f"Downloading ZIP file from: {download_url}")
+
+            # Download file
+            download_file(download_url, zip_path, self._logger)
+
+            # Extract ZIP file
+            extract_zip_file(self._logger, zip_path, folder_path)
+
+            # Regex to extract stock_market and date from filenames
+            pattern = re.compile(
+                r"CafeF\.(?P<stock_market>\w+)\.Upto(?P<date>\d{2}\.\d{2}\.\d{4})\.csv"
+            )
+
+            for file_name in os.listdir(folder_path):
+                match = pattern.match(file_name)
+                if match:
+                    stock_market = match.group("stock_market")
+                    date_str = match.group("date")  # e.g., 29.04.2025
+                    # Reformat date to YYYYMMDD
+                    date_parts = date_str.split(".")  # ['29', '04', '2025']
+                    reformatted_date = (
+                        f"{date_parts[2]}{date_parts[1]}{date_parts[0]}"  # '20250429'
+                    )
+                    new_file_name = f"{stock_market}_upto_{reformatted_date}.csv"
+                    src = Path(folder_path) / file_name
+                    dst = Path(folder_path) / new_file_name
+                    os.rename(src, dst)
+                    self._logger.log_info(f"Renamed '{file_name}' -> '{dst}'")
+                else:
+                    self._logger.log_info(f"Skipped file (no match): {file_name}")
+
+            os.remove(zip_path)
+            self._logger.log_info(f"Removed temporary ZIP file: {zip_path}")
+
+        finally:
+            web_driver.close()
+
+        self._logger.log_info("Finish scraping enterprise data for DAILY_PRICE.")
+
     def add_enterprise_data_scraping_tasks(self):
         self._logger.log_info("Adding enterprise data scraping tasks.")
         number_of_task_before = self._thread_manager.get_current_number_of_task()
 
-        # Add tasks here
+        # DAILY_PRICE
+        self._thread_manager.add_task(
+            Task(
+                self._scrape_enterprise_data_daily_price.__name__,
+                self._scrape_enterprise_data_daily_price,
+            )
+        )
 
         number_of_task_after = self._thread_manager.get_current_number_of_task()
         self._logger.log_info(
@@ -1271,8 +1351,8 @@ class WebScraper:
         self._logger.log_info("Adding data scraping tasks.")
         number_of_task_before = self._thread_manager.get_current_number_of_task()
 
-        self.add_macroeconomics_data_scraping_tasks()
-        self.add_stock_market_data_scraping_tasks()
+        # self.add_macroeconomics_data_scraping_tasks()
+        # self.add_stock_market_data_scraping_tasks()
         self.add_enterprise_data_scraping_tasks()
 
         number_of_task_after = self._thread_manager.get_current_number_of_task()
