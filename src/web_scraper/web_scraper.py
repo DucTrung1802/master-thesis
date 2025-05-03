@@ -961,8 +961,43 @@ class WebScraper:
             # Remove all current files in folder_path
             remove_all_files_with_extensions(self._logger, folder_path)
 
+            # Create file and header
+            with open(file_path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(STOCK_MARKET_INDEX_HEADER)
+
             max_index_xpath = '//*[@id="wraper-content-paging"]/div[11]/p'
             max_index = int(web_driver.find_element("xpath", max_index_xpath).text)
+            next_page_button_xpath = '//*[@id="divStart"]/div/div[3]/div[3]'
+
+            for page in range(1, max_index + 1):
+                headers, rows = self._extract_table_by_id(
+                    bs4_parser, "owner-contents-table"
+                )
+
+                with open(file_path, "a", newline="", encoding="utf-8") as f:
+                    writer = csv.writer(f)
+                    writer.writerows(rows)
+
+                # Click next page
+
+                # Get a reference element inside the table BEFORE clicking "Next"
+                table_xpath = '//*[@id="owner-contents-table"]'
+                old_content = web_driver.find_element(
+                    By.XPATH, table_xpath
+                ).get_attribute("innerHTML")
+
+                # Click the Next button
+                self._click_element(web_driver, next_page_button_xpath)
+
+                # Wait until the content inside the table changes
+                WebDriverWait(web_driver, 10).until(
+                    lambda driver: driver.find_element(
+                        By.XPATH, table_xpath
+                    ).get_attribute("innerHTML")
+                    != old_content
+                )
+                bs4_parser = self._update_bs4_parser(web_driver)
 
             # with open(file_path, "w", newline="", encoding="utf-8") as f:
             #     writer = csv.writer(f)
