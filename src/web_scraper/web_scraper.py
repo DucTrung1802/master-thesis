@@ -901,21 +901,12 @@ class WebScraper:
 
             xpath = '//*[@id="container"]/div/div[1]/div/div/div/div[2]/div[2]/table/tbody/tr[4]/td[3]/a'
             download_link_element = web_driver.find_element("xpath", xpath)
-            file_url = download_link_element.get_attribute("href")
+            download_url = download_link_element.get_attribute("href")
 
             zip_path = file_path.replace(".csv", ".zip")
-            self._logger.log_info(f"Downloading ZIP file from: {file_url}")
+            self._logger.log_info(f"Downloading ZIP file from: {download_url}")
 
-            response = requests.get(file_url)
-            if response.status_code == 200:
-                with open(zip_path, "wb") as f:
-                    f.write(response.content)
-                self._logger.log_info(f"ZIP file downloaded to: {zip_path}")
-            else:
-                self._logger.log_error(
-                    f"Failed to download file. Status code: {response.status_code}"
-                )
-                return
+            download_file(download_url, zip_path, self._logger)
 
             # Extract ZIP file
             extracted_files = extract_zip_file(self._logger, zip_path, folder_path)
