@@ -1,5 +1,6 @@
 import os
 import zipfile
+import requests
 
 from logger.logger import Logger
 from models.tabular_database_driver_models.tabular_database_driver_models import (
@@ -94,6 +95,24 @@ def extract_zip_file(logger: Logger, zip_path, extract_to_folder):
 def rename_first_csv_file(
     logger: Logger, extracted_files, folder_path, target_file_path
 ):
+    """
+    Renames the first CSV file found in a list of extracted files to a specified target file path.
+
+    Args:
+        logger (Logger): An instance of a logger to log information and warnings.
+        extracted_files (list): A list of file names extracted from a ZIP archive.
+        folder_path (str): The path to the folder containing the extracted files.
+        target_file_path (str): The desired file path for renaming the first CSV file.
+
+    Behavior:
+        - Iterates through the list of extracted files.
+        - If a file with a ".csv" extension is found, renames it to the specified target file path.
+        - Logs an informational message upon successful renaming.
+        - If no CSV file is found, logs a warning message.
+
+    Returns:
+        None
+    """
     for extracted_file in extracted_files:
         if extracted_file.endswith(".csv"):
             original_path = os.path.join(folder_path, extracted_file)
@@ -101,3 +120,36 @@ def rename_first_csv_file(
             logger.log_info(f"Renamed extracted file to: {target_file_path}")
             return
     logger.log_warning("No CSV file found in ZIP archive.")
+
+
+def download_file(download_url, file_path, logger):
+    """
+    Downloads a ZIP file from a given URL and saves it to the specified path.
+
+    Args:
+        zip_path (str): The file path where the downloaded ZIP file will be saved.
+        file_url (str): The URL of the ZIP file to download.
+        logger (object): A logger instance with methods `log_info` and `log_error`
+                         for logging informational and error messages.
+
+    Returns:
+        None
+
+    Logs:
+        - Logs an informational message if the file is downloaded successfully.
+        - Logs an error message if the download fails or an exception occurs.
+    """
+    try:
+        response = requests.get(download_url)
+        if response.status_code == 200:
+            with open(file_path, "wb") as f:
+                f.write(response.content)
+            logger.log_info(f"ZIP file downloaded to: {file_path}")
+        else:
+            logger.log_error(
+                f"Failed to download file. Status code: {response.status_code}"
+            )
+            return
+    except Exception as e:
+        logger.log_error(f"Exception occurred while downloading ZIP file: {str(e)}")
+        return
