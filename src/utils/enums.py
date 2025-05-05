@@ -1,4 +1,8 @@
 from enum import Enum
+from dataclasses import dataclass
+from typing import Dict, Type, Union, Tuple
+
+from utils.constants import *
 
 
 class DatabaseExecutionStatus(Enum):
@@ -72,3 +76,80 @@ class FileExtension(Enum):
     PNG = "png"
     JPG = "jpg"
     MP4 = "mp4"
+
+
+# Enum for Main Scraping Types
+class ScrapeMainType(Enum):
+    MACROECONOMICS = "macroeconomics"
+    STOCK_MARKET = "stock_market"
+    ENTERPRISE = "enterprise"
+
+
+# ================================================
+
+
+# Enums for Macroeconomics, Stock Market, and Enterprise Subtypes
+class MacroeconomicsSubType(Enum):
+    GDP = "gdp"
+    CPI = "cpi"
+    EXCHANGE_RATE = "exchange_rate"
+    INTEREST_RATE = "interest_rate"
+    EXPORT_IMPORT = "export_import"
+    IPI = "ipi"
+    FDI = "fdi"
+    M2 = "m2"
+    RETAIL = "retail"
+    POPULATION_UNEMPLOYMENT = "population_unemployment"
+
+
+class StockMarketSubType(Enum):
+    VN_HNX_INDEX = "vn_hnx_index"
+    VN30_INDEX = "vn30_index"
+    VN100_INDEX = "vn100_index"
+    HNX30_INDEX = "hnx30_index"
+    UPCOM_INDEX = "upcom_index"
+
+
+class EnterpriseSubType(Enum):
+    FINANCE_INFO = "finance_info"
+    DAILY_PRICE = "daily_price"
+
+
+ScrapeSubType = Union[
+    MacroeconomicsSubType,
+    StockMarketSubType,
+    EnterpriseSubType,
+]
+
+# ================================================
+
+
+# Enum for sources
+class GdpSource(Enum):
+    VIETSTOCK = "vietstock"
+    WORLDOMETER = "worldometer"
+
+
+class CpiSource(Enum):
+    VIETSTOCK = "vietstock"
+
+
+Source = Union[GdpSource, CpiSource]
+
+# ================================================
+
+
+@dataclass(frozen=True)
+class SourceInfo:
+    url: str
+
+
+SCRAPE_MAPPING: Dict[Tuple[ScrapeMainType, ScrapeSubType, Source], SourceInfo] = {
+    (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.GDP,
+        GdpSource.VIETSTOCK,
+    ): SourceInfo(
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/43/thu-nhap.htm",
+    ),
+}

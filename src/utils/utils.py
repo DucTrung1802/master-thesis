@@ -1,12 +1,13 @@
 import os
 import zipfile
 import requests
+from typing import Tuple
 
 from logger.logger import Logger
 from models.tabular_database_driver_models.tabular_database_driver_models import (
     DataType,
 )
-from utils.enums import FileExtension
+from utils.enums import *
 
 
 def format_value(value, data_type: DataType):
@@ -153,3 +154,7 @@ def download_file(download_url, file_path, logger):
     except Exception as e:
         logger.log_error(f"Exception occurred while downloading ZIP file: {str(e)}")
         return
+
+
+def format_key_for_name(key: Tuple[ScrapeMainType, ScrapeSubType, Source]):
+    return "_".join(k.name.lower() for k in key)
