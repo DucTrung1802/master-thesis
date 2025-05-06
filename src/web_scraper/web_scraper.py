@@ -5,7 +5,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait, Select
 from selenium.webdriver.support import expected_conditions as EC
 
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
 
 import csv
 
@@ -13,7 +13,7 @@ import os
 import time
 import re
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 
 from logger.logger import Logger
@@ -76,12 +76,7 @@ class WebScraper:
         )
         element.click()
 
-    def _extract_table_by_id(
-        self, bs4_parser: BeautifulSoup, id: str
-    ) -> Tuple[List, List]:
-        # Extract data from the table
-        table = bs4_parser.find("table", id=id)
-
+    def _extract_table(self, table: Optional[Tag]):
         # Extract headers
         headers = []
         thead = table.find("thead")
@@ -105,6 +100,14 @@ class WebScraper:
             rows.append(row)
 
         return (headers, rows)
+
+    def _extract_table_by_id(
+        self, bs4_parser: BeautifulSoup, id: str
+    ) -> Tuple[List, List]:
+        # Extract data from the table
+        table = bs4_parser.find("table", id=id)
+
+        return self._extract_table(table)
 
     def _scrape_macroeconomics_data_gdp(self):
         pass
@@ -750,6 +753,61 @@ class WebScraper:
 
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
+    def _scrape_data_macroeconomics_gdp_worldometer(
+        self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
+    ):
+        self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
+
+        try:
+            # 1. Initialize folder path and file name
+            folder_path = (
+                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            )
+            file_name = f"{key[2].value}"
+
+            # 2. Initialize start time and current time
+            start_year = SCRAPER_START_DATE.year
+            current_year = datetime.now().year
+
+            file_path = f"{folder_path}/{file_name}_{start_year}_{current_year}.csv"
+
+            # 3. Check if file(s) already exists
+            if os.path.exists(file_path):
+                self._logger.log_info(f"File already exists: {file_path}")
+                return
+
+            # 4. Create folder if not exists
+            if not os.path.exists(folder_path):
+                os.makedirs(folder_path, exist_ok=True)
+
+            # 5. Initialize web driver and bs4 parser
+            web_driver, bs4_parser = self._initialize_web_driver_and_bs4_parser()
+
+            # 6. Get SourceInfo
+            source_info = SCRAPE_MAPPING[key]
+
+            # 7. Navigate to URL
+            web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
+            time.sleep(SCRAPER_BASE_WAIT_TIME)
+
+            # 8. Logic for scraping
+            table = bs4_parser.find(
+                "table",
+                {"class": "datatable w-full border border-zinc-200 datatable-table"},
+            )
+            headers, rows = self._extract_table(table)
+
+            # 9. Write to CSV
+            with open(file_path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(headers)
+                writer.writerows(rows)
+
+        finally:
+            web_driver.close()
+
+        self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
+
     def _scrape_data_from(self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]):
         if key not in SCRAPE_MAPPING:
             raise ValueError(f"No mapping found for {key}")
@@ -764,10 +822,10 @@ class WebScraper:
 
             case (
                 ScrapeMainType.MACROECONOMICS,
-                MacroeconomicsSubType.CPI,
-                CpiSource.VIETSTOCK,
+                MacroeconomicsSubType.GDP,
+                GdpSource.WORLDOMETER,
             ):
-                pass
+                self._scrape_data_macroeconomics_gdp_worldometer(key)
 
     def add_macroeconomics_data_scraping_tasks(self):
         self._logger.log_info("Adding macroeconomic data scraping tasks.")
@@ -778,6 +836,16 @@ class WebScraper:
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.GDP,
             GdpSource.VIETSTOCK,
+        )
+        self._thread_manager.add_task(
+            Task(format_key_for_name(key), self._scrape_data_from, key)
+        )
+
+        # MACROECONOMICS_GDP_WORLDOMETER
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.GDP,
+            GdpSource.WORLDOMETER,
         )
         self._thread_manager.add_task(
             Task(format_key_for_name(key), self._scrape_data_from, key)

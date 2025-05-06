@@ -152,4 +152,11 @@ SCRAPE_MAPPING: Dict[Tuple[ScrapeMainType, ScrapeSubType, Source], SourceInfo] =
     ): SourceInfo(
         url="https://finance.vietstock.vn/du-lieu-vi-mo/43/thu-nhap.htm",
     ),
+    (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.GDP,
+        GdpSource.WORLDOMETER,
+    ): SourceInfo(
+        url="https://www.worldometers.info/gdp/vietnam-gdp/",
+    ),
 }
