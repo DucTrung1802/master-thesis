@@ -27,7 +27,7 @@ class ThreadManager:
                 f'Power of ThreadManager is invalid: "{power}". Power is set as default: 50%.'
             )
 
-        self._max_workers = int(os.process_cpu_count() * self._power / 100)
+        self._max_workers = int(os.process_cpu_count() * self._power / 100) * 0.4
         self._logger.log_info(f"Total logical processors: {os.process_cpu_count()}.")
         self._logger.log_info(f"The number of max workers is {self._max_workers}.")
 

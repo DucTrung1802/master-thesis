@@ -104,9 +104,9 @@ class MacroeconomicsSubType(Enum):
 
 class StockMarketSubType(Enum):
     VN_HNX_INDEX = "vn_hnx_index"
-    VN30_INDEX = "vn30_index"
-    VN100_INDEX = "vn100_index"
-    HNX30_INDEX = "hnx30_index"
+    VN_30_INDEX = "vn30_index"
+    VN_100_INDEX = "vn100_index"
+    HNX_30_INDEX = "hnx30_index"
     UPCOM_INDEX = "upcom_index"
 
 
@@ -125,6 +125,9 @@ ScrapeSubType = Union[
 
 
 # Enum for sources
+
+
+# MACROECONOMICS
 class GdpSource(Enum):
     VIETSTOCK = "vietstock"
     WORLDOMETER = "worldometer"
@@ -134,7 +137,88 @@ class CpiSource(Enum):
     VIETSTOCK = "vietstock"
 
 
-Source = Union[GdpSource, CpiSource]
+class ExchangeRateSource(Enum):
+    VIETSTOCK = "vietstock"
+
+
+class InterestRateSource(Enum):
+    VIETSTOCK = "vietstock"
+
+
+class ExportImportSource(Enum):
+    VIETSTOCK = "vietstock"
+
+
+class IpiSource(Enum):
+    VIETSTOCK = "vietstock"
+
+
+class FdiSource(Enum):
+    VIETSTOCK = "vietstock"
+
+
+class M2Source(Enum):
+    VIETSTOCK = "vietstock"
+
+
+class RetailSource(Enum):
+    VIETSTOCK = "vietstock"
+
+
+class PopulationUnemploymentSource(Enum):
+    VIETSTOCK = "vietstock"
+
+
+# STOCK_MARKET
+class VnHnxIndexSource(Enum):
+    CAFEF = "cafef"
+
+
+class Vn30IndexSource(Enum):
+    CAFEF = "cafef"
+
+
+class Vn100IndexSource(Enum):
+    CAFEF = "cafef"
+
+
+class Hnx30IndexSource(Enum):
+    CAFEF = "cafef"
+
+
+class UpcomIndexSource(Enum):
+    CAFEF = "cafef"
+
+
+# ENTERPRISE
+class FinanceInfoSource(Enum):
+    CAFEF = "cafef"
+
+
+class DailyPriceSource(Enum):
+    CAFEF = "cafef"
+
+
+# Union of all sources
+Source = Union[
+    GdpSource,
+    CpiSource,
+    ExchangeRateSource,
+    InterestRateSource,
+    ExportImportSource,
+    IpiSource,
+    FdiSource,
+    M2Source,
+    RetailSource,
+    PopulationUnemploymentSource,
+    VnHnxIndexSource,
+    Vn30IndexSource,
+    Vn100IndexSource,
+    Hnx30IndexSource,
+    UpcomIndexSource,
+    FinanceInfoSource,
+    DailyPriceSource,
+]
 
 # ================================================
 
@@ -145,6 +229,7 @@ class SourceInfo:
 
 
 SCRAPE_MAPPING: Dict[Tuple[ScrapeMainType, ScrapeSubType, Source], SourceInfo] = {
+    # MACROECONOMICS
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.GDP,
@@ -159,4 +244,110 @@ SCRAPE_MAPPING: Dict[Tuple[ScrapeMainType, ScrapeSubType, Source], SourceInfo] =
     ): SourceInfo(
         url="https://www.worldometers.info/gdp/vietnam-gdp/",
     ),
+    (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.CPI,
+        CpiSource.VIETSTOCK,
+    ): SourceInfo(
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/52/cpi.htm",
+    ),
+    (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.EXCHANGE_RATE,
+        ExchangeRateSource.VIETSTOCK,
+    ): SourceInfo(
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/53-64/ty-gia-lai-suat.htm"
+    ),
+    (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.INTEREST_RATE,
+        InterestRateSource.VIETSTOCK,
+    ): SourceInfo(
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/53-64/ty-gia-lai-suat.htm"
+    ),
+    (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.EXPORT_IMPORT,
+        ExportImportSource.VIETSTOCK,
+    ): SourceInfo(
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/48-49/xuat-nhap-khau.htm",
+    ),
+    (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.IPI,
+        IpiSource.VIETSTOCK,
+    ): SourceInfo(
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/46/san-xuat-cong-nghiep.htm",
+    ),
+    (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.FDI,
+        FdiSource.VIETSTOCK,
+    ): SourceInfo(
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/50/fdi.htm",
+    ),
+    (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.M2,
+        M2Source.VIETSTOCK,
+    ): SourceInfo(
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/51/tin-dung.htm",
+    ),
+    (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.RETAIL,
+        RetailSource.VIETSTOCK,
+    ): SourceInfo(
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/47/ban-le.htm",
+    ),
+    (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.POPULATION_UNEMPLOYMENT,
+        PopulationUnemploymentSource.VIETSTOCK,
+    ): SourceInfo(
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/55-56/dan-so-va-lao-dong.htm",
+    ),
+    # STOCK_MARKET
+    (
+        ScrapeMainType.STOCK_MARKET,
+        StockMarketSubType.VN_HNX_INDEX,
+        VnHnxIndexSource.CAFEF,
+    ): SourceInfo(url="https://cafef.vn/du-lieu/du-lieu-download.chn"),
+    (
+        ScrapeMainType.STOCK_MARKET,
+        StockMarketSubType.VN_30_INDEX,
+        Vn30IndexSource.CAFEF,
+    ): SourceInfo(
+        url="https://cafef.vn/du-lieu/lich-su-giao-dich-vn30index-1.chn#data",
+    ),
+    (
+        ScrapeMainType.STOCK_MARKET,
+        StockMarketSubType.VN_100_INDEX,
+        Vn100IndexSource.CAFEF,
+    ): SourceInfo(
+        url="https://cafef.vn/du-lieu/lich-su-giao-dich-vn100-index-1.chn",
+    ),
+    (
+        ScrapeMainType.STOCK_MARKET,
+        StockMarketSubType.HNX_30_INDEX,
+        Hnx30IndexSource.CAFEF,
+    ): SourceInfo(
+        url="https://cafef.vn/du-lieu/lich-su-giao-dich-hnx30-index-1.chn",
+    ),
+    (
+        ScrapeMainType.STOCK_MARKET,
+        StockMarketSubType.UPCOM_INDEX,
+        UpcomIndexSource.CAFEF,
+    ): SourceInfo(url="https://cafef.vn/du-lieu/lich-su-giao-dich-upcom-index-1.chn"),
+    # ENTERPRISE
+    (
+        ScrapeMainType.ENTERPRISE,
+        EnterpriseSubType.FINANCE_INFO,
+        FinanceInfoSource.CAFEF,
+    ): SourceInfo(url="https://cafef.vn/"),
+    (
+        ScrapeMainType.ENTERPRISE,
+        EnterpriseSubType.DAILY_PRICE,
+        DailyPriceSource.CAFEF,
+    ): SourceInfo(url="https://cafef.vn/du-lieu/du-lieu-download.chn"),
 }
