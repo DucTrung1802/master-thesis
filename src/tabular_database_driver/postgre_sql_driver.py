@@ -19,14 +19,7 @@ class PostgreSQLDriver(TabularDatabaseDriverInterface):
         self._logger = logger
         self._connection = None
         self._cursor = None
-        self._connection_model: PostgreSQLConnectionModel = PostgreSQLConnectionModel(
-            logger=logger,
-            host=POSTGRES.get("HOST"),
-            user=POSTGRES.get("USER"),
-            password=POSTGRES.get("PASSWORD"),
-            port=POSTGRES.get("PORT"),
-            database=POSTGRES.get("DATABASE"),
-        )
+        self._connection_model: PostgreSQLConnectionModel = None
 
     def connect(
         self, connection_model: PostgreSQLConnectionModel
