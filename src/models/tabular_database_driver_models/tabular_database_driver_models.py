@@ -24,8 +24,13 @@ class DataType:
         return "TIMESTAMP"
 
     @classmethod
-    def DECIMAL(cls, precision: int, scale: int):
-        return f"DECIMAL({precision}, {scale})"
+    def DECIMAL(cls, precision: int = None, scale: int = None):
+        if precision and scale:
+            return f"DECIMAL({precision}, {scale})"
+        elif precision:
+            return f"DECIMAL({precision})"
+        else:
+            return f"DECIMAL"
 
     @classmethod
     def BOOLEAN(cls):
