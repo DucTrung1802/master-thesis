@@ -1,2 +1,4 @@
 psycopg2
-pytest
+selenium
+beautifulsoup4
+requests
