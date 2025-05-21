@@ -166,18 +166,22 @@ class PostgreSQLDriver(TabularDatabaseDriverInterface):
         schema_name: str,
         table_name: str,
         columns: List[Column],
-        primary_key: str,
+        primary_keys: List[str],
         foreign_keys: List[ForeignKey] = None,
     ):
         """Create a new table in the current database."""
         try:
             column_definitions = ",\n    ".join(
                 [
-                    f"{col.name} {"SERIAL" if col.name == primary_key else col.data_type} {"NOT NULL" if not col.nullable else ""}"
+                    f"{col.name} {col.data_type}{" NOT NULL" if not col.nullable else ""}"
                     for col in columns
                 ]
             )
-            primary_key_definition = f"PRIMARY KEY ({primary_key})"
+
+            primary_key_definition = None
+            if len(primary_keys) > 0:
+                primary_key_definition = f"PRIMARY KEY ({', '.join(primary_keys)})"
+
             foreign_key_definitions = [
                 f"FOREIGN KEY ({fk.column_name}) REFERENCES {fk.ref_table}({fk.ref_column})"
                 for fk in foreign_keys or []

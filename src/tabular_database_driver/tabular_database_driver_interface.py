@@ -52,7 +52,7 @@ class TabularDatabaseDriverInterface(ABC):
         schema_name: str,
         table_name: str,
         columns: List[Column],
-        primary_key: str,
+        primary_keys: List[str],
         foreign_keys: List[ForeignKey] = None,
     ) -> DatabaseExecutionStatus:
         """Create a new table in the current database."""

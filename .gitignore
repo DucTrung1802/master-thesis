@@ -2,3 +2,5 @@
 *.pyc
 
 raw_data/
+
+.env
