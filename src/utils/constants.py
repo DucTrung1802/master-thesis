@@ -12,18 +12,6 @@ LOG_FILE_BASE = f"{LOG_DIR}/app"
 # ===========================
 THREAD_MANAGER_POWER = 50  # unit: %
 
-# ===========================
-# POSTGRESQL CONFIGURATION
-# ===========================
-POSTGRES = {
-    "HOST": "localhost",
-    "USER": "postgres",
-    "PASSWORD": "changeme",
-    "PORT": 5432,
-    "DATABASE": "postgres",
-    "SCHEMA": "public",
-}
-
 
 # ===========================
 # SCRAPER CONFIGURATION
