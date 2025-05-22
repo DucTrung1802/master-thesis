@@ -351,3 +351,13 @@ SCRAPE_MAPPING: Dict[Tuple[ScrapeMainType, ScrapeSubType, Source], SourceInfo] =
         DailyPriceSource.CAFEF,
     ): SourceInfo(url="https://cafef.vn/du-lieu/du-lieu-download.chn"),
 }
+
+
+class Schema(Enum):
+    MACROECONOMICS = "macroeconomics"
+    STOCK_MARKET = "stock_market"
+    ENTERPRISE = "enterprise"
+
+
+class Table(Enum):
+    GDP = "gdp"
