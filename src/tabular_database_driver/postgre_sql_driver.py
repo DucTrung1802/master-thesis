@@ -233,9 +233,13 @@ CREATE TABLE {schema_name}.{table_name} (
                 values = ", ".join(
                     [
                         (
-                            f"'{col.value}'"
-                            if isinstance(col.value, str)
-                            else str(col.value)
+                            "NULL"
+                            if col.value is None
+                            else (
+                                f"'{col.value}'"
+                                if isinstance(col.value, str)
+                                else str(col.value)
+                            )
                         )
                         for col in record.data_model_list
                     ]
