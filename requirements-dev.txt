@@ -3,3 +3,4 @@ selenium
 beautifulsoup4
 requests
 load_dotenv
+pandas
