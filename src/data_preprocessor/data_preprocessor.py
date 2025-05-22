@@ -183,13 +183,63 @@ class DataPreprocessor:
         self._logger.log_info(f'Finish processing data in "{file_path}".')
 
     def _process_macroeconomics_gdp_worldometer(self) -> None:
-        pass
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.GDP,
+            GdpSource.WORLDOMETER,
+        )
+        folder_path = (
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+        )
+
+        file_path = get_newest_file_path(
+            folder_path=folder_path, extension=FileExtension.CSV
+        )
+
+        if not file_path:
+            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
+            return
+
+        self._logger.log_info(f'Start processing data in "{file_path}".')
+
+        df = pd.read_csv(file_path)
+        df = df.iloc[:, [0, 3]]
+        df.columns = [
+            "year",
+            "gdp_true_growth_acc",
+        ]
+        df = df[df["year"] >= SCRAPER_START_DATE.year]
+        df.insert(1, "quarter", 4)
+        df["gdp_true_growth_acc"] = (
+            df["gdp_true_growth_acc"].str.rstrip("%").astype(float)
+        )
+
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS, table_name=Table.GDP, df=df
+        )
+
+        self._logger.log_info(f'Finish processing data in "{file_path}".')
+
+    def _process_macroeconomics_gdp_custom(self) -> None:
+        # NOTE: At current date (23/05/2025), Worldometer does not have data for 2024. Have to input manually
+        self._logger.log_info(f"Start manually input data.")
+
+        df = pd.DataFrame(
+            {"year": [2024], "quarter": [4], "gdp_true_growth_acc": [7.09]}
+        )
+
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS, table_name=Table.GDP, df=df
+        )
+
+        self._logger.log_info(f"Start manually input data.")
 
     def _process_macroeconomics_gdp(self) -> None:
         self._logger.log_info("Start processing macroeconomics GDP data.")
 
         self._process_macroeconomics_gdp_vietstock()
         self._process_macroeconomics_gdp_worldometer()
+        self._process_macroeconomics_gdp_custom()  # NOTE: This is for manually input data
 
         self._logger.log_info("Finish processing macroeconomics GDP data.")
 
