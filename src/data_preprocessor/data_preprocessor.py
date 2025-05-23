@@ -121,6 +121,19 @@ class DataPreprocessor:
             primary_keys=[Table.CPI.Column.YEAR.value, Table.CPI.Column.MONTH.value],
         )
         # fmt: on
+        
+        # EXCHANGE_RATE
+        # fmt: off
+        self._database_driver.create_table(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.EXCHANGE_RATE.name,
+            columns = [
+                Column(name=Table.EXCHANGE_RATE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                Column(name=Table.EXCHANGE_RATE.Column.EXCHANGE_RATE.value, data_type=DataType.DECIMAL(), nullable=False),
+            ],
+            primary_keys=[Table.EXCHANGE_RATE.Column.DATE.value],
+        )
+        # fmt: on
 
         self._logger.log_info("Finish creating macroeconomics tables.")
 
@@ -354,12 +367,60 @@ class DataPreprocessor:
 
         self._logger.log_info("Finish processing macroeconomics CPI data.")
 
+    def _process_macroeconomics_exchange_rate_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.EXCHANGE_RATE,
+            GdpSource.VIETSTOCK,
+        )
+        folder_path = (
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+        )
+
+        file_path = get_newest_file_path(
+            folder_path=folder_path, extension=FileExtension.CSV
+        )
+
+        if not file_path:
+            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
+            return
+
+        self._logger.log_info(f'Start processing data in "{file_path}".')
+
+        # Add logic for processing data here
+        df = pd.read_csv(file_path)
+        df = df.drop(df.columns[:2], axis=1).drop(df.columns[-1], axis=1)
+        df = df.transpose()
+        df.index = pd.to_datetime(df.index, format='%d/%m/%Y')
+        df = df.reset_index()
+        df = df.rename(columns={'index': 'date'})
+        df['exchange_rate'] = df[0].combine_first(df[1])
+        df = df.drop(columns=[0, 1])
+        df['exchange_rate'] = df['exchange_rate'].str.replace(',', '.', regex=True).astype(float)
+        df['date'] = df['date'].dt.date
+
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.EXCHANGE_RATE.name,
+            df=df,
+        )
+
+        self._logger.log_info(f'Finish processing data in "{file_path}".')
+
+    def _process_macroeconomics_exchange_rate(self) -> None:
+        self._logger.log_info("Start processing macroeconomics EXCHANGE_RATE data.")
+
+        self._process_macroeconomics_exchange_rate_vietstock()
+
+        self._logger.log_info("Finish processing macroeconomics EXCHANGE_RATE data.")
+
     def _process_data(self) -> None:
         self._logger.log_info("Start processing data.")
 
         # Macroeconomics
         self._process_macroeconomics_gdp()
         self._process_macroeconomics_cpi()
+        self._process_macroeconomics_exchange_rate()
 
         # Stock market
 

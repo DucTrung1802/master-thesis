@@ -395,3 +395,10 @@ class Table:
             EDUCATION = "education"
             CULTURE_ENTERTAINMENT_AND_TOURISM = "culture_entertainment_and_tourism"
             OTHER_SUPPLIES_AND_SERVICES = "other_supplies_and_services"
+
+    class EXCHANGE_RATE:
+        name = "exchange_rate"
+
+        class Column(Enum):
+            DATE = "date"
+            EXCHANGE_RATE = "exchange_rate"
