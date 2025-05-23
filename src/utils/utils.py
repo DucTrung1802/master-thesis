@@ -3,6 +3,14 @@ import zipfile
 import requests
 from typing import Tuple
 import numpy as np
+import pandas as pd
+from pandas.api.types import (
+    is_integer_dtype,
+    is_float_dtype,
+    is_bool_dtype,
+    is_string_dtype,
+    is_datetime64_any_dtype,
+)
 
 
 from logger.logger import Logger
@@ -196,32 +204,3 @@ def get_newest_file_path(folder_path, extension: FileExtension = None):
             newest_file = file_path
 
     return newest_file
-
-
-def convert_numpy_datatype_to_postgres_datatype(numpy_dtype):
-    """
-    Convert a NumPy data type to an equivalent PostgreSQL data type.
-    """
-    dtype_map = {
-        np.int8: "SMALLINT",
-        np.int16: "SMALLINT",
-        np.int32: "INTEGER",
-        np.int64: "BIGINT",
-        np.uint8: "SMALLINT",
-        np.uint16: "INTEGER",
-        np.uint32: "BIGINT",
-        np.uint64: "NUMERIC",  # PostgreSQL has no unsigned types
-        np.float16: "REAL",
-        np.float32: "REAL",
-        np.float64: "DOUBLE PRECISION",
-        np.bool_: "BOOLEAN",
-        np.str_: "TEXT",
-        np.object_: "TEXT",  # assuming object is string-like
-        np.datetime64: "TIMESTAMP",
-        np.bytes_: "BYTEA",
-    }
-
-    # Handle dtype instances as well as types
-    base_dtype = np.dtype(numpy_dtype).type
-
-    return dtype_map.get(base_dtype, "TEXT")  # default fallback
