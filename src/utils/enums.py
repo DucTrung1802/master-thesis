@@ -359,5 +359,39 @@ class Schema(Enum):
     ENTERPRISE = "enterprise"
 
 
-class Table(Enum):
-    GDP = "gdp"
+class Table:
+    class GDP:
+        name = "gdp"
+
+        class Column(Enum):
+            YEAR = "year"
+            QUARTER = "quarter"
+            AGRICULTURE_SHARE = "agriculture_share"
+            INDUSTRY_SHARE = "industry_share"
+            SERVICE_SHARE = "service_share"
+            GDP_TRUE_GROWTH_ACC = "gdp_true_growth_acc"
+            AGRICULTURE_TRUE_GROWTH_ACC = "agriculture_true_growth_acc"
+            INDUSTRY_TRUE_GROWTH_ACC = "industry_true_growth_acc"
+            SERVICE_TRUE_GROWTH_ACC = "service_true_growth_acc"
+
+    class CPI:
+        name = "cpi"
+
+        class Column(Enum):
+            YEAR = "year"
+            MONTH = "month"
+            CPI = "cpi"
+            FNB_SERVICES = "fnb_services"
+            STAPLE_FOOD = "staple_food"
+            FOOD = "food"
+            FAFH = "fafh"
+            DRINK_AND_TOBACO = "drink_and_tobaco"
+            WEARING = "wearing"
+            HOUSING_AND_BUILDING_MATERIALS = "housing_and_building_materials"
+            HOUSEHOLD_APPLIANCES_AND_EQUIPMENT = "household_appliances_and_equipment"
+            MEDICINES_AND_MEDICAL_SERVICES = "medicines_and_medical_services"
+            TRAFFIC = "traffic"
+            POST_AND_TELECOMMUNICATIONS = "post_and_telecommunications"
+            EDUCATION = "education"
+            CULTURE_ENTERTAINMENT_AND_TOURISM = "culture_entertainment_and_tourism"
+            OTHER_SUPPLIES_AND_SERVICES = "other_supplies_and_services"

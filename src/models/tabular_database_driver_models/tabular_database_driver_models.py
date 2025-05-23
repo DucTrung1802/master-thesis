@@ -71,7 +71,7 @@ class Column:
 class DataModel:
     column_name: str
     value: str | int | float
-    data_type: DataType
+    data_type: DataType = None
 
 
 @dataclass
