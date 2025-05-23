@@ -37,14 +37,14 @@ class DataPreprocessor:
         self._database_driver.connect(connection_model)
 
     def _save_pandas_table_to_database(
-        self, schema_name: Schema, table_name: Table, df: pd.DataFrame
+        self, schema_name: str, table_name: str, df: pd.DataFrame
     ) -> None:
         self._logger.log_info(f'Saving dataframe to table "{schema_name}.{table_name}"')
 
         for row in df.iterrows():
             self._database_driver.insert(
-                schema_name=schema_name.value,
-                table_name=table_name.value,
+                schema_name=schema_name,
+                table_name=table_name,
                 records=[
                     Record(
                         data_model_list=[
@@ -81,17 +81,17 @@ class DataPreprocessor:
         # fmt: off
         self._database_driver.create_table(
             schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.GDP.value,
-            columns=[
-                Column(name="year", data_type=DataType.INT(), nullable=False),
-                Column(name="quarter", data_type=DataType.INT(), nullable=False),
-                Column(name="agriculture_share", data_type=DataType.DECIMAL(), nullable=True),
-                Column(name="industry_share", data_type=DataType.DECIMAL(), nullable=True),
-                Column(name="service_share", data_type=DataType.DECIMAL(), nullable=True),
-                Column(name="gdp_true_growth_acc", data_type=DataType.DECIMAL(), nullable=True),
-                Column(name="agriculture_true_growth_acc", data_type=DataType.DECIMAL(), nullable=True),
-                Column(name="industry_true_growth_acc", data_type=DataType.DECIMAL(), nullable=True),
-                Column(name="service_true_growth_acc", data_type=DataType.DECIMAL(), nullable=True),
+            table_name=Table.GDP.name,
+            columns = [
+                Column(name=Table.GDP.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
+                Column(name=Table.GDP.Column.QUARTER.value, data_type=DataType.INT(), nullable=False),
+                Column(name=Table.GDP.Column.AGRICULTURE_SHARE.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.GDP.Column.INDUSTRY_SHARE.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.GDP.Column.SERVICE_SHARE.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.GDP.Column.GDP_TRUE_GROWTH_ACC.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.GDP.Column.AGRICULTURE_TRUE_GROWTH_ACC.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.GDP.Column.INDUSTRY_TRUE_GROWTH_ACC.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.GDP.Column.SERVICE_TRUE_GROWTH_ACC.value, data_type=DataType.DECIMAL(), nullable=True),
             ],
             primary_keys=["year", "quarter"],
         )
@@ -138,13 +138,13 @@ class DataPreprocessor:
         df = df.transpose().iloc[2:, :7]
 
         df.columns = [
-            "agriculture_share",
-            "industry_share",
-            "service_share",
-            "gdp_true_growth_acc",
-            "agriculture_true_growth_acc",
-            "industry_true_growth_acc",
-            "service_true_growth_acc",
+            Table.GDP.Column.AGRICULTURE_SHARE.value,
+            Table.GDP.Column.INDUSTRY_SHARE.value,
+            Table.GDP.Column.SERVICE_SHARE.value,
+            Table.GDP.Column.GDP_TRUE_GROWTH_ACC.value,
+            Table.GDP.Column.AGRICULTURE_TRUE_GROWTH_ACC.value,
+            Table.GDP.Column.INDUSTRY_TRUE_GROWTH_ACC.value,
+            Table.GDP.Column.SERVICE_TRUE_GROWTH_ACC.value,
         ]
 
         df = df.reset_index().rename(columns={"index": "period"})
@@ -165,11 +165,18 @@ class DataPreprocessor:
 
             return pd.Series([year, quarter])
 
-        df[["year", "quarter"]] = df["period"].apply(extract_year_quarter)
+        df[[Table.GDP.Column.YEAR.value, Table.GDP.Column.QUARTER.value]] = df[
+            "period"
+        ].apply(extract_year_quarter)
 
         df = df[
-            ["year", "quarter"]
-            + [col for col in df.columns if col not in {"year", "quarter"}]
+            [Table.GDP.Column.YEAR.value, Table.GDP.Column.QUARTER.value]
+            + [
+                col
+                for col in df.columns
+                if col
+                not in {Table.GDP.Column.YEAR.value, Table.GDP.Column.QUARTER.value}
+            ]
         ]
 
         df.drop(columns="period", inplace=True)
@@ -177,7 +184,7 @@ class DataPreprocessor:
         df[df.columns] = df[df.columns].apply(pd.to_numeric, errors="coerce")
 
         self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS, table_name=Table.GDP, df=df
+            schema_name=Schema.MACROECONOMICS.value, table_name=Table.GDP.name, df=df
         )
 
         self._logger.log_info(f'Finish processing data in "{file_path}".')
@@ -215,7 +222,7 @@ class DataPreprocessor:
         )
 
         self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS, table_name=Table.GDP, df=df
+            schema_name=Schema.MACROECONOMICS.value, table_name=Table.GDP.name, df=df
         )
 
         self._logger.log_info(f'Finish processing data in "{file_path}".')
@@ -229,7 +236,7 @@ class DataPreprocessor:
         )
 
         self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS, table_name=Table.GDP, df=df
+            schema_name=Schema.MACROECONOMICS.value, table_name=Table.GDP.name, df=df
         )
 
         self._logger.log_info(f"Start manually input data.")

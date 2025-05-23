@@ -359,5 +359,17 @@ class Schema(Enum):
     ENTERPRISE = "enterprise"
 
 
-class Table(Enum):
-    GDP = "gdp"
+class Table:
+    class GDP:
+        name = "gdp"
+
+        class Column(Enum):
+            YEAR = "year"
+            QUARTER = "quarter"
+            AGRICULTURE_SHARE = "agriculture_share"
+            INDUSTRY_SHARE = "industry_share"
+            SERVICE_SHARE = "service_share"
+            GDP_TRUE_GROWTH_ACC = "gdp_true_growth_acc"
+            AGRICULTURE_TRUE_GROWTH_ACC = "agriculture_true_growth_acc"
+            INDUSTRY_TRUE_GROWTH_ACC = "industry_true_growth_acc"
+            SERVICE_TRUE_GROWTH_ACC = "service_true_growth_acc"
