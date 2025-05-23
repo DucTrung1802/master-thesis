@@ -12,6 +12,7 @@ from models.tabular_database_driver_models.tabular_database_driver_models import
 from utils.enums import DatabaseExecutionStatus
 from utils.constants import *
 from utils.utils import *
+from datetime import date
 
 
 class PostgreSQLDriver(TabularDatabaseDriverInterface):
@@ -237,7 +238,7 @@ CREATE TABLE {schema_name}.{table_name} (
                             if col.value is None
                             else (
                                 f"'{col.value}'"
-                                if isinstance(col.value, str)
+                                if isinstance(col.value, (str, date))
                                 else str(col.value)
                             )
                         )
