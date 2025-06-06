@@ -361,8 +361,6 @@ class Schema(Enum):
 
 class Table:
     class GDP:
-        name = "gdp"
-
         class Column(Enum):
             YEAR = "year"
             QUARTER = "quarter"
@@ -374,9 +372,10 @@ class Table:
             INDUSTRY_TRUE_GROWTH_ACC = "industry_true_growth_acc"
             SERVICE_TRUE_GROWTH_ACC = "service_true_growth_acc"
 
-    class CPI:
-        name = "cpi"
+        name = "gdp"
+        primary_key = [Column.YEAR.value, Column.QUARTER.value]
 
+    class CPI:
         class Column(Enum):
             YEAR = "year"
             MONTH = "month"
@@ -396,9 +395,14 @@ class Table:
             CULTURE_ENTERTAINMENT_AND_TOURISM = "culture_entertainment_and_tourism"
             OTHER_SUPPLIES_AND_SERVICES = "other_supplies_and_services"
 
-    class EXCHANGE_RATE:
-        name = "exchange_rate"
+        name = "cpi"
+        primary_key = [Column.YEAR.value, Column.MONTH.value]
 
+    class EXCHANGE_RATE:
         class Column(Enum):
             DATE = "date"
             EXCHANGE_RATE = "exchange_rate"
+
+        name = "exchange_rate"
+        primary_key = [Column.DATE.value]
+

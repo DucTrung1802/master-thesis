@@ -90,7 +90,7 @@ class DataPreprocessor:
                 Column(name=Table.GDP.Column.INDUSTRY_TRUE_GROWTH_ACC.value, data_type=DataType.DECIMAL(), nullable=True),
                 Column(name=Table.GDP.Column.SERVICE_TRUE_GROWTH_ACC.value, data_type=DataType.DECIMAL(), nullable=True),
             ],
-            primary_keys=[Table.GDP.Column.YEAR.value, Table.GDP.Column.QUARTER.value],
+            primary_keys=Table.GDP.primary_key,
         )
         # fmt: on
 
@@ -118,7 +118,7 @@ class DataPreprocessor:
                 Column(name=Table.CPI.Column.CULTURE_ENTERTAINMENT_AND_TOURISM.value, data_type=DataType.DECIMAL(), nullable=True),
                 Column(name=Table.CPI.Column.OTHER_SUPPLIES_AND_SERVICES.value, data_type=DataType.DECIMAL(), nullable=True),
             ],
-            primary_keys=[Table.CPI.Column.YEAR.value, Table.CPI.Column.MONTH.value],
+            primary_keys=Table.CPI.primary_key,
         )
         # fmt: on
         
@@ -131,7 +131,7 @@ class DataPreprocessor:
                 Column(name=Table.EXCHANGE_RATE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
                 Column(name=Table.EXCHANGE_RATE.Column.EXCHANGE_RATE.value, data_type=DataType.DECIMAL(), nullable=False),
             ],
-            primary_keys=[Table.EXCHANGE_RATE.Column.DATE.value],
+            primary_keys=Table.EXCHANGE_RATE.primary_key,
         )
         # fmt: on
 
