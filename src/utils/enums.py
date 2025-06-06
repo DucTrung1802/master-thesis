@@ -406,3 +406,15 @@ class Table:
         name = "exchange_rate"
         primary_key = [Column.DATE.value]
 
+    class INTEREST_RATE:
+        class Column(Enum):
+            DATE = "date"
+            ONE_WEEK = "one_week"
+            TWO_WEEK = "two_week"
+            ONE_MONTH = "one_month"
+            THREE_MONTH = "three_month"
+            SIX_MONTH = "six_month"
+            NINE_MONTH = "nine_month"
+
+        name = "interest_rate"
+        primary_key = [Column.DATE.value]

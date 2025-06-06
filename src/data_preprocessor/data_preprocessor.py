@@ -2,6 +2,7 @@ from dotenv import load_dotenv
 import os
 import pandas as pd
 import re
+from glob import glob
 
 from logger.logger import Logger
 from models.tabular_database_driver_models.postgre_sql_connection_model import (
@@ -11,7 +12,7 @@ from models.tabular_database_driver_models.tabular_database_driver_models import
 from tabular_database_driver.postgre_sql_driver import PostgreSQLDriver
 from utils.constants import SCRAPER_RAW_DATA_DIR
 from utils.enums import *
-from utils.utils import get_newest_file_path
+from utils.utils import *
 
 load_dotenv()
 
@@ -132,6 +133,24 @@ class DataPreprocessor:
                 Column(name=Table.EXCHANGE_RATE.Column.EXCHANGE_RATE.value, data_type=DataType.DECIMAL(), nullable=False),
             ],
             primary_keys=Table.EXCHANGE_RATE.primary_key,
+        )
+        # fmt: on
+        
+        # INTEREST_RATE
+        # fmt: off
+        self._database_driver.create_table(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.INTEREST_RATE.name,
+            columns = [
+                Column(name=Table.INTEREST_RATE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                Column(name=Table.INTEREST_RATE.Column.ONE_WEEK.value, data_type=DataType.DECIMAL(), nullable=False),
+                Column(name=Table.INTEREST_RATE.Column.TWO_WEEK.value, data_type=DataType.DECIMAL(), nullable=False),
+                Column(name=Table.INTEREST_RATE.Column.ONE_MONTH.value, data_type=DataType.DECIMAL(), nullable=False),
+                Column(name=Table.INTEREST_RATE.Column.THREE_MONTH.value, data_type=DataType.DECIMAL(), nullable=False),
+                Column(name=Table.INTEREST_RATE.Column.SIX_MONTH.value, data_type=DataType.DECIMAL(), nullable=False),
+                Column(name=Table.INTEREST_RATE.Column.NINE_MONTH.value, data_type=DataType.DECIMAL(), nullable=False),
+            ],
+            primary_keys=Table.INTEREST_RATE.primary_key,
         )
         # fmt: on
 
@@ -391,13 +410,15 @@ class DataPreprocessor:
         df = pd.read_csv(file_path)
         df = df.drop(df.columns[:2], axis=1).drop(df.columns[-1], axis=1)
         df = df.transpose()
-        df.index = pd.to_datetime(df.index, format='%d/%m/%Y')
+        df.index = pd.to_datetime(df.index, format="%d/%m/%Y")
         df = df.reset_index()
-        df = df.rename(columns={'index': 'date'})
-        df['exchange_rate'] = df[0].combine_first(df[1])
+        df = df.rename(columns={"index": "date"})
+        df["exchange_rate"] = df[0].combine_first(df[1])
         df = df.drop(columns=[0, 1])
-        df['exchange_rate'] = df['exchange_rate'].str.replace(',', '.', regex=True).astype(float)
-        df['date'] = df['date'].dt.date
+        df["exchange_rate"] = (
+            df["exchange_rate"].str.replace(",", ".", regex=True).astype(float)
+        )
+        df["date"] = df["date"].dt.date
 
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
@@ -407,6 +428,84 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish processing data in "{file_path}".')
 
+    def _process_macroeconomics_interest_rate_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.INTEREST_RATE,
+            GdpSource.VIETSTOCK,
+        )
+        folder_path = (
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+        )
+
+        extension = FileExtension.CSV
+        if not folder_contains_files(folder_path, extension):
+            self._logger.log_error(
+                f'Data{" with extension " + extension if extension else ""} in "{folder_path}" does not exist.'
+            )
+            return
+
+        self._logger.log_info(f'Start processing data in folder "{folder_path}".')
+
+        # Add logic for processing data here
+        file_pattern = os.path.join(folder_path, "vietstock_*.csv")
+        files = sorted(glob(file_pattern))
+
+        rename_map = {
+            "1 tuần": "one_week",
+            "2 tuần": "two_week",
+            "1 tháng": "one_month",
+            "3 tháng": "three_month",
+            "6 tháng": "six_month",
+            "9 tháng": "nine_month",
+        }
+
+        combined_data = []
+
+        for file in files:
+            df = pd.read_csv(file, index_col=0)
+
+            # Skip files with only headers or no data
+            if df.shape[1] <= 3:
+                print(f"Skipping {file} (likely no actual data)")
+                continue
+
+            # Clean column names and rows
+            df = df.drop(columns=["Đơn vị tính"], errors="ignore")
+            df = df.dropna(how="all", axis=1)  # Drop completely empty columns
+            df = df.dropna(how="all", axis=0)  # Drop completely empty rows
+
+            df = df.T  # Transpose to have dates as rows
+            df["date"] = df.index
+            df["date"] = pd.to_datetime(df["date"], dayfirst=True)
+            df.reset_index(drop=True, inplace=True)
+
+            combined_data.append(df)
+
+        # Merge all into one big DataFrame
+        result_df = pd.concat(combined_data)
+
+        # Reset index to remove old index and get clean integer index
+        result_df = result_df.reset_index(drop=True)
+
+        # Sort by date
+        result_df = result_df.sort_values(by="date")
+
+        # Reorder columns to have 'date' first
+        cols = result_df.columns.tolist()
+        cols.insert(0, cols.pop(cols.index("date")))
+        result_df = result_df[cols]
+        result_df = result_df.drop(columns=["Qua đêm"], errors="ignore")
+        result_df = result_df.rename(columns=rename_map)
+
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.INTEREST_RATE.name,
+            df=result_df,
+        )
+
+        self._logger.log_info(f'Finish processing data in folder "{folder_path}".')
+
     def _process_macroeconomics_exchange_rate(self) -> None:
         self._logger.log_info("Start processing macroeconomics EXCHANGE_RATE data.")
 
@@ -414,13 +513,21 @@ class DataPreprocessor:
 
         self._logger.log_info("Finish processing macroeconomics EXCHANGE_RATE data.")
 
+    def _process_macroeconomics_interest_rate(self) -> None:
+        self._logger.log_info("Start processing macroeconomics INTEREST_RATE data.")
+
+        self._process_macroeconomics_interest_rate_vietstock()
+
+        self._logger.log_info("Finish processing macroeconomics INTEREST_RATE data.")
+
     def _process_data(self) -> None:
         self._logger.log_info("Start processing data.")
 
         # Macroeconomics
-        self._process_macroeconomics_gdp()
-        self._process_macroeconomics_cpi()
-        self._process_macroeconomics_exchange_rate()
+        # self._process_macroeconomics_gdp()
+        # self._process_macroeconomics_cpi()
+        # self._process_macroeconomics_exchange_rate()
+        self._process_macroeconomics_interest_rate()
 
         # Stock market
 
