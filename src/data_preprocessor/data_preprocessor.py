@@ -153,6 +153,29 @@ class DataPreprocessor:
             primary_keys=Table.INTEREST_RATE.primary_key,
         )
         # fmt: on
+        
+        # EXPORT
+        # fmt: off
+        self._database_driver.create_table(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.EXPORT.name,
+            columns = [
+                Column(name=Table.EXPORT.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
+                Column(name=Table.EXPORT.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
+                Column(name=Table.EXPORT.Column.TOTAL.value, data_type=DataType.DECIMAL(), nullable=False),
+                Column(name=Table.EXPORT.Column.LEATHER_SHOES.value, data_type=DataType.DECIMAL(), nullable=False),
+                Column(name=Table.EXPORT.Column.TEXTILES.value, data_type=DataType.DECIMAL(), nullable=False),
+                Column(name=Table.EXPORT.Column.WOOD_PRODUCTS.value, data_type=DataType.DECIMAL(), nullable=False),
+                Column(name=Table.EXPORT.Column.SEAFOOD.value, data_type=DataType.DECIMAL(), nullable=False),
+                Column(name=Table.EXPORT.Column.CRUDE_OIL.value, data_type=DataType.DECIMAL(), nullable=False),
+                Column(name=Table.EXPORT.Column.RICE.value, data_type=DataType.DECIMAL(), nullable=False),
+                Column(name=Table.EXPORT.Column.COFFEE.value, data_type=DataType.DECIMAL(), nullable=False),
+                Column(name=Table.EXPORT.Column.COMPUTER_ELECTRONICS.value, data_type=DataType.DECIMAL(), nullable=False),
+                Column(name=Table.EXPORT.Column.MACHINERY_EQUIPMENT.value, data_type=DataType.DECIMAL(), nullable=False),
+            ],
+            primary_keys=Table.EXPORT.primary_key,
+        )
+        # fmt: on
 
         self._logger.log_info("Finish creating macroeconomics tables.")
 
@@ -452,12 +475,12 @@ class DataPreprocessor:
         files = sorted(glob(file_pattern))
 
         rename_map = {
-            "1 tuần": "one_week",
-            "2 tuần": "two_week",
-            "1 tháng": "one_month",
-            "3 tháng": "three_month",
-            "6 tháng": "six_month",
-            "9 tháng": "nine_month",
+            "1 tuần": Table.INTEREST_RATE.Column.ONE_WEEK.value,
+            "2 tuần": Table.INTEREST_RATE.Column.TWO_WEEK.value,
+            "1 tháng": Table.INTEREST_RATE.Column.ONE_MONTH.value,
+            "3 tháng": Table.INTEREST_RATE.Column.THREE_MONTH.value,
+            "6 tháng": Table.INTEREST_RATE.Column.SIX_MONTH.value,
+            "9 tháng": Table.INTEREST_RATE.Column.NINE_MONTH.value,
         }
 
         combined_data = []
@@ -506,6 +529,75 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish processing data in folder "{folder_path}".')
 
+    def _process_macroeconomics_export_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.EXPORT,
+            GdpSource.VIETSTOCK,
+        )
+        folder_path = (
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{"export_import"}/{key[2].value}"
+        )
+
+        file_path = get_newest_file_path(
+            folder_path=folder_path, extension=FileExtension.CSV
+        )
+
+        if not file_path:
+            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
+            return
+
+        self._logger.log_info(f'Start processing data in "{file_path}".')
+
+        # Add logic for processing data here
+        df = pd.read_csv(file_path)
+        export_df = df.iloc[0:10, :]
+
+        # Drop "Đơn vị tính" only if it exists
+        if "Đơn vị tính" in export_df.columns:
+            export_df = export_df.drop(columns=["Đơn vị tính"])
+
+        # Transpose and rename
+        export_df = export_df.set_index("Chỉ tiêu").T
+
+        rename_map = {
+            "Tổng trị giá Xuất khẩu": Table.EXPORT.Column.TOTAL.value,
+            "Giày da": Table.EXPORT.Column.LEATHER_SHOES.value,
+            "Dệt may": Table.EXPORT.Column.TEXTILES.value,
+            "Gỗ và sản phẩm gỗ": Table.EXPORT.Column.WOOD_PRODUCTS.value,
+            "Thủy sản": Table.EXPORT.Column.SEAFOOD.value,
+            "Dầu thô": Table.EXPORT.Column.CRUDE_OIL.value,
+            "Gạo": Table.EXPORT.Column.RICE.value,
+            "Café": Table.EXPORT.Column.COFFEE.value,
+            "Điện tử máy tính": Table.EXPORT.Column.COMPUTER_ELECTRONICS.value,
+            "Máy móc thiết bị": Table.EXPORT.Column.MACHINERY_EQUIPMENT.value,
+        }
+        export_df = export_df.rename(columns=rename_map).reset_index()
+
+        # Extract month and year
+        export_df[["month", "year"]] = (
+            export_df["index"].str.extract(r"Tháng (\d+)/(\d+)").astype("Int64")
+        )
+
+        # Reorder columns
+        new_col_order = ["year", "month"] + list(rename_map.values())
+        export_df = export_df[new_col_order]
+
+        # Convert all data columns (except year and month) to float, removing commas
+        data_cols = export_df.columns.difference(["year", "month"])
+        for col in data_cols:
+            export_df[col] = (
+                export_df[col].astype(str).str.replace(",", "").astype(float)
+            )
+
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.EXPORT.name,
+            df=export_df,
+        )
+
+        self._logger.log_info(f'Finish processing data in "{file_path}".')
+
     def _process_macroeconomics_exchange_rate(self) -> None:
         self._logger.log_info("Start processing macroeconomics EXCHANGE_RATE data.")
 
@@ -520,6 +612,13 @@ class DataPreprocessor:
 
         self._logger.log_info("Finish processing macroeconomics INTEREST_RATE data.")
 
+    def _process_macroeconomics_export(self) -> None:
+        self._logger.log_info("Start processing macroeconomics EXPORT data.")
+
+        self._process_macroeconomics_export_vietstock()
+
+        self._logger.log_info("Finish processing macroeconomics EXPORT data.")
+
     def _process_data(self) -> None:
         self._logger.log_info("Start processing data.")
 
@@ -527,7 +626,8 @@ class DataPreprocessor:
         # self._process_macroeconomics_gdp()
         # self._process_macroeconomics_cpi()
         # self._process_macroeconomics_exchange_rate()
-        self._process_macroeconomics_interest_rate()
+        # self._process_macroeconomics_interest_rate()
+        self._process_macroeconomics_export()
 
         # Stock market
 

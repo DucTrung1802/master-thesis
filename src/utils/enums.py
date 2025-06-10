@@ -94,7 +94,8 @@ class MacroeconomicsSubType(Enum):
     CPI = "cpi"
     EXCHANGE_RATE = "exchange_rate"
     INTEREST_RATE = "interest_rate"
-    EXPORT_IMPORT = "export_import"
+    EXPORT = "export"
+    IMPORT = "import"
     IPI = "ipi"
     FDI = "fdi"
     M2 = "m2"
@@ -267,7 +268,14 @@ SCRAPE_MAPPING: Dict[Tuple[ScrapeMainType, ScrapeSubType, Source], SourceInfo] =
     ),
     (
         ScrapeMainType.MACROECONOMICS,
-        MacroeconomicsSubType.EXPORT_IMPORT,
+        MacroeconomicsSubType.EXPORT,
+        ExportImportSource.VIETSTOCK,
+    ): SourceInfo(
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/48-49/xuat-nhap-khau.htm",
+    ),
+    (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.IMPORT,
         ExportImportSource.VIETSTOCK,
     ): SourceInfo(
         url="https://finance.vietstock.vn/du-lieu-vi-mo/48-49/xuat-nhap-khau.htm",
@@ -418,3 +426,21 @@ class Table:
 
         name = "interest_rate"
         primary_key = [Column.DATE.value]
+
+    class EXPORT:
+        class Column(Enum):
+            YEAR = "year"
+            MONTH = "month"
+            TOTAL = "total"
+            LEATHER_SHOES = "leather_shoes"
+            TEXTILES = "textiles"
+            WOOD_PRODUCTS = "wood_products"
+            SEAFOOD = "seafood"
+            CRUDE_OIL = "crude_oil"
+            RICE = "rice"
+            COFFEE = "coffee"
+            COMPUTER_ELECTRONICS = "computer_electronics"
+            MACHINERY_EQUIPMENT = "machinery_equipment"
+
+        name = "export"
+        primary_key = [Column.YEAR.value, Column.MONTH.value]
