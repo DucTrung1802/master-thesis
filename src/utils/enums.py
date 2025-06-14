@@ -501,3 +501,16 @@ class Table:
 
         name = "m2"
         primary_key = [Column.YEAR.value, Column.MONTH.value]
+
+    class RETAIL:
+        class Column(Enum):
+            YEAR = "year"
+            MONTH = "month"
+            TOTAL = "total"
+            COMMERCIAL = "commercial"
+            HOTEL_RESTAURANT = "hotel_restaurant"
+            TOURISM = "tourism"
+            SERVICE = "service"
+
+        name = "retail"
+        primary_key = [Column.YEAR.value, Column.MONTH.value]

@@ -258,6 +258,24 @@ class DataPreprocessor:
             primary_keys=Table.M2.primary_key,
         )
         # fmt: on
+        
+        # RETAIL
+        # fmt: off
+        self._database_driver.create_table(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.RETAIL.name,
+            columns = [
+                Column(name=Table.RETAIL.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
+                Column(name=Table.RETAIL.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
+                Column(name=Table.RETAIL.Column.TOTAL.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.RETAIL.Column.COMMERCIAL.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.RETAIL.Column.HOTEL_RESTAURANT.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.RETAIL.Column.TOURISM.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.RETAIL.Column.SERVICE.value, data_type=DataType.DECIMAL(), nullable=True),
+            ],
+            primary_keys=Table.RETAIL.primary_key,
+        )
+        # fmt: on
 
         self._logger.log_info("Finish creating macroeconomics tables.")
 
@@ -978,6 +996,66 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish processing data in "{file_path}".')
 
+    def _process_macroeconomics_retail_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.RETAIL,
+            GdpSource.VIETSTOCK,
+        )
+        folder_path = (
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+        )
+
+        file_path = get_newest_file_path(
+            folder_path=folder_path, extension=FileExtension.CSV
+        )
+
+        if not file_path:
+            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
+            return
+
+        self._logger.log_info(f'Start processing data in "{file_path}".')
+
+        # Add logic for processing data here
+        df = pd.read_csv(file_path)
+
+        # Drop "Đơn vị tính" only if it exists
+        if "Đơn vị tính" in df.columns:
+            df = df.drop(columns=["Đơn vị tính"])
+
+        df = df.set_index("Chỉ tiêu").T
+
+        rename_map = {
+            "Tổng": "total",
+            "Thương nghiệp": "commercial",
+            "Khách sạn nhà hàng": "hotel_restaurant",
+            "Du lịch": "tourism",
+            "Dịch vụ": "service",
+        }
+        df = df.rename(columns=rename_map).reset_index()
+
+        # Extract month and year
+        df[["month", "year"]] = (
+            df["index"].str.extract(r"Tháng (\d+)/(\d+)").astype("Int64")
+        )
+
+        # Reorder columns
+        new_col_order = ["year", "month"] + list(rename_map.values())
+        df = df[new_col_order]
+
+        # Convert all data columns (except year and month) to float, removing commas
+        data_cols = df.columns.difference(["year", "month"])
+        for col in data_cols:
+            df[col] = df[col].astype(str).str.replace(",", "").astype(float)
+
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.RETAIL.name,
+            df=df,
+        )
+
+        self._logger.log_info(f'Finish processing data in "{file_path}".')
+
     def _process_macroeconomics_exchange_rate(self) -> None:
         self._logger.log_info("Start processing macroeconomics EXCHANGE_RATE data.")
 
@@ -1027,6 +1105,13 @@ class DataPreprocessor:
 
         self._logger.log_info("Finish processing macroeconomics M2 data.")
 
+    def _process_macroeconomics_import_retail(self) -> None:
+        self._logger.log_info("Start processing macroeconomics RETAIL data.")
+
+        self._process_macroeconomics_retail_vietstock()
+
+        self._logger.log_info("Finish processing macroeconomics RETAIL data.")
+
     def _process_data(self) -> None:
         self._logger.log_info("Start processing data.")
 
@@ -1039,7 +1124,8 @@ class DataPreprocessor:
         # self._process_macroeconomics_import()
         # self._process_macroeconomics_import_ipi()
         # self._process_macroeconomics_import_fdi()
-        self._process_macroeconomics_import_m2()
+        # self._process_macroeconomics_import_m2()
+        self._process_macroeconomics_import_retail()
 
         # Stock market
 
