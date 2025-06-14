@@ -462,3 +462,20 @@ class Table:
 
         name = "import"
         primary_key = [Column.YEAR.value, Column.MONTH.value]
+
+    class IPI:
+        class Column(Enum):
+            YEAR = "year"
+            MONTH = "month"
+            TOTAL = "total"
+            EXTRACTIVE = "extractive"
+            PROCESSING_AND_MANUFACTURING_INDUSTRY = (
+                "processing_and_manufacturing_industry"
+            )
+            ELECTRICITY_GENERATION_AND_DISTRIBUTION = (
+                "electricity_generation_and_distribution"
+            )
+            WATER_SUPPLY_AND_WASTE_MANAGEMENT = "water_supply_and_waste_management"
+
+        name = "ipi"
+        primary_key = [Column.YEAR.value, Column.MONTH.value]

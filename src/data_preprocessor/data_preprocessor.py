@@ -208,6 +208,24 @@ class DataPreprocessor:
         )
         # fmt: on
 
+        # IPI
+        # fmt: off
+        self._database_driver.create_table(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.IPI.name,
+            columns = [
+                Column(name=Table.IPI.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
+                Column(name=Table.IPI.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
+                Column(name=Table.IPI.Column.TOTAL.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.IPI.Column.EXTRACTIVE.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.IPI.Column.PROCESSING_AND_MANUFACTURING_INDUSTRY.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.IPI.Column.ELECTRICITY_GENERATION_AND_DISTRIBUTION.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.IPI.Column.WATER_SUPPLY_AND_WASTE_MANAGEMENT.value, data_type=DataType.DECIMAL(), nullable=True),
+            ],
+            primary_keys=Table.IPI.primary_key,
+        )
+        # fmt: on
+
         self._logger.log_info("Finish creating macroeconomics tables.")
 
     def _create_tables(self) -> None:
@@ -698,6 +716,67 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish processing data in "{file_path}".')
 
+    def _process_macroeconomics_ipi_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.IPI,
+            GdpSource.VIETSTOCK,
+        )
+        folder_path = (
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+        )
+
+        file_path = get_newest_file_path(
+            folder_path=folder_path, extension=FileExtension.CSV
+        )
+
+        if not file_path:
+            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
+            return
+
+        self._logger.log_info(f'Start processing data in "{file_path}".')
+
+        # Add logic for processing data here
+        df = pd.read_csv(file_path)
+
+        # Drop "Đơn vị tính" only if it exists
+        if "Đơn vị tính" in df.columns:
+            df = df.drop(columns=["Đơn vị tính"])
+
+        # Transpose and rename
+        df = df.set_index("Chỉ tiêu").T
+
+        rename_map = {
+            "Toàn ngành công nghiệp": Table.IPI.Column.TOTAL.value,
+            "Khai khoáng": Table.IPI.Column.EXTRACTIVE.value,
+            "Công nghiệp chế biến, chế tạo": Table.IPI.Column.PROCESSING_AND_MANUFACTURING_INDUSTRY.value,
+            "Sản xuất và Phân phối điện": Table.IPI.Column.ELECTRICITY_GENERATION_AND_DISTRIBUTION.value,
+            "Cung cấp nước, hoạt động quản lý và xử lý rác thải, nước thải": Table.IPI.Column.WATER_SUPPLY_AND_WASTE_MANAGEMENT.value,
+        }
+        df = df.rename(columns=rename_map).reset_index()
+
+        # Extract month and year
+        df[["month", "year"]] = (
+            df["index"].str.extract(r"Tháng (\d+)/(\d+)").astype("Int64")
+        )
+
+        # Reorder columns
+        new_col_order = ["year", "month"] + list(rename_map.values())
+        df = df[new_col_order]
+
+        # Convert all data columns (except year and month) to float, removing commas
+        data_cols = df.columns.difference(["year", "month"])
+        for col in data_cols:
+            df[col] = df[col].astype(str).str.replace(",", "").astype(float)
+
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.IPI.name,
+            df=df,
+        )
+
+        self._logger.log_info(f'Finish processing data in "{file_path}".')
+
     def _process_macroeconomics_exchange_rate(self) -> None:
         self._logger.log_info("Start processing macroeconomics EXCHANGE_RATE data.")
 
@@ -726,6 +805,13 @@ class DataPreprocessor:
 
         self._logger.log_info("Finish processing macroeconomics IMPORT data.")
 
+    def _process_macroeconomics_import_ipi(self) -> None:
+        self._logger.log_info("Start processing macroeconomics IPI data.")
+
+        self._process_macroeconomics_ipi_vietstock()
+
+        self._logger.log_info("Finish processing macroeconomics IPI data.")
+
     def _process_data(self) -> None:
         self._logger.log_info("Start processing data.")
 
@@ -735,7 +821,8 @@ class DataPreprocessor:
         # self._process_macroeconomics_exchange_rate()
         # self._process_macroeconomics_interest_rate()
         # self._process_macroeconomics_export()
-        self._process_macroeconomics_import()
+        # self._process_macroeconomics_import()
+        self._process_macroeconomics_import_ipi()
 
         # Stock market
 
