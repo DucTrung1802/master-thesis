@@ -2,16 +2,7 @@ import os
 import zipfile
 import requests
 from typing import Tuple
-import numpy as np
-import pandas as pd
-from pandas.api.types import (
-    is_integer_dtype,
-    is_float_dtype,
-    is_bool_dtype,
-    is_string_dtype,
-    is_datetime64_any_dtype,
-)
-
+from typing import Optional
 
 from logger.logger import Logger
 from models.tabular_database_driver_models.tabular_database_driver_models import (
@@ -204,3 +195,20 @@ def get_newest_file_path(folder_path, extension: FileExtension = None):
             newest_file = file_path
 
     return newest_file
+
+
+def folder_contains_files(
+    folder_path: str, extension: Optional[FileExtension] = None
+) -> bool:
+    if not os.path.isdir(folder_path):
+        return False
+
+    for filename in os.listdir(folder_path):
+        file_path = os.path.join(folder_path, filename)
+        if os.path.isfile(file_path):
+            if extension is None:
+                return True
+            if filename.lower().endswith(f".{extension.value.lower()}"):
+                return True
+
+    return False

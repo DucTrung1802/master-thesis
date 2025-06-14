@@ -94,7 +94,8 @@ class MacroeconomicsSubType(Enum):
     CPI = "cpi"
     EXCHANGE_RATE = "exchange_rate"
     INTEREST_RATE = "interest_rate"
-    EXPORT_IMPORT = "export_import"
+    EXPORT = "export"
+    IMPORT = "import"
     IPI = "ipi"
     FDI = "fdi"
     M2 = "m2"
@@ -267,7 +268,14 @@ SCRAPE_MAPPING: Dict[Tuple[ScrapeMainType, ScrapeSubType, Source], SourceInfo] =
     ),
     (
         ScrapeMainType.MACROECONOMICS,
-        MacroeconomicsSubType.EXPORT_IMPORT,
+        MacroeconomicsSubType.EXPORT,
+        ExportImportSource.VIETSTOCK,
+    ): SourceInfo(
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/48-49/xuat-nhap-khau.htm",
+    ),
+    (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.IMPORT,
         ExportImportSource.VIETSTOCK,
     ): SourceInfo(
         url="https://finance.vietstock.vn/du-lieu-vi-mo/48-49/xuat-nhap-khau.htm",
@@ -361,8 +369,6 @@ class Schema(Enum):
 
 class Table:
     class GDP:
-        name = "gdp"
-
         class Column(Enum):
             YEAR = "year"
             QUARTER = "quarter"
@@ -374,9 +380,10 @@ class Table:
             INDUSTRY_TRUE_GROWTH_ACC = "industry_true_growth_acc"
             SERVICE_TRUE_GROWTH_ACC = "service_true_growth_acc"
 
-    class CPI:
-        name = "cpi"
+        name = "gdp"
+        primary_key = [Column.YEAR.value, Column.QUARTER.value]
 
+    class CPI:
         class Column(Enum):
             YEAR = "year"
             MONTH = "month"
@@ -396,9 +403,135 @@ class Table:
             CULTURE_ENTERTAINMENT_AND_TOURISM = "culture_entertainment_and_tourism"
             OTHER_SUPPLIES_AND_SERVICES = "other_supplies_and_services"
 
-    class EXCHANGE_RATE:
-        name = "exchange_rate"
+        name = "cpi"
+        primary_key = [Column.YEAR.value, Column.MONTH.value]
 
+    class EXCHANGE_RATE:
         class Column(Enum):
             DATE = "date"
             EXCHANGE_RATE = "exchange_rate"
+
+        name = "exchange_rate"
+        primary_key = [Column.DATE.value]
+
+    class INTEREST_RATE:
+        class Column(Enum):
+            DATE = "date"
+            ONE_WEEK = "one_week"
+            TWO_WEEK = "two_week"
+            ONE_MONTH = "one_month"
+            THREE_MONTH = "three_month"
+            SIX_MONTH = "six_month"
+            NINE_MONTH = "nine_month"
+
+        name = "interest_rate"
+        primary_key = [Column.DATE.value]
+
+    class EXPORT:
+        class Column(Enum):
+            YEAR = "year"
+            MONTH = "month"
+            TOTAL = "total"
+            LEATHER_SHOES = "leather_shoes"
+            TEXTILES = "textiles"
+            WOOD_PRODUCTS = "wood_products"
+            SEAFOOD = "seafood"
+            CRUDE_OIL = "crude_oil"
+            RICE = "rice"
+            COFFEE = "coffee"
+            COMPUTER_ELECTRONICS = "computer_electronics"
+            MACHINERY_EQUIPMENT = "machinery_equipment"
+
+        name = "export"
+        primary_key = [Column.YEAR.value, Column.MONTH.value]
+
+    class IMPORT:
+        class Column(Enum):
+            YEAR = "year"
+            MONTH = "month"
+            TOTAL = "total"
+            ELECTRONICS_COMPUTERS_COMPONENTS = "electronics_computers_components"
+            MACHINERY_EQUIPMENT = "machinery_equipment"
+            GASOLINE = "gasoline"
+            CHEMICAL = "chemical"
+            CHEMICAL_PRODUCTS = "chemical_products"
+            IRON_STEEL = "iron_steel"
+            FABRIC = "fabric"
+            CAR = "car"
+            ANIMAL_FEED = "animal_feed"
+
+        name = "import"
+        primary_key = [Column.YEAR.value, Column.MONTH.value]
+
+    class IPI:
+        class Column(Enum):
+            YEAR = "year"
+            MONTH = "month"
+            TOTAL = "total"
+            EXTRACTIVE = "extractive"
+            PROCESSING_AND_MANUFACTURING_INDUSTRY = (
+                "processing_and_manufacturing_industry"
+            )
+            ELECTRICITY_GENERATION_AND_DISTRIBUTION = (
+                "electricity_generation_and_distribution"
+            )
+            WATER_SUPPLY_AND_WASTE_MANAGEMENT = "water_supply_and_waste_management"
+
+        name = "ipi"
+        primary_key = [Column.YEAR.value, Column.MONTH.value]
+
+    class FDI:
+        class Column(Enum):
+            YEAR = "year"
+            MONTH = "month"
+            REGISTERED = "registered"
+            DISBURSEMENTED = "disbursemented"
+
+        name = "fdi"
+        primary_key = [Column.YEAR.value, Column.MONTH.value]
+
+    class M2:
+        class Column(Enum):
+            YEAR = "year"
+            MONTH = "month"
+            CREDITS = "credits"
+            M2_MONEY_SUPPLY = "m2_money_supply"
+            CREDITS_GROWTH_YTD = "credits_growth_ytd"
+            M2_MONEY_SUPPLY_GROWTH_YTD = "m2_money_supply_growth_ytd"
+
+        name = "m2"
+        primary_key = [Column.YEAR.value, Column.MONTH.value]
+
+    class RETAIL:
+        class Column(Enum):
+            YEAR = "year"
+            MONTH = "month"
+            TOTAL = "total"
+            COMMERCIAL = "commercial"
+            HOTEL_RESTAURANT = "hotel_restaurant"
+            TOURISM = "tourism"
+            SERVICE = "service"
+
+        name = "retail"
+        primary_key = [Column.YEAR.value, Column.MONTH.value]
+
+    class POPULATION_UNEMPLOYMENT:
+        class Column(Enum):
+            YEAR = "year"
+            POPULATION = "population"
+            POPULATION_DENSITY = "population_density"
+            POPULATION_GROWTH_RATIO = "population_growth_ratio"
+            URBAN_POPULATION_RATIO = "urban_population_ratio"
+            LABOR_FORCE_COUNT = "labor_force_count"
+            AGRICULTURE_FORESTRY_AND_FISHERIES = "agriculture_forestry_and_fisheries"
+            INDUSTRY_AND_CONSTRUCTION = "industry_and_construction"
+            SERVICE = "service"
+            URBAN_UNEMPLOYED_COUNT = "urban_unemployed_count"
+            LABOR_FORCE_GROWTH = "labor_force_growth"
+            LABOR_FORCE_RATIO = "labor_force_ratio"
+            MALE_RATIO = "male_ratio"
+            FEMALE_RATIO = "female_ratio"
+            URBAN_UNEMPLOYED_RATIO = "urban_unemployed_ratio"
+
+        name = "population_unemployment"
+        primary_key = [Column.YEAR.value]
