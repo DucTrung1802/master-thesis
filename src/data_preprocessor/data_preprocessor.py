@@ -276,6 +276,32 @@ class DataPreprocessor:
             primary_keys=Table.RETAIL.primary_key,
         )
         # fmt: on
+        
+        # POPULATION_UNEMPLOYMENT
+        # fmt: off
+        self._database_driver.create_table(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.POPULATION_UNEMPLOYMENT.name,
+            columns = [
+                Column(name=Table.POPULATION_UNEMPLOYMENT.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
+                Column(name=Table.POPULATION_UNEMPLOYMENT.Column.POPULATION.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.POPULATION_UNEMPLOYMENT.Column.POPULATION_DENSITY.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.POPULATION_UNEMPLOYMENT.Column.POPULATION_GROWTH_RATIO.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.POPULATION_UNEMPLOYMENT.Column.URBAN_POPULATION_RATIO.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.POPULATION_UNEMPLOYMENT.Column.LABOR_FORCE_COUNT.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.POPULATION_UNEMPLOYMENT.Column.AGRICULTURE_FORESTRY_AND_FISHERIES.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.POPULATION_UNEMPLOYMENT.Column.INDUSTRY_AND_CONSTRUCTION.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.POPULATION_UNEMPLOYMENT.Column.SERVICE.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.POPULATION_UNEMPLOYMENT.Column.URBAN_UNEMPLOYED_COUNT.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.POPULATION_UNEMPLOYMENT.Column.LABOR_FORCE_GROWTH.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.POPULATION_UNEMPLOYMENT.Column.LABOR_FORCE_RATIO.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.POPULATION_UNEMPLOYMENT.Column.MALE_RATIO.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.POPULATION_UNEMPLOYMENT.Column.FEMALE_RATIO.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.POPULATION_UNEMPLOYMENT.Column.URBAN_UNEMPLOYED_RATIO.value, data_type=DataType.DECIMAL(), nullable=True),
+            ],
+            primary_keys=Table.POPULATION_UNEMPLOYMENT.primary_key,
+        )
+        # fmt: on
 
         self._logger.log_info("Finish creating macroeconomics tables.")
 
@@ -1056,6 +1082,70 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish processing data in "{file_path}".')
 
+    def _process_macroeconomics_population_unemployment_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.POPULATION_UNEMPLOYMENT,
+            GdpSource.VIETSTOCK,
+        )
+        folder_path = (
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+        )
+
+        file_path = get_newest_file_path(
+            folder_path=folder_path, extension=FileExtension.CSV
+        )
+
+        if not file_path:
+            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
+            return
+
+        self._logger.log_info(f'Start processing data in "{file_path}".')
+
+        # Add logic for processing data here
+        df = pd.read_csv(file_path)
+
+        if "Đơn vị tính" in df.columns:
+            df = df.drop(columns=["Đơn vị tính"])
+
+        df = df.set_index("Chỉ tiêu").T
+
+        df = df.reset_index()
+
+        rename_map = {
+            "index": Table.POPULATION_UNEMPLOYMENT.Column.YEAR.value,
+            "Dân số": Table.POPULATION_UNEMPLOYMENT.Column.POPULATION.value,
+            "Mật độ dân số": Table.POPULATION_UNEMPLOYMENT.Column.POPULATION_DENSITY.value,
+            "Tốc độ tăng dân số": Table.POPULATION_UNEMPLOYMENT.Column.POPULATION_GROWTH_RATIO.value,
+            "Tỷ lệ dân thành thị": Table.POPULATION_UNEMPLOYMENT.Column.URBAN_POPULATION_RATIO.value,
+            "Số lượng lao động": Table.POPULATION_UNEMPLOYMENT.Column.LABOR_FORCE_COUNT.value,
+            "Nông, lâm nghiệp và thủy sản": Table.POPULATION_UNEMPLOYMENT.Column.AGRICULTURE_FORESTRY_AND_FISHERIES.value,
+            "Công nghiệp và Xây dựng": Table.POPULATION_UNEMPLOYMENT.Column.INDUSTRY_AND_CONSTRUCTION.value,
+            "Dịch vụ": Table.POPULATION_UNEMPLOYMENT.Column.SERVICE.value,
+            "Số người thất nghiệp thành thị": Table.POPULATION_UNEMPLOYMENT.Column.URBAN_UNEMPLOYED_COUNT.value,
+            "Tăng trưởng lực lượng lao động": Table.POPULATION_UNEMPLOYMENT.Column.LABOR_FORCE_GROWTH.value,
+            "Tỷ lệ lao động/dân số": Table.POPULATION_UNEMPLOYMENT.Column.LABOR_FORCE_RATIO.value,
+            "Tỷ lệ nam": Table.POPULATION_UNEMPLOYMENT.Column.MALE_RATIO.value,
+            "Tỷ lệ nữ": Table.POPULATION_UNEMPLOYMENT.Column.FEMALE_RATIO.value,
+            "Tỷ lệ thất nghiệp thành thị": Table.POPULATION_UNEMPLOYMENT.Column.URBAN_UNEMPLOYED_RATIO.value,
+        }
+        df = df.rename(columns=rename_map)
+
+        df = df[df["year"].str.fullmatch(r"\d{4}")]
+
+        df["year"] = df["year"].astype("Int64")
+
+        for col in df.columns.difference(["year"]):
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.POPULATION_UNEMPLOYMENT.name,
+            df=df,
+        )
+
+        self._logger.log_info(f'Finish processing data in "{file_path}".')
+
     def _process_macroeconomics_exchange_rate(self) -> None:
         self._logger.log_info("Start processing macroeconomics EXCHANGE_RATE data.")
 
@@ -1112,6 +1202,17 @@ class DataPreprocessor:
 
         self._logger.log_info("Finish processing macroeconomics RETAIL data.")
 
+    def _process_macroeconomics_import_population_unemployment(self) -> None:
+        self._logger.log_info(
+            "Start processing macroeconomics POPULATION_UNEMPLOYMENT data."
+        )
+
+        self._process_macroeconomics_population_unemployment_vietstock()
+
+        self._logger.log_info(
+            "Finish processing macroeconomics POPULATION_UNEMPLOYMENT data."
+        )
+
     def _process_data(self) -> None:
         self._logger.log_info("Start processing data.")
 
@@ -1125,7 +1226,8 @@ class DataPreprocessor:
         # self._process_macroeconomics_import_ipi()
         # self._process_macroeconomics_import_fdi()
         # self._process_macroeconomics_import_m2()
-        self._process_macroeconomics_import_retail()
+        # self._process_macroeconomics_import_retail()
+        self._process_macroeconomics_import_population_unemployment()
 
         # Stock market
 

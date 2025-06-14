@@ -514,3 +514,24 @@ class Table:
 
         name = "retail"
         primary_key = [Column.YEAR.value, Column.MONTH.value]
+
+    class POPULATION_UNEMPLOYMENT:
+        class Column(Enum):
+            YEAR = "year"
+            POPULATION = "population"
+            POPULATION_DENSITY = "population_density"
+            POPULATION_GROWTH_RATIO = "population_growth_ratio"
+            URBAN_POPULATION_RATIO = "urban_population_ratio"
+            LABOR_FORCE_COUNT = "labor_force_count"
+            AGRICULTURE_FORESTRY_AND_FISHERIES = "agriculture_forestry_and_fisheries"
+            INDUSTRY_AND_CONSTRUCTION = "industry_and_construction"
+            SERVICE = "service"
+            URBAN_UNEMPLOYED_COUNT = "urban_unemployed_count"
+            LABOR_FORCE_GROWTH = "labor_force_growth"
+            LABOR_FORCE_RATIO = "labor_force_ratio"
+            MALE_RATIO = "male_ratio"
+            FEMALE_RATIO = "female_ratio"
+            URBAN_UNEMPLOYED_RATIO = "urban_unemployed_ratio"
+
+        name = "population_unemployment"
+        primary_key = [Column.YEAR.value]
