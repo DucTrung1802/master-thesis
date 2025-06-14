@@ -479,3 +479,13 @@ class Table:
 
         name = "ipi"
         primary_key = [Column.YEAR.value, Column.MONTH.value]
+
+    class FDI:
+        class Column(Enum):
+            YEAR = "year"
+            MONTH = "month"
+            REGISTERED = "registered"
+            DISBURSEMENTED = "disbursemented"
+
+        name = "fdi"
+        primary_key = [Column.YEAR.value, Column.MONTH.value]

@@ -3,6 +3,7 @@ import os
 import pandas as pd
 import re
 from glob import glob
+import csv
 
 from logger.logger import Logger
 from models.tabular_database_driver_models.postgre_sql_connection_model import (
@@ -223,6 +224,21 @@ class DataPreprocessor:
                 Column(name=Table.IPI.Column.WATER_SUPPLY_AND_WASTE_MANAGEMENT.value, data_type=DataType.DECIMAL(), nullable=True),
             ],
             primary_keys=Table.IPI.primary_key,
+        )
+        # fmt: on
+        
+        # FDI
+        # fmt: off
+        self._database_driver.create_table(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.FDI.name,
+            columns = [
+                Column(name=Table.FDI.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
+                Column(name=Table.FDI.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
+                Column(name=Table.FDI.Column.REGISTERED.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.FDI.Column.DISBURSEMENTED.value, data_type=DataType.DECIMAL(), nullable=True),
+            ],
+            primary_keys=Table.FDI.primary_key,
         )
         # fmt: on
 
@@ -777,6 +793,115 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish processing data in "{file_path}".')
 
+    def _process_macroeconomics_fdi_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.FDI,
+            GdpSource.VIETSTOCK,
+        )
+        folder_path = (
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+        )
+
+        to_fix_file_path = os.path.join(folder_path, "vietstock_2016_2020.csv")
+
+        # Fix file "vietstock_2016_2020.csv" with redundant data
+        with open(to_fix_file_path, "r", encoding="utf-8") as f:
+            reader = list(csv.reader(f))
+
+        # Extract header and the two data rows
+        header = reader[0]
+        registration_row = reader[1]  # "Đăng ký"
+        disbursement_row = reader[2]  # "Giải ngân"
+
+        # Normalize row lengths by removing duplicated values
+        expected_columns = len(header)
+
+        # Fix the registration row - remove duplicate at index 13 ("0.49")
+        if len(registration_row) > expected_columns:
+            del registration_row[13]  # corresponds to "Tháng 1/2017"
+
+        # Fix the disbursement row - remove duplicate at index 12 ("1.6")
+        if len(disbursement_row) > expected_columns:
+            del disbursement_row[12]  # corresponds to "Tháng 12/2016"
+
+        # Write the cleaned data to a new CSV file
+        with open(to_fix_file_path, "w", encoding="utf-8", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(header)
+            writer.writerow(registration_row)
+            writer.writerow(disbursement_row)
+
+        # Process cleaned data
+        data_path = os.path.join(folder_path, "vietstock_*.csv")
+        file_list = sorted(glob(data_path))
+
+        dfs = []
+
+        for file in file_list:
+            df = pd.read_csv(file)
+            dfs.append(df)
+
+        merged_df = dfs[0].copy()
+
+        for df in dfs[1:]:
+            merged_df = pd.concat([merged_df, df.iloc[:, 2:]], axis=1)
+
+        merged_df = merged_df.loc[:, ~merged_df.columns.str.contains("Đồ thị")]
+        merged_df.drop(merged_df.columns[2], axis=1, inplace=True)
+
+        merged_file_path = os.path.join(folder_path, "vietstock_merged.csv")
+
+        # Delete the old merged file if it exists
+        if os.path.exists(merged_file_path):
+            os.remove(merged_file_path)
+
+        merged_df.to_csv(merged_file_path, index=False)
+
+        if not merged_file_path:
+            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
+            return
+
+        self._logger.log_info(f'Start processing data in "{merged_file_path}".')
+
+        # Add logic for processing data here
+        df = pd.read_csv(merged_file_path)
+
+        # Drop "Đơn vị tính" only if it exists
+        if "Đơn vị tính" in df.columns:
+            df = df.drop(columns=["Đơn vị tính"])
+
+        # Transpose and rename
+        df = df.set_index("Chỉ tiêu").T
+
+        rename_map = {
+            "Đăng ký": Table.FDI.Column.REGISTERED.value,
+            "Giải ngân": Table.FDI.Column.DISBURSEMENTED.value,
+        }
+        df = df.rename(columns=rename_map).reset_index()
+
+        # Extract month and year
+        df[["month", "year"]] = (
+            df["index"].str.extract(r"Tháng (\d+)/(\d+)").astype("Int64")
+        )
+
+        # Reorder columns
+        new_col_order = ["year", "month"] + list(rename_map.values())
+        df = df[new_col_order]
+
+        # Convert all data columns (except year and month) to float, removing commas
+        data_cols = df.columns.difference(["year", "month"])
+        for col in data_cols:
+            df[col] = df[col].astype(str).str.replace(",", "").astype(float)
+
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.FDI.name,
+            df=df,
+        )
+
+        self._logger.log_info(f'Finish processing data in "{folder_path}".')
+
     def _process_macroeconomics_exchange_rate(self) -> None:
         self._logger.log_info("Start processing macroeconomics EXCHANGE_RATE data.")
 
@@ -812,6 +937,13 @@ class DataPreprocessor:
 
         self._logger.log_info("Finish processing macroeconomics IPI data.")
 
+    def _process_macroeconomics_import_fdi(self) -> None:
+        self._logger.log_info("Start processing macroeconomics FDI data.")
+
+        self._process_macroeconomics_fdi_vietstock()
+
+        self._logger.log_info("Finish processing macroeconomics FDI data.")
+
     def _process_data(self) -> None:
         self._logger.log_info("Start processing data.")
 
@@ -822,7 +954,8 @@ class DataPreprocessor:
         # self._process_macroeconomics_interest_rate()
         # self._process_macroeconomics_export()
         # self._process_macroeconomics_import()
-        self._process_macroeconomics_import_ipi()
+        # self._process_macroeconomics_import_ipi()
+        self._process_macroeconomics_import_fdi()
 
         # Stock market
 
