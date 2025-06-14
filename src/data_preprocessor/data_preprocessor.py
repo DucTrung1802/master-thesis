@@ -42,8 +42,9 @@ class DataPreprocessor:
         # Remove all rows that have NaN values in all columns
         df = df.dropna(how="all")
 
+        success_count = 0
         for row in df.iterrows():
-            self._database_driver.insert(
+            result = self._database_driver.insert(
                 schema_name=schema_name,
                 table_name=table_name,
                 records=[
@@ -62,6 +63,13 @@ class DataPreprocessor:
                     )
                 ],
             )
+
+            if result == DatabaseExecutionStatus.SUCCESS:
+                success_count += 1
+
+        self._logger.log_info(
+            f"Saved {success_count}/{len(df)} records into table '{schema_name}.{table_name}'"
+        )
 
     def _create_schemas(self) -> None:
         self._logger.log_info("Start creating schemas.")
