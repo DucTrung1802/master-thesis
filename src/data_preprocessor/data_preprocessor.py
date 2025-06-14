@@ -865,6 +865,16 @@ class DataPreprocessor:
         )
 
         to_fix_file_path = os.path.join(folder_path, "vietstock_2016_2020.csv")
+        fixed_file_path = os.path.join(folder_path, "vietstock_2016_2020_fixed.csv")
+        merged_file_path = os.path.join(folder_path, "vietstock_merged.csv")
+
+        # Delete the old fixed file if it exists
+        if os.path.exists(fixed_file_path):
+            os.remove(fixed_file_path)
+
+        # Delete the old merged file if it exists
+        if os.path.exists(merged_file_path):
+            os.remove(merged_file_path)
 
         # Fix file "vietstock_2016_2020.csv" with redundant data
         with open(to_fix_file_path, "r", encoding="utf-8") as f:
@@ -887,7 +897,7 @@ class DataPreprocessor:
             del disbursement_row[12]  # corresponds to "Tháng 12/2016"
 
         # Write the cleaned data to a new CSV file
-        with open(to_fix_file_path, "w", encoding="utf-8", newline="") as f:
+        with open(fixed_file_path, "w", encoding="utf-8", newline="") as f:
             writer = csv.writer(f)
             writer.writerow(header)
             writer.writerow(registration_row)
@@ -900,6 +910,9 @@ class DataPreprocessor:
         dfs = []
 
         for file in file_list:
+            if file.endswith("vietstock_2016_2020.csv"):
+                continue
+
             df = pd.read_csv(file)
             dfs.append(df)
 
@@ -910,12 +923,6 @@ class DataPreprocessor:
 
         merged_df = merged_df.loc[:, ~merged_df.columns.str.contains("Đồ thị")]
         merged_df.drop(merged_df.columns[2], axis=1, inplace=True)
-
-        merged_file_path = os.path.join(folder_path, "vietstock_merged.csv")
-
-        # Delete the old merged file if it exists
-        if os.path.exists(merged_file_path):
-            os.remove(merged_file_path)
 
         merged_df.to_csv(merged_file_path, index=False)
 
@@ -1217,16 +1224,16 @@ class DataPreprocessor:
         self._logger.log_info("Start processing data.")
 
         # Macroeconomics
-        # self._process_macroeconomics_gdp()
-        # self._process_macroeconomics_cpi()
-        # self._process_macroeconomics_exchange_rate()
-        # self._process_macroeconomics_interest_rate()
-        # self._process_macroeconomics_export()
-        # self._process_macroeconomics_import()
-        # self._process_macroeconomics_import_ipi()
-        # self._process_macroeconomics_import_fdi()
-        # self._process_macroeconomics_import_m2()
-        # self._process_macroeconomics_import_retail()
+        self._process_macroeconomics_gdp()
+        self._process_macroeconomics_cpi()
+        self._process_macroeconomics_exchange_rate()
+        self._process_macroeconomics_interest_rate()
+        self._process_macroeconomics_export()
+        self._process_macroeconomics_import()
+        self._process_macroeconomics_import_ipi()
+        self._process_macroeconomics_import_fdi()
+        self._process_macroeconomics_import_m2()
+        self._process_macroeconomics_import_retail()
         self._process_macroeconomics_import_population_unemployment()
 
         # Stock market
