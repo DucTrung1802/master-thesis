@@ -489,3 +489,15 @@ class Table:
 
         name = "fdi"
         primary_key = [Column.YEAR.value, Column.MONTH.value]
+
+    class M2:
+        class Column(Enum):
+            YEAR = "year"
+            MONTH = "month"
+            CREDITS = "credits"
+            M2_MONEY_SUPPLY = "m2_money_supply"
+            CREDITS_GROWTH_YTD = "credits_growth_ytd"
+            M2_MONEY_SUPPLY_GROWTH_YTD = "m2_money_supply_growth_ytd"
+
+        name = "m2"
+        primary_key = [Column.YEAR.value, Column.MONTH.value]
