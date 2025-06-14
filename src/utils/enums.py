@@ -444,3 +444,21 @@ class Table:
 
         name = "export"
         primary_key = [Column.YEAR.value, Column.MONTH.value]
+
+    class IMPORT:
+        class Column(Enum):
+            YEAR = "year"
+            MONTH = "month"
+            TOTAL = "total"
+            ELECTRONICS_COMPUTERS_COMPONENTS = "electronics_computers_components"
+            MACHINERY_EQUIPMENT = "machinery_equipment"
+            GASOLINE = "gasoline"
+            CHEMICAL = "chemical"
+            CHEMICAL_PRODUCTS = "chemical_products"
+            IRON_STEEL = "iron_steel"
+            FABRIC = "fabric"
+            CAR = "car"
+            ANIMAL_FEED = "animal_feed"
+
+        name = "import"
+        primary_key = [Column.YEAR.value, Column.MONTH.value]

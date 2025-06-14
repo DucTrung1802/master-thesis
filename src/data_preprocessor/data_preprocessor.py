@@ -184,6 +184,29 @@ class DataPreprocessor:
             primary_keys=Table.EXPORT.primary_key,
         )
         # fmt: on
+        
+        # IMPORT
+        # fmt: off
+        self._database_driver.create_table(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.IMPORT.name,
+            columns = [
+                Column(name=Table.IMPORT.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
+                Column(name=Table.IMPORT.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
+                Column(name=Table.IMPORT.Column.TOTAL.value, data_type=DataType.DECIMAL(), nullable=False),
+                Column(name=Table.IMPORT.Column.ELECTRONICS_COMPUTERS_COMPONENTS.value, data_type=DataType.DECIMAL(), nullable=False),
+                Column(name=Table.IMPORT.Column.MACHINERY_EQUIPMENT.value, data_type=DataType.DECIMAL(), nullable=False),
+                Column(name=Table.IMPORT.Column.GASOLINE.value, data_type=DataType.DECIMAL(), nullable=False),
+                Column(name=Table.IMPORT.Column.CHEMICAL.value, data_type=DataType.DECIMAL(), nullable=False),
+                Column(name=Table.IMPORT.Column.CHEMICAL_PRODUCTS.value, data_type=DataType.DECIMAL(), nullable=False),
+                Column(name=Table.IMPORT.Column.IRON_STEEL.value, data_type=DataType.DECIMAL(), nullable=False),
+                Column(name=Table.IMPORT.Column.FABRIC.value, data_type=DataType.DECIMAL(), nullable=False),
+                Column(name=Table.IMPORT.Column.CAR.value, data_type=DataType.DECIMAL(), nullable=False),
+                Column(name=Table.IMPORT.Column.ANIMAL_FEED.value, data_type=DataType.DECIMAL(), nullable=False),
+            ],
+            primary_keys=Table.IMPORT.primary_key,
+        )
+        # fmt: on
 
         self._logger.log_info("Finish creating macroeconomics tables.")
 
@@ -606,6 +629,75 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish processing data in "{file_path}".')
 
+    def _process_macroeconomics_import_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.IMPORT,
+            GdpSource.VIETSTOCK,
+        )
+        folder_path = (
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{"export_import"}/{key[2].value}"
+        )
+
+        file_path = get_newest_file_path(
+            folder_path=folder_path, extension=FileExtension.CSV
+        )
+
+        if not file_path:
+            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
+            return
+
+        self._logger.log_info(f'Start processing data in "{file_path}".')
+
+        # Add logic for processing data here
+        df = pd.read_csv(file_path)
+        import_df = df.iloc[10:, :]
+
+        # Drop "Đơn vị tính" only if it exists
+        if "Đơn vị tính" in import_df.columns:
+            import_df = import_df.drop(columns=["Đơn vị tính"])
+
+        # Transpose and rename
+        import_df = import_df.set_index("Chỉ tiêu").T
+
+        rename_map = {
+            "Tổng trị giá Nhập khẩu": Table.IMPORT.Column.TOTAL.value,
+            "Điện tử, máy tính và linh kiện": Table.IMPORT.Column.ELECTRONICS_COMPUTERS_COMPONENTS.value,
+            "Máy móc thiết bị, phụ tùng": Table.IMPORT.Column.MACHINERY_EQUIPMENT.value,
+            "Xăng dầu": Table.IMPORT.Column.GASOLINE.value,
+            "Hóa chất": Table.IMPORT.Column.CHEMICAL.value,
+            "Sản phẩm hóa chất": Table.IMPORT.Column.CHEMICAL_PRODUCTS.value,
+            "Sắt thép": Table.IMPORT.Column.IRON_STEEL.value,
+            "Vải": Table.IMPORT.Column.FABRIC.value,
+            "Ô tô": Table.IMPORT.Column.CAR.value,
+            "Thức ăn gia súc": Table.IMPORT.Column.ANIMAL_FEED.value,
+        }
+        import_df = import_df.rename(columns=rename_map).reset_index()
+
+        # Extract month and year
+        import_df[["month", "year"]] = (
+            import_df["index"].str.extract(r"Tháng (\d+)/(\d+)").astype("Int64")
+        )
+
+        # Reorder columns
+        new_col_order = ["year", "month"] + list(rename_map.values())
+        import_df = import_df[new_col_order]
+
+        # Convert all data columns (except year and month) to float, removing commas
+        data_cols = import_df.columns.difference(["year", "month"])
+        for col in data_cols:
+            import_df[col] = (
+                import_df[col].astype(str).str.replace(",", "").astype(float)
+            )
+
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.IMPORT.name,
+            df=import_df,
+        )
+
+        self._logger.log_info(f'Finish processing data in "{file_path}".')
+
     def _process_macroeconomics_exchange_rate(self) -> None:
         self._logger.log_info("Start processing macroeconomics EXCHANGE_RATE data.")
 
@@ -627,6 +719,13 @@ class DataPreprocessor:
 
         self._logger.log_info("Finish processing macroeconomics EXPORT data.")
 
+    def _process_macroeconomics_import(self) -> None:
+        self._logger.log_info("Start processing macroeconomics IMPORT data.")
+
+        self._process_macroeconomics_import_vietstock()
+
+        self._logger.log_info("Finish processing macroeconomics IMPORT data.")
+
     def _process_data(self) -> None:
         self._logger.log_info("Start processing data.")
 
@@ -635,7 +734,8 @@ class DataPreprocessor:
         # self._process_macroeconomics_cpi()
         # self._process_macroeconomics_exchange_rate()
         # self._process_macroeconomics_interest_rate()
-        self._process_macroeconomics_export()
+        # self._process_macroeconomics_export()
+        self._process_macroeconomics_import()
 
         # Stock market
 
