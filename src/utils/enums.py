@@ -103,6 +103,7 @@ class MacroeconomicsSubType(Enum):
     POPULATION_UNEMPLOYMENT = "population_unemployment"
     GOLD_PRICE = "gold_price"
     OIL_PRICE = "oil_price"
+    DOW_JONES = "dow_jones"
 
 
 class StockMarketSubType(Enum):
@@ -180,6 +181,10 @@ class OilPriceSource(Enum):
     INVESTING = "investing"
 
 
+class DowJonesSource(Enum):
+    INVESTING = "investing"
+
+
 # STOCK_MARKET
 class VnHnxIndexSource(Enum):
     CAFEF = "cafef"
@@ -230,7 +235,8 @@ Source = Union[
     FinanceInfoSource,
     DailyPriceSource,
     GoldPriceSource,
-    OilPriceSource
+    OilPriceSource,
+    DowJonesSource
 ]
 
 # ================================================
@@ -340,6 +346,13 @@ SCRAPE_MAPPING: Dict[Tuple[ScrapeMainType, ScrapeSubType, Source], SourceInfo] =
         OilPriceSource.INVESTING,
     ): SourceInfo(
         url="https://www.investing.com/commodities/brent-oil-historical-data",
+    ),
+    (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.DOW_JONES,
+        DowJonesSource.INVESTING,
+    ): SourceInfo(
+        url="https://www.investing.com/indices/us-30-historical-data",
     ),
     # STOCK_MARKET
     (
@@ -589,7 +602,7 @@ class Table:
 
         name = "oil_price"
         primary_key = [Column.DATE.value]
-        
+
     class DOW_JONES:
         class Column(Enum):
             DATE = "date"
