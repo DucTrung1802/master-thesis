@@ -12,7 +12,7 @@ class DataType:
         return "INT"
 
     @classmethod
-    def VARCHAR(cls, length: int):
+    def VARCHAR(cls, length: int = None):
         if length is None:
             return "VARCHAR(255)"
         else:
