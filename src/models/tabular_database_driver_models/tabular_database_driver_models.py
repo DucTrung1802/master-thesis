@@ -27,6 +27,10 @@ class DataType:
         return "TIMESTAMP"
 
     @classmethod
+    def AUTO_TIMESTAMP(cls):
+        return "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+
+    @classmethod
     def DECIMAL(cls, precision: int = None, scale: int = None):
         if precision and scale:
             return f"DECIMAL({precision}, {scale})"
