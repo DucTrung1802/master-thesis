@@ -13,7 +13,10 @@ class DataType:
 
     @classmethod
     def VARCHAR(cls, length: int):
-        return f"VARCHAR({length})"
+        if length is None:
+            return "VARCHAR(255)"
+        else:
+            return f"VARCHAR({length})"
 
     @classmethod
     def TEXT(cls):
@@ -51,6 +54,10 @@ class DataType:
     @classmethod
     def FLOAT(cls):
         return "FLOAT"
+
+    @classmethod
+    def SERIAL(cls):
+        return "SERIAL"
 
 
 @dataclass
