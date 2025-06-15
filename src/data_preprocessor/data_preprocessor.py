@@ -327,11 +327,44 @@ class DataPreprocessor:
 
         self._logger.log_info("Finish creating macroeconomics tables.")
 
+    def _create_enterprise_tables(self) -> None:
+        self._logger.log_info("Start creating macroeconomics tables.")
+
+        # STOCK
+        # fmt: off
+        self._database_driver.create_table(
+            schema_name=Schema.ENTERPRISE.value,
+            table_name=Table.STOCK.name,
+            columns = [
+                Column(name=Table.STOCK.Column.ID.value, data_type=DataType.SERIAL(), nullable=False),
+                Column(name=Table.STOCK.Column.CODE.value, data_type=DataType.VARCHAR(), nullable=False),
+                Column(name=Table.STOCK.Column.ISSUED_SHARES.value, data_type=DataType.BIGINT(), nullable=True),
+                Column(name=Table.STOCK.Column.OUTSTANDING_SHARES.value, data_type=DataType.BIGINT(), nullable=True),
+                Column(name=Table.STOCK.Column.OUTSTANDING_RATE.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.STOCK.Column.MARKET_CAP.value, data_type=DataType.BIGINT(), nullable=True),
+                Column(name=Table.STOCK.Column.MARKET_ID.value, data_type=DataType.INT(), nullable=False),
+                Column(name=Table.STOCK.Column.STOCK_TYPE.value, data_type=DataType.INT(), nullable=True),
+                Column(name=Table.STOCK.Column.CREATE_DATE.value, data_type=DataType.AUTO_TIMESTAMP(), nullable=False),
+                Column(name=Table.STOCK.Column.UPDATE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
+                Column(name=Table.STOCK.Column.DELETE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
+            ],
+            primary_keys=Table.STOCK.primary_key,
+            foreign_keys=[ForeignKey(
+                column_name=Table.STOCK.Column.MARKET_ID.value, 
+                ref_table=f"{Schema.STOCK_MARKET.value}.{Table.MARKET.name}", 
+                ref_column=Table.MARKET.Column.ID.value,
+            )],
+        )
+        # fmt: on
+
+        self._logger.log_info("Finish creating macroeconomics tables.")
+
     def _create_tables(self) -> None:
         self._logger.log_info("Start creating tables.")
 
         self._create_macroeconomics_tables()
         self._create_stock_market_tables()
+        self._create_enterprise_tables()
 
         self._logger.log_info("Finish creating tables.")
 
@@ -1202,6 +1235,96 @@ class DataPreprocessor:
             f'Finish processing data in "{Table.MARKET.__qualname__.lower()}".'
         )
 
+    def _process_enterprise_stock_cafef(self) -> None:
+        key = (
+            ScrapeMainType.ENTERPRISE,
+            EnterpriseSubType.DAILY_PRICE,
+            DailyPriceSource.CAFEF,
+        )
+        folder_path = (
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+        )
+
+        all_files = [f for f in os.listdir(folder_path) if f.endswith(".csv")]
+
+        # Pattern to match: NAME_upto_YYYYMMDD.csv
+        pattern = re.compile(r"(HNX|HSX|UPCOM)_upto_(\d{8})\.csv")
+
+        # Create a dict to store the newest file per exchange
+        latest_files = {}
+
+        for file in all_files:
+            match = pattern.match(file)
+            if match:
+                exchange = match.group(1)
+                date_str = match.group(2)
+                date = datetime.strptime(date_str, "%Y%m%d")
+
+                # Compare and store the latest file per exchange
+                if (exchange not in latest_files) or (
+                    date > latest_files[exchange]["date"]
+                ):
+                    latest_files[exchange] = {"file": file, "date": date}
+
+        # Assign to variables
+        hsx_file_path = os.path.join(
+            folder_path, latest_files.get("HSX", {}).get("file")
+        )
+        hnx_file_path = os.path.join(
+            folder_path, latest_files.get("HNX", {}).get("file")
+        )
+        upcom_file_path = os.path.join(
+            folder_path, latest_files.get("UPCOM", {}).get("file")
+        )
+
+        # Check for missing files
+        if not hsx_file_path or not os.path.isfile(hsx_file_path):
+            self._logger.log_error(f'HSX data file not found in "{folder_path}".')
+            return
+
+        if not hnx_file_path or not os.path.isfile(hnx_file_path):
+            self._logger.log_error(f'HNX data file not found in "{folder_path}".')
+            return
+
+        if not upcom_file_path or not os.path.isfile(upcom_file_path):
+            self._logger.log_error(f'UPCOM data file not found in "{folder_path}".')
+            return
+
+        self._logger.log_info(
+            f'Start processing data in "{Table.STOCK.__qualname__.lower()}".'
+        )
+
+        stock_market_file_path_list = [hsx_file_path, hnx_file_path, upcom_file_path]
+
+        overall_df = pd.DataFrame()
+        for stock_market in stock_market_file_path_list:
+            df = pd.read_csv(stock_market)
+            df["<Ticker>"] = df["<Ticker>"].astype("string")
+
+            distinct_stocks = df["<Ticker>"].dropna().unique()
+
+            stock_df = pd.DataFrame(
+                {
+                    Table.STOCK.Column.CODE.value: distinct_stocks,
+                    Table.STOCK.Column.MARKET_ID.value: [
+                        stock_market_file_path_list.index(stock_market) + 1
+                    ]
+                    * len(distinct_stocks),
+                }
+            )
+
+            overall_df = pd.concat([overall_df, stock_df], ignore_index=True)
+
+        self._save_pandas_table_to_database(
+            schema_name=Schema.ENTERPRISE.value,
+            table_name=Table.STOCK.name,
+            df=overall_df,
+        )
+
+        self._logger.log_info(
+            f'Finish processing data in "{Table.MARKET.__qualname__.lower()}".'
+        )
+
     def _process_macroeconomics_exchange_rate(self) -> None:
         self._logger.log_info("Start processing macroeconomics EXCHANGE_RATE data.")
 
@@ -1276,6 +1399,13 @@ class DataPreprocessor:
 
         self._logger.log_info("Finish processing stock market MARKET data.")
 
+    def _process_enterprise_stock(self) -> None:
+        self._logger.log_info("Start processing enterprise STOCK data.")
+
+        self._process_enterprise_stock_cafef()
+
+        self._logger.log_info("Finish processing enterprise STOCK data.")
+
     def _process_data(self) -> None:
         self._logger.log_info("Start processing data.")
 
@@ -1293,9 +1423,10 @@ class DataPreprocessor:
         # self._process_macroeconomics_import_population_unemployment()
 
         # Stock market
-        self._process_stock_market_market()
+        # self._process_stock_market_market()
 
         # Enterprise
+        self._process_enterprise_stock()
 
         self._logger.log_info("Finish processing data.")
 
