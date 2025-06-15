@@ -306,6 +306,24 @@ class DataPreprocessor:
             primary_keys=Table.POPULATION_UNEMPLOYMENT.primary_key,
         )
         # fmt: on
+        
+        # GOLD_PRICE
+        # fmt: off
+        self._database_driver.create_table(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.GOLD_PRICE.name,
+            columns = [
+                Column(name=Table.GOLD_PRICE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                Column(name=Table.GOLD_PRICE.Column.PRICE.value, data_type=DataType.DECIMAL(), nullable=False),
+                Column(name=Table.GOLD_PRICE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.GOLD_PRICE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.GOLD_PRICE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.GOLD_PRICE.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.GOLD_PRICE.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
+            ],
+            primary_keys=Table.GOLD_PRICE.primary_key,
+        )
+        # fmt: on
 
         self._logger.log_info("Finish creating macroeconomics tables.")
 
@@ -1317,6 +1335,88 @@ class DataPreprocessor:
 
     # endregion MACROECONOMICS.POPULATION_UNEMPLOYMENT
 
+    # region MACROECONOMICS.GOLD_PRICE
+    def _process_macroeconomics_gold_price_investing(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.GOLD_PRICE,
+            GoldPriceSource.INVESTING,
+        )
+        folder_path = (
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+        )
+
+        table_name = Table.GOLD_PRICE.__qualname__.lower()
+
+        self._logger.log_info(f'Start processing data in "{table_name}".')
+
+        combined_file_path = os.path.join(folder_path, "Gold_Futures_Combined.csv")
+        # Add logic for processing data here
+        if os.path.isfile(combined_file_path):
+            os.remove(combined_file_path)
+
+        file_paths = glob(os.path.join(folder_path, "*.csv"))
+
+        dfs = []
+        for file in file_paths:
+            df = pd.read_csv(file)
+
+            # Convert 'Date' to datetime
+            df["Date"] = pd.to_datetime(df["Date"], format="%m/%d/%Y", errors="coerce")
+
+            # Clean numeric columns: remove commas and symbols, then convert to float
+            for col in ["Price", "Open", "High", "Low"]:
+                df[col] = df[col].astype(str).str.replace(",", "").astype(float)
+
+            # Volume: remove 'K', 'M' and convert to float with multiplier
+            def parse_volume(val):
+                if pd.isna(val):
+                    return None
+                val = str(val).strip().replace(",", "")
+                if val.endswith("K"):
+                    return float(val[:-1]) * 1_000
+                elif val.endswith("M"):
+                    return float(val[:-1]) * 1_000_000
+                else:
+                    return float(val)
+
+            df["Vol."] = df["Vol."].apply(parse_volume)
+
+            # Change %: remove '%' and convert to float
+            df["Change %"] = (
+                df["Change %"].astype(str).str.replace("%", "").astype(float)
+            )
+
+            dfs.append(df)
+
+        # Combine and sort
+        full_df = pd.concat(dfs, ignore_index=True)
+        full_df = full_df.sort_values("Date").reset_index(drop=True)
+
+        rename_map = {
+            "Vol.": "volume",
+            "Change %": "change",
+        }
+
+        full_df.rename(columns=rename_map, inplace=True)
+
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.GOLD_PRICE.name,
+            df=full_df,
+        )
+
+        self._logger.log_info(f'Finish processing data in "{table_name}".')
+
+    def _process_macroeconomics_gold_price(self) -> None:
+        self._logger.log_info("Start processing macroeconomics GOLD_PRICE data.")
+
+        self._process_macroeconomics_gold_price_investing()
+
+        self._logger.log_info("Finish processing macroeconomics GOLD_PRICE data.")
+
+    # endregion MACROECONOMICS.GOLD_PRICE
+
     # endregion MACROECONOMICS data process
 
     # region STOCK MARKET data process
@@ -1457,23 +1557,24 @@ class DataPreprocessor:
         self._logger.log_info("Start processing data.")
 
         # Macroeconomics
-        self._process_macroeconomics_gdp()
-        self._process_macroeconomics_cpi()
-        self._process_macroeconomics_exchange_rate()
-        self._process_macroeconomics_interest_rate()
-        self._process_macroeconomics_export()
-        self._process_macroeconomics_import()
-        self._process_macroeconomics_ipi()
-        self._process_macroeconomics_fdi()
-        self._process_macroeconomics_m2()
-        self._process_macroeconomics_retail()
-        self._process_macroeconomics_population_unemployment()
+        # self._process_macroeconomics_gdp()
+        # self._process_macroeconomics_cpi()
+        # self._process_macroeconomics_exchange_rate()
+        # self._process_macroeconomics_interest_rate()
+        # self._process_macroeconomics_export()
+        # self._process_macroeconomics_import()
+        # self._process_macroeconomics_ipi()
+        # self._process_macroeconomics_fdi()
+        # self._process_macroeconomics_m2()
+        # self._process_macroeconomics_retail()
+        # self._process_macroeconomics_population_unemployment()
+        self._process_macroeconomics_gold_price()
 
         # Stock market
-        self._process_stock_market_market()
+        # self._process_stock_market_market()
 
         # Enterprise
-        self._process_enterprise_stock()
+        # self._process_enterprise_stock()
 
         self._logger.log_info("Finish processing data.")
 

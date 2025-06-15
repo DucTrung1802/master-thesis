@@ -101,6 +101,7 @@ class MacroeconomicsSubType(Enum):
     M2 = "m2"
     RETAIL = "retail"
     POPULATION_UNEMPLOYMENT = "population_unemployment"
+    GOLD_PRICE = "gold_price"
 
 
 class StockMarketSubType(Enum):
@@ -170,6 +171,10 @@ class PopulationUnemploymentSource(Enum):
     VIETSTOCK = "vietstock"
 
 
+class GoldPriceSource(Enum):
+    INVESTING = "investing"
+
+
 # STOCK_MARKET
 class VnHnxIndexSource(Enum):
     CAFEF = "cafef"
@@ -219,6 +224,7 @@ Source = Union[
     UpcomIndexSource,
     FinanceInfoSource,
     DailyPriceSource,
+    GoldPriceSource,
 ]
 
 # ================================================
@@ -314,6 +320,13 @@ SCRAPE_MAPPING: Dict[Tuple[ScrapeMainType, ScrapeSubType, Source], SourceInfo] =
         PopulationUnemploymentSource.VIETSTOCK,
     ): SourceInfo(
         url="https://finance.vietstock.vn/du-lieu-vi-mo/55-56/dan-so-va-lao-dong.htm",
+    ),
+    (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.GOLD_PRICE,
+        GoldPriceSource.INVESTING,
+    ): SourceInfo(
+        url="https://www.investing.com/commodities/gold-historical-data",
     ),
     # STOCK_MARKET
     (
@@ -537,6 +550,19 @@ class Table:
 
         name = "population_unemployment"
         primary_key = [Column.YEAR.value]
+
+    class GOLD_PRICE:
+        class Column(Enum):
+            DATE = "date"
+            PRICE = "price"
+            OPEN = "open"
+            HIGH = "high"
+            LOW = "low"
+            VOLUME = "volume"
+            CHANGE = "change"
+
+        name = "gold_price"
+        primary_key = [Column.DATE.value]
 
     # STOCK_MARKET
     class MARKET:
