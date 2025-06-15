@@ -72,6 +72,7 @@ class DataPreprocessor:
             f"Saved {success_count}/{len(df)} records into table '{schema_name}.{table_name}'"
         )
 
+    # region Create Schemas
     def _create_schemas(self) -> None:
         self._logger.log_info("Start creating schemas.")
 
@@ -81,6 +82,9 @@ class DataPreprocessor:
 
         self._logger.log_info("Finish creating schemas.")
 
+    # endregion Create Schemas
+
+    # region Create Tables
     def _create_macroeconomics_tables(self) -> None:
         self._logger.log_info("Start creating macroeconomics tables.")
 
@@ -368,6 +372,11 @@ class DataPreprocessor:
 
         self._logger.log_info("Finish creating tables.")
 
+    # endregion Create Tables
+
+    # region MACROECONOMICS data process
+
+    # region MACROECONOMICS.GDP
     def _process_macroeconomics_gdp_vietstock(self) -> None:
         key = (
             ScrapeMainType.MACROECONOMICS,
@@ -519,6 +528,9 @@ class DataPreprocessor:
 
         self._logger.log_info("Finish processing macroeconomics GDP data.")
 
+    # endregion GDP
+
+    # region MACROECONOMICS.CPI
     def _process_macroeconomics_cpi_vietstock(self) -> None:
         key = (
             ScrapeMainType.MACROECONOMICS,
@@ -591,6 +603,9 @@ class DataPreprocessor:
 
         self._logger.log_info("Finish processing macroeconomics CPI data.")
 
+    # endregion MACROECONOMICS.CPI
+
+    # region MACROECONOMICS.EXCHANGE_RATE
     def _process_macroeconomics_exchange_rate_vietstock(self) -> None:
         key = (
             ScrapeMainType.MACROECONOMICS,
@@ -633,6 +648,16 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish processing data in "{file_path}".')
 
+    def _process_macroeconomics_exchange_rate(self) -> None:
+        self._logger.log_info("Start processing macroeconomics EXCHANGE_RATE data.")
+
+        self._process_macroeconomics_exchange_rate_vietstock()
+
+        self._logger.log_info("Finish processing macroeconomics EXCHANGE_RATE data.")
+
+    # endregion MACROECONOMICS.EXCHANGE_RATE
+
+    # region MACROECONOMICS.INTEREST_RATE
     def _process_macroeconomics_interest_rate_vietstock(self) -> None:
         key = (
             ScrapeMainType.MACROECONOMICS,
@@ -711,6 +736,16 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish processing data in folder "{folder_path}".')
 
+    def _process_macroeconomics_interest_rate(self) -> None:
+        self._logger.log_info("Start processing macroeconomics INTEREST_RATE data.")
+
+        self._process_macroeconomics_interest_rate_vietstock()
+
+        self._logger.log_info("Finish processing macroeconomics INTEREST_RATE data.")
+
+    # endregion MACROECONOMICS.INTEREST_RATE
+
+    # region MACROECONOMICS.EXPORT
     def _process_macroeconomics_export_vietstock(self) -> None:
         key = (
             ScrapeMainType.MACROECONOMICS,
@@ -780,6 +815,16 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish processing data in "{file_path}".')
 
+    def _process_macroeconomics_export(self) -> None:
+        self._logger.log_info("Start processing macroeconomics EXPORT data.")
+
+        self._process_macroeconomics_export_vietstock()
+
+        self._logger.log_info("Finish processing macroeconomics EXPORT data.")
+
+    # endregion MACROECONOMICS.EXPORT
+
+    # region MACROECONOMICS.IMPORT
     def _process_macroeconomics_import_vietstock(self) -> None:
         key = (
             ScrapeMainType.MACROECONOMICS,
@@ -849,6 +894,16 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish processing data in "{file_path}".')
 
+    def _process_macroeconomics_import(self) -> None:
+        self._logger.log_info("Start processing macroeconomics IMPORT data.")
+
+        self._process_macroeconomics_import_vietstock()
+
+        self._logger.log_info("Finish processing macroeconomics IMPORT data.")
+
+    # endregion
+
+    # region MACROECONOMICS.IPI
     def _process_macroeconomics_ipi_vietstock(self) -> None:
         key = (
             ScrapeMainType.MACROECONOMICS,
@@ -910,6 +965,16 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish processing data in "{file_path}".')
 
+    def _process_macroeconomics_ipi(self) -> None:
+        self._logger.log_info("Start processing macroeconomics IPI data.")
+
+        self._process_macroeconomics_ipi_vietstock()
+
+        self._logger.log_info("Finish processing macroeconomics IPI data.")
+
+    # endregion MACROECONOMICS.IPI
+
+    # region MACROECONOMICS.FDI
     def _process_macroeconomics_fdi_vietstock(self) -> None:
         key = (
             ScrapeMainType.MACROECONOMICS,
@@ -1026,6 +1091,16 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish processing data in "{folder_path}".')
 
+    def _process_macroeconomics_fdi(self) -> None:
+        self._logger.log_info("Start processing macroeconomics FDI data.")
+
+        self._process_macroeconomics_fdi_vietstock()
+
+        self._logger.log_info("Finish processing macroeconomics FDI data.")
+
+    # endregion MACROECONOMICS.FDI
+
+    # region MACROECONOMICS.M2
     def _process_macroeconomics_m2_vietstock(self) -> None:
         key = (
             ScrapeMainType.MACROECONOMICS,
@@ -1085,6 +1160,16 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish processing data in "{file_path}".')
 
+    def _process_macroeconomics_m2(self) -> None:
+        self._logger.log_info("Start processing macroeconomics M2 data.")
+
+        self._process_macroeconomics_m2_vietstock()
+
+        self._logger.log_info("Finish processing macroeconomics M2 data.")
+
+    # endregion MACROECONOMICS.M2
+
+    # region MACROECONOMICS.RETAIL
     def _process_macroeconomics_retail_vietstock(self) -> None:
         key = (
             ScrapeMainType.MACROECONOMICS,
@@ -1145,6 +1230,16 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish processing data in "{file_path}".')
 
+    def _process_macroeconomics_retail(self) -> None:
+        self._logger.log_info("Start processing macroeconomics RETAIL data.")
+
+        self._process_macroeconomics_retail_vietstock()
+
+        self._logger.log_info("Finish processing macroeconomics RETAIL data.")
+
+    # endregion MACROECONOMICS.RETAIL
+
+    # region MACROECONOMICS.POPULATION_UNEMPLOYMENT
     def _process_macroeconomics_population_unemployment_vietstock(self) -> None:
         key = (
             ScrapeMainType.MACROECONOMICS,
@@ -1209,6 +1304,22 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish processing data in "{file_path}".')
 
+    def _process_macroeconomics_population_unemployment(self) -> None:
+        self._logger.log_info(
+            "Start processing macroeconomics POPULATION_UNEMPLOYMENT data."
+        )
+
+        self._process_macroeconomics_population_unemployment_vietstock()
+
+        self._logger.log_info(
+            "Finish processing macroeconomics POPULATION_UNEMPLOYMENT data."
+        )
+
+    # endregion MACROECONOMICS.POPULATION_UNEMPLOYMENT
+
+    # endregion MACROECONOMICS data process
+
+    # region STOCK MARKET data process
     def _process_stock_market_market_add_data(self) -> None:
         self._logger.log_info(
             f'Start processing data in "{Table.MARKET.__qualname__.lower()}".'
@@ -1235,6 +1346,16 @@ class DataPreprocessor:
             f'Finish processing data in "{Table.MARKET.__qualname__.lower()}".'
         )
 
+    def _process_stock_market_market(self) -> None:
+        self._logger.log_info("Start processing stock market MARKET data.")
+
+        self._process_stock_market_market_add_data()
+
+        self._logger.log_info("Finish processing stock market MARKET data.")
+
+    # endregion STOCK MARKET data process
+
+    # region ENTERPRISE data process
     def _process_enterprise_stock_cafef(self) -> None:
         key = (
             ScrapeMainType.ENTERPRISE,
@@ -1290,9 +1411,9 @@ class DataPreprocessor:
             self._logger.log_error(f'UPCOM data file not found in "{folder_path}".')
             return
 
-        self._logger.log_info(
-            f'Start processing data in "{Table.STOCK.__qualname__.lower()}".'
-        )
+        table_name = Table.STOCK.__qualname__.lower()
+
+        self._logger.log_info(f'Start processing data in "{table_name}".')
 
         stock_market_file_path_list = [hsx_file_path, hnx_file_path, upcom_file_path]
 
@@ -1321,83 +1442,7 @@ class DataPreprocessor:
             df=overall_df,
         )
 
-        self._logger.log_info(
-            f'Finish processing data in "{Table.MARKET.__qualname__.lower()}".'
-        )
-
-    def _process_macroeconomics_exchange_rate(self) -> None:
-        self._logger.log_info("Start processing macroeconomics EXCHANGE_RATE data.")
-
-        self._process_macroeconomics_exchange_rate_vietstock()
-
-        self._logger.log_info("Finish processing macroeconomics EXCHANGE_RATE data.")
-
-    def _process_macroeconomics_interest_rate(self) -> None:
-        self._logger.log_info("Start processing macroeconomics INTEREST_RATE data.")
-
-        self._process_macroeconomics_interest_rate_vietstock()
-
-        self._logger.log_info("Finish processing macroeconomics INTEREST_RATE data.")
-
-    def _process_macroeconomics_export(self) -> None:
-        self._logger.log_info("Start processing macroeconomics EXPORT data.")
-
-        self._process_macroeconomics_export_vietstock()
-
-        self._logger.log_info("Finish processing macroeconomics EXPORT data.")
-
-    def _process_macroeconomics_import(self) -> None:
-        self._logger.log_info("Start processing macroeconomics IMPORT data.")
-
-        self._process_macroeconomics_import_vietstock()
-
-        self._logger.log_info("Finish processing macroeconomics IMPORT data.")
-
-    def _process_macroeconomics_import_ipi(self) -> None:
-        self._logger.log_info("Start processing macroeconomics IPI data.")
-
-        self._process_macroeconomics_ipi_vietstock()
-
-        self._logger.log_info("Finish processing macroeconomics IPI data.")
-
-    def _process_macroeconomics_import_fdi(self) -> None:
-        self._logger.log_info("Start processing macroeconomics FDI data.")
-
-        self._process_macroeconomics_fdi_vietstock()
-
-        self._logger.log_info("Finish processing macroeconomics FDI data.")
-
-    def _process_macroeconomics_import_m2(self) -> None:
-        self._logger.log_info("Start processing macroeconomics M2 data.")
-
-        self._process_macroeconomics_m2_vietstock()
-
-        self._logger.log_info("Finish processing macroeconomics M2 data.")
-
-    def _process_macroeconomics_import_retail(self) -> None:
-        self._logger.log_info("Start processing macroeconomics RETAIL data.")
-
-        self._process_macroeconomics_retail_vietstock()
-
-        self._logger.log_info("Finish processing macroeconomics RETAIL data.")
-
-    def _process_macroeconomics_import_population_unemployment(self) -> None:
-        self._logger.log_info(
-            "Start processing macroeconomics POPULATION_UNEMPLOYMENT data."
-        )
-
-        self._process_macroeconomics_population_unemployment_vietstock()
-
-        self._logger.log_info(
-            "Finish processing macroeconomics POPULATION_UNEMPLOYMENT data."
-        )
-
-    def _process_stock_market_market(self) -> None:
-        self._logger.log_info("Start processing stock market MARKET data.")
-
-        self._process_stock_market_market_add_data()
-
-        self._logger.log_info("Finish processing stock market MARKET data.")
+        self._logger.log_info(f'Finish processing data in "{table_name}".')
 
     def _process_enterprise_stock(self) -> None:
         self._logger.log_info("Start processing enterprise STOCK data.")
@@ -1405,6 +1450,8 @@ class DataPreprocessor:
         self._process_enterprise_stock_cafef()
 
         self._logger.log_info("Finish processing enterprise STOCK data.")
+
+    # endregion ENTERPRISE data process
 
     def _process_data(self) -> None:
         self._logger.log_info("Start processing data.")
@@ -1416,11 +1463,11 @@ class DataPreprocessor:
         self._process_macroeconomics_interest_rate()
         self._process_macroeconomics_export()
         self._process_macroeconomics_import()
-        self._process_macroeconomics_import_ipi()
-        self._process_macroeconomics_import_fdi()
-        self._process_macroeconomics_import_m2()
-        self._process_macroeconomics_import_retail()
-        self._process_macroeconomics_import_population_unemployment()
+        self._process_macroeconomics_ipi()
+        self._process_macroeconomics_fdi()
+        self._process_macroeconomics_m2()
+        self._process_macroeconomics_retail()
+        self._process_macroeconomics_population_unemployment()
 
         # Stock market
         self._process_stock_market_market()
