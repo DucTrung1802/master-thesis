@@ -523,7 +523,7 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.CPI,
-            GdpSource.VIETSTOCK,
+            CpiSource.VIETSTOCK,
         )
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
@@ -595,7 +595,7 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.EXCHANGE_RATE,
-            GdpSource.VIETSTOCK,
+            ExchangeRateSource.VIETSTOCK,
         )
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
@@ -637,7 +637,7 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.INTEREST_RATE,
-            GdpSource.VIETSTOCK,
+            InterestRateSource.VIETSTOCK,
         )
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
@@ -715,7 +715,7 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.EXPORT,
-            GdpSource.VIETSTOCK,
+            ExportImportSource.VIETSTOCK,
         )
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{"export_import"}/{key[2].value}"
@@ -784,7 +784,7 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.IMPORT,
-            GdpSource.VIETSTOCK,
+            ExportImportSource.VIETSTOCK,
         )
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{"export_import"}/{key[2].value}"
@@ -853,7 +853,7 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.IPI,
-            GdpSource.VIETSTOCK,
+            IpiSource.VIETSTOCK,
         )
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
@@ -914,7 +914,7 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.FDI,
-            GdpSource.VIETSTOCK,
+            FdiSource.VIETSTOCK,
         )
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
@@ -1030,7 +1030,7 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.M2,
-            GdpSource.VIETSTOCK,
+            M2Source.VIETSTOCK,
         )
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
@@ -1089,7 +1089,7 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.RETAIL,
-            GdpSource.VIETSTOCK,
+            RetailSource.VIETSTOCK,
         )
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
@@ -1149,7 +1149,7 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.POPULATION_UNEMPLOYMENT,
-            GdpSource.VIETSTOCK,
+            PopulationUnemploymentSource.VIETSTOCK,
         )
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
@@ -1410,20 +1410,20 @@ class DataPreprocessor:
         self._logger.log_info("Start processing data.")
 
         # Macroeconomics
-        # self._process_macroeconomics_gdp()
-        # self._process_macroeconomics_cpi()
-        # self._process_macroeconomics_exchange_rate()
-        # self._process_macroeconomics_interest_rate()
-        # self._process_macroeconomics_export()
-        # self._process_macroeconomics_import()
-        # self._process_macroeconomics_import_ipi()
-        # self._process_macroeconomics_import_fdi()
-        # self._process_macroeconomics_import_m2()
-        # self._process_macroeconomics_import_retail()
-        # self._process_macroeconomics_import_population_unemployment()
+        self._process_macroeconomics_gdp()
+        self._process_macroeconomics_cpi()
+        self._process_macroeconomics_exchange_rate()
+        self._process_macroeconomics_interest_rate()
+        self._process_macroeconomics_export()
+        self._process_macroeconomics_import()
+        self._process_macroeconomics_import_ipi()
+        self._process_macroeconomics_import_fdi()
+        self._process_macroeconomics_import_m2()
+        self._process_macroeconomics_import_retail()
+        self._process_macroeconomics_import_population_unemployment()
 
         # Stock market
-        # self._process_stock_market_market()
+        self._process_stock_market_market()
 
         # Enterprise
         self._process_enterprise_stock()
