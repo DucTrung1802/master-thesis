@@ -368,6 +368,8 @@ class Schema(Enum):
 
 
 class Table:
+
+    # MACROECONOMICS
     class GDP:
         class Column(Enum):
             YEAR = "year"
@@ -535,3 +537,16 @@ class Table:
 
         name = "population_unemployment"
         primary_key = [Column.YEAR.value]
+
+    # STOCK_MARKET
+    class MARKET:
+        class Column(Enum):
+            ID = "id"
+            CODE = "code"
+            NAME = "name"
+            CREATE_DATE = "create_date"
+            UPDATE_DATE = "update_date"
+            DELETE_DATE = "delete_date"
+
+        name = "market"
+        primary_key = [Column.ID.value]

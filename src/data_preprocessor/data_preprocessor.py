@@ -305,10 +305,33 @@ class DataPreprocessor:
 
         self._logger.log_info("Finish creating macroeconomics tables.")
 
+    def _create_stock_market_tables(self) -> None:
+        self._logger.log_info("Start creating macroeconomics tables.")
+
+        # MARKET
+        # fmt: off
+        self._database_driver.create_table(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.MARKET.name,
+            columns = [
+                Column(name=Table.MARKET.Column.ID.value, data_type=DataType.SERIAL(), nullable=False),
+                Column(name=Table.MARKET.Column.CODE.value, data_type=DataType.VARCHAR(), nullable=True),
+                Column(name=Table.MARKET.Column.NAME.value, data_type=DataType.VARCHAR(), nullable=True),
+                Column(name=Table.MARKET.Column.CREATE_DATE.value, data_type=DataType.AUTO_TIMESTAMP(), nullable=True),
+                Column(name=Table.MARKET.Column.UPDATE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
+                Column(name=Table.MARKET.Column.DELETE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
+            ],
+            primary_keys=Table.MARKET.primary_key,
+        )
+        # fmt: on
+
+        self._logger.log_info("Finish creating macroeconomics tables.")
+
     def _create_tables(self) -> None:
         self._logger.log_info("Start creating tables.")
 
         self._create_macroeconomics_tables()
+        self._create_stock_market_tables()
 
         self._logger.log_info("Finish creating tables.")
 
@@ -1153,6 +1176,32 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish processing data in "{file_path}".')
 
+    def _process_stock_market_market_add_data(self) -> None:
+        self._logger.log_info(
+            f'Start processing data in "{Table.MARKET.__qualname__.lower()}".'
+        )
+
+        market_data = {
+            Table.MARKET.Column.CODE.value: ["HSX", "HNX", "UPCOM"],
+            Table.MARKET.Column.NAME.value: [
+                "Ho Chi Minh City Stock Exchange",
+                "Hanoi Stock Exchange",
+                "Unlisted Public Company Market",
+            ],
+        }
+
+        df = pd.DataFrame(market_data)
+
+        self._save_pandas_table_to_database(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.MARKET.name,
+            df=df,
+        )
+
+        self._logger.log_info(
+            f'Finish processing data in "{Table.MARKET.__qualname__.lower()}".'
+        )
+
     def _process_macroeconomics_exchange_rate(self) -> None:
         self._logger.log_info("Start processing macroeconomics EXCHANGE_RATE data.")
 
@@ -1220,23 +1269,31 @@ class DataPreprocessor:
             "Finish processing macroeconomics POPULATION_UNEMPLOYMENT data."
         )
 
+    def _process_stock_market_market(self) -> None:
+        self._logger.log_info("Start processing stock market MARKET data.")
+
+        self._process_stock_market_market_add_data()
+
+        self._logger.log_info("Finish processing stock market MARKET data.")
+
     def _process_data(self) -> None:
         self._logger.log_info("Start processing data.")
 
         # Macroeconomics
-        self._process_macroeconomics_gdp()
-        self._process_macroeconomics_cpi()
-        self._process_macroeconomics_exchange_rate()
-        self._process_macroeconomics_interest_rate()
-        self._process_macroeconomics_export()
-        self._process_macroeconomics_import()
-        self._process_macroeconomics_import_ipi()
-        self._process_macroeconomics_import_fdi()
-        self._process_macroeconomics_import_m2()
-        self._process_macroeconomics_import_retail()
-        self._process_macroeconomics_import_population_unemployment()
+        # self._process_macroeconomics_gdp()
+        # self._process_macroeconomics_cpi()
+        # self._process_macroeconomics_exchange_rate()
+        # self._process_macroeconomics_interest_rate()
+        # self._process_macroeconomics_export()
+        # self._process_macroeconomics_import()
+        # self._process_macroeconomics_import_ipi()
+        # self._process_macroeconomics_import_fdi()
+        # self._process_macroeconomics_import_m2()
+        # self._process_macroeconomics_import_retail()
+        # self._process_macroeconomics_import_population_unemployment()
 
         # Stock market
+        self._process_stock_market_market()
 
         # Enterprise
 
