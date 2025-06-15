@@ -63,6 +63,10 @@ class DataType:
     def SERIAL(cls):
         return "SERIAL"
 
+    @classmethod
+    def BIGINT(cls):
+        return "BIGINT"
+
 
 @dataclass
 class ForeignKey:
