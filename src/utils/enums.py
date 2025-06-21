@@ -104,6 +104,7 @@ class MacroeconomicsSubType(Enum):
     GOLD_PRICE = "gold_price"
     OIL_PRICE = "oil_price"
     DOW_JONES = "dow_jones"
+    NYSE_COMPOSITE = "nyse_composite"
 
 
 class StockMarketSubType(Enum):
@@ -185,6 +186,10 @@ class DowJonesSource(Enum):
     INVESTING = "investing"
 
 
+class NYSECompositeSource(Enum):
+    INVESTING = "investing"
+
+
 # STOCK_MARKET
 class VnHnxIndexSource(Enum):
     CAFEF = "cafef"
@@ -236,7 +241,8 @@ Source = Union[
     DailyPriceSource,
     GoldPriceSource,
     OilPriceSource,
-    DowJonesSource
+    DowJonesSource,
+    NYSECompositeSource,
 ]
 
 # ================================================
@@ -353,6 +359,13 @@ SCRAPE_MAPPING: Dict[Tuple[ScrapeMainType, ScrapeSubType, Source], SourceInfo] =
         DowJonesSource.INVESTING,
     ): SourceInfo(
         url="https://www.investing.com/indices/us-30-historical-data",
+    ),
+    (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.NYSE_COMPOSITE,
+        NYSECompositeSource.INVESTING,
+    ): SourceInfo(
+        url="https://www.investing.com/indices/nyse-composite-historical-data",
     ),
     # STOCK_MARKET
     (
@@ -614,6 +627,19 @@ class Table:
             CHANGE = "change"
 
         name = "dow_jones"
+        primary_key = [Column.DATE.value]
+
+    class NYSE_COMPOSITE:
+        class Column(Enum):
+            DATE = "date"
+            PRICE = "price"
+            OPEN = "open"
+            HIGH = "high"
+            LOW = "low"
+            VOLUME = "volume"
+            CHANGE = "change"
+
+        name = "nyse_composite"
         primary_key = [Column.DATE.value]
 
     # STOCK_MARKET
