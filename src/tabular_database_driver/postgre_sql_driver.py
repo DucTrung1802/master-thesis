@@ -368,7 +368,7 @@ DELETE FROM {schema_name}.{table_name}
     ) -> List:
         """Select records from a table."""
         try:
-            if not isinstance(columns, List):
+            if columns and not isinstance(columns, List):
                 columns = [columns]
 
             columns_clause = ",\n    ".join(columns) if columns else "*"
