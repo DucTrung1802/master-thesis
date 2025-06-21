@@ -107,6 +107,7 @@ class MacroeconomicsSubType(Enum):
     NYSE_COMPOSITE = "nyse_composite"
     SNP_500 = "snp_500"
     NASDAQ_COMPOSITE = "nasdaq_composite"
+    NASDAQ_100 = "nasdaq_100"
 
 
 class StockMarketSubType(Enum):
@@ -194,8 +195,13 @@ class NYSECompositeSource(Enum):
 
 class SNP500Source(Enum):
     INVESTING = "investing"
-    
+
+
 class NASDAQCompositeSource(Enum):
+    INVESTING = "investing"
+
+
+class NASDAQ100Source(Enum):
     INVESTING = "investing"
 
 
@@ -254,6 +260,7 @@ Source = Union[
     NYSECompositeSource,
     SNP500Source,
     NASDAQCompositeSource,
+    NASDAQ100Source,
 ]
 
 # ================================================
@@ -385,12 +392,19 @@ SCRAPE_MAPPING: Dict[Tuple[ScrapeMainType, ScrapeSubType, Source], SourceInfo] =
     ): SourceInfo(
         url="https://www.investing.com/indices/us-spx-500",
     ),
-        (
+    (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.NASDAQ_COMPOSITE,
         NASDAQCompositeSource.INVESTING,
     ): SourceInfo(
         url="https://www.investing.com/indices/nasdaq-composite-historical-data",
+    ),
+    (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.NASDAQ_100,
+        NASDAQ100Source.INVESTING,
+    ): SourceInfo(
+        url="https://www.investing.com/indices/nq-100",
     ),
     # STOCK_MARKET
     (
@@ -679,7 +693,7 @@ class Table:
 
         name = "snp_500"
         primary_key = [Column.DATE.value]
-        
+
     class NASDAQ_COMPOSITE:
         class Column(Enum):
             DATE = "date"
@@ -691,6 +705,19 @@ class Table:
             CHANGE = "change"
 
         name = "nasdaq_composite"
+        primary_key = [Column.DATE.value]
+
+    class NASDAQ_100:
+        class Column(Enum):
+            DATE = "date"
+            PRICE = "price"
+            OPEN = "open"
+            HIGH = "high"
+            LOW = "low"
+            VOLUME = "volume"
+            CHANGE = "change"
+
+        name = "nasdaq_100"
         primary_key = [Column.DATE.value]
 
     # STOCK_MARKET
