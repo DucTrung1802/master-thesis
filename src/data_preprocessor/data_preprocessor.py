@@ -72,6 +72,7 @@ class DataPreprocessor:
             f"Saved {success_count}/{len(df)} records into table '{schema_name}.{table_name}'"
         )
 
+    # region Create Schemas
     def _create_schemas(self) -> None:
         self._logger.log_info("Start creating schemas.")
 
@@ -81,6 +82,9 @@ class DataPreprocessor:
 
         self._logger.log_info("Finish creating schemas.")
 
+    # endregion Create Schemas
+
+    # region Create Tables
     def _create_macroeconomics_tables(self) -> None:
         self._logger.log_info("Start creating macroeconomics tables.")
 
@@ -302,6 +306,186 @@ class DataPreprocessor:
             primary_keys=Table.POPULATION_UNEMPLOYMENT.primary_key,
         )
         # fmt: on
+        
+        # GOLD_PRICE
+        # fmt: off
+        self._database_driver.create_table(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.GOLD_PRICE.name,
+            columns = [
+                Column(name=Table.GOLD_PRICE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                Column(name=Table.GOLD_PRICE.Column.PRICE.value, data_type=DataType.DECIMAL(), nullable=False),
+                Column(name=Table.GOLD_PRICE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.GOLD_PRICE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.GOLD_PRICE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.GOLD_PRICE.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.GOLD_PRICE.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
+            ],
+            primary_keys=Table.GOLD_PRICE.primary_key,
+        )
+        # fmt: on
+        
+        # OIL_PRICE
+        # fmt: off
+        self._database_driver.create_table(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.OIL_PRICE.name,
+            columns = [
+                Column(name=Table.OIL_PRICE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                Column(name=Table.OIL_PRICE.Column.PRICE.value, data_type=DataType.DECIMAL(), nullable=False),
+                Column(name=Table.OIL_PRICE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.OIL_PRICE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.OIL_PRICE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.OIL_PRICE.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.OIL_PRICE.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
+            ],
+            primary_keys=Table.OIL_PRICE.primary_key,
+        )
+        # fmt: on
+
+        # DOW_JONES
+        # fmt: off
+        self._database_driver.create_table(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.DOW_JONES.name,
+            columns = [
+                Column(name=Table.DOW_JONES.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                Column(name=Table.DOW_JONES.Column.PRICE.value, data_type=DataType.DECIMAL(), nullable=False),
+                Column(name=Table.DOW_JONES.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.DOW_JONES.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.DOW_JONES.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.DOW_JONES.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.DOW_JONES.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
+            ],
+            primary_keys=Table.DOW_JONES.primary_key,
+        )
+        # fmt: on
+        
+        # NYSE_COMPOSITE
+        # fmt: off
+        self._database_driver.create_table(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.NYSE_COMPOSITE.name,
+            columns = [
+                Column(name=Table.NYSE_COMPOSITE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                Column(name=Table.NYSE_COMPOSITE.Column.PRICE.value, data_type=DataType.DECIMAL(), nullable=False),
+                Column(name=Table.NYSE_COMPOSITE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.NYSE_COMPOSITE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.NYSE_COMPOSITE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.NYSE_COMPOSITE.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.NYSE_COMPOSITE.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
+            ],
+            primary_keys=Table.NYSE_COMPOSITE.primary_key,
+        )
+        # fmt: on
+
+        # SNP_500
+        # fmt: off
+        self._database_driver.create_table(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.SNP_500.name,
+            columns = [
+                Column(name=Table.SNP_500.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                Column(name=Table.SNP_500.Column.PRICE.value, data_type=DataType.DECIMAL(), nullable=False),
+                Column(name=Table.SNP_500.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.SNP_500.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.SNP_500.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.SNP_500.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.SNP_500.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
+            ],
+            primary_keys=Table.SNP_500.primary_key,
+        )
+        # fmt: on
+        
+        # NASDAQ_COMPOSITE
+        # fmt: off
+        self._database_driver.create_table(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.NASDAQ_COMPOSITE.name,
+            columns = [
+                Column(name=Table.NASDAQ_COMPOSITE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                Column(name=Table.NASDAQ_COMPOSITE.Column.PRICE.value, data_type=DataType.DECIMAL(), nullable=False),
+                Column(name=Table.NASDAQ_COMPOSITE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.NASDAQ_COMPOSITE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.NASDAQ_COMPOSITE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.NASDAQ_COMPOSITE.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.NASDAQ_COMPOSITE.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
+            ],
+            primary_keys=Table.NASDAQ_COMPOSITE.primary_key,
+        )
+        # fmt: on
+        
+        # NASDAQ_100
+        # fmt: off
+        self._database_driver.create_table(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.NASDAQ_100.name,
+            columns = [
+                Column(name=Table.NASDAQ_100.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                Column(name=Table.NASDAQ_100.Column.PRICE.value, data_type=DataType.DECIMAL(), nullable=False),
+                Column(name=Table.NASDAQ_100.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.NASDAQ_100.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.NASDAQ_100.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.NASDAQ_100.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.NASDAQ_100.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
+            ],
+            primary_keys=Table.NASDAQ_100.primary_key,
+        )
+        # fmt: on
+
+        self._logger.log_info("Finish creating macroeconomics tables.")
+
+    def _create_stock_market_tables(self) -> None:
+        self._logger.log_info("Start creating macroeconomics tables.")
+
+        # MARKET
+        # fmt: off
+        self._database_driver.create_table(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.MARKET.name,
+            columns = [
+                Column(name=Table.MARKET.Column.ID.value, data_type=DataType.SERIAL(), nullable=False),
+                Column(name=Table.MARKET.Column.CODE.value, data_type=DataType.VARCHAR(), nullable=True),
+                Column(name=Table.MARKET.Column.NAME.value, data_type=DataType.VARCHAR(), nullable=True),
+                Column(name=Table.MARKET.Column.CREATE_DATE.value, data_type=DataType.AUTO_TIMESTAMP(), nullable=True),
+                Column(name=Table.MARKET.Column.UPDATE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
+                Column(name=Table.MARKET.Column.DELETE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
+            ],
+            primary_keys=Table.MARKET.primary_key,
+        )
+        # fmt: on
+
+        self._logger.log_info("Finish creating macroeconomics tables.")
+
+    def _create_enterprise_tables(self) -> None:
+        self._logger.log_info("Start creating macroeconomics tables.")
+
+        # STOCK
+        # fmt: off
+        self._database_driver.create_table(
+            schema_name=Schema.ENTERPRISE.value,
+            table_name=Table.STOCK.name,
+            columns = [
+                Column(name=Table.STOCK.Column.ID.value, data_type=DataType.SERIAL(), nullable=False),
+                Column(name=Table.STOCK.Column.CODE.value, data_type=DataType.VARCHAR(), nullable=False),
+                Column(name=Table.STOCK.Column.ISSUED_SHARES.value, data_type=DataType.BIGINT(), nullable=True),
+                Column(name=Table.STOCK.Column.OUTSTANDING_SHARES.value, data_type=DataType.BIGINT(), nullable=True),
+                Column(name=Table.STOCK.Column.OUTSTANDING_RATE.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.STOCK.Column.MARKET_CAP.value, data_type=DataType.BIGINT(), nullable=True),
+                Column(name=Table.STOCK.Column.MARKET_ID.value, data_type=DataType.INT(), nullable=False),
+                Column(name=Table.STOCK.Column.STOCK_TYPE.value, data_type=DataType.INT(), nullable=True),
+                Column(name=Table.STOCK.Column.CREATE_DATE.value, data_type=DataType.AUTO_TIMESTAMP(), nullable=False),
+                Column(name=Table.STOCK.Column.UPDATE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
+                Column(name=Table.STOCK.Column.DELETE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
+            ],
+            primary_keys=Table.STOCK.primary_key,
+            foreign_keys=[ForeignKey(
+                column_name=Table.STOCK.Column.MARKET_ID.value, 
+                ref_table=f"{Schema.STOCK_MARKET.value}.{Table.MARKET.name}", 
+                ref_column=Table.MARKET.Column.ID.value,
+            )],
+        )
+        # fmt: on
 
         self._logger.log_info("Finish creating macroeconomics tables.")
 
@@ -309,9 +493,16 @@ class DataPreprocessor:
         self._logger.log_info("Start creating tables.")
 
         self._create_macroeconomics_tables()
+        self._create_stock_market_tables()
+        self._create_enterprise_tables()
 
         self._logger.log_info("Finish creating tables.")
 
+    # endregion Create Tables
+
+    # region MACROECONOMICS data process
+
+    # region MACROECONOMICS.GDP
     def _process_macroeconomics_gdp_vietstock(self) -> None:
         key = (
             ScrapeMainType.MACROECONOMICS,
@@ -463,11 +654,14 @@ class DataPreprocessor:
 
         self._logger.log_info("Finish processing macroeconomics GDP data.")
 
+    # endregion GDP
+
+    # region MACROECONOMICS.CPI
     def _process_macroeconomics_cpi_vietstock(self) -> None:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.CPI,
-            GdpSource.VIETSTOCK,
+            CpiSource.VIETSTOCK,
         )
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
@@ -535,11 +729,14 @@ class DataPreprocessor:
 
         self._logger.log_info("Finish processing macroeconomics CPI data.")
 
+    # endregion MACROECONOMICS.CPI
+
+    # region MACROECONOMICS.EXCHANGE_RATE
     def _process_macroeconomics_exchange_rate_vietstock(self) -> None:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.EXCHANGE_RATE,
-            GdpSource.VIETSTOCK,
+            ExchangeRateSource.VIETSTOCK,
         )
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
@@ -577,11 +774,21 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish processing data in "{file_path}".')
 
+    def _process_macroeconomics_exchange_rate(self) -> None:
+        self._logger.log_info("Start processing macroeconomics EXCHANGE_RATE data.")
+
+        self._process_macroeconomics_exchange_rate_vietstock()
+
+        self._logger.log_info("Finish processing macroeconomics EXCHANGE_RATE data.")
+
+    # endregion MACROECONOMICS.EXCHANGE_RATE
+
+    # region MACROECONOMICS.INTEREST_RATE
     def _process_macroeconomics_interest_rate_vietstock(self) -> None:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.INTEREST_RATE,
-            GdpSource.VIETSTOCK,
+            InterestRateSource.VIETSTOCK,
         )
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
@@ -655,11 +862,21 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish processing data in folder "{folder_path}".')
 
+    def _process_macroeconomics_interest_rate(self) -> None:
+        self._logger.log_info("Start processing macroeconomics INTEREST_RATE data.")
+
+        self._process_macroeconomics_interest_rate_vietstock()
+
+        self._logger.log_info("Finish processing macroeconomics INTEREST_RATE data.")
+
+    # endregion MACROECONOMICS.INTEREST_RATE
+
+    # region MACROECONOMICS.EXPORT
     def _process_macroeconomics_export_vietstock(self) -> None:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.EXPORT,
-            GdpSource.VIETSTOCK,
+            ExportImportSource.VIETSTOCK,
         )
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{"export_import"}/{key[2].value}"
@@ -724,11 +941,21 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish processing data in "{file_path}".')
 
+    def _process_macroeconomics_export(self) -> None:
+        self._logger.log_info("Start processing macroeconomics EXPORT data.")
+
+        self._process_macroeconomics_export_vietstock()
+
+        self._logger.log_info("Finish processing macroeconomics EXPORT data.")
+
+    # endregion MACROECONOMICS.EXPORT
+
+    # region MACROECONOMICS.IMPORT
     def _process_macroeconomics_import_vietstock(self) -> None:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.IMPORT,
-            GdpSource.VIETSTOCK,
+            ExportImportSource.VIETSTOCK,
         )
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{"export_import"}/{key[2].value}"
@@ -793,11 +1020,21 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish processing data in "{file_path}".')
 
+    def _process_macroeconomics_import(self) -> None:
+        self._logger.log_info("Start processing macroeconomics IMPORT data.")
+
+        self._process_macroeconomics_import_vietstock()
+
+        self._logger.log_info("Finish processing macroeconomics IMPORT data.")
+
+    # endregion
+
+    # region MACROECONOMICS.IPI
     def _process_macroeconomics_ipi_vietstock(self) -> None:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.IPI,
-            GdpSource.VIETSTOCK,
+            IpiSource.VIETSTOCK,
         )
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
@@ -854,11 +1091,21 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish processing data in "{file_path}".')
 
+    def _process_macroeconomics_ipi(self) -> None:
+        self._logger.log_info("Start processing macroeconomics IPI data.")
+
+        self._process_macroeconomics_ipi_vietstock()
+
+        self._logger.log_info("Finish processing macroeconomics IPI data.")
+
+    # endregion MACROECONOMICS.IPI
+
+    # region MACROECONOMICS.FDI
     def _process_macroeconomics_fdi_vietstock(self) -> None:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.FDI,
-            GdpSource.VIETSTOCK,
+            FdiSource.VIETSTOCK,
         )
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
@@ -970,11 +1217,21 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish processing data in "{folder_path}".')
 
+    def _process_macroeconomics_fdi(self) -> None:
+        self._logger.log_info("Start processing macroeconomics FDI data.")
+
+        self._process_macroeconomics_fdi_vietstock()
+
+        self._logger.log_info("Finish processing macroeconomics FDI data.")
+
+    # endregion MACROECONOMICS.FDI
+
+    # region MACROECONOMICS.M2
     def _process_macroeconomics_m2_vietstock(self) -> None:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.M2,
-            GdpSource.VIETSTOCK,
+            M2Source.VIETSTOCK,
         )
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
@@ -1029,11 +1286,21 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish processing data in "{file_path}".')
 
+    def _process_macroeconomics_m2(self) -> None:
+        self._logger.log_info("Start processing macroeconomics M2 data.")
+
+        self._process_macroeconomics_m2_vietstock()
+
+        self._logger.log_info("Finish processing macroeconomics M2 data.")
+
+    # endregion MACROECONOMICS.M2
+
+    # region MACROECONOMICS.RETAIL
     def _process_macroeconomics_retail_vietstock(self) -> None:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.RETAIL,
-            GdpSource.VIETSTOCK,
+            RetailSource.VIETSTOCK,
         )
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
@@ -1089,11 +1356,21 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish processing data in "{file_path}".')
 
+    def _process_macroeconomics_retail(self) -> None:
+        self._logger.log_info("Start processing macroeconomics RETAIL data.")
+
+        self._process_macroeconomics_retail_vietstock()
+
+        self._logger.log_info("Finish processing macroeconomics RETAIL data.")
+
+    # endregion MACROECONOMICS.RETAIL
+
+    # region MACROECONOMICS.POPULATION_UNEMPLOYMENT
     def _process_macroeconomics_population_unemployment_vietstock(self) -> None:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.POPULATION_UNEMPLOYMENT,
-            GdpSource.VIETSTOCK,
+            PopulationUnemploymentSource.VIETSTOCK,
         )
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
@@ -1153,63 +1430,7 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish processing data in "{file_path}".')
 
-    def _process_macroeconomics_exchange_rate(self) -> None:
-        self._logger.log_info("Start processing macroeconomics EXCHANGE_RATE data.")
-
-        self._process_macroeconomics_exchange_rate_vietstock()
-
-        self._logger.log_info("Finish processing macroeconomics EXCHANGE_RATE data.")
-
-    def _process_macroeconomics_interest_rate(self) -> None:
-        self._logger.log_info("Start processing macroeconomics INTEREST_RATE data.")
-
-        self._process_macroeconomics_interest_rate_vietstock()
-
-        self._logger.log_info("Finish processing macroeconomics INTEREST_RATE data.")
-
-    def _process_macroeconomics_export(self) -> None:
-        self._logger.log_info("Start processing macroeconomics EXPORT data.")
-
-        self._process_macroeconomics_export_vietstock()
-
-        self._logger.log_info("Finish processing macroeconomics EXPORT data.")
-
-    def _process_macroeconomics_import(self) -> None:
-        self._logger.log_info("Start processing macroeconomics IMPORT data.")
-
-        self._process_macroeconomics_import_vietstock()
-
-        self._logger.log_info("Finish processing macroeconomics IMPORT data.")
-
-    def _process_macroeconomics_import_ipi(self) -> None:
-        self._logger.log_info("Start processing macroeconomics IPI data.")
-
-        self._process_macroeconomics_ipi_vietstock()
-
-        self._logger.log_info("Finish processing macroeconomics IPI data.")
-
-    def _process_macroeconomics_import_fdi(self) -> None:
-        self._logger.log_info("Start processing macroeconomics FDI data.")
-
-        self._process_macroeconomics_fdi_vietstock()
-
-        self._logger.log_info("Finish processing macroeconomics FDI data.")
-
-    def _process_macroeconomics_import_m2(self) -> None:
-        self._logger.log_info("Start processing macroeconomics M2 data.")
-
-        self._process_macroeconomics_m2_vietstock()
-
-        self._logger.log_info("Finish processing macroeconomics M2 data.")
-
-    def _process_macroeconomics_import_retail(self) -> None:
-        self._logger.log_info("Start processing macroeconomics RETAIL data.")
-
-        self._process_macroeconomics_retail_vietstock()
-
-        self._logger.log_info("Finish processing macroeconomics RETAIL data.")
-
-    def _process_macroeconomics_import_population_unemployment(self) -> None:
+    def _process_macroeconomics_population_unemployment(self) -> None:
         self._logger.log_info(
             "Start processing macroeconomics POPULATION_UNEMPLOYMENT data."
         )
@@ -1220,25 +1441,662 @@ class DataPreprocessor:
             "Finish processing macroeconomics POPULATION_UNEMPLOYMENT data."
         )
 
+    # endregion MACROECONOMICS.POPULATION_UNEMPLOYMENT
+
+    # region MACROECONOMICS.GOLD_PRICE
+    def _process_macroeconomics_gold_price_investing(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.GOLD_PRICE,
+            GoldPriceSource.INVESTING,
+        )
+        folder_path = (
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+        )
+
+        table_name = Table.GOLD_PRICE.__qualname__.lower()
+
+        self._logger.log_info(f'Start processing data in "{table_name}".')
+
+        # Add logic for processing data here
+        combined_file_path = os.path.join(folder_path, "Gold_Futures_Combined.csv")
+        if os.path.isfile(combined_file_path):
+            os.remove(combined_file_path)
+
+        file_paths = glob(os.path.join(folder_path, "*.csv"))
+
+        dfs = []
+        for file in file_paths:
+            df = pd.read_csv(file)
+
+            # Convert 'Date' to datetime
+            df["Date"] = pd.to_datetime(df["Date"], format="%m/%d/%Y", errors="coerce")
+
+            # Clean numeric columns: remove commas and symbols, then convert to float
+            for col in ["Price", "Open", "High", "Low"]:
+                df[col] = df[col].astype(str).str.replace(",", "").astype(float)
+
+            df["Vol."] = df["Vol."].apply(parse_volume)
+
+            # Change %: remove '%' and convert to float
+            df["Change %"] = (
+                df["Change %"].astype(str).str.replace("%", "").astype(float)
+            )
+
+            dfs.append(df)
+
+        # Combine and sort
+        full_df = pd.concat(dfs, ignore_index=True)
+        full_df = full_df.sort_values("Date").reset_index(drop=True)
+
+        rename_map = {
+            "Vol.": "volume",
+            "Change %": "change",
+        }
+
+        full_df.rename(columns=rename_map, inplace=True)
+
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.GOLD_PRICE.name,
+            df=full_df,
+        )
+
+        self._logger.log_info(f'Finish processing data in "{table_name}".')
+
+    def _process_macroeconomics_gold_price(self) -> None:
+        self._logger.log_info("Start processing macroeconomics GOLD_PRICE data.")
+
+        self._process_macroeconomics_gold_price_investing()
+
+        self._logger.log_info("Finish processing macroeconomics GOLD_PRICE data.")
+
+    # endregion MACROECONOMICS.GOLD_PRICE
+
+    # region MACROECONOMICS.OIL_PRICE
+    def _process_macroeconomics_oil_price_investing(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.OIL_PRICE,
+            OilPriceSource.INVESTING,
+        )
+        folder_path = (
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+        )
+
+        table_name = Table.OIL_PRICE.__qualname__.lower()
+
+        self._logger.log_info(f'Start processing data in "{table_name}".')
+
+        # Add logic for processing data here
+        combined_file_path = os.path.join(folder_path, "Brent_Oil_Futures_Combined.csv")
+        if os.path.isfile(combined_file_path):
+            os.remove(combined_file_path)
+
+        file_paths = glob(os.path.join(folder_path, "*.csv"))
+
+        dfs = []
+        for file in file_paths:
+            df = pd.read_csv(file)
+
+            # Convert 'Date' to datetime
+            df["Date"] = pd.to_datetime(df["Date"], format="%m/%d/%Y", errors="coerce")
+
+            # Clean numeric columns: remove commas and symbols, then convert to float
+            for col in ["Price", "Open", "High", "Low"]:
+                df[col] = df[col].astype(str).str.replace(",", "").astype(float)
+
+            df["Vol."] = df["Vol."].apply(parse_volume)
+
+            # Change %: remove '%' and convert to float
+            df["Change %"] = (
+                df["Change %"].astype(str).str.replace("%", "").astype(float)
+            )
+
+            dfs.append(df)
+
+        # Combine and sort
+        full_df = pd.concat(dfs, ignore_index=True)
+        full_df = full_df.sort_values("Date").reset_index(drop=True)
+
+        rename_map = {
+            "Vol.": "volume",
+            "Change %": "change",
+        }
+
+        full_df.rename(columns=rename_map, inplace=True)
+
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.OIL_PRICE.name,
+            df=full_df,
+        )
+
+        self._logger.log_info(f'Finish processing data in "{table_name}".')
+
+    def _process_macroeconomics_oil_price(self) -> None:
+        self._logger.log_info("Start processing macroeconomics OIL_PRICE data.")
+
+        self._process_macroeconomics_oil_price_investing()
+
+        self._logger.log_info("Finish processing macroeconomics OIL_PRICE data.")
+
+    # endregion MACROECONOMICS.OIL_PRICE
+
+    # region MACROECONOMICS.DOW_JONES
+    def _process_macroeconomics_dow_jones_investing(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.DOW_JONES,
+            DowJonesSource.INVESTING,
+        )
+        folder_path = (
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+        )
+
+        table_name = Table.DOW_JONES.__qualname__.lower()
+
+        self._logger.log_info(f'Start processing data in "{table_name}".')
+
+        # Add logic for processing data here
+        combined_file_path = os.path.join(folder_path, "Brent_Oil_Futures_Combined.csv")
+        if os.path.isfile(combined_file_path):
+            os.remove(combined_file_path)
+
+        file_paths = glob(os.path.join(folder_path, "*.csv"))
+
+        dfs = []
+        for file in file_paths:
+            df = pd.read_csv(file)
+
+            # Convert 'Date' to datetime
+            df["Date"] = pd.to_datetime(df["Date"], format="%m/%d/%Y", errors="coerce")
+
+            # Clean numeric columns: remove commas and symbols, then convert to float
+            for col in ["Price", "Open", "High", "Low"]:
+                df[col] = df[col].astype(str).str.replace(",", "").astype(float)
+
+            df["Vol."] = df["Vol."].apply(parse_volume)
+
+            # Change %: remove '%' and convert to float
+            df["Change %"] = (
+                df["Change %"].astype(str).str.replace("%", "").astype(float)
+            )
+
+            dfs.append(df)
+
+        # Combine and sort
+        full_df = pd.concat(dfs, ignore_index=True)
+        full_df = full_df.sort_values("Date").reset_index(drop=True)
+
+        rename_map = {
+            "Vol.": "volume",
+            "Change %": "change",
+        }
+
+        full_df.rename(columns=rename_map, inplace=True)
+
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.DOW_JONES.name,
+            df=full_df,
+        )
+
+        self._logger.log_info(f'Finish processing data in "{table_name}".')
+
+    def _process_macroeconomics_dow_jones(self) -> None:
+        self._logger.log_info("Start processing macroeconomics DOW_JONES data.")
+
+        self._process_macroeconomics_dow_jones_investing()
+
+        self._logger.log_info("Finish processing macroeconomics DOW_JONES data.")
+
+    # endregion MACROECONOMICS.DOW_JONES
+
+    # region MACROECONOMICS.NYSE_COMPOSITE
+    def _process_macroeconomics_nyse_composite_investing(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.NYSE_COMPOSITE,
+            NYSECompositeSource.INVESTING,
+        )
+        folder_path = (
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+        )
+
+        table_name = Table.NYSE_COMPOSITE.__qualname__.lower()
+
+        self._logger.log_info(f'Start processing data in "{table_name}".')
+
+        # Add logic for processing data here
+        combined_file_path = os.path.join(folder_path, "Brent_Oil_Futures_Combined.csv")
+        if os.path.isfile(combined_file_path):
+            os.remove(combined_file_path)
+
+        file_paths = glob(os.path.join(folder_path, "*.csv"))
+
+        dfs = []
+        for file in file_paths:
+            df = pd.read_csv(file)
+
+            # Convert 'Date' to datetime
+            df["Date"] = pd.to_datetime(df["Date"], format="%m/%d/%Y", errors="coerce")
+
+            # Clean numeric columns: remove commas and symbols, then convert to float
+            for col in ["Price", "Open", "High", "Low"]:
+                df[col] = df[col].astype(str).str.replace(",", "").astype(float)
+
+            df["Vol."] = df["Vol."].apply(parse_volume)
+
+            # Change %: remove '%' and convert to float
+            df["Change %"] = (
+                df["Change %"].astype(str).str.replace("%", "").astype(float)
+            )
+
+            dfs.append(df)
+
+        # Combine and sort
+        full_df = pd.concat(dfs, ignore_index=True)
+        full_df = full_df.sort_values("Date").reset_index(drop=True)
+
+        rename_map = {
+            "Vol.": "volume",
+            "Change %": "change",
+        }
+
+        full_df.rename(columns=rename_map, inplace=True)
+
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.NYSE_COMPOSITE.name,
+            df=full_df,
+        )
+
+        self._logger.log_info(f'Finish processing data in "{table_name}".')
+
+    def _process_macroeconomics_nyse_composite(self) -> None:
+        self._logger.log_info("Start processing macroeconomics NYSE_COMPOSITE data.")
+
+        self._process_macroeconomics_nyse_composite_investing()
+
+        self._logger.log_info("Finish processing macroeconomics NYSE_COMPOSITE data.")
+
+    # endregion MACROECONOMICS.NYSE_COMPOSITE
+
+    # region MACROECONOMICS.SNP_500
+    def _process_macroeconomics_snp_500_investing(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.SNP_500,
+            SNP500Source.INVESTING,
+        )
+        folder_path = (
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+        )
+
+        table_name = Table.SNP_500.__qualname__.lower()
+
+        self._logger.log_info(f'Start processing data in "{table_name}".')
+
+        # Add logic for processing data here
+        combined_file_path = os.path.join(folder_path, "Brent_Oil_Futures_Combined.csv")
+        if os.path.isfile(combined_file_path):
+            os.remove(combined_file_path)
+
+        file_paths = glob(os.path.join(folder_path, "*.csv"))
+
+        dfs = []
+        for file in file_paths:
+            df = pd.read_csv(file)
+
+            # Convert 'Date' to datetime
+            df["Date"] = pd.to_datetime(df["Date"], format="%m/%d/%Y", errors="coerce")
+
+            # Clean numeric columns: remove commas and symbols, then convert to float
+            for col in ["Price", "Open", "High", "Low"]:
+                df[col] = df[col].astype(str).str.replace(",", "").astype(float)
+
+            df["Vol."] = df["Vol."].apply(parse_volume)
+
+            # Change %: remove '%' and convert to float
+            df["Change %"] = (
+                df["Change %"].astype(str).str.replace("%", "").astype(float)
+            )
+
+            dfs.append(df)
+
+        # Combine and sort
+        full_df = pd.concat(dfs, ignore_index=True)
+        full_df = full_df.sort_values("Date").reset_index(drop=True)
+
+        rename_map = {
+            "Vol.": "volume",
+            "Change %": "change",
+        }
+
+        full_df.rename(columns=rename_map, inplace=True)
+
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.SNP_500.name,
+            df=full_df,
+        )
+
+        self._logger.log_info(f'Finish processing data in "{table_name}".')
+
+    def _process_macroeconomics_snp_500(self) -> None:
+        self._logger.log_info("Start processing macroeconomics SNP_500 data.")
+
+        self._process_macroeconomics_snp_500_investing()
+
+        self._logger.log_info("Finish processing macroeconomics SNP_500 data.")
+
+    # endregion MACROECONOMICS.SNP_500
+
+    # region MACROECONOMICS.NASDAQ_COMPOSITE
+    def _process_macroeconomics_nasdaq_composite_investing(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.NASDAQ_COMPOSITE,
+            NASDAQCompositeSource.INVESTING,
+        )
+        folder_path = (
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+        )
+
+        table_name = Table.NASDAQ_COMPOSITE.__qualname__.lower()
+
+        self._logger.log_info(f'Start processing data in "{table_name}".')
+
+        # Add logic for processing data here
+        combined_file_path = os.path.join(folder_path, "Brent_Oil_Futures_Combined.csv")
+        if os.path.isfile(combined_file_path):
+            os.remove(combined_file_path)
+
+        file_paths = glob(os.path.join(folder_path, "*.csv"))
+
+        dfs = []
+        for file in file_paths:
+            df = pd.read_csv(file)
+
+            # Convert 'Date' to datetime
+            df["Date"] = pd.to_datetime(df["Date"], format="%m/%d/%Y", errors="coerce")
+
+            # Clean numeric columns: remove commas and symbols, then convert to float
+            for col in ["Price", "Open", "High", "Low"]:
+                df[col] = df[col].astype(str).str.replace(",", "").astype(float)
+
+            df["Vol."] = df["Vol."].apply(parse_volume)
+
+            # Change %: remove '%' and convert to float
+            df["Change %"] = (
+                df["Change %"].astype(str).str.replace("%", "").astype(float)
+            )
+
+            dfs.append(df)
+
+        # Combine and sort
+        full_df = pd.concat(dfs, ignore_index=True)
+        full_df = full_df.sort_values("Date").reset_index(drop=True)
+
+        rename_map = {
+            "Vol.": "volume",
+            "Change %": "change",
+        }
+
+        full_df.rename(columns=rename_map, inplace=True)
+
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.NASDAQ_COMPOSITE.name,
+            df=full_df,
+        )
+
+        self._logger.log_info(f'Finish processing data in "{table_name}".')
+
+    def _process_macroeconomics_nasdaq_composite(self) -> None:
+        self._logger.log_info("Start processing macroeconomics NASDAQ_COMPOSITE data.")
+
+        self._process_macroeconomics_nasdaq_composite_investing()
+
+        self._logger.log_info("Finish processing macroeconomics NASDAQ_COMPOSITE data.")
+
+    # endregion MACROECONOMICS.NASDAQ_COMPOSITE
+
+    # region MACROECONOMICS.NASDAQ_100
+    def _process_macroeconomics_nasdaq_100_investing(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.NASDAQ_100,
+            NASDAQ100Source.INVESTING,
+        )
+        folder_path = (
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+        )
+
+        table_name = Table.NASDAQ_100.__qualname__.lower()
+
+        self._logger.log_info(f'Start processing data in "{table_name}".')
+
+        # Add logic for processing data here
+        combined_file_path = os.path.join(folder_path, "Brent_Oil_Futures_Combined.csv")
+        if os.path.isfile(combined_file_path):
+            os.remove(combined_file_path)
+
+        file_paths = glob(os.path.join(folder_path, "*.csv"))
+
+        dfs = []
+        for file in file_paths:
+            df = pd.read_csv(file)
+
+            # Convert 'Date' to datetime
+            df["Date"] = pd.to_datetime(df["Date"], format="%m/%d/%Y", errors="coerce")
+
+            # Clean numeric columns: remove commas and symbols, then convert to float
+            for col in ["Price", "Open", "High", "Low"]:
+                df[col] = df[col].astype(str).str.replace(",", "").astype(float)
+
+            df["Vol."] = df["Vol."].apply(parse_volume)
+
+            # Change %: remove '%' and convert to float
+            df["Change %"] = (
+                df["Change %"].astype(str).str.replace("%", "").astype(float)
+            )
+
+            dfs.append(df)
+
+        # Combine and sort
+        full_df = pd.concat(dfs, ignore_index=True)
+        full_df = full_df.sort_values("Date").reset_index(drop=True)
+
+        rename_map = {
+            "Vol.": "volume",
+            "Change %": "change",
+        }
+
+        full_df.rename(columns=rename_map, inplace=True)
+
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.NASDAQ_100.name,
+            df=full_df,
+        )
+
+        self._logger.log_info(f'Finish processing data in "{table_name}".')
+
+    def _process_macroeconomics_nasdaq_100(self) -> None:
+        self._logger.log_info("Start processing macroeconomics NASDAQ_100 data.")
+
+        self._process_macroeconomics_nasdaq_100_investing()
+
+        self._logger.log_info("Finish processing macroeconomics NASDAQ_100 data.")
+
+    # endregion MACROECONOMICS.NASDAQ_100
+
+    # endregion MACROECONOMICS data process
+
+    # region STOCK MARKET data process
+    def _process_stock_market_market_add_data(self) -> None:
+        self._logger.log_info(
+            f'Start processing data in "{Table.MARKET.__qualname__.lower()}".'
+        )
+
+        market_data = {
+            Table.MARKET.Column.CODE.value: ["HSX", "HNX", "UPCOM"],
+            Table.MARKET.Column.NAME.value: [
+                "Ho Chi Minh City Stock Exchange",
+                "Hanoi Stock Exchange",
+                "Unlisted Public Company Market",
+            ],
+        }
+
+        df = pd.DataFrame(market_data)
+
+        self._save_pandas_table_to_database(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.MARKET.name,
+            df=df,
+        )
+
+        self._logger.log_info(
+            f'Finish processing data in "{Table.MARKET.__qualname__.lower()}".'
+        )
+
+    def _process_stock_market_market(self) -> None:
+        self._logger.log_info("Start processing stock market MARKET data.")
+
+        self._process_stock_market_market_add_data()
+
+        self._logger.log_info("Finish processing stock market MARKET data.")
+
+    # endregion STOCK MARKET data process
+
+    # region ENTERPRISE data process
+    def _process_enterprise_stock_cafef(self) -> None:
+        key = (
+            ScrapeMainType.ENTERPRISE,
+            EnterpriseSubType.DAILY_PRICE,
+            DailyPriceSource.CAFEF,
+        )
+        folder_path = (
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+        )
+
+        all_files = [f for f in os.listdir(folder_path) if f.endswith(".csv")]
+
+        # Pattern to match: NAME_upto_YYYYMMDD.csv
+        pattern = re.compile(r"(HNX|HSX|UPCOM)_upto_(\d{8})\.csv")
+
+        # Create a dict to store the newest file per exchange
+        latest_files = {}
+
+        for file in all_files:
+            match = pattern.match(file)
+            if match:
+                exchange = match.group(1)
+                date_str = match.group(2)
+                date = datetime.strptime(date_str, "%Y%m%d")
+
+                # Compare and store the latest file per exchange
+                if (exchange not in latest_files) or (
+                    date > latest_files[exchange]["date"]
+                ):
+                    latest_files[exchange] = {"file": file, "date": date}
+
+        # Assign to variables
+        hsx_file_path = os.path.join(
+            folder_path, latest_files.get("HSX", {}).get("file")
+        )
+        hnx_file_path = os.path.join(
+            folder_path, latest_files.get("HNX", {}).get("file")
+        )
+        upcom_file_path = os.path.join(
+            folder_path, latest_files.get("UPCOM", {}).get("file")
+        )
+
+        # Check for missing files
+        if not hsx_file_path or not os.path.isfile(hsx_file_path):
+            self._logger.log_error(f'HSX data file not found in "{folder_path}".')
+            return
+
+        if not hnx_file_path or not os.path.isfile(hnx_file_path):
+            self._logger.log_error(f'HNX data file not found in "{folder_path}".')
+            return
+
+        if not upcom_file_path or not os.path.isfile(upcom_file_path):
+            self._logger.log_error(f'UPCOM data file not found in "{folder_path}".')
+            return
+
+        table_name = Table.STOCK.__qualname__.lower()
+
+        self._logger.log_info(f'Start processing data in "{table_name}".')
+
+        stock_market_file_path_list = [hsx_file_path, hnx_file_path, upcom_file_path]
+
+        overall_df = pd.DataFrame()
+        for stock_market in stock_market_file_path_list:
+            df = pd.read_csv(stock_market)
+            df["<Ticker>"] = df["<Ticker>"].astype("string")
+
+            distinct_stocks = df["<Ticker>"].dropna().unique()
+
+            stock_df = pd.DataFrame(
+                {
+                    Table.STOCK.Column.CODE.value: distinct_stocks,
+                    Table.STOCK.Column.MARKET_ID.value: [
+                        stock_market_file_path_list.index(stock_market) + 1
+                    ]
+                    * len(distinct_stocks),
+                }
+            )
+
+            overall_df = pd.concat([overall_df, stock_df], ignore_index=True)
+
+        self._save_pandas_table_to_database(
+            schema_name=Schema.ENTERPRISE.value,
+            table_name=Table.STOCK.name,
+            df=overall_df,
+        )
+
+        self._logger.log_info(f'Finish processing data in "{table_name}".')
+
+    def _process_enterprise_stock(self) -> None:
+        self._logger.log_info("Start processing enterprise STOCK data.")
+
+        self._process_enterprise_stock_cafef()
+
+        self._logger.log_info("Finish processing enterprise STOCK data.")
+
+    # endregion ENTERPRISE data process
+
     def _process_data(self) -> None:
         self._logger.log_info("Start processing data.")
 
         # Macroeconomics
-        self._process_macroeconomics_gdp()
-        self._process_macroeconomics_cpi()
-        self._process_macroeconomics_exchange_rate()
-        self._process_macroeconomics_interest_rate()
-        self._process_macroeconomics_export()
-        self._process_macroeconomics_import()
-        self._process_macroeconomics_import_ipi()
-        self._process_macroeconomics_import_fdi()
-        self._process_macroeconomics_import_m2()
-        self._process_macroeconomics_import_retail()
-        self._process_macroeconomics_import_population_unemployment()
+        # self._process_macroeconomics_gdp()
+        # self._process_macroeconomics_cpi()
+        # self._process_macroeconomics_exchange_rate()
+        # self._process_macroeconomics_interest_rate()
+        # self._process_macroeconomics_export()
+        # self._process_macroeconomics_import()
+        # self._process_macroeconomics_ipi()
+        # self._process_macroeconomics_fdi()
+        # self._process_macroeconomics_m2()
+        # self._process_macroeconomics_retail()
+        # self._process_macroeconomics_population_unemployment()
+        # self._process_macroeconomics_gold_price()
+        # self._process_macroeconomics_oil_price()
+        # self._process_macroeconomics_dow_jones()
+        # self._process_macroeconomics_nyse_composite()
+        # self._process_macroeconomics_snp_500()
+        # self._process_macroeconomics_nasdaq_composite()
+        self._process_macroeconomics_nasdaq_100()
 
         # Stock market
+        # self._process_stock_market_market()
 
         # Enterprise
+        # self._process_enterprise_stock()
 
         self._logger.log_info("Finish processing data.")
 

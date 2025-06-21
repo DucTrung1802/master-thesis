@@ -101,6 +101,13 @@ class MacroeconomicsSubType(Enum):
     M2 = "m2"
     RETAIL = "retail"
     POPULATION_UNEMPLOYMENT = "population_unemployment"
+    GOLD_PRICE = "gold_price"
+    OIL_PRICE = "oil_price"
+    DOW_JONES = "dow_jones"
+    NYSE_COMPOSITE = "nyse_composite"
+    SNP_500 = "snp_500"
+    NASDAQ_COMPOSITE = "nasdaq_composite"
+    NASDAQ_100 = "nasdaq_100"
 
 
 class StockMarketSubType(Enum):
@@ -170,6 +177,34 @@ class PopulationUnemploymentSource(Enum):
     VIETSTOCK = "vietstock"
 
 
+class GoldPriceSource(Enum):
+    INVESTING = "investing"
+
+
+class OilPriceSource(Enum):
+    INVESTING = "investing"
+
+
+class DowJonesSource(Enum):
+    INVESTING = "investing"
+
+
+class NYSECompositeSource(Enum):
+    INVESTING = "investing"
+
+
+class SNP500Source(Enum):
+    INVESTING = "investing"
+
+
+class NASDAQCompositeSource(Enum):
+    INVESTING = "investing"
+
+
+class NASDAQ100Source(Enum):
+    INVESTING = "investing"
+
+
 # STOCK_MARKET
 class VnHnxIndexSource(Enum):
     CAFEF = "cafef"
@@ -219,6 +254,13 @@ Source = Union[
     UpcomIndexSource,
     FinanceInfoSource,
     DailyPriceSource,
+    GoldPriceSource,
+    OilPriceSource,
+    DowJonesSource,
+    NYSECompositeSource,
+    SNP500Source,
+    NASDAQCompositeSource,
+    NASDAQ100Source,
 ]
 
 # ================================================
@@ -315,6 +357,55 @@ SCRAPE_MAPPING: Dict[Tuple[ScrapeMainType, ScrapeSubType, Source], SourceInfo] =
     ): SourceInfo(
         url="https://finance.vietstock.vn/du-lieu-vi-mo/55-56/dan-so-va-lao-dong.htm",
     ),
+    (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.GOLD_PRICE,
+        GoldPriceSource.INVESTING,
+    ): SourceInfo(
+        url="https://www.investing.com/commodities/gold-historical-data",
+    ),
+    (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.OIL_PRICE,
+        OilPriceSource.INVESTING,
+    ): SourceInfo(
+        url="https://www.investing.com/commodities/brent-oil-historical-data",
+    ),
+    (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.DOW_JONES,
+        DowJonesSource.INVESTING,
+    ): SourceInfo(
+        url="https://www.investing.com/indices/us-30-historical-data",
+    ),
+    (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.NYSE_COMPOSITE,
+        NYSECompositeSource.INVESTING,
+    ): SourceInfo(
+        url="https://www.investing.com/indices/nyse-composite-historical-data",
+    ),
+    (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.SNP_500,
+        SNP500Source.INVESTING,
+    ): SourceInfo(
+        url="https://www.investing.com/indices/us-spx-500",
+    ),
+    (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.NASDAQ_COMPOSITE,
+        NASDAQCompositeSource.INVESTING,
+    ): SourceInfo(
+        url="https://www.investing.com/indices/nasdaq-composite-historical-data",
+    ),
+    (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.NASDAQ_100,
+        NASDAQ100Source.INVESTING,
+    ): SourceInfo(
+        url="https://www.investing.com/indices/nq-100",
+    ),
     # STOCK_MARKET
     (
         ScrapeMainType.STOCK_MARKET,
@@ -368,6 +459,8 @@ class Schema(Enum):
 
 
 class Table:
+
+    # MACROECONOMICS
     class GDP:
         class Column(Enum):
             YEAR = "year"
@@ -535,3 +628,125 @@ class Table:
 
         name = "population_unemployment"
         primary_key = [Column.YEAR.value]
+
+    class GOLD_PRICE:
+        class Column(Enum):
+            DATE = "date"
+            PRICE = "price"
+            OPEN = "open"
+            HIGH = "high"
+            LOW = "low"
+            VOLUME = "volume"
+            CHANGE = "change"
+
+        name = "gold_price"
+        primary_key = [Column.DATE.value]
+
+    class OIL_PRICE:
+        class Column(Enum):
+            DATE = "date"
+            PRICE = "price"
+            OPEN = "open"
+            HIGH = "high"
+            LOW = "low"
+            VOLUME = "volume"
+            CHANGE = "change"
+
+        name = "oil_price"
+        primary_key = [Column.DATE.value]
+
+    class DOW_JONES:
+        class Column(Enum):
+            DATE = "date"
+            PRICE = "price"
+            OPEN = "open"
+            HIGH = "high"
+            LOW = "low"
+            VOLUME = "volume"
+            CHANGE = "change"
+
+        name = "dow_jones"
+        primary_key = [Column.DATE.value]
+
+    class NYSE_COMPOSITE:
+        class Column(Enum):
+            DATE = "date"
+            PRICE = "price"
+            OPEN = "open"
+            HIGH = "high"
+            LOW = "low"
+            VOLUME = "volume"
+            CHANGE = "change"
+
+        name = "nyse_composite"
+        primary_key = [Column.DATE.value]
+
+    class SNP_500:
+        class Column(Enum):
+            DATE = "date"
+            PRICE = "price"
+            OPEN = "open"
+            HIGH = "high"
+            LOW = "low"
+            VOLUME = "volume"
+            CHANGE = "change"
+
+        name = "snp_500"
+        primary_key = [Column.DATE.value]
+
+    class NASDAQ_COMPOSITE:
+        class Column(Enum):
+            DATE = "date"
+            PRICE = "price"
+            OPEN = "open"
+            HIGH = "high"
+            LOW = "low"
+            VOLUME = "volume"
+            CHANGE = "change"
+
+        name = "nasdaq_composite"
+        primary_key = [Column.DATE.value]
+
+    class NASDAQ_100:
+        class Column(Enum):
+            DATE = "date"
+            PRICE = "price"
+            OPEN = "open"
+            HIGH = "high"
+            LOW = "low"
+            VOLUME = "volume"
+            CHANGE = "change"
+
+        name = "nasdaq_100"
+        primary_key = [Column.DATE.value]
+
+    # STOCK_MARKET
+    class MARKET:
+        class Column(Enum):
+            ID = "id"
+            CODE = "code"
+            NAME = "name"
+            CREATE_DATE = "create_date"
+            UPDATE_DATE = "update_date"
+            DELETE_DATE = "delete_date"
+
+        name = "market"
+        primary_key = [Column.ID.value]
+
+    # ENTERPRISE
+    class STOCK:
+        class Column(Enum):
+            ID = "id"
+            CODE = "code"
+            ISSUED_SHARES = "issued_shares"
+            OUTSTANDING_SHARES = "outstanding_shares"
+            OUTSTANDING_RATE = "outstanding_rate"
+            MARKET_CAP = "market_cap"
+            MARKET_ID = "market_id"
+            STOCK_TYPE = "stock_type"
+            CREATE_DATE = "create_date"
+            UPDATE_DATE = "update_date"
+            DELETE_DATE = "delete_date"
+
+        name = "stock"
+        primary_key = [Column.ID.value]

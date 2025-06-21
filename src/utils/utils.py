@@ -3,6 +3,7 @@ import zipfile
 import requests
 from typing import Tuple
 from typing import Optional
+import pandas as pd
 
 from logger.logger import Logger
 from models.tabular_database_driver_models.tabular_database_driver_models import (
@@ -212,3 +213,18 @@ def folder_contains_files(
                 return True
 
     return False
+
+
+# Volume: remove 'K', 'M' 'B' and convert to float with multiplier
+def parse_volume(val):
+    if pd.isna(val):
+        return None
+    val = str(val).strip().replace(",", "")
+    if val.endswith("K"):
+        return float(val[:-1]) * 1_000
+    elif val.endswith("M"):
+        return float(val[:-1]) * 1_000_000
+    elif val.endswith("B"):
+        return float(val[:-1]) * 1_000_000_000
+    else:
+        return float(val)

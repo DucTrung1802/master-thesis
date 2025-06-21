@@ -1680,6 +1680,9 @@ class WebScraper:
             Task(format_key_for_name(key), self._scrape_data_from, key)
         )
 
+        # MACROECONOMICS_POPULATION_GOLD_PRICE_INVESTING
+        # Gold price is scaped MANUALLY from investing.com
+
         number_of_task_after = self._thread_manager.get_current_number_of_task()
         self._logger.log_info(
             f"Added {number_of_task_after - number_of_task_before} macroeconomic data scraping tasks."
