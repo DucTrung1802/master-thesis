@@ -1,5 +1,6 @@
 import psycopg2
 from typing import List
+import pandas as pd
 
 from logger.logger import Logger
 from tabular_database_driver.tabular_database_driver_interface import (
@@ -365,7 +366,8 @@ DELETE FROM {schema_name}.{table_name}
         columns: List[str] = None,
         join_model: JoinModel = None,
         conditions: List[Condition] = None,
-    ) -> List:
+        limit: int = None,
+    ) -> pd.DataFrame:
         """Select records from a table."""
         try:
             if columns and not isinstance(columns, List):
@@ -395,13 +397,16 @@ SELECT
 FROM
     {schema_name}.{table_name} {f"\n    {join_clause}" if join_clause else ""}
 {where_clause}
+{f"LIMIT {limit}" if limit else ""}
 """
             self.execute_query(query)
             results = self.fetch_result()
+            column_names = [desc[0] for desc in self._cursor.description]
+            df = pd.DataFrame(results, columns=column_names)
             self._logger.log_info(
                 f'Selected {len(results)} records from table "{schema_name}.{table_name}" successfully.'
             )
-            return results
+            return df
         except Exception as e:
             self._logger.log_error(f"Error selecting records: {e}")
-            return []
+            return pd.DataFrame()
