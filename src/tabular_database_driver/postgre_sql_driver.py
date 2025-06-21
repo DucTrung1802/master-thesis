@@ -366,6 +366,7 @@ DELETE FROM {schema_name}.{table_name}
         columns: List[str] = None,
         join_model: JoinModel = None,
         conditions: List[Condition] = None,
+        order_by: List[str] = None,
         limit: int = None,
     ) -> pd.DataFrame:
         """Select records from a table."""
@@ -390,6 +391,9 @@ DELETE FROM {schema_name}.{table_name}
                 if join_model
                 else ""
             )
+            order_by_clause = (
+                "ORDER BY\n    " + ",\n    ".join(order_by) if order_by else ""
+            )
 
             query = f"""
 SELECT
@@ -397,6 +401,7 @@ SELECT
 FROM
     {schema_name}.{table_name} {f"\n    {join_clause}" if join_clause else ""}
 {where_clause}
+{order_by_clause}
 {f"LIMIT {limit}" if limit else ""}
 """
             self.execute_query(query)
