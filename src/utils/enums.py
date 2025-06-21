@@ -106,6 +106,7 @@ class MacroeconomicsSubType(Enum):
     DOW_JONES = "dow_jones"
     NYSE_COMPOSITE = "nyse_composite"
     SNP_500 = "snp_500"
+    NASDAQ_COMPOSITE = "nasdaq_composite"
 
 
 class StockMarketSubType(Enum):
@@ -193,6 +194,9 @@ class NYSECompositeSource(Enum):
 
 class SNP500Source(Enum):
     INVESTING = "investing"
+    
+class NASDAQCompositeSource(Enum):
+    INVESTING = "investing"
 
 
 # STOCK_MARKET
@@ -249,6 +253,7 @@ Source = Union[
     DowJonesSource,
     NYSECompositeSource,
     SNP500Source,
+    NASDAQCompositeSource,
 ]
 
 # ================================================
@@ -379,6 +384,13 @@ SCRAPE_MAPPING: Dict[Tuple[ScrapeMainType, ScrapeSubType, Source], SourceInfo] =
         SNP500Source.INVESTING,
     ): SourceInfo(
         url="https://www.investing.com/indices/us-spx-500",
+    ),
+        (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.NASDAQ_COMPOSITE,
+        NASDAQCompositeSource.INVESTING,
+    ): SourceInfo(
+        url="https://www.investing.com/indices/nasdaq-composite-historical-data",
     ),
     # STOCK_MARKET
     (
@@ -666,6 +678,19 @@ class Table:
             CHANGE = "change"
 
         name = "snp_500"
+        primary_key = [Column.DATE.value]
+        
+    class NASDAQ_COMPOSITE:
+        class Column(Enum):
+            DATE = "date"
+            PRICE = "price"
+            OPEN = "open"
+            HIGH = "high"
+            LOW = "low"
+            VOLUME = "volume"
+            CHANGE = "change"
+
+        name = "nasdaq_composite"
         primary_key = [Column.DATE.value]
 
     # STOCK_MARKET

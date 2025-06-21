@@ -396,6 +396,24 @@ class DataPreprocessor:
             primary_keys=Table.SNP_500.primary_key,
         )
         # fmt: on
+        
+        # NASDAQ_COMPOSITE
+        # fmt: off
+        self._database_driver.create_table(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.NASDAQ_COMPOSITE.name,
+            columns = [
+                Column(name=Table.NASDAQ_COMPOSITE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                Column(name=Table.NASDAQ_COMPOSITE.Column.PRICE.value, data_type=DataType.DECIMAL(), nullable=False),
+                Column(name=Table.NASDAQ_COMPOSITE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.NASDAQ_COMPOSITE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.NASDAQ_COMPOSITE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.NASDAQ_COMPOSITE.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.NASDAQ_COMPOSITE.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
+            ],
+            primary_keys=Table.NASDAQ_COMPOSITE.primary_key,
+        )
+        # fmt: on
 
         self._logger.log_info("Finish creating macroeconomics tables.")
 
@@ -1757,6 +1775,76 @@ class DataPreprocessor:
 
     # endregion MACROECONOMICS.SNP_500
 
+    # region MACROECONOMICS.NASDAQ_COMPOSITE
+    def _process_macroeconomics_nasdaq_composite_investing(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.NASDAQ_COMPOSITE,
+            NASDAQCompositeSource.INVESTING,
+        )
+        folder_path = (
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+        )
+
+        table_name = Table.NASDAQ_COMPOSITE.__qualname__.lower()
+
+        self._logger.log_info(f'Start processing data in "{table_name}".')
+
+        # Add logic for processing data here
+        combined_file_path = os.path.join(folder_path, "Brent_Oil_Futures_Combined.csv")
+        if os.path.isfile(combined_file_path):
+            os.remove(combined_file_path)
+
+        file_paths = glob(os.path.join(folder_path, "*.csv"))
+
+        dfs = []
+        for file in file_paths:
+            df = pd.read_csv(file)
+
+            # Convert 'Date' to datetime
+            df["Date"] = pd.to_datetime(df["Date"], format="%m/%d/%Y", errors="coerce")
+
+            # Clean numeric columns: remove commas and symbols, then convert to float
+            for col in ["Price", "Open", "High", "Low"]:
+                df[col] = df[col].astype(str).str.replace(",", "").astype(float)
+
+            df["Vol."] = df["Vol."].apply(parse_volume)
+
+            # Change %: remove '%' and convert to float
+            df["Change %"] = (
+                df["Change %"].astype(str).str.replace("%", "").astype(float)
+            )
+
+            dfs.append(df)
+
+        # Combine and sort
+        full_df = pd.concat(dfs, ignore_index=True)
+        full_df = full_df.sort_values("Date").reset_index(drop=True)
+
+        rename_map = {
+            "Vol.": "volume",
+            "Change %": "change",
+        }
+
+        full_df.rename(columns=rename_map, inplace=True)
+
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.NASDAQ_COMPOSITE.name,
+            df=full_df,
+        )
+
+        self._logger.log_info(f'Finish processing data in "{table_name}".')
+
+    def _process_macroeconomics_nasdaq_composite(self) -> None:
+        self._logger.log_info("Start processing macroeconomics NASDAQ_COMPOSITE data.")
+
+        self._process_macroeconomics_nasdaq_composite_investing()
+
+        self._logger.log_info("Finish processing macroeconomics NASDAQ_COMPOSITE data.")
+
+    # endregion MACROECONOMICS.NASDAQ_COMPOSITE
+
     # endregion MACROECONOMICS data process
 
     # region STOCK MARKET data process
@@ -1912,7 +2000,8 @@ class DataPreprocessor:
         # self._process_macroeconomics_oil_price()
         # self._process_macroeconomics_dow_jones()
         # self._process_macroeconomics_nyse_composite()
-        self._process_macroeconomics_snp_500()
+        # self._process_macroeconomics_snp_500()
+        self._process_macroeconomics_nasdaq_composite()
 
         # Stock market
         # self._process_stock_market_market()
