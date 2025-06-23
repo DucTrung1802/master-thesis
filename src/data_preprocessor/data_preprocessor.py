@@ -436,7 +436,7 @@ class DataPreprocessor:
         self._logger.log_info("Finish creating macroeconomics tables.")
 
     def _create_stock_market_tables(self) -> None:
-        self._logger.log_info("Start creating macroeconomics tables.")
+        self._logger.log_info("Start creating stock market tables.")
 
         # MARKET
         # fmt: off
@@ -454,11 +454,28 @@ class DataPreprocessor:
             primary_keys=Table.MARKET.primary_key,
         )
         # fmt: on
+        
+        # VN_INDEX
+        # fmt: off
+        self._database_driver.create_table(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.VN_INDEX.name,
+            columns = [
+                Column(name=Table.VN_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                Column(name=Table.VN_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.VN_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.VN_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.VN_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.VN_INDEX.Column.VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+            ],
+            primary_keys=Table.VN_INDEX.primary_key,
+        )
+        # fmt: on
 
-        self._logger.log_info("Finish creating macroeconomics tables.")
+        self._logger.log_info("Finish creating stock market tables.")
 
     def _create_enterprise_tables(self) -> None:
-        self._logger.log_info("Start creating macroeconomics tables.")
+        self._logger.log_info("Start creating enterprise tables.")
 
         # STOCK
         # fmt: off
@@ -487,7 +504,7 @@ class DataPreprocessor:
         )
         # fmt: on
 
-        self._logger.log_info("Finish creating macroeconomics tables.")
+        self._logger.log_info("Finish creating enterprise tables.")
 
     def _create_tables(self) -> None:
         self._logger.log_info("Start creating tables.")
@@ -1935,7 +1952,9 @@ class DataPreprocessor:
 
     # endregion MACROECONOMICS data process
 
-    # region STOCK MARKET data process
+    # region STOCK_MARKET data process
+
+    # region STOCK_MARKET.MARKET
     def _process_stock_market_market_add_data(self) -> None:
         self._logger.log_info(
             f'Start processing data in "{Table.MARKET.__qualname__.lower()}".'
@@ -1969,9 +1988,68 @@ class DataPreprocessor:
 
         self._logger.log_info("Finish processing stock market MARKET data.")
 
-    # endregion STOCK MARKET data process
+    # endregion STOCK MARKET.MARKET
+
+    # region STOCK_MARKET.VN_INDEX
+    def _process_stock_market_vn_index_cafef(self) -> None:
+        key = (
+            ScrapeMainType.STOCK_MARKET,
+            StockMarketSubType.VN_HNX_INDEX,
+            VnHnxIndexSource.CAFEF,
+        )
+        folder_path = (
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+        )
+
+        file_path = get_newest_file_path(
+            folder_path=folder_path, extension=FileExtension.CSV
+        )
+
+        if not file_path:
+            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
+            return
+
+        self._logger.log_info(f'Start processing data in "{file_path}".')
+
+        # Add logic for processing data here
+        df = pd.read_csv(file_path, encoding="utf-8")
+        vn_index_df = df[df["<Ticker>"] == "VNINDEX"]
+        rename_map = {
+            "<Ticker>": "ticker",
+            "<DTYYYYMMDD>": "date",
+            "<Open>": "open",
+            "<High>": "high",
+            "<Low>": "low",
+            "<Close>": "close",
+            "<Volume>": "volume",
+        }
+        vn_index_df = vn_index_df.rename(columns=rename_map)
+        vn_index_df.drop(columns=["ticker"], inplace=True)
+        vn_index_df["date"] = pd.to_datetime(vn_index_df["date"], format="%Y%m%d")
+        vn_index_df = vn_index_df.sort_values(by="date").reset_index(drop=True)
+
+        self._save_pandas_table_to_database(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.VN_INDEX.name,
+            df=vn_index_df,
+        )
+
+        self._logger.log_info(f'Finish processing data in "{file_path}".')
+
+    def _process_stock_market_vn_index(self) -> None:
+        self._logger.log_info("Start processing stock market VN_INDEX data.")
+
+        self._process_stock_market_vn_index_cafef()
+
+        self._logger.log_info("Finish processing stock market VN_INDEX data.")
+
+    # endregion STOCK_MARKET.VN_INDEX
+
+    # endregion STOCK_MARKET data process
 
     # region ENTERPRISE data process
+
+    # region ENTERPRISE.DAILY_PRICE
     def _process_enterprise_stock_cafef(self) -> None:
         key = (
             ScrapeMainType.ENTERPRISE,
@@ -2067,6 +2145,8 @@ class DataPreprocessor:
 
         self._logger.log_info("Finish processing enterprise STOCK data.")
 
+    # endregion ENTERPRISE.DAILY_PRICE
+
     # endregion ENTERPRISE data process
 
     def _process_data(self) -> None:
@@ -2090,10 +2170,11 @@ class DataPreprocessor:
         # self._process_macroeconomics_nyse_composite()
         # self._process_macroeconomics_snp_500()
         # self._process_macroeconomics_nasdaq_composite()
-        self._process_macroeconomics_nasdaq_100()
+        # self._process_macroeconomics_nasdaq_100()
 
         # Stock market
         # self._process_stock_market_market()
+        self._process_stock_market_vn_index()
 
         # Enterprise
         # self._process_enterprise_stock()

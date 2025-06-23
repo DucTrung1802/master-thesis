@@ -733,6 +733,18 @@ class Table:
         name = "market"
         primary_key = [Column.ID.value]
 
+    class VN_INDEX:
+        class Column(Enum):
+            DATE = "date"
+            OPEN = "open"
+            HIGH = "high"
+            LOW = "low"
+            CLOSE = "close"
+            VOLUME = "volume"
+
+        name = "vn_index"
+        primary_key = [Column.DATE.value]
+
     # ENTERPRISE
     class STOCK:
         class Column(Enum):
