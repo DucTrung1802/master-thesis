@@ -488,6 +488,29 @@ class DataPreprocessor:
             primary_keys=Table.HNX_INDEX.primary_key,
         )
         # fmt: on
+        
+        # VN_30_INDEX
+        # fmt: off
+        self._database_driver.create_table(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.VN_30_INDEX.name,
+            columns = [
+                Column(name=Table.VN_30_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                Column(name=Table.VN_30_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.VN_30_INDEX.Column.ADJUSTED_CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.VN_30_INDEX.Column.MATCHED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                Column(name=Table.VN_30_INDEX.Column.MATCHED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.VN_30_INDEX.Column.NEGOTIATED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                Column(name=Table.VN_30_INDEX.Column.NEGOTIATED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.VN_30_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.VN_30_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.VN_30_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.VN_30_INDEX.Column.CHANGE_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.VN_30_INDEX.Column.CHANGE_PERCENTAGE.value, data_type=DataType.DECIMAL(), nullable=True),
+            ],
+            primary_keys=Table.VN_30_INDEX.primary_key,
+        )
+        # fmt: on
 
         self._logger.log_info("Finish creating stock market tables.")
 
@@ -2117,6 +2140,76 @@ class DataPreprocessor:
 
     # endregion STOCK_MARKET.HNX_INDEX
 
+    # region STOCK_MARKET.VN_30_INDEX
+    def _process_stock_market_vn_30_index_cafef(self) -> None:
+        key = (
+            ScrapeMainType.STOCK_MARKET,
+            StockMarketSubType.VN_30_INDEX,
+            Vn30IndexSource.CAFEF,
+        )
+        folder_path = (
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+        )
+
+        file_path = get_newest_file_path(
+            folder_path=folder_path, extension=FileExtension.CSV
+        )
+
+        if not file_path:
+            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
+            return
+
+        self._logger.log_info(f'Start processing data in "{file_path}".')
+
+        # Add logic for processing data here
+        df = pd.read_csv(file_path, encoding="utf-8")
+
+        df["date"] = pd.to_datetime(df["date"], format="%d/%m/%Y")
+
+        df["adjusted_close"] = df["adjusted_close"].str.replace(",", "", regex=False)
+        df["adjusted_close"] = pd.to_numeric(df["adjusted_close"], errors="coerce")
+
+        df[["change_value", "change_percentage"]] = df["change"].str.extract(
+            r"([-\d.]+)\s*\(([-\d.]+)\s*%\)"
+        )
+        df["change_value"] = df["change_value"].astype(float)
+        df["change_percentage"] = df["change_percentage"].astype(float)
+
+        df = df.drop(columns=["change"])
+
+        df["matched_volume"] = (
+            df["matched_volume"].str.replace(",", "", regex=False).astype(int)
+        )
+        df["matched_value"] = (
+            df["matched_value"].str.replace(",", "", regex=False).astype(float)
+        )
+        df["negotiated_volume"] = (
+            df["negotiated_volume"].str.replace(",", "", regex=False).astype(int)
+        )
+        df["negotiated_value"] = (
+            df["negotiated_value"].str.replace(",", "", regex=False).astype(float)
+        )
+        df["open"] = df["open"].str.replace(",", "", regex=False).astype(float)
+        df["high"] = df["high"].str.replace(",", "", regex=False).astype(float)
+        df["low"] = df["low"].str.replace(",", "", regex=False).astype(float)
+        df = df.sort_values(by="date", ascending=True, ignore_index=True)
+
+        self._save_pandas_table_to_database(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.VN_30_INDEX.name,
+            df=df,
+        )
+
+        self._logger.log_info(f'Finish processing data in "{file_path}".')
+
+    def _process_stock_market_vn_30_index(self) -> None:
+        self._logger.log_info("Start processing stock market VN_30_INDEX data.")
+
+        self._process_stock_market_vn_30_index_cafef()
+
+        self._logger.log_info("Finish processing stock market VN_30_INDEX data.")
+
+    # endregion STOCK_MARKET.VN_30_INDEX
 
     # endregion STOCK_MARKET data process
 
@@ -2248,7 +2341,8 @@ class DataPreprocessor:
         # Stock market
         # self._process_stock_market_market()
         # self._process_stock_market_vn_index()
-        self._process_stock_market_hnx_index()
+        # self._process_stock_market_hnx_index()
+        self._process_stock_market_vn_30_index()
 
         # Enterprise
         # self._process_enterprise_stock()
