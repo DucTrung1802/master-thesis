@@ -744,6 +744,18 @@ class Table:
 
         name = "vn_index"
         primary_key = [Column.DATE.value]
+        
+    class HNX_INDEX:
+        class Column(Enum):
+            DATE = "date"
+            OPEN = "open"
+            HIGH = "high"
+            LOW = "low"
+            CLOSE = "close"
+            VOLUME = "volume"
+
+        name = "hnx_index"
+        primary_key = [Column.DATE.value]
 
     # ENTERPRISE
     class STOCK:

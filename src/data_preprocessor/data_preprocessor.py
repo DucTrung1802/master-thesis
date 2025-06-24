@@ -471,6 +471,23 @@ class DataPreprocessor:
             primary_keys=Table.VN_INDEX.primary_key,
         )
         # fmt: on
+        
+        # HNX_INDEX
+        # fmt: off
+        self._database_driver.create_table(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.HNX_INDEX.name,
+            columns = [
+                Column(name=Table.HNX_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                Column(name=Table.HNX_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.HNX_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.HNX_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.HNX_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.HNX_INDEX.Column.VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+            ],
+            primary_keys=Table.HNX_INDEX.primary_key,
+        )
+        # fmt: on
 
         self._logger.log_info("Finish creating stock market tables.")
 
@@ -2045,6 +2062,62 @@ class DataPreprocessor:
 
     # endregion STOCK_MARKET.VN_INDEX
 
+    # region STOCK_MARKET.HNX_INDEX
+    def _process_stock_market_hnx_index_cafef(self) -> None:
+        key = (
+            ScrapeMainType.STOCK_MARKET,
+            StockMarketSubType.VN_HNX_INDEX,
+            VnHnxIndexSource.CAFEF,
+        )
+        folder_path = (
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+        )
+
+        file_path = get_newest_file_path(
+            folder_path=folder_path, extension=FileExtension.CSV
+        )
+
+        if not file_path:
+            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
+            return
+
+        self._logger.log_info(f'Start processing data in "{file_path}".')
+
+        # Add logic for processing data here
+        df = pd.read_csv(file_path, encoding="utf-8")
+        hnx_index_df = df[df["<Ticker>"] == "HNX-INDEX"]
+        rename_map = {
+            "<Ticker>": "ticker",
+            "<DTYYYYMMDD>": "date",
+            "<Open>": "open",
+            "<High>": "high",
+            "<Low>": "low",
+            "<Close>": "close",
+            "<Volume>": "volume",
+        }
+        hnx_index_df = hnx_index_df.rename(columns=rename_map)
+        hnx_index_df.drop(columns=["ticker"], inplace=True)
+        hnx_index_df["date"] = pd.to_datetime(hnx_index_df["date"], format="%Y%m%d")
+        hnx_index_df = hnx_index_df.sort_values(by="date").reset_index(drop=True)
+
+        self._save_pandas_table_to_database(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.HNX_INDEX.name,
+            df=hnx_index_df,
+        )
+
+        self._logger.log_info(f'Finish processing data in "{file_path}".')
+
+    def _process_stock_market_hnx_index(self) -> None:
+        self._logger.log_info("Start processing stock market HNX_INDEX data.")
+
+        self._process_stock_market_hnx_index_cafef()
+
+        self._logger.log_info("Finish processing stock market HNX_INDEX data.")
+
+    # endregion STOCK_MARKET.HNX_INDEX
+
+
     # endregion STOCK_MARKET data process
 
     # region ENTERPRISE data process
@@ -2174,7 +2247,8 @@ class DataPreprocessor:
 
         # Stock market
         # self._process_stock_market_market()
-        self._process_stock_market_vn_index()
+        # self._process_stock_market_vn_index()
+        self._process_stock_market_hnx_index()
 
         # Enterprise
         # self._process_enterprise_stock()
