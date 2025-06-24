@@ -775,6 +775,24 @@ class Table:
         name = "vn_30_index"
         primary_key = [Column.DATE.value]
 
+    class VN_100_INDEX:
+        class Column(Enum):
+            DATE = "date"
+            CLOSE = "close"
+            ADJUSTED_CLOSE = "adjusted_close"
+            MATCHED_VOLUME = "matched_volume"
+            MATCHED_VALUE = "matched_value"
+            NEGOTIATED_VOLUME = "negotiated_volume"
+            NEGOTIATED_VALUE = "negotiated_value"
+            OPEN = "open"
+            HIGH = "high"
+            LOW = "low"
+            CHANGE_VALUE = "change_value"
+            CHANGE_PERCENTAGE = "change_percentage"
+
+        name = "vn_100_index"
+        primary_key = [Column.DATE.value]
+
     # ENTERPRISE
     class STOCK:
         class Column(Enum):
