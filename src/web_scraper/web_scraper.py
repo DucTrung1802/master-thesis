@@ -1078,7 +1078,7 @@ class WebScraper:
             max_index = int(web_driver.find_element(By.XPATH, max_index_xpath).text)
             next_page_button_xpath = '//*[@id="divStart"]/div/div[3]/div[3]'
 
-            for page in range(1, max_index):
+            for page in range(1, max_index + 1):
                 headers, rows = self._extract_table_by_id(
                     bs4_parser, "owner-contents-table"
                 )
@@ -1087,8 +1087,11 @@ class WebScraper:
                     writer = csv.writer(f)
                     writer.writerows(rows)
 
+                if page == max_index:
+                    break
+                
                 # Click next page
-
+                
                 # Get a reference element inside the table BEFORE clicking "Next"
                 table_xpath = '//*[@id="owner-contents-table"]'
                 old_content = web_driver.find_element(
@@ -1159,7 +1162,7 @@ class WebScraper:
             max_index = int(web_driver.find_element(By.XPATH, max_index_xpath).text)
             next_page_button_xpath = '//*[@id="divStart"]/div/div[3]/div[3]'
 
-            for page in range(1, max_index):
+            for page in range(1, max_index + 1):
                 headers, rows = self._extract_table_by_id(
                     bs4_parser, "owner-contents-table"
                 )
@@ -1167,6 +1170,9 @@ class WebScraper:
                 with open(file_path, "a", newline="", encoding="utf-8") as f:
                     writer = csv.writer(f)
                     writer.writerows(rows)
+
+                if page == max_index:
+                    break
 
                 # Click next page
 
@@ -1240,7 +1246,7 @@ class WebScraper:
             max_index = int(web_driver.find_element(By.XPATH, max_index_xpath).text)
             next_page_button_xpath = '//*[@id="divStart"]/div/div[3]/div[3]'
 
-            for page in range(1, max_index):
+            for page in range(1, max_index + 1):
                 headers, rows = self._extract_table_by_id(
                     bs4_parser, "owner-contents-table"
                 )
@@ -1248,6 +1254,9 @@ class WebScraper:
                 with open(file_path, "a", newline="", encoding="utf-8") as f:
                     writer = csv.writer(f)
                     writer.writerows(rows)
+
+                if page == max_index:
+                    break
 
                 # Click next page
 
@@ -1321,7 +1330,7 @@ class WebScraper:
             max_index = int(web_driver.find_element(By.XPATH, max_index_xpath).text)
             next_page_button_xpath = '//*[@id="divStart"]/div/div[3]/div[3]'
 
-            for page in range(1, max_index):
+            for page in range(1, max_index + 1):
                 headers, rows = self._extract_table_by_id(
                     bs4_parser, "owner-contents-table"
                 )
@@ -1329,6 +1338,9 @@ class WebScraper:
                 with open(file_path, "a", newline="", encoding="utf-8") as f:
                     writer = csv.writer(f)
                     writer.writerows(rows)
+
+                if page == max_index:
+                    break
 
                 # Click next page
 
