@@ -1494,7 +1494,7 @@ class WebScraper:
 
             case (
                 ScrapeMainType.MACROECONOMICS,
-                MacroeconomicsSubType.EXPORT_IMPORT,
+                MacroeconomicsSubType.EXPORT,
                 ExportImportSource.VIETSTOCK,
             ):
                 self._scrape_data_macroeconomics_export_import_vietstock(key)
@@ -1635,7 +1635,7 @@ class WebScraper:
         # MACROECONOMICS_EXPORT_IMPORT_VIETSTOCK
         key = (
             ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.EXPORT_IMPORT,
+            MacroeconomicsSubType.EXPORT,
             ExportImportSource.VIETSTOCK,
         )
         self._thread_manager.add_task(
