@@ -594,7 +594,7 @@ class DataPreprocessor:
             columns = [
                 Column(name=Table.STOCK.Column.ID.value, data_type=DataType.SERIAL(), nullable=False),
                 Column(name=Table.STOCK.Column.CODE.value, data_type=DataType.VARCHAR(), nullable=False),
-                Column(name=Table.STOCK.Column.ISSUED_SHARES.value, data_type=DataType.BIGINT(), nullable=True),
+                Column(name=Table.STOCK.Column.LISTED_SHARES.value, data_type=DataType.BIGINT(), nullable=True),
                 Column(name=Table.STOCK.Column.OUTSTANDING_SHARES.value, data_type=DataType.BIGINT(), nullable=True),
                 Column(name=Table.STOCK.Column.OUTSTANDING_RATE.value, data_type=DataType.DECIMAL(), nullable=True),
                 Column(name=Table.STOCK.Column.MARKET_CAP.value, data_type=DataType.BIGINT(), nullable=True),
@@ -2651,7 +2651,7 @@ class DataPreprocessor:
             self._connect_to_database()
             self._create_schemas()
             self._create_tables()
-            self._process_data()
+            # self._process_data()
         except Exception as e:
             self._logger.log_error(f"Error preprocessing data: {e}")
         finally:

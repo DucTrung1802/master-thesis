@@ -834,7 +834,7 @@ class Table:
         class Column(Enum):
             ID = "id"
             CODE = "code"
-            ISSUED_SHARES = "issued_shares"
+            LISTED_SHARES = "listed_shares"
             OUTSTANDING_SHARES = "outstanding_shares"
             OUTSTANDING_RATE = "outstanding_rate"
             MARKET_CAP = "market_cap"
