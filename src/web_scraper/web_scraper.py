@@ -1787,8 +1787,8 @@ class WebScraper:
         self._logger.log_info("Adding data scraping tasks.")
         number_of_task_before = self._thread_manager.get_current_number_of_task()
 
-        self.add_macroeconomics_data_scraping_tasks()
-        self.add_stock_market_data_scraping_tasks()
+        # self.add_macroeconomics_data_scraping_tasks()
+        # self.add_stock_market_data_scraping_tasks()
         self.add_enterprise_data_scraping_tasks()
 
         number_of_task_after = self._thread_manager.get_current_number_of_task()

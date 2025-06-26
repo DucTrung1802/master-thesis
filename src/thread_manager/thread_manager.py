@@ -119,9 +119,7 @@ class ThreadManager:
                 try:
                     result = future.result()
                     successful_tasks.append((task.name, result))
-                    self._logger.log_info(
-                        f"Task '{task.name}' completed with result: {result}"
-                    )
+                    self._logger.log_info(f"Task '{task.name}' completed successfully.")
                 except Exception as e:
                     failed_tasks.append((task.name, str(e)))
                     self._logger.log_error(
