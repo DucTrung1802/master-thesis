@@ -1451,6 +1451,48 @@ class WebScraper:
 
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
+        return key
+
+    def _scrape_data_enterprise_stock_information_cafef_callback(
+        self, stock_codes: List[str]
+    ):
+        print(len(stock_codes))
+
+    def _scrape_data_enterprise_stock_information_cafef(
+        self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
+    ):
+        folder_path = (
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+        )
+        all_files = get_all_file_names_with_extensions(
+            self._logger, folder_path=folder_path, extensions=[FileExtension.CSV]
+        )
+
+        all_stock_codes = set()
+        for file in all_files:
+            with open(file, mode="r", newline="", encoding="utf-8") as csvfile:
+                reader = csv.reader(csvfile)
+                next(reader)  # Skip header row
+
+                for row in reader:
+                    if row:  # Ensure the row is not empty
+                        all_stock_codes.add(row[0].strip())
+
+        all_stock_code_chunks = divided_into_chunks(
+            all_stock_codes, PARALLEL_SCRAPE_ENTERPRISE_STOCK_INFORMATION
+        )
+
+        for chunk, index in zip(
+            all_stock_code_chunks, range(len(all_stock_code_chunks))
+        ):
+            self._thread_manager.add_task(
+                Task(
+                    f"{format_key_for_name(key)}_callback_{index + 1}",
+                    self._scrape_data_enterprise_stock_information_cafef_callback,
+                    chunk,
+                )
+            )
+
     def _scrape_data_from(self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]):
         if key not in SCRAPE_MAPPING:
             raise ValueError(f"No mapping found for {key}")
@@ -1768,24 +1810,18 @@ class WebScraper:
         self._logger.log_info("Adding enterprise data scraping tasks.")
         number_of_task_before = self._thread_manager.get_current_number_of_task()
 
-        # # DAILY_PRICE
-        # key = (
-        #     ScrapeMainType.ENTERPRISE,
-        #     EnterpriseSubType.DAILY_PRICE,
-        #     DailyPriceSource.CAFEF,
-        # )
-        # self._thread_manager.add_task(
-        #     Task(format_key_for_name(key), self._scrape_data_from, key)
-        # )
-
-        n = 4
-        callbacks = self._thread_manager.generate_callbacks(self.my_callback_handler, n)
-
+        # DAILY_PRICE
+        key = (
+            ScrapeMainType.ENTERPRISE,
+            EnterpriseSubType.DAILY_PRICE,
+            DailyPriceSource.CAFEF,
+        )
         self._thread_manager.add_task(
             Task(
-                name="hello_1",
-                func=self.hello_1,
-                callbacks=callbacks,
+                format_key_for_name(key),
+                self._scrape_data_from,
+                key,
+                callbacks=self._scrape_data_enterprise_stock_information_cafef,
             )
         )
 
@@ -1793,16 +1829,6 @@ class WebScraper:
         self._logger.log_info(
             f"Added {number_of_task_after - number_of_task_before} enterprise data scraping tasks."
         )
-
-    def hello_1(self):
-        print("Hello 1")
-        # Configurable number
-        n = 4
-        result = [["abc", "def"], ["adu", "ahn"], ["hello", "oreo"], ["hi", "aloha"]]
-        return result[:n]
-
-    def my_callback_handler(self, sublist, index):
-        print(f"[Callback {index}] received: {sublist}")
 
     def start_scraping(self):
         self._logger.log_info("Start scraping data using ThreadManager.")
