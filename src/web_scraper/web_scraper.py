@@ -1374,89 +1374,111 @@ class WebScraper:
         # Initialize web driver and bs4 parser
         web_driver, bs4_parser = self._initialize_web_driver_and_bs4_parser()
 
-        try:
-            # 1. Initialize folder path and file name
-            folder_path = (
-                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            )
-            file_name = f"{key[2].value}"
+        # try:
+        #     # 1. Initialize folder path and file name
+        #     folder_path = (
+        #         f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+        #     )
+        #     file_name = f"{key[2].value}"
 
-            # 2. Initialize start time and current time
-            current_date = datetime.now()
+        #     # 2. Initialize start time and current time
+        #     current_date = datetime.now()
 
-            file_path = (
-                f"{folder_path}/{file_name}_upto_{current_date.strftime('%Y%m%d')}.csv"
-            )
+        #     file_path = (
+        #         f"{folder_path}/{file_name}_upto_{current_date.strftime('%Y%m%d')}.csv"
+        #     )
 
-            # 3. Remove old file if exists
-            remove_all_files_with_extensions(
-                logger=self._logger,
-                folder_path=folder_path,
-                extensions=[FileExtension.CSV],
-            )
+        #     # 3. Remove old file if exists
+        #     remove_all_files_with_extensions(
+        #         logger=self._logger,
+        #         folder_path=folder_path,
+        #         extensions=[FileExtension.CSV],
+        #     )
 
-            # 4. Create folder if not exists
-            if not os.path.exists(folder_path):
-                os.makedirs(folder_path, exist_ok=True)
+        #     # 4. Create folder if not exists
+        #     if not os.path.exists(folder_path):
+        #         os.makedirs(folder_path, exist_ok=True)
 
-            # 5. Get SourceInfo
-            source_info = SCRAPE_MAPPING[key]
+        #     # 5. Get SourceInfo
+        #     source_info = SCRAPE_MAPPING[key]
 
-            # 6. Navigate to URL
-            web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
+        #     # 6. Navigate to URL
+        #     web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
+        #     time.sleep(SCRAPER_BASE_WAIT_TIME)
 
-            # 7. Logic for scraping
-            xpath = '//*[@id="container"]/div/div[1]/div/div/div/div[2]/div[2]/table/tbody/tr[2]/td[4]/a'
-            download_link_element = web_driver.find_element("xpath", xpath)
-            download_url = download_link_element.get_attribute("href")
+        #     # 7. Logic for scraping
+        #     xpath = '//*[@id="container"]/div/div[1]/div/div/div/div[2]/div[2]/table/tbody/tr[2]/td[4]/a'
+        #     download_link_element = web_driver.find_element("xpath", xpath)
+        #     download_url = download_link_element.get_attribute("href")
 
-            zip_path = file_path.replace(".csv", ".zip")
-            self._logger.log_info(f"Downloading ZIP file from: {download_url}")
+        #     zip_path = file_path.replace(".csv", ".zip")
+        #     self._logger.log_info(f"Downloading ZIP file from: {download_url}")
 
-            # Download file
-            download_file(download_url, zip_path, self._logger)
+        #     # Download file
+        #     download_file(download_url, zip_path, self._logger)
 
-            # Extract ZIP file
-            extract_zip_file(self._logger, zip_path, folder_path)
+        #     # Extract ZIP file
+        #     extract_zip_file(self._logger, zip_path, folder_path)
 
-            # Regex to extract stock_market and date from filenames
-            pattern = re.compile(
-                r"CafeF\.(?P<stock_market>\w+)\.Upto(?P<date>\d{2}\.\d{2}\.\d{4})\.csv"
-            )
+        #     # Regex to extract stock_market and date from filenames
+        #     pattern = re.compile(
+        #         r"CafeF\.(?P<stock_market>\w+)\.Upto(?P<date>\d{2}\.\d{2}\.\d{4})\.csv"
+        #     )
 
-            for file_name in os.listdir(folder_path):
-                match = pattern.match(file_name)
-                if match:
-                    stock_market = match.group("stock_market")
-                    date_str = match.group("date")  # e.g., 29.04.2025
-                    # Reformat date to YYYYMMDD
-                    date_parts = date_str.split(".")  # ['29', '04', '2025']
-                    reformatted_date = (
-                        f"{date_parts[2]}{date_parts[1]}{date_parts[0]}"  # '20250429'
-                    )
-                    new_file_name = f"{stock_market}_upto_{reformatted_date}.csv"
-                    src = Path(folder_path) / file_name
-                    dst = Path(folder_path) / new_file_name
-                    os.rename(src, dst)
-                    self._logger.log_info(f"Renamed '{file_name}' -> '{dst}'")
-                else:
-                    self._logger.log_info(f"Skipped file (no match): {file_name}")
+        #     for file_name in os.listdir(folder_path):
+        #         match = pattern.match(file_name)
+        #         if match:
+        #             stock_market = match.group("stock_market")
+        #             date_str = match.group("date")  # e.g., 29.04.2025
+        #             # Reformat date to YYYYMMDD
+        #             date_parts = date_str.split(".")  # ['29', '04', '2025']
+        #             reformatted_date = (
+        #                 f"{date_parts[2]}{date_parts[1]}{date_parts[0]}"  # '20250429'
+        #             )
+        #             new_file_name = f"{stock_market}_upto_{reformatted_date}.csv"
+        #             src = Path(folder_path) / file_name
+        #             dst = Path(folder_path) / new_file_name
+        #             os.rename(src, dst)
+        #             self._logger.log_info(f"Renamed '{file_name}' -> '{dst}'")
+        #         else:
+        #             self._logger.log_info(f"Skipped file (no match): {file_name}")
 
-            os.remove(zip_path)
-            self._logger.log_info(f"Removed temporary ZIP file: {zip_path}")
+        #     os.remove(zip_path)
+        #     self._logger.log_info(f"Removed temporary ZIP file: {zip_path}")
 
-        finally:
-            web_driver.close()
+        # finally:
+        #     web_driver.close()
 
-        self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
+        # self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
         return key
 
     def _scrape_data_enterprise_stock_information_cafef_callback(
         self, stock_codes: List[str]
     ):
-        print(len(stock_codes))
+        web_driver, bs4_parser = self._initialize_web_driver_and_bs4_parser()
+        try:
+            for stock_code in stock_codes:
+                web_driver, bs4_parser = self._navigate_to_url(web_driver, CAFEF_URL)
+                time.sleep(SCRAPER_BASE_WAIT_TIME)
+
+                search_box_xpath = '//*[@id="CafeF_SearchKeyword_Companyv2"]'
+                self._input_text(web_driver, search_box_xpath, stock_code)
+                auto_complete_link_xpath = '//*[@id="autoCompleteLink"]'
+                _ = WebDriverWait(web_driver, 10).until(
+                    EC.presence_of_element_located((By.XPATH, auto_complete_link_xpath))
+                )
+                bs4_parser = self._update_bs4_parser(web_driver)
+
+                auto_complete_link = bs4_parser.find("a", id="autoCompleteLink")
+                if auto_complete_link:
+                    em_text = auto_complete_link.find("em").text
+                    print(em_text)
+
+                break
+
+        finally:
+            web_driver.close()
 
     def _scrape_data_enterprise_stock_information_cafef(
         self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
