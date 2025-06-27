@@ -1,5 +1,6 @@
 import psycopg2
 from typing import List
+import pandas as pd
 
 from logger.logger import Logger
 from tabular_database_driver.tabular_database_driver_interface import (
@@ -12,6 +13,7 @@ from models.tabular_database_driver_models.tabular_database_driver_models import
 from utils.enums import DatabaseExecutionStatus
 from utils.constants import *
 from utils.utils import *
+from datetime import date
 
 
 class PostgreSQLDriver(TabularDatabaseDriverInterface):
@@ -19,14 +21,7 @@ class PostgreSQLDriver(TabularDatabaseDriverInterface):
         self._logger = logger
         self._connection = None
         self._cursor = None
-        self._connection_model: PostgreSQLConnectionModel = PostgreSQLConnectionModel(
-            logger=logger,
-            host=POSTGRES.get("HOST"),
-            user=POSTGRES.get("USER"),
-            password=POSTGRES.get("PASSWORD"),
-            port=POSTGRES.get("PORT"),
-            database=POSTGRES.get("DATABASE"),
-        )
+        self._connection_model: PostgreSQLConnectionModel = None
 
     def connect(
         self, connection_model: PostgreSQLConnectionModel
@@ -166,18 +161,22 @@ class PostgreSQLDriver(TabularDatabaseDriverInterface):
         schema_name: str,
         table_name: str,
         columns: List[Column],
-        primary_key: str,
+        primary_keys: List[str],
         foreign_keys: List[ForeignKey] = None,
     ):
         """Create a new table in the current database."""
         try:
             column_definitions = ",\n    ".join(
                 [
-                    f"{col.name} {"SERIAL" if col.name == primary_key else col.data_type} {"NOT NULL" if not col.nullable else ""}"
+                    f"{col.name} {col.data_type}{" NOT NULL" if not col.nullable else ""}"
                     for col in columns
                 ]
             )
-            primary_key_definition = f"PRIMARY KEY ({primary_key})"
+
+            primary_key_definition = None
+            if len(primary_keys) > 0:
+                primary_key_definition = f"PRIMARY KEY ({', '.join(primary_keys)})"
+
             foreign_key_definitions = [
                 f"FOREIGN KEY ({fk.column_name}) REFERENCES {fk.ref_table}({fk.ref_column})"
                 for fk in foreign_keys or []
@@ -236,9 +235,13 @@ CREATE TABLE {schema_name}.{table_name} (
                 values = ", ".join(
                     [
                         (
-                            f"'{col.value}'"
-                            if isinstance(col.value, str)
-                            else str(col.value)
+                            "NULL"
+                            if col.value is None
+                            else (
+                                f"'{col.value}'"
+                                if isinstance(col.value, (str, date))
+                                else str(col.value)
+                            )
                         )
                         for col in record.data_model_list
                     ]
@@ -363,10 +366,12 @@ DELETE FROM {schema_name}.{table_name}
         columns: List[str] = None,
         join_model: JoinModel = None,
         conditions: List[Condition] = None,
-    ) -> List:
+        order_by: List[str] = None,
+        limit: int = None,
+    ) -> pd.DataFrame:
         """Select records from a table."""
         try:
-            if not isinstance(columns, List):
+            if columns and not isinstance(columns, List):
                 columns = [columns]
 
             columns_clause = ",\n    ".join(columns) if columns else "*"
@@ -386,6 +391,9 @@ DELETE FROM {schema_name}.{table_name}
                 if join_model
                 else ""
             )
+            order_by_clause = (
+                "ORDER BY\n    " + ",\n    ".join(order_by) if order_by else ""
+            )
 
             query = f"""
 SELECT
@@ -393,13 +401,17 @@ SELECT
 FROM
     {schema_name}.{table_name} {f"\n    {join_clause}" if join_clause else ""}
 {where_clause}
+{order_by_clause}
+{f"LIMIT {limit}" if limit else ""}
 """
             self.execute_query(query)
             results = self.fetch_result()
+            column_names = [desc[0] for desc in self._cursor.description]
+            df = pd.DataFrame(results, columns=column_names)
             self._logger.log_info(
                 f'Selected {len(results)} records from table "{schema_name}.{table_name}" successfully.'
             )
-            return results
+            return df
         except Exception as e:
             self._logger.log_error(f"Error selecting records: {e}")
-            return []
+            return pd.DataFrame()

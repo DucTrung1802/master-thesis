@@ -2,3 +2,7 @@ psycopg2
 selenium
 beautifulsoup4
 requests
+load_dotenv
+pandas
+plotly
+nbformat

@@ -12,8 +12,11 @@ class DataType:
         return "INT"
 
     @classmethod
-    def VARCHAR(cls, length: int):
-        return f"VARCHAR({length})"
+    def VARCHAR(cls, length: int = None):
+        if length is None:
+            return "VARCHAR(255)"
+        else:
+            return f"VARCHAR({length})"
 
     @classmethod
     def TEXT(cls):
@@ -24,8 +27,17 @@ class DataType:
         return "TIMESTAMP"
 
     @classmethod
-    def DECIMAL(cls, precision: int, scale: int):
-        return f"DECIMAL({precision}, {scale})"
+    def AUTO_TIMESTAMP(cls):
+        return "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+
+    @classmethod
+    def DECIMAL(cls, precision: int = None, scale: int = None):
+        if precision and scale:
+            return f"DECIMAL({precision}, {scale})"
+        elif precision:
+            return f"DECIMAL({precision})"
+        else:
+            return f"DECIMAL"
 
     @classmethod
     def BOOLEAN(cls):
@@ -47,6 +59,14 @@ class DataType:
     def FLOAT(cls):
         return "FLOAT"
 
+    @classmethod
+    def SERIAL(cls):
+        return "SERIAL"
+
+    @classmethod
+    def BIGINT(cls):
+        return "BIGINT"
+
 
 @dataclass
 class ForeignKey:
@@ -66,7 +86,7 @@ class Column:
 class DataModel:
     column_name: str
     value: str | int | float
-    data_type: DataType
+    data_type: DataType = None
 
 
 @dataclass

@@ -2,6 +2,8 @@ import os
 import zipfile
 import requests
 from typing import Tuple
+from typing import Optional
+import pandas as pd
 
 from logger.logger import Logger
 from models.tabular_database_driver_models.tabular_database_driver_models import (
@@ -158,3 +160,71 @@ def download_file(download_url, file_path, logger):
 
 def format_key_for_name(key: Tuple[ScrapeMainType, ScrapeSubType, Source]):
     return "_".join(k.name.lower() for k in key)
+
+
+def get_newest_file_path(folder_path, extension: FileExtension = None):
+    """
+    Returns the path of the newest (most recently modified) file in the given folder,
+    optionally filtered by a single file extension.
+
+    Parameters:
+        folder_path (str): The path to the folder to search.
+        extension (FileExtension, optional): File extension to filter by (e.g., '.txt').
+                                   If None, all files are considered.
+
+    Returns:
+        str or None: Path to the newest file, or None if no matching file is found.
+    """
+    if not os.path.isdir(folder_path):
+        raise ValueError(f"'{folder_path}' is not a valid directory.")
+
+    newest_file = None
+    newest_mtime = -1
+
+    for filename in os.listdir(folder_path):
+        file_path = os.path.join(folder_path, filename)
+
+        if not os.path.isfile(file_path):
+            continue
+
+        if extension and not filename.lower().endswith(extension.value.lower()):
+            continue
+
+        mtime = os.path.getmtime(file_path)
+        if mtime > newest_mtime:
+            newest_mtime = mtime
+            newest_file = file_path
+
+    return newest_file
+
+
+def folder_contains_files(
+    folder_path: str, extension: Optional[FileExtension] = None
+) -> bool:
+    if not os.path.isdir(folder_path):
+        return False
+
+    for filename in os.listdir(folder_path):
+        file_path = os.path.join(folder_path, filename)
+        if os.path.isfile(file_path):
+            if extension is None:
+                return True
+            if filename.lower().endswith(f".{extension.value.lower()}"):
+                return True
+
+    return False
+
+
+# Volume: remove 'K', 'M' 'B' and convert to float with multiplier
+def parse_volume(val):
+    if pd.isna(val):
+        return None
+    val = str(val).strip().replace(",", "")
+    if val.endswith("K"):
+        return float(val[:-1]) * 1_000
+    elif val.endswith("M"):
+        return float(val[:-1]) * 1_000_000
+    elif val.endswith("B"):
+        return float(val[:-1]) * 1_000_000_000
+    else:
+        return float(val)
