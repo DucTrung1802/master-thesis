@@ -276,7 +276,7 @@ def parse_volume(val):
         return float(val)
 
 
-def divided_into_chunks(lst, x):
+def divided_into_chunks(lst: List, x: int) -> List[List]:
     """
     Divides a list into n chunks.
 
@@ -287,6 +287,12 @@ def divided_into_chunks(lst, x):
     Returns:
         list: A list containing n chunks of the original list.
     """
+
+    if not isinstance(lst, list):
+        try:
+            lst = list(lst)
+        except TypeError:
+            return []
 
     n = len(lst)
     if n == 0 or x <= 0:
