@@ -112,41 +112,49 @@ class ThreadManager:
         successful_tasks = []
         failed_tasks = []
 
-        if not self._task_list:
-            self._logger.log_info("No tasks to execute.")
-            return successful_tasks, failed_tasks
-
-        with ThreadPoolExecutor(max_workers=self._max_workers) as executor:
-            self._logger.log_info(f"Executing {len(self._task_list)} tasks...")
-
-            future_to_task = {
-                executor.submit(task.run): task for task in self._task_list
-            }
-
-            for future in future_to_task:
-                task = future_to_task[future]
-                try:
-                    result = future.result()
-                    successful_tasks.append((task.name, result))
-                    self._logger.log_info(f"Task '{task.name}' completed successfully.")
-                except Exception as e:
-                    failed_tasks.append((task.name, str(e)))
-                    self._logger.log_error(
-                        f"Task '{task.name}' failed with exception: {e}"
-                    )
-
+        total_round = 0
+        while self._task_list:
+            total_round += 1
+            current_batch = self._task_list[:]
+            self._task_list.clear()
             self._logger.log_info(
-                f"All {len(self._task_name_set)} tasks have been executed."
+                f"Executing batch #{total_round} with {len(current_batch)} tasks..."
             )
 
-            successful_names = [name for name, _ in successful_tasks]
-            failed_names = [name for name, _ in failed_tasks]
+            with ThreadPoolExecutor(max_workers=self._max_workers) as executor:
+                future_to_task = {
+                    executor.submit(task.run): task for task in current_batch
+                }
 
-            self._logger.log_info(
-                f"Successful Tasks ({len(successful_names)}/{len(self._task_name_set)}) : {successful_names}"
-            )
-            self._logger.log_info(
-                f"Failed Tasks ({len(failed_names)}/{len(self._task_name_set)}): {failed_names}"
-            )
+                for future in future_to_task:
+                    task = future_to_task[future]
+                    try:
+                        result = future.result()
+                        successful_tasks.append((task.name, result))
+                        self._logger.log_info(
+                            f"Task '{task.name}' completed successfully."
+                        )
+                    except Exception as e:
+                        failed_tasks.append((task.name, str(e)))
+                        self._logger.log_error(
+                            f"Task '{task.name}' failed with exception: {e}"
+                        )
+
+            # This log shows progress across rounds
+            self._logger.log_info(f"Finished executing batch #{total_round}.")
+
+        self._logger.log_info(
+            f"All tasks have been executed across {total_round} batches."
+        )
+
+        successful_names = [name for name, _ in successful_tasks]
+        failed_names = [name for name, _ in failed_tasks]
+
+        self._logger.log_info(
+            f"Successful Tasks ({len(successful_names)} total): {successful_names}"
+        )
+        self._logger.log_info(
+            f"Failed Tasks ({len(failed_names)} total): {failed_names}"
+        )
 
         return successful_tasks, failed_tasks
