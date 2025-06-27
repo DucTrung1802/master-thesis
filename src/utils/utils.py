@@ -1,8 +1,7 @@
 import os
 import zipfile
 import requests
-from typing import Tuple
-from typing import Optional
+from typing import Tuple, List, Optional
 import pandas as pd
 
 from logger.logger import Logger
@@ -28,7 +27,7 @@ def format_value(value, data_type: DataType):
 
 
 def remove_all_files_with_extensions(
-    logger: Logger, folder_path, extensions: list[FileExtension] = None
+    logger: Logger, folder_path, extensions: List[FileExtension] = None
 ):
     """
     Removes all files with the specified extensions from the folder.
@@ -36,7 +35,7 @@ def remove_all_files_with_extensions(
 
     Args:
         folder_path (str): The path to the folder.
-        extensions (list[str]): List of file extensions to delete (e.g., [".csv", ".txt"]).
+        extensions (List[str]): List of file extensions to delete (e.g., [".csv", ".txt"]).
         logger (Logger): Logger instance for logging.
 
     Raises:
@@ -49,6 +48,7 @@ def remove_all_files_with_extensions(
 
             if os.path.isfile(file_path):
                 _, ext = os.path.splitext(file_name)
+                ext = ext.replace(".", "", 1)  # Remove leading dot from extension
 
                 if not extensions or ext.lower() in [
                     e.value.lower() for e in extensions
@@ -69,6 +69,52 @@ def remove_all_files_with_extensions(
         logger.log_error(
             f"Permission denied to access folder: {folder_path}. Error: {e}"
         )
+
+
+def get_all_file_names_with_extensions(
+    logger: Logger, folder_path: str, extensions: List[FileExtension] = None
+) -> List[str]:
+    """
+    Retrieves all file names in the specified folder, optionally filtered by extensions.
+
+    Args:
+        logger (Logger): Logger instance for logging.
+        folder_path (str): Path to the folder.
+        extensions (List[FileExtension], optional): List of file extensions to include (e.g., [".csv", ".txt"]).
+
+    Returns:
+        List[str]: List of matching file names (not full paths).
+
+    Raises:
+        FileNotFoundError: If the folder does not exist.
+        PermissionError: If access to the folder is denied.
+    """
+    matching_files = []
+
+    try:
+        for file_name in os.listdir(folder_path):
+            file_path = os.path.join(folder_path, file_name)
+
+            if os.path.isfile(file_path):
+                _, ext = os.path.splitext(file_name)
+                ext = ext.replace(".", "", 1)  # Remove leading dot from extension
+
+                if not extensions or ext.lower() in [
+                    e.value.lower() for e in extensions
+                ]:
+                    matching_files.append(file_name)
+
+        logger.log_info(f"Found {len(matching_files)} matching files in {folder_path}.")
+        return matching_files
+
+    except FileNotFoundError as e:
+        logger.log_error(f"Folder not found: {folder_path}. Error: {e}")
+        raise
+    except PermissionError as e:
+        logger.log_error(
+            f"Permission denied to access folder: {folder_path}. Error: {e}"
+        )
+        raise
 
 
 def extract_zip_file(logger: Logger, zip_path, extract_to_folder):
