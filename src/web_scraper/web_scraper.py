@@ -1463,77 +1463,81 @@ class WebScraper:
                 MacroeconomicsSubType.GDP,
                 GdpSource.VIETSTOCK,
             ):
-                self._scrape_data_macroeconomics_gdp_vietstock(key)
+                return self._scrape_data_macroeconomics_gdp_vietstock(key)
 
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.GDP,
                 GdpSource.WORLDOMETER,
             ):
-                self._scrape_data_macroeconomics_gdp_worldometer(key)
+                return self._scrape_data_macroeconomics_gdp_worldometer(key)
 
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.CPI,
                 CpiSource.VIETSTOCK,
             ):
-                self._scrape_data_macroeconomics_cpi_vietstock(key)
+                return self._scrape_data_macroeconomics_cpi_vietstock(key)
 
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.EXCHANGE_RATE,
                 ExchangeRateSource.VIETSTOCK,
             ):
-                self._scrape_data_macroeconomics_exchange_rate_vietstock(key)
+                return self._scrape_data_macroeconomics_exchange_rate_vietstock(key)
 
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.INTEREST_RATE,
                 InterestRateSource.VIETSTOCK,
             ):
-                self._scrape_data_macroeconomics_interest_rate_vietstock(key)
+                return self._scrape_data_macroeconomics_interest_rate_vietstock(key)
 
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.EXPORT,
                 ExportImportSource.VIETSTOCK,
             ):
-                self._scrape_data_macroeconomics_export_import_vietstock(key)
+                return self._scrape_data_macroeconomics_export_import_vietstock(key)
 
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.IPI,
                 IpiSource.VIETSTOCK,
             ):
-                self._scrape_data_macroeconomics_ipi_vietstock(key)
+                return self._scrape_data_macroeconomics_ipi_vietstock(key)
 
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.FDI,
                 FdiSource.VIETSTOCK,
             ):
-                self._scrape_data_macroeconomics_fdi_vietstock(key)
+                return self._scrape_data_macroeconomics_fdi_vietstock(key)
 
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.M2,
                 M2Source.VIETSTOCK,
             ):
-                self._scrape_data_macroeconomics_m2_vietstock(key)
+                return self._scrape_data_macroeconomics_m2_vietstock(key)
 
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.RETAIL,
                 RetailSource.VIETSTOCK,
             ):
-                self._scrape_data_macroeconomics_retail_vietstock(key)
+                return self._scrape_data_macroeconomics_retail_vietstock(key)
 
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.POPULATION_UNEMPLOYMENT,
                 PopulationUnemploymentSource.VIETSTOCK,
             ):
-                self._scrape_data_macroeconomics_population_unemployment_vietstock(key)
+                return (
+                    self._scrape_data_macroeconomics_population_unemployment_vietstock(
+                        key
+                    )
+                )
 
             # STOCK_MARKET
             case (
@@ -1541,35 +1545,35 @@ class WebScraper:
                 StockMarketSubType.VN_HNX_INDEX,
                 VnHnxIndexSource.CAFEF,
             ):
-                self._scrape_data_stock_market_vn_hnx_index_cafef(key)
+                return self._scrape_data_stock_market_vn_hnx_index_cafef(key)
 
             case (
                 ScrapeMainType.STOCK_MARKET,
                 StockMarketSubType.VN_30_INDEX,
                 Vn30IndexSource.CAFEF,
             ):
-                self._scrape_data_stock_market_vn_30_index_cafef(key)
+                return self._scrape_data_stock_market_vn_30_index_cafef(key)
 
             case (
                 ScrapeMainType.STOCK_MARKET,
                 StockMarketSubType.VN_100_INDEX,
                 Vn100IndexSource.CAFEF,
             ):
-                self._scrape_data_stock_market_vn_100_index_cafef(key)
+                return self._scrape_data_stock_market_vn_100_index_cafef(key)
 
             case (
                 ScrapeMainType.STOCK_MARKET,
                 StockMarketSubType.HNX_30_INDEX,
                 Hnx30IndexSource.CAFEF,
             ):
-                self._scrape_data_stock_market_hnx_30_index_cafef(key)
+                return self._scrape_data_stock_market_hnx_30_index_cafef(key)
 
             case (
                 ScrapeMainType.STOCK_MARKET,
                 StockMarketSubType.UPCOM_INDEX,
                 UpcomIndexSource.CAFEF,
             ):
-                self._scrape_data_stock_market_upcom_index_cafef(key)
+                return self._scrape_data_stock_market_upcom_index_cafef(key)
 
             # ENTERPRISE
             case (
@@ -1577,7 +1581,7 @@ class WebScraper:
                 EnterpriseSubType.DAILY_PRICE,
                 DailyPriceSource.CAFEF,
             ):
-                self._scrape_data_enterprise_daily_price_cafef(key)
+                return self._scrape_data_enterprise_daily_price_cafef(key)
 
     def add_macroeconomics_data_scraping_tasks(self):
         self._logger.log_info("Adding macroeconomic data scraping tasks.")
