@@ -102,7 +102,7 @@ def get_all_file_names_with_extensions(
                 if not extensions or ext.lower() in [
                     e.value.lower() for e in extensions
                 ]:
-                    matching_files.append(file_name)
+                    matching_files.append(file_path)
 
         logger.log_info(f"Found {len(matching_files)} matching files in {folder_path}.")
         return matching_files
