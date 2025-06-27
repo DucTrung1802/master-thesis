@@ -274,3 +274,30 @@ def parse_volume(val):
         return float(val[:-1]) * 1_000_000_000
     else:
         return float(val)
+
+
+def divided_into_chunks(lst, x):
+    """
+    Divides a list into n chunks.
+
+    Args:
+        lst (list): The list to be divided.
+        n (int): The number of chunks.
+
+    Returns:
+        list: A list containing n chunks of the original list.
+    """
+
+    n = len(lst)
+    if n == 0 or x <= 0:
+        return []
+    bin_size = n // x
+    remainder = n % x
+    chunks = []
+    start = 0
+
+    for i in range(x):
+        end = start + bin_size + (1 if i < remainder else 0)
+        chunks.append(lst[start:end])
+        start = end
+    return chunks
