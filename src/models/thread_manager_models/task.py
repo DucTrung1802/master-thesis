@@ -7,9 +7,12 @@ class Task:
         self.func = func
         self.args = args
         self.kwargs = kwargs
+        if callbacks and not isinstance(callbacks, list):
+            callbacks = [callbacks]
         self.callbacks = callbacks if callbacks else []
 
     def run(self):
+        print(f"Executing task: {self.name}")
         result = self.func(*self.args, **self.kwargs)
 
         # If result is a list and matches callbacks count, split it
