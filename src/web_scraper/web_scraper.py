@@ -8,7 +8,6 @@ from selenium.webdriver.support import expected_conditions as EC
 from bs4 import BeautifulSoup, Tag
 
 import csv
-
 import os
 import time
 import re
@@ -1389,10 +1388,12 @@ class WebScraper:
                 f"{folder_path}/{file_name}_upto_{current_date.strftime('%Y%m%d')}.csv"
             )
 
-            # 3. Check if file(s) already exists
-            if os.path.exists(file_path):
-                self._logger.log_info(f"File already exists: {file_path}")
-                return
+            # 3. Remove old file if exists
+            remove_all_files_with_extensions(
+                logger=self._logger,
+                folder_path=folder_path,
+                extensions=[FileExtension.CSV],
+            )
 
             # 4. Create folder if not exists
             if not os.path.exists(folder_path):

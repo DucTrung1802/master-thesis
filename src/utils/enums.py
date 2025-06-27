@@ -237,6 +237,7 @@ class DailyPriceSource(Enum):
 
 # Union of all sources
 Source = Union[
+    # MACROECONOMICS
     GdpSource,
     CpiSource,
     ExchangeRateSource,
@@ -247,13 +248,6 @@ Source = Union[
     M2Source,
     RetailSource,
     PopulationUnemploymentSource,
-    VnHnxIndexSource,
-    Vn30IndexSource,
-    Vn100IndexSource,
-    Hnx30IndexSource,
-    UpcomIndexSource,
-    FinanceInfoSource,
-    DailyPriceSource,
     GoldPriceSource,
     OilPriceSource,
     DowJonesSource,
@@ -261,6 +255,15 @@ Source = Union[
     SNP500Source,
     NASDAQCompositeSource,
     NASDAQ100Source,
+    # STOCK_MARKET
+    VnHnxIndexSource,
+    Vn30IndexSource,
+    Vn100IndexSource,
+    Hnx30IndexSource,
+    UpcomIndexSource,
+    # ENTERPRISE
+    FinanceInfoSource,
+    DailyPriceSource,
 ]
 
 # ================================================
