@@ -12,12 +12,26 @@ class Task:
     def run(self):
         result = self.func(*self.args, **self.kwargs)
 
-        with ThreadPoolExecutor() as cb_executor:
-            futures = [cb_executor.submit(cb, result) for cb in self.callbacks]
-            for future in futures:
-                try:
-                    future.result()
-                except Exception as e:
-                    print(f"Callback failed: {e}")
+        # If result is a list and matches callbacks count, split it
+        if isinstance(result, list) and len(result) == len(self.callbacks):
+            with ThreadPoolExecutor() as cb_executor:
+                futures = [
+                    cb_executor.submit(cb, item)
+                    for cb, item in zip(self.callbacks, result)
+                ]
+                for future in futures:
+                    try:
+                        future.result()
+                    except Exception as e:
+                        print(f"Callback failed: {e}")
+        else:
+            # Fallback if result is not a list of same length
+            with ThreadPoolExecutor() as cb_executor:
+                futures = [cb_executor.submit(cb, result) for cb in self.callbacks]
+                for future in futures:
+                    try:
+                        future.result()
+                    except Exception as e:
+                        print(f"Callback failed: {e}")
 
         return result

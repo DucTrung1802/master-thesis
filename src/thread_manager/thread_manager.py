@@ -99,6 +99,15 @@ class ThreadManager:
     def get_current_number_of_task(self):
         return len(self._task_name_set)
 
+    def generate_callbacks(self, func: callable, num: int):
+        def make_callback(i):
+            def callback(sublist):
+                return func(sublist, i)
+
+            return callback
+
+        return [make_callback(i) for i in range(num)]
+
     def execute(self):
         successful_tasks = []
         failed_tasks = []

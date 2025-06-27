@@ -1089,9 +1089,9 @@ class WebScraper:
 
                 if page == max_index:
                     break
-                
+
                 # Click next page
-                
+
                 # Get a reference element inside the table BEFORE clicking "Next"
                 table_xpath = '//*[@id="owner-contents-table"]'
                 old_content = web_driver.find_element(
@@ -1763,20 +1763,41 @@ class WebScraper:
         self._logger.log_info("Adding enterprise data scraping tasks.")
         number_of_task_before = self._thread_manager.get_current_number_of_task()
 
-        # DAILY_PRICE
-        key = (
-            ScrapeMainType.ENTERPRISE,
-            EnterpriseSubType.DAILY_PRICE,
-            DailyPriceSource.CAFEF,
-        )
+        # # DAILY_PRICE
+        # key = (
+        #     ScrapeMainType.ENTERPRISE,
+        #     EnterpriseSubType.DAILY_PRICE,
+        #     DailyPriceSource.CAFEF,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
+
+        n = 4
+        callbacks = self._thread_manager.generate_callbacks(self.my_callback_handler, n)
+
         self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
+            Task(
+                name="hello_1",
+                func=self.hello_1,
+                callbacks=callbacks,
+            )
         )
 
         number_of_task_after = self._thread_manager.get_current_number_of_task()
         self._logger.log_info(
             f"Added {number_of_task_after - number_of_task_before} enterprise data scraping tasks."
         )
+
+    def hello_1(self):
+        print("Hello 1")
+        # Configurable number
+        n = 4
+        result = [["abc", "def"], ["adu", "ahn"], ["hello", "oreo"], ["hi", "aloha"]]
+        return result[:n]
+
+    def my_callback_handler(self, sublist, index):
+        print(f"[Callback {index}] received: {sublist}")
 
     def start_scraping(self):
         self._logger.log_info("Start scraping data using ThreadManager.")
