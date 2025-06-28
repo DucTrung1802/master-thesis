@@ -1454,16 +1454,54 @@ class WebScraper:
         return key
 
     def _scrape_data_enterprise_stock_information_cafef_callback(
-        self, stock_codes: List[str]
+        self, index: int, stock_codes: List[str]
     ):
+        self._logger.log_info(f"Start scraping data for .")
+
         web_driver, bs4_parser = self._initialize_web_driver_and_bs4_parser()
         try:
-            for stock_code in stock_codes:
-                web_driver, bs4_parser = self._navigate_to_url(web_driver, CAFEF_URL)
-                time.sleep(SCRAPER_BASE_WAIT_TIME)
+            key = (
+                ScrapeMainType.ENTERPRISE,
+                EnterpriseSubType.STOCK_INFORMATION,
+                StockInformationSource.CAFEF,
+            )
+            # 1. Initialize folder path and file name
+            folder_path = (
+                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            )
+            file_name = f"{key[2].value}"
 
+            # 2. Initialize start time and current time
+            current_date = datetime.now()
+
+            file_path = f"{folder_path}/{file_name}_upto_{current_date.strftime('%Y%m%d')}_{index}.csv"
+
+            # 3. Create folder if not exists
+            if not os.path.exists(folder_path):
+                os.makedirs(folder_path, exist_ok=True)
+
+            # Write header to CSV file
+            if len(stock_codes) > 0:
+                with open(file_path, mode="w", newline="", encoding="utf-8") as file:
+                    writer = csv.writer(file)
+                    writer.writerow(
+                        ["Code", "Listed Shares", "Outstanding Shares", "Market Cap"]
+                    )
+                    
+            web_driver, bs4_parser = self._navigate_to_url(
+                web_driver, url=SCRAPE_MAPPING[key].url
+            )
+            time.sleep(SCRAPER_BASE_WAIT_TIME)
+
+            # Write data to CSV file
+            for stock_code in stock_codes:
                 search_box_xpath = '//*[@id="CafeF_SearchKeyword_Companyv2"]'
+                _ = WebDriverWait(web_driver, 10).until(
+                    EC.presence_of_element_located((By.XPATH, search_box_xpath))
+                )
+                
                 self._input_text(web_driver, search_box_xpath, stock_code)
+                
                 auto_complete_link_xpath = '//*[@id="autoCompleteLink"]'
                 _ = WebDriverWait(web_driver, 10).until(
                     EC.presence_of_element_located((By.XPATH, auto_complete_link_xpath))
@@ -1473,9 +1511,88 @@ class WebScraper:
                 auto_complete_link = bs4_parser.find("a", id="autoCompleteLink")
                 if auto_complete_link:
                     em_text = auto_complete_link.find("em").text
-                    print(em_text)
 
-                break
+                    listed_shares = 0
+                    outstanding_shares = 0
+                    market_cap = 0
+
+                    if em_text == stock_code:
+                        self._click_element(web_driver, auto_complete_link_xpath)
+                        auto_complete_link_xpath = '//*[@id="autoCompleteLink"]'
+                        old_auto_complete_link_content = web_driver.find_element(
+                            By.XPATH, auto_complete_link_xpath
+                        ).get_attribute("innerHTML")
+                        WebDriverWait(web_driver, 10).until(
+                            lambda driver: driver.find_element(
+                                By.XPATH, auto_complete_link_xpath
+                            ).get_attribute("innerHTML")
+                            != old_auto_complete_link_content
+                        )
+                        bs4_parser = self._update_bs4_parser(web_driver)
+
+                        # Extract listed shares
+                        # fmt: off
+                        listed_shares_xpath_v1 = '//*[@id="contentV1"]/div[4]/div[4]/div/ul/li[2]/div[2]'
+                        listed_shares_xpath_v2 = '//*[@id="content"]/div/div[7]/div[4]/div/ul/li[2]/div[2]'
+                        listed_shares_component = WebDriverWait(web_driver, 10).until(
+                            lambda driver: driver.find_element(By.XPATH, listed_shares_xpath_v1) 
+                            if driver.find_elements(By.XPATH, listed_shares_xpath_v1) 
+                            else driver.find_element(By.XPATH, listed_shares_xpath_v2)
+                            if driver.find_elements(By.XPATH, listed_shares_xpath_v2) 
+                            else False
+                        )
+                        # fmt: on
+                        if listed_shares_component:
+                            listed_shares = int(
+                                listed_shares_component.text.replace(",", "")
+                            )
+
+                        # Extract outstanding shares
+                        # fmt: off
+                        outstanding_shares_xpath_v1 = '//*[@id="contentV1"]/div[4]/div[4]/div/ul/li[3]/div[2]'
+                        outstanding_shares_xpath_v2 = '//*[@id="content"]/div/div[7]/div[4]/div/ul/li[3]/div[2]'
+                        outstanding_shares_component = WebDriverWait(web_driver, 10).until(
+                            lambda driver: driver.find_element(By.XPATH, outstanding_shares_xpath_v1) 
+                            if driver.find_elements(By.XPATH, outstanding_shares_xpath_v1) 
+                            else driver.find_element(By.XPATH, outstanding_shares_xpath_v2)
+                            if driver.find_elements(By.XPATH, outstanding_shares_xpath_v2) 
+                            else False
+                        )
+                        # fmt: on
+                        if outstanding_shares_component:
+                            outstanding_shares = int(
+                                outstanding_shares_component.text.replace(",", "")
+                            )
+
+                        # Extract market cap
+                        # fmt: off
+                        market_cap_xpath_v1 = '//*[@id="contentV1"]/div[4]/div[4]/div/ul/li[4]/div[2]'
+                        market_cap_xpath_v2 = '//*[@id="content"]/div/div[7]/div[4]/div/ul/li[4]/div[2]'
+                        market_cap_component = WebDriverWait(web_driver, 10).until(
+                            lambda driver: driver.find_element(By.XPATH, market_cap_xpath_v1) 
+                            if driver.find_elements(By.XPATH, market_cap_xpath_v1) 
+                            else driver.find_element(By.XPATH, market_cap_xpath_v2)
+                            if driver.find_elements(By.XPATH, market_cap_xpath_v2)
+                            else False
+                        )
+                        # fmt: on
+                        if market_cap_component:
+                            market_cap = float(
+                                market_cap_component.text.replace(",", "")
+                            )
+
+                        with open(
+                            file_path, mode="a", newline="", encoding="utf-8"
+                        ) as file:
+                            writer = csv.writer(file)
+                            writer.writerow(
+                                [
+                                    stock_code,
+                                    listed_shares,
+                                    outstanding_shares,
+                                    market_cap,
+                                ]
+                            )
 
         finally:
             web_driver.close()
@@ -1511,6 +1628,7 @@ class WebScraper:
                 Task(
                     f"{format_key_for_name(key)}_callback_{index + 1}",
                     self._scrape_data_enterprise_stock_information_cafef_callback,
+                    index + 1,
                     chunk,
                 )
             )

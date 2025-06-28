@@ -47,5 +47,4 @@ STOCK_MARKET_INDEX_HEADER = [
 # ===========================
 # ENTERPRISE CONFIGURATION
 # ===========================
-CAFEF_URL = "https://cafef.vn/du-lieu/hose/vic-tap-doan-vingroup-cong-ty-co-phan.chn"
 PARALLEL_SCRAPE_ENTERPRISE_STOCK_INFORMATION = 1
