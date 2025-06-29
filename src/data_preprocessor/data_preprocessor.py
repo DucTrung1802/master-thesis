@@ -2519,7 +2519,11 @@ class DataPreprocessor:
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
-        all_files = [f for f in os.listdir(folder_path) if f.endswith(".csv")]
+        all_files = get_all_file_names_with_extensions(
+            self._logger,
+            folder_path=folder_path,
+            extensions=[FileExtension.CSV],
+        )
 
         # Pattern to match: NAME_upto_YYYYMMDD.csv
         pattern = re.compile(r"(HNX|HSX|UPCOM)_upto_(\d{8})\.csv")
@@ -2638,10 +2642,10 @@ class DataPreprocessor:
         # self._process_stock_market_vn_30_index()
         # self._process_stock_market_vn_100_index()
         # self._process_stock_market_hnx_30_index()
-        self._process_stock_market_upcom_index()
+        # self._process_stock_market_upcom_index()
 
         # Enterprise
-        # self._process_enterprise_stock()
+        self._process_enterprise_stock()
 
         self._logger.log_info("Finish processing data.")
 

@@ -121,6 +121,7 @@ class StockMarketSubType(Enum):
 class EnterpriseSubType(Enum):
     FINANCE_INFO = "finance_info"
     DAILY_PRICE = "daily_price"
+    STOCK_INFORMATION = "stock_information"
 
 
 ScrapeSubType = Union[
@@ -235,8 +236,13 @@ class DailyPriceSource(Enum):
     CAFEF = "cafef"
 
 
+class StockInformationSource(Enum):
+    CAFEF = "cafef"
+
+
 # Union of all sources
 Source = Union[
+    # MACROECONOMICS
     GdpSource,
     CpiSource,
     ExchangeRateSource,
@@ -247,13 +253,6 @@ Source = Union[
     M2Source,
     RetailSource,
     PopulationUnemploymentSource,
-    VnHnxIndexSource,
-    Vn30IndexSource,
-    Vn100IndexSource,
-    Hnx30IndexSource,
-    UpcomIndexSource,
-    FinanceInfoSource,
-    DailyPriceSource,
     GoldPriceSource,
     OilPriceSource,
     DowJonesSource,
@@ -261,6 +260,16 @@ Source = Union[
     SNP500Source,
     NASDAQCompositeSource,
     NASDAQ100Source,
+    # STOCK_MARKET
+    VnHnxIndexSource,
+    Vn30IndexSource,
+    Vn100IndexSource,
+    Hnx30IndexSource,
+    UpcomIndexSource,
+    # ENTERPRISE
+    FinanceInfoSource,
+    DailyPriceSource,
+    StockInformationSource,
 ]
 
 # ================================================
@@ -449,6 +458,13 @@ SCRAPE_MAPPING: Dict[Tuple[ScrapeMainType, ScrapeSubType, Source], SourceInfo] =
         EnterpriseSubType.DAILY_PRICE,
         DailyPriceSource.CAFEF,
     ): SourceInfo(url="https://cafef.vn/du-lieu/du-lieu-download.chn"),
+    (
+        ScrapeMainType.ENTERPRISE,
+        EnterpriseSubType.STOCK_INFORMATION,
+        StockInformationSource.CAFEF,
+    ): SourceInfo(
+        url="https://cafef.vn/du-lieu/hose/vic-tap-doan-vingroup-cong-ty-co-phan.chn"
+    ),
 }
 
 

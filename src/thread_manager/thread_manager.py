@@ -1,5 +1,5 @@
 import os
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, wait
 from typing import List, Set
 from logger.logger import Logger
 
@@ -99,47 +99,64 @@ class ThreadManager:
     def get_current_number_of_task(self):
         return len(self._task_name_set)
 
-    def execute(self):
+    def generate_callbacks(self, func: callable, num: int):
+        def make_callback(i):
+            def callback(sublist):
+                return func(sublist, i)
+
+            return callback
+
+        return [make_callback(i) for i in range(num)]
+
+    def execute(self, final_callback: callable = None):
         successful_tasks = []
         failed_tasks = []
 
-        if not self._task_list:
-            self._logger.log_info("No tasks to execute.")
-            return successful_tasks, failed_tasks
+        total_round = 0
+        while self._task_list:
+            total_round += 1
+            current_batch = self._task_list[:]
+            self._task_list.clear()
 
-        with ThreadPoolExecutor(max_workers=self._max_workers) as executor:
-            self._logger.log_info(f"Executing {len(self._task_list)} tasks...")
+            with ThreadPoolExecutor(max_workers=self._max_workers) as executor:
+                future_to_task = {
+                    executor.submit(task.run): task for task in current_batch
+                }
 
-            future_to_task = {
-                executor.submit(task.run): task for task in self._task_list
-            }
+                futures = list(future_to_task.keys())
+                wait(futures)
 
-            for future in future_to_task:
-                task = future_to_task[future]
-                try:
-                    result = future.result()
-                    successful_tasks.append((task.name, result))
-                    self._logger.log_info(
-                        f"Task '{task.name}' completed with result: {result}"
-                    )
-                except Exception as e:
-                    failed_tasks.append((task.name, str(e)))
-                    self._logger.log_error(
-                        f"Task '{task.name}' failed with exception: {e}"
-                    )
+                for future in future_to_task:
+                    task = future_to_task[future]
+                    try:
+                        result = future.result()
+                        successful_tasks.append((task.name, result))
+                        self._logger.log_info(
+                            f"Task '{task.name}' completed successfully."
+                        )
+                    except Exception as e:
+                        failed_tasks.append((task.name, str(e)))
+                        self._logger.log_error(
+                            f"Task '{task.name}' failed with exception: {e}"
+                        )
 
-            self._logger.log_info(
-                f"All {len(self._task_name_set)} tasks have been executed."
-            )
+                if final_callback:
+                    try:
+                        final_callback()
+                        self._logger.log_info(
+                            "Final callback executed after all tasks."
+                        )
+                    except Exception as e:
+                        self._logger.log_error(f"Final callback failed: {e}")
 
-            successful_names = [name for name, _ in successful_tasks]
-            failed_names = [name for name, _ in failed_tasks]
+        successful_names = [name for name, _ in successful_tasks]
+        failed_names = [name for name, _ in failed_tasks]
 
-            self._logger.log_info(
-                f"Successful Tasks ({len(successful_names)}/{len(self._task_name_set)}) : {successful_names}"
-            )
-            self._logger.log_info(
-                f"Failed Tasks ({len(failed_names)}/{len(self._task_name_set)}): {failed_names}"
-            )
+        self._logger.log_info(
+            f"Successful Tasks ({len(successful_names)} total): {successful_names}"
+        )
+        self._logger.log_info(
+            f"Failed Tasks ({len(failed_names)} total): {failed_names}"
+        )
 
         return successful_tasks, failed_tasks
