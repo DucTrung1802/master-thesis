@@ -1799,6 +1799,9 @@ class WebScraper:
     def my_callback_handler(self, sublist, index):
         print(f"[Callback {index}] received: {sublist}")
 
+    def final_callback_handler(self):
+        print(f"Final callback received results: Goodbye.")
+
     def start_scraping(self):
         self._logger.log_info("Start scraping data using ThreadManager.")
 
@@ -1822,6 +1825,6 @@ class WebScraper:
             f"Start executing {self._thread_manager.get_current_number_of_task()} tasks."
         )
 
-        self._thread_manager.execute()
+        self._thread_manager.execute(final_callback=self.final_callback_handler)
 
         self._logger.log_info("Finished scraping data.")

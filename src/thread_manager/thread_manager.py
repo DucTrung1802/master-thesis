@@ -1,5 +1,5 @@
 import os
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, wait
 from typing import List, Set
 from logger.logger import Logger
 
@@ -108,7 +108,7 @@ class ThreadManager:
 
         return [make_callback(i) for i in range(num)]
 
-    def execute(self):
+    def execute(self, final_callback: callable = None):
         successful_tasks = []
         failed_tasks = []
 
@@ -126,6 +126,9 @@ class ThreadManager:
                     executor.submit(task.run): task for task in current_batch
                 }
 
+                futures = list(future_to_task.keys())
+                wait(futures)
+
                 for future in future_to_task:
                     task = future_to_task[future]
                     try:
@@ -139,6 +142,15 @@ class ThreadManager:
                         self._logger.log_error(
                             f"Task '{task.name}' failed with exception: {e}"
                         )
+
+                if final_callback:
+                    try:
+                        final_callback()
+                        self._logger.log_info(
+                            "Final callback executed after all tasks."
+                        )
+                    except Exception as e:
+                        self._logger.log_error(f"Final callback failed: {e}")
 
             # This log shows progress across rounds
             self._logger.log_info(f"Finished executing batch #{total_round}.")
