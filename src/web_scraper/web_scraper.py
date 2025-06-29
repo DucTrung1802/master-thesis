@@ -1536,16 +1536,18 @@ class WebScraper:
                         outstanding_shares = 0
                         market_cap = 0
 
-                        stock_name_xpath = '//*[@id="symbolbox"]'
-                        old_stock_name_content = web_driver.find_element(
-                            By.XPATH, stock_name_xpath
-                        ).get_attribute("innerHTML")
+                        stock_name_xpaths = [
+                            '//*[@id="symbolbox"]', '//*[@id="contentV1"]/div[2]/div[1]'
+                        ]
+                        old_stock_name_content = self._find_first_valid_element(
+                            web_driver, stock_name_xpaths
+                        ).text
 
                         self._click_element(web_driver, auto_complete_link_xpath)
                         WebDriverWait(web_driver, 10).until(
-                            lambda driver: driver.find_element(
-                                By.XPATH, stock_name_xpath
-                            ).get_attribute("innerHTML")
+                            lambda driver: self._find_first_valid_element(
+                                web_driver, stock_name_xpaths
+                            ).text
                             != old_stock_name_content
                         )
 
@@ -1614,12 +1616,17 @@ class WebScraper:
                                     market_cap,
                                 ]
                             )
-                            
+
                         break  # Success, exit retry loop
 
                     except Exception as e:
                         print(f"[Attempt {attempt+1}/3] Failed for {stock_code}: {e}")
-                        time.sleep(2)  # Optional: backoff before retry
+                        web_driver.refresh()
+                        search_box_xpath = '//*[@id="CafeF_SearchKeyword_Companyv2"]'
+                        _ = WebDriverWait(web_driver, 10).until(
+                            EC.presence_of_element_located((By.XPATH, search_box_xpath))
+                        )
+                        bs4_parser = self._update_bs4_parser(web_driver)
                         if attempt == 2:
                             self._logger.log_error(
                                 f"Failed to scrape stock code {stock_code} after 3 attempts."
