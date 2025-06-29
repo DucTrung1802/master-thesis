@@ -2579,6 +2579,9 @@ class DataPreprocessor:
             df = pd.read_csv(stock_market)
             df["<Ticker>"] = df["<Ticker>"].astype("string")
 
+            # Skip all Derivatives
+            df = df[df["<Ticker>"].str.len() == 3]
+
             distinct_stocks = df["<Ticker>"].dropna().unique()
 
             stock_df = pd.DataFrame(
