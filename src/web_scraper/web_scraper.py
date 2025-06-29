@@ -1657,7 +1657,7 @@ class WebScraper:
                 next(reader)  # Skip header row
 
                 for row in reader:
-                    if row:  # Ensure the row is not empty
+                    if row and len(row[0].strip()) == 3:  # Skip all Derivatives
                         all_stock_codes.add(row[0].strip())
 
         all_stock_code_chunks = divided_into_chunks(
