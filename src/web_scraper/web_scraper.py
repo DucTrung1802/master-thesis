@@ -108,6 +108,13 @@ class WebScraper:
 
         return self._extract_table(table)
 
+    def _find_first_valid_element(self, web_driver: ChromiumDriver, xpaths: List[str]):
+        for xpath in xpaths:
+            elements = web_driver.find_elements(By.XPATH, xpath)
+            if elements:
+                return elements[0]
+        return False
+
     def _scrape_data_macroeconomics_gdp_vietstock(
         self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
     ):
@@ -1487,7 +1494,7 @@ class WebScraper:
                     writer.writerow(
                         ["Code", "Listed Shares", "Outstanding Shares", "Market Cap"]
                     )
-                    
+
             web_driver, bs4_parser = self._navigate_to_url(
                 web_driver, url=SCRAPE_MAPPING[key].url
             )
@@ -1495,92 +1502,106 @@ class WebScraper:
 
             # Write data to CSV file
             for stock_code in stock_codes:
-                search_box_xpath = '//*[@id="CafeF_SearchKeyword_Companyv2"]'
-                _ = WebDriverWait(web_driver, 10).until(
-                    EC.presence_of_element_located((By.XPATH, search_box_xpath))
-                )
-                
-                self._input_text(web_driver, search_box_xpath, stock_code)
-                
-                auto_complete_link_xpath = '//*[@id="autoCompleteLink"]'
-                _ = WebDriverWait(web_driver, 10).until(
-                    EC.presence_of_element_located((By.XPATH, auto_complete_link_xpath))
-                )
-                bs4_parser = self._update_bs4_parser(web_driver)
+                print(f"Scraping stock code: {stock_code}")
+                for attempt in range(3):
+                    try:
+                        search_box_xpath = '//*[@id="CafeF_SearchKeyword_Companyv2"]'
+                        _ = WebDriverWait(web_driver, 10).until(
+                            EC.presence_of_element_located((By.XPATH, search_box_xpath))
+                        )
 
-                auto_complete_link = bs4_parser.find("a", id="autoCompleteLink")
-                if auto_complete_link:
-                    em_text = auto_complete_link.find("em").text
+                        self._input_text(web_driver, search_box_xpath, stock_code)
 
-                    listed_shares = 0
-                    outstanding_shares = 0
-                    market_cap = 0
-
-                    if em_text == stock_code:
-                        self._click_element(web_driver, auto_complete_link_xpath)
                         auto_complete_link_xpath = '//*[@id="autoCompleteLink"]'
-                        old_auto_complete_link_content = web_driver.find_element(
-                            By.XPATH, auto_complete_link_xpath
+                        _ = WebDriverWait(web_driver, 10).until(
+                            EC.presence_of_element_located(
+                                (By.XPATH, auto_complete_link_xpath)
+                            )
+                        )
+
+                        bs4_parser = self._update_bs4_parser(web_driver)
+                        auto_complete_link = bs4_parser.find("a", id="autoCompleteLink")
+
+                        if not auto_complete_link:
+                            raise ValueError("Auto-complete link not found")
+
+                        em_text = auto_complete_link.find("em").text
+
+                        if em_text != stock_code:
+                            raise ValueError(
+                                f"Autocomplete text mismatch: {em_text} vs {stock_code}"
+                            )
+
+                        listed_shares = 0
+                        outstanding_shares = 0
+                        market_cap = 0
+
+                        stock_name_xpath = '//*[@id="symbolbox"]'
+                        old_stock_name_content = web_driver.find_element(
+                            By.XPATH, stock_name_xpath
                         ).get_attribute("innerHTML")
+
+                        self._click_element(web_driver, auto_complete_link_xpath)
                         WebDriverWait(web_driver, 10).until(
                             lambda driver: driver.find_element(
-                                By.XPATH, auto_complete_link_xpath
+                                By.XPATH, stock_name_xpath
                             ).get_attribute("innerHTML")
-                            != old_auto_complete_link_content
+                            != old_stock_name_content
                         )
+
                         bs4_parser = self._update_bs4_parser(web_driver)
 
-                        # Extract listed shares
-                        # fmt: off
-                        listed_shares_xpath_v1 = '//*[@id="contentV1"]/div[4]/div[4]/div/ul/li[2]/div[2]'
-                        listed_shares_xpath_v2 = '//*[@id="content"]/div/div[7]/div[4]/div/ul/li[2]/div[2]'
+                        # Listed Shares
+                        listed_shares_xpaths = [
+                            '//*[@id="contentV1"]/div[4]/div[4]/div/ul/li[2]/div[2]',
+                            '//*[@id="content"]/div/div[7]/div[4]/div/ul/li[2]/div[2]',
+                            '//*[@id="content"]/div/div[6]/div[4]/div/ul/li[2]/div[2]',
+                        ]
                         listed_shares_component = WebDriverWait(web_driver, 10).until(
-                            lambda driver: driver.find_element(By.XPATH, listed_shares_xpath_v1) 
-                            if driver.find_elements(By.XPATH, listed_shares_xpath_v1) 
-                            else driver.find_element(By.XPATH, listed_shares_xpath_v2)
-                            if driver.find_elements(By.XPATH, listed_shares_xpath_v2) 
-                            else False
+                            lambda driver: self._find_first_valid_element(
+                                driver, listed_shares_xpaths
+                            )
                         )
-                        # fmt: on
                         if listed_shares_component:
                             listed_shares = int(
                                 listed_shares_component.text.replace(",", "")
                             )
 
-                        # Extract outstanding shares
-                        # fmt: off
-                        outstanding_shares_xpath_v1 = '//*[@id="contentV1"]/div[4]/div[4]/div/ul/li[3]/div[2]'
-                        outstanding_shares_xpath_v2 = '//*[@id="content"]/div/div[7]/div[4]/div/ul/li[3]/div[2]'
-                        outstanding_shares_component = WebDriverWait(web_driver, 10).until(
-                            lambda driver: driver.find_element(By.XPATH, outstanding_shares_xpath_v1) 
-                            if driver.find_elements(By.XPATH, outstanding_shares_xpath_v1) 
-                            else driver.find_element(By.XPATH, outstanding_shares_xpath_v2)
-                            if driver.find_elements(By.XPATH, outstanding_shares_xpath_v2) 
-                            else False
+                        # Outstanding Shares
+                        outstanding_shares_xpaths = [
+                            '//*[@id="contentV1"]/div[4]/div[4]/div/ul/li[3]/div[2]',
+                            '//*[@id="content"]/div/div[7]/div[4]/div/ul/li[3]/div[2]',
+                            '//*[@id="content"]/div/div[6]/div[4]/div/ul/li[3]/div[2]',
+                        ]
+                        outstanding_shares_component = WebDriverWait(
+                            web_driver, 10
+                        ).until(
+                            lambda driver: self._find_first_valid_element(
+                                driver, outstanding_shares_xpaths
+                            )
                         )
-                        # fmt: on
                         if outstanding_shares_component:
                             outstanding_shares = int(
                                 outstanding_shares_component.text.replace(",", "")
                             )
 
-                        # Extract market cap
-                        # fmt: off
-                        market_cap_xpath_v1 = '//*[@id="contentV1"]/div[4]/div[4]/div/ul/li[4]/div[2]'
-                        market_cap_xpath_v2 = '//*[@id="content"]/div/div[7]/div[4]/div/ul/li[4]/div[2]'
+                        # Market Cap
+                        market_cap_xpaths = [
+                            '//*[@id="contentV1"]/div[4]/div[4]/div/ul/li[4]/div[2]',
+                            '//*[@id="content"]/div/div[7]/div[4]/div/ul/li[4]/div[2]',
+                            '//*[@id="content"]/div/div[6]/div[4]/div/ul/li[4]/div[2]',
+                        ]
                         market_cap_component = WebDriverWait(web_driver, 10).until(
-                            lambda driver: driver.find_element(By.XPATH, market_cap_xpath_v1) 
-                            if driver.find_elements(By.XPATH, market_cap_xpath_v1) 
-                            else driver.find_element(By.XPATH, market_cap_xpath_v2)
-                            if driver.find_elements(By.XPATH, market_cap_xpath_v2)
-                            else False
+                            lambda driver: self._find_first_valid_element(
+                                driver, market_cap_xpaths
+                            )
                         )
-                        # fmt: on
                         if market_cap_component:
                             market_cap = float(
                                 market_cap_component.text.replace(",", "")
                             )
 
+                        # Write to CSV
                         with open(
                             file_path, mode="a", newline="", encoding="utf-8"
                         ) as file:
@@ -1592,6 +1613,16 @@ class WebScraper:
                                     outstanding_shares,
                                     market_cap,
                                 ]
+                            )
+                            
+                        break  # Success, exit retry loop
+
+                    except Exception as e:
+                        print(f"[Attempt {attempt+1}/3] Failed for {stock_code}: {e}")
+                        time.sleep(2)  # Optional: backoff before retry
+                        if attempt == 2:
+                            self._logger.log_error(
+                                f"Failed to scrape stock code {stock_code} after 3 attempts."
                             )
 
         finally:
