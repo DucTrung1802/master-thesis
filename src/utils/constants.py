@@ -47,3 +47,4 @@ STOCK_MARKET_INDEX_HEADER = [
 # ===========================
 # ENTERPRISE CONFIGURATION
 # ===========================
+PARALLEL_SCRAPE_ENTERPRISE_STOCK_INFORMATION = 4

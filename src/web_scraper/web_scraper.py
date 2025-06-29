@@ -8,7 +8,6 @@ from selenium.webdriver.support import expected_conditions as EC
 from bs4 import BeautifulSoup, Tag
 
 import csv
-
 import os
 import time
 import re
@@ -108,6 +107,13 @@ class WebScraper:
         table = bs4_parser.find("table", id=id)
 
         return self._extract_table(table)
+
+    def _find_first_valid_element(self, web_driver: ChromiumDriver, xpaths: List[str]):
+        for xpath in xpaths:
+            elements = web_driver.find_elements(By.XPATH, xpath)
+            if elements:
+                return elements[0]
+        return False
 
     def _scrape_data_macroeconomics_gdp_vietstock(
         self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
@@ -1389,10 +1395,12 @@ class WebScraper:
                 f"{folder_path}/{file_name}_upto_{current_date.strftime('%Y%m%d')}.csv"
             )
 
-            # 3. Check if file(s) already exists
-            if os.path.exists(file_path):
-                self._logger.log_info(f"File already exists: {file_path}")
-                return
+            # 3. Remove old file if exists
+            remove_all_files_with_extensions(
+                logger=self._logger,
+                folder_path=folder_path,
+                extensions=[FileExtension.CSV],
+            )
 
             # 4. Create folder if not exists
             if not os.path.exists(folder_path):
@@ -1450,6 +1458,225 @@ class WebScraper:
 
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
+        return key
+
+    def _scrape_data_enterprise_stock_information_cafef_callback(
+        self, index: int, total: int, stock_codes: List[str]
+    ):
+        self._logger.log_info(f"Start scraping data for .")
+
+        web_driver, bs4_parser = self._initialize_web_driver_and_bs4_parser()
+        try:
+            key = (
+                ScrapeMainType.ENTERPRISE,
+                EnterpriseSubType.STOCK_INFORMATION,
+                StockInformationSource.CAFEF,
+            )
+            # 1. Initialize folder path and file name
+            folder_path = (
+                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            )
+            file_name = f"{key[2].value}"
+
+            # 2. Initialize start time and current time
+            current_date = datetime.now()
+
+            file_path = f"{folder_path}/{file_name}_upto_{current_date.strftime('%Y%m%d')}_{index}.csv"
+
+            # 3. Create folder if not exists
+            if not os.path.exists(folder_path):
+                os.makedirs(folder_path, exist_ok=True)
+
+            # Write header to CSV file
+            if len(stock_codes) > 0:
+                with open(file_path, mode="w", newline="", encoding="utf-8") as file:
+                    writer = csv.writer(file)
+                    writer.writerow(
+                        ["Code", "Listed Shares", "Outstanding Shares", "Market Cap"]
+                    )
+
+            web_driver, bs4_parser = self._navigate_to_url(
+                web_driver, url=SCRAPE_MAPPING[key].url
+            )
+            time.sleep(SCRAPER_BASE_WAIT_TIME)
+
+            # Write data to CSV file
+            count = 0
+            for stock_code in stock_codes:
+                self._logger.log_info(
+                    f"Stock information cafef callback index: {index}/{total} | Scraping stock: {stock_code} | Count: ({count + 1}/{len(stock_codes)})."
+                )
+                for attempt in range(3):
+                    try:
+                        search_box_xpath = '//*[@id="CafeF_SearchKeyword_Companyv2"]'
+                        _ = WebDriverWait(web_driver, 10).until(
+                            EC.presence_of_element_located((By.XPATH, search_box_xpath))
+                        )
+
+                        self._input_text(web_driver, search_box_xpath, stock_code)
+
+                        auto_complete_link_xpath = '//*[@id="autoCompleteLink"]'
+                        _ = WebDriverWait(web_driver, 10).until(
+                            EC.presence_of_element_located(
+                                (By.XPATH, auto_complete_link_xpath)
+                            )
+                        )
+
+                        bs4_parser = self._update_bs4_parser(web_driver)
+                        auto_complete_link = bs4_parser.find("a", id="autoCompleteLink")
+
+                        if not auto_complete_link:
+                            raise ValueError("Auto-complete link not found")
+
+                        em_text = auto_complete_link.find("em").text
+
+                        if em_text != stock_code:
+                            raise ValueError(
+                                f"Autocomplete text mismatch: {em_text} vs {stock_code}"
+                            )
+
+                        listed_shares = 0
+                        outstanding_shares = 0
+                        market_cap = 0
+
+                        stock_name_xpaths = [
+                            '//*[@id="symbolbox"]',
+                            '//*[@id="contentV1"]/div[2]/div[1]',
+                        ]
+                        old_stock_name_content = self._find_first_valid_element(
+                            web_driver, stock_name_xpaths
+                        ).text
+
+                        self._click_element(web_driver, auto_complete_link_xpath)
+                        WebDriverWait(web_driver, 10).until(
+                            lambda driver: self._find_first_valid_element(
+                                web_driver, stock_name_xpaths
+                            ).text
+                            != old_stock_name_content
+                        )
+
+                        bs4_parser = self._update_bs4_parser(web_driver)
+
+                        # Listed Shares
+                        listed_shares_xpaths = [
+                            '//*[@id="contentV1"]/div[4]/div[4]/div/ul/li[2]/div[2]',
+                            '//*[@id="content"]/div/div[7]/div[4]/div/ul/li[2]/div[2]',
+                            '//*[@id="content"]/div/div[6]/div[4]/div/ul/li[2]/div[2]',
+                        ]
+                        listed_shares_component = WebDriverWait(web_driver, 10).until(
+                            lambda driver: self._find_first_valid_element(
+                                driver, listed_shares_xpaths
+                            )
+                        )
+                        if listed_shares_component:
+                            listed_shares = int(
+                                listed_shares_component.text.replace(",", "")
+                            )
+
+                        # Outstanding Shares
+                        outstanding_shares_xpaths = [
+                            '//*[@id="contentV1"]/div[4]/div[4]/div/ul/li[3]/div[2]',
+                            '//*[@id="content"]/div/div[7]/div[4]/div/ul/li[3]/div[2]',
+                            '//*[@id="content"]/div/div[6]/div[4]/div/ul/li[3]/div[2]',
+                        ]
+                        outstanding_shares_component = WebDriverWait(
+                            web_driver, 10
+                        ).until(
+                            lambda driver: self._find_first_valid_element(
+                                driver, outstanding_shares_xpaths
+                            )
+                        )
+                        if outstanding_shares_component:
+                            outstanding_shares = int(
+                                outstanding_shares_component.text.replace(",", "")
+                            )
+
+                        # Market Cap
+                        market_cap_xpaths = [
+                            '//*[@id="contentV1"]/div[4]/div[4]/div/ul/li[4]/div[2]',
+                            '//*[@id="content"]/div/div[7]/div[4]/div/ul/li[4]/div[2]',
+                            '//*[@id="content"]/div/div[6]/div[4]/div/ul/li[4]/div[2]',
+                        ]
+                        market_cap_component = WebDriverWait(web_driver, 10).until(
+                            lambda driver: self._find_first_valid_element(
+                                driver, market_cap_xpaths
+                            )
+                        )
+                        if market_cap_component:
+                            market_cap = float(
+                                market_cap_component.text.replace(",", "")
+                            )
+
+                        # Write to CSV
+                        with open(
+                            file_path, mode="a", newline="", encoding="utf-8"
+                        ) as file:
+                            writer = csv.writer(file)
+                            writer.writerow(
+                                [
+                                    stock_code,
+                                    listed_shares,
+                                    outstanding_shares,
+                                    market_cap,
+                                ]
+                            )
+
+                        break  # Success, exit retry loop
+
+                    except Exception as e:
+                        print(f"[Attempt {attempt+1}/3] Failed for {stock_code}: {e}")
+                        web_driver.refresh()
+                        search_box_xpath = '//*[@id="CafeF_SearchKeyword_Companyv2"]'
+                        _ = WebDriverWait(web_driver, 10).until(
+                            EC.presence_of_element_located((By.XPATH, search_box_xpath))
+                        )
+                        bs4_parser = self._update_bs4_parser(web_driver)
+                        if attempt == 2:
+                            self._logger.log_error(
+                                f"Failed to scrape stock code {stock_code} after 3 attempts."
+                            )
+
+                count += 1
+        finally:
+            web_driver.close()
+
+    def _scrape_data_enterprise_stock_information_cafef(
+        self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
+    ):
+        folder_path = (
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+        )
+        all_files = get_all_file_names_with_extensions(
+            self._logger, folder_path=folder_path, extensions=[FileExtension.CSV]
+        )
+
+        all_stock_codes = set()
+        for file in all_files:
+            with open(file, mode="r", newline="", encoding="utf-8") as csvfile:
+                reader = csv.reader(csvfile)
+                next(reader)  # Skip header row
+
+                for row in reader:
+                    if row:  # Ensure the row is not empty
+                        all_stock_codes.add(row[0].strip())
+
+        all_stock_code_chunks = divided_into_chunks(
+            all_stock_codes, PARALLEL_SCRAPE_ENTERPRISE_STOCK_INFORMATION
+        )
+
+        for chunk, index in zip(
+            all_stock_code_chunks, range(len(all_stock_code_chunks))
+        ):
+            self._thread_manager.add_task(
+                Task(
+                    f"{format_key_for_name(key)}_callback_{index + 1}",
+                    self._scrape_data_enterprise_stock_information_cafef_callback,
+                    index + 1,
+                    len(all_stock_code_chunks),
+                    chunk,
+                )
+            )
+
     def _scrape_data_from(self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]):
         if key not in SCRAPE_MAPPING:
             raise ValueError(f"No mapping found for {key}")
@@ -1462,77 +1689,81 @@ class WebScraper:
                 MacroeconomicsSubType.GDP,
                 GdpSource.VIETSTOCK,
             ):
-                self._scrape_data_macroeconomics_gdp_vietstock(key)
+                return self._scrape_data_macroeconomics_gdp_vietstock(key)
 
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.GDP,
                 GdpSource.WORLDOMETER,
             ):
-                self._scrape_data_macroeconomics_gdp_worldometer(key)
+                return self._scrape_data_macroeconomics_gdp_worldometer(key)
 
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.CPI,
                 CpiSource.VIETSTOCK,
             ):
-                self._scrape_data_macroeconomics_cpi_vietstock(key)
+                return self._scrape_data_macroeconomics_cpi_vietstock(key)
 
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.EXCHANGE_RATE,
                 ExchangeRateSource.VIETSTOCK,
             ):
-                self._scrape_data_macroeconomics_exchange_rate_vietstock(key)
+                return self._scrape_data_macroeconomics_exchange_rate_vietstock(key)
 
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.INTEREST_RATE,
                 InterestRateSource.VIETSTOCK,
             ):
-                self._scrape_data_macroeconomics_interest_rate_vietstock(key)
+                return self._scrape_data_macroeconomics_interest_rate_vietstock(key)
 
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.EXPORT,
                 ExportImportSource.VIETSTOCK,
             ):
-                self._scrape_data_macroeconomics_export_import_vietstock(key)
+                return self._scrape_data_macroeconomics_export_import_vietstock(key)
 
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.IPI,
                 IpiSource.VIETSTOCK,
             ):
-                self._scrape_data_macroeconomics_ipi_vietstock(key)
+                return self._scrape_data_macroeconomics_ipi_vietstock(key)
 
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.FDI,
                 FdiSource.VIETSTOCK,
             ):
-                self._scrape_data_macroeconomics_fdi_vietstock(key)
+                return self._scrape_data_macroeconomics_fdi_vietstock(key)
 
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.M2,
                 M2Source.VIETSTOCK,
             ):
-                self._scrape_data_macroeconomics_m2_vietstock(key)
+                return self._scrape_data_macroeconomics_m2_vietstock(key)
 
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.RETAIL,
                 RetailSource.VIETSTOCK,
             ):
-                self._scrape_data_macroeconomics_retail_vietstock(key)
+                return self._scrape_data_macroeconomics_retail_vietstock(key)
 
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.POPULATION_UNEMPLOYMENT,
                 PopulationUnemploymentSource.VIETSTOCK,
             ):
-                self._scrape_data_macroeconomics_population_unemployment_vietstock(key)
+                return (
+                    self._scrape_data_macroeconomics_population_unemployment_vietstock(
+                        key
+                    )
+                )
 
             # STOCK_MARKET
             case (
@@ -1540,35 +1771,35 @@ class WebScraper:
                 StockMarketSubType.VN_HNX_INDEX,
                 VnHnxIndexSource.CAFEF,
             ):
-                self._scrape_data_stock_market_vn_hnx_index_cafef(key)
+                return self._scrape_data_stock_market_vn_hnx_index_cafef(key)
 
             case (
                 ScrapeMainType.STOCK_MARKET,
                 StockMarketSubType.VN_30_INDEX,
                 Vn30IndexSource.CAFEF,
             ):
-                self._scrape_data_stock_market_vn_30_index_cafef(key)
+                return self._scrape_data_stock_market_vn_30_index_cafef(key)
 
             case (
                 ScrapeMainType.STOCK_MARKET,
                 StockMarketSubType.VN_100_INDEX,
                 Vn100IndexSource.CAFEF,
             ):
-                self._scrape_data_stock_market_vn_100_index_cafef(key)
+                return self._scrape_data_stock_market_vn_100_index_cafef(key)
 
             case (
                 ScrapeMainType.STOCK_MARKET,
                 StockMarketSubType.HNX_30_INDEX,
                 Hnx30IndexSource.CAFEF,
             ):
-                self._scrape_data_stock_market_hnx_30_index_cafef(key)
+                return self._scrape_data_stock_market_hnx_30_index_cafef(key)
 
             case (
                 ScrapeMainType.STOCK_MARKET,
                 StockMarketSubType.UPCOM_INDEX,
                 UpcomIndexSource.CAFEF,
             ):
-                self._scrape_data_stock_market_upcom_index_cafef(key)
+                return self._scrape_data_stock_market_upcom_index_cafef(key)
 
             # ENTERPRISE
             case (
@@ -1576,7 +1807,7 @@ class WebScraper:
                 EnterpriseSubType.DAILY_PRICE,
                 DailyPriceSource.CAFEF,
             ):
-                self._scrape_data_enterprise_daily_price_cafef(key)
+                return self._scrape_data_enterprise_daily_price_cafef(key)
 
     def add_macroeconomics_data_scraping_tasks(self):
         self._logger.log_info("Adding macroeconomic data scraping tasks.")
@@ -1763,24 +1994,18 @@ class WebScraper:
         self._logger.log_info("Adding enterprise data scraping tasks.")
         number_of_task_before = self._thread_manager.get_current_number_of_task()
 
-        # # DAILY_PRICE
-        # key = (
-        #     ScrapeMainType.ENTERPRISE,
-        #     EnterpriseSubType.DAILY_PRICE,
-        #     DailyPriceSource.CAFEF,
-        # )
-        # self._thread_manager.add_task(
-        #     Task(format_key_for_name(key), self._scrape_data_from, key)
-        # )
-
-        n = 4
-        callbacks = self._thread_manager.generate_callbacks(self.my_callback_handler, n)
-
+        # DAILY_PRICE
+        key = (
+            ScrapeMainType.ENTERPRISE,
+            EnterpriseSubType.DAILY_PRICE,
+            DailyPriceSource.CAFEF,
+        )
         self._thread_manager.add_task(
             Task(
-                name="hello_1",
-                func=self.hello_1,
-                callbacks=callbacks,
+                format_key_for_name(key),
+                self._scrape_data_from,
+                key,
+                callbacks=self._scrape_data_enterprise_stock_information_cafef,
             )
         )
 
@@ -1789,18 +2014,61 @@ class WebScraper:
             f"Added {number_of_task_after - number_of_task_before} enterprise data scraping tasks."
         )
 
-    def hello_1(self):
-        print("Hello 1")
-        # Configurable number
-        n = 4
-        result = [["abc", "def"], ["adu", "ahn"], ["hello", "oreo"], ["hi", "aloha"]]
-        return result[:n]
+    def _double_check_stock_information_cafef_result(self):
+        key = (
+            ScrapeMainType.ENTERPRISE,
+            EnterpriseSubType.STOCK_INFORMATION,
+            StockInformationSource.CAFEF,
+        )
+        folder_path = (
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+        )
+        all_files = get_all_file_names_with_extensions(
+            self._logger, folder_path=folder_path, extensions=[FileExtension.CSV]
+        )
 
-    def my_callback_handler(self, sublist, index):
-        print(f"[Callback {index}] received: {sublist}")
+        scraped_stock_code_list = []
+        for file in all_files:
+            with open(file, newline="") as csvfile:
+                reader = csv.DictReader(csvfile)
+                for row in reader:
+                    scraped_stock_code_list.append(row["Code"])
 
-    def final_callback_handler(self):
-        print(f"Final callback received results: Goodbye.")
+        all_stock_codes = set()
+        for file in all_files:
+            with open(file, mode="r", newline="", encoding="utf-8") as csvfile:
+                reader = csv.reader(csvfile)
+                next(reader)  # Skip header row
+
+                for row in reader:
+                    if row:  # Ensure the row is not empty
+                        all_stock_codes.add(row[0].strip())
+
+        not_scraped_codes = all_stock_codes - set(scraped_stock_code_list)
+        self._logger.log_info(
+            f"Double-checking stock information from CafeF. Scraped: {len(scraped_stock_code_list)}/{len(all_stock_codes)}"
+        )
+
+        file_path = f"{folder_path}/not_scraped_stock_codes.csv"
+
+        if not_scraped_codes:
+            if not os.path.exists(folder_path):
+                os.makedirs(folder_path, exist_ok=True)
+
+            with open(file_path, mode="w", newline="", encoding="utf-8") as csvfile:
+                writer = csv.writer(csvfile)
+                writer.writerow(["Not Scraped Stock Codes"])
+                for code in not_scraped_codes:
+                    writer.writerow([code])
+
+            self._logger.log_info(
+                f"Double-checking stock information from CafeF completed. Not scraped codes saved to `{file_path}`."
+            )
+
+        else:
+            self._logger.log_info(
+                "Double-checking stock information from CafeF completed. All stock codes have been scraped."
+            )
 
     def start_scraping(self):
         self._logger.log_info("Start scraping data using ThreadManager.")
@@ -1825,6 +2093,10 @@ class WebScraper:
             f"Start executing {self._thread_manager.get_current_number_of_task()} tasks."
         )
 
-        self._thread_manager.execute(final_callback=self.final_callback_handler)
+        self._thread_manager.execute(
+            final_callback=self._double_check_stock_information_cafef_result
+        )
+
+        self._double_check_stock_information_cafef_result()
 
         self._logger.log_info("Finished scraping data.")
