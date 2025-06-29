@@ -117,9 +117,6 @@ class ThreadManager:
             total_round += 1
             current_batch = self._task_list[:]
             self._task_list.clear()
-            self._logger.log_info(
-                f"Executing batch #{total_round} with {len(current_batch)} tasks..."
-            )
 
             with ThreadPoolExecutor(max_workers=self._max_workers) as executor:
                 future_to_task = {
@@ -151,13 +148,6 @@ class ThreadManager:
                         )
                     except Exception as e:
                         self._logger.log_error(f"Final callback failed: {e}")
-
-            # This log shows progress across rounds
-            self._logger.log_info(f"Finished executing batch #{total_round}.")
-
-        self._logger.log_info(
-            f"All tasks have been executed across {total_round} batches."
-        )
 
         successful_names = [name for name, _ in successful_tasks]
         failed_names = [name for name, _ in failed_tasks]
