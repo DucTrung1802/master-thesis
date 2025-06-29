@@ -1537,7 +1537,8 @@ class WebScraper:
                         market_cap = 0
 
                         stock_name_xpaths = [
-                            '//*[@id="symbolbox"]', '//*[@id="contentV1"]/div[2]/div[1]'
+                            '//*[@id="symbolbox"]',
+                            '//*[@id="contentV1"]/div[2]/div[1]',
                         ]
                         old_stock_name_content = self._find_first_valid_element(
                             web_driver, stock_name_xpaths
@@ -2031,6 +2032,6 @@ class WebScraper:
             f"Start executing {self._thread_manager.get_current_number_of_task()} tasks."
         )
 
-        self._thread_manager.execute()
+        self._thread_manager.execute(final_callback=self.final_callback_handler)
 
         self._logger.log_info("Finished scraping data.")
