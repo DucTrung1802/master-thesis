@@ -140,14 +140,13 @@ class ThreadManager:
                             f"Task '{task.name}' failed with exception: {e}"
                         )
 
-                if final_callback:
-                    try:
-                        final_callback()
-                        self._logger.log_info(
-                            "Final callback executed after all tasks."
-                        )
-                    except Exception as e:
-                        self._logger.log_error(f"Final callback failed: {e}")
+        # Final callback runs once after all rounds of tasks
+        if final_callback:
+            try:
+                final_callback()
+                self._logger.log_info("Final callback executed after all tasks.")
+            except Exception as e:
+                self._logger.log_error(f"Final callback failed: {e}")
 
         successful_names = [name for name, _ in successful_tasks]
         failed_names = [name for name, _ in failed_tasks]
