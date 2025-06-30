@@ -115,6 +115,13 @@ class WebScraper:
                 return elements[0]
         return False
 
+    def _find_first_valid_xpath(self, web_driver: ChromiumDriver, xpaths: List[str]):
+        for xpath in xpaths:
+            elements = web_driver.find_elements(By.XPATH, xpath)
+            if elements:
+                return xpath
+        return False
+
     def _scrape_data_macroeconomics_gdp_vietstock(
         self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
     ):
@@ -1378,83 +1385,83 @@ class WebScraper:
     ):
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
 
-        # Initialize web driver and bs4 parser
-        web_driver, bs4_parser = self._initialize_web_driver_and_bs4_parser()
+        # # Initialize web driver and bs4 parser
+        # web_driver, bs4_parser = self._initialize_web_driver_and_bs4_parser()
 
-        try:
-            # 1. Initialize folder path and file name
-            folder_path = (
-                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            )
-            file_name = f"{key[2].value}"
+        # try:
+        #     # 1. Initialize folder path and file name
+        #     folder_path = (
+        #         f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+        #     )
+        #     file_name = f"{key[2].value}"
 
-            # 2. Initialize start time and current time
-            current_date = datetime.now()
+        #     # 2. Initialize start time and current time
+        #     current_date = datetime.now()
 
-            file_path = (
-                f"{folder_path}/{file_name}_upto_{current_date.strftime('%Y%m%d')}.csv"
-            )
+        #     file_path = (
+        #         f"{folder_path}/{file_name}_upto_{current_date.strftime('%Y%m%d')}.csv"
+        #     )
 
-            # 3. Remove old file if exists
-            remove_all_files_with_extensions(
-                logger=self._logger,
-                folder_path=folder_path,
-                extensions=[FileExtension.CSV],
-            )
+        #     # 3. Remove old file if exists
+        #     remove_all_files_with_extensions(
+        #         logger=self._logger,
+        #         folder_path=folder_path,
+        #         extensions=[FileExtension.CSV],
+        #     )
 
-            # 4. Create folder if not exists
-            if not os.path.exists(folder_path):
-                os.makedirs(folder_path, exist_ok=True)
+        #     # 4. Create folder if not exists
+        #     if not os.path.exists(folder_path):
+        #         os.makedirs(folder_path, exist_ok=True)
 
-            # 5. Get SourceInfo
-            source_info = SCRAPE_MAPPING[key]
+        #     # 5. Get SourceInfo
+        #     source_info = SCRAPE_MAPPING[key]
 
-            # 6. Navigate to URL
-            web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
+        #     # 6. Navigate to URL
+        #     web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
+        #     time.sleep(SCRAPER_BASE_WAIT_TIME)
 
-            # 7. Logic for scraping
-            xpath = '//*[@id="container"]/div/div[1]/div/div/div/div[2]/div[2]/table/tbody/tr[2]/td[4]/a'
-            download_link_element = web_driver.find_element("xpath", xpath)
-            download_url = download_link_element.get_attribute("href")
+        #     # 7. Logic for scraping
+        #     xpath = '//*[@id="container"]/div/div[1]/div/div/div/div[2]/div[2]/table/tbody/tr[2]/td[4]/a'
+        #     download_link_element = web_driver.find_element("xpath", xpath)
+        #     download_url = download_link_element.get_attribute("href")
 
-            zip_path = file_path.replace(".csv", ".zip")
-            self._logger.log_info(f"Downloading ZIP file from: {download_url}")
+        #     zip_path = file_path.replace(".csv", ".zip")
+        #     self._logger.log_info(f"Downloading ZIP file from: {download_url}")
 
-            # Download file
-            download_file(download_url, zip_path, self._logger)
+        #     # Download file
+        #     download_file(download_url, zip_path, self._logger)
 
-            # Extract ZIP file
-            extract_zip_file(self._logger, zip_path, folder_path)
+        #     # Extract ZIP file
+        #     extract_zip_file(self._logger, zip_path, folder_path)
 
-            # Regex to extract stock_market and date from filenames
-            pattern = re.compile(
-                r"CafeF\.(?P<stock_market>\w+)\.Upto(?P<date>\d{2}\.\d{2}\.\d{4})\.csv"
-            )
+        #     # Regex to extract stock_market and date from filenames
+        #     pattern = re.compile(
+        #         r"CafeF\.(?P<stock_market>\w+)\.Upto(?P<date>\d{2}\.\d{2}\.\d{4})\.csv"
+        #     )
 
-            for file_name in os.listdir(folder_path):
-                match = pattern.match(file_name)
-                if match:
-                    stock_market = match.group("stock_market")
-                    date_str = match.group("date")  # e.g., 29.04.2025
-                    # Reformat date to YYYYMMDD
-                    date_parts = date_str.split(".")  # ['29', '04', '2025']
-                    reformatted_date = (
-                        f"{date_parts[2]}{date_parts[1]}{date_parts[0]}"  # '20250429'
-                    )
-                    new_file_name = f"{stock_market}_upto_{reformatted_date}.csv"
-                    src = Path(folder_path) / file_name
-                    dst = Path(folder_path) / new_file_name
-                    os.rename(src, dst)
-                    self._logger.log_info(f"Renamed '{file_name}' -> '{dst}'")
-                else:
-                    self._logger.log_info(f"Skipped file (no match): {file_name}")
+        #     for file_name in os.listdir(folder_path):
+        #         match = pattern.match(file_name)
+        #         if match:
+        #             stock_market = match.group("stock_market")
+        #             date_str = match.group("date")  # e.g., 29.04.2025
+        #             # Reformat date to YYYYMMDD
+        #             date_parts = date_str.split(".")  # ['29', '04', '2025']
+        #             reformatted_date = (
+        #                 f"{date_parts[2]}{date_parts[1]}{date_parts[0]}"  # '20250429'
+        #             )
+        #             new_file_name = f"{stock_market}_upto_{reformatted_date}.csv"
+        #             src = Path(folder_path) / file_name
+        #             dst = Path(folder_path) / new_file_name
+        #             os.rename(src, dst)
+        #             self._logger.log_info(f"Renamed '{file_name}' -> '{dst}'")
+        #         else:
+        #             self._logger.log_info(f"Skipped file (no match): {file_name}")
 
-            os.remove(zip_path)
-            self._logger.log_info(f"Removed temporary ZIP file: {zip_path}")
+        #     os.remove(zip_path)
+        #     self._logger.log_info(f"Removed temporary ZIP file: {zip_path}")
 
-        finally:
-            web_driver.close()
+        # finally:
+        #     web_driver.close()
 
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
@@ -1463,15 +1470,18 @@ class WebScraper:
     def _scrape_data_enterprise_stock_information_cafef_callback(
         self, index: int, total: int, stock_codes: List[str]
     ):
-        self._logger.log_info(f"Start scraping data for .")
+        key = (
+            ScrapeMainType.ENTERPRISE,
+            EnterpriseSubType.STOCK_INFORMATION,
+            StockInformationSource.CAFEF,
+        )
+        self._logger.log_info(
+            f'Start scraping data for "{format_key_for_name(key)}" - Callback {index}.'
+        )
 
         web_driver, bs4_parser = self._initialize_web_driver_and_bs4_parser()
         try:
-            key = (
-                ScrapeMainType.ENTERPRISE,
-                EnterpriseSubType.STOCK_INFORMATION,
-                StockInformationSource.CAFEF,
-            )
+
             # 1. Initialize folder path and file name
             folder_path = (
                 f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
@@ -1508,12 +1518,22 @@ class WebScraper:
                 )
                 for attempt in range(3):
                     try:
-                        search_box_xpath = '//*[@id="CafeF_SearchKeyword_Companyv2"]'
+                        search_box_xpath_list = [
+                            '//*[@id="CafeF_SearchKeyword_Companyv2"]',
+                            '//*[@id="search-header"]',
+                        ]
+                        search_box_xpath = self._find_first_valid_xpath(
+                            web_driver=web_driver, xpaths=search_box_xpath_list
+                        )
                         _ = WebDriverWait(web_driver, 10).until(
                             EC.presence_of_element_located((By.XPATH, search_box_xpath))
                         )
 
-                        self._input_text(web_driver, search_box_xpath, stock_code)
+                        self._input_text(
+                            web_driver=web_driver,
+                            xpath=search_box_xpath,
+                            value=stock_code,
+                        )
 
                         auto_complete_link_xpath = '//*[@id="autoCompleteLink"]'
                         _ = WebDriverWait(web_driver, 10).until(
@@ -1522,13 +1542,21 @@ class WebScraper:
                             )
                         )
 
-                        bs4_parser = self._update_bs4_parser(web_driver)
-                        auto_complete_link = bs4_parser.find("a", id="autoCompleteLink")
+                        bs4_parser = self._update_bs4_parser(web_driver=web_driver)
+                        auto_complete_link = bs4_parser.find(
+                            name="a", id="autoCompleteLink"
+                        )
 
                         if not auto_complete_link:
                             raise ValueError("Auto-complete link not found")
 
-                        em_text = auto_complete_link.find("em").text
+                        em_tag = auto_complete_link.find(
+                            name="em"
+                        ) or auto_complete_link.find(name="p")
+                        if em_tag:
+                            em_text = em_tag.text
+                        else:
+                            em_text = None  # or handle the case where both are missing
 
                         if em_text != stock_code:
                             raise ValueError(
@@ -1542,15 +1570,16 @@ class WebScraper:
                         stock_name_xpaths = [
                             '//*[@id="symbolbox"]',
                             '//*[@id="contentV1"]/div[2]/div[1]',
+                            '//*[@id="real-time-stock-exchange"]',
                         ]
                         old_stock_name_content = self._find_first_valid_element(
-                            web_driver, stock_name_xpaths
+                            web_driver=web_driver, xpaths=stock_name_xpaths
                         ).text
 
                         self._click_element(web_driver, auto_complete_link_xpath)
                         WebDriverWait(web_driver, 10).until(
                             lambda driver: self._find_first_valid_element(
-                                web_driver, stock_name_xpaths
+                                web_driver=driver, xpaths=stock_name_xpaths
                             ).text
                             != old_stock_name_content
                         )
@@ -1562,50 +1591,74 @@ class WebScraper:
                             '//*[@id="contentV1"]/div[4]/div[4]/div/ul/li[2]/div[2]',
                             '//*[@id="content"]/div/div[7]/div[4]/div/ul/li[2]/div[2]',
                             '//*[@id="content"]/div/div[6]/div[4]/div/ul/li[2]/div[2]',
+                            '//*[@id="content"]/div/div[5]/div[4]/div/ul/li[2]/div[2]',
+                            '//*[@id="transaction-information-table-right"]/div[8]/p[2]',
                         ]
                         listed_shares_component = WebDriverWait(web_driver, 10).until(
                             lambda driver: self._find_first_valid_element(
-                                driver, listed_shares_xpaths
+                                web_driver=driver, xpaths=listed_shares_xpaths
                             )
                         )
                         if listed_shares_component:
-                            listed_shares = int(
-                                listed_shares_component.text.replace(",", "")
-                            )
+                            try:
+                                listed_shares = int(
+                                    listed_shares_component.text.replace(",", "")
+                                )
+                            except ValueError:
+                                self._logger.log_error(
+                                    f"Listed shares not found for {stock_code}. Set listed shares to 0."
+                                )
+                                listed_shares = 0
 
                         # Outstanding Shares
                         outstanding_shares_xpaths = [
                             '//*[@id="contentV1"]/div[4]/div[4]/div/ul/li[3]/div[2]',
                             '//*[@id="content"]/div/div[7]/div[4]/div/ul/li[3]/div[2]',
                             '//*[@id="content"]/div/div[6]/div[4]/div/ul/li[3]/div[2]',
+                            '//*[@id="content"]/div/div[5]/div[4]/div/ul/li[3]/div[2]',
+                            '//*[@id="transaction-information-table-right"]/div[9]/p[2]',
                         ]
                         outstanding_shares_component = WebDriverWait(
                             web_driver, 10
                         ).until(
                             lambda driver: self._find_first_valid_element(
-                                driver, outstanding_shares_xpaths
+                                web_driver=driver, xpaths=outstanding_shares_xpaths
                             )
                         )
                         if outstanding_shares_component:
-                            outstanding_shares = int(
-                                outstanding_shares_component.text.replace(",", "")
-                            )
+                            try:
+                                outstanding_shares = int(
+                                    outstanding_shares_component.text.replace(",", "")
+                                )
+                            except ValueError:
+                                self._logger.log_error(
+                                    f"Outstanding shares not found for {stock_code}. Set outstanding shares to 0."
+                                )
+                                outstanding_shares = 0
 
                         # Market Cap
                         market_cap_xpaths = [
                             '//*[@id="contentV1"]/div[4]/div[4]/div/ul/li[4]/div[2]',
                             '//*[@id="content"]/div/div[7]/div[4]/div/ul/li[4]/div[2]',
                             '//*[@id="content"]/div/div[6]/div[4]/div/ul/li[4]/div[2]',
+                            '//*[@id="content"]/div/div[5]/div[4]/div/ul/li[4]/div[2]',
+                            '//*[@id="transaction-information-table-right"]/div[6]/p[2]',
                         ]
                         market_cap_component = WebDriverWait(web_driver, 10).until(
                             lambda driver: self._find_first_valid_element(
-                                driver, market_cap_xpaths
+                                web_driver=driver, xpaths=market_cap_xpaths
                             )
                         )
                         if market_cap_component:
-                            market_cap = float(
-                                market_cap_component.text.replace(",", "")
-                            )
+                            try:
+                                market_cap = float(
+                                    market_cap_component.text.replace(",", "")
+                                )
+                            except ValueError:
+                                self._logger.log_error(
+                                    f"Market cap not found for {stock_code}. Set market cap to 0."
+                                )
+                                market_cap = 0
 
                         # Write to CSV
                         with open(
@@ -1626,7 +1679,13 @@ class WebScraper:
                     except Exception as e:
                         print(f"[Attempt {attempt+1}/3] Failed for {stock_code}: {e}")
                         web_driver.refresh()
-                        search_box_xpath = '//*[@id="CafeF_SearchKeyword_Companyv2"]'
+                        search_box_xpath_list = [
+                            '//*[@id="CafeF_SearchKeyword_Companyv2"]',
+                            '//*[@id="search-header"]',
+                        ]
+                        search_box_xpath = self._find_first_valid_xpath(
+                            web_driver=web_driver, xpaths=search_box_xpath_list
+                        )
                         _ = WebDriverWait(web_driver, 10).until(
                             EC.presence_of_element_located((By.XPATH, search_box_xpath))
                         )
@@ -1636,9 +1695,18 @@ class WebScraper:
                                 f"Failed to scrape stock code {stock_code} after 3 attempts."
                             )
 
+                        continue
+
                 count += 1
+        except Exception as e:
+            self._logger.log_error(f"Error scraping data - Callback {index}: " + str(e))
+
         finally:
             web_driver.close()
+
+        self._logger.log_info(
+            f'Finish scraping data for "{format_key_for_name(key)}" - Callback {index}.'
+        )
 
     def _scrape_data_enterprise_stock_information_cafef(
         self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
@@ -2015,45 +2083,59 @@ class WebScraper:
         )
 
     def _double_check_stock_information_cafef_result(self):
-        key = (
+        # All stocks
+        daily_price_key = (
             ScrapeMainType.ENTERPRISE,
-            EnterpriseSubType.STOCK_INFORMATION,
+            EnterpriseSubType.DAILY_PRICE,
             StockInformationSource.CAFEF,
         )
-        folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+        daily_price_folder_path = f"{SCRAPER_RAW_DATA_DIR}/{daily_price_key[0].value}/{daily_price_key[1].value}/{daily_price_key[2].value}"
+        daily_price_all_files = get_all_file_names_with_extensions(
+            self._logger,
+            folder_path=daily_price_folder_path,
+            extensions=[FileExtension.CSV],
         )
-        all_files = get_all_file_names_with_extensions(
-            self._logger, folder_path=folder_path, extensions=[FileExtension.CSV]
-        )
-
-        scraped_stock_code_list = []
-        for file in all_files:
-            with open(file, newline="") as csvfile:
-                reader = csv.DictReader(csvfile)
-                for row in reader:
-                    scraped_stock_code_list.append(row["Code"])
 
         all_stock_codes = set()
-        for file in all_files:
+        for file in daily_price_all_files:
             with open(file, mode="r", newline="", encoding="utf-8") as csvfile:
                 reader = csv.reader(csvfile)
                 next(reader)  # Skip header row
 
                 for row in reader:
-                    if row:  # Ensure the row is not empty
+                    if row and len(row[0].strip()) == 3:  # Skip all Derivatives
                         all_stock_codes.add(row[0].strip())
+
+        # Scraped stocks
+        scraped_stock_key = (
+            ScrapeMainType.ENTERPRISE,
+            EnterpriseSubType.STOCK_INFORMATION,
+            StockInformationSource.CAFEF,
+        )
+        scraped_stock_folder_path = f"{SCRAPER_RAW_DATA_DIR}/{scraped_stock_key[0].value}/{scraped_stock_key[1].value}/{scraped_stock_key[2].value}"
+        scraped_stock_all_files = get_all_file_names_with_extensions(
+            self._logger,
+            folder_path=scraped_stock_folder_path,
+            extensions=[FileExtension.CSV],
+        )
+
+        scraped_stock_code_list = []
+        for file in scraped_stock_all_files:
+            with open(file, newline="") as csvfile:
+                reader = csv.DictReader(csvfile)
+                for row in reader:
+                    scraped_stock_code_list.append(row["Code"])
 
         not_scraped_codes = all_stock_codes - set(scraped_stock_code_list)
         self._logger.log_info(
             f"Double-checking stock information from CafeF. Scraped: {len(scraped_stock_code_list)}/{len(all_stock_codes)}"
         )
 
-        file_path = f"{folder_path}/not_scraped_stock_codes.csv"
+        file_path = f"{scraped_stock_folder_path}/not_scraped_stock_codes.csv"
 
         if not_scraped_codes:
-            if not os.path.exists(folder_path):
-                os.makedirs(folder_path, exist_ok=True)
+            if not os.path.exists(scraped_stock_folder_path):
+                os.makedirs(scraped_stock_folder_path, exist_ok=True)
 
             with open(file_path, mode="w", newline="", encoding="utf-8") as csvfile:
                 writer = csv.writer(csvfile)
@@ -2096,7 +2178,5 @@ class WebScraper:
         self._thread_manager.execute(
             final_callback=self._double_check_stock_information_cafef_result
         )
-
-        self._double_check_stock_information_cafef_result()
 
         self._logger.log_info("Finished scraping data.")
