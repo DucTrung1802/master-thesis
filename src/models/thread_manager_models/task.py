@@ -2,7 +2,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 
 class Task:
-    def __init__(self, name, func, *args, callbacks=None, **kwargs):
+    def __init__(self, name, func, *args, callbacks=None, dependencies=None, **kwargs):
         self.name = name
         self.func = func
         self.args = args
@@ -10,6 +10,9 @@ class Task:
         if callbacks and not isinstance(callbacks, list):
             callbacks = [callbacks]
         self.callbacks = callbacks if callbacks else []
+
+        # New: dependencies (list of task names)
+        self.dependencies = dependencies if dependencies else []
 
     def run(self):
         print(f"Executing task: {self.name}")
