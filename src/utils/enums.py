@@ -850,12 +850,11 @@ class Table:
         class Column(Enum):
             ID = "id"
             CODE = "code"
-            ISSUED_SHARES = "issued_shares"
+            LISTED_SHARES = "listed_shares"
             OUTSTANDING_SHARES = "outstanding_shares"
             OUTSTANDING_RATE = "outstanding_rate"
             MARKET_CAP = "market_cap"
             MARKET_ID = "market_id"
-            STOCK_TYPE = "stock_type"
             CREATE_DATE = "create_date"
             UPDATE_DATE = "update_date"
             DELETE_DATE = "delete_date"

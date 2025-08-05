@@ -594,12 +594,11 @@ class DataPreprocessor:
             columns = [
                 Column(name=Table.STOCK.Column.ID.value, data_type=DataType.SERIAL(), nullable=False),
                 Column(name=Table.STOCK.Column.CODE.value, data_type=DataType.VARCHAR(), nullable=False),
-                Column(name=Table.STOCK.Column.ISSUED_SHARES.value, data_type=DataType.BIGINT(), nullable=True),
+                Column(name=Table.STOCK.Column.LISTED_SHARES.value, data_type=DataType.BIGINT(), nullable=True),
                 Column(name=Table.STOCK.Column.OUTSTANDING_SHARES.value, data_type=DataType.BIGINT(), nullable=True),
                 Column(name=Table.STOCK.Column.OUTSTANDING_RATE.value, data_type=DataType.DECIMAL(), nullable=True),
                 Column(name=Table.STOCK.Column.MARKET_CAP.value, data_type=DataType.BIGINT(), nullable=True),
                 Column(name=Table.STOCK.Column.MARKET_ID.value, data_type=DataType.INT(), nullable=False),
-                Column(name=Table.STOCK.Column.STOCK_TYPE.value, data_type=DataType.INT(), nullable=True),
                 Column(name=Table.STOCK.Column.CREATE_DATE.value, data_type=DataType.AUTO_TIMESTAMP(), nullable=False),
                 Column(name=Table.STOCK.Column.UPDATE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
                 Column(name=Table.STOCK.Column.DELETE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
@@ -2533,7 +2532,10 @@ class DataPreprocessor:
         latest_files = {}
 
         for file in all_files:
-            match = pattern.match(file)
+            file_name = Path(
+                file
+            ).name  # Extract only the file name (e.g. HNX_upto_20250804.csv)
+            match = pattern.match(file_name)
             if match:
                 exchange = match.group(1)
                 date_str = match.group(2)
@@ -2545,16 +2547,10 @@ class DataPreprocessor:
                 ):
                     latest_files[exchange] = {"file": file, "date": date}
 
-        # Assign to variables
-        hsx_file_path = os.path.join(
-            folder_path, latest_files.get("HSX", {}).get("file")
-        )
-        hnx_file_path = os.path.join(
-            folder_path, latest_files.get("HNX", {}).get("file")
-        )
-        upcom_file_path = os.path.join(
-            folder_path, latest_files.get("UPCOM", {}).get("file")
-        )
+        # Assign to variables directly using the full file paths from latest_files
+        hsx_file_path = latest_files.get("HSX", {}).get("file")
+        hnx_file_path = latest_files.get("HNX", {}).get("file")
+        upcom_file_path = latest_files.get("UPCOM", {}).get("file")
 
         # Check for missing files
         if not hsx_file_path or not os.path.isfile(hsx_file_path):
@@ -2580,6 +2576,9 @@ class DataPreprocessor:
             df = pd.read_csv(stock_market)
             df["<Ticker>"] = df["<Ticker>"].astype("string")
 
+            # Skip all Derivatives
+            df = df[df["<Ticker>"].str.len() == 3]
+
             distinct_stocks = df["<Ticker>"].dropna().unique()
 
             stock_df = pd.DataFrame(
@@ -2593,6 +2592,9 @@ class DataPreprocessor:
             )
 
             overall_df = pd.concat([overall_df, stock_df], ignore_index=True)
+            
+            # Sort by code
+            overall_df = overall_df.sort_values(by=Table.STOCK.Column.CODE.value, ignore_index=True)
 
         self._save_pandas_table_to_database(
             schema_name=Schema.ENTERPRISE.value,
