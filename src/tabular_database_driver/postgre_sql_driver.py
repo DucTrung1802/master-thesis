@@ -314,6 +314,87 @@ SET
             self._logger.log_error(f"Error updating records: {e}")
             return DatabaseExecutionStatus.ERROR
 
+    def upsert(
+        self,
+        schema_name: str,
+        table_name: str,
+        records: List[Record],
+        primary_keys: List[str],
+    ):
+        """
+        Upsert records into a table using INSERT ... ON CONFLICT(<primary_key>) DO UPDATE SET ...
+        Tracks number of inserted and updated records.
+        """
+        try:
+            inserted_count = 0
+            updated_count = 0
+
+            for record in records:
+                columns = ", ".join([col.column_name for col in record.data_model_list])
+                values = ", ".join(
+                    [
+                        (
+                            "NULL"
+                            if col.value is None
+                            else (
+                                f"'{col.value}'"
+                                if isinstance(col.value, (str, date))
+                                else str(col.value)
+                            )
+                        )
+                        for col in record.data_model_list
+                    ]
+                )
+
+                update_set_clause = ", ".join(
+                    [
+                        f"{col.column_name} = EXCLUDED.{col.column_name}"
+                        for col in record.data_model_list
+                        if col.column_name not in primary_keys
+                    ]
+                )
+
+                conflict_clause = ", ".join(primary_keys)
+
+                # CTE to track inserted vs updated rows
+                query = f"""
+WITH upserted AS (
+    INSERT INTO {schema_name}.{table_name} ({columns})
+    VALUES ({values})
+    ON CONFLICT ({conflict_clause})
+    DO UPDATE SET {update_set_clause}
+    RETURNING xmax
+)
+SELECT COUNT(*) FILTER (WHERE xmax = 0) AS inserted,
+    COUNT(*) FILTER (WHERE xmax <> 0) AS updated
+FROM upserted;
+    """
+
+                self.execute_query(query)
+
+                if hasattr(self._cursor, "fetchone"):
+                    row = self._cursor.fetchone()
+                    if row:
+                        inserted_count += row[0] or 0
+                        updated_count += row[1] or 0
+
+                # Optional: log raw statusmessage
+                status_msg = self._cursor.statusmessage
+                self._logger.log_debug(
+                    f'upsert() - Query status: "{status_msg}"'
+                )
+
+            self._logger.log_info(
+                f'Upserted {len(records)} record(s) into "{schema_name}.{table_name}". '
+                f"Inserted: {inserted_count}, Updated: {updated_count} successfully."
+            )
+            return DatabaseExecutionStatus.SUCCESS, inserted_count, updated_count
+
+        except Exception as e:
+            self._logger.log_error(f"Error upserting records: {e}")
+            return DatabaseExecutionStatus.ERROR
+
+
     def delete(
         self,
         schema_name: str,
