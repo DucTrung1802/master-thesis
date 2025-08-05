@@ -1,5 +1,5 @@
 import os
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, wait
 from typing import List, Set
 from logger.logger import Logger
 
@@ -99,47 +99,67 @@ class ThreadManager:
     def get_current_number_of_task(self):
         return len(self._task_name_set)
 
-    def execute(self):
-        successful_tasks = []
-        failed_tasks = []
+    def generate_callbacks(self, func: callable, num: int):
+        def make_callback(i):
+            def callback(sublist):
+                return func(sublist, i)
 
-        if not self._task_list:
-            self._logger.log_info("No tasks to execute.")
-            return successful_tasks, failed_tasks
+            return callback
 
-        with ThreadPoolExecutor(max_workers=self._max_workers) as executor:
-            self._logger.log_info(f"Executing {len(self._task_list)} tasks...")
+        return [make_callback(i) for i in range(num)]
 
-            future_to_task = {
-                executor.submit(task.run): task for task in self._task_list
-            }
+    def execute(self, final_callback: callable = None):
+        successful_tasks = {}
+        failed_tasks = {}
 
-            for future in future_to_task:
-                task = future_to_task[future]
-                try:
-                    result = future.result()
-                    successful_tasks.append((task.name, result))
-                    self._logger.log_info(
-                        f"Task '{task.name}' completed with result: {result}"
-                    )
-                except Exception as e:
-                    failed_tasks.append((task.name, str(e)))
-                    self._logger.log_error(
-                        f"Task '{task.name}' failed with exception: {e}"
-                    )
+        total_round = 0
+        while self._task_list:
+            total_round += 1
+            ready_tasks = []
 
-            self._logger.log_info(
-                f"All {len(self._task_name_set)} tasks have been executed."
-            )
+            # Only run tasks whose dependencies are all completed
+            for task in self._task_list:
+                if all(dep in successful_tasks for dep in task.dependencies):
+                    ready_tasks.append(task)
 
-            successful_names = [name for name, _ in successful_tasks]
-            failed_names = [name for name, _ in failed_tasks]
+            # If no task is ready but tasks remain, it means dependencies failed or circular dependency
+            if not ready_tasks:
+                self._logger.log_error("No ready tasks found. Possible dependency issue.")
+                break
 
-            self._logger.log_info(
-                f"Successful Tasks ({len(successful_names)}/{len(self._task_name_set)}) : {successful_names}"
-            )
-            self._logger.log_info(
-                f"Failed Tasks ({len(failed_names)}/{len(self._task_name_set)}): {failed_names}"
-            )
+            # Remove ready tasks from task list
+            for task in ready_tasks:
+                self._task_list.remove(task)
 
-        return successful_tasks, failed_tasks
+            with ThreadPoolExecutor(max_workers=self._max_workers) as executor:
+                future_to_task = {executor.submit(task.run): task for task in ready_tasks}
+
+                futures = list(future_to_task.keys())
+                wait(futures)
+
+                for future in future_to_task:
+                    task = future_to_task[future]
+                    try:
+                        result = future.result()
+                        successful_tasks[task.name] = result
+                        self._logger.log_info(f"Task '{task.name}' completed successfully.")
+                    except Exception as e:
+                        failed_tasks[task.name] = str(e)
+                        self._logger.log_error(f"Task '{task.name}' failed: {e}")
+
+        # Final callback runs once after all tasks
+        if final_callback:
+            try:
+                final_callback()
+                self._logger.log_info("Final callback executed after all tasks.")
+            except Exception as e:
+                self._logger.log_error(f"Final callback failed: {e}")
+
+        self._logger.log_info(
+            f"Successful Tasks ({len(successful_tasks)}): {list(successful_tasks.keys())}"
+        )
+        self._logger.log_info(
+            f"Failed Tasks ({len(failed_tasks)}): {list(failed_tasks.keys())}"
+        )
+
+        return list(successful_tasks.items()), list(failed_tasks.items())
