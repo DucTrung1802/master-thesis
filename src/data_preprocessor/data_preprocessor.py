@@ -2532,7 +2532,10 @@ class DataPreprocessor:
         latest_files = {}
 
         for file in all_files:
-            match = pattern.match(file)
+            file_name = Path(
+                file
+            ).name  # Extract only the file name (e.g. HNX_upto_20250804.csv)
+            match = pattern.match(file_name)
             if match:
                 exchange = match.group(1)
                 date_str = match.group(2)
@@ -2544,16 +2547,10 @@ class DataPreprocessor:
                 ):
                     latest_files[exchange] = {"file": file, "date": date}
 
-        # Assign to variables
-        hsx_file_path = os.path.join(
-            folder_path, latest_files.get("HSX", {}).get("file")
-        )
-        hnx_file_path = os.path.join(
-            folder_path, latest_files.get("HNX", {}).get("file")
-        )
-        upcom_file_path = os.path.join(
-            folder_path, latest_files.get("UPCOM", {}).get("file")
-        )
+        # Assign to variables directly using the full file paths from latest_files
+        hsx_file_path = latest_files.get("HSX", {}).get("file")
+        hnx_file_path = latest_files.get("HNX", {}).get("file")
+        upcom_file_path = latest_files.get("UPCOM", {}).get("file")
 
         # Check for missing files
         if not hsx_file_path or not os.path.isfile(hsx_file_path):
@@ -2595,6 +2592,9 @@ class DataPreprocessor:
             )
 
             overall_df = pd.concat([overall_df, stock_df], ignore_index=True)
+            
+            # Sort by code
+            overall_df = overall_df.sort_values(by=Table.STOCK.Column.CODE.value, ignore_index=True)
 
         self._save_pandas_table_to_database(
             schema_name=Schema.ENTERPRISE.value,
@@ -2657,7 +2657,7 @@ class DataPreprocessor:
             self._connect_to_database()
             self._create_schemas()
             self._create_tables()
-            # self._process_data()
+            self._process_data()
         except Exception as e:
             self._logger.log_error(f"Error preprocessing data: {e}")
         finally:
