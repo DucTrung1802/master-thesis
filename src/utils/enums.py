@@ -860,4 +860,4 @@ class Table:
             DELETE_DATE = "delete_date"
 
         name = "stock"
-        primary_key = [Column.ID.value]
+        primary_key = [Column.CODE.value]

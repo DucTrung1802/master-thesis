@@ -4,6 +4,7 @@ import pandas as pd
 import re
 from glob import glob
 import csv
+import numpy as np
 
 from logger.logger import Logger
 from models.tabular_database_driver_models.postgre_sql_connection_model import (
@@ -23,6 +24,9 @@ class DataPreprocessor:
         self._logger = logger
         self._database_driver = PostgreSQLDriver(logger=logger)
 
+        # Data
+        self._market_df = None
+
     def _connect_to_database(self) -> None:
         connection_model = PostgreSQLConnectionModel(
             logger=self._logger,
@@ -36,16 +40,21 @@ class DataPreprocessor:
         self._database_driver.connect(connection_model)
 
     def _save_pandas_table_to_database(
-        self, schema_name: str, table_name: str, df: pd.DataFrame
+        self,
+        schema_name: str,
+        table_name: str,
+        primary_keys: List[str],
+        df: pd.DataFrame,
     ) -> None:
         self._logger.log_info(f'Saving dataframe to table "{schema_name}.{table_name}"')
 
         # Remove all rows that have NaN values in all columns
         df = df.dropna(how="all")
 
-        success_count = 0
+        inserted_count = 0
+        updated_count = 0
         for row in df.iterrows():
-            result = self._database_driver.insert(
+            result = self._database_driver.upsert(
                 schema_name=schema_name,
                 table_name=table_name,
                 records=[
@@ -63,14 +72,32 @@ class DataPreprocessor:
                         ]
                     )
                 ],
+                primary_keys=primary_keys,
             )
 
-            if result == DatabaseExecutionStatus.SUCCESS:
-                success_count += 1
+            if result[0] == DatabaseExecutionStatus.SUCCESS:
+                inserted_count += result[1]
+                updated_count += result[2]
 
         self._logger.log_info(
-            f"Saved {success_count}/{len(df)} records into table '{schema_name}.{table_name}'"
+            f"Saved {inserted_count + updated_count}/{len(df)} records into table '{schema_name}.{table_name}'"
+            f" (Inserted: {inserted_count}, Updated: {updated_count}) successfully."
         )
+
+    # Helper functions
+    def get_merket_id(self, market_code: str) -> int:
+        if not isinstance(self._market_df, pd.DataFrame):
+            self._market_df = self._database_driver.select(
+                schema_name=Schema.STOCK_MARKET.value,
+                table_name=Table.MARKET.name,
+                columns=[Table.MARKET.Column.ID.value, Table.MARKET.Column.CODE.value],
+            )
+
+        market_id = self._market_df[self._market_df[Table.MARKET.Column.CODE.value] == market_code][
+            Table.MARKET.Column.ID.value
+        ].item()
+        
+        return market_id
 
     # region Create Schemas
     def _create_schemas(self) -> None:
@@ -634,6 +661,7 @@ class DataPreprocessor:
             MacroeconomicsSubType.GDP,
             GdpSource.VIETSTOCK,
         )
+
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
@@ -707,7 +735,10 @@ class DataPreprocessor:
         df[df.columns] = df[df.columns].apply(pd.to_numeric, errors="coerce")
 
         self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value, table_name=Table.GDP.name, df=df
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.GDP.name,
+            primary_keys=Table.GDP.primary_key,
+            df=df,
         )
 
         self._logger.log_info(f'Finish processing data in "{file_path}".')
@@ -718,6 +749,7 @@ class DataPreprocessor:
             MacroeconomicsSubType.GDP,
             GdpSource.WORLDOMETER,
         )
+
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
@@ -746,7 +778,10 @@ class DataPreprocessor:
         )
 
         self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value, table_name=Table.GDP.name, df=df
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.GDP.name,
+            primary_keys=Table.GDP.primary_key,
+            df=df,
         )
 
         self._logger.log_info(f'Finish processing data in "{file_path}".')
@@ -765,7 +800,10 @@ class DataPreprocessor:
         )
 
         self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value, table_name=Table.GDP.name, df=df
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.GDP.name,
+            primary_keys=Table.GDP.primary_key,
+            df=df,
         )
 
         self._logger.log_info(f"Start manually input data.")
@@ -788,6 +826,7 @@ class DataPreprocessor:
             MacroeconomicsSubType.CPI,
             CpiSource.VIETSTOCK,
         )
+
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
@@ -842,7 +881,10 @@ class DataPreprocessor:
         df = df.reset_index(drop=True)
 
         self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value, table_name=Table.CPI.name, df=df
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.CPI.name,
+            primary_keys=Table.CPI.primary_key,
+            df=df,
         )
 
         self._logger.log_info(f'Finish processing data in "{file_path}".')
@@ -863,6 +905,7 @@ class DataPreprocessor:
             MacroeconomicsSubType.EXCHANGE_RATE,
             ExchangeRateSource.VIETSTOCK,
         )
+
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
@@ -894,6 +937,7 @@ class DataPreprocessor:
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
             table_name=Table.EXCHANGE_RATE.name,
+            primary_keys=Table.EXCHANGE_RATE.primary_key,
             df=df,
         )
 
@@ -915,6 +959,7 @@ class DataPreprocessor:
             MacroeconomicsSubType.INTEREST_RATE,
             InterestRateSource.VIETSTOCK,
         )
+
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
@@ -982,6 +1027,7 @@ class DataPreprocessor:
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
             table_name=Table.INTEREST_RATE.name,
+            primary_keys=Table.INTEREST_RATE.primary_key,
             df=result_df,
         )
 
@@ -1003,6 +1049,7 @@ class DataPreprocessor:
             MacroeconomicsSubType.EXPORT,
             ExportImportSource.VIETSTOCK,
         )
+
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{"export_import"}/{key[2].value}"
         )
@@ -1061,6 +1108,7 @@ class DataPreprocessor:
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
             table_name=Table.EXPORT.name,
+            primary_keys=Table.EXPORT.primary_key,
             df=export_df,
         )
 
@@ -1082,6 +1130,7 @@ class DataPreprocessor:
             MacroeconomicsSubType.IMPORT,
             ExportImportSource.VIETSTOCK,
         )
+
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{"export_import"}/{key[2].value}"
         )
@@ -1140,6 +1189,7 @@ class DataPreprocessor:
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
             table_name=Table.IMPORT.name,
+            primary_keys=Table.IMPORT.primary_key,
             df=import_df,
         )
 
@@ -1161,6 +1211,7 @@ class DataPreprocessor:
             MacroeconomicsSubType.IPI,
             IpiSource.VIETSTOCK,
         )
+
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
@@ -1211,6 +1262,7 @@ class DataPreprocessor:
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
             table_name=Table.IPI.name,
+            primary_keys=Table.IPI.primary_key,
             df=df,
         )
 
@@ -1232,6 +1284,7 @@ class DataPreprocessor:
             MacroeconomicsSubType.FDI,
             FdiSource.VIETSTOCK,
         )
+
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
@@ -1337,6 +1390,7 @@ class DataPreprocessor:
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
             table_name=Table.FDI.name,
+            primary_keys=Table.FDI.primary_key,
             df=df,
         )
 
@@ -1358,6 +1412,7 @@ class DataPreprocessor:
             MacroeconomicsSubType.M2,
             M2Source.VIETSTOCK,
         )
+
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
@@ -1406,6 +1461,7 @@ class DataPreprocessor:
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
             table_name=Table.M2.name,
+            primary_keys=Table.M2.primary_key,
             df=df,
         )
 
@@ -1427,6 +1483,7 @@ class DataPreprocessor:
             MacroeconomicsSubType.RETAIL,
             RetailSource.VIETSTOCK,
         )
+
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
@@ -1476,6 +1533,7 @@ class DataPreprocessor:
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
             table_name=Table.RETAIL.name,
+            primary_keys=Table.RETAIL.primary_key,
             df=df,
         )
 
@@ -1497,6 +1555,7 @@ class DataPreprocessor:
             MacroeconomicsSubType.POPULATION_UNEMPLOYMENT,
             PopulationUnemploymentSource.VIETSTOCK,
         )
+
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
@@ -1550,6 +1609,7 @@ class DataPreprocessor:
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
             table_name=Table.POPULATION_UNEMPLOYMENT.name,
+            primary_keys=Table.POPULATION_UNEMPLOYMENT.primary_key,
             df=df,
         )
 
@@ -1575,6 +1635,7 @@ class DataPreprocessor:
             MacroeconomicsSubType.GOLD_PRICE,
             GoldPriceSource.INVESTING,
         )
+
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
@@ -1624,6 +1685,7 @@ class DataPreprocessor:
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
             table_name=Table.GOLD_PRICE.name,
+            primary_keys=Table.GOLD_PRICE.primary_key,
             df=full_df,
         )
 
@@ -1645,6 +1707,7 @@ class DataPreprocessor:
             MacroeconomicsSubType.OIL_PRICE,
             OilPriceSource.INVESTING,
         )
+
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
@@ -1694,6 +1757,7 @@ class DataPreprocessor:
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
             table_name=Table.OIL_PRICE.name,
+            primary_keys=Table.OIL_PRICE.primary_key,
             df=full_df,
         )
 
@@ -1715,6 +1779,7 @@ class DataPreprocessor:
             MacroeconomicsSubType.DOW_JONES,
             DowJonesSource.INVESTING,
         )
+
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
@@ -1764,6 +1829,7 @@ class DataPreprocessor:
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
             table_name=Table.DOW_JONES.name,
+            primary_keys=Table.DOW_JONES.primary_key,
             df=full_df,
         )
 
@@ -1785,6 +1851,7 @@ class DataPreprocessor:
             MacroeconomicsSubType.NYSE_COMPOSITE,
             NYSECompositeSource.INVESTING,
         )
+
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
@@ -1834,6 +1901,7 @@ class DataPreprocessor:
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
             table_name=Table.NYSE_COMPOSITE.name,
+            primary_keys=Table.NYSE_COMPOSITE.primary_key,
             df=full_df,
         )
 
@@ -1855,6 +1923,7 @@ class DataPreprocessor:
             MacroeconomicsSubType.SNP_500,
             SNP500Source.INVESTING,
         )
+
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
@@ -1904,6 +1973,7 @@ class DataPreprocessor:
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
             table_name=Table.SNP_500.name,
+            primary_keys=Table.SNP_500.primary_key,
             df=full_df,
         )
 
@@ -1925,6 +1995,7 @@ class DataPreprocessor:
             MacroeconomicsSubType.NASDAQ_COMPOSITE,
             NASDAQCompositeSource.INVESTING,
         )
+
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
@@ -1974,6 +2045,7 @@ class DataPreprocessor:
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
             table_name=Table.NASDAQ_COMPOSITE.name,
+            primary_keys=Table.NASDAQ_COMPOSITE.primary_key,
             df=full_df,
         )
 
@@ -1995,6 +2067,7 @@ class DataPreprocessor:
             MacroeconomicsSubType.NASDAQ_100,
             NASDAQ100Source.INVESTING,
         )
+
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
@@ -2044,6 +2117,7 @@ class DataPreprocessor:
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
             table_name=Table.NASDAQ_100.name,
+            primary_keys=Table.NASDAQ_100.primary_key,
             df=full_df,
         )
 
@@ -2082,6 +2156,7 @@ class DataPreprocessor:
         self._save_pandas_table_to_database(
             schema_name=Schema.STOCK_MARKET.value,
             table_name=Table.MARKET.name,
+            primary_keys=Table.MARKET.primary_key,
             df=df,
         )
 
@@ -2105,6 +2180,7 @@ class DataPreprocessor:
             StockMarketSubType.VN_HNX_INDEX,
             VnHnxIndexSource.CAFEF,
         )
+
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
@@ -2139,6 +2215,7 @@ class DataPreprocessor:
         self._save_pandas_table_to_database(
             schema_name=Schema.STOCK_MARKET.value,
             table_name=Table.VN_INDEX.name,
+            primary_keys=Table.VN_INDEX.primary_key,
             df=vn_index_df,
         )
 
@@ -2160,6 +2237,7 @@ class DataPreprocessor:
             StockMarketSubType.VN_HNX_INDEX,
             VnHnxIndexSource.CAFEF,
         )
+
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
@@ -2194,6 +2272,7 @@ class DataPreprocessor:
         self._save_pandas_table_to_database(
             schema_name=Schema.STOCK_MARKET.value,
             table_name=Table.HNX_INDEX.name,
+            primary_keys=Table.HNX_INDEX.primary_key,
             df=hnx_index_df,
         )
 
@@ -2215,6 +2294,7 @@ class DataPreprocessor:
             StockMarketSubType.VN_30_INDEX,
             Vn30IndexSource.CAFEF,
         )
+
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
@@ -2265,6 +2345,7 @@ class DataPreprocessor:
         self._save_pandas_table_to_database(
             schema_name=Schema.STOCK_MARKET.value,
             table_name=Table.VN_30_INDEX.name,
+            primary_keys=Table.VN_30_INDEX.primary_key,
             df=df,
         )
 
@@ -2286,6 +2367,7 @@ class DataPreprocessor:
             StockMarketSubType.VN_100_INDEX,
             Vn100IndexSource.CAFEF,
         )
+
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
@@ -2336,6 +2418,7 @@ class DataPreprocessor:
         self._save_pandas_table_to_database(
             schema_name=Schema.STOCK_MARKET.value,
             table_name=Table.VN_100_INDEX.name,
+            primary_keys=Table.VN_100_INDEX.primary_key,
             df=df,
         )
 
@@ -2357,6 +2440,7 @@ class DataPreprocessor:
             StockMarketSubType.HNX_30_INDEX,
             Hnx30IndexSource.CAFEF,
         )
+
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
@@ -2413,6 +2497,7 @@ class DataPreprocessor:
         self._save_pandas_table_to_database(
             schema_name=Schema.STOCK_MARKET.value,
             table_name=Table.HNX_30_INDEX.name,
+            primary_keys=Table.HNX_30_INDEX.primary_key,
             df=df,
         )
 
@@ -2434,6 +2519,7 @@ class DataPreprocessor:
             StockMarketSubType.UPCOM_INDEX,
             UpcomIndexSource.CAFEF,
         )
+
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
@@ -2490,6 +2576,7 @@ class DataPreprocessor:
         self._save_pandas_table_to_database(
             schema_name=Schema.STOCK_MARKET.value,
             table_name=Table.UPCOM_INDEX.name,
+            primary_keys=Table.UPCOM_INDEX.primary_key,
             df=df,
         )
 
@@ -2508,97 +2595,128 @@ class DataPreprocessor:
 
     # region ENTERPRISE data process
 
-    # region ENTERPRISE.DAILY_PRICE
+    # region ENTERPRISE.STOCK_INFORMATION
     def _process_enterprise_stock_cafef(self) -> None:
-        key = (
+        key_1 = (
             ScrapeMainType.ENTERPRISE,
             EnterpriseSubType.DAILY_PRICE,
             DailyPriceSource.CAFEF,
         )
-        folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+
+        key_2 = (
+            ScrapeMainType.ENTERPRISE,
+            EnterpriseSubType.STOCK_INFORMATION,
+            StockInformationSource.CAFEF,
         )
 
-        all_files = get_all_file_names_with_extensions(
+        folder_path_1 = (
+            f"{SCRAPER_RAW_DATA_DIR}/{key_1[0].value}/{key_1[1].value}/{key_1[2].value}"
+        )
+        folder_path_2 = (
+            f"{SCRAPER_RAW_DATA_DIR}/{key_2[0].value}/{key_2[1].value}/{key_2[2].value}"
+        )
+
+        # 1. Get file lists
+        base_stock_files = get_all_file_names_with_extensions(
             self._logger,
-            folder_path=folder_path,
+            folder_path=folder_path_1,
+            extensions=[FileExtension.CSV],
+        )
+        stock_information_files = get_all_file_names_with_extensions(
+            self._logger,
+            folder_path=folder_path_2,
             extensions=[FileExtension.CSV],
         )
 
-        # Pattern to match: NAME_upto_YYYYMMDD.csv
+        # 2. Find latest stock files per exchange
         pattern = re.compile(r"(HNX|HSX|UPCOM)_upto_(\d{8})\.csv")
-
-        # Create a dict to store the newest file per exchange
         latest_files = {}
 
-        for file in all_files:
-            file_name = Path(
-                file
-            ).name  # Extract only the file name (e.g. HNX_upto_20250804.csv)
-            match = pattern.match(file_name)
+        for file in base_stock_files:
+            match = pattern.search(os.path.basename(file))
             if match:
-                exchange = match.group(1)
-                date_str = match.group(2)
+                exchange, date_str = match.groups()
                 date = datetime.strptime(date_str, "%Y%m%d")
-
-                # Compare and store the latest file per exchange
-                if (exchange not in latest_files) or (
-                    date > latest_files[exchange]["date"]
+                if (
+                    exchange not in latest_files
+                    or date > latest_files[exchange]["date"]
                 ):
                     latest_files[exchange] = {"file": file, "date": date}
 
-        # Assign to variables directly using the full file paths from latest_files
-        hsx_file_path = latest_files.get("HSX", {}).get("file")
-        hnx_file_path = latest_files.get("HNX", {}).get("file")
-        upcom_file_path = latest_files.get("UPCOM", {}).get("file")
+        # 3. Validate and collect file paths
+        required_exchanges = ["HSX", "HNX", "UPCOM"]
+        file_paths = {}
 
-        # Check for missing files
-        if not hsx_file_path or not os.path.isfile(hsx_file_path):
-            self._logger.log_error(f'HSX data file not found in "{folder_path}".')
-            return
-
-        if not hnx_file_path or not os.path.isfile(hnx_file_path):
-            self._logger.log_error(f'HNX data file not found in "{folder_path}".')
-            return
-
-        if not upcom_file_path or not os.path.isfile(upcom_file_path):
-            self._logger.log_error(f'UPCOM data file not found in "{folder_path}".')
-            return
+        for exchange in required_exchanges:
+            file_path = latest_files.get(exchange, {}).get("file")
+            if not file_path or not os.path.isfile(file_path):
+                self._logger.log_error(
+                    f'{exchange} data file not found in "{folder_path_1}".'
+                )
+                return
+            file_paths[exchange] = file_path
 
         table_name = Table.STOCK.__qualname__.lower()
-
         self._logger.log_info(f'Start processing data in "{table_name}".')
 
-        stock_market_file_path_list = [hsx_file_path, hnx_file_path, upcom_file_path]
+        # 4. Load stock information data efficiently
+        stock_info_frames = [
+            pd.read_csv(file, encoding="utf-8")
+            for file in stock_information_files
+            if re.search(r"cafef_upto_\d+_\d+\.csv$", file)
+        ]
+        stock_infomation_df = (
+            pd.concat(stock_info_frames, ignore_index=True)
+            if stock_info_frames
+            else pd.DataFrame()
+        )
+        stock_infomation_df.columns = (
+            stock_infomation_df.columns.str.lower().str.replace(" ", "_")
+        )
 
-        overall_df = pd.DataFrame()
-        for stock_market in stock_market_file_path_list:
-            df = pd.read_csv(stock_market)
-            df["<Ticker>"] = df["<Ticker>"].astype("string")
+        # 6. Create base DataFrame for stocks
+        base_dfs = []
+        for market_code, stock_market_path in file_paths.items():
+            base_df = pd.read_csv(stock_market_path)
+            base_df["<Ticker>"] = base_df["<Ticker>"].astype("string")
 
-            # Skip all Derivatives
-            df = df[df["<Ticker>"].str.len() == 3]
+            # Skip derivatives
+            base_df = base_df[base_df["<Ticker>"].str.len() == 3]
 
-            distinct_stocks = df["<Ticker>"].dropna().unique()
-
-            stock_df = pd.DataFrame(
+            base_stock_df = pd.DataFrame(
                 {
-                    Table.STOCK.Column.CODE.value: distinct_stocks,
-                    Table.STOCK.Column.MARKET_ID.value: [
-                        stock_market_file_path_list.index(stock_market) + 1
-                    ]
-                    * len(distinct_stocks),
+                    Table.STOCK.Column.CODE.value: base_df["<Ticker>"]
+                    .dropna()
+                    .unique(),
+                    Table.STOCK.Column.MARKET_ID.value: self.get_merket_id(market_code),
                 }
             )
+            base_dfs.append(base_stock_df)
 
-            overall_df = pd.concat([overall_df, stock_df], ignore_index=True)
-            
-            # Sort by code
-            overall_df = overall_df.sort_values(by=Table.STOCK.Column.CODE.value, ignore_index=True)
+        overall_df = pd.concat(base_dfs, ignore_index=True).sort_values(
+            by=Table.STOCK.primary_key, ignore_index=True
+        )
 
+        # 7. Merge with stock information
+        overall_df = pd.merge(
+            overall_df, stock_infomation_df, on=Table.STOCK.primary_key, how="left"
+        )
+
+        # 8. Calculate outstanding_rate safely
+        listed = overall_df["listed_shares"].astype(float)
+        outstanding = overall_df["outstanding_shares"].astype(float)
+        overall_df["outstanding_rate"] = np.where(
+            listed > 0, outstanding / listed, np.nan
+        )
+
+        # 9. Update timestamp
+        overall_df["update_date"] = datetime.now()
+
+        # 10. Save to database
         self._save_pandas_table_to_database(
             schema_name=Schema.ENTERPRISE.value,
             table_name=Table.STOCK.name,
+            primary_keys=Table.STOCK.primary_key,
             df=overall_df,
         )
 
@@ -2611,6 +2729,7 @@ class DataPreprocessor:
 
         self._logger.log_info("Finish processing enterprise STOCK data.")
 
+    # endregion ENTERPRISE.STOCK_INFORMATION
     # endregion ENTERPRISE.DAILY_PRICE
 
     # endregion ENTERPRISE data process
