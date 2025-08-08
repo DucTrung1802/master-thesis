@@ -742,12 +742,13 @@ class Table:
             ID = "id"
             CODE = "code"
             NAME = "name"
+            SAVE_PROGRESS_YEAR = "SAVE_PROGRESS_YEAR"
             CREATE_DATE = "create_date"
             UPDATE_DATE = "update_date"
             DELETE_DATE = "delete_date"
 
         name = "market"
-        primary_key = [Column.ID.value]
+        primary_key = [Column.CODE.value]
 
     class VN_INDEX:
         class Column(Enum):

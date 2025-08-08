@@ -474,6 +474,7 @@ class DataPreprocessor:
                 Column(name=Table.MARKET.Column.ID.value, data_type=DataType.SERIAL(), nullable=False),
                 Column(name=Table.MARKET.Column.CODE.value, data_type=DataType.VARCHAR(), nullable=True),
                 Column(name=Table.MARKET.Column.NAME.value, data_type=DataType.VARCHAR(), nullable=True),
+                Column(name=Table.MARKET.Column.SAVE_PROGRESS_YEAR.value, data_type=DataType.INT(), nullable=True),
                 Column(name=Table.MARKET.Column.CREATE_DATE.value, data_type=DataType.AUTO_TIMESTAMP(), nullable=True),
                 Column(name=Table.MARKET.Column.UPDATE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
                 Column(name=Table.MARKET.Column.DELETE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
@@ -2688,7 +2689,9 @@ class DataPreprocessor:
                     Table.STOCK.Column.CODE.value: base_df["<Ticker>"]
                     .dropna()
                     .unique(),
-                    Table.STOCK.Column.MARKET_ID.value: self.get_merket_id(market_code),
+                    Table.STOCK.Column.MARKET_ID.value: self._get_market_id(
+                        market_code
+                    ),
                 }
             )
             base_dfs.append(base_stock_df)
