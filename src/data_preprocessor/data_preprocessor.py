@@ -5,6 +5,7 @@ import re
 from glob import glob
 import csv
 import numpy as np
+from datetime import datetime, timedelta
 
 from logger.logger import Logger
 from models.tabular_database_driver_models.postgre_sql_connection_model import (
@@ -84,20 +85,30 @@ class DataPreprocessor:
             f" (Inserted: {inserted_count}, Updated: {updated_count}) successfully."
         )
 
-    # Helper functions
-    def get_merket_id(self, market_code: str) -> int:
+    # region Helper functions
+    def _get_market_df(self) -> pd.DataFrame:
         if not isinstance(self._market_df, pd.DataFrame):
             self._market_df = self._database_driver.select(
                 schema_name=Schema.STOCK_MARKET.value,
                 table_name=Table.MARKET.name,
-                columns=[Table.MARKET.Column.ID.value, Table.MARKET.Column.CODE.value],
             )
 
-        market_id = self._market_df[self._market_df[Table.MARKET.Column.CODE.value] == market_code][
+        return self._market_df
+
+    def _get_market_id(self, market_code: str) -> int:
+        market_df = self._get_market_df()
+
+        market_id = market_df[market_df[Table.MARKET.Column.CODE.value] == market_code][
             Table.MARKET.Column.ID.value
         ].item()
-        
+
         return market_id
+
+    def _get_year_list_from_start(self, start_date):
+        end_year = datetime.today().year
+        return list(range(start_date.year, end_year + 1))
+
+    # endregion Helper functions
 
     # region Create Schemas
     def _create_schemas(self) -> None:
@@ -634,6 +645,30 @@ class DataPreprocessor:
             primary_keys=Table.STOCK.primary_key,
             foreign_keys=[ForeignKey(
                 column_name=Table.STOCK.Column.MARKET_ID.value, 
+                ref_table=f"{Schema.STOCK_MARKET.value}.{Table.MARKET.name}", 
+                ref_column=Table.MARKET.Column.ID.value,
+            )],
+        )
+        # fmt: on
+        
+        # DAILY_PRICE
+        # fmt: off
+        self._database_driver.create_table(
+            schema_name=Schema.ENTERPRISE.value,
+            table_name=Table.DAILY_PRICE.name,
+            columns = [
+                Column(name=Table.DAILY_PRICE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                Column(name=Table.DAILY_PRICE.Column.CODE.value, data_type=DataType.VARCHAR(), nullable=False),
+                Column(name=Table.DAILY_PRICE.Column.MARKET_ID.value, data_type=DataType.INT(), nullable=False),
+                Column(name=Table.DAILY_PRICE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.DAILY_PRICE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.DAILY_PRICE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.DAILY_PRICE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.DAILY_PRICE.Column.VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+            ],
+            primary_keys=Table.DAILY_PRICE.primary_key,
+            foreign_keys=[ForeignKey(
+                column_name=Table.DAILY_PRICE.Column.MARKET_ID.value, 
                 ref_table=f"{Schema.STOCK_MARKET.value}.{Table.MARKET.name}", 
                 ref_column=Table.MARKET.Column.ID.value,
             )],
@@ -2733,6 +2768,118 @@ class DataPreprocessor:
         self._logger.log_info("Finish processing enterprise STOCK data.")
 
     # endregion ENTERPRISE.STOCK_INFORMATION
+
+    # region ENTERPRISE.DAILY_PRICE
+    def _process_enterprise_daily_price_cafef(self) -> None:
+        key = (
+            ScrapeMainType.ENTERPRISE,
+            EnterpriseSubType.DAILY_PRICE,
+            DailyPriceSource.CAFEF,
+        )
+
+        folder_path = (
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+        )
+
+        file_paths = get_all_file_names_with_extensions(
+            self._logger,
+            folder_path=folder_path,
+            extensions=[FileExtension.CSV],
+        )
+
+        if len(file_paths) < 3:
+            self._logger.log_info(
+                "Files found: " + ", ".join(f"`{path}`" for path in file_paths.values())
+            )
+            self._logger.log_warning(
+                f'Not enough data files in "{folder_path}". Expected 03 .csv files, found {len(file_paths)}.'
+            )
+            return
+
+        self._logger.log_info(f'Start processing data in "{folder_path}".')
+
+        for file_path in file_paths:
+            df = pd.read_csv(file_path, encoding="utf-8")
+            df["<Ticker>"] = df["<Ticker>"].astype("string")
+            df["<DTYYYYMMDD>"] = pd.to_datetime(
+                df["<DTYYYYMMDD>"], format="%Y%m%d", errors="coerce"
+            )
+            df["<Open>"] = pd.to_numeric(df["<Open>"], errors="coerce")
+            df["<High>"] = pd.to_numeric(df["<High>"], errors="coerce")
+            df["<Low>"] = pd.to_numeric(df["<Low>"], errors="coerce")
+            df["<Close>"] = pd.to_numeric(df["<Close>"], errors="coerce")
+            df["<Volume>"] = pd.to_numeric(df["<Volume>"], errors="coerce")
+
+            market_code = os.path.basename(file_path).split("_")[0]
+
+            daily_price_df = pd.DataFrame(
+                {
+                    Table.DAILY_PRICE.Column.DATE.value: df["<DTYYYYMMDD>"],
+                    Table.DAILY_PRICE.Column.CODE.value: df["<Ticker>"],
+                    Table.DAILY_PRICE.Column.MARKET_ID.value: self._get_market_id(
+                        market_code
+                    ),
+                    Table.DAILY_PRICE.Column.OPEN.value: df["<Open>"],
+                    Table.DAILY_PRICE.Column.HIGH.value: df["<High>"],
+                    Table.DAILY_PRICE.Column.LOW.value: df["<Low>"],
+                    Table.DAILY_PRICE.Column.CLOSE.value: df["<Close>"],
+                    Table.DAILY_PRICE.Column.VOLUME.value: df["<Volume>"],
+                }
+            )
+
+            year_list = self._get_year_list_from_start(SCRAPER_START_DATE)
+
+            # Remove current year
+            year_list = year_list[:-1]
+
+            # Remove years already processed
+            market_df = self._get_market_df()
+            process_year = market_df[
+                market_df[Table.MARKET.Column.CODE.value] == market_code
+            ][Table.MARKET.Column.SAVE_PROGRESS_YEAR.value].item()
+            
+            year_list = [year for year in year_list if year > process_year]
+
+            for year in year_list:
+                self._save_pandas_table_to_database(
+                    schema_name=Schema.ENTERPRISE.value,
+                    table_name=Table.DAILY_PRICE.name,
+                    primary_keys=Table.DAILY_PRICE.primary_key,
+                    df=daily_price_df[
+                        daily_price_df[Table.DAILY_PRICE.Column.DATE.value].dt.year
+                        == year
+                    ],
+                )
+
+                self._database_driver.update(
+                    schema_name=Schema.STOCK_MARKET.value,
+                    table_name=Table.MARKET.name,
+                    update_record=Record(
+                        data_model_list=[
+                            DataModel(
+                                column_name=Table.MARKET.Column.SAVE_PROGRESS_YEAR.value,
+                                value=year,
+                                data_type=DataType.INT,
+                            )
+                        ]
+                    ),
+                    conditions=[
+                        Condition(
+                            column=Table.MARKET.Column.CODE.value,
+                            operator=SqlOperator.EQUAL_TO,
+                            value=market_code,
+                            data_type=DataType.VARCHAR,
+                        )
+                    ],
+                )
+
+    def _process_enterprise_daily_price(self) -> None:
+        self._logger.log_info("Start processing enterprise DAILY_PRICE data.")
+
+        self._process_enterprise_daily_price_cafef()
+
+        self._logger.log_info("Finish processing enterprise DAILY_PRICE data.")
+
     # endregion ENTERPRISE.DAILY_PRICE
 
     # endregion ENTERPRISE data process
@@ -2761,7 +2908,7 @@ class DataPreprocessor:
         # self._process_macroeconomics_nasdaq_100()
 
         # Stock market
-        # self._process_stock_market_market()
+        self._process_stock_market_market()
         # self._process_stock_market_vn_index()
         # self._process_stock_market_hnx_index()
         # self._process_stock_market_vn_30_index()
@@ -2770,7 +2917,8 @@ class DataPreprocessor:
         # self._process_stock_market_upcom_index()
 
         # Enterprise
-        self._process_enterprise_stock()
+        # self._process_enterprise_stock()
+        self._process_enterprise_daily_price()
 
         self._logger.log_info("Finish processing data.")
 

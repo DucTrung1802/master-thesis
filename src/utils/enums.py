@@ -742,7 +742,7 @@ class Table:
             ID = "id"
             CODE = "code"
             NAME = "name"
-            SAVE_PROGRESS_YEAR = "SAVE_PROGRESS_YEAR"
+            SAVE_PROGRESS_YEAR = "save_progress_year"
             CREATE_DATE = "create_date"
             UPDATE_DATE = "update_date"
             DELETE_DATE = "delete_date"
@@ -862,3 +862,17 @@ class Table:
 
         name = "stock"
         primary_key = [Column.CODE.value]
+
+    class DAILY_PRICE:
+        class Column(Enum):
+            DATE = "date"
+            CODE = "code"
+            MARKET_ID = "market_id"
+            OPEN = "open"
+            HIGH = "high"
+            LOW = "low"
+            CLOSE = "close"
+            VOLUME = "volume"
+
+        name = "daily_price"
+        primary_key = [Column.DATE.value, Column.CODE.value]
