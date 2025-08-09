@@ -450,16 +450,13 @@ class WebScraper:
             WebDriverWait(web_driver, 10).until(
                 EC.presence_of_element_located((By.XPATH, table_title_xpath))
             )
+            time.sleep(3)
 
             bs4_parser = self._update_bs4_parser(web_driver)
 
             headers, rows = self._extract_table_by_id(
                 bs4_parser=bs4_parser, id="tbl-macro-data"
             )
-
-            bs4_parser = self._update_bs4_parser(web_driver)
-
-            headers, rows = self._extract_table_by_id(bs4_parser, "tbl-macro-data")
 
             # Write to CSV
             with open(file_path, "w", newline="", encoding="utf-8") as f:
