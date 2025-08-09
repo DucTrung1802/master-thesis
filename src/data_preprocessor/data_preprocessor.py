@@ -4,6 +4,8 @@ import pandas as pd
 import re
 from glob import glob
 import csv
+import numpy as np
+from datetime import datetime, timedelta
 
 from logger.logger import Logger
 from models.tabular_database_driver_models.postgre_sql_connection_model import (
@@ -23,6 +25,9 @@ class DataPreprocessor:
         self._logger = logger
         self._database_driver = PostgreSQLDriver(logger=logger)
 
+        # Data
+        self._market_df = None
+
     def _connect_to_database(self) -> None:
         connection_model = PostgreSQLConnectionModel(
             logger=self._logger,
@@ -36,41 +41,75 @@ class DataPreprocessor:
         self._database_driver.connect(connection_model)
 
     def _save_pandas_table_to_database(
-        self, schema_name: str, table_name: str, df: pd.DataFrame
+        self,
+        schema_name: str,
+        table_name: str,
+        primary_keys: List[str],
+        df: pd.DataFrame,
     ) -> None:
         self._logger.log_info(f'Saving dataframe to table "{schema_name}.{table_name}"')
 
-        # Remove all rows that have NaN values in all columns
+        # Drop rows where all values are NaN
         df = df.dropna(how="all")
 
-        success_count = 0
-        for row in df.iterrows():
-            result = self._database_driver.insert(
-                schema_name=schema_name,
-                table_name=table_name,
-                records=[
-                    Record(
-                        data_model_list=[
-                            DataModel(
-                                column_name=df.columns[index],
-                                value=(
-                                    row[1].iloc[index]
-                                    if not pd.isnull(row[1].iloc[index])
-                                    else None
-                                ),
-                            )
-                            for index in range(len(df.columns))
-                        ]
-                    )
-                ],
-            )
+        if df.empty:
+            self._logger.log_info("DataFrame is empty after cleaning. Nothing to save.")
+            return
 
-            if result == DatabaseExecutionStatus.SUCCESS:
-                success_count += 1
+        # Convert entire DataFrame into a list of Records (vectorized)
+        column_names = list(df.columns)
+        records = []
+
+        for row in df.itertuples(index=False, name=None):
+            data_model_list = [
+                DataModel(column_name=col, value=(val if pd.notna(val) else None))
+                for col, val in zip(column_names, row)
+            ]
+            records.append(Record(data_model_list=data_model_list))
+
+        # Batch upsert once
+        result = self._database_driver.upsert(
+            schema_name=schema_name,
+            table_name=table_name,
+            records=records,
+            primary_keys=primary_keys,
+        )
+
+        if result[0] == DatabaseExecutionStatus.SUCCESS:
+            inserted_count = result[1]
+            updated_count = result[2]
+        else:
+            inserted_count = updated_count = 0
 
         self._logger.log_info(
-            f"Saved {success_count}/{len(df)} records into table '{schema_name}.{table_name}'"
+            f"Saved {inserted_count + updated_count}/{len(df)} records into table '{schema_name}.{table_name}'"
+            f" (Inserted: {inserted_count}, Updated: {updated_count}) successfully."
         )
+
+    # region Helper functions
+    def _get_market_df(self) -> pd.DataFrame:
+        if not isinstance(self._market_df, pd.DataFrame):
+            self._market_df = self._database_driver.select(
+                schema_name=Schema.STOCK_MARKET.value,
+                table_name=Table.MARKET.name,
+            )
+
+        return self._market_df
+
+    def _get_market_id(self, market_code: str) -> int:
+        market_df = self._get_market_df()
+
+        market_id = market_df[market_df[Table.MARKET.Column.CODE.value] == market_code][
+            Table.MARKET.Column.ID.value
+        ].item()
+
+        return market_id
+
+    def _get_year_list_from_start(self, start_date):
+        end_year = datetime.today().year
+        return list(range(start_date.year, end_year + 1))
+
+    # endregion Helper functions
 
     # region Create Schemas
     def _create_schemas(self) -> None:
@@ -436,7 +475,7 @@ class DataPreprocessor:
         self._logger.log_info("Finish creating macroeconomics tables.")
 
     def _create_stock_market_tables(self) -> None:
-        self._logger.log_info("Start creating macroeconomics tables.")
+        self._logger.log_info("Start creating stock market tables.")
 
         # MARKET
         # fmt: off
@@ -447,6 +486,7 @@ class DataPreprocessor:
                 Column(name=Table.MARKET.Column.ID.value, data_type=DataType.SERIAL(), nullable=False),
                 Column(name=Table.MARKET.Column.CODE.value, data_type=DataType.VARCHAR(), nullable=True),
                 Column(name=Table.MARKET.Column.NAME.value, data_type=DataType.VARCHAR(), nullable=True),
+                Column(name=Table.MARKET.Column.SAVE_PROGRESS_YEAR.value, data_type=DataType.INT(), nullable=True),
                 Column(name=Table.MARKET.Column.CREATE_DATE.value, data_type=DataType.AUTO_TIMESTAMP(), nullable=True),
                 Column(name=Table.MARKET.Column.UPDATE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
                 Column(name=Table.MARKET.Column.DELETE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
@@ -454,11 +494,137 @@ class DataPreprocessor:
             primary_keys=Table.MARKET.primary_key,
         )
         # fmt: on
+        
+        # VN_INDEX
+        # fmt: off
+        self._database_driver.create_table(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.VN_INDEX.name,
+            columns = [
+                Column(name=Table.VN_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                Column(name=Table.VN_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.VN_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.VN_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.VN_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.VN_INDEX.Column.VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+            ],
+            primary_keys=Table.VN_INDEX.primary_key,
+        )
+        # fmt: on
+        
+        # HNX_INDEX
+        # fmt: off
+        self._database_driver.create_table(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.HNX_INDEX.name,
+            columns = [
+                Column(name=Table.HNX_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                Column(name=Table.HNX_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.HNX_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.HNX_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.HNX_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.HNX_INDEX.Column.VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+            ],
+            primary_keys=Table.HNX_INDEX.primary_key,
+        )
+        # fmt: on
+        
+        # VN_30_INDEX
+        # fmt: off
+        self._database_driver.create_table(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.VN_30_INDEX.name,
+            columns = [
+                Column(name=Table.VN_30_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                Column(name=Table.VN_30_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.VN_30_INDEX.Column.ADJUSTED_CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.VN_30_INDEX.Column.MATCHED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                Column(name=Table.VN_30_INDEX.Column.MATCHED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.VN_30_INDEX.Column.NEGOTIATED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                Column(name=Table.VN_30_INDEX.Column.NEGOTIATED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.VN_30_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.VN_30_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.VN_30_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.VN_30_INDEX.Column.CHANGE_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.VN_30_INDEX.Column.CHANGE_PERCENTAGE.value, data_type=DataType.DECIMAL(), nullable=True),
+            ],
+            primary_keys=Table.VN_30_INDEX.primary_key,
+        )
+        # fmt: on
+        
+        # VN_100_INDEX
+        # fmt: off
+        self._database_driver.create_table(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.VN_100_INDEX.name,
+            columns = [
+                Column(name=Table.VN_100_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                Column(name=Table.VN_100_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.VN_100_INDEX.Column.ADJUSTED_CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.VN_100_INDEX.Column.MATCHED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                Column(name=Table.VN_100_INDEX.Column.MATCHED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.VN_100_INDEX.Column.NEGOTIATED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                Column(name=Table.VN_100_INDEX.Column.NEGOTIATED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.VN_100_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.VN_100_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.VN_100_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.VN_100_INDEX.Column.CHANGE_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.VN_100_INDEX.Column.CHANGE_PERCENTAGE.value, data_type=DataType.DECIMAL(), nullable=True),
+            ],
+            primary_keys=Table.VN_100_INDEX.primary_key,
+        )
+        # fmt: on
+        
+        # HNX_30_INDEX
+        # fmt: off
+        self._database_driver.create_table(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.HNX_30_INDEX.name,
+            columns = [
+                Column(name=Table.HNX_30_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                Column(name=Table.HNX_30_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.HNX_30_INDEX.Column.ADJUSTED_CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.HNX_30_INDEX.Column.MATCHED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                Column(name=Table.HNX_30_INDEX.Column.MATCHED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.HNX_30_INDEX.Column.NEGOTIATED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                Column(name=Table.HNX_30_INDEX.Column.NEGOTIATED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.HNX_30_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.HNX_30_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.HNX_30_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.HNX_30_INDEX.Column.CHANGE_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.HNX_30_INDEX.Column.CHANGE_PERCENTAGE.value, data_type=DataType.DECIMAL(), nullable=True),
+            ],
+            primary_keys=Table.HNX_30_INDEX.primary_key,
+        )
+        # fmt: on
+        
+        # UPCOM_INDEX
+        # fmt: off
+        self._database_driver.create_table(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.UPCOM_INDEX.name,
+            columns = [
+                Column(name=Table.UPCOM_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                Column(name=Table.UPCOM_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.UPCOM_INDEX.Column.ADJUSTED_CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.UPCOM_INDEX.Column.MATCHED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                Column(name=Table.UPCOM_INDEX.Column.MATCHED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.UPCOM_INDEX.Column.NEGOTIATED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                Column(name=Table.UPCOM_INDEX.Column.NEGOTIATED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.UPCOM_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.UPCOM_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.UPCOM_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.UPCOM_INDEX.Column.CHANGE_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.UPCOM_INDEX.Column.CHANGE_PERCENTAGE.value, data_type=DataType.DECIMAL(), nullable=True),
+            ],
+            primary_keys=Table.UPCOM_INDEX.primary_key,
+        )
+        # fmt: on
 
-        self._logger.log_info("Finish creating macroeconomics tables.")
+        self._logger.log_info("Finish creating stock market tables.")
 
     def _create_enterprise_tables(self) -> None:
-        self._logger.log_info("Start creating macroeconomics tables.")
+        self._logger.log_info("Start creating enterprise tables.")
 
         # STOCK
         # fmt: off
@@ -468,12 +634,11 @@ class DataPreprocessor:
             columns = [
                 Column(name=Table.STOCK.Column.ID.value, data_type=DataType.SERIAL(), nullable=False),
                 Column(name=Table.STOCK.Column.CODE.value, data_type=DataType.VARCHAR(), nullable=False),
-                Column(name=Table.STOCK.Column.ISSUED_SHARES.value, data_type=DataType.BIGINT(), nullable=True),
+                Column(name=Table.STOCK.Column.LISTED_SHARES.value, data_type=DataType.BIGINT(), nullable=True),
                 Column(name=Table.STOCK.Column.OUTSTANDING_SHARES.value, data_type=DataType.BIGINT(), nullable=True),
                 Column(name=Table.STOCK.Column.OUTSTANDING_RATE.value, data_type=DataType.DECIMAL(), nullable=True),
                 Column(name=Table.STOCK.Column.MARKET_CAP.value, data_type=DataType.BIGINT(), nullable=True),
                 Column(name=Table.STOCK.Column.MARKET_ID.value, data_type=DataType.INT(), nullable=False),
-                Column(name=Table.STOCK.Column.STOCK_TYPE.value, data_type=DataType.INT(), nullable=True),
                 Column(name=Table.STOCK.Column.CREATE_DATE.value, data_type=DataType.AUTO_TIMESTAMP(), nullable=False),
                 Column(name=Table.STOCK.Column.UPDATE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
                 Column(name=Table.STOCK.Column.DELETE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
@@ -486,8 +651,32 @@ class DataPreprocessor:
             )],
         )
         # fmt: on
+        
+        # DAILY_PRICE
+        # fmt: off
+        self._database_driver.create_table(
+            schema_name=Schema.ENTERPRISE.value,
+            table_name=Table.DAILY_PRICE.name,
+            columns = [
+                Column(name=Table.DAILY_PRICE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                Column(name=Table.DAILY_PRICE.Column.CODE.value, data_type=DataType.VARCHAR(), nullable=False),
+                Column(name=Table.DAILY_PRICE.Column.MARKET_ID.value, data_type=DataType.INT(), nullable=False),
+                Column(name=Table.DAILY_PRICE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.DAILY_PRICE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.DAILY_PRICE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.DAILY_PRICE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.DAILY_PRICE.Column.VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+            ],
+            primary_keys=Table.DAILY_PRICE.primary_key,
+            foreign_keys=[ForeignKey(
+                column_name=Table.DAILY_PRICE.Column.MARKET_ID.value, 
+                ref_table=f"{Schema.STOCK_MARKET.value}.{Table.MARKET.name}", 
+                ref_column=Table.MARKET.Column.ID.value,
+            )],
+        )
+        # fmt: on
 
-        self._logger.log_info("Finish creating macroeconomics tables.")
+        self._logger.log_info("Finish creating enterprise tables.")
 
     def _create_tables(self) -> None:
         self._logger.log_info("Start creating tables.")
@@ -509,6 +698,7 @@ class DataPreprocessor:
             MacroeconomicsSubType.GDP,
             GdpSource.VIETSTOCK,
         )
+
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
@@ -582,7 +772,10 @@ class DataPreprocessor:
         df[df.columns] = df[df.columns].apply(pd.to_numeric, errors="coerce")
 
         self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value, table_name=Table.GDP.name, df=df
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.GDP.name,
+            primary_keys=Table.GDP.primary_key,
+            df=df,
         )
 
         self._logger.log_info(f'Finish processing data in "{file_path}".')
@@ -593,6 +786,7 @@ class DataPreprocessor:
             MacroeconomicsSubType.GDP,
             GdpSource.WORLDOMETER,
         )
+
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
@@ -621,7 +815,10 @@ class DataPreprocessor:
         )
 
         self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value, table_name=Table.GDP.name, df=df
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.GDP.name,
+            primary_keys=Table.GDP.primary_key,
+            df=df,
         )
 
         self._logger.log_info(f'Finish processing data in "{file_path}".')
@@ -640,7 +837,10 @@ class DataPreprocessor:
         )
 
         self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value, table_name=Table.GDP.name, df=df
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.GDP.name,
+            primary_keys=Table.GDP.primary_key,
+            df=df,
         )
 
         self._logger.log_info(f"Start manually input data.")
@@ -663,6 +863,7 @@ class DataPreprocessor:
             MacroeconomicsSubType.CPI,
             CpiSource.VIETSTOCK,
         )
+
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
@@ -717,7 +918,10 @@ class DataPreprocessor:
         df = df.reset_index(drop=True)
 
         self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value, table_name=Table.CPI.name, df=df
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.CPI.name,
+            primary_keys=Table.CPI.primary_key,
+            df=df,
         )
 
         self._logger.log_info(f'Finish processing data in "{file_path}".')
@@ -738,6 +942,7 @@ class DataPreprocessor:
             MacroeconomicsSubType.EXCHANGE_RATE,
             ExchangeRateSource.VIETSTOCK,
         )
+
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
@@ -769,6 +974,7 @@ class DataPreprocessor:
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
             table_name=Table.EXCHANGE_RATE.name,
+            primary_keys=Table.EXCHANGE_RATE.primary_key,
             df=df,
         )
 
@@ -790,6 +996,7 @@ class DataPreprocessor:
             MacroeconomicsSubType.INTEREST_RATE,
             InterestRateSource.VIETSTOCK,
         )
+
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
@@ -857,6 +1064,7 @@ class DataPreprocessor:
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
             table_name=Table.INTEREST_RATE.name,
+            primary_keys=Table.INTEREST_RATE.primary_key,
             df=result_df,
         )
 
@@ -878,6 +1086,7 @@ class DataPreprocessor:
             MacroeconomicsSubType.EXPORT,
             ExportImportSource.VIETSTOCK,
         )
+
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{"export_import"}/{key[2].value}"
         )
@@ -936,6 +1145,7 @@ class DataPreprocessor:
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
             table_name=Table.EXPORT.name,
+            primary_keys=Table.EXPORT.primary_key,
             df=export_df,
         )
 
@@ -957,6 +1167,7 @@ class DataPreprocessor:
             MacroeconomicsSubType.IMPORT,
             ExportImportSource.VIETSTOCK,
         )
+
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{"export_import"}/{key[2].value}"
         )
@@ -1015,6 +1226,7 @@ class DataPreprocessor:
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
             table_name=Table.IMPORT.name,
+            primary_keys=Table.IMPORT.primary_key,
             df=import_df,
         )
 
@@ -1036,6 +1248,7 @@ class DataPreprocessor:
             MacroeconomicsSubType.IPI,
             IpiSource.VIETSTOCK,
         )
+
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
@@ -1086,6 +1299,7 @@ class DataPreprocessor:
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
             table_name=Table.IPI.name,
+            primary_keys=Table.IPI.primary_key,
             df=df,
         )
 
@@ -1107,6 +1321,7 @@ class DataPreprocessor:
             MacroeconomicsSubType.FDI,
             FdiSource.VIETSTOCK,
         )
+
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
@@ -1212,6 +1427,7 @@ class DataPreprocessor:
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
             table_name=Table.FDI.name,
+            primary_keys=Table.FDI.primary_key,
             df=df,
         )
 
@@ -1233,6 +1449,7 @@ class DataPreprocessor:
             MacroeconomicsSubType.M2,
             M2Source.VIETSTOCK,
         )
+
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
@@ -1281,6 +1498,7 @@ class DataPreprocessor:
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
             table_name=Table.M2.name,
+            primary_keys=Table.M2.primary_key,
             df=df,
         )
 
@@ -1302,6 +1520,7 @@ class DataPreprocessor:
             MacroeconomicsSubType.RETAIL,
             RetailSource.VIETSTOCK,
         )
+
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
@@ -1351,6 +1570,7 @@ class DataPreprocessor:
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
             table_name=Table.RETAIL.name,
+            primary_keys=Table.RETAIL.primary_key,
             df=df,
         )
 
@@ -1372,6 +1592,7 @@ class DataPreprocessor:
             MacroeconomicsSubType.POPULATION_UNEMPLOYMENT,
             PopulationUnemploymentSource.VIETSTOCK,
         )
+
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
@@ -1425,6 +1646,7 @@ class DataPreprocessor:
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
             table_name=Table.POPULATION_UNEMPLOYMENT.name,
+            primary_keys=Table.POPULATION_UNEMPLOYMENT.primary_key,
             df=df,
         )
 
@@ -1450,6 +1672,7 @@ class DataPreprocessor:
             MacroeconomicsSubType.GOLD_PRICE,
             GoldPriceSource.INVESTING,
         )
+
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
@@ -1499,6 +1722,7 @@ class DataPreprocessor:
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
             table_name=Table.GOLD_PRICE.name,
+            primary_keys=Table.GOLD_PRICE.primary_key,
             df=full_df,
         )
 
@@ -1520,6 +1744,7 @@ class DataPreprocessor:
             MacroeconomicsSubType.OIL_PRICE,
             OilPriceSource.INVESTING,
         )
+
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
@@ -1569,6 +1794,7 @@ class DataPreprocessor:
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
             table_name=Table.OIL_PRICE.name,
+            primary_keys=Table.OIL_PRICE.primary_key,
             df=full_df,
         )
 
@@ -1590,6 +1816,7 @@ class DataPreprocessor:
             MacroeconomicsSubType.DOW_JONES,
             DowJonesSource.INVESTING,
         )
+
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
@@ -1639,6 +1866,7 @@ class DataPreprocessor:
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
             table_name=Table.DOW_JONES.name,
+            primary_keys=Table.DOW_JONES.primary_key,
             df=full_df,
         )
 
@@ -1660,6 +1888,7 @@ class DataPreprocessor:
             MacroeconomicsSubType.NYSE_COMPOSITE,
             NYSECompositeSource.INVESTING,
         )
+
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
@@ -1709,6 +1938,7 @@ class DataPreprocessor:
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
             table_name=Table.NYSE_COMPOSITE.name,
+            primary_keys=Table.NYSE_COMPOSITE.primary_key,
             df=full_df,
         )
 
@@ -1730,6 +1960,7 @@ class DataPreprocessor:
             MacroeconomicsSubType.SNP_500,
             SNP500Source.INVESTING,
         )
+
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
@@ -1779,6 +2010,7 @@ class DataPreprocessor:
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
             table_name=Table.SNP_500.name,
+            primary_keys=Table.SNP_500.primary_key,
             df=full_df,
         )
 
@@ -1800,6 +2032,7 @@ class DataPreprocessor:
             MacroeconomicsSubType.NASDAQ_COMPOSITE,
             NASDAQCompositeSource.INVESTING,
         )
+
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
@@ -1849,6 +2082,7 @@ class DataPreprocessor:
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
             table_name=Table.NASDAQ_COMPOSITE.name,
+            primary_keys=Table.NASDAQ_COMPOSITE.primary_key,
             df=full_df,
         )
 
@@ -1870,6 +2104,7 @@ class DataPreprocessor:
             MacroeconomicsSubType.NASDAQ_100,
             NASDAQ100Source.INVESTING,
         )
+
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
@@ -1919,6 +2154,7 @@ class DataPreprocessor:
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
             table_name=Table.NASDAQ_100.name,
+            primary_keys=Table.NASDAQ_100.primary_key,
             df=full_df,
         )
 
@@ -1935,13 +2171,16 @@ class DataPreprocessor:
 
     # endregion MACROECONOMICS data process
 
-    # region STOCK MARKET data process
+    # region STOCK_MARKET data process
+
+    # region STOCK_MARKET.MARKET
     def _process_stock_market_market_add_data(self) -> None:
         self._logger.log_info(
             f'Start processing data in "{Table.MARKET.__qualname__.lower()}".'
         )
 
         market_data = {
+            Table.MARKET.Column.ID.value: [1, 2, 3],
             Table.MARKET.Column.CODE.value: ["HSX", "HNX", "UPCOM"],
             Table.MARKET.Column.NAME.value: [
                 "Ho Chi Minh City Stock Exchange",
@@ -1955,6 +2194,7 @@ class DataPreprocessor:
         self._save_pandas_table_to_database(
             schema_name=Schema.STOCK_MARKET.value,
             table_name=Table.MARKET.name,
+            primary_keys=Table.MARKET.primary_key,
             df=df,
         )
 
@@ -1969,92 +2209,554 @@ class DataPreprocessor:
 
         self._logger.log_info("Finish processing stock market MARKET data.")
 
-    # endregion STOCK MARKET data process
+    # endregion STOCK MARKET.MARKET
 
-    # region ENTERPRISE data process
-    def _process_enterprise_stock_cafef(self) -> None:
+    # region STOCK_MARKET.VN_INDEX
+    def _process_stock_market_vn_index_cafef(self) -> None:
         key = (
-            ScrapeMainType.ENTERPRISE,
-            EnterpriseSubType.DAILY_PRICE,
-            DailyPriceSource.CAFEF,
+            ScrapeMainType.STOCK_MARKET,
+            StockMarketSubType.VN_HNX_INDEX,
+            VnHnxIndexSource.CAFEF,
         )
+
         folder_path = (
             f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
-        all_files = [f for f in os.listdir(folder_path) if f.endswith(".csv")]
+        file_path = get_newest_file_path(
+            folder_path=folder_path, extension=FileExtension.CSV
+        )
 
-        # Pattern to match: NAME_upto_YYYYMMDD.csv
+        if not file_path:
+            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
+            return
+
+        self._logger.log_info(f'Start processing data in "{file_path}".')
+
+        # Add logic for processing data here
+        df = pd.read_csv(file_path, encoding="utf-8")
+        vn_index_df = df[df["<Ticker>"] == "VNINDEX"]
+        rename_map = {
+            "<Ticker>": "ticker",
+            "<DTYYYYMMDD>": "date",
+            "<Open>": "open",
+            "<High>": "high",
+            "<Low>": "low",
+            "<Close>": "close",
+            "<Volume>": "volume",
+        }
+        vn_index_df = vn_index_df.rename(columns=rename_map)
+        vn_index_df.drop(columns=["ticker"], inplace=True)
+        vn_index_df["date"] = pd.to_datetime(vn_index_df["date"], format="%Y%m%d")
+        vn_index_df = vn_index_df.sort_values(by="date").reset_index(drop=True)
+
+        self._save_pandas_table_to_database(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.VN_INDEX.name,
+            primary_keys=Table.VN_INDEX.primary_key,
+            df=vn_index_df,
+        )
+
+        self._logger.log_info(f'Finish processing data in "{file_path}".')
+
+    def _process_stock_market_vn_index(self) -> None:
+        self._logger.log_info("Start processing stock market VN_INDEX data.")
+
+        self._process_stock_market_vn_index_cafef()
+
+        self._logger.log_info("Finish processing stock market VN_INDEX data.")
+
+    # endregion STOCK_MARKET.VN_INDEX
+
+    # region STOCK_MARKET.HNX_INDEX
+    def _process_stock_market_hnx_index_cafef(self) -> None:
+        key = (
+            ScrapeMainType.STOCK_MARKET,
+            StockMarketSubType.VN_HNX_INDEX,
+            VnHnxIndexSource.CAFEF,
+        )
+
+        folder_path = (
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+        )
+
+        file_path = get_newest_file_path(
+            folder_path=folder_path, extension=FileExtension.CSV
+        )
+
+        if not file_path:
+            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
+            return
+
+        self._logger.log_info(f'Start processing data in "{file_path}".')
+
+        # Add logic for processing data here
+        df = pd.read_csv(file_path, encoding="utf-8")
+        hnx_index_df = df[df["<Ticker>"] == "HNX-INDEX"]
+        rename_map = {
+            "<Ticker>": "ticker",
+            "<DTYYYYMMDD>": "date",
+            "<Open>": "open",
+            "<High>": "high",
+            "<Low>": "low",
+            "<Close>": "close",
+            "<Volume>": "volume",
+        }
+        hnx_index_df = hnx_index_df.rename(columns=rename_map)
+        hnx_index_df.drop(columns=["ticker"], inplace=True)
+        hnx_index_df["date"] = pd.to_datetime(hnx_index_df["date"], format="%Y%m%d")
+        hnx_index_df = hnx_index_df.sort_values(by="date").reset_index(drop=True)
+
+        self._save_pandas_table_to_database(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.HNX_INDEX.name,
+            primary_keys=Table.HNX_INDEX.primary_key,
+            df=hnx_index_df,
+        )
+
+        self._logger.log_info(f'Finish processing data in "{file_path}".')
+
+    def _process_stock_market_hnx_index(self) -> None:
+        self._logger.log_info("Start processing stock market HNX_INDEX data.")
+
+        self._process_stock_market_hnx_index_cafef()
+
+        self._logger.log_info("Finish processing stock market HNX_INDEX data.")
+
+    # endregion STOCK_MARKET.HNX_INDEX
+
+    # region STOCK_MARKET.VN_30_INDEX
+    def _process_stock_market_vn_30_index_cafef(self) -> None:
+        key = (
+            ScrapeMainType.STOCK_MARKET,
+            StockMarketSubType.VN_30_INDEX,
+            Vn30IndexSource.CAFEF,
+        )
+
+        folder_path = (
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+        )
+
+        file_path = get_newest_file_path(
+            folder_path=folder_path, extension=FileExtension.CSV
+        )
+
+        if not file_path:
+            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
+            return
+
+        self._logger.log_info(f'Start processing data in "{file_path}".')
+
+        # Add logic for processing data here
+        df = pd.read_csv(file_path, encoding="utf-8")
+
+        df["date"] = pd.to_datetime(df["date"], format="%d/%m/%Y")
+
+        df["adjusted_close"] = df["adjusted_close"].str.replace(",", "", regex=False)
+        df["adjusted_close"] = pd.to_numeric(df["adjusted_close"], errors="coerce")
+
+        df[["change_value", "change_percentage"]] = df["change"].str.extract(
+            r"([-\d.]+)\s*\(([-\d.]+)\s*%\)"
+        )
+        df["change_value"] = df["change_value"].astype(float)
+        df["change_percentage"] = df["change_percentage"].astype(float)
+
+        df = df.drop(columns=["change"])
+
+        df["matched_volume"] = (
+            df["matched_volume"].str.replace(",", "", regex=False).astype(int)
+        )
+        df["matched_value"] = (
+            df["matched_value"].str.replace(",", "", regex=False).astype(float)
+        )
+        df["negotiated_volume"] = (
+            df["negotiated_volume"].str.replace(",", "", regex=False).astype(int)
+        )
+        df["negotiated_value"] = (
+            df["negotiated_value"].str.replace(",", "", regex=False).astype(float)
+        )
+        df["open"] = df["open"].str.replace(",", "", regex=False).astype(float)
+        df["high"] = df["high"].str.replace(",", "", regex=False).astype(float)
+        df["low"] = df["low"].str.replace(",", "", regex=False).astype(float)
+        df = df.sort_values(by="date", ascending=True, ignore_index=True)
+
+        self._save_pandas_table_to_database(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.VN_30_INDEX.name,
+            primary_keys=Table.VN_30_INDEX.primary_key,
+            df=df,
+        )
+
+        self._logger.log_info(f'Finish processing data in "{file_path}".')
+
+    def _process_stock_market_vn_30_index(self) -> None:
+        self._logger.log_info("Start processing stock market VN_30_INDEX data.")
+
+        self._process_stock_market_vn_30_index_cafef()
+
+        self._logger.log_info("Finish processing stock market VN_30_INDEX data.")
+
+    # endregion STOCK_MARKET.VN_30_INDEX
+
+    # region STOCK_MARKET.VN_100_INDEX
+    def _process_stock_market_vn_100_index_cafef(self) -> None:
+        key = (
+            ScrapeMainType.STOCK_MARKET,
+            StockMarketSubType.VN_100_INDEX,
+            Vn100IndexSource.CAFEF,
+        )
+
+        folder_path = (
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+        )
+
+        file_path = get_newest_file_path(
+            folder_path=folder_path, extension=FileExtension.CSV
+        )
+
+        if not file_path:
+            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
+            return
+
+        self._logger.log_info(f'Start processing data in "{file_path}".')
+
+        # Add logic for processing data here
+        df = pd.read_csv(file_path, encoding="utf-8")
+
+        df["date"] = pd.to_datetime(df["date"], format="%d/%m/%Y")
+
+        df["adjusted_close"] = df["adjusted_close"].str.replace(",", "", regex=False)
+        df["adjusted_close"] = pd.to_numeric(df["adjusted_close"], errors="coerce")
+
+        df[["change_value", "change_percentage"]] = df["change"].str.extract(
+            r"([-\d.]+)\s*\(([-\d.]+)\s*%\)"
+        )
+        df["change_value"] = df["change_value"].astype(float)
+        df["change_percentage"] = df["change_percentage"].astype(float)
+
+        df = df.drop(columns=["change"])
+
+        df["matched_volume"] = (
+            df["matched_volume"].str.replace(",", "", regex=False).astype(int)
+        )
+        df["matched_value"] = (
+            df["matched_value"].str.replace(",", "", regex=False).astype(float)
+        )
+        df["negotiated_volume"] = (
+            df["negotiated_volume"].str.replace(",", "", regex=False).astype(int)
+        )
+        df["negotiated_value"] = (
+            df["negotiated_value"].str.replace(",", "", regex=False).astype(float)
+        )
+        df["open"] = df["open"].str.replace(",", "", regex=False).astype(float)
+        df["high"] = df["high"].str.replace(",", "", regex=False).astype(float)
+        df["low"] = df["low"].str.replace(",", "", regex=False).astype(float)
+        df = df.sort_values(by="date", ascending=True, ignore_index=True)
+
+        self._save_pandas_table_to_database(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.VN_100_INDEX.name,
+            primary_keys=Table.VN_100_INDEX.primary_key,
+            df=df,
+        )
+
+        self._logger.log_info(f'Finish processing data in "{file_path}".')
+
+    def _process_stock_market_vn_100_index(self) -> None:
+        self._logger.log_info("Start processing stock market VN_100_INDEX data.")
+
+        self._process_stock_market_vn_100_index_cafef()
+
+        self._logger.log_info("Finish processing stock market VN_100_INDEX data.")
+
+    # endregion STOCK_MARKET.VN_100_INDEX
+
+    # region STOCK_MARKET.HNX_30_INDEX
+    def _process_stock_market_hnx_30_index_cafef(self) -> None:
+        key = (
+            ScrapeMainType.STOCK_MARKET,
+            StockMarketSubType.HNX_30_INDEX,
+            Hnx30IndexSource.CAFEF,
+        )
+
+        folder_path = (
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+        )
+
+        file_path = get_newest_file_path(
+            folder_path=folder_path, extension=FileExtension.CSV
+        )
+
+        if not file_path:
+            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
+            return
+
+        self._logger.log_info(f'Start processing data in "{file_path}".')
+
+        # Add logic for processing data here
+        df = pd.read_csv(file_path, encoding="utf-8")
+
+        df["date"] = pd.to_datetime(df["date"], format="%d/%m/%Y")
+
+        df["adjusted_close"] = df["adjusted_close"].str.replace(",", "", regex=False)
+        df["adjusted_close"] = pd.to_numeric(df["adjusted_close"], errors="coerce")
+
+        df[["change_value", "change_percentage"]] = df["change"].str.extract(
+            r"([-\d.]+)\s*\(([-\d.]+)\s*%\)"
+        )
+        df["change_value"] = df["change_value"].astype(float)
+        df["change_percentage"] = df["change_percentage"].astype(float)
+
+        df = df.drop(columns=["change"])
+
+        df["matched_volume"] = (
+            df["matched_volume"].str.replace(",", "", regex=False).astype(int)
+        )
+        df["matched_value"] = (
+            df["matched_value"].str.replace(",", "", regex=False).astype(float)
+        )
+        df["negotiated_volume"] = (
+            df["negotiated_volume"].str.replace(",", "", regex=False).astype(int)
+        )
+        df["negotiated_value"] = (
+            df["negotiated_value"].str.replace(",", "", regex=False).astype(float)
+        )
+        df["open"] = (
+            df["open"].astype(str).str.replace(",", "", regex=False).astype(float)
+        )
+        df["high"] = (
+            df["high"].astype(str).str.replace(",", "", regex=False).astype(float)
+        )
+        df["low"] = (
+            df["low"].astype(str).str.replace(",", "", regex=False).astype(float)
+        )
+        df = df.sort_values(by="date", ascending=True, ignore_index=True)
+
+        self._save_pandas_table_to_database(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.HNX_30_INDEX.name,
+            primary_keys=Table.HNX_30_INDEX.primary_key,
+            df=df,
+        )
+
+        self._logger.log_info(f'Finish processing data in "{file_path}".')
+
+    def _process_stock_market_hnx_30_index(self) -> None:
+        self._logger.log_info("Start processing stock market HNX_30_INDEX data.")
+
+        self._process_stock_market_hnx_30_index_cafef()
+
+        self._logger.log_info("Finish processing stock market HNX_30_INDEX data.")
+
+    # endregion STOCK_MARKET.HNX_30_INDEX
+
+    # region STOCK_MARKET.UPCOM_INDEX
+    def _process_stock_market_upcom_index_cafef(self) -> None:
+        key = (
+            ScrapeMainType.STOCK_MARKET,
+            StockMarketSubType.UPCOM_INDEX,
+            UpcomIndexSource.CAFEF,
+        )
+
+        folder_path = (
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+        )
+
+        file_path = get_newest_file_path(
+            folder_path=folder_path, extension=FileExtension.CSV
+        )
+
+        if not file_path:
+            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
+            return
+
+        self._logger.log_info(f'Start processing data in "{file_path}".')
+
+        # Add logic for processing data here
+        df = pd.read_csv(file_path, encoding="utf-8")
+
+        df["date"] = pd.to_datetime(df["date"], format="%d/%m/%Y")
+
+        df["adjusted_close"] = df["adjusted_close"].str.replace(",", "", regex=False)
+        df["adjusted_close"] = pd.to_numeric(df["adjusted_close"], errors="coerce")
+
+        df[["change_value", "change_percentage"]] = df["change"].str.extract(
+            r"([-\d.]+)\s*\(([-\d.]+)\s*%\)"
+        )
+        df["change_value"] = df["change_value"].astype(float)
+        df["change_percentage"] = df["change_percentage"].astype(float)
+
+        df = df.drop(columns=["change"])
+
+        df["matched_volume"] = (
+            df["matched_volume"].str.replace(",", "", regex=False).astype(int)
+        )
+        df["matched_value"] = (
+            df["matched_value"].str.replace(",", "", regex=False).astype(float)
+        )
+        df["negotiated_volume"] = (
+            df["negotiated_volume"].str.replace(",", "", regex=False).astype(int)
+        )
+        df["negotiated_value"] = (
+            df["negotiated_value"].str.replace(",", "", regex=False).astype(float)
+        )
+        df["open"] = (
+            df["open"].astype(str).str.replace(",", "", regex=False).astype(float)
+        )
+        df["high"] = (
+            df["high"].astype(str).str.replace(",", "", regex=False).astype(float)
+        )
+        df["low"] = (
+            df["low"].astype(str).str.replace(",", "", regex=False).astype(float)
+        )
+        df = df.sort_values(by="date", ascending=True, ignore_index=True)
+
+        self._save_pandas_table_to_database(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.UPCOM_INDEX.name,
+            primary_keys=Table.UPCOM_INDEX.primary_key,
+            df=df,
+        )
+
+        self._logger.log_info(f'Finish processing data in "{file_path}".')
+
+    def _process_stock_market_upcom_index(self) -> None:
+        self._logger.log_info("Start processing stock market UPCOM_INDEX data.")
+
+        self._process_stock_market_upcom_index_cafef()
+
+        self._logger.log_info("Finish processing stock market UPCOM_INDEX data.")
+
+    # endregion STOCK_MARKET.UPCOM_INDEX
+
+    # endregion STOCK_MARKET data process
+
+    # region ENTERPRISE data process
+
+    # region ENTERPRISE.STOCK_INFORMATION
+    def _process_enterprise_stock_cafef(self) -> None:
+        key_1 = (
+            ScrapeMainType.ENTERPRISE,
+            EnterpriseSubType.DAILY_PRICE,
+            DailyPriceSource.CAFEF,
+        )
+
+        key_2 = (
+            ScrapeMainType.ENTERPRISE,
+            EnterpriseSubType.STOCK_INFORMATION,
+            StockInformationSource.CAFEF,
+        )
+
+        folder_path_1 = (
+            f"{SCRAPER_RAW_DATA_DIR}/{key_1[0].value}/{key_1[1].value}/{key_1[2].value}"
+        )
+        folder_path_2 = (
+            f"{SCRAPER_RAW_DATA_DIR}/{key_2[0].value}/{key_2[1].value}/{key_2[2].value}"
+        )
+
+        # 1. Get file lists
+        base_stock_files = get_all_file_names_with_extensions(
+            self._logger,
+            folder_path=folder_path_1,
+            extensions=[FileExtension.CSV],
+        )
+        stock_information_files = get_all_file_names_with_extensions(
+            self._logger,
+            folder_path=folder_path_2,
+            extensions=[FileExtension.CSV],
+        )
+
+        # 2. Find latest stock files per exchange
         pattern = re.compile(r"(HNX|HSX|UPCOM)_upto_(\d{8})\.csv")
-
-        # Create a dict to store the newest file per exchange
         latest_files = {}
 
-        for file in all_files:
-            match = pattern.match(file)
+        for file in base_stock_files:
+            match = pattern.search(os.path.basename(file))
             if match:
-                exchange = match.group(1)
-                date_str = match.group(2)
+                exchange, date_str = match.groups()
                 date = datetime.strptime(date_str, "%Y%m%d")
-
-                # Compare and store the latest file per exchange
-                if (exchange not in latest_files) or (
-                    date > latest_files[exchange]["date"]
+                if (
+                    exchange not in latest_files
+                    or date > latest_files[exchange]["date"]
                 ):
                     latest_files[exchange] = {"file": file, "date": date}
 
-        # Assign to variables
-        hsx_file_path = os.path.join(
-            folder_path, latest_files.get("HSX", {}).get("file")
-        )
-        hnx_file_path = os.path.join(
-            folder_path, latest_files.get("HNX", {}).get("file")
-        )
-        upcom_file_path = os.path.join(
-            folder_path, latest_files.get("UPCOM", {}).get("file")
-        )
+        # 3. Validate and collect file paths
+        required_exchanges = ["HSX", "HNX", "UPCOM"]
+        file_paths = {}
 
-        # Check for missing files
-        if not hsx_file_path or not os.path.isfile(hsx_file_path):
-            self._logger.log_error(f'HSX data file not found in "{folder_path}".')
-            return
-
-        if not hnx_file_path or not os.path.isfile(hnx_file_path):
-            self._logger.log_error(f'HNX data file not found in "{folder_path}".')
-            return
-
-        if not upcom_file_path or not os.path.isfile(upcom_file_path):
-            self._logger.log_error(f'UPCOM data file not found in "{folder_path}".')
-            return
+        for exchange in required_exchanges:
+            file_path = latest_files.get(exchange, {}).get("file")
+            if not file_path or not os.path.isfile(file_path):
+                self._logger.log_error(
+                    f'{exchange} data file not found in "{folder_path_1}".'
+                )
+                return
+            file_paths[exchange] = file_path
 
         table_name = Table.STOCK.__qualname__.lower()
-
         self._logger.log_info(f'Start processing data in "{table_name}".')
 
-        stock_market_file_path_list = [hsx_file_path, hnx_file_path, upcom_file_path]
+        # 4. Load stock information data efficiently
+        stock_info_frames = [
+            pd.read_csv(file, encoding="utf-8")
+            for file in stock_information_files
+            if re.search(r"cafef_upto_\d+_\d+\.csv$", file)
+        ]
+        stock_infomation_df = (
+            pd.concat(stock_info_frames, ignore_index=True)
+            if stock_info_frames
+            else pd.DataFrame()
+        )
+        stock_infomation_df.columns = (
+            stock_infomation_df.columns.str.lower().str.replace(" ", "_")
+        )
 
-        overall_df = pd.DataFrame()
-        for stock_market in stock_market_file_path_list:
-            df = pd.read_csv(stock_market)
-            df["<Ticker>"] = df["<Ticker>"].astype("string")
+        # 6. Create base DataFrame for stocks
+        base_dfs = []
+        for market_code, stock_market_path in file_paths.items():
+            base_df = pd.read_csv(stock_market_path)
+            base_df["<Ticker>"] = base_df["<Ticker>"].astype("string")
 
-            distinct_stocks = df["<Ticker>"].dropna().unique()
+            # Skip derivatives
+            base_df = base_df[base_df["<Ticker>"].str.len() == 3]
 
-            stock_df = pd.DataFrame(
+            base_stock_df = pd.DataFrame(
                 {
-                    Table.STOCK.Column.CODE.value: distinct_stocks,
-                    Table.STOCK.Column.MARKET_ID.value: [
-                        stock_market_file_path_list.index(stock_market) + 1
-                    ]
-                    * len(distinct_stocks),
+                    Table.STOCK.Column.CODE.value: base_df["<Ticker>"]
+                    .dropna()
+                    .unique(),
+                    Table.STOCK.Column.MARKET_ID.value: self._get_market_id(
+                        market_code
+                    ),
                 }
             )
+            base_dfs.append(base_stock_df)
 
-            overall_df = pd.concat([overall_df, stock_df], ignore_index=True)
+        overall_df = pd.concat(base_dfs, ignore_index=True).sort_values(
+            by=Table.STOCK.primary_key, ignore_index=True
+        )
 
+        # 7. Merge with stock information
+        overall_df = pd.merge(
+            overall_df, stock_infomation_df, on=Table.STOCK.primary_key, how="left"
+        )
+
+        # 8. Calculate outstanding_rate safely
+        listed = overall_df["listed_shares"].astype(float)
+        outstanding = overall_df["outstanding_shares"].astype(float)
+        overall_df["outstanding_rate"] = np.where(
+            listed > 0, outstanding / listed, np.nan
+        )
+
+        # 9. Update timestamp
+        overall_df["update_date"] = datetime.now()
+
+        # 10. Save to database
         self._save_pandas_table_to_database(
             schema_name=Schema.ENTERPRISE.value,
             table_name=Table.STOCK.name,
+            primary_keys=Table.STOCK.primary_key,
             df=overall_df,
         )
 
@@ -2066,6 +2768,124 @@ class DataPreprocessor:
         self._process_enterprise_stock_cafef()
 
         self._logger.log_info("Finish processing enterprise STOCK data.")
+
+    # endregion ENTERPRISE.STOCK_INFORMATION
+
+    # region ENTERPRISE.DAILY_PRICE
+    def _process_enterprise_daily_price_cafef(self) -> None:
+        key = (
+            ScrapeMainType.ENTERPRISE,
+            EnterpriseSubType.DAILY_PRICE,
+            DailyPriceSource.CAFEF,
+        )
+
+        folder_path = (
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+        )
+
+        file_paths = get_all_file_names_with_extensions(
+            self._logger,
+            folder_path=folder_path,
+            extensions=[FileExtension.CSV],
+        )
+
+        if len(file_paths) < 3:
+            self._logger.log_info(
+                "Files found: " + ", ".join(f"`{path}`" for path in file_paths.values())
+            )
+            self._logger.log_warning(
+                f'Not enough data files in "{folder_path}". Expected 03 .csv files, found {len(file_paths)}.'
+            )
+            return
+
+        self._logger.log_info(f'Start processing data in "{folder_path}".')
+
+        for file_path in file_paths:
+            df = pd.read_csv(file_path, encoding="utf-8")
+            df["<Ticker>"] = df["<Ticker>"].astype("string")
+            df["<DTYYYYMMDD>"] = pd.to_datetime(
+                df["<DTYYYYMMDD>"], format="%Y%m%d", errors="coerce"
+            )
+            df["<Open>"] = pd.to_numeric(df["<Open>"], errors="coerce")
+            df["<High>"] = pd.to_numeric(df["<High>"], errors="coerce")
+            df["<Low>"] = pd.to_numeric(df["<Low>"], errors="coerce")
+            df["<Close>"] = pd.to_numeric(df["<Close>"], errors="coerce")
+            df["<Volume>"] = pd.to_numeric(df["<Volume>"], errors="coerce")
+
+            market_code = os.path.basename(file_path).split("_")[0]
+
+            daily_price_df = pd.DataFrame(
+                {
+                    Table.DAILY_PRICE.Column.DATE.value: df["<DTYYYYMMDD>"],
+                    Table.DAILY_PRICE.Column.CODE.value: df["<Ticker>"],
+                    Table.DAILY_PRICE.Column.MARKET_ID.value: self._get_market_id(
+                        market_code
+                    ),
+                    Table.DAILY_PRICE.Column.OPEN.value: df["<Open>"],
+                    Table.DAILY_PRICE.Column.HIGH.value: df["<High>"],
+                    Table.DAILY_PRICE.Column.LOW.value: df["<Low>"],
+                    Table.DAILY_PRICE.Column.CLOSE.value: df["<Close>"],
+                    Table.DAILY_PRICE.Column.VOLUME.value: df["<Volume>"],
+                }
+            )
+
+            year_list = self._get_year_list_from_start(SCRAPER_START_DATE)
+
+            # Remove current year
+            year_list = year_list[:-1]
+
+            # Remove years already processed
+            market_df = self._get_market_df()
+            process_year = market_df[
+                market_df[Table.MARKET.Column.CODE.value] == market_code
+            ][Table.MARKET.Column.SAVE_PROGRESS_YEAR.value].item()
+
+            if process_year is None:
+                process_year = SCRAPER_START_DATE.year - 1
+
+            year_list = [year for year in year_list if year > process_year]
+
+            for year in year_list:
+                self._save_pandas_table_to_database(
+                    schema_name=Schema.ENTERPRISE.value,
+                    table_name=Table.DAILY_PRICE.name,
+                    primary_keys=Table.DAILY_PRICE.primary_key,
+                    df=daily_price_df[
+                        daily_price_df[Table.DAILY_PRICE.Column.DATE.value].dt.year
+                        == year
+                    ],
+                )
+
+                self._database_driver.update(
+                    schema_name=Schema.STOCK_MARKET.value,
+                    table_name=Table.MARKET.name,
+                    update_record=Record(
+                        data_model_list=[
+                            DataModel(
+                                column_name=Table.MARKET.Column.SAVE_PROGRESS_YEAR.value,
+                                value=year,
+                                data_type=DataType.INT,
+                            )
+                        ]
+                    ),
+                    conditions=[
+                        Condition(
+                            column=Table.MARKET.Column.CODE.value,
+                            operator=SqlOperator.EQUAL_TO,
+                            value=market_code,
+                            data_type=DataType.VARCHAR,
+                        )
+                    ],
+                )
+
+    def _process_enterprise_daily_price(self) -> None:
+        self._logger.log_info("Start processing enterprise DAILY_PRICE data.")
+
+        self._process_enterprise_daily_price_cafef()
+
+        self._logger.log_info("Finish processing enterprise DAILY_PRICE data.")
+
+    # endregion ENTERPRISE.DAILY_PRICE
 
     # endregion ENTERPRISE data process
 
@@ -2090,13 +2910,20 @@ class DataPreprocessor:
         # self._process_macroeconomics_nyse_composite()
         # self._process_macroeconomics_snp_500()
         # self._process_macroeconomics_nasdaq_composite()
-        self._process_macroeconomics_nasdaq_100()
+        # self._process_macroeconomics_nasdaq_100()
 
         # Stock market
-        # self._process_stock_market_market()
+        self._process_stock_market_market()
+        # self._process_stock_market_vn_index()
+        # self._process_stock_market_hnx_index()
+        # self._process_stock_market_vn_30_index()
+        # self._process_stock_market_vn_100_index()
+        # self._process_stock_market_hnx_30_index()
+        # self._process_stock_market_upcom_index()
 
         # Enterprise
         # self._process_enterprise_stock()
+        self._process_enterprise_daily_price()
 
         self._logger.log_info("Finish processing data.")
 

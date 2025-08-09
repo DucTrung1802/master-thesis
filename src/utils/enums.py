@@ -121,6 +121,7 @@ class StockMarketSubType(Enum):
 class EnterpriseSubType(Enum):
     FINANCE_INFO = "finance_info"
     DAILY_PRICE = "daily_price"
+    STOCK_INFORMATION = "stock_information"
 
 
 ScrapeSubType = Union[
@@ -235,8 +236,13 @@ class DailyPriceSource(Enum):
     CAFEF = "cafef"
 
 
+class StockInformationSource(Enum):
+    CAFEF = "cafef"
+
+
 # Union of all sources
 Source = Union[
+    # MACROECONOMICS
     GdpSource,
     CpiSource,
     ExchangeRateSource,
@@ -247,13 +253,6 @@ Source = Union[
     M2Source,
     RetailSource,
     PopulationUnemploymentSource,
-    VnHnxIndexSource,
-    Vn30IndexSource,
-    Vn100IndexSource,
-    Hnx30IndexSource,
-    UpcomIndexSource,
-    FinanceInfoSource,
-    DailyPriceSource,
     GoldPriceSource,
     OilPriceSource,
     DowJonesSource,
@@ -261,6 +260,16 @@ Source = Union[
     SNP500Source,
     NASDAQCompositeSource,
     NASDAQ100Source,
+    # STOCK_MARKET
+    VnHnxIndexSource,
+    Vn30IndexSource,
+    Vn100IndexSource,
+    Hnx30IndexSource,
+    UpcomIndexSource,
+    # ENTERPRISE
+    FinanceInfoSource,
+    DailyPriceSource,
+    StockInformationSource,
 ]
 
 # ================================================
@@ -449,6 +458,13 @@ SCRAPE_MAPPING: Dict[Tuple[ScrapeMainType, ScrapeSubType, Source], SourceInfo] =
         EnterpriseSubType.DAILY_PRICE,
         DailyPriceSource.CAFEF,
     ): SourceInfo(url="https://cafef.vn/du-lieu/du-lieu-download.chn"),
+    (
+        ScrapeMainType.ENTERPRISE,
+        EnterpriseSubType.STOCK_INFORMATION,
+        StockInformationSource.CAFEF,
+    ): SourceInfo(
+        url="https://cafef.vn/du-lieu/hose/vic-tap-doan-vingroup-cong-ty-co-phan.chn"
+    ),
 }
 
 
@@ -726,6 +742,7 @@ class Table:
             ID = "id"
             CODE = "code"
             NAME = "name"
+            SAVE_PROGRESS_YEAR = "save_progress_year"
             CREATE_DATE = "create_date"
             UPDATE_DATE = "update_date"
             DELETE_DATE = "delete_date"
@@ -733,20 +750,129 @@ class Table:
         name = "market"
         primary_key = [Column.ID.value]
 
+    class VN_INDEX:
+        class Column(Enum):
+            DATE = "date"
+            OPEN = "open"
+            HIGH = "high"
+            LOW = "low"
+            CLOSE = "close"
+            VOLUME = "volume"
+
+        name = "vn_index"
+        primary_key = [Column.DATE.value]
+
+    class HNX_INDEX:
+        class Column(Enum):
+            DATE = "date"
+            OPEN = "open"
+            HIGH = "high"
+            LOW = "low"
+            CLOSE = "close"
+            VOLUME = "volume"
+
+        name = "hnx_index"
+        primary_key = [Column.DATE.value]
+
+    class VN_30_INDEX:
+        class Column(Enum):
+            DATE = "date"
+            CLOSE = "close"
+            ADJUSTED_CLOSE = "adjusted_close"
+            MATCHED_VOLUME = "matched_volume"
+            MATCHED_VALUE = "matched_value"
+            NEGOTIATED_VOLUME = "negotiated_volume"
+            NEGOTIATED_VALUE = "negotiated_value"
+            OPEN = "open"
+            HIGH = "high"
+            LOW = "low"
+            CHANGE_VALUE = "change_value"
+            CHANGE_PERCENTAGE = "change_percentage"
+
+        name = "vn_30_index"
+        primary_key = [Column.DATE.value]
+
+    class VN_100_INDEX:
+        class Column(Enum):
+            DATE = "date"
+            CLOSE = "close"
+            ADJUSTED_CLOSE = "adjusted_close"
+            MATCHED_VOLUME = "matched_volume"
+            MATCHED_VALUE = "matched_value"
+            NEGOTIATED_VOLUME = "negotiated_volume"
+            NEGOTIATED_VALUE = "negotiated_value"
+            OPEN = "open"
+            HIGH = "high"
+            LOW = "low"
+            CHANGE_VALUE = "change_value"
+            CHANGE_PERCENTAGE = "change_percentage"
+
+        name = "vn_100_index"
+        primary_key = [Column.DATE.value]
+
+    class HNX_30_INDEX:
+        class Column(Enum):
+            DATE = "date"
+            CLOSE = "close"
+            ADJUSTED_CLOSE = "adjusted_close"
+            MATCHED_VOLUME = "matched_volume"
+            MATCHED_VALUE = "matched_value"
+            NEGOTIATED_VOLUME = "negotiated_volume"
+            NEGOTIATED_VALUE = "negotiated_value"
+            OPEN = "open"
+            HIGH = "high"
+            LOW = "low"
+            CHANGE_VALUE = "change_value"
+            CHANGE_PERCENTAGE = "change_percentage"
+
+        name = "hnx_30_index"
+        primary_key = [Column.DATE.value]
+
+    class UPCOM_INDEX:
+        class Column(Enum):
+            DATE = "date"
+            CLOSE = "close"
+            ADJUSTED_CLOSE = "adjusted_close"
+            MATCHED_VOLUME = "matched_volume"
+            MATCHED_VALUE = "matched_value"
+            NEGOTIATED_VOLUME = "negotiated_volume"
+            NEGOTIATED_VALUE = "negotiated_value"
+            OPEN = "open"
+            HIGH = "high"
+            LOW = "low"
+            CHANGE_VALUE = "change_value"
+            CHANGE_PERCENTAGE = "change_percentage"
+
+        name = "upcom_index"
+        primary_key = [Column.DATE.value]
+
     # ENTERPRISE
     class STOCK:
         class Column(Enum):
             ID = "id"
             CODE = "code"
-            ISSUED_SHARES = "issued_shares"
+            LISTED_SHARES = "listed_shares"
             OUTSTANDING_SHARES = "outstanding_shares"
             OUTSTANDING_RATE = "outstanding_rate"
             MARKET_CAP = "market_cap"
             MARKET_ID = "market_id"
-            STOCK_TYPE = "stock_type"
             CREATE_DATE = "create_date"
             UPDATE_DATE = "update_date"
             DELETE_DATE = "delete_date"
 
         name = "stock"
-        primary_key = [Column.ID.value]
+        primary_key = [Column.CODE.value]
+
+    class DAILY_PRICE:
+        class Column(Enum):
+            DATE = "date"
+            CODE = "code"
+            MARKET_ID = "market_id"
+            OPEN = "open"
+            HIGH = "high"
+            LOW = "low"
+            CLOSE = "close"
+            VOLUME = "volume"
+
+        name = "daily_price"
+        primary_key = [Column.DATE.value, Column.CODE.value]
