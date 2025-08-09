@@ -3,6 +3,7 @@ import zipfile
 import requests
 from typing import Tuple, List, Optional
 import pandas as pd
+from pathlib import Path
 
 from logger.logger import Logger
 from models.tabular_database_driver_models.tabular_database_driver_models import (
@@ -80,42 +81,47 @@ def get_all_file_names_with_extensions(
     Args:
         logger (Logger): Logger instance for logging.
         folder_path (str): Path to the folder.
-        extensions (List[FileExtension], optional): List of file extensions to include (e.g., [".csv", ".txt"]).
+        extensions (List[FileExtension], optional): List of file extensions to include 
+            (e.g., [".csv", ".txt"]). If None, all files are returned.
 
     Returns:
-        List[str]: List of matching file names (not full paths).
+        List[str]: List of matching file paths (with forward slashes).
 
     Raises:
         FileNotFoundError: If the folder does not exist.
         PermissionError: If access to the folder is denied.
     """
-    matching_files = []
+    matching_files = []  # List to store matching file paths
 
     try:
+        # Iterate through all files and folders in the given directory
         for file_name in os.listdir(folder_path):
-            file_path = os.path.join(folder_path, file_name)
+            # Construct the full file path using pathlib for cross-platform compatibility
+            file_path = Path(folder_path) / file_name
 
-            if os.path.isfile(file_path):
-                _, ext = os.path.splitext(file_name)
-                ext = ext.replace(".", "", 1)  # Remove leading dot from extension
+            # Check if the current path is a file (not a directory)
+            if file_path.is_file():
+                # Extract the file extension without the leading dot (e.g., ".csv" -> "csv")
+                ext = file_path.suffix.lstrip(".")
 
-                if not extensions or ext.lower() in [
-                    e.value.lower() for e in extensions
-                ]:
-                    matching_files.append(file_path)
+                # Check if extensions filter is provided and match the file extension
+                # If no filter is provided, include all files
+                if not extensions or ext.lower() in [e.value.lower() for e in extensions]:
+                    # Convert the path to a POSIX-style string (uses forward slashes)
+                    matching_files.append(file_path.as_posix())
 
+        # Log how many matching files were found in the folder
         logger.log_info(f"Found {len(matching_files)} matching files in {folder_path}.")
         return matching_files
 
     except FileNotFoundError as e:
+        # Log and re-raise if the folder does not exist
         logger.log_error(f"Folder not found: {folder_path}. Error: {e}")
         raise
     except PermissionError as e:
-        logger.log_error(
-            f"Permission denied to access folder: {folder_path}. Error: {e}"
-        )
+        # Log and re-raise if there is a permission error
+        logger.log_error(f"Permission denied to access folder: {folder_path}. Error: {e}")
         raise
-
 
 def extract_zip_file(logger: Logger, zip_path, extract_to_folder):
     """

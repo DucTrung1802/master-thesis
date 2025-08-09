@@ -742,6 +742,7 @@ class Table:
             ID = "id"
             CODE = "code"
             NAME = "name"
+            SAVE_PROGRESS_YEAR = "save_progress_year"
             CREATE_DATE = "create_date"
             UPDATE_DATE = "update_date"
             DELETE_DATE = "delete_date"
@@ -850,15 +851,28 @@ class Table:
         class Column(Enum):
             ID = "id"
             CODE = "code"
-            ISSUED_SHARES = "issued_shares"
+            LISTED_SHARES = "listed_shares"
             OUTSTANDING_SHARES = "outstanding_shares"
             OUTSTANDING_RATE = "outstanding_rate"
             MARKET_CAP = "market_cap"
             MARKET_ID = "market_id"
-            STOCK_TYPE = "stock_type"
             CREATE_DATE = "create_date"
             UPDATE_DATE = "update_date"
             DELETE_DATE = "delete_date"
 
         name = "stock"
-        primary_key = [Column.ID.value]
+        primary_key = [Column.CODE.value]
+
+    class DAILY_PRICE:
+        class Column(Enum):
+            DATE = "date"
+            CODE = "code"
+            MARKET_ID = "market_id"
+            OPEN = "open"
+            HIGH = "high"
+            LOW = "low"
+            CLOSE = "close"
+            VOLUME = "volume"
+
+        name = "daily_price"
+        primary_key = [Column.DATE.value, Column.CODE.value]
