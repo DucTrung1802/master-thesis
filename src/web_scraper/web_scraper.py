@@ -165,18 +165,23 @@ class WebScraper:
                 f"Scraping GDP data from {start_year} to {current_year}."
             )
 
+            gdp_panel_xpath = (
+                '//*[@id="macro-data"]/div[3]/div[1]/div[1]/div[2]/div[1]/div[2]/div[2]'
+            )
             self._click_element(
                 web_driver=web_driver,
-                xpath='//*[@id="macro-data"]/div[3]/div[1]/div[1]/div[2]/div[1]/div[2]/div[2]',
+                xpath=gdp_panel_xpath,
             )
             time.sleep(SCRAPER_BASE_WAIT_TIME)
+            all_time_button_xpath = '//*[@id="macro-data"]/div[3]/div[2]/div[1]/div[1]/div[1]/div[1]/div[2]/div[1]/div[10]'
             self._click_element(
                 web_driver=web_driver,
-                xpath='//*[@id="macro-data"]/div[3]/div[2]/div[1]/div[1]/div[1]/div[1]/div[2]/div[1]/div[10]',
+                xpath=all_time_button_xpath,
             )
 
+            table_title_xpath = '//*[@id="tbl-macro-data"]/tbody/tr[1]/td/div'
             WebDriverWait(web_driver, 10).until(
-                EC.presence_of_element_located((By.XPATH, '//*[@id="tbl-macro-data"]/tbody/tr[1]/td/div'))
+                EC.presence_of_element_located((By.XPATH, table_title_xpath))
             )
 
             bs4_parser = self._update_bs4_parser(web_driver)
@@ -217,10 +222,10 @@ class WebScraper:
 
             file_path = f"{folder_path}/{file_name}_{start_year}_{current_year}.csv"
 
-            # 3. Check if file(s) already exists
+            # 3. Delete file if exists
             if os.path.exists(file_path):
-                self._logger.log_info(f"File already exists: {file_path}")
-                return
+                self._logger.log_info(f"File already exists: {file_path}, delete it.")
+                os.remove(file_path)
 
             # 4. Create folder if not exists
             if not os.path.exists(folder_path):
@@ -234,28 +239,43 @@ class WebScraper:
             time.sleep(SCRAPER_BASE_WAIT_TIME)
 
             # 7. Logic for scraping
-            xpaths = {
-                "time_unit": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[1]/select',
-                "from_month": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[2]/select',
-                "from_year": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[3]/select',
-                "to_month": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[4]/select',
-                "to_year": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[5]/select',
-                "view_button": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/button',
-            }
-
-            self._select_dropdown_by_text(web_driver, xpaths["time_unit"], "Tháng")
-            self._select_dropdown_by_text(web_driver, xpaths["from_month"], "1")
-            self._select_dropdown_by_text(
-                web_driver, xpaths["from_year"], str(start_year)
-            )
-            self._select_dropdown_by_text(web_driver, xpaths["to_month"], "12")
-            self._select_dropdown_by_text(
-                web_driver, xpaths["to_year"], str(current_year)
+            self._logger.log_info(
+                f"Scraping CPI data from {start_year} to {current_year}."
             )
 
-            self._click_element(web_driver, xpaths["view_button"])
+            cpi_panel_xpath = (
+                '//*[@id="macro-data"]/div[3]/div[1]/div[1]/div[2]/div[2]/div[1]/span'
+            )
+            self._click_element(
+                web_driver=web_driver,
+                xpath=cpi_panel_xpath,
+            )
+            time.sleep(SCRAPER_BASE_WAIT_TIME)
+            cpi_xpath = (
+                '//*[@id="macro-data"]/div[3]/div[1]/div[1]/div[2]/div[2]/div[2]/div[1]'
+            )
+            self._click_element(
+                web_driver=web_driver,
+                xpath=cpi_xpath,
+            )
+            time.sleep(SCRAPER_BASE_WAIT_TIME)
+            all_time_button_xpath = '//*[@id="macro-data"]/div[3]/div[2]/div[1]/div[1]/div[1]/div[1]/div[2]/div[1]/div[10]'
+            self._click_element(
+                web_driver=web_driver,
+                xpath=all_time_button_xpath,
+            )
+
+            table_title_xpath = (
+                '//*[@id="macro-data"]/div[3]/div[2]/div[2]/div[1]/div[1]'
+            )
             WebDriverWait(web_driver, 10).until(
-                EC.presence_of_element_located((By.ID, "tbl-macro-data"))
+                EC.presence_of_element_located((By.XPATH, table_title_xpath))
+            )
+
+            bs4_parser = self._update_bs4_parser(web_driver)
+
+            headers, rows = self._extract_table_by_id(
+                bs4_parser=bs4_parser, id="tbl-macro-data"
             )
 
             bs4_parser = self._update_bs4_parser(web_driver)
@@ -1809,25 +1829,25 @@ class WebScraper:
         self._logger.log_info("Adding macroeconomic data scraping tasks.")
         number_of_task_before = self._thread_manager.get_current_number_of_task()
 
-        # MACROECONOMICS_GDP_VIETSTOCK
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.GDP,
-            GdpSource.VIETSTOCK,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
-
-        # # MACROECONOMICS_CPI_VIETSTOCK
+        # # MACROECONOMICS_GDP_VIETSTOCK
         # key = (
         #     ScrapeMainType.MACROECONOMICS,
-        #     MacroeconomicsSubType.CPI,
-        #     CpiSource.VIETSTOCK,
+        #     MacroeconomicsSubType.GDP,
+        #     GdpSource.VIETSTOCK,
         # )
         # self._thread_manager.add_task(
         #     Task(format_key_for_name(key), self._scrape_data_from, key)
         # )
+
+        # MACROECONOMICS_CPI_VIETSTOCK
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.CPI,
+            CpiSource.VIETSTOCK,
+        )
+        self._thread_manager.add_task(
+            Task(format_key_for_name(key), self._scrape_data_from, key)
+        )
 
         # # MACROECONOMICS_EXCHANGE_RATE_VIETSTOCK
         # key = (

@@ -294,70 +294,70 @@ SCRAPE_MAPPING: Dict[Tuple[ScrapeMainType, ScrapeSubType, Source], SourceInfo] =
         MacroeconomicsSubType.CPI,
         CpiSource.VIETSTOCK,
     ): SourceInfo(
-        url="https://finance.vietstock.vn/du-lieu-vi-mo/52/cpi.htm",
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.EXCHANGE_RATE,
         ExchangeRateSource.VIETSTOCK,
     ): SourceInfo(
-        url="https://finance.vietstock.vn/du-lieu-vi-mo/53-64/ty-gia-lai-suat.htm"
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7"
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.INTEREST_RATE,
         InterestRateSource.VIETSTOCK,
     ): SourceInfo(
-        url="https://finance.vietstock.vn/du-lieu-vi-mo/53-64/ty-gia-lai-suat.htm"
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7"
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.EXPORT,
         ExportImportSource.VIETSTOCK,
     ): SourceInfo(
-        url="https://finance.vietstock.vn/du-lieu-vi-mo/48-49/xuat-nhap-khau.htm",
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.IMPORT,
         ExportImportSource.VIETSTOCK,
     ): SourceInfo(
-        url="https://finance.vietstock.vn/du-lieu-vi-mo/48-49/xuat-nhap-khau.htm",
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.IPI,
         IpiSource.VIETSTOCK,
     ): SourceInfo(
-        url="https://finance.vietstock.vn/du-lieu-vi-mo/46/san-xuat-cong-nghiep.htm",
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.FDI,
         FdiSource.VIETSTOCK,
     ): SourceInfo(
-        url="https://finance.vietstock.vn/du-lieu-vi-mo/50/fdi.htm",
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.M2,
         M2Source.VIETSTOCK,
     ): SourceInfo(
-        url="https://finance.vietstock.vn/du-lieu-vi-mo/51/tin-dung.htm",
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.RETAIL,
         RetailSource.VIETSTOCK,
     ): SourceInfo(
-        url="https://finance.vietstock.vn/du-lieu-vi-mo/47/ban-le.htm",
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.POPULATION_UNEMPLOYMENT,
         PopulationUnemploymentSource.VIETSTOCK,
     ): SourceInfo(
-        url="https://finance.vietstock.vn/du-lieu-vi-mo/55-56/dan-so-va-lao-dong.htm",
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
