@@ -287,14 +287,7 @@ SCRAPE_MAPPING: Dict[Tuple[ScrapeMainType, ScrapeSubType, Source], SourceInfo] =
         MacroeconomicsSubType.GDP,
         GdpSource.VIETSTOCK,
     ): SourceInfo(
-        url="https://finance.vietstock.vn/du-lieu-vi-mo/43/thu-nhap.htm",
-    ),
-    (
-        ScrapeMainType.MACROECONOMICS,
-        MacroeconomicsSubType.GDP,
-        GdpSource.WORLDOMETER,
-    ): SourceInfo(
-        url="https://www.worldometers.info/gdp/vietnam-gdp/",
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7",
     ),
     (
         ScrapeMainType.MACROECONOMICS,

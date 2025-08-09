@@ -38,6 +38,7 @@ class WebScraper:
     ) -> Tuple[ChromiumDriver, BeautifulSoup]:
         web_driver: ChromiumDriver = webdriver.Chrome(options=self._chrome_options)
         bs4_parser: BeautifulSoup = BeautifulSoup(web_driver.page_source, "html.parser")
+        web_driver.maximize_window()
 
         return (web_driver, bs4_parser)
 
@@ -143,10 +144,10 @@ class WebScraper:
 
             file_path = f"{folder_path}/{file_name}_{start_year}_{current_year}.csv"
 
-            # 3. Check if file(s) already exists
+            # 3. Delete file if exists
             if os.path.exists(file_path):
-                self._logger.log_info(f"File already exists: {file_path}")
-                return
+                self._logger.log_info(f"File already exists: {file_path}, delete it.")
+                os.remove(file_path)
 
             # 4. Create folder if not exists
             if not os.path.exists(folder_path):
@@ -164,91 +165,25 @@ class WebScraper:
                 f"Scraping GDP data from {start_year} to {current_year}."
             )
 
-            # Define XPaths
-            xpaths = {
-                "time_unit": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[1]/select',
-                "from_quarter": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[2]/select',
-                "from_year": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[3]/select',
-                "to_quarter": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[4]/select',
-                "to_year": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[5]/select',
-                "view_button": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/button',
-            }
-
-            # Select dropdown values
-            self._select_dropdown_by_text(web_driver, xpaths["time_unit"], "Quý")
-            self._select_dropdown_by_text(web_driver, xpaths["from_quarter"], "Q1")
-            self._select_dropdown_by_text(
-                web_driver, xpaths["from_year"], str(start_year)
+            self._click_element(
+                web_driver=web_driver,
+                xpath='//*[@id="macro-data"]/div[3]/div[1]/div[1]/div[2]/div[1]/div[2]/div[2]',
             )
-            self._select_dropdown_by_text(web_driver, xpaths["to_quarter"], "Q4")
-            self._select_dropdown_by_text(
-                web_driver, xpaths["to_year"], str(current_year)
+            time.sleep(SCRAPER_BASE_WAIT_TIME)
+            self._click_element(
+                web_driver=web_driver,
+                xpath='//*[@id="macro-data"]/div[3]/div[2]/div[1]/div[1]/div[1]/div[1]/div[2]/div[1]/div[10]',
             )
 
-            # Click view button
-            self._click_element(web_driver, xpaths["view_button"])
             WebDriverWait(web_driver, 10).until(
-                EC.presence_of_element_located((By.ID, "tbl-macro-data"))
+                EC.presence_of_element_located((By.XPATH, '//*[@id="tbl-macro-data"]/tbody/tr[1]/td/div'))
             )
 
             bs4_parser = self._update_bs4_parser(web_driver)
 
-            headers, rows = self._extract_table_by_id(bs4_parser, "tbl-macro-data")
-
-            # Write to CSV
-            with open(file_path, "w", newline="", encoding="utf-8") as f:
-                writer = csv.writer(f)
-                writer.writerow(headers)
-                writer.writerows(rows)
-
-        finally:
-            web_driver.close()
-
-        self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
-
-    def _scrape_data_macroeconomics_gdp_worldometer(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
-    ):
-        self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
-
-        # Initialize web driver and bs4 parser
-        web_driver, bs4_parser = self._initialize_web_driver_and_bs4_parser()
-
-        try:
-            # 1. Initialize folder path and file name
-            folder_path = (
-                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            headers, rows = self._extract_table_by_id(
+                bs4_parser=bs4_parser, id="tbl-macro-data"
             )
-            file_name = f"{key[2].value}"
-
-            # 2. Initialize start time and current time
-            start_year = SCRAPER_START_DATE.year
-            current_year = datetime.now().year
-
-            file_path = f"{folder_path}/{file_name}_{start_year}_{current_year}.csv"
-
-            # 3. Check if file(s) already exists
-            if os.path.exists(file_path):
-                self._logger.log_info(f"File already exists: {file_path}")
-                return
-
-            # 4. Create folder if not exists
-            if not os.path.exists(folder_path):
-                os.makedirs(folder_path, exist_ok=True)
-
-            # 5. Get SourceInfo
-            source_info = SCRAPE_MAPPING[key]
-
-            # 6. Navigate to URL
-            web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
-
-            # 7. Logic for scraping
-            table = bs4_parser.find(
-                "table",
-                {"class": "datatable w-full border border-zinc-200 datatable-table"},
-            )
-            headers, rows = self._extract_table(table)
 
             # Write to CSV
             with open(file_path, "w", newline="", encoding="utf-8") as f:
@@ -1761,13 +1696,6 @@ class WebScraper:
 
             case (
                 ScrapeMainType.MACROECONOMICS,
-                MacroeconomicsSubType.GDP,
-                GdpSource.WORLDOMETER,
-            ):
-                return self._scrape_data_macroeconomics_gdp_worldometer(key)
-
-            case (
-                ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.CPI,
                 CpiSource.VIETSTOCK,
             ):
@@ -1891,105 +1819,95 @@ class WebScraper:
             Task(format_key_for_name(key), self._scrape_data_from, key)
         )
 
-        # MACROECONOMICS_GDP_WORLDOMETER
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.GDP,
-            GdpSource.WORLDOMETER,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # # MACROECONOMICS_CPI_VIETSTOCK
+        # key = (
+        #     ScrapeMainType.MACROECONOMICS,
+        #     MacroeconomicsSubType.CPI,
+        #     CpiSource.VIETSTOCK,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
 
-        # MACROECONOMICS_CPI_VIETSTOCK
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.CPI,
-            CpiSource.VIETSTOCK,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # # MACROECONOMICS_EXCHANGE_RATE_VIETSTOCK
+        # key = (
+        #     ScrapeMainType.MACROECONOMICS,
+        #     MacroeconomicsSubType.EXCHANGE_RATE,
+        #     ExchangeRateSource.VIETSTOCK,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
 
-        # MACROECONOMICS_EXCHANGE_RATE_VIETSTOCK
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.EXCHANGE_RATE,
-            ExchangeRateSource.VIETSTOCK,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # # MACROECONOMICS_INTEREST_RATE_VIETSTOCK
+        # key = (
+        #     ScrapeMainType.MACROECONOMICS,
+        #     MacroeconomicsSubType.INTEREST_RATE,
+        #     InterestRateSource.VIETSTOCK,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
 
-        # MACROECONOMICS_INTEREST_RATE_VIETSTOCK
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.INTEREST_RATE,
-            InterestRateSource.VIETSTOCK,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # # MACROECONOMICS_EXPORT_IMPORT_VIETSTOCK
+        # key = (
+        #     ScrapeMainType.MACROECONOMICS,
+        #     MacroeconomicsSubType.EXPORT,
+        #     ExportImportSource.VIETSTOCK,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
 
-        # MACROECONOMICS_EXPORT_IMPORT_VIETSTOCK
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.EXPORT,
-            ExportImportSource.VIETSTOCK,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # # MACROECONOMICS_IPI_VIETSTOCK
+        # key = (
+        #     ScrapeMainType.MACROECONOMICS,
+        #     MacroeconomicsSubType.IPI,
+        #     IpiSource.VIETSTOCK,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
 
-        # MACROECONOMICS_IPI_VIETSTOCK
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.IPI,
-            IpiSource.VIETSTOCK,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # # MACROECONOMICS_FDI_VIETSTOCK
+        # key = (
+        #     ScrapeMainType.MACROECONOMICS,
+        #     MacroeconomicsSubType.FDI,
+        #     FdiSource.VIETSTOCK,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
 
-        # MACROECONOMICS_FDI_VIETSTOCK
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.FDI,
-            FdiSource.VIETSTOCK,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # # MACROECONOMICS_M2_VIETSTOCK
+        # key = (
+        #     ScrapeMainType.MACROECONOMICS,
+        #     MacroeconomicsSubType.M2,
+        #     M2Source.VIETSTOCK,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
 
-        # MACROECONOMICS_M2_VIETSTOCK
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.M2,
-            M2Source.VIETSTOCK,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # # MACROECONOMICS_RETAIL_VIETSTOCK
+        # key = (
+        #     ScrapeMainType.MACROECONOMICS,
+        #     MacroeconomicsSubType.RETAIL,
+        #     RetailSource.VIETSTOCK,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
 
-        # MACROECONOMICS_RETAIL_VIETSTOCK
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.RETAIL,
-            RetailSource.VIETSTOCK,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
-
-        # MACROECONOMICS_POPULATION_UNEMPLOYMENT_VIETSTOCK
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.POPULATION_UNEMPLOYMENT,
-            PopulationUnemploymentSource.VIETSTOCK,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # # MACROECONOMICS_POPULATION_UNEMPLOYMENT_VIETSTOCK
+        # key = (
+        #     ScrapeMainType.MACROECONOMICS,
+        #     MacroeconomicsSubType.POPULATION_UNEMPLOYMENT,
+        #     PopulationUnemploymentSource.VIETSTOCK,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
 
         # MACROECONOMICS_POPULATION_GOLD_PRICE_INVESTING
         # Gold price is scaped MANUALLY from investing.com
@@ -2161,9 +2079,9 @@ class WebScraper:
         self._logger.log_info("Adding data scraping tasks.")
         number_of_task_before = self._thread_manager.get_current_number_of_task()
 
-        # self.add_macroeconomics_data_scraping_tasks()
+        self.add_macroeconomics_data_scraping_tasks()
         # self.add_stock_market_data_scraping_tasks()
-        self.add_enterprise_data_scraping_tasks()
+        # self.add_enterprise_data_scraping_tasks()
 
         number_of_task_after = self._thread_manager.get_current_number_of_task()
         self._logger.log_info(
@@ -2175,8 +2093,10 @@ class WebScraper:
             f"Start executing {self._thread_manager.get_current_number_of_task()} tasks."
         )
 
-        self._thread_manager.execute(
-            final_callback=self._double_check_stock_information_cafef_result
-        )
+        # self._thread_manager.execute(
+        #     final_callback=self._double_check_stock_information_cafef_result
+        # )
+
+        self._thread_manager.execute()
 
         self._logger.log_info("Finished scraping data.")
