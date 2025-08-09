@@ -253,9 +253,9 @@ VALUES
     ({values})
 """
                 self.execute_query(query)
-            self._logger.log_info(
-                f'Insert {len(records)} record(s) into table "{schema_name}.{table_name}" successfully.'
-            )
+            # self._logger.log_info(
+            #     f'Insert {len(records)} record(s) into table "{schema_name}.{table_name}" successfully.'
+            # )
             return DatabaseExecutionStatus.SUCCESS
         except Exception as e:
             self._logger.log_error(f"Error inserting records: {e}")
@@ -306,9 +306,9 @@ SET
                 if self._cursor.statusmessage.startswith("UPDATE")
                 else 0
             )
-            self._logger.log_info(
-                f'Updated {number_of_records_updated} records in table "{schema_name}.{table_name}" successfully.'
-            )
+            # self._logger.log_info(
+            #     f'Updated {number_of_records_updated} records in table "{schema_name}.{table_name}" successfully.'
+            # )
             return DatabaseExecutionStatus.SUCCESS
         except Exception as e:
             self._logger.log_error(f"Error updating records: {e}")
@@ -384,10 +384,11 @@ FROM upserted;
                     f'upsert() - Query status: "{status_msg}"'
                 )
 
-            self._logger.log_info(
-                f'Upserted {len(records)} record(s) into "{schema_name}.{table_name}". '
-                f"Inserted: {inserted_count}, Updated: {updated_count} successfully."
-            )
+            # self._logger.log_info(
+            #     f'Upserted {len(records)} record(s) into "{schema_name}.{table_name}". '
+            #     f"Inserted: {inserted_count}, Updated: {updated_count} successfully."
+            # )
+            
             return DatabaseExecutionStatus.SUCCESS, inserted_count, updated_count
 
         except Exception as e:
@@ -432,9 +433,9 @@ DELETE FROM {schema_name}.{table_name}
                 if self._cursor.statusmessage.startswith("DELETE")
                 else 0
             )
-            self._logger.log_info(
-                f'Delete {number_of_records_updated} records in table "{schema_name}.{table_name}" successfully.'
-            )
+            # self._logger.log_info(
+            #     f'Delete {number_of_records_updated} records in table "{schema_name}.{table_name}" successfully.'
+            # )
             return DatabaseExecutionStatus.SUCCESS
         except Exception as e:
             self._logger.log_error(f"Error deleting records: {e}")
@@ -489,9 +490,9 @@ FROM
             results = self.fetch_result()
             column_names = [desc[0] for desc in self._cursor.description]
             df = pd.DataFrame(results, columns=column_names)
-            self._logger.log_info(
-                f'Selected {len(results)} records from table "{schema_name}.{table_name}" successfully.'
-            )
+            # self._logger.log_info(
+            #     f'Selected {len(results)} records from table "{schema_name}.{table_name}" successfully.'
+            # )
             return df
         except Exception as e:
             self._logger.log_error(f"Error selecting records: {e}")
