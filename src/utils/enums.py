@@ -94,9 +94,9 @@ class MacroeconomicsSubType(Enum):
     CPI = "cpi"
     PPI = "ppi"
     IPI = "ipi"
+    XPI = "xpi"
     EXCHANGE_RATE = "exchange_rate"
     INTEREST_RATE = "interest_rate"
-    EXPORT = "export"
     IMPORT = "import"
     FDI = "fdi"
     M2 = "m2"
@@ -154,15 +154,15 @@ class IpiSource(Enum):
     VIETSTOCK = "vietstock"
 
 
+class XpiSource(Enum):
+    VIETSTOCK = "vietstock"
+
+
 class ExchangeRateSource(Enum):
     VIETSTOCK = "vietstock"
 
 
 class InterestRateSource(Enum):
-    VIETSTOCK = "vietstock"
-
-
-class ExportImportSource(Enum):
     VIETSTOCK = "vietstock"
 
 
@@ -251,9 +251,9 @@ Source = Union[
     CpiSource,
     PpiSource,
     IpiSource,
+    XpiSource,
     ExchangeRateSource,
     InterestRateSource,
-    ExportImportSource,
     FdiSource,
     M2Source,
     RetailSource,
@@ -317,6 +317,13 @@ SCRAPE_MAPPING: Dict[Tuple[ScrapeMainType, ScrapeSubType, Source], SourceInfo] =
     ),
     (
         ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.XPI,
+        XpiSource.VIETSTOCK,
+    ): SourceInfo(
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7",
+    ),
+    (
+        ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.EXCHANGE_RATE,
         ExchangeRateSource.VIETSTOCK,
     ): SourceInfo(url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7"),
@@ -325,20 +332,13 @@ SCRAPE_MAPPING: Dict[Tuple[ScrapeMainType, ScrapeSubType, Source], SourceInfo] =
         MacroeconomicsSubType.INTEREST_RATE,
         InterestRateSource.VIETSTOCK,
     ): SourceInfo(url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7"),
-    (
-        ScrapeMainType.MACROECONOMICS,
-        MacroeconomicsSubType.EXPORT,
-        ExportImportSource.VIETSTOCK,
-    ): SourceInfo(
-        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7",
-    ),
-    (
-        ScrapeMainType.MACROECONOMICS,
-        MacroeconomicsSubType.IMPORT,
-        ExportImportSource.VIETSTOCK,
-    ): SourceInfo(
-        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7",
-    ),
+    # (
+    #     ScrapeMainType.MACROECONOMICS,
+    #     MacroeconomicsSubType.IMPORT,
+    #     ExportImportSource.VIETSTOCK,
+    # ): SourceInfo(
+    #     url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7",
+    # ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.FDI,
