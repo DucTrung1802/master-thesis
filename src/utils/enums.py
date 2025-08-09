@@ -748,7 +748,7 @@ class Table:
             DELETE_DATE = "delete_date"
 
         name = "market"
-        primary_key = [Column.CODE.value]
+        primary_key = [Column.ID.value]
 
     class VN_INDEX:
         class Column(Enum):

@@ -2179,6 +2179,7 @@ class DataPreprocessor:
         )
 
         market_data = {
+            Table.MARKET.Column.ID.value: [1, 2, 3],
             Table.MARKET.Column.CODE.value: ["HSX", "HNX", "UPCOM"],
             Table.MARKET.Column.NAME.value: [
                 "Ho Chi Minh City Stock Exchange",
