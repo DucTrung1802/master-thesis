@@ -49,36 +49,37 @@ class DataPreprocessor:
     ) -> None:
         self._logger.log_info(f'Saving dataframe to table "{schema_name}.{table_name}"')
 
-        # Remove all rows that have NaN values in all columns
+        # Drop rows where all values are NaN
         df = df.dropna(how="all")
 
-        inserted_count = 0
-        updated_count = 0
-        for row in df.iterrows():
-            result = self._database_driver.upsert(
-                schema_name=schema_name,
-                table_name=table_name,
-                records=[
-                    Record(
-                        data_model_list=[
-                            DataModel(
-                                column_name=df.columns[index],
-                                value=(
-                                    row[1].iloc[index]
-                                    if not pd.isnull(row[1].iloc[index])
-                                    else None
-                                ),
-                            )
-                            for index in range(len(df.columns))
-                        ]
-                    )
-                ],
-                primary_keys=primary_keys,
-            )
+        if df.empty:
+            self._logger.log_info("DataFrame is empty after cleaning. Nothing to save.")
+            return
 
-            if result[0] == DatabaseExecutionStatus.SUCCESS:
-                inserted_count += result[1]
-                updated_count += result[2]
+        # Convert entire DataFrame into a list of Records (vectorized)
+        column_names = list(df.columns)
+        records = []
+
+        for row in df.itertuples(index=False, name=None):
+            data_model_list = [
+                DataModel(column_name=col, value=(val if pd.notna(val) else None))
+                for col, val in zip(column_names, row)
+            ]
+            records.append(Record(data_model_list=data_model_list))
+
+        # Batch upsert once
+        result = self._database_driver.upsert(
+            schema_name=schema_name,
+            table_name=table_name,
+            records=records,
+            primary_keys=primary_keys,
+        )
+
+        if result[0] == DatabaseExecutionStatus.SUCCESS:
+            inserted_count = result[1]
+            updated_count = result[2]
+        else:
+            inserted_count = updated_count = 0
 
         self._logger.log_info(
             f"Saved {inserted_count + updated_count}/{len(df)} records into table '{schema_name}.{table_name}'"
@@ -2838,7 +2839,10 @@ class DataPreprocessor:
             process_year = market_df[
                 market_df[Table.MARKET.Column.CODE.value] == market_code
             ][Table.MARKET.Column.SAVE_PROGRESS_YEAR.value].item()
-            
+
+            if process_year is None:
+                process_year = SCRAPER_START_DATE.year - 1
+
             year_list = [year for year in year_list if year > process_year]
 
             for year in year_list:
