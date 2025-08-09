@@ -183,6 +183,7 @@ class WebScraper:
             WebDriverWait(web_driver, 10).until(
                 EC.presence_of_element_located((By.XPATH, table_title_xpath))
             )
+            time.sleep(3)
 
             bs4_parser = self._update_bs4_parser(web_driver)
 
