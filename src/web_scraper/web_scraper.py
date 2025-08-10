@@ -158,7 +158,7 @@ class WebScraper:
 
             # 6. Navigate to URL
             web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
+            time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
 
             # 7. Logic for scraping
             self._logger.log_info(
@@ -172,7 +172,7 @@ class WebScraper:
                 web_driver=web_driver,
                 xpath=gdp_panel_xpath,
             )
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
+            time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
             all_time_button_xpath = '//*[@id="macro-data"]/div[3]/div[2]/div[1]/div[1]/div[1]/div[1]/div[2]/div[1]/div[10]'
             self._click_element(
                 web_driver=web_driver,
@@ -237,7 +237,7 @@ class WebScraper:
 
             # 6. Navigate to URL
             web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
+            time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
 
             # 7. Logic for scraping
             self._logger.log_info(
@@ -251,7 +251,7 @@ class WebScraper:
                 web_driver=web_driver,
                 xpath=cpi_panel_xpath,
             )
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
+            time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
             cpi_xpath = (
                 '//*[@id="macro-data"]/div[3]/div[1]/div[1]/div[2]/div[2]/div[2]/div[1]'
             )
@@ -259,7 +259,7 @@ class WebScraper:
                 web_driver=web_driver,
                 xpath=cpi_xpath,
             )
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
+            time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
             all_time_button_xpath = '//*[@id="macro-data"]/div[3]/div[2]/div[1]/div[1]/div[1]/div[1]/div[2]/div[1]/div[10]'
             self._click_element(
                 web_driver=web_driver,
@@ -326,7 +326,7 @@ class WebScraper:
 
             # 6. Navigate to URL
             web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
+            time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
 
             # 7. Logic for scraping
             self._logger.log_info(
@@ -340,7 +340,7 @@ class WebScraper:
                 web_driver=web_driver,
                 xpath=ppi_panel_xpath,
             )
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
+            time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
             ppi_xpath = (
                 '//*[@id="macro-data"]/div[3]/div[1]/div[1]/div[2]/div[2]/div[2]/div[2]'
             )
@@ -348,7 +348,7 @@ class WebScraper:
                 web_driver=web_driver,
                 xpath=ppi_xpath,
             )
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
+            time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
             all_time_button_xpath = '//*[@id="macro-data"]/div[3]/div[2]/div[1]/div[1]/div[1]/div[1]/div[2]/div[1]/div[10]'
             self._click_element(
                 web_driver=web_driver,
@@ -415,7 +415,7 @@ class WebScraper:
 
             # 6. Navigate to URL
             web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
+            time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
 
             # 7. Logic for scraping
             self._logger.log_info(
@@ -429,7 +429,7 @@ class WebScraper:
                 web_driver=web_driver,
                 xpath=ipi_panel_xpath,
             )
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
+            time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
             ipi_xpath = (
                 '//*[@id="macro-data"]/div[3]/div[1]/div[1]/div[2]/div[2]/div[2]/div[3]'
             )
@@ -437,7 +437,7 @@ class WebScraper:
                 web_driver=web_driver,
                 xpath=ipi_xpath,
             )
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
+            time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
             all_time_button_xpath = '//*[@id="macro-data"]/div[3]/div[2]/div[1]/div[1]/div[1]/div[1]/div[2]/div[1]/div[10]'
             self._click_element(
                 web_driver=web_driver,
@@ -504,7 +504,7 @@ class WebScraper:
 
             # 6. Navigate to URL
             web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
+            time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
 
             # 7. Logic for scraping
             self._logger.log_info(
@@ -518,7 +518,7 @@ class WebScraper:
                 web_driver=web_driver,
                 xpath=xpi_panel_xpath,
             )
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
+            time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
             xpi_xpath = (
                 '//*[@id="macro-data"]/div[3]/div[1]/div[1]/div[2]/div[2]/div[2]/div[4]'
             )
@@ -526,7 +526,7 @@ class WebScraper:
                 web_driver=web_driver,
                 xpath=xpi_xpath,
             )
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
+            time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
             all_time_button_xpath = '//*[@id="macro-data"]/div[3]/div[2]/div[1]/div[1]/div[1]/div[1]/div[2]/div[1]/div[10]'
             self._click_element(
                 web_driver=web_driver,
@@ -593,7 +593,7 @@ class WebScraper:
 
             # 6. Navigate to URL
             web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
+            time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
 
             # 7. Logic for scraping
             self._logger.log_info(
@@ -607,7 +607,7 @@ class WebScraper:
                 web_driver=web_driver,
                 xpath=mpi_panel_xpath,
             )
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
+            time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
             mpi_xpath = (
                 '//*[@id="macro-data"]/div[3]/div[1]/div[1]/div[2]/div[2]/div[2]/div[4]'
             )
@@ -615,7 +615,7 @@ class WebScraper:
                 web_driver=web_driver,
                 xpath=mpi_xpath,
             )
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
+            time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
             ten_year_button_xpath = '//*[@id="macro-data"]/div[3]/div[2]/div[1]/div[1]/div[1]/div[1]/div[2]/div[1]/div[9]'
             self._click_element(
                 web_driver=web_driver,
@@ -682,7 +682,7 @@ class WebScraper:
 
             # 6. Navigate to URL
             web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
+            time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
 
             # 7. Logic for scraping
             self._logger.log_info(
@@ -696,7 +696,7 @@ class WebScraper:
                 web_driver=web_driver,
                 xpath=population_panel_xpath,
             )
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
+            time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
             population_xpath = (
                 '//*[@id="macro-data"]/div[3]/div[1]/div[1]/div[2]/div[3]/div[2]/div[1]'
             )
@@ -704,7 +704,7 @@ class WebScraper:
                 web_driver=web_driver,
                 xpath=population_xpath,
             )
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
+            time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
             all_time_button_xpath = '//*[@id="macro-data"]/div[3]/div[2]/div[1]/div[1]/div[1]/div[1]/div[2]/div[1]/div[10]'
             self._click_element(
                 web_driver=web_driver,
@@ -771,7 +771,7 @@ class WebScraper:
 
             # 6. Navigate to URL
             web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
+            time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
 
             # 7. Logic for scraping
             self._logger.log_info(
@@ -785,7 +785,7 @@ class WebScraper:
                 web_driver=web_driver,
                 xpath=labor_panel_xpath,
             )
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
+            time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
             labor_xpath = (
                 '//*[@id="macro-data"]/div[3]/div[1]/div[1]/div[2]/div[3]/div[2]/div[2]'
             )
@@ -793,7 +793,7 @@ class WebScraper:
                 web_driver=web_driver,
                 xpath=labor_xpath,
             )
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
+            time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
             all_time_button_xpath = '//*[@id="macro-data"]/div[3]/div[2]/div[1]/div[1]/div[1]/div[1]/div[2]/div[1]/div[10]'
             self._click_element(
                 web_driver=web_driver,
@@ -860,7 +860,7 @@ class WebScraper:
 
             # 6. Navigate to URL
             web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
+            time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
 
             # 7. Logic for scraping
             self._logger.log_info(
@@ -874,7 +874,7 @@ class WebScraper:
                 web_driver=web_driver,
                 xpath=retail_panel_xpath,
             )
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
+            time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
             retail_xpath = (
                 '//*[@id="macro-data"]/div[3]/div[1]/div[1]/div[2]/div[4]/div[2]/div'
             )
@@ -882,7 +882,7 @@ class WebScraper:
                 web_driver=web_driver,
                 xpath=retail_xpath,
             )
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
+            time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
             all_time_button_xpath = '//*[@id="macro-data"]/div[3]/div[2]/div[1]/div[1]/div[1]/div[1]/div[2]/div[1]/div[10]'
             self._click_element(
                 web_driver=web_driver,
@@ -949,7 +949,7 @@ class WebScraper:
 
             # 6. Navigate to URL
             web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
+            time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
 
             # 7. Logic for scraping
             self._logger.log_info(
@@ -963,7 +963,7 @@ class WebScraper:
                 web_driver=web_driver,
                 xpath=pmi_panel_xpath,
             )
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
+            time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
             pmi_xpath = (
                 '//*[@id="macro-data"]/div[3]/div[1]/div[1]/div[2]/div[5]/div[2]/div[1]'
             )
@@ -971,7 +971,7 @@ class WebScraper:
                 web_driver=web_driver,
                 xpath=pmi_xpath,
             )
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
+            time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
             all_time_button_xpath = '//*[@id="macro-data"]/div[3]/div[2]/div[1]/div[1]/div[1]/div[1]/div[2]/div[1]/div[10]'
             self._click_element(
                 web_driver=web_driver,
@@ -1038,7 +1038,7 @@ class WebScraper:
 
             # 6. Navigate to URL
             web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
+            time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
 
             # 7. Logic for scraping
             self._logger.log_info(
@@ -1052,7 +1052,7 @@ class WebScraper:
                 web_driver=web_driver,
                 xpath=iip_panel_xpath,
             )
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
+            time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
             iip_xpath = (
                 '//*[@id="macro-data"]/div[3]/div[1]/div[1]/div[2]/div[5]/div[2]/div[2]'
             )
@@ -1060,7 +1060,7 @@ class WebScraper:
                 web_driver=web_driver,
                 xpath=iip_xpath,
             )
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
+            time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
             all_time_button_xpath = '//*[@id="macro-data"]/div[3]/div[2]/div[1]/div[1]/div[1]/div[1]/div[2]/div[1]/div[10]'
             self._click_element(
                 web_driver=web_driver,
@@ -1127,7 +1127,7 @@ class WebScraper:
 
             # 6. Navigate to URL
             web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
+            time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
 
             # 7. Logic for scraping
             self._logger.log_info(
@@ -1141,7 +1141,7 @@ class WebScraper:
                 web_driver=web_driver,
                 xpath=ipv_panel_xpath,
             )
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
+            time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
             ipv_xpath = (
                 '//*[@id="macro-data"]/div[3]/div[1]/div[1]/div[2]/div[5]/div[2]/div[3]'
             )
@@ -1149,7 +1149,96 @@ class WebScraper:
                 web_driver=web_driver,
                 xpath=ipv_xpath,
             )
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
+            time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
+            all_time_button_xpath = '//*[@id="macro-data"]/div[3]/div[2]/div[1]/div[1]/div[1]/div[1]/div[2]/div[1]/div[10]'
+            self._click_element(
+                web_driver=web_driver,
+                xpath=all_time_button_xpath,
+            )
+
+            table_title_xpath = (
+                '//*[@id="macro-data"]/div[3]/div[2]/div[2]/div[1]/div[1]'
+            )
+            WebDriverWait(web_driver, 10).until(
+                EC.presence_of_element_located((By.XPATH, table_title_xpath))
+            )
+            time.sleep(3)
+
+            bs4_parser = self._update_bs4_parser(web_driver)
+
+            headers, rows = self._extract_table_by_id(
+                bs4_parser=bs4_parser, id="tbl-macro-data"
+            )
+
+            # Write to CSV
+            with open(file_path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(headers)
+                writer.writerows(rows)
+
+        finally:
+            web_driver.close()
+
+        self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
+
+    def _scrape_data_macroeconomics_ipv_by_industry_vietstock(
+        self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
+    ):
+        self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
+
+        # Initialize web driver and bs4 parser
+        web_driver, bs4_parser = self._initialize_web_driver_and_bs4_parser()
+
+        try:
+            # 1. Initialize folder path and file name
+            folder_path = (
+                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            )
+            file_name = f"{key[2].value}"
+
+            # 2. Initialize start time and current time
+            start_year = SCRAPER_START_DATE.year
+            current_year = datetime.now().year
+
+            file_path = f"{folder_path}/{file_name}_{start_year}_{current_year}.csv"
+
+            # 3. Delete file if exists
+            if os.path.exists(file_path):
+                self._logger.log_info(f"File already exists: {file_path}, delete it.")
+                os.remove(file_path)
+
+            # 4. Create folder if not exists
+            if not os.path.exists(folder_path):
+                os.makedirs(folder_path, exist_ok=True)
+
+            # 5. Get SourceInfo
+            source_info = SCRAPE_MAPPING[key]
+
+            # 6. Navigate to URL
+            web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
+            time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
+
+            # 7. Logic for scraping
+            self._logger.log_info(
+                f"Scraping IPV BY INDUSTRY data from {start_year} to {current_year}."
+            )
+
+            ipv_by_industry_panel_xpath = (
+                '//*[@id="macro-data"]/div[3]/div[1]/div[1]/div[2]/div[5]/div[1]/span'
+            )
+            self._click_element(
+                web_driver=web_driver,
+                xpath=ipv_by_industry_panel_xpath,
+            )
+            time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
+            ipv_by_industry_xpath = (
+                '//*[@id="macro-data"]/div[3]/div[1]/div[1]/div[2]/div[5]/div[2]/div[4]'
+            )
+            self._click_element(
+                web_driver=web_driver,
+                xpath=ipv_by_industry_xpath,
+            )
+            time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
             all_time_button_xpath = '//*[@id="macro-data"]/div[3]/div[2]/div[1]/div[1]/div[1]/div[1]/div[2]/div[1]/div[10]'
             self._click_element(
                 web_driver=web_driver,
@@ -2525,6 +2614,13 @@ class WebScraper:
             ):
                 return self._scrape_data_macroeconomics_ipv_vietstock(key)
 
+            case (
+                ScrapeMainType.MACROECONOMICS,
+                MacroeconomicsSubType.IPV_BY_INDUSTRY,
+                IpvByIndustrySource.VIETSTOCK,
+            ):
+                return self._scrape_data_macroeconomics_ipv_by_industry_vietstock(key)
+
             # STOCK_MARKET
             case (
                 ScrapeMainType.STOCK_MARKET,
@@ -2573,121 +2669,131 @@ class WebScraper:
         self._logger.log_info("Adding macroeconomic data scraping tasks.")
         number_of_task_before = self._thread_manager.get_current_number_of_task()
 
-        # MACROECONOMICS_GDP_VIETSTOCK
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.GDP,
-            GdpSource.VIETSTOCK,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # # MACROECONOMICS_GDP_VIETSTOCK
+        # key = (
+        #     ScrapeMainType.MACROECONOMICS,
+        #     MacroeconomicsSubType.GDP,
+        #     GdpSource.VIETSTOCK,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
 
-        # MACROECONOMICS_CPI_VIETSTOCK
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.CPI,
-            CpiSource.VIETSTOCK,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # # MACROECONOMICS_CPI_VIETSTOCK
+        # key = (
+        #     ScrapeMainType.MACROECONOMICS,
+        #     MacroeconomicsSubType.CPI,
+        #     CpiSource.VIETSTOCK,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
 
-        # MACROECONOMICS_PPI_VIETSTOCK
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.PPI,
-            PpiSource.VIETSTOCK,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # # MACROECONOMICS_PPI_VIETSTOCK
+        # key = (
+        #     ScrapeMainType.MACROECONOMICS,
+        #     MacroeconomicsSubType.PPI,
+        #     PpiSource.VIETSTOCK,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
 
-        # MACROECONOMICS_IPI_VIETSTOCK
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.IPI,
-            IpiSource.VIETSTOCK,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # # MACROECONOMICS_IPI_VIETSTOCK
+        # key = (
+        #     ScrapeMainType.MACROECONOMICS,
+        #     MacroeconomicsSubType.IPI,
+        #     IpiSource.VIETSTOCK,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
 
-        # MACROECONOMICS_XPI_VIETSTOCK
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.XPI,
-            XpiSource.VIETSTOCK,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # # MACROECONOMICS_XPI_VIETSTOCK
+        # key = (
+        #     ScrapeMainType.MACROECONOMICS,
+        #     MacroeconomicsSubType.XPI,
+        #     XpiSource.VIETSTOCK,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
 
-        # MACROECONOMICS_MPI_VIETSTOCK
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.MPI,
-            MpiSource.VIETSTOCK,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # # MACROECONOMICS_MPI_VIETSTOCK
+        # key = (
+        #     ScrapeMainType.MACROECONOMICS,
+        #     MacroeconomicsSubType.MPI,
+        #     MpiSource.VIETSTOCK,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
 
-        # MACROECONOMICS_POPULATION_VIETSTOCK
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.POPULATION,
-            PopulationSource.VIETSTOCK,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # # MACROECONOMICS_POPULATION_VIETSTOCK
+        # key = (
+        #     ScrapeMainType.MACROECONOMICS,
+        #     MacroeconomicsSubType.POPULATION,
+        #     PopulationSource.VIETSTOCK,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
 
-        # MACROECONOMICS_EMPLOYMENT_VIETSTOCK
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.LABOR,
-            LaborSource.VIETSTOCK,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # # MACROECONOMICS_EMPLOYMENT_VIETSTOCK
+        # key = (
+        #     ScrapeMainType.MACROECONOMICS,
+        #     MacroeconomicsSubType.LABOR,
+        #     LaborSource.VIETSTOCK,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
 
-        # MACROECONOMICS_RETAIL_VIETSTOCK
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.RETAIL,
-            RetailSource.VIETSTOCK,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # # MACROECONOMICS_RETAIL_VIETSTOCK
+        # key = (
+        #     ScrapeMainType.MACROECONOMICS,
+        #     MacroeconomicsSubType.RETAIL,
+        #     RetailSource.VIETSTOCK,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
 
-        # MACROECONOMICS_PMI_VIETSTOCK
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.PMI,
-            PmiSource.VIETSTOCK,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # # MACROECONOMICS_PMI_VIETSTOCK
+        # key = (
+        #     ScrapeMainType.MACROECONOMICS,
+        #     MacroeconomicsSubType.PMI,
+        #     PmiSource.VIETSTOCK,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
 
-        # MACROECONOMICS_IIP_VIETSTOCK
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.IIP,
-            IipSource.VIETSTOCK,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # # MACROECONOMICS_IIP_VIETSTOCK
+        # key = (
+        #     ScrapeMainType.MACROECONOMICS,
+        #     MacroeconomicsSubType.IIP,
+        #     IipSource.VIETSTOCK,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
 
-        # MACROECONOMICS_IIP_VIETSTOCK
+        # # MACROECONOMICS_IPV_VIETSTOCK
+        # key = (
+        #     ScrapeMainType.MACROECONOMICS,
+        #     MacroeconomicsSubType.IPV,
+        #     IpvSource.VIETSTOCK,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
+
+        # MACROECONOMICS_IPV_BY_INDUSTRY_VIETSTOCK
         key = (
             ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.IPV,
-            IpvSource.VIETSTOCK,
+            MacroeconomicsSubType.IPV_BY_INDUSTRY,
+            IpvByIndustrySource.VIETSTOCK,
         )
         self._thread_manager.add_task(
             Task(format_key_for_name(key), self._scrape_data_from, key)

@@ -102,6 +102,7 @@ class MacroeconomicsSubType(Enum):
     PMI = "pmi"  # Purchasing Managers' Index
     IIP = "iip"  # Index of Industrial Production
     IPV = "ipv"  # Industrial Production Volume
+    IPV_BY_INDUSTRY = "ipv_by_industry"  # Industrial Production Volume by Industry
     GOLD_PRICE = "gold_price"
     OIL_PRICE = "oil_price"
     DOW_JONES = "dow_jones"
@@ -186,6 +187,10 @@ class IpvSource(Enum):
     VIETSTOCK = "vietstock"
 
 
+class IpvByIndustrySource(Enum):
+    VIETSTOCK = "vietstock"
+
+
 class GoldPriceSource(Enum):
     INVESTING = "investing"
 
@@ -263,6 +268,7 @@ Source = Union[
     PmiSource,
     IipSource,
     IpvSource,
+    IpvByIndustrySource,
     GoldPriceSource,
     OilPriceSource,
     DowJonesSource,
@@ -373,6 +379,13 @@ SCRAPE_MAPPING: Dict[Tuple[ScrapeMainType, ScrapeSubType, Source], SourceInfo] =
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.IPV,
         IpvSource.VIETSTOCK,
+    ): SourceInfo(
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
+    ),
+    (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.IPV_BY_INDUSTRY,
+        IpvByIndustrySource.VIETSTOCK,
     ): SourceInfo(
         url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
     ),
