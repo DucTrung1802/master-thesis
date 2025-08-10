@@ -98,12 +98,12 @@ class MacroeconomicsSubType(Enum):
     MPI = "mpi"
     POPULATION = "population"
     EMPLOYMENT = "employment"
+    RETAIL = "retail"
     EXCHANGE_RATE = "exchange_rate"
     INTEREST_RATE = "interest_rate"
     IMPORT = "import"
     FDI = "fdi"
     M2 = "m2"
-    RETAIL = "retail"
     POPULATION_UNEMPLOYMENT = "population_unemployment"
     GOLD_PRICE = "gold_price"
     OIL_PRICE = "oil_price"
@@ -173,6 +173,10 @@ class EmploymentSource(Enum):
     VIETSTOCK = "vietstock"
 
 
+class RetailSource(Enum):
+    VIETSTOCK = "vietstock"
+
+
 class ExchangeRateSource(Enum):
     VIETSTOCK = "vietstock"
 
@@ -186,10 +190,6 @@ class FdiSource(Enum):
 
 
 class M2Source(Enum):
-    VIETSTOCK = "vietstock"
-
-
-class RetailSource(Enum):
     VIETSTOCK = "vietstock"
 
 
@@ -270,11 +270,11 @@ Source = Union[
     MpiSource,
     PopulationSource,
     EmploymentSource,
+    RetailSource,
     ExchangeRateSource,
     InterestRateSource,
     FdiSource,
     M2Source,
-    RetailSource,
     PopulationUnemploymentSource,
     GoldPriceSource,
     OilPriceSource,
@@ -363,6 +363,13 @@ SCRAPE_MAPPING: Dict[Tuple[ScrapeMainType, ScrapeSubType, Source], SourceInfo] =
     ),
     (
         ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.RETAIL,
+        RetailSource.VIETSTOCK,
+    ): SourceInfo(
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7",
+    ),
+    (
+        ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.EXCHANGE_RATE,
         ExchangeRateSource.VIETSTOCK,
     ): SourceInfo(url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7"),
@@ -389,13 +396,6 @@ SCRAPE_MAPPING: Dict[Tuple[ScrapeMainType, ScrapeSubType, Source], SourceInfo] =
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.M2,
         M2Source.VIETSTOCK,
-    ): SourceInfo(
-        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7",
-    ),
-    (
-        ScrapeMainType.MACROECONOMICS,
-        MacroeconomicsSubType.RETAIL,
-        RetailSource.VIETSTOCK,
     ): SourceInfo(
         url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7",
     ),
