@@ -736,7 +736,7 @@ class WebScraper:
 
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
-    def _scrape_data_macroeconomics_employment_vietstock(
+    def _scrape_data_macroeconomics_labor_vietstock(
         self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
     ):
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
@@ -775,23 +775,23 @@ class WebScraper:
 
             # 7. Logic for scraping
             self._logger.log_info(
-                f"Scraping EMPLOYMENT data from {start_year} to {current_year}."
+                f"Scraping LABOR data from {start_year} to {current_year}."
             )
 
-            employment_panel_xpath = (
+            labor_panel_xpath = (
                 '//*[@id="macro-data"]/div[3]/div[1]/div[1]/div[2]/div[3]/div[1]/span'
             )
             self._click_element(
                 web_driver=web_driver,
-                xpath=employment_panel_xpath,
+                xpath=labor_panel_xpath,
             )
             time.sleep(SCRAPER_BASE_WAIT_TIME)
-            employment_xpath = (
+            labor_xpath = (
                 '//*[@id="macro-data"]/div[3]/div[1]/div[1]/div[2]/div[3]/div[2]/div[2]'
             )
             self._click_element(
                 web_driver=web_driver,
-                xpath=employment_xpath,
+                xpath=labor_xpath,
             )
             time.sleep(SCRAPER_BASE_WAIT_TIME)
             all_time_button_xpath = '//*[@id="macro-data"]/div[3]/div[2]/div[1]/div[1]/div[1]/div[1]/div[2]/div[1]/div[10]'
@@ -2492,10 +2492,10 @@ class WebScraper:
 
             case (
                 ScrapeMainType.MACROECONOMICS,
-                MacroeconomicsSubType.EMPLOYMENT,
-                EmploymentSource.VIETSTOCK,
+                MacroeconomicsSubType.LABOR,
+                LaborSource.VIETSTOCK,
             ):
-                return self._scrape_data_macroeconomics_employment_vietstock(key)
+                return self._scrape_data_macroeconomics_labor_vietstock(key)
 
             case (
                 ScrapeMainType.MACROECONOMICS,
@@ -2573,115 +2573,115 @@ class WebScraper:
         self._logger.log_info("Adding macroeconomic data scraping tasks.")
         number_of_task_before = self._thread_manager.get_current_number_of_task()
 
-        # # MACROECONOMICS_GDP_VIETSTOCK
-        # key = (
-        #     ScrapeMainType.MACROECONOMICS,
-        #     MacroeconomicsSubType.GDP,
-        #     GdpSource.VIETSTOCK,
-        # )
-        # self._thread_manager.add_task(
-        #     Task(format_key_for_name(key), self._scrape_data_from, key)
-        # )
+        # MACROECONOMICS_GDP_VIETSTOCK
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.GDP,
+            GdpSource.VIETSTOCK,
+        )
+        self._thread_manager.add_task(
+            Task(format_key_for_name(key), self._scrape_data_from, key)
+        )
 
-        # # MACROECONOMICS_CPI_VIETSTOCK
-        # key = (
-        #     ScrapeMainType.MACROECONOMICS,
-        #     MacroeconomicsSubType.CPI,
-        #     CpiSource.VIETSTOCK,
-        # )
-        # self._thread_manager.add_task(
-        #     Task(format_key_for_name(key), self._scrape_data_from, key)
-        # )
+        # MACROECONOMICS_CPI_VIETSTOCK
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.CPI,
+            CpiSource.VIETSTOCK,
+        )
+        self._thread_manager.add_task(
+            Task(format_key_for_name(key), self._scrape_data_from, key)
+        )
 
-        # # MACROECONOMICS_PPI_VIETSTOCK
-        # key = (
-        #     ScrapeMainType.MACROECONOMICS,
-        #     MacroeconomicsSubType.PPI,
-        #     PpiSource.VIETSTOCK,
-        # )
-        # self._thread_manager.add_task(
-        #     Task(format_key_for_name(key), self._scrape_data_from, key)
-        # )
+        # MACROECONOMICS_PPI_VIETSTOCK
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.PPI,
+            PpiSource.VIETSTOCK,
+        )
+        self._thread_manager.add_task(
+            Task(format_key_for_name(key), self._scrape_data_from, key)
+        )
 
-        # # MACROECONOMICS_IPI_VIETSTOCK
-        # key = (
-        #     ScrapeMainType.MACROECONOMICS,
-        #     MacroeconomicsSubType.IPI,
-        #     IpiSource.VIETSTOCK,
-        # )
-        # self._thread_manager.add_task(
-        #     Task(format_key_for_name(key), self._scrape_data_from, key)
-        # )
+        # MACROECONOMICS_IPI_VIETSTOCK
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.IPI,
+            IpiSource.VIETSTOCK,
+        )
+        self._thread_manager.add_task(
+            Task(format_key_for_name(key), self._scrape_data_from, key)
+        )
 
-        # # MACROECONOMICS_XPI_VIETSTOCK
-        # key = (
-        #     ScrapeMainType.MACROECONOMICS,
-        #     MacroeconomicsSubType.XPI,
-        #     XpiSource.VIETSTOCK,
-        # )
-        # self._thread_manager.add_task(
-        #     Task(format_key_for_name(key), self._scrape_data_from, key)
-        # )
+        # MACROECONOMICS_XPI_VIETSTOCK
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.XPI,
+            XpiSource.VIETSTOCK,
+        )
+        self._thread_manager.add_task(
+            Task(format_key_for_name(key), self._scrape_data_from, key)
+        )
 
-        # # MACROECONOMICS_MPI_VIETSTOCK
-        # key = (
-        #     ScrapeMainType.MACROECONOMICS,
-        #     MacroeconomicsSubType.MPI,
-        #     MpiSource.VIETSTOCK,
-        # )
-        # self._thread_manager.add_task(
-        #     Task(format_key_for_name(key), self._scrape_data_from, key)
-        # )
+        # MACROECONOMICS_MPI_VIETSTOCK
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.MPI,
+            MpiSource.VIETSTOCK,
+        )
+        self._thread_manager.add_task(
+            Task(format_key_for_name(key), self._scrape_data_from, key)
+        )
 
-        # # MACROECONOMICS_POPULATION_VIETSTOCK
-        # key = (
-        #     ScrapeMainType.MACROECONOMICS,
-        #     MacroeconomicsSubType.POPULATION,
-        #     PopulationSource.VIETSTOCK,
-        # )
-        # self._thread_manager.add_task(
-        #     Task(format_key_for_name(key), self._scrape_data_from, key)
-        # )
+        # MACROECONOMICS_POPULATION_VIETSTOCK
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.POPULATION,
+            PopulationSource.VIETSTOCK,
+        )
+        self._thread_manager.add_task(
+            Task(format_key_for_name(key), self._scrape_data_from, key)
+        )
 
-        # # MACROECONOMICS_EMPLOYMENT_VIETSTOCK
-        # key = (
-        #     ScrapeMainType.MACROECONOMICS,
-        #     MacroeconomicsSubType.EMPLOYMENT,
-        #     EmploymentSource.VIETSTOCK,
-        # )
-        # self._thread_manager.add_task(
-        #     Task(format_key_for_name(key), self._scrape_data_from, key)
-        # )
+        # MACROECONOMICS_EMPLOYMENT_VIETSTOCK
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.LABOR,
+            LaborSource.VIETSTOCK,
+        )
+        self._thread_manager.add_task(
+            Task(format_key_for_name(key), self._scrape_data_from, key)
+        )
 
-        # # MACROECONOMICS_RETAIL_VIETSTOCK
-        # key = (
-        #     ScrapeMainType.MACROECONOMICS,
-        #     MacroeconomicsSubType.RETAIL,
-        #     RetailSource.VIETSTOCK,
-        # )
-        # self._thread_manager.add_task(
-        #     Task(format_key_for_name(key), self._scrape_data_from, key)
-        # )
+        # MACROECONOMICS_RETAIL_VIETSTOCK
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.RETAIL,
+            RetailSource.VIETSTOCK,
+        )
+        self._thread_manager.add_task(
+            Task(format_key_for_name(key), self._scrape_data_from, key)
+        )
 
-        # # MACROECONOMICS_PMI_VIETSTOCK
-        # key = (
-        #     ScrapeMainType.MACROECONOMICS,
-        #     MacroeconomicsSubType.PMI,
-        #     PmiSource.VIETSTOCK,
-        # )
-        # self._thread_manager.add_task(
-        #     Task(format_key_for_name(key), self._scrape_data_from, key)
-        # )
+        # MACROECONOMICS_PMI_VIETSTOCK
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.PMI,
+            PmiSource.VIETSTOCK,
+        )
+        self._thread_manager.add_task(
+            Task(format_key_for_name(key), self._scrape_data_from, key)
+        )
 
-        # # MACROECONOMICS_IIP_VIETSTOCK
-        # key = (
-        #     ScrapeMainType.MACROECONOMICS,
-        #     MacroeconomicsSubType.IIP,
-        #     IipSource.VIETSTOCK,
-        # )
-        # self._thread_manager.add_task(
-        #     Task(format_key_for_name(key), self._scrape_data_from, key)
-        # )
+        # MACROECONOMICS_IIP_VIETSTOCK
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.IIP,
+            IipSource.VIETSTOCK,
+        )
+        self._thread_manager.add_task(
+            Task(format_key_for_name(key), self._scrape_data_from, key)
+        )
 
         # MACROECONOMICS_IIP_VIETSTOCK
         key = (
