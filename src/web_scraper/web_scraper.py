@@ -2510,66 +2510,20 @@ class WebScraper:
                 PmiSource.VIETSTOCK,
             ):
                 return self._scrape_data_macroeconomics_pmi_vietstock(key)
-            
+
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.IIP,
                 IipSource.VIETSTOCK,
             ):
                 return self._scrape_data_macroeconomics_iip_vietstock(key)
-            
+
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.IPV,
                 IpvSource.VIETSTOCK,
             ):
                 return self._scrape_data_macroeconomics_ipv_vietstock(key)
-
-            case (
-                ScrapeMainType.MACROECONOMICS,
-                MacroeconomicsSubType.EXCHANGE_RATE,
-                ExchangeRateSource.VIETSTOCK,
-            ):
-                return self._scrape_data_macroeconomics_exchange_rate_vietstock(key)
-
-            case (
-                ScrapeMainType.MACROECONOMICS,
-                MacroeconomicsSubType.INTEREST_RATE,
-                InterestRateSource.VIETSTOCK,
-            ):
-                return self._scrape_data_macroeconomics_interest_rate_vietstock(key)
-
-            # case (
-            #     ScrapeMainType.MACROECONOMICS,
-            #     MacroeconomicsSubType.EXPORT,
-            #     ExportImportSource.VIETSTOCK,
-            # ):
-            #     return self._scrape_data_macroeconomics_export_import_vietstock(key)
-
-            case (
-                ScrapeMainType.MACROECONOMICS,
-                MacroeconomicsSubType.FDI,
-                FdiSource.VIETSTOCK,
-            ):
-                return self._scrape_data_macroeconomics_fdi_vietstock(key)
-
-            case (
-                ScrapeMainType.MACROECONOMICS,
-                MacroeconomicsSubType.M2,
-                M2Source.VIETSTOCK,
-            ):
-                return self._scrape_data_macroeconomics_m2_vietstock(key)
-
-            case (
-                ScrapeMainType.MACROECONOMICS,
-                MacroeconomicsSubType.POPULATION_UNEMPLOYMENT,
-                PopulationUnemploymentSource.VIETSTOCK,
-            ):
-                return (
-                    self._scrape_data_macroeconomics_population_unemployment_vietstock(
-                        key
-                    )
-                )
 
             # STOCK_MARKET
             case (
@@ -2718,7 +2672,7 @@ class WebScraper:
         # self._thread_manager.add_task(
         #     Task(format_key_for_name(key), self._scrape_data_from, key)
         # )
-        
+
         # # MACROECONOMICS_IIP_VIETSTOCK
         # key = (
         #     ScrapeMainType.MACROECONOMICS,
@@ -2728,7 +2682,7 @@ class WebScraper:
         # self._thread_manager.add_task(
         #     Task(format_key_for_name(key), self._scrape_data_from, key)
         # )
-        
+
         # MACROECONOMICS_IIP_VIETSTOCK
         key = (
             ScrapeMainType.MACROECONOMICS,
