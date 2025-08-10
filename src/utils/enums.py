@@ -101,6 +101,7 @@ class MacroeconomicsSubType(Enum):
     RETAIL = "retail"
     PMI = "pmi"
     IIP = "iip"
+    IPV = "ipv"
     EXCHANGE_RATE = "exchange_rate"
     INTEREST_RATE = "interest_rate"
     IMPORT = "import"
@@ -181,9 +182,13 @@ class RetailSource(Enum):
 
 class PmiSource(Enum):
     VIETSTOCK = "vietstock"
-    
+
 
 class IipSource(Enum):
+    VIETSTOCK = "vietstock"
+
+
+class IpvSource(Enum):
     VIETSTOCK = "vietstock"
 
 
@@ -283,6 +288,7 @@ Source = Union[
     RetailSource,
     PmiSource,
     IipSource,
+    IpvSource,
     ExchangeRateSource,
     InterestRateSource,
     FdiSource,
@@ -391,6 +397,13 @@ SCRAPE_MAPPING: Dict[Tuple[ScrapeMainType, ScrapeSubType, Source], SourceInfo] =
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.IIP,
         IipSource.VIETSTOCK,
+    ): SourceInfo(
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7",
+    ),
+    (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.IPV,
+        IpvSource.VIETSTOCK,
     ): SourceInfo(
         url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7",
     ),
