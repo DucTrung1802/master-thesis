@@ -97,6 +97,7 @@ class MacroeconomicsSubType(Enum):
     XPI = "xpi"
     MPI = "mpi"
     POPULATION = "population"
+    EMPLOYMENT = "employment"
     EXCHANGE_RATE = "exchange_rate"
     INTEREST_RATE = "interest_rate"
     IMPORT = "import"
@@ -165,6 +166,10 @@ class MpiSource(Enum):
 
 
 class PopulationSource(Enum):
+    VIETSTOCK = "vietstock"
+
+
+class EmploymentSource(Enum):
     VIETSTOCK = "vietstock"
 
 
@@ -264,6 +269,7 @@ Source = Union[
     XpiSource,
     MpiSource,
     PopulationSource,
+    EmploymentSource,
     ExchangeRateSource,
     InterestRateSource,
     FdiSource,
@@ -345,6 +351,13 @@ SCRAPE_MAPPING: Dict[Tuple[ScrapeMainType, ScrapeSubType, Source], SourceInfo] =
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.POPULATION,
         PopulationSource.VIETSTOCK,
+    ): SourceInfo(
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7",
+    ),
+    (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.EMPLOYMENT,
+        EmploymentSource.VIETSTOCK,
     ): SourceInfo(
         url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7",
     ),
