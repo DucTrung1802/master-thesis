@@ -119,6 +119,7 @@ class MacroeconomicsSubType(Enum):
     RRRR = "rrrr"  # Rediscount rate, Refinancing rate
     FDI_SECTOR = "fdi_sector"  # Foreign Direct Investment by Sector
     FDI_RD = "fdi_rd"  # Foreign Direct Investment Registration, Disbursement
+    EXPORT = "export"  # Export statistics
     GOLD_PRICE = "gold_price"
     OIL_PRICE = "oil_price"
     DOW_JONES = "dow_jones"
@@ -271,6 +272,10 @@ class FdiRdSource(Enum):
     VIETSTOCK = "vietstock"
 
 
+class ExportSource(Enum):
+    VIETSTOCK = "vietstock"
+
+
 class GoldPriceSource(Enum):
     INVESTING = "investing"
 
@@ -365,6 +370,7 @@ Source = Union[
     RrrrSource,
     FdiSectorSource,
     FdiRdSource,
+    ExportSource,
     GoldPriceSource,
     OilPriceSource,
     DowJonesSource,
@@ -594,6 +600,13 @@ SCRAPE_MAPPING: Dict[Tuple[ScrapeMainType, ScrapeSubType, Source], SourceInfo] =
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.FDI_RD,
         FdiRdSource.VIETSTOCK,
+    ): SourceInfo(
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
+    ),
+    (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.EXPORT,
+        ExportSource.VIETSTOCK,
     ): SourceInfo(
         url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
     ),

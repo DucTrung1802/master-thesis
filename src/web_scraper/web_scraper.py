@@ -2965,7 +2965,7 @@ class WebScraper:
 
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
-    def _scrape_data_macroeconomics_fdi_rd_vietstock(
+    def _scrape_data_macroeconomics_export_vietstock(
         self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
     ):
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
@@ -3004,23 +3004,23 @@ class WebScraper:
 
             # 7. Logic for scraping
             self._logger.log_info(
-                f"Scraping FDI RD data from {start_year} to {current_year}."
+                f"Scraping EXPORT data from {start_year} to {current_year}."
             )
 
-            fdi_rd_panel_xpath = (
-                '//*[@id="macro-data"]/div[3]/div[1]/div[1]/div[2]/div[10]/div[1]/span'
+            export_panel_xpath = (
+                '//*[@id="macro-data"]/div[3]/div[1]/div[1]/div[2]/div[11]/div[1]/span'
             )
             self._click_element(
                 web_driver=web_driver,
-                xpath=fdi_rd_panel_xpath,
+                xpath=export_panel_xpath,
             )
             time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
-            fdi_rd_xpath = (
-                '//*[@id="macro-data"]/div[3]/div[1]/div[1]/div[2]/div[10]/div[2]/div[2]'
+            export_xpath = (
+                '//*[@id="macro-data"]/div[3]/div[1]/div[1]/div[2]/div[11]/div[2]/div[1]'
             )
             self._click_element(
                 web_driver=web_driver,
-                xpath=fdi_rd_xpath,
+                xpath=export_xpath,
             )
             time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
             all_time_button_xpath = '//*[@id="macro-data"]/div[3]/div[2]/div[1]/div[1]/div[1]/div[1]/div[2]/div[1]/div[10]'
@@ -4514,6 +4514,13 @@ class WebScraper:
                 FdiRdSource.VIETSTOCK,
             ):
                 return self._scrape_data_macroeconomics_fdi_rd_vietstock(key)
+            
+            case (
+                ScrapeMainType.MACROECONOMICS,
+                MacroeconomicsSubType.EXPORT,
+                ExportSource.VIETSTOCK,
+            ):
+                return self._scrape_data_macroeconomics_export_vietstock(key)
 
             # STOCK_MARKET
             case (
@@ -4843,11 +4850,21 @@ class WebScraper:
         #     Task(format_key_for_name(key), self._scrape_data_from, key)
         # )
         
-        # MACROECONOMICS_FDI_RD_VIETSTOCK
+        # # MACROECONOMICS_FDI_RD_VIETSTOCK
+        # key = (
+        #     ScrapeMainType.MACROECONOMICS,
+        #     MacroeconomicsSubType.FDI_RD,
+        #     FdiRdSource.VIETSTOCK,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
+
+        # MACROECONOMICS_EXPORT_VIETSTOCK
         key = (
             ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.FDI_RD,
-            FdiRdSource.VIETSTOCK,
+            MacroeconomicsSubType.EXPORT,
+            ExportSource.VIETSTOCK,
         )
         self._thread_manager.add_task(
             Task(format_key_for_name(key), self._scrape_data_from, key)
