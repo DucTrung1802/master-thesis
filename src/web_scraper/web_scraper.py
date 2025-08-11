@@ -2032,9 +2032,7 @@ class WebScraper:
                 xpath=treg_panel_xpath,
             )
             time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
-            treg_xpath = (
-                '//*[@id="macro-data"]/div[3]/div[1]/div[1]/div[2]/div[8]/div[2]/div[10]'
-            )
+            treg_xpath = '//*[@id="macro-data"]/div[3]/div[1]/div[1]/div[2]/div[8]/div[2]/div[10]'
             self._click_element(
                 web_driver=web_driver,
                 xpath=treg_xpath,
@@ -2249,78 +2247,6 @@ class WebScraper:
 
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
-
-        self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
-
-        # Initialize web driver and bs4 parser
-        web_driver, bs4_parser = self._initialize_web_driver_and_bs4_parser()
-
-        try:
-            # 1. Initialize folder path and file name
-            folder_path = (
-                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            )
-            file_name = f"{key[2].value}"
-
-            # 2. Initialize start time and current time
-            start_date = SCRAPER_START_DATE
-            start_year = start_date.year
-            input_start_date = start_date.strftime("%d/%m/%Y")
-
-            current_date = datetime.now().date()
-            current_year = current_date.year
-            input_current_date = current_date.strftime("%d/%m/%Y")
-
-            file_path = f"{folder_path}/{file_name}_{start_year}_{current_year}.csv"
-
-            # 3. Check if file(s) already exists
-            if os.path.exists(file_path):
-                self._logger.log_info(f"File already exists: {file_path}")
-                return
-
-            # 4. Create folder if not exists
-            if not os.path.exists(folder_path):
-                os.makedirs(folder_path, exist_ok=True)
-
-            # 5. Get SourceInfo
-            source_info = SCRAPE_MAPPING[key]
-
-            # 6. Navigate to URL
-            web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
-
-            # 7. Logic for scraping
-            xpaths = {
-                "time_unit": '//*[@id="macro-content"]/div/div/div[3]/div/div[3]/div/div[1]/select',
-                "from_date": '//*[@id="txtFromTradeDate"]/input',
-                "to_date": '//*[@id="txtToTradeDate"]/input',
-                "view_button": '//*[@id="macro-content"]/div/div/div[3]/div/div[3]/div/button',
-            }
-
-            self._select_dropdown_by_text(web_driver, xpaths["time_unit"], "Ngày")
-            self._input_text(web_driver, xpaths["from_date"], input_start_date)
-            self._input_text(web_driver, xpaths["to_date"], input_current_date)
-
-            self._click_element(web_driver, xpaths["view_button"])
-            WebDriverWait(web_driver, 10).until(
-                EC.presence_of_element_located((By.ID, "tbl-macro-data"))
-            )
-
-            bs4_parser = self._update_bs4_parser(web_driver)
-
-            headers, rows = self._extract_table_by_id(bs4_parser, "tbl-macro-data")
-
-            # Write to CSV
-            with open(file_path, "w", newline="", encoding="utf-8") as f:
-                writer = csv.writer(f)
-                writer.writerow(headers)
-                writer.writerows(rows)
-
-        finally:
-            web_driver.close()
-
-        self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
-
     def _scrape_data_macroeconomics_exchange_rate_vietstock(
         self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
     ):
@@ -2398,78 +2324,6 @@ class WebScraper:
             headers, rows = self._extract_table_by_id(
                 bs4_parser=bs4_parser, id="tbl-macro-data"
             )
-
-            # Write to CSV
-            with open(file_path, "w", newline="", encoding="utf-8") as f:
-                writer = csv.writer(f)
-                writer.writerow(headers)
-                writer.writerows(rows)
-
-        finally:
-            web_driver.close()
-
-        self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
-
-
-        self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
-
-        # Initialize web driver and bs4 parser
-        web_driver, bs4_parser = self._initialize_web_driver_and_bs4_parser()
-
-        try:
-            # 1. Initialize folder path and file name
-            folder_path = (
-                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            )
-            file_name = f"{key[2].value}"
-
-            # 2. Initialize start time and current time
-            start_date = SCRAPER_START_DATE
-            start_year = start_date.year
-            input_start_date = start_date.strftime("%d/%m/%Y")
-
-            current_date = datetime.now().date()
-            current_year = current_date.year
-            input_current_date = current_date.strftime("%d/%m/%Y")
-
-            file_path = f"{folder_path}/{file_name}_{start_year}_{current_year}.csv"
-
-            # 3. Check if file(s) already exists
-            if os.path.exists(file_path):
-                self._logger.log_info(f"File already exists: {file_path}")
-                return
-
-            # 4. Create folder if not exists
-            if not os.path.exists(folder_path):
-                os.makedirs(folder_path, exist_ok=True)
-
-            # 5. Get SourceInfo
-            source_info = SCRAPE_MAPPING[key]
-
-            # 6. Navigate to URL
-            web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
-
-            # 7. Logic for scraping
-            xpaths = {
-                "time_unit": '//*[@id="macro-content"]/div/div/div[3]/div/div[3]/div/div[1]/select',
-                "from_date": '//*[@id="txtFromTradeDate"]/input',
-                "to_date": '//*[@id="txtToTradeDate"]/input',
-                "view_button": '//*[@id="macro-content"]/div/div/div[3]/div/div[3]/div/button',
-            }
-
-            self._select_dropdown_by_text(web_driver, xpaths["time_unit"], "Ngày")
-            self._input_text(web_driver, xpaths["from_date"], input_start_date)
-            self._input_text(web_driver, xpaths["to_date"], input_current_date)
-
-            self._click_element(web_driver, xpaths["view_button"])
-            WebDriverWait(web_driver, 10).until(
-                EC.presence_of_element_located((By.ID, "tbl-macro-data"))
-            )
-
-            bs4_parser = self._update_bs4_parser(web_driver)
-
-            headers, rows = self._extract_table_by_id(bs4_parser, "tbl-macro-data")
 
             # Write to CSV
             with open(file_path, "w", newline="", encoding="utf-8") as f:
@@ -2571,78 +2425,6 @@ class WebScraper:
 
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
-
-        self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
-
-        # Initialize web driver and bs4 parser
-        web_driver, bs4_parser = self._initialize_web_driver_and_bs4_parser()
-
-        try:
-            # 1. Initialize folder path and file name
-            folder_path = (
-                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            )
-            file_name = f"{key[2].value}"
-
-            # 2. Initialize start time and current time
-            start_date = SCRAPER_START_DATE
-            start_year = start_date.year
-            input_start_date = start_date.strftime("%d/%m/%Y")
-
-            current_date = datetime.now().date()
-            current_year = current_date.year
-            input_current_date = current_date.strftime("%d/%m/%Y")
-
-            file_path = f"{folder_path}/{file_name}_{start_year}_{current_year}.csv"
-
-            # 3. Check if file(s) already exists
-            if os.path.exists(file_path):
-                self._logger.log_info(f"File already exists: {file_path}")
-                return
-
-            # 4. Create folder if not exists
-            if not os.path.exists(folder_path):
-                os.makedirs(folder_path, exist_ok=True)
-
-            # 5. Get SourceInfo
-            source_info = SCRAPE_MAPPING[key]
-
-            # 6. Navigate to URL
-            web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
-
-            # 7. Logic for scraping
-            xpaths = {
-                "time_unit": '//*[@id="macro-content"]/div/div/div[3]/div/div[3]/div/div[1]/select',
-                "from_date": '//*[@id="txtFromTradeDate"]/input',
-                "to_date": '//*[@id="txtToTradeDate"]/input',
-                "view_button": '//*[@id="macro-content"]/div/div/div[3]/div/div[3]/div/button',
-            }
-
-            self._select_dropdown_by_text(web_driver, xpaths["time_unit"], "Ngày")
-            self._input_text(web_driver, xpaths["from_date"], input_start_date)
-            self._input_text(web_driver, xpaths["to_date"], input_current_date)
-
-            self._click_element(web_driver, xpaths["view_button"])
-            WebDriverWait(web_driver, 10).until(
-                EC.presence_of_element_located((By.ID, "tbl-macro-data"))
-            )
-
-            bs4_parser = self._update_bs4_parser(web_driver)
-
-            headers, rows = self._extract_table_by_id(bs4_parser, "tbl-macro-data")
-
-            # Write to CSV
-            with open(file_path, "w", newline="", encoding="utf-8") as f:
-                writer = csv.writer(f)
-                writer.writerow(headers)
-                writer.writerows(rows)
-
-        finally:
-            web_driver.close()
-
-        self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
-
     def _scrape_data_macroeconomics_rrrr_vietstock(
         self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
     ):
@@ -2732,78 +2514,6 @@ class WebScraper:
 
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
-
-        self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
-
-        # Initialize web driver and bs4 parser
-        web_driver, bs4_parser = self._initialize_web_driver_and_bs4_parser()
-
-        try:
-            # 1. Initialize folder path and file name
-            folder_path = (
-                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            )
-            file_name = f"{key[2].value}"
-
-            # 2. Initialize start time and current time
-            start_date = SCRAPER_START_DATE
-            start_year = start_date.year
-            input_start_date = start_date.strftime("%d/%m/%Y")
-
-            current_date = datetime.now().date()
-            current_year = current_date.year
-            input_current_date = current_date.strftime("%d/%m/%Y")
-
-            file_path = f"{folder_path}/{file_name}_{start_year}_{current_year}.csv"
-
-            # 3. Check if file(s) already exists
-            if os.path.exists(file_path):
-                self._logger.log_info(f"File already exists: {file_path}")
-                return
-
-            # 4. Create folder if not exists
-            if not os.path.exists(folder_path):
-                os.makedirs(folder_path, exist_ok=True)
-
-            # 5. Get SourceInfo
-            source_info = SCRAPE_MAPPING[key]
-
-            # 6. Navigate to URL
-            web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
-
-            # 7. Logic for scraping
-            xpaths = {
-                "time_unit": '//*[@id="macro-content"]/div/div/div[3]/div/div[3]/div/div[1]/select',
-                "from_date": '//*[@id="txtFromTradeDate"]/input',
-                "to_date": '//*[@id="txtToTradeDate"]/input',
-                "view_button": '//*[@id="macro-content"]/div/div/div[3]/div/div[3]/div/button',
-            }
-
-            self._select_dropdown_by_text(web_driver, xpaths["time_unit"], "Ngày")
-            self._input_text(web_driver, xpaths["from_date"], input_start_date)
-            self._input_text(web_driver, xpaths["to_date"], input_current_date)
-
-            self._click_element(web_driver, xpaths["view_button"])
-            WebDriverWait(web_driver, 10).until(
-                EC.presence_of_element_located((By.ID, "tbl-macro-data"))
-            )
-
-            bs4_parser = self._update_bs4_parser(web_driver)
-
-            headers, rows = self._extract_table_by_id(bs4_parser, "tbl-macro-data")
-
-            # Write to CSV
-            with open(file_path, "w", newline="", encoding="utf-8") as f:
-                writer = csv.writer(f)
-                writer.writerow(headers)
-                writer.writerows(rows)
-
-        finally:
-            web_driver.close()
-
-        self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
-
     def _scrape_data_macroeconomics_fdi_sector_vietstock(
         self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
     ):
@@ -2854,9 +2564,7 @@ class WebScraper:
                 xpath=fdi_sector_panel_xpath,
             )
             time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
-            fdi_sector_xpath = (
-                '//*[@id="macro-data"]/div[3]/div[1]/div[1]/div[2]/div[10]/div[2]/div[1]'
-            )
+            fdi_sector_xpath = '//*[@id="macro-data"]/div[3]/div[1]/div[1]/div[2]/div[10]/div[2]/div[1]'
             self._click_element(
                 web_driver=web_driver,
                 xpath=fdi_sector_xpath,
@@ -2893,7 +2601,9 @@ class WebScraper:
 
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
-
+    def _scrape_data_macroeconomics_fdi_rd_vietstock(
+        self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
+    ):
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
 
         # Initialize web driver and bs4 parser
@@ -2907,20 +2617,15 @@ class WebScraper:
             file_name = f"{key[2].value}"
 
             # 2. Initialize start time and current time
-            start_date = SCRAPER_START_DATE
-            start_year = start_date.year
-            input_start_date = start_date.strftime("%d/%m/%Y")
-
-            current_date = datetime.now().date()
-            current_year = current_date.year
-            input_current_date = current_date.strftime("%d/%m/%Y")
+            start_year = SCRAPER_START_DATE.year
+            current_year = datetime.now().year
 
             file_path = f"{folder_path}/{file_name}_{start_year}_{current_year}.csv"
 
-            # 3. Check if file(s) already exists
+            # 3. Delete file if exists
             if os.path.exists(file_path):
-                self._logger.log_info(f"File already exists: {file_path}")
-                return
+                self._logger.log_info(f"File already exists: {file_path}, delete it.")
+                os.remove(file_path)
 
             # 4. Create folder if not exists
             if not os.path.exists(folder_path):
@@ -2931,28 +2636,46 @@ class WebScraper:
 
             # 6. Navigate to URL
             web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
+            time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
 
             # 7. Logic for scraping
-            xpaths = {
-                "time_unit": '//*[@id="macro-content"]/div/div/div[3]/div/div[3]/div/div[1]/select',
-                "from_date": '//*[@id="txtFromTradeDate"]/input',
-                "to_date": '//*[@id="txtToTradeDate"]/input',
-                "view_button": '//*[@id="macro-content"]/div/div/div[3]/div/div[3]/div/button',
-            }
-
-            self._select_dropdown_by_text(web_driver, xpaths["time_unit"], "Ngày")
-            self._input_text(web_driver, xpaths["from_date"], input_start_date)
-            self._input_text(web_driver, xpaths["to_date"], input_current_date)
-
-            self._click_element(web_driver, xpaths["view_button"])
-            WebDriverWait(web_driver, 10).until(
-                EC.presence_of_element_located((By.ID, "tbl-macro-data"))
+            self._logger.log_info(
+                f"Scraping FDI RD data from {start_year} to {current_year}."
             )
+
+            fdi_rd_panel_xpath = (
+                '//*[@id="macro-data"]/div[3]/div[1]/div[1]/div[2]/div[10]/div[1]/span'
+            )
+            self._click_element(
+                web_driver=web_driver,
+                xpath=fdi_rd_panel_xpath,
+            )
+            time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
+            fdi_rd_xpath = '//*[@id="macro-data"]/div[3]/div[1]/div[1]/div[2]/div[10]/div[2]/div[2]'
+            self._click_element(
+                web_driver=web_driver,
+                xpath=fdi_rd_xpath,
+            )
+            time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
+            all_time_button_xpath = '//*[@id="macro-data"]/div[3]/div[2]/div[1]/div[1]/div[1]/div[1]/div[2]/div[1]/div[10]'
+            self._click_element(
+                web_driver=web_driver,
+                xpath=all_time_button_xpath,
+            )
+
+            table_title_xpath = (
+                '//*[@id="macro-data"]/div[3]/div[2]/div[2]/div[1]/div[1]'
+            )
+            WebDriverWait(web_driver, 10).until(
+                EC.presence_of_element_located((By.XPATH, table_title_xpath))
+            )
+            time.sleep(3)
 
             bs4_parser = self._update_bs4_parser(web_driver)
 
-            headers, rows = self._extract_table_by_id(bs4_parser, "tbl-macro-data")
+            headers, rows = self._extract_table_by_id(
+                bs4_parser=bs4_parser, id="tbl-macro-data"
+            )
 
             # Write to CSV
             with open(file_path, "w", newline="", encoding="utf-8") as f:
@@ -3015,9 +2738,7 @@ class WebScraper:
                 xpath=export_panel_xpath,
             )
             time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
-            export_xpath = (
-                '//*[@id="macro-data"]/div[3]/div[1]/div[1]/div[2]/div[11]/div[2]/div[1]'
-            )
+            export_xpath = '//*[@id="macro-data"]/div[3]/div[1]/div[1]/div[2]/div[11]/div[2]/div[1]'
             self._click_element(
                 web_driver=web_driver,
                 xpath=export_xpath,
@@ -3042,78 +2763,6 @@ class WebScraper:
             headers, rows = self._extract_table_by_id(
                 bs4_parser=bs4_parser, id="tbl-macro-data"
             )
-
-            # Write to CSV
-            with open(file_path, "w", newline="", encoding="utf-8") as f:
-                writer = csv.writer(f)
-                writer.writerow(headers)
-                writer.writerows(rows)
-
-        finally:
-            web_driver.close()
-
-        self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
-
-
-        self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
-
-        # Initialize web driver and bs4 parser
-        web_driver, bs4_parser = self._initialize_web_driver_and_bs4_parser()
-
-        try:
-            # 1. Initialize folder path and file name
-            folder_path = (
-                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            )
-            file_name = f"{key[2].value}"
-
-            # 2. Initialize start time and current time
-            start_date = SCRAPER_START_DATE
-            start_year = start_date.year
-            input_start_date = start_date.strftime("%d/%m/%Y")
-
-            current_date = datetime.now().date()
-            current_year = current_date.year
-            input_current_date = current_date.strftime("%d/%m/%Y")
-
-            file_path = f"{folder_path}/{file_name}_{start_year}_{current_year}.csv"
-
-            # 3. Check if file(s) already exists
-            if os.path.exists(file_path):
-                self._logger.log_info(f"File already exists: {file_path}")
-                return
-
-            # 4. Create folder if not exists
-            if not os.path.exists(folder_path):
-                os.makedirs(folder_path, exist_ok=True)
-
-            # 5. Get SourceInfo
-            source_info = SCRAPE_MAPPING[key]
-
-            # 6. Navigate to URL
-            web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
-
-            # 7. Logic for scraping
-            xpaths = {
-                "time_unit": '//*[@id="macro-content"]/div/div/div[3]/div/div[3]/div/div[1]/select',
-                "from_date": '//*[@id="txtFromTradeDate"]/input',
-                "to_date": '//*[@id="txtToTradeDate"]/input',
-                "view_button": '//*[@id="macro-content"]/div/div/div[3]/div/div[3]/div/button',
-            }
-
-            self._select_dropdown_by_text(web_driver, xpaths["time_unit"], "Ngày")
-            self._input_text(web_driver, xpaths["from_date"], input_start_date)
-            self._input_text(web_driver, xpaths["to_date"], input_current_date)
-
-            self._click_element(web_driver, xpaths["view_button"])
-            WebDriverWait(web_driver, 10).until(
-                EC.presence_of_element_located((By.ID, "tbl-macro-data"))
-            )
-
-            bs4_parser = self._update_bs4_parser(web_driver)
-
-            headers, rows = self._extract_table_by_id(bs4_parser, "tbl-macro-data")
 
             # Write to CSV
             with open(file_path, "w", newline="", encoding="utf-8") as f:
@@ -3176,9 +2825,7 @@ class WebScraper:
                 xpath=import_panel_xpath,
             )
             time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
-            import_xpath = (
-                '//*[@id="macro-data"]/div[3]/div[1]/div[1]/div[2]/div[11]/div[2]/div[2]'
-            )
+            import_xpath = '//*[@id="macro-data"]/div[3]/div[1]/div[1]/div[2]/div[11]/div[2]/div[2]'
             self._click_element(
                 web_driver=web_driver,
                 xpath=import_xpath,
@@ -3203,489 +2850,6 @@ class WebScraper:
             headers, rows = self._extract_table_by_id(
                 bs4_parser=bs4_parser, id="tbl-macro-data"
             )
-
-            # Write to CSV
-            with open(file_path, "w", newline="", encoding="utf-8") as f:
-                writer = csv.writer(f)
-                writer.writerow(headers)
-                writer.writerows(rows)
-
-        finally:
-            web_driver.close()
-
-        self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
-
-
-        self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
-
-        # Initialize web driver and bs4 parser
-        web_driver, bs4_parser = self._initialize_web_driver_and_bs4_parser()
-
-        try:
-            # 1. Initialize folder path and file name
-            folder_path = (
-                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            )
-            file_name = f"{key[2].value}"
-
-            # 2. Initialize start time and current time
-            start_date = SCRAPER_START_DATE
-            start_year = start_date.year
-            input_start_date = start_date.strftime("%d/%m/%Y")
-
-            current_date = datetime.now().date()
-            current_year = current_date.year
-            input_current_date = current_date.strftime("%d/%m/%Y")
-
-            file_path = f"{folder_path}/{file_name}_{start_year}_{current_year}.csv"
-
-            # 3. Check if file(s) already exists
-            if os.path.exists(file_path):
-                self._logger.log_info(f"File already exists: {file_path}")
-                return
-
-            # 4. Create folder if not exists
-            if not os.path.exists(folder_path):
-                os.makedirs(folder_path, exist_ok=True)
-
-            # 5. Get SourceInfo
-            source_info = SCRAPE_MAPPING[key]
-
-            # 6. Navigate to URL
-            web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
-
-            # 7. Logic for scraping
-            xpaths = {
-                "time_unit": '//*[@id="macro-content"]/div/div/div[3]/div/div[3]/div/div[1]/select',
-                "from_date": '//*[@id="txtFromTradeDate"]/input',
-                "to_date": '//*[@id="txtToTradeDate"]/input',
-                "view_button": '//*[@id="macro-content"]/div/div/div[3]/div/div[3]/div/button',
-            }
-
-            self._select_dropdown_by_text(web_driver, xpaths["time_unit"], "Ngày")
-            self._input_text(web_driver, xpaths["from_date"], input_start_date)
-            self._input_text(web_driver, xpaths["to_date"], input_current_date)
-
-            self._click_element(web_driver, xpaths["view_button"])
-            WebDriverWait(web_driver, 10).until(
-                EC.presence_of_element_located((By.ID, "tbl-macro-data"))
-            )
-
-            bs4_parser = self._update_bs4_parser(web_driver)
-
-            headers, rows = self._extract_table_by_id(bs4_parser, "tbl-macro-data")
-
-            # Write to CSV
-            with open(file_path, "w", newline="", encoding="utf-8") as f:
-                writer = csv.writer(f)
-                writer.writerow(headers)
-                writer.writerows(rows)
-
-        finally:
-            web_driver.close()
-
-        self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
-
-    def _scrape_data_macroeconomics_interest_rate_vietstock(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
-    ):
-        self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
-
-        # Initialize web driver and bs4 parser
-        web_driver, bs4_parser = self._initialize_web_driver_and_bs4_parser()
-
-        try:
-            # 1. Initialize folder path and file name
-            folder_path = (
-                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            )
-            file_name = f"{key[2].value}"
-
-            # 2. Initialize start time and current time
-            start_year = SCRAPER_START_DATE.year
-            current_year = datetime.now().year
-
-            file_path = f"{folder_path}/{file_name}_{start_year}_{current_year}.csv"
-
-            # 3. Check if file(s) already exists
-            if os.path.exists(file_path):
-                self._logger.log_info(f"File already exists: {file_path}")
-                return
-
-            # 4. Create folder if not exists
-            if not os.path.exists(folder_path):
-                os.makedirs(folder_path, exist_ok=True)
-
-            # 5. Get SourceInfo
-            source_info = SCRAPE_MAPPING[key]
-
-            # 6. Navigate to URL
-            web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
-
-            # 7. Logic for scraping
-            xpaths = {
-                "from_date": '//*[@id="txtFromTradeDate"]/input',
-                "to_date": '//*[@id="txtToTradeDate"]/input',
-                "view_button": '//*[@id="macro-content"]/div/div/div[3]/div/div[3]/div/button',
-            }
-
-            for year in range(start_year, current_year + 1):
-                file_path = f"{folder_path}/{file_name}_{year}.csv"
-                if os.path.exists(file_path):
-                    self._logger.log_info(f"File already exists: {file_path}")
-                    continue
-
-                self._logger.log_info(f"Scraping INTEREST_RATE data in {year}.")
-
-                web_driver, bs4_parser = self._navigate_to_url(
-                    web_driver, source_info.url
-                )
-
-                interest_rate_tab_xpath = (
-                    '//*[@id="macro-content"]/div/div/div[3]/div/div[1]/a[2]'
-                )
-
-                # Try to click
-                element = WebDriverWait(web_driver, 10).until(
-                    EC.element_to_be_clickable((By.XPATH, interest_rate_tab_xpath))
-                )
-                web_driver.execute_script("arguments[0].scrollIntoView(true);", element)
-                try:
-                    element.click()
-                except Exception:
-                    web_driver.execute_script("arguments[0].click();", element)
-                time.sleep(SCRAPER_BASE_WAIT_TIME + 1)
-
-                self._input_text(web_driver, xpaths["from_date"], f"01/01/{year}")
-                self._input_text(web_driver, xpaths["to_date"], f"31/12/{year}")
-
-                self._click_element(web_driver, xpaths["view_button"])
-                WebDriverWait(web_driver, 10).until(
-                    EC.presence_of_element_located((By.ID, "tbl-macro-data"))
-                )
-
-                bs4_parser = self._update_bs4_parser(web_driver)
-
-                headers, rows = self._extract_table_by_id(bs4_parser, "tbl-macro-data")
-
-                # Write to CSV
-                with open(file_path, "w", newline="", encoding="utf-8") as f:
-                    writer = csv.writer(f)
-                    writer.writerow(headers)
-                    writer.writerows(rows)
-
-        finally:
-            web_driver.close()
-
-        self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
-
-    def _scrape_data_macroeconomics_export_import_vietstock(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
-    ):
-        self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
-
-        # Initialize web driver and bs4 parser
-        web_driver, bs4_parser = self._initialize_web_driver_and_bs4_parser()
-
-        try:
-            # 1. Initialize folder path and file name
-            folder_path = (
-                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            )
-            file_name = f"{key[2].value}"
-
-            # 2. Initialize start time and current time
-            start_year = SCRAPER_START_DATE.year
-            current_year = datetime.now().year
-
-            file_path = f"{folder_path}/{file_name}_{start_year}_{current_year}.csv"
-
-            # 3. Check if file(s) already exists
-            if os.path.exists(file_path):
-                self._logger.log_info(f"File already exists: {file_path}")
-                return
-
-            # 4. Create folder if not exists
-            if not os.path.exists(folder_path):
-                os.makedirs(folder_path, exist_ok=True)
-
-            # 5. Get SourceInfo
-            source_info = SCRAPE_MAPPING[key]
-
-            # 6 Navigate to URL
-            web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
-
-            # 7. Logic for scraping
-            xpaths = {
-                "time_unit": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[1]/select',
-                "from_month": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[2]/select',
-                "from_year": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[3]/select',
-                "to_month": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[4]/select',
-                "to_year": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[5]/select',
-                "view_button": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/button',
-            }
-
-            self._select_dropdown_by_text(web_driver, xpaths["time_unit"], "Tháng")
-            self._select_dropdown_by_text(web_driver, xpaths["from_month"], "1")
-            self._select_dropdown_by_text(
-                web_driver, xpaths["from_year"], str(start_year)
-            )
-            self._select_dropdown_by_text(web_driver, xpaths["to_month"], "12")
-            self._select_dropdown_by_text(
-                web_driver, xpaths["to_year"], str(current_year)
-            )
-
-            self._click_element(web_driver, xpaths["view_button"])
-            WebDriverWait(web_driver, 10).until(
-                EC.presence_of_element_located((By.ID, "tbl-macro-data"))
-            )
-
-            bs4_parser = self._update_bs4_parser(web_driver)
-
-            headers, rows = self._extract_table_by_id(bs4_parser, "tbl-macro-data")
-
-            # Write to CSV
-            with open(file_path, "w", newline="", encoding="utf-8") as f:
-                writer = csv.writer(f)
-                writer.writerow(headers)
-                writer.writerows(rows)
-
-        finally:
-            web_driver.close()
-
-        self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
-
-    def _scrape_data_macroeconomics_fdi_vietstock(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
-    ):
-        self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
-
-        # Initialize web driver and bs4 parser
-        web_driver, bs4_parser = self._initialize_web_driver_and_bs4_parser()
-
-        try:
-            # 1. Initialize folder path and file name
-            folder_path = (
-                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            )
-            file_name = f"{key[2].value}"
-
-            # 2. Initialize start time and current time
-            start_year = 2001
-            current_year = datetime.now().year
-
-            file_path = f"{folder_path}/{file_name}_{start_year}_{current_year}.csv"
-
-            # 3. Check if file(s) already exists
-            if os.path.exists(file_path):
-                self._logger.log_info(f"File already exists: {file_path}")
-                return
-
-            # 4. Create folder if not exists
-            if not os.path.exists(folder_path):
-                os.makedirs(folder_path, exist_ok=True)
-
-            # 5. Get SourceInfo
-            source_info = SCRAPE_MAPPING[key]
-
-            # 6. Navigate to URL
-            web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
-
-            # 7. Logic for scraping
-            xpaths = {
-                "time_unit": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[1]/select',
-                "from_month": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[2]/select',
-                "from_year": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[3]/select',
-                "to_month": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[4]/select',
-                "to_year": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[5]/select',
-                "view_button": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/button',
-            }
-
-            web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
-
-            for year in range(start_year, current_year + 1, 5):
-                from_year = year
-                to_year = year + 4 if year + 4 <= current_year else current_year
-                file_path = f"{folder_path}/{file_name}_{from_year}_{to_year}.csv"
-                if os.path.exists(file_path):
-                    self._logger.log_info(f"File already exists: {file_path}")
-                    continue
-
-                self._logger.log_info(
-                    f"Scraping FDI data from {from_year} to {to_year}."
-                )
-
-                self._select_dropdown_by_text(web_driver, xpaths["time_unit"], "Tháng")
-                self._select_dropdown_by_text(web_driver, xpaths["from_month"], "1")
-                self._select_dropdown_by_text(
-                    web_driver, xpaths["from_year"], str(from_year)
-                )
-                self._select_dropdown_by_text(web_driver, xpaths["to_month"], "12")
-                self._select_dropdown_by_text(
-                    web_driver, xpaths["to_year"], str(to_year)
-                )
-
-                self._click_element(web_driver, xpaths["view_button"])
-                WebDriverWait(web_driver, 10).until(
-                    EC.presence_of_element_located((By.ID, "tbl-macro-data"))
-                )
-
-                bs4_parser = self._update_bs4_parser(web_driver)
-
-                headers, rows = self._extract_table_by_id(bs4_parser, "tbl-macro-data")
-
-                # Write to CSV
-                with open(file_path, "w", newline="", encoding="utf-8") as f:
-                    writer = csv.writer(f)
-                    writer.writerow(headers)
-                    writer.writerows(rows)
-
-        finally:
-            web_driver.close()
-
-        self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
-
-    def _scrape_data_macroeconomics_m2_vietstock(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
-    ):
-        self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
-
-        # Initialize web driver and bs4 parser
-        web_driver, bs4_parser = self._initialize_web_driver_and_bs4_parser()
-
-        try:
-            # 1. Initialize folder path and file name
-            folder_path = (
-                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            )
-            file_name = f"{key[2].value}"
-
-            # 2. Initialize start time and current time
-            start_year = SCRAPER_START_DATE.year
-            current_year = datetime.now().year
-
-            file_path = f"{folder_path}/{file_name}_{start_year}_{current_year}.csv"
-
-            # 3. Check if file(s) already exists
-            if os.path.exists(file_path):
-                self._logger.log_info(f"File already exists: {file_path}")
-                return
-
-            # 4. Create folder if not exists
-            if not os.path.exists(folder_path):
-                os.makedirs(folder_path, exist_ok=True)
-
-            # 5. Get SourceInfo
-            source_info = SCRAPE_MAPPING[key]
-
-            # 6. Navigate to URL
-            web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
-
-            # 7. Logic for scraping
-            xpaths = {
-                "time_unit": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[1]/select',
-                "from_month": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[2]/select',
-                "from_year": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[3]/select',
-                "to_month": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[4]/select',
-                "to_year": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[5]/select',
-                "view_button": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/button',
-            }
-
-            self._select_dropdown_by_text(web_driver, xpaths["time_unit"], "Tháng")
-            self._select_dropdown_by_text(web_driver, xpaths["from_month"], "1")
-            self._select_dropdown_by_text(
-                web_driver, xpaths["from_year"], str(start_year)
-            )
-            self._select_dropdown_by_text(web_driver, xpaths["to_month"], "12")
-            self._select_dropdown_by_text(
-                web_driver, xpaths["to_year"], str(current_year)
-            )
-
-            self._click_element(web_driver, xpaths["view_button"])
-            WebDriverWait(web_driver, 10).until(
-                EC.presence_of_element_located((By.ID, "tbl-macro-data"))
-            )
-
-            bs4_parser = self._update_bs4_parser(web_driver)
-
-            headers, rows = self._extract_table_by_id(bs4_parser, "tbl-macro-data")
-
-            # Write to CSV
-            with open(file_path, "w", newline="", encoding="utf-8") as f:
-                writer = csv.writer(f)
-                writer.writerow(headers)
-                writer.writerows(rows)
-
-        finally:
-            web_driver.close()
-
-        self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
-
-    def _scrape_data_macroeconomics_population_unemployment_vietstock(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
-    ):
-        self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
-
-        # Initialize web driver and bs4 parser
-        web_driver, bs4_parser = self._initialize_web_driver_and_bs4_parser()
-
-        try:
-            # 1. Initialize folder path and file name
-            folder_path = (
-                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            )
-            file_name = f"{key[2].value}"
-
-            # 2. Initialize start time and current time
-            start_year = SCRAPER_START_DATE.year
-            current_year = datetime.now().year
-
-            file_path = f"{folder_path}/{file_name}_{start_year}_{current_year}.csv"
-
-            # 3. Check if file(s) already exists
-            if os.path.exists(file_path):
-                self._logger.log_info(f"File already exists: {file_path}")
-                return
-
-            # 4. Create folder if not exists
-            if not os.path.exists(folder_path):
-                os.makedirs(folder_path, exist_ok=True)
-
-            # 5. Get SourceInfo
-            source_info = SCRAPE_MAPPING[key]
-
-            # 6. Navigate to URL
-            web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
-
-            # 7. Logic for scraping
-            xpaths = {
-                "from_year": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[2]/select',
-                "to_year": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/div[3]/select',
-                "view_button": '//*[@id="macro-content"]/div/div/div[3]/div/div[2]/div/button',
-            }
-
-            self._select_dropdown_by_text(
-                web_driver, xpaths["from_year"], str(start_year)
-            )
-            self._select_dropdown_by_text(
-                web_driver, xpaths["to_year"], str(current_year)
-            )
-
-            self._click_element(web_driver, xpaths["view_button"])
-            WebDriverWait(web_driver, 10).until(
-                EC.presence_of_element_located((By.ID, "tbl-macro-data"))
-            )
-
-            bs4_parser = self._update_bs4_parser(web_driver)
-
-            headers, rows = self._extract_table_by_id(bs4_parser, "tbl-macro-data")
 
             # Write to CSV
             with open(file_path, "w", newline="", encoding="utf-8") as f:
@@ -4106,83 +3270,83 @@ class WebScraper:
     ):
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
 
-        # # Initialize web driver and bs4 parser
-        # web_driver, bs4_parser = self._initialize_web_driver_and_bs4_parser()
+        # Initialize web driver and bs4 parser
+        web_driver, bs4_parser = self._initialize_web_driver_and_bs4_parser()
 
-        # try:
-        #     # 1. Initialize folder path and file name
-        #     folder_path = (
-        #         f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        #     )
-        #     file_name = f"{key[2].value}"
+        try:
+            # 1. Initialize folder path and file name
+            folder_path = (
+                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            )
+            file_name = f"{key[2].value}"
 
-        #     # 2. Initialize start time and current time
-        #     current_date = datetime.now()
+            # 2. Initialize start time and current time
+            current_date = datetime.now()
 
-        #     file_path = (
-        #         f"{folder_path}/{file_name}_upto_{current_date.strftime('%Y%m%d')}.csv"
-        #     )
+            file_path = (
+                f"{folder_path}/{file_name}_upto_{current_date.strftime('%Y%m%d')}.csv"
+            )
 
-        #     # 3. Remove old file if exists
-        #     remove_all_files_with_extensions(
-        #         logger=self._logger,
-        #         folder_path=folder_path,
-        #         extensions=[FileExtension.CSV],
-        #     )
+            # 3. Remove old file if exists
+            remove_all_files_with_extensions(
+                logger=self._logger,
+                folder_path=folder_path,
+                extensions=[FileExtension.CSV],
+            )
 
-        #     # 4. Create folder if not exists
-        #     if not os.path.exists(folder_path):
-        #         os.makedirs(folder_path, exist_ok=True)
+            # 4. Create folder if not exists
+            if not os.path.exists(folder_path):
+                os.makedirs(folder_path, exist_ok=True)
 
-        #     # 5. Get SourceInfo
-        #     source_info = SCRAPE_MAPPING[key]
+            # 5. Get SourceInfo
+            source_info = SCRAPE_MAPPING[key]
 
-        #     # 6. Navigate to URL
-        #     web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
-        #     time.sleep(SCRAPER_BASE_WAIT_TIME)
+            # 6. Navigate to URL
+            web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
+            time.sleep(SCRAPER_BASE_WAIT_TIME)
 
-        #     # 7. Logic for scraping
-        #     xpath = '//*[@id="container"]/div/div[1]/div/div/div/div[2]/div[2]/table/tbody/tr[2]/td[4]/a'
-        #     download_link_element = web_driver.find_element("xpath", xpath)
-        #     download_url = download_link_element.get_attribute("href")
+            # 7. Logic for scraping
+            xpath = '//*[@id="container"]/div/div[1]/div/div/div/div[2]/div[2]/table/tbody/tr[2]/td[4]/a'
+            download_link_element = web_driver.find_element("xpath", xpath)
+            download_url = download_link_element.get_attribute("href")
 
-        #     zip_path = file_path.replace(".csv", ".zip")
-        #     self._logger.log_info(f"Downloading ZIP file from: {download_url}")
+            zip_path = file_path.replace(".csv", ".zip")
+            self._logger.log_info(f"Downloading ZIP file from: {download_url}")
 
-        #     # Download file
-        #     download_file(download_url, zip_path, self._logger)
+            # Download file
+            download_file(download_url, zip_path, self._logger)
 
-        #     # Extract ZIP file
-        #     extract_zip_file(self._logger, zip_path, folder_path)
+            # Extract ZIP file
+            extract_zip_file(self._logger, zip_path, folder_path)
 
-        #     # Regex to extract stock_market and date from filenames
-        #     pattern = re.compile(
-        #         r"CafeF\.(?P<stock_market>\w+)\.Upto(?P<date>\d{2}\.\d{2}\.\d{4})\.csv"
-        #     )
+            # Regex to extract stock_market and date from filenames
+            pattern = re.compile(
+                r"CafeF\.(?P<stock_market>\w+)\.Upto(?P<date>\d{2}\.\d{2}\.\d{4})\.csv"
+            )
 
-        #     for file_name in os.listdir(folder_path):
-        #         match = pattern.match(file_name)
-        #         if match:
-        #             stock_market = match.group("stock_market")
-        #             date_str = match.group("date")  # e.g., 29.04.2025
-        #             # Reformat date to YYYYMMDD
-        #             date_parts = date_str.split(".")  # ['29', '04', '2025']
-        #             reformatted_date = (
-        #                 f"{date_parts[2]}{date_parts[1]}{date_parts[0]}"  # '20250429'
-        #             )
-        #             new_file_name = f"{stock_market}_upto_{reformatted_date}.csv"
-        #             src = Path(folder_path) / file_name
-        #             dst = Path(folder_path) / new_file_name
-        #             os.rename(src, dst)
-        #             self._logger.log_info(f"Renamed '{file_name}' -> '{dst}'")
-        #         else:
-        #             self._logger.log_info(f"Skipped file (no match): {file_name}")
+            for file_name in os.listdir(folder_path):
+                match = pattern.match(file_name)
+                if match:
+                    stock_market = match.group("stock_market")
+                    date_str = match.group("date")  # e.g., 29.04.2025
+                    # Reformat date to YYYYMMDD
+                    date_parts = date_str.split(".")  # ['29', '04', '2025']
+                    reformatted_date = (
+                        f"{date_parts[2]}{date_parts[1]}{date_parts[0]}"  # '20250429'
+                    )
+                    new_file_name = f"{stock_market}_upto_{reformatted_date}.csv"
+                    src = Path(folder_path) / file_name
+                    dst = Path(folder_path) / new_file_name
+                    os.rename(src, dst)
+                    self._logger.log_info(f"Renamed '{file_name}' -> '{dst}'")
+                else:
+                    self._logger.log_info(f"Skipped file (no match): {file_name}")
 
-        #     os.remove(zip_path)
-        #     self._logger.log_info(f"Removed temporary ZIP file: {zip_path}")
+            os.remove(zip_path)
+            self._logger.log_info(f"Removed temporary ZIP file: {zip_path}")
 
-        # finally:
-        #     web_driver.close()
+        finally:
+            web_driver.close()
 
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
@@ -4577,21 +3741,21 @@ class WebScraper:
                 FaByHouseTypeSource.VIETSTOCK,
             ):
                 return self._scrape_data_macroeconomics_fa_by_house_type_vietstock(key)
-            
+
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.IT_BOP,
                 ItBopSource.VIETSTOCK,
             ):
                 return self._scrape_data_macroeconomics_it_bop_vietstock(key)
-            
+
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.TSBR,
                 TsbrSource.VIETSTOCK,
             ):
                 return self._scrape_data_macroeconomics_tsbr_vietstock(key)
-            
+
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.TSBE,
@@ -4605,84 +3769,84 @@ class WebScraper:
                 GdSource.VIETSTOCK,
             ):
                 return self._scrape_data_macroeconomics_gd_vietstock(key)
-            
+
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.BRD,
                 BrdSource.VIETSTOCK,
             ):
                 return self._scrape_data_macroeconomics_brd_vietstock(key)
-            
+
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.IISD,
                 IisdSource.VIETSTOCK,
             ):
                 return self._scrape_data_macroeconomics_iisd_vietstock(key)
-            
+
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.TREG,
                 TregSource.VIETSTOCK,
             ):
                 return self._scrape_data_macroeconomics_treg_vietstock(key)
-            
+
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.CREDIT,
                 CreditSource.VIETSTOCK,
             ):
                 return self._scrape_data_macroeconomics_credit_vietstock(key)
-            
+
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.MOBILIZATION,
                 MobilizationSource.VIETSTOCK,
             ):
                 return self._scrape_data_macroeconomics_mobilization_vietstock(key)
-            
+
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.EXCHANGE_RATE,
                 ExchangeRateSource.VIETSTOCK,
             ):
                 return self._scrape_data_macroeconomics_exchange_rate_vietstock(key)
-            
+
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.IIR,
                 IirSource.VIETSTOCK,
             ):
                 return self._scrape_data_macroeconomics_iir_vietstock(key)
-            
+
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.RRRR,
                 RrrrSource.VIETSTOCK,
             ):
                 return self._scrape_data_macroeconomics_rrrr_vietstock(key)
-            
+
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.FDI_SECTOR,
                 FdiSectorSource.VIETSTOCK,
             ):
                 return self._scrape_data_macroeconomics_fdi_sector_vietstock(key)
-            
+
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.FDI_RD,
                 FdiRdSource.VIETSTOCK,
             ):
                 return self._scrape_data_macroeconomics_fdi_rd_vietstock(key)
-            
+
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.EXPORT,
                 ExportSource.VIETSTOCK,
             ):
                 return self._scrape_data_macroeconomics_export_vietstock(key)
-            
+
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.IMPORT,
@@ -4738,305 +3902,305 @@ class WebScraper:
         self._logger.log_info("Adding macroeconomic data scraping tasks.")
         number_of_task_before = self._thread_manager.get_current_number_of_task()
 
-        # # MACROECONOMICS_GDP_VIETSTOCK
-        # key = (
-        #     ScrapeMainType.MACROECONOMICS,
-        #     MacroeconomicsSubType.GDP,
-        #     GdpSource.VIETSTOCK,
-        # )
-        # self._thread_manager.add_task(
-        #     Task(format_key_for_name(key), self._scrape_data_from, key)
-        # )
+        # MACROECONOMICS_GDP_VIETSTOCK
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.GDP,
+            GdpSource.VIETSTOCK,
+        )
+        self._thread_manager.add_task(
+            Task(format_key_for_name(key), self._scrape_data_from, key)
+        )
 
-        # # MACROECONOMICS_CPI_VIETSTOCK
-        # key = (
-        #     ScrapeMainType.MACROECONOMICS,
-        #     MacroeconomicsSubType.CPI,
-        #     CpiSource.VIETSTOCK,
-        # )
-        # self._thread_manager.add_task(
-        #     Task(format_key_for_name(key), self._scrape_data_from, key)
-        # )
+        # MACROECONOMICS_CPI_VIETSTOCK
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.CPI,
+            CpiSource.VIETSTOCK,
+        )
+        self._thread_manager.add_task(
+            Task(format_key_for_name(key), self._scrape_data_from, key)
+        )
 
-        # # MACROECONOMICS_PPI_VIETSTOCK
-        # key = (
-        #     ScrapeMainType.MACROECONOMICS,
-        #     MacroeconomicsSubType.PPI,
-        #     PpiSource.VIETSTOCK,
-        # )
-        # self._thread_manager.add_task(
-        #     Task(format_key_for_name(key), self._scrape_data_from, key)
-        # )
+        # MACROECONOMICS_PPI_VIETSTOCK
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.PPI,
+            PpiSource.VIETSTOCK,
+        )
+        self._thread_manager.add_task(
+            Task(format_key_for_name(key), self._scrape_data_from, key)
+        )
 
-        # # MACROECONOMICS_IPI_VIETSTOCK
-        # key = (
-        #     ScrapeMainType.MACROECONOMICS,
-        #     MacroeconomicsSubType.IPI,
-        #     IpiSource.VIETSTOCK,
-        # )
-        # self._thread_manager.add_task(
-        #     Task(format_key_for_name(key), self._scrape_data_from, key)
-        # )
+        # MACROECONOMICS_IPI_VIETSTOCK
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.IPI,
+            IpiSource.VIETSTOCK,
+        )
+        self._thread_manager.add_task(
+            Task(format_key_for_name(key), self._scrape_data_from, key)
+        )
 
-        # # MACROECONOMICS_XPI_VIETSTOCK
-        # key = (
-        #     ScrapeMainType.MACROECONOMICS,
-        #     MacroeconomicsSubType.XPI,
-        #     XpiSource.VIETSTOCK,
-        # )
-        # self._thread_manager.add_task(
-        #     Task(format_key_for_name(key), self._scrape_data_from, key)
-        # )
+        # MACROECONOMICS_XPI_VIETSTOCK
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.XPI,
+            XpiSource.VIETSTOCK,
+        )
+        self._thread_manager.add_task(
+            Task(format_key_for_name(key), self._scrape_data_from, key)
+        )
 
-        # # MACROECONOMICS_MPI_VIETSTOCK
-        # key = (
-        #     ScrapeMainType.MACROECONOMICS,
-        #     MacroeconomicsSubType.MPI,
-        #     MpiSource.VIETSTOCK,
-        # )
-        # self._thread_manager.add_task(
-        #     Task(format_key_for_name(key), self._scrape_data_from, key)
-        # )
+        # MACROECONOMICS_MPI_VIETSTOCK
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.MPI,
+            MpiSource.VIETSTOCK,
+        )
+        self._thread_manager.add_task(
+            Task(format_key_for_name(key), self._scrape_data_from, key)
+        )
 
-        # # MACROECONOMICS_POPULATION_VIETSTOCK
-        # key = (
-        #     ScrapeMainType.MACROECONOMICS,
-        #     MacroeconomicsSubType.POPULATION,
-        #     PopulationSource.VIETSTOCK,
-        # )
-        # self._thread_manager.add_task(
-        #     Task(format_key_for_name(key), self._scrape_data_from, key)
-        # )
+        # MACROECONOMICS_POPULATION_VIETSTOCK
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.POPULATION,
+            PopulationSource.VIETSTOCK,
+        )
+        self._thread_manager.add_task(
+            Task(format_key_for_name(key), self._scrape_data_from, key)
+        )
 
-        # # MACROECONOMICS_EMPLOYMENT_VIETSTOCK
-        # key = (
-        #     ScrapeMainType.MACROECONOMICS,
-        #     MacroeconomicsSubType.LABOR,
-        #     LaborSource.VIETSTOCK,
-        # )
-        # self._thread_manager.add_task(
-        #     Task(format_key_for_name(key), self._scrape_data_from, key)
-        # )
+        # MACROECONOMICS_EMPLOYMENT_VIETSTOCK
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.LABOR,
+            LaborSource.VIETSTOCK,
+        )
+        self._thread_manager.add_task(
+            Task(format_key_for_name(key), self._scrape_data_from, key)
+        )
 
-        # # MACROECONOMICS_RETAIL_VIETSTOCK
-        # key = (
-        #     ScrapeMainType.MACROECONOMICS,
-        #     MacroeconomicsSubType.RETAIL,
-        #     RetailSource.VIETSTOCK,
-        # )
-        # self._thread_manager.add_task(
-        #     Task(format_key_for_name(key), self._scrape_data_from, key)
-        # )
+        # MACROECONOMICS_RETAIL_VIETSTOCK
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.RETAIL,
+            RetailSource.VIETSTOCK,
+        )
+        self._thread_manager.add_task(
+            Task(format_key_for_name(key), self._scrape_data_from, key)
+        )
 
-        # # MACROECONOMICS_PMI_VIETSTOCK
-        # key = (
-        #     ScrapeMainType.MACROECONOMICS,
-        #     MacroeconomicsSubType.PMI,
-        #     PmiSource.VIETSTOCK,
-        # )
-        # self._thread_manager.add_task(
-        #     Task(format_key_for_name(key), self._scrape_data_from, key)
-        # )
+        # MACROECONOMICS_PMI_VIETSTOCK
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.PMI,
+            PmiSource.VIETSTOCK,
+        )
+        self._thread_manager.add_task(
+            Task(format_key_for_name(key), self._scrape_data_from, key)
+        )
 
-        # # MACROECONOMICS_IIP_VIETSTOCK
-        # key = (
-        #     ScrapeMainType.MACROECONOMICS,
-        #     MacroeconomicsSubType.IIP,
-        #     IipSource.VIETSTOCK,
-        # )
-        # self._thread_manager.add_task(
-        #     Task(format_key_for_name(key), self._scrape_data_from, key)
-        # )
+        # MACROECONOMICS_IIP_VIETSTOCK
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.IIP,
+            IipSource.VIETSTOCK,
+        )
+        self._thread_manager.add_task(
+            Task(format_key_for_name(key), self._scrape_data_from, key)
+        )
 
-        # # MACROECONOMICS_IPV_VIETSTOCK
-        # key = (
-        #     ScrapeMainType.MACROECONOMICS,
-        #     MacroeconomicsSubType.IPV,
-        #     IpvSource.VIETSTOCK,
-        # )
-        # self._thread_manager.add_task(
-        #     Task(format_key_for_name(key), self._scrape_data_from, key)
-        # )
+        # MACROECONOMICS_IPV_VIETSTOCK
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.IPV,
+            IpvSource.VIETSTOCK,
+        )
+        self._thread_manager.add_task(
+            Task(format_key_for_name(key), self._scrape_data_from, key)
+        )
 
-        # # MACROECONOMICS_IPV_BY_INDUSTRY_VIETSTOCK
-        # key = (
-        #     ScrapeMainType.MACROECONOMICS,
-        #     MacroeconomicsSubType.IPV_BY_INDUSTRY,
-        #     IpvByIndustrySource.VIETSTOCK,
-        # )
-        # self._thread_manager.add_task(
-        #     Task(format_key_for_name(key), self._scrape_data_from, key)
-        # )
+        # MACROECONOMICS_IPV_BY_INDUSTRY_VIETSTOCK
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.IPV_BY_INDUSTRY,
+            IpvByIndustrySource.VIETSTOCK,
+        )
+        self._thread_manager.add_task(
+            Task(format_key_for_name(key), self._scrape_data_from, key)
+        )
 
-        # # MACROECONOMICS_MIP_VIETSTOCK
-        # key = (
-        #     ScrapeMainType.MACROECONOMICS,
-        #     MacroeconomicsSubType.MIP,
-        #     MipSource.VIETSTOCK,
-        # )
-        # self._thread_manager.add_task(
-        #     Task(format_key_for_name(key), self._scrape_data_from, key)
-        # )
+        # MACROECONOMICS_MIP_VIETSTOCK
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.MIP,
+            MipSource.VIETSTOCK,
+        )
+        self._thread_manager.add_task(
+            Task(format_key_for_name(key), self._scrape_data_from, key)
+        )
 
-        # # MACROECONOMICS_FA_BY_HOUSE_TYPES_VIETSTOCK
-        # key = (
-        #     ScrapeMainType.MACROECONOMICS,
-        #     MacroeconomicsSubType.FA_BY_HOUSE_TYPES,
-        #     FaByHouseTypeSource.VIETSTOCK,
-        # )
-        # self._thread_manager.add_task(
-        #     Task(format_key_for_name(key), self._scrape_data_from, key)
-        # )
-        
-        # # MACROECONOMICS_IT_BOP_VIETSTOCK
-        # key = (
-        #     ScrapeMainType.MACROECONOMICS,
-        #     MacroeconomicsSubType.IT_BOP,
-        #     ItBopSource.VIETSTOCK,
-        # )
-        # self._thread_manager.add_task(
-        #     Task(format_key_for_name(key), self._scrape_data_from, key)
-        # )
+        # MACROECONOMICS_FA_BY_HOUSE_TYPES_VIETSTOCK
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.FA_BY_HOUSE_TYPES,
+            FaByHouseTypeSource.VIETSTOCK,
+        )
+        self._thread_manager.add_task(
+            Task(format_key_for_name(key), self._scrape_data_from, key)
+        )
 
-        # # MACROECONOMICS_TSBR_VIETSTOCK
-        # key = (
-        #     ScrapeMainType.MACROECONOMICS,
-        #     MacroeconomicsSubType.TSBR,
-        #     TsbrSource.VIETSTOCK,
-        # )
-        # self._thread_manager.add_task(
-        #     Task(format_key_for_name(key), self._scrape_data_from, key)
-        # )
-        
-        # # MACROECONOMICS_TSBE_VIETSTOCK
-        # key = (
-        #     ScrapeMainType.MACROECONOMICS,
-        #     MacroeconomicsSubType.TSBE,
-        #     TsbeSource.VIETSTOCK,
-        # )
-        # self._thread_manager.add_task(
-        #     Task(format_key_for_name(key), self._scrape_data_from, key)
-        # )
-        
-        # # MACROECONOMICS_GD_VIETSTOCK
-        # key = (
-        #     ScrapeMainType.MACROECONOMICS,
-        #     MacroeconomicsSubType.GD,
-        #     GdSource.VIETSTOCK,
-        # )
-        # self._thread_manager.add_task(
-        #     Task(format_key_for_name(key), self._scrape_data_from, key)
-        # )
-        
-        # # MACROECONOMICS_BRD_VIETSTOCK
-        # key = (
-        #     ScrapeMainType.MACROECONOMICS,
-        #     MacroeconomicsSubType.BRD,
-        #     BrdSource.VIETSTOCK,
-        # )
-        # self._thread_manager.add_task(
-        #     Task(format_key_for_name(key), self._scrape_data_from, key)
-        # )
-        
-        # # MACROECONOMICS_IISD_VIETSTOCK
-        # key = (
-        #     ScrapeMainType.MACROECONOMICS,
-        #     MacroeconomicsSubType.IISD,
-        #     IisdSource.VIETSTOCK,
-        # )
-        # self._thread_manager.add_task(
-        #     Task(format_key_for_name(key), self._scrape_data_from, key)
-        # )
-        
-        # # MACROECONOMICS_TREG_VIETSTOCK
-        # key = (
-        #     ScrapeMainType.MACROECONOMICS,
-        #     MacroeconomicsSubType.TREG,
-        #     TregSource.VIETSTOCK,
-        # )
-        # self._thread_manager.add_task(
-        #     Task(format_key_for_name(key), self._scrape_data_from, key)
-        # )
-        
-        # # MACROECONOMICS_CREDIT_VIETSTOCK
-        # key = (
-        #     ScrapeMainType.MACROECONOMICS,
-        #     MacroeconomicsSubType.CREDIT,
-        #     CreditSource.VIETSTOCK,
-        # )
-        # self._thread_manager.add_task(
-        #     Task(format_key_for_name(key), self._scrape_data_from, key)
-        # )
-        
-        # # MACROECONOMICS_MOBILIZATION_VIETSTOCK
-        # key = (
-        #     ScrapeMainType.MACROECONOMICS,
-        #     MacroeconomicsSubType.MOBILIZATION,
-        #     MobilizationSource.VIETSTOCK,
-        # )
-        # self._thread_manager.add_task(
-        #     Task(format_key_for_name(key), self._scrape_data_from, key)
-        # )
-        
-        # # MACROECONOMICS_EXCHANGE_RATE_VIETSTOCK
-        # key = (
-        #     ScrapeMainType.MACROECONOMICS,
-        #     MacroeconomicsSubType.EXCHANGE_RATE,
-        #     ExchangeRateSource.VIETSTOCK,
-        # )
-        # self._thread_manager.add_task(
-        #     Task(format_key_for_name(key), self._scrape_data_from, key)
-        # )
+        # MACROECONOMICS_IT_BOP_VIETSTOCK
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.IT_BOP,
+            ItBopSource.VIETSTOCK,
+        )
+        self._thread_manager.add_task(
+            Task(format_key_for_name(key), self._scrape_data_from, key)
+        )
 
-        # # MACROECONOMICS_IIR_VIETSTOCK
-        # key = (
-        #     ScrapeMainType.MACROECONOMICS,
-        #     MacroeconomicsSubType.IIR,
-        #     IirSource.VIETSTOCK,
-        # )
-        # self._thread_manager.add_task(
-        #     Task(format_key_for_name(key), self._scrape_data_from, key)
-        # )
-        
-        # # MACROECONOMICS_RRRR_VIETSTOCK
-        # key = (
-        #     ScrapeMainType.MACROECONOMICS,
-        #     MacroeconomicsSubType.RRRR,
-        #     RrrrSource.VIETSTOCK,
-        # )
-        # self._thread_manager.add_task(
-        #     Task(format_key_for_name(key), self._scrape_data_from, key)
-        # )
+        # MACROECONOMICS_TSBR_VIETSTOCK
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.TSBR,
+            TsbrSource.VIETSTOCK,
+        )
+        self._thread_manager.add_task(
+            Task(format_key_for_name(key), self._scrape_data_from, key)
+        )
 
-        # # MACROECONOMICS_FDI_SECTOR_VIETSTOCK
-        # key = (
-        #     ScrapeMainType.MACROECONOMICS,
-        #     MacroeconomicsSubType.FDI_SECTOR,
-        #     FdiSectorSource.VIETSTOCK,
-        # )
-        # self._thread_manager.add_task(
-        #     Task(format_key_for_name(key), self._scrape_data_from, key)
-        # )
-        
-        # # MACROECONOMICS_FDI_RD_VIETSTOCK
-        # key = (
-        #     ScrapeMainType.MACROECONOMICS,
-        #     MacroeconomicsSubType.FDI_RD,
-        #     FdiRdSource.VIETSTOCK,
-        # )
-        # self._thread_manager.add_task(
-        #     Task(format_key_for_name(key), self._scrape_data_from, key)
-        # )
+        # MACROECONOMICS_TSBE_VIETSTOCK
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.TSBE,
+            TsbeSource.VIETSTOCK,
+        )
+        self._thread_manager.add_task(
+            Task(format_key_for_name(key), self._scrape_data_from, key)
+        )
 
-        # # MACROECONOMICS_EXPORT_VIETSTOCK
-        # key = (
-        #     ScrapeMainType.MACROECONOMICS,
-        #     MacroeconomicsSubType.EXPORT,
-        #     ExportSource.VIETSTOCK,
-        # )
-        # self._thread_manager.add_task(
-        #     Task(format_key_for_name(key), self._scrape_data_from, key)
-        # )
+        # MACROECONOMICS_GD_VIETSTOCK
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.GD,
+            GdSource.VIETSTOCK,
+        )
+        self._thread_manager.add_task(
+            Task(format_key_for_name(key), self._scrape_data_from, key)
+        )
+
+        # MACROECONOMICS_BRD_VIETSTOCK
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.BRD,
+            BrdSource.VIETSTOCK,
+        )
+        self._thread_manager.add_task(
+            Task(format_key_for_name(key), self._scrape_data_from, key)
+        )
+
+        # MACROECONOMICS_IISD_VIETSTOCK
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.IISD,
+            IisdSource.VIETSTOCK,
+        )
+        self._thread_manager.add_task(
+            Task(format_key_for_name(key), self._scrape_data_from, key)
+        )
+
+        # MACROECONOMICS_TREG_VIETSTOCK
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.TREG,
+            TregSource.VIETSTOCK,
+        )
+        self._thread_manager.add_task(
+            Task(format_key_for_name(key), self._scrape_data_from, key)
+        )
+
+        # MACROECONOMICS_CREDIT_VIETSTOCK
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.CREDIT,
+            CreditSource.VIETSTOCK,
+        )
+        self._thread_manager.add_task(
+            Task(format_key_for_name(key), self._scrape_data_from, key)
+        )
+
+        # MACROECONOMICS_MOBILIZATION_VIETSTOCK
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.MOBILIZATION,
+            MobilizationSource.VIETSTOCK,
+        )
+        self._thread_manager.add_task(
+            Task(format_key_for_name(key), self._scrape_data_from, key)
+        )
+
+        # MACROECONOMICS_EXCHANGE_RATE_VIETSTOCK
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.EXCHANGE_RATE,
+            ExchangeRateSource.VIETSTOCK,
+        )
+        self._thread_manager.add_task(
+            Task(format_key_for_name(key), self._scrape_data_from, key)
+        )
+
+        # MACROECONOMICS_IIR_VIETSTOCK
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.IIR,
+            IirSource.VIETSTOCK,
+        )
+        self._thread_manager.add_task(
+            Task(format_key_for_name(key), self._scrape_data_from, key)
+        )
+
+        # MACROECONOMICS_RRRR_VIETSTOCK
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.RRRR,
+            RrrrSource.VIETSTOCK,
+        )
+        self._thread_manager.add_task(
+            Task(format_key_for_name(key), self._scrape_data_from, key)
+        )
+
+        # MACROECONOMICS_FDI_SECTOR_VIETSTOCK
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.FDI_SECTOR,
+            FdiSectorSource.VIETSTOCK,
+        )
+        self._thread_manager.add_task(
+            Task(format_key_for_name(key), self._scrape_data_from, key)
+        )
+
+        # MACROECONOMICS_FDI_RD_VIETSTOCK
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.FDI_RD,
+            FdiRdSource.VIETSTOCK,
+        )
+        self._thread_manager.add_task(
+            Task(format_key_for_name(key), self._scrape_data_from, key)
+        )
+
+        # MACROECONOMICS_EXPORT_VIETSTOCK
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.EXPORT,
+            ExportSource.VIETSTOCK,
+        )
+        self._thread_manager.add_task(
+            Task(format_key_for_name(key), self._scrape_data_from, key)
+        )
 
         # MACROECONOMICS_IMPORT_VIETSTOCK
         key = (
@@ -5048,58 +4212,14 @@ class WebScraper:
             Task(format_key_for_name(key), self._scrape_data_from, key)
         )
 
-        # # MACROECONOMICS_INTEREST_RATE_VIETSTOCK
-        # key = (
-        #     ScrapeMainType.MACROECONOMICS,
-        #     MacroeconomicsSubType.INTEREST_RATE,
-        #     InterestRateSource.VIETSTOCK,
-        # )
-        # self._thread_manager.add_task(
-        #     Task(format_key_for_name(key), self._scrape_data_from, key)
-        # )
-
-        # # MACROECONOMICS_EXPORT_IMPORT_VIETSTOCK
-        # key = (
-        #     ScrapeMainType.MACROECONOMICS,
-        #     MacroeconomicsSubType.EXPORT,
-        #     ExportImportSource.VIETSTOCK,
-        # )
-        # self._thread_manager.add_task(
-        #     Task(format_key_for_name(key), self._scrape_data_from, key)
-        # )
-
-        # # MACROECONOMICS_FDI_VIETSTOCK
-        # key = (
-        #     ScrapeMainType.MACROECONOMICS,
-        #     MacroeconomicsSubType.FDI,
-        #     FdiSource.VIETSTOCK,
-        # )
-        # self._thread_manager.add_task(
-        #     Task(format_key_for_name(key), self._scrape_data_from, key)
-        # )
-
-        # # MACROECONOMICS_M2_VIETSTOCK
-        # key = (
-        #     ScrapeMainType.MACROECONOMICS,
-        #     MacroeconomicsSubType.M2,
-        #     M2Source.VIETSTOCK,
-        # )
-        # self._thread_manager.add_task(
-        #     Task(format_key_for_name(key), self._scrape_data_from, key)
-        # )
-
-        # # MACROECONOMICS_POPULATION_UNEMPLOYMENT_VIETSTOCK
-        # key = (
-        #     ScrapeMainType.MACROECONOMICS,
-        #     MacroeconomicsSubType.POPULATION_UNEMPLOYMENT,
-        #     PopulationUnemploymentSource.VIETSTOCK,
-        # )
-        # self._thread_manager.add_task(
-        #     Task(format_key_for_name(key), self._scrape_data_from, key)
-        # )
-
         # MACROECONOMICS_POPULATION_GOLD_PRICE_INVESTING
-        # Gold price is scaped MANUALLY from investing.com
+        # Gold price is scraped MANUALLY from investing.com
+        # Oil price is scraped MANUALLY from investing.com
+        # Dow Jones index is scraped MANUALLY from investing.com
+        # NYSE Composite index is scraped MANUALLY from investing.com
+        # S&P 500 index is scraped MANUALLY from investing.com
+        # NASDAQ Composite index is scraped MANUALLY from investing.com
+        # NASDAQ 100 index is scraped MANUALLY from investing.com
 
         number_of_task_after = self._thread_manager.get_current_number_of_task()
         self._logger.log_info(

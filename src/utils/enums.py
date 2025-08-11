@@ -157,6 +157,7 @@ ScrapeSubType = Union[
 
 
 # MACROECONOMICS
+# region Automatically scraped from Vietstock
 class GdpSource(Enum):
     VIETSTOCK = "vietstock"
 
@@ -281,6 +282,10 @@ class ImportSource(Enum):
     VIETSTOCK = "vietstock"
 
 
+# endregion Automatically scraped from Vietstock
+
+
+# region Manually scraped from Investing.com
 class GoldPriceSource(Enum):
     INVESTING = "investing"
 
@@ -343,9 +348,13 @@ class StockInformationSource(Enum):
     CAFEF = "cafef"
 
 
+# endregion Manually scraped from Investing.com
+
+
 # Union of all sources
 Source = Union[
     # MACROECONOMICS
+    # Automatically scraped from Vietstock
     GdpSource,
     CpiSource,
     PpiSource,
@@ -377,6 +386,7 @@ Source = Union[
     FdiRdSource,
     ExportSource,
     ImportSource,
+    # Manually scraped from Investing.com
     GoldPriceSource,
     OilPriceSource,
     DowJonesSource,
