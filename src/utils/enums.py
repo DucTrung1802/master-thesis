@@ -90,17 +90,37 @@ class ScrapeMainType(Enum):
 
 # Enums for Macroeconomics, Stock Market, and Enterprise Subtypes
 class MacroeconomicsSubType(Enum):
-    GDP = "gdp"
-    CPI = "cpi"
-    EXCHANGE_RATE = "exchange_rate"
-    INTEREST_RATE = "interest_rate"
-    EXPORT = "export"
-    IMPORT = "import"
-    IPI = "ipi"
-    FDI = "fdi"
-    M2 = "m2"
-    RETAIL = "retail"
-    POPULATION_UNEMPLOYMENT = "population_unemployment"
+    GDP = "gdp"  # Gross Domestic Product
+    CPI = "cpi"  # Consumer Price Index
+    PPI = "ppi"  # Producer Price Index
+    IPI = "ipi"  # Industrial Production Index
+    XPI = "xpi"  # Export Price Index
+    MPI = "mpi"  # Import Price Index
+    POPULATION = "population"  # Population statistics
+    LABOR = "labor"  # Labor statistics
+    RETAIL = "retail"  # Retail sales statistics
+    PMI = "pmi"  # Purchasing Managers' Index
+    IIP = "iip"  # Index of Industrial Production
+    IPV = "ipv"  # Industrial Production Volume
+    IPV_BY_INDUSTRY = "ipv_by_industry"  # Industrial Production Volume by Industry
+    MIP = "mip"  # Major industries production
+    FA_BY_HOUSE_TYPES = "fa_by_house_types"  # Floor area of ​​completed housing construction in the year by type of house
+    IT_BOP = "it_bop"  # International Trade and Balance of Payments
+    TSBR = "tsbr"  # Total State Budget Revenue
+    TSBE = "tsbe"  # Total State Budget Expenditure
+    GD = "gd"  # Gorvernment Debt
+    BRD = "brd"  # Business Registered Dissolved
+    IISD = "iisd"  # Investing In Social Development
+    TREG = "treg"  # Total Reserves excluding gold (USD)
+    CREDIT = "credit"  # Credit statistics
+    MOBILIZATION = "mobilization"  # Mobilization statistics
+    EXCHANGE_RATE = "exchange_rate"  # Exchange rate statistics
+    IIR = "iir"  # Interbank interest rates
+    RRRR = "rrrr"  # Rediscount rate, Refinancing rate
+    FDI_SECTOR = "fdi_sector"  # Foreign Direct Investment by Sector
+    FDI_RD = "fdi_rd"  # Foreign Direct Investment Registration, Disbursement
+    EXPORT = "export"  # Export statistics
+    IMPORT = "import"  # Import statistics
     GOLD_PRICE = "gold_price"
     OIL_PRICE = "oil_price"
     DOW_JONES = "dow_jones"
@@ -137,24 +157,16 @@ ScrapeSubType = Union[
 
 
 # MACROECONOMICS
+# region Automatically scraped from Vietstock
 class GdpSource(Enum):
     VIETSTOCK = "vietstock"
-    WORLDOMETER = "worldometer"
 
 
 class CpiSource(Enum):
     VIETSTOCK = "vietstock"
 
 
-class ExchangeRateSource(Enum):
-    VIETSTOCK = "vietstock"
-
-
-class InterestRateSource(Enum):
-    VIETSTOCK = "vietstock"
-
-
-class ExportImportSource(Enum):
+class PpiSource(Enum):
     VIETSTOCK = "vietstock"
 
 
@@ -162,11 +174,19 @@ class IpiSource(Enum):
     VIETSTOCK = "vietstock"
 
 
-class FdiSource(Enum):
+class XpiSource(Enum):
     VIETSTOCK = "vietstock"
 
 
-class M2Source(Enum):
+class MpiSource(Enum):
+    VIETSTOCK = "vietstock"
+
+
+class PopulationSource(Enum):
+    VIETSTOCK = "vietstock"
+
+
+class LaborSource(Enum):
     VIETSTOCK = "vietstock"
 
 
@@ -174,10 +194,98 @@ class RetailSource(Enum):
     VIETSTOCK = "vietstock"
 
 
-class PopulationUnemploymentSource(Enum):
+class PmiSource(Enum):
     VIETSTOCK = "vietstock"
 
 
+class IipSource(Enum):
+    VIETSTOCK = "vietstock"
+
+
+class IpvSource(Enum):
+    VIETSTOCK = "vietstock"
+
+
+class IpvByIndustrySource(Enum):
+    VIETSTOCK = "vietstock"
+
+
+class MipSource(Enum):
+    VIETSTOCK = "vietstock"
+
+
+class FaByHouseTypeSource(Enum):
+    VIETSTOCK = "vietstock"
+
+
+class ItBopSource(Enum):
+    VIETSTOCK = "vietstock"
+
+
+class TsbrSource(Enum):
+    VIETSTOCK = "vietstock"
+
+
+class TsbeSource(Enum):
+    VIETSTOCK = "vietstock"
+
+
+class GdSource(Enum):
+    VIETSTOCK = "vietstock"
+
+
+class BrdSource(Enum):
+    VIETSTOCK = "vietstock"
+
+
+class IisdSource(Enum):
+    VIETSTOCK = "vietstock"
+
+
+class TregSource(Enum):
+    VIETSTOCK = "vietstock"
+
+
+class CreditSource(Enum):
+    VIETSTOCK = "vietstock"
+
+
+class MobilizationSource(Enum):
+    VIETSTOCK = "vietstock"
+
+
+class ExchangeRateSource(Enum):
+    VIETSTOCK = "vietstock"
+
+
+class IirSource(Enum):
+    VIETSTOCK = "vietstock"
+
+
+class RrrrSource(Enum):
+    VIETSTOCK = "vietstock"
+
+
+class FdiSectorSource(Enum):
+    VIETSTOCK = "vietstock"
+
+
+class FdiRdSource(Enum):
+    VIETSTOCK = "vietstock"
+
+
+class ExportSource(Enum):
+    VIETSTOCK = "vietstock"
+
+
+class ImportSource(Enum):
+    VIETSTOCK = "vietstock"
+
+
+# endregion Automatically scraped from Vietstock
+
+
+# region Manually scraped from Investing.com
 class GoldPriceSource(Enum):
     INVESTING = "investing"
 
@@ -240,19 +348,45 @@ class StockInformationSource(Enum):
     CAFEF = "cafef"
 
 
+# endregion Manually scraped from Investing.com
+
+
 # Union of all sources
 Source = Union[
     # MACROECONOMICS
+    # Automatically scraped from Vietstock
     GdpSource,
     CpiSource,
-    ExchangeRateSource,
-    InterestRateSource,
-    ExportImportSource,
+    PpiSource,
     IpiSource,
-    FdiSource,
-    M2Source,
+    XpiSource,
+    MpiSource,
+    PopulationSource,
+    LaborSource,
     RetailSource,
-    PopulationUnemploymentSource,
+    PmiSource,
+    IipSource,
+    IpvSource,
+    IpvByIndustrySource,
+    MipSource,
+    FaByHouseTypeSource,
+    ItBopSource,
+    TsbrSource,
+    TsbeSource,
+    GdSource,
+    BrdSource,
+    IisdSource,
+    TregSource,
+    CreditSource,
+    MobilizationSource,
+    ExchangeRateSource,
+    IirSource,
+    RrrrSource,
+    FdiSectorSource,
+    FdiRdSource,
+    ExportSource,
+    ImportSource,
+    # Manually scraped from Investing.com
     GoldPriceSource,
     OilPriceSource,
     DowJonesSource,
@@ -287,84 +421,217 @@ SCRAPE_MAPPING: Dict[Tuple[ScrapeMainType, ScrapeSubType, Source], SourceInfo] =
         MacroeconomicsSubType.GDP,
         GdpSource.VIETSTOCK,
     ): SourceInfo(
-        url="https://finance.vietstock.vn/du-lieu-vi-mo/43/thu-nhap.htm",
-    ),
-    (
-        ScrapeMainType.MACROECONOMICS,
-        MacroeconomicsSubType.GDP,
-        GdpSource.WORLDOMETER,
-    ): SourceInfo(
-        url="https://www.worldometers.info/gdp/vietnam-gdp/",
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.CPI,
         CpiSource.VIETSTOCK,
     ): SourceInfo(
-        url="https://finance.vietstock.vn/du-lieu-vi-mo/52/cpi.htm",
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
-        MacroeconomicsSubType.EXCHANGE_RATE,
-        ExchangeRateSource.VIETSTOCK,
+        MacroeconomicsSubType.PPI,
+        PpiSource.VIETSTOCK,
     ): SourceInfo(
-        url="https://finance.vietstock.vn/du-lieu-vi-mo/53-64/ty-gia-lai-suat.htm"
-    ),
-    (
-        ScrapeMainType.MACROECONOMICS,
-        MacroeconomicsSubType.INTEREST_RATE,
-        InterestRateSource.VIETSTOCK,
-    ): SourceInfo(
-        url="https://finance.vietstock.vn/du-lieu-vi-mo/53-64/ty-gia-lai-suat.htm"
-    ),
-    (
-        ScrapeMainType.MACROECONOMICS,
-        MacroeconomicsSubType.EXPORT,
-        ExportImportSource.VIETSTOCK,
-    ): SourceInfo(
-        url="https://finance.vietstock.vn/du-lieu-vi-mo/48-49/xuat-nhap-khau.htm",
-    ),
-    (
-        ScrapeMainType.MACROECONOMICS,
-        MacroeconomicsSubType.IMPORT,
-        ExportImportSource.VIETSTOCK,
-    ): SourceInfo(
-        url="https://finance.vietstock.vn/du-lieu-vi-mo/48-49/xuat-nhap-khau.htm",
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.IPI,
         IpiSource.VIETSTOCK,
     ): SourceInfo(
-        url="https://finance.vietstock.vn/du-lieu-vi-mo/46/san-xuat-cong-nghiep.htm",
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
-        MacroeconomicsSubType.FDI,
-        FdiSource.VIETSTOCK,
+        MacroeconomicsSubType.XPI,
+        XpiSource.VIETSTOCK,
     ): SourceInfo(
-        url="https://finance.vietstock.vn/du-lieu-vi-mo/50/fdi.htm",
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
-        MacroeconomicsSubType.M2,
-        M2Source.VIETSTOCK,
+        MacroeconomicsSubType.MPI,
+        MpiSource.VIETSTOCK,
     ): SourceInfo(
-        url="https://finance.vietstock.vn/du-lieu-vi-mo/51/tin-dung.htm",
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
+    ),
+    (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.POPULATION,
+        PopulationSource.VIETSTOCK,
+    ): SourceInfo(
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
+    ),
+    (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.LABOR,
+        LaborSource.VIETSTOCK,
+    ): SourceInfo(
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.RETAIL,
         RetailSource.VIETSTOCK,
     ): SourceInfo(
-        url="https://finance.vietstock.vn/du-lieu-vi-mo/47/ban-le.htm",
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
-        MacroeconomicsSubType.POPULATION_UNEMPLOYMENT,
-        PopulationUnemploymentSource.VIETSTOCK,
+        MacroeconomicsSubType.PMI,
+        PmiSource.VIETSTOCK,
     ): SourceInfo(
-        url="https://finance.vietstock.vn/du-lieu-vi-mo/55-56/dan-so-va-lao-dong.htm",
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
+    ),
+    (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.IIP,
+        IipSource.VIETSTOCK,
+    ): SourceInfo(
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
+    ),
+    (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.IPV,
+        IpvSource.VIETSTOCK,
+    ): SourceInfo(
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
+    ),
+    (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.IPV_BY_INDUSTRY,
+        IpvByIndustrySource.VIETSTOCK,
+    ): SourceInfo(
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
+    ),
+    (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.MIP,
+        MipSource.VIETSTOCK,
+    ): SourceInfo(
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
+    ),
+    (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.FA_BY_HOUSE_TYPES,
+        FaByHouseTypeSource.VIETSTOCK,
+    ): SourceInfo(
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
+    ),
+    (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.IT_BOP,
+        ItBopSource.VIETSTOCK,
+    ): SourceInfo(
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
+    ),
+    (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.TSBR,
+        TsbrSource.VIETSTOCK,
+    ): SourceInfo(
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
+    ),
+    (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.TSBE,
+        TsbeSource.VIETSTOCK,
+    ): SourceInfo(
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
+    ),
+    (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.GD,
+        GdSource.VIETSTOCK,
+    ): SourceInfo(
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
+    ),
+    (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.BRD,
+        BrdSource.VIETSTOCK,
+    ): SourceInfo(
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
+    ),
+    (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.IISD,
+        IisdSource.VIETSTOCK,
+    ): SourceInfo(
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
+    ),
+    (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.TREG,
+        TregSource.VIETSTOCK,
+    ): SourceInfo(
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
+    ),
+    (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.CREDIT,
+        CreditSource.VIETSTOCK,
+    ): SourceInfo(
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
+    ),
+    (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.MOBILIZATION,
+        MobilizationSource.VIETSTOCK,
+    ): SourceInfo(
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
+    ),
+    (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.EXCHANGE_RATE,
+        ExchangeRateSource.VIETSTOCK,
+    ): SourceInfo(
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
+    ),
+    (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.IIR,
+        IirSource.VIETSTOCK,
+    ): SourceInfo(
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
+    ),
+    (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.RRRR,
+        RrrrSource.VIETSTOCK,
+    ): SourceInfo(
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
+    ),
+    (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.FDI_SECTOR,
+        FdiSectorSource.VIETSTOCK,
+    ): SourceInfo(
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
+    ),
+    (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.FDI_RD,
+        FdiRdSource.VIETSTOCK,
+    ): SourceInfo(
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
+    ),
+    (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.EXPORT,
+        ExportSource.VIETSTOCK,
+    ): SourceInfo(
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
+    ),
+    (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.IMPORT,
+        ImportSource.VIETSTOCK,
+    ): SourceInfo(
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
