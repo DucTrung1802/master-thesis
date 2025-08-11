@@ -2249,9 +2249,168 @@ class WebScraper:
 
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
+
+        self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
+
+        # Initialize web driver and bs4 parser
+        web_driver, bs4_parser = self._initialize_web_driver_and_bs4_parser()
+
+        try:
+            # 1. Initialize folder path and file name
+            folder_path = (
+                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            )
+            file_name = f"{key[2].value}"
+
+            # 2. Initialize start time and current time
+            start_date = SCRAPER_START_DATE
+            start_year = start_date.year
+            input_start_date = start_date.strftime("%d/%m/%Y")
+
+            current_date = datetime.now().date()
+            current_year = current_date.year
+            input_current_date = current_date.strftime("%d/%m/%Y")
+
+            file_path = f"{folder_path}/{file_name}_{start_year}_{current_year}.csv"
+
+            # 3. Check if file(s) already exists
+            if os.path.exists(file_path):
+                self._logger.log_info(f"File already exists: {file_path}")
+                return
+
+            # 4. Create folder if not exists
+            if not os.path.exists(folder_path):
+                os.makedirs(folder_path, exist_ok=True)
+
+            # 5. Get SourceInfo
+            source_info = SCRAPE_MAPPING[key]
+
+            # 6. Navigate to URL
+            web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
+            time.sleep(SCRAPER_BASE_WAIT_TIME)
+
+            # 7. Logic for scraping
+            xpaths = {
+                "time_unit": '//*[@id="macro-content"]/div/div/div[3]/div/div[3]/div/div[1]/select',
+                "from_date": '//*[@id="txtFromTradeDate"]/input',
+                "to_date": '//*[@id="txtToTradeDate"]/input',
+                "view_button": '//*[@id="macro-content"]/div/div/div[3]/div/div[3]/div/button',
+            }
+
+            self._select_dropdown_by_text(web_driver, xpaths["time_unit"], "Ngày")
+            self._input_text(web_driver, xpaths["from_date"], input_start_date)
+            self._input_text(web_driver, xpaths["to_date"], input_current_date)
+
+            self._click_element(web_driver, xpaths["view_button"])
+            WebDriverWait(web_driver, 10).until(
+                EC.presence_of_element_located((By.ID, "tbl-macro-data"))
+            )
+
+            bs4_parser = self._update_bs4_parser(web_driver)
+
+            headers, rows = self._extract_table_by_id(bs4_parser, "tbl-macro-data")
+
+            # Write to CSV
+            with open(file_path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(headers)
+                writer.writerows(rows)
+
+        finally:
+            web_driver.close()
+
+        self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
+
     def _scrape_data_macroeconomics_exchange_rate_vietstock(
         self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
     ):
+        self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
+
+        # Initialize web driver and bs4 parser
+        web_driver, bs4_parser = self._initialize_web_driver_and_bs4_parser()
+
+        try:
+            # 1. Initialize folder path and file name
+            folder_path = (
+                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            )
+            file_name = f"{key[2].value}"
+
+            # 2. Initialize start time and current time
+            start_year = SCRAPER_START_DATE.year
+            current_year = datetime.now().year
+
+            file_path = f"{folder_path}/{file_name}_{start_year}_{current_year}.csv"
+
+            # 3. Delete file if exists
+            if os.path.exists(file_path):
+                self._logger.log_info(f"File already exists: {file_path}, delete it.")
+                os.remove(file_path)
+
+            # 4. Create folder if not exists
+            if not os.path.exists(folder_path):
+                os.makedirs(folder_path, exist_ok=True)
+
+            # 5. Get SourceInfo
+            source_info = SCRAPE_MAPPING[key]
+
+            # 6. Navigate to URL
+            web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
+            time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
+
+            # 7. Logic for scraping
+            self._logger.log_info(
+                f"Scraping EXCHANGE RATE data from {start_year} to {current_year}."
+            )
+
+            exchange_rate_panel_xpath = (
+                '//*[@id="macro-data"]/div[3]/div[1]/div[1]/div[2]/div[9]/div[1]/span'
+            )
+            self._click_element(
+                web_driver=web_driver,
+                xpath=exchange_rate_panel_xpath,
+            )
+            time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
+            exchange_rate_xpath = (
+                '//*[@id="macro-data"]/div[3]/div[1]/div[1]/div[2]/div[9]/div[2]/div[4]'
+            )
+            self._click_element(
+                web_driver=web_driver,
+                xpath=exchange_rate_xpath,
+            )
+            time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
+            all_time_button_xpath = '//*[@id="macro-data"]/div[3]/div[2]/div[1]/div[1]/div[1]/div[1]/div[2]/div[1]/div[10]'
+            self._click_element(
+                web_driver=web_driver,
+                xpath=all_time_button_xpath,
+            )
+
+            table_title_xpath = (
+                '//*[@id="macro-data"]/div[3]/div[2]/div[2]/div[1]/div[1]'
+            )
+            WebDriverWait(web_driver, 10).until(
+                EC.presence_of_element_located((By.XPATH, table_title_xpath))
+            )
+            time.sleep(3)
+
+            bs4_parser = self._update_bs4_parser(web_driver)
+
+            headers, rows = self._extract_table_by_id(
+                bs4_parser=bs4_parser, id="tbl-macro-data"
+            )
+
+            # Write to CSV
+            with open(file_path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(headers)
+                writer.writerows(rows)
+
+        finally:
+            web_driver.close()
+
+        self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
+
+
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
 
         # Initialize web driver and bs4 parser
@@ -3676,6 +3835,13 @@ class WebScraper:
                 MobilizationSource.VIETSTOCK,
             ):
                 return self._scrape_data_macroeconomics_mobilization_vietstock(key)
+            
+            case (
+                ScrapeMainType.MACROECONOMICS,
+                MacroeconomicsSubType.EXCHANGE_RATE,
+                ExchangeRateSource.VIETSTOCK,
+            ):
+                return self._scrape_data_macroeconomics_exchange_rate_vietstock(key)
 
             # STOCK_MARKET
             case (
@@ -3955,25 +4121,25 @@ class WebScraper:
         #     Task(format_key_for_name(key), self._scrape_data_from, key)
         # )
         
-        # MACROECONOMICS_MOBILIZATION_VIETSTOCK
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.MOBILIZATION,
-            MobilizationSource.VIETSTOCK,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
-        
-        # # MACROECONOMICS_EXCHANGE_RATE_VIETSTOCK
+        # # MACROECONOMICS_MOBILIZATION_VIETSTOCK
         # key = (
         #     ScrapeMainType.MACROECONOMICS,
-        #     MacroeconomicsSubType.EXCHANGE_RATE,
-        #     ExchangeRateSource.VIETSTOCK,
+        #     MacroeconomicsSubType.MOBILIZATION,
+        #     MobilizationSource.VIETSTOCK,
         # )
         # self._thread_manager.add_task(
         #     Task(format_key_for_name(key), self._scrape_data_from, key)
         # )
+        
+        # MACROECONOMICS_EXCHANGE_RATE_VIETSTOCK
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.EXCHANGE_RATE,
+            ExchangeRateSource.VIETSTOCK,
+        )
+        self._thread_manager.add_task(
+            Task(format_key_for_name(key), self._scrape_data_from, key)
+        )
 
         # # MACROECONOMICS_INTEREST_RATE_VIETSTOCK
         # key = (
