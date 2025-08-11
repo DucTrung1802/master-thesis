@@ -110,6 +110,7 @@ class MacroeconomicsSubType(Enum):
     TSBE = "tsbe"  # Total State Budget Expenditure
     GD = "gd"  # Gorvernment Debt
     BRD = "brd"  # Business Registered Dissolved
+    IISD = "iisd" # Investing In Social Development
     GOLD_PRICE = "gold_price"
     OIL_PRICE = "oil_price"
     DOW_JONES = "dow_jones"
@@ -226,6 +227,10 @@ class BrdSource(Enum):
     VIETSTOCK = "vietstock"
 
 
+class IisdSource(Enum):
+    VIETSTOCK = "vietstock"
+
+
 class GoldPriceSource(Enum):
     INVESTING = "investing"
 
@@ -311,6 +316,7 @@ Source = Union[
     TsbeSource,
     GdSource,
     BrdSource,
+    IisdSource,
     GoldPriceSource,
     OilPriceSource,
     DowJonesSource,
@@ -477,6 +483,13 @@ SCRAPE_MAPPING: Dict[Tuple[ScrapeMainType, ScrapeSubType, Source], SourceInfo] =
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.BRD,
         BrdSource.VIETSTOCK,
+    ): SourceInfo(
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
+    ),
+    (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.IISD,
+        IisdSource.VIETSTOCK,
     ): SourceInfo(
         url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
     ),
