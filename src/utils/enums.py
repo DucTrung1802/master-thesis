@@ -106,6 +106,7 @@ class MacroeconomicsSubType(Enum):
     MIP = "mip"  # Major industries production
     FA_BY_HOUSE_TYPES = "fa_by_house_types"  # Floor area of ​​completed housing construction in the year by type of house
     IT_BOP = "it_bop"  # International Trade and Balance of Payments
+    TSBR = "tsbr"  # Total State Budget Revenue
     GOLD_PRICE = "gold_price"
     OIL_PRICE = "oil_price"
     DOW_JONES = "dow_jones"
@@ -206,6 +207,10 @@ class ItBopSource(Enum):
     VIETSTOCK = "vietstock"
 
 
+class TsbrSource(Enum):
+    VIETSTOCK = "vietstock"
+
+
 class GoldPriceSource(Enum):
     INVESTING = "investing"
 
@@ -287,6 +292,7 @@ Source = Union[
     MipSource,
     FaByHouseTypeSource,
     ItBopSource,
+    TsbrSource,
     GoldPriceSource,
     OilPriceSource,
     DowJonesSource,
@@ -425,6 +431,13 @@ SCRAPE_MAPPING: Dict[Tuple[ScrapeMainType, ScrapeSubType, Source], SourceInfo] =
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.IT_BOP,
         ItBopSource.VIETSTOCK,
+    ): SourceInfo(
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
+    ),
+    (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.TSBR,
+        TsbrSource.VIETSTOCK,
     ): SourceInfo(
         url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
     ),
