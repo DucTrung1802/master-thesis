@@ -3420,33 +3420,44 @@ class WebScraper:
                             value=stock_code,
                         )
 
-                        auto_complete_link_xpath = '//*[@id="autoCompleteLink"]'
-                        _ = WebDriverWait(web_driver, 10).until(
-                            EC.presence_of_element_located(
-                                (By.XPATH, auto_complete_link_xpath)
-                            )
-                        )
+                        time.sleep(2)
 
                         bs4_parser = self._update_bs4_parser(web_driver=web_driver)
-                        auto_complete_link = bs4_parser.find(
-                            name="a", id="autoCompleteLink"
-                        )
 
-                        if not auto_complete_link:
-                            raise ValueError("Auto-complete link not found")
+                        # Extract list of results
+                        result_list = bs4_parser.select(
+                            ".ac_results ul li a div p"
+                        )  # UI v1
+                        if len(result_list) == 0:
+                            result_list = bs4_parser.select(
+                                ".list-search-result ul li a div p"
+                            )  # UI v2
 
-                        em_tag = auto_complete_link.find(
-                            name="em"
-                        ) or auto_complete_link.find(name="p")
-                        if em_tag:
-                            em_text = em_tag.text
-                        else:
-                            em_text = None  # or handle the case where both are missing
-
-                        if em_text != stock_code:
-                            raise ValueError(
-                                f"Autocomplete text mismatch: {em_text} vs {stock_code}"
+                        if not result_list or len(result_list) == 0:
+                            self._logger.log_warning(
+                                f"Cannot find stock with code: `{stock_code}`"
                             )
+                            break
+
+                        found_stock_code = None
+                        for element in result_list:
+                            try:
+                                found_stock_code = element.get_text().split(" - ")[0]
+                                if found_stock_code.lower() == stock_code.lower():
+                                    a_tag = element.find_parent("a")
+                                    if a_tag:
+                                        href = a_tag["href"]
+                                        # Click matched element
+                                        web_driver.get(f"https://cafef.vn{href}")
+                                        break
+                            except:
+                                continue
+
+                        if not found_stock_code:
+                            self._logger.log_warning(
+                                f"Cannot find stock with code: `{stock_code}`"
+                            )
+                            break
 
                         listed_shares = 0
                         outstanding_shares = 0
@@ -3457,16 +3468,10 @@ class WebScraper:
                             '//*[@id="contentV1"]/div[2]/div[1]',
                             '//*[@id="real-time-stock-exchange"]',
                         ]
-                        old_stock_name_content = self._find_first_valid_element(
-                            web_driver=web_driver, xpaths=stock_name_xpaths
-                        ).text
-
-                        self._click_element(web_driver, auto_complete_link_xpath)
                         WebDriverWait(web_driver, 10).until(
                             lambda driver: self._find_first_valid_element(
                                 web_driver=driver, xpaths=stock_name_xpaths
-                            ).text
-                            != old_stock_name_content
+                            )
                         )
 
                         bs4_parser = self._update_bs4_parser(web_driver)
@@ -4388,9 +4393,9 @@ class WebScraper:
         self._logger.log_info("Adding data scraping tasks.")
         number_of_task_before = self._thread_manager.get_current_number_of_task()
 
-        self.add_macroeconomics_data_scraping_tasks()
+        # self.add_macroeconomics_data_scraping_tasks()
         # self.add_stock_market_data_scraping_tasks()
-        # self.add_enterprise_data_scraping_tasks()
+        self.add_enterprise_data_scraping_tasks()
 
         number_of_task_after = self._thread_manager.get_current_number_of_task()
         self._logger.log_info(
@@ -4402,10 +4407,10 @@ class WebScraper:
             f"Start executing {self._thread_manager.get_current_number_of_task()} tasks."
         )
 
-        # self._thread_manager.execute(
-        #     final_callback=self._double_check_stock_information_cafef_result
-        # )
+        self._thread_manager.execute(
+            final_callback=self._double_check_stock_information_cafef_result
+        )
 
-        self._thread_manager.execute()
+        # self._thread_manager.execute()
 
         self._logger.log_info("Finished scraping data.")
