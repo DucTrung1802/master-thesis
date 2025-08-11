@@ -115,6 +115,7 @@ class MacroeconomicsSubType(Enum):
     CREDIT = "credit"  # Credit statistics
     MOBILIZATION = "mobilization"  # Mobilization statistics
     EXCHANGE_RATE = "exchange_rate"  # Exchange rate statistics
+    IIR = "iir"  # Interbank interest rates
     GOLD_PRICE = "gold_price"
     OIL_PRICE = "oil_price"
     DOW_JONES = "dow_jones"
@@ -251,6 +252,10 @@ class ExchangeRateSource(Enum):
     VIETSTOCK = "vietstock"
 
 
+class IirSource(Enum):
+    VIETSTOCK = "vietstock"
+
+
 class GoldPriceSource(Enum):
     INVESTING = "investing"
 
@@ -341,6 +346,7 @@ Source = Union[
     CreditSource,
     MobilizationSource,
     ExchangeRateSource,
+    IirSource,
     GoldPriceSource,
     OilPriceSource,
     DowJonesSource,
@@ -542,6 +548,13 @@ SCRAPE_MAPPING: Dict[Tuple[ScrapeMainType, ScrapeSubType, Source], SourceInfo] =
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.EXCHANGE_RATE,
         ExchangeRateSource.VIETSTOCK,
+    ): SourceInfo(
+        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
+    ),
+    (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.IIR,
+        IirSource.VIETSTOCK,
     ): SourceInfo(
         url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
     ),
