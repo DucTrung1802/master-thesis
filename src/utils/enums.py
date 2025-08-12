@@ -638,49 +638,49 @@ SCRAPE_MAPPING: Dict[Tuple[ScrapeMainType, ScrapeSubType, Source], SourceInfo] =
         MacroeconomicsSubType.GOLD_PRICE,
         GoldPriceSource.INVESTING,
     ): SourceInfo(
-        url="https://www.investing.com/commodities/gold-historical-data",
+        url="https://vn.investing.com/commodities/gold-historical-data",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.OIL_PRICE,
         OilPriceSource.INVESTING,
     ): SourceInfo(
-        url="https://www.investing.com/commodities/brent-oil-historical-data",
+        url="https://vn.investing.com/commodities/brent-oil-historical-data",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.DOW_JONES,
         DowJonesSource.INVESTING,
     ): SourceInfo(
-        url="https://www.investing.com/indices/us-30-historical-data",
+        url="https://vn.investing.com/indices/us-30-historical-data",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.NYSE_COMPOSITE,
         NYSECompositeSource.INVESTING,
     ): SourceInfo(
-        url="https://www.investing.com/indices/nyse-composite-historical-data",
+        url="https://vn.investing.com/indices/nyse-composite-historical-data",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.SNP_500,
         SNP500Source.INVESTING,
     ): SourceInfo(
-        url="https://www.investing.com/indices/us-spx-500",
+        url="https://vn.investing.com/indices/us-spx-500-historical-data",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.NASDAQ_COMPOSITE,
         NASDAQCompositeSource.INVESTING,
     ): SourceInfo(
-        url="https://www.investing.com/indices/nasdaq-composite-historical-data",
+        url="https://vn.investing.com/indices/nasdaq-composite-historical-data",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.NASDAQ_100,
         NASDAQ100Source.INVESTING,
     ): SourceInfo(
-        url="https://www.investing.com/indices/nq-100",
+        url="https://vn.investing.com/indices/nq-100-historical-data",
     ),
     # STOCK_MARKET
     (
