@@ -774,12 +774,36 @@ class Table:
             HOUSING_AND_CONSTRUCTION_MATERIALS = "housing_and_construction_materials"
             MEDICINE_AND_HEALTH_CARE = "medicine_and_health_care"
             OTHER_GOODS_AND_SERVICES = "other_goods_and_services"
-            POSTAL_SERVICES_AND_TELECOMMUNICATION = "postal_services_and_telecommunication"
+            POSTAL_SERVICES_AND_TELECOMMUNICATION = (
+                "postal_services_and_telecommunication"
+            )
             TRAFFIC = "traffic"
 
         name = "cpi"
         primary_key = [Column.YEAR.value, Column.MONTH.value]
 
+    class PPI:
+        class Column(Enum):
+            YEAR = "year"
+            GENERAL_INDEX = "general_index"
+            FORESTRY_SERVICES = "forestry_services"
+            AGRICULTURAL_SERVICES = "agricultural_services"
+            FORESTRY_AND_RELATED_SERVICES = "forestry_and_related_services"
+            EXPLOITED_FOREST_PRODUCTS = "exploited_forest_products"
+            COLLECTED_FOREST_PRODUCTS = "collected_forest_products"
+            AGRICULTURE_AND_RELATED_SERVICES = "agriculture_and_related_services"
+            LIVESTOCK_PRODUCTS = "livestock_products"
+            ANNUAL_CROP_PRODUCTS = "annual_crop_products"
+            PERENNIAL_CROP_PRODUCTS = "perennial_crop_products"
+            EXPLOITED_AQUATIC_PRODUCTS = "exploited_aquatic_products"
+            AQUATIC_PRODUCTS_EXPLOITATION_AND_FARMING = (
+                "aquatic_products_exploitation_and_farming"
+            )
+            AQUATIC_FARMING_PRODUCTS = "aquatic_farming_products"
+            FOREST_PLANTING_AND_CARE = "forest_planting_and_care"
+
+        name = "ppi"
+        primary_key = [Column.YEAR.value]
 
     class EXCHANGE_RATE:
         class Column(Enum):

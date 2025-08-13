@@ -173,6 +173,31 @@ class DataPreprocessor:
         )
         # fmt: on
 
+        # PPI
+        # fmt: off
+        self._database_driver.create_table(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.PPI.name,
+            columns = [
+                Column(name=Table.PPI.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
+                Column(name=Table.PPI.Column.GENERAL_INDEX.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.PPI.Column.FORESTRY_SERVICES.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.PPI.Column.AGRICULTURAL_SERVICES.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.PPI.Column.FORESTRY_AND_RELATED_SERVICES.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.PPI.Column.EXPLOITED_FOREST_PRODUCTS.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.PPI.Column.COLLECTED_FOREST_PRODUCTS.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.PPI.Column.AGRICULTURE_AND_RELATED_SERVICES.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.PPI.Column.LIVESTOCK_PRODUCTS.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.PPI.Column.ANNUAL_CROP_PRODUCTS.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.PPI.Column.PERENNIAL_CROP_PRODUCTS.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.PPI.Column.EXPLOITED_AQUATIC_PRODUCTS.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.PPI.Column.AQUATIC_PRODUCTS_EXPLOITATION_AND_FARMING.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.PPI.Column.AQUATIC_FARMING_PRODUCTS.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.PPI.Column.FOREST_PLANTING_AND_CARE.value, data_type=DataType.DECIMAL(), nullable=True),
+            ],
+            primary_keys=Table.PPI.primary_key,
+        )
+        # fmt: on
         
         # EXCHANGE_RATE
         # fmt: off
@@ -812,7 +837,9 @@ class DataPreprocessor:
         df = pd.read_csv(file_path)
 
         # Set indicator names as lowercase with underscores
-        df["Chỉ tiêu"] = df["Chỉ tiêu"].str.lower().str.replace(",", "").str.replace(" ", "_")
+        df["Chỉ tiêu"] = (
+            df["Chỉ tiêu"].str.lower().str.replace(",", "").str.replace(" ", "_")
+        )
 
         # Melt from wide to long format
         df = df.melt(
@@ -863,6 +890,99 @@ class DataPreprocessor:
         self._logger.log_info("Finish processing macroeconomics CPI data.")
 
     # endregion MACROECONOMICS.CPI
+
+    # region MACROECONOMICS.PPI
+
+    def _process_macroeconomics_ppi_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.PPI,
+            PpiSource.VIETSTOCK,
+        )
+
+        folder_path = (
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+        )
+
+        file_path = get_newest_file_path(
+            folder_path=folder_path, extension=FileExtension.CSV
+        )
+
+        if not file_path:
+            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
+            return
+
+        self._logger.log_info(f'Start processing data in "{file_path}".')
+
+        # Add logic for processing data here
+        df = pd.read_csv(file_path)
+
+        # Set indicator names as lowercase with underscores
+        # df["Chỉ tiêu"] = df["Chỉ tiêu"].str.lower().str.replace(" ", "_")
+        df["Chỉ tiêu"] = (
+            df["Chỉ tiêu"].str.lower().str.replace(",", "").str.replace(" ", "_")
+        )
+
+        # Melt from wide to long format
+        df = df.melt(
+            id_vars=["Chỉ tiêu", "Đơn vị tính"], var_name="year_str", value_name="value"
+        )
+
+        # Clean numeric values
+        df["value"] = df["value"].astype(str).str.replace(",", "", regex=False)
+        df["value"] = pd.to_numeric(df["value"], errors="coerce")
+
+        # Extract year
+        df["year"] = pd.to_datetime(df["year_str"], errors="coerce").dt.year
+
+        # Use pivot_table with first() to handle duplicates
+        df = df.pivot_table(
+            index=["year"], columns="Chỉ tiêu", values="value", aggfunc="first"
+        ).reset_index()
+
+        # Sort by year and month
+        df = df.sort_values(["year"]).reset_index(drop=True)
+
+        # Fill missing values with 0
+        df.fillna(0, inplace=True)
+
+        col_translation = {
+            "year": "year",
+            "chỉ_số_chung": "general_index",
+            "dịch_vụ_lâm_nghiệp": "forestry_services",
+            "dịch_vụ_nông_nghiệp": "agricultural_services",
+            "lâm_nghiệp_và_dịch_vụ_có_liên_quan": "forestry_and_related_services",
+            "lâm_sản_khai_thác": "exploited_forest_products",
+            "lâm_sản_thu_nhặt": "collected_forest_products",
+            "nông_nghiệp_và_dịch_vụ_có_liên_quan": "agriculture_and_related_services",
+            "sản_phẩm_từ_chăn_nuôi": "livestock_products",
+            "sản_phẩm_từ_cây_hàng_năm": "annual_crop_products",
+            "sản_phẩm_từ_cây_lâu_năm": "perennial_crop_products",
+            "thủy_sản_khai_thác": "exploited_aquatic_products",
+            "thủy_sản_khai_thác_nuôi_trồng": "aquatic_products_exploitation_and_farming",
+            "thủy_sản_nuôi_trồng": "aquatic_farming_products",
+            "trồng_rừng_và_chăm_sóc_rừng": "forest_planting_and_care",
+        }
+
+        df = df.rename(columns=col_translation)
+
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.PPI.name,
+            primary_keys=Table.PPI.primary_key,
+            df=df,
+        )
+
+        self._logger.log_info(f'Finish processing data in "{file_path}".')
+
+    def _process_macroeconomics_ppi(self) -> None:
+        self._logger.log_info("Start processing macroeconomics PPI data.")
+
+        self._process_macroeconomics_ppi_vietstock()
+
+        self._logger.log_info("Finish processing macroeconomics PPI data.")
+
+    # endregion MACROECONOMICS.PPI
 
     # region MACROECONOMICS.EXCHANGE_RATE
     def _process_macroeconomics_exchange_rate_vietstock(self) -> None:
@@ -2824,7 +2944,7 @@ class DataPreprocessor:
         # Macroeconomics
         self._process_macroeconomics_gdp()
         self._process_macroeconomics_cpi()
-        # self._process_macroeconomics_exchange_rate()
+        self._process_macroeconomics_ppi()
         # self._process_macroeconomics_interest_rate()
         # self._process_macroeconomics_export()
         # self._process_macroeconomics_import()
