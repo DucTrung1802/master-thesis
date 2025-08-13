@@ -153,25 +153,26 @@ class DataPreprocessor:
             columns = [
                 Column(name=Table.CPI.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
                 Column(name=Table.CPI.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
-                Column(name=Table.CPI.Column.CPI.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.CPI.Column.FNB_SERVICES.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.CPI.Column.STAPLE_FOOD.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.CPI.Column.FOOD.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.CPI.Column.FAFH.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.CPI.Column.DRINK_AND_TOBACO.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.CPI.Column.WEARING.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.CPI.Column.HOUSING_AND_BUILDING_MATERIALS.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.CPI.Column.HOUSEHOLD_APPLIANCES_AND_EQUIPMENT.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.CPI.Column.MEDICINES_AND_MEDICAL_SERVICES.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.CPI.Column.TRAFFIC.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.CPI.Column.POST_AND_TELECOMMUNICATIONS.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.CPI.Column.EDUCATION.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.CPI.Column.CULTURE_ENTERTAINMENT_AND_TOURISM.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.CPI.Column.OTHER_SUPPLIES_AND_SERVICES.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.CPI.Column.BEVERAGE_AND_CIGARETTE.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.CPI.Column.CONSUMER_PRICE_INDEX.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.CPI.Column.CULTURE_ENTERTAINMENT_AND_TOURISM.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.CPI.Column.EATING_OUTSIDE.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.CPI.Column.EDUCATION.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.CPI.Column.FOOD.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.CPI.Column.FOOD_AND_FOODSTUFF.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.CPI.Column.FOODSTUFF.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.CPI.Column.GARMENT_FOOTWEAR_HAT.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.CPI.Column.HOUSEHOLD_APPLIANCES_AND_GOODS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.CPI.Column.HOUSING_AND_CONSTRUCTION_MATERIALS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.CPI.Column.MEDICINE_AND_HEALTH_CARE.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.CPI.Column.OTHER_GOODS_AND_SERVICES.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.CPI.Column.POSTAL_SERVICES_AND_TELECOMMUNICATION.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.CPI.Column.TRAFFIC.value, data_type=DataType.FLOAT(), nullable=True),
             ],
             primary_keys=Table.CPI.primary_key,
         )
         # fmt: on
+
         
         # EXCHANGE_RATE
         # fmt: off
@@ -808,43 +809,42 @@ class DataPreprocessor:
         self._logger.log_info(f'Start processing data in "{file_path}".')
 
         # Add logic for processing data here
-
         df = pd.read_csv(file_path)
-        df = df.drop(df.columns[:2], axis=1)
-        df = df.transpose()
-        df.columns = [
-            Table.CPI.Column.CPI.value,
-            Table.CPI.Column.FNB_SERVICES.value,
-            Table.CPI.Column.STAPLE_FOOD.value,
-            Table.CPI.Column.FOOD.value,
-            Table.CPI.Column.FAFH.value,
-            Table.CPI.Column.DRINK_AND_TOBACO.value,
-            Table.CPI.Column.WEARING.value,
-            Table.CPI.Column.HOUSING_AND_BUILDING_MATERIALS.value,
-            Table.CPI.Column.HOUSEHOLD_APPLIANCES_AND_EQUIPMENT.value,
-            Table.CPI.Column.MEDICINES_AND_MEDICAL_SERVICES.value,
-            Table.CPI.Column.TRAFFIC.value,
-            Table.CPI.Column.POST_AND_TELECOMMUNICATIONS.value,
-            Table.CPI.Column.EDUCATION.value,
-            Table.CPI.Column.CULTURE_ENTERTAINMENT_AND_TOURISM.value,
-            Table.CPI.Column.OTHER_SUPPLIES_AND_SERVICES.value,
-        ]
-        df[Table.CPI.Column.MONTH.value] = (
-            df.index.to_series().str.extract(r"Tháng (\d+)/\d+")[0].astype("Int64")
+
+        # Set indicator names as lowercase with underscores
+        df["Chỉ tiêu"] = df["Chỉ tiêu"].str.lower().str.replace(",", "").str.replace(" ", "_")
+
+        # Melt from wide to long format
+        df = df.melt(
+            id_vars=["Chỉ tiêu", "Đơn vị tính"],
+            var_name="month_str",
+            value_name="value",
         )
-        df[Table.CPI.Column.YEAR.value] = (
-            df.index.to_series().str.extract(r"Tháng \d+/(\d+)")[0].astype("Int64")
-        )
-        df = df[
-            [Table.CPI.Column.YEAR.value, Table.CPI.Column.MONTH.value]
-            + [
-                col
-                for col in df.columns
-                if col
-                not in [Table.CPI.Column.YEAR.value, Table.CPI.Column.MONTH.value]
-            ]
-        ]
-        df = df.reset_index(drop=True)
+
+        # Clean numeric values
+        df["value"] = df["value"].astype(str).str.replace(",", "", regex=False)
+        df["value"] = pd.to_numeric(df["value"], errors="coerce")
+
+        # Extract year and month
+        df["date"] = pd.to_datetime(df["month_str"], errors="coerce")
+
+        # Drop rows where date couldn't be parsed
+        df = df.dropna(subset=["date"])
+
+        # Extract numeric year, month
+        df["month"] = df["date"].dt.month
+        df["year"] = df["date"].dt.year
+
+        # Use pivot_table with first() to handle duplicates
+        df = df.pivot_table(
+            index=["year", "month"], columns="Chỉ tiêu", values="value", aggfunc="first"
+        ).reset_index()
+
+        # Sort by year and month
+        df = df.sort_values(["year", "month"]).reset_index(drop=True)
+
+        # Fill missing values with 0
+        df.fillna(0, inplace=True)
 
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
@@ -2823,7 +2823,7 @@ class DataPreprocessor:
 
         # Macroeconomics
         self._process_macroeconomics_gdp()
-        # self._process_macroeconomics_cpi()
+        self._process_macroeconomics_cpi()
         # self._process_macroeconomics_exchange_rate()
         # self._process_macroeconomics_interest_rate()
         # self._process_macroeconomics_export()

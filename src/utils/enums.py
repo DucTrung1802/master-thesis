@@ -761,24 +761,25 @@ class Table:
         class Column(Enum):
             YEAR = "year"
             MONTH = "month"
-            CPI = "cpi"
-            FNB_SERVICES = "fnb_services"
-            STAPLE_FOOD = "staple_food"
-            FOOD = "food"
-            FAFH = "fafh"
-            DRINK_AND_TOBACO = "drink_and_tobaco"
-            WEARING = "wearing"
-            HOUSING_AND_BUILDING_MATERIALS = "housing_and_building_materials"
-            HOUSEHOLD_APPLIANCES_AND_EQUIPMENT = "household_appliances_and_equipment"
-            MEDICINES_AND_MEDICAL_SERVICES = "medicines_and_medical_services"
-            TRAFFIC = "traffic"
-            POST_AND_TELECOMMUNICATIONS = "post_and_telecommunications"
-            EDUCATION = "education"
+            BEVERAGE_AND_CIGARETTE = "beverage_and_cigarette"
+            CONSUMER_PRICE_INDEX = "consumer_price_index"
             CULTURE_ENTERTAINMENT_AND_TOURISM = "culture_entertainment_and_tourism"
-            OTHER_SUPPLIES_AND_SERVICES = "other_supplies_and_services"
+            EATING_OUTSIDE = "eating_outside"
+            EDUCATION = "education"
+            FOOD = "food"
+            FOOD_AND_FOODSTUFF = "food_and_foodstuff"
+            FOODSTUFF = "foodstuff"
+            GARMENT_FOOTWEAR_HAT = "garment_footwear_hat"
+            HOUSEHOLD_APPLIANCES_AND_GOODS = "household_appliances_and_goods"
+            HOUSING_AND_CONSTRUCTION_MATERIALS = "housing_and_construction_materials"
+            MEDICINE_AND_HEALTH_CARE = "medicine_and_health_care"
+            OTHER_GOODS_AND_SERVICES = "other_goods_and_services"
+            POSTAL_SERVICES_AND_TELECOMMUNICATION = "postal_services_and_telecommunication"
+            TRAFFIC = "traffic"
 
         name = "cpi"
         primary_key = [Column.YEAR.value, Column.MONTH.value]
+
 
     class EXCHANGE_RATE:
         class Column(Enum):
