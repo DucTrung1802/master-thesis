@@ -132,16 +132,14 @@ class DataPreprocessor:
         self._database_driver.create_table(
             schema_name=Schema.MACROECONOMICS.value,
             table_name=Table.GDP.name,
-            columns = [
+            columns=[
                 Column(name=Table.GDP.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
                 Column(name=Table.GDP.Column.QUARTER.value, data_type=DataType.INT(), nullable=False),
-                Column(name=Table.GDP.Column.AGRICULTURE_SHARE.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.GDP.Column.INDUSTRY_SHARE.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.GDP.Column.SERVICE_SHARE.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.GDP.Column.GDP_TRUE_GROWTH_ACC.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.GDP.Column.AGRICULTURE_TRUE_GROWTH_ACC.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.GDP.Column.INDUSTRY_TRUE_GROWTH_ACC.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.GDP.Column.SERVICE_TRUE_GROWTH_ACC.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.GDP.Column.AGRICULTURE.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.GDP.Column.INDUSTRY.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.GDP.Column.SERVICES.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.GDP.Column.GDP_GROWTH.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.GDP.Column.GDP_REAL.value, data_type=DataType.FLOAT(), nullable=True),
             ],
             primary_keys=Table.GDP.primary_key,
         )
@@ -682,8 +680,8 @@ class DataPreprocessor:
         self._logger.log_info("Start creating tables.")
 
         self._create_macroeconomics_tables()
-        self._create_stock_market_tables()
-        self._create_enterprise_tables()
+        # self._create_stock_market_tables()
+        # self._create_enterprise_tables()
 
         self._logger.log_info("Finish creating tables.")
 
@@ -715,61 +713,59 @@ class DataPreprocessor:
 
         # Add logic for processing data here
         df = pd.read_csv(file_path)
+
+        df = df.iloc[:5, :]
+
+        # Set indicator names as lowercase with underscores
+        df["Chỉ tiêu"] = df["Chỉ tiêu"].str.lower().str.replace(" ", "_")
+
+        # Melt from wide to long format
+        df = df.melt(
+            id_vars=["Chỉ tiêu", "Đơn vị tính"],
+            var_name="quarter_str",
+            value_name="value",
+        )
+
+        # Filter out any non-quarter columns
+        df = df[df["quarter_str"].str.match(r"Q\d+/\d{4}")]
+
+        # Clean numeric values
+        df["value"] = df["value"].astype(str).str.replace(",", "", regex=False)
+        df["value"] = pd.to_numeric(df["value"], errors="coerce")
+
+        # Extract year and quarter
+        df["quarter"] = df["quarter_str"].str.extract(r"Q(\d+)/")[0].astype(int)
+        df["year"] = df["quarter_str"].str.extract(r"/(\d{4})")[0].astype(int)
+
+        # Use pivot_table with first() to handle duplicates
+        df = df.pivot_table(
+            index=["year", "quarter"],
+            columns="Chỉ tiêu",
+            values="value",
+            aggfunc="first",
+        ).reset_index()
+
+        # Sort by year and quarter
+        df = df.sort_values(["year", "quarter"]).reset_index(drop=True)
+
+        # Fill missing values with 0
+        df.fillna(0, inplace=True)
+
+        # Rename columns
+        df.rename(columns={"total_gdp": "gdp_growth"}, inplace=True)
+
+        # Resort columns
         df = df[
             [
-                col
-                for col in df.columns
-                if not col.startswith(("Quý 2", "Quý 3", "Quý 4"))
+                "year",
+                "quarter",
+                "agriculture",
+                "industry",
+                "services",
+                "gdp_growth",
+                "gdp_real",
             ]
         ]
-
-        df = df.transpose().iloc[2:, :7]
-
-        df.columns = [
-            Table.GDP.Column.AGRICULTURE_SHARE.value,
-            Table.GDP.Column.INDUSTRY_SHARE.value,
-            Table.GDP.Column.SERVICE_SHARE.value,
-            Table.GDP.Column.GDP_TRUE_GROWTH_ACC.value,
-            Table.GDP.Column.AGRICULTURE_TRUE_GROWTH_ACC.value,
-            Table.GDP.Column.INDUSTRY_TRUE_GROWTH_ACC.value,
-            Table.GDP.Column.SERVICE_TRUE_GROWTH_ACC.value,
-        ]
-
-        df = df.reset_index().rename(columns={"index": "period"})
-        df = df[df["period"] != "Đồ thị"].copy()
-
-        def extract_year_quarter(period):
-            year_match = re.search(r"(\d{4})", period)
-            year = int(year_match.group(1)) if year_match else None
-
-            if "Quý 1" in period:
-                quarter = 1
-            elif "6 tháng" in period:
-                quarter = 2
-            elif "9 tháng" in period:
-                quarter = 3
-            else:
-                quarter = None
-
-            return pd.Series([year, quarter])
-
-        df[[Table.GDP.Column.YEAR.value, Table.GDP.Column.QUARTER.value]] = df[
-            "period"
-        ].apply(extract_year_quarter)
-
-        df = df[
-            [Table.GDP.Column.YEAR.value, Table.GDP.Column.QUARTER.value]
-            + [
-                col
-                for col in df.columns
-                if col
-                not in {Table.GDP.Column.YEAR.value, Table.GDP.Column.QUARTER.value}
-            ]
-        ]
-
-        df.drop(columns="period", inplace=True)
-
-        df[df.columns] = df[df.columns].apply(pd.to_numeric, errors="coerce")
 
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
@@ -779,78 +775,11 @@ class DataPreprocessor:
         )
 
         self._logger.log_info(f'Finish processing data in "{file_path}".')
-
-    def _process_macroeconomics_gdp_worldometer(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.GDP,
-            GdpSource.WORLDOMETER,
-        )
-
-        folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
-
-        file_path = get_newest_file_path(
-            folder_path=folder_path, extension=FileExtension.CSV
-        )
-
-        if not file_path:
-            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
-            return
-
-        self._logger.log_info(f'Start processing data in "{file_path}".')
-
-        # Add logic for processing data here
-        df = pd.read_csv(file_path)
-        df = df.iloc[:, [0, 3]]
-        df.columns = [
-            Table.GDP.Column.YEAR.value,
-            Table.GDP.Column.GDP_TRUE_GROWTH_ACC.value,
-        ]
-        df = df[df[Table.GDP.Column.YEAR.value] >= SCRAPER_START_DATE.year]
-        df.insert(1, Table.GDP.Column.QUARTER.value, 4)
-        df[Table.GDP.Column.GDP_TRUE_GROWTH_ACC.value] = (
-            df[Table.GDP.Column.GDP_TRUE_GROWTH_ACC.value].str.rstrip("%").astype(float)
-        )
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.GDP.name,
-            primary_keys=Table.GDP.primary_key,
-            df=df,
-        )
-
-        self._logger.log_info(f'Finish processing data in "{file_path}".')
-
-    def _process_macroeconomics_gdp_custom(self) -> None:
-        # NOTE: At current date (23/05/2025), Worldometer does not have data for 2024. Have to input manually
-        self._logger.log_info(f"Start manually input data.")
-
-        # Add logic for processing data here
-        df = pd.DataFrame(
-            {
-                Table.GDP.Column.YEAR.value: [2024],
-                Table.GDP.Column.QUARTER.value: [4],
-                Table.GDP.Column.GDP_TRUE_GROWTH_ACC.value: [7.09],
-            }
-        )
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.GDP.name,
-            primary_keys=Table.GDP.primary_key,
-            df=df,
-        )
-
-        self._logger.log_info(f"Start manually input data.")
 
     def _process_macroeconomics_gdp(self) -> None:
         self._logger.log_info("Start processing macroeconomics GDP data.")
 
         self._process_macroeconomics_gdp_vietstock()
-        self._process_macroeconomics_gdp_worldometer()
-        self._process_macroeconomics_gdp_custom()  # NOTE: This is for manually input data
 
         self._logger.log_info("Finish processing macroeconomics GDP data.")
 
@@ -2893,7 +2822,7 @@ class DataPreprocessor:
         self._logger.log_info("Start processing data.")
 
         # Macroeconomics
-        # self._process_macroeconomics_gdp()
+        self._process_macroeconomics_gdp()
         # self._process_macroeconomics_cpi()
         # self._process_macroeconomics_exchange_rate()
         # self._process_macroeconomics_interest_rate()
@@ -2913,7 +2842,7 @@ class DataPreprocessor:
         # self._process_macroeconomics_nasdaq_100()
 
         # Stock market
-        self._process_stock_market_market()
+        # self._process_stock_market_market()
         # self._process_stock_market_vn_index()
         # self._process_stock_market_hnx_index()
         # self._process_stock_market_vn_30_index()
@@ -2923,7 +2852,7 @@ class DataPreprocessor:
 
         # Enterprise
         # self._process_enterprise_stock()
-        self._process_enterprise_daily_price()
+        # self._process_enterprise_daily_price()
 
         self._logger.log_info("Finish processing data.")
 

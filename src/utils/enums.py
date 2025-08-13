@@ -748,13 +748,11 @@ class Table:
         class Column(Enum):
             YEAR = "year"
             QUARTER = "quarter"
-            AGRICULTURE_SHARE = "agriculture_share"
-            INDUSTRY_SHARE = "industry_share"
-            SERVICE_SHARE = "service_share"
-            GDP_TRUE_GROWTH_ACC = "gdp_true_growth_acc"
-            AGRICULTURE_TRUE_GROWTH_ACC = "agriculture_true_growth_acc"
-            INDUSTRY_TRUE_GROWTH_ACC = "industry_true_growth_acc"
-            SERVICE_TRUE_GROWTH_ACC = "service_true_growth_acc"
+            AGRICULTURE = "agriculture"
+            INDUSTRY = "industry"
+            SERVICES = "services"
+            GDP_GROWTH = "gdp_growth"
+            GDP_REAL = "gdp_real"
 
         name = "gdp"
         primary_key = [Column.YEAR.value, Column.QUARTER.value]

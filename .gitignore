@@ -4,3 +4,4 @@
 raw_data/
 
 .env
+logs/
