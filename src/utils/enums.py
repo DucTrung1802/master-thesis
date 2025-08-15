@@ -805,6 +805,70 @@ class Table:
         name = "ppi"
         primary_key = [Column.YEAR.value]
 
+    class IPI:
+        class Column(Enum):
+            YEAR = "year"
+            GENERAL_INDEX = "general_index"
+            PROFESSIONAL_SCIENTIFIC_AND_TECHNICAL_SERVICES = (
+                "professional_scientific_and_technical_services"
+            )
+            CONSTRUCTION_SERVICES = "construction_services"
+            PAPER_AND_PAPER_PRODUCTS = "paper_and_paper_products"
+            CHEMICALS_AND_CHEMICAL_PRODUCTS = "chemicals_and_chemical_products"
+            MACHINERY_AND_EQUIPMENT_NOT_ELSEWHERE_CLASSIFIED = (
+                "machinery_and_equipment_not_elsewhere_classified"
+            )
+            NATURAL_WATER_EXTRACTION = "natural_water_extraction"
+            NATURAL_WATER_EXTRACTION_AND_WASTE_MANAGEMENT_SERVICES = (
+                "natural_water_extraction_and_waste_management_services"
+            )
+            OTHER_TRANSPORT_EQUIPMENT = "other_transport_equipment"
+            METAL_ORES = "metal_ores"
+            PROCESSED_FOOD_PRODUCTS = "processed_food_products"
+            MANUFACTURING_PRODUCTS = "manufacturing_products"
+            TEXTILES_AND_LEATHER_PRODUCTS = "textiles_and_leather_products"
+            MINING_PRODUCTS = "mining_products"
+            OTHER_MINING_PRODUCTS = "other_mining_products"
+            METAL_PRODUCTS = "metal_products"
+            FORESTRY_PRODUCTS_AND_RELATED_SERVICES = (
+                "forestry_products_and_related_services"
+            )
+            AGRICULTURE_FORESTRY_AND_FISHERY_PRODUCTS = (
+                "agriculture_forestry_and_fishery_products"
+            )
+            AGRICULTURE_PRODUCTS_AND_RELATED_SERVICES = (
+                "agriculture_products_and_related_services"
+            )
+            FISHING_AND_AQUACULTURE_PRODUCTS = "fishing_and_aquaculture_products"
+            RUBBER_AND_PLASTIC_PRODUCTS = "rubber_and_plastic_products"
+            WOOD_PRODUCTS = "wood_products"
+            OTHER_NON_METALLIC_MINERAL_PRODUCTS = "other_non_metallic_mineral_products"
+            FABRICATED_METAL_PRODUCTS_EXCEPT_MACHINERY_AND_EQUIPMENT = (
+                "fabricated_metal_products_except_machinery_and_equipment"
+            )
+            ELECTRONIC_COMPUTER_AND_OPTICAL_PRODUCTS = (
+                "electronic_computer_and_optical_products"
+            )
+            USED_FOR_MANUFACTURING_INDUSTRY = "used_for_manufacturing_industry"
+            USED_FOR_AGRICULTURE_FORESTRY_AND_FISHERY = (
+                "used_for_agriculture_forestry_and_fishery"
+            )
+            USED_FOR_CONSTRUCTION = "used_for_construction"
+            COKE_AND_REFINED_PETROLEUM_PRODUCTS = "coke_and_refined_petroleum_products"
+            HARD_COAL_AND_LIGNITE = "hard_coal_and_lignite"
+            ELECTRICAL_EQUIPMENT = "electrical_equipment"
+            PHARMACEUTICALS_AND_MEDICINAL_CHEMICALS = (
+                "pharmaceuticals_and_medicinal_chemicals"
+            )
+            MOTOR_VEHICLES_AND_TRAILERS = "motor_vehicles_and_trailers"
+            ELECTRICITY_GAS_STEAM_AND_AIR_CONDITIONING = (
+                "electricity_gas_steam_and_air_conditioning"
+            )
+            BEVERAGES_AND_TOBACCO = "beverages_and_tobacco"
+
+        name = "ipi"
+        primary_key = [Column.YEAR.value]
+
     class EXCHANGE_RATE:
         class Column(Enum):
             DATE = "date"
@@ -860,23 +924,6 @@ class Table:
             ANIMAL_FEED = "animal_feed"
 
         name = "import"
-        primary_key = [Column.YEAR.value, Column.MONTH.value]
-
-    class IPI:
-        class Column(Enum):
-            YEAR = "year"
-            MONTH = "month"
-            TOTAL = "total"
-            EXTRACTIVE = "extractive"
-            PROCESSING_AND_MANUFACTURING_INDUSTRY = (
-                "processing_and_manufacturing_industry"
-            )
-            ELECTRICITY_GENERATION_AND_DISTRIBUTION = (
-                "electricity_generation_and_distribution"
-            )
-            WATER_SUPPLY_AND_WASTE_MANAGEMENT = "water_supply_and_waste_management"
-
-        name = "ipi"
         primary_key = [Column.YEAR.value, Column.MONTH.value]
 
     class FDI:

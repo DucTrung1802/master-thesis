@@ -198,6 +198,53 @@ class DataPreprocessor:
             primary_keys=Table.PPI.primary_key,
         )
         # fmt: on
+
+        # IPI
+        # fmt: off
+        self._database_driver.create_table(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.IPI.name,
+            columns=[
+                Column(name=Table.IPI.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
+                Column(name=Table.IPI.Column.GENERAL_INDEX.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPI.Column.PROFESSIONAL_SCIENTIFIC_AND_TECHNICAL_SERVICES.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPI.Column.CONSTRUCTION_SERVICES.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPI.Column.PAPER_AND_PAPER_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPI.Column.CHEMICALS_AND_CHEMICAL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPI.Column.MACHINERY_AND_EQUIPMENT_NOT_ELSEWHERE_CLASSIFIED.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPI.Column.NATURAL_WATER_EXTRACTION.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPI.Column.NATURAL_WATER_EXTRACTION_AND_WASTE_MANAGEMENT_SERVICES.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPI.Column.OTHER_TRANSPORT_EQUIPMENT.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPI.Column.METAL_ORES.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPI.Column.PROCESSED_FOOD_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPI.Column.MANUFACTURING_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPI.Column.TEXTILES_AND_LEATHER_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPI.Column.MINING_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPI.Column.OTHER_MINING_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPI.Column.METAL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPI.Column.FORESTRY_PRODUCTS_AND_RELATED_SERVICES.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPI.Column.AGRICULTURE_FORESTRY_AND_FISHERY_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPI.Column.AGRICULTURE_PRODUCTS_AND_RELATED_SERVICES.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPI.Column.FISHING_AND_AQUACULTURE_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPI.Column.RUBBER_AND_PLASTIC_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPI.Column.WOOD_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPI.Column.OTHER_NON_METALLIC_MINERAL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPI.Column.FABRICATED_METAL_PRODUCTS_EXCEPT_MACHINERY_AND_EQUIPMENT.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPI.Column.ELECTRONIC_COMPUTER_AND_OPTICAL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPI.Column.USED_FOR_MANUFACTURING_INDUSTRY.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPI.Column.USED_FOR_AGRICULTURE_FORESTRY_AND_FISHERY.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPI.Column.USED_FOR_CONSTRUCTION.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPI.Column.COKE_AND_REFINED_PETROLEUM_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPI.Column.HARD_COAL_AND_LIGNITE.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPI.Column.ELECTRICAL_EQUIPMENT.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPI.Column.PHARMACEUTICALS_AND_MEDICINAL_CHEMICALS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPI.Column.MOTOR_VEHICLES_AND_TRAILERS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPI.Column.ELECTRICITY_GAS_STEAM_AND_AIR_CONDITIONING.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPI.Column.BEVERAGES_AND_TOBACCO.value, data_type=DataType.FLOAT(), nullable=True),
+            ],
+            primary_keys=Table.IPI.primary_key,
+        )
+        # fmt: on
         
         # EXCHANGE_RATE
         # fmt: off
@@ -276,24 +323,6 @@ class DataPreprocessor:
         )
         # fmt: on
 
-        # IPI
-        # fmt: off
-        self._database_driver.create_table(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.IPI.name,
-            columns = [
-                Column(name=Table.IPI.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                Column(name=Table.IPI.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
-                Column(name=Table.IPI.Column.TOTAL.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.IPI.Column.EXTRACTIVE.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.IPI.Column.PROCESSING_AND_MANUFACTURING_INDUSTRY.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.IPI.Column.ELECTRICITY_GENERATION_AND_DISTRIBUTION.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.IPI.Column.WATER_SUPPLY_AND_WASTE_MANAGEMENT.value, data_type=DataType.DECIMAL(), nullable=True),
-            ],
-            primary_keys=Table.IPI.primary_key,
-        )
-        # fmt: on
-        
         # FDI
         # fmt: off
         self._database_driver.create_table(
@@ -984,6 +1013,119 @@ class DataPreprocessor:
 
     # endregion MACROECONOMICS.PPI
 
+    # region MACROECONOMICS.IPI
+    def _process_macroeconomics_ipi_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.IPI,
+            IpiSource.VIETSTOCK,
+        )
+
+        folder_path = (
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+        )
+
+        file_path = get_newest_file_path(
+            folder_path=folder_path, extension=FileExtension.CSV
+        )
+
+        if not file_path:
+            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
+            return
+
+        self._logger.log_info(f'Start processing data in "{file_path}".')
+
+        # Add logic for processing data here
+        df = pd.read_csv(file_path)
+
+        # Set indicator names as lowercase with underscores
+        # df["Chỉ tiêu"] = df["Chỉ tiêu"].str.lower().str.replace(" ", "_")
+        df["Chỉ tiêu"] = (
+            df["Chỉ tiêu"].str.lower().str.replace(",", "").str.replace(" ", "_")
+        )
+
+        # Melt from wide to long format
+        df = df.melt(
+            id_vars=["Chỉ tiêu", "Đơn vị tính"], var_name="year_str", value_name="value"
+        )
+
+        # Clean numeric values
+        df["value"] = df["value"].astype(str).str.replace(",", "", regex=False)
+        df["value"] = pd.to_numeric(df["value"], errors="coerce")
+
+        # Extract year
+        df["year"] = pd.to_datetime(df["year_str"], errors="coerce").dt.year
+
+        # Use pivot_table with first() to handle duplicates
+        df = df.pivot_table(
+            index=["year"], columns="Chỉ tiêu", values="value", aggfunc="first"
+        ).reset_index()
+
+        # Sort by year and month
+        df = df.sort_values(["year"]).reset_index(drop=True)
+
+        # Fill missing values with 0
+        df.fillna(0, inplace=True)
+
+        col_translation = {
+            "year": "year",
+            "chỉ_số_chung": "general_index",
+            "dịch_vụ_chuyên_môn_khoa_học_công_nghệ": "professional_scientific_and_technical_services",
+            "dịch_vụ_xây_dựng": "construction_services",
+            "giấy_và_các_sản_phẩm_từ_giấy": "paper_and_paper_products",
+            "hóa_chất_và_sản_phẩm_hóa_chất": "chemicals_and_chemical_products",
+            "máy_móc_thiết_bị_chưa_được_phân_vào_đâu": "machinery_and_equipment_not_elsewhere_classified",
+            "nước_tự_nhiên_khai_thác": "natural_water_extraction",
+            "nước_tự_nhiên_khai_thác;_dịch_vụ_quản_lý_và_xử_lý_rác_thải._nước_thải-": "natural_water_extraction_and_waste_management_services",
+            "phương_tiện_vận_tải_khác": "other_transport_equipment",
+            "quặng_kim_loại": "metal_ores",
+            "sản_phẩm_chế_biến_lương_thực_thực_phẩm": "processed_food_products",
+            "sản_phẩm_công_nghiệp_chế_biến_chế_tạo": "manufacturing_products",
+            "sản_phẩm_dệt_da": "textiles_and_leather_products",
+            "sản_phẩm_khai_khoáng": "mining_products",
+            "sản_phẩm_khai_khoáng_khác": "other_mining_products",
+            "sản_phẩm_kim_loại": "metal_products",
+            "sản_phẩm_lâm_nghiệp_và_dịch_vụ_liên_quan": "forestry_products_and_related_services",
+            "sản_phẩm_nông_lâm_nghiệp_và_thủy_sản": "agriculture_forestry_and_fishery_products",
+            "sản_phẩm_nông_nghiệp_và_dịch_vụ_liên_quan": "agriculture_products_and_related_services",
+            "sản_phẩm_thủy_sản_khai_thác_nuôi_trồng": "fishing_and_aquaculture_products",
+            "sản_phẩm_từ_cao_su_và_plastic": "rubber_and_plastic_products",
+            "sản_phẩm_từ_gỗ": "wood_products",
+            "sản_phẩm_từ_khoáng_phi_kim_loại_khác": "other_non_metallic_mineral_products",
+            "sản_phẩm_từ_kim_loại_đúc_sẵn_(trừ_máy_móc_thiết_bị)": "fabricated_metal_products_except_machinery_and_equipment",
+            "sản_phẩm_điện_tử_máy_tính_quang_học": "electronic_computer_and_optical_products",
+            "sử_dụng_cho_sản_xuất_công_nghiệp_chế_biến_chế_tạo": "used_for_manufacturing_industry",
+            "sử_dụng_cho_sản_xuất_nông_lâm_nghiệp_và_thủy_sản": "used_for_agriculture_forestry_and_fishery",
+            "sử_dụng_cho_xây_dựng": "used_for_construction",
+            "than_cốc_sản_phẩm_dầu_mỏ_tinh_chế": "coke_and_refined_petroleum_products",
+            "than_cứng_và_than_non": "hard_coal_and_lignite",
+            "thiết_bị_điện": "electrical_equipment",
+            "thuốc_và_dược_liệu": "pharmaceuticals_and_medicinal_chemicals",
+            "xe_có_động_cơ_rơ_moóc": "motor_vehicles_and_trailers",
+            "điện_khí_đốt_hơi_nước_và_điều_hòa_không_khí": "electricity_gas_steam_and_air_conditioning",
+            "đồ_uống_hút": "beverages_and_tobacco",
+        }
+
+        df = df.rename(columns=col_translation)
+
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.IPI.name,
+            primary_keys=Table.IPI.primary_key,
+            df=df,
+        )
+
+        self._logger.log_info(f'Finish processing data in "{file_path}".')
+
+    def _process_macroeconomics_ipi(self) -> None:
+        self._logger.log_info("Start processing macroeconomics IPI data.")
+
+        self._process_macroeconomics_ipi_vietstock()
+
+        self._logger.log_info("Finish processing macroeconomics IPI data.")
+
+    # endregion MACROECONOMICS.IPI
+
     # region MACROECONOMICS.EXCHANGE_RATE
     def _process_macroeconomics_exchange_rate_vietstock(self) -> None:
         key = (
@@ -1289,79 +1431,6 @@ class DataPreprocessor:
         self._logger.log_info("Finish processing macroeconomics IMPORT data.")
 
     # endregion
-
-    # region MACROECONOMICS.IPI
-    def _process_macroeconomics_ipi_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.IPI,
-            IpiSource.VIETSTOCK,
-        )
-
-        folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
-
-        file_path = get_newest_file_path(
-            folder_path=folder_path, extension=FileExtension.CSV
-        )
-
-        if not file_path:
-            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
-            return
-
-        self._logger.log_info(f'Start processing data in "{file_path}".')
-
-        # Add logic for processing data here
-        df = pd.read_csv(file_path)
-
-        # Drop "Đơn vị tính" only if it exists
-        if "Đơn vị tính" in df.columns:
-            df = df.drop(columns=["Đơn vị tính"])
-
-        # Transpose and rename
-        df = df.set_index("Chỉ tiêu").T
-
-        rename_map = {
-            "Toàn ngành công nghiệp": Table.IPI.Column.TOTAL.value,
-            "Khai khoáng": Table.IPI.Column.EXTRACTIVE.value,
-            "Công nghiệp chế biến, chế tạo": Table.IPI.Column.PROCESSING_AND_MANUFACTURING_INDUSTRY.value,
-            "Sản xuất và Phân phối điện": Table.IPI.Column.ELECTRICITY_GENERATION_AND_DISTRIBUTION.value,
-            "Cung cấp nước, hoạt động quản lý và xử lý rác thải, nước thải": Table.IPI.Column.WATER_SUPPLY_AND_WASTE_MANAGEMENT.value,
-        }
-        df = df.rename(columns=rename_map).reset_index()
-
-        # Extract month and year
-        df[["month", "year"]] = (
-            df["index"].str.extract(r"Tháng (\d+)/(\d+)").astype("Int64")
-        )
-
-        # Reorder columns
-        new_col_order = ["year", "month"] + list(rename_map.values())
-        df = df[new_col_order]
-
-        # Convert all data columns (except year and month) to float, removing commas
-        data_cols = df.columns.difference(["year", "month"])
-        for col in data_cols:
-            df[col] = df[col].astype(str).str.replace(",", "").astype(float)
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.IPI.name,
-            primary_keys=Table.IPI.primary_key,
-            df=df,
-        )
-
-        self._logger.log_info(f'Finish processing data in "{file_path}".')
-
-    def _process_macroeconomics_ipi(self) -> None:
-        self._logger.log_info("Start processing macroeconomics IPI data.")
-
-        self._process_macroeconomics_ipi_vietstock()
-
-        self._logger.log_info("Finish processing macroeconomics IPI data.")
-
-    # endregion MACROECONOMICS.IPI
 
     # region MACROECONOMICS.FDI
     def _process_macroeconomics_fdi_vietstock(self) -> None:
@@ -2945,6 +3014,7 @@ class DataPreprocessor:
         self._process_macroeconomics_gdp()
         self._process_macroeconomics_cpi()
         self._process_macroeconomics_ppi()
+        self._process_macroeconomics_ipi()
         # self._process_macroeconomics_interest_rate()
         # self._process_macroeconomics_export()
         # self._process_macroeconomics_import()
