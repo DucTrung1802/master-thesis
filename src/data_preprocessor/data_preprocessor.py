@@ -360,6 +360,22 @@ class DataPreprocessor:
         )
         # fmt: on
 
+        # POPULATION
+        # fmt: off
+        self._database_driver.create_table(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.POPULATION.name,
+            columns=[
+                Column(name=Table.POPULATION.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
+                Column(name=Table.POPULATION.Column.POPULATION.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.POPULATION.Column.POPULATION_AREA_URBAN_RATE.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.POPULATION.Column.POPULATION_DENSITY.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.POPULATION.Column.POPULATION_GROWTH_RATE.value, data_type=DataType.FLOAT(), nullable=True),
+            ],
+            primary_keys=Table.POPULATION.primary_key,
+        )
+        # fmt: on
+
         # EXCHANGE_RATE
         # fmt: off
         self._database_driver.create_table(
@@ -1406,6 +1422,77 @@ class DataPreprocessor:
         self._logger.log_info("Finish processing macroeconomics MPI data.")
 
     # endregion MACROECONOMICS.MPI
+
+    # region MACROECONOMICS.POPULATION
+    def _process_macroeconomics_population_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.POPULATION,
+            PopulationSource.VIETSTOCK,
+        )
+
+        folder_path = (
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+        )
+
+        file_path = get_newest_file_path(
+            folder_path=folder_path, extension=FileExtension.CSV
+        )
+
+        if not file_path:
+            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
+            return
+
+        self._logger.log_info(f'Start processing data in "{file_path}".')
+
+        # Add logic for processing data here
+        df = pd.read_csv(file_path)
+
+        # Set indicator names as lowercase with underscores
+        df["Chỉ tiêu"] = (
+            df["Chỉ tiêu"].str.lower().str.replace(",", "").str.replace(" ", "_")
+        )
+
+        # Melt from wide to long format
+        df = df.melt(
+            id_vars=["Chỉ tiêu", "Đơn vị tính"], var_name="year_str", value_name="value"
+        )
+
+        # Clean numeric values
+        df["value"] = df["value"].astype(str).str.replace(",", "", regex=False)
+        df["value"] = pd.to_numeric(df["value"], errors="coerce")
+
+        # Extract year
+        df["year"] = pd.to_datetime(df["year_str"], errors="coerce").dt.year
+
+        # Use pivot_table with first() to handle duplicates
+        df = df.pivot_table(
+            index=["year"], columns="Chỉ tiêu", values="value", aggfunc="first"
+        ).reset_index()
+
+        # Sort by year and month
+        df = df.sort_values(["year"]).reset_index(drop=True)
+
+        # Fill missing values with 0
+        df.fillna(0, inplace=True)
+
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.POPULATION.name,
+            primary_keys=Table.POPULATION.primary_key,
+            df=df,
+        )
+
+        self._logger.log_info(f'Finish processing data in "{file_path}".')
+
+    def _process_macroeconomics_population(self) -> None:
+        self._logger.log_info("Start processing macroeconomics POPULATION data.")
+
+        self._process_macroeconomics_population_vietstock()
+
+        self._logger.log_info("Finish processing macroeconomics POPULATION data.")
+
+    # endregion MACROECONOMICS.POPULATION
 
     # region MACROECONOMICS.EXCHANGE_RATE
     def _process_macroeconomics_exchange_rate_vietstock(self) -> None:
@@ -3298,6 +3385,7 @@ class DataPreprocessor:
         self._process_macroeconomics_ipi()
         self._process_macroeconomics_xpi()
         self._process_macroeconomics_mpi()
+        self._process_macroeconomics_population()
         # self._process_macroeconomics_interest_rate()
         # self._process_macroeconomics_export()
         # self._process_macroeconomics_import()

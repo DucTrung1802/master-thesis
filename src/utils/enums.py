@@ -997,6 +997,17 @@ class Table:
         name = "mpi"
         primary_key = [Column.YEAR.value, Column.MONTH.value]
 
+    class POPULATION:
+        class Column(Enum):
+            YEAR = "year"
+            POPULATION = "population"
+            POPULATION_AREA_URBAN_RATE = "population_area_urban_rate"
+            POPULATION_DENSITY = "population_density"
+            POPULATION_GROWTH_RATE = "population_growth_rate"
+
+        name = "population"
+        primary_key = [Column.YEAR.value]
+
     class EXCHANGE_RATE:
         class Column(Enum):
             DATE = "date"
