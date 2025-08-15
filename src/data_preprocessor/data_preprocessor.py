@@ -416,6 +416,20 @@ class DataPreprocessor:
         )
         # fmt: on
 
+        # PMI
+        # fmt: off
+        self._database_driver.create_table(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.PMI.name,
+            columns=[
+                Column(name=Table.PMI.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
+                Column(name=Table.PMI.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
+                Column(name=Table.PMI.Column.PMI.value, data_type=DataType.FLOAT(), nullable=True),
+            ],
+            primary_keys=Table.PMI.primary_key,
+        )
+        # fmt: on
+
         # GOLD_PRICE
         # fmt: off
         self._database_driver.create_table(
@@ -1537,6 +1551,86 @@ class DataPreprocessor:
         self._logger.log_info("Finish processing macroeconomics RETAIL data.")
 
     # endregion MACROECONOMICS.RETAIL
+
+    # region MACROECONOMICS.PMI
+    def _process_macroeconomics_pmi_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.PMI,
+            PmiSource.VIETSTOCK,
+        )
+
+        folder_path = (
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+        )
+
+        file_path = get_newest_file_path(
+            folder_path=folder_path, extension=FileExtension.CSV
+        )
+
+        if not file_path:
+            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
+            return
+
+        self._logger.log_info(f'Start processing data in "{file_path}".')
+
+        # Add logic for processing data here
+        df = pd.read_csv(file_path)
+
+        # Set indicator names as lowercase with underscores
+        df["Chỉ tiêu"] = (
+            df["Chỉ tiêu"].str.lower().str.replace(",", "").str.replace(" ", "_")
+        )
+
+        # Melt from wide to long format
+        df = df.melt(
+            id_vars=["Chỉ tiêu", "Đơn vị tính"],
+            var_name="month_str",
+            value_name="value",
+        )
+
+        # Clean numeric values
+        df["value"] = df["value"].astype(str).str.replace(",", "", regex=False)
+        df["value"] = pd.to_numeric(df["value"], errors="coerce")
+
+        # Extract year and month
+        df["date"] = pd.to_datetime(df["month_str"], errors="coerce")
+
+        # Drop rows where date couldn't be parsed
+        df = df.dropna(subset=["date"])
+
+        # Extract numeric year, month
+        df["month"] = df["date"].dt.month
+        df["year"] = df["date"].dt.year
+
+        # Use pivot_table with first() to handle duplicates
+        df = df.pivot_table(
+            index=["year", "month"], columns="Chỉ tiêu", values="value", aggfunc="first"
+        ).reset_index()
+
+        # Sort by year and month
+        df = df.sort_values(["year", "month"]).reset_index(drop=True)
+
+        # Fill missing values with 0
+        df.fillna(0, inplace=True)
+
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.PMI.name,
+            primary_keys=Table.PMI.primary_key,
+            df=df,
+        )
+
+        self._logger.log_info(f'Finish processing data in "{file_path}".')
+
+    def _process_macroeconomics_pmi(self) -> None:
+        self._logger.log_info("Start processing macroeconomics PMI data.")
+
+        self._process_macroeconomics_pmi_vietstock()
+
+        self._logger.log_info("Finish processing macroeconomics PMI data.")
+
+    # endregion MACROECONOMICS.PMI
 
     # region MACROECONOMICS.GOLD_PRICE
     def _process_macroeconomics_gold_price_investing(self) -> None:
@@ -2775,6 +2869,7 @@ class DataPreprocessor:
         self._process_macroeconomics_population()
         self._process_macroeconomics_labor()
         self._process_macroeconomics_retail()
+        self._process_macroeconomics_pmi()
         # self._process_macroeconomics_interest_rate()
         # self._process_macroeconomics_export()
         # self._process_macroeconomics_import()

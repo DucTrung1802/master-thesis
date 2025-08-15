@@ -1040,6 +1040,15 @@ class Table:
         name = "retail"
         primary_key = [Column.YEAR.value, Column.MONTH.value]
 
+    class PMI:
+        class Column(Enum):
+            YEAR = "year"
+            MONTH = "month"
+            PMI = "pmi"
+
+        name = "pmi"
+        primary_key = [Column.YEAR.value, Column.MONTH.value]
+
     class EXCHANGE_RATE:
         class Column(Enum):
             DATE = "date"
