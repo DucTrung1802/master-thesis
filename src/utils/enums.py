@@ -1027,6 +1027,19 @@ class Table:
         name = "labor"
         primary_key = [Column.YEAR.value]
 
+    class RETAIL:
+        class Column(Enum):
+            YEAR = "year"
+            MONTH = "month"
+            ACCOMMODATION_AND_CATERING_SERVICE = "accommodation_and_catering_service"
+            RETAIL_GROWTH = "retail_growth"
+            RETAIL_SALE = "retail_sale"
+            SERVICES = "services"
+            TRAVELING_SERVICE = "traveling_service"
+
+        name = "retail"
+        primary_key = [Column.YEAR.value, Column.MONTH.value]
+
     class EXCHANGE_RATE:
         class Column(Enum):
             DATE = "date"
@@ -1104,19 +1117,6 @@ class Table:
             M2_MONEY_SUPPLY_GROWTH_YTD = "m2_money_supply_growth_ytd"
 
         name = "m2"
-        primary_key = [Column.YEAR.value, Column.MONTH.value]
-
-    class RETAIL:
-        class Column(Enum):
-            YEAR = "year"
-            MONTH = "month"
-            TOTAL = "total"
-            COMMERCIAL = "commercial"
-            HOTEL_RESTAURANT = "hotel_restaurant"
-            TOURISM = "tourism"
-            SERVICE = "service"
-
-        name = "retail"
         primary_key = [Column.YEAR.value, Column.MONTH.value]
 
     class POPULATION_UNEMPLOYMENT:

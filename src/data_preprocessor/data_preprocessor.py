@@ -398,159 +398,24 @@ class DataPreprocessor:
         )
         # fmt: on
 
-        # EXCHANGE_RATE
-        # fmt: off
-        self._database_driver.create_table(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.EXCHANGE_RATE.name,
-            columns = [
-                Column(name=Table.EXCHANGE_RATE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                Column(name=Table.EXCHANGE_RATE.Column.EXCHANGE_RATE.value, data_type=DataType.DECIMAL(), nullable=True),
-            ],
-            primary_keys=Table.EXCHANGE_RATE.primary_key,
-        )
-        # fmt: on
-        
-        # INTEREST_RATE
-        # fmt: off
-        self._database_driver.create_table(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.INTEREST_RATE.name,
-            columns = [
-                Column(name=Table.INTEREST_RATE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                Column(name=Table.INTEREST_RATE.Column.ONE_WEEK.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.INTEREST_RATE.Column.TWO_WEEK.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.INTEREST_RATE.Column.ONE_MONTH.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.INTEREST_RATE.Column.THREE_MONTH.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.INTEREST_RATE.Column.SIX_MONTH.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.INTEREST_RATE.Column.NINE_MONTH.value, data_type=DataType.DECIMAL(), nullable=True),
-            ],
-            primary_keys=Table.INTEREST_RATE.primary_key,
-        )
-        # fmt: on
-        
-        # EXPORT
-        # fmt: off
-        self._database_driver.create_table(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.EXPORT.name,
-            columns = [
-                Column(name=Table.EXPORT.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                Column(name=Table.EXPORT.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
-                Column(name=Table.EXPORT.Column.TOTAL.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.EXPORT.Column.LEATHER_SHOES.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.EXPORT.Column.TEXTILES.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.EXPORT.Column.WOOD_PRODUCTS.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.EXPORT.Column.SEAFOOD.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.EXPORT.Column.CRUDE_OIL.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.EXPORT.Column.RICE.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.EXPORT.Column.COFFEE.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.EXPORT.Column.COMPUTER_ELECTRONICS.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.EXPORT.Column.MACHINERY_EQUIPMENT.value, data_type=DataType.DECIMAL(), nullable=True),
-            ],
-            primary_keys=Table.EXPORT.primary_key,
-        )
-        # fmt: on
-        
-        # IMPORT
-        # fmt: off
-        self._database_driver.create_table(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.IMPORT.name,
-            columns = [
-                Column(name=Table.IMPORT.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                Column(name=Table.IMPORT.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
-                Column(name=Table.IMPORT.Column.TOTAL.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.IMPORT.Column.ELECTRONICS_COMPUTERS_COMPONENTS.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.IMPORT.Column.MACHINERY_EQUIPMENT.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.IMPORT.Column.GASOLINE.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.IMPORT.Column.CHEMICAL.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.IMPORT.Column.CHEMICAL_PRODUCTS.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.IMPORT.Column.IRON_STEEL.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.IMPORT.Column.FABRIC.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.IMPORT.Column.CAR.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.IMPORT.Column.ANIMAL_FEED.value, data_type=DataType.DECIMAL(), nullable=True),
-            ],
-            primary_keys=Table.IMPORT.primary_key,
-        )
-        # fmt: on
-
-        # FDI
-        # fmt: off
-        self._database_driver.create_table(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.FDI.name,
-            columns = [
-                Column(name=Table.FDI.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                Column(name=Table.FDI.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
-                Column(name=Table.FDI.Column.REGISTERED.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.FDI.Column.DISBURSEMENTED.value, data_type=DataType.DECIMAL(), nullable=True),
-            ],
-            primary_keys=Table.FDI.primary_key,
-        )
-        # fmt: on
-        
-        # M2
-        # fmt: off
-        self._database_driver.create_table(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.M2.name,
-            columns = [
-                Column(name=Table.M2.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                Column(name=Table.M2.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
-                Column(name=Table.M2.Column.CREDITS.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.M2.Column.M2_MONEY_SUPPLY.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.M2.Column.CREDITS_GROWTH_YTD.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.M2.Column.M2_MONEY_SUPPLY_GROWTH_YTD.value, data_type=DataType.DECIMAL(), nullable=True),
-            ],
-            primary_keys=Table.M2.primary_key,
-        )
-        # fmt: on
-        
         # RETAIL
         # fmt: off
         self._database_driver.create_table(
             schema_name=Schema.MACROECONOMICS.value,
             table_name=Table.RETAIL.name,
-            columns = [
+            columns=[
                 Column(name=Table.RETAIL.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
                 Column(name=Table.RETAIL.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
-                Column(name=Table.RETAIL.Column.TOTAL.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.RETAIL.Column.COMMERCIAL.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.RETAIL.Column.HOTEL_RESTAURANT.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.RETAIL.Column.TOURISM.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.RETAIL.Column.SERVICE.value, data_type=DataType.DECIMAL(), nullable=True),
+                Column(name=Table.RETAIL.Column.ACCOMMODATION_AND_CATERING_SERVICE.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.RETAIL.Column.RETAIL_GROWTH.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.RETAIL.Column.RETAIL_SALE.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.RETAIL.Column.SERVICES.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.RETAIL.Column.TRAVELING_SERVICE.value, data_type=DataType.FLOAT(), nullable=True),
             ],
             primary_keys=Table.RETAIL.primary_key,
         )
         # fmt: on
-        
-        # POPULATION_UNEMPLOYMENT
-        # fmt: off
-        self._database_driver.create_table(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.POPULATION_UNEMPLOYMENT.name,
-            columns = [
-                Column(name=Table.POPULATION_UNEMPLOYMENT.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                Column(name=Table.POPULATION_UNEMPLOYMENT.Column.POPULATION.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.POPULATION_UNEMPLOYMENT.Column.POPULATION_DENSITY.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.POPULATION_UNEMPLOYMENT.Column.POPULATION_GROWTH_RATIO.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.POPULATION_UNEMPLOYMENT.Column.URBAN_POPULATION_RATIO.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.POPULATION_UNEMPLOYMENT.Column.LABOR_FORCE_COUNT.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.POPULATION_UNEMPLOYMENT.Column.AGRICULTURE_FORESTRY_AND_FISHERIES.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.POPULATION_UNEMPLOYMENT.Column.INDUSTRY_AND_CONSTRUCTION.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.POPULATION_UNEMPLOYMENT.Column.SERVICE.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.POPULATION_UNEMPLOYMENT.Column.URBAN_UNEMPLOYED_COUNT.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.POPULATION_UNEMPLOYMENT.Column.LABOR_FORCE_GROWTH.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.POPULATION_UNEMPLOYMENT.Column.LABOR_FORCE_RATIO.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.POPULATION_UNEMPLOYMENT.Column.MALE_RATIO.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.POPULATION_UNEMPLOYMENT.Column.FEMALE_RATIO.value, data_type=DataType.DECIMAL(), nullable=True),
-                Column(name=Table.POPULATION_UNEMPLOYMENT.Column.URBAN_UNEMPLOYED_RATIO.value, data_type=DataType.DECIMAL(), nullable=True),
-            ],
-            primary_keys=Table.POPULATION_UNEMPLOYMENT.primary_key,
-        )
-        # fmt: on
-        
+
         # GOLD_PRICE
         # fmt: off
         self._database_driver.create_table(
@@ -1593,511 +1458,6 @@ class DataPreprocessor:
 
     # endregion MACROECONOMICS.LABOR
 
-    # region MACROECONOMICS.EXCHANGE_RATE
-    def _process_macroeconomics_exchange_rate_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.EXCHANGE_RATE,
-            ExchangeRateSource.VIETSTOCK,
-        )
-
-        folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
-
-        file_path = get_newest_file_path(
-            folder_path=folder_path, extension=FileExtension.CSV
-        )
-
-        if not file_path:
-            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
-            return
-
-        self._logger.log_info(f'Start processing data in "{file_path}".')
-
-        # Add logic for processing data here
-        df = pd.read_csv(file_path)
-        df = df.drop(df.columns[:2], axis=1).drop(df.columns[-1], axis=1)
-        df = df.transpose()
-        df.index = pd.to_datetime(df.index, format="%d/%m/%Y")
-        df = df.reset_index()
-        df = df.rename(columns={"index": "date"})
-        df["exchange_rate"] = df[0].combine_first(df[1])
-        df = df.drop(columns=[0, 1])
-        df["exchange_rate"] = (
-            df["exchange_rate"].str.replace(",", ".", regex=True).astype(float)
-        )
-        df["date"] = df["date"].dt.date
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.EXCHANGE_RATE.name,
-            primary_keys=Table.EXCHANGE_RATE.primary_key,
-            df=df,
-        )
-
-        self._logger.log_info(f'Finish processing data in "{file_path}".')
-
-    def _process_macroeconomics_exchange_rate(self) -> None:
-        self._logger.log_info("Start processing macroeconomics EXCHANGE_RATE data.")
-
-        self._process_macroeconomics_exchange_rate_vietstock()
-
-        self._logger.log_info("Finish processing macroeconomics EXCHANGE_RATE data.")
-
-    # endregion MACROECONOMICS.EXCHANGE_RATE
-
-    # region MACROECONOMICS.INTEREST_RATE
-    def _process_macroeconomics_interest_rate_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.INTEREST_RATE,
-            InterestRateSource.VIETSTOCK,
-        )
-
-        folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
-
-        extension = FileExtension.CSV
-        if not folder_contains_files(folder_path, extension):
-            self._logger.log_error(
-                f'Data{" with extension " + extension if extension else ""} in "{folder_path}" does not exist.'
-            )
-            return
-
-        self._logger.log_info(f'Start processing data in folder "{folder_path}".')
-
-        # Add logic for processing data here
-        file_pattern = os.path.join(folder_path, "vietstock_*.csv")
-        files = sorted(glob(file_pattern))
-
-        rename_map = {
-            "1 tuần": Table.INTEREST_RATE.Column.ONE_WEEK.value,
-            "2 tuần": Table.INTEREST_RATE.Column.TWO_WEEK.value,
-            "1 tháng": Table.INTEREST_RATE.Column.ONE_MONTH.value,
-            "3 tháng": Table.INTEREST_RATE.Column.THREE_MONTH.value,
-            "6 tháng": Table.INTEREST_RATE.Column.SIX_MONTH.value,
-            "9 tháng": Table.INTEREST_RATE.Column.NINE_MONTH.value,
-        }
-
-        combined_data = []
-
-        for file in files:
-            df = pd.read_csv(file, index_col=0)
-
-            # Skip files with only headers or no data
-            if df.shape[1] <= 3:
-                print(f"Skipping {file} (likely no actual data)")
-                continue
-
-            # Clean column names and rows
-            df = df.drop(columns=["Đơn vị tính"], errors="ignore")
-            df = df.dropna(how="all", axis=1)  # Drop completely empty columns
-            df = df.dropna(how="all", axis=0)  # Drop completely empty rows
-
-            df = df.T  # Transpose to have dates as rows
-            df["date"] = df.index
-            df["date"] = pd.to_datetime(df["date"], dayfirst=True)
-            df.reset_index(drop=True, inplace=True)
-
-            combined_data.append(df)
-
-        # Merge all into one big DataFrame
-        result_df = pd.concat(combined_data)
-
-        # Reset index to remove old index and get clean integer index
-        result_df = result_df.reset_index(drop=True)
-
-        # Sort by date
-        result_df = result_df.sort_values(by="date")
-
-        # Reorder columns to have 'date' first
-        cols = result_df.columns.tolist()
-        cols.insert(0, cols.pop(cols.index("date")))
-        result_df = result_df[cols]
-        result_df = result_df.drop(columns=["Qua đêm"], errors="ignore")
-        result_df = result_df.rename(columns=rename_map)
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.INTEREST_RATE.name,
-            primary_keys=Table.INTEREST_RATE.primary_key,
-            df=result_df,
-        )
-
-        self._logger.log_info(f'Finish processing data in folder "{folder_path}".')
-
-    def _process_macroeconomics_interest_rate(self) -> None:
-        self._logger.log_info("Start processing macroeconomics INTEREST_RATE data.")
-
-        self._process_macroeconomics_interest_rate_vietstock()
-
-        self._logger.log_info("Finish processing macroeconomics INTEREST_RATE data.")
-
-    # endregion MACROECONOMICS.INTEREST_RATE
-
-    # region MACROECONOMICS.EXPORT
-    def _process_macroeconomics_export_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.EXPORT,
-            ExportImportSource.VIETSTOCK,
-        )
-
-        folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{"export_import"}/{key[2].value}"
-        )
-
-        file_path = get_newest_file_path(
-            folder_path=folder_path, extension=FileExtension.CSV
-        )
-
-        if not file_path:
-            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
-            return
-
-        self._logger.log_info(f'Start processing data in "{file_path}".')
-
-        # Add logic for processing data here
-        df = pd.read_csv(file_path)
-        export_df = df.iloc[0:10, :]
-
-        # Drop "Đơn vị tính" only if it exists
-        if "Đơn vị tính" in export_df.columns:
-            export_df = export_df.drop(columns=["Đơn vị tính"])
-
-        # Transpose and rename
-        export_df = export_df.set_index("Chỉ tiêu").T
-
-        rename_map = {
-            "Tổng trị giá Xuất khẩu": Table.EXPORT.Column.TOTAL.value,
-            "Giày da": Table.EXPORT.Column.LEATHER_SHOES.value,
-            "Dệt may": Table.EXPORT.Column.TEXTILES.value,
-            "Gỗ và sản phẩm gỗ": Table.EXPORT.Column.WOOD_PRODUCTS.value,
-            "Thủy sản": Table.EXPORT.Column.SEAFOOD.value,
-            "Dầu thô": Table.EXPORT.Column.CRUDE_OIL.value,
-            "Gạo": Table.EXPORT.Column.RICE.value,
-            "Café": Table.EXPORT.Column.COFFEE.value,
-            "Điện tử máy tính": Table.EXPORT.Column.COMPUTER_ELECTRONICS.value,
-            "Máy móc thiết bị": Table.EXPORT.Column.MACHINERY_EQUIPMENT.value,
-        }
-        export_df = export_df.rename(columns=rename_map).reset_index()
-
-        # Extract month and year
-        export_df[["month", "year"]] = (
-            export_df["index"].str.extract(r"Tháng (\d+)/(\d+)").astype("Int64")
-        )
-
-        # Reorder columns
-        new_col_order = ["year", "month"] + list(rename_map.values())
-        export_df = export_df[new_col_order]
-
-        # Convert all data columns (except year and month) to float, removing commas
-        data_cols = export_df.columns.difference(["year", "month"])
-        for col in data_cols:
-            export_df[col] = (
-                export_df[col].astype(str).str.replace(",", "").astype(float)
-            )
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.EXPORT.name,
-            primary_keys=Table.EXPORT.primary_key,
-            df=export_df,
-        )
-
-        self._logger.log_info(f'Finish processing data in "{file_path}".')
-
-    def _process_macroeconomics_export(self) -> None:
-        self._logger.log_info("Start processing macroeconomics EXPORT data.")
-
-        self._process_macroeconomics_export_vietstock()
-
-        self._logger.log_info("Finish processing macroeconomics EXPORT data.")
-
-    # endregion MACROECONOMICS.EXPORT
-
-    # region MACROECONOMICS.IMPORT
-    def _process_macroeconomics_import_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.IMPORT,
-            ExportImportSource.VIETSTOCK,
-        )
-
-        folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{"export_import"}/{key[2].value}"
-        )
-
-        file_path = get_newest_file_path(
-            folder_path=folder_path, extension=FileExtension.CSV
-        )
-
-        if not file_path:
-            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
-            return
-
-        self._logger.log_info(f'Start processing data in "{file_path}".')
-
-        # Add logic for processing data here
-        df = pd.read_csv(file_path)
-        import_df = df.iloc[10:, :]
-
-        # Drop "Đơn vị tính" only if it exists
-        if "Đơn vị tính" in import_df.columns:
-            import_df = import_df.drop(columns=["Đơn vị tính"])
-
-        # Transpose and rename
-        import_df = import_df.set_index("Chỉ tiêu").T
-
-        rename_map = {
-            "Tổng trị giá Nhập khẩu": Table.IMPORT.Column.TOTAL.value,
-            "Điện tử, máy tính và linh kiện": Table.IMPORT.Column.ELECTRONICS_COMPUTERS_COMPONENTS.value,
-            "Máy móc thiết bị, phụ tùng": Table.IMPORT.Column.MACHINERY_EQUIPMENT.value,
-            "Xăng dầu": Table.IMPORT.Column.GASOLINE.value,
-            "Hóa chất": Table.IMPORT.Column.CHEMICAL.value,
-            "Sản phẩm hóa chất": Table.IMPORT.Column.CHEMICAL_PRODUCTS.value,
-            "Sắt thép": Table.IMPORT.Column.IRON_STEEL.value,
-            "Vải": Table.IMPORT.Column.FABRIC.value,
-            "Ô tô": Table.IMPORT.Column.CAR.value,
-            "Thức ăn gia súc": Table.IMPORT.Column.ANIMAL_FEED.value,
-        }
-        import_df = import_df.rename(columns=rename_map).reset_index()
-
-        # Extract month and year
-        import_df[["month", "year"]] = (
-            import_df["index"].str.extract(r"Tháng (\d+)/(\d+)").astype("Int64")
-        )
-
-        # Reorder columns
-        new_col_order = ["year", "month"] + list(rename_map.values())
-        import_df = import_df[new_col_order]
-
-        # Convert all data columns (except year and month) to float, removing commas
-        data_cols = import_df.columns.difference(["year", "month"])
-        for col in data_cols:
-            import_df[col] = (
-                import_df[col].astype(str).str.replace(",", "").astype(float)
-            )
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.IMPORT.name,
-            primary_keys=Table.IMPORT.primary_key,
-            df=import_df,
-        )
-
-        self._logger.log_info(f'Finish processing data in "{file_path}".')
-
-    def _process_macroeconomics_import(self) -> None:
-        self._logger.log_info("Start processing macroeconomics IMPORT data.")
-
-        self._process_macroeconomics_import_vietstock()
-
-        self._logger.log_info("Finish processing macroeconomics IMPORT data.")
-
-    # endregion
-
-    # region MACROECONOMICS.FDI
-    def _process_macroeconomics_fdi_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.FDI,
-            FdiSource.VIETSTOCK,
-        )
-
-        folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
-
-        to_fix_file_path = os.path.join(folder_path, "vietstock_2016_2020.csv")
-        fixed_file_path = os.path.join(folder_path, "vietstock_2016_2020_fixed.csv")
-        merged_file_path = os.path.join(folder_path, "vietstock_merged.csv")
-
-        # Delete the old fixed file if it exists
-        if os.path.exists(fixed_file_path):
-            os.remove(fixed_file_path)
-
-        # Delete the old merged file if it exists
-        if os.path.exists(merged_file_path):
-            os.remove(merged_file_path)
-
-        # Fix file "vietstock_2016_2020.csv" with redundant data
-        with open(to_fix_file_path, "r", encoding="utf-8") as f:
-            reader = list(csv.reader(f))
-
-        # Extract header and the two data rows
-        header = reader[0]
-        registration_row = reader[1]  # "Đăng ký"
-        disbursement_row = reader[2]  # "Giải ngân"
-
-        # Normalize row lengths by removing duplicated values
-        expected_columns = len(header)
-
-        # Fix the registration row - remove duplicate at index 13 ("0.49")
-        if len(registration_row) > expected_columns:
-            del registration_row[13]  # corresponds to "Tháng 1/2017"
-
-        # Fix the disbursement row - remove duplicate at index 12 ("1.6")
-        if len(disbursement_row) > expected_columns:
-            del disbursement_row[12]  # corresponds to "Tháng 12/2016"
-
-        # Write the cleaned data to a new CSV file
-        with open(fixed_file_path, "w", encoding="utf-8", newline="") as f:
-            writer = csv.writer(f)
-            writer.writerow(header)
-            writer.writerow(registration_row)
-            writer.writerow(disbursement_row)
-
-        # Process cleaned data
-        data_path = os.path.join(folder_path, "vietstock_*.csv")
-        file_list = sorted(glob(data_path))
-
-        dfs = []
-
-        for file in file_list:
-            if file.endswith("vietstock_2016_2020.csv"):
-                continue
-
-            df = pd.read_csv(file)
-            dfs.append(df)
-
-        merged_df = dfs[0].copy()
-
-        for df in dfs[1:]:
-            merged_df = pd.concat([merged_df, df.iloc[:, 2:]], axis=1)
-
-        merged_df = merged_df.loc[:, ~merged_df.columns.str.contains("Đồ thị")]
-        merged_df.drop(merged_df.columns[2], axis=1, inplace=True)
-
-        merged_df.to_csv(merged_file_path, index=False)
-
-        if not merged_file_path:
-            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
-            return
-
-        self._logger.log_info(f'Start processing data in "{merged_file_path}".')
-
-        # Add logic for processing data here
-        df = pd.read_csv(merged_file_path)
-
-        # Drop "Đơn vị tính" only if it exists
-        if "Đơn vị tính" in df.columns:
-            df = df.drop(columns=["Đơn vị tính"])
-
-        # Transpose and rename
-        df = df.set_index("Chỉ tiêu").T
-
-        rename_map = {
-            "Đăng ký": Table.FDI.Column.REGISTERED.value,
-            "Giải ngân": Table.FDI.Column.DISBURSEMENTED.value,
-        }
-        df = df.rename(columns=rename_map).reset_index()
-
-        # Extract month and year
-        df[["month", "year"]] = (
-            df["index"].str.extract(r"Tháng (\d+)/(\d+)").astype("Int64")
-        )
-
-        # Reorder columns
-        new_col_order = ["year", "month"] + list(rename_map.values())
-        df = df[new_col_order]
-
-        # Convert all data columns (except year and month) to float, removing commas
-        data_cols = df.columns.difference(["year", "month"])
-        for col in data_cols:
-            df[col] = df[col].astype(str).str.replace(",", "").astype(float)
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.FDI.name,
-            primary_keys=Table.FDI.primary_key,
-            df=df,
-        )
-
-        self._logger.log_info(f'Finish processing data in "{folder_path}".')
-
-    def _process_macroeconomics_fdi(self) -> None:
-        self._logger.log_info("Start processing macroeconomics FDI data.")
-
-        self._process_macroeconomics_fdi_vietstock()
-
-        self._logger.log_info("Finish processing macroeconomics FDI data.")
-
-    # endregion MACROECONOMICS.FDI
-
-    # region MACROECONOMICS.M2
-    def _process_macroeconomics_m2_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.M2,
-            M2Source.VIETSTOCK,
-        )
-
-        folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
-
-        file_path = get_newest_file_path(
-            folder_path=folder_path, extension=FileExtension.CSV
-        )
-
-        if not file_path:
-            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
-            return
-
-        self._logger.log_info(f'Start processing data in "{file_path}".')
-
-        # Add logic for processing data here
-        df = pd.read_csv(file_path)
-
-        # Drop "Đơn vị tính" only if it exists
-        if "Đơn vị tính" in df.columns:
-            df = df.drop(columns=["Đơn vị tính"])
-
-        df = df.set_index("Chỉ tiêu").T
-
-        rename_map = {
-            "Tín dụng": Table.M2.Column.CREDITS.value,
-            "Cung tiền M2": Table.M2.Column.M2_MONEY_SUPPLY.value,
-            "Tăng trưởng tín dụng (YTD)*": Table.M2.Column.CREDITS_GROWTH_YTD.value,
-            "Tăng trưởng Cung tiền M2 (YTD)*": Table.M2.Column.M2_MONEY_SUPPLY_GROWTH_YTD.value,
-        }
-        df = df.rename(columns=rename_map).reset_index()
-
-        # Extract month and year
-        df[["month", "year"]] = (
-            df["index"].str.extract(r"Tháng (\d+)/(\d+)").astype("Int64")
-        )
-
-        # Reorder columns
-        new_col_order = ["year", "month"] + list(rename_map.values())
-        df = df[new_col_order]
-
-        # Convert all data columns (except year and month) to float, removing commas
-        data_cols = df.columns.difference(["year", "month"])
-        for col in data_cols:
-            df[col] = df[col].astype(str).str.replace(",", "").astype(float)
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.M2.name,
-            primary_keys=Table.M2.primary_key,
-            df=df,
-        )
-
-        self._logger.log_info(f'Finish processing data in "{file_path}".')
-
-    def _process_macroeconomics_m2(self) -> None:
-        self._logger.log_info("Start processing macroeconomics M2 data.")
-
-        self._process_macroeconomics_m2_vietstock()
-
-        self._logger.log_info("Finish processing macroeconomics M2 data.")
-
-    # endregion MACROECONOMICS.M2
-
     # region MACROECONOMICS.RETAIL
     def _process_macroeconomics_retail_vietstock(self) -> None:
         key = (
@@ -2123,34 +1483,42 @@ class DataPreprocessor:
         # Add logic for processing data here
         df = pd.read_csv(file_path)
 
-        # Drop "Đơn vị tính" only if it exists
-        if "Đơn vị tính" in df.columns:
-            df = df.drop(columns=["Đơn vị tính"])
-
-        df = df.set_index("Chỉ tiêu").T
-
-        rename_map = {
-            "Tổng": "total",
-            "Thương nghiệp": "commercial",
-            "Khách sạn nhà hàng": "hotel_restaurant",
-            "Du lịch": "tourism",
-            "Dịch vụ": "service",
-        }
-        df = df.rename(columns=rename_map).reset_index()
-
-        # Extract month and year
-        df[["month", "year"]] = (
-            df["index"].str.extract(r"Tháng (\d+)/(\d+)").astype("Int64")
+        # Set indicator names as lowercase with underscores
+        df["Chỉ tiêu"] = (
+            df["Chỉ tiêu"].str.lower().str.replace(",", "").str.replace(" ", "_")
         )
 
-        # Reorder columns
-        new_col_order = ["year", "month"] + list(rename_map.values())
-        df = df[new_col_order]
+        # Melt from wide to long format
+        df = df.melt(
+            id_vars=["Chỉ tiêu", "Đơn vị tính"],
+            var_name="month_str",
+            value_name="value",
+        )
 
-        # Convert all data columns (except year and month) to float, removing commas
-        data_cols = df.columns.difference(["year", "month"])
-        for col in data_cols:
-            df[col] = df[col].astype(str).str.replace(",", "").astype(float)
+        # Clean numeric values
+        df["value"] = df["value"].astype(str).str.replace(",", "", regex=False)
+        df["value"] = pd.to_numeric(df["value"], errors="coerce")
+
+        # Extract year and month
+        df["date"] = pd.to_datetime(df["month_str"], errors="coerce")
+
+        # Drop rows where date couldn't be parsed
+        df = df.dropna(subset=["date"])
+
+        # Extract numeric year, month
+        df["month"] = df["date"].dt.month
+        df["year"] = df["date"].dt.year
+
+        # Use pivot_table with first() to handle duplicates
+        df = df.pivot_table(
+            index=["year", "month"], columns="Chỉ tiêu", values="value", aggfunc="first"
+        ).reset_index()
+
+        # Sort by year and month
+        df = df.sort_values(["year", "month"]).reset_index(drop=True)
+
+        # Fill missing values with 0
+        df.fillna(0, inplace=True)
 
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
@@ -2169,86 +1537,6 @@ class DataPreprocessor:
         self._logger.log_info("Finish processing macroeconomics RETAIL data.")
 
     # endregion MACROECONOMICS.RETAIL
-
-    # region MACROECONOMICS.POPULATION_UNEMPLOYMENT
-    def _process_macroeconomics_population_unemployment_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.POPULATION_UNEMPLOYMENT,
-            PopulationUnemploymentSource.VIETSTOCK,
-        )
-
-        folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
-
-        file_path = get_newest_file_path(
-            folder_path=folder_path, extension=FileExtension.CSV
-        )
-
-        if not file_path:
-            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
-            return
-
-        self._logger.log_info(f'Start processing data in "{file_path}".')
-
-        # Add logic for processing data here
-        df = pd.read_csv(file_path)
-
-        if "Đơn vị tính" in df.columns:
-            df = df.drop(columns=["Đơn vị tính"])
-
-        df = df.set_index("Chỉ tiêu").T
-
-        df = df.reset_index()
-
-        rename_map = {
-            "index": Table.POPULATION_UNEMPLOYMENT.Column.YEAR.value,
-            "Dân số": Table.POPULATION_UNEMPLOYMENT.Column.POPULATION.value,
-            "Mật độ dân số": Table.POPULATION_UNEMPLOYMENT.Column.POPULATION_DENSITY.value,
-            "Tốc độ tăng dân số": Table.POPULATION_UNEMPLOYMENT.Column.POPULATION_GROWTH_RATIO.value,
-            "Tỷ lệ dân thành thị": Table.POPULATION_UNEMPLOYMENT.Column.URBAN_POPULATION_RATIO.value,
-            "Số lượng lao động": Table.POPULATION_UNEMPLOYMENT.Column.LABOR_FORCE_COUNT.value,
-            "Nông, lâm nghiệp và thủy sản": Table.POPULATION_UNEMPLOYMENT.Column.AGRICULTURE_FORESTRY_AND_FISHERIES.value,
-            "Công nghiệp và Xây dựng": Table.POPULATION_UNEMPLOYMENT.Column.INDUSTRY_AND_CONSTRUCTION.value,
-            "Dịch vụ": Table.POPULATION_UNEMPLOYMENT.Column.SERVICE.value,
-            "Số người thất nghiệp thành thị": Table.POPULATION_UNEMPLOYMENT.Column.URBAN_UNEMPLOYED_COUNT.value,
-            "Tăng trưởng lực lượng lao động": Table.POPULATION_UNEMPLOYMENT.Column.LABOR_FORCE_GROWTH.value,
-            "Tỷ lệ lao động/dân số": Table.POPULATION_UNEMPLOYMENT.Column.LABOR_FORCE_RATIO.value,
-            "Tỷ lệ nam": Table.POPULATION_UNEMPLOYMENT.Column.MALE_RATIO.value,
-            "Tỷ lệ nữ": Table.POPULATION_UNEMPLOYMENT.Column.FEMALE_RATIO.value,
-            "Tỷ lệ thất nghiệp thành thị": Table.POPULATION_UNEMPLOYMENT.Column.URBAN_UNEMPLOYED_RATIO.value,
-        }
-        df = df.rename(columns=rename_map)
-
-        df = df[df["year"].str.fullmatch(r"\d{4}")]
-
-        df["year"] = df["year"].astype("Int64")
-
-        for col in df.columns.difference(["year"]):
-            df[col] = pd.to_numeric(df[col], errors="coerce")
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.POPULATION_UNEMPLOYMENT.name,
-            primary_keys=Table.POPULATION_UNEMPLOYMENT.primary_key,
-            df=df,
-        )
-
-        self._logger.log_info(f'Finish processing data in "{file_path}".')
-
-    def _process_macroeconomics_population_unemployment(self) -> None:
-        self._logger.log_info(
-            "Start processing macroeconomics POPULATION_UNEMPLOYMENT data."
-        )
-
-        self._process_macroeconomics_population_unemployment_vietstock()
-
-        self._logger.log_info(
-            "Finish processing macroeconomics POPULATION_UNEMPLOYMENT data."
-        )
-
-    # endregion MACROECONOMICS.POPULATION_UNEMPLOYMENT
 
     # region MACROECONOMICS.GOLD_PRICE
     def _process_macroeconomics_gold_price_investing(self) -> None:
@@ -3486,6 +2774,7 @@ class DataPreprocessor:
         self._process_macroeconomics_mpi()
         self._process_macroeconomics_population()
         self._process_macroeconomics_labor()
+        self._process_macroeconomics_retail()
         # self._process_macroeconomics_interest_rate()
         # self._process_macroeconomics_export()
         # self._process_macroeconomics_import()
