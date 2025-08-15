@@ -303,6 +303,63 @@ class DataPreprocessor:
         )
         # fmt: on
 
+        # MPI
+        # fmt: off
+        self._database_driver.create_table(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.MPI.name,
+            columns=[
+                Column(name=Table.MPI.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
+                Column(name=Table.MPI.Column.MONTH.value, data_type=DataType.INT(), nullable=True),
+                Column(name=Table.MPI.Column.ANIMAL_FEED_AND_RAW_MATERIALS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.MPI.Column.AQUATIC_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.MPI.Column.CAMERAS_CAMCORDERS_AND_COMPONENTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.MPI.Column.CASHEW_NUTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.MPI.Column.CASSAVA_AND_CASSAVA_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.MPI.Column.CHEMICAL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.MPI.Column.CHEMICALS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.MPI.Column.CLINKER_AND_CEMENT.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.MPI.Column.COFFEE.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.MPI.Column.CONFECTIONERY_AND_CEREAL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.MPI.Column.CRUDE_OIL.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.MPI.Column.DOMESTIC_ECONOMIC_SECTOR.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.MPI.Column.ELECTRICAL_WIRES_AND_CABLES.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.MPI.Column.ELECTRONICS_COMPUTERS_AND_COMPONENTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.MPI.Column.FOOTWEAR.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.MPI.Column.FOREIGN_INVESTED_SECTOR.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.MPI.Column.FOREIGN_CRUDE_OIL.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.MPI.Column.FURNITURE_PRODUCTS_FROM_MATERIALS_OTHER_THAN_WOOD.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.MPI.Column.GLASS_AND_GLASS_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.MPI.Column.HANDBAGS_WALLETS_SUITCASES_HATS_UMBRELLAS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.MPI.Column.IRON_AND_STEEL.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.MPI.Column.IRON_AND_STEEL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.MPI.Column.MACHINERY_EQUIPMENT_TOOLS_SPARE_PARTS_OTHER.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.MPI.Column.MAIN_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.MPI.Column.OTHER_BASE_METALS_AND_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.MPI.Column.OTHER_GOODS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.MPI.Column.PAPER_AND_PAPER_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.MPI.Column.PEPPER.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.MPI.Column.PETROLEUM.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.MPI.Column.PHONES_AND_COMPONENTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.MPI.Column.PLASTIC_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.MPI.Column.RAW_PLASTICS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.MPI.Column.RICE.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.MPI.Column.RUBBER.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.MPI.Column.RUBBER_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.MPI.Column.TEA.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.MPI.Column.TEXTILE_FIBERS_YARNS_OF_ALL_KINDS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.MPI.Column.TEXTILE_GARMENT_LEATHER_FOOTWEAR_RAW_MATERIALS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.MPI.Column.TEXTILES_GARMENTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.MPI.Column.TOTAL_VALUE.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.MPI.Column.TOYS_SPORTS_EQUIPMENT_AND_PARTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.MPI.Column.TRANSPORTATION_VEHICLES_AND_SPARE_PARTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.MPI.Column.VEGETABLES.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.MPI.Column.WOOD_AND_WOOD_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+            ],
+            primary_keys=Table.MPI.primary_key,
+        )
+        # fmt: on
+
         # EXCHANGE_RATE
         # fmt: off
         self._database_driver.create_table(
@@ -1209,7 +1266,11 @@ class DataPreprocessor:
 
         # Set indicator names as lowercase with underscores
         df["Chỉ tiêu"] = (
-            df["Chỉ tiêu"].str.lower().str.replace(",", "").str.replace(" ", "_").str.replace("-", "_")
+            df["Chỉ tiêu"]
+            .str.lower()
+            .str.replace(",", "")
+            .str.replace(" ", "_")
+            .str.replace("-", "_")
         )
 
         # Melt from wide to long format
@@ -1261,6 +1322,90 @@ class DataPreprocessor:
         self._logger.log_info("Finish processing macroeconomics XPI data.")
 
     # endregion MACROECONOMICS.XPI
+
+    # region MACROECONOMICS.MPI
+    def _process_macroeconomics_mpi_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.MPI,
+            MpiSource.VIETSTOCK,
+        )
+
+        folder_path = (
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+        )
+
+        file_path = get_newest_file_path(
+            folder_path=folder_path, extension=FileExtension.CSV
+        )
+
+        if not file_path:
+            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
+            return
+
+        self._logger.log_info(f'Start processing data in "{file_path}".')
+
+        # Add logic for processing data here
+        df = pd.read_csv(file_path)
+
+        # Set indicator names as lowercase with underscores
+        df["Chỉ tiêu"] = (
+            df["Chỉ tiêu"]
+            .str.lower()
+            .str.replace(",", "")
+            .str.replace(" ", "_")
+            .str.replace("-", "_")
+        )
+
+        # Melt from wide to long format
+        df = df.melt(
+            id_vars=["Chỉ tiêu", "Đơn vị tính"],
+            var_name="month_str",
+            value_name="value",
+        )
+
+        # Clean numeric values
+        df["value"] = df["value"].astype(str).str.replace(",", "", regex=False)
+        df["value"] = pd.to_numeric(df["value"], errors="coerce")
+
+        # Extract year and month
+        df["date"] = pd.to_datetime(df["month_str"], errors="coerce")
+
+        # Drop rows where date couldn't be parsed
+        df = df.dropna(subset=["date"])
+
+        # Extract numeric year, month
+        df["month"] = df["date"].dt.month
+        df["year"] = df["date"].dt.year
+
+        # Use pivot_table with first() to handle duplicates
+        df = df.pivot_table(
+            index=["year", "month"], columns="Chỉ tiêu", values="value", aggfunc="first"
+        ).reset_index()
+
+        # Sort by year and month
+        df = df.sort_values(["year", "month"]).reset_index(drop=True)
+
+        # Fill missing values with 0
+        df.fillna(0, inplace=True)
+
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.MPI.name,
+            primary_keys=Table.MPI.primary_key,
+            df=df,
+        )
+
+        self._logger.log_info(f'Finish processing data in "{file_path}".')
+
+    def _process_macroeconomics_mpi(self) -> None:
+        self._logger.log_info("Start processing macroeconomics MPI data.")
+
+        self._process_macroeconomics_mpi_vietstock()
+
+        self._logger.log_info("Finish processing macroeconomics MPI data.")
+
+    # endregion MACROECONOMICS.MPI
 
     # region MACROECONOMICS.EXCHANGE_RATE
     def _process_macroeconomics_exchange_rate_vietstock(self) -> None:
@@ -3152,6 +3297,7 @@ class DataPreprocessor:
         self._process_macroeconomics_ppi()
         self._process_macroeconomics_ipi()
         self._process_macroeconomics_xpi()
+        self._process_macroeconomics_mpi()
         # self._process_macroeconomics_interest_rate()
         # self._process_macroeconomics_export()
         # self._process_macroeconomics_import()
