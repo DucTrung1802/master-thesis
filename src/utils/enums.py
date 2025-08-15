@@ -1049,6 +1049,80 @@ class Table:
         name = "pmi"
         primary_key = [Column.YEAR.value, Column.MONTH.value]
 
+    class IIP:
+        class Column(Enum):
+            YEAR = "year"
+            MONTH = "month"
+            APPAREL_MANUFACTURING = "apparel_manufacturing"
+            BEVERAGE_PRODUCTION = "beverage_production"
+            COAL_AND_LIGNITE_MINING = "coal_and_lignite_mining"
+            CRUDE_OIL_AND_NATURAL_GAS_EXTRACTION = (
+                "crude_oil_and_natural_gas_extraction"
+            )
+            ENTIRE_INDUSTRIAL_SECTOR = "entire_industrial_sector"
+            FOOD_PRODUCTION_AND_PROCESSING = "food_production_and_processing"
+            LEATHER_AND_RELATED_PRODUCT_MANUFACTURING = (
+                "leather_and_related_product_manufacturing"
+            )
+            MANUFACTURE_OF_CHEMICALS_AND_CHEMICAL_PRODUCTS = (
+                "manufacture_of_chemicals_and_chemical_products"
+            )
+            MANUFACTURE_OF_COKE_AND_REFINED_PETROLEUM_PRODUCTS = (
+                "manufacture_of_coke_and_refined_petroleum_products"
+            )
+            MANUFACTURE_OF_ELECTRICAL_EQUIPMENT = "manufacture_of_electrical_equipment"
+            MANUFACTURE_OF_ELECTRONIC_PRODUCTS_COMPUTERS_AND_OPTICAL_PRODUCTS = (
+                "manufacture_of_electronic_products_computers_and_optical_products"
+            )
+            MANUFACTURE_OF_FABRICATED_METAL_PRODUCTS_EXCLUDING_MACHINERY_AND_EQUIPMENT = "manufacture_of_fabricated_metal_products_excluding_machinery_and_equipment"
+            MANUFACTURE_OF_FURNITURE = "manufacture_of_furniture"
+            MANUFACTURE_OF_MACHINERY_AND_EQUIPMENT_NOT_ELSEWHERE_CLASSIFIED = (
+                "manufacture_of_machinery_and_equipment_not_elsewhere_classified"
+            )
+            MANUFACTURE_OF_METALS = "manufacture_of_metals"
+            MANUFACTURE_OF_MOTOR_VEHICLES = "manufacture_of_motor_vehicles"
+            MANUFACTURE_OF_OTHER_NON_METALLIC_MINERAL_PRODUCTS = (
+                "manufacture_of_other_non_metallic_mineral_products"
+            )
+            MANUFACTURE_OF_OTHER_TRANSPORT_EQUIPMENT = (
+                "manufacture_of_other_transport_equipment"
+            )
+            MANUFACTURE_OF_PHARMACEUTICALS_MEDICINAL_CHEMICALS_AND_BOTANICAL_PRODUCTS = "manufacture_of_pharmaceuticals_medicinal_chemicals_and_botanical_products"
+            MANUFACTURE_OF_RUBBER_AND_PLASTIC_PRODUCTS = (
+                "manufacture_of_rubber_and_plastic_products"
+            )
+            MANUFACTURING_INDUSTRY = "manufacturing_industry"
+            METAL_ORE_MINING = "metal_ore_mining"
+            MINING = "mining"
+            MINING_SUPPORT_SERVICE_ACTIVITIES = "mining_support_service_activities"
+            OTHER_MANUFACTURING_INDUSTRIES = "other_manufacturing_industries"
+            OTHER_MINING = "other_mining"
+            PAPER_AND_PAPER_PRODUCT_MANUFACTURING = (
+                "paper_and_paper_product_manufacturing"
+            )
+            PRINTING_AND_REPRODUCTION_OF_RECORDED_MEDIA = (
+                "printing_and_reproduction_of_recorded_media"
+            )
+            PRODUCTION_AND_DISTRIBUTION_OF_ELECTRICITY_GAS_HOT_WATER_STEAM_AND_AIR_CONDITIONING = "production_and_distribution_of_electricity_gas_hot_water_steam_and_air_conditioning"
+            REPAIR_MAINTENANCE_AND_INSTALLATION_OF_MACHINERY_AND_EQUIPMENT = (
+                "repair_maintenance_and_installation_of_machinery_and_equipment"
+            )
+            TEXTILE_MANUFACTURING = "textile_manufacturing"
+            TOBACCO_PRODUCT_MANUFACTURING = "tobacco_product_manufacturing"
+            WASTE_COLLECTION_TREATMENT_AND_DISPOSAL_ACTIVITIES_RECYCLING_OF_WASTE = (
+                "waste_collection_treatment_and_disposal_activities_recycling_of_waste"
+            )
+            WASTEWATER_COLLECTION_AND_TREATMENT = "wastewater_collection_and_treatment"
+            WATER_COLLECTION_TREATMENT_AND_SUPPLY = (
+                "water_collection_treatment_and_supply"
+            )
+            WATER_SUPPLY_WASTE_MANAGEMENT_AND_TREATMENT_ACTIVITIES = (
+                "water_supply_waste_management_and_treatment_activities"
+            )
+
+        name = "iip"
+        primary_key = [Column.YEAR.value, Column.MONTH.value]
+
     class EXCHANGE_RATE:
         class Column(Enum):
             DATE = "date"
