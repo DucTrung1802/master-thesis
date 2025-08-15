@@ -869,6 +869,70 @@ class Table:
         name = "ipi"
         primary_key = [Column.YEAR.value]
 
+    class XPI:
+        class Column(Enum):
+            YEAR = "year"
+            MONTH = "month"
+            ANIMAL_FEED_AND_RAW_MATERIALS = "animal_feed_and_raw_materials"
+            AQUATIC_PRODUCTS = "aquatic_products"
+            CAMERAS_CAMCORDERS_AND_COMPONENTS = "cameras_camcorders_and_components"
+            CASHEW_NUTS = "cashew_nuts"
+            CASSAVA_AND_CASSAVA_PRODUCTS = "cassava_and_cassava_products"
+            CHEMICAL_PRODUCTS = "chemical_products"
+            CHEMICALS = "chemicals"
+            CLINKER_AND_CEMENT = "clinker_and_cement"
+            COFFEE = "coffee"
+            CONFECTIONERY_AND_CEREAL_PRODUCTS = "confectionery_and_cereal_products"
+            CRUDE_OIL = "crude_oil"
+            DOMESTIC_ECONOMIC_SECTOR = "domestic_economic_sector"
+            ELECTRICAL_WIRES_AND_CABLES = "electrical_wires_and_cables"
+            ELECTRONICS_COMPUTERS_AND_COMPONENTS = (
+                "electronics_computers_and_components"
+            )
+            FOOTWEAR = "footwear"
+            FOREIGN_INVESTED_SECTOR = "foreign_invested_sector"
+            FOREIGN_CRUDE_OIL = "foreign_crude_oil"
+            FURNITURE_PRODUCTS_FROM_MATERIALS_OTHER_THAN_WOOD = (
+                "furniture_products_from_materials_other_than_wood"
+            )
+            GLASS_AND_GLASS_PRODUCTS = "glass_and_glass_products"
+            HANDBAGS_WALLETS_SUITCASES_HATS_UMBRELLAS = (
+                "handbags_wallets_suitcases_hats_umbrellas"
+            )
+            IRON_AND_STEEL = "iron_and_steel"
+            IRON_AND_STEEL_PRODUCTS = "iron_and_steel_products"
+            MACHINERY_EQUIPMENT_TOOLS_SPARE_PARTS_OTHER = (
+                "machinery_equipment_tools_spare_parts_other"
+            )
+            MAIN_PRODUCTS = "main_products"
+            OTHER_BASE_METALS_AND_PRODUCTS = "other_base_metals_and_products"
+            OTHER_GOODS = "other_goods"
+            PAPER_AND_PAPER_PRODUCTS = "paper_and_paper_products"
+            PEPPER = "pepper"
+            PETROLEUM = "petroleum"
+            PHONES_AND_COMPONENTS = "phones_and_components"
+            PLASTIC_PRODUCTS = "plastic_products"
+            RAW_PLASTICS = "raw_plastics"
+            RICE = "rice"
+            RUBBER = "rubber"
+            RUBBER_PRODUCTS = "rubber_products"
+            TEA = "tea"
+            TEXTILE_FIBERS_YARNS_OF_ALL_KINDS = "textile_fibers_yarns_of_all_kinds"
+            TEXTILE_GARMENT_LEATHER_FOOTWEAR_RAW_MATERIALS = (
+                "textile_garment_leather_footwear_raw_materials"
+            )
+            TEXTILES_GARMENTS = "textiles_garments"
+            TOTAL_VALUE = "total_value"
+            TOYS_SPORTS_EQUIPMENT_AND_PARTS = "toys_sports_equipment_and_parts"
+            TRANSPORTATION_VEHICLES_AND_SPARE_PARTS = (
+                "transportation_vehicles_and_spare_parts"
+            )
+            VEGETABLES = "vegetables"
+            WOOD_AND_WOOD_PRODUCTS = "wood_and_wood_products"
+
+        name = "xpi"
+        primary_key = [Column.YEAR.value, Column.MONTH.value]
+
     class EXCHANGE_RATE:
         class Column(Enum):
             DATE = "date"

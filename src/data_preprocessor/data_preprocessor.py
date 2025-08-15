@@ -245,7 +245,64 @@ class DataPreprocessor:
             primary_keys=Table.IPI.primary_key,
         )
         # fmt: on
-        
+
+        # XPI
+        # fmt: off
+        self._database_driver.create_table(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.XPI.name,
+            columns=[
+                Column(name=Table.XPI.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
+                Column(name=Table.XPI.Column.MONTH.value, data_type=DataType.INT(), nullable=True),
+                Column(name=Table.XPI.Column.ANIMAL_FEED_AND_RAW_MATERIALS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.XPI.Column.AQUATIC_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.XPI.Column.CAMERAS_CAMCORDERS_AND_COMPONENTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.XPI.Column.CASHEW_NUTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.XPI.Column.CASSAVA_AND_CASSAVA_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.XPI.Column.CHEMICAL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.XPI.Column.CHEMICALS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.XPI.Column.CLINKER_AND_CEMENT.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.XPI.Column.COFFEE.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.XPI.Column.CONFECTIONERY_AND_CEREAL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.XPI.Column.CRUDE_OIL.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.XPI.Column.DOMESTIC_ECONOMIC_SECTOR.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.XPI.Column.ELECTRICAL_WIRES_AND_CABLES.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.XPI.Column.ELECTRONICS_COMPUTERS_AND_COMPONENTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.XPI.Column.FOOTWEAR.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.XPI.Column.FOREIGN_INVESTED_SECTOR.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.XPI.Column.FOREIGN_CRUDE_OIL.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.XPI.Column.FURNITURE_PRODUCTS_FROM_MATERIALS_OTHER_THAN_WOOD.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.XPI.Column.GLASS_AND_GLASS_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.XPI.Column.HANDBAGS_WALLETS_SUITCASES_HATS_UMBRELLAS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.XPI.Column.IRON_AND_STEEL.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.XPI.Column.IRON_AND_STEEL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.XPI.Column.MACHINERY_EQUIPMENT_TOOLS_SPARE_PARTS_OTHER.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.XPI.Column.MAIN_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.XPI.Column.OTHER_BASE_METALS_AND_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.XPI.Column.OTHER_GOODS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.XPI.Column.PAPER_AND_PAPER_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.XPI.Column.PEPPER.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.XPI.Column.PETROLEUM.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.XPI.Column.PHONES_AND_COMPONENTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.XPI.Column.PLASTIC_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.XPI.Column.RAW_PLASTICS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.XPI.Column.RICE.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.XPI.Column.RUBBER.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.XPI.Column.RUBBER_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.XPI.Column.TEA.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.XPI.Column.TEXTILE_FIBERS_YARNS_OF_ALL_KINDS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.XPI.Column.TEXTILE_GARMENT_LEATHER_FOOTWEAR_RAW_MATERIALS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.XPI.Column.TEXTILES_GARMENTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.XPI.Column.TOTAL_VALUE.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.XPI.Column.TOYS_SPORTS_EQUIPMENT_AND_PARTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.XPI.Column.TRANSPORTATION_VEHICLES_AND_SPARE_PARTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.XPI.Column.VEGETABLES.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.XPI.Column.WOOD_AND_WOOD_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+            ],
+            primary_keys=Table.XPI.primary_key,
+        )
+        # fmt: on
+
         # EXCHANGE_RATE
         # fmt: off
         self._database_driver.create_table(
@@ -947,7 +1004,6 @@ class DataPreprocessor:
         df = pd.read_csv(file_path)
 
         # Set indicator names as lowercase with underscores
-        # df["Chỉ tiêu"] = df["Chỉ tiêu"].str.lower().str.replace(" ", "_")
         df["Chỉ tiêu"] = (
             df["Chỉ tiêu"].str.lower().str.replace(",", "").str.replace(" ", "_")
         )
@@ -1125,6 +1181,86 @@ class DataPreprocessor:
         self._logger.log_info("Finish processing macroeconomics IPI data.")
 
     # endregion MACROECONOMICS.IPI
+
+    # region MACROECONOMICS.XPI
+    def _process_macroeconomics_xpi_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.XPI,
+            XpiSource.VIETSTOCK,
+        )
+
+        folder_path = (
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+        )
+
+        file_path = get_newest_file_path(
+            folder_path=folder_path, extension=FileExtension.CSV
+        )
+
+        if not file_path:
+            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
+            return
+
+        self._logger.log_info(f'Start processing data in "{file_path}".')
+
+        # Add logic for processing data here
+        df = pd.read_csv(file_path)
+
+        # Set indicator names as lowercase with underscores
+        df["Chỉ tiêu"] = (
+            df["Chỉ tiêu"].str.lower().str.replace(",", "").str.replace(" ", "_").str.replace("-", "_")
+        )
+
+        # Melt from wide to long format
+        df = df.melt(
+            id_vars=["Chỉ tiêu", "Đơn vị tính"],
+            var_name="month_str",
+            value_name="value",
+        )
+
+        # Clean numeric values
+        df["value"] = df["value"].astype(str).str.replace(",", "", regex=False)
+        df["value"] = pd.to_numeric(df["value"], errors="coerce")
+
+        # Extract year and month
+        df["date"] = pd.to_datetime(df["month_str"], errors="coerce")
+
+        # Drop rows where date couldn't be parsed
+        df = df.dropna(subset=["date"])
+
+        # Extract numeric year, month
+        df["month"] = df["date"].dt.month
+        df["year"] = df["date"].dt.year
+
+        # Use pivot_table with first() to handle duplicates
+        df = df.pivot_table(
+            index=["year", "month"], columns="Chỉ tiêu", values="value", aggfunc="first"
+        ).reset_index()
+
+        # Sort by year and month
+        df = df.sort_values(["year", "month"]).reset_index(drop=True)
+
+        # Fill missing values with 0
+        df.fillna(0, inplace=True)
+
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.XPI.name,
+            primary_keys=Table.XPI.primary_key,
+            df=df,
+        )
+
+        self._logger.log_info(f'Finish processing data in "{file_path}".')
+
+    def _process_macroeconomics_xpi(self) -> None:
+        self._logger.log_info("Start processing macroeconomics XPI data.")
+
+        self._process_macroeconomics_xpi_vietstock()
+
+        self._logger.log_info("Finish processing macroeconomics XPI data.")
+
+    # endregion MACROECONOMICS.XPI
 
     # region MACROECONOMICS.EXCHANGE_RATE
     def _process_macroeconomics_exchange_rate_vietstock(self) -> None:
@@ -3015,6 +3151,7 @@ class DataPreprocessor:
         self._process_macroeconomics_cpi()
         self._process_macroeconomics_ppi()
         self._process_macroeconomics_ipi()
+        self._process_macroeconomics_xpi()
         # self._process_macroeconomics_interest_rate()
         # self._process_macroeconomics_export()
         # self._process_macroeconomics_import()
