@@ -78,6 +78,14 @@ class FileExtension(Enum):
     MP4 = "mp4"
 
 
+class TimeFormat(Enum):
+    YEAR = "2000"
+    MONTH_NAME_YEAR = "Feb-2000"  # month name + year
+    DAY_MONTH_YEAR = "18/02/2000"  # full date (day, month, year)
+    QUARTER_YEAR = "Q1/2000"  # quarter + year
+    MONTH_INDEX_YEAR = "M2/2000"  # month index + year
+
+
 # Enum for Main Scraping Types
 class ScrapeMainType(Enum):
     MACROECONOMICS = "macroeconomics"

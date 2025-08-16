@@ -3,7 +3,6 @@ import os
 import pandas as pd
 import re
 from glob import glob
-import csv
 import numpy as np
 from datetime import datetime, timedelta
 
@@ -108,6 +107,124 @@ class DataPreprocessor:
     def _get_year_list_from_start(self, start_date):
         end_year = datetime.today().year
         return list(range(start_date.year, end_year + 1))
+
+    def _melt_dataframe_by_time_format(
+        self, df: pd.DataFrame, time_format: TimeFormat, id_vars: list[str]
+    ) -> pd.DataFrame:
+        match time_format:
+            case TimeFormat.YEAR:
+                # Melt from wide to long format
+                df = df.melt(id_vars=id_vars, var_name="year_str", value_name="value")
+
+                # Clean numeric values
+                df["value"] = df["value"].astype(str).str.replace(",", "", regex=False)
+                df["value"] = pd.to_numeric(df["value"], errors="coerce")
+
+                # Extract year
+                df["year"] = pd.to_datetime(df["year_str"], errors="coerce").dt.year
+
+                # Use pivot_table with first() to handle duplicates
+                df = df.pivot_table(
+                    index=["year"], columns=id_vars[0], values="value", aggfunc="first"
+                ).reset_index()
+
+                # Sort by year and month
+                df = df.sort_values(["year"]).reset_index(drop=True)
+
+            case TimeFormat.QUARTER_YEAR:
+                # Melt from wide to long format
+                df = df.melt(
+                    id_vars=id_vars,
+                    var_name="quarter_str",
+                    value_name="value",
+                )
+
+                # Filter out any non-quarter columns
+                df = df[df["quarter_str"].str.match(r"Q\d+/\d{4}")]
+
+                # Clean numeric values
+                df["value"] = df["value"].astype(str).str.replace(",", "", regex=False)
+                df["value"] = pd.to_numeric(df["value"], errors="coerce")
+
+                # Extract year and quarter
+                df["quarter"] = df["quarter_str"].str.extract(r"Q(\d+)/")[0].astype(int)
+                df["year"] = df["quarter_str"].str.extract(r"/(\d{4})")[0].astype(int)
+
+                # Use pivot_table with first() to handle duplicates
+                df = df.pivot_table(
+                    index=["year", "quarter"],
+                    columns=id_vars[0],
+                    values="value",
+                    aggfunc="first",
+                ).reset_index()
+
+                # Sort by year and quarter
+                df = df.sort_values(["year", "quarter"]).reset_index(drop=True)
+
+            case TimeFormat.MONTH_NAME_YEAR:
+                # Melt from wide to long format
+                df = df.melt(
+                    id_vars=id_vars,
+                    var_name="month_str",
+                    value_name="value",
+                )
+
+                # Clean numeric values
+                df["value"] = df["value"].astype(str).str.replace(",", "", regex=False)
+                df["value"] = pd.to_numeric(df["value"], errors="coerce")
+
+                # Extract year and month
+                df["date"] = pd.to_datetime(df["month_str"], errors="coerce")
+
+                # Drop rows where date couldn't be parsed
+                df = df.dropna(subset=["date"])
+
+                # Extract numeric year, month
+                df["month"] = df["date"].dt.month
+                df["year"] = df["date"].dt.year
+
+                # Use pivot_table with first() to handle duplicates
+                df = df.pivot_table(
+                    index=["year", "month"],
+                    columns=id_vars[0],
+                    values="value",
+                    aggfunc="first",
+                ).reset_index()
+
+                # Sort by year and month
+                df = df.sort_values(["year", "month"]).reset_index(drop=True)
+
+            case TimeFormat.MONTH_INDEX_YEAR:
+                # Melt from wide to long format
+                df = df.melt(
+                    id_vars=id_vars,
+                    var_name="month_str",
+                    value_name="value",
+                )
+
+                # Filter out any non-month columns
+                df = df[df["month_str"].str.match(r"M\d+/\d{4}")]
+
+                # Clean numeric values
+                df["value"] = df["value"].astype(str).str.replace(",", "", regex=False)
+                df["value"] = pd.to_numeric(df["value"], errors="coerce")
+
+                # Extract year and month
+                df["month"] = df["month_str"].str.extract(r"M(\d+)/")[0].astype(int)
+                df["year"] = df["month_str"].str.extract(r"/(\d{4})")[0].astype(int)
+
+                # Use pivot_table with first() to handle duplicates
+                df = df.pivot_table(
+                    index=["year", "month"],
+                    columns=id_vars[0],
+                    values="value",
+                    aggfunc="first",
+                ).reset_index()
+
+                # Sort by year and month
+                df = df.sort_values(["year", "month"]).reset_index(drop=True)
+
+        return df
 
     # endregion Helper functions
 
@@ -854,34 +971,11 @@ class DataPreprocessor:
         # Set indicator names as lowercase with underscores
         df["Chỉ tiêu"] = df["Chỉ tiêu"].str.lower().str.replace(" ", "_")
 
-        # Melt from wide to long format
-        df = df.melt(
+        df = self._melt_dataframe_by_time_format(
+            df=df,
+            time_format=TimeFormat.QUARTER_YEAR,
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
-            var_name="quarter_str",
-            value_name="value",
         )
-
-        # Filter out any non-quarter columns
-        df = df[df["quarter_str"].str.match(r"Q\d+/\d{4}")]
-
-        # Clean numeric values
-        df["value"] = df["value"].astype(str).str.replace(",", "", regex=False)
-        df["value"] = pd.to_numeric(df["value"], errors="coerce")
-
-        # Extract year and quarter
-        df["quarter"] = df["quarter_str"].str.extract(r"Q(\d+)/")[0].astype(int)
-        df["year"] = df["quarter_str"].str.extract(r"/(\d{4})")[0].astype(int)
-
-        # Use pivot_table with first() to handle duplicates
-        df = df.pivot_table(
-            index=["year", "quarter"],
-            columns="Chỉ tiêu",
-            values="value",
-            aggfunc="first",
-        ).reset_index()
-
-        # Sort by year and quarter
-        df = df.sort_values(["year", "quarter"]).reset_index(drop=True)
 
         # Fill missing values with 0
         df.fillna(0, inplace=True)
@@ -950,34 +1044,11 @@ class DataPreprocessor:
             df["Chỉ tiêu"].str.lower().str.replace(",", "").str.replace(" ", "_")
         )
 
-        # Melt from wide to long format
-        df = df.melt(
+        df = self._melt_dataframe_by_time_format(
+            df=df,
+            time_format=TimeFormat.MONTH_NAME_YEAR,
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
-            var_name="month_str",
-            value_name="value",
         )
-
-        # Clean numeric values
-        df["value"] = df["value"].astype(str).str.replace(",", "", regex=False)
-        df["value"] = pd.to_numeric(df["value"], errors="coerce")
-
-        # Extract year and month
-        df["date"] = pd.to_datetime(df["month_str"], errors="coerce")
-
-        # Drop rows where date couldn't be parsed
-        df = df.dropna(subset=["date"])
-
-        # Extract numeric year, month
-        df["month"] = df["date"].dt.month
-        df["year"] = df["date"].dt.year
-
-        # Use pivot_table with first() to handle duplicates
-        df = df.pivot_table(
-            index=["year", "month"], columns="Chỉ tiêu", values="value", aggfunc="first"
-        ).reset_index()
-
-        # Sort by year and month
-        df = df.sort_values(["year", "month"]).reset_index(drop=True)
 
         # Fill missing values with 0
         df.fillna(0, inplace=True)
@@ -1031,25 +1102,11 @@ class DataPreprocessor:
             df["Chỉ tiêu"].str.lower().str.replace(",", "").str.replace(" ", "_")
         )
 
-        # Melt from wide to long format
-        df = df.melt(
-            id_vars=["Chỉ tiêu", "Đơn vị tính"], var_name="year_str", value_name="value"
+        df = self._melt_dataframe_by_time_format(
+            df=df,
+            time_format=TimeFormat.YEAR,
+            id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
-
-        # Clean numeric values
-        df["value"] = df["value"].astype(str).str.replace(",", "", regex=False)
-        df["value"] = pd.to_numeric(df["value"], errors="coerce")
-
-        # Extract year
-        df["year"] = pd.to_datetime(df["year_str"], errors="coerce").dt.year
-
-        # Use pivot_table with first() to handle duplicates
-        df = df.pivot_table(
-            index=["year"], columns="Chỉ tiêu", values="value", aggfunc="first"
-        ).reset_index()
-
-        # Sort by year and month
-        df = df.sort_values(["year"]).reset_index(drop=True)
 
         # Fill missing values with 0
         df.fillna(0, inplace=True)
@@ -1118,30 +1175,15 @@ class DataPreprocessor:
         df = pd.read_csv(file_path)
 
         # Set indicator names as lowercase with underscores
-        # df["Chỉ tiêu"] = df["Chỉ tiêu"].str.lower().str.replace(" ", "_")
         df["Chỉ tiêu"] = (
             df["Chỉ tiêu"].str.lower().str.replace(",", "").str.replace(" ", "_")
         )
 
-        # Melt from wide to long format
-        df = df.melt(
-            id_vars=["Chỉ tiêu", "Đơn vị tính"], var_name="year_str", value_name="value"
+        df = self._melt_dataframe_by_time_format(
+            df=df,
+            time_format=TimeFormat.YEAR,
+            id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
-
-        # Clean numeric values
-        df["value"] = df["value"].astype(str).str.replace(",", "", regex=False)
-        df["value"] = pd.to_numeric(df["value"], errors="coerce")
-
-        # Extract year
-        df["year"] = pd.to_datetime(df["year_str"], errors="coerce").dt.year
-
-        # Use pivot_table with first() to handle duplicates
-        df = df.pivot_table(
-            index=["year"], columns="Chỉ tiêu", values="value", aggfunc="first"
-        ).reset_index()
-
-        # Sort by year and month
-        df = df.sort_values(["year"]).reset_index(drop=True)
 
         # Fill missing values with 0
         df.fillna(0, inplace=True)
@@ -1239,34 +1281,11 @@ class DataPreprocessor:
             .str.replace("-", "_")
         )
 
-        # Melt from wide to long format
-        df = df.melt(
+        df = self._melt_dataframe_by_time_format(
+            df=df,
+            time_format=TimeFormat.MONTH_NAME_YEAR,
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
-            var_name="month_str",
-            value_name="value",
         )
-
-        # Clean numeric values
-        df["value"] = df["value"].astype(str).str.replace(",", "", regex=False)
-        df["value"] = pd.to_numeric(df["value"], errors="coerce")
-
-        # Extract year and month
-        df["date"] = pd.to_datetime(df["month_str"], errors="coerce")
-
-        # Drop rows where date couldn't be parsed
-        df = df.dropna(subset=["date"])
-
-        # Extract numeric year, month
-        df["month"] = df["date"].dt.month
-        df["year"] = df["date"].dt.year
-
-        # Use pivot_table with first() to handle duplicates
-        df = df.pivot_table(
-            index=["year", "month"], columns="Chỉ tiêu", values="value", aggfunc="first"
-        ).reset_index()
-
-        # Sort by year and month
-        df = df.sort_values(["year", "month"]).reset_index(drop=True)
 
         # Fill missing values with 0
         df.fillna(0, inplace=True)
@@ -1323,34 +1342,11 @@ class DataPreprocessor:
             .str.replace("-", "_")
         )
 
-        # Melt from wide to long format
-        df = df.melt(
+        df = self._melt_dataframe_by_time_format(
+            df=df,
+            time_format=TimeFormat.MONTH_NAME_YEAR,
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
-            var_name="month_str",
-            value_name="value",
         )
-
-        # Clean numeric values
-        df["value"] = df["value"].astype(str).str.replace(",", "", regex=False)
-        df["value"] = pd.to_numeric(df["value"], errors="coerce")
-
-        # Extract year and month
-        df["date"] = pd.to_datetime(df["month_str"], errors="coerce")
-
-        # Drop rows where date couldn't be parsed
-        df = df.dropna(subset=["date"])
-
-        # Extract numeric year, month
-        df["month"] = df["date"].dt.month
-        df["year"] = df["date"].dt.year
-
-        # Use pivot_table with first() to handle duplicates
-        df = df.pivot_table(
-            index=["year", "month"], columns="Chỉ tiêu", values="value", aggfunc="first"
-        ).reset_index()
-
-        # Sort by year and month
-        df = df.sort_values(["year", "month"]).reset_index(drop=True)
 
         # Fill missing values with 0
         df.fillna(0, inplace=True)
@@ -1403,25 +1399,11 @@ class DataPreprocessor:
             df["Chỉ tiêu"].str.lower().str.replace(",", "").str.replace(" ", "_")
         )
 
-        # Melt from wide to long format
-        df = df.melt(
-            id_vars=["Chỉ tiêu", "Đơn vị tính"], var_name="year_str", value_name="value"
+        df = self._melt_dataframe_by_time_format(
+            df=df,
+            time_format=TimeFormat.YEAR,
+            id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
-
-        # Clean numeric values
-        df["value"] = df["value"].astype(str).str.replace(",", "", regex=False)
-        df["value"] = pd.to_numeric(df["value"], errors="coerce")
-
-        # Extract year
-        df["year"] = pd.to_datetime(df["year_str"], errors="coerce").dt.year
-
-        # Use pivot_table with first() to handle duplicates
-        df = df.pivot_table(
-            index=["year"], columns="Chỉ tiêu", values="value", aggfunc="first"
-        ).reset_index()
-
-        # Sort by year and month
-        df = df.sort_values(["year"]).reset_index(drop=True)
 
         # Fill missing values with 0
         df.fillna(0, inplace=True)
@@ -1480,25 +1462,11 @@ class DataPreprocessor:
             .str.replace("employed_a", "employed_amount")
         )
 
-        # Melt from wide to long format
-        df = df.melt(
-            id_vars=["Chỉ tiêu", "Đơn vị tính"], var_name="year_str", value_name="value"
+        df = self._melt_dataframe_by_time_format(
+            df=df,
+            time_format=TimeFormat.YEAR,
+            id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
-
-        # Clean numeric values
-        df["value"] = df["value"].astype(str).str.replace(",", "", regex=False)
-        df["value"] = pd.to_numeric(df["value"], errors="coerce")
-
-        # Extract year
-        df["year"] = pd.to_datetime(df["year_str"], errors="coerce").dt.year
-
-        # Use pivot_table with first() to handle duplicates
-        df = df.pivot_table(
-            index=["year"], columns="Chỉ tiêu", values="value", aggfunc="first"
-        ).reset_index()
-
-        # Sort by year and month
-        df = df.sort_values(["year"]).reset_index(drop=True)
 
         # Fill missing values with 0
         df.fillna(0, inplace=True)
@@ -1551,34 +1519,11 @@ class DataPreprocessor:
             df["Chỉ tiêu"].str.lower().str.replace(",", "").str.replace(" ", "_")
         )
 
-        # Melt from wide to long format
-        df = df.melt(
+        df = self._melt_dataframe_by_time_format(
+            df=df,
+            time_format=TimeFormat.MONTH_NAME_YEAR,
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
-            var_name="month_str",
-            value_name="value",
         )
-
-        # Clean numeric values
-        df["value"] = df["value"].astype(str).str.replace(",", "", regex=False)
-        df["value"] = pd.to_numeric(df["value"], errors="coerce")
-
-        # Extract year and month
-        df["date"] = pd.to_datetime(df["month_str"], errors="coerce")
-
-        # Drop rows where date couldn't be parsed
-        df = df.dropna(subset=["date"])
-
-        # Extract numeric year, month
-        df["month"] = df["date"].dt.month
-        df["year"] = df["date"].dt.year
-
-        # Use pivot_table with first() to handle duplicates
-        df = df.pivot_table(
-            index=["year", "month"], columns="Chỉ tiêu", values="value", aggfunc="first"
-        ).reset_index()
-
-        # Sort by year and month
-        df = df.sort_values(["year", "month"]).reset_index(drop=True)
 
         # Fill missing values with 0
         df.fillna(0, inplace=True)
@@ -1631,34 +1576,11 @@ class DataPreprocessor:
             df["Chỉ tiêu"].str.lower().str.replace(",", "").str.replace(" ", "_")
         )
 
-        # Melt from wide to long format
-        df = df.melt(
+        df = self._melt_dataframe_by_time_format(
+            df=df,
+            time_format=TimeFormat.MONTH_NAME_YEAR,
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
-            var_name="month_str",
-            value_name="value",
         )
-
-        # Clean numeric values
-        df["value"] = df["value"].astype(str).str.replace(",", "", regex=False)
-        df["value"] = pd.to_numeric(df["value"], errors="coerce")
-
-        # Extract year and month
-        df["date"] = pd.to_datetime(df["month_str"], errors="coerce")
-
-        # Drop rows where date couldn't be parsed
-        df = df.dropna(subset=["date"])
-
-        # Extract numeric year, month
-        df["month"] = df["date"].dt.month
-        df["year"] = df["date"].dt.year
-
-        # Use pivot_table with first() to handle duplicates
-        df = df.pivot_table(
-            index=["year", "month"], columns="Chỉ tiêu", values="value", aggfunc="first"
-        ).reset_index()
-
-        # Sort by year and month
-        df = df.sort_values(["year", "month"]).reset_index(drop=True)
 
         # Fill missing values with 0
         df.fillna(0, inplace=True)
@@ -1719,34 +1641,11 @@ class DataPreprocessor:
             .str.replace("-", "_")
         )
 
-        # Melt from wide to long format
-        df = df.melt(
+        df = self._melt_dataframe_by_time_format(
+            df=df,
+            time_format=TimeFormat.MONTH_INDEX_YEAR,
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
-            var_name="month_str",
-            value_name="value",
         )
-
-        # Filter out any non-month columns
-        df = df[df["month_str"].str.match(r"M\d+/\d{4}")]
-
-        # Clean numeric values
-        df["value"] = df["value"].astype(str).str.replace(",", "", regex=False)
-        df["value"] = pd.to_numeric(df["value"], errors="coerce")
-
-        # Extract year and month
-        df["month"] = df["month_str"].str.extract(r"M(\d+)/")[0].astype(int)
-        df["year"] = df["month_str"].str.extract(r"/(\d{4})")[0].astype(int)
-
-        # Use pivot_table with first() to handle duplicates
-        df = df.pivot_table(
-            index=["year", "month"],
-            columns="Chỉ tiêu",
-            values="value",
-            aggfunc="first",
-        ).reset_index()
-
-        # Sort by year and month
-        df = df.sort_values(["year", "month"]).reset_index(drop=True)
 
         # Fill missing values with 0
         df.fillna(0, inplace=True)
