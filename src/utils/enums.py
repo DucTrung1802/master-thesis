@@ -1325,6 +1325,80 @@ class Table:
         name = "fa_by_house_types"
         primary_key = [Column.YEAR.value]
 
+    class IT_BOP:
+        class Column(Enum):
+            YEAR = "year"
+            QUARTER = "quarter"
+            A_CURRENT_ACCOUNT = "a_current_account"
+            B_CAPITAL_ACCOUNT = "b_capital_account"
+            BORROWING_AND_EXTERNAL_DEBT_REPAYMENT = (
+                "borrowing_and_external_debt_repayment"
+            )
+            C_FINANCIAL_ACCOUNT = "c_financial_account"
+            CAPITAL_ACCOUNT_PAYMENTS = "capital_account_payments"
+            CAPITAL_ACCOUNT_RECEIPTS = "capital_account_receipts"
+            CAPITAL_WITHDRAWAL = "capital_withdrawal"
+            CURRENT_TRANSFERS_SECONDARY_INCOME_NET = (
+                "current_transfers_secondary_income_net"
+            )
+            CURRENT_TRANSFERS_SECONDARY_INCOME_PAYMENTS = (
+                "current_transfers_secondary_income_payments"
+            )
+            CURRENT_TRANSFERS_SECONDARY_INCOME_RECEIPTS = (
+                "current_transfers_secondary_income_receipts"
+            )
+            D_ERRORS_AND_OMISSIONS = "d_errors_and_omissions"
+            DIRECT_INVESTMENT_ABROAD_ASSETS = "direct_investment_abroad_assets"
+            DIRECT_INVESTMENT_IN_VIETNAM_LIABILITIES = (
+                "direct_investment_in_vietnam_liabilities"
+            )
+            DIRECT_INVESTMENT_NET = "direct_investment_net"
+            E_OVERALL_BALANCE = "e_overall_balance"
+            F_RESERVES_AND_RELATED_ITEMS = "f_reserves_and_related_items"
+            FINANCIAL_INSTITUTIONS = "financial_institutions"
+            GOODS_EXPORTS_FOB = "goods_exports_fob"
+            GOODS_IMPORTS_FOB = "goods_imports_fob"
+            GOODS_NET = "goods_net"
+            GOVERNMENT = "government"
+            IMF_CREDITS_AND_LOANS = "imf_credits_and_loans"
+            INVESTMENT_INCOME_PRIMARY_INCOME_NET = (
+                "investment_income_primary_income_net"
+            )
+            INVESTMENT_INCOME_PRIMARY_INCOME_PAYMENTS = (
+                "investment_income_primary_income_payments"
+            )
+            INVESTMENT_INCOME_PRIMARY_INCOME_RECEIPTS = (
+                "investment_income_primary_income_receipts"
+            )
+            LOANS_AND_EXTERNAL_DEBT_COLLECTION = "loans_and_external_debt_collection"
+            LONG_TERM = "long_term"
+            MONEY_AND_DEPOSITS = "money_and_deposits"
+            OTHER_INVESTMENT_ASSETS = "other_investment_assets"
+            OTHER_INVESTMENT_LIABILITIES = "other_investment_liabilities"
+            OTHER_INVESTMENT_NET = "other_investment_net"
+            OTHER_RECEIVABLESPAYABLES = "other_receivablespayables"
+            PORTFOLIO_INVESTMENT_ABROAD_ASSETS = "portfolio_investment_abroad_assets"
+            PORTFOLIO_INVESTMENT_IN_VIETNAM_LIABILITIES = (
+                "portfolio_investment_in_vietnam_liabilities"
+            )
+            PORTFOLIO_INVESTMENT_NET = "portfolio_investment_net"
+            PRINCIPAL_REPAYMENT = "principal_repayment"
+            PRIVATE_SECTOR = "private_sector"
+            RESERVE_ASSETS = "reserve_assets"
+            RESIDENTS = "residents"
+            SERVICES_EXPORTS = "services_exports"
+            SERVICES_IMPORTS = "services_imports"
+            SERVICES_NET = "services_net"
+            SHORT_TERM = "short_term"
+            SPECIAL_FINANCING = "special_financing"
+            TOTAL_CURRENT_AND_CAPITAL_ACCOUNT_BALANCE = (
+                "total_current_and_capital_account_balance"
+            )
+            TRADE_CREDITS_AND_ADVANCES = "trade_credits_and_advances"
+
+        name = "it_bop"
+        primary_key = [Column.YEAR.value, Column.QUARTER.value]
+
     class EXCHANGE_RATE:
         class Column(Enum):
             DATE = "date"

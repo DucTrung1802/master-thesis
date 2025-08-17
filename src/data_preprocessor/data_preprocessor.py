@@ -812,6 +812,65 @@ class DataPreprocessor:
         )
         # fmt: on
 
+        # IT_BOP
+        # fmt: off
+        self._database_driver.create_table(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.IT_BOP.name,
+            columns=[
+                Column(name=Table.IT_BOP.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
+                Column(name=Table.IT_BOP.Column.QUARTER.value, data_type=DataType.INT(), nullable=True),
+                Column(name=Table.IT_BOP.Column.A_CURRENT_ACCOUNT.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IT_BOP.Column.B_CAPITAL_ACCOUNT.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IT_BOP.Column.BORROWING_AND_EXTERNAL_DEBT_REPAYMENT.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IT_BOP.Column.C_FINANCIAL_ACCOUNT.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IT_BOP.Column.CAPITAL_ACCOUNT_PAYMENTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IT_BOP.Column.CAPITAL_ACCOUNT_RECEIPTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IT_BOP.Column.CAPITAL_WITHDRAWAL.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IT_BOP.Column.CURRENT_TRANSFERS_SECONDARY_INCOME_NET.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IT_BOP.Column.CURRENT_TRANSFERS_SECONDARY_INCOME_PAYMENTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IT_BOP.Column.CURRENT_TRANSFERS_SECONDARY_INCOME_RECEIPTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IT_BOP.Column.D_ERRORS_AND_OMISSIONS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IT_BOP.Column.DIRECT_INVESTMENT_ABROAD_ASSETS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IT_BOP.Column.DIRECT_INVESTMENT_IN_VIETNAM_LIABILITIES.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IT_BOP.Column.DIRECT_INVESTMENT_NET.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IT_BOP.Column.E_OVERALL_BALANCE.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IT_BOP.Column.F_RESERVES_AND_RELATED_ITEMS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IT_BOP.Column.FINANCIAL_INSTITUTIONS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IT_BOP.Column.GOODS_EXPORTS_FOB.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IT_BOP.Column.GOODS_IMPORTS_FOB.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IT_BOP.Column.GOODS_NET.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IT_BOP.Column.GOVERNMENT.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IT_BOP.Column.IMF_CREDITS_AND_LOANS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IT_BOP.Column.INVESTMENT_INCOME_PRIMARY_INCOME_NET.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IT_BOP.Column.INVESTMENT_INCOME_PRIMARY_INCOME_PAYMENTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IT_BOP.Column.INVESTMENT_INCOME_PRIMARY_INCOME_RECEIPTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IT_BOP.Column.LOANS_AND_EXTERNAL_DEBT_COLLECTION.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IT_BOP.Column.LONG_TERM.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IT_BOP.Column.MONEY_AND_DEPOSITS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IT_BOP.Column.OTHER_INVESTMENT_ASSETS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IT_BOP.Column.OTHER_INVESTMENT_LIABILITIES.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IT_BOP.Column.OTHER_INVESTMENT_NET.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IT_BOP.Column.OTHER_RECEIVABLESPAYABLES.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IT_BOP.Column.PORTFOLIO_INVESTMENT_ABROAD_ASSETS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IT_BOP.Column.PORTFOLIO_INVESTMENT_IN_VIETNAM_LIABILITIES.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IT_BOP.Column.PORTFOLIO_INVESTMENT_NET.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IT_BOP.Column.PRINCIPAL_REPAYMENT.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IT_BOP.Column.PRIVATE_SECTOR.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IT_BOP.Column.RESERVE_ASSETS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IT_BOP.Column.RESIDENTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IT_BOP.Column.SERVICES_EXPORTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IT_BOP.Column.SERVICES_IMPORTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IT_BOP.Column.SERVICES_NET.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IT_BOP.Column.SHORT_TERM.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IT_BOP.Column.SPECIAL_FINANCING.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IT_BOP.Column.TOTAL_CURRENT_AND_CAPITAL_ACCOUNT_BALANCE.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IT_BOP.Column.TRADE_CREDITS_AND_ADVANCES.value, data_type=DataType.FLOAT(), nullable=True),
+            ],
+            primary_keys=Table.IT_BOP.primary_key,
+        )
+        # fmt: on
+
         # GOLD_PRICE
         # fmt: off
         self._database_driver.create_table(
@@ -2116,6 +2175,61 @@ class DataPreprocessor:
 
     # endregion MACROECONOMICS.FA_BY_HOUSE_TYPES
 
+    # region MACROECONOMICS.IT_BOP
+    def _process_macroeconomics_it_bop_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.IT_BOP,
+            ItBopSource.VIETSTOCK,
+        )
+
+        folder_path = (
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+        )
+
+        file_path = get_newest_file_path(
+            folder_path=folder_path, extension=FileExtension.CSV
+        )
+
+        if not file_path:
+            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
+            return
+
+        self._logger.log_info(f'Start processing data in "{file_path}".')
+
+        # Add logic for processing data here
+        df = pd.read_csv(file_path)
+
+        # Set indicator names as lowercase with underscores
+        df = self._standardize_column_name_before_melting(df=df)
+
+        df = self._melt_dataframe_by_time_format(
+            df=df,
+            time_format=TimeFormat.QUARTER_YEAR,
+            id_vars=["Chỉ tiêu", "Đơn vị tính"],
+        )
+
+        # Fill missing values with 0
+        df.fillna(0, inplace=True)
+
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.IT_BOP.name,
+            primary_keys=Table.IT_BOP.primary_key,
+            df=df,
+        )
+
+        self._logger.log_info(f'Finish processing data in "{file_path}".')
+
+    def _process_macroeconomics_it_bop(self) -> None:
+        self._logger.log_info("Start processing macroeconomics IT_BOP data.")
+
+        self._process_macroeconomics_it_bop_vietstock()
+
+        self._logger.log_info("Finish processing macroeconomics IT_BOP data.")
+
+    # endregion MACROECONOMICS.IT_BOP
+
     # region MACROECONOMICS.GOLD_PRICE
     def _process_macroeconomics_gold_price_investing(self) -> None:
         key = (
@@ -3360,6 +3474,7 @@ class DataPreprocessor:
         self._process_macroeconomics_mip()
         self._process_macroeconomics_mip()
         self._process_macroeconomics_fa_by_house_types()
+        self._process_macroeconomics_it_bop()
         # self._process_macroeconomics_interest_rate()
         # self._process_macroeconomics_export()
         # self._process_macroeconomics_import()
