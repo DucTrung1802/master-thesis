@@ -646,6 +646,7 @@ class DataPreprocessor:
                 Column(name=Table.IPV.Column.NATURAL_FABRICS.value, data_type=DataType.FLOAT(), nullable=True),
                 Column(name=Table.IPV.Column.NATURAL_GAS_AIR.value, data_type=DataType.FLOAT(), nullable=True),
                 Column(name=Table.IPV.Column.PHONE_ACCESSORIES.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPV.Column.POWDERED_MILK.value, data_type=DataType.FLOAT(), nullable=True),
                 Column(name=Table.IPV.Column.PROCESSED_SEAFOOD.value, data_type=DataType.FLOAT(), nullable=True),
                 Column(name=Table.IPV.Column.ROLLED_STEEL.value, data_type=DataType.FLOAT(), nullable=True),
                 Column(name=Table.IPV.Column.STEEL_BARS_ANGLE_STEEL.value, data_type=DataType.FLOAT(), nullable=True),
@@ -787,6 +788,29 @@ class DataPreprocessor:
         )
         # fmt: on
 
+        # FA_BY_HOUSE_TYPES
+        # fmt: off
+        self._database_driver.create_table(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.FA_BY_HOUSE_TYPES.name,
+            columns=[
+                Column(name=Table.FA_BY_HOUSE_TYPES.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
+                Column(name=Table.FA_BY_HOUSE_TYPES.Column._16_20_FLOORS.value, data_type=DataType.INT(), nullable=True),
+                Column(name=Table.FA_BY_HOUSE_TYPES.Column._21_25_FLOORS.value, data_type=DataType.INT(), nullable=True),
+                Column(name=Table.FA_BY_HOUSE_TYPES.Column._26_FLOORS_AND_ABOVE.value, data_type=DataType.INT(), nullable=True),
+                Column(name=Table.FA_BY_HOUSE_TYPES.Column._5_FLOORS_AND_BELOW.value, data_type=DataType.INT(), nullable=True),
+                Column(name=Table.FA_BY_HOUSE_TYPES.Column._6_8_FLOORS.value, data_type=DataType.INT(), nullable=True),
+                Column(name=Table.FA_BY_HOUSE_TYPES.Column._9_15_FLOORS.value, data_type=DataType.INT(), nullable=True),
+                Column(name=Table.FA_BY_HOUSE_TYPES.Column.APARTMENT_BUILDINGS.value, data_type=DataType.INT(), nullable=True),
+                Column(name=Table.FA_BY_HOUSE_TYPES.Column.SINGLE_FAMILY_HOMES.value, data_type=DataType.INT(), nullable=True),
+                Column(name=Table.FA_BY_HOUSE_TYPES.Column.SINGLE_FAMILY_HOMES_4_FLOORS_AND_ABOVE.value, data_type=DataType.INT(), nullable=True),
+                Column(name=Table.FA_BY_HOUSE_TYPES.Column.SINGLE_FAMILY_HOMES_BELOW_4_FLOORS.value, data_type=DataType.INT(), nullable=True),
+                Column(name=Table.FA_BY_HOUSE_TYPES.Column.TOTAL.value, data_type=DataType.INT(), nullable=True),
+                Column(name=Table.FA_BY_HOUSE_TYPES.Column.VILLAS.value, data_type=DataType.INT(), nullable=True),
+            ],
+            primary_keys=Table.FA_BY_HOUSE_TYPES.primary_key,
+        )
+        # fmt: on
 
         # GOLD_PRICE
         # fmt: off
@@ -1851,8 +1875,6 @@ class DataPreprocessor:
         # Add logic for processing data here
         df = pd.read_csv(file_path)
 
-        df = df.drop(df.index[14])
-
         # Set indicator names as lowercase with underscores
         self._standardize_column_name_before_melting(df=df)
 
@@ -1996,8 +2018,6 @@ class DataPreprocessor:
         # Add logic for processing data here
         df = pd.read_csv(file_path)
 
-        df = df.drop(df.index[14])
-
         # Set indicator names as lowercase with underscores
         df = self._standardize_column_name_before_melting(df=df)
 
@@ -2027,6 +2047,74 @@ class DataPreprocessor:
         self._logger.log_info("Finish processing macroeconomics MIP data.")
 
     # endregion MACROECONOMICS.MIP
+
+    # region MACROECONOMICS.FA_BY_HOUSE_TYPES
+    def _process_macroeconomics_fa_by_house_types_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.FA_BY_HOUSE_TYPES,
+            FaByHouseTypeSource.VIETSTOCK,
+        )
+
+        folder_path = (
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+        )
+
+        file_path = get_newest_file_path(
+            folder_path=folder_path, extension=FileExtension.CSV
+        )
+
+        if not file_path:
+            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
+            return
+
+        self._logger.log_info(f'Start processing data in "{file_path}".')
+
+        # Add logic for processing data here
+        df = pd.read_csv(file_path)
+
+        # Set indicator names as lowercase with underscores
+        df = self._standardize_column_name_before_melting(df=df)
+
+        df = self._melt_dataframe_by_time_format(
+            df=df,
+            time_format=TimeFormat.YEAR,
+            id_vars=["Chỉ tiêu", "Đơn vị tính"],
+        )
+
+        # Fill missing values with 0
+        df.fillna(0, inplace=True)
+
+        col_translation = {
+            "16_20_floors": "_16_20_floors",
+            "21_25_floors": "_21_25_floors",
+            "26_floors_and_above": "_26_floors_and_above",
+            "5_floors_and_below": "_5_floors_and_below",
+            "6_8_floors": "_6_8_floors",
+            "9_15_floors": "_9_15_floors",
+        }
+
+        df = df.rename(columns=col_translation)
+
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.FA_BY_HOUSE_TYPES.name,
+            primary_keys=Table.FA_BY_HOUSE_TYPES.primary_key,
+            df=df,
+        )
+
+        self._logger.log_info(f'Finish processing data in "{file_path}".')
+
+    def _process_macroeconomics_fa_by_house_types(self) -> None:
+        self._logger.log_info("Start processing macroeconomics FA_BY_HOUSE_TYPES data.")
+
+        self._process_macroeconomics_fa_by_house_types_vietstock()
+
+        self._logger.log_info(
+            "Finish processing macroeconomics FA_BY_HOUSE_TYPES data."
+        )
+
+    # endregion MACROECONOMICS.FA_BY_HOUSE_TYPES
 
     # region MACROECONOMICS.GOLD_PRICE
     def _process_macroeconomics_gold_price_investing(self) -> None:
@@ -3270,6 +3358,8 @@ class DataPreprocessor:
         self._process_macroeconomics_ipv()
         self._process_macroeconomics_ipv_by_industry()
         self._process_macroeconomics_mip()
+        self._process_macroeconomics_mip()
+        self._process_macroeconomics_fa_by_house_types()
         # self._process_macroeconomics_interest_rate()
         # self._process_macroeconomics_export()
         # self._process_macroeconomics_import()

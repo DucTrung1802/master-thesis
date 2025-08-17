@@ -1161,6 +1161,7 @@ class Table:
             NATURAL_FABRICS = "natural_fabrics"
             NATURAL_GAS_AIR = "natural_gas_in_the_form_of_air"
             PHONE_ACCESSORIES = "phone_accessories"
+            POWDERED_MILK = "powdered_milk"
             PROCESSED_SEAFOOD = "processed_seafood"
             ROLLED_STEEL = "rolled_steel"
             STEEL_BARS_ANGLE_STEEL = "steel_bars_angle_steel"
@@ -1221,9 +1222,7 @@ class Table:
             CANNED_SEAFOOD = "canned_seafood"
             CANNED_VEGETABLES = "canned_vegetables"
             CAR_AND_TRACTOR_TIRES_INFLATABLE = "car_and_tractor_tires_inflatable"
-            CAST_OR_OTHER_ROUGH_IRON_AND_STEEL = (
-                "cast_or_other_rough_iron_and_steel"
-            )
+            CAST_OR_OTHER_ROUGH_IRON_AND_STEEL = "cast_or_other_rough_iron_and_steel"
             CASUAL_CLOTHING = "casual_clothing"
             CEMENT = "cement"
             CHEMICAL_FERTILIZERS = "chemical_fertilizers"
@@ -1295,9 +1294,7 @@ class Table:
             )
             TOBACCO = "tobacco"
             TOOTHPASTE = "toothpaste"
-            TUBES_FOR_BICYCLES_AND_MOTORCYCLES = (
-                "tubes_for_bicycles_and_motorcycles"
-            )
+            TUBES_FOR_BICYCLES_AND_MOTORCYCLES = "tubes_for_bicycles_and_motorcycles"
             TUBES_FOR_CARS_AND_AIRCRAFT = "tubes_for_cars_and_aircraft"
             VARIOUS_TYPES_OF_BATTERIES = "various_types_of_batteries"
             VARIOUS_TYPES_OF_BICYCLES = "various_types_of_bicycles"
@@ -1305,6 +1302,27 @@ class Table:
             YELLOW_PHOSPHORUS = "yellow_phosphorus"
 
         name = "mip"
+        primary_key = [Column.YEAR.value]
+
+    class FA_BY_HOUSE_TYPES:
+        class Column(Enum):
+            YEAR = "year"
+            _16_20_FLOORS = "_16_20_floors"
+            _21_25_FLOORS = "_21_25_floors"
+            _26_FLOORS_AND_ABOVE = "_26_floors_and_above"
+            _5_FLOORS_AND_BELOW = "_5_floors_and_below"
+            _6_8_FLOORS = "_6_8_floors"
+            _9_15_FLOORS = "_9_15_floors"
+            APARTMENT_BUILDINGS = "apartment_buildings"
+            SINGLE_FAMILY_HOMES = "single_family_homes"
+            SINGLE_FAMILY_HOMES_4_FLOORS_AND_ABOVE = (
+                "single_family_homes_4_floors_and_above"
+            )
+            SINGLE_FAMILY_HOMES_BELOW_4_FLOORS = "single_family_homes_below_4_floors"
+            TOTAL = "total"
+            VILLAS = "villas"
+
+        name = "fa_by_house_types"
         primary_key = [Column.YEAR.value]
 
     class EXCHANGE_RATE:
