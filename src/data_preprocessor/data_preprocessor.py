@@ -596,6 +596,51 @@ class DataPreprocessor:
         )
         # fmt: on
 
+        # IPV
+        # fmt: off
+        self._database_driver.create_table(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.IPV.name,
+            columns=[
+                Column(name=Table.IPV.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
+                Column(name=Table.IPV.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
+                Column(name=Table.IPV.Column.ALUMINIUM.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPV.Column.ANIMAL_FEED.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPV.Column.AQUATIC_FEED.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPV.Column.BEER.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPV.Column.CARS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPV.Column.CASUAL_CLOTHES.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPV.Column.CEMENT.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPV.Column.CHEMICAL_PAINTS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPV.Column.CIGARETTES.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPV.Column.COAL_CLEAN_COAL.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPV.Column.COMMERCIAL_TAP_WATER.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPV.Column.ELECTRICITY_PRODUCED.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPV.Column.EXTRACTED_CRUDE_OIL.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPV.Column.FRESH_MILK.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPV.Column.GASOLINE_OIL.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPV.Column.GRANULATED_SUGAR.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPV.Column.IRON_CRUDE_STEEL.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPV.Column.LEATHER_SHOES_AND_SANDALS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPV.Column.LIQUIDIZED_GAS_LPG.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPV.Column.MOBILE_PHONES.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPV.Column.MONONATRI_GLUTAMAT.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPV.Column.MOTORCYCLES.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPV.Column.NPK_MIXED_FERTILIZERS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPV.Column.NATURAL_FABRICS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPV.Column.NATURAL_GAS_AIR.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPV.Column.PHONE_ACCESSORIES.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPV.Column.PROCESSED_SEAFOOD.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPV.Column.ROLLED_STEEL.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPV.Column.STEEL_BARS_ANGLE_STEEL.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPV.Column.SYNTHETIC_FABRICS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPV.Column.TELEVISION.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IPV.Column.UREA_FERTILIZER.value, data_type=DataType.FLOAT(), nullable=True),
+            ],
+            primary_keys=Table.IPV.primary_key,
+        )
+        # fmt: on
+
         # GOLD_PRICE
         # fmt: off
         self._database_driver.create_table(
@@ -1667,6 +1712,72 @@ class DataPreprocessor:
         self._logger.log_info("Finish processing macroeconomics IIP data.")
 
     # endregion MACROECONOMICS.IIP
+
+    # region MACROECONOMICS.IPV
+    def _process_macroeconomics_ipv_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.IPV,
+            IpvSource.VIETSTOCK,
+        )
+
+        folder_path = (
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+        )
+
+        file_path = get_newest_file_path(
+            folder_path=folder_path, extension=FileExtension.CSV
+        )
+
+        if not file_path:
+            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
+            return
+
+        self._logger.log_info(f'Start processing data in "{file_path}".')
+
+        # Add logic for processing data here
+        df = pd.read_csv(file_path)
+
+        df = df.drop(df.index[14])
+
+        # Set indicator names as lowercase with underscores
+        df["Chỉ tiêu"] = (
+            df["Chỉ tiêu"]
+            .str.lower()
+            .str.replace(
+                r"\s+", "_", regex=True
+            )  # replace any whitespace with underscore
+            .str.replace(
+                r"[^a-z0-9_]", "", regex=True
+            )  # remove everything except letters, numbers, underscore
+        )
+
+        df = self._melt_dataframe_by_time_format(
+            df=df,
+            time_format=TimeFormat.MONTH_NAME_YEAR,
+            id_vars=["Chỉ tiêu", "Đơn vị tính"],
+        )
+
+        # Fill missing values with 0
+        df.fillna(0, inplace=True)
+
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.IPV.name,
+            primary_keys=Table.IPV.primary_key,
+            df=df,
+        )
+
+        self._logger.log_info(f'Finish processing data in "{file_path}".')
+
+    def _process_macroeconomics_ipv(self) -> None:
+        self._logger.log_info("Start processing macroeconomics IPV data.")
+
+        self._process_macroeconomics_ipv_vietstock()
+
+        self._logger.log_info("Finish processing macroeconomics IPV data.")
+
+    # endregion MACROECONOMICS.IPV
 
     # region MACROECONOMICS.GOLD_PRICE
     def _process_macroeconomics_gold_price_investing(self) -> None:
@@ -2907,6 +3018,7 @@ class DataPreprocessor:
         self._process_macroeconomics_retail()
         self._process_macroeconomics_pmi()
         self._process_macroeconomics_iip()
+        self._process_macroeconomics_ipv()
         # self._process_macroeconomics_interest_rate()
         # self._process_macroeconomics_export()
         # self._process_macroeconomics_import()

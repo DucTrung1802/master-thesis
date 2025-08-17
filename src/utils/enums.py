@@ -1131,6 +1131,46 @@ class Table:
         name = "iip"
         primary_key = [Column.YEAR.value, Column.MONTH.value]
 
+    class IPV:
+        class Column(Enum):
+            YEAR = "year"
+            MONTH = "month"
+            ALUMINIUM = "aluminium"
+            ANIMAL_FEED = "animal_feed"
+            AQUATIC_FEED = "aquatic_feed"
+            BEER = "beer"
+            CARS = "cars"
+            CASUAL_CLOTHES = "casual_clothes"
+            CEMENT = "cement"
+            CHEMICAL_PAINTS = "chemical_paints"
+            CIGARETTES = "cigarettes"
+            COAL_CLEAN_COAL = "coal_clean_coal"
+            COMMERCIAL_TAP_WATER = "commercial_tap_water"
+            ELECTRICITY_PRODUCED = "electricity_produced"
+            EXTRACTED_CRUDE_OIL = "extracted_crude_oil"
+            FRESH_MILK = "fresh_milk"
+            GASOLINE_OIL = "gasoline_oil"
+            GRANULATED_SUGAR = "granulated_sugar"
+            IRON_CRUDE_STEEL = "iron_crude_steel"
+            LEATHER_SHOES_AND_SANDALS = "leather_shoes_and_sandals"
+            LIQUIDIZED_GAS_LPG = "liquidized_gas_lpg"
+            MOBILE_PHONES = "mobile_phones"
+            MONONATRI_GLUTAMAT = "mononatri_glutamat"
+            MOTORCYCLES = "motorcycles"
+            NPK_MIXED_FERTILIZERS = "npk_mixed_fertilizers"
+            NATURAL_FABRICS = "natural_fabrics"
+            NATURAL_GAS_AIR = "natural_gas_in_the_form_of_air"
+            PHONE_ACCESSORIES = "phone_accessories"
+            PROCESSED_SEAFOOD = "processed_seafood"
+            ROLLED_STEEL = "rolled_steel"
+            STEEL_BARS_ANGLE_STEEL = "steel_bars_angle_steel"
+            SYNTHETIC_FABRICS = "synthetic_or_artificial_fabrics"
+            TELEVISION = "television"
+            UREA_FERTILIZER = "urea_fertilizer"
+
+        name = "ipv"
+        primary_key = [Column.YEAR.value, Column.MONTH.value]
+
     class EXCHANGE_RATE:
         class Column(Enum):
             DATE = "date"
