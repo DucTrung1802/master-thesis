@@ -1486,6 +1486,26 @@ class Table:
         name = "tsbe"
         primary_key = [Column.YEAR.value, Column.MONTH.value]
 
+    class GD:
+        class Column(Enum):
+            YEAR = "year"
+            DEBT_BALANCE = "debt_balance"
+            DOMESTIC_DEBT = "domestic_debt"
+            FOREIGN_DEBT = "foreign_debt"
+            TOTAL_DEBT_PAYMENTS_DURING_THE_PERIOD = (
+                "total_debt_payments_during_the_period"
+            )
+            TOTAL_INTEREST_AND_FEES_PAID_DURING_THE_PERIOD = (
+                "total_interest_and_fees_paid_during_the_period"
+            )
+            TOTAL_PRINCIPAL_REPAYMENT_DURING_THE_PERIOD = (
+                "total_principal_repayment_during_the_period"
+            )
+            WITHDRAWALS_DURING_THE_PERIOD = "withdrawals_during_the_period"
+
+        name = "gd"
+        primary_key = [Column.YEAR.value]
+
     class EXCHANGE_RATE:
         class Column(Enum):
             DATE = "date"

@@ -967,6 +967,25 @@ class DataPreprocessor:
         )
         # fmt: on
 
+        # GD
+        # fmt: off
+        self._database_driver.create_table(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.GD.name,
+            columns=[
+                Column(name=Table.GD.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
+                Column(name=Table.GD.Column.DEBT_BALANCE.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.GD.Column.DOMESTIC_DEBT.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.GD.Column.FOREIGN_DEBT.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.GD.Column.TOTAL_DEBT_PAYMENTS_DURING_THE_PERIOD.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.GD.Column.TOTAL_INTEREST_AND_FEES_PAID_DURING_THE_PERIOD.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.GD.Column.TOTAL_PRINCIPAL_REPAYMENT_DURING_THE_PERIOD.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.GD.Column.WITHDRAWALS_DURING_THE_PERIOD.value, data_type=DataType.FLOAT(), nullable=True),
+            ],
+            primary_keys=Table.GD.primary_key,
+        )
+        # fmt: on
+
         # GOLD_PRICE
         # fmt: off
         self._database_driver.create_table(
@@ -2436,6 +2455,61 @@ class DataPreprocessor:
 
     # endregion MACROECONOMICS.TSBE
 
+    # region MACROECONOMICS.GD
+    def _process_macroeconomics_gd_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.GD,
+            GdSource.VIETSTOCK,
+        )
+
+        folder_path = (
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+        )
+
+        file_path = get_newest_file_path(
+            folder_path=folder_path, extension=FileExtension.CSV
+        )
+
+        if not file_path:
+            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
+            return
+
+        self._logger.log_info(f'Start processing data in "{file_path}".')
+
+        # Add logic for processing data here
+        df = pd.read_csv(file_path)
+
+        # Set indicator names as lowercase with underscores
+        df = self._standardize_column_name_before_melting(df=df)
+
+        df = self._melt_dataframe_by_time_format(
+            df=df,
+            time_format=TimeFormat.YEAR,
+            id_vars=["Chỉ tiêu", "Đơn vị tính"],
+        )
+
+        # Fill missing values with 0
+        df.fillna(0, inplace=True)
+
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.GD.name,
+            primary_keys=Table.GD.primary_key,
+            df=df,
+        )
+
+        self._logger.log_info(f'Finish processing data in "{file_path}".')
+
+    def _process_macroeconomics_gd(self) -> None:
+        self._logger.log_info("Start processing macroeconomics GD data.")
+
+        self._process_macroeconomics_gd_vietstock()
+
+        self._logger.log_info("Finish processing macroeconomics GD data.")
+
+    # endregion MACROECONOMICS.GD
+
     # region MACROECONOMICS.GOLD_PRICE
     def _process_macroeconomics_gold_price_investing(self) -> None:
         key = (
@@ -3683,6 +3757,7 @@ class DataPreprocessor:
         self._process_macroeconomics_it_bop()
         self._process_macroeconomics_tsbr()
         self._process_macroeconomics_tsbe()
+        self._process_macroeconomics_gd()
         # self._process_macroeconomics_interest_rate()
         # self._process_macroeconomics_export()
         # self._process_macroeconomics_import()
