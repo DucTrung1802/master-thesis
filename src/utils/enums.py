@@ -1506,6 +1506,22 @@ class Table:
         name = "gd"
         primary_key = [Column.YEAR.value]
 
+    class BRD:
+        class Column(Enum):
+            YEAR = "year"
+            MONTH = "month"
+            ENTERPRISES_COMPLETING_DISSOLUTION = "enterprises_completing_dissolution"
+            ENTERPRISES_RESUMING_OPERATIONS = "enterprises_resuming_operations"
+            ENTERPRISES_TEMPORARILY_SUSPENDED_AWAITING_DISSOLUTION = (
+                "enterprises_temporarily_suspended_awaiting_dissolution"
+            )
+            NEWLY_ESTABLISHED_ENTERPRISES = "newly_established_enterprises"
+            REGISTERED_CAPITAL = "registered_capital"
+            REGISTERED_LABOR = "registered_labor"
+
+        name = "brd"
+        primary_key = [Column.YEAR.value, Column.MONTH.value]
+
     class EXCHANGE_RATE:
         class Column(Enum):
             DATE = "date"
