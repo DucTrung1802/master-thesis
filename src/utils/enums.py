@@ -1547,6 +1547,18 @@ class Table:
         name = "iisd"
         primary_key = [Column.YEAR.value, Column.QUARTER.value]
 
+    class TREG:
+        class Column(Enum):
+            YEAR = "year"
+            MONTH = "month"
+            INTERNATIONAL_LIQUIDITY_TOTAL_RESERVES_EXCLUDING_GOLD_FOREIGN_EXCHANGE_US_DOLLARS = "international_liquidity_total_reserves_excluding_gold_foreign_exchange_us_dollars"
+            INTERNATIONAL_LIQUIDITY_TOTAL_RESERVES_EXCLUDING_GOLD_US_DOLLARS = (
+                "international_liquidity_total_reserves_excluding_gold_us_dollars"
+            )
+
+        name = "treg"
+        primary_key = [Column.YEAR.value, Column.MONTH.value]
+
     class EXCHANGE_RATE:
         class Column(Enum):
             DATE = "date"

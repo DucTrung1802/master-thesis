@@ -1027,6 +1027,21 @@ class DataPreprocessor:
         )
         # fmt: on
 
+        # TREG
+        # fmt: off
+        self._database_driver.create_table(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.TREG.name,
+            columns=[
+                Column(name=Table.TREG.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
+                Column(name=Table.TREG.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
+                Column(name=Table.TREG.Column.INTERNATIONAL_LIQUIDITY_TOTAL_RESERVES_EXCLUDING_GOLD_FOREIGN_EXCHANGE_US_DOLLARS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.TREG.Column.INTERNATIONAL_LIQUIDITY_TOTAL_RESERVES_EXCLUDING_GOLD_US_DOLLARS.value, data_type=DataType.FLOAT(), nullable=True),
+            ],
+            primary_keys=Table.TREG.primary_key,
+        )
+        # fmt: on
+
         # GOLD_PRICE
         # fmt: off
         self._database_driver.create_table(
@@ -2661,6 +2676,61 @@ class DataPreprocessor:
 
     # endregion MACROECONOMICS.IISD
 
+    # region MACROECONOMICS.TREG
+    def _process_macroeconomics_treg_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.TREG,
+            TregSource.VIETSTOCK,
+        )
+
+        folder_path = (
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+        )
+
+        file_path = get_newest_file_path(
+            folder_path=folder_path, extension=FileExtension.CSV
+        )
+
+        if not file_path:
+            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
+            return
+
+        self._logger.log_info(f'Start processing data in "{file_path}".')
+
+        # Add logic for processing data here
+        df = pd.read_csv(file_path)
+
+        # Set indicator names as lowercase with underscores
+        df = self._standardize_column_name_before_melting(df=df)
+
+        df = self._melt_dataframe_by_time_format(
+            df=df,
+            time_format=TimeFormat.MONTH_NAME_YEAR,
+            id_vars=["Chỉ tiêu", "Đơn vị tính"],
+        )
+
+        # Fill missing values with 0
+        df.fillna(0, inplace=True)
+
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.TREG.name,
+            primary_keys=Table.TREG.primary_key,
+            df=df,
+        )
+
+        self._logger.log_info(f'Finish processing data in "{file_path}".')
+
+    def _process_macroeconomics_treg(self) -> None:
+        self._logger.log_info("Start processing macroeconomics TREG data.")
+
+        self._process_macroeconomics_treg_vietstock()
+
+        self._logger.log_info("Finish processing macroeconomics TREG data.")
+
+    # endregion MACROECONOMICS.TREG
+
     # region MACROECONOMICS.GOLD_PRICE
     def _process_macroeconomics_gold_price_investing(self) -> None:
         key = (
@@ -3911,6 +3981,7 @@ class DataPreprocessor:
         self._process_macroeconomics_gd()
         self._process_macroeconomics_brd()
         self._process_macroeconomics_iisd()
+        self._process_macroeconomics_treg()
         # self._process_macroeconomics_interest_rate()
         # self._process_macroeconomics_export()
         # self._process_macroeconomics_import()
