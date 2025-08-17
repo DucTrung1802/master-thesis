@@ -226,6 +226,22 @@ class DataPreprocessor:
 
         return df
 
+    def _standardize_column_name_before_melting(
+        self, df: pd.DataFrame, column_name: str = "Chỉ tiêu"
+    ) -> pd.DataFrame:
+        df[column_name] = (
+            df[column_name]
+            .str.lower()
+            .str.replace(
+                r"[^a-z0-9_\s-]", "", regex=True
+            )  # remove everything except letters, numbers, underscore, space
+            .str.replace(
+                r"[\s-]+", "_", regex=True
+            )  # replace any whitespace with underscore
+        )
+
+        return df
+
     # endregion Helper functions
 
     # region Create Schemas
@@ -1014,7 +1030,7 @@ class DataPreprocessor:
         df = df.iloc[:5, :]
 
         # Set indicator names as lowercase with underscores
-        df["Chỉ tiêu"] = df["Chỉ tiêu"].str.lower().str.replace(" ", "_")
+        self._standardize_column_name_before_melting(df=df)
 
         df = self._melt_dataframe_by_time_format(
             df=df,
@@ -1085,9 +1101,7 @@ class DataPreprocessor:
         df = pd.read_csv(file_path)
 
         # Set indicator names as lowercase with underscores
-        df["Chỉ tiêu"] = (
-            df["Chỉ tiêu"].str.lower().str.replace(",", "").str.replace(" ", "_")
-        )
+        self._standardize_column_name_before_melting(df=df)
 
         df = self._melt_dataframe_by_time_format(
             df=df,
@@ -1318,13 +1332,7 @@ class DataPreprocessor:
         df = pd.read_csv(file_path)
 
         # Set indicator names as lowercase with underscores
-        df["Chỉ tiêu"] = (
-            df["Chỉ tiêu"]
-            .str.lower()
-            .str.replace(",", "")
-            .str.replace(" ", "_")
-            .str.replace("-", "_")
-        )
+        self._standardize_column_name_before_melting(df=df)
 
         df = self._melt_dataframe_by_time_format(
             df=df,
@@ -1379,13 +1387,7 @@ class DataPreprocessor:
         df = pd.read_csv(file_path)
 
         # Set indicator names as lowercase with underscores
-        df["Chỉ tiêu"] = (
-            df["Chỉ tiêu"]
-            .str.lower()
-            .str.replace(",", "")
-            .str.replace(" ", "_")
-            .str.replace("-", "_")
-        )
+        self._standardize_column_name_before_melting(df=df)
 
         df = self._melt_dataframe_by_time_format(
             df=df,
@@ -1440,9 +1442,7 @@ class DataPreprocessor:
         df = pd.read_csv(file_path)
 
         # Set indicator names as lowercase with underscores
-        df["Chỉ tiêu"] = (
-            df["Chỉ tiêu"].str.lower().str.replace(",", "").str.replace(" ", "_")
-        )
+        self._standardize_column_name_before_melting(df=df)
 
         df = self._melt_dataframe_by_time_format(
             df=df,
@@ -1497,15 +1497,9 @@ class DataPreprocessor:
         df = pd.read_csv(file_path)
 
         # Set indicator names as lowercase with underscores
-        df["Chỉ tiêu"] = (
-            df["Chỉ tiêu"]
-            .str.lower()
-            .str.replace("&", "")
-            .str.replace(r"\s+", " ", regex=True)
-            .str.replace(",", "")
-            .str.replace(" ", "_")
-            .str.replace("employed_a", "employed_amount")
-        )
+        self._standardize_column_name_before_melting(df=df)
+
+        df["Chỉ tiêu"] = df["Chỉ tiêu"].str.replace("employed_a", "employed_amount")
 
         df = self._melt_dataframe_by_time_format(
             df=df,
@@ -1560,9 +1554,7 @@ class DataPreprocessor:
         df = pd.read_csv(file_path)
 
         # Set indicator names as lowercase with underscores
-        df["Chỉ tiêu"] = (
-            df["Chỉ tiêu"].str.lower().str.replace(",", "").str.replace(" ", "_")
-        )
+        self._standardize_column_name_before_melting(df=df)
 
         df = self._melt_dataframe_by_time_format(
             df=df,
@@ -1617,9 +1609,7 @@ class DataPreprocessor:
         df = pd.read_csv(file_path)
 
         # Set indicator names as lowercase with underscores
-        df["Chỉ tiêu"] = (
-            df["Chỉ tiêu"].str.lower().str.replace(",", "").str.replace(" ", "_")
-        )
+        self._standardize_column_name_before_melting(df=df)
 
         df = self._melt_dataframe_by_time_format(
             df=df,
@@ -1676,15 +1666,7 @@ class DataPreprocessor:
         df = df.drop(df.index[14])
 
         # Set indicator names as lowercase with underscores
-        df["Chỉ tiêu"] = (
-            df["Chỉ tiêu"]
-            .str.lower()
-            .str.replace(
-                r"\s+", "_", regex=True
-            )  # replace any whitespace with underscore
-            .str.replace(r"[(),;]", "", regex=True)  # remove (, ), -, and comma
-            .str.replace("-", "_")
-        )
+        self._standardize_column_name_before_melting(df=df)
 
         df = self._melt_dataframe_by_time_format(
             df=df,
@@ -1741,16 +1723,7 @@ class DataPreprocessor:
         df = df.drop(df.index[14])
 
         # Set indicator names as lowercase with underscores
-        df["Chỉ tiêu"] = (
-            df["Chỉ tiêu"]
-            .str.lower()
-            .str.replace(
-                r"\s+", "_", regex=True
-            )  # replace any whitespace with underscore
-            .str.replace(
-                r"[^a-z0-9_]", "", regex=True
-            )  # remove everything except letters, numbers, underscore
-        )
+        self._standardize_column_name_before_melting(df=df)
 
         df = self._melt_dataframe_by_time_format(
             df=df,
