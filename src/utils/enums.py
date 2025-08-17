@@ -1522,6 +1522,31 @@ class Table:
         name = "brd"
         primary_key = [Column.YEAR.value, Column.MONTH.value]
 
+    class IISD:
+        class Column(Enum):
+            YEAR = "year"
+            QUARTER = "quarter"
+            FOREIGN_DIRECT_INVESTMENT_CAPITAL = "foreign_direct_investment_capital"
+            GOVERNMENT_BOND_CAPITAL = "government_bond_capital"
+            INVESTMENT_CAPITAL_FROM_RESIDENTS_AND_PRIVATE_INDIVIDUALS = (
+                "investment_capital_from_residents_and_private_individuals"
+            )
+            INVESTMENT_CAPITAL_FROM_THE_STATE_BUDGET = (
+                "investment_capital_from_the_state_budget"
+            )
+            INVESTMENT_CAPITAL_OF_STATE_ENTERPRISES_EQUITY = (
+                "investment_capital_of_state_enterprises_equity"
+            )
+            LOANS_FROM_OTHER_SOURCES_OF_THE_STATE_SECTOR = (
+                "loans_from_other_sources_of_the_state_sector"
+            )
+            OTHER_MOBILIZED_CAPITAL = "other_mobilized_capital"
+            PLANNED_STATE_INVESTMENT_CREDIT = "planned_state_investment_credit"
+            TOTAL = "total"
+
+        name = "iisd"
+        primary_key = [Column.YEAR.value, Column.QUARTER.value]
+
     class EXCHANGE_RATE:
         class Column(Enum):
             DATE = "date"

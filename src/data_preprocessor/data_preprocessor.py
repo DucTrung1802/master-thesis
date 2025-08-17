@@ -1005,6 +1005,28 @@ class DataPreprocessor:
         )
         # fmt: on
 
+        # IISD
+        # fmt: off
+        self._database_driver.create_table(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.IISD.name,
+            columns=[
+                Column(name=Table.IISD.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
+                Column(name=Table.IISD.Column.QUARTER.value, data_type=DataType.INT(), nullable=False),
+                Column(name=Table.IISD.Column.FOREIGN_DIRECT_INVESTMENT_CAPITAL.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IISD.Column.GOVERNMENT_BOND_CAPITAL.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IISD.Column.INVESTMENT_CAPITAL_FROM_RESIDENTS_AND_PRIVATE_INDIVIDUALS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IISD.Column.INVESTMENT_CAPITAL_FROM_THE_STATE_BUDGET.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IISD.Column.INVESTMENT_CAPITAL_OF_STATE_ENTERPRISES_EQUITY.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IISD.Column.LOANS_FROM_OTHER_SOURCES_OF_THE_STATE_SECTOR.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IISD.Column.OTHER_MOBILIZED_CAPITAL.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IISD.Column.PLANNED_STATE_INVESTMENT_CREDIT.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IISD.Column.TOTAL.value, data_type=DataType.FLOAT(), nullable=True),
+            ],
+            primary_keys=Table.IISD.primary_key,
+        )
+        # fmt: on
+
         # GOLD_PRICE
         # fmt: off
         self._database_driver.create_table(
@@ -2584,6 +2606,61 @@ class DataPreprocessor:
 
     # endregion MACROECONOMICS.BRD
 
+    # region MACROECONOMICS.IISD
+    def _process_macroeconomics_iisd_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.IISD,
+            IisdSource.VIETSTOCK,
+        )
+
+        folder_path = (
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+        )
+
+        file_path = get_newest_file_path(
+            folder_path=folder_path, extension=FileExtension.CSV
+        )
+
+        if not file_path:
+            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
+            return
+
+        self._logger.log_info(f'Start processing data in "{file_path}".')
+
+        # Add logic for processing data here
+        df = pd.read_csv(file_path)
+
+        # Set indicator names as lowercase with underscores
+        df = self._standardize_column_name_before_melting(df=df)
+
+        df = self._melt_dataframe_by_time_format(
+            df=df,
+            time_format=TimeFormat.QUARTER_YEAR,
+            id_vars=["Chỉ tiêu", "Đơn vị tính"],
+        )
+
+        # Fill missing values with 0
+        df.fillna(0, inplace=True)
+
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.IISD.name,
+            primary_keys=Table.IISD.primary_key,
+            df=df,
+        )
+
+        self._logger.log_info(f'Finish processing data in "{file_path}".')
+
+    def _process_macroeconomics_iisd(self) -> None:
+        self._logger.log_info("Start processing macroeconomics IISD data.")
+
+        self._process_macroeconomics_iisd_vietstock()
+
+        self._logger.log_info("Finish processing macroeconomics IISD data.")
+
+    # endregion MACROECONOMICS.IISD
+
     # region MACROECONOMICS.GOLD_PRICE
     def _process_macroeconomics_gold_price_investing(self) -> None:
         key = (
@@ -3833,6 +3910,7 @@ class DataPreprocessor:
         self._process_macroeconomics_tsbe()
         self._process_macroeconomics_gd()
         self._process_macroeconomics_brd()
+        self._process_macroeconomics_iisd()
         # self._process_macroeconomics_interest_rate()
         # self._process_macroeconomics_export()
         # self._process_macroeconomics_import()
