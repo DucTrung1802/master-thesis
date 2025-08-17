@@ -1460,6 +1460,32 @@ class Table:
         name = "tsbr"
         primary_key = [Column.YEAR.value, Column.MONTH.value]
 
+    class TSBE:
+        class Column(Enum):
+            YEAR = "year"
+            MONTH = "month"
+            AID_EXPENDITURE = "aid_expenditure"
+            DEBT_INTEREST_PAYMENT_EXPENDITURE = "debt_interest_payment_expenditure"
+            DEVELOPMENT_INVESTMENT_EXPENDITURE = "development_investment_expenditure"
+            EXPENDITURE_FOR_EDUCATION_TRAINING_AND_VOCATIONAL_EDUCATION = (
+                "expenditure_for_education_training_and_vocational_education"
+            )
+            EXPENDITURE_FOR_SCIENCE_AND_TECHNOLOGY = (
+                "expenditure_for_science_and_technology"
+            )
+            EXPENDITURE_FOR_WAGE_REFORM_AND_STREAMLINING_PERSONNEL = (
+                "expenditure_for_wage_reform_and_streamlining_personnel"
+            )
+            REGULAR_EXPENDITURE = "regular_expenditure"
+            STATE_BUDGET_CONTINGENCY = "state_budget_contingency"
+            SUPPLEMENTARY_EXPENDITURE_FOR_FINANCIAL_RESERVE_FUND = (
+                "supplementary_expenditure_for_financial_reserve_fund"
+            )
+            TOTAL_STATE_BUDGET_EXPENDITURE = "total_state_budget_expenditure"
+
+        name = "tsbe"
+        primary_key = [Column.YEAR.value, Column.MONTH.value]
+
     class EXCHANGE_RATE:
         class Column(Enum):
             DATE = "date"
