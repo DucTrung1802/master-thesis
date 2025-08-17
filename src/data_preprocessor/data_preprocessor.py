@@ -224,6 +224,36 @@ class DataPreprocessor:
                 # Sort by year and month
                 df = df.sort_values(["year", "month"]).reset_index(drop=True)
 
+            case TimeFormat.THREE_MONTH_INDEX_YEAR:
+                # Melt from wide to long format
+                df = df.melt(
+                    id_vars=id_vars,
+                    var_name="month_str",
+                    value_name="value",
+                )
+
+                # Filter out any non-month columns
+                df = df[df["month_str"].str.match(r"\d+M/\d{4}")]
+
+                # Clean numeric values
+                df["value"] = df["value"].astype(str).str.replace(",", "", regex=False)
+                df["value"] = pd.to_numeric(df["value"], errors="coerce")
+
+                # Extract year and month
+                df["month"] = df["month_str"].str.extract(r"(\d+)M/")[0].astype(int)
+                df["year"] = df["month_str"].str.extract(r"/(\d{4})")[0].astype(int)
+
+                # Use pivot_table with first() to handle duplicates
+                df = df.pivot_table(
+                    index=["year", "month"],
+                    columns=id_vars[0],
+                    values="value",
+                    aggfunc="first",
+                ).reset_index()
+
+                # Sort by year and month
+                df = df.sort_values(["year", "month"]).reset_index(drop=True)
+
         return df
 
     def _standardize_column_name_before_melting(
@@ -870,6 +900,50 @@ class DataPreprocessor:
             primary_keys=Table.IT_BOP.primary_key,
         )
         # fmt: on
+
+        # TSBR
+        # fmt: off
+        self._database_driver.create_table(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.TSBR.name,
+            columns=[
+                Column(name=Table.TSBR.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
+                Column(name=Table.TSBR.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
+                Column(name=Table.TSBR.Column.AGRICULTURAL_LAND_USE_TAX.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.TSBR.Column.AID_REVENUE.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.TSBR.Column.DOMESTIC_REVENUE.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.TSBR.Column.ENVIRONMENTAL_PROTECTION_TAX.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.TSBR.Column.ENVIRONMENTAL_PROTECTION_TAX_ON_IMPORTED_GOODS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.TSBR.Column.EXPORT_TAX.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.TSBR.Column.FEES_AND_CHARGES.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.TSBR.Column.IMPORT_TAX.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.TSBR.Column.NON_AGRICULTURAL_LAND_USE_TAX.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.TSBR.Column.OTHER_BUDGET_REVENUES.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.TSBR.Column.OTHER_REVENUE.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.TSBR.Column.PERSONAL_INCOME_TAX.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.TSBR.Column.RECOVERY_OF_CAPITAL_DIVIDENDS_POST_TAX_PROFITS_SURPLUS_REVENUE_AND_EXPENDITURE_OF_THE_STATE_BANK.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.TSBR.Column.REVENUE_BALANCE_FROM_IMPORT_EXPORT_ACTIVITIES.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.TSBR.Column.REVENUE_FROM_CRUDE_OIL.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.TSBR.Column.REVENUE_FROM_FOREIGN_INVESTED_ENTERPRISES.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.TSBR.Column.REVENUE_FROM_HOUSING_AND_LAND.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.TSBR.Column.REVENUE_FROM_LAND_AND_WATER_SURFACE_LEASING.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.TSBR.Column.REVENUE_FROM_LAND_USE.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.TSBR.Column.REVENUE_FROM_LEASING_AND_SALE_OF_STATE_OWNED_HOUSING.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.TSBR.Column.REVENUE_FROM_LOTTERY_ACTIVITIES.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.TSBR.Column.REVENUE_FROM_MINING_RIGHTS_LICENSING.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.TSBR.Column.REVENUE_FROM_NON_STATE_ECONOMIC_SECTOR.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.TSBR.Column.REVENUE_FROM_PUBLIC_LAND_FUNDS_AND_OTHER_PUBLIC_ASSET_BENEFITS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.TSBR.Column.REVENUE_FROM_STATE_OWNED_ENTERPRISES.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.TSBR.Column.SPECIAL_CONSUMPTION_TAX_ON_IMPORTED_GOODS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.TSBR.Column.TOTAL_REVENUE_FROM_IMPORT_EXPORT_ACTIVITIES.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.TSBR.Column.TOTAL_STATE_BUDGET_REVENUE.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.TSBR.Column.VALUE_ADDED_TAX_ON_IMPORTED_GOODS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.TSBR.Column.VALUE_ADDED_TAX_REFUND.value, data_type=DataType.FLOAT(), nullable=True),
+            ],
+            primary_keys=Table.TSBR.primary_key,
+        )
+        # fmt: on
+
 
         # GOLD_PRICE
         # fmt: off
@@ -2230,6 +2304,61 @@ class DataPreprocessor:
 
     # endregion MACROECONOMICS.IT_BOP
 
+    # region MACROECONOMICS.TSBR
+    def _process_macroeconomics_tsbr_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.TSBR,
+            TsbrSource.VIETSTOCK,
+        )
+
+        folder_path = (
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+        )
+
+        file_path = get_newest_file_path(
+            folder_path=folder_path, extension=FileExtension.CSV
+        )
+
+        if not file_path:
+            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
+            return
+
+        self._logger.log_info(f'Start processing data in "{file_path}".')
+
+        # Add logic for processing data here
+        df = pd.read_csv(file_path)
+
+        # Set indicator names as lowercase with underscores
+        df = self._standardize_column_name_before_melting(df=df)
+
+        df = self._melt_dataframe_by_time_format(
+            df=df,
+            time_format=TimeFormat.THREE_MONTH_INDEX_YEAR,
+            id_vars=["Chỉ tiêu", "Đơn vị tính"],
+        )
+
+        # Fill missing values with 0
+        df.fillna(0, inplace=True)
+
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.TSBR.name,
+            primary_keys=Table.TSBR.primary_key,
+            df=df,
+        )
+
+        self._logger.log_info(f'Finish processing data in "{file_path}".')
+
+    def _process_macroeconomics_tsbr(self) -> None:
+        self._logger.log_info("Start processing macroeconomics TSBR data.")
+
+        self._process_macroeconomics_tsbr_vietstock()
+
+        self._logger.log_info("Finish processing macroeconomics TSBR data.")
+
+    # endregion MACROECONOMICS.TSBR
+
     # region MACROECONOMICS.GOLD_PRICE
     def _process_macroeconomics_gold_price_investing(self) -> None:
         key = (
@@ -3475,6 +3604,7 @@ class DataPreprocessor:
         self._process_macroeconomics_mip()
         self._process_macroeconomics_fa_by_house_types()
         self._process_macroeconomics_it_bop()
+        self._process_macroeconomics_tsbr() # CONTINUE HERE
         # self._process_macroeconomics_interest_rate()
         # self._process_macroeconomics_export()
         # self._process_macroeconomics_import()

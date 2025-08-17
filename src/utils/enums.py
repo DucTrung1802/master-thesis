@@ -84,6 +84,7 @@ class TimeFormat(Enum):
     DAY_MONTH_YEAR = "18/02/2000"  # full date (day, month, year)
     QUARTER_YEAR = "Q1/2000"  # quarter + year
     MONTH_INDEX_YEAR = "M2/2000"  # month index + year
+    THREE_MONTH_INDEX_YEAR = "3M/2000"  # 3 month index + year
 
 
 # Enum for Main Scraping Types
@@ -1398,6 +1399,66 @@ class Table:
 
         name = "it_bop"
         primary_key = [Column.YEAR.value, Column.QUARTER.value]
+
+    class TSBR:
+        class Column(Enum):
+            YEAR = "year"
+            MONTH = "month"
+            AGRICULTURAL_LAND_USE_TAX = "agricultural_land_use_tax"
+            AID_REVENUE = "aid_revenue"
+            DOMESTIC_REVENUE = "domestic_revenue"
+            ENVIRONMENTAL_PROTECTION_TAX = "environmental_protection_tax"
+            ENVIRONMENTAL_PROTECTION_TAX_ON_IMPORTED_GOODS = (
+                "environmental_protection_tax_on_imported_goods"
+            )
+            EXPORT_TAX = "export_tax"
+            FEES_AND_CHARGES = "fees_and_charges"
+            IMPORT_TAX = "import_tax"
+            NON_AGRICULTURAL_LAND_USE_TAX = "non_agricultural_land_use_tax"
+            OTHER_BUDGET_REVENUES = "other_budget_revenues"
+            OTHER_REVENUE = "other_revenue"
+            PERSONAL_INCOME_TAX = "personal_income_tax"
+            RECOVERY_OF_CAPITAL_DIVIDENDS_POST_TAX_PROFITS_SURPLUS_REVENUE_AND_EXPENDITURE_OF_THE_STATE_BANK = "recovery_of_capital_dividends_post_tax_profits_surplus_revenue_and_expenditure_of_the_state_bank"
+            REVENUE_BALANCE_FROM_IMPORT_EXPORT_ACTIVITIES = (
+                "revenue_balance_from_import_export_activities"
+            )
+            REVENUE_FROM_CRUDE_OIL = "revenue_from_crude_oil"
+            REVENUE_FROM_FOREIGN_INVESTED_ENTERPRISES = (
+                "revenue_from_foreign_invested_enterprises"
+            )
+            REVENUE_FROM_HOUSING_AND_LAND = "revenue_from_housing_and_land"
+            REVENUE_FROM_LAND_AND_WATER_SURFACE_LEASING = (
+                "revenue_from_land_and_water_surface_leasing"
+            )
+            REVENUE_FROM_LAND_USE = "revenue_from_land_use"
+            REVENUE_FROM_LEASING_AND_SALE_OF_STATE_OWNED_HOUSING = (
+                "revenue_from_leasing_and_sale_of_state_owned_housing"
+            )
+            REVENUE_FROM_LOTTERY_ACTIVITIES = "revenue_from_lottery_activities"
+            REVENUE_FROM_MINING_RIGHTS_LICENSING = (
+                "revenue_from_mining_rights_licensing"
+            )
+            REVENUE_FROM_NON_STATE_ECONOMIC_SECTOR = (
+                "revenue_from_non_state_economic_sector"
+            )
+            REVENUE_FROM_PUBLIC_LAND_FUNDS_AND_OTHER_PUBLIC_ASSET_BENEFITS = (
+                "revenue_from_public_land_funds_and_other_public_asset_benefits"
+            )
+            REVENUE_FROM_STATE_OWNED_ENTERPRISES = (
+                "revenue_from_state_owned_enterprises"
+            )
+            SPECIAL_CONSUMPTION_TAX_ON_IMPORTED_GOODS = (
+                "special_consumption_tax_on_imported_goods"
+            )
+            TOTAL_REVENUE_FROM_IMPORT_EXPORT_ACTIVITIES = (
+                "total_revenue_from_import_export_activities"
+            )
+            TOTAL_STATE_BUDGET_REVENUE = "total_state_budget_revenue"
+            VALUE_ADDED_TAX_ON_IMPORTED_GOODS = "value_added_tax_on_imported_goods"
+            VALUE_ADDED_TAX_REFUND = "value_added_tax_refund"
+
+        name = "tsbr"
+        primary_key = [Column.YEAR.value, Column.MONTH.value]
 
     class EXCHANGE_RATE:
         class Column(Enum):
