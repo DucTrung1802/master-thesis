@@ -1559,6 +1559,18 @@ class Table:
         name = "treg"
         primary_key = [Column.YEAR.value, Column.MONTH.value]
 
+    class CREDIT:
+        class Column(Enum):
+            YEAR = "year"
+            MONTH = "month"
+            CREDIT = "credit"
+            CREDIT_GROWTH_YTD = "credit_growth_ytd"
+            MONEY_SUPPLY_GROWTH_M2_YTD = "money_supply_growth_m2_ytd"
+            MONEY_SUPPLY_M2 = "money_supply_m2"
+
+        name = "credit"
+        primary_key = [Column.YEAR.value, Column.MONTH.value]
+
     class EXCHANGE_RATE:
         class Column(Enum):
             DATE = "date"
