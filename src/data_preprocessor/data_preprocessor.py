@@ -1126,6 +1126,27 @@ class DataPreprocessor:
         )
         # fmt: on
 
+        # IIR
+        # fmt: off
+        self._database_driver.create_table(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.IIR.name,
+            columns=[
+                Column(name=Table.IIR.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
+                Column(name=Table.IIR.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
+                Column(name=Table.IIR.Column.DAY.value, data_type=DataType.INT(), nullable=False),
+                Column(name=Table.IIR.Column.ONE_MONTH.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IIR.Column.ONE_WEEK.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IIR.Column.TWO_WEEKS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IIR.Column.THREE_MONTHS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IIR.Column.SIX_MONTHS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IIR.Column.NINE_MONTHS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.IIR.Column.OVERNIGHT.value, data_type=DataType.FLOAT(), nullable=True),
+            ],
+            primary_keys=Table.IIR.primary_key,
+        )
+        # fmt: on
+
         # GOLD_PRICE
         # fmt: off
         self._database_driver.create_table(
@@ -2983,6 +3004,74 @@ class DataPreprocessor:
 
     # endregion MACROECONOMICS.EXCHANGE_RATE
 
+    # region MACROECONOMICS.IIR
+    def _process_macroeconomics_iir_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.IIR,
+            IirSource.VIETSTOCK,
+        )
+
+        folder_path = (
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+        )
+
+        file_path = get_newest_file_path(
+            folder_path=folder_path, extension=FileExtension.CSV
+        )
+
+        if not file_path:
+            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
+            return
+
+        self._logger.log_info(f'Start processing data in "{file_path}".')
+
+        # Add logic for processing data here
+        df = pd.read_csv(file_path)
+
+        # Set indicator names as lowercase with underscores
+        df = self._standardize_column_name_before_melting(df=df)
+
+        df = self._melt_dataframe_by_time_format(
+            df=df,
+            time_format=TimeFormat.DAY_MONTH_YEAR,
+            id_vars=["Chỉ tiêu", "Đơn vị tính"],
+        )
+
+        # Fill missing values with 0
+        df.fillna(0, inplace=True)
+
+        # Rename columns
+        df.rename(
+            columns={
+                "1_months": "_1_months",
+                "1_weeks": "_1_weeks",
+                "2_weeks": "_2_weeks",
+                "3_months": "_3_months",
+                "6_months": "_6_months",
+                "9_months": "_9_months",
+            },
+            inplace=True,
+        )
+
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.IIR.name,
+            primary_keys=Table.IIR.primary_key,
+            df=df,
+        )
+
+        self._logger.log_info(f'Finish processing data in "{file_path}".')
+
+    def _process_macroeconomics_iir(self) -> None:
+        self._logger.log_info("Start processing macroeconomics IIR data.")
+
+        self._process_macroeconomics_iir_vietstock()
+
+        self._logger.log_info("Finish processing macroeconomics IIR data.")
+
+    # endregion MACROECONOMICS.IIR
+
     # region MACROECONOMICS.GOLD_PRICE
     def _process_macroeconomics_gold_price_investing(self) -> None:
         key = (
@@ -4237,6 +4326,7 @@ class DataPreprocessor:
         self._process_macroeconomics_credit()
         self._process_macroeconomics_mobilization()
         self._process_macroeconomics_exchange_rate()
+        self._process_macroeconomics_iir()
         # self._process_macroeconomics_interest_rate()
         # self._process_macroeconomics_export()
         # self._process_macroeconomics_import()

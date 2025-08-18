@@ -1594,6 +1594,22 @@ class Table:
         name = "exchange_rate"
         primary_key = [Column.YEAR.value, Column.MONTH.value, Column.DAY.value]
 
+    class IIR:
+        class Column(Enum):
+            YEAR = "year"
+            MONTH = "month"
+            DAY = "day"
+            ONE_MONTH = "_1_months"
+            ONE_WEEK = "_1_weeks"
+            TWO_WEEKS = "_2_weeks"
+            THREE_MONTHS = "_3_months"
+            SIX_MONTHS = "_6_months"
+            NINE_MONTHS = "_9_months"
+            OVERNIGHT = "overnight"
+
+        name = "iir"
+        primary_key = [Column.YEAR.value, Column.MONTH.value, Column.DAY.value]
+
     class GOLD_PRICE:
         class Column(Enum):
             DATE = "date"
