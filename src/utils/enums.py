@@ -1610,6 +1610,17 @@ class Table:
         name = "iir"
         primary_key = [Column.YEAR.value, Column.MONTH.value, Column.DAY.value]
 
+    class RRRR:
+        class Column(Enum):
+            YEAR = "year"
+            MONTH = "month"
+            DAY = "day"
+            DISCOUNT_RATE = "discount_rate"
+            REFINANCING_RATE = "refinancing_rate"
+
+        name = "rrrr"
+        primary_key = [Column.YEAR.value, Column.MONTH.value, Column.DAY.value]
+
     class GOLD_PRICE:
         class Column(Enum):
             DATE = "date"
