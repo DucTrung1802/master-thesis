@@ -1621,6 +1621,45 @@ class Table:
         name = "rrrr"
         primary_key = [Column.YEAR.value, Column.MONTH.value, Column.DAY.value]
 
+    class FDI_SECTOR:
+        class Column(Enum):
+            YEAR = "year"
+            MONTH = "month"
+            ACCOMMODATION_AND_FOOD_SERVICES = "accommodation_and_food_services"
+            ADMINISTRATIVE_AND_SUPPORT_SERVICE_ACTIVITIES = (
+                "administrative_and_support_service_activities"
+            )
+            AGRICULTURE_FORESTRY_AND_FISHERY = "agriculture_forestry_and_fishery"
+            ARTS_ENTERTAINMENT_AND_RECREATION = "arts_entertainment_and_recreation"
+            CONSTRUCTION = "construction"
+            DOMESTIC_HOUSEHOLD_SERVICE_WORKERS = "domestic_household_service_workers"
+            EDUCATION_AND_TRAINING = "education_and_training"
+            FINANCIAL_BANKING_AND_INSURANCE_ACTIVITIES = (
+                "financial_banking_and_insurance_activities"
+            )
+            HEALTHCARE_AND_SOCIAL_ASSISTANCE_ACTIVITIES = (
+                "healthcare_and_social_assistance_activities"
+            )
+            INFORMATION_AND_COMMUNICATION = "information_and_communication"
+            MANUFACTURING_AND_PROCESSING_INDUSTRY = (
+                "manufacturing_and_processing_industry"
+            )
+            MINING_AND_QUARRYING = "mining_and_quarrying"
+            OTHER_SERVICE_ACTIVITIES = "other_service_activities"
+            PRODUCTION_AND_DISTRIBUTION_OF_ELECTRICITY_GAS_WATER_AND_AIR_CONDITIONING = "production_and_distribution_of_electricity_gas_water_and_air_conditioning"
+            PROFESSIONAL_SCIENTIFIC_AND_TECHNOLOGICAL_ACTIVITIES = (
+                "professional_scientific_and_technological_activities"
+            )
+            REAL_ESTATE_BUSINESS_ACTIVITIES = "real_estate_business_activities"
+            TRANSPORTATION_AND_WAREHOUSING = "transportation_and_warehousing"
+            WATER_SUPPLY_AND_WASTE_TREATMENT = "water_supply_and_waste_treatment"
+            WHOLESALE_AND_RETAIL_REPAIR_OF_MOTOR_VEHICLES_AND_MOTORCYCLES = (
+                "wholesale_and_retail_repair_of_motor_vehicles_and_motorcycles"
+            )
+
+        name = "fdi_sector"
+        primary_key = [Column.YEAR.value, Column.MONTH.value]
+
     class GOLD_PRICE:
         class Column(Enum):
             DATE = "date"

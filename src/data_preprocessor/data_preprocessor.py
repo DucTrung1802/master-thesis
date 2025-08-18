@@ -1163,6 +1163,38 @@ class DataPreprocessor:
         )
         # fmt: on
 
+        # FDI_SECTOR
+        # fmt: off
+        self._database_driver.create_table(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.FDI_SECTOR.name,
+            columns=[
+                Column(name=Table.FDI_SECTOR.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
+                Column(name=Table.FDI_SECTOR.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
+                Column(name=Table.FDI_SECTOR.Column.ACCOMMODATION_AND_FOOD_SERVICES.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.FDI_SECTOR.Column.ADMINISTRATIVE_AND_SUPPORT_SERVICE_ACTIVITIES.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.FDI_SECTOR.Column.AGRICULTURE_FORESTRY_AND_FISHERY.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.FDI_SECTOR.Column.ARTS_ENTERTAINMENT_AND_RECREATION.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.FDI_SECTOR.Column.CONSTRUCTION.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.FDI_SECTOR.Column.DOMESTIC_HOUSEHOLD_SERVICE_WORKERS.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.FDI_SECTOR.Column.EDUCATION_AND_TRAINING.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.FDI_SECTOR.Column.FINANCIAL_BANKING_AND_INSURANCE_ACTIVITIES.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.FDI_SECTOR.Column.HEALTHCARE_AND_SOCIAL_ASSISTANCE_ACTIVITIES.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.FDI_SECTOR.Column.INFORMATION_AND_COMMUNICATION.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.FDI_SECTOR.Column.MANUFACTURING_AND_PROCESSING_INDUSTRY.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.FDI_SECTOR.Column.MINING_AND_QUARRYING.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.FDI_SECTOR.Column.OTHER_SERVICE_ACTIVITIES.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.FDI_SECTOR.Column.PRODUCTION_AND_DISTRIBUTION_OF_ELECTRICITY_GAS_WATER_AND_AIR_CONDITIONING.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.FDI_SECTOR.Column.PROFESSIONAL_SCIENTIFIC_AND_TECHNOLOGICAL_ACTIVITIES.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.FDI_SECTOR.Column.REAL_ESTATE_BUSINESS_ACTIVITIES.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.FDI_SECTOR.Column.TRANSPORTATION_AND_WAREHOUSING.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.FDI_SECTOR.Column.WATER_SUPPLY_AND_WASTE_TREATMENT.value, data_type=DataType.FLOAT(), nullable=True),
+                Column(name=Table.FDI_SECTOR.Column.WHOLESALE_AND_RETAIL_REPAIR_OF_MOTOR_VEHICLES_AND_MOTORCYCLES.value, data_type=DataType.FLOAT(), nullable=True),
+            ],
+            primary_keys=Table.FDI_SECTOR.primary_key,
+        )
+        # fmt: on
+
         # GOLD_PRICE
         # fmt: off
         self._database_driver.create_table(
@@ -3125,19 +3157,6 @@ class DataPreprocessor:
         # Fill missing values with 0
         df.fillna(0, inplace=True)
 
-        # Rename columns
-        df.rename(
-            columns={
-                "1_months": "_1_months",
-                "1_weeks": "_1_weeks",
-                "2_weeks": "_2_weeks",
-                "3_months": "_3_months",
-                "6_months": "_6_months",
-                "9_months": "_9_months",
-            },
-            inplace=True,
-        )
-
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
             table_name=Table.RRRR.name,
@@ -3155,6 +3174,77 @@ class DataPreprocessor:
         self._logger.log_info("Finish processing macroeconomics RRRR data.")
 
     # endregion MACROECONOMICS.RRRR
+
+    # region MACROECONOMICS.FDI_SECTOR
+    def _process_macroeconomics_fdi_sector_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.FDI_SECTOR,
+            FdiSectorSource.VIETSTOCK,
+        )
+
+        folder_path = (
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+        )
+
+        file_path = get_newest_file_path(
+            folder_path=folder_path, extension=FileExtension.CSV
+        )
+
+        if not file_path:
+            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
+            return
+
+        self._logger.log_info(f'Start processing data in "{file_path}".')
+
+        # Add logic for processing data here
+        df = pd.read_csv(file_path)
+
+        # Step 1: Find the row that matches both conditions
+        mask = (df["Chỉ tiêu"] == "Manufacturing and Processing Industry") & (
+            df["Đơn vị tính"] == "Million US Dollars"
+        )
+
+        # Step 2: Within that subset, find the row with the max value in Aug-2020
+        max_idx = (
+            df.loc[mask, "Aug-2020"]
+            .str.replace(",", "", regex=False)
+            .astype(float)
+            .idxmax()
+        )
+
+        # Step 3: Slice from that row to the end
+        df = df.loc[max_idx:]
+
+        # Set indicator names as lowercase with underscores
+        df = self._standardize_column_name_before_melting(df=df)
+
+        df = self._melt_dataframe_by_time_format(
+            df=df,
+            time_format=TimeFormat.MONTH_NAME_YEAR,
+            id_vars=["Chỉ tiêu", "Đơn vị tính"],
+        )
+
+        # Fill missing values with 0
+        df.fillna(0, inplace=True)
+
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.FDI_SECTOR.name,
+            primary_keys=Table.FDI_SECTOR.primary_key,
+            df=df,
+        )
+
+        self._logger.log_info(f'Finish processing data in "{file_path}".')
+
+    def _process_macroeconomics_fdi_sector(self) -> None:
+        self._logger.log_info("Start processing macroeconomics FDI_SECTOR data.")
+
+        self._process_macroeconomics_fdi_sector_vietstock()
+
+        self._logger.log_info("Finish processing macroeconomics FDI_SECTOR data.")
+
+    # endregion MACROECONOMICS.FDI_SECTOR
 
     # region MACROECONOMICS.GOLD_PRICE
     def _process_macroeconomics_gold_price_investing(self) -> None:
@@ -4412,6 +4502,7 @@ class DataPreprocessor:
         self._process_macroeconomics_exchange_rate()
         self._process_macroeconomics_iir()
         self._process_macroeconomics_rrrr()
+        self._process_macroeconomics_fdi_sector()
         # self._process_macroeconomics_interest_rate()
         # self._process_macroeconomics_export()
         # self._process_macroeconomics_import()
