@@ -254,6 +254,42 @@ class DataPreprocessor:
                 # Sort by year and month
                 df = df.sort_values(["year", "month"]).reset_index(drop=True)
 
+            case TimeFormat.DAY_MONTH_YEAR:
+                # Melt from wide to long format
+                df = df.melt(
+                    id_vars=id_vars,
+                    var_name="date_str",
+                    value_name="value",
+                )
+
+                # Filter only valid dd/mm/yyyy
+                df = df[df["date_str"].str.match(r"\d{2}/\d{2}/\d{4}")]
+
+                # Clean numeric values
+                df["value"] = df["value"].astype(str).str.replace(",", "", regex=False)
+                df["value"] = pd.to_numeric(df["value"], errors="coerce")
+
+                # Convert to datetime
+                df["date"] = pd.to_datetime(
+                    df["date_str"], format="%d/%m/%Y", errors="coerce"
+                )
+
+                # Extract year, month, day
+                df["year"] = df["date"].dt.year
+                df["month"] = df["date"].dt.month
+                df["day"] = df["date"].dt.day
+
+                # Pivot table to wide format
+                df = df.pivot_table(
+                    index=["year", "month", "day"],
+                    columns=id_vars[0],
+                    values="value",
+                    aggfunc="first",
+                ).reset_index()
+
+                # Sort by date
+                df = df.sort_values(["year", "month", "day"]).reset_index(drop=True)
+
         return df
 
     def _standardize_column_name_before_melting(
@@ -1072,6 +1108,21 @@ class DataPreprocessor:
                 Column(name=Table.MOBILIZATION.Column.TOTAL_PAYMENT_INSTRUMENTS.value, data_type=DataType.FLOAT(), nullable=True),
             ],
             primary_keys=Table.MOBILIZATION.primary_key,
+        )
+        # fmt: on
+
+        # EXCHANGE_RATE
+        # fmt: off
+        self._database_driver.create_table(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.EXCHANGE_RATE.name,
+            columns=[
+                Column(name=Table.EXCHANGE_RATE.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
+                Column(name=Table.EXCHANGE_RATE.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
+                Column(name=Table.EXCHANGE_RATE.Column.DAY.value, data_type=DataType.INT(), nullable=False),
+                Column(name=Table.EXCHANGE_RATE.Column.CENTRAL_RATE.value, data_type=DataType.FLOAT(), nullable=True),
+            ],
+            primary_keys=Table.EXCHANGE_RATE.primary_key,
         )
         # fmt: on
 
@@ -2874,6 +2925,64 @@ class DataPreprocessor:
 
     # endregion MACROECONOMICS.MOBILIZATION
 
+    # region MACROECONOMICS.EXCHANGE_RATE
+    def _process_macroeconomics_exchange_rate_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.EXCHANGE_RATE,
+            ExchangeRateSource.VIETSTOCK,
+        )
+
+        folder_path = (
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+        )
+
+        file_path = get_newest_file_path(
+            folder_path=folder_path, extension=FileExtension.CSV
+        )
+
+        if not file_path:
+            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
+            return
+
+        self._logger.log_info(f'Start processing data in "{file_path}".')
+
+        # Add logic for processing data here
+        df = pd.read_csv(file_path)
+
+        # Set indicator names as lowercase with underscores
+        df = self._standardize_column_name_before_melting(df=df)
+
+        df = self._melt_dataframe_by_time_format(
+            df=df,
+            time_format=TimeFormat.DAY_MONTH_YEAR,
+            id_vars=["Chỉ tiêu", "Đơn vị tính"],
+        )
+
+        # Fill missing values with 0
+        df.fillna(0, inplace=True)
+
+        # Rename columns
+        df.rename(columns={"central_rate_from_04012016": "central_rate"}, inplace=True)
+
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.EXCHANGE_RATE.name,
+            primary_keys=Table.EXCHANGE_RATE.primary_key,
+            df=df,
+        )
+
+        self._logger.log_info(f'Finish processing data in "{file_path}".')
+
+    def _process_macroeconomics_exchange_rate(self) -> None:
+        self._logger.log_info("Start processing macroeconomics EXCHANGE_RATE data.")
+
+        self._process_macroeconomics_exchange_rate_vietstock()
+
+        self._logger.log_info("Finish processing macroeconomics EXCHANGE_RATE data.")
+
+    # endregion MACROECONOMICS.EXCHANGE_RATE
+
     # region MACROECONOMICS.GOLD_PRICE
     def _process_macroeconomics_gold_price_investing(self) -> None:
         key = (
@@ -4127,6 +4236,7 @@ class DataPreprocessor:
         self._process_macroeconomics_treg()
         self._process_macroeconomics_credit()
         self._process_macroeconomics_mobilization()
+        self._process_macroeconomics_exchange_rate()
         # self._process_macroeconomics_interest_rate()
         # self._process_macroeconomics_export()
         # self._process_macroeconomics_import()
