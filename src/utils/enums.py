@@ -1660,6 +1660,16 @@ class Table:
         name = "fdi_sector"
         primary_key = [Column.YEAR.value, Column.MONTH.value]
 
+    class FDI_RD:
+        class Column(Enum):
+            YEAR = "year"
+            MONTH = "month"
+            FDI_DISBURSEMENT = "fdi_disbursement"
+            REGISTER = "register"
+
+        name = "fdi_rd"
+        primary_key = [Column.YEAR.value, Column.MONTH.value]
+
     class GOLD_PRICE:
         class Column(Enum):
             DATE = "date"
