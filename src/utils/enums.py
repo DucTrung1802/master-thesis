@@ -78,6 +78,15 @@ class FileExtension(Enum):
     MP4 = "mp4"
 
 
+class TimeFormat(Enum):
+    YEAR = "2000"
+    MONTH_NAME_YEAR = "Feb-2000"  # month name + year
+    DAY_MONTH_YEAR = "18/02/2000"  # full date (day, month, year)
+    QUARTER_YEAR = "Q1/2000"  # quarter + year
+    MONTH_INDEX_YEAR = "M2/2000"  # month index + year
+    THREE_MONTH_INDEX_YEAR = "3M/2000"  # 3 month index + year
+
+
 # Enum for Main Scraping Types
 class ScrapeMainType(Enum):
     MACROECONOMICS = "macroeconomics"
@@ -748,13 +757,11 @@ class Table:
         class Column(Enum):
             YEAR = "year"
             QUARTER = "quarter"
-            AGRICULTURE_SHARE = "agriculture_share"
-            INDUSTRY_SHARE = "industry_share"
-            SERVICE_SHARE = "service_share"
-            GDP_TRUE_GROWTH_ACC = "gdp_true_growth_acc"
-            AGRICULTURE_TRUE_GROWTH_ACC = "agriculture_true_growth_acc"
-            INDUSTRY_TRUE_GROWTH_ACC = "industry_true_growth_acc"
-            SERVICE_TRUE_GROWTH_ACC = "service_true_growth_acc"
+            AGRICULTURE = "agriculture"
+            INDUSTRY = "industry"
+            SERVICES = "services"
+            GDP_GROWTH = "gdp_growth"
+            GDP_REAL = "gdp_real"
 
         name = "gdp"
         primary_key = [Column.YEAR.value, Column.QUARTER.value]
@@ -763,60 +770,981 @@ class Table:
         class Column(Enum):
             YEAR = "year"
             MONTH = "month"
-            CPI = "cpi"
-            FNB_SERVICES = "fnb_services"
-            STAPLE_FOOD = "staple_food"
-            FOOD = "food"
-            FAFH = "fafh"
-            DRINK_AND_TOBACO = "drink_and_tobaco"
-            WEARING = "wearing"
-            HOUSING_AND_BUILDING_MATERIALS = "housing_and_building_materials"
-            HOUSEHOLD_APPLIANCES_AND_EQUIPMENT = "household_appliances_and_equipment"
-            MEDICINES_AND_MEDICAL_SERVICES = "medicines_and_medical_services"
-            TRAFFIC = "traffic"
-            POST_AND_TELECOMMUNICATIONS = "post_and_telecommunications"
-            EDUCATION = "education"
+            BEVERAGE_AND_CIGARETTE = "beverage_and_cigarette"
+            CONSUMER_PRICE_INDEX = "consumer_price_index"
             CULTURE_ENTERTAINMENT_AND_TOURISM = "culture_entertainment_and_tourism"
-            OTHER_SUPPLIES_AND_SERVICES = "other_supplies_and_services"
+            EATING_OUTSIDE = "eating_outside"
+            EDUCATION = "education"
+            FOOD = "food"
+            FOOD_AND_FOODSTUFF = "food_and_foodstuff"
+            FOODSTUFF = "foodstuff"
+            GARMENT_FOOTWEAR_HAT = "garment_footwear_hat"
+            HOUSEHOLD_APPLIANCES_AND_GOODS = "household_appliances_and_goods"
+            HOUSING_AND_CONSTRUCTION_MATERIALS = "housing_and_construction_materials"
+            MEDICINE_AND_HEALTH_CARE = "medicine_and_health_care"
+            OTHER_GOODS_AND_SERVICES = "other_goods_and_services"
+            POSTAL_SERVICES_AND_TELECOMMUNICATION = (
+                "postal_services_and_telecommunication"
+            )
+            TRAFFIC = "traffic"
 
         name = "cpi"
         primary_key = [Column.YEAR.value, Column.MONTH.value]
 
+    class PPI:
+        class Column(Enum):
+            YEAR = "year"
+            GENERAL_INDEX = "general_index"
+            FORESTRY_SERVICES = "forestry_services"
+            AGRICULTURAL_SERVICES = "agricultural_services"
+            FORESTRY_AND_RELATED_SERVICES = "forestry_and_related_services"
+            EXPLOITED_FOREST_PRODUCTS = "exploited_forest_products"
+            COLLECTED_FOREST_PRODUCTS = "collected_forest_products"
+            AGRICULTURE_AND_RELATED_SERVICES = "agriculture_and_related_services"
+            LIVESTOCK_PRODUCTS = "livestock_products"
+            ANNUAL_CROP_PRODUCTS = "annual_crop_products"
+            PERENNIAL_CROP_PRODUCTS = "perennial_crop_products"
+            EXPLOITED_AQUATIC_PRODUCTS = "exploited_aquatic_products"
+            AQUATIC_PRODUCTS_EXPLOITATION_AND_FARMING = (
+                "aquatic_products_exploitation_and_farming"
+            )
+            AQUATIC_FARMING_PRODUCTS = "aquatic_farming_products"
+            FOREST_PLANTING_AND_CARE = "forest_planting_and_care"
+
+        name = "ppi"
+        primary_key = [Column.YEAR.value]
+
+    class IPI:
+        class Column(Enum):
+            YEAR = "year"
+            GENERAL_INDEX = "general_index"
+            PROFESSIONAL_SCIENTIFIC_AND_TECHNICAL_SERVICES = (
+                "professional_scientific_and_technical_services"
+            )
+            CONSTRUCTION_SERVICES = "construction_services"
+            PAPER_AND_PAPER_PRODUCTS = "paper_and_paper_products"
+            CHEMICALS_AND_CHEMICAL_PRODUCTS = "chemicals_and_chemical_products"
+            MACHINERY_AND_EQUIPMENT_NOT_ELSEWHERE_CLASSIFIED = (
+                "machinery_and_equipment_not_elsewhere_classified"
+            )
+            NATURAL_WATER_EXTRACTION = "natural_water_extraction"
+            NATURAL_WATER_EXTRACTION_AND_WASTE_MANAGEMENT_SERVICES = (
+                "natural_water_extraction_and_waste_management_services"
+            )
+            OTHER_TRANSPORT_EQUIPMENT = "other_transport_equipment"
+            METAL_ORES = "metal_ores"
+            PROCESSED_FOOD_PRODUCTS = "processed_food_products"
+            MANUFACTURING_PRODUCTS = "manufacturing_products"
+            TEXTILES_AND_LEATHER_PRODUCTS = "textiles_and_leather_products"
+            MINING_PRODUCTS = "mining_products"
+            OTHER_MINING_PRODUCTS = "other_mining_products"
+            METAL_PRODUCTS = "metal_products"
+            FORESTRY_PRODUCTS_AND_RELATED_SERVICES = (
+                "forestry_products_and_related_services"
+            )
+            AGRICULTURE_FORESTRY_AND_FISHERY_PRODUCTS = (
+                "agriculture_forestry_and_fishery_products"
+            )
+            AGRICULTURE_PRODUCTS_AND_RELATED_SERVICES = (
+                "agriculture_products_and_related_services"
+            )
+            FISHING_AND_AQUACULTURE_PRODUCTS = "fishing_and_aquaculture_products"
+            RUBBER_AND_PLASTIC_PRODUCTS = "rubber_and_plastic_products"
+            WOOD_PRODUCTS = "wood_products"
+            OTHER_NON_METALLIC_MINERAL_PRODUCTS = "other_non_metallic_mineral_products"
+            FABRICATED_METAL_PRODUCTS_EXCEPT_MACHINERY_AND_EQUIPMENT = (
+                "fabricated_metal_products_except_machinery_and_equipment"
+            )
+            ELECTRONIC_COMPUTER_AND_OPTICAL_PRODUCTS = (
+                "electronic_computer_and_optical_products"
+            )
+            USED_FOR_MANUFACTURING_INDUSTRY = "used_for_manufacturing_industry"
+            USED_FOR_AGRICULTURE_FORESTRY_AND_FISHERY = (
+                "used_for_agriculture_forestry_and_fishery"
+            )
+            USED_FOR_CONSTRUCTION = "used_for_construction"
+            COKE_AND_REFINED_PETROLEUM_PRODUCTS = "coke_and_refined_petroleum_products"
+            HARD_COAL_AND_LIGNITE = "hard_coal_and_lignite"
+            ELECTRICAL_EQUIPMENT = "electrical_equipment"
+            PHARMACEUTICALS_AND_MEDICINAL_CHEMICALS = (
+                "pharmaceuticals_and_medicinal_chemicals"
+            )
+            MOTOR_VEHICLES_AND_TRAILERS = "motor_vehicles_and_trailers"
+            ELECTRICITY_GAS_STEAM_AND_AIR_CONDITIONING = (
+                "electricity_gas_steam_and_air_conditioning"
+            )
+            BEVERAGES_AND_TOBACCO = "beverages_and_tobacco"
+
+        name = "ipi"
+        primary_key = [Column.YEAR.value]
+
+    class XPI:
+        class Column(Enum):
+            YEAR = "year"
+            MONTH = "month"
+            ANIMAL_FEED_AND_RAW_MATERIALS = "animal_feed_and_raw_materials"
+            AQUATIC_PRODUCTS = "aquatic_products"
+            CAMERAS_CAMCORDERS_AND_COMPONENTS = "cameras_camcorders_and_components"
+            CASHEW_NUTS = "cashew_nuts"
+            CASSAVA_AND_CASSAVA_PRODUCTS = "cassava_and_cassava_products"
+            CHEMICAL_PRODUCTS = "chemical_products"
+            CHEMICALS = "chemicals"
+            CLINKER_AND_CEMENT = "clinker_and_cement"
+            COFFEE = "coffee"
+            CONFECTIONERY_AND_CEREAL_PRODUCTS = "confectionery_and_cereal_products"
+            CRUDE_OIL = "crude_oil"
+            DOMESTIC_ECONOMIC_SECTOR = "domestic_economic_sector"
+            ELECTRICAL_WIRES_AND_CABLES = "electrical_wires_and_cables"
+            ELECTRONICS_COMPUTERS_AND_COMPONENTS = (
+                "electronics_computers_and_components"
+            )
+            FOOTWEAR = "footwear"
+            FOREIGN_INVESTED_SECTOR = "foreign_invested_sector"
+            FOREIGN_CRUDE_OIL = "foreign_crude_oil"
+            FURNITURE_PRODUCTS_FROM_MATERIALS_OTHER_THAN_WOOD = (
+                "furniture_products_from_materials_other_than_wood"
+            )
+            GLASS_AND_GLASS_PRODUCTS = "glass_and_glass_products"
+            HANDBAGS_WALLETS_SUITCASES_HATS_UMBRELLAS = (
+                "handbags_wallets_suitcases_hats_umbrellas"
+            )
+            IRON_AND_STEEL = "iron_and_steel"
+            IRON_AND_STEEL_PRODUCTS = "iron_and_steel_products"
+            MACHINERY_EQUIPMENT_TOOLS_SPARE_PARTS_OTHER = (
+                "machinery_equipment_tools_spare_parts_other"
+            )
+            MAIN_PRODUCTS = "main_products"
+            OTHER_BASE_METALS_AND_PRODUCTS = "other_base_metals_and_products"
+            OTHER_GOODS = "other_goods"
+            PAPER_AND_PAPER_PRODUCTS = "paper_and_paper_products"
+            PEPPER = "pepper"
+            PETROLEUM = "petroleum"
+            PHONES_AND_COMPONENTS = "phones_and_components"
+            PLASTIC_PRODUCTS = "plastic_products"
+            RAW_PLASTICS = "raw_plastics"
+            RICE = "rice"
+            RUBBER = "rubber"
+            RUBBER_PRODUCTS = "rubber_products"
+            TEA = "tea"
+            TEXTILE_FIBERS_YARNS_OF_ALL_KINDS = "textile_fibers_yarns_of_all_kinds"
+            TEXTILE_GARMENT_LEATHER_FOOTWEAR_RAW_MATERIALS = (
+                "textile_garment_leather_footwear_raw_materials"
+            )
+            TEXTILES_GARMENTS = "textiles_garments"
+            TOTAL_VALUE = "total_value"
+            TOYS_SPORTS_EQUIPMENT_AND_PARTS = "toys_sports_equipment_and_parts"
+            TRANSPORTATION_VEHICLES_AND_SPARE_PARTS = (
+                "transportation_vehicles_and_spare_parts"
+            )
+            VEGETABLES = "vegetables"
+            WOOD_AND_WOOD_PRODUCTS = "wood_and_wood_products"
+
+        name = "xpi"
+        primary_key = [Column.YEAR.value, Column.MONTH.value]
+
+    class MPI:
+        class Column(Enum):
+            YEAR = "year"
+            MONTH = "month"
+            ANIMAL_FEED_AND_RAW_MATERIALS = "animal_feed_and_raw_materials"
+            AQUATIC_PRODUCTS = "aquatic_products"
+            CAMERAS_CAMCORDERS_AND_COMPONENTS = "cameras_camcorders_and_components"
+            CASHEW_NUTS = "cashew_nuts"
+            CASSAVA_AND_CASSAVA_PRODUCTS = "cassava_and_cassava_products"
+            CHEMICAL_PRODUCTS = "chemical_products"
+            CHEMICALS = "chemicals"
+            CLINKER_AND_CEMENT = "clinker_and_cement"
+            COFFEE = "coffee"
+            CONFECTIONERY_AND_CEREAL_PRODUCTS = "confectionery_and_cereal_products"
+            CRUDE_OIL = "crude_oil"
+            DOMESTIC_ECONOMIC_SECTOR = "domestic_economic_sector"
+            ELECTRICAL_WIRES_AND_CABLES = "electrical_wires_and_cables"
+            ELECTRONICS_COMPUTERS_AND_COMPONENTS = (
+                "electronics_computers_and_components"
+            )
+            FOOTWEAR = "footwear"
+            FOREIGN_INVESTED_SECTOR = "foreign_invested_sector"
+            FOREIGN_CRUDE_OIL = "foreign_crude_oil"
+            FURNITURE_PRODUCTS_FROM_MATERIALS_OTHER_THAN_WOOD = (
+                "furniture_products_from_materials_other_than_wood"
+            )
+            GLASS_AND_GLASS_PRODUCTS = "glass_and_glass_products"
+            HANDBAGS_WALLETS_SUITCASES_HATS_UMBRELLAS = (
+                "handbags_wallets_suitcases_hats_umbrellas"
+            )
+            IRON_AND_STEEL = "iron_and_steel"
+            IRON_AND_STEEL_PRODUCTS = "iron_and_steel_products"
+            MACHINERY_EQUIPMENT_TOOLS_SPARE_PARTS_OTHER = (
+                "machinery_equipment_tools_spare_parts_other"
+            )
+            MAIN_PRODUCTS = "main_products"
+            OTHER_BASE_METALS_AND_PRODUCTS = "other_base_metals_and_products"
+            OTHER_GOODS = "other_goods"
+            PAPER_AND_PAPER_PRODUCTS = "paper_and_paper_products"
+            PEPPER = "pepper"
+            PETROLEUM = "petroleum"
+            PHONES_AND_COMPONENTS = "phones_and_components"
+            PLASTIC_PRODUCTS = "plastic_products"
+            RAW_PLASTICS = "raw_plastics"
+            RICE = "rice"
+            RUBBER = "rubber"
+            RUBBER_PRODUCTS = "rubber_products"
+            TEA = "tea"
+            TEXTILE_FIBERS_YARNS_OF_ALL_KINDS = "textile_fibers_yarns_of_all_kinds"
+            TEXTILE_GARMENT_LEATHER_FOOTWEAR_RAW_MATERIALS = (
+                "textile_garment_leather_footwear_raw_materials"
+            )
+            TEXTILES_GARMENTS = "textiles_garments"
+            TOTAL_VALUE = "total_value"
+            TOYS_SPORTS_EQUIPMENT_AND_PARTS = "toys_sports_equipment_and_parts"
+            TRANSPORTATION_VEHICLES_AND_SPARE_PARTS = (
+                "transportation_vehicles_and_spare_parts"
+            )
+            VEGETABLES = "vegetables"
+            WOOD_AND_WOOD_PRODUCTS = "wood_and_wood_products"
+
+        name = "mpi"
+        primary_key = [Column.YEAR.value, Column.MONTH.value]
+
+    class POPULATION:
+        class Column(Enum):
+            YEAR = "year"
+            POPULATION = "population"
+            POPULATION_AREA_URBAN_RATE = "population_area_urban_rate"
+            POPULATION_DENSITY = "population_density"
+            POPULATION_GROWTH_RATE = "population_growth_rate"
+
+        name = "population"
+        primary_key = [Column.YEAR.value]
+
+    class LABOR:
+        class Column(Enum):
+            YEAR = "year"
+            AGRICULTURE_FORESTRY_AND_FISHERY = "agriculture_forestry_and_fishery"
+            EMPLOYED_AMOUNT = "employed_amount"
+            FEMALE = "female"
+            INDUSTRY_CONSTRUCTION = "industry_construction"
+            LABOR_FORCE_ANNUAL_CHANGE_PERCENT = "labor_force_annual_change_percent"
+            LABOR_FORCE_PARTICIPATION_RATE_PERCENT = (
+                "labor_force_participation_rate_percent"
+            )
+            MALE = "male"
+            SERVICES = "services"
+            UNEMPLOYED = "unemployed"
+            URBAN_UNEMPLOYMENT_RATE = "urban_unemployment_rate"
+
+        name = "labor"
+        primary_key = [Column.YEAR.value]
+
+    class RETAIL:
+        class Column(Enum):
+            YEAR = "year"
+            MONTH = "month"
+            ACCOMMODATION_AND_CATERING_SERVICE = "accommodation_and_catering_service"
+            RETAIL_GROWTH = "retail_growth"
+            RETAIL_SALE = "retail_sale"
+            SERVICES = "services"
+            TRAVELING_SERVICE = "traveling_service"
+
+        name = "retail"
+        primary_key = [Column.YEAR.value, Column.MONTH.value]
+
+    class PMI:
+        class Column(Enum):
+            YEAR = "year"
+            MONTH = "month"
+            PMI = "pmi"
+
+        name = "pmi"
+        primary_key = [Column.YEAR.value, Column.MONTH.value]
+
+    class IIP:
+        class Column(Enum):
+            YEAR = "year"
+            MONTH = "month"
+            APPAREL_MANUFACTURING = "apparel_manufacturing"
+            BEVERAGE_PRODUCTION = "beverage_production"
+            COAL_AND_LIGNITE_MINING = "coal_and_lignite_mining"
+            CRUDE_OIL_AND_NATURAL_GAS_EXTRACTION = (
+                "crude_oil_and_natural_gas_extraction"
+            )
+            ENTIRE_INDUSTRIAL_SECTOR = "entire_industrial_sector"
+            FOOD_PRODUCTION_AND_PROCESSING = "food_production_and_processing"
+            LEATHER_AND_RELATED_PRODUCT_MANUFACTURING = (
+                "leather_and_related_product_manufacturing"
+            )
+            MANUFACTURE_OF_CHEMICALS_AND_CHEMICAL_PRODUCTS = (
+                "manufacture_of_chemicals_and_chemical_products"
+            )
+            MANUFACTURE_OF_COKE_AND_REFINED_PETROLEUM_PRODUCTS = (
+                "manufacture_of_coke_and_refined_petroleum_products"
+            )
+            MANUFACTURE_OF_ELECTRICAL_EQUIPMENT = "manufacture_of_electrical_equipment"
+            MANUFACTURE_OF_ELECTRONIC_PRODUCTS_COMPUTERS_AND_OPTICAL_PRODUCTS = (
+                "manufacture_of_electronic_products_computers_and_optical_products"
+            )
+            MANUFACTURE_OF_FABRICATED_METAL_PRODUCTS_EXCLUDING_MACHINERY_AND_EQUIPMENT = "manufacture_of_fabricated_metal_products_excluding_machinery_and_equipment"
+            MANUFACTURE_OF_FURNITURE = "manufacture_of_furniture"
+            MANUFACTURE_OF_MACHINERY_AND_EQUIPMENT_NOT_ELSEWHERE_CLASSIFIED = (
+                "manufacture_of_machinery_and_equipment_not_elsewhere_classified"
+            )
+            MANUFACTURE_OF_METALS = "manufacture_of_metals"
+            MANUFACTURE_OF_MOTOR_VEHICLES = "manufacture_of_motor_vehicles"
+            MANUFACTURE_OF_OTHER_NON_METALLIC_MINERAL_PRODUCTS = (
+                "manufacture_of_other_non_metallic_mineral_products"
+            )
+            MANUFACTURE_OF_OTHER_TRANSPORT_EQUIPMENT = (
+                "manufacture_of_other_transport_equipment"
+            )
+            MANUFACTURE_OF_PHARMACEUTICALS_MEDICINAL_CHEMICALS_AND_BOTANICAL_PRODUCTS = "manufacture_of_pharmaceuticals_medicinal_chemicals_and_botanical_products"
+            MANUFACTURE_OF_RUBBER_AND_PLASTIC_PRODUCTS = (
+                "manufacture_of_rubber_and_plastic_products"
+            )
+            MANUFACTURING_INDUSTRY = "manufacturing_industry"
+            METAL_ORE_MINING = "metal_ore_mining"
+            MINING = "mining"
+            MINING_SUPPORT_SERVICE_ACTIVITIES = "mining_support_service_activities"
+            OTHER_MANUFACTURING_INDUSTRIES = "other_manufacturing_industries"
+            OTHER_MINING = "other_mining"
+            PAPER_AND_PAPER_PRODUCT_MANUFACTURING = (
+                "paper_and_paper_product_manufacturing"
+            )
+            PRINTING_AND_REPRODUCTION_OF_RECORDED_MEDIA = (
+                "printing_and_reproduction_of_recorded_media"
+            )
+            PRODUCTION_AND_DISTRIBUTION_OF_ELECTRICITY_GAS_HOT_WATER_STEAM_AND_AIR_CONDITIONING = "production_and_distribution_of_electricity_gas_hot_water_steam_and_air_conditioning"
+            REPAIR_MAINTENANCE_AND_INSTALLATION_OF_MACHINERY_AND_EQUIPMENT = (
+                "repair_maintenance_and_installation_of_machinery_and_equipment"
+            )
+            TEXTILE_MANUFACTURING = "textile_manufacturing"
+            TOBACCO_PRODUCT_MANUFACTURING = "tobacco_product_manufacturing"
+            WASTE_COLLECTION_TREATMENT_AND_DISPOSAL_ACTIVITIES_RECYCLING_OF_WASTE = (
+                "waste_collection_treatment_and_disposal_activities_recycling_of_waste"
+            )
+            WASTEWATER_COLLECTION_AND_TREATMENT = "wastewater_collection_and_treatment"
+            WATER_COLLECTION_TREATMENT_AND_SUPPLY = (
+                "water_collection_treatment_and_supply"
+            )
+            WATER_SUPPLY_WASTE_MANAGEMENT_AND_TREATMENT_ACTIVITIES = (
+                "water_supply_waste_management_and_treatment_activities"
+            )
+
+        name = "iip"
+        primary_key = [Column.YEAR.value, Column.MONTH.value]
+
+    class IPV:
+        class Column(Enum):
+            YEAR = "year"
+            MONTH = "month"
+            ALUMINIUM = "aluminium"
+            ANIMAL_FEED = "animal_feed"
+            AQUATIC_FEED = "aquatic_feed"
+            BEER = "beer"
+            CARS = "cars"
+            CASUAL_CLOTHES = "casual_clothes"
+            CEMENT = "cement"
+            CHEMICAL_PAINTS = "chemical_paints"
+            CIGARETTES = "cigarettes"
+            COAL_CLEAN_COAL = "coal_clean_coal"
+            COMMERCIAL_TAP_WATER = "commercial_tap_water"
+            ELECTRICITY_PRODUCED = "electricity_produced"
+            EXTRACTED_CRUDE_OIL = "extracted_crude_oil"
+            FRESH_MILK = "fresh_milk"
+            GASOLINE_OIL = "gasoline_oil"
+            GRANULATED_SUGAR = "granulated_sugar"
+            IRON_CRUDE_STEEL = "iron_crude_steel"
+            LEATHER_SHOES_AND_SANDALS = "leather_shoes_and_sandals"
+            LIQUIDIZED_GAS_LPG = "liquidized_gas_lpg"
+            MOBILE_PHONES = "mobile_phones"
+            MONONATRI_GLUTAMAT = "mononatri_glutamat"
+            MOTORCYCLES = "motorcycles"
+            NPK_MIXED_FERTILIZERS = "npk_mixed_fertilizers"
+            NATURAL_FABRICS = "natural_fabrics"
+            NATURAL_GAS_AIR = "natural_gas_in_the_form_of_air"
+            PHONE_ACCESSORIES = "phone_accessories"
+            POWDERED_MILK = "powdered_milk"
+            PROCESSED_SEAFOOD = "processed_seafood"
+            ROLLED_STEEL = "rolled_steel"
+            STEEL_BARS_ANGLE_STEEL = "steel_bars_angle_steel"
+            SYNTHETIC_FABRICS = "synthetic_or_artificial_fabrics"
+            TELEVISION = "television"
+            UREA_FERTILIZER = "urea_fertilizer"
+
+        name = "ipv"
+        primary_key = [Column.YEAR.value, Column.MONTH.value]
+
+    class IPV_BY_INDUSTRY:
+        class Column(Enum):
+            YEAR = "year"
+            MANUFACTURING_INDUSTRY = "manufacturing_industry"
+            TEXTILES = "textiles"
+            MINING_SUPPORT_SERVICES = "mining_support_services"
+            PRINTING_AND_COPYING = "printing_and_copying"
+            MINING = "mining"
+            OTHER_MINING = "other_mining"
+            OIL_AND_GAS_EXTRACTION = "oil_and_gas_extraction"
+            METAL_ORE_MINING = "metal_ore_mining"
+            HARD_AND_SOFT_COAL_MINING = "hard_and_soft_coal_mining"
+            FOOD_PROCESSING = "food_processing"
+            LEATHER_PRODUCTS = "leather_products"
+            PAPER_PRODUCTS = "paper_products"
+            CHEMICAL_PRODUCTS = "chemical_products"
+            METAL_PRODUCTS = "metal_products"
+            TOBACCO_PRODUCTS = "tobacco_products"
+            RUBBER_AND_PLASTIC_PRODUCTS = "rubber_and_plastic_products"
+            OTHER_NON_METAL_MINERAL_PRODUCTS = "other_non_metal_mineral_products"
+            PREFAB_METAL_PRODUCTS = "prefab_metal_products"
+            COKE_AND_REFINED_PETROLEUM_PRODUCTS = "coke_and_refined_petroleum_products"
+            PHARMACEUTICAL_PRODUCTS = "pharmaceutical_products"
+            CLOTHING = "clothing"
+            BEVERAGES = "beverages"
+            TOTAL = "total"
+
+        name = "ipv_by_industry"
+        primary_key = [Column.YEAR.value]
+
+    class MIP:
+        class Column(Enum):
+            YEAR = "year"
+            AIR_CONDITIONERS = "air_conditioners"
+            ANIMAL_AND_POULTRY_FEED = "animal_and_poultry_feed"
+            ANTIMONY_ORE_AND_ANTIMONY_CONCENTRATE = (
+                "antimony_ore_and_antimony_concentrate"
+            )
+            APATITE_ORE = "apatite_ore"
+            AQUACULTURE_FEED = "aquaculture_feed"
+            ASSEMBLED_CARS = "assembled_cars"
+            ASSEMBLED_MOTORCYCLES_AND_MOPEDS = "assembled_motorcycles_and_mopeds"
+            ASSEMBLED_TVS = "assembled_tvs"
+            BATH_MILK_AND_FACIAL_CLEANSER = "bath_milk_and_facial_cleanser"
+            BEER = "beer"
+            CANNED_FRUITS_AND_NUTS = "canned_fruits_and_nuts"
+            CANNED_MEAT = "canned_meat"
+            CANNED_SEAFOOD = "canned_seafood"
+            CANNED_VEGETABLES = "canned_vegetables"
+            CAR_AND_TRACTOR_TIRES_INFLATABLE = "car_and_tractor_tires_inflatable"
+            CAST_OR_OTHER_ROUGH_IRON_AND_STEEL = "cast_or_other_rough_iron_and_steel"
+            CASUAL_CLOTHING = "casual_clothing"
+            CEMENT = "cement"
+            CHEMICAL_FERTILIZERS = "chemical_fertilizers"
+            CLEAN_COAL = "clean_coal"
+            COMMERCIAL_TAP_WATER = "commercial_tap_water"
+            COPPER_ORE_AND_COPPER_CONCENTRATE = "copper_ore_and_copper_concentrate"
+            CRUDE_OIL_EXTRACTION = "crude_oil_extraction"
+            DIGITAL_CAMERAS = "digital_cameras"
+            DOMESTIC_CERAMICS = "domestic_ceramics"
+            DOMESTIC_CRUDE_OIL_EXTRACTION = "domestic_crude_oil_extraction"
+            EXTRACTED_STONE = "extracted_stone"
+            FABRIC = "fabric"
+            FABRIC_SHOES = "fabric_shoes"
+            FIBER = "fiber"
+            FIBER_CEMENT_ROOFING_SHEETS = "fiber_cement_roofing_sheets"
+            FIRED_BRICKS = "fired_bricks"
+            FIRED_TILES = "fired_tiles"
+            FISH_SAUCE = "fish_sauce"
+            FRESH_MILK = "fresh_milk"
+            FROZEN_SEAFOOD = "frozen_seafood"
+            GENERATED_ELECTRICITY = "generated_electricity"
+            GRANULATED_SUGAR = "granulated_sugar"
+            GRAVEL_AND_PEBBLES = "gravel_and_pebbles"
+            GROUND_COFFEE_AND_INSTANT_COFFEE = "ground_coffee_and_instant_coffee"
+            HERBICIDES = "herbicides"
+            HOUSEHOLD_ELECTRIC_FANS = "household_electric_fans"
+            HOUSEHOLD_REFRIGERATORS_AND_FREEZERS = (
+                "household_refrigerators_and_freezers"
+            )
+            HOUSEHOLD_WASHING_MACHINES = "household_washing_machines"
+            IRON_ORE_AND_IRON_CONCENTRATE = "iron_ore_and_iron_concentrate"
+            LANDLINE_PHONES = "landline_phones"
+            LAUNDRY_DETERGENT_AND_CLEANING_PRODUCTS = (
+                "laundry_detergent_and_cleaning_products"
+            )
+            LEATHER_SHOES_AND_BOOTS = "leather_shoes_and_boots"
+            LIGHT_BULBS = "light_bulbs"
+            MILLED_RICE = "milled_rice"
+            MINERAL_WATER = "mineral_water"
+            MOBILE_PHONES = "mobile_phones"
+            MOTORCYCLE_AND_BICYCLE_TIRES_INFLATABLE = (
+                "motorcycle_and_bicycle_tires_inflatable"
+            )
+            MSG_MONOSODIUM_GLUTAMATE = "msg_monosodium_glutamate"
+            NATURAL_GAS_IN_GAS_FORM = "natural_gas_in_gas_form"
+            NPK_FERTILIZERS = "npk_fertilizers"
+            PAPER_AND_CARDBOARD = "paper_and_cardboard"
+            PESTICIDES = "pesticides"
+            PLASTIC_PACKAGING_AND_BAGS = "plastic_packaging_and_bags"
+            POWDERED_MILK = "powdered_milk"
+            PRINTED_NEWSPAPERS_AND_OTHER_PRINTING_PRODUCTS = (
+                "printed_newspapers_and_other_printing_products"
+            )
+            PRINTERS = "printers"
+            PROCESSED_TEA = "processed_tea"
+            PURIFIED_WATER = "purified_water"
+            REFINED_VEGETABLE_OIL = "refined_vegetable_oil"
+            ROLLED_STEEL_AND_SHAPED_STEEL = "rolled_steel_and_shaped_steel"
+            SANITARY_WARE = "sanitary_ware"
+            SAWN_TIMBER = "sawn_timber"
+            SEA_SALT = "sea_salt"
+            SHAMPOO_AND_CONDITIONER = "shampoo_and_conditioner"
+            SPIRITS_AND_WHITE_WINE = "spirits_and_white_wine"
+            SPORTS_SHOES = "sports_shoes"
+            STANDARD_BATTERIES_1_5V = "standard_batteries_15v"
+            THRESHING_MACHINES = "threshing_machines"
+            TITANIUM_ORE_AND_TITANIUM_CONCENTRATE = (
+                "titanium_ore_and_titanium_concentrate"
+            )
+            TOBACCO = "tobacco"
+            TOOTHPASTE = "toothpaste"
+            TUBES_FOR_BICYCLES_AND_MOTORCYCLES = "tubes_for_bicycles_and_motorcycles"
+            TUBES_FOR_CARS_AND_AIRCRAFT = "tubes_for_cars_and_aircraft"
+            VARIOUS_TYPES_OF_BATTERIES = "various_types_of_batteries"
+            VARIOUS_TYPES_OF_BICYCLES = "various_types_of_bicycles"
+            VARIOUS_TYPES_OF_SAND = "various_types_of_sand"
+            YELLOW_PHOSPHORUS = "yellow_phosphorus"
+
+        name = "mip"
+        primary_key = [Column.YEAR.value]
+
+    class FA_BY_HOUSE_TYPES:
+        class Column(Enum):
+            YEAR = "year"
+            _16_20_FLOORS = "_16_20_floors"
+            _21_25_FLOORS = "_21_25_floors"
+            _26_FLOORS_AND_ABOVE = "_26_floors_and_above"
+            _5_FLOORS_AND_BELOW = "_5_floors_and_below"
+            _6_8_FLOORS = "_6_8_floors"
+            _9_15_FLOORS = "_9_15_floors"
+            APARTMENT_BUILDINGS = "apartment_buildings"
+            SINGLE_FAMILY_HOMES = "single_family_homes"
+            SINGLE_FAMILY_HOMES_4_FLOORS_AND_ABOVE = (
+                "single_family_homes_4_floors_and_above"
+            )
+            SINGLE_FAMILY_HOMES_BELOW_4_FLOORS = "single_family_homes_below_4_floors"
+            TOTAL = "total"
+            VILLAS = "villas"
+
+        name = "fa_by_house_types"
+        primary_key = [Column.YEAR.value]
+
+    class IT_BOP:
+        class Column(Enum):
+            YEAR = "year"
+            QUARTER = "quarter"
+            A_CURRENT_ACCOUNT = "a_current_account"
+            B_CAPITAL_ACCOUNT = "b_capital_account"
+            BORROWING_AND_EXTERNAL_DEBT_REPAYMENT = (
+                "borrowing_and_external_debt_repayment"
+            )
+            C_FINANCIAL_ACCOUNT = "c_financial_account"
+            CAPITAL_ACCOUNT_PAYMENTS = "capital_account_payments"
+            CAPITAL_ACCOUNT_RECEIPTS = "capital_account_receipts"
+            CAPITAL_WITHDRAWAL = "capital_withdrawal"
+            CURRENT_TRANSFERS_SECONDARY_INCOME_NET = (
+                "current_transfers_secondary_income_net"
+            )
+            CURRENT_TRANSFERS_SECONDARY_INCOME_PAYMENTS = (
+                "current_transfers_secondary_income_payments"
+            )
+            CURRENT_TRANSFERS_SECONDARY_INCOME_RECEIPTS = (
+                "current_transfers_secondary_income_receipts"
+            )
+            D_ERRORS_AND_OMISSIONS = "d_errors_and_omissions"
+            DIRECT_INVESTMENT_ABROAD_ASSETS = "direct_investment_abroad_assets"
+            DIRECT_INVESTMENT_IN_VIETNAM_LIABILITIES = (
+                "direct_investment_in_vietnam_liabilities"
+            )
+            DIRECT_INVESTMENT_NET = "direct_investment_net"
+            E_OVERALL_BALANCE = "e_overall_balance"
+            F_RESERVES_AND_RELATED_ITEMS = "f_reserves_and_related_items"
+            FINANCIAL_INSTITUTIONS = "financial_institutions"
+            GOODS_EXPORTS_FOB = "goods_exports_fob"
+            GOODS_IMPORTS_FOB = "goods_imports_fob"
+            GOODS_NET = "goods_net"
+            GOVERNMENT = "government"
+            IMF_CREDITS_AND_LOANS = "imf_credits_and_loans"
+            INVESTMENT_INCOME_PRIMARY_INCOME_NET = (
+                "investment_income_primary_income_net"
+            )
+            INVESTMENT_INCOME_PRIMARY_INCOME_PAYMENTS = (
+                "investment_income_primary_income_payments"
+            )
+            INVESTMENT_INCOME_PRIMARY_INCOME_RECEIPTS = (
+                "investment_income_primary_income_receipts"
+            )
+            LOANS_AND_EXTERNAL_DEBT_COLLECTION = "loans_and_external_debt_collection"
+            LONG_TERM = "long_term"
+            MONEY_AND_DEPOSITS = "money_and_deposits"
+            OTHER_INVESTMENT_ASSETS = "other_investment_assets"
+            OTHER_INVESTMENT_LIABILITIES = "other_investment_liabilities"
+            OTHER_INVESTMENT_NET = "other_investment_net"
+            OTHER_RECEIVABLESPAYABLES = "other_receivablespayables"
+            PORTFOLIO_INVESTMENT_ABROAD_ASSETS = "portfolio_investment_abroad_assets"
+            PORTFOLIO_INVESTMENT_IN_VIETNAM_LIABILITIES = (
+                "portfolio_investment_in_vietnam_liabilities"
+            )
+            PORTFOLIO_INVESTMENT_NET = "portfolio_investment_net"
+            PRINCIPAL_REPAYMENT = "principal_repayment"
+            PRIVATE_SECTOR = "private_sector"
+            RESERVE_ASSETS = "reserve_assets"
+            RESIDENTS = "residents"
+            SERVICES_EXPORTS = "services_exports"
+            SERVICES_IMPORTS = "services_imports"
+            SERVICES_NET = "services_net"
+            SHORT_TERM = "short_term"
+            SPECIAL_FINANCING = "special_financing"
+            TOTAL_CURRENT_AND_CAPITAL_ACCOUNT_BALANCE = (
+                "total_current_and_capital_account_balance"
+            )
+            TRADE_CREDITS_AND_ADVANCES = "trade_credits_and_advances"
+
+        name = "it_bop"
+        primary_key = [Column.YEAR.value, Column.QUARTER.value]
+
+    class TSBR:
+        class Column(Enum):
+            YEAR = "year"
+            MONTH = "month"
+            AGRICULTURAL_LAND_USE_TAX = "agricultural_land_use_tax"
+            AID_REVENUE = "aid_revenue"
+            DOMESTIC_REVENUE = "domestic_revenue"
+            ENVIRONMENTAL_PROTECTION_TAX = "environmental_protection_tax"
+            ENVIRONMENTAL_PROTECTION_TAX_ON_IMPORTED_GOODS = (
+                "environmental_protection_tax_on_imported_goods"
+            )
+            EXPORT_TAX = "export_tax"
+            FEES_AND_CHARGES = "fees_and_charges"
+            IMPORT_TAX = "import_tax"
+            NON_AGRICULTURAL_LAND_USE_TAX = "non_agricultural_land_use_tax"
+            OTHER_BUDGET_REVENUES = "other_budget_revenues"
+            OTHER_REVENUE = "other_revenue"
+            PERSONAL_INCOME_TAX = "personal_income_tax"
+            RECOVERY_OF_CAPITAL_DIVIDENDS_POST_TAX_PROFITS_SURPLUS_REVENUE_AND_EXPENDITURE_OF_THE_STATE_BANK = "recovery_of_capital_dividends_post_tax_profits_surplus_revenue_and_expenditure_of_the_state_bank"
+            REVENUE_BALANCE_FROM_IMPORT_EXPORT_ACTIVITIES = (
+                "revenue_balance_from_import_export_activities"
+            )
+            REVENUE_FROM_CRUDE_OIL = "revenue_from_crude_oil"
+            REVENUE_FROM_FOREIGN_INVESTED_ENTERPRISES = (
+                "revenue_from_foreign_invested_enterprises"
+            )
+            REVENUE_FROM_HOUSING_AND_LAND = "revenue_from_housing_and_land"
+            REVENUE_FROM_LAND_AND_WATER_SURFACE_LEASING = (
+                "revenue_from_land_and_water_surface_leasing"
+            )
+            REVENUE_FROM_LAND_USE = "revenue_from_land_use"
+            REVENUE_FROM_LEASING_AND_SALE_OF_STATE_OWNED_HOUSING = (
+                "revenue_from_leasing_and_sale_of_state_owned_housing"
+            )
+            REVENUE_FROM_LOTTERY_ACTIVITIES = "revenue_from_lottery_activities"
+            REVENUE_FROM_MINING_RIGHTS_LICENSING = (
+                "revenue_from_mining_rights_licensing"
+            )
+            REVENUE_FROM_NON_STATE_ECONOMIC_SECTOR = (
+                "revenue_from_non_state_economic_sector"
+            )
+            REVENUE_FROM_PUBLIC_LAND_FUNDS_AND_OTHER_PUBLIC_ASSET_BENEFITS = (
+                "revenue_from_public_land_funds_and_other_public_asset_benefits"
+            )
+            REVENUE_FROM_STATE_OWNED_ENTERPRISES = (
+                "revenue_from_state_owned_enterprises"
+            )
+            SPECIAL_CONSUMPTION_TAX_ON_IMPORTED_GOODS = (
+                "special_consumption_tax_on_imported_goods"
+            )
+            TOTAL_REVENUE_FROM_IMPORT_EXPORT_ACTIVITIES = (
+                "total_revenue_from_import_export_activities"
+            )
+            TOTAL_STATE_BUDGET_REVENUE = "total_state_budget_revenue"
+            VALUE_ADDED_TAX_ON_IMPORTED_GOODS = "value_added_tax_on_imported_goods"
+            VALUE_ADDED_TAX_REFUND = "value_added_tax_refund"
+
+        name = "tsbr"
+        primary_key = [Column.YEAR.value, Column.MONTH.value]
+
+    class TSBE:
+        class Column(Enum):
+            YEAR = "year"
+            MONTH = "month"
+            AID_EXPENDITURE = "aid_expenditure"
+            DEBT_INTEREST_PAYMENT_EXPENDITURE = "debt_interest_payment_expenditure"
+            DEVELOPMENT_INVESTMENT_EXPENDITURE = "development_investment_expenditure"
+            EXPENDITURE_FOR_EDUCATION_TRAINING_AND_VOCATIONAL_EDUCATION = (
+                "expenditure_for_education_training_and_vocational_education"
+            )
+            EXPENDITURE_FOR_SCIENCE_AND_TECHNOLOGY = (
+                "expenditure_for_science_and_technology"
+            )
+            EXPENDITURE_FOR_WAGE_REFORM_AND_STREAMLINING_PERSONNEL = (
+                "expenditure_for_wage_reform_and_streamlining_personnel"
+            )
+            REGULAR_EXPENDITURE = "regular_expenditure"
+            STATE_BUDGET_CONTINGENCY = "state_budget_contingency"
+            SUPPLEMENTARY_EXPENDITURE_FOR_FINANCIAL_RESERVE_FUND = (
+                "supplementary_expenditure_for_financial_reserve_fund"
+            )
+            TOTAL_STATE_BUDGET_EXPENDITURE = "total_state_budget_expenditure"
+
+        name = "tsbe"
+        primary_key = [Column.YEAR.value, Column.MONTH.value]
+
+    class GD:
+        class Column(Enum):
+            YEAR = "year"
+            DEBT_BALANCE = "debt_balance"
+            DOMESTIC_DEBT = "domestic_debt"
+            FOREIGN_DEBT = "foreign_debt"
+            TOTAL_DEBT_PAYMENTS_DURING_THE_PERIOD = (
+                "total_debt_payments_during_the_period"
+            )
+            TOTAL_INTEREST_AND_FEES_PAID_DURING_THE_PERIOD = (
+                "total_interest_and_fees_paid_during_the_period"
+            )
+            TOTAL_PRINCIPAL_REPAYMENT_DURING_THE_PERIOD = (
+                "total_principal_repayment_during_the_period"
+            )
+            WITHDRAWALS_DURING_THE_PERIOD = "withdrawals_during_the_period"
+
+        name = "gd"
+        primary_key = [Column.YEAR.value]
+
+    class BRD:
+        class Column(Enum):
+            YEAR = "year"
+            MONTH = "month"
+            ENTERPRISES_COMPLETING_DISSOLUTION = "enterprises_completing_dissolution"
+            ENTERPRISES_RESUMING_OPERATIONS = "enterprises_resuming_operations"
+            ENTERPRISES_TEMPORARILY_SUSPENDED_AWAITING_DISSOLUTION = (
+                "enterprises_temporarily_suspended_awaiting_dissolution"
+            )
+            NEWLY_ESTABLISHED_ENTERPRISES = "newly_established_enterprises"
+            REGISTERED_CAPITAL = "registered_capital"
+            REGISTERED_LABOR = "registered_labor"
+
+        name = "brd"
+        primary_key = [Column.YEAR.value, Column.MONTH.value]
+
+    class IISD:
+        class Column(Enum):
+            YEAR = "year"
+            QUARTER = "quarter"
+            FOREIGN_DIRECT_INVESTMENT_CAPITAL = "foreign_direct_investment_capital"
+            GOVERNMENT_BOND_CAPITAL = "government_bond_capital"
+            INVESTMENT_CAPITAL_FROM_RESIDENTS_AND_PRIVATE_INDIVIDUALS = (
+                "investment_capital_from_residents_and_private_individuals"
+            )
+            INVESTMENT_CAPITAL_FROM_THE_STATE_BUDGET = (
+                "investment_capital_from_the_state_budget"
+            )
+            INVESTMENT_CAPITAL_OF_STATE_ENTERPRISES_EQUITY = (
+                "investment_capital_of_state_enterprises_equity"
+            )
+            LOANS_FROM_OTHER_SOURCES_OF_THE_STATE_SECTOR = (
+                "loans_from_other_sources_of_the_state_sector"
+            )
+            OTHER_MOBILIZED_CAPITAL = "other_mobilized_capital"
+            PLANNED_STATE_INVESTMENT_CREDIT = "planned_state_investment_credit"
+            TOTAL = "total"
+
+        name = "iisd"
+        primary_key = [Column.YEAR.value, Column.QUARTER.value]
+
+    class TREG:
+        class Column(Enum):
+            YEAR = "year"
+            MONTH = "month"
+            INTERNATIONAL_LIQUIDITY_TOTAL_RESERVES_EXCLUDING_GOLD_FOREIGN_EXCHANGE_US_DOLLARS = "international_liquidity_total_reserves_excluding_gold_foreign_exchange_us_dollars"
+            INTERNATIONAL_LIQUIDITY_TOTAL_RESERVES_EXCLUDING_GOLD_US_DOLLARS = (
+                "international_liquidity_total_reserves_excluding_gold_us_dollars"
+            )
+
+        name = "treg"
+        primary_key = [Column.YEAR.value, Column.MONTH.value]
+
+    class CREDIT:
+        class Column(Enum):
+            YEAR = "year"
+            MONTH = "month"
+            CREDIT = "credit"
+            CREDIT_GROWTH_YTD = "credit_growth_ytd"
+            MONEY_SUPPLY_GROWTH_M2_YTD = "money_supply_growth_m2_ytd"
+            MONEY_SUPPLY_M2 = "money_supply_m2"
+
+        name = "credit"
+        primary_key = [Column.YEAR.value, Column.MONTH.value]
+
+    class MOBILIZATION:
+        class Column(Enum):
+            YEAR = "year"
+            MONTH = "month"
+            DEPOSITS_FROM_ECONOMIC_ORGANIZATIONS = (
+                "deposits_from_economic_organizations"
+            )
+            DEPOSITS_FROM_RESIDENTS = "deposits_from_residents"
+            TOTAL_PAYMENT_INSTRUMENTS = "total_payment_instruments"
+
+        name = "mobilization"
+        primary_key = [Column.YEAR.value, Column.MONTH.value]
+
     class EXCHANGE_RATE:
         class Column(Enum):
-            DATE = "date"
-            EXCHANGE_RATE = "exchange_rate"
+            YEAR = "year"
+            MONTH = "month"
+            DAY = "day"
+            CENTRAL_RATE = "central_rate"
 
         name = "exchange_rate"
-        primary_key = [Column.DATE.value]
+        primary_key = [Column.YEAR.value, Column.MONTH.value, Column.DAY.value]
 
-    class INTEREST_RATE:
+    class IIR:
         class Column(Enum):
-            DATE = "date"
-            ONE_WEEK = "one_week"
-            TWO_WEEK = "two_week"
-            ONE_MONTH = "one_month"
-            THREE_MONTH = "three_month"
-            SIX_MONTH = "six_month"
-            NINE_MONTH = "nine_month"
+            YEAR = "year"
+            MONTH = "month"
+            DAY = "day"
+            ONE_MONTH = "_1_months"
+            ONE_WEEK = "_1_weeks"
+            TWO_WEEKS = "_2_weeks"
+            THREE_MONTHS = "_3_months"
+            SIX_MONTHS = "_6_months"
+            NINE_MONTHS = "_9_months"
+            OVERNIGHT = "overnight"
 
-        name = "interest_rate"
-        primary_key = [Column.DATE.value]
+        name = "iir"
+        primary_key = [Column.YEAR.value, Column.MONTH.value, Column.DAY.value]
+
+    class RRRR:
+        class Column(Enum):
+            YEAR = "year"
+            MONTH = "month"
+            DAY = "day"
+            DISCOUNT_RATE = "discount_rate"
+            REFINANCING_RATE = "refinancing_rate"
+
+        name = "rrrr"
+        primary_key = [Column.YEAR.value, Column.MONTH.value, Column.DAY.value]
+
+    class FDI_SECTOR:
+        class Column(Enum):
+            YEAR = "year"
+            MONTH = "month"
+            ACCOMMODATION_AND_FOOD_SERVICES = "accommodation_and_food_services"
+            ADMINISTRATIVE_AND_SUPPORT_SERVICE_ACTIVITIES = (
+                "administrative_and_support_service_activities"
+            )
+            AGRICULTURE_FORESTRY_AND_FISHERY = "agriculture_forestry_and_fishery"
+            ARTS_ENTERTAINMENT_AND_RECREATION = "arts_entertainment_and_recreation"
+            CONSTRUCTION = "construction"
+            DOMESTIC_HOUSEHOLD_SERVICE_WORKERS = "domestic_household_service_workers"
+            EDUCATION_AND_TRAINING = "education_and_training"
+            FINANCIAL_BANKING_AND_INSURANCE_ACTIVITIES = (
+                "financial_banking_and_insurance_activities"
+            )
+            HEALTHCARE_AND_SOCIAL_ASSISTANCE_ACTIVITIES = (
+                "healthcare_and_social_assistance_activities"
+            )
+            INFORMATION_AND_COMMUNICATION = "information_and_communication"
+            MANUFACTURING_AND_PROCESSING_INDUSTRY = (
+                "manufacturing_and_processing_industry"
+            )
+            MINING_AND_QUARRYING = "mining_and_quarrying"
+            OTHER_SERVICE_ACTIVITIES = "other_service_activities"
+            PRODUCTION_AND_DISTRIBUTION_OF_ELECTRICITY_GAS_WATER_AND_AIR_CONDITIONING = "production_and_distribution_of_electricity_gas_water_and_air_conditioning"
+            PROFESSIONAL_SCIENTIFIC_AND_TECHNOLOGICAL_ACTIVITIES = (
+                "professional_scientific_and_technological_activities"
+            )
+            REAL_ESTATE_BUSINESS_ACTIVITIES = "real_estate_business_activities"
+            TRANSPORTATION_AND_WAREHOUSING = "transportation_and_warehousing"
+            WATER_SUPPLY_AND_WASTE_TREATMENT = "water_supply_and_waste_treatment"
+            WHOLESALE_AND_RETAIL_REPAIR_OF_MOTOR_VEHICLES_AND_MOTORCYCLES = (
+                "wholesale_and_retail_repair_of_motor_vehicles_and_motorcycles"
+            )
+
+        name = "fdi_sector"
+        primary_key = [Column.YEAR.value, Column.MONTH.value]
+
+    class FDI_RD:
+        class Column(Enum):
+            YEAR = "year"
+            MONTH = "month"
+            FDI_DISBURSEMENT = "fdi_disbursement"
+            REGISTER = "register"
+
+        name = "fdi_rd"
+        primary_key = [Column.YEAR.value, Column.MONTH.value]
 
     class EXPORT:
         class Column(Enum):
             YEAR = "year"
             MONTH = "month"
-            TOTAL = "total"
-            LEATHER_SHOES = "leather_shoes"
-            TEXTILES = "textiles"
-            WOOD_PRODUCTS = "wood_products"
-            SEAFOOD = "seafood"
-            CRUDE_OIL = "crude_oil"
-            RICE = "rice"
-            COFFEE = "coffee"
-            COMPUTER_ELECTRONICS = "computer_electronics"
-            MACHINERY_EQUIPMENT = "machinery_equipment"
+            ARGENTINA = "argentina"
+            ASEAN = "asean"
+            POLAND = "poland"
+            BELARUS = "belarus"
+            BRAZIL = "brazil"
+            BULGARIA = "bulgaria"
+            BELGIUM = "belgium"
+            PORTUGAL = "portugal"
+            IVORY_COAST = "ivory_coast"
+            CAMEROON = "cameroon"
+            CAMBODIA = "cambodia"
+            CANADA = "canada"
+            CHILE = "chile"
+            CROATIA = "croatia"
+            UNITED_ARAB_EMIRATES = "united_arab_emirates"
+            ESTONIA = "estonia"
+            EU = "eu"
+            HUNGARY = "hungary"
+            GREECE = "greece"
+            NETHERLANDS = "netherlands"
+            SOUTH_KOREA = "south_korea"
+            HONG_KONG = "hong_kong"
+            INDONESIA = "indonesia"
+            IRELAND = "ireland"
+            ISRAEL = "israel"
+            KAZAKHSTAN = "kazakhstan"
+            KUWAIT = "kuwait"
+            LATVIA = "latvia"
+            LITHUANIA = "lithuania"
+            LUXEMBOURG = "luxembourg"
+            LAOS = "laos"
+            MALAYSIA = "malaysia"
+            MALTA = "malta"
+            MEXICO = "mexico"
+            MYANMAR = "myanmar"
+            USA = "usa"
+            NORWAY = "norway"
+            SOUTH_AFRICA = "south_africa"
+            NEW_ZEALAND = "new_zealand"
+            RUSSIA = "russia"
+            BRUNEI_DARUSSALAM = "brunei_darussalam"
+            JAPAN = "japan"
+            OTHER_COUNTRIES = "other_countries"
+            PAKISTAN = "pakistan"
+            PERU = "peru"
+            PHILIPPINES = "philippines"
+            FRANCE = "france"
+            FINLAND = "finland"
+            ROMANIA = "romania"
+            SENEGAL = "senegal"
+            SINGAPORE = "singapore"
+            SLOVAKIA = "slovakia"
+            SLOVENIA = "slovenia"
+            CZECHIA = "czechia"
+            CYPRUS = "cyprus"
+            THAILAND = "thailand"
+            TURKEY = "turkey"
+            SWITZERLAND = "switzerland"
+            SWEDEN = "sweden"
+            CHINA = "china"
+            SPAIN = "spain"
+            UKRAINE = "ukraine"
+            UNITED_KINGDOM = "united_kingdom"
+            AUSTRIA = "austria"
+            AUSTRALIA = "australia"
+            ITALY = "italy"
+            DENMARK = "denmark"
+            TAIWAN = "taiwan"
+            GERMANY = "germany"
+            SAUDI_ARABIA = "saudi_arabia"
+            INDIA = "india"
 
         name = "export"
         primary_key = [Column.YEAR.value, Column.MONTH.value]
@@ -825,92 +1753,80 @@ class Table:
         class Column(Enum):
             YEAR = "year"
             MONTH = "month"
-            TOTAL = "total"
-            ELECTRONICS_COMPUTERS_COMPONENTS = "electronics_computers_components"
-            MACHINERY_EQUIPMENT = "machinery_equipment"
-            GASOLINE = "gasoline"
-            CHEMICAL = "chemical"
-            CHEMICAL_PRODUCTS = "chemical_products"
-            IRON_STEEL = "iron_steel"
-            FABRIC = "fabric"
-            CAR = "car"
-            ANIMAL_FEED = "animal_feed"
+            ARGENTINA = "argentina"
+            ASEAN = "asean"
+            POLAND = "poland"
+            BELARUS = "belarus"
+            BRAZIL = "brazil"
+            BULGARIA = "bulgaria"
+            BELGIUM = "belgium"
+            PORTUGAL = "portugal"
+            IVORY_COAST = "ivory_coast"
+            CAMEROON = "cameroon"
+            CAMBODIA = "cambodia"
+            CANADA = "canada"
+            CHILE = "chile"
+            CROATIA = "croatia"
+            UNITED_ARAB_EMIRATES = "united_arab_emirates"
+            ESTONIA = "estonia"
+            EU = "eu"
+            HUNGARY = "hungary"
+            GREECE = "greece"
+            NETHERLANDS = "netherlands"
+            SOUTH_KOREA = "south_korea"
+            HONG_KONG = "hong_kong"
+            INDONESIA = "indonesia"
+            IRELAND = "ireland"
+            ISRAEL = "israel"
+            KAZAKHSTAN = "kazakhstan"
+            KUWAIT = "kuwait"
+            LATVIA = "latvia"
+            LITHUANIA = "lithuania"
+            LUXEMBOURG = "luxembourg"
+            LAOS = "laos"
+            MALAYSIA = "malaysia"
+            MALTA = "malta"
+            MEXICO = "mexico"
+            MYANMAR = "myanmar"
+            USA = "usa"
+            NORWAY = "norway"
+            SOUTH_AFRICA = "south_africa"
+            NEW_ZEALAND = "new_zealand"
+            RUSSIA = "russia"
+            BRUNEI_DARUSSALAM = "brunei_darussalam"
+            JAPAN = "japan"
+            OTHER_COUNTRIES = "other_countries"
+            PAKISTAN = "pakistan"
+            PERU = "peru"
+            PHILIPPINES = "philippines"
+            FRANCE = "france"
+            FINLAND = "finland"
+            ROMANIA = "romania"
+            SENEGAL = "senegal"
+            SINGAPORE = "singapore"
+            SLOVAKIA = "slovakia"
+            SLOVENIA = "slovenia"
+            CZECHIA = "czechia"
+            CYPRUS = "cyprus"
+            THAILAND = "thailand"
+            TURKEY = "turkey"
+            SWITZERLAND = "switzerland"
+            SWEDEN = "sweden"
+            CHINA = "china"
+            SPAIN = "spain"
+            UKRAINE = "ukraine"
+            UNITED_KINGDOM = "united_kingdom"
+            AUSTRIA = "austria"
+            AUSTRALIA = "australia"
+            ITALY = "italy"
+            DENMARK = "denmark"
+            TAIWAN = "taiwan"
+            GERMANY = "germany"
+            SAUDI_ARABIA = "saudi_arabia"
+            INDIA = "india"
 
         name = "import"
         primary_key = [Column.YEAR.value, Column.MONTH.value]
-
-    class IPI:
-        class Column(Enum):
-            YEAR = "year"
-            MONTH = "month"
-            TOTAL = "total"
-            EXTRACTIVE = "extractive"
-            PROCESSING_AND_MANUFACTURING_INDUSTRY = (
-                "processing_and_manufacturing_industry"
-            )
-            ELECTRICITY_GENERATION_AND_DISTRIBUTION = (
-                "electricity_generation_and_distribution"
-            )
-            WATER_SUPPLY_AND_WASTE_MANAGEMENT = "water_supply_and_waste_management"
-
-        name = "ipi"
-        primary_key = [Column.YEAR.value, Column.MONTH.value]
-
-    class FDI:
-        class Column(Enum):
-            YEAR = "year"
-            MONTH = "month"
-            REGISTERED = "registered"
-            DISBURSEMENTED = "disbursemented"
-
-        name = "fdi"
-        primary_key = [Column.YEAR.value, Column.MONTH.value]
-
-    class M2:
-        class Column(Enum):
-            YEAR = "year"
-            MONTH = "month"
-            CREDITS = "credits"
-            M2_MONEY_SUPPLY = "m2_money_supply"
-            CREDITS_GROWTH_YTD = "credits_growth_ytd"
-            M2_MONEY_SUPPLY_GROWTH_YTD = "m2_money_supply_growth_ytd"
-
-        name = "m2"
-        primary_key = [Column.YEAR.value, Column.MONTH.value]
-
-    class RETAIL:
-        class Column(Enum):
-            YEAR = "year"
-            MONTH = "month"
-            TOTAL = "total"
-            COMMERCIAL = "commercial"
-            HOTEL_RESTAURANT = "hotel_restaurant"
-            TOURISM = "tourism"
-            SERVICE = "service"
-
-        name = "retail"
-        primary_key = [Column.YEAR.value, Column.MONTH.value]
-
-    class POPULATION_UNEMPLOYMENT:
-        class Column(Enum):
-            YEAR = "year"
-            POPULATION = "population"
-            POPULATION_DENSITY = "population_density"
-            POPULATION_GROWTH_RATIO = "population_growth_ratio"
-            URBAN_POPULATION_RATIO = "urban_population_ratio"
-            LABOR_FORCE_COUNT = "labor_force_count"
-            AGRICULTURE_FORESTRY_AND_FISHERIES = "agriculture_forestry_and_fisheries"
-            INDUSTRY_AND_CONSTRUCTION = "industry_and_construction"
-            SERVICE = "service"
-            URBAN_UNEMPLOYED_COUNT = "urban_unemployed_count"
-            LABOR_FORCE_GROWTH = "labor_force_growth"
-            LABOR_FORCE_RATIO = "labor_force_ratio"
-            MALE_RATIO = "male_ratio"
-            FEMALE_RATIO = "female_ratio"
-            URBAN_UNEMPLOYED_RATIO = "urban_unemployed_ratio"
-
-        name = "population_unemployment"
-        primary_key = [Column.YEAR.value]
 
     class GOLD_PRICE:
         class Column(Enum):
