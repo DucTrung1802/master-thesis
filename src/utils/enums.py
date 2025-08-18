@@ -1571,6 +1571,19 @@ class Table:
         name = "credit"
         primary_key = [Column.YEAR.value, Column.MONTH.value]
 
+    class MOBILIZATION:
+        class Column(Enum):
+            YEAR = "year"
+            MONTH = "month"
+            DEPOSITS_FROM_ECONOMIC_ORGANIZATIONS = (
+                "deposits_from_economic_organizations"
+            )
+            DEPOSITS_FROM_RESIDENTS = "deposits_from_residents"
+            TOTAL_PAYMENT_INSTRUMENTS = "total_payment_instruments"
+
+        name = "mobilization"
+        primary_key = [Column.YEAR.value, Column.MONTH.value]
+
     class EXCHANGE_RATE:
         class Column(Enum):
             DATE = "date"
