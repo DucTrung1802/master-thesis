@@ -1831,7 +1831,7 @@ class Table:
     class GOLD_PRICE:
         class Column(Enum):
             DATE = "date"
-            PRICE = "price"
+            CLOSE = "close"
             OPEN = "open"
             HIGH = "high"
             LOW = "low"
