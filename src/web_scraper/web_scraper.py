@@ -134,7 +134,7 @@ class WebScraper:
         try:
             # 1. Initialize folder path and file name
             folder_path = (
-                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             )
             file_name = f"{key[2].value}"
 
@@ -213,7 +213,7 @@ class WebScraper:
         try:
             # 1. Initialize folder path and file name
             folder_path = (
-                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             )
             file_name = f"{key[2].value}"
 
@@ -302,7 +302,7 @@ class WebScraper:
         try:
             # 1. Initialize folder path and file name
             folder_path = (
-                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             )
             file_name = f"{key[2].value}"
 
@@ -391,7 +391,7 @@ class WebScraper:
         try:
             # 1. Initialize folder path and file name
             folder_path = (
-                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             )
             file_name = f"{key[2].value}"
 
@@ -480,7 +480,7 @@ class WebScraper:
         try:
             # 1. Initialize folder path and file name
             folder_path = (
-                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             )
             file_name = f"{key[2].value}"
 
@@ -569,7 +569,7 @@ class WebScraper:
         try:
             # 1. Initialize folder path and file name
             folder_path = (
-                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             )
             file_name = f"{key[2].value}"
 
@@ -658,7 +658,7 @@ class WebScraper:
         try:
             # 1. Initialize folder path and file name
             folder_path = (
-                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             )
             file_name = f"{key[2].value}"
 
@@ -747,7 +747,7 @@ class WebScraper:
         try:
             # 1. Initialize folder path and file name
             folder_path = (
-                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             )
             file_name = f"{key[2].value}"
 
@@ -836,7 +836,7 @@ class WebScraper:
         try:
             # 1. Initialize folder path and file name
             folder_path = (
-                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             )
             file_name = f"{key[2].value}"
 
@@ -925,7 +925,7 @@ class WebScraper:
         try:
             # 1. Initialize folder path and file name
             folder_path = (
-                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             )
             file_name = f"{key[2].value}"
 
@@ -1014,7 +1014,7 @@ class WebScraper:
         try:
             # 1. Initialize folder path and file name
             folder_path = (
-                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             )
             file_name = f"{key[2].value}"
 
@@ -1103,7 +1103,7 @@ class WebScraper:
         try:
             # 1. Initialize folder path and file name
             folder_path = (
-                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             )
             file_name = f"{key[2].value}"
 
@@ -1192,7 +1192,7 @@ class WebScraper:
         try:
             # 1. Initialize folder path and file name
             folder_path = (
-                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             )
             file_name = f"{key[2].value}"
 
@@ -1281,7 +1281,7 @@ class WebScraper:
         try:
             # 1. Initialize folder path and file name
             folder_path = (
-                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             )
             file_name = f"{key[2].value}"
 
@@ -1370,7 +1370,7 @@ class WebScraper:
         try:
             # 1. Initialize folder path and file name
             folder_path = (
-                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             )
             file_name = f"{key[2].value}"
 
@@ -1459,7 +1459,7 @@ class WebScraper:
         try:
             # 1. Initialize folder path and file name
             folder_path = (
-                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             )
             file_name = f"{key[2].value}"
 
@@ -1548,7 +1548,7 @@ class WebScraper:
         try:
             # 1. Initialize folder path and file name
             folder_path = (
-                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             )
             file_name = f"{key[2].value}"
 
@@ -1637,7 +1637,7 @@ class WebScraper:
         try:
             # 1. Initialize folder path and file name
             folder_path = (
-                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             )
             file_name = f"{key[2].value}"
 
@@ -1726,7 +1726,7 @@ class WebScraper:
         try:
             # 1. Initialize folder path and file name
             folder_path = (
-                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             )
             file_name = f"{key[2].value}"
 
@@ -1815,7 +1815,7 @@ class WebScraper:
         try:
             # 1. Initialize folder path and file name
             folder_path = (
-                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             )
             file_name = f"{key[2].value}"
 
@@ -1904,7 +1904,7 @@ class WebScraper:
         try:
             # 1. Initialize folder path and file name
             folder_path = (
-                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             )
             file_name = f"{key[2].value}"
 
@@ -1993,7 +1993,7 @@ class WebScraper:
         try:
             # 1. Initialize folder path and file name
             folder_path = (
-                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             )
             file_name = f"{key[2].value}"
 
@@ -2080,7 +2080,7 @@ class WebScraper:
         try:
             # 1. Initialize folder path and file name
             folder_path = (
-                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             )
             file_name = f"{key[2].value}"
 
@@ -2169,7 +2169,7 @@ class WebScraper:
         try:
             # 1. Initialize folder path and file name
             folder_path = (
-                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             )
             file_name = f"{key[2].value}"
 
@@ -2258,7 +2258,7 @@ class WebScraper:
         try:
             # 1. Initialize folder path and file name
             folder_path = (
-                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             )
             file_name = f"{key[2].value}"
 
@@ -2347,7 +2347,7 @@ class WebScraper:
         try:
             # 1. Initialize folder path and file name
             folder_path = (
-                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             )
             file_name = f"{key[2].value}"
 
@@ -2436,7 +2436,7 @@ class WebScraper:
         try:
             # 1. Initialize folder path and file name
             folder_path = (
-                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             )
             file_name = f"{key[2].value}"
 
@@ -2525,7 +2525,7 @@ class WebScraper:
         try:
             # 1. Initialize folder path and file name
             folder_path = (
-                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             )
             file_name = f"{key[2].value}"
 
@@ -2612,7 +2612,7 @@ class WebScraper:
         try:
             # 1. Initialize folder path and file name
             folder_path = (
-                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             )
             file_name = f"{key[2].value}"
 
@@ -2699,7 +2699,7 @@ class WebScraper:
         try:
             # 1. Initialize folder path and file name
             folder_path = (
-                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             )
             file_name = f"{key[2].value}"
 
@@ -2786,7 +2786,7 @@ class WebScraper:
         try:
             # 1. Initialize folder path and file name
             folder_path = (
-                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             )
             file_name = f"{key[2].value}"
 
@@ -2873,7 +2873,7 @@ class WebScraper:
         try:
             # 1. Initialize folder path and file name
             folder_path = (
-                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             )
             file_name = f"{key[2].value}"
 
@@ -2940,7 +2940,7 @@ class WebScraper:
         try:
             # 1. Initialize folder path and file name
             folder_path = (
-                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             )
             file_name = f"{key[2].value}"
 
@@ -3024,7 +3024,7 @@ class WebScraper:
         try:
             # 1. Initialize folder path and file name
             folder_path = (
-                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             )
             file_name = f"{key[2].value}"
 
@@ -3108,7 +3108,7 @@ class WebScraper:
         try:
             # 1. Initialize folder path and file name
             folder_path = (
-                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             )
             file_name = f"{key[2].value}"
 
@@ -3192,7 +3192,7 @@ class WebScraper:
         try:
             # 1. Initialize folder path and file name
             folder_path = (
-                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             )
             file_name = f"{key[2].value}"
 
@@ -3276,7 +3276,7 @@ class WebScraper:
         try:
             # 1. Initialize folder path and file name
             folder_path = (
-                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             )
             file_name = f"{key[2].value}"
 
@@ -3369,7 +3369,7 @@ class WebScraper:
 
             # 1. Initialize folder path and file name
             folder_path = (
-                f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             )
             file_name = f"{key[2].value}"
 
@@ -3602,7 +3602,7 @@ class WebScraper:
         self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
     ):
         folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
         all_files = get_all_file_names_with_extensions(
             self._logger, folder_path=folder_path, extensions=[FileExtension.CSV]
@@ -4321,7 +4321,7 @@ class WebScraper:
             EnterpriseSubType.DAILY_PRICE,
             StockInformationSource.CAFEF,
         )
-        daily_price_folder_path = f"{SCRAPER_RAW_DATA_DIR}/{daily_price_key[0].value}/{daily_price_key[1].value}/{daily_price_key[2].value}"
+        daily_price_folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{daily_price_key[0].value}/{daily_price_key[1].value}/{daily_price_key[2].value}"
         daily_price_all_files = get_all_file_names_with_extensions(
             self._logger,
             folder_path=daily_price_folder_path,
@@ -4344,7 +4344,7 @@ class WebScraper:
             EnterpriseSubType.STOCK_INFORMATION,
             StockInformationSource.CAFEF,
         )
-        scraped_stock_folder_path = f"{SCRAPER_RAW_DATA_DIR}/{scraped_stock_key[0].value}/{scraped_stock_key[1].value}/{scraped_stock_key[2].value}"
+        scraped_stock_folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{scraped_stock_key[0].value}/{scraped_stock_key[1].value}/{scraped_stock_key[2].value}"
         scraped_stock_all_files = get_all_file_names_with_extensions(
             self._logger,
             folder_path=scraped_stock_folder_path,

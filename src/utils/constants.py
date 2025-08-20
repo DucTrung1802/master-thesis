@@ -17,7 +17,7 @@ THREAD_MANAGER_POWER = 50  # unit: %
 # SCRAPER CONFIGURATION
 # ===========================
 SCRAPER_START_DATE = datetime(2000, 1, 1)
-SCRAPER_RAW_DATA_DIR = "raw_data"
+SCRAPER_BRONZE_DATA_DIR = "bronze_data"
 SCRAPER_BASE_WAIT_TIME = 1  # seconds
 
 
