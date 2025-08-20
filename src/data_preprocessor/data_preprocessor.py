@@ -1714,8 +1714,8 @@ class DataPreprocessor:
         self._logger.log_info("Start creating tables.")
 
         self._create_macroeconomics_tables()
-        # self._create_stock_market_tables()
-        # self._create_enterprise_tables()
+        self._create_stock_market_tables()
+        self._create_enterprise_tables()
 
         self._logger.log_info("Finish creating tables.")
 
@@ -5103,17 +5103,17 @@ class DataPreprocessor:
         self._process_macroeconomics_nasdaq_100()
 
         # Stock market
-        # self._process_stock_market_market()
-        # self._process_stock_market_vn_index()
-        # self._process_stock_market_hnx_index()
-        # self._process_stock_market_vn_30_index()
-        # self._process_stock_market_vn_100_index()
-        # self._process_stock_market_hnx_30_index()
-        # self._process_stock_market_upcom_index()
+        self._process_stock_market_market()
+        self._process_stock_market_vn_index()
+        self._process_stock_market_hnx_index()
+        self._process_stock_market_vn_30_index()
+        self._process_stock_market_vn_100_index()
+        self._process_stock_market_hnx_30_index()
+        self._process_stock_market_upcom_index()
 
         # Enterprise
-        # self._process_enterprise_stock()
-        # self._process_enterprise_daily_price()
+        self._process_enterprise_stock()
+        self._process_enterprise_daily_price()
 
         self._logger.log_info("Finish processing data.")
 
