@@ -1857,7 +1857,7 @@ class Table:
     class DOW_JONES:
         class Column(Enum):
             DATE = "date"
-            PRICE = "price"
+            CLOSE = "close"
             OPEN = "open"
             HIGH = "high"
             LOW = "low"
@@ -1870,7 +1870,7 @@ class Table:
     class NYSE_COMPOSITE:
         class Column(Enum):
             DATE = "date"
-            PRICE = "price"
+            CLOSE = "close"
             OPEN = "open"
             HIGH = "high"
             LOW = "low"
@@ -1883,7 +1883,7 @@ class Table:
     class SNP_500:
         class Column(Enum):
             DATE = "date"
-            PRICE = "price"
+            CLOSE = "close"
             OPEN = "open"
             HIGH = "high"
             LOW = "low"
@@ -1896,7 +1896,7 @@ class Table:
     class NASDAQ_COMPOSITE:
         class Column(Enum):
             DATE = "date"
-            PRICE = "price"
+            CLOSE = "close"
             OPEN = "open"
             HIGH = "high"
             LOW = "low"
@@ -1909,7 +1909,7 @@ class Table:
     class NASDAQ_100:
         class Column(Enum):
             DATE = "date"
-            PRICE = "price"
+            CLOSE = "close"
             OPEN = "open"
             HIGH = "high"
             LOW = "low"
