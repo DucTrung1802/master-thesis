@@ -29,25 +29,57 @@ class PostgreSQLDriver(TabularDatabaseDriverInterface):
         """Establish a connection to the PostgreSQL database."""
         try:
             self._connection_model = connection_model
+            try:
+                # Try connecting directly
+                self._connection = psycopg2.connect(
+                    host=self._connection_model.host,
+                    user=self._connection_model.user,
+                    password=self._connection_model.password,
+                    port=self._connection_model.port,
+                    database=self._connection_model.database,
+                )
+            except psycopg2.OperationalError as e:
+                if "does not exist" in str(e):
+                    self._logger.log_warning(
+                        f'Database "{self._connection_model.database}" does not exist. Attempting to create it...'
+                    )
+                    # Connect to default DB first
+                    temp_connection = psycopg2.connect(
+                        host=self._connection_model.host,
+                        user=self._connection_model.user,
+                        password=self._connection_model.password,
+                        port=self._connection_model.port,
+                        database="postgres",  # fallback db
+                    )
+                    temp_connection.autocommit = True
+                    temp_cursor = temp_connection.cursor()
+                    temp_cursor.execute(
+                        f'CREATE DATABASE "{self._connection_model.database}"'
+                    )
+                    temp_cursor.close()
+                    temp_connection.close()
 
-            self._connection = psycopg2.connect(
-                host=self._connection_model.host,
-                user=self._connection_model.user,
-                password=self._connection_model.password,
-                port=self._connection_model.port,
-                database=self._connection_model.database,
-            )
+                    # Now connect again to the new DB
+                    self._connection = psycopg2.connect(
+                        host=self._connection_model.host,
+                        user=self._connection_model.user,
+                        password=self._connection_model.password,
+                        port=self._connection_model.port,
+                        database=self._connection_model.database,
+                    )
+                else:
+                    raise
 
-            # Set autocommit to True to allow database creation without a transaction block
             self._connection.autocommit = True
-
             self._cursor = self._connection.cursor()
             self._logger.log_info(
                 f'Connection to PostgreSQL established. Database: "{self._connection_model.database}"'
             )
+            return DatabaseExecutionStatus.SUCCESS
+
         except Exception as e:
             self._logger.log_error(f"Error connecting to PostgreSQL: {e}")
-            raise ValueError(f"Error executing query: {e}")
+            return DatabaseExecutionStatus.ERROR
 
     def disconnect(self) -> DatabaseExecutionStatus:
         """Close the connection to the PostgreSQL database."""
@@ -380,21 +412,18 @@ FROM upserted;
 
                 # Optional: log raw statusmessage
                 status_msg = self._cursor.statusmessage
-                self._logger.log_debug(
-                    f'upsert() - Query status: "{status_msg}"'
-                )
+                self._logger.log_debug(f'upsert() - Query status: "{status_msg}"')
 
             # self._logger.log_info(
             #     f'Upserted {len(records)} record(s) into "{schema_name}.{table_name}". '
             #     f"Inserted: {inserted_count}, Updated: {updated_count} successfully."
             # )
-            
+
             return DatabaseExecutionStatus.SUCCESS, inserted_count, updated_count
 
         except Exception as e:
             self._logger.log_error(f"Error upserting records: {e}")
             return DatabaseExecutionStatus.ERROR
-
 
     def delete(
         self,

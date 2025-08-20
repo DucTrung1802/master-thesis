@@ -142,7 +142,7 @@ class WebScraper:
             start_year = SCRAPER_START_DATE.year
             current_year = datetime.now().year
 
-            file_path = f"{folder_path}/{file_name}_{start_year}_{current_year}.csv"
+            file_path = f"{folder_path}/{key[1].value}_{file_name}_{start_year}_{current_year}.csv"
 
             # 3. Delete file if exists
             if os.path.exists(file_path):
@@ -221,7 +221,7 @@ class WebScraper:
             start_year = SCRAPER_START_DATE.year
             current_year = datetime.now().year
 
-            file_path = f"{folder_path}/{file_name}_{start_year}_{current_year}.csv"
+            file_path = f"{folder_path}/{key[1].value}_{file_name}_{start_year}_{current_year}.csv"
 
             # 3. Delete file if exists
             if os.path.exists(file_path):
@@ -310,7 +310,7 @@ class WebScraper:
             start_year = SCRAPER_START_DATE.year
             current_year = datetime.now().year
 
-            file_path = f"{folder_path}/{file_name}_{start_year}_{current_year}.csv"
+            file_path = f"{folder_path}/{key[1].value}_{file_name}_{start_year}_{current_year}.csv"
 
             # 3. Delete file if exists
             if os.path.exists(file_path):
@@ -399,7 +399,7 @@ class WebScraper:
             start_year = SCRAPER_START_DATE.year
             current_year = datetime.now().year
 
-            file_path = f"{folder_path}/{file_name}_{start_year}_{current_year}.csv"
+            file_path = f"{folder_path}/{key[1].value}_{file_name}_{start_year}_{current_year}.csv"
 
             # 3. Delete file if exists
             if os.path.exists(file_path):
@@ -488,7 +488,7 @@ class WebScraper:
             start_year = SCRAPER_START_DATE.year
             current_year = datetime.now().year
 
-            file_path = f"{folder_path}/{file_name}_{start_year}_{current_year}.csv"
+            file_path = f"{folder_path}/{key[1].value}_{file_name}_{start_year}_{current_year}.csv"
 
             # 3. Delete file if exists
             if os.path.exists(file_path):
@@ -577,7 +577,7 @@ class WebScraper:
             start_year = SCRAPER_START_DATE.year
             current_year = datetime.now().year
 
-            file_path = f"{folder_path}/{file_name}_{start_year}_{current_year}.csv"
+            file_path = f"{folder_path}/{key[1].value}_{file_name}_{start_year}_{current_year}.csv"
 
             # 3. Delete file if exists
             if os.path.exists(file_path):
@@ -666,7 +666,7 @@ class WebScraper:
             start_year = SCRAPER_START_DATE.year
             current_year = datetime.now().year
 
-            file_path = f"{folder_path}/{file_name}_{start_year}_{current_year}.csv"
+            file_path = f"{folder_path}/{key[1].value}_{file_name}_{start_year}_{current_year}.csv"
 
             # 3. Delete file if exists
             if os.path.exists(file_path):
@@ -755,7 +755,7 @@ class WebScraper:
             start_year = SCRAPER_START_DATE.year
             current_year = datetime.now().year
 
-            file_path = f"{folder_path}/{file_name}_{start_year}_{current_year}.csv"
+            file_path = f"{folder_path}/{key[1].value}_{file_name}_{start_year}_{current_year}.csv"
 
             # 3. Delete file if exists
             if os.path.exists(file_path):
@@ -844,7 +844,7 @@ class WebScraper:
             start_year = SCRAPER_START_DATE.year
             current_year = datetime.now().year
 
-            file_path = f"{folder_path}/{file_name}_{start_year}_{current_year}.csv"
+            file_path = f"{folder_path}/{key[1].value}_{file_name}_{start_year}_{current_year}.csv"
 
             # 3. Delete file if exists
             if os.path.exists(file_path):
@@ -933,7 +933,7 @@ class WebScraper:
             start_year = SCRAPER_START_DATE.year
             current_year = datetime.now().year
 
-            file_path = f"{folder_path}/{file_name}_{start_year}_{current_year}.csv"
+            file_path = f"{folder_path}/{key[1].value}_{file_name}_{start_year}_{current_year}.csv"
 
             # 3. Delete file if exists
             if os.path.exists(file_path):
@@ -1022,7 +1022,7 @@ class WebScraper:
             start_year = SCRAPER_START_DATE.year
             current_year = datetime.now().year
 
-            file_path = f"{folder_path}/{file_name}_{start_year}_{current_year}.csv"
+            file_path = f"{folder_path}/{key[1].value}_{file_name}_{start_year}_{current_year}.csv"
 
             # 3. Delete file if exists
             if os.path.exists(file_path):
@@ -1111,7 +1111,7 @@ class WebScraper:
             start_year = SCRAPER_START_DATE.year
             current_year = datetime.now().year
 
-            file_path = f"{folder_path}/{file_name}_{start_year}_{current_year}.csv"
+            file_path = f"{folder_path}/{key[1].value}_{file_name}_{start_year}_{current_year}.csv"
 
             # 3. Delete file if exists
             if os.path.exists(file_path):
@@ -1200,7 +1200,7 @@ class WebScraper:
             start_year = SCRAPER_START_DATE.year
             current_year = datetime.now().year
 
-            file_path = f"{folder_path}/{file_name}_{start_year}_{current_year}.csv"
+            file_path = f"{folder_path}/{key[1].value}_{file_name}_{start_year}_{current_year}.csv"
 
             # 3. Delete file if exists
             if os.path.exists(file_path):
@@ -1289,7 +1289,7 @@ class WebScraper:
             start_year = SCRAPER_START_DATE.year
             current_year = datetime.now().year
 
-            file_path = f"{folder_path}/{file_name}_{start_year}_{current_year}.csv"
+            file_path = f"{folder_path}/{key[1].value}_{file_name}_{start_year}_{current_year}.csv"
 
             # 3. Delete file if exists
             if os.path.exists(file_path):
@@ -1378,7 +1378,7 @@ class WebScraper:
             start_year = SCRAPER_START_DATE.year
             current_year = datetime.now().year
 
-            file_path = f"{folder_path}/{file_name}_{start_year}_{current_year}.csv"
+            file_path = f"{folder_path}/{key[1].value}_{file_name}_{start_year}_{current_year}.csv"
 
             # 3. Delete file if exists
             if os.path.exists(file_path):
@@ -1467,7 +1467,7 @@ class WebScraper:
             start_year = SCRAPER_START_DATE.year
             current_year = datetime.now().year
 
-            file_path = f"{folder_path}/{file_name}_{start_year}_{current_year}.csv"
+            file_path = f"{folder_path}/{key[1].value}_{file_name}_{start_year}_{current_year}.csv"
 
             # 3. Delete file if exists
             if os.path.exists(file_path):
@@ -1556,7 +1556,7 @@ class WebScraper:
             start_year = SCRAPER_START_DATE.year
             current_year = datetime.now().year
 
-            file_path = f"{folder_path}/{file_name}_{start_year}_{current_year}.csv"
+            file_path = f"{folder_path}/{key[1].value}_{file_name}_{start_year}_{current_year}.csv"
 
             # 3. Delete file if exists
             if os.path.exists(file_path):
@@ -1645,7 +1645,7 @@ class WebScraper:
             start_year = SCRAPER_START_DATE.year
             current_year = datetime.now().year
 
-            file_path = f"{folder_path}/{file_name}_{start_year}_{current_year}.csv"
+            file_path = f"{folder_path}/{key[1].value}_{file_name}_{start_year}_{current_year}.csv"
 
             # 3. Delete file if exists
             if os.path.exists(file_path):
@@ -1734,7 +1734,7 @@ class WebScraper:
             start_year = SCRAPER_START_DATE.year
             current_year = datetime.now().year
 
-            file_path = f"{folder_path}/{file_name}_{start_year}_{current_year}.csv"
+            file_path = f"{folder_path}/{key[1].value}_{file_name}_{start_year}_{current_year}.csv"
 
             # 3. Delete file if exists
             if os.path.exists(file_path):
@@ -1823,7 +1823,7 @@ class WebScraper:
             start_year = SCRAPER_START_DATE.year
             current_year = datetime.now().year
 
-            file_path = f"{folder_path}/{file_name}_{start_year}_{current_year}.csv"
+            file_path = f"{folder_path}/{key[1].value}_{file_name}_{start_year}_{current_year}.csv"
 
             # 3. Delete file if exists
             if os.path.exists(file_path):
@@ -1912,7 +1912,7 @@ class WebScraper:
             start_year = SCRAPER_START_DATE.year
             current_year = datetime.now().year
 
-            file_path = f"{folder_path}/{file_name}_{start_year}_{current_year}.csv"
+            file_path = f"{folder_path}/{key[1].value}_{file_name}_{start_year}_{current_year}.csv"
 
             # 3. Delete file if exists
             if os.path.exists(file_path):
@@ -2001,7 +2001,7 @@ class WebScraper:
             start_year = SCRAPER_START_DATE.year
             current_year = datetime.now().year
 
-            file_path = f"{folder_path}/{file_name}_{start_year}_{current_year}.csv"
+            file_path = f"{folder_path}/{key[1].value}_{file_name}_{start_year}_{current_year}.csv"
 
             # 3. Delete file if exists
             if os.path.exists(file_path):
@@ -2088,7 +2088,7 @@ class WebScraper:
             start_year = SCRAPER_START_DATE.year
             current_year = datetime.now().year
 
-            file_path = f"{folder_path}/{file_name}_{start_year}_{current_year}.csv"
+            file_path = f"{folder_path}/{key[1].value}_{file_name}_{start_year}_{current_year}.csv"
 
             # 3. Delete file if exists
             if os.path.exists(file_path):
@@ -2177,7 +2177,7 @@ class WebScraper:
             start_year = SCRAPER_START_DATE.year
             current_year = datetime.now().year
 
-            file_path = f"{folder_path}/{file_name}_{start_year}_{current_year}.csv"
+            file_path = f"{folder_path}/{key[1].value}_{file_name}_{start_year}_{current_year}.csv"
 
             # 3. Delete file if exists
             if os.path.exists(file_path):
@@ -2266,7 +2266,7 @@ class WebScraper:
             start_year = SCRAPER_START_DATE.year
             current_year = datetime.now().year
 
-            file_path = f"{folder_path}/{file_name}_{start_year}_{current_year}.csv"
+            file_path = f"{folder_path}/{key[1].value}_{file_name}_{start_year}_{current_year}.csv"
 
             # 3. Delete file if exists
             if os.path.exists(file_path):
@@ -2355,7 +2355,7 @@ class WebScraper:
             start_year = SCRAPER_START_DATE.year
             current_year = datetime.now().year
 
-            file_path = f"{folder_path}/{file_name}_{start_year}_{current_year}.csv"
+            file_path = f"{folder_path}/{key[1].value}_{file_name}_{start_year}_{current_year}.csv"
 
             # 3. Delete file if exists
             if os.path.exists(file_path):
@@ -2444,7 +2444,7 @@ class WebScraper:
             start_year = SCRAPER_START_DATE.year
             current_year = datetime.now().year
 
-            file_path = f"{folder_path}/{file_name}_{start_year}_{current_year}.csv"
+            file_path = f"{folder_path}/{key[1].value}_{file_name}_{start_year}_{current_year}.csv"
 
             # 3. Delete file if exists
             if os.path.exists(file_path):
@@ -2533,7 +2533,7 @@ class WebScraper:
             start_year = SCRAPER_START_DATE.year
             current_year = datetime.now().year
 
-            file_path = f"{folder_path}/{file_name}_{start_year}_{current_year}.csv"
+            file_path = f"{folder_path}/{key[1].value}_{file_name}_{start_year}_{current_year}.csv"
 
             # 3. Delete file if exists
             if os.path.exists(file_path):
@@ -2620,7 +2620,7 @@ class WebScraper:
             start_year = SCRAPER_START_DATE.year
             current_year = datetime.now().year
 
-            file_path = f"{folder_path}/{file_name}_{start_year}_{current_year}.csv"
+            file_path = f"{folder_path}/{key[1].value}_{file_name}_{start_year}_{current_year}.csv"
 
             # 3. Delete file if exists
             if os.path.exists(file_path):
@@ -2707,7 +2707,7 @@ class WebScraper:
             start_year = SCRAPER_START_DATE.year
             current_year = datetime.now().year
 
-            file_path = f"{folder_path}/{file_name}_{start_year}_{current_year}.csv"
+            file_path = f"{folder_path}/{key[1].value}_{file_name}_{start_year}_{current_year}.csv"
 
             # 3. Delete file if exists
             if os.path.exists(file_path):
@@ -2794,7 +2794,7 @@ class WebScraper:
             start_year = SCRAPER_START_DATE.year
             current_year = datetime.now().year
 
-            file_path = f"{folder_path}/{file_name}_{start_year}_{current_year}.csv"
+            file_path = f"{folder_path}/{key[1].value}_{file_name}_{start_year}_{current_year}.csv"
 
             # 3. Delete file if exists
             if os.path.exists(file_path):
