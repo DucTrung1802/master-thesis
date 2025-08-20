@@ -1403,7 +1403,7 @@ class DataPreprocessor:
             table_name=Table.OIL_PRICE.name,
             columns = [
                 Column(name=Table.OIL_PRICE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                Column(name=Table.OIL_PRICE.Column.PRICE.value, data_type=DataType.DECIMAL(), nullable=False),
+                Column(name=Table.OIL_PRICE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
                 Column(name=Table.OIL_PRICE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
                 Column(name=Table.OIL_PRICE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
                 Column(name=Table.OIL_PRICE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
@@ -3858,7 +3858,7 @@ class DataPreprocessor:
         self._logger.log_info(f'Start processing data in "{table_name}".')
 
         # Add logic for processing data here
-        combined_file_path = os.path.join(folder_path, "Brent_Oil_Futures_Combined.csv")
+        combined_file_path = os.path.join(folder_path, "Gold_Futures_Combined.csv")
         if os.path.isfile(combined_file_path):
             os.remove(combined_file_path)
 
@@ -3868,32 +3868,37 @@ class DataPreprocessor:
         for file in file_paths:
             df = pd.read_csv(file)
 
-            # Convert 'Date' to datetime
-            df["Date"] = pd.to_datetime(df["Date"], format="%m/%d/%Y", errors="coerce")
+            # Rename columns
+            rename_map = {
+                "Ngày": "date",
+                "Lần cuối": "close",
+                "Mở": "open",
+                "Cao": "high",
+                "Thấp": "low",
+                "KL": "volume",
+                "% Thay đổi": "change",
+            }
+            df = df.rename(columns=rename_map)
+
+            # Convert 'date' to datetime
+            df["date"] = pd.to_datetime(df["date"], format="%d/%m/%Y", errors="coerce")
 
             # Clean numeric columns: remove commas and symbols, then convert to float
-            for col in ["Price", "Open", "High", "Low"]:
+            for col in ["close", "open", "high", "low"]:
                 df[col] = df[col].astype(str).str.replace(",", "").astype(float)
 
-            df["Vol."] = df["Vol."].apply(parse_volume)
+            df["volume"] = df["volume"].apply(parse_volume)
 
-            # Change %: remove '%' and convert to float
-            df["Change %"] = (
-                df["Change %"].astype(str).str.replace("%", "").astype(float)
+            # Handle "change" column: remove '%' and convert to float
+            df["change"] = (
+                df["change"].astype(str).str.replace("%", "").astype(float)
             )
 
             dfs.append(df)
 
         # Combine and sort
         full_df = pd.concat(dfs, ignore_index=True)
-        full_df = full_df.sort_values("Date").reset_index(drop=True)
-
-        rename_map = {
-            "Vol.": "volume",
-            "Change %": "change",
-        }
-
-        full_df.rename(columns=rename_map, inplace=True)
+        full_df = full_df.sort_values("date").reset_index(drop=True)
 
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
@@ -5030,7 +5035,7 @@ class DataPreprocessor:
         self._process_macroeconomics_export()
         self._process_macroeconomics_import()
         self._process_macroeconomics_gold_price()
-        # self._process_macroeconomics_oil_price()
+        self._process_macroeconomics_oil_price()
         # self._process_macroeconomics_dow_jones()
         # self._process_macroeconomics_nyse_composite()
         # self._process_macroeconomics_snp_500()

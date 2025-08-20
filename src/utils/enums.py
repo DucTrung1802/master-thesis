@@ -1844,7 +1844,7 @@ class Table:
     class OIL_PRICE:
         class Column(Enum):
             DATE = "date"
-            PRICE = "price"
+            CLOSE = "close"
             OPEN = "open"
             HIGH = "high"
             LOW = "low"
