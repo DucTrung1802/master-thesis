@@ -12,7 +12,7 @@ from models.tabular_database_driver_models.postgre_sql_connection_model import (
 )
 from models.tabular_database_driver_models.tabular_database_driver_models import *
 from tabular_database_driver.postgre_sql_driver import PostgreSQLDriver
-from utils.constants import SCRAPER_RAW_DATA_DIR
+from utils.constants import SCRAPER_BRONZE_DATA_DIR
 from utils.enums import *
 from utils.utils import *
 
@@ -34,7 +34,7 @@ class DataPreprocessor:
             user=os.getenv("POSTGRES_USER"),
             password=os.getenv("POSTGRES_PASSWORD"),
             port=os.getenv("POSTGRES_PORT"),
-            database=os.getenv("POSTGRES_DATABASE"),
+            database=os.getenv("BRONZE_POSTGRES_DATABASE"),
         )
 
         self._database_driver.connect(connection_model)
@@ -1732,7 +1732,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -1758,9 +1758,6 @@ class DataPreprocessor:
             time_format=TimeFormat.QUARTER_YEAR,
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
-
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
 
         # Rename columns
         df.rename(columns={"total_gdp": "gdp_growth"}, inplace=True)
@@ -1805,7 +1802,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -1829,9 +1826,6 @@ class DataPreprocessor:
             time_format=TimeFormat.MONTH_NAME_YEAR,
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
-
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
 
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
@@ -1861,7 +1855,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -1887,9 +1881,6 @@ class DataPreprocessor:
             time_format=TimeFormat.YEAR,
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
-
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
 
         col_translation = {
             "year": "year",
@@ -1938,7 +1929,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -1964,9 +1955,6 @@ class DataPreprocessor:
             time_format=TimeFormat.YEAR,
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
-
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
 
         col_translation = {
             "year": "year",
@@ -2036,7 +2024,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -2060,9 +2048,6 @@ class DataPreprocessor:
             time_format=TimeFormat.MONTH_NAME_YEAR,
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
-
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
 
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
@@ -2091,7 +2076,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -2115,9 +2100,6 @@ class DataPreprocessor:
             time_format=TimeFormat.MONTH_NAME_YEAR,
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
-
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
 
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
@@ -2146,7 +2128,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -2170,9 +2152,6 @@ class DataPreprocessor:
             time_format=TimeFormat.YEAR,
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
-
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
 
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
@@ -2201,7 +2180,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -2227,9 +2206,6 @@ class DataPreprocessor:
             time_format=TimeFormat.YEAR,
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
-
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
 
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
@@ -2258,7 +2234,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -2282,9 +2258,6 @@ class DataPreprocessor:
             time_format=TimeFormat.MONTH_NAME_YEAR,
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
-
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
 
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
@@ -2313,7 +2286,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -2337,9 +2310,6 @@ class DataPreprocessor:
             time_format=TimeFormat.MONTH_NAME_YEAR,
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
-
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
 
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
@@ -2368,7 +2338,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -2394,9 +2364,6 @@ class DataPreprocessor:
             time_format=TimeFormat.MONTH_INDEX_YEAR,
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
-
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
 
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
@@ -2425,7 +2392,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -2449,9 +2416,6 @@ class DataPreprocessor:
             time_format=TimeFormat.MONTH_NAME_YEAR,
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
-
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
 
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
@@ -2480,7 +2444,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -2508,9 +2472,6 @@ class DataPreprocessor:
             time_format=TimeFormat.YEAR,
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
-
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
 
         col_translation = {
             "year": "year",
@@ -2568,7 +2529,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -2592,9 +2553,6 @@ class DataPreprocessor:
             time_format=TimeFormat.YEAR,
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
-
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
 
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
@@ -2623,7 +2581,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -2647,9 +2605,6 @@ class DataPreprocessor:
             time_format=TimeFormat.YEAR,
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
-
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
 
         col_translation = {
             "16_20_floors": "_16_20_floors",
@@ -2691,7 +2646,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -2715,9 +2670,6 @@ class DataPreprocessor:
             time_format=TimeFormat.QUARTER_YEAR,
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
-
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
 
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
@@ -2746,7 +2698,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -2770,9 +2722,6 @@ class DataPreprocessor:
             time_format=TimeFormat.THREE_MONTH_INDEX_YEAR,
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
-
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
 
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
@@ -2801,7 +2750,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -2825,9 +2774,6 @@ class DataPreprocessor:
             time_format=TimeFormat.THREE_MONTH_INDEX_YEAR,
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
-
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
 
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
@@ -2856,7 +2802,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -2880,9 +2826,6 @@ class DataPreprocessor:
             time_format=TimeFormat.YEAR,
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
-
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
 
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
@@ -2911,7 +2854,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -2935,9 +2878,6 @@ class DataPreprocessor:
             time_format=TimeFormat.MONTH_NAME_YEAR,
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
-
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
 
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
@@ -2966,7 +2906,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -2990,9 +2930,6 @@ class DataPreprocessor:
             time_format=TimeFormat.QUARTER_YEAR,
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
-
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
 
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
@@ -3021,7 +2958,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -3045,9 +2982,6 @@ class DataPreprocessor:
             time_format=TimeFormat.MONTH_NAME_YEAR,
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
-
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
 
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
@@ -3076,7 +3010,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -3100,9 +3034,6 @@ class DataPreprocessor:
             time_format=TimeFormat.MONTH_NAME_YEAR,
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
-
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
 
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
@@ -3131,7 +3062,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -3155,9 +3086,6 @@ class DataPreprocessor:
             time_format=TimeFormat.MONTH_NAME_YEAR,
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
-
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
 
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
@@ -3186,7 +3114,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -3210,9 +3138,6 @@ class DataPreprocessor:
             time_format=TimeFormat.DAY_MONTH_YEAR,
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
-
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
 
         # Rename columns
         df.rename(columns={"central_rate_from_04012016": "central_rate"}, inplace=True)
@@ -3244,7 +3169,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -3268,9 +3193,6 @@ class DataPreprocessor:
             time_format=TimeFormat.DAY_MONTH_YEAR,
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
-
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
 
         # Rename columns
         df.rename(
@@ -3312,7 +3234,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -3336,9 +3258,6 @@ class DataPreprocessor:
             time_format=TimeFormat.DAY_MONTH_YEAR,
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
-
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
 
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
@@ -3367,7 +3286,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -3408,9 +3327,6 @@ class DataPreprocessor:
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
 
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
-
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
             table_name=Table.FDI_SECTOR.name,
@@ -3438,7 +3354,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -3462,9 +3378,6 @@ class DataPreprocessor:
             time_format=TimeFormat.MONTH_NAME_YEAR,
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
-
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
 
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
@@ -3493,7 +3406,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -3524,9 +3437,6 @@ class DataPreprocessor:
             time_format=TimeFormat.MONTH_NAME_YEAR,
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
-
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
 
         rename_map = {
             "year": "year",
@@ -3633,7 +3543,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -3664,9 +3574,6 @@ class DataPreprocessor:
             time_format=TimeFormat.MONTH_NAME_YEAR,
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
-
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
 
         rename_map = {
             "year": "year",
@@ -3773,7 +3680,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         table_name = Table.GOLD_PRICE.__qualname__.lower()
@@ -3813,9 +3720,7 @@ class DataPreprocessor:
             df["volume"] = df["volume"].apply(parse_volume)
 
             # Handle "change" column: remove '%' and convert to float
-            df["change"] = (
-                df["change"].astype(str).str.replace("%", "").astype(float)
-            )
+            df["change"] = df["change"].astype(str).str.replace("%", "").astype(float)
 
             dfs.append(df)
 
@@ -3850,7 +3755,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         table_name = Table.OIL_PRICE.__qualname__.lower()
@@ -3890,9 +3795,7 @@ class DataPreprocessor:
             df["volume"] = df["volume"].apply(parse_volume)
 
             # Handle "change" column: remove '%' and convert to float
-            df["change"] = (
-                df["change"].astype(str).str.replace("%", "").astype(float)
-            )
+            df["change"] = df["change"].astype(str).str.replace("%", "").astype(float)
 
             dfs.append(df)
 
@@ -3927,7 +3830,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         table_name = Table.DOW_JONES.__qualname__.lower()
@@ -3967,9 +3870,7 @@ class DataPreprocessor:
             df["volume"] = df["volume"].apply(parse_volume)
 
             # Handle "change" column: remove '%' and convert to float
-            df["change"] = (
-                df["change"].astype(str).str.replace("%", "").astype(float)
-            )
+            df["change"] = df["change"].astype(str).str.replace("%", "").astype(float)
 
             dfs.append(df)
 
@@ -4011,7 +3912,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         table_name = Table.NYSE_COMPOSITE.__qualname__.lower()
@@ -4051,9 +3952,7 @@ class DataPreprocessor:
             df["volume"] = df["volume"].apply(parse_volume)
 
             # Handle "change" column: remove '%' and convert to float
-            df["change"] = (
-                df["change"].astype(str).str.replace("%", "").astype(float)
-            )
+            df["change"] = df["change"].astype(str).str.replace("%", "").astype(float)
 
             dfs.append(df)
 
@@ -4095,7 +3994,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         table_name = Table.SNP_500.__qualname__.lower()
@@ -4135,9 +4034,7 @@ class DataPreprocessor:
             df["volume"] = df["volume"].apply(parse_volume)
 
             # Handle "change" column: remove '%' and convert to float
-            df["change"] = (
-                df["change"].astype(str).str.replace("%", "").astype(float)
-            )
+            df["change"] = df["change"].astype(str).str.replace("%", "").astype(float)
 
             dfs.append(df)
 
@@ -4179,7 +4076,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         table_name = Table.NASDAQ_COMPOSITE.__qualname__.lower()
@@ -4219,9 +4116,7 @@ class DataPreprocessor:
             df["volume"] = df["volume"].apply(parse_volume)
 
             # Handle "change" column: remove '%' and convert to float
-            df["change"] = (
-                df["change"].astype(str).str.replace("%", "").astype(float)
-            )
+            df["change"] = df["change"].astype(str).str.replace("%", "").astype(float)
 
             dfs.append(df)
 
@@ -4263,7 +4158,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         table_name = Table.NASDAQ_100.__qualname__.lower()
@@ -4303,9 +4198,7 @@ class DataPreprocessor:
             df["volume"] = df["volume"].apply(parse_volume)
 
             # Handle "change" column: remove '%' and convert to float
-            df["change"] = (
-                df["change"].astype(str).str.replace("%", "").astype(float)
-            )
+            df["change"] = df["change"].astype(str).str.replace("%", "").astype(float)
 
             dfs.append(df)
 
@@ -4389,7 +4282,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -4446,7 +4339,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -4503,7 +4396,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -4576,7 +4469,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -4649,7 +4542,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -4728,7 +4621,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -4816,12 +4709,8 @@ class DataPreprocessor:
             StockInformationSource.CAFEF,
         )
 
-        folder_path_1 = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key_1[0].value}/{key_1[1].value}/{key_1[2].value}"
-        )
-        folder_path_2 = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key_2[0].value}/{key_2[1].value}/{key_2[2].value}"
-        )
+        folder_path_1 = f"{SCRAPER_BRONZE_DATA_DIR}/{key_1[0].value}/{key_1[1].value}/{key_1[2].value}"
+        folder_path_2 = f"{SCRAPER_BRONZE_DATA_DIR}/{key_2[0].value}/{key_2[1].value}/{key_2[2].value}"
 
         # 1. Get file lists
         base_stock_files = get_all_file_names_with_extensions(
@@ -4949,7 +4838,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_paths = get_all_file_names_with_extensions(
@@ -5117,7 +5006,7 @@ class DataPreprocessor:
 
         self._logger.log_info("Finish processing data.")
 
-    def preprocess_data(self) -> None:
+    def ingest_bronze_data(self) -> None:
         try:
             self._connect_to_database()
             self._create_schemas()
@@ -5127,3 +5016,6 @@ class DataPreprocessor:
             self._logger.log_error(f"Error preprocessing data: {e}")
         finally:
             self._database_driver.disconnect()
+
+    def ingesgt_silver_data(self) -> None:
+        pass

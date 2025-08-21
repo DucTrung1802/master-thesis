@@ -23,3 +23,4 @@ class PostgreSQLConnectionModel(BaseTabularDatabaseModel):
             raise ValueError(error_msg)
 
         self.port = str(port_int)
+        self.database = str(self.database)
