@@ -3,5 +3,10 @@
 
 bronze_data/
 
+silver_data/
+
+gold_data/
+
 .env
+
 logs/
