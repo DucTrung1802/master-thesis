@@ -34,7 +34,7 @@ class DataPreprocessor:
             user=os.getenv("POSTGRES_USER"),
             password=os.getenv("POSTGRES_PASSWORD"),
             port=os.getenv("POSTGRES_PORT"),
-            database=os.getenv("POSTGRES_DATABASE"),
+            database=os.getenv("BRONZE_POSTGRES_DATABASE"),
         )
 
         self._database_driver.connect(connection_model)
@@ -1759,9 +1759,6 @@ class DataPreprocessor:
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
 
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
-
         # Rename columns
         df.rename(columns={"total_gdp": "gdp_growth"}, inplace=True)
 
@@ -1830,9 +1827,6 @@ class DataPreprocessor:
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
 
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
-
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
             table_name=Table.CPI.name,
@@ -1887,9 +1881,6 @@ class DataPreprocessor:
             time_format=TimeFormat.YEAR,
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
-
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
 
         col_translation = {
             "year": "year",
@@ -1964,9 +1955,6 @@ class DataPreprocessor:
             time_format=TimeFormat.YEAR,
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
-
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
 
         col_translation = {
             "year": "year",
@@ -2061,9 +2049,6 @@ class DataPreprocessor:
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
 
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
-
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
             table_name=Table.XPI.name,
@@ -2116,9 +2101,6 @@ class DataPreprocessor:
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
 
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
-
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
             table_name=Table.MPI.name,
@@ -2170,9 +2152,6 @@ class DataPreprocessor:
             time_format=TimeFormat.YEAR,
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
-
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
 
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
@@ -2228,9 +2207,6 @@ class DataPreprocessor:
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
 
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
-
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
             table_name=Table.LABOR.name,
@@ -2283,9 +2259,6 @@ class DataPreprocessor:
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
 
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
-
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
             table_name=Table.RETAIL.name,
@@ -2337,9 +2310,6 @@ class DataPreprocessor:
             time_format=TimeFormat.MONTH_NAME_YEAR,
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
-
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
 
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
@@ -2395,9 +2365,6 @@ class DataPreprocessor:
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
 
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
-
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
             table_name=Table.IIP.name,
@@ -2449,9 +2416,6 @@ class DataPreprocessor:
             time_format=TimeFormat.MONTH_NAME_YEAR,
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
-
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
 
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
@@ -2508,9 +2472,6 @@ class DataPreprocessor:
             time_format=TimeFormat.YEAR,
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
-
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
 
         col_translation = {
             "year": "year",
@@ -2593,9 +2554,6 @@ class DataPreprocessor:
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
 
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
-
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
             table_name=Table.MIP.name,
@@ -2647,9 +2605,6 @@ class DataPreprocessor:
             time_format=TimeFormat.YEAR,
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
-
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
 
         col_translation = {
             "16_20_floors": "_16_20_floors",
@@ -2716,9 +2671,6 @@ class DataPreprocessor:
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
 
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
-
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
             table_name=Table.IT_BOP.name,
@@ -2770,9 +2722,6 @@ class DataPreprocessor:
             time_format=TimeFormat.THREE_MONTH_INDEX_YEAR,
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
-
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
 
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
@@ -2826,9 +2775,6 @@ class DataPreprocessor:
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
 
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
-
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
             table_name=Table.TSBE.name,
@@ -2880,9 +2826,6 @@ class DataPreprocessor:
             time_format=TimeFormat.YEAR,
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
-
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
 
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
@@ -2936,9 +2879,6 @@ class DataPreprocessor:
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
 
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
-
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
             table_name=Table.BRD.name,
@@ -2990,9 +2930,6 @@ class DataPreprocessor:
             time_format=TimeFormat.QUARTER_YEAR,
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
-
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
 
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
@@ -3046,9 +2983,6 @@ class DataPreprocessor:
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
 
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
-
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
             table_name=Table.TREG.name,
@@ -3100,9 +3034,6 @@ class DataPreprocessor:
             time_format=TimeFormat.MONTH_NAME_YEAR,
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
-
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
 
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
@@ -3156,9 +3087,6 @@ class DataPreprocessor:
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
 
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
-
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
             table_name=Table.MOBILIZATION.name,
@@ -3210,9 +3138,6 @@ class DataPreprocessor:
             time_format=TimeFormat.DAY_MONTH_YEAR,
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
-
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
 
         # Rename columns
         df.rename(columns={"central_rate_from_04012016": "central_rate"}, inplace=True)
@@ -3268,9 +3193,6 @@ class DataPreprocessor:
             time_format=TimeFormat.DAY_MONTH_YEAR,
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
-
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
 
         # Rename columns
         df.rename(
@@ -3336,9 +3258,6 @@ class DataPreprocessor:
             time_format=TimeFormat.DAY_MONTH_YEAR,
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
-
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
 
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
@@ -3408,9 +3327,6 @@ class DataPreprocessor:
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
 
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
-
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
             table_name=Table.FDI_SECTOR.name,
@@ -3462,9 +3378,6 @@ class DataPreprocessor:
             time_format=TimeFormat.MONTH_NAME_YEAR,
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
-
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
 
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
@@ -3524,9 +3437,6 @@ class DataPreprocessor:
             time_format=TimeFormat.MONTH_NAME_YEAR,
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
-
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
 
         rename_map = {
             "year": "year",
@@ -3664,9 +3574,6 @@ class DataPreprocessor:
             time_format=TimeFormat.MONTH_NAME_YEAR,
             id_vars=["Chỉ tiêu", "Đơn vị tính"],
         )
-
-        # Fill missing values with 0
-        df.fillna(0, inplace=True)
 
         rename_map = {
             "year": "year",
@@ -3813,9 +3720,7 @@ class DataPreprocessor:
             df["volume"] = df["volume"].apply(parse_volume)
 
             # Handle "change" column: remove '%' and convert to float
-            df["change"] = (
-                df["change"].astype(str).str.replace("%", "").astype(float)
-            )
+            df["change"] = df["change"].astype(str).str.replace("%", "").astype(float)
 
             dfs.append(df)
 
@@ -3890,9 +3795,7 @@ class DataPreprocessor:
             df["volume"] = df["volume"].apply(parse_volume)
 
             # Handle "change" column: remove '%' and convert to float
-            df["change"] = (
-                df["change"].astype(str).str.replace("%", "").astype(float)
-            )
+            df["change"] = df["change"].astype(str).str.replace("%", "").astype(float)
 
             dfs.append(df)
 
@@ -3967,9 +3870,7 @@ class DataPreprocessor:
             df["volume"] = df["volume"].apply(parse_volume)
 
             # Handle "change" column: remove '%' and convert to float
-            df["change"] = (
-                df["change"].astype(str).str.replace("%", "").astype(float)
-            )
+            df["change"] = df["change"].astype(str).str.replace("%", "").astype(float)
 
             dfs.append(df)
 
@@ -4051,9 +3952,7 @@ class DataPreprocessor:
             df["volume"] = df["volume"].apply(parse_volume)
 
             # Handle "change" column: remove '%' and convert to float
-            df["change"] = (
-                df["change"].astype(str).str.replace("%", "").astype(float)
-            )
+            df["change"] = df["change"].astype(str).str.replace("%", "").astype(float)
 
             dfs.append(df)
 
@@ -4135,9 +4034,7 @@ class DataPreprocessor:
             df["volume"] = df["volume"].apply(parse_volume)
 
             # Handle "change" column: remove '%' and convert to float
-            df["change"] = (
-                df["change"].astype(str).str.replace("%", "").astype(float)
-            )
+            df["change"] = df["change"].astype(str).str.replace("%", "").astype(float)
 
             dfs.append(df)
 
@@ -4219,9 +4116,7 @@ class DataPreprocessor:
             df["volume"] = df["volume"].apply(parse_volume)
 
             # Handle "change" column: remove '%' and convert to float
-            df["change"] = (
-                df["change"].astype(str).str.replace("%", "").astype(float)
-            )
+            df["change"] = df["change"].astype(str).str.replace("%", "").astype(float)
 
             dfs.append(df)
 
@@ -4303,9 +4198,7 @@ class DataPreprocessor:
             df["volume"] = df["volume"].apply(parse_volume)
 
             # Handle "change" column: remove '%' and convert to float
-            df["change"] = (
-                df["change"].astype(str).str.replace("%", "").astype(float)
-            )
+            df["change"] = df["change"].astype(str).str.replace("%", "").astype(float)
 
             dfs.append(df)
 
@@ -4816,12 +4709,8 @@ class DataPreprocessor:
             StockInformationSource.CAFEF,
         )
 
-        folder_path_1 = (
-            f"{SCRAPER_BRONZE_DATA_DIR}/{key_1[0].value}/{key_1[1].value}/{key_1[2].value}"
-        )
-        folder_path_2 = (
-            f"{SCRAPER_BRONZE_DATA_DIR}/{key_2[0].value}/{key_2[1].value}/{key_2[2].value}"
-        )
+        folder_path_1 = f"{SCRAPER_BRONZE_DATA_DIR}/{key_1[0].value}/{key_1[1].value}/{key_1[2].value}"
+        folder_path_2 = f"{SCRAPER_BRONZE_DATA_DIR}/{key_2[0].value}/{key_2[1].value}/{key_2[2].value}"
 
         # 1. Get file lists
         base_stock_files = get_all_file_names_with_extensions(
@@ -5127,3 +5016,6 @@ class DataPreprocessor:
             self._logger.log_error(f"Error preprocessing data: {e}")
         finally:
             self._database_driver.disconnect()
+
+    def ingesgt_silver_data(self) -> None:
+        pass
