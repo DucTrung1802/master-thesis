@@ -1602,6 +1602,34 @@ class DataPreprocessor:
                 )
                 # fmt: on
 
+                # CPI
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.CPI.name,
+                    columns = [
+                        Column(name=Table.CPI.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
+                        Column(name=Table.CPI.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
+                        Column(name=Table.CPI.Column.BEVERAGE_AND_CIGARETTE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.CPI.Column.CONSUMER_PRICE_INDEX.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.CPI.Column.CULTURE_ENTERTAINMENT_AND_TOURISM.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.CPI.Column.EATING_OUTSIDE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.CPI.Column.EDUCATION.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.CPI.Column.FOOD.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.CPI.Column.FOOD_AND_FOODSTUFF.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.CPI.Column.FOODSTUFF.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.CPI.Column.GARMENT_FOOTWEAR_HAT.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.CPI.Column.HOUSEHOLD_APPLIANCES_AND_GOODS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.CPI.Column.HOUSING_AND_CONSTRUCTION_MATERIALS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.CPI.Column.MEDICINE_AND_HEALTH_CARE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.CPI.Column.OTHER_GOODS_AND_SERVICES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.CPI.Column.POSTAL_SERVICES_AND_TELECOMMUNICATION.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.CPI.Column.TRAFFIC.value, data_type=DataType.FLOAT(), nullable=True),
+                    ],
+                    primary_keys=Table.CPI.primary_key,
+                )
+                # fmt: on
+
             case DataQuality.GOLD:
                 pass
 
@@ -2041,6 +2069,39 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish ingesting data in "{file_path}".')
 
+    def _clean_macroeconomics_cpi_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.CPI,
+            GdpSource.VIETSTOCK,
+        )
+
+        self._logger.log_info(
+            f'Start cleaning data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for cleaning data here
+        self._select_database(DataQuality.BRONZE.value)
+
+        bronze_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.CPI.name,
+        )
+
+        silver_df = self._clean(df=bronze_df, clean_layer_list=[])
+
+        self._select_database(DataQuality.SILVER.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.CPI.name,
+            primary_keys=Table.CPI.primary_key,
+            df=silver_df,
+        )
+
+        self._logger.log_info(
+            f'Finish cleaning data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_macroeconomics_cpi(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing macroeconomics CPI data for "{data_quality.value}".'
@@ -2051,7 +2112,7 @@ class DataPreprocessor:
                 self._ingest_macroeconomics_cpi_vietstock()
 
             case DataQuality.SILVER:
-                pass
+                self._clean_macroeconomics_cpi_vietstock()
 
             case DataQuality.GOLD:
                 pass
@@ -5715,7 +5776,7 @@ class DataPreprocessor:
 
         # Macroeconomics
         self._process_macroeconomics_gdp(data_quality)
-        # self._process_macroeconomics_cpi(data_quality)
+        self._process_macroeconomics_cpi(data_quality)
         # self._process_macroeconomics_ppi(data_quality)
         # self._process_macroeconomics_ipi(data_quality)
         # self._process_macroeconomics_xpi(data_quality)
