@@ -1887,6 +1887,55 @@ class DataPreprocessor:
                 )
                 # fmt: on
 
+                # IIP
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.IIP.name,
+                    columns=[
+                        Column(name=Table.IIP.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
+                        Column(name=Table.IIP.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
+                        Column(name=Table.IIP.Column.APPAREL_MANUFACTURING.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IIP.Column.BEVERAGE_PRODUCTION.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IIP.Column.COAL_AND_LIGNITE_MINING.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IIP.Column.CRUDE_OIL_AND_NATURAL_GAS_EXTRACTION.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IIP.Column.ENTIRE_INDUSTRIAL_SECTOR.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IIP.Column.FOOD_PRODUCTION_AND_PROCESSING.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IIP.Column.LEATHER_AND_RELATED_PRODUCT_MANUFACTURING.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IIP.Column.MANUFACTURE_OF_CHEMICALS_AND_CHEMICAL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IIP.Column.MANUFACTURE_OF_COKE_AND_REFINED_PETROLEUM_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IIP.Column.MANUFACTURE_OF_ELECTRICAL_EQUIPMENT.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IIP.Column.MANUFACTURE_OF_ELECTRONIC_PRODUCTS_COMPUTERS_AND_OPTICAL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IIP.Column.MANUFACTURE_OF_FABRICATED_METAL_PRODUCTS_EXCLUDING_MACHINERY_AND_EQUIPMENT.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IIP.Column.MANUFACTURE_OF_FURNITURE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IIP.Column.MANUFACTURE_OF_MACHINERY_AND_EQUIPMENT_NOT_ELSEWHERE_CLASSIFIED.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IIP.Column.MANUFACTURE_OF_METALS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IIP.Column.MANUFACTURE_OF_MOTOR_VEHICLES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IIP.Column.MANUFACTURE_OF_OTHER_NON_METALLIC_MINERAL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IIP.Column.MANUFACTURE_OF_OTHER_TRANSPORT_EQUIPMENT.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IIP.Column.MANUFACTURE_OF_PHARMACEUTICALS_MEDICINAL_CHEMICALS_AND_BOTANICAL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IIP.Column.MANUFACTURE_OF_RUBBER_AND_PLASTIC_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IIP.Column.MANUFACTURING_INDUSTRY.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IIP.Column.METAL_ORE_MINING.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IIP.Column.MINING.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IIP.Column.MINING_SUPPORT_SERVICE_ACTIVITIES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IIP.Column.OTHER_MANUFACTURING_INDUSTRIES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IIP.Column.OTHER_MINING.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IIP.Column.PAPER_AND_PAPER_PRODUCT_MANUFACTURING.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IIP.Column.PRINTING_AND_REPRODUCTION_OF_RECORDED_MEDIA.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IIP.Column.PRODUCTION_AND_DISTRIBUTION_OF_ELECTRICITY_GAS_HOT_WATER_STEAM_AND_AIR_CONDITIONING.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IIP.Column.REPAIR_MAINTENANCE_AND_INSTALLATION_OF_MACHINERY_AND_EQUIPMENT.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IIP.Column.TEXTILE_MANUFACTURING.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IIP.Column.TOBACCO_PRODUCT_MANUFACTURING.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IIP.Column.WASTE_COLLECTION_TREATMENT_AND_DISPOSAL_ACTIVITIES_RECYCLING_OF_WASTE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IIP.Column.WASTEWATER_COLLECTION_AND_TREATMENT.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IIP.Column.WATER_COLLECTION_TREATMENT_AND_SUPPLY.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IIP.Column.WATER_SUPPLY_WASTE_MANAGEMENT_AND_TREATMENT_ACTIVITIES.value, data_type=DataType.FLOAT(), nullable=True),
+                    ],
+                    primary_keys=Table.IIP.primary_key,
+                )
+                # fmt: on
+
             case DataQuality.GOLD:
                 pass
 
@@ -3295,6 +3344,39 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish ingesting data in "{file_path}".')
 
+    def _clean_macroeconomics_iip_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.IIP,
+            GdpSource.VIETSTOCK,
+        )
+
+        self._logger.log_info(
+            f'Start cleaning data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for cleaning data here
+        self._select_database(DataQuality.BRONZE.value)
+
+        bronze_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.IIP.name,
+        )
+
+        silver_df = self._clean(df=bronze_df, clean_layer_list=[])
+
+        self._select_database(DataQuality.SILVER.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.IIP.name,
+            primary_keys=Table.IIP.primary_key,
+            df=silver_df,
+        )
+
+        self._logger.log_info(
+            f'Finish cleaning data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_macroeconomics_iip(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing macroeconomics IIP data for "{data_quality.value}".'
@@ -3305,7 +3387,7 @@ class DataPreprocessor:
                 self._ingest_macroeconomics_iip_vietstock()
 
             case DataQuality.SILVER:
-                pass
+                self._clean_macroeconomics_iip_vietstock()
 
             case DataQuality.GOLD:
                 pass
@@ -6306,7 +6388,7 @@ class DataPreprocessor:
         self._process_macroeconomics_labor(data_quality)
         self._process_macroeconomics_retail(data_quality)
         self._process_macroeconomics_pmi(data_quality)
-        # self._process_macroeconomics_iip(data_quality)
+        self._process_macroeconomics_iip(data_quality)
         # self._process_macroeconomics_ipv(data_quality)
         # self._process_macroeconomics_ipv_by_industry(data_quality)
         # self._process_macroeconomics_mip(data_quality)
