@@ -87,6 +87,12 @@ class TimeFormat(Enum):
     THREE_MONTH_INDEX_YEAR = "3M/2000"  # 3 month index + year
 
 
+class DataQuality(Enum):
+    BRONZE = "bronze"
+    SILVER = "silver"
+    GOLD = "gold"
+
+
 # Enum for Main Scraping Types
 class ScrapeMainType(Enum):
     MACROECONOMICS = "macroeconomics"

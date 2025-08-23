@@ -27,14 +27,30 @@ class DataPreprocessor:
         # Data
         self._market_df = None
 
-    def _connect_to_database(self) -> None:
+    def _connect_to_database(self, data_quality: DataQuality) -> None:
+        self._logger.log_info(f"Connecting to `{data_quality.value}` database...")
+
+        database = None
+        match (data_quality):
+            case DataQuality.BRONZE:
+                database = os.getenv("BRONZE_POSTGRES_DATABASE")
+
+            case DataQuality.SILVER:
+                database = os.getenv("SILVER_POSTGRES_DATABASE")
+
+            case DataQuality.GOLD:
+                database = os.getenv("GOLD_POSTGRES_DATABASE")
+
+            case _:
+                raise ValueError(f"Invalid data quality: `{data_quality.value}`")
+
         connection_model = PostgreSQLConnectionModel(
             logger=self._logger,
             host=os.getenv("POSTGRES_HOST"),
             user=os.getenv("POSTGRES_USER"),
             password=os.getenv("POSTGRES_PASSWORD"),
             port=os.getenv("POSTGRES_PORT"),
-            database=os.getenv("BRONZE_POSTGRES_DATABASE"),
+            database=database,
         )
 
         self._database_driver.connect(connection_model)
@@ -311,14 +327,25 @@ class DataPreprocessor:
     # endregion Helper functions
 
     # region Create Schemas
-    def _create_schemas(self) -> None:
-        self._logger.log_info("Start creating schemas.")
+    def _create_schemas(self, data_quality: DataQuality) -> None:
+        self._logger.log_info(f"Start creating schemas for `{data_quality.value}`.")
 
-        self._database_driver.create_schema(Schema.MACROECONOMICS.value)
-        self._database_driver.create_schema(Schema.STOCK_MARKET.value)
-        self._database_driver.create_schema(Schema.ENTERPRISE.value)
+        match data_quality:
+            case DataQuality.BRONZE:
+                self._database_driver.create_schema(Schema.MACROECONOMICS.value)
+                self._database_driver.create_schema(Schema.STOCK_MARKET.value)
+                self._database_driver.create_schema(Schema.ENTERPRISE.value)
 
-        self._logger.log_info("Finish creating schemas.")
+            case DataQuality.SILVER:
+                self._database_driver.create_schema(Schema.MACROECONOMICS.value)
+
+            case DataQuality.GOLD:
+                pass
+
+            case _:
+                raise ValueError(f"Invalid data quality: `{data_quality.value}`")
+
+        self._logger.log_info(f"Finish creating schemas for `{data_quality.value}`.")
 
     # endregion Create Schemas
 
@@ -1710,14 +1737,25 @@ class DataPreprocessor:
 
         self._logger.log_info("Finish creating enterprise tables.")
 
-    def _create_tables(self) -> None:
-        self._logger.log_info("Start creating tables.")
+    def _create_tables(self, data_quality: DataQuality) -> None:
+        self._logger.log_info(f"Start creating tables for `{data_quality.value}`.")
 
-        self._create_macroeconomics_tables()
-        self._create_stock_market_tables()
-        self._create_enterprise_tables()
+        match data_quality:
+            case DataQuality.BRONZE:
+                self._create_macroeconomics_tables()
+                self._create_stock_market_tables()
+                self._create_enterprise_tables()
 
-        self._logger.log_info("Finish creating tables.")
+            case DataQuality.SILVER:
+                pass
+
+            case DataQuality.GOLD:
+                pass
+
+            case _:
+                raise ValueError(f"Invalid data quality: `{data_quality.value}`")
+
+        self._logger.log_info(f"Finish creating tables for `{data_quality.value}`.")
 
     # endregion Create Tables
 
@@ -4947,75 +4985,102 @@ class DataPreprocessor:
 
     # endregion ENTERPRISE data process
 
-    def _process_data(self) -> None:
+    def _process_data(self, data_quality: DataQuality) -> None:
         self._logger.log_info("Start processing data.")
 
-        # Macroeconomics
-        self._process_macroeconomics_gdp()
-        self._process_macroeconomics_cpi()
-        self._process_macroeconomics_ppi()
-        self._process_macroeconomics_ipi()
-        self._process_macroeconomics_xpi()
-        self._process_macroeconomics_mpi()
-        self._process_macroeconomics_population()
-        self._process_macroeconomics_labor()
-        self._process_macroeconomics_retail()
-        self._process_macroeconomics_pmi()
-        self._process_macroeconomics_iip()
-        self._process_macroeconomics_ipv()
-        self._process_macroeconomics_ipv_by_industry()
-        self._process_macroeconomics_mip()
-        self._process_macroeconomics_mip()
-        self._process_macroeconomics_fa_by_house_types()
-        self._process_macroeconomics_it_bop()
-        self._process_macroeconomics_tsbr()
-        self._process_macroeconomics_tsbe()
-        self._process_macroeconomics_gd()
-        self._process_macroeconomics_brd()
-        self._process_macroeconomics_iisd()
-        self._process_macroeconomics_treg()
-        self._process_macroeconomics_credit()
-        self._process_macroeconomics_mobilization()
-        self._process_macroeconomics_exchange_rate()
-        self._process_macroeconomics_iir()
-        self._process_macroeconomics_rrrr()
-        self._process_macroeconomics_fdi_sector()
-        self._process_macroeconomics_fdi_rd()
-        self._process_macroeconomics_export()
-        self._process_macroeconomics_import()
-        self._process_macroeconomics_gold_price()
-        self._process_macroeconomics_oil_price()
-        self._process_macroeconomics_dow_jones()
-        self._process_macroeconomics_nyse_composite()
-        self._process_macroeconomics_snp_500()
-        self._process_macroeconomics_nasdaq_composite()
-        self._process_macroeconomics_nasdaq_100()
+        match data_quality:
+            case DataQuality.BRONZE:
+                # Macroeconomics
+                self._process_macroeconomics_gdp()
+                self._process_macroeconomics_cpi()
+                self._process_macroeconomics_ppi()
+                self._process_macroeconomics_ipi()
+                self._process_macroeconomics_xpi()
+                self._process_macroeconomics_mpi()
+                self._process_macroeconomics_population()
+                self._process_macroeconomics_labor()
+                self._process_macroeconomics_retail()
+                self._process_macroeconomics_pmi()
+                self._process_macroeconomics_iip()
+                self._process_macroeconomics_ipv()
+                self._process_macroeconomics_ipv_by_industry()
+                self._process_macroeconomics_mip()
+                self._process_macroeconomics_mip()
+                self._process_macroeconomics_fa_by_house_types()
+                self._process_macroeconomics_it_bop()
+                self._process_macroeconomics_tsbr()
+                self._process_macroeconomics_tsbe()
+                self._process_macroeconomics_gd()
+                self._process_macroeconomics_brd()
+                self._process_macroeconomics_iisd()
+                self._process_macroeconomics_treg()
+                self._process_macroeconomics_credit()
+                self._process_macroeconomics_mobilization()
+                self._process_macroeconomics_exchange_rate()
+                self._process_macroeconomics_iir()
+                self._process_macroeconomics_rrrr()
+                self._process_macroeconomics_fdi_sector()
+                self._process_macroeconomics_fdi_rd()
+                self._process_macroeconomics_export()
+                self._process_macroeconomics_import()
+                self._process_macroeconomics_gold_price()
+                self._process_macroeconomics_oil_price()
+                self._process_macroeconomics_dow_jones()
+                self._process_macroeconomics_nyse_composite()
+                self._process_macroeconomics_snp_500()
+                self._process_macroeconomics_nasdaq_composite()
+                self._process_macroeconomics_nasdaq_100()
 
-        # Stock market
-        self._process_stock_market_market()
-        self._process_stock_market_vn_index()
-        self._process_stock_market_hnx_index()
-        self._process_stock_market_vn_30_index()
-        self._process_stock_market_vn_100_index()
-        self._process_stock_market_hnx_30_index()
-        self._process_stock_market_upcom_index()
+                # Stock market
+                self._process_stock_market_market()
+                self._process_stock_market_vn_index()
+                self._process_stock_market_hnx_index()
+                self._process_stock_market_vn_30_index()
+                self._process_stock_market_vn_100_index()
+                self._process_stock_market_hnx_30_index()
+                self._process_stock_market_upcom_index()
 
-        # Enterprise
-        self._process_enterprise_stock()
-        self._process_enterprise_daily_price()
+                # Enterprise
+                self._process_enterprise_stock()
+                self._process_enterprise_daily_price()
+
+            case DataQuality.SILVER:
+                pass
+
+            case DataQuality.GOLD:
+                pass
+
+            case _:
+                raise ValueError(f"Invalid data quality: `{data_quality.value}`")
 
         self._logger.log_info("Finish processing data.")
 
     def ingest_bronze_data(self) -> None:
         try:
-            self._connect_to_database()
-            self._create_schemas()
-            self._create_tables()
-            self._process_data()
+            self._connect_to_database(DataQuality.BRONZE)
+            self._create_schemas(DataQuality.BRONZE)
+            self._create_tables(DataQuality.BRONZE)
+            self._process_data(DataQuality.BRONZE)
+
         except Exception as e:
-            self._logger.log_error(f"Error preprocessing data: {e}")
+            self._logger.log_error(
+                f"Error preprocessing `{DataQuality.BRONZE.value}` data: {e}"
+            )
+
         finally:
             self._database_driver.disconnect()
 
-    def ingesgt_silver_data(self) -> None:
-        pass
+    def ingest_silver_data(self) -> None:
+        try:
+            self._connect_to_database(DataQuality.SILVER)
+            self._create_schemas(DataQuality.SILVER)
+            self._create_tables(DataQuality.SILVER)
+            self._process_data(DataQuality.SILVER)
+
+        except Exception as e:
+            self._logger.log_error(
+                f"Error preprocessing `{DataQuality.SILVER.value}` data: {e}"
+            )
+
+        finally:
+            self._database_driver.disconnect()
