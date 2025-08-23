@@ -1656,6 +1656,53 @@ class DataPreprocessor:
                 )
                 # fmt: on
 
+                # IPI
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.IPI.name,
+                    columns=[
+                        Column(name=Table.IPI.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
+                        Column(name=Table.IPI.Column.GENERAL_INDEX.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPI.Column.PROFESSIONAL_SCIENTIFIC_AND_TECHNICAL_SERVICES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPI.Column.CONSTRUCTION_SERVICES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPI.Column.PAPER_AND_PAPER_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPI.Column.CHEMICALS_AND_CHEMICAL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPI.Column.MACHINERY_AND_EQUIPMENT_NOT_ELSEWHERE_CLASSIFIED.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPI.Column.NATURAL_WATER_EXTRACTION.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPI.Column.NATURAL_WATER_EXTRACTION_AND_WASTE_MANAGEMENT_SERVICES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPI.Column.OTHER_TRANSPORT_EQUIPMENT.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPI.Column.METAL_ORES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPI.Column.PROCESSED_FOOD_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPI.Column.MANUFACTURING_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPI.Column.TEXTILES_AND_LEATHER_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPI.Column.MINING_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPI.Column.OTHER_MINING_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPI.Column.METAL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPI.Column.FORESTRY_PRODUCTS_AND_RELATED_SERVICES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPI.Column.AGRICULTURE_FORESTRY_AND_FISHERY_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPI.Column.AGRICULTURE_PRODUCTS_AND_RELATED_SERVICES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPI.Column.FISHING_AND_AQUACULTURE_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPI.Column.RUBBER_AND_PLASTIC_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPI.Column.WOOD_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPI.Column.OTHER_NON_METALLIC_MINERAL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPI.Column.FABRICATED_METAL_PRODUCTS_EXCEPT_MACHINERY_AND_EQUIPMENT.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPI.Column.ELECTRONIC_COMPUTER_AND_OPTICAL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPI.Column.USED_FOR_MANUFACTURING_INDUSTRY.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPI.Column.USED_FOR_AGRICULTURE_FORESTRY_AND_FISHERY.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPI.Column.USED_FOR_CONSTRUCTION.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPI.Column.COKE_AND_REFINED_PETROLEUM_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPI.Column.HARD_COAL_AND_LIGNITE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPI.Column.ELECTRICAL_EQUIPMENT.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPI.Column.PHARMACEUTICALS_AND_MEDICINAL_CHEMICALS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPI.Column.MOTOR_VEHICLES_AND_TRAILERS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPI.Column.ELECTRICITY_GAS_STEAM_AND_AIR_CONDITIONING.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPI.Column.BEVERAGES_AND_TOBACCO.value, data_type=DataType.FLOAT(), nullable=True),
+                    ],
+                    primary_keys=Table.IPI.primary_key,
+                )
+                # fmt: on
+
             case DataQuality.GOLD:
                 pass
 
@@ -2360,6 +2407,39 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish ingesting data in "{file_path}".')
 
+    def _clean_macroeconomics_ipi_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.IPI,
+            GdpSource.VIETSTOCK,
+        )
+
+        self._logger.log_info(
+            f'Start cleaning data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for cleaning data here
+        self._select_database(DataQuality.BRONZE.value)
+
+        bronze_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.IPI.name,
+        )
+
+        silver_df = self._clean(df=bronze_df, clean_layer_list=[])
+
+        self._select_database(DataQuality.SILVER.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.IPI.name,
+            primary_keys=Table.IPI.primary_key,
+            df=silver_df,
+        )
+
+        self._logger.log_info(
+            f'Finish cleaning data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_macroeconomics_ipi(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing macroeconomics IPI data for "{data_quality.value}".'
@@ -2370,7 +2450,7 @@ class DataPreprocessor:
                 self._ingest_macroeconomics_ipi_vietstock()
 
             case DataQuality.SILVER:
-                pass
+                self._clean_macroeconomics_ipi_vietstock()
 
             case DataQuality.GOLD:
                 pass
@@ -5837,7 +5917,7 @@ class DataPreprocessor:
         self._process_macroeconomics_gdp(data_quality)
         self._process_macroeconomics_cpi(data_quality)
         self._process_macroeconomics_ppi(data_quality)
-        # self._process_macroeconomics_ipi(data_quality)
+        self._process_macroeconomics_ipi(data_quality)
         # self._process_macroeconomics_xpi(data_quality)
         # self._process_macroeconomics_mpi(data_quality)
         # self._process_macroeconomics_population(data_quality)
