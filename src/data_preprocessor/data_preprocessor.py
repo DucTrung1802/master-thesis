@@ -1817,6 +1817,22 @@ class DataPreprocessor:
                 )
                 # fmt: on
 
+                # POPULATION
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.POPULATION.name,
+                    columns=[
+                        Column(name=Table.POPULATION.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
+                        Column(name=Table.POPULATION.Column.POPULATION.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.POPULATION.Column.POPULATION_AREA_URBAN_RATE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.POPULATION.Column.POPULATION_DENSITY.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.POPULATION.Column.POPULATION_GROWTH_RATE.value, data_type=DataType.FLOAT(), nullable=True),
+                    ],
+                    primary_keys=Table.POPULATION.primary_key,
+                )
+                # fmt: on
+
             case DataQuality.GOLD:
                 pass
 
@@ -2821,6 +2837,39 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish ingesting data in "{file_path}".')
 
+    def _clean_macroeconomics_population_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.POPULATION,
+            GdpSource.VIETSTOCK,
+        )
+
+        self._logger.log_info(
+            f'Start cleaning data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for cleaning data here
+        self._select_database(DataQuality.BRONZE.value)
+
+        bronze_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.POPULATION.name,
+        )
+
+        silver_df = self._clean(df=bronze_df, clean_layer_list=[])
+
+        self._select_database(DataQuality.SILVER.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.POPULATION.name,
+            primary_keys=Table.POPULATION.primary_key,
+            df=silver_df,
+        )
+
+        self._logger.log_info(
+            f'Finish cleaning data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_macroeconomics_population(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing macroeconomics POPULATION data for "{data_quality.value}".'
@@ -2831,7 +2880,7 @@ class DataPreprocessor:
                 self._ingest_macroeconomics_population_vietstock()
 
             case DataQuality.SILVER:
-                pass
+                self._clean_macroeconomics_population_vietstock()
 
             case DataQuality.GOLD:
                 pass
@@ -6100,7 +6149,7 @@ class DataPreprocessor:
         self._process_macroeconomics_ipi(data_quality)
         self._process_macroeconomics_xpi(data_quality)
         self._process_macroeconomics_mpi(data_quality)
-        # self._process_macroeconomics_population(data_quality)
+        self._process_macroeconomics_population(data_quality)
         # self._process_macroeconomics_labor(data_quality)
         # self._process_macroeconomics_retail(data_quality)
         # self._process_macroeconomics_pmi(data_quality)
