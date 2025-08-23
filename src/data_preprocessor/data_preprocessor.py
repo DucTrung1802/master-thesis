@@ -1703,6 +1703,63 @@ class DataPreprocessor:
                 )
                 # fmt: on
 
+                # XPI
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.XPI.name,
+                    columns=[
+                        Column(name=Table.XPI.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
+                        Column(name=Table.XPI.Column.MONTH.value, data_type=DataType.INT(), nullable=True),
+                        Column(name=Table.XPI.Column.ANIMAL_FEED_AND_RAW_MATERIALS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.XPI.Column.AQUATIC_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.XPI.Column.CAMERAS_CAMCORDERS_AND_COMPONENTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.XPI.Column.CASHEW_NUTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.XPI.Column.CASSAVA_AND_CASSAVA_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.XPI.Column.CHEMICAL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.XPI.Column.CHEMICALS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.XPI.Column.CLINKER_AND_CEMENT.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.XPI.Column.COFFEE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.XPI.Column.CONFECTIONERY_AND_CEREAL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.XPI.Column.CRUDE_OIL.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.XPI.Column.DOMESTIC_ECONOMIC_SECTOR.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.XPI.Column.ELECTRICAL_WIRES_AND_CABLES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.XPI.Column.ELECTRONICS_COMPUTERS_AND_COMPONENTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.XPI.Column.FOOTWEAR.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.XPI.Column.FOREIGN_INVESTED_SECTOR.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.XPI.Column.FOREIGN_CRUDE_OIL.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.XPI.Column.FURNITURE_PRODUCTS_FROM_MATERIALS_OTHER_THAN_WOOD.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.XPI.Column.GLASS_AND_GLASS_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.XPI.Column.HANDBAGS_WALLETS_SUITCASES_HATS_UMBRELLAS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.XPI.Column.IRON_AND_STEEL.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.XPI.Column.IRON_AND_STEEL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.XPI.Column.MACHINERY_EQUIPMENT_TOOLS_SPARE_PARTS_OTHER.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.XPI.Column.MAIN_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.XPI.Column.OTHER_BASE_METALS_AND_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.XPI.Column.OTHER_GOODS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.XPI.Column.PAPER_AND_PAPER_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.XPI.Column.PEPPER.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.XPI.Column.PETROLEUM.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.XPI.Column.PHONES_AND_COMPONENTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.XPI.Column.PLASTIC_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.XPI.Column.RAW_PLASTICS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.XPI.Column.RICE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.XPI.Column.RUBBER.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.XPI.Column.RUBBER_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.XPI.Column.TEA.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.XPI.Column.TEXTILE_FIBERS_YARNS_OF_ALL_KINDS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.XPI.Column.TEXTILE_GARMENT_LEATHER_FOOTWEAR_RAW_MATERIALS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.XPI.Column.TEXTILES_GARMENTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.XPI.Column.TOTAL_VALUE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.XPI.Column.TOYS_SPORTS_EQUIPMENT_AND_PARTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.XPI.Column.TRANSPORTATION_VEHICLES_AND_SPARE_PARTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.XPI.Column.VEGETABLES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.XPI.Column.WOOD_AND_WOOD_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                    ],
+                    primary_keys=Table.XPI.primary_key,
+                )
+                # fmt: on
+
             case DataQuality.GOLD:
                 pass
 
@@ -2507,6 +2564,39 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish ingesting data in "{file_path}".')
 
+    def _clean_macroeconomics_xpi_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.XPI,
+            GdpSource.VIETSTOCK,
+        )
+
+        self._logger.log_info(
+            f'Start cleaning data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for cleaning data here
+        self._select_database(DataQuality.BRONZE.value)
+
+        bronze_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.XPI.name,
+        )
+
+        silver_df = self._clean(df=bronze_df, clean_layer_list=[])
+
+        self._select_database(DataQuality.SILVER.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.XPI.name,
+            primary_keys=Table.XPI.primary_key,
+            df=silver_df,
+        )
+
+        self._logger.log_info(
+            f'Finish cleaning data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_macroeconomics_xpi(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing macroeconomics XPI data for "{data_quality.value}".'
@@ -2517,7 +2607,7 @@ class DataPreprocessor:
                 self._ingest_macroeconomics_xpi_vietstock()
 
             case DataQuality.SILVER:
-                pass
+                self._clean_macroeconomics_xpi_vietstock()
 
             case DataQuality.GOLD:
                 pass
@@ -5918,7 +6008,7 @@ class DataPreprocessor:
         self._process_macroeconomics_cpi(data_quality)
         self._process_macroeconomics_ppi(data_quality)
         self._process_macroeconomics_ipi(data_quality)
-        # self._process_macroeconomics_xpi(data_quality)
+        self._process_macroeconomics_xpi(data_quality)
         # self._process_macroeconomics_mpi(data_quality)
         # self._process_macroeconomics_population(data_quality)
         # self._process_macroeconomics_labor(data_quality)
