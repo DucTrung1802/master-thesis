@@ -1760,6 +1760,63 @@ class DataPreprocessor:
                 )
                 # fmt: on
 
+                # MPI
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.MPI.name,
+                    columns=[
+                        Column(name=Table.MPI.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
+                        Column(name=Table.MPI.Column.MONTH.value, data_type=DataType.INT(), nullable=True),
+                        Column(name=Table.MPI.Column.ANIMAL_FEED_AND_RAW_MATERIALS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.MPI.Column.AQUATIC_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.MPI.Column.CAMERAS_CAMCORDERS_AND_COMPONENTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.MPI.Column.CASHEW_NUTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.MPI.Column.CASSAVA_AND_CASSAVA_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.MPI.Column.CHEMICAL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.MPI.Column.CHEMICALS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.MPI.Column.CLINKER_AND_CEMENT.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.MPI.Column.COFFEE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.MPI.Column.CONFECTIONERY_AND_CEREAL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.MPI.Column.CRUDE_OIL.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.MPI.Column.DOMESTIC_ECONOMIC_SECTOR.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.MPI.Column.ELECTRICAL_WIRES_AND_CABLES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.MPI.Column.ELECTRONICS_COMPUTERS_AND_COMPONENTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.MPI.Column.FOOTWEAR.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.MPI.Column.FOREIGN_INVESTED_SECTOR.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.MPI.Column.FOREIGN_CRUDE_OIL.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.MPI.Column.FURNITURE_PRODUCTS_FROM_MATERIALS_OTHER_THAN_WOOD.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.MPI.Column.GLASS_AND_GLASS_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.MPI.Column.HANDBAGS_WALLETS_SUITCASES_HATS_UMBRELLAS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.MPI.Column.IRON_AND_STEEL.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.MPI.Column.IRON_AND_STEEL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.MPI.Column.MACHINERY_EQUIPMENT_TOOLS_SPARE_PARTS_OTHER.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.MPI.Column.MAIN_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.MPI.Column.OTHER_BASE_METALS_AND_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.MPI.Column.OTHER_GOODS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.MPI.Column.PAPER_AND_PAPER_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.MPI.Column.PEPPER.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.MPI.Column.PETROLEUM.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.MPI.Column.PHONES_AND_COMPONENTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.MPI.Column.PLASTIC_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.MPI.Column.RAW_PLASTICS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.MPI.Column.RICE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.MPI.Column.RUBBER.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.MPI.Column.RUBBER_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.MPI.Column.TEA.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.MPI.Column.TEXTILE_FIBERS_YARNS_OF_ALL_KINDS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.MPI.Column.TEXTILE_GARMENT_LEATHER_FOOTWEAR_RAW_MATERIALS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.MPI.Column.TEXTILES_GARMENTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.MPI.Column.TOTAL_VALUE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.MPI.Column.TOYS_SPORTS_EQUIPMENT_AND_PARTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.MPI.Column.TRANSPORTATION_VEHICLES_AND_SPARE_PARTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.MPI.Column.VEGETABLES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.MPI.Column.WOOD_AND_WOOD_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                    ],
+                    primary_keys=Table.MPI.primary_key,
+                )
+                # fmt: on
+
             case DataQuality.GOLD:
                 pass
 
@@ -2664,6 +2721,39 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish ingesting data in "{file_path}".')
 
+    def _clean_macroeconomics_mpi_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.MPI,
+            GdpSource.VIETSTOCK,
+        )
+
+        self._logger.log_info(
+            f'Start cleaning data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for cleaning data here
+        self._select_database(DataQuality.BRONZE.value)
+
+        bronze_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.MPI.name,
+        )
+
+        silver_df = self._clean(df=bronze_df, clean_layer_list=[])
+
+        self._select_database(DataQuality.SILVER.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.MPI.name,
+            primary_keys=Table.MPI.primary_key,
+            df=silver_df,
+        )
+
+        self._logger.log_info(
+            f'Finish cleaning data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_macroeconomics_mpi(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing macroeconomics MPI data for "{data_quality.value}".'
@@ -2674,7 +2764,7 @@ class DataPreprocessor:
                 self._ingest_macroeconomics_mpi_vietstock()
 
             case DataQuality.SILVER:
-                pass
+                self._clean_macroeconomics_mpi_vietstock()
 
             case DataQuality.GOLD:
                 pass
@@ -6009,7 +6099,7 @@ class DataPreprocessor:
         self._process_macroeconomics_ppi(data_quality)
         self._process_macroeconomics_ipi(data_quality)
         self._process_macroeconomics_xpi(data_quality)
-        # self._process_macroeconomics_mpi(data_quality)
+        self._process_macroeconomics_mpi(data_quality)
         # self._process_macroeconomics_population(data_quality)
         # self._process_macroeconomics_labor(data_quality)
         # self._process_macroeconomics_retail(data_quality)
