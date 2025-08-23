@@ -81,7 +81,7 @@ def get_all_file_names_with_extensions(
     Args:
         logger (Logger): Logger instance for logging.
         folder_path (str): Path to the folder.
-        extensions (List[FileExtension], optional): List of file extensions to include 
+        extensions (List[FileExtension], optional): List of file extensions to include
             (e.g., [".csv", ".txt"]). If None, all files are returned.
 
     Returns:
@@ -106,7 +106,9 @@ def get_all_file_names_with_extensions(
 
                 # Check if extensions filter is provided and match the file extension
                 # If no filter is provided, include all files
-                if not extensions or ext.lower() in [e.value.lower() for e in extensions]:
+                if not extensions or ext.lower() in [
+                    e.value.lower() for e in extensions
+                ]:
                     # Convert the path to a POSIX-style string (uses forward slashes)
                     matching_files.append(file_path.as_posix())
 
@@ -120,8 +122,11 @@ def get_all_file_names_with_extensions(
         raise
     except PermissionError as e:
         # Log and re-raise if there is a permission error
-        logger.log_error(f"Permission denied to access folder: {folder_path}. Error: {e}")
+        logger.log_error(
+            f"Permission denied to access folder: {folder_path}. Error: {e}"
+        )
         raise
+
 
 def extract_zip_file(logger: Logger, zip_path, extract_to_folder):
     """
@@ -212,6 +217,10 @@ def download_file(download_url, file_path, logger):
 
 def format_key_for_name(key: Tuple[ScrapeMainType, ScrapeSubType, Source]):
     return "_".join(k.name.lower() for k in key)
+
+
+def format_key_for_table(key: Tuple[ScrapeMainType, ScrapeSubType, Source]):
+    return ".".join(k.name.lower() for k in key)
 
 
 def get_newest_file_path(folder_path, extension: FileExtension = None):

@@ -55,6 +55,52 @@ class DataPreprocessor:
 
         self._database_driver.connect(connection_model)
 
+    def _select_database(self, database_name: str) -> None:
+        self._logger.log_info(f'Selecting database "{database_name}"...')
+
+        self._database_driver.change_database(database_name)
+
+    def _select(
+        self,
+        schema_name: str,
+        table_name: str,
+        columns: List[str] = None,
+        join_model: JoinModel = None,
+        conditions: List[Condition] = None,
+        order_by: List[str] = None,
+        limit: int = None,
+    ) -> pd.DataFrame:
+        return self._database_driver.select(
+            schema_name=schema_name,
+            table_name=table_name,
+            columns=columns,
+            join_model=join_model,
+            conditions=conditions,
+            order_by=order_by,
+            limit=limit,
+        )
+
+    def _clean(self, df: pd.DataFrame, clean_layer_list: List[CleanLayer]) -> pd.DataFrame:
+        if not clean_layer_list:
+            return df
+
+        for layer in clean_layer_list:
+            if layer.action == CleanAction.REMOVE_RECORD_IF_COLUMN_IS_NULL:
+                col = layer.params.get("column_name")
+                if col:
+                    df = df[df[col].notnull()]
+
+            elif layer.action == CleanAction.ORDER_BY:
+                col_list = layer.params.get("column_list")
+                if col_list:
+                    df = df.sort_values(by=col_list)
+
+            else:
+                # Optional: handle unknown layer or skip
+                pass
+
+        return df
+
     def _save_pandas_table_to_database(
         self,
         schema_name: str,
@@ -1886,7 +1932,47 @@ class DataPreprocessor:
         self._logger.log_info(f'Finish ingesting data in "{file_path}".')
 
     def _clean_macroeconomics_gdp_vietstock(self) -> None:
-        pass
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.GDP,
+            GdpSource.VIETSTOCK,
+        )
+
+        self._logger.log_info(
+            f'Start cleaning data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for cleaning data here
+        self._select_database(DataQuality.BRONZE.value)
+
+        bronze_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.GDP.name,
+        )
+
+        silver_df = self._clean(
+            df=bronze_df,
+            clean_layer_list=[
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL(
+                    Table.GDP.Column.GDP_GROWTH.value
+                ),
+                CleanLayer.ORDER_BY(
+                    [Table.GDP.Column.YEAR.value, Table.GDP.Column.QUARTER.value]
+                ),
+            ],
+        )
+
+        self._select_database(DataQuality.SILVER.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.GDP.name,
+            primary_keys=Table.GDP.primary_key,
+            df=silver_df,
+        )
+
+        self._logger.log_info(
+            f'Finish cleaning data in table "{format_key_for_table(key)}".'
+        )
 
     def _process_macroeconomics_gdp(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
@@ -1898,8 +1984,8 @@ class DataPreprocessor:
                 self._ingest_macroeconomics_gdp_vietstock()
 
             case DataQuality.SILVER:
-                pass
-            
+                self._clean_macroeconomics_gdp_vietstock()
+
             case DataQuality.GOLD:
                 pass
 
@@ -5629,59 +5715,60 @@ class DataPreprocessor:
 
         # Macroeconomics
         self._process_macroeconomics_gdp(data_quality)
-        self._process_macroeconomics_cpi(data_quality)
-        self._process_macroeconomics_ppi(data_quality)
-        self._process_macroeconomics_ipi(data_quality)
-        self._process_macroeconomics_xpi(data_quality)
-        self._process_macroeconomics_mpi(data_quality)
-        self._process_macroeconomics_population(data_quality)
-        self._process_macroeconomics_labor(data_quality)
-        self._process_macroeconomics_retail(data_quality)
-        self._process_macroeconomics_pmi(data_quality)
-        self._process_macroeconomics_iip(data_quality)
-        self._process_macroeconomics_ipv(data_quality)
-        self._process_macroeconomics_ipv_by_industry(data_quality)
-        self._process_macroeconomics_mip(data_quality)
-        self._process_macroeconomics_mip(data_quality)
-        self._process_macroeconomics_fa_by_house_types(data_quality)
-        self._process_macroeconomics_it_bop(data_quality)
-        self._process_macroeconomics_tsbr(data_quality)
-        self._process_macroeconomics_tsbe(data_quality)
-        self._process_macroeconomics_gd(data_quality)
-        self._process_macroeconomics_brd(data_quality)
-        self._process_macroeconomics_iisd(data_quality)
-        self._process_macroeconomics_treg(data_quality)
-        self._process_macroeconomics_credit(data_quality)
-        self._process_macroeconomics_mobilization(data_quality)
-        self._process_macroeconomics_exchange_rate(data_quality)
-        self._process_macroeconomics_iir(data_quality)
-        self._process_macroeconomics_rrrr(data_quality)
-        self._process_macroeconomics_fdi_sector(data_quality)
-        self._process_macroeconomics_fdi_rd(data_quality)
-        self._process_macroeconomics_export(data_quality)
-        self._process_macroeconomics_import(data_quality)
-        self._process_macroeconomics_gold_price(data_quality)
-        self._process_macroeconomics_oil_price(data_quality)
-        self._process_macroeconomics_dow_jones(data_quality)
-        self._process_macroeconomics_nyse_composite(data_quality)
-        self._process_macroeconomics_snp_500(data_quality)
-        self._process_macroeconomics_nasdaq_composite(data_quality)
-        self._process_macroeconomics_nasdaq_100(data_quality)
+        # self._process_macroeconomics_cpi(data_quality)
+        # self._process_macroeconomics_ppi(data_quality)
+        # self._process_macroeconomics_ipi(data_quality)
+        # self._process_macroeconomics_xpi(data_quality)
+        # self._process_macroeconomics_mpi(data_quality)
+        # self._process_macroeconomics_population(data_quality)
+        # self._process_macroeconomics_labor(data_quality)
+        # self._process_macroeconomics_retail(data_quality)
+        # self._process_macroeconomics_pmi(data_quality)
+        # self._process_macroeconomics_iip(data_quality)
+        # self._process_macroeconomics_ipv(data_quality)
+        # self._process_macroeconomics_ipv_by_industry(data_quality)
+        # self._process_macroeconomics_mip(data_quality)
+        # self._process_macroeconomics_mip(data_quality)
+        # self._process_macroeconomics_fa_by_house_types(data_quality)
+        # self._process_macroeconomics_it_bop(data_quality)
+        # self._process_macroeconomics_tsbr(data_quality)
+        # self._process_macroeconomics_tsbe(data_quality)
+        # self._process_macroeconomics_gd(data_quality)
+        # self._process_macroeconomics_brd(data_quality)
+        # self._process_macroeconomics_iisd(data_quality)
+        # self._process_macroeconomics_treg(data_quality)
+        # self._process_macroeconomics_credit(data_quality)
+        # self._process_macroeconomics_mobilization(data_quality)
+        # self._process_macroeconomics_exchange_rate(data_quality)
+        # self._process_macroeconomics_iir(data_quality)
+        # self._process_macroeconomics_rrrr(data_quality)
+        # self._process_macroeconomics_fdi_sector(data_quality)
+        # self._process_macroeconomics_fdi_rd(data_quality)
+        # self._process_macroeconomics_export(data_quality)
+        # self._process_macroeconomics_import(data_quality)
+        # self._process_macroeconomics_gold_price(data_quality)
+        # self._process_macroeconomics_oil_price(data_quality)
+        # self._process_macroeconomics_dow_jones(data_quality)
+        # self._process_macroeconomics_nyse_composite(data_quality)
+        # self._process_macroeconomics_snp_500(data_quality)
+        # self._process_macroeconomics_nasdaq_composite(data_quality)
+        # self._process_macroeconomics_nasdaq_100(data_quality)
 
         match data_quality:
             case DataQuality.BRONZE:
-                # Stock market
-                self._process_stock_market_market()
-                self._process_stock_market_vn_index()
-                self._process_stock_market_hnx_index()
-                self._process_stock_market_vn_30_index()
-                self._process_stock_market_vn_100_index()
-                self._process_stock_market_hnx_30_index()
-                self._process_stock_market_upcom_index()
+                pass
+                # # Stock market
+                # self._process_stock_market_market()
+                # self._process_stock_market_vn_index()
+                # self._process_stock_market_hnx_index()
+                # self._process_stock_market_vn_30_index()
+                # self._process_stock_market_vn_100_index()
+                # self._process_stock_market_hnx_30_index()
+                # self._process_stock_market_upcom_index()
 
-                # Enterprise
-                self._process_enterprise_stock()
-                self._process_enterprise_daily_price()
+                # # Enterprise
+                # self._process_enterprise_stock()
+                # self._process_enterprise_daily_price()
 
             case DataQuality.SILVER:
                 pass
