@@ -1,8 +1,8 @@
 from typing import List, Optional
 from dotenv import load_dotenv
 import os
-import plotly.graph_objects as go
 import pandas as pd
+import matplotlib.pyplot as plt
 from datetime import datetime
 
 from logger.logger import Logger
@@ -15,7 +15,11 @@ from models.tabular_database_driver_models.postgre_sql_connection_model import (
     PostgreSQLConnectionModel,
 )
 from utils.enums import GenerateDateTimeType
-from utils.constants import SCRAPER_START_DATE, SCRAPER_END_DATE
+from utils.constants import (
+    CHARTS_DIR,
+    SCRAPER_START_DATE,
+    SCRAPER_END_DATE,
+)
 
 parent_dir = os.path.dirname(os.getcwd())
 
@@ -29,6 +33,8 @@ class Visualizer:
         self._logger = logger
         self._database_driver = PostgreSQLDriver(logger=logger)
         self.connect_to_database()
+
+        os.makedirs(CHARTS_DIR, exist_ok=True)
 
     def connect_to_database(self, database_name: str = "postgres") -> None:
         connection_model = PostgreSQLConnectionModel(
@@ -183,11 +189,14 @@ class Visualizer:
         y_axis_title: str = "Value",
         y_unit: Optional[str] = None,
         legend_title: str = "Series",
-        legend_orientation: str = "h",  # "h" = horizontal, "v" = vertical
+        legend_orientation: str = "h",  # kept for compatibility
+        legend_position: str = "best",  # NEW parameter
         font_size: int = 16,
-    ) -> go.Figure:
+        figure_name: str = None,
+        dpi: int = 300,
+    ) -> plt.Figure:
         """
-        Plots a line chart using Plotly Graph Objects.
+        Plots a line chart using Matplotlib.
 
         Parameters:
             df (pd.DataFrame): Input dataframe.
@@ -198,23 +207,22 @@ class Visualizer:
             y_axis_title (str): Label for y-axis.
             y_unit (str, optional): Unit suffix for y-axis values (e.g., "%", "$").
             legend_title (str): Title of the legend.
-            legend_orientation (str): "h" (horizontal) or "v" (vertical).
+            legend_orientation (str): For compatibility, not used if legend_position is set.
+            legend_position (str): Position of the legend (e.g., "best", "upper left", "upper right").
+            font_size (int): Base font size.
+            figure_name (str, optional): Name of the saved figure. Defaults to first y_column.
+            dpi (int): Resolution of saved figure.
 
         Returns:
-            go.Figure: Plotly Figure object.
+            plt.Figure: Matplotlib Figure object.
         """
-        fig = go.Figure()
+        df[x_column] = pd.to_datetime(df[x_column])
 
-        # Add traces for each y-column
+        fig, ax = plt.subplots(figsize=(14, 5))
+
+        # Plot each y-column
         for col in y_columns:
-            fig.add_trace(
-                go.Scatter(
-                    x=df[x_column],
-                    y=df[col],
-                    mode="lines+markers",
-                    name=col,  # Legend label
-                )
-            )
+            ax.plot(df[x_column], df[col], marker="o", label=col)
 
         # Format y-axis title with unit
         if y_unit:
@@ -222,25 +230,35 @@ class Visualizer:
         else:
             y_axis_label = y_axis_title
 
-        # Update layout
-        fig.update_layout(
-            title=title,
-            xaxis_title=x_axis_title,
-            yaxis_title=y_axis_label,
-            template="plotly_white",
-            hovermode="x unified",
-            legend=dict(
-                title=legend_title,
-                orientation=legend_orientation,
-                yanchor="bottom",  # adjust position for horizontal legends
-                y=1.02 if legend_orientation == "h" else 1,
-                xanchor="right",
-                x=1,
-            ),
-            font=dict(size=font_size),
+        ax.set_title(title, fontsize=font_size + 2)
+        ax.set_xlabel(x_axis_title, fontsize=font_size)
+        ax.set_ylabel(y_axis_label, fontsize=font_size)
+
+        x_min = df[x_column].min() - pd.DateOffset(years=1)
+        x_max = df[x_column].max() + pd.DateOffset(years=1)
+        ax.set_xlim([x_min, x_max])
+
+        # Legend with flexible position
+        ax.legend(
+            title=legend_title,
+            loc=legend_position,
+            fontsize=font_size - 2,
+            title_fontsize=font_size - 2,
         )
 
-        fig.update_xaxes(automargin=True)
-        fig.update_yaxes(automargin=True)
+        # Format x-axis (years only)
+        ax.xaxis.set_major_formatter(plt.matplotlib.dates.DateFormatter("%Y"))
+        ax.xaxis.set_major_locator(plt.matplotlib.dates.YearLocator(base=1))
+
+        ax.tick_params(axis="x", rotation=45, labelsize=font_size - 2)
+        ax.tick_params(axis="y", labelsize=font_size - 2)
+
+        plt.tight_layout()
+
+        # Default file name if not specified
+        if figure_name is None:
+            figure_name = f"{y_columns[0]}.png"
+
+        fig.savefig(os.path.join(CHARTS_DIR, figure_name), dpi=dpi)
 
         return fig
