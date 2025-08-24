@@ -19,77 +19,99 @@ from datetime import date
 class PostgreSQLDriver(TabularDatabaseDriverInterface):
     def __init__(self, logger: Logger):
         self._logger = logger
-        self._connection = None
+        self._connections: dict[str, psycopg2.extensions.connection] = {}
+        self._cursors: dict[str, psycopg2.extensions.cursor] = {}
         self._cursor = None
-        self._connection_model: PostgreSQLConnectionModel = None
+        self._current_db: str = None
+        self._connection_models: dict[str, PostgreSQLConnectionModel] = {}
 
     def connect(
         self, connection_model: PostgreSQLConnectionModel
     ) -> DatabaseExecutionStatus:
-        """Establish a connection to the PostgreSQL database."""
+        """Establish a connection to a PostgreSQL database."""
+        db_name = connection_model.database
+        if db_name in self._connections:
+            self._logger.log_info(f"Already connected to database: '{db_name}'")
+            self._current_db = db_name
+            return DatabaseExecutionStatus.SUCCESS
+
         try:
-            self._connection_model = connection_model
             try:
-                # Try connecting directly
-                self._connection = psycopg2.connect(
-                    host=self._connection_model.host,
-                    user=self._connection_model.user,
-                    password=self._connection_model.password,
-                    port=self._connection_model.port,
-                    database=self._connection_model.database,
+                conn = psycopg2.connect(
+                    host=connection_model.host,
+                    user=connection_model.user,
+                    password=connection_model.password,
+                    port=connection_model.port,
+                    database=connection_model.database,
                 )
             except psycopg2.OperationalError as e:
                 if "does not exist" in str(e):
                     self._logger.log_warning(
-                        f'Database "{self._connection_model.database}" does not exist. Attempting to create it...'
+                        f'Database "{db_name}" does not exist. Creating it...'
                     )
-                    # Connect to default DB first
-                    temp_connection = psycopg2.connect(
-                        host=self._connection_model.host,
-                        user=self._connection_model.user,
-                        password=self._connection_model.password,
-                        port=self._connection_model.port,
-                        database="postgres",  # fallback db
+                    temp_conn = psycopg2.connect(
+                        host=connection_model.host,
+                        user=connection_model.user,
+                        password=connection_model.password,
+                        port=connection_model.port,
+                        database="postgres",
                     )
-                    temp_connection.autocommit = True
-                    temp_cursor = temp_connection.cursor()
-                    temp_cursor.execute(
-                        f'CREATE DATABASE "{self._connection_model.database}"'
-                    )
+                    temp_conn.autocommit = True
+                    temp_cursor = temp_conn.cursor()
+                    temp_cursor.execute(f'CREATE DATABASE "{db_name}"')
                     temp_cursor.close()
-                    temp_connection.close()
+                    temp_conn.close()
 
-                    # Now connect again to the new DB
-                    self._connection = psycopg2.connect(
-                        host=self._connection_model.host,
-                        user=self._connection_model.user,
-                        password=self._connection_model.password,
-                        port=self._connection_model.port,
-                        database=self._connection_model.database,
+                    conn = psycopg2.connect(
+                        host=connection_model.host,
+                        user=connection_model.user,
+                        password=connection_model.password,
+                        port=connection_model.port,
+                        database=db_name,
                     )
                 else:
-                    raise
+                    raise ConnectionError(e)
 
-            self._connection.autocommit = True
-            self._cursor = self._connection.cursor()
-            self._logger.log_info(
-                f'Connection to PostgreSQL established. Database: "{self._connection_model.database}"'
-            )
+            conn.autocommit = True
+            cursor = conn.cursor()
+
+            self._connections[db_name] = conn
+            self._cursors[db_name] = cursor
+            self._cursor = cursor
+            self._connection_models[db_name] = connection_model
+            self._current_db = db_name
+
+            self._logger.log_info(f'Connected to database: "{db_name}"')
             return DatabaseExecutionStatus.SUCCESS
 
         except Exception as e:
             self._logger.log_error(f"Error connecting to PostgreSQL: {e}")
             return DatabaseExecutionStatus.ERROR
 
-    def disconnect(self) -> DatabaseExecutionStatus:
-        """Close the connection to the PostgreSQL database."""
-        if self._cursor:
-            self._cursor.close()
-        if self._connection:
-            self._connection.close()
-        self._logger.log_info(
-            f'PostgreSQL connection to database "{self._connection_model.database}" closed.'
-        )
+    def disconnect(self, database_name: str = None) -> DatabaseExecutionStatus:
+        """Close connection to a specific database or all if None."""
+        try:
+            if database_name:
+                if database_name in self._cursors:
+                    self._cursors[database_name].close()
+                    del self._cursors[database_name]
+                if database_name in self._connections:
+                    self._connections[database_name].close()
+                    del self._connections[database_name]
+                self._logger.log_info(f'Disconnected from database "{database_name}"')
+            else:
+                for db, cursor in self._cursors.items():
+                    cursor.close()
+                for db, conn in self._connections.items():
+                    conn.close()
+                self._cursors.clear()
+                self._connections.clear()
+                self._logger.log_info("Disconnected from all databases")
+            self._current_db = None
+            return DatabaseExecutionStatus.SUCCESS
+        except Exception as e:
+            self._logger.log_error(f"Error disconnecting: {e}")
+            return DatabaseExecutionStatus.ERROR
 
     def execute_query(self, query: str) -> None:
         self._logger.log_debug(f"Executing query:\n{query.strip()}")
@@ -137,19 +159,17 @@ class PostgreSQLDriver(TabularDatabaseDriverInterface):
                 self._logger.log_error(f"Error dropping database: {e}")
                 return DatabaseExecutionStatus.ERROR
 
-    def change_database(self, database_name_to_select: str):
-        """Change the current database."""
-        try:
-            self.disconnect()
-            self._connection_model.database = database_name_to_select
-            self.connect(self._connection_model)
-            self._logger.log_info(
-                f'Changed current database to: "{self._connection_model.database}"'
-            )
+    def change_database(self, database_name_to_select: str) -> DatabaseExecutionStatus:
+        """Switch to a different database connection."""
+        if database_name_to_select not in self._connections.keys():
+            first_key = next(iter(self._connection_models))
+            connection_model = self._connection_models[first_key]
+            connection_model.database = database_name_to_select
+            return self.connect(connection_model)
+        else:
+            self._cursor = self._cursors[database_name_to_select]
+            self._current_db = database_name_to_select
             return DatabaseExecutionStatus.SUCCESS
-        except Exception as e:
-            self._logger.log_error(f"Error changing database: {e}")
-            return DatabaseExecutionStatus.ERROR
 
     def create_schema(self, schema_name: str):
         """Create a new schema in the current database."""
