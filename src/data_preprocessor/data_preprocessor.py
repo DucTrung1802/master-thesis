@@ -1982,6 +1982,41 @@ class DataPreprocessor:
                 )
                 # fmt: on
 
+                # IPV_BY_INDUSTRY
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.IPV_BY_INDUSTRY.name,
+                    columns=[
+                        Column(name=Table.IPV_BY_INDUSTRY.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
+                        Column(name=Table.IPV_BY_INDUSTRY.Column.MANUFACTURING_INDUSTRY.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPV_BY_INDUSTRY.Column.TEXTILES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPV_BY_INDUSTRY.Column.MINING_SUPPORT_SERVICES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPV_BY_INDUSTRY.Column.PRINTING_AND_COPYING.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPV_BY_INDUSTRY.Column.MINING.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPV_BY_INDUSTRY.Column.OTHER_MINING.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPV_BY_INDUSTRY.Column.OIL_AND_GAS_EXTRACTION.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPV_BY_INDUSTRY.Column.METAL_ORE_MINING.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPV_BY_INDUSTRY.Column.HARD_AND_SOFT_COAL_MINING.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPV_BY_INDUSTRY.Column.FOOD_PROCESSING.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPV_BY_INDUSTRY.Column.LEATHER_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPV_BY_INDUSTRY.Column.PAPER_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPV_BY_INDUSTRY.Column.CHEMICAL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPV_BY_INDUSTRY.Column.METAL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPV_BY_INDUSTRY.Column.TOBACCO_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPV_BY_INDUSTRY.Column.RUBBER_AND_PLASTIC_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPV_BY_INDUSTRY.Column.OTHER_NON_METAL_MINERAL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPV_BY_INDUSTRY.Column.PREFAB_METAL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPV_BY_INDUSTRY.Column.COKE_AND_REFINED_PETROLEUM_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPV_BY_INDUSTRY.Column.PHARMACEUTICAL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPV_BY_INDUSTRY.Column.CLOTHING.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPV_BY_INDUSTRY.Column.BEVERAGES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IPV_BY_INDUSTRY.Column.TOTAL.value, data_type=DataType.FLOAT(), nullable=True),
+                    ],
+                    primary_keys=Table.IPV_BY_INDUSTRY.primary_key,
+                )
+                # fmt: on
+
             case DataQuality.GOLD:
                 pass
 
@@ -3623,6 +3658,39 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish ingesting data in "{file_path}".')
 
+    def _clean_macroeconomics_ipv_by_industry_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.IPV_BY_INDUSTRY,
+            GdpSource.VIETSTOCK,
+        )
+
+        self._logger.log_info(
+            f'Start cleaning data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for cleaning data here
+        self._select_database(DataQuality.BRONZE.value)
+
+        bronze_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.IPV_BY_INDUSTRY.name,
+        )
+
+        silver_df = self._clean(df=bronze_df, clean_layer_list=[])
+
+        self._select_database(DataQuality.SILVER.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.IPV_BY_INDUSTRY.name,
+            primary_keys=Table.IPV_BY_INDUSTRY.primary_key,
+            df=silver_df,
+        )
+
+        self._logger.log_info(
+            f'Finish cleaning data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_macroeconomics_ipv_by_industry(
         self, data_quality: DataQuality
     ) -> None:
@@ -3635,7 +3703,7 @@ class DataPreprocessor:
                 self._ingest_macroeconomics_ipv_by_industry_vietstock()
 
             case DataQuality.SILVER:
-                pass
+                self._clean_macroeconomics_ipv_by_industry_vietstock()
 
             case DataQuality.GOLD:
                 pass
@@ -6469,7 +6537,7 @@ class DataPreprocessor:
         self._process_macroeconomics_pmi(data_quality)
         self._process_macroeconomics_iip(data_quality)
         self._process_macroeconomics_ipv(data_quality)
-        # self._process_macroeconomics_ipv_by_industry(data_quality)
+        self._process_macroeconomics_ipv_by_industry(data_quality)
         # self._process_macroeconomics_mip(data_quality)
         # self._process_macroeconomics_mip(data_quality)
         # self._process_macroeconomics_fa_by_house_types(data_quality)
