@@ -2197,6 +2197,49 @@ class DataPreprocessor:
                 )
                 # fmt: on
 
+                # TSBR
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.TSBR.name,
+                    columns=[
+                        Column(name=Table.TSBR.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
+                        Column(name=Table.TSBR.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
+                        Column(name=Table.TSBR.Column.AGRICULTURAL_LAND_USE_TAX.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.TSBR.Column.AID_REVENUE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.TSBR.Column.DOMESTIC_REVENUE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.TSBR.Column.ENVIRONMENTAL_PROTECTION_TAX.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.TSBR.Column.ENVIRONMENTAL_PROTECTION_TAX_ON_IMPORTED_GOODS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.TSBR.Column.EXPORT_TAX.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.TSBR.Column.FEES_AND_CHARGES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.TSBR.Column.IMPORT_TAX.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.TSBR.Column.NON_AGRICULTURAL_LAND_USE_TAX.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.TSBR.Column.OTHER_BUDGET_REVENUES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.TSBR.Column.OTHER_REVENUE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.TSBR.Column.PERSONAL_INCOME_TAX.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.TSBR.Column.RECOVERY_OF_CAPITAL_DIVIDENDS_POST_TAX_PROFITS_SURPLUS_REVENUE_AND_EXPENDITURE_OF_THE_STATE_BANK.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.TSBR.Column.REVENUE_BALANCE_FROM_IMPORT_EXPORT_ACTIVITIES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.TSBR.Column.REVENUE_FROM_CRUDE_OIL.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.TSBR.Column.REVENUE_FROM_FOREIGN_INVESTED_ENTERPRISES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.TSBR.Column.REVENUE_FROM_HOUSING_AND_LAND.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.TSBR.Column.REVENUE_FROM_LAND_AND_WATER_SURFACE_LEASING.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.TSBR.Column.REVENUE_FROM_LAND_USE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.TSBR.Column.REVENUE_FROM_LEASING_AND_SALE_OF_STATE_OWNED_HOUSING.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.TSBR.Column.REVENUE_FROM_LOTTERY_ACTIVITIES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.TSBR.Column.REVENUE_FROM_MINING_RIGHTS_LICENSING.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.TSBR.Column.REVENUE_FROM_NON_STATE_ECONOMIC_SECTOR.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.TSBR.Column.REVENUE_FROM_PUBLIC_LAND_FUNDS_AND_OTHER_PUBLIC_ASSET_BENEFITS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.TSBR.Column.REVENUE_FROM_STATE_OWNED_ENTERPRISES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.TSBR.Column.SPECIAL_CONSUMPTION_TAX_ON_IMPORTED_GOODS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.TSBR.Column.TOTAL_REVENUE_FROM_IMPORT_EXPORT_ACTIVITIES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.TSBR.Column.TOTAL_STATE_BUDGET_REVENUE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.TSBR.Column.VALUE_ADDED_TAX_ON_IMPORTED_GOODS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.TSBR.Column.VALUE_ADDED_TAX_REFUND.value, data_type=DataType.FLOAT(), nullable=True),
+                    ],
+                    primary_keys=Table.TSBR.primary_key,
+                )
+                # fmt: on
+
             case DataQuality.GOLD:
                 pass
 
@@ -4334,6 +4377,44 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish ingesting data in "{file_path}".')
 
+    def _clean_macroeconomics_tsbr_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.TSBR,
+            GdpSource.VIETSTOCK,
+        )
+
+        self._logger.log_info(
+            f'Start cleaning data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for cleaning data here
+        self._select_database(DataQuality.BRONZE.value)
+
+        bronze_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.TSBR.name,
+        )
+
+        silver_df = self._clean(
+            df=bronze_df,
+            clean_layer_list=[
+                CleanLayer.ORDER_BY([Table.TSBR.Column.YEAR.value])
+            ],
+        )
+
+        self._select_database(DataQuality.SILVER.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.TSBR.name,
+            primary_keys=Table.TSBR.primary_key,
+            df=silver_df,
+        )
+
+        self._logger.log_info(
+            f'Finish cleaning data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_macroeconomics_tsbr(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing macroeconomics TSBR data for "{data_quality.value}".'
@@ -4344,7 +4425,7 @@ class DataPreprocessor:
                 self._ingest_macroeconomics_tsbr_vietstock()
 
             case DataQuality.SILVER:
-                pass
+                self._clean_macroeconomics_tsbr_vietstock()
 
             case DataQuality.GOLD:
                 pass
@@ -6901,7 +6982,7 @@ class DataPreprocessor:
         self._process_macroeconomics_mip(data_quality)
         self._process_macroeconomics_fa_by_house_types(data_quality)
         self._process_macroeconomics_it_bop(data_quality)
-        # self._process_macroeconomics_tsbr(data_quality)
+        self._process_macroeconomics_tsbr(data_quality)
         # self._process_macroeconomics_tsbe(data_quality)
         # self._process_macroeconomics_gd(data_quality)
         # self._process_macroeconomics_brd(data_quality)
