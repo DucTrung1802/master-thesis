@@ -80,7 +80,9 @@ class DataPreprocessor:
             limit=limit,
         )
 
-    def _clean(self, df: pd.DataFrame, clean_layer_list: List[CleanLayer]) -> pd.DataFrame:
+    def _clean(
+        self, df: pd.DataFrame, clean_layer_list: List[CleanLayer]
+    ) -> pd.DataFrame:
         if not clean_layer_list:
             return df
 
@@ -2475,7 +2477,14 @@ class DataPreprocessor:
             table_name=Table.CPI.name,
         )
 
-        silver_df = self._clean(df=bronze_df, clean_layer_list=[])
+        silver_df = self._clean(
+            df=bronze_df,
+            clean_layer_list=[
+                CleanLayer.ORDER_BY(
+                    [Table.CPI.Column.YEAR.value, Table.CPI.Column.MONTH.value]
+                )
+            ],
+        )
 
         self._select_database(DataQuality.SILVER.value)
         self._save_pandas_table_to_database(
@@ -2597,7 +2606,10 @@ class DataPreprocessor:
             table_name=Table.PPI.name,
         )
 
-        silver_df = self._clean(df=bronze_df, clean_layer_list=[])
+        silver_df = self._clean(
+            df=bronze_df,
+            clean_layer_list=[CleanLayer.ORDER_BY([Table.PPI.Column.YEAR.value])],
+        )
 
         self._select_database(DataQuality.SILVER.value)
         self._save_pandas_table_to_database(
@@ -2740,7 +2752,10 @@ class DataPreprocessor:
             table_name=Table.IPI.name,
         )
 
-        silver_df = self._clean(df=bronze_df, clean_layer_list=[])
+        silver_df = self._clean(
+            df=bronze_df,
+            clean_layer_list=[CleanLayer.ORDER_BY([Table.IPI.Column.YEAR.value])],
+        )
 
         self._select_database(DataQuality.SILVER.value)
         self._save_pandas_table_to_database(
@@ -2840,7 +2855,14 @@ class DataPreprocessor:
             table_name=Table.XPI.name,
         )
 
-        silver_df = self._clean(df=bronze_df, clean_layer_list=[])
+        silver_df = self._clean(
+            df=bronze_df,
+            clean_layer_list=[
+                CleanLayer.ORDER_BY(
+                    [Table.XPI.Column.YEAR.value, Table.XPI.Column.MONTH.value]
+                )
+            ],
+        )
 
         self._select_database(DataQuality.SILVER.value)
         self._save_pandas_table_to_database(
@@ -2940,7 +2962,14 @@ class DataPreprocessor:
             table_name=Table.MPI.name,
         )
 
-        silver_df = self._clean(df=bronze_df, clean_layer_list=[])
+        silver_df = self._clean(
+            df=bronze_df,
+            clean_layer_list=[
+                CleanLayer.ORDER_BY(
+                    [Table.MPI.Column.YEAR.value, Table.MPI.Column.MONTH.value]
+                )
+            ],
+        )
 
         self._select_database(DataQuality.SILVER.value)
         self._save_pandas_table_to_database(
@@ -3040,7 +3069,12 @@ class DataPreprocessor:
             table_name=Table.POPULATION.name,
         )
 
-        silver_df = self._clean(df=bronze_df, clean_layer_list=[])
+        silver_df = self._clean(
+            df=bronze_df,
+            clean_layer_list=[
+                CleanLayer.ORDER_BY([Table.POPULATION.Column.YEAR.value])
+            ],
+        )
 
         self._select_database(DataQuality.SILVER.value)
         self._save_pandas_table_to_database(
@@ -3142,7 +3176,10 @@ class DataPreprocessor:
             table_name=Table.LABOR.name,
         )
 
-        silver_df = self._clean(df=bronze_df, clean_layer_list=[])
+        silver_df = self._clean(
+            df=bronze_df,
+            clean_layer_list=[CleanLayer.ORDER_BY([Table.LABOR.Column.YEAR.value])],
+        )
 
         self._select_database(DataQuality.SILVER.value)
         self._save_pandas_table_to_database(
@@ -3242,7 +3279,14 @@ class DataPreprocessor:
             table_name=Table.RETAIL.name,
         )
 
-        silver_df = self._clean(df=bronze_df, clean_layer_list=[])
+        silver_df = self._clean(
+            df=bronze_df,
+            clean_layer_list=[
+                CleanLayer.ORDER_BY(
+                    [Table.RETAIL.Column.YEAR.value, Table.RETAIL.Column.MONTH.value]
+                )
+            ],
+        )
 
         self._select_database(DataQuality.SILVER.value)
         self._save_pandas_table_to_database(
@@ -3342,7 +3386,14 @@ class DataPreprocessor:
             table_name=Table.PMI.name,
         )
 
-        silver_df = self._clean(df=bronze_df, clean_layer_list=[])
+        silver_df = self._clean(
+            df=bronze_df,
+            clean_layer_list=[
+                CleanLayer.ORDER_BY(
+                    [Table.PMI.Column.YEAR.value, Table.PMI.Column.MONTH.value]
+                )
+            ],
+        )
 
         self._select_database(DataQuality.SILVER.value)
         self._save_pandas_table_to_database(
@@ -3444,7 +3495,14 @@ class DataPreprocessor:
             table_name=Table.IIP.name,
         )
 
-        silver_df = self._clean(df=bronze_df, clean_layer_list=[])
+        silver_df = self._clean(
+            df=bronze_df,
+            clean_layer_list=[
+                CleanLayer.ORDER_BY(
+                    [Table.IIP.Column.YEAR.value, Table.IIP.Column.MONTH.value]
+                )
+            ],
+        )
 
         self._select_database(DataQuality.SILVER.value)
         self._save_pandas_table_to_database(
@@ -3544,7 +3602,14 @@ class DataPreprocessor:
             table_name=Table.IPV.name,
         )
 
-        silver_df = self._clean(df=bronze_df, clean_layer_list=[])
+        silver_df = self._clean(
+            df=bronze_df,
+            clean_layer_list=[
+                CleanLayer.ORDER_BY(
+                    [Table.IPV.Column.YEAR.value, Table.IPV.Column.MONTH.value]
+                )
+            ],
+        )
 
         self._select_database(DataQuality.SILVER.value)
         self._save_pandas_table_to_database(
@@ -3677,7 +3742,12 @@ class DataPreprocessor:
             table_name=Table.IPV_BY_INDUSTRY.name,
         )
 
-        silver_df = self._clean(df=bronze_df, clean_layer_list=[])
+        silver_df = self._clean(
+            df=bronze_df,
+            clean_layer_list=[
+                CleanLayer.ORDER_BY([Table.IPV_BY_INDUSTRY.Column.YEAR.value])
+            ],
+        )
 
         self._select_database(DataQuality.SILVER.value)
         self._save_pandas_table_to_database(
