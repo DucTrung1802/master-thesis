@@ -2240,6 +2240,29 @@ class DataPreprocessor:
                 )
                 # fmt: on
 
+                # TSBE
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.TSBE.name,
+                    columns=[
+                        Column(name=Table.TSBE.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
+                        Column(name=Table.TSBE.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
+                        Column(name=Table.TSBE.Column.AID_EXPENDITURE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.TSBE.Column.DEBT_INTEREST_PAYMENT_EXPENDITURE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.TSBE.Column.DEVELOPMENT_INVESTMENT_EXPENDITURE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.TSBE.Column.EXPENDITURE_FOR_EDUCATION_TRAINING_AND_VOCATIONAL_EDUCATION.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.TSBE.Column.EXPENDITURE_FOR_SCIENCE_AND_TECHNOLOGY.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.TSBE.Column.EXPENDITURE_FOR_WAGE_REFORM_AND_STREAMLINING_PERSONNEL.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.TSBE.Column.REGULAR_EXPENDITURE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.TSBE.Column.STATE_BUDGET_CONTINGENCY.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.TSBE.Column.SUPPLEMENTARY_EXPENDITURE_FOR_FINANCIAL_RESERVE_FUND.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.TSBE.Column.TOTAL_STATE_BUDGET_EXPENDITURE.value, data_type=DataType.FLOAT(), nullable=True),
+                    ],
+                    primary_keys=Table.TSBE.primary_key,
+                )
+                # fmt: on
+
             case DataQuality.GOLD:
                 pass
 
@@ -4482,6 +4505,44 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish ingesting data in "{file_path}".')
 
+    def _clean_macroeconomics_tsbe_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.TSBE,
+            GdpSource.VIETSTOCK,
+        )
+
+        self._logger.log_info(
+            f'Start cleaning data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for cleaning data here
+        self._select_database(DataQuality.BRONZE.value)
+
+        bronze_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.TSBE.name,
+        )
+
+        silver_df = self._clean(
+            df=bronze_df,
+            clean_layer_list=[
+                CleanLayer.ORDER_BY([Table.TSBE.Column.YEAR.value])
+            ],
+        )
+
+        self._select_database(DataQuality.SILVER.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.TSBE.name,
+            primary_keys=Table.TSBE.primary_key,
+            df=silver_df,
+        )
+
+        self._logger.log_info(
+            f'Finish cleaning data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_macroeconomics_tsbe(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing macroeconomics TSBE data for "{data_quality.value}".'
@@ -4492,7 +4553,7 @@ class DataPreprocessor:
                 self._ingest_macroeconomics_tsbe_vietstock()
 
             case DataQuality.SILVER:
-                pass
+                self._clean_macroeconomics_tsbe_vietstock()
 
             case DataQuality.GOLD:
                 pass
@@ -6983,7 +7044,7 @@ class DataPreprocessor:
         self._process_macroeconomics_fa_by_house_types(data_quality)
         self._process_macroeconomics_it_bop(data_quality)
         self._process_macroeconomics_tsbr(data_quality)
-        # self._process_macroeconomics_tsbe(data_quality)
+        self._process_macroeconomics_tsbe(data_quality)
         # self._process_macroeconomics_gd(data_quality)
         # self._process_macroeconomics_brd(data_quality)
         # self._process_macroeconomics_iisd(data_quality)
