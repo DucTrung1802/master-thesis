@@ -90,8 +90,9 @@ class Visualizer:
             case GenerateDateTimeType.YEAR:
                 df["date"] = (
                     pd.to_datetime(df["year"], format="%Y") + pd.offsets.YearEnd(0)
-                ).normalize()
+                ).dt.normalize()
                 df = df.drop(columns=["year"])
+
             case GenerateDateTimeType.QUARTER:
                 df["date"] = (
                     pd.PeriodIndex.from_fields(
@@ -101,6 +102,7 @@ class Visualizer:
                     .normalize()
                 )
                 df = df.drop(columns=["year", "quarter"])
+
             case GenerateDateTimeType.MONTH:
                 df["date"] = (
                     pd.to_datetime(
@@ -110,10 +112,14 @@ class Visualizer:
                         format="%Y-%m",
                     )
                     + pd.offsets.MonthEnd(0)
-                ).normalize()
+                ).dt.normalize()
                 df = df.drop(columns=["year", "month"])
+
             case GenerateDateTimeType.DAY:
-                df["date"] = pd.to_datetime(df["date"], format="%Y-%m-%d").normalize()
+                df["date"] = pd.to_datetime(
+                    df["date"], format="%Y-%m-%d"
+                ).dt.normalize()
+
             case _:
                 raise ValueError("Unsupported generate_date_time_type")
 
@@ -123,18 +129,22 @@ class Visualizer:
                 full_range = pd.date_range(
                     start=start_date, end=end_date, freq="YE"
                 ).normalize()
+
             case GenerateDateTimeType.QUARTER:
                 full_range = pd.date_range(
                     start=start_date, end=end_date, freq="QE"
                 ).normalize()
+
             case GenerateDateTimeType.MONTH:
                 full_range = pd.date_range(
                     start=start_date, end=end_date, freq="ME"
                 ).normalize()
+
             case GenerateDateTimeType.DAY:
                 full_range = pd.date_range(
                     start=start_date, end=end_date, freq="D"
                 ).normalize()
+
             case _:
                 raise ValueError("Unsupported generate_date_time_type")
 
