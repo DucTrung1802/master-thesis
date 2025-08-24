@@ -87,6 +87,13 @@ class TimeFormat(Enum):
     THREE_MONTH_INDEX_YEAR = "3M/2000"  # 3 month index + year
 
 
+class GenerateDateTimeType(Enum):
+    YEAR = "year"
+    QUARTER = "quarter"
+    MONTH = "month"
+    DAY = "day"
+
+
 # Enum for Main Scraping Types
 class ScrapeMainType(Enum):
     MACROECONOMICS = "macroeconomics"

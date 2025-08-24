@@ -1,13 +1,20 @@
+from typing import List
 from dotenv import load_dotenv
 import os
 import plotly.graph_objects as go
 import pandas as pd
+from datetime import datetime
 
 from logger.logger import Logger
+from models.tabular_database_driver_models.tabular_database_driver_models import (
+    Condition,
+    JoinModel,
+)
 from tabular_database_driver.postgre_sql_driver import PostgreSQLDriver
 from models.tabular_database_driver_models.postgre_sql_connection_model import (
     PostgreSQLConnectionModel,
 )
+from utils.enums import GenerateDateTimeType
 
 parent_dir = os.path.dirname(os.getcwd())
 
@@ -22,53 +29,48 @@ class Visualizer:
         self._database_driver = PostgreSQLDriver(logger=logger)
         self._connect_to_database()
 
-    def _connect_to_database(self) -> None:
+    def _connect_to_database(self, database_name: str = "postgres") -> None:
         connection_model = PostgreSQLConnectionModel(
             logger=self._logger,
             host=os.getenv("POSTGRES_HOST"),
             user=os.getenv("POSTGRES_USER"),
             password=os.getenv("POSTGRES_PASSWORD"),
             port=os.getenv("POSTGRES_PORT"),
-            database=os.getenv("POSTGRES_DATABASE"),
+            database=database_name,
         )
 
         self._database_driver.connect(connection_model)
 
-    def test_data(self) -> pd.DataFrame:
+    def generate_date_time_series(
+        self,
+        generate_date_time_type: GenerateDateTimeType,
+        start_date: datetime,
+        end_date: datetime,
+    ) -> pd.Series:
+        match generate_date_time_type:
+            case GenerateDateTimeType.YEAR:
+                dates = pd.date_range(start=start_date, end=end_date, freq="YE")
+            case GenerateDateTimeType.QUARTER:
+                dates = pd.date_range(start=start_date, end=end_date, freq="QE")
+            case GenerateDateTimeType.MONTH:
+                dates = pd.date_range(start=start_date, end=end_date, freq="ME")
+            case GenerateDateTimeType.DAY:
+                dates = pd.date_range(start=start_date, end=end_date, freq="D")
+            case _:
+                raise ValueError(f"Unsupported type: {generate_date_time_type}")
+
+        return pd.Series(dates)
+
+    def select(
+        self,
+        schema_name: str,
+        table_name: str,
+        columns: List[str] = None,
+        join_model: JoinModel = None,
+        conditions: List[Condition] = None,
+        order_by: List[str] = None,
+        limit: int = None,
+    ) -> pd.DataFrame:
         return self._database_driver.select(
-            schema_name="macroeconomics",
-            table_name="gdp",
-            order_by=["year", "quarter"],
+            schema_name=schema_name, table_name=table_name
         )
-
-    def test_visualize(self) -> None:
-        df = self.test_data()
-        df["gdp_true_growth_acc"] = df["gdp_true_growth_acc"].fillna(0)
-        df["period"] = df["year"].astype(str) + "-Q" + df["quarter"].astype(str)
-        fig = go.Figure()
-
-        fig.add_trace(
-            go.Scatter(
-                x=df["period"],
-                y=df["gdp_true_growth_acc"],
-                mode="lines+markers",
-                name="GDP Growth",
-            )
-        )
-
-        fig.update_layout(
-            title="GDP True Growth Acc by Quarter",
-            xaxis_title="Year-Quarter",
-            yaxis_title="GDP Growth (%)",
-            xaxis=dict(
-                tickangle=30,  # less tilt
-                tickmode="auto",
-                nticks=30,  # reduce number of ticks shown
-                tickfont=dict(size=10),
-            ),
-            template="plotly_white",
-            height=500,
-            width=1000,
-        )
-
-        fig.show()
