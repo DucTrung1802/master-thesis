@@ -189,11 +189,11 @@ class Visualizer:
         y_axis_title: str = "Value",
         y_unit: Optional[str] = None,
         legend_title: str = "Series",
-        legend_orientation: str = "h",  # kept for compatibility
-        legend_position: str = "best",  # NEW parameter
+        legend_position: str = "best",
         font_size: int = 16,
         figure_name: str = None,
         dpi: int = 300,
+        style: str = "fivethirtyeight",
     ) -> plt.Figure:
         """
         Plots a line chart using Matplotlib.
@@ -207,58 +207,66 @@ class Visualizer:
             y_axis_title (str): Label for y-axis.
             y_unit (str, optional): Unit suffix for y-axis values (e.g., "%", "$").
             legend_title (str): Title of the legend.
-            legend_orientation (str): For compatibility, not used if legend_position is set.
             legend_position (str): Position of the legend (e.g., "best", "upper left", "upper right").
             font_size (int): Base font size.
             figure_name (str, optional): Name of the saved figure. Defaults to first y_column.
             dpi (int): Resolution of saved figure.
+            style (str): Matplotlib style (e.g., "default", "fivethirtyeight", "seaborn", "ggplot")
 
         Returns:
             plt.Figure: Matplotlib Figure object.
         """
-        df[x_column] = pd.to_datetime(df[x_column])
+        with plt.style.context(style):
+            df[x_column] = pd.to_datetime(df[x_column])
 
-        fig, ax = plt.subplots(figsize=(14, 5))
+            fig, ax = plt.subplots(figsize=(14, 5))
 
-        # Plot each y-column
-        for col in y_columns:
-            ax.plot(df[x_column], df[col], marker="o", label=col)
+            # Plot each y-column
+            for col in y_columns:
+                ax.plot(
+                    df[x_column],
+                    df[col],
+                    marker="o",
+                    label=col,
+                    markerfacecolor="#1f3b73",  # point fill color
+                    markeredgecolor="#1f3b73",  # point border color
+                )
 
-        # Format y-axis title with unit
-        if y_unit:
-            y_axis_label = f"{y_axis_title} ({y_unit})"
-        else:
-            y_axis_label = y_axis_title
+            # Format y-axis title with unit
+            if y_unit:
+                y_axis_label = f"{y_axis_title} ({y_unit})"
+            else:
+                y_axis_label = y_axis_title
 
-        ax.set_title(title, fontsize=font_size + 2)
-        ax.set_xlabel(x_axis_title, fontsize=font_size)
-        ax.set_ylabel(y_axis_label, fontsize=font_size)
+            ax.set_title(title, fontsize=font_size + 2)
+            ax.set_xlabel(x_axis_title, fontsize=font_size)
+            ax.set_ylabel(y_axis_label, fontsize=font_size)
 
-        x_min = df[x_column].min() - pd.DateOffset(years=1)
-        x_max = df[x_column].max() + pd.DateOffset(years=1)
-        ax.set_xlim([x_min, x_max])
+            x_min = df[x_column].min() - pd.DateOffset(years=1)
+            x_max = df[x_column].max() + pd.DateOffset(years=1)
+            ax.set_xlim([x_min, x_max])
 
-        # Legend with flexible position
-        ax.legend(
-            title=legend_title,
-            loc=legend_position,
-            fontsize=font_size - 2,
-            title_fontsize=font_size - 2,
-        )
+            # Legend with flexible position
+            ax.legend(
+                title=legend_title,
+                loc=legend_position,
+                fontsize=font_size - 2,
+                title_fontsize=font_size - 2,
+            )
 
-        # Format x-axis (years only)
-        ax.xaxis.set_major_formatter(plt.matplotlib.dates.DateFormatter("%Y"))
-        ax.xaxis.set_major_locator(plt.matplotlib.dates.YearLocator(base=1))
+            # Format x-axis (years only)
+            ax.xaxis.set_major_formatter(plt.matplotlib.dates.DateFormatter("%Y"))
+            ax.xaxis.set_major_locator(plt.matplotlib.dates.YearLocator(base=1))
 
-        ax.tick_params(axis="x", rotation=45, labelsize=font_size - 2)
-        ax.tick_params(axis="y", labelsize=font_size - 2)
+            ax.tick_params(axis="x", rotation=45, labelsize=font_size - 2)
+            ax.tick_params(axis="y", labelsize=font_size - 2)
 
-        plt.tight_layout()
+            plt.tight_layout()
 
-        # Default file name if not specified
-        if figure_name is None:
-            figure_name = f"{y_columns[0]}.png"
+            # Default file name if not specified
+            if figure_name is None:
+                figure_name = f"{y_columns[0]}.png"
 
-        fig.savefig(os.path.join(CHARTS_DIR, figure_name), dpi=dpi)
+            fig.savefig(os.path.join(CHARTS_DIR, figure_name), dpi=dpi)
 
         return fig
