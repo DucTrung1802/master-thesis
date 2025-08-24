@@ -266,6 +266,8 @@ class Visualizer:
             # Default file name if not specified
             if figure_name is None:
                 figure_name = f"{y_columns[0]}.png"
+            else:
+                figure_name = f"{figure_name}.png"
 
             fig.savefig(os.path.join(CHARTS_DIR, figure_name), dpi=dpi)
 
