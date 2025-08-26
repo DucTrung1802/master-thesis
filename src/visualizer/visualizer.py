@@ -36,8 +36,6 @@ class Visualizer:
 
         os.makedirs(CHARTS_DIR, exist_ok=True)
 
-        self.count = 1
-
     def connect_to_database(self, database_name: str = "postgres") -> None:
         connection_model = PostgreSQLConnectionModel(
             logger=self._logger,
@@ -268,12 +266,10 @@ class Visualizer:
 
             # Default file name if not specified
             if figure_name is None:
-                figure_name = f"{self.count}_{f"{prefix_figure_name}_" if prefix_figure_name else ''}{"_".join(title.lower().split())}.png"
+                figure_name = f"{f"{prefix_figure_name}_" if prefix_figure_name else ''}{"_".join(title.lower().split())}.png"
             else:
                 figure_name = f"{figure_name}.png"
 
             fig.savefig(os.path.join(CHARTS_DIR, figure_name), dpi=dpi)
-
-        self.count += 1
 
         return fig
