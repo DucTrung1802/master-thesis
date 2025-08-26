@@ -118,7 +118,7 @@ class MacroeconomicsSubType(Enum):
     PMI = "pmi"  # Purchasing Managers' Index
     IIP = "iip"  # Index of Industrial Production
     IPV = "ipv"  # Industrial Production Volume
-    IPV_BY_INDUSTRY = "ipv_by_industry"  # Industrial Production Volume by Industry
+    IPV_BY_INDUSTRY = "ipv_by_industry"  # Industrial Production Volume by Industry // REMOVE
     MIP = "mip"  # Major industries production
     FA_BY_HOUSE_TYPES = "fa_by_house_types"  # Floor area of ​​completed housing construction in the year by type of house
     IT_BOP = "it_bop"  # International Trade and Balance of Payments

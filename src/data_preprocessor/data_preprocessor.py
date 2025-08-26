@@ -4965,7 +4965,6 @@ class DataPreprocessor:
         self._process_macroeconomics_ipv()
         self._process_macroeconomics_ipv_by_industry()
         self._process_macroeconomics_mip()
-        self._process_macroeconomics_mip()
         self._process_macroeconomics_fa_by_house_types()
         self._process_macroeconomics_it_bop()
         self._process_macroeconomics_tsbr()
