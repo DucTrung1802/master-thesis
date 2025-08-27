@@ -97,7 +97,7 @@ class DataPreprocessor:
                     df = df.dropna(
                         axis="index",
                         how="all",
-                        subset=[col for col in df.columns if col not in keep_cols]
+                        subset=[col for col in df.columns if col not in keep_cols],
                     )
 
                 case CleanAction.ORDER_BY:
@@ -4735,6 +4735,16 @@ class DataPreprocessor:
                     [Table.TSBR.Column.YEAR.value, Table.TSBR.Column.MONTH.value]
                 )
             ],
+        )
+
+        keep_cols = ["year", "quarter", "month", "day", "date"]
+
+        # Identify the columns to check (exclude date-related columns)
+        check_cols = [col for col in silver_df.columns if col not in keep_cols]
+
+        # Drop rows where *all* of those columns are 0
+        silver_df = silver_df.drop(
+            silver_df[(silver_df[check_cols] == 0).all(axis=1)].index
         )
 
         self._select_database(DataQuality.SILVER.value)

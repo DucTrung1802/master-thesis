@@ -2,9 +2,6 @@ from enum import Enum
 from dataclasses import dataclass
 from typing import Dict, List, Union, Tuple, Optional
 
-from models.tabular_database_driver_models.tabular_database_driver_models import (
-    DataType,
-)
 from utils.constants import *
 
 
