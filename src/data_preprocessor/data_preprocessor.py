@@ -2407,6 +2407,22 @@ class DataPreprocessor:
                 )
                 # fmt: on
 
+                # RRRR
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.RRRR.name,
+                    columns=[
+                        Column(name=Table.RRRR.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
+                        Column(name=Table.RRRR.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
+                        Column(name=Table.RRRR.Column.DAY.value, data_type=DataType.INT(), nullable=False),
+                        Column(name=Table.RRRR.Column.DISCOUNT_RATE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.RRRR.Column.REFINANCING_RATE.value, data_type=DataType.FLOAT(), nullable=True),
+                    ],
+                    primary_keys=Table.RRRR.primary_key,
+                )
+                # fmt: on
+
             case DataQuality.GOLD:
                 pass
 
@@ -4461,7 +4477,9 @@ class DataPreprocessor:
         silver_df = self._clean(
             df=bronze_df,
             clean_layer_list=[
-                CleanLayer.ORDER_BY([Table.IT_BOP.Column.YEAR.value])
+                CleanLayer.ORDER_BY(
+                    [Table.IT_BOP.Column.YEAR.value, Table.IT_BOP.Column.QUARTER.value]
+                )
             ],
         )
 
@@ -4566,7 +4584,9 @@ class DataPreprocessor:
         silver_df = self._clean(
             df=bronze_df,
             clean_layer_list=[
-                CleanLayer.ORDER_BY([Table.TSBR.Column.YEAR.value])
+                CleanLayer.ORDER_BY(
+                    [Table.TSBR.Column.YEAR.value, Table.TSBR.Column.MONTH.value]
+                )
             ],
         )
 
@@ -4671,7 +4691,9 @@ class DataPreprocessor:
         silver_df = self._clean(
             df=bronze_df,
             clean_layer_list=[
-                CleanLayer.ORDER_BY([Table.TSBE.Column.YEAR.value])
+                CleanLayer.ORDER_BY(
+                    [Table.TSBE.Column.YEAR.value, Table.TSBE.Column.MONTH.value]
+                )
             ],
         )
 
@@ -4775,9 +4797,7 @@ class DataPreprocessor:
 
         silver_df = self._clean(
             df=bronze_df,
-            clean_layer_list=[
-                CleanLayer.ORDER_BY([Table.GD.Column.YEAR.value])
-            ],
+            clean_layer_list=[CleanLayer.ORDER_BY([Table.GD.Column.YEAR.value])],
         )
 
         self._select_database(DataQuality.SILVER.value)
@@ -4881,7 +4901,9 @@ class DataPreprocessor:
         silver_df = self._clean(
             df=bronze_df,
             clean_layer_list=[
-                CleanLayer.ORDER_BY([Table.BRD.Column.YEAR.value])
+                CleanLayer.ORDER_BY(
+                    [Table.BRD.Column.YEAR.value, Table.BRD.Column.MONTH.value]
+                )
             ],
         )
 
@@ -4986,7 +5008,9 @@ class DataPreprocessor:
         silver_df = self._clean(
             df=bronze_df,
             clean_layer_list=[
-                CleanLayer.ORDER_BY([Table.IISD.Column.YEAR.value])
+                CleanLayer.ORDER_BY(
+                    [Table.IISD.Column.YEAR.value, Table.IISD.Column.QUARTER.value]
+                )
             ],
         )
 
@@ -5091,7 +5115,9 @@ class DataPreprocessor:
         silver_df = self._clean(
             df=bronze_df,
             clean_layer_list=[
-                CleanLayer.ORDER_BY([Table.TREG.Column.YEAR.value])
+                CleanLayer.ORDER_BY(
+                    [Table.TREG.Column.YEAR.value, Table.TREG.Column.MONTH.value]
+                )
             ],
         )
 
@@ -5196,7 +5222,9 @@ class DataPreprocessor:
         silver_df = self._clean(
             df=bronze_df,
             clean_layer_list=[
-                CleanLayer.ORDER_BY([Table.CREDIT.Column.YEAR.value])
+                CleanLayer.ORDER_BY(
+                    [Table.CREDIT.Column.YEAR.value, Table.CREDIT.Column.MONTH.value]
+                )
             ],
         )
 
@@ -5301,7 +5329,12 @@ class DataPreprocessor:
         silver_df = self._clean(
             df=bronze_df,
             clean_layer_list=[
-                CleanLayer.ORDER_BY([Table.MOBILIZATION.Column.YEAR.value])
+                CleanLayer.ORDER_BY(
+                    [
+                        Table.MOBILIZATION.Column.YEAR.value,
+                        Table.MOBILIZATION.Column.MONTH.value,
+                    ]
+                )
             ],
         )
 
@@ -5409,7 +5442,12 @@ class DataPreprocessor:
         silver_df = self._clean(
             df=bronze_df,
             clean_layer_list=[
-                CleanLayer.ORDER_BY([Table.EXCHANGE_RATE.Column.YEAR.value])
+                CleanLayer.ORDER_BY(
+                    [
+                        Table.EXCHANGE_RATE.Column.YEAR.value,
+                        Table.EXCHANGE_RATE.Column.MONTH.value,
+                    ]
+                )
             ],
         )
 
@@ -5527,7 +5565,13 @@ class DataPreprocessor:
         silver_df = self._clean(
             df=bronze_df,
             clean_layer_list=[
-                CleanLayer.ORDER_BY([Table.IIR.Column.YEAR.value])
+                CleanLayer.ORDER_BY(
+                    [
+                        Table.IIR.Column.YEAR.value,
+                        Table.IIR.Column.MONTH.value,
+                        Table.IIR.Column.DAY.value,
+                    ]
+                )
             ],
         )
 
@@ -5610,6 +5654,50 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish ingesting data in "{file_path}".')
 
+    def _clean_macroeconomics_rrrr_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.RRRR,
+            RrrrSource.VIETSTOCK,
+        )
+
+        self._logger.log_info(
+            f'Start cleaning data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for cleaning data here
+        self._select_database(DataQuality.BRONZE.value)
+
+        bronze_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.RRRR.name,
+        )
+
+        silver_df = self._clean(
+            df=bronze_df,
+            clean_layer_list=[
+                CleanLayer.ORDER_BY(
+                    [
+                        Table.RRRR.Column.YEAR.value,
+                        Table.RRRR.Column.MONTH.value,
+                        Table.RRRR.Column.DAY.value,
+                    ]
+                )
+            ],
+        )
+
+        self._select_database(DataQuality.SILVER.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.RRRR.name,
+            primary_keys=Table.RRRR.primary_key,
+            df=silver_df,
+        )
+
+        self._logger.log_info(
+            f'Finish cleaning data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_macroeconomics_rrrr(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing macroeconomics RRRR data for "{data_quality.value}".'
@@ -5620,7 +5708,7 @@ class DataPreprocessor:
                 self._ingest_macroeconomics_rrrr_vietstock()
 
             case DataQuality.SILVER:
-                pass
+                self._clean_macroeconomics_rrrr_vietstock()
 
             case DataQuality.GOLD:
                 pass
@@ -7501,7 +7589,7 @@ class DataPreprocessor:
         self._process_macroeconomics_mobilization(data_quality)
         self._process_macroeconomics_exchange_rate(data_quality)
         self._process_macroeconomics_iir(data_quality)
-        # self._process_macroeconomics_rrrr(data_quality)
+        self._process_macroeconomics_rrrr(data_quality)
         # self._process_macroeconomics_fdi_sector(data_quality)
         # self._process_macroeconomics_fdi_rd(data_quality)
         # self._process_macroeconomics_export(data_quality)
