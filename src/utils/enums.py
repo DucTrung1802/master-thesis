@@ -1616,6 +1616,7 @@ class Table:
 
     class RRRR:
         class Column(Enum):
+            DATE = "date"
             YEAR = "year"
             MONTH = "month"
             DAY = "day"
