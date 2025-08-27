@@ -2338,6 +2338,23 @@ class DataPreprocessor:
                 )
                 # fmt: on
 
+                # CREDIT
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.CREDIT.name,
+                    columns=[
+                        Column(name=Table.CREDIT.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
+                        Column(name=Table.CREDIT.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
+                        Column(name=Table.CREDIT.Column.CREDIT.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.CREDIT.Column.CREDIT_GROWTH_YTD.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.CREDIT.Column.MONEY_SUPPLY_GROWTH_M2_YTD.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.CREDIT.Column.MONEY_SUPPLY_M2.value, data_type=DataType.FLOAT(), nullable=True),
+                    ],
+                    primary_keys=Table.CREDIT.primary_key,
+                )
+                # fmt: on
+
             case DataQuality.GOLD:
                 pass
 
@@ -5105,6 +5122,44 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish ingesting data in "{file_path}".')
 
+    def _clean_macroeconomics_credit_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.CREDIT,
+            CreditSource.VIETSTOCK,
+        )
+
+        self._logger.log_info(
+            f'Start cleaning data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for cleaning data here
+        self._select_database(DataQuality.BRONZE.value)
+
+        bronze_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.CREDIT.name,
+        )
+
+        silver_df = self._clean(
+            df=bronze_df,
+            clean_layer_list=[
+                CleanLayer.ORDER_BY([Table.CREDIT.Column.YEAR.value])
+            ],
+        )
+
+        self._select_database(DataQuality.SILVER.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.CREDIT.name,
+            primary_keys=Table.CREDIT.primary_key,
+            df=silver_df,
+        )
+
+        self._logger.log_info(
+            f'Finish cleaning data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_macroeconomics_credit(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing macroeconomics CREDIT data for "{data_quality.value}".'
@@ -5115,7 +5170,7 @@ class DataPreprocessor:
                 self._ingest_macroeconomics_credit_vietstock()
 
             case DataQuality.SILVER:
-                pass
+                self._clean_macroeconomics_credit_vietstock()
 
             case DataQuality.GOLD:
                 pass
@@ -7276,7 +7331,7 @@ class DataPreprocessor:
         self._process_macroeconomics_brd(data_quality)
         self._process_macroeconomics_iisd(data_quality)
         self._process_macroeconomics_treg(data_quality)
-        # self._process_macroeconomics_credit(data_quality)
+        self._process_macroeconomics_credit(data_quality)
         # self._process_macroeconomics_mobilization(data_quality)
         # self._process_macroeconomics_exchange_rate(data_quality)
         # self._process_macroeconomics_iir(data_quality)
