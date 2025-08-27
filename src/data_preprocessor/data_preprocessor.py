@@ -2554,6 +2554,90 @@ class DataPreprocessor:
                 )
                 # fmt: on
 
+                # IMPORT
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.IMPORT.name,
+                    columns=[
+                        Column(name=Table.IMPORT.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
+                        Column(name=Table.IMPORT.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
+                        Column(name=Table.IMPORT.Column.ARGENTINA.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.ASEAN.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.POLAND.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.BELARUS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.BRAZIL.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.BULGARIA.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.BELGIUM.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.PORTUGAL.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.IVORY_COAST.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.CAMEROON.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.CAMBODIA.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.CANADA.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.CHILE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.CROATIA.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.UNITED_ARAB_EMIRATES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.ESTONIA.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.EU.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.HUNGARY.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.GREECE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.NETHERLANDS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.SOUTH_KOREA.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.HONG_KONG.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.INDONESIA.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.IRELAND.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.ISRAEL.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.KAZAKHSTAN.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.KUWAIT.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.LATVIA.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.LITHUANIA.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.LUXEMBOURG.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.LAOS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.MALAYSIA.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.MALTA.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.MEXICO.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.MYANMAR.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.USA.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.NORWAY.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.SOUTH_AFRICA.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.NEW_ZEALAND.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.RUSSIA.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.BRUNEI_DARUSSALAM.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.JAPAN.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.OTHER_COUNTRIES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.PAKISTAN.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.PERU.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.PHILIPPINES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.FRANCE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.FINLAND.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.ROMANIA.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.SENEGAL.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.SINGAPORE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.SLOVAKIA.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.SLOVENIA.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.CZECHIA.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.CYPRUS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.THAILAND.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.TURKEY.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.SWITZERLAND.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.SWEDEN.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.CHINA.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.SPAIN.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.UKRAINE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.UNITED_KINGDOM.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.AUSTRIA.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.AUSTRALIA.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.ITALY.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.DENMARK.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.TAIWAN.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.GERMANY.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.SAUDI_ARABIA.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IMPORT.Column.INDIA.value, data_type=DataType.FLOAT(), nullable=True),
+                    ],
+                    primary_keys=Table.IMPORT.primary_key,
+                )
+                # fmt: on
+
             case DataQuality.GOLD:
                 pass
 
@@ -6412,6 +6496,49 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish ingesting data in "{file_path}".')
 
+    def _clean_macroeconomics_import_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.IMPORT,
+            ImportSource.VIETSTOCK,
+        )
+
+        self._logger.log_info(
+            f'Start cleaning data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for cleaning data here
+        self._select_database(DataQuality.BRONZE.value)
+
+        bronze_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.IMPORT.name,
+        )
+
+        silver_df = self._clean(
+            df=bronze_df,
+            clean_layer_list=[
+                CleanLayer.ORDER_BY(
+                    [
+                        Table.IMPORT.Column.YEAR.value,
+                        Table.IMPORT.Column.MONTH.value,
+                    ]
+                )
+            ],
+        )
+
+        self._select_database(DataQuality.SILVER.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.IMPORT.name,
+            primary_keys=Table.IMPORT.primary_key,
+            df=silver_df,
+        )
+
+        self._logger.log_info(
+            f'Finish cleaning data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_macroeconomics_import(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing macroeconomics IMPORT data for "{data_quality.value}".'
@@ -6422,7 +6549,7 @@ class DataPreprocessor:
                 self._ingest_macroeconomics_import_vietstock()
 
             case DataQuality.SILVER:
-                pass
+                self._clean_macroeconomics_import_vietstock()
 
             case DataQuality.GOLD:
                 pass
@@ -7853,7 +7980,7 @@ class DataPreprocessor:
         self._process_macroeconomics_fdi_sector(data_quality)
         self._process_macroeconomics_fdi_rd(data_quality)
         self._process_macroeconomics_export(data_quality)
-        # self._process_macroeconomics_import(data_quality)
+        self._process_macroeconomics_import(data_quality)
         # self._process_macroeconomics_gold_price(data_quality)
         # self._process_macroeconomics_oil_price(data_quality)
         # self._process_macroeconomics_dow_jones(data_quality)
