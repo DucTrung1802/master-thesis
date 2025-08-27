@@ -2347,13 +2347,11 @@ class DataPreprocessor:
                     schema_name=Schema.MACROECONOMICS.value,
                     table_name=Table.RRRR.name,
                     columns=[
-                        Column(name=Table.RRRR.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.RRRR.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.RRRR.Column.DAY.value, data_type=DataType.INT(), nullable=False),
+                        Column(name=Table.RRRR.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
                         Column(name=Table.RRRR.Column.DISCOUNT_RATE.value, data_type=DataType.FLOAT(), nullable=True),
                         Column(name=Table.RRRR.Column.REFINANCING_RATE.value, data_type=DataType.FLOAT(), nullable=True),
                     ],
-                    primary_keys=Table.RRRR.primary_key,
+                    primary_keys=[Table.RRRR.Column.DATE.value],
                 )
                 # fmt: on
 
@@ -5853,11 +5851,31 @@ class DataPreprocessor:
             ],
         )
 
+        # Fill timeline
+        silver_df = make_date_time_index_for_dataframe(silver_df)
+
+        # Interpolate missing values
+        # make sure 'date' is datetime
+        silver_df["date"] = pd.to_datetime(
+            silver_df["date"], dayfirst=True, errors="coerce"
+        )
+
+        # set it as index for interpolation
+        silver_df = silver_df.set_index("date").sort_index()
+
+        # interpolate along the datetime index
+        silver_df[["discount_rate", "refinancing_rate"]] = silver_df[
+            ["discount_rate", "refinancing_rate"]
+        ].interpolate(method="time")
+
+        # fill edges (optional)
+        silver_df = silver_df.ffill().bfill().reset_index()
+
         self._select_database(DataQuality.SILVER.value)
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
             table_name=Table.RRRR.name,
-            primary_keys=Table.RRRR.primary_key,
+            primary_keys=[Table.RRRR.Column.DATE.value],
             df=silver_df,
         )
 
@@ -8178,7 +8196,7 @@ class DataPreprocessor:
         # self._process_macroeconomics_fa_by_house_types(data_quality)
         # self._process_macroeconomics_it_bop(data_quality)
         # self._process_macroeconomics_tsbr(data_quality)
-        self._process_macroeconomics_tsbe(data_quality)
+        # self._process_macroeconomics_tsbe(data_quality)
         # self._process_macroeconomics_gd(data_quality)
         # self._process_macroeconomics_brd(data_quality)
         # self._process_macroeconomics_iisd(data_quality)
@@ -8187,7 +8205,7 @@ class DataPreprocessor:
         # self._process_macroeconomics_mobilization(data_quality)
         # self._process_macroeconomics_exchange_rate(data_quality)
         # self._process_macroeconomics_iir(data_quality)
-        # self._process_macroeconomics_rrrr(data_quality)
+        self._process_macroeconomics_rrrr(data_quality)
         # self._process_macroeconomics_fdi_sector(data_quality)
         # self._process_macroeconomics_fdi_rd(data_quality)
         # self._process_macroeconomics_export(data_quality)
