@@ -96,6 +96,7 @@ class DataQuality(Enum):
 class CleanAction(Enum):
     REMOVE_RECORD_IF_COLUMN_IS_NULL = "remove_record_if_column_is_null"
     ORDER_BY = "order_by"
+    REMOVE_COLUMN = "remove_column"
 
 
 class CleanLayer:
@@ -114,6 +115,10 @@ class CleanLayer:
     @classmethod
     def ORDER_BY(cls, column_list: List[str]):
         return cls(CleanAction.ORDER_BY, column_list=column_list)
+    
+    @classmethod
+    def REMOVE_COLUMN(cls, column_list: List[str]):
+        return cls(CleanAction.REMOVE_COLUMN, column_list=column_list)
 
 
 # Enum for Main Scraping Types

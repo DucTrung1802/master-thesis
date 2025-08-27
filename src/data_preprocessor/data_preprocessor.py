@@ -87,19 +87,22 @@ class DataPreprocessor:
             return df
 
         for layer in clean_layer_list:
-            if layer.action == CleanAction.REMOVE_RECORD_IF_COLUMN_IS_NULL:
-                col = layer.params.get("column_name")
-                if col:
-                    df = df[df[col].notnull()]
+            match layer.action:
+                case CleanAction.REMOVE_RECORD_IF_COLUMN_IS_NULL:
+                    if col := layer.params.get("column_name"):
+                        df = df[df[col].notnull()]
 
-            elif layer.action == CleanAction.ORDER_BY:
-                col_list = layer.params.get("column_list")
-                if col_list:
-                    df = df.sort_values(by=col_list)
+                case CleanAction.ORDER_BY:
+                    if col_list := layer.params.get("column_list"):
+                        df = df.sort_values(by=col_list)
 
-            else:
-                # Optional: handle unknown layer or skip
-                pass
+                case CleanAction.REMOVE_COLUMN:
+                    if col_list := layer.params.get("column_list"):
+                        df = df.drop(columns=col_list)
+
+                case _:
+                    # Optional: handle unknown layer or skip
+                    pass
 
         return df
 
@@ -2077,11 +2080,8 @@ class DataPreprocessor:
                         Column(name=Table.IT_BOP.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
                         Column(name=Table.IT_BOP.Column.QUARTER.value, data_type=DataType.INT(), nullable=True),
                         Column(name=Table.IT_BOP.Column.A_CURRENT_ACCOUNT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.B_CAPITAL_ACCOUNT.value, data_type=DataType.FLOAT(), nullable=True),
                         Column(name=Table.IT_BOP.Column.BORROWING_AND_EXTERNAL_DEBT_REPAYMENT.value, data_type=DataType.FLOAT(), nullable=True),
                         Column(name=Table.IT_BOP.Column.C_FINANCIAL_ACCOUNT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.CAPITAL_ACCOUNT_PAYMENTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.CAPITAL_ACCOUNT_RECEIPTS.value, data_type=DataType.FLOAT(), nullable=True),
                         Column(name=Table.IT_BOP.Column.CAPITAL_WITHDRAWAL.value, data_type=DataType.FLOAT(), nullable=True),
                         Column(name=Table.IT_BOP.Column.CURRENT_TRANSFERS_SECONDARY_INCOME_NET.value, data_type=DataType.FLOAT(), nullable=True),
                         Column(name=Table.IT_BOP.Column.CURRENT_TRANSFERS_SECONDARY_INCOME_PAYMENTS.value, data_type=DataType.FLOAT(), nullable=True),
@@ -2097,11 +2097,9 @@ class DataPreprocessor:
                         Column(name=Table.IT_BOP.Column.GOODS_IMPORTS_FOB.value, data_type=DataType.FLOAT(), nullable=True),
                         Column(name=Table.IT_BOP.Column.GOODS_NET.value, data_type=DataType.FLOAT(), nullable=True),
                         Column(name=Table.IT_BOP.Column.GOVERNMENT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.IMF_CREDITS_AND_LOANS.value, data_type=DataType.FLOAT(), nullable=True),
                         Column(name=Table.IT_BOP.Column.INVESTMENT_INCOME_PRIMARY_INCOME_NET.value, data_type=DataType.FLOAT(), nullable=True),
                         Column(name=Table.IT_BOP.Column.INVESTMENT_INCOME_PRIMARY_INCOME_PAYMENTS.value, data_type=DataType.FLOAT(), nullable=True),
                         Column(name=Table.IT_BOP.Column.INVESTMENT_INCOME_PRIMARY_INCOME_RECEIPTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.LOANS_AND_EXTERNAL_DEBT_COLLECTION.value, data_type=DataType.FLOAT(), nullable=True),
                         Column(name=Table.IT_BOP.Column.LONG_TERM.value, data_type=DataType.FLOAT(), nullable=True),
                         Column(name=Table.IT_BOP.Column.MONEY_AND_DEPOSITS.value, data_type=DataType.FLOAT(), nullable=True),
                         Column(name=Table.IT_BOP.Column.OTHER_INVESTMENT_ASSETS.value, data_type=DataType.FLOAT(), nullable=True),
@@ -2119,9 +2117,7 @@ class DataPreprocessor:
                         Column(name=Table.IT_BOP.Column.SERVICES_IMPORTS.value, data_type=DataType.FLOAT(), nullable=True),
                         Column(name=Table.IT_BOP.Column.SERVICES_NET.value, data_type=DataType.FLOAT(), nullable=True),
                         Column(name=Table.IT_BOP.Column.SHORT_TERM.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.SPECIAL_FINANCING.value, data_type=DataType.FLOAT(), nullable=True),
                         Column(name=Table.IT_BOP.Column.TOTAL_CURRENT_AND_CAPITAL_ACCOUNT_BALANCE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.TRADE_CREDITS_AND_ADVANCES.value, data_type=DataType.FLOAT(), nullable=True),
                     ],
                     primary_keys=Table.IT_BOP.primary_key,
                 )
@@ -4610,7 +4606,19 @@ class DataPreprocessor:
             clean_layer_list=[
                 CleanLayer.ORDER_BY(
                     [Table.IT_BOP.Column.YEAR.value, Table.IT_BOP.Column.QUARTER.value]
-                )
+                ),
+                CleanLayer.REMOVE_COLUMN(
+                    [
+                        Table.IT_BOP.Column.B_CAPITAL_ACCOUNT.value,
+                        Table.IT_BOP.Column.CAPITAL_ACCOUNT_PAYMENTS.value,
+                        Table.IT_BOP.Column.CAPITAL_ACCOUNT_RECEIPTS.value,
+                        Table.IT_BOP.Column.LOANS_AND_EXTERNAL_DEBT_COLLECTION.value,
+                        Table.IT_BOP.Column.TRADE_CREDITS_AND_ADVANCES.value,
+                        Table.IT_BOP.Column.OTHER_RECEIVABLESPAYABLES.value,
+                        Table.IT_BOP.Column.IMF_CREDITS_AND_LOANS.value,
+                        Table.IT_BOP.Column.SPECIAL_FINANCING.value,
+                    ]
+                ),
             ],
         )
 
