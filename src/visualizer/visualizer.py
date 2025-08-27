@@ -195,6 +195,7 @@ class Visualizer:
         prefix_figure_name: str = None,
         dpi: int = 300,
         style: str = "fivethirtyeight",
+        marker: str = "o",
     ) -> plt.Figure:
         """
         Plots a line chart using Matplotlib.
@@ -227,7 +228,7 @@ class Visualizer:
                 ax.plot(
                     df[x_column],
                     df[col],
-                    marker="o",
+                    marker=marker,
                     label=col,
                     markerfacecolor="#1f3b73",  # point fill color
                     markeredgecolor="#1f3b73",  # point border color
