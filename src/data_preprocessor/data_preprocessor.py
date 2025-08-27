@@ -2423,6 +2423,38 @@ class DataPreprocessor:
                 )
                 # fmt: on
 
+                # FDI_SECTOR
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.FDI_SECTOR.name,
+                    columns=[
+                        Column(name=Table.FDI_SECTOR.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
+                        Column(name=Table.FDI_SECTOR.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
+                        Column(name=Table.FDI_SECTOR.Column.ACCOMMODATION_AND_FOOD_SERVICES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.FDI_SECTOR.Column.ADMINISTRATIVE_AND_SUPPORT_SERVICE_ACTIVITIES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.FDI_SECTOR.Column.AGRICULTURE_FORESTRY_AND_FISHERY.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.FDI_SECTOR.Column.ARTS_ENTERTAINMENT_AND_RECREATION.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.FDI_SECTOR.Column.CONSTRUCTION.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.FDI_SECTOR.Column.DOMESTIC_HOUSEHOLD_SERVICE_WORKERS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.FDI_SECTOR.Column.EDUCATION_AND_TRAINING.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.FDI_SECTOR.Column.FINANCIAL_BANKING_AND_INSURANCE_ACTIVITIES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.FDI_SECTOR.Column.HEALTHCARE_AND_SOCIAL_ASSISTANCE_ACTIVITIES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.FDI_SECTOR.Column.INFORMATION_AND_COMMUNICATION.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.FDI_SECTOR.Column.MANUFACTURING_AND_PROCESSING_INDUSTRY.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.FDI_SECTOR.Column.MINING_AND_QUARRYING.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.FDI_SECTOR.Column.OTHER_SERVICE_ACTIVITIES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.FDI_SECTOR.Column.PRODUCTION_AND_DISTRIBUTION_OF_ELECTRICITY_GAS_WATER_AND_AIR_CONDITIONING.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.FDI_SECTOR.Column.PROFESSIONAL_SCIENTIFIC_AND_TECHNOLOGICAL_ACTIVITIES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.FDI_SECTOR.Column.REAL_ESTATE_BUSINESS_ACTIVITIES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.FDI_SECTOR.Column.TRANSPORTATION_AND_WAREHOUSING.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.FDI_SECTOR.Column.WATER_SUPPLY_AND_WASTE_TREATMENT.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.FDI_SECTOR.Column.WHOLESALE_AND_RETAIL_REPAIR_OF_MOTOR_VEHICLES_AND_MOTORCYCLES.value, data_type=DataType.FLOAT(), nullable=True),
+                    ],
+                    primary_keys=Table.FDI_SECTOR.primary_key,
+                )
+                # fmt: on
+
             case DataQuality.GOLD:
                 pass
 
@@ -5781,6 +5813,49 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish ingesting data in "{file_path}".')
 
+    def _clean_macroeconomics_fdi_sector_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.FDI_SECTOR,
+            FdiSectorSource.VIETSTOCK,
+        )
+
+        self._logger.log_info(
+            f'Start cleaning data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for cleaning data here
+        self._select_database(DataQuality.BRONZE.value)
+
+        bronze_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.FDI_SECTOR.name,
+        )
+
+        silver_df = self._clean(
+            df=bronze_df,
+            clean_layer_list=[
+                CleanLayer.ORDER_BY(
+                    [
+                        Table.FDI_SECTOR.Column.YEAR.value,
+                        Table.FDI_SECTOR.Column.MONTH.value,
+                    ]
+                )
+            ],
+        )
+
+        self._select_database(DataQuality.SILVER.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.FDI_SECTOR.name,
+            primary_keys=Table.FDI_SECTOR.primary_key,
+            df=silver_df,
+        )
+
+        self._logger.log_info(
+            f'Finish cleaning data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_macroeconomics_fdi_sector(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing macroeconomics FDI_SECTOR data for "{data_quality.value}".'
@@ -5791,7 +5866,7 @@ class DataPreprocessor:
                 self._ingest_macroeconomics_fdi_sector_vietstock()
 
             case DataQuality.SILVER:
-                pass
+                self._clean_macroeconomics_fdi_sector_vietstock()
 
             case DataQuality.GOLD:
                 pass
@@ -7590,7 +7665,7 @@ class DataPreprocessor:
         self._process_macroeconomics_exchange_rate(data_quality)
         self._process_macroeconomics_iir(data_quality)
         self._process_macroeconomics_rrrr(data_quality)
-        # self._process_macroeconomics_fdi_sector(data_quality)
+        self._process_macroeconomics_fdi_sector(data_quality)
         # self._process_macroeconomics_fdi_rd(data_quality)
         # self._process_macroeconomics_export(data_quality)
         # self._process_macroeconomics_import(data_quality)
