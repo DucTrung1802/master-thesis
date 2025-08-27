@@ -20,6 +20,7 @@ from utils.constants import (
     SCRAPER_START_DATE,
     SCRAPER_END_DATE,
 )
+from utils.utils import make_date_time_index_for_dataframe
 
 parent_dir = os.path.dirname(os.getcwd())
 
@@ -74,108 +75,7 @@ class Visualizer:
         start_date: datetime = SCRAPER_START_DATE,
         end_date: datetime = SCRAPER_END_DATE,
     ) -> pd.DataFrame:
-        generate_date_time_type = None
-
-        # Detect type based on dataframe columns
-        if {"year", "month", "day"}.issubset(df.columns):
-            generate_date_time_type = GenerateDateTimeType.DAY
-        elif {"year", "quarter"}.issubset(df.columns):
-            generate_date_time_type = GenerateDateTimeType.QUARTER
-        elif {"year", "month"}.issubset(df.columns):
-            generate_date_time_type = GenerateDateTimeType.MONTH
-        elif (
-            "year" in df.columns
-            and len(df.columns.intersection({"quarter", "month", "date"})) == 0
-        ):
-            generate_date_time_type = GenerateDateTimeType.YEAR
-        elif "date" in df.columns:
-            generate_date_time_type = GenerateDateTimeType.DATE
-        else:
-            raise ValueError("DataFrame does not contain recognizable time columns")
-
-        # Build "date" column from existing fields
-        match generate_date_time_type:
-            case GenerateDateTimeType.YEAR:
-                df["date"] = (
-                    pd.to_datetime(df["year"], format="%Y") + pd.offsets.YearEnd(0)
-                ).dt.normalize()
-                df = df.drop(columns=["year"])
-
-            case GenerateDateTimeType.QUARTER:
-                df["date"] = (
-                    pd.PeriodIndex.from_fields(
-                        year=df["year"], quarter=df["quarter"], freq="Q"
-                    )
-                    .to_timestamp(how="end")
-                    .normalize()
-                )
-                df = df.drop(columns=["year", "quarter"])
-
-            case GenerateDateTimeType.MONTH:
-                df["date"] = (
-                    pd.to_datetime(
-                        df["year"].astype(str)
-                        + "-"
-                        + df["month"].astype(str).str.zfill(2),
-                        format="%Y-%m",
-                    )
-                    + pd.offsets.MonthEnd(0)
-                ).dt.normalize()
-                df = df.drop(columns=["year", "month"])
-
-            case GenerateDateTimeType.DAY:
-                # Combine year, month, day into a single datetime
-                df["date"] = pd.to_datetime(
-                    df[["year", "month", "day"]].astype(str).agg("-".join, axis=1),
-                    format="%Y-%m-%d",
-                ).dt.normalize()
-                df = df.drop(columns=["year", "month", "day"])
-
-            case GenerateDateTimeType.DATE:
-                # Already has a date column
-                df["date"] = pd.to_datetime(
-                    df["date"], format="%Y-%m-%d"
-                ).dt.normalize()
-                # nothing else to drop
-
-            case _:
-                raise ValueError("Unsupported generate_date_time_type")
-
-        # --- NEW PART: generate full date range ---
-        match generate_date_time_type:
-            case GenerateDateTimeType.YEAR:
-                full_range = pd.date_range(
-                    start=start_date, end=end_date, freq="YE"
-                ).normalize()
-
-            case GenerateDateTimeType.QUARTER:
-                full_range = pd.date_range(
-                    start=start_date, end=end_date, freq="QE"
-                ).normalize()
-
-            case GenerateDateTimeType.MONTH:
-                full_range = pd.date_range(
-                    start=start_date, end=end_date, freq="ME"
-                ).normalize()
-
-            case GenerateDateTimeType.DAY:
-                full_range = pd.date_range(
-                    start=start_date, end=end_date, freq="D"
-                ).normalize()
-
-            case _:
-                raise ValueError("Unsupported generate_date_time_type")
-
-        full_df = pd.DataFrame({"date": full_range})
-
-        # Merge to ensure full coverage
-        df = pd.merge(full_df, df, on="date", how="left")
-
-        # Move "date" column to the first position (already is, but keep consistent)
-        cols = ["date"] + [col for col in df.columns if col != "date"]
-        df = df[cols]
-
-        return df
+        return make_date_time_index_for_dataframe(df, start_date, end_date)
 
     def select(
         self,
