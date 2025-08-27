@@ -2263,6 +2263,25 @@ class DataPreprocessor:
                 )
                 # fmt: on
 
+                # GD
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.GD.name,
+                    columns=[
+                        Column(name=Table.GD.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
+                        Column(name=Table.GD.Column.DEBT_BALANCE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.GD.Column.DOMESTIC_DEBT.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.GD.Column.FOREIGN_DEBT.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.GD.Column.TOTAL_DEBT_PAYMENTS_DURING_THE_PERIOD.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.GD.Column.TOTAL_INTEREST_AND_FEES_PAID_DURING_THE_PERIOD.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.GD.Column.TOTAL_PRINCIPAL_REPAYMENT_DURING_THE_PERIOD.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.GD.Column.WITHDRAWALS_DURING_THE_PERIOD.value, data_type=DataType.FLOAT(), nullable=True),
+                    ],
+                    primary_keys=Table.GD.primary_key,
+                )
+                # fmt: on
+
             case DataQuality.GOLD:
                 pass
 
@@ -2706,7 +2725,7 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.CPI,
-            GdpSource.VIETSTOCK,
+            CpiSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -2835,7 +2854,7 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.PPI,
-            GdpSource.VIETSTOCK,
+            PpiSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -2981,7 +3000,7 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.IPI,
-            GdpSource.VIETSTOCK,
+            IpiSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -3084,7 +3103,7 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.XPI,
-            GdpSource.VIETSTOCK,
+            XpiSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -3191,7 +3210,7 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.MPI,
-            GdpSource.VIETSTOCK,
+            MpiSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -3298,7 +3317,7 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.POPULATION,
-            GdpSource.VIETSTOCK,
+            PopulationSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -3405,7 +3424,7 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.LABOR,
-            GdpSource.VIETSTOCK,
+            LaborSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -3508,7 +3527,7 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.RETAIL,
-            GdpSource.VIETSTOCK,
+            RetailSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -3615,7 +3634,7 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.PMI,
-            GdpSource.VIETSTOCK,
+            PmiSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -3724,7 +3743,7 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.IIP,
-            GdpSource.VIETSTOCK,
+            IipSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -3831,7 +3850,7 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.IPV,
-            GdpSource.VIETSTOCK,
+            IpvSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -3971,7 +3990,7 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.IPV_BY_INDUSTRY,
-            GdpSource.VIETSTOCK,
+            IpvByIndustrySource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -4078,7 +4097,7 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.MIP,
-            GdpSource.VIETSTOCK,
+            MipSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -4192,7 +4211,7 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.FA_BY_HOUSE_TYPES,
-            GdpSource.VIETSTOCK,
+            FaByHouseTypeSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -4299,7 +4318,7 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.IT_BOP,
-            GdpSource.VIETSTOCK,
+            ItBopSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -4404,7 +4423,7 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.TSBR,
-            GdpSource.VIETSTOCK,
+            TsbrSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -4509,7 +4528,7 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.TSBE,
-            GdpSource.VIETSTOCK,
+            TsbeSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -4610,6 +4629,44 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish ingesting data in "{file_path}".')
 
+    def _clean_macroeconomics_gd_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.GD,
+            GdSource.VIETSTOCK,
+        )
+
+        self._logger.log_info(
+            f'Start cleaning data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for cleaning data here
+        self._select_database(DataQuality.BRONZE.value)
+
+        bronze_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.GD.name,
+        )
+
+        silver_df = self._clean(
+            df=bronze_df,
+            clean_layer_list=[
+                CleanLayer.ORDER_BY([Table.GD.Column.YEAR.value])
+            ],
+        )
+
+        self._select_database(DataQuality.SILVER.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.GD.name,
+            primary_keys=Table.GD.primary_key,
+            df=silver_df,
+        )
+
+        self._logger.log_info(
+            f'Finish cleaning data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_macroeconomics_gd(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing macroeconomics GD data for "{data_quality.value}".'
@@ -4620,7 +4677,7 @@ class DataPreprocessor:
                 self._ingest_macroeconomics_gd_vietstock()
 
             case DataQuality.SILVER:
-                pass
+                self._clean_macroeconomics_gd_vietstock()
 
             case DataQuality.GOLD:
                 pass
@@ -7045,7 +7102,7 @@ class DataPreprocessor:
         self._process_macroeconomics_it_bop(data_quality)
         self._process_macroeconomics_tsbr(data_quality)
         self._process_macroeconomics_tsbe(data_quality)
-        # self._process_macroeconomics_gd(data_quality)
+        self._process_macroeconomics_gd(data_quality)
         # self._process_macroeconomics_brd(data_quality)
         # self._process_macroeconomics_iisd(data_quality)
         # self._process_macroeconomics_treg(data_quality)
