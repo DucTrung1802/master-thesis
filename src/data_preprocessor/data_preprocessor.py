@@ -2355,6 +2355,37 @@ class DataPreprocessor:
                 )
                 # fmt: on
 
+                # MOBILIZATION
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.MOBILIZATION.name,
+                    columns=[
+                        Column(name=Table.MOBILIZATION.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
+                        Column(name=Table.MOBILIZATION.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
+                        Column(name=Table.MOBILIZATION.Column.DEPOSITS_FROM_ECONOMIC_ORGANIZATIONS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.MOBILIZATION.Column.DEPOSITS_FROM_RESIDENTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.MOBILIZATION.Column.TOTAL_PAYMENT_INSTRUMENTS.value, data_type=DataType.FLOAT(), nullable=True),
+                    ],
+                    primary_keys=Table.MOBILIZATION.primary_key,
+                )
+                # fmt: on
+
+                # EXCHANGE_RATE
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.EXCHANGE_RATE.name,
+                    columns=[
+                        Column(name=Table.EXCHANGE_RATE.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
+                        Column(name=Table.EXCHANGE_RATE.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
+                        Column(name=Table.EXCHANGE_RATE.Column.DAY.value, data_type=DataType.INT(), nullable=False),
+                        Column(name=Table.EXCHANGE_RATE.Column.CENTRAL_RATE.value, data_type=DataType.FLOAT(), nullable=True),
+                    ],
+                    primary_keys=Table.EXCHANGE_RATE.primary_key,
+                )
+                # fmt: on
+
             case DataQuality.GOLD:
                 pass
 
@@ -5227,6 +5258,44 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish ingesting data in "{file_path}".')
 
+    def _clean_macroeconomics_mobilization_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.MOBILIZATION,
+            MobilizationSource.VIETSTOCK,
+        )
+
+        self._logger.log_info(
+            f'Start cleaning data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for cleaning data here
+        self._select_database(DataQuality.BRONZE.value)
+
+        bronze_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.MOBILIZATION.name,
+        )
+
+        silver_df = self._clean(
+            df=bronze_df,
+            clean_layer_list=[
+                CleanLayer.ORDER_BY([Table.MOBILIZATION.Column.YEAR.value])
+            ],
+        )
+
+        self._select_database(DataQuality.SILVER.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.MOBILIZATION.name,
+            primary_keys=Table.MOBILIZATION.primary_key,
+            df=silver_df,
+        )
+
+        self._logger.log_info(
+            f'Finish cleaning data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_macroeconomics_mobilization(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing macroeconomics MOBILIZATION data for "{data_quality.value}".'
@@ -5237,7 +5306,7 @@ class DataPreprocessor:
                 self._ingest_macroeconomics_mobilization_vietstock()
 
             case DataQuality.SILVER:
-                pass
+                self._clean_macroeconomics_mobilization_vietstock()
 
             case DataQuality.GOLD:
                 pass
@@ -5297,6 +5366,44 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish ingesting data in "{file_path}".')
 
+    def _clean_macroeconomics_exchange_rate_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.EXCHANGE_RATE,
+            ExchangeRateSource.VIETSTOCK,
+        )
+
+        self._logger.log_info(
+            f'Start cleaning data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for cleaning data here
+        self._select_database(DataQuality.BRONZE.value)
+
+        bronze_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.EXCHANGE_RATE.name,
+        )
+
+        silver_df = self._clean(
+            df=bronze_df,
+            clean_layer_list=[
+                CleanLayer.ORDER_BY([Table.EXCHANGE_RATE.Column.YEAR.value])
+            ],
+        )
+
+        self._select_database(DataQuality.SILVER.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.EXCHANGE_RATE.name,
+            primary_keys=Table.EXCHANGE_RATE.primary_key,
+            df=silver_df,
+        )
+
+        self._logger.log_info(
+            f'Finish cleaning data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_macroeconomics_exchange_rate(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing macroeconomics EXCHANGE_RATE data for "{data_quality.value}".'
@@ -5307,7 +5414,7 @@ class DataPreprocessor:
                 self._ingest_macroeconomics_exchange_rate_vietstock()
 
             case DataQuality.SILVER:
-                pass
+                self._clean_macroeconomics_exchange_rate_vietstock()
 
             case DataQuality.GOLD:
                 pass
@@ -7332,8 +7439,8 @@ class DataPreprocessor:
         self._process_macroeconomics_iisd(data_quality)
         self._process_macroeconomics_treg(data_quality)
         self._process_macroeconomics_credit(data_quality)
-        # self._process_macroeconomics_mobilization(data_quality)
-        # self._process_macroeconomics_exchange_rate(data_quality)
+        self._process_macroeconomics_mobilization(data_quality)
+        self._process_macroeconomics_exchange_rate(data_quality)
         # self._process_macroeconomics_iir(data_quality)
         # self._process_macroeconomics_rrrr(data_quality)
         # self._process_macroeconomics_fdi_sector(data_quality)
