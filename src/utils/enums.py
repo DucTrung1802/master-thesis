@@ -87,6 +87,14 @@ class TimeFormat(Enum):
     THREE_MONTH_INDEX_YEAR = "3M/2000"  # 3 month index + year
 
 
+class GenerateDateTimeType(Enum):
+    YEAR = "year"
+    QUARTER = "quarter"
+    MONTH = "month"
+    DAY = "day"
+    DATE = "date"
+
+
 class DataQuality(Enum):
     BRONZE = "bronze"
     SILVER = "silver"
