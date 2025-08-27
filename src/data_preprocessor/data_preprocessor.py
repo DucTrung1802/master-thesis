@@ -2455,6 +2455,105 @@ class DataPreprocessor:
                 )
                 # fmt: on
 
+                # FDI_RD
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.FDI_RD.name,
+                    columns=[
+                        Column(name=Table.FDI_RD.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
+                        Column(name=Table.FDI_RD.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
+                        Column(name=Table.FDI_RD.Column.FDI_DISBURSEMENT.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.FDI_RD.Column.REGISTER.value, data_type=DataType.FLOAT(), nullable=True),
+                    ],
+                    primary_keys=Table.FDI_RD.primary_key,
+                )
+                # fmt: on
+
+                # EXPORT
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.EXPORT.name,
+                    columns=[
+                        Column(name=Table.EXPORT.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
+                        Column(name=Table.EXPORT.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
+                        Column(name=Table.EXPORT.Column.ARGENTINA.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.ASEAN.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.POLAND.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.BELARUS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.BRAZIL.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.BULGARIA.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.BELGIUM.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.PORTUGAL.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.IVORY_COAST.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.CAMEROON.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.CAMBODIA.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.CANADA.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.CHILE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.CROATIA.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.UNITED_ARAB_EMIRATES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.ESTONIA.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.EU.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.HUNGARY.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.GREECE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.NETHERLANDS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.SOUTH_KOREA.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.HONG_KONG.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.INDONESIA.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.IRELAND.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.ISRAEL.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.KAZAKHSTAN.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.KUWAIT.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.LATVIA.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.LITHUANIA.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.LUXEMBOURG.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.LAOS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.MALAYSIA.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.MALTA.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.MEXICO.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.MYANMAR.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.USA.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.NORWAY.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.SOUTH_AFRICA.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.NEW_ZEALAND.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.RUSSIA.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.BRUNEI_DARUSSALAM.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.JAPAN.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.OTHER_COUNTRIES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.PAKISTAN.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.PERU.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.PHILIPPINES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.FRANCE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.FINLAND.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.ROMANIA.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.SENEGAL.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.SINGAPORE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.SLOVAKIA.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.SLOVENIA.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.CZECHIA.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.CYPRUS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.THAILAND.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.TURKEY.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.SWITZERLAND.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.SWEDEN.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.CHINA.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.SPAIN.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.UKRAINE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.UNITED_KINGDOM.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.AUSTRIA.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.AUSTRALIA.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.ITALY.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.DENMARK.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.TAIWAN.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.GERMANY.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.SAUDI_ARABIA.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.EXPORT.Column.INDIA.value, data_type=DataType.FLOAT(), nullable=True),
+                    ],
+                    primary_keys=Table.EXPORT.primary_key,
+                )
+                # fmt: on
+
             case DataQuality.GOLD:
                 pass
 
@@ -5923,6 +6022,49 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish ingesting data in "{file_path}".')
 
+    def _clean_macroeconomics_fdi_rd_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.FDI_RD,
+            FdiRdSource.VIETSTOCK,
+        )
+
+        self._logger.log_info(
+            f'Start cleaning data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for cleaning data here
+        self._select_database(DataQuality.BRONZE.value)
+
+        bronze_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.FDI_RD.name,
+        )
+
+        silver_df = self._clean(
+            df=bronze_df,
+            clean_layer_list=[
+                CleanLayer.ORDER_BY(
+                    [
+                        Table.FDI_RD.Column.YEAR.value,
+                        Table.FDI_RD.Column.MONTH.value,
+                    ]
+                )
+            ],
+        )
+
+        self._select_database(DataQuality.SILVER.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.FDI_RD.name,
+            primary_keys=Table.FDI_RD.primary_key,
+            df=silver_df,
+        )
+
+        self._logger.log_info(
+            f'Finish cleaning data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_macroeconomics_fdi_rd(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing macroeconomics FDI_RD data for "{data_quality.value}".'
@@ -5933,7 +6075,7 @@ class DataPreprocessor:
                 self._ingest_macroeconomics_fdi_rd_vietstock()
 
             case DataQuality.SILVER:
-                pass
+                self._clean_macroeconomics_fdi_rd_vietstock()
 
             case DataQuality.GOLD:
                 pass
@@ -6075,6 +6217,49 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish ingesting data in "{file_path}".')
 
+    def _clean_macroeconomics_export_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.EXPORT,
+            ExportSource.VIETSTOCK,
+        )
+
+        self._logger.log_info(
+            f'Start cleaning data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for cleaning data here
+        self._select_database(DataQuality.BRONZE.value)
+
+        bronze_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.EXPORT.name,
+        )
+
+        silver_df = self._clean(
+            df=bronze_df,
+            clean_layer_list=[
+                CleanLayer.ORDER_BY(
+                    [
+                        Table.EXPORT.Column.YEAR.value,
+                        Table.EXPORT.Column.MONTH.value,
+                    ]
+                )
+            ],
+        )
+
+        self._select_database(DataQuality.SILVER.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.EXPORT.name,
+            primary_keys=Table.EXPORT.primary_key,
+            df=silver_df,
+        )
+
+        self._logger.log_info(
+            f'Finish cleaning data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_macroeconomics_export(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing macroeconomics EXPORT data for "{data_quality.value}".'
@@ -6085,7 +6270,7 @@ class DataPreprocessor:
                 self._ingest_macroeconomics_export_vietstock()
 
             case DataQuality.SILVER:
-                pass
+                self._clean_macroeconomics_export_vietstock()
 
             case DataQuality.GOLD:
                 pass
@@ -7666,8 +7851,8 @@ class DataPreprocessor:
         self._process_macroeconomics_iir(data_quality)
         self._process_macroeconomics_rrrr(data_quality)
         self._process_macroeconomics_fdi_sector(data_quality)
-        # self._process_macroeconomics_fdi_rd(data_quality)
-        # self._process_macroeconomics_export(data_quality)
+        self._process_macroeconomics_fdi_rd(data_quality)
+        self._process_macroeconomics_export(data_quality)
         # self._process_macroeconomics_import(data_quality)
         # self._process_macroeconomics_gold_price(data_quality)
         # self._process_macroeconomics_oil_price(data_quality)
