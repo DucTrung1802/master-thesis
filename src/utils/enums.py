@@ -1,6 +1,6 @@
 from enum import Enum
 from dataclasses import dataclass
-from typing import Dict, Type, Union, Tuple
+from typing import Dict, List, Union, Tuple, Optional
 
 from utils.constants import *
 
@@ -85,6 +85,35 @@ class TimeFormat(Enum):
     QUARTER_YEAR = "Q1/2000"  # quarter + year
     MONTH_INDEX_YEAR = "M2/2000"  # month index + year
     THREE_MONTH_INDEX_YEAR = "3M/2000"  # 3 month index + year
+
+
+class DataQuality(Enum):
+    BRONZE = "bronze"
+    SILVER = "silver"
+    GOLD = "gold"
+
+
+class CleanAction(Enum):
+    REMOVE_RECORD_IF_COLUMN_IS_NULL = "remove_record_if_column_is_null"
+    ORDER_BY = "order_by"
+
+
+class CleanLayer:
+    """
+    Represents a cleaning step. Can have parameters like column_name.
+    """
+
+    def __init__(self, action: CleanAction, **kwargs):
+        self.action = action
+        self.params = kwargs
+
+    @classmethod
+    def REMOVE_RECORD_IF_COLUMN_IS_NULL(cls, column_name: str):
+        return cls(CleanAction.REMOVE_RECORD_IF_COLUMN_IS_NULL, column_name=column_name)
+
+    @classmethod
+    def ORDER_BY(cls, column_list: List[str]):
+        return cls(CleanAction.ORDER_BY, column_list=column_list)
 
 
 # Enum for Main Scraping Types
