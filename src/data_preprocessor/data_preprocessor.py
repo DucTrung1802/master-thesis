@@ -2386,6 +2386,27 @@ class DataPreprocessor:
                 )
                 # fmt: on
 
+                # IIR
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.IIR.name,
+                    columns=[
+                        Column(name=Table.IIR.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
+                        Column(name=Table.IIR.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
+                        Column(name=Table.IIR.Column.DAY.value, data_type=DataType.INT(), nullable=False),
+                        Column(name=Table.IIR.Column.ONE_MONTH.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IIR.Column.ONE_WEEK.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IIR.Column.TWO_WEEKS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IIR.Column.THREE_MONTHS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IIR.Column.SIX_MONTHS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IIR.Column.NINE_MONTHS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.IIR.Column.OVERNIGHT.value, data_type=DataType.FLOAT(), nullable=True),
+                    ],
+                    primary_keys=Table.IIR.primary_key,
+                )
+                # fmt: on
+
             case DataQuality.GOLD:
                 pass
 
@@ -5484,6 +5505,44 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish ingesting data in "{file_path}".')
 
+    def _clean_macroeconomics_iir_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.IIR,
+            IirSource.VIETSTOCK,
+        )
+
+        self._logger.log_info(
+            f'Start cleaning data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for cleaning data here
+        self._select_database(DataQuality.BRONZE.value)
+
+        bronze_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.IIR.name,
+        )
+
+        silver_df = self._clean(
+            df=bronze_df,
+            clean_layer_list=[
+                CleanLayer.ORDER_BY([Table.IIR.Column.YEAR.value])
+            ],
+        )
+
+        self._select_database(DataQuality.SILVER.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.IIR.name,
+            primary_keys=Table.IIR.primary_key,
+            df=silver_df,
+        )
+
+        self._logger.log_info(
+            f'Finish cleaning data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_macroeconomics_iir(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing macroeconomics IIR data for "{data_quality.value}".'
@@ -5494,7 +5553,7 @@ class DataPreprocessor:
                 self._ingest_macroeconomics_iir_vietstock()
 
             case DataQuality.SILVER:
-                pass
+                self._clean_macroeconomics_iir_vietstock()
 
             case DataQuality.GOLD:
                 pass
@@ -7441,7 +7500,7 @@ class DataPreprocessor:
         self._process_macroeconomics_credit(data_quality)
         self._process_macroeconomics_mobilization(data_quality)
         self._process_macroeconomics_exchange_rate(data_quality)
-        # self._process_macroeconomics_iir(data_quality)
+        self._process_macroeconomics_iir(data_quality)
         # self._process_macroeconomics_rrrr(data_quality)
         # self._process_macroeconomics_fdi_sector(data_quality)
         # self._process_macroeconomics_fdi_rd(data_quality)
