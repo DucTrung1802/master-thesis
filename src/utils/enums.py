@@ -95,6 +95,7 @@ class DataQuality(Enum):
 
 class CleanAction(Enum):
     REMOVE_RECORD_IF_COLUMN_IS_NULL = "remove_record_if_column_is_null"
+    REMOVE_IF_ALL_COLUMNS_ARE_NULL = "remove_if_all_columns_are_null"
     ORDER_BY = "order_by"
     REMOVE_COLUMN = "remove_column"
 
@@ -113,9 +114,13 @@ class CleanLayer:
         return cls(CleanAction.REMOVE_RECORD_IF_COLUMN_IS_NULL, column_name=column_name)
 
     @classmethod
+    def REMOVE_IF_ALL_COLUMNS_ARE_NULL(cls):
+        return cls(CleanAction.REMOVE_IF_ALL_COLUMNS_ARE_NULL)
+
+    @classmethod
     def ORDER_BY(cls, column_list: List[str]):
         return cls(CleanAction.ORDER_BY, column_list=column_list)
-    
+
     @classmethod
     def REMOVE_COLUMN(cls, column_list: List[str]):
         return cls(CleanAction.REMOVE_COLUMN, column_list=column_list)
