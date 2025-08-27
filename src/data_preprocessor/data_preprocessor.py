@@ -2692,6 +2692,78 @@ class DataPreprocessor:
                 )
                 # fmt: on
 
+                # NYSE_COMPOSITE
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.NYSE_COMPOSITE.name,
+                    columns = [
+                        Column(name=Table.NYSE_COMPOSITE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.NYSE_COMPOSITE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
+                        Column(name=Table.NYSE_COMPOSITE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.NYSE_COMPOSITE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.NYSE_COMPOSITE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.NYSE_COMPOSITE.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.NYSE_COMPOSITE.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
+                    ],
+                    primary_keys=Table.NYSE_COMPOSITE.primary_key,
+                )
+                # fmt: on
+
+                # SNP_500
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.SNP_500.name,
+                    columns = [
+                        Column(name=Table.SNP_500.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.SNP_500.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
+                        Column(name=Table.SNP_500.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.SNP_500.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.SNP_500.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.SNP_500.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.SNP_500.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
+                    ],
+                    primary_keys=Table.SNP_500.primary_key,
+                )
+                # fmt: on
+                
+                # NASDAQ_COMPOSITE
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.NASDAQ_COMPOSITE.name,
+                    columns = [
+                        Column(name=Table.NASDAQ_COMPOSITE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.NASDAQ_COMPOSITE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
+                        Column(name=Table.NASDAQ_COMPOSITE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.NASDAQ_COMPOSITE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.NASDAQ_COMPOSITE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.NASDAQ_COMPOSITE.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.NASDAQ_COMPOSITE.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
+                    ],
+                    primary_keys=Table.NASDAQ_COMPOSITE.primary_key,
+                )
+                # fmt: on
+                
+                # NASDAQ_100
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.NASDAQ_100.name,
+                    columns = [
+                        Column(name=Table.NASDAQ_100.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.NASDAQ_100.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
+                        Column(name=Table.NASDAQ_100.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.NASDAQ_100.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.NASDAQ_100.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.NASDAQ_100.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.NASDAQ_100.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
+                    ],
+                    primary_keys=Table.NASDAQ_100.primary_key,
+                )
+                # fmt: on
+
             case DataQuality.GOLD:
                 pass
 
@@ -6832,9 +6904,7 @@ class DataPreprocessor:
 
         silver_df = self._clean(
             df=bronze_df,
-            clean_layer_list=[
-                CleanLayer.ORDER_BY([Table.OIL_PRICE.Column.DATE.value])
-            ],
+            clean_layer_list=[CleanLayer.ORDER_BY([Table.OIL_PRICE.Column.DATE.value])],
         )
 
         self._select_database(DataQuality.SILVER.value)
@@ -6967,9 +7037,7 @@ class DataPreprocessor:
 
         silver_df = self._clean(
             df=bronze_df,
-            clean_layer_list=[
-                CleanLayer.ORDER_BY([Table.DOW_JONES.Column.DATE.value])
-            ],
+            clean_layer_list=[CleanLayer.ORDER_BY([Table.DOW_JONES.Column.DATE.value])],
         )
 
         self._select_database(DataQuality.SILVER.value)
@@ -7081,6 +7149,44 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish ingesting data in "{table_name}".')
 
+    def _clean_macroeconomics_nyse_composite_investing(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.NYSE_COMPOSITE,
+            NYSECompositeSource.INVESTING,
+        )
+
+        self._logger.log_info(
+            f'Start cleaning data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for cleaning data here
+        self._select_database(DataQuality.BRONZE.value)
+
+        bronze_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.NYSE_COMPOSITE.name,
+        )
+
+        silver_df = self._clean(
+            df=bronze_df,
+            clean_layer_list=[
+                CleanLayer.ORDER_BY([Table.NYSE_COMPOSITE.Column.DATE.value])
+            ],
+        )
+
+        self._select_database(DataQuality.SILVER.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.NYSE_COMPOSITE.name,
+            primary_keys=Table.NYSE_COMPOSITE.primary_key,
+            df=silver_df,
+        )
+
+        self._logger.log_info(
+            f'Finish cleaning data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_macroeconomics_nyse_composite(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing macroeconomics NYSE_COMPOSITE data for "{data_quality.value}".'
@@ -7091,7 +7197,7 @@ class DataPreprocessor:
                 self._ingest_macroeconomics_nyse_composite_investing()
 
             case DataQuality.SILVER:
-                pass
+                self._clean_macroeconomics_nyse_composite_investing()
 
             case DataQuality.GOLD:
                 pass
@@ -7178,6 +7284,42 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish ingesting data in "{table_name}".')
 
+    def _clean_macroeconomics_snp_500_investing(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.SNP_500,
+            SNP500Source.INVESTING,
+        )
+
+        self._logger.log_info(
+            f'Start cleaning data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for cleaning data here
+        self._select_database(DataQuality.BRONZE.value)
+
+        bronze_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.SNP_500.name,
+        )
+
+        silver_df = self._clean(
+            df=bronze_df,
+            clean_layer_list=[CleanLayer.ORDER_BY([Table.SNP_500.Column.DATE.value])],
+        )
+
+        self._select_database(DataQuality.SILVER.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.SNP_500.name,
+            primary_keys=Table.SNP_500.primary_key,
+            df=silver_df,
+        )
+
+        self._logger.log_info(
+            f'Finish cleaning data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_macroeconomics_snp_500(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing macroeconomics SNP_500 data for "{data_quality.value}".'
@@ -7188,7 +7330,7 @@ class DataPreprocessor:
                 self._ingest_macroeconomics_snp_500_investing()
 
             case DataQuality.SILVER:
-                pass
+                self._clean_macroeconomics_snp_500_investing()
 
             case DataQuality.GOLD:
                 pass
@@ -7275,6 +7417,44 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish ingesting data in "{table_name}".')
 
+    def _clean_macroeconomics_nasdaq_composite_investing(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.NASDAQ_COMPOSITE,
+            NASDAQCompositeSource.INVESTING,
+        )
+
+        self._logger.log_info(
+            f'Start cleaning data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for cleaning data here
+        self._select_database(DataQuality.BRONZE.value)
+
+        bronze_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.NASDAQ_COMPOSITE.name,
+        )
+
+        silver_df = self._clean(
+            df=bronze_df,
+            clean_layer_list=[
+                CleanLayer.ORDER_BY([Table.NASDAQ_COMPOSITE.Column.DATE.value])
+            ],
+        )
+
+        self._select_database(DataQuality.SILVER.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.NASDAQ_COMPOSITE.name,
+            primary_keys=Table.NASDAQ_COMPOSITE.primary_key,
+            df=silver_df,
+        )
+
+        self._logger.log_info(
+            f'Finish cleaning data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_macroeconomics_nasdaq_composite(
         self, data_quality: DataQuality
     ) -> None:
@@ -7287,7 +7467,7 @@ class DataPreprocessor:
                 self._ingest_macroeconomics_nasdaq_composite_investing()
 
             case DataQuality.SILVER:
-                pass
+                self._clean_macroeconomics_nasdaq_composite_investing()
 
             case DataQuality.GOLD:
                 pass
@@ -7374,6 +7554,44 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish ingesting data in "{table_name}".')
 
+    def _clean_macroeconomics_nasdaq_100_investing(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.NASDAQ_100,
+            NASDAQ100Source.INVESTING,
+        )
+
+        self._logger.log_info(
+            f'Start cleaning data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for cleaning data here
+        self._select_database(DataQuality.BRONZE.value)
+
+        bronze_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.NASDAQ_100.name,
+        )
+
+        silver_df = self._clean(
+            df=bronze_df,
+            clean_layer_list=[
+                CleanLayer.ORDER_BY([Table.NASDAQ_100.Column.DATE.value])
+            ],
+        )
+
+        self._select_database(DataQuality.SILVER.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.NASDAQ_100.name,
+            primary_keys=Table.NASDAQ_100.primary_key,
+            df=silver_df,
+        )
+
+        self._logger.log_info(
+            f'Finish cleaning data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_macroeconomics_nasdaq_100(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing macroeconomics NASDAQ_100 data for "{data_quality.value}".'
@@ -7384,7 +7602,7 @@ class DataPreprocessor:
                 self._ingest_macroeconomics_nasdaq_100_investing()
 
             case DataQuality.SILVER:
-                pass
+                self._clean_macroeconomics_nasdaq_100_investing()
 
             case DataQuality.GOLD:
                 pass
@@ -8152,10 +8370,10 @@ class DataPreprocessor:
         self._process_macroeconomics_gold_price(data_quality)
         self._process_macroeconomics_oil_price(data_quality)
         self._process_macroeconomics_dow_jones(data_quality)
-        # self._process_macroeconomics_nyse_composite(data_quality)
-        # self._process_macroeconomics_snp_500(data_quality)
-        # self._process_macroeconomics_nasdaq_composite(data_quality)
-        # self._process_macroeconomics_nasdaq_100(data_quality)
+        self._process_macroeconomics_nyse_composite(data_quality)
+        self._process_macroeconomics_snp_500(data_quality)
+        self._process_macroeconomics_nasdaq_composite(data_quality)
+        self._process_macroeconomics_nasdaq_100(data_quality)
 
         match data_quality:
             case DataQuality.BRONZE:
