@@ -140,7 +140,6 @@ class MacroeconomicsSubType(Enum):
     PMI = "pmi"  # Purchasing Managers' Index
     IIP = "iip"  # Index of Industrial Production
     IPV = "ipv"  # Industrial Production Volume
-    IPV_BY_INDUSTRY = "ipv_by_industry"  # Industrial Production Volume by Industry
     MIP = "mip"  # Major industries production
     FA_BY_HOUSE_TYPES = "fa_by_house_types"  # Floor area of ​​completed housing construction in the year by type of house
     IT_BOP = "it_bop"  # International Trade and Balance of Payments
@@ -241,10 +240,6 @@ class IipSource(Enum):
 
 
 class IpvSource(Enum):
-    VIETSTOCK = "vietstock"
-
-
-class IpvByIndustrySource(Enum):
     VIETSTOCK = "vietstock"
 
 
@@ -405,7 +400,6 @@ Source = Union[
     PmiSource,
     IipSource,
     IpvSource,
-    IpvByIndustrySource,
     MipSource,
     FaByHouseTypeSource,
     ItBopSource,
@@ -535,13 +529,6 @@ SCRAPE_MAPPING: Dict[Tuple[ScrapeMainType, ScrapeSubType, Source], SourceInfo] =
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.IPV,
         IpvSource.VIETSTOCK,
-    ): SourceInfo(
-        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
-    ),
-    (
-        ScrapeMainType.MACROECONOMICS,
-        MacroeconomicsSubType.IPV_BY_INDUSTRY,
-        IpvByIndustrySource.VIETSTOCK,
     ): SourceInfo(
         url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
     ),
@@ -1201,36 +1188,6 @@ class Table:
 
         name = "ipv"
         primary_key = [Column.YEAR.value, Column.MONTH.value]
-
-    class IPV_BY_INDUSTRY:
-        class Column(Enum):
-            YEAR = "year"
-            MANUFACTURING_INDUSTRY = "manufacturing_industry"
-            TEXTILES = "textiles"
-            MINING_SUPPORT_SERVICES = "mining_support_services"
-            PRINTING_AND_COPYING = "printing_and_copying"
-            MINING = "mining"
-            OTHER_MINING = "other_mining"
-            OIL_AND_GAS_EXTRACTION = "oil_and_gas_extraction"
-            METAL_ORE_MINING = "metal_ore_mining"
-            HARD_AND_SOFT_COAL_MINING = "hard_and_soft_coal_mining"
-            FOOD_PROCESSING = "food_processing"
-            LEATHER_PRODUCTS = "leather_products"
-            PAPER_PRODUCTS = "paper_products"
-            CHEMICAL_PRODUCTS = "chemical_products"
-            METAL_PRODUCTS = "metal_products"
-            TOBACCO_PRODUCTS = "tobacco_products"
-            RUBBER_AND_PLASTIC_PRODUCTS = "rubber_and_plastic_products"
-            OTHER_NON_METAL_MINERAL_PRODUCTS = "other_non_metal_mineral_products"
-            PREFAB_METAL_PRODUCTS = "prefab_metal_products"
-            COKE_AND_REFINED_PETROLEUM_PRODUCTS = "coke_and_refined_petroleum_products"
-            PHARMACEUTICAL_PRODUCTS = "pharmaceutical_products"
-            CLOTHING = "clothing"
-            BEVERAGES = "beverages"
-            TOTAL = "total"
-
-        name = "ipv_by_industry"
-        primary_key = [Column.YEAR.value]
 
     class MIP:
         class Column(Enum):
