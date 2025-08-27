@@ -92,6 +92,7 @@ class GenerateDateTimeType(Enum):
     QUARTER = "quarter"
     MONTH = "month"
     DAY = "day"
+    DATE = "date"
 
 
 class DataQuality(Enum):

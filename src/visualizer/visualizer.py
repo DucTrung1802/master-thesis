@@ -77,7 +77,9 @@ class Visualizer:
         generate_date_time_type = None
 
         # Detect type based on dataframe columns
-        if {"year", "quarter"}.issubset(df.columns):
+        if {"year", "month", "day"}.issubset(df.columns):
+            generate_date_time_type = GenerateDateTimeType.DAY
+        elif {"year", "quarter"}.issubset(df.columns):
             generate_date_time_type = GenerateDateTimeType.QUARTER
         elif {"year", "month"}.issubset(df.columns):
             generate_date_time_type = GenerateDateTimeType.MONTH
@@ -87,7 +89,7 @@ class Visualizer:
         ):
             generate_date_time_type = GenerateDateTimeType.YEAR
         elif "date" in df.columns:
-            generate_date_time_type = GenerateDateTimeType.DAY
+            generate_date_time_type = GenerateDateTimeType.DATE
         else:
             raise ValueError("DataFrame does not contain recognizable time columns")
 
@@ -122,9 +124,19 @@ class Visualizer:
                 df = df.drop(columns=["year", "month"])
 
             case GenerateDateTimeType.DAY:
+                # Combine year, month, day into a single datetime
+                df["date"] = pd.to_datetime(
+                    df[["year", "month", "day"]].astype(str).agg("-".join, axis=1),
+                    format="%Y-%m-%d",
+                ).dt.normalize()
+                df = df.drop(columns=["year", "month", "day"])
+
+            case GenerateDateTimeType.DATE:
+                # Already has a date column
                 df["date"] = pd.to_datetime(
                     df["date"], format="%Y-%m-%d"
                 ).dt.normalize()
+                # nothing else to drop
 
             case _:
                 raise ValueError("Unsupported generate_date_time_type")
