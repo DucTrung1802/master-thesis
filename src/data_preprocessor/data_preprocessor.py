@@ -92,6 +92,14 @@ class DataPreprocessor:
                     if col := layer.params.get("column_name"):
                         df = df[df[col].notnull()]
 
+                case CleanAction.REMOVE_IF_ALL_COLUMNS_ARE_NULL:
+                    keep_cols = ["year", "quarter", "month", "day", "date"]
+                    df = df.dropna(
+                        axis="index",
+                        how="all",
+                        subset=[col for col in df.columns if col not in keep_cols]
+                    )
+
                 case CleanAction.ORDER_BY:
                     if col_list := layer.params.get("column_list"):
                         df = df.sort_values(by=col_list)
