@@ -132,6 +132,7 @@ class Visualizer:
         """
         with plt.style.context(style):
             df[x_column] = pd.to_datetime(df[x_column])
+            df = df.sort_values(by=x_column)
 
             fig, ax = plt.subplots(figsize=(14, 5))
 
