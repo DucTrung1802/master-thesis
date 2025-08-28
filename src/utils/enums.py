@@ -174,8 +174,8 @@ class MacroeconomicsSubType(Enum):
     RRRR = "rrrr"  # Rediscount rate, Refinancing rate
     FDI_SECTOR = "fdi_sector"  # Foreign Direct Investment by Sector
     FDI_RD = "fdi_rd"  # Foreign Direct Investment Registration, Disbursement
-    EXPORT = "export"  # Export statistics
-    IMPORT = "import"  # Import statistics
+    EXPORT = "export"  # Export statistics by countries
+    IMPORT = "import"  # Import statistics by countries
     GOLD_PRICE = "gold_price"
     OIL_PRICE = "oil_price"
     DOW_JONES = "dow_jones"

@@ -135,15 +135,18 @@ class Visualizer:
 
             fig, ax = plt.subplots(figsize=(14, 5))
 
+            colors = plt.cm.tab20.colors   # 20 distinct colors
+
             # Plot each y-column
-            for col in y_columns:
+            for i, col in enumerate(y_columns):
                 ax.plot(
                     df[x_column],
                     df[col],
+                    color=colors[i % len(colors)],   # unique line color
                     marker=marker,
                     label=col,
-                    markerfacecolor="#1f3b73",  # point fill color
-                    markeredgecolor="#1f3b73",  # point border color
+                    markerfacecolor="#1f3b73",  # keep marker fill
+                    markeredgecolor="#1f3b73",  # keep marker border
                 )
 
             # Format y-axis title with unit
