@@ -135,7 +135,7 @@ class Visualizer:
 
             fig, ax = plt.subplots(figsize=(14, 5))
 
-            colors = plt.cm.tab20.colors   # 20 distinct colors
+            colors = plt.cm.Set1.colors
 
             # Plot each y-column
             for i, col in enumerate(y_columns):
