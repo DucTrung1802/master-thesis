@@ -7639,6 +7639,46 @@ class DataPreprocessor:
             f'Finish ingesting data in "{Table.MARKET.__qualname__.lower()}".'
         )
 
+    def _clean_stock_market_market(self) -> None:
+
+        self._logger.log_info(
+            f'Start cleaning data in table "{Table.MARKET.__qualname__.lower()}".'
+        )
+
+        # Add logic for cleaning data here
+        self._select_database(DataQuality.BRONZE.value)
+
+        bronze_df = self._select(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.MARKET.name,
+        )
+
+        bronze_df.drop(
+            columns=[
+                Table.MARKET.Column.CREATE_DATE.value,
+                Table.MARKET.Column.UPDATE_DATE.value,
+                Table.MARKET.Column.DELETE_DATE.value,
+            ],
+            inplace=True,
+        )
+
+        silver_df = self._clean(
+            df=bronze_df,
+            clean_layer_list=[CleanLayer.ORDER_BY([Table.MARKET.Column.ID.value])],
+        )
+
+        self._select_database(DataQuality.SILVER.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.MARKET.name,
+            primary_keys=Table.MARKET.primary_key,
+            df=silver_df,
+        )
+
+        self._logger.log_info(
+            f'Finish cleaning data in table "{Table.MARKET.__qualname__.lower()}".'
+        )
+
     def _process_stock_market_market(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing stock market MARKET data for "{data_quality.value}".'
@@ -7649,7 +7689,7 @@ class DataPreprocessor:
                 self._process_stock_market_market_add_data()
 
             case DataQuality.SILVER:
-                self._process_stock_market_market_add_data()
+                self._clean_stock_market_market()
 
             case DataQuality.GOLD:
                 pass
@@ -8693,12 +8733,12 @@ class DataPreprocessor:
 
         # # Stock market
         self._process_stock_market_market(data_quality)
-        self._process_stock_market_vn_index(data_quality)
-        self._process_stock_market_hnx_index(data_quality)
-        self._process_stock_market_vn_30_index(data_quality)
-        self._process_stock_market_vn_100_index(data_quality)
-        self._process_stock_market_hnx_30_index(data_quality)
-        self._process_stock_market_upcom_index(data_quality)
+        # self._process_stock_market_vn_index(data_quality)
+        # self._process_stock_market_hnx_index(data_quality)
+        # self._process_stock_market_vn_30_index(data_quality)
+        # self._process_stock_market_vn_100_index(data_quality)
+        # self._process_stock_market_hnx_30_index(data_quality)
+        # self._process_stock_market_upcom_index(data_quality)
 
         match data_quality:
             case DataQuality.BRONZE:
