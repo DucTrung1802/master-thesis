@@ -89,7 +89,13 @@ class Visualizer:
         limit: int = None,
     ) -> pd.DataFrame:
         return self._database_driver.select(
-            schema_name=schema_name, table_name=table_name
+            schema_name=schema_name,
+            table_name=table_name,
+            columns=columns,
+            join_model=join_model,
+            conditions=conditions,
+            order_by=order_by,
+            limit=limit,
         )
 
     def plot_lines_chart(
