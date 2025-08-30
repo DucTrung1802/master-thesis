@@ -309,8 +309,12 @@ VALUES
             #     f'Insert {len(records)} record(s) into table "{schema_name}.{table_name}" successfully.'
             # )
             return DatabaseExecutionStatus.SUCCESS
+
         except Exception as e:
-            self._logger.log_error(f"Error inserting records: {e}")
+            self._connections[self._current_db].rollback()
+            self._logger.log_error(
+                f"Error inserting records: {e}. Rolled back transaction."
+            )
             return DatabaseExecutionStatus.ERROR
 
     def update(
@@ -362,8 +366,12 @@ SET
             #     f'Updated {number_of_records_updated} records in table "{schema_name}.{table_name}" successfully.'
             # )
             return DatabaseExecutionStatus.SUCCESS
+
         except Exception as e:
-            self._logger.log_error(f"Error updating records: {e}")
+            self._connections[self._current_db].rollback()
+            self._logger.log_error(
+                f"Error inserting records: {e}. Rolled back transaction."
+            )
             return DatabaseExecutionStatus.ERROR
 
     def upsert(
@@ -463,7 +471,10 @@ FROM upserted;
             return DatabaseExecutionStatus.SUCCESS, inserted_count, updated_count
 
         except Exception as e:
-            self._logger.log_error(f"Error upserting records: {e}")
+            self._connections[self._current_db].rollback()
+            self._logger.log_error(
+                f"Error inserting records: {e}. Rolled back transaction."
+            )
             return DatabaseExecutionStatus.ERROR
 
     def delete(
@@ -507,8 +518,12 @@ DELETE FROM {schema_name}.{table_name}
             #     f'Delete {number_of_records_updated} records in table "{schema_name}.{table_name}" successfully.'
             # )
             return DatabaseExecutionStatus.SUCCESS
+
         except Exception as e:
-            self._logger.log_error(f"Error deleting records: {e}")
+            self._connections[self._current_db].rollback()
+            self._logger.log_error(
+                f"Error inserting records: {e}. Rolled back transaction."
+            )
             return DatabaseExecutionStatus.ERROR
 
     def soft_delete(
@@ -575,12 +590,15 @@ WHERE {where_clause}
             self.execute_query(query)
 
             self._logger.log_info(
-                f'Soft deleted record in "{schema_name}.{table_name}" where \"{where_clause}\"'
+                f'Soft deleted record in "{schema_name}.{table_name}" where "{where_clause}"'
             )
             return DatabaseExecutionStatus.SUCCESS
 
         except Exception as e:
-            self._logger.log_error(f"Error soft deleting record: {e}")
+            self._connections[self._current_db].rollback()
+            self._logger.log_error(
+                f"Error inserting records: {e}. Rolled back transaction."
+            )
             return DatabaseExecutionStatus.ERROR
 
     def select(
