@@ -1,5 +1,5 @@
 import psycopg2
-from typing import List
+from typing import Any, List
 import pandas as pd
 
 from logger.logger import Logger
@@ -376,51 +376,77 @@ SET
         """
         Upsert records into a table using INSERT ... ON CONFLICT(<primary_key>) DO UPDATE SET ...
         Tracks number of inserted and updated records.
+        Automatically manages create_date/update_date if those columns exist in the table.
         """
         try:
             inserted_count = 0
             updated_count = 0
 
+            # Fetch column names from database (schema introspection)
+            self.execute_query(
+                f"""
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_schema = '{schema_name}'
+                AND table_name = '{table_name}'
+            """
+            )
+            available_columns = {row[0] for row in self._cursor.fetchall()}
+
+            has_create_date = "create_date" in available_columns
+            has_update_date = "update_date" in available_columns
+
             for record in records:
-                columns = ", ".join([col.column_name for col in record.data_model_list])
-                values = ", ".join(
-                    [
-                        (
-                            "NULL"
-                            if col.value is None
-                            else (
-                                f"'{col.value}'"
-                                if isinstance(col.value, (str, date))
-                                else str(col.value)
-                            )
+                # Collect user-provided columns/values
+                column_names = [col.column_name for col in record.data_model_list]
+                values = [
+                    (
+                        "NULL"
+                        if col.value is None
+                        else (
+                            f"'{col.value}'"
+                            if isinstance(col.value, (str, date))
+                            else str(col.value)
                         )
-                        for col in record.data_model_list
-                    ]
-                )
+                    )
+                    for col in record.data_model_list
+                ]
 
-                update_set_clause = ", ".join(
-                    [
-                        f"{col.column_name} = EXCLUDED.{col.column_name}"
-                        for col in record.data_model_list
-                        if col.column_name not in primary_keys
-                    ]
-                )
+                # If create_date column exists and not provided → set it on INSERT
+                if has_create_date and "create_date" not in column_names:
+                    column_names.append("create_date")
+                    values.append("now()")
 
+                columns = ", ".join(column_names)
+                values_str = ", ".join(values)
+
+                # Build update clause: all non-PK cols
+                update_set_parts = [
+                    f"{col.column_name} = EXCLUDED.{col.column_name}"
+                    for col in record.data_model_list
+                    if col.column_name not in primary_keys
+                ]
+
+                # If update_date exists → always bump it
+                if has_update_date:
+                    update_set_parts.append("update_date = now()")
+
+                update_set_clause = ", ".join(update_set_parts)
                 conflict_clause = ", ".join(primary_keys)
 
                 # CTE to track inserted vs updated rows
                 query = f"""
 WITH upserted AS (
     INSERT INTO {schema_name}.{table_name} ({columns})
-    VALUES ({values})
+    VALUES ({values_str})
     ON CONFLICT ({conflict_clause})
     DO UPDATE SET {update_set_clause}
     RETURNING xmax
 )
 SELECT COUNT(*) FILTER (WHERE xmax = 0) AS inserted,
-    COUNT(*) FILTER (WHERE xmax <> 0) AS updated
+       COUNT(*) FILTER (WHERE xmax <> 0) AS updated
 FROM upserted;
-    """
+"""
 
                 self.execute_query(query)
 
@@ -430,14 +456,9 @@ FROM upserted;
                         inserted_count += row[0] or 0
                         updated_count += row[1] or 0
 
-                # Optional: log raw statusmessage
-                status_msg = self._cursor.statusmessage
-                self._logger.log_debug(f'upsert() - Query status: "{status_msg}"')
-
-            # self._logger.log_info(
-            #     f'Upserted {len(records)} record(s) into "{schema_name}.{table_name}". '
-            #     f"Inserted: {inserted_count}, Updated: {updated_count} successfully."
-            # )
+                self._logger.log_debug(
+                    f'upsert() - Query status: "{self._cursor.statusmessage}"'
+                )
 
             return DatabaseExecutionStatus.SUCCESS, inserted_count, updated_count
 
@@ -488,6 +509,78 @@ DELETE FROM {schema_name}.{table_name}
             return DatabaseExecutionStatus.SUCCESS
         except Exception as e:
             self._logger.log_error(f"Error deleting records: {e}")
+            return DatabaseExecutionStatus.ERROR
+
+    def soft_delete(
+        self,
+        schema_name: str,
+        table_name: str,
+        primary_keys: Dict[str, Any],  # e.g. {"id": 1, "code": "HSX"}
+    ):
+        """
+        Soft delete: sets delete_date = now() if the table has that column.
+        Supports single or composite primary keys.
+
+        Args:
+            schema_name (str): Database schema name (e.g. "stock_market").
+            table_name (str): Table name (e.g. "market").
+            primary_keys (Dict[str, Any]): Dictionary of primary key column/value pairs.
+                - For single PK: {"id": 1}
+                - For composite PK: {"id": 1, "code": "HSX"}
+
+        Returns:
+            DatabaseExecutionStatus: SUCCESS if soft delete executed or skipped,
+                                    ERROR if query failed.
+
+        Example:
+            # Single primary key
+            driver.soft_delete("stock_market", "market", {"id": 1})
+
+            # Composite primary key
+            driver.soft_delete("stock_market", "market", {"id": 1, "code": "HSX"})
+        """
+        try:
+            # Check if delete_date exists
+            self.execute_query(
+                f"""
+SELECT 1
+FROM information_schema.columns
+WHERE table_schema = '{schema_name}'
+AND table_name = '{table_name}'
+AND column_name = 'delete_date'
+"""
+            )
+            if not self._cursor.fetchone():
+                self._logger.log_info(
+                    f"Table {schema_name}.{table_name} has no delete_date column. Skipping soft delete."
+                )
+                return DatabaseExecutionStatus.SUCCESS
+
+            # Build WHERE clause for multiple PKs
+            conditions = []
+            for pk_name, pk_value in primary_keys.items():
+                if isinstance(pk_value, str):
+                    pk_value_formatted = f"'{pk_value}'"
+                else:
+                    pk_value_formatted = str(pk_value)
+                conditions.append(f"{pk_name} = {pk_value_formatted}")
+
+            where_clause = " AND ".join(conditions)
+
+            query = f"""
+UPDATE {schema_name}.{table_name}
+SET delete_date = now()
+WHERE {where_clause}
+"""
+            self.execute_query(query)
+
+            self._logger.log_info(
+                f'Soft deleted record in "{schema_name}.{table_name}" where \"{where_clause}\"'
+            )
+            return DatabaseExecutionStatus.SUCCESS
+
+        except Exception as e:
+            self._logger.log_error(f"Error soft deleting record: {e}")
             return DatabaseExecutionStatus.ERROR
 
     def select(
