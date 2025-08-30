@@ -427,3 +427,8 @@ def make_date_time_index_for_dataframe(
     df = df[cols]
 
     return df
+
+
+def remove_time_column_name(column_names: List[str]) -> List[str]:
+    time_column_names = ["year", "quarter", "month", "day", "date"]
+    return [name for name in column_names if name.lower() not in time_column_names]
