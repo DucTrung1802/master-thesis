@@ -299,18 +299,26 @@ CREATE TABLE {schema_name}.{table_name} (
                     ]
                 )
                 query = f"""
+BEGIN;
+
 INSERT INTO 
     {schema_name}.{table_name} ({columns})
 VALUES
     ({values})
+
+;COMMIT;
 """
                 self.execute_query(query)
             # self._logger.log_info(
             #     f'Insert {len(records)} record(s) into table "{schema_name}.{table_name}" successfully.'
             # )
             return DatabaseExecutionStatus.SUCCESS
+
         except Exception as e:
-            self._logger.log_error(f"Error inserting records: {e}")
+            self.execute_query("ROLLBACK")
+            self._logger.log_error(
+                f"Error inserting records: {e}. Rolled back transaction."
+            )
             return DatabaseExecutionStatus.ERROR
 
     def update(
@@ -347,10 +355,14 @@ VALUES
             )
 
             query = f"""
+BEGIN;
+
 UPDATE {schema_name}.{table_name}
 SET
     {set_clause} {f"\n    {join_clause}" if join_clause else ""}
 {where_clause}
+
+;COMMIT;
 """
             self.execute_query(query)
             number_of_records_updated = (
@@ -362,8 +374,12 @@ SET
             #     f'Updated {number_of_records_updated} records in table "{schema_name}.{table_name}" successfully.'
             # )
             return DatabaseExecutionStatus.SUCCESS
+
         except Exception as e:
-            self._logger.log_error(f"Error updating records: {e}")
+            self.execute_query("ROLLBACK")
+            self._logger.log_error(
+                f"Error inserting records: {e}. Rolled back transaction."
+            )
             return DatabaseExecutionStatus.ERROR
 
     def upsert(
@@ -436,6 +452,8 @@ SET
 
                 # CTE to track inserted vs updated rows
                 query = f"""
+BEGIN;
+
 WITH upserted AS (
     INSERT INTO {schema_name}.{table_name} ({columns})
     VALUES ({values_str})
@@ -446,6 +464,8 @@ WITH upserted AS (
 SELECT COUNT(*) FILTER (WHERE xmax = 0) AS inserted,
        COUNT(*) FILTER (WHERE xmax <> 0) AS updated
 FROM upserted;
+
+COMMIT;
 """
 
                 self.execute_query(query)
@@ -463,7 +483,10 @@ FROM upserted;
             return DatabaseExecutionStatus.SUCCESS, inserted_count, updated_count
 
         except Exception as e:
-            self._logger.log_error(f"Error upserting records: {e}")
+            self.execute_query("ROLLBACK")
+            self._logger.log_error(
+                f"Error inserting records: {e}. Rolled back transaction."
+            )
             return DatabaseExecutionStatus.ERROR
 
     def delete(
@@ -493,10 +516,14 @@ FROM upserted;
             )
 
             query = f"""
+BEGIN;
+
 DELETE FROM {schema_name}.{table_name}
 {f"\n    {join_clause}" if join_clause else ""}
 {where_clause}
-            """
+
+;COMMIT;
+"""
             self.execute_query(query)
             number_of_records_updated = (
                 int(self._cursor.statusmessage.split()[-1])
@@ -507,8 +534,12 @@ DELETE FROM {schema_name}.{table_name}
             #     f'Delete {number_of_records_updated} records in table "{schema_name}.{table_name}" successfully.'
             # )
             return DatabaseExecutionStatus.SUCCESS
+
         except Exception as e:
-            self._logger.log_error(f"Error deleting records: {e}")
+            self.execute_query("ROLLBACK")
+            self._logger.log_error(
+                f"Error inserting records: {e}. Rolled back transaction."
+            )
             return DatabaseExecutionStatus.ERROR
 
     def soft_delete(
@@ -568,19 +599,26 @@ AND column_name = 'delete_date'
             where_clause = " AND ".join(conditions)
 
             query = f"""
+BEGIN;
+
 UPDATE {schema_name}.{table_name}
 SET delete_date = now()
 WHERE {where_clause}
+
+;COMMIT;
 """
             self.execute_query(query)
 
             self._logger.log_info(
-                f'Soft deleted record in "{schema_name}.{table_name}" where \"{where_clause}\"'
+                f'Soft deleted record in "{schema_name}.{table_name}" where "{where_clause}"'
             )
             return DatabaseExecutionStatus.SUCCESS
 
         except Exception as e:
-            self._logger.log_error(f"Error soft deleting record: {e}")
+            self.execute_query("ROLLBACK")
+            self._logger.log_error(
+                f"Error inserting records: {e}. Rolled back transaction."
+            )
             return DatabaseExecutionStatus.ERROR
 
     def select(
