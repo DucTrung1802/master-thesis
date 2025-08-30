@@ -15,11 +15,7 @@ from models.tabular_database_driver_models.postgre_sql_connection_model import (
     PostgreSQLConnectionModel,
 )
 from utils.enums import GenerateDateTimeType
-from utils.constants import (
-    CHARTS_DIR,
-    SCRAPER_START_DATE,
-    SCRAPER_END_DATE,
-)
+from utils.constants import *
 from utils.utils import *
 
 parent_dir = os.path.dirname(os.getcwd())
@@ -33,9 +29,14 @@ class Visualizer:
     def __init__(self, logger: Logger = my_logger):
         self._logger = logger
         self._database_driver = PostgreSQLDriver(logger=logger)
+        self._chart_dir = CHARTS_DIR_BASE
         self.connect_to_database()
 
-        os.makedirs(CHARTS_DIR, exist_ok=True)
+        os.makedirs(CHARTS_DIR_BASE, exist_ok=True)
+
+    def set_chart_dir(self, chart_dir: str) -> None:
+        os.makedirs(chart_dir, exist_ok=True)
+        self._chart_dir = chart_dir
 
     def connect_to_database(self, database_name: str = "postgres") -> None:
         connection_model = PostgreSQLConnectionModel(
@@ -191,7 +192,7 @@ class Visualizer:
             else:
                 figure_name = f"{figure_name}.png"
 
-            fig.savefig(os.path.join(CHARTS_DIR, figure_name), dpi=dpi)
+            fig.savefig(os.path.join(self._chart_dir, figure_name), dpi=dpi)
 
         return fig
 
@@ -348,6 +349,6 @@ class Visualizer:
             else:
                 figure_name = f"{figure_name}.png"
 
-            fig.savefig(os.path.join(CHARTS_DIR, figure_name), dpi=dpi)
+            fig.savefig(os.path.join(self._chart_dir, figure_name), dpi=dpi)
 
         return fig
