@@ -399,6 +399,8 @@ class DataPreprocessor:
 
             case DataQuality.SILVER:
                 self._database_driver.create_schema(Schema.MACROECONOMICS.value)
+                self._database_driver.create_schema(Schema.STOCK_MARKET.value)
+                self._database_driver.create_schema(Schema.ENTERPRISE.value)
 
             case DataQuality.GOLD:
                 pass
@@ -2858,7 +2860,149 @@ class DataPreprocessor:
                 # fmt: on
 
             case DataQuality.SILVER:
-                pass
+                # MARKET
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.STOCK_MARKET.value,
+                    table_name=Table.MARKET.name,
+                    columns = [
+                        Column(name=Table.MARKET.Column.ID.value, data_type=DataType.SERIAL(), nullable=False),
+                        Column(name=Table.MARKET.Column.CODE.value, data_type=DataType.VARCHAR(), nullable=True),
+                        Column(name=Table.MARKET.Column.NAME.value, data_type=DataType.VARCHAR(), nullable=True),
+                        Column(name=Table.MARKET.Column.SAVE_PROGRESS_YEAR.value, data_type=DataType.INT(), nullable=True),
+                        Column(name=Table.MARKET.Column.CREATE_DATE.value, data_type=DataType.AUTO_TIMESTAMP(), nullable=True),
+                        Column(name=Table.MARKET.Column.UPDATE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
+                        Column(name=Table.MARKET.Column.DELETE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
+                    ],
+                    primary_keys=Table.MARKET.primary_key,
+                )
+                # fmt: on
+                
+                # VN_INDEX
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.STOCK_MARKET.value,
+                    table_name=Table.VN_INDEX.name,
+                    columns = [
+                        Column(name=Table.VN_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.VN_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.VN_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.VN_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.VN_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.VN_INDEX.Column.VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                    ],
+                    primary_keys=Table.VN_INDEX.primary_key,
+                )
+                # fmt: on
+                
+                # HNX_INDEX
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.STOCK_MARKET.value,
+                    table_name=Table.HNX_INDEX.name,
+                    columns = [
+                        Column(name=Table.HNX_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.HNX_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.HNX_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.HNX_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.HNX_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.HNX_INDEX.Column.VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                    ],
+                    primary_keys=Table.HNX_INDEX.primary_key,
+                )
+                # fmt: on
+                
+                # VN_30_INDEX
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.STOCK_MARKET.value,
+                    table_name=Table.VN_30_INDEX.name,
+                    columns = [
+                        Column(name=Table.VN_30_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.VN_30_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.VN_30_INDEX.Column.ADJUSTED_CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.VN_30_INDEX.Column.MATCHED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(name=Table.VN_30_INDEX.Column.MATCHED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.VN_30_INDEX.Column.NEGOTIATED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(name=Table.VN_30_INDEX.Column.NEGOTIATED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.VN_30_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.VN_30_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.VN_30_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.VN_30_INDEX.Column.CHANGE_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.VN_30_INDEX.Column.CHANGE_PERCENTAGE.value, data_type=DataType.DECIMAL(), nullable=True),
+                    ],
+                    primary_keys=Table.VN_30_INDEX.primary_key,
+                )
+                # fmt: on
+                
+                # VN_100_INDEX
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.STOCK_MARKET.value,
+                    table_name=Table.VN_100_INDEX.name,
+                    columns = [
+                        Column(name=Table.VN_100_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.VN_100_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.VN_100_INDEX.Column.ADJUSTED_CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.VN_100_INDEX.Column.MATCHED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(name=Table.VN_100_INDEX.Column.MATCHED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.VN_100_INDEX.Column.NEGOTIATED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(name=Table.VN_100_INDEX.Column.NEGOTIATED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.VN_100_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.VN_100_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.VN_100_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.VN_100_INDEX.Column.CHANGE_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.VN_100_INDEX.Column.CHANGE_PERCENTAGE.value, data_type=DataType.DECIMAL(), nullable=True),
+                    ],
+                    primary_keys=Table.VN_100_INDEX.primary_key,
+                )
+                # fmt: on
+                
+                # HNX_30_INDEX
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.STOCK_MARKET.value,
+                    table_name=Table.HNX_30_INDEX.name,
+                    columns = [
+                        Column(name=Table.HNX_30_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.HNX_30_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.HNX_30_INDEX.Column.ADJUSTED_CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.HNX_30_INDEX.Column.MATCHED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(name=Table.HNX_30_INDEX.Column.MATCHED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.HNX_30_INDEX.Column.NEGOTIATED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(name=Table.HNX_30_INDEX.Column.NEGOTIATED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.HNX_30_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.HNX_30_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.HNX_30_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.HNX_30_INDEX.Column.CHANGE_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.HNX_30_INDEX.Column.CHANGE_PERCENTAGE.value, data_type=DataType.DECIMAL(), nullable=True),
+                    ],
+                    primary_keys=Table.HNX_30_INDEX.primary_key,
+                )
+                # fmt: on
+                
+                # UPCOM_INDEX
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.STOCK_MARKET.value,
+                    table_name=Table.UPCOM_INDEX.name,
+                    columns = [
+                        Column(name=Table.UPCOM_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.UPCOM_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.UPCOM_INDEX.Column.ADJUSTED_CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.UPCOM_INDEX.Column.MATCHED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(name=Table.UPCOM_INDEX.Column.MATCHED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.UPCOM_INDEX.Column.NEGOTIATED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(name=Table.UPCOM_INDEX.Column.NEGOTIATED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.UPCOM_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.UPCOM_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.UPCOM_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.UPCOM_INDEX.Column.CHANGE_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.UPCOM_INDEX.Column.CHANGE_PERCENTAGE.value, data_type=DataType.DECIMAL(), nullable=True),
+                    ],
+                    primary_keys=Table.UPCOM_INDEX.primary_key,
+                )
+                # fmt: on
 
             case DataQuality.GOLD:
                 pass
@@ -2951,6 +3095,8 @@ class DataPreprocessor:
 
             case DataQuality.SILVER:
                 self._create_macroeconomics_tables(data_quality)
+                self._create_stock_market_tables(data_quality)
+                self._create_enterprise_tables(data_quality)
 
             case DataQuality.GOLD:
                 pass
@@ -7493,17 +7639,30 @@ class DataPreprocessor:
             f'Finish ingesting data in "{Table.MARKET.__qualname__.lower()}".'
         )
 
-    def _process_stock_market_market(self) -> None:
-        self._logger.log_info("Start processing stock market MARKET data.")
+    def _process_stock_market_market(self, data_quality: DataQuality) -> None:
+        self._logger.log_info(
+            f'Start processing stock market MARKET data for "{data_quality.value}".'
+        )
 
-        self._process_stock_market_market_add_data()
+        match data_quality:
+            case DataQuality.BRONZE:
+                self._process_stock_market_market_add_data()
+
+            case DataQuality.SILVER:
+                self._process_stock_market_market_add_data()
+
+            case DataQuality.GOLD:
+                pass
+
+            case _:
+                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
 
         self._logger.log_info("Finish processing stock market MARKET data.")
 
     # endregion STOCK MARKET.MARKET
 
     # region STOCK_MARKET.VN_INDEX
-    def _process_stock_market_vn_index_cafef(self) -> None:
+    def _ingest_stock_market_vn_index_cafef(self) -> None:
         key = (
             ScrapeMainType.STOCK_MARKET,
             StockMarketSubType.VN_HNX_INDEX,
@@ -7550,12 +7709,63 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish ingesting data in "{file_path}".')
 
-    def _process_stock_market_vn_index(self) -> None:
-        self._logger.log_info("Start processing stock market VN_INDEX data.")
+    def _clean_stock_market_vn_index_cafef(self) -> None:
+        key = (
+            ScrapeMainType.STOCK_MARKET,
+            StockMarketSubType.VN_HNX_INDEX,
+            VnHnxIndexSource.CAFEF,
+        )
 
-        self._process_stock_market_vn_index_cafef()
+        self._logger.log_info(
+            f'Start cleaning data in table "{format_key_for_table(key)}".'
+        )
 
-        self._logger.log_info("Finish processing stock market VN_INDEX data.")
+        # Add logic for cleaning data here
+        self._select_database(DataQuality.BRONZE.value)
+
+        bronze_df = self._select(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.VN_INDEX.name,
+        )
+
+        silver_df = self._clean(
+            df=bronze_df,
+            clean_layer_list=[CleanLayer.ORDER_BY([Table.VN_INDEX.Column.DATE.value])],
+        )
+
+        self._select_database(DataQuality.SILVER.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.VN_INDEX.name,
+            primary_keys=Table.VN_INDEX.primary_key,
+            df=silver_df,
+        )
+
+        self._logger.log_info(
+            f'Finish cleaning data in table "{format_key_for_table(key)}".'
+        )
+
+    def _process_stock_market_vn_index(self, data_quality: DataQuality) -> None:
+        self._logger.log_info(
+            f'Start processing stock market VN_INDEX data for "{data_quality.value}".'
+        )
+
+        match data_quality:
+            case DataQuality.BRONZE:
+                self._ingest_stock_market_vn_index_cafef()
+
+            case DataQuality.SILVER:
+                self._clean_stock_market_vn_index_cafef()
+
+            case DataQuality.GOLD:
+                pass
+
+            case _:
+                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
+
+        self._logger.log_info(
+            f'Finish processing stock market VN_INDEX data for "{data_quality.value}".'
+        )
 
     # endregion STOCK_MARKET.VN_INDEX
 
@@ -7607,12 +7817,63 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish ingesting data in "{file_path}".')
 
-    def _process_stock_market_hnx_index(self) -> None:
-        self._logger.log_info("Start processing stock market HNX_INDEX data.")
+    def _clean_stock_market_hnx_index_cafef(self) -> None:
+        key = (
+            ScrapeMainType.STOCK_MARKET,
+            StockMarketSubType.VN_HNX_INDEX,
+            VnHnxIndexSource.CAFEF,
+        )
 
-        self._process_stock_market_hnx_index_cafef()
+        self._logger.log_info(
+            f'Start cleaning data in table "{format_key_for_table(key)}".'
+        )
 
-        self._logger.log_info("Finish processing stock market HNX_INDEX data.")
+        # Add logic for cleaning data here
+        self._select_database(DataQuality.BRONZE.value)
+
+        bronze_df = self._select(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.HNX_INDEX.name,
+        )
+
+        silver_df = self._clean(
+            df=bronze_df,
+            clean_layer_list=[CleanLayer.ORDER_BY([Table.HNX_INDEX.Column.DATE.value])],
+        )
+
+        self._select_database(DataQuality.SILVER.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.HNX_INDEX.name,
+            primary_keys=Table.HNX_INDEX.primary_key,
+            df=silver_df,
+        )
+
+        self._logger.log_info(
+            f'Finish cleaning data in table "{format_key_for_table(key)}".'
+        )
+
+    def _process_stock_market_hnx_index(self, data_quality: DataQuality) -> None:
+        self._logger.log_info(
+            f'Start processing stock market HNX_INDEX data for "{data_quality.value}".'
+        )
+
+        match data_quality:
+            case DataQuality.BRONZE:
+                self._process_stock_market_hnx_index_cafef()
+
+            case DataQuality.SILVER:
+                self._clean_stock_market_hnx_index_cafef()
+
+            case DataQuality.GOLD:
+                pass
+
+            case _:
+                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
+
+        self._logger.log_info(
+            f'Finish processing stock market HNX_INDEX data for "{data_quality.value}".'
+        )
 
     # endregion STOCK_MARKET.HNX_INDEX
 
@@ -7680,12 +7941,65 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish ingesting data in "{file_path}".')
 
-    def _process_stock_market_vn_30_index(self) -> None:
-        self._logger.log_info("Start processing stock market VN_30_INDEX data.")
+    def _clean_stock_market_vn_30_index_cafef(self) -> None:
+        key = (
+            ScrapeMainType.STOCK_MARKET,
+            StockMarketSubType.VN_30_INDEX,
+            Vn30IndexSource.CAFEF,
+        )
 
-        self._process_stock_market_vn_30_index_cafef()
+        self._logger.log_info(
+            f'Start cleaning data in table "{format_key_for_table(key)}".'
+        )
 
-        self._logger.log_info("Finish processing stock market VN_30_INDEX data.")
+        # Add logic for cleaning data here
+        self._select_database(DataQuality.BRONZE.value)
+
+        bronze_df = self._select(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.VN_30_INDEX.name,
+        )
+
+        silver_df = self._clean(
+            df=bronze_df,
+            clean_layer_list=[
+                CleanLayer.ORDER_BY([Table.VN_30_INDEX.Column.DATE.value])
+            ],
+        )
+
+        self._select_database(DataQuality.SILVER.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.VN_30_INDEX.name,
+            primary_keys=Table.VN_30_INDEX.primary_key,
+            df=silver_df,
+        )
+
+        self._logger.log_info(
+            f'Finish cleaning data in table "{format_key_for_table(key)}".'
+        )
+
+    def _process_stock_market_vn_30_index(self, data_quality: DataQuality) -> None:
+        self._logger.log_info(
+            f'Start processing stock market VN_30_INDEX data for "{data_quality.value}".'
+        )
+
+        match data_quality:
+            case DataQuality.BRONZE:
+                self._process_stock_market_vn_30_index_cafef()
+
+            case DataQuality.SILVER:
+                self._clean_stock_market_vn_30_index_cafef()
+
+            case DataQuality.GOLD:
+                pass
+
+            case _:
+                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
+
+        self._logger.log_info(
+            f'Finish processing stock market VN_30_INDEX data for "{data_quality.value}".'
+        )
 
     # endregion STOCK_MARKET.VN_30_INDEX
 
@@ -7753,12 +8067,65 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish ingesting data in "{file_path}".')
 
-    def _process_stock_market_vn_100_index(self) -> None:
-        self._logger.log_info("Start processing stock market VN_100_INDEX data.")
+    def _clean_stock_market_vn_100_index_cafef(self) -> None:
+        key = (
+            ScrapeMainType.STOCK_MARKET,
+            StockMarketSubType.VN_100_INDEX,
+            Vn100IndexSource.CAFEF,
+        )
 
-        self._process_stock_market_vn_100_index_cafef()
+        self._logger.log_info(
+            f'Start cleaning data in table "{format_key_for_table(key)}".'
+        )
 
-        self._logger.log_info("Finish processing stock market VN_100_INDEX data.")
+        # Add logic for cleaning data here
+        self._select_database(DataQuality.BRONZE.value)
+
+        bronze_df = self._select(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.VN_100_INDEX.name,
+        )
+
+        silver_df = self._clean(
+            df=bronze_df,
+            clean_layer_list=[
+                CleanLayer.ORDER_BY([Table.VN_100_INDEX.Column.DATE.value])
+            ],
+        )
+
+        self._select_database(DataQuality.SILVER.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.VN_100_INDEX.name,
+            primary_keys=Table.VN_100_INDEX.primary_key,
+            df=silver_df,
+        )
+
+        self._logger.log_info(
+            f'Finish cleaning data in table "{format_key_for_table(key)}".'
+        )
+
+    def _process_stock_market_vn_100_index(self, data_quality: DataQuality) -> None:
+        self._logger.log_info(
+            f'Start processing stock market VN_100_INDEX data for "{data_quality.value}".'
+        )
+
+        match data_quality:
+            case DataQuality.BRONZE:
+                self._process_stock_market_vn_100_index_cafef()
+
+            case DataQuality.SILVER:
+                self._clean_stock_market_vn_100_index_cafef()
+
+            case DataQuality.GOLD:
+                pass
+
+            case _:
+                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
+
+        self._logger.log_info(
+            f'Finish processing stock market VN_100_INDEX data for "{data_quality.value}".'
+        )
 
     # endregion STOCK_MARKET.VN_100_INDEX
 
@@ -7832,12 +8199,65 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish ingesting data in "{file_path}".')
 
-    def _process_stock_market_hnx_30_index(self) -> None:
-        self._logger.log_info("Start processing stock market HNX_30_INDEX data.")
+    def _clean_stock_market_hnx_30_index_cafef(self) -> None:
+        key = (
+            ScrapeMainType.STOCK_MARKET,
+            StockMarketSubType.HNX_30_INDEX,
+            Hnx30IndexSource.CAFEF,
+        )
 
-        self._process_stock_market_hnx_30_index_cafef()
+        self._logger.log_info(
+            f'Start cleaning data in table "{format_key_for_table(key)}".'
+        )
 
-        self._logger.log_info("Finish processing stock market HNX_30_INDEX data.")
+        # Add logic for cleaning data here
+        self._select_database(DataQuality.BRONZE.value)
+
+        bronze_df = self._select(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.HNX_30_INDEX.name,
+        )
+
+        silver_df = self._clean(
+            df=bronze_df,
+            clean_layer_list=[
+                CleanLayer.ORDER_BY([Table.HNX_30_INDEX.Column.DATE.value])
+            ],
+        )
+
+        self._select_database(DataQuality.SILVER.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.HNX_30_INDEX.name,
+            primary_keys=Table.HNX_30_INDEX.primary_key,
+            df=silver_df,
+        )
+
+        self._logger.log_info(
+            f'Finish cleaning data in table "{format_key_for_table(key)}".'
+        )
+
+    def _process_stock_market_hnx_30_index(self, data_quality: DataQuality) -> None:
+        self._logger.log_info(
+            f'Start processing stock market HNX_30_INDEX data for "{data_quality.value}".'
+        )
+
+        match data_quality:
+            case DataQuality.BRONZE:
+                self._process_stock_market_hnx_30_index_cafef()
+
+            case DataQuality.SILVER:
+                self._clean_stock_market_hnx_30_index_cafef()
+
+            case DataQuality.GOLD:
+                pass
+
+            case _:
+                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
+
+        self._logger.log_info(
+            f'Finish processing stock market HNX_30_INDEX data for "{data_quality.value}".'
+        )
 
     # endregion STOCK_MARKET.HNX_30_INDEX
 
@@ -7911,12 +8331,65 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish ingesting data in "{file_path}".')
 
-    def _process_stock_market_upcom_index(self) -> None:
-        self._logger.log_info("Start processing stock market UPCOM_INDEX data.")
+    def _clean_stock_market_upcom_index_cafef(self) -> None:
+        key = (
+            ScrapeMainType.STOCK_MARKET,
+            StockMarketSubType.UPCOM_INDEX,
+            UpcomIndexSource.CAFEF,
+        )
 
-        self._process_stock_market_upcom_index_cafef()
+        self._logger.log_info(
+            f'Start cleaning data in table "{format_key_for_table(key)}".'
+        )
 
-        self._logger.log_info("Finish processing stock market UPCOM_INDEX data.")
+        # Add logic for cleaning data here
+        self._select_database(DataQuality.BRONZE.value)
+
+        bronze_df = self._select(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.UPCOM_INDEX.name,
+        )
+
+        silver_df = self._clean(
+            df=bronze_df,
+            clean_layer_list=[
+                CleanLayer.ORDER_BY([Table.UPCOM_INDEX.Column.DATE.value])
+            ],
+        )
+
+        self._select_database(DataQuality.SILVER.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.UPCOM_INDEX.name,
+            primary_keys=Table.UPCOM_INDEX.primary_key,
+            df=silver_df,
+        )
+
+        self._logger.log_info(
+            f'Finish cleaning data in table "{format_key_for_table(key)}".'
+        )
+
+    def _process_stock_market_upcom_index(self, data_quality: DataQuality) -> None:
+        self._logger.log_info(
+            f'Start processing stock market UPCOM_INDEX data for "{data_quality.value}".'
+        )
+
+        match data_quality:
+            case DataQuality.BRONZE:
+                self._process_stock_market_upcom_index_cafef()
+
+            case DataQuality.SILVER:
+                self._clean_stock_market_upcom_index_cafef()
+
+            case DataQuality.GOLD:
+                pass
+
+            case _:
+                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
+
+        self._logger.log_info(
+            f'Finish processing stock market UPCOM_INDEX data for "{data_quality.value}".'
+        )
 
     # endregion STOCK_MARKET.UPCOM_INDEX
 
@@ -8179,57 +8652,57 @@ class DataPreprocessor:
     def _process_data(self, data_quality: DataQuality) -> None:
         self._logger.log_info(f'Start processing data for "{data_quality.value}".')
 
-        # Macroeconomics
-        self._process_macroeconomics_gdp(data_quality)
-        self._process_macroeconomics_cpi(data_quality)
-        self._process_macroeconomics_ppi(data_quality)
-        self._process_macroeconomics_ipi(data_quality)
-        self._process_macroeconomics_xpi(data_quality)
-        self._process_macroeconomics_mpi(data_quality)
-        self._process_macroeconomics_population(data_quality)
-        self._process_macroeconomics_labor(data_quality)
-        self._process_macroeconomics_retail(data_quality)
-        self._process_macroeconomics_pmi(data_quality)
-        self._process_macroeconomics_iip(data_quality)
-        self._process_macroeconomics_ipv(data_quality)
-        self._process_macroeconomics_mip(data_quality)
-        self._process_macroeconomics_fa_by_house_types(data_quality)
-        self._process_macroeconomics_it_bop(data_quality)
-        self._process_macroeconomics_tsbr(data_quality)
-        self._process_macroeconomics_tsbe(data_quality)
-        self._process_macroeconomics_gd(data_quality)
-        self._process_macroeconomics_brd(data_quality)
-        self._process_macroeconomics_iisd(data_quality)
-        self._process_macroeconomics_treg(data_quality)
-        self._process_macroeconomics_credit(data_quality)
-        self._process_macroeconomics_mobilization(data_quality)
-        self._process_macroeconomics_exchange_rate(data_quality)
-        self._process_macroeconomics_iir(data_quality)
-        self._process_macroeconomics_rrrr(data_quality)
-        self._process_macroeconomics_fdi_sector(data_quality)
-        self._process_macroeconomics_fdi_rd(data_quality)
-        self._process_macroeconomics_export(data_quality)
-        self._process_macroeconomics_import(data_quality)
-        self._process_macroeconomics_gold_price(data_quality)
-        self._process_macroeconomics_oil_price(data_quality)
-        self._process_macroeconomics_dow_jones(data_quality)
-        self._process_macroeconomics_nyse_composite(data_quality)
-        self._process_macroeconomics_snp_500(data_quality)
-        self._process_macroeconomics_nasdaq_composite(data_quality)
-        self._process_macroeconomics_nasdaq_100(data_quality)
+        # # Macroeconomics
+        # self._process_macroeconomics_gdp(data_quality)
+        # self._process_macroeconomics_cpi(data_quality)
+        # self._process_macroeconomics_ppi(data_quality)
+        # self._process_macroeconomics_ipi(data_quality)
+        # self._process_macroeconomics_xpi(data_quality)
+        # self._process_macroeconomics_mpi(data_quality)
+        # self._process_macroeconomics_population(data_quality)
+        # self._process_macroeconomics_labor(data_quality)
+        # self._process_macroeconomics_retail(data_quality)
+        # self._process_macroeconomics_pmi(data_quality)
+        # self._process_macroeconomics_iip(data_quality)
+        # self._process_macroeconomics_ipv(data_quality)
+        # self._process_macroeconomics_mip(data_quality)
+        # self._process_macroeconomics_fa_by_house_types(data_quality)
+        # self._process_macroeconomics_it_bop(data_quality)
+        # self._process_macroeconomics_tsbr(data_quality)
+        # self._process_macroeconomics_tsbe(data_quality)
+        # self._process_macroeconomics_gd(data_quality)
+        # self._process_macroeconomics_brd(data_quality)
+        # self._process_macroeconomics_iisd(data_quality)
+        # self._process_macroeconomics_treg(data_quality)
+        # self._process_macroeconomics_credit(data_quality)
+        # self._process_macroeconomics_mobilization(data_quality)
+        # self._process_macroeconomics_exchange_rate(data_quality)
+        # self._process_macroeconomics_iir(data_quality)
+        # self._process_macroeconomics_rrrr(data_quality)
+        # self._process_macroeconomics_fdi_sector(data_quality)
+        # self._process_macroeconomics_fdi_rd(data_quality)
+        # self._process_macroeconomics_export(data_quality)
+        # self._process_macroeconomics_import(data_quality)
+        # self._process_macroeconomics_gold_price(data_quality)
+        # self._process_macroeconomics_oil_price(data_quality)
+        # self._process_macroeconomics_dow_jones(data_quality)
+        # self._process_macroeconomics_nyse_composite(data_quality)
+        # self._process_macroeconomics_snp_500(data_quality)
+        # self._process_macroeconomics_nasdaq_composite(data_quality)
+        # self._process_macroeconomics_nasdaq_100(data_quality)
+
+        # # Stock market
+        self._process_stock_market_market(data_quality)
+        self._process_stock_market_vn_index(data_quality)
+        self._process_stock_market_hnx_index(data_quality)
+        self._process_stock_market_vn_30_index(data_quality)
+        self._process_stock_market_vn_100_index(data_quality)
+        self._process_stock_market_hnx_30_index(data_quality)
+        self._process_stock_market_upcom_index(data_quality)
 
         match data_quality:
             case DataQuality.BRONZE:
                 pass
-                # # Stock market
-                # self._process_stock_market_market()
-                # self._process_stock_market_vn_index()
-                # self._process_stock_market_hnx_index()
-                # self._process_stock_market_vn_30_index()
-                # self._process_stock_market_vn_100_index()
-                # self._process_stock_market_hnx_30_index()
-                # self._process_stock_market_upcom_index()
-
                 # # Enterprise
                 # self._process_enterprise_stock()
                 # self._process_enterprise_daily_price()
