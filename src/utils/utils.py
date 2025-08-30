@@ -81,7 +81,7 @@ def get_all_file_names_with_extensions(
     Args:
         logger (Logger): Logger instance for logging.
         folder_path (str): Path to the folder.
-        extensions (List[FileExtension], optional): List of file extensions to include 
+        extensions (List[FileExtension], optional): List of file extensions to include
             (e.g., [".csv", ".txt"]). If None, all files are returned.
 
     Returns:
@@ -106,7 +106,9 @@ def get_all_file_names_with_extensions(
 
                 # Check if extensions filter is provided and match the file extension
                 # If no filter is provided, include all files
-                if not extensions or ext.lower() in [e.value.lower() for e in extensions]:
+                if not extensions or ext.lower() in [
+                    e.value.lower() for e in extensions
+                ]:
                     # Convert the path to a POSIX-style string (uses forward slashes)
                     matching_files.append(file_path.as_posix())
 
@@ -120,8 +122,11 @@ def get_all_file_names_with_extensions(
         raise
     except PermissionError as e:
         # Log and re-raise if there is a permission error
-        logger.log_error(f"Permission denied to access folder: {folder_path}. Error: {e}")
+        logger.log_error(
+            f"Permission denied to access folder: {folder_path}. Error: {e}"
+        )
         raise
+
 
 def extract_zip_file(logger: Logger, zip_path, extract_to_folder):
     """
@@ -212,6 +217,10 @@ def download_file(download_url, file_path, logger):
 
 def format_key_for_name(key: Tuple[ScrapeMainType, ScrapeSubType, Source]):
     return "_".join(k.name.lower() for k in key)
+
+
+def format_key_for_table(key: Tuple[ScrapeMainType, ScrapeSubType, Source]):
+    return ".".join(k.name.lower() for k in key)
 
 
 def get_newest_file_path(folder_path, extension: FileExtension = None):
@@ -313,3 +322,113 @@ def divided_into_chunks(lst: List, x: int) -> List[List]:
         chunks.append(lst[start:end])
         start = end
     return chunks
+
+
+def make_date_time_index_for_dataframe(
+    df: pd.DataFrame,
+    start_date: datetime = SCRAPER_START_DATE,
+    end_date: datetime = SCRAPER_END_DATE,
+) -> pd.DataFrame:
+    generate_date_time_type = None
+
+    # Detect type based on dataframe columns
+    if {"year", "month", "day"}.issubset(df.columns):
+        generate_date_time_type = GenerateDateTimeType.DAY
+    elif {"year", "quarter"}.issubset(df.columns):
+        generate_date_time_type = GenerateDateTimeType.QUARTER
+    elif {"year", "month"}.issubset(df.columns):
+        generate_date_time_type = GenerateDateTimeType.MONTH
+    elif (
+        "year" in df.columns
+        and len(df.columns.intersection({"quarter", "month", "date"})) == 0
+    ):
+        generate_date_time_type = GenerateDateTimeType.YEAR
+    elif "date" in df.columns:
+        generate_date_time_type = GenerateDateTimeType.DATE
+    else:
+        raise ValueError("DataFrame does not contain recognizable time columns")
+
+    # Build "date" column from existing fields
+    match generate_date_time_type:
+        case GenerateDateTimeType.YEAR:
+            df["date"] = (
+                pd.to_datetime(df["year"], format="%Y") + pd.offsets.YearEnd(0)
+            ).dt.normalize()
+            df = df.drop(columns=["year"])
+
+        case GenerateDateTimeType.QUARTER:
+            df["date"] = (
+                pd.PeriodIndex.from_fields(
+                    year=df["year"], quarter=df["quarter"], freq="Q"
+                )
+                .to_timestamp(how="end")
+                .normalize()
+            )
+            df = df.drop(columns=["year", "quarter"])
+
+        case GenerateDateTimeType.MONTH:
+            df["date"] = (
+                pd.to_datetime(
+                    df["year"].astype(str) + "-" + df["month"].astype(str).str.zfill(2),
+                    format="%Y-%m",
+                )
+                + pd.offsets.MonthEnd(0)
+            ).dt.normalize()
+            df = df.drop(columns=["year", "month"])
+
+        case GenerateDateTimeType.DAY:
+            # Combine year, month, day into a single datetime
+            df["date"] = pd.to_datetime(
+                df[["year", "month", "day"]].astype(str).agg("-".join, axis=1),
+                format="%Y-%m-%d",
+            ).dt.normalize()
+            df = df.drop(columns=["year", "month", "day"])
+
+        case GenerateDateTimeType.DATE:
+            # Already has a date column
+            df["date"] = pd.to_datetime(df["date"], format="%Y-%m-%d").dt.normalize()
+            # nothing else to drop
+
+        case _:
+            raise ValueError("Unsupported generate_date_time_type")
+
+    # --- NEW PART: generate full date range ---
+    match generate_date_time_type:
+        case GenerateDateTimeType.YEAR:
+            full_range = pd.date_range(
+                start=start_date, end=end_date, freq="YE"
+            ).normalize()
+
+        case GenerateDateTimeType.QUARTER:
+            full_range = pd.date_range(
+                start=start_date, end=end_date, freq="QE"
+            ).normalize()
+
+        case GenerateDateTimeType.MONTH:
+            full_range = pd.date_range(
+                start=start_date, end=end_date, freq="ME"
+            ).normalize()
+
+        case GenerateDateTimeType.DAY:
+            full_range = pd.date_range(
+                start=start_date, end=end_date, freq="D"
+            ).normalize()
+
+        case _:
+            raise ValueError("Unsupported generate_date_time_type")
+
+    full_df = pd.DataFrame({"date": full_range})
+
+    # Merge to ensure full coverage
+    df = pd.merge(full_df, df, on="date", how="left")
+
+    # Move "date" column to the first position (already is, but keep consistent)
+    cols = ["date"] + [col for col in df.columns if col != "date"]
+    df = df[cols]
+
+    return df
+
+
+def remove_time_column_name(column_names: List[str]) -> List[str]:
+    time_column_names = ["year", "quarter", "month", "day", "date"]
+    return [name for name in column_names if name.lower() not in time_column_names]

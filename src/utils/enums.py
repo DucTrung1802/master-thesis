@@ -1,6 +1,6 @@
 from enum import Enum
 from dataclasses import dataclass
-from typing import Dict, Type, Union, Tuple
+from typing import Dict, List, Union, Tuple, Optional
 
 from utils.constants import *
 
@@ -87,6 +87,53 @@ class TimeFormat(Enum):
     THREE_MONTH_INDEX_YEAR = "3M/2000"  # 3 month index + year
 
 
+class GenerateDateTimeType(Enum):
+    YEAR = "year"
+    QUARTER = "quarter"
+    MONTH = "month"
+    DAY = "day"
+    DATE = "date"
+
+
+class DataQuality(Enum):
+    BRONZE = "bronze"
+    SILVER = "silver"
+    GOLD = "gold"
+
+
+class CleanAction(Enum):
+    REMOVE_RECORD_IF_COLUMN_IS_NULL = "remove_record_if_column_is_null"
+    REMOVE_IF_ALL_COLUMNS_ARE_NULL = "remove_if_all_columns_are_null"
+    ORDER_BY = "order_by"
+    REMOVE_COLUMN = "remove_column"
+
+
+class CleanLayer:
+    """
+    Represents a cleaning step. Can have parameters like column_name.
+    """
+
+    def __init__(self, action: CleanAction, **kwargs):
+        self.action = action
+        self.params = kwargs
+
+    @classmethod
+    def REMOVE_RECORD_IF_COLUMN_IS_NULL(cls, column_name: str):
+        return cls(CleanAction.REMOVE_RECORD_IF_COLUMN_IS_NULL, column_name=column_name)
+
+    @classmethod
+    def REMOVE_IF_ALL_COLUMNS_ARE_NULL(cls):
+        return cls(CleanAction.REMOVE_IF_ALL_COLUMNS_ARE_NULL)
+
+    @classmethod
+    def ORDER_BY(cls, column_list: List[str]):
+        return cls(CleanAction.ORDER_BY, column_list=column_list)
+
+    @classmethod
+    def REMOVE_COLUMN(cls, column_list: List[str]):
+        return cls(CleanAction.REMOVE_COLUMN, column_list=column_list)
+
+
 # Enum for Main Scraping Types
 class ScrapeMainType(Enum):
     MACROECONOMICS = "macroeconomics"
@@ -111,7 +158,6 @@ class MacroeconomicsSubType(Enum):
     PMI = "pmi"  # Purchasing Managers' Index
     IIP = "iip"  # Index of Industrial Production
     IPV = "ipv"  # Industrial Production Volume
-    IPV_BY_INDUSTRY = "ipv_by_industry"  # Industrial Production Volume by Industry
     MIP = "mip"  # Major industries production
     FA_BY_HOUSE_TYPES = "fa_by_house_types"  # Floor area of ​​completed housing construction in the year by type of house
     IT_BOP = "it_bop"  # International Trade and Balance of Payments
@@ -128,8 +174,8 @@ class MacroeconomicsSubType(Enum):
     RRRR = "rrrr"  # Rediscount rate, Refinancing rate
     FDI_SECTOR = "fdi_sector"  # Foreign Direct Investment by Sector
     FDI_RD = "fdi_rd"  # Foreign Direct Investment Registration, Disbursement
-    EXPORT = "export"  # Export statistics
-    IMPORT = "import"  # Import statistics
+    EXPORT = "export"  # Export statistics by countries
+    IMPORT = "import"  # Import statistics by countries
     GOLD_PRICE = "gold_price"
     OIL_PRICE = "oil_price"
     DOW_JONES = "dow_jones"
@@ -212,10 +258,6 @@ class IipSource(Enum):
 
 
 class IpvSource(Enum):
-    VIETSTOCK = "vietstock"
-
-
-class IpvByIndustrySource(Enum):
     VIETSTOCK = "vietstock"
 
 
@@ -376,7 +418,6 @@ Source = Union[
     PmiSource,
     IipSource,
     IpvSource,
-    IpvByIndustrySource,
     MipSource,
     FaByHouseTypeSource,
     ItBopSource,
@@ -506,13 +547,6 @@ SCRAPE_MAPPING: Dict[Tuple[ScrapeMainType, ScrapeSubType, Source], SourceInfo] =
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.IPV,
         IpvSource.VIETSTOCK,
-    ): SourceInfo(
-        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
-    ),
-    (
-        ScrapeMainType.MACROECONOMICS,
-        MacroeconomicsSubType.IPV_BY_INDUSTRY,
-        IpvByIndustrySource.VIETSTOCK,
     ): SourceInfo(
         url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
     ),
@@ -1173,36 +1207,6 @@ class Table:
         name = "ipv"
         primary_key = [Column.YEAR.value, Column.MONTH.value]
 
-    class IPV_BY_INDUSTRY:
-        class Column(Enum):
-            YEAR = "year"
-            MANUFACTURING_INDUSTRY = "manufacturing_industry"
-            TEXTILES = "textiles"
-            MINING_SUPPORT_SERVICES = "mining_support_services"
-            PRINTING_AND_COPYING = "printing_and_copying"
-            MINING = "mining"
-            OTHER_MINING = "other_mining"
-            OIL_AND_GAS_EXTRACTION = "oil_and_gas_extraction"
-            METAL_ORE_MINING = "metal_ore_mining"
-            HARD_AND_SOFT_COAL_MINING = "hard_and_soft_coal_mining"
-            FOOD_PROCESSING = "food_processing"
-            LEATHER_PRODUCTS = "leather_products"
-            PAPER_PRODUCTS = "paper_products"
-            CHEMICAL_PRODUCTS = "chemical_products"
-            METAL_PRODUCTS = "metal_products"
-            TOBACCO_PRODUCTS = "tobacco_products"
-            RUBBER_AND_PLASTIC_PRODUCTS = "rubber_and_plastic_products"
-            OTHER_NON_METAL_MINERAL_PRODUCTS = "other_non_metal_mineral_products"
-            PREFAB_METAL_PRODUCTS = "prefab_metal_products"
-            COKE_AND_REFINED_PETROLEUM_PRODUCTS = "coke_and_refined_petroleum_products"
-            PHARMACEUTICAL_PRODUCTS = "pharmaceutical_products"
-            CLOTHING = "clothing"
-            BEVERAGES = "beverages"
-            TOTAL = "total"
-
-        name = "ipv_by_industry"
-        primary_key = [Column.YEAR.value]
-
     class MIP:
         class Column(Enum):
             YEAR = "year"
@@ -1612,6 +1616,7 @@ class Table:
 
     class RRRR:
         class Column(Enum):
+            DATE = "date"
             YEAR = "year"
             MONTH = "month"
             DAY = "day"
