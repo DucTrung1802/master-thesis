@@ -8438,7 +8438,7 @@ class DataPreprocessor:
     # region ENTERPRISE data process
 
     # region ENTERPRISE.STOCK_INFORMATION
-    def _process_enterprise_stock_cafef(self) -> None:
+    def _ingest_enterprise_stock_cafef(self) -> None:
         key_1 = (
             ScrapeMainType.ENTERPRISE,
             EnterpriseSubType.DAILY_PRICE,
@@ -8549,10 +8549,7 @@ class DataPreprocessor:
             listed > 0, outstanding / listed, np.nan
         )
 
-        # 9. Update timestamp
-        overall_df["update_date"] = datetime.now()
-
-        # 10. Save to database
+        # 9. Save to database
         self._save_pandas_table_to_database(
             schema_name=Schema.ENTERPRISE.value,
             table_name=Table.STOCK.name,
@@ -8565,14 +8562,14 @@ class DataPreprocessor:
     def _process_enterprise_stock(self) -> None:
         self._logger.log_info("Start processing enterprise STOCK data.")
 
-        self._process_enterprise_stock_cafef()
+        self._ingest_enterprise_stock_cafef()
 
         self._logger.log_info("Finish processing enterprise STOCK data.")
 
     # endregion ENTERPRISE.STOCK_INFORMATION
 
     # region ENTERPRISE.DAILY_PRICE
-    def _process_enterprise_daily_price_cafef(self) -> None:
+    def _ingest_enterprise_daily_price_cafef(self) -> None:
         key = (
             ScrapeMainType.ENTERPRISE,
             EnterpriseSubType.DAILY_PRICE,
@@ -8629,12 +8626,15 @@ class DataPreprocessor:
                 }
             )
 
+            daily_price_df = daily_price_df.dropna(subset=["code"])
+
             year_list = self._get_year_list_from_start(SCRAPER_START_DATE)
 
             # Remove current year
+            current_year = year_list[-1]
             year_list = year_list[:-1]
 
-            # Remove years already processed
+            # Remove years already ingested
             market_df = self._get_market_df()
             process_year = market_df[
                 market_df[Table.MARKET.Column.CODE.value] == market_code
@@ -8678,10 +8678,21 @@ class DataPreprocessor:
                     ],
                 )
 
+            # Ingest current year
+            self._save_pandas_table_to_database(
+                schema_name=Schema.ENTERPRISE.value,
+                table_name=Table.DAILY_PRICE.name,
+                primary_keys=Table.DAILY_PRICE.primary_key,
+                df=daily_price_df[
+                    daily_price_df[Table.DAILY_PRICE.Column.DATE.value].dt.year
+                    == current_year
+                ],
+            )
+
     def _process_enterprise_daily_price(self) -> None:
         self._logger.log_info("Start processing enterprise DAILY_PRICE data.")
 
-        self._process_enterprise_daily_price_cafef()
+        self._ingest_enterprise_daily_price_cafef()
 
         self._logger.log_info("Finish processing enterprise DAILY_PRICE data.")
 
@@ -8732,7 +8743,7 @@ class DataPreprocessor:
         # self._process_macroeconomics_nasdaq_100(data_quality)
 
         # # Stock market
-        self._process_stock_market_market(data_quality)
+        # self._process_stock_market_market(data_quality)
         # self._process_stock_market_vn_index(data_quality)
         # self._process_stock_market_hnx_index(data_quality)
         # self._process_stock_market_vn_30_index(data_quality)
@@ -8744,8 +8755,8 @@ class DataPreprocessor:
             case DataQuality.BRONZE:
                 pass
                 # # Enterprise
-                # self._process_enterprise_stock()
-                # self._process_enterprise_daily_price()
+                self._process_enterprise_stock()
+                self._process_enterprise_daily_price()
 
             case DataQuality.SILVER:
                 pass
