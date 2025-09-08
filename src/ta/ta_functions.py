@@ -75,25 +75,23 @@ def plot_with_indicators(df: pd.DataFrame, indicators: list):
 
 def main():
     df = generate_trend_data()
-    df = add_sma(df, n=10)
-    df = add_sma(df, n=20)
-    df = add_sma(df, n=50)
-    df = add_sma(df, n=100)
-    df = add_sma(df, n=150)
-    df = add_sma(df, n=200)
-    # df = add_ema(df, n=20)  # uncomment if you want EMA
+    df = add_ema(df, n=10)
+    df = add_ema(df, n=20)
+    df = add_ema(df, n=50)
+    df = add_ema(df, n=100)
+    df = add_ema(df, n=150)
+    df = add_ema(df, n=200)
 
     # Plot all indicators you calculated
     plot_with_indicators(
         df,
         indicators=[
-            "sma_10",
-            "sma_20",
-            "sma_50",
-            "sma_100",
-            "sma_150",
-            "sma_200",
-            # "ema_20",
+            "ema_10",
+            "ema_20",
+            "ema_50",
+            "ema_100",
+            "ema_150",
+            "ema_200",
         ],
     )
 
