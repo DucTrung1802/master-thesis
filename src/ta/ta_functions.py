@@ -16,14 +16,81 @@ def prepare_data(date_series: pd.Series, price_series: pd.Series) -> pd.DataFram
 
 
 def add_sma(df: pd.DataFrame, n: int) -> pd.DataFrame:
+    """
+    Add a Simple Moving Average (SMA) column to the DataFrame.
+
+    The SMA is the unweighted mean of the previous `n` prices.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input DataFrame that must contain a 'price' column.
+    n : int
+        Window size for the SMA.
+
+    Returns
+    -------
+    pd.DataFrame
+        Copy of the input DataFrame with an added column 'sma_{n}'.
+    """
     df = df.copy()
     df[f"sma_{n}"] = df["price"].rolling(window=n, min_periods=1).mean()
     return df
 
 
 def add_ema(df: pd.DataFrame, n: int) -> pd.DataFrame:
+    """
+    Add an Exponential Moving Average (EMA) column to the DataFrame.
+
+    The EMA applies exponentially decreasing weights, giving more
+    significance to recent prices.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input DataFrame that must contain a 'price' column.
+    n : int
+        Span for the EMA calculation.
+
+    Returns
+    -------
+    pd.DataFrame
+        Copy of the input DataFrame with an added column 'ema_{n}'.
+    """
     df = df.copy()
     df[f"ema_{n}"] = df["price"].ewm(span=n, adjust=False).mean()
+    return df
+
+
+def add_lwma(df: pd.DataFrame, n: int) -> pd.DataFrame:
+    """
+    Add a Linear Weighted Moving Average (LWMA) column to the DataFrame.
+
+    The LWMA assigns linearly increasing weights to prices within the
+    window, where the most recent price gets the highest weight (n),
+    and the oldest gets weight 1.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input DataFrame that must contain a 'price' column.
+    n : int
+        Window size for the LWMA.
+
+    Returns
+    -------
+    pd.DataFrame
+        Copy of the input DataFrame with an added column 'lwma_{n}'.
+    """
+    df = df.copy()
+    weights = np.arange(1, n + 1)
+
+    df[f"lwma_{n}"] = (
+        df["price"]
+        .rolling(window=n)
+        .apply(lambda x: np.dot(x, weights) / weights.sum(), raw=True)
+    )
+
     return df
 
 
@@ -75,23 +142,23 @@ def plot_with_indicators(df: pd.DataFrame, indicators: list):
 
 def main():
     df = generate_trend_data()
-    df = add_ema(df, n=10)
-    df = add_ema(df, n=20)
-    df = add_ema(df, n=50)
-    df = add_ema(df, n=100)
-    df = add_ema(df, n=150)
-    df = add_ema(df, n=200)
+    df = add_lwma(df, n=10)
+    df = add_lwma(df, n=20)
+    df = add_lwma(df, n=50)
+    df = add_lwma(df, n=100)
+    df = add_lwma(df, n=150)
+    df = add_lwma(df, n=200)
 
     # Plot all indicators you calculated
     plot_with_indicators(
         df,
         indicators=[
-            "ema_10",
-            "ema_20",
-            "ema_50",
-            "ema_100",
-            "ema_150",
-            "ema_200",
+            "lwma_10",
+            "lwma_20",
+            "lwma_50",
+            "lwma_100",
+            "lwma_150",
+            "lwma_200",
         ],
     )
 
