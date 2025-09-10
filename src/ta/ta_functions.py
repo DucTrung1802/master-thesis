@@ -94,6 +94,31 @@ def add_lwma(df: pd.DataFrame, n: int) -> pd.DataFrame:
     return df
 
 
+def add_wma(df: pd.DataFrame, n: int) -> pd.DataFrame:
+    """
+    Add Wilder's Moving Average (WMA) column to the DataFrame.
+
+    Wilder’s MA is similar to an EMA but uses an alpha = 1/n.
+    It smooths price movements more slowly than a regular EMA.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input DataFrame that must contain a 'price' column.
+    n : int
+        Period for the WMA calculation.
+
+    Returns
+    -------
+    pd.DataFrame
+        Copy of the input DataFrame with an added column 'wma_{n}'.
+    """
+    df = df.copy()
+    alpha = 1 / n
+    df[f"wma_{n}"] = df["price"].ewm(alpha=alpha, adjust=False).mean()
+    return df
+
+
 def generate_trend_data():
     dates = pd.date_range(start="2025-01-01", end="2025-08-31", freq="D")
     n = len(dates)
@@ -142,23 +167,17 @@ def plot_with_indicators(df: pd.DataFrame, indicators: list):
 
 def main():
     df = generate_trend_data()
-    df = add_lwma(df, n=10)
-    df = add_lwma(df, n=20)
-    df = add_lwma(df, n=50)
-    df = add_lwma(df, n=100)
-    df = add_lwma(df, n=150)
-    df = add_lwma(df, n=200)
+    df = add_wma(df, n=14)
+    df = add_wma(df, n=50)
+    df = add_wma(df, n=100)
 
     # Plot all indicators you calculated
     plot_with_indicators(
         df,
         indicators=[
-            "lwma_10",
-            "lwma_20",
-            "lwma_50",
-            "lwma_100",
-            "lwma_150",
-            "lwma_200",
+            "wma_14",
+            "wma_50",
+            "wma_100",
         ],
     )
 
