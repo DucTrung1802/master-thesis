@@ -352,6 +352,35 @@ def add_atr(df: pd.DataFrame, n: int = 14) -> pd.DataFrame:
     return df
 
 
+def add_divergence_index(df: pd.DataFrame, n: int = 14, k: float = 1.0) -> pd.DataFrame:
+    df = df.copy()
+
+    # Ensure numeric (convert Decimal → float)
+    for col in ["high", "low", "close"]:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    # SMA of close
+    sma = df["close"].rolling(window=n, min_periods=1).mean()
+
+    # True Range
+    tr = pd.concat(
+        [
+            df["high"] - df["low"],
+            (df["high"] - df["close"].shift()).abs(),
+            (df["low"] - df["close"].shift()).abs(),
+        ],
+        axis=1,
+    ).max(axis=1)
+
+    # Wilder’s ATR
+    atr = tr.ewm(alpha=1 / n, adjust=False).mean()
+
+    # Divergence Index
+    df[f"dvi_{n}"] = (df["close"] - sma) / (k * atr)
+
+    return df
+
+
 # endregion VOLATILITY INDICATORS
 
 
@@ -415,12 +444,12 @@ def main():
         order_by=[Table.VN_INDEX.Column.DATE.value],
     )
 
-    df = add_atr(df, n=14)
+    df = add_divergence_index(df, n=14)
 
     plot_with_indicators(
         df,
         indicators=[
-            "atr_14",
+            "dvi_14",
         ],
     )
 
