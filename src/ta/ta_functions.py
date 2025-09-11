@@ -318,6 +318,40 @@ def add_starc_band(df: pd.DataFrame, n: int = 20, k: float = 2.0) -> pd.DataFram
     return df
 
 
+def add_atr(df: pd.DataFrame, n: int = 14) -> pd.DataFrame:
+    """
+    Add Average True Range (ATR) to the DataFrame.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input DataFrame that must contain 'high', 'low', 'close'.
+    n : int, optional
+        Period for ATR calculation (default is 14).
+
+    Returns
+    -------
+    pd.DataFrame
+        Copy of the input DataFrame with an added column 'atr_{n}'.
+    """
+    df = df.copy()
+
+    # True Range
+    tr = pd.concat(
+        [
+            df["high"] - df["low"],
+            (df["high"] - df["close"].shift()).abs(),
+            (df["low"] - df["close"].shift()).abs(),
+        ],
+        axis=1,
+    ).max(axis=1)
+
+    # Wilder’s ATR (RMA)
+    df[f"atr_{n}"] = tr.ewm(alpha=1 / n, adjust=False).mean()
+
+    return df
+
+
 # endregion VOLATILITY INDICATORS
 
 
@@ -381,14 +415,12 @@ def main():
         order_by=[Table.VN_INDEX.Column.DATE.value],
     )
 
-    df = add_starc_band(df, n=20, k=2)
+    df = add_atr(df, n=14)
 
     plot_with_indicators(
         df,
         indicators=[
-            "starc_middle_20",
-            "starc_upper_20",
-            "starc_lower_20",
+            "atr_14",
         ],
     )
 
