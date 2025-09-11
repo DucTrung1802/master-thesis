@@ -1,6 +1,26 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import sys, os
+from dotenv import load_dotenv
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+
+from logger.logger import LogType, Logger
+from models.tabular_database_driver_models.postgre_sql_connection_model import (
+    PostgreSQLConnectionModel,
+)
+from models.tabular_database_driver_models.tabular_database_driver_models import (
+    Condition,
+    DataType,
+)
+from tabular_database_driver.postgre_sql_driver import PostgreSQLDriver
+from utils.constants import *
+from utils.enums import *
+
+
+load_dotenv()
 
 
 def prepare_data(date_series: pd.Series, price_series: pd.Series) -> pd.DataFrame:
@@ -34,7 +54,7 @@ def add_sma(df: pd.DataFrame, n: int) -> pd.DataFrame:
         Copy of the input DataFrame with an added column 'sma_{n}'.
     """
     df = df.copy()
-    df[f"sma_{n}"] = df["price"].rolling(window=n, min_periods=1).mean()
+    df[f"sma_{n}"] = df["close"].rolling(window=n, min_periods=1).mean()
     return df
 
 
@@ -58,7 +78,7 @@ def add_ema(df: pd.DataFrame, n: int) -> pd.DataFrame:
         Copy of the input DataFrame with an added column 'ema_{n}'.
     """
     df = df.copy()
-    df[f"ema_{n}"] = df["price"].ewm(span=n, adjust=False).mean()
+    df[f"ema_{n}"] = df["close"].ewm(span=n, adjust=False).mean()
     return df
 
 
@@ -86,7 +106,7 @@ def add_lwma(df: pd.DataFrame, n: int) -> pd.DataFrame:
     weights = np.arange(1, n + 1)
 
     df[f"lwma_{n}"] = (
-        df["price"]
+        df["close"]
         .rolling(window=n)
         .apply(lambda x: np.dot(x, weights) / weights.sum(), raw=True)
     )
@@ -115,50 +135,28 @@ def add_wma(df: pd.DataFrame, n: int) -> pd.DataFrame:
     """
     df = df.copy()
     alpha = 1 / n
-    df[f"wma_{n}"] = df["price"].ewm(alpha=alpha, adjust=False).mean()
+    df[f"wma_{n}"] = df["close"].ewm(alpha=alpha, adjust=False).mean()
     return df
 
 
-def generate_trend_data():
-    dates = pd.date_range(start="2025-01-01", end="2025-08-31", freq="D")
-    n = len(dates)
-
-    # Split into 3 phases: up, down, big up
-    phase1 = int(n * 0.3)  # ~30%
-    phase2 = int(n * 0.4)  # ~40%
-    phase3 = n - (phase1 + phase2)
-
-    np.random.seed(42)
-
-    # Phase 1: go up from 100 → 130
-    up1 = np.linspace(100, 130, phase1)
-
-    # Phase 2: go down from 130 → 110
-    down = np.linspace(130, 110, phase2)
-
-    # Phase 3: strong rally from 110 → 170
-    up2 = np.linspace(110, 170, phase3)
-
-    trend = np.concatenate([up1, down, up2])
-    noise = np.random.normal(0, 2, n)
-    prices = trend + noise
-
-    return prepare_data(dates, prices)
-
-
-def plot_with_indicators(df: pd.DataFrame, indicators: list):
+def plot_with_indicators(df: pd.DataFrame, indicators: list = None):
     plt.figure(figsize=(12, 6))
-    plt.plot(df["date"], df["price"], label="Price", linewidth=2)
 
-    for col in indicators:
-        if col in df.columns:
-            plt.plot(
-                df["date"], df[col], label=col.upper(), linewidth=2, linestyle="--"
-            )
+    # Always plot close price
+    if "close" in df.columns:
+        plt.plot(df["date"], df["close"], label="Close price", linewidth=2)
 
-    plt.title("Price with Indicators", fontsize=14)
+    # Plot indicators only if provided
+    if indicators:
+        for col in indicators:
+            if col in df.columns:
+                plt.plot(
+                    df["date"], df[col], label=col.upper(), linewidth=2, linestyle="--"
+                )
+
+    plt.title("Close price with Indicators", fontsize=14)
     plt.xlabel("Date")
-    plt.ylabel("Price")
+    plt.ylabel("Close price")
     plt.legend()
     plt.grid(True, linestyle="--", alpha=0.6)
     plt.tight_layout()
@@ -166,7 +164,41 @@ def plot_with_indicators(df: pd.DataFrame, indicators: list):
 
 
 def main():
-    df = generate_trend_data()
+    # Connect to the database
+    ta_logger = Logger(file_name=TA_LOG_FILE_BASE)
+    ta_database_driver = PostgreSQLDriver(logger=ta_logger)
+
+    connection_model = PostgreSQLConnectionModel(
+        logger=ta_logger,
+        host=os.getenv("POSTGRES_HOST"),
+        user=os.getenv("POSTGRES_USER"),
+        password=os.getenv("POSTGRES_PASSWORD"),
+        port=os.getenv("POSTGRES_PORT"),
+        database=os.getenv("SILVER_POSTGRES_DATABASE"),
+    )
+    ta_database_driver.connect(connection_model)
+
+    # Select df
+    df = ta_database_driver.select(
+        schema_name=Schema.STOCK_MARKET.value,
+        table_name=Table.VN_INDEX.name,
+        conditions=[
+            Condition(
+                column=Table.VN_INDEX.Column.DATE.value,
+                operator=SqlOperator.GREATER_THAN_OR_EQUAL_TO,
+                value="2025-01-01",
+                data_type=DataType.DATE,
+            ),
+            Condition(
+                column=Table.VN_INDEX.Column.DATE.value,
+                operator=SqlOperator.LESS_THAN_OR_EQUAL_TO,
+                value="2025-06-30",
+                data_type=DataType.DATE,
+            ),
+        ],
+        order_by=[Table.VN_INDEX.Column.DATE.value],
+    )
+
     df = add_wma(df, n=14)
     df = add_wma(df, n=50)
     df = add_wma(df, n=100)
