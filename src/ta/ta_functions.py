@@ -139,6 +139,62 @@ def add_wma(df: pd.DataFrame, n: int) -> pd.DataFrame:
     return df
 
 
+def add_adx(df: pd.DataFrame, n: int = 14) -> pd.DataFrame:
+    """
+    Add Average Directional Movement Index (ADX) to the DataFrame.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input DataFrame that must contain 'high', 'low', and 'close' columns.
+    n : int, optional
+        Period for ADX calculation (default is 14).
+
+    Returns
+    -------
+    pd.DataFrame
+        Copy of the input DataFrame with columns:
+        '+di', '-di', 'adx_{n}'.
+    """
+    df = df.copy()
+
+    # Ensure numeric types
+    df["high"] = pd.to_numeric(df["high"], errors="coerce")
+    df["low"] = pd.to_numeric(df["low"], errors="coerce")
+    df["close"] = pd.to_numeric(df["close"], errors="coerce")
+
+    # True Range (TR)
+    df["tr"] = np.maximum(
+        df["high"] - df["low"],
+        np.maximum(
+            abs(df["high"] - df["close"].shift()), abs(df["low"] - df["close"].shift())
+        ),
+    )
+
+    # Directional Movement
+    df["+dm"] = df["high"].diff()
+    df["-dm"] = -df["low"].diff()
+    df["+dm"] = df["+dm"].where((df["+dm"] > df["-dm"]) & (df["+dm"] > 0), 0.0)
+    df["-dm"] = df["-dm"].where((df["-dm"] > df["+dm"]) & (df["-dm"] > 0), 0.0)
+
+    # Wilder’s smoothing (RMA)
+    tr_n = df["tr"].rolling(n).sum()
+    plus_dm_n = df["+dm"].rolling(n).sum()
+    minus_dm_n = df["-dm"].rolling(n).sum()
+
+    # +DI and -DI
+    df["+di"] = 100 * (plus_dm_n / tr_n)
+    df["-di"] = 100 * (minus_dm_n / tr_n)
+
+    # DX
+    df["dx"] = (100 * abs(df["+di"] - df["-di"]) / (df["+di"] + df["-di"])).fillna(0)
+
+    # ADX = smoothed DX
+    df[f"adx_{n}"] = df["dx"].rolling(n).mean()
+
+    return df
+
+
 def plot_with_indicators(df: pd.DataFrame, indicators: list = None):
     plt.figure(figsize=(12, 6))
 
@@ -199,17 +255,12 @@ def main():
         order_by=[Table.VN_INDEX.Column.DATE.value],
     )
 
-    df = add_wma(df, n=14)
-    df = add_wma(df, n=50)
-    df = add_wma(df, n=100)
+    df = add_adx(df, n=14)
 
-    # Plot all indicators you calculated
     plot_with_indicators(
         df,
         indicators=[
-            "wma_14",
-            "wma_50",
-            "wma_100",
+            "adx_14",  # main ADX line
         ],
     )
 
