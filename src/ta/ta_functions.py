@@ -35,6 +35,7 @@ def prepare_data(date_series: pd.Series, price_series: pd.Series) -> pd.DataFram
     return df
 
 
+# region TREND INDICATORS
 def add_sma(df: pd.DataFrame, n: int) -> pd.DataFrame:
     """
     Add a Simple Moving Average (SMA) column to the DataFrame.
@@ -195,6 +196,43 @@ def add_adx(df: pd.DataFrame, n: int = 14) -> pd.DataFrame:
     return df
 
 
+# endregion TREND INDICATORS
+
+
+# region VOLATILITY INDICATORS
+def add_bollinger_bands(df: pd.DataFrame, n: int = 20, k: float = 2.0) -> pd.DataFrame:
+    """
+    Add Bollinger Bands (upper, middle, lower) to the DataFrame.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input DataFrame that must contain 'close' column.
+    n : int, optional
+        Period for SMA and rolling std (default 20).
+    k : float, optional
+        Number of standard deviations for bands (default 2.0).
+
+    Returns
+    -------
+    pd.DataFrame
+        Copy of the input DataFrame with columns:
+        'bb_middle_{n}', 'bb_upper_{n}', 'bb_lower_{n}'.
+    """
+    df = df.copy()
+    sma = df["close"].rolling(window=n, min_periods=1).mean()
+    std = df["close"].rolling(window=n, min_periods=1).std()
+
+    df[f"bb_middle_{n}"] = sma
+    df[f"bb_upper_{n}"] = sma + (k * std)
+    df[f"bb_lower_{n}"] = sma - (k * std)
+
+    return df
+
+
+# endregion VOLATILITY INDICATORS
+
+
 def plot_with_indicators(df: pd.DataFrame, indicators: list = None):
     plt.figure(figsize=(12, 6))
 
@@ -207,7 +245,7 @@ def plot_with_indicators(df: pd.DataFrame, indicators: list = None):
         for col in indicators:
             if col in df.columns:
                 plt.plot(
-                    df["date"], df[col], label=col.upper(), linewidth=2, linestyle="--"
+                    df["date"], df[col], label=col.upper(), linewidth=1, linestyle="--"
                 )
 
     plt.title("Close price with Indicators", fontsize=14)
@@ -255,12 +293,14 @@ def main():
         order_by=[Table.VN_INDEX.Column.DATE.value],
     )
 
-    df = add_adx(df, n=14)
+    df = add_bollinger_bands(df, n=20, k=2)
 
     plot_with_indicators(
         df,
         indicators=[
-            "adx_14",  # main ADX line
+            "bb_middle_20",
+            "bb_upper_20",
+            "bb_lower_20",
         ],
     )
 
