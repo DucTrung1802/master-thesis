@@ -274,6 +274,50 @@ def add_keltner_channel(df: pd.DataFrame, n: int = 20, k: float = 2.0) -> pd.Dat
     return df
 
 
+def add_starc_band(df: pd.DataFrame, n: int = 20, k: float = 2.0) -> pd.DataFrame:
+    """
+    Add STARC Bands (upper, middle, lower) to the DataFrame.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input DataFrame that must contain 'high', 'low', 'close'.
+    n : int, optional
+        Period for SMA and ATR (default 20).
+    k : float, optional
+        Multiplier for ATR (default 2.0).
+
+    Returns
+    -------
+    pd.DataFrame
+        Copy of the input DataFrame with columns:
+        'starc_middle_{n}', 'starc_upper_{n}', 'starc_lower_{n}'.
+    """
+    df = df.copy()
+
+    # Middle Band (SMA of close)
+    df[f"starc_middle_{n}"] = df["close"].rolling(window=n, min_periods=1).mean()
+
+    # True Range
+    tr = pd.concat(
+        [
+            df["high"] - df["low"],
+            (df["high"] - df["close"].shift()).abs(),
+            (df["low"] - df["close"].shift()).abs(),
+        ],
+        axis=1,
+    ).max(axis=1)
+
+    # ATR (simple rolling mean)
+    atr = tr.rolling(n, min_periods=1).mean()
+
+    # Upper & Lower Bands
+    df[f"starc_upper_{n}"] = df[f"starc_middle_{n}"] + k * atr
+    df[f"starc_lower_{n}"] = df[f"starc_middle_{n}"] - k * atr
+
+    return df
+
+
 # endregion VOLATILITY INDICATORS
 
 
@@ -337,14 +381,14 @@ def main():
         order_by=[Table.VN_INDEX.Column.DATE.value],
     )
 
-    df = add_keltner_channel(df, n=20, k=2)
+    df = add_starc_band(df, n=20, k=2)
 
     plot_with_indicators(
         df,
         indicators=[
-            "kc_middle_20",
-            "kc_upper_20",
-            "kc_lower_20",
+            "starc_middle_20",
+            "starc_upper_20",
+            "starc_lower_20",
         ],
     )
 
