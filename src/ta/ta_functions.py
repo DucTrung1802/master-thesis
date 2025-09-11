@@ -230,6 +230,50 @@ def add_bollinger_bands(df: pd.DataFrame, n: int = 20, k: float = 2.0) -> pd.Dat
     return df
 
 
+def add_keltner_channel(df: pd.DataFrame, n: int = 20, k: float = 2.0) -> pd.DataFrame:
+    """
+    Add Keltner Channel (upper, middle, lower) to the DataFrame.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input DataFrame that must contain 'high', 'low', 'close'.
+    n : int, optional
+        Period for EMA and ATR (default 20).
+    k : float, optional
+        Multiplier for ATR (default 2.0).
+
+    Returns
+    -------
+    pd.DataFrame
+        Copy of the input DataFrame with columns:
+        'kc_middle_{n}', 'kc_upper_{n}', 'kc_lower_{n}'.
+    """
+    df = df.copy()
+
+    # Middle line (EMA of close)
+    df[f"kc_middle_{n}"] = df["close"].ewm(span=n, adjust=False).mean()
+
+    # True Range
+    tr = pd.concat(
+        [
+            df["high"] - df["low"],
+            (df["high"] - df["close"].shift()).abs(),
+            (df["low"] - df["close"].shift()).abs(),
+        ],
+        axis=1,
+    ).max(axis=1)
+
+    # ATR (Wilder’s moving average of TR)
+    atr = tr.rolling(n).mean()
+
+    # Upper & Lower bands
+    df[f"kc_upper_{n}"] = df[f"kc_middle_{n}"] + k * atr
+    df[f"kc_lower_{n}"] = df[f"kc_middle_{n}"] - k * atr
+
+    return df
+
+
 # endregion VOLATILITY INDICATORS
 
 
@@ -293,14 +337,14 @@ def main():
         order_by=[Table.VN_INDEX.Column.DATE.value],
     )
 
-    df = add_bollinger_bands(df, n=20, k=2)
+    df = add_keltner_channel(df, n=20, k=2)
 
     plot_with_indicators(
         df,
         indicators=[
-            "bb_middle_20",
-            "bb_upper_20",
-            "bb_lower_20",
+            "kc_middle_20",
+            "kc_upper_20",
+            "kc_lower_20",
         ],
     )
 
