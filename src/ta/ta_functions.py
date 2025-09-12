@@ -493,27 +493,46 @@ def add_macd(
 # endregion MOMENTUM INDICATORS
 
 
-def plot_with_indicators(df: pd.DataFrame, indicators: list = None):
-    plt.figure(figsize=(12, 6))
+def plot_with_indicators(df: pd.DataFrame, indicators: list):
+    """
+    Plot price with optional indicators using up to 2 y-axes:
+      - Left y-axis for price-based indicators
+      - Right y-axis for oscillators or relative indicators
+    """
+    fig, ax1 = plt.subplots(figsize=(12, 6))
 
-    # Always plot close price
-    if "close" in df.columns:
-        plt.plot(df["date"], df["close"], label="Close price", linewidth=2)
+    # Main price axis
+    ax1.plot(df["date"], df["close"], label="Close", color="black", linewidth=2)
 
-    # Plot indicators only if provided
-    if indicators:
-        for col in indicators:
-            if col in df.columns:
-                plt.plot(
-                    df["date"], df[col], label=col.upper(), linewidth=1, linestyle="--"
-                )
+    # Second axis for oscillators
+    ax2 = ax1.twinx()
 
-    plt.title("Close price with Indicators", fontsize=14)
-    plt.xlabel("Date")
-    plt.ylabel("Close price")
-    plt.legend()
-    plt.grid(True, linestyle="--", alpha=0.6)
-    plt.tight_layout()
+    for col in indicators:
+        if col not in df.columns:
+            continue
+
+        col_lower = col.lower()
+
+        # Assign based on heuristic
+        if col_lower.startswith(("sma", "ema", "wma", "lwma", "boll", "kelt", "starc")):
+            ax1.plot(df["date"], df[col], label=col.upper(), linestyle="--")
+        elif col_lower.startswith(("rsi", "roc", "macd", "adx", "atr", "dvi")):
+            ax2.plot(df["date"], df[col], label=col.upper(), linestyle="--")
+        else:
+            # fallback: put in price axis
+            ax1.plot(df["date"], df[col], label=col.upper(), linestyle="--")
+
+    ax1.set_xlabel("Date")
+    ax1.set_ylabel("Price / Price-based Indicators")
+    ax2.set_ylabel("Oscillators / Relative Indicators")
+
+    # Merge legends
+    lines, labels = ax1.get_legend_handles_labels()
+    lines2, labels2 = ax2.get_legend_handles_labels()
+    ax1.legend(lines + lines2, labels + labels2, loc="best")
+
+    ax1.grid(True, linestyle="--", alpha=0.6)
+    fig.tight_layout()
     plt.show()
 
 
