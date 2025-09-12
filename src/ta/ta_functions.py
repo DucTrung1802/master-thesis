@@ -384,6 +384,46 @@ def add_divergence_index(df: pd.DataFrame, n: int = 14, k: float = 1.0) -> pd.Da
 # endregion VOLATILITY INDICATORS
 
 
+# region MOMENTUN INDICATORS
+
+
+def add_rsi(df: pd.DataFrame, n: int = 14) -> pd.DataFrame:
+    """
+    Add Relative Strength Index (RSI) to the dataframe.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame with at least a 'close' column.
+    n : int, default 14
+        Lookback period.
+
+    Returns
+    -------
+    pd.DataFrame
+        Original DataFrame with an added 'rsi_{n}' column.
+    """
+
+    # Ensure float array to avoid Decimal issues
+    close = np.asarray(df["close"], dtype="float64")
+    delta = np.diff(close, prepend=close[0])
+
+    gain = np.where(delta > 0, delta, 0.0)
+    loss = np.where(delta < 0, -delta, 0.0)
+
+    avg_gain = pd.Series(gain).rolling(n, min_periods=n).mean()
+    avg_loss = pd.Series(loss).rolling(n, min_periods=n).mean()
+
+    rs = avg_gain / avg_loss.replace(0, np.nan)
+    rsi = 100 - (100 / (1 + rs))
+
+    df[f"rsi_{n}"] = rsi
+    return df
+
+
+# endregion MOMENTUM INDICATORS
+
+
 def plot_with_indicators(df: pd.DataFrame, indicators: list = None):
     plt.figure(figsize=(12, 6))
 
@@ -444,12 +484,12 @@ def main():
         order_by=[Table.VN_INDEX.Column.DATE.value],
     )
 
-    df = add_divergence_index(df, n=14)
+    df = add_rsi(df, n=14)
 
     plot_with_indicators(
         df,
         indicators=[
-            "dvi_14",
+            "rsi_14",
         ],
     )
 
