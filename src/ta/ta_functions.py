@@ -421,6 +421,33 @@ def add_rsi(df: pd.DataFrame, n: int = 14) -> pd.DataFrame:
     return df
 
 
+def add_roc(df: pd.DataFrame, n: int = 14) -> pd.DataFrame:
+    """
+    Add Rate of Change (ROC) indicator to the dataframe.
+
+    ROC measures the percentage change in price compared to
+    the price n periods ago.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame with at least a 'close' column.
+    n : int, default 14
+        Lookback period for ROC calculation.
+
+    Returns
+    -------
+    pd.DataFrame
+        Original DataFrame with an added 'roc_{n}' column.
+    """
+    close = np.asarray(df["close"], dtype="float64")
+    roc = (
+        (pd.Series(close) - pd.Series(close).shift(n)) / pd.Series(close).shift(n) * 100
+    )
+    df[f"roc_{n}"] = roc
+    return df
+
+
 # endregion MOMENTUM INDICATORS
 
 
@@ -484,12 +511,12 @@ def main():
         order_by=[Table.VN_INDEX.Column.DATE.value],
     )
 
-    df = add_rsi(df, n=14)
+    df = add_roc(df, n=14)
 
     plot_with_indicators(
         df,
         indicators=[
-            "rsi_14",
+            "roc_14",
         ],
     )
 
