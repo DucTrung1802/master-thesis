@@ -448,6 +448,48 @@ def add_roc(df: pd.DataFrame, n: int = 14) -> pd.DataFrame:
     return df
 
 
+def add_macd(
+    df: pd.DataFrame, short_n: int = 12, long_n: int = 26, signal_n: int = 9
+) -> pd.DataFrame:
+    """
+    Add Moving Average Convergence/Divergence (MACD) to the dataframe.
+
+    MACD is calculated as the difference between a short-term EMA
+    and a long-term EMA. A signal line (EMA of MACD) is also added.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame with at least a 'close' column.
+    short_n : int, default 12
+        Period for short-term EMA.
+    long_n : int, default 26
+        Period for long-term EMA.
+    signal_n : int, default 9
+        Period for the signal line EMA.
+
+    Returns
+    -------
+    pd.DataFrame
+        Original DataFrame with added columns:
+        - 'macd_{short_n}_{long_n}'
+        - 'macd_signal_{signal_n}'
+        - 'macd_hist_{short_n}_{long_n}_{signal_n}'
+    """
+    short_ema = df["close"].ewm(span=short_n, adjust=False).mean()
+    long_ema = df["close"].ewm(span=long_n, adjust=False).mean()
+
+    macd = short_ema - long_ema
+    signal = macd.ewm(span=signal_n, adjust=False).mean()
+    hist = macd - signal
+
+    df[f"macd_{short_n}_{long_n}"] = macd
+    df[f"macd_signal_{signal_n}"] = signal
+    df[f"macd_hist_{short_n}_{long_n}_{signal_n}"] = hist
+
+    return df
+
+
 # endregion MOMENTUM INDICATORS
 
 
@@ -511,12 +553,14 @@ def main():
         order_by=[Table.VN_INDEX.Column.DATE.value],
     )
 
-    df = add_roc(df, n=14)
+    df = add_macd(df, short_n=12, long_n=26, signal_n=9)
 
     plot_with_indicators(
         df,
         indicators=[
-            "roc_14",
+            "macd_12_26",
+            "macd_signal_9",
+            "macd_hist_12_26_9",
         ],
     )
 
