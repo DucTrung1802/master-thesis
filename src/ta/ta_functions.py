@@ -490,6 +490,46 @@ def add_macd(
     return df
 
 
+def add_stochastic(
+    df: pd.DataFrame, k_period: int = 14, d_period: int = 3
+) -> pd.DataFrame:
+    """
+    Add Stochastic Oscillator (%K and %D) to the dataframe.
+
+    %K = (Close - LowestLow) / (HighestHigh - LowestLow) * 100
+    %D = SMA of %K
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame with 'high', 'low', and 'close' columns.
+    k_period : int, default 14
+        Lookback period for %K.
+    d_period : int, default 3
+        Lookback period for %D (smoothing of %K).
+
+    Returns
+    -------
+    pd.DataFrame
+        Original DataFrame with added columns:
+        - 'stoch_k_{k_period}'
+        - 'stoch_d_{d_period}'
+    """
+    close = pd.to_numeric(df["close"], errors="coerce").astype("float64")
+    high = pd.to_numeric(df["high"], errors="coerce").astype("float64")
+    low = pd.to_numeric(df["low"], errors="coerce").astype("float64")
+
+    low_min = low.rolling(window=k_period, min_periods=1).min()
+    high_max = high.rolling(window=k_period, min_periods=1).max()
+
+    stoch_k = 100 * (close - low_min) / (high_max - low_min)
+    stoch_d = stoch_k.rolling(window=d_period, min_periods=1).mean()
+
+    df[f"stoch_k_{k_period}"] = stoch_k
+    df[f"stoch_d_{d_period}"] = stoch_d
+    return df
+
+
 # endregion MOMENTUM INDICATORS
 
 
@@ -516,7 +556,7 @@ def plot_with_indicators(df: pd.DataFrame, indicators: list):
         # Assign based on heuristic
         if col_lower.startswith(("sma", "ema", "wma", "lwma", "boll", "kelt", "starc")):
             ax1.plot(df["date"], df[col], label=col.upper(), linestyle="--")
-        elif col_lower.startswith(("rsi", "roc", "macd", "adx", "atr", "dvi")):
+        elif col_lower.startswith(("rsi", "roc", "macd", "adx", "atr", "dvi", "stoch")):
             ax2.plot(df["date"], df[col], label=col.upper(), linestyle="--")
         else:
             # fallback: put in price axis
@@ -572,14 +612,13 @@ def main():
         order_by=[Table.VN_INDEX.Column.DATE.value],
     )
 
-    df = add_macd(df, short_n=12, long_n=26, signal_n=9)
+    df = add_stochastic(df, k_period=14, d_period=3)
 
     plot_with_indicators(
         df,
         indicators=[
-            "macd_12_26",
-            "macd_signal_9",
-            "macd_hist_12_26_9",
+            "stoch_k_14",
+            "stoch_d_3",
         ],
     )
 
