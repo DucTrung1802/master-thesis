@@ -627,6 +627,45 @@ def add_rvi(df: pd.DataFrame, n: int = 10, signal: int = 4) -> pd.DataFrame:
     return df
 
 
+def add_tsi(df: pd.DataFrame, r: int = 25, s: int = 13) -> pd.DataFrame:
+    """
+    Add True Strength Index (TSI) to the DataFrame.
+
+    Formula:
+        m_t = Close_t - Close_{t-1}
+        TSI = 100 * (EMA_r(EMA_s(m_t)) / EMA_r(EMA_s(|m_t|)))
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame with 'close' column.
+    r : int, optional (default=25)
+        Long smoothing period.
+    s : int, optional (default=13)
+        Short smoothing period.
+
+    Returns
+    -------
+    pd.DataFrame
+        Original DataFrame with an added 'tsi_{r}_{s}' column.
+    """
+    close = pd.to_numeric(df["close"], errors="coerce").astype("float64")
+    momentum = close.diff()
+
+    # short EMA
+    ema_mom_s = momentum.ewm(span=s, adjust=False).mean()
+    ema_abs_s = momentum.abs().ewm(span=s, adjust=False).mean()
+
+    # long EMA
+    ema_mom_r = ema_mom_s.ewm(span=r, adjust=False).mean()
+    ema_abs_r = ema_abs_s.ewm(span=r, adjust=False).mean()
+
+    tsi = 100 * (ema_mom_r / ema_abs_r)
+    df[f"tsi_{r}_{s}"] = tsi
+
+    return df
+
+
 # endregion MOMENTUM INDICATORS
 
 
@@ -687,7 +726,7 @@ def main():
             Condition(
                 column=Table.VN_INDEX.Column.DATE.value,
                 operator=SqlOperator.GREATER_THAN_OR_EQUAL_TO,
-                value="2025-01-01",
+                value="2023-01-01",
                 data_type=DataType.DATE,
             ),
             Condition(
@@ -700,13 +739,12 @@ def main():
         order_by=[Table.VN_INDEX.Column.DATE.value],
     )
 
-    df = add_rvi(df, n=10, signal=4)
+    df = add_tsi(df, r=25, s=13)
 
     plot_with_indicators(
         df,
         indicators=[
-            "rvi_10",
-            "rvi_signal_4",
+            "tsi_25_13",
         ],
     )
 
