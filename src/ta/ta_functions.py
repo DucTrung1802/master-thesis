@@ -1038,6 +1038,62 @@ def add_pvi_nvi(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def add_vw_macd(
+    df: pd.DataFrame, fast: int = 12, slow: int = 26, signal: int = 9
+) -> pd.DataFrame:
+    """
+    Add Volume-Weighted MACD (VW-MACD) and signal line to the DataFrame.
+
+    VW-MACD uses volume-weighted prices instead of closing prices.
+
+    Formula
+    -------
+    vp = close * volume
+    vw_price = cumulative(vp) / cumulative(volume)
+
+    MACD = EMA_fast(vw_price) - EMA_slow(vw_price)
+    Signal = EMA_signal(MACD)
+    Histogram = MACD - Signal
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame with 'close' and 'volume' columns.
+    fast : int, default=12
+        Fast EMA period.
+    slow : int, default=26
+        Slow EMA period.
+    signal : int, default=9
+        Signal EMA period.
+
+    Returns
+    -------
+    pd.DataFrame
+        Original DataFrame with 'vw_macd', 'vw_macd_signal', 'vw_macd_hist'.
+    """
+    # Convert to float64 to avoid Decimal vs float errors
+    close = df["close"].astype("float64")
+    volume = df["volume"].astype("float64")
+
+    # Volume-weighted price (VWAP style cumulative)
+    vp = close * volume
+    vw_price = vp.cumsum() / volume.cumsum()
+
+    # MACD calculation
+    ema_fast = vw_price.ewm(span=fast, adjust=False).mean()
+    ema_slow = vw_price.ewm(span=slow, adjust=False).mean()
+
+    vw_macd = ema_fast - ema_slow
+    vw_signal = vw_macd.ewm(span=signal, adjust=False).mean()
+    vw_hist = vw_macd - vw_signal
+
+    df["vw_macd"] = vw_macd
+    df["vw_macd_signal"] = vw_signal
+    df["vw_macd_hist"] = vw_hist
+
+    return df
+
+
 # endregion VOLUME INDICATORS
 
 
@@ -1112,13 +1168,14 @@ def main():
         order_by=[Table.VN_INDEX.Column.DATE.value],
     )
 
-    df = add_pvi_nvi(df)
+    df = add_vw_macd(df)
 
     plot_with_indicators(
         df,
         indicators=[
-            "pvi",
-            "nvi",
+            "vw_macd",
+            "vw_macd_signal",
+            "vw_macd_hist",
         ],
     )
 
