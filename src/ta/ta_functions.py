@@ -908,6 +908,35 @@ def add_cmf(df: pd.DataFrame, n: int = 20) -> pd.DataFrame:
     return df
 
 
+def add_vroc(df: pd.DataFrame, n: int = 14) -> pd.DataFrame:
+    """
+    Add Volume Rate of Change (VROC) indicator to the DataFrame.
+
+    VROC measures the percentage change in volume compared to
+    the volume n periods ago.
+
+    Formula
+    -------
+    VROC = (Volume_t - Volume_{t-n}) / Volume_{t-n} * 100
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame with 'volume' column.
+    n : int, default 14
+        Lookback period.
+
+    Returns
+    -------
+    pd.DataFrame
+        Original DataFrame with added 'vroc_{n}' column.
+    """
+    volume = df["volume"].astype("float64")
+    vroc = (volume - volume.shift(n)) / volume.shift(n) * 100
+    df[f"vroc_{n}"] = vroc
+    return df
+
+
 # endregion VOLUME INDICATORS
 
 
@@ -982,12 +1011,12 @@ def main():
         order_by=[Table.VN_INDEX.Column.DATE.value],
     )
 
-    df = add_cmf(df, n=20)
+    df = add_vroc(df, n=14)
 
     plot_with_indicators(
         df,
         indicators=[
-            "cmf_20",
+            "vroc_14",
         ],
     )
 
