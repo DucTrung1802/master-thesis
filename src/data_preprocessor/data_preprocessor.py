@@ -3227,6 +3227,46 @@ class DataPreprocessor:
             f'Finish cleaning data in table "{format_key_for_table(key)}".'
         )
 
+    def _transform_macroeconomics_gdp_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.GDP,
+            GdpSource.VIETSTOCK,
+        )
+
+        self._logger.log_info(
+            f'Start transforming data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for transforming data here
+        self._select_database(DataQuality.SILVER.value)
+        silver_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.GDP.name,
+            columns=[
+                Table.GDP.Column.YEAR.value,
+                Table.GDP.Column.QUARTER.value,
+                Table.GDP.Column.GDP_GROWTH.value,
+            ],
+        )
+
+        gold_df = make_date_time_index_for_dataframe(df=silver_df)
+        gold_df = standardize_time_frame(df=gold_df)
+
+        gold_df["gdp_growth"] = gold_df["gdp_growth"].interpolate(method="linear")
+
+        self._select_database(DataQuality.GOLD.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.G_GDP.name,
+            primary_keys=Table.G_GDP.primary_key,
+            df=gold_df,
+        )
+
+        self._logger.log_info(
+            f'Finish transforming data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_macroeconomics_gdp(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing macroeconomics GDP data for "{data_quality.value}".'
@@ -3240,7 +3280,7 @@ class DataPreprocessor:
                 self._clean_macroeconomics_gdp_vietstock()
 
             case DataQuality.GOLD:
-                pass
+                self._transform_macroeconomics_gdp_vietstock()
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
