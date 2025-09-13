@@ -579,12 +579,50 @@ def add_ad(df: pd.DataFrame) -> pd.DataFrame:
         Original DataFrame with an added 'ad' column.
     """
     close = pd.to_numeric(df["close"], errors="coerce").astype("float64")
-    open_ = pd.to_numeric(df["open"], errors="coerce").astype("float64")
+    open = pd.to_numeric(df["open"], errors="coerce").astype("float64")
     high = pd.to_numeric(df["high"], errors="coerce").astype("float64")
     low = pd.to_numeric(df["low"], errors="coerce").astype("float64")
 
-    ad = ((close - open_) / (high - low).replace(0, np.nan)) * 100
+    ad = ((close - open) / (high - low).replace(0, np.nan)) * 100
     df["ad"] = ad
+
+    return df
+
+
+def add_rvi(df: pd.DataFrame, n: int = 10, signal: int = 4) -> pd.DataFrame:
+    """
+    Add Relative Vigor Index (RVI) and signal line.
+
+    Formula:
+        RV = (Close - Open) / (High - Low)
+        RVI = SMA(RV, n)
+        Signal = SMA(RVI, signal)
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame with 'open', 'high', 'low', 'close' columns.
+    n : int, optional (default=10)
+        Period for main RVI smoothing.
+    signal : int, optional (default=4)
+        Period for RVI signal line smoothing.
+
+    Returns
+    -------
+    pd.DataFrame
+        Original DataFrame with added 'rvi_{n}' and 'rvi_signal_{signal}' columns.
+    """
+    close = pd.to_numeric(df["close"], errors="coerce").astype("float64")
+    open = pd.to_numeric(df["open"], errors="coerce").astype("float64")
+    high = pd.to_numeric(df["high"], errors="coerce").astype("float64")
+    low = pd.to_numeric(df["low"], errors="coerce").astype("float64")
+
+    rv = (close - open) / (high - low).replace(0, np.nan)
+    rvi = rv.rolling(window=n, min_periods=1).mean()
+    rvi_signal = rvi.rolling(window=signal, min_periods=1).mean()
+
+    df[f"rvi_{n}"] = rvi
+    df[f"rvi_signal_{signal}"] = rvi_signal
 
     return df
 
@@ -662,12 +700,13 @@ def main():
         order_by=[Table.VN_INDEX.Column.DATE.value],
     )
 
-    df = add_ad(df)
+    df = add_rvi(df, n=10, signal=4)
 
     plot_with_indicators(
         df,
         indicators=[
-            "ad",
+            "rvi_10",
+            "rvi_signal_4",
         ],
     )
 
