@@ -666,6 +666,52 @@ def add_tsi(df: pd.DataFrame, r: int = 25, s: int = 13) -> pd.DataFrame:
     return df
 
 
+def add_vortex(df: pd.DataFrame, n: int = 14) -> pd.DataFrame:
+    """
+    Add Vortex Indicator (VI) to the DataFrame.
+
+    The Vortex Indicator consists of two lines, +VI and -VI,
+    that are derived from True Range (TR) and directional movement.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame with 'high', 'low', and 'close' columns.
+    n : int, default 14
+        Lookback period.
+
+    Returns
+    -------
+    pd.DataFrame
+        Original DataFrame with added columns:
+        - 'vi_plus_{n}'
+        - 'vi_minus_{n}'
+    """
+    high = df["high"].astype("float64")
+    low = df["low"].astype("float64")
+    close = df["close"].astype("float64")
+
+    # True Range
+    tr1 = high - low
+    tr2 = (high - close.shift(1)).abs()
+    tr3 = (low - close.shift(1)).abs()
+    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+
+    # Vortex movements
+    vm_plus = (high - low.shift(1)).abs()
+    vm_minus = (low - high.shift(1)).abs()
+
+    # Rolling sums
+    tr_n = tr.rolling(n).sum()
+    vm_plus_n = vm_plus.rolling(n).sum()
+    vm_minus_n = vm_minus.rolling(n).sum()
+
+    df[f"vi_plus_{n}"] = vm_plus_n / tr_n
+    df[f"vi_minus_{n}"] = vm_minus_n / tr_n
+
+    return df
+
+
 # endregion MOMENTUM INDICATORS
 
 
@@ -726,7 +772,7 @@ def main():
             Condition(
                 column=Table.VN_INDEX.Column.DATE.value,
                 operator=SqlOperator.GREATER_THAN_OR_EQUAL_TO,
-                value="2023-01-01",
+                value="2025-01-01",
                 data_type=DataType.DATE,
             ),
             Condition(
@@ -739,12 +785,13 @@ def main():
         order_by=[Table.VN_INDEX.Column.DATE.value],
     )
 
-    df = add_tsi(df, r=25, s=13)
+    df = add_vortex(df, n=14)
 
     plot_with_indicators(
         df,
         indicators=[
-            "tsi_25_13",
+            "vi_plus_14",
+            "vi_minus_14",
         ],
     )
 
