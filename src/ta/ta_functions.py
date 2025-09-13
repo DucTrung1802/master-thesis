@@ -715,6 +715,43 @@ def add_vortex(df: pd.DataFrame, n: int = 14) -> pd.DataFrame:
 # endregion MOMENTUM INDICATORS
 
 
+# region VOLUME INDICATORS
+def add_obv(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Add On-Balance Volume (OBV) indicator to the DataFrame.
+
+    OBV measures cumulative buying/selling pressure by adding
+    volume on up days and subtracting volume on down days.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame with 'close' and 'volume' columns.
+
+    Returns
+    -------
+    pd.DataFrame
+        Original DataFrame with added 'obv' column.
+    """
+    close = df["close"].astype("float64")
+    volume = df["volume"].astype("float64")
+
+    obv = [0]  # start OBV at 0
+    for i in range(1, len(close)):
+        if close[i] > close[i - 1]:
+            obv.append(obv[-1] + volume.iloc[i])
+        elif close[i] < close[i - 1]:
+            obv.append(obv[-1] - volume.iloc[i])
+        else:
+            obv.append(obv[-1])
+
+    df["obv"] = obv
+    return df
+
+
+# endregion VOLUME INDICATORS
+
+
 def plot_with_indicators(df: pd.DataFrame, indicators: list):
     """
     Plot price with optional indicators using up to 2 y-axes:
@@ -725,6 +762,7 @@ def plot_with_indicators(df: pd.DataFrame, indicators: list):
 
     # Main price axis
     ax1.plot(df["date"], df["close"], label="Close", color="black", linewidth=2)
+    # ax1.plot(df["date"], df["volume"], label="Volume", color="brown", linewidth=2)
 
     # Second axis for oscillators
     ax2 = ax1.twinx()
@@ -785,13 +823,12 @@ def main():
         order_by=[Table.VN_INDEX.Column.DATE.value],
     )
 
-    df = add_vortex(df, n=14)
+    df = add_obv(df)
 
     plot_with_indicators(
         df,
         indicators=[
-            "vi_plus_14",
-            "vi_minus_14",
+            "obv",
         ],
     )
 
