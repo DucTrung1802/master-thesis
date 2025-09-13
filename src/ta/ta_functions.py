@@ -869,6 +869,45 @@ def add_chaikin_ad(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def add_cmf(df: pd.DataFrame, n: int = 20) -> pd.DataFrame:
+    """
+    Add Chaikin’s Money Flow (CMF) indicator to the DataFrame.
+
+    CMF measures the amount of Money Flow Volume over a specific period.
+    It oscillates between -1 and +1.
+
+    Formula
+    -------
+    CLV = ((Close - Low) - (High - Close)) / (High - Low)
+    MFV = CLV * Volume
+    CMF = (Sum of MFV over n periods) / (Sum of Volume over n periods)
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame with 'high', 'low', 'close', and 'volume' columns.
+    n : int, default 20
+        Lookback period.
+
+    Returns
+    -------
+    pd.DataFrame
+        Original DataFrame with added 'cmf_{n}' column.
+    """
+    high = df["high"].astype("float64")
+    low = df["low"].astype("float64")
+    close = df["close"].astype("float64")
+    volume = df["volume"].astype("float64")
+
+    clv = ((close - low) - (high - close)) / np.where(high != low, (high - low), 1e-10)
+    mfv = clv * volume
+
+    cmf = mfv.rolling(n).sum() / volume.rolling(n).sum()
+    df[f"cmf_{n}"] = cmf
+
+    return df
+
+
 # endregion VOLUME INDICATORS
 
 
@@ -943,12 +982,12 @@ def main():
         order_by=[Table.VN_INDEX.Column.DATE.value],
     )
 
-    df = add_chaikin_ad(df)
+    df = add_cmf(df, n=20)
 
     plot_with_indicators(
         df,
         indicators=[
-            "chaikin_ad",
+            "cmf_20",
         ],
     )
 
