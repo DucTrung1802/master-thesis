@@ -8,9 +8,19 @@ LOG_FILE_BASE = f"{LOG_DIR}/app"
 
 
 # ===========================
-# LOGGER CONFIGURATION
+# CHARTS CONFIGURATION
 # ===========================
-CHARTS_DIR = "../charts"
+CHARTS_DIR_BASE = "../charts"
+CHARTS_DIR_MACROECONOMICS = f"{CHARTS_DIR_BASE}/macroeconomics"
+CHARTS_DIR_STOCK_MARKET = f"{CHARTS_DIR_BASE}/stock_market"
+CHARTS_DIR_ENTERPRISE = f"{CHARTS_DIR_BASE}/enterprise"
+
+PDF_OUTPUT_DIR = "../pdfs"
+
+# ===========================
+# TA CONFIGURATION
+# ===========================
+TA_LOG_FILE_BASE = f"{LOG_DIR}/ta"
 
 
 # ===========================

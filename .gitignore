@@ -10,3 +10,5 @@ gold_data/
 .env
 
 logs/
+
+mt_env/

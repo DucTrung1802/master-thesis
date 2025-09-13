@@ -1,28 +1,24 @@
-import matplotlib.pyplot as plt
-import numpy as np
+from PIL import Image
+import os
+import random
 
-# Generate 1000 data points
-x = np.arange(1000)
-bar_values = np.random.randint(10, 50, size=1000)  # random integer bar heights
-line_values = np.random.randn(1000).cumsum()  # cumulative sum for smoother line
+base_path = r"charts\macroeconomics"
 
-# Create figure and primary axis (for line)
-with plt.style.context("seaborn"):
-    fig, ax1 = plt.subplots(figsize=(12, 6))
+# Get all PNG files in the folder
+all_png_files = [f for f in os.listdir(base_path) if f.lower().endswith(".png")]
 
-    # Plot line chart on left y-axis
-    ax1.plot(x, line_values, color="red", linewidth=2, label="Line Values")
-    ax1.set_ylabel("Line Values (Left Y-Axis)", color="red")
-    ax1.tick_params(axis="y", labelcolor="red")
+# Pick 5 random files
+png_files = random.sample(all_png_files, 5)
 
-    # Create secondary y-axis (for bar)
-    ax2 = ax1.twinx()
-    ax2.bar(x, bar_values, color="skyblue", alpha=1, label="Bar Values")
-    ax2.set_ylabel("Bar Values (Right Y-Axis)", color="blue")
-    ax2.tick_params(axis="y", labelcolor="blue")
+# Build full paths
+png_paths = [os.path.join(base_path, fname) for fname in png_files]
 
-    # Title
-    plt.title("Line (Left Y-Axis) and Bar (Right Y-Axis) Chart with 1000 Points")
+# Open and convert to RGB
+image_list = [Image.open(png).convert("RGB") for png in png_paths]
 
-    # Show plot
-    plt.show()
+# Save as PDF
+output_path = os.path.join(base_path, "output.pdf")
+image_list[0].save(output_path, save_all=True, append_images=image_list[1:])
+
+print("Selected files:", png_files)
+print(f"PDF saved at: {output_path}")
