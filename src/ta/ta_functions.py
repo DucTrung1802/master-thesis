@@ -794,6 +794,41 @@ def add_mfi(df: pd.DataFrame, n: int = 14) -> pd.DataFrame:
     return df
 
 
+def add_adl(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Add Larry Williams’ Accumulation/Distribution Line (ADL) to the DataFrame.
+
+    The ADL measures supply and demand by evaluating where the close lies
+    within the period’s high-low range, then multiplying by volume.
+    It is a cumulative indicator.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame with 'high', 'low', 'close', and 'volume' columns.
+
+    Returns
+    -------
+    pd.DataFrame
+        Original DataFrame with added 'adl' column.
+    """
+    high = df["high"].astype("float64")
+    low = df["low"].astype("float64")
+    close = df["close"].astype("float64")
+    volume = df["volume"].astype("float64")
+
+    # Avoid division by zero
+    clv = ((close - low) - (high - close)) / np.where(high != low, (high - low), 1e-10)
+
+    # Money Flow Volume
+    mfv = clv * volume
+
+    # Cumulative ADL
+    df["adl"] = mfv.cumsum()
+
+    return df
+
+
 # endregion VOLUME INDICATORS
 
 
@@ -855,7 +890,7 @@ def main():
             Condition(
                 column=Table.VN_INDEX.Column.DATE.value,
                 operator=SqlOperator.GREATER_THAN_OR_EQUAL_TO,
-                value="2023-01-01",
+                value="2025-01-01",
                 data_type=DataType.DATE,
             ),
             Condition(
@@ -868,12 +903,12 @@ def main():
         order_by=[Table.VN_INDEX.Column.DATE.value],
     )
 
-    df = add_mfi(df, n=14)
+    df = add_adl(df)
 
     plot_with_indicators(
         df,
         indicators=[
-            "mfi_14",
+            "adl",
         ],
     )
 
