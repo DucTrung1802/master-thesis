@@ -409,7 +409,7 @@ def make_date_time_index_for_dataframe(
                 start=start_date, end=end_date, freq="ME"
             ).normalize()
 
-        case GenerateDateTimeType.DAY:
+        case GenerateDateTimeType.DAY | GenerateDateTimeType.DATE:
             full_range = pd.date_range(
                 start=start_date, end=end_date, freq="D"
             ).normalize()
