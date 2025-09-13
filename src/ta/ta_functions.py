@@ -981,6 +981,63 @@ def add_eom(df: pd.DataFrame, n: int = 14) -> pd.DataFrame:
     return df
 
 
+def add_pvi_nvi(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Add Positive Volume Index (PVI) and Negative Volume Index (NVI) to the DataFrame.
+
+    PVI assumes that when volume increases, the 'crowd' is driving prices.
+    NVI assumes that when volume decreases, the 'smart money' is active.
+
+    Formula
+    -------
+    If Volume[t] > Volume[t-1]:
+        PVI[t] = PVI[t-1] + ( (Close[t] - Close[t-1]) / Close[t-1] ) * PVI[t-1]
+        else PVI[t] = PVI[t-1]
+
+    If Volume[t] < Volume[t-1]:
+        NVI[t] = NVI[t-1] + ( (Close[t] - Close[t-1]) / Close[t-1] ) * NVI[t-1]
+        else NVI[t] = NVI[t-1]
+
+    Both series usually start from 1000.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame with 'close' and 'volume' columns.
+
+    Returns
+    -------
+    pd.DataFrame
+        Original DataFrame with added 'pvi' and 'nvi'.
+    """
+    close = df["close"].astype("float64").values
+    volume = df["volume"].astype("float64").values
+
+    pvi = np.zeros(len(df))
+    nvi = np.zeros(len(df))
+    pvi[0], nvi[0] = 1000, 1000
+
+    for i in range(1, len(df)):
+        if volume[i] > volume[i - 1]:
+            pvi[i] = (
+                pvi[i - 1] + ((close[i] - close[i - 1]) / close[i - 1]) * pvi[i - 1]
+            )
+        else:
+            pvi[i] = pvi[i - 1]
+
+        if volume[i] < volume[i - 1]:
+            nvi[i] = (
+                nvi[i - 1] + ((close[i] - close[i - 1]) / close[i - 1]) * nvi[i - 1]
+            )
+        else:
+            nvi[i] = nvi[i - 1]
+
+    df["pvi"] = pvi
+    df["nvi"] = nvi
+
+    return df
+
+
 # endregion VOLUME INDICATORS
 
 
@@ -1055,12 +1112,13 @@ def main():
         order_by=[Table.VN_INDEX.Column.DATE.value],
     )
 
-    df = add_eom(df, n=14)
+    df = add_pvi_nvi(df)
 
     plot_with_indicators(
         df,
         indicators=[
-            "eom_14",
+            "pvi",
+            "nvi",
         ],
     )
 
