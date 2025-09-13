@@ -610,18 +610,7 @@ def plot_with_indicators(df: pd.DataFrame, indicators: list):
         if col not in df.columns:
             continue
 
-        col_lower = col.lower()
-
-        # Assign based on heuristic
-        if col_lower.startswith(("sma", "ema", "wma", "lwma", "boll", "kelt", "starc")):
-            ax1.plot(df["date"], df[col], label=col.upper(), linestyle="--")
-        elif col_lower.startswith(
-            ("rsi", "roc", "macd", "adx", "atr", "dvi", "stoch", "williams", "ad")
-        ):
-            ax2.plot(df["date"], df[col], label=col.upper(), linestyle="--")
-        else:
-            # fallback: put in price axis
-            ax1.plot(df["date"], df[col], label=col.upper(), linestyle="--")
+        ax2.plot(df["date"], df[col], label=col.upper(), linestyle="--")
 
     ax1.set_xlabel("Date")
     ax1.set_ylabel("Price / Price-based Indicators")
