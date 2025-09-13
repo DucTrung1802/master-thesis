@@ -2714,6 +2714,33 @@ class DataPreprocessor:
                 )
                 # fmt: on
 
+                # CPI
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.G_CPI.name,
+                    columns = [
+                        Column(name=Table.G_CPI.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.G_CPI.Column.BEVERAGE_AND_CIGARETTE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_CPI.Column.CONSUMER_PRICE_INDEX.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_CPI.Column.CULTURE_ENTERTAINMENT_AND_TOURISM.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_CPI.Column.EATING_OUTSIDE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_CPI.Column.EDUCATION.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_CPI.Column.FOOD.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_CPI.Column.FOOD_AND_FOODSTUFF.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_CPI.Column.FOODSTUFF.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_CPI.Column.GARMENT_FOOTWEAR_HAT.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_CPI.Column.HOUSEHOLD_APPLIANCES_AND_GOODS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_CPI.Column.HOUSING_AND_CONSTRUCTION_MATERIALS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_CPI.Column.MEDICINE_AND_HEALTH_CARE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_CPI.Column.OTHER_GOODS_AND_SERVICES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_CPI.Column.POSTAL_SERVICES_AND_TELECOMMUNICATION.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_CPI.Column.TRAFFIC.value, data_type=DataType.FLOAT(), nullable=True),
+                    ],
+                    primary_keys=Table.G_CPI.primary_key,
+                )
+                # fmt: on
+
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
 
@@ -3374,6 +3401,42 @@ class DataPreprocessor:
             f'Finish cleaning data in table "{format_key_for_table(key)}".'
         )
 
+    def _transform_macroeconomics_cpi_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.CPI,
+            CpiSource.VIETSTOCK,
+        )
+
+        self._logger.log_info(
+            f'Start transforming data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for transforming data here
+        self._select_database(DataQuality.SILVER.value)
+        silver_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.CPI.name,
+        )
+
+        gold_df = make_date_time_index_for_dataframe(df=silver_df)
+        gold_df = standardize_time_frame(df=gold_df)
+
+        cols_to_interpolate = gold_df.columns.difference(["date"])
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(method="linear")
+
+        self._select_database(DataQuality.GOLD.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.G_CPI.name,
+            primary_keys=Table.G_CPI.primary_key,
+            df=gold_df,
+        )
+
+        self._logger.log_info(
+            f'Finish transforming data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_macroeconomics_cpi(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing macroeconomics CPI data for "{data_quality.value}".'
@@ -3387,7 +3450,7 @@ class DataPreprocessor:
                 self._clean_macroeconomics_cpi_vietstock()
 
             case DataQuality.GOLD:
-                pass
+                self._transform_macroeconomics_cpi_vietstock()
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -8787,7 +8850,7 @@ class DataPreprocessor:
         self._logger.log_info(f'Start processing data for "{data_quality.value}".')
 
         # Macroeconomics
-        self._process_macroeconomics_gdp(data_quality)
+        # self._process_macroeconomics_gdp(data_quality)
         self._process_macroeconomics_cpi(data_quality)
         self._process_macroeconomics_ppi(data_quality)
         self._process_macroeconomics_ipi(data_quality)
