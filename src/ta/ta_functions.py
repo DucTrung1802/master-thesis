@@ -1152,6 +1152,54 @@ def add_kvo(
     return df
 
 
+def add_demand_oscillator(
+    df: pd.DataFrame, fast: int = 5, slow: int = 10
+) -> pd.DataFrame:
+    """
+    Add Aspray's Demand Oscillator (ADO) to the DataFrame.
+
+    Formula
+    -------
+    UpMove = High - min(Open, PrevClose)
+    DownMove = max(Open, PrevClose) - Low
+    Demand = ((UpMove - DownMove) / (UpMove + DownMove)) * Volume
+    ADO = EMA_fast(Demand) - EMA_slow(Demand)
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame with 'open', 'high', 'low', 'close', 'volume'.
+    fast : int, default=5
+        Fast EMA period.
+    slow : int, default=10
+        Slow EMA period.
+
+    Returns
+    -------
+    pd.DataFrame
+        Original DataFrame with 'demand_osc'.
+    """
+    open_ = df["open"].astype("float64")
+    high = df["high"].astype("float64")
+    low = df["low"].astype("float64")
+    close = df["close"].astype("float64")
+    volume = df["volume"].astype("float64")
+
+    prev_close = close.shift(1)
+
+    up_move = high - np.minimum(open_, prev_close)
+    down_move = np.maximum(open_, prev_close) - low
+
+    demand = ((up_move - down_move) / (up_move + down_move + 1e-9)) * volume
+
+    ema_fast = demand.ewm(span=fast, adjust=False).mean()
+    ema_slow = demand.ewm(span=slow, adjust=False).mean()
+
+    df["demand_osc"] = ema_fast - ema_slow
+
+    return df
+
+
 # endregion VOLUME INDICATORS
 
 
@@ -1226,13 +1274,12 @@ def main():
         order_by=[Table.VN_INDEX.Column.DATE.value],
     )
 
-    df = add_kvo(df)
+    df = add_demand_oscillator(df)
 
     plot_with_indicators(
         df,
         indicators=[
-            "kvo",
-            "kvo_signal",
+            "demand_osc",
         ],
     )
 
