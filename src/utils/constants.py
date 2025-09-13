@@ -18,6 +18,12 @@ CHARTS_DIR_ENTERPRISE = f"{CHARTS_DIR_BASE}/enterprise"
 PDF_OUTPUT_DIR = "../pdfs"
 
 # ===========================
+# TA CONFIGURATION
+# ===========================
+TA_LOG_FILE_BASE = f"{LOG_DIR}/ta"
+
+
+# ===========================
 # THREAD MANAGER CONFIGURATION
 # ===========================
 THREAD_MANAGER_POWER = 50  # unit: %
