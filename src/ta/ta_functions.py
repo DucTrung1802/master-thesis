@@ -749,6 +749,51 @@ def add_obv(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def add_mfi(df: pd.DataFrame, n: int = 14) -> pd.DataFrame:
+    """
+    Add Money Flow Index (MFI) to the DataFrame.
+
+    The MFI uses price and volume to identify overbought/oversold
+    conditions, similar to RSI but volume-adjusted.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame with 'high', 'low', 'close', and 'volume' columns.
+    n : int, default 14
+        Lookback period.
+
+    Returns
+    -------
+    pd.DataFrame
+        Original DataFrame with added 'mfi_{n}' column.
+    """
+    high = df["high"].astype("float64")
+    low = df["low"].astype("float64")
+    close = df["close"].astype("float64")
+    volume = df["volume"].astype("float64")
+
+    # Typical Price
+    tp = (high + low + close) / 3
+
+    # Raw Money Flow
+    rmf = tp * volume
+
+    # Positive & Negative Money Flow
+    pos_mf = np.where(tp > tp.shift(1), rmf, 0.0)
+    neg_mf = np.where(tp < tp.shift(1), rmf, 0.0)
+
+    # Sum over n periods
+    pos_mf_sum = pd.Series(pos_mf).rolling(n).sum()
+    neg_mf_sum = pd.Series(neg_mf).rolling(n).sum()
+
+    # Money Flow Index
+    mfi = 100 * (pos_mf_sum / (pos_mf_sum + neg_mf_sum))
+    df[f"mfi_{n}"] = mfi
+
+    return df
+
+
 # endregion VOLUME INDICATORS
 
 
@@ -810,7 +855,7 @@ def main():
             Condition(
                 column=Table.VN_INDEX.Column.DATE.value,
                 operator=SqlOperator.GREATER_THAN_OR_EQUAL_TO,
-                value="2025-01-01",
+                value="2023-01-01",
                 data_type=DataType.DATE,
             ),
             Condition(
@@ -823,12 +868,12 @@ def main():
         order_by=[Table.VN_INDEX.Column.DATE.value],
     )
 
-    df = add_obv(df)
+    df = add_mfi(df, n=14)
 
     plot_with_indicators(
         df,
         indicators=[
-            "obv",
+            "mfi_14",
         ],
     )
 
