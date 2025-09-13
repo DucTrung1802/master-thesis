@@ -937,6 +937,50 @@ def add_vroc(df: pd.DataFrame, n: int = 14) -> pd.DataFrame:
     return df
 
 
+def add_eom(df: pd.DataFrame, n: int = 14) -> pd.DataFrame:
+    """
+    Add Ease of Movement (EoM) indicator to the DataFrame.
+
+    EoM relates price change to volume, showing how much volume is
+    required to move prices. A smoothed version (SMA of EoM) is
+    often used.
+
+    Formula
+    -------
+    Midpoint Move = ((High + Low)/2) - ((High[-1] + Low[-1])/2)
+    Box Ratio     = (Volume / 1e6) / (High - Low)
+    EoM           = Midpoint Move / Box Ratio
+    EoM_smooth    = SMA(EoM, n)
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame with 'high', 'low', and 'volume' columns.
+    n : int, default 14
+        Smoothing period.
+
+    Returns
+    -------
+    pd.DataFrame
+        Original DataFrame with added:
+        - 'eom' (raw values)
+        - 'eom_{n}' (smoothed version)
+    """
+    high = df["high"].astype("float64")
+    low = df["low"].astype("float64")
+    volume = df["volume"].astype("float64")
+
+    midpoint_move = ((high + low) / 2) - ((high.shift(1) + low.shift(1)) / 2)
+    box_ratio = np.where((high - low) != 0, (volume / 1e6) / (high - low), 0)
+
+    eom = np.where(box_ratio != 0, midpoint_move / box_ratio, 0)
+
+    df["eom"] = eom
+    df[f"eom_{n}"] = pd.Series(eom).rolling(n).mean()
+
+    return df
+
+
 # endregion VOLUME INDICATORS
 
 
@@ -1011,12 +1055,12 @@ def main():
         order_by=[Table.VN_INDEX.Column.DATE.value],
     )
 
-    df = add_vroc(df, n=14)
+    df = add_eom(df, n=14)
 
     plot_with_indicators(
         df,
         indicators=[
-            "vroc_14",
+            "eom_14",
         ],
     )
 
