@@ -800,6 +800,14 @@ class Table:
         name = "gdp"
         primary_key = [Column.YEAR.value, Column.QUARTER.value]
 
+    class G_GDP:
+        class Column(Enum):
+            DATE = "date"
+            GDP_GROWTH = "gdp_growth"
+
+        name = "gdp"
+        primary_key = [Column.DATE.value]
+
     class CPI:
         class Column(Enum):
             YEAR = "year"
