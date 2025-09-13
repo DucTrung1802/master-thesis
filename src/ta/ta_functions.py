@@ -829,6 +829,46 @@ def add_adl(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def add_chaikin_ad(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Add Marc Chaikin’s Accumulation/Distribution (AD) Line to the DataFrame.
+
+    The Chaikin AD Line uses the Close Location Value (CLV) multiplied by
+    volume to track the flow of money into or out of a security.
+    It is a cumulative indicator.
+
+    Formula
+    -------
+    CLV = ((Close - Low) - (High - Close)) / (High - Low)
+    AD  = cumulative sum of (CLV * Volume)
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame with 'high', 'low', 'close', and 'volume' columns.
+
+    Returns
+    -------
+    pd.DataFrame
+        Original DataFrame with added 'chaikin_ad' column.
+    """
+    high = df["high"].astype("float64")
+    low = df["low"].astype("float64")
+    close = df["close"].astype("float64")
+    volume = df["volume"].astype("float64")
+
+    # Close Location Value (CLV)
+    clv = ((close - low) - (high - close)) / np.where(high != low, (high - low), 1e-10)
+
+    # Money Flow Volume
+    mfv = clv * volume
+
+    # Chaikin AD Line (cumulative)
+    df["chaikin_ad"] = mfv.cumsum()
+
+    return df
+
+
 # endregion VOLUME INDICATORS
 
 
@@ -903,12 +943,12 @@ def main():
         order_by=[Table.VN_INDEX.Column.DATE.value],
     )
 
-    df = add_adl(df)
+    df = add_chaikin_ad(df)
 
     plot_with_indicators(
         df,
         indicators=[
-            "adl",
+            "chaikin_ad",
         ],
     )
 
