@@ -530,6 +530,37 @@ def add_stochastic(
     return df
 
 
+def add_williams_r(df: pd.DataFrame, n: int = 14) -> pd.DataFrame:
+    """
+    Add William's %R indicator to the dataframe.
+
+    %R = (HighestHigh - Close) / (HighestHigh - LowestLow) * -100
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame with 'high', 'low', and 'close' columns.
+    n : int, default 14
+        Lookback period.
+
+    Returns
+    -------
+    pd.DataFrame
+        Original DataFrame with an added 'williams_r_{n}' column.
+    """
+    close = pd.to_numeric(df["close"], errors="coerce").astype("float64")
+    high = pd.to_numeric(df["high"], errors="coerce").astype("float64")
+    low = pd.to_numeric(df["low"], errors="coerce").astype("float64")
+
+    highest_high = high.rolling(window=n, min_periods=1).max()
+    lowest_low = low.rolling(window=n, min_periods=1).min()
+
+    williams_r = (highest_high - close) / (highest_high - lowest_low) * -100
+    df[f"williams_r_{n}"] = williams_r
+
+    return df
+
+
 # endregion MOMENTUM INDICATORS
 
 
@@ -556,7 +587,7 @@ def plot_with_indicators(df: pd.DataFrame, indicators: list):
         # Assign based on heuristic
         if col_lower.startswith(("sma", "ema", "wma", "lwma", "boll", "kelt", "starc")):
             ax1.plot(df["date"], df[col], label=col.upper(), linestyle="--")
-        elif col_lower.startswith(("rsi", "roc", "macd", "adx", "atr", "dvi", "stoch")):
+        elif col_lower.startswith(("rsi", "roc", "macd", "adx", "atr", "dvi", "stoch", "williams")):
             ax2.plot(df["date"], df[col], label=col.upper(), linestyle="--")
         else:
             # fallback: put in price axis
@@ -612,13 +643,12 @@ def main():
         order_by=[Table.VN_INDEX.Column.DATE.value],
     )
 
-    df = add_stochastic(df, k_period=14, d_period=3)
+    df = add_williams_r(df, n=14)
 
     plot_with_indicators(
         df,
         indicators=[
-            "stoch_k_14",
-            "stoch_d_3",
+            "williams_r_14",
         ],
     )
 
