@@ -403,7 +403,9 @@ class DataPreprocessor:
                 self._database_driver.create_schema(Schema.ENTERPRISE.value)
 
             case DataQuality.GOLD:
-                pass
+                self._database_driver.create_schema(Schema.MACROECONOMICS.value)
+                self._database_driver.create_schema(Schema.STOCK_MARKET.value)
+                self._database_driver.create_schema(Schema.ENTERPRISE.value)
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -2699,7 +2701,18 @@ class DataPreprocessor:
                 # fmt: on
 
             case DataQuality.GOLD:
-                pass
+                # G_GDP
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.G_GDP.name,
+                    columns=[
+                        Column(name=Table.G_GDP.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.G_GDP.Column.GDP_GROWTH.value, data_type=DataType.FLOAT(), nullable=True),
+                    ],
+                    primary_keys=Table.G_GDP.primary_key,
+                )
+                # fmt: on
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -3099,7 +3112,7 @@ class DataPreprocessor:
                 self._create_enterprise_tables(data_quality)
 
             case DataQuality.GOLD:
-                pass
+                self._create_macroeconomics_tables(data_quality)
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}".')
@@ -8812,6 +8825,21 @@ class DataPreprocessor:
         except Exception as e:
             self._logger.log_error(
                 f"Error preprocessing `{DataQuality.SILVER.value}` data: {e}"
+            )
+
+        finally:
+            self._database_driver.disconnect()
+
+    def ingest_gold_data(self) -> None:
+        try:
+            self._connect_to_database(DataQuality.GOLD)
+            self._create_schemas(DataQuality.GOLD)
+            self._create_tables(DataQuality.GOLD)
+            self._process_data(DataQuality.GOLD)
+
+        except Exception as e:
+            self._logger.log_error(
+                f"Error preprocessing `{DataQuality.GOLD.value}` data: {e}"
             )
 
         finally:
