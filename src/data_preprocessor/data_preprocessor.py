@@ -8559,12 +8559,27 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish ingesting data in "{table_name}".')
 
-    def _process_enterprise_stock(self) -> None:
-        self._logger.log_info("Start processing enterprise STOCK data.")
+    def _process_enterprise_stock(self, data_quality: DataQuality) -> None:
+        self._logger.log_info(
+            f'Start processing enterprise STOCK data for "{data_quality.value}".'
+        )
 
-        self._ingest_enterprise_stock_cafef()
+        match data_quality:
+            case DataQuality.BRONZE:
+                self._ingest_enterprise_stock_cafef()
 
-        self._logger.log_info("Finish processing enterprise STOCK data.")
+            case DataQuality.SILVER:
+                pass
+
+            case DataQuality.GOLD:
+                pass
+
+            case _:
+                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
+
+        self._logger.log_info(
+            f'Finish processing enterprise STOCK data for "{data_quality.value}".'
+        )
 
     # endregion ENTERPRISE.STOCK_INFORMATION
 
@@ -8689,74 +8704,14 @@ class DataPreprocessor:
                 ],
             )
 
-    def _process_enterprise_daily_price(self) -> None:
-        self._logger.log_info("Start processing enterprise DAILY_PRICE data.")
-
-        self._ingest_enterprise_daily_price_cafef()
-
-        self._logger.log_info("Finish processing enterprise DAILY_PRICE data.")
-
-    # endregion ENTERPRISE.DAILY_PRICE
-
-    # endregion ENTERPRISE data process
-
-    def _process_data(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(f'Start processing data for "{data_quality.value}".')
-
-        # # Macroeconomics
-        # self._process_macroeconomics_gdp(data_quality)
-        # self._process_macroeconomics_cpi(data_quality)
-        # self._process_macroeconomics_ppi(data_quality)
-        # self._process_macroeconomics_ipi(data_quality)
-        # self._process_macroeconomics_xpi(data_quality)
-        # self._process_macroeconomics_mpi(data_quality)
-        # self._process_macroeconomics_population(data_quality)
-        # self._process_macroeconomics_labor(data_quality)
-        # self._process_macroeconomics_retail(data_quality)
-        # self._process_macroeconomics_pmi(data_quality)
-        # self._process_macroeconomics_iip(data_quality)
-        # self._process_macroeconomics_ipv(data_quality)
-        # self._process_macroeconomics_mip(data_quality)
-        # self._process_macroeconomics_fa_by_house_types(data_quality)
-        # self._process_macroeconomics_it_bop(data_quality)
-        # self._process_macroeconomics_tsbr(data_quality)
-        # self._process_macroeconomics_tsbe(data_quality)
-        # self._process_macroeconomics_gd(data_quality)
-        # self._process_macroeconomics_brd(data_quality)
-        # self._process_macroeconomics_iisd(data_quality)
-        # self._process_macroeconomics_treg(data_quality)
-        # self._process_macroeconomics_credit(data_quality)
-        # self._process_macroeconomics_mobilization(data_quality)
-        # self._process_macroeconomics_exchange_rate(data_quality)
-        # self._process_macroeconomics_iir(data_quality)
-        # self._process_macroeconomics_rrrr(data_quality)
-        # self._process_macroeconomics_fdi_sector(data_quality)
-        # self._process_macroeconomics_fdi_rd(data_quality)
-        # self._process_macroeconomics_export(data_quality)
-        # self._process_macroeconomics_import(data_quality)
-        # self._process_macroeconomics_gold_price(data_quality)
-        # self._process_macroeconomics_oil_price(data_quality)
-        # self._process_macroeconomics_dow_jones(data_quality)
-        # self._process_macroeconomics_nyse_composite(data_quality)
-        # self._process_macroeconomics_snp_500(data_quality)
-        # self._process_macroeconomics_nasdaq_composite(data_quality)
-        # self._process_macroeconomics_nasdaq_100(data_quality)
-
-        # # Stock market
-        # self._process_stock_market_market(data_quality)
-        # self._process_stock_market_vn_index(data_quality)
-        # self._process_stock_market_hnx_index(data_quality)
-        # self._process_stock_market_vn_30_index(data_quality)
-        # self._process_stock_market_vn_100_index(data_quality)
-        # self._process_stock_market_hnx_30_index(data_quality)
-        # self._process_stock_market_upcom_index(data_quality)
+    def _process_enterprise_daily_price(self, data_quality: DataQuality) -> None:
+        self._logger.log_info(
+            f'Start processing enterprise DAILY PRICE data for "{data_quality.value}".'
+        )
 
         match data_quality:
             case DataQuality.BRONZE:
-                pass
-                # # Enterprise
-                self._process_enterprise_stock()
-                self._process_enterprise_daily_price()
+                self._ingest_enterprise_daily_price_cafef()
 
             case DataQuality.SILVER:
                 pass
@@ -8766,6 +8721,69 @@ class DataPreprocessor:
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
+
+        self._logger.log_info(
+            f'Finish processing enterprise DAILY PRICE data for "{data_quality.value}".'
+        )
+
+    # endregion ENTERPRISE.DAILY_PRICE
+
+    # endregion ENTERPRISE data process
+
+    def _process_data(self, data_quality: DataQuality) -> None:
+        self._logger.log_info(f'Start processing data for "{data_quality.value}".')
+
+        # Macroeconomics
+        self._process_macroeconomics_gdp(data_quality)
+        self._process_macroeconomics_cpi(data_quality)
+        self._process_macroeconomics_ppi(data_quality)
+        self._process_macroeconomics_ipi(data_quality)
+        self._process_macroeconomics_xpi(data_quality)
+        self._process_macroeconomics_mpi(data_quality)
+        self._process_macroeconomics_population(data_quality)
+        self._process_macroeconomics_labor(data_quality)
+        self._process_macroeconomics_retail(data_quality)
+        self._process_macroeconomics_pmi(data_quality)
+        self._process_macroeconomics_iip(data_quality)
+        self._process_macroeconomics_ipv(data_quality)
+        self._process_macroeconomics_mip(data_quality)
+        self._process_macroeconomics_fa_by_house_types(data_quality)
+        self._process_macroeconomics_it_bop(data_quality)
+        self._process_macroeconomics_tsbr(data_quality)
+        self._process_macroeconomics_tsbe(data_quality)
+        self._process_macroeconomics_gd(data_quality)
+        self._process_macroeconomics_brd(data_quality)
+        self._process_macroeconomics_iisd(data_quality)
+        self._process_macroeconomics_treg(data_quality)
+        self._process_macroeconomics_credit(data_quality)
+        self._process_macroeconomics_mobilization(data_quality)
+        self._process_macroeconomics_exchange_rate(data_quality)
+        self._process_macroeconomics_iir(data_quality)
+        self._process_macroeconomics_rrrr(data_quality)
+        self._process_macroeconomics_fdi_sector(data_quality)
+        self._process_macroeconomics_fdi_rd(data_quality)
+        self._process_macroeconomics_export(data_quality)
+        self._process_macroeconomics_import(data_quality)
+        self._process_macroeconomics_gold_price(data_quality)
+        self._process_macroeconomics_oil_price(data_quality)
+        self._process_macroeconomics_dow_jones(data_quality)
+        self._process_macroeconomics_nyse_composite(data_quality)
+        self._process_macroeconomics_snp_500(data_quality)
+        self._process_macroeconomics_nasdaq_composite(data_quality)
+        self._process_macroeconomics_nasdaq_100(data_quality)
+
+        # Stock market
+        self._process_stock_market_market(data_quality)
+        self._process_stock_market_vn_index(data_quality)
+        self._process_stock_market_hnx_index(data_quality)
+        self._process_stock_market_vn_30_index(data_quality)
+        self._process_stock_market_vn_100_index(data_quality)
+        self._process_stock_market_hnx_30_index(data_quality)
+        self._process_stock_market_upcom_index(data_quality)
+
+        # Enterprise
+        self._process_enterprise_stock(data_quality)
+        self._process_enterprise_daily_price(data_quality)
 
         self._logger.log_info(f'Finish processing data for "{data_quality.value}".')
 
