@@ -1094,6 +1094,64 @@ def add_vw_macd(
     return df
 
 
+def add_kvo(
+    df: pd.DataFrame, fast: int = 34, slow: int = 55, signal: int = 13
+) -> pd.DataFrame:
+    """
+    Add Klinger Volume Oscillator (KVO) and signal line to the DataFrame.
+
+    Formula
+    -------
+    - Trend = 1 if today's (high+low+close)/3 > yesterday's, else -1
+    - Volume Force (VF) = Trend * 2 * ((High - Low) / (High + Low)) * Volume
+    - KVO = EMA_fast(VF) - EMA_slow(VF)
+    - Signal = EMA_signal(KVO)
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame with 'high', 'low', 'close', 'volume'.
+    fast : int, default=34
+        Fast EMA period.
+    slow : int, default=55
+        Slow EMA period.
+    signal : int, default=13
+        Signal EMA period.
+
+    Returns
+    -------
+    pd.DataFrame
+        Original DataFrame with 'kvo' and 'kvo_signal'.
+    """
+    high = df["high"].astype("float64")
+    low = df["low"].astype("float64")
+    close = df["close"].astype("float64")
+    volume = df["volume"].astype("float64")
+
+    # Typical price
+    tp = (high + low + close) / 3
+    prev_tp = tp.shift(1)
+
+    # Trend direction
+    trend = np.where(tp > prev_tp, 1, -1)
+
+    # Volume Force (VF)
+    vf = trend * 2 * ((high - low) / (high + low + 1e-9)) * volume
+
+    # KVO calculation
+    ema_fast = pd.Series(vf).ewm(span=fast, adjust=False).mean()
+    ema_slow = pd.Series(vf).ewm(span=slow, adjust=False).mean()
+    kvo = ema_fast - ema_slow
+
+    # Signal line
+    kvo_signal = kvo.ewm(span=signal, adjust=False).mean()
+
+    df["kvo"] = kvo
+    df["kvo_signal"] = kvo_signal
+
+    return df
+
+
 # endregion VOLUME INDICATORS
 
 
@@ -1168,14 +1226,13 @@ def main():
         order_by=[Table.VN_INDEX.Column.DATE.value],
     )
 
-    df = add_vw_macd(df)
+    df = add_kvo(df)
 
     plot_with_indicators(
         df,
         indicators=[
-            "vw_macd",
-            "vw_macd_signal",
-            "vw_macd_hist",
+            "kvo",
+            "kvo_signal",
         ],
     )
 
