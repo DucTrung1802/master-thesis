@@ -14,6 +14,12 @@ CHARTS_DIR = "../charts"
 
 
 # ===========================
+# TA CONFIGURATION
+# ===========================
+TA_LOG_FILE_BASE = f"{LOG_DIR}/ta"
+
+
+# ===========================
 # THREAD MANAGER CONFIGURATION
 # ===========================
 THREAD_MANAGER_POWER = 50  # unit: %
