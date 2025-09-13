@@ -561,6 +561,34 @@ def add_williams_r(df: pd.DataFrame, n: int = 14) -> pd.DataFrame:
     return df
 
 
+def add_ad(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Add Larry Williams’ Accumulation/Distribution (AD) Oscillator.
+
+    Formula:
+        AD = ((Close - Open) / (High - Low)) * 100
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame with 'open', 'high', 'low', 'close' columns.
+
+    Returns
+    -------
+    pd.DataFrame
+        Original DataFrame with an added 'ad' column.
+    """
+    close = pd.to_numeric(df["close"], errors="coerce").astype("float64")
+    open_ = pd.to_numeric(df["open"], errors="coerce").astype("float64")
+    high = pd.to_numeric(df["high"], errors="coerce").astype("float64")
+    low = pd.to_numeric(df["low"], errors="coerce").astype("float64")
+
+    ad = ((close - open_) / (high - low).replace(0, np.nan)) * 100
+    df["ad"] = ad
+
+    return df
+
+
 # endregion MOMENTUM INDICATORS
 
 
@@ -587,7 +615,9 @@ def plot_with_indicators(df: pd.DataFrame, indicators: list):
         # Assign based on heuristic
         if col_lower.startswith(("sma", "ema", "wma", "lwma", "boll", "kelt", "starc")):
             ax1.plot(df["date"], df[col], label=col.upper(), linestyle="--")
-        elif col_lower.startswith(("rsi", "roc", "macd", "adx", "atr", "dvi", "stoch", "williams")):
+        elif col_lower.startswith(
+            ("rsi", "roc", "macd", "adx", "atr", "dvi", "stoch", "williams", "ad")
+        ):
             ax2.plot(df["date"], df[col], label=col.upper(), linestyle="--")
         else:
             # fallback: put in price axis
@@ -643,12 +673,12 @@ def main():
         order_by=[Table.VN_INDEX.Column.DATE.value],
     )
 
-    df = add_williams_r(df, n=14)
+    df = add_ad(df)
 
     plot_with_indicators(
         df,
         indicators=[
-            "williams_r_14",
+            "ad",
         ],
     )
 
