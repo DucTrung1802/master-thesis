@@ -561,12 +561,12 @@ def add_williams_r(df: pd.DataFrame, n: int = 14) -> pd.DataFrame:
     return df
 
 
-def add_ad(df: pd.DataFrame) -> pd.DataFrame:
+def add_ado(df: pd.DataFrame) -> pd.DataFrame:
     """
     Add Larry Williams’ Accumulation/Distribution (AD) Oscillator.
 
     Formula:
-        AD = ((Close - Open) / (High - Low)) * 100
+        ADO = ((Close - Open) / (High - Low)) * 100
 
     Parameters
     ----------
@@ -583,8 +583,8 @@ def add_ad(df: pd.DataFrame) -> pd.DataFrame:
     high = pd.to_numeric(df["high"], errors="coerce").astype("float64")
     low = pd.to_numeric(df["low"], errors="coerce").astype("float64")
 
-    ad = ((close - open) / (high - low).replace(0, np.nan)) * 100
-    df["ad"] = ad
+    ado = ((close - open) / (high - low).replace(0, np.nan)) * 100
+    df["ad"] = ado
 
     return df
 
