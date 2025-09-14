@@ -6,13 +6,13 @@ import matplotlib.pyplot as plt
 from datetime import datetime
 
 from logger.logger import Logger
-from models.tabular_database_driver_models.tabular_database_driver_models import (
+from dtos.tabular_database_driver_dtos.tabular_database_driver_dtos import (
     Condition,
     JoinModel,
 )
 from tabular_database_driver.postgre_sql_driver import PostgreSQLDriver
-from models.tabular_database_driver_models.postgre_sql_connection_model import (
-    PostgreSQLConnectionModel,
+from dtos.tabular_database_driver_dtos.postgre_sql_connection_dto import (
+    PostgreSQLConnectionDto,
 )
 from utils.enums import GenerateDateTimeType
 from utils.constants import *
@@ -39,7 +39,7 @@ class Visualizer:
         self._chart_dir = chart_dir
 
     def connect_to_database(self, database_name: str = "postgres") -> None:
-        connection_model = PostgreSQLConnectionModel(
+        connection_model = PostgreSQLConnectionDto(
             logger=self._logger,
             host=os.getenv("POSTGRES_HOST"),
             user=os.getenv("POSTGRES_USER"),
