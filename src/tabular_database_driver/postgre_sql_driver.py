@@ -6,10 +6,10 @@ from logger.logger import Logger
 from tabular_database_driver.tabular_database_driver_interface import (
     TabularDatabaseDriverInterface,
 )
-from models.tabular_database_driver_models.postgre_sql_connection_model import (
-    PostgreSQLConnectionModel,
+from dtos.tabular_database_driver_dtos.postgre_sql_connection_dto import (
+    PostgreSQLConnectionDto,
 )
-from models.tabular_database_driver_models.tabular_database_driver_models import *
+from dtos.tabular_database_driver_dtos.tabular_database_driver_dtos import *
 from utils.enums import DatabaseExecutionStatus
 from utils.constants import *
 from utils.utils import *
@@ -23,10 +23,10 @@ class PostgreSQLDriver(TabularDatabaseDriverInterface):
         self._cursors: dict[str, psycopg2.extensions.cursor] = {}
         self._cursor = None
         self._current_db: str = None
-        self._connection_models: dict[str, PostgreSQLConnectionModel] = {}
+        self._connection_models: dict[str, PostgreSQLConnectionDto] = {}
 
     def connect(
-        self, connection_model: PostgreSQLConnectionModel
+        self, connection_model: PostgreSQLConnectionDto
     ) -> DatabaseExecutionStatus:
         """Establish a connection to a PostgreSQL database."""
         db_name = connection_model.database
@@ -283,7 +283,7 @@ CREATE TABLE {schema_name}.{table_name} (
         """Insert records into a table."""
         try:
             for record in records:
-                columns = ", ".join([col.column_name for col in record.data_model_list])
+                columns = ", ".join([col.column_name for col in record.data_dto_list])
                 values = ", ".join(
                     [
                         (
@@ -295,7 +295,7 @@ CREATE TABLE {schema_name}.{table_name} (
                                 else str(col.value)
                             )
                         )
-                        for col in record.data_model_list
+                        for col in record.data_dto_list
                     ]
                 )
                 query = f"""
@@ -330,7 +330,7 @@ VALUES
             set_clause = ",\n    ".join(
                 [
                     f"{col.column_name} = {format_value(col.value, col.data_type)}"
-                    for col in update_record.data_model_list
+                    for col in update_record.data_dto_list
                 ]
             )
             where_clause = (
@@ -406,7 +406,7 @@ SET
 
             for record in records:
                 # Collect user-provided columns/values
-                column_names = [col.column_name for col in record.data_model_list]
+                column_names = [col.column_name for col in record.data_dto_list]
                 values = [
                     (
                         "NULL"
@@ -417,7 +417,7 @@ SET
                             else str(col.value)
                         )
                     )
-                    for col in record.data_model_list
+                    for col in record.data_dto_list
                 ]
 
                 # If create_date column exists and not provided → set it on INSERT
@@ -431,7 +431,7 @@ SET
                 # Build update clause: all non-PK cols
                 update_set_parts = [
                     f"{col.column_name} = EXCLUDED.{col.column_name}"
-                    for col in record.data_model_list
+                    for col in record.data_dto_list
                     if col.column_name not in primary_keys
                 ]
 

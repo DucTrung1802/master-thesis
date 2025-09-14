@@ -6,7 +6,7 @@ import pandas as pd
 from pathlib import Path
 
 from logger.logger import Logger
-from models.tabular_database_driver_models.tabular_database_driver_models import (
+from dtos.tabular_database_driver_dtos.tabular_database_driver_dtos import (
     DataType,
 )
 from utils.enums import *
@@ -409,7 +409,7 @@ def make_date_time_index_for_dataframe(
                 start=start_date, end=end_date, freq="ME"
             ).normalize()
 
-        case GenerateDateTimeType.DAY:
+        case GenerateDateTimeType.DAY | GenerateDateTimeType.DATE:
             full_range = pd.date_range(
                 start=start_date, end=end_date, freq="D"
             ).normalize()
@@ -425,6 +425,52 @@ def make_date_time_index_for_dataframe(
     # Move "date" column to the first position (already is, but keep consistent)
     cols = ["date"] + [col for col in df.columns if col != "date"]
     df = df[cols]
+
+    return df
+
+
+def standardize_time_frame(
+    df: pd.DataFrame,
+    start_date: datetime = SCRAPER_START_DATE,
+    end_date: datetime = SCRAPER_END_DATE,
+) -> pd.DataFrame:
+    # Detect type and generate date column
+    if {"year", "month", "day"}.issubset(df.columns):
+        # Daily data
+        df["date"] = pd.to_datetime(df[["year", "month", "day"]])
+    elif {"year", "quarter"}.issubset(df.columns):
+        # Quarterly data: last day of quarter
+        df["month"] = df["quarter"] * 3
+        df["date"] = pd.to_datetime(
+            df[["year", "month"]].assign(day=1)
+        ) + pd.offsets.MonthEnd(0)
+    elif {"year", "month"}.issubset(df.columns):
+        # Monthly data: last day of month
+        df["date"] = pd.to_datetime(
+            df[["year", "month"]].assign(day=1)
+        ) + pd.offsets.MonthEnd(0)
+    elif (
+        "year" in df.columns
+        and len(df.columns.intersection({"quarter", "month", "date"})) == 0
+    ):
+        # Yearly data: last day of year
+        df["date"] = pd.to_datetime(df["year"].astype(str) + "-12-31")
+    elif "date" in df.columns:
+        # Already a date column
+        df["date"] = pd.to_datetime(df["date"])
+    else:
+        raise ValueError("DataFrame does not contain recognizable time columns")
+
+    # Generate full daily date range
+    full_dates = pd.date_range(start=start_date, end=end_date, freq="D")
+
+    # Reindex to include all dates, existing data stays, missing dates = NaN
+    df = (
+        df.set_index("date")
+        .reindex(full_dates)
+        .reset_index()
+        .rename(columns={"index": "date"})
+    )
 
     return df
 

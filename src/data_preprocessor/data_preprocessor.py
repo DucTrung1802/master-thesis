@@ -7,10 +7,10 @@ import numpy as np
 from datetime import datetime, timedelta
 
 from logger.logger import Logger
-from models.tabular_database_driver_models.postgre_sql_connection_model import (
-    PostgreSQLConnectionModel,
+from dtos.tabular_database_driver_dtos.postgre_sql_connection_dto import (
+    PostgreSQLConnectionDto,
 )
-from models.tabular_database_driver_models.tabular_database_driver_models import *
+from dtos.tabular_database_driver_dtos.tabular_database_driver_dtos import *
 from tabular_database_driver.postgre_sql_driver import PostgreSQLDriver
 from utils.constants import SCRAPER_BRONZE_DATA_DIR
 from utils.enums import *
@@ -44,7 +44,7 @@ class DataPreprocessor:
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
 
-        connection_model = PostgreSQLConnectionModel(
+        connection_model = PostgreSQLConnectionDto(
             logger=self._logger,
             host=os.getenv("POSTGRES_HOST"),
             user=os.getenv("POSTGRES_USER"),
@@ -137,11 +137,11 @@ class DataPreprocessor:
         records = []
 
         for row in df.itertuples(index=False, name=None):
-            data_model_list = [
+            data_dto_list = [
                 DataModel(column_name=col, value=(val if pd.notna(val) else None))
                 for col, val in zip(column_names, row)
             ]
-            records.append(Record(data_model_list=data_model_list))
+            records.append(Record(data_dto_list=data_dto_list))
 
         # Batch upsert once
         result = self._database_driver.upsert(
@@ -403,7 +403,9 @@ class DataPreprocessor:
                 self._database_driver.create_schema(Schema.ENTERPRISE.value)
 
             case DataQuality.GOLD:
-                pass
+                self._database_driver.create_schema(Schema.MACROECONOMICS.value)
+                self._database_driver.create_schema(Schema.STOCK_MARKET.value)
+                self._database_driver.create_schema(Schema.ENTERPRISE.value)
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -2699,7 +2701,45 @@ class DataPreprocessor:
                 # fmt: on
 
             case DataQuality.GOLD:
-                pass
+                # G_GDP
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.G_GDP.name,
+                    columns=[
+                        Column(name=Table.G_GDP.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.G_GDP.Column.GDP_GROWTH.value, data_type=DataType.FLOAT(), nullable=True),
+                    ],
+                    primary_keys=Table.G_GDP.primary_key,
+                )
+                # fmt: on
+
+                # CPI
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.G_CPI.name,
+                    columns = [
+                        Column(name=Table.G_CPI.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.G_CPI.Column.BEVERAGE_AND_CIGARETTE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_CPI.Column.CONSUMER_PRICE_INDEX.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_CPI.Column.CULTURE_ENTERTAINMENT_AND_TOURISM.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_CPI.Column.EATING_OUTSIDE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_CPI.Column.EDUCATION.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_CPI.Column.FOOD.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_CPI.Column.FOOD_AND_FOODSTUFF.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_CPI.Column.FOODSTUFF.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_CPI.Column.GARMENT_FOOTWEAR_HAT.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_CPI.Column.HOUSEHOLD_APPLIANCES_AND_GOODS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_CPI.Column.HOUSING_AND_CONSTRUCTION_MATERIALS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_CPI.Column.MEDICINE_AND_HEALTH_CARE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_CPI.Column.OTHER_GOODS_AND_SERVICES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_CPI.Column.POSTAL_SERVICES_AND_TELECOMMUNICATION.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_CPI.Column.TRAFFIC.value, data_type=DataType.FLOAT(), nullable=True),
+                    ],
+                    primary_keys=Table.G_CPI.primary_key,
+                )
+                # fmt: on
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -3099,7 +3139,7 @@ class DataPreprocessor:
                 self._create_enterprise_tables(data_quality)
 
             case DataQuality.GOLD:
-                pass
+                self._create_macroeconomics_tables(data_quality)
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}".')
@@ -3214,6 +3254,46 @@ class DataPreprocessor:
             f'Finish cleaning data in table "{format_key_for_table(key)}".'
         )
 
+    def _transform_macroeconomics_gdp_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.GDP,
+            GdpSource.VIETSTOCK,
+        )
+
+        self._logger.log_info(
+            f'Start transforming data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for transforming data here
+        self._select_database(DataQuality.SILVER.value)
+        silver_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.GDP.name,
+            columns=[
+                Table.GDP.Column.YEAR.value,
+                Table.GDP.Column.QUARTER.value,
+                Table.GDP.Column.GDP_GROWTH.value,
+            ],
+        )
+
+        gold_df = make_date_time_index_for_dataframe(df=silver_df)
+        gold_df = standardize_time_frame(df=gold_df)
+
+        gold_df["gdp_growth"] = gold_df["gdp_growth"].interpolate(method="linear")
+
+        self._select_database(DataQuality.GOLD.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.G_GDP.name,
+            primary_keys=Table.G_GDP.primary_key,
+            df=gold_df,
+        )
+
+        self._logger.log_info(
+            f'Finish transforming data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_macroeconomics_gdp(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing macroeconomics GDP data for "{data_quality.value}".'
@@ -3227,7 +3307,7 @@ class DataPreprocessor:
                 self._clean_macroeconomics_gdp_vietstock()
 
             case DataQuality.GOLD:
-                pass
+                self._transform_macroeconomics_gdp_vietstock()
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -3321,6 +3401,42 @@ class DataPreprocessor:
             f'Finish cleaning data in table "{format_key_for_table(key)}".'
         )
 
+    def _transform_macroeconomics_cpi_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.CPI,
+            CpiSource.VIETSTOCK,
+        )
+
+        self._logger.log_info(
+            f'Start transforming data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for transforming data here
+        self._select_database(DataQuality.SILVER.value)
+        silver_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.CPI.name,
+        )
+
+        gold_df = make_date_time_index_for_dataframe(df=silver_df)
+        gold_df = standardize_time_frame(df=gold_df)
+
+        cols_to_interpolate = gold_df.columns.difference(["date"])
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(method="linear")
+
+        self._select_database(DataQuality.GOLD.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.G_CPI.name,
+            primary_keys=Table.G_CPI.primary_key,
+            df=gold_df,
+        )
+
+        self._logger.log_info(
+            f'Finish transforming data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_macroeconomics_cpi(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing macroeconomics CPI data for "{data_quality.value}".'
@@ -3334,7 +3450,7 @@ class DataPreprocessor:
                 self._clean_macroeconomics_cpi_vietstock()
 
             case DataQuality.GOLD:
-                pass
+                self._transform_macroeconomics_cpi_vietstock()
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -8559,12 +8675,27 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish ingesting data in "{table_name}".')
 
-    def _process_enterprise_stock(self) -> None:
-        self._logger.log_info("Start processing enterprise STOCK data.")
+    def _process_enterprise_stock(self, data_quality: DataQuality) -> None:
+        self._logger.log_info(
+            f'Start processing enterprise STOCK data for "{data_quality.value}".'
+        )
 
-        self._ingest_enterprise_stock_cafef()
+        match data_quality:
+            case DataQuality.BRONZE:
+                self._ingest_enterprise_stock_cafef()
 
-        self._logger.log_info("Finish processing enterprise STOCK data.")
+            case DataQuality.SILVER:
+                pass
+
+            case DataQuality.GOLD:
+                pass
+
+            case _:
+                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
+
+        self._logger.log_info(
+            f'Finish processing enterprise STOCK data for "{data_quality.value}".'
+        )
 
     # endregion ENTERPRISE.STOCK_INFORMATION
 
@@ -8660,7 +8791,7 @@ class DataPreprocessor:
                     schema_name=Schema.STOCK_MARKET.value,
                     table_name=Table.MARKET.name,
                     update_record=Record(
-                        data_model_list=[
+                        data_dto_list=[
                             DataModel(
                                 column_name=Table.MARKET.Column.SAVE_PROGRESS_YEAR.value,
                                 value=year,
@@ -8689,74 +8820,14 @@ class DataPreprocessor:
                 ],
             )
 
-    def _process_enterprise_daily_price(self) -> None:
-        self._logger.log_info("Start processing enterprise DAILY_PRICE data.")
-
-        self._ingest_enterprise_daily_price_cafef()
-
-        self._logger.log_info("Finish processing enterprise DAILY_PRICE data.")
-
-    # endregion ENTERPRISE.DAILY_PRICE
-
-    # endregion ENTERPRISE data process
-
-    def _process_data(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(f'Start processing data for "{data_quality.value}".')
-
-        # # Macroeconomics
-        # self._process_macroeconomics_gdp(data_quality)
-        # self._process_macroeconomics_cpi(data_quality)
-        # self._process_macroeconomics_ppi(data_quality)
-        # self._process_macroeconomics_ipi(data_quality)
-        # self._process_macroeconomics_xpi(data_quality)
-        # self._process_macroeconomics_mpi(data_quality)
-        # self._process_macroeconomics_population(data_quality)
-        # self._process_macroeconomics_labor(data_quality)
-        # self._process_macroeconomics_retail(data_quality)
-        # self._process_macroeconomics_pmi(data_quality)
-        # self._process_macroeconomics_iip(data_quality)
-        # self._process_macroeconomics_ipv(data_quality)
-        # self._process_macroeconomics_mip(data_quality)
-        # self._process_macroeconomics_fa_by_house_types(data_quality)
-        # self._process_macroeconomics_it_bop(data_quality)
-        # self._process_macroeconomics_tsbr(data_quality)
-        # self._process_macroeconomics_tsbe(data_quality)
-        # self._process_macroeconomics_gd(data_quality)
-        # self._process_macroeconomics_brd(data_quality)
-        # self._process_macroeconomics_iisd(data_quality)
-        # self._process_macroeconomics_treg(data_quality)
-        # self._process_macroeconomics_credit(data_quality)
-        # self._process_macroeconomics_mobilization(data_quality)
-        # self._process_macroeconomics_exchange_rate(data_quality)
-        # self._process_macroeconomics_iir(data_quality)
-        # self._process_macroeconomics_rrrr(data_quality)
-        # self._process_macroeconomics_fdi_sector(data_quality)
-        # self._process_macroeconomics_fdi_rd(data_quality)
-        # self._process_macroeconomics_export(data_quality)
-        # self._process_macroeconomics_import(data_quality)
-        # self._process_macroeconomics_gold_price(data_quality)
-        # self._process_macroeconomics_oil_price(data_quality)
-        # self._process_macroeconomics_dow_jones(data_quality)
-        # self._process_macroeconomics_nyse_composite(data_quality)
-        # self._process_macroeconomics_snp_500(data_quality)
-        # self._process_macroeconomics_nasdaq_composite(data_quality)
-        # self._process_macroeconomics_nasdaq_100(data_quality)
-
-        # # Stock market
-        # self._process_stock_market_market(data_quality)
-        # self._process_stock_market_vn_index(data_quality)
-        # self._process_stock_market_hnx_index(data_quality)
-        # self._process_stock_market_vn_30_index(data_quality)
-        # self._process_stock_market_vn_100_index(data_quality)
-        # self._process_stock_market_hnx_30_index(data_quality)
-        # self._process_stock_market_upcom_index(data_quality)
+    def _process_enterprise_daily_price(self, data_quality: DataQuality) -> None:
+        self._logger.log_info(
+            f'Start processing enterprise DAILY PRICE data for "{data_quality.value}".'
+        )
 
         match data_quality:
             case DataQuality.BRONZE:
-                pass
-                # # Enterprise
-                self._process_enterprise_stock()
-                self._process_enterprise_daily_price()
+                self._ingest_enterprise_daily_price_cafef()
 
             case DataQuality.SILVER:
                 pass
@@ -8766,6 +8837,69 @@ class DataPreprocessor:
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
+
+        self._logger.log_info(
+            f'Finish processing enterprise DAILY PRICE data for "{data_quality.value}".'
+        )
+
+    # endregion ENTERPRISE.DAILY_PRICE
+
+    # endregion ENTERPRISE data process
+
+    def _process_data(self, data_quality: DataQuality) -> None:
+        self._logger.log_info(f'Start processing data for "{data_quality.value}".')
+
+        # Macroeconomics
+        self._process_macroeconomics_gdp(data_quality)
+        self._process_macroeconomics_cpi(data_quality)
+        self._process_macroeconomics_ppi(data_quality)
+        self._process_macroeconomics_ipi(data_quality)
+        self._process_macroeconomics_xpi(data_quality)
+        self._process_macroeconomics_mpi(data_quality)
+        self._process_macroeconomics_population(data_quality)
+        self._process_macroeconomics_labor(data_quality)
+        self._process_macroeconomics_retail(data_quality)
+        self._process_macroeconomics_pmi(data_quality)
+        self._process_macroeconomics_iip(data_quality)
+        self._process_macroeconomics_ipv(data_quality)
+        self._process_macroeconomics_mip(data_quality)
+        self._process_macroeconomics_fa_by_house_types(data_quality)
+        self._process_macroeconomics_it_bop(data_quality)
+        self._process_macroeconomics_tsbr(data_quality)
+        self._process_macroeconomics_tsbe(data_quality)
+        self._process_macroeconomics_gd(data_quality)
+        self._process_macroeconomics_brd(data_quality)
+        self._process_macroeconomics_iisd(data_quality)
+        self._process_macroeconomics_treg(data_quality)
+        self._process_macroeconomics_credit(data_quality)
+        self._process_macroeconomics_mobilization(data_quality)
+        self._process_macroeconomics_exchange_rate(data_quality)
+        self._process_macroeconomics_iir(data_quality)
+        self._process_macroeconomics_rrrr(data_quality)
+        self._process_macroeconomics_fdi_sector(data_quality)
+        self._process_macroeconomics_fdi_rd(data_quality)
+        self._process_macroeconomics_export(data_quality)
+        self._process_macroeconomics_import(data_quality)
+        self._process_macroeconomics_gold_price(data_quality)
+        self._process_macroeconomics_oil_price(data_quality)
+        self._process_macroeconomics_dow_jones(data_quality)
+        self._process_macroeconomics_nyse_composite(data_quality)
+        self._process_macroeconomics_snp_500(data_quality)
+        self._process_macroeconomics_nasdaq_composite(data_quality)
+        self._process_macroeconomics_nasdaq_100(data_quality)
+
+        # Stock market
+        self._process_stock_market_market(data_quality)
+        self._process_stock_market_vn_index(data_quality)
+        self._process_stock_market_hnx_index(data_quality)
+        self._process_stock_market_vn_30_index(data_quality)
+        self._process_stock_market_vn_100_index(data_quality)
+        self._process_stock_market_hnx_30_index(data_quality)
+        self._process_stock_market_upcom_index(data_quality)
+
+        # Enterprise
+        self._process_enterprise_stock(data_quality)
+        self._process_enterprise_daily_price(data_quality)
 
         self._logger.log_info(f'Finish processing data for "{data_quality.value}".')
 
@@ -8794,6 +8928,21 @@ class DataPreprocessor:
         except Exception as e:
             self._logger.log_error(
                 f"Error preprocessing `{DataQuality.SILVER.value}` data: {e}"
+            )
+
+        finally:
+            self._database_driver.disconnect()
+
+    def ingest_gold_data(self) -> None:
+        try:
+            self._connect_to_database(DataQuality.GOLD)
+            self._create_schemas(DataQuality.GOLD)
+            self._create_tables(DataQuality.GOLD)
+            self._process_data(DataQuality.GOLD)
+
+        except Exception as e:
+            self._logger.log_error(
+                f"Error preprocessing `{DataQuality.GOLD.value}` data: {e}"
             )
 
         finally:

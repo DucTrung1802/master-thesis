@@ -800,6 +800,14 @@ class Table:
         name = "gdp"
         primary_key = [Column.YEAR.value, Column.QUARTER.value]
 
+    class G_GDP:
+        class Column(Enum):
+            DATE = "date"
+            GDP_GROWTH = "gdp_growth"
+
+        name = "gdp"
+        primary_key = [Column.DATE.value]
+
     class CPI:
         class Column(Enum):
             YEAR = "year"
@@ -824,6 +832,30 @@ class Table:
 
         name = "cpi"
         primary_key = [Column.YEAR.value, Column.MONTH.value]
+
+    class G_CPI:
+        class Column(Enum):
+            DATE = "date"
+            BEVERAGE_AND_CIGARETTE = "beverage_and_cigarette"
+            CONSUMER_PRICE_INDEX = "consumer_price_index"
+            CULTURE_ENTERTAINMENT_AND_TOURISM = "culture_entertainment_and_tourism"
+            EATING_OUTSIDE = "eating_outside"
+            EDUCATION = "education"
+            FOOD = "food"
+            FOOD_AND_FOODSTUFF = "food_and_foodstuff"
+            FOODSTUFF = "foodstuff"
+            GARMENT_FOOTWEAR_HAT = "garment_footwear_hat"
+            HOUSEHOLD_APPLIANCES_AND_GOODS = "household_appliances_and_goods"
+            HOUSING_AND_CONSTRUCTION_MATERIALS = "housing_and_construction_materials"
+            MEDICINE_AND_HEALTH_CARE = "medicine_and_health_care"
+            OTHER_GOODS_AND_SERVICES = "other_goods_and_services"
+            POSTAL_SERVICES_AND_TELECOMMUNICATION = (
+                "postal_services_and_telecommunication"
+            )
+            TRAFFIC = "traffic"
+
+        name = "cpi"
+        primary_key = [Column.DATE.value]
 
     class PPI:
         class Column(Enum):

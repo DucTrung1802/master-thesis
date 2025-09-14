@@ -6,20 +6,16 @@ import matplotlib.pyplot as plt
 from datetime import datetime
 
 from logger.logger import Logger
-from models.tabular_database_driver_models.tabular_database_driver_models import (
+from dtos.tabular_database_driver_dtos.tabular_database_driver_dtos import (
     Condition,
     JoinModel,
 )
 from tabular_database_driver.postgre_sql_driver import PostgreSQLDriver
-from models.tabular_database_driver_models.postgre_sql_connection_model import (
-    PostgreSQLConnectionModel,
+from dtos.tabular_database_driver_dtos.postgre_sql_connection_dto import (
+    PostgreSQLConnectionDto,
 )
 from utils.enums import GenerateDateTimeType
-from utils.constants import (
-    CHARTS_DIR,
-    SCRAPER_START_DATE,
-    SCRAPER_END_DATE,
-)
+from utils.constants import *
 from utils.utils import *
 
 parent_dir = os.path.dirname(os.getcwd())
@@ -33,12 +29,17 @@ class Visualizer:
     def __init__(self, logger: Logger = my_logger):
         self._logger = logger
         self._database_driver = PostgreSQLDriver(logger=logger)
+        self._chart_dir = CHARTS_DIR_BASE
         self.connect_to_database()
 
-        os.makedirs(CHARTS_DIR, exist_ok=True)
+        os.makedirs(CHARTS_DIR_BASE, exist_ok=True)
+
+    def set_chart_dir(self, chart_dir: str) -> None:
+        os.makedirs(chart_dir, exist_ok=True)
+        self._chart_dir = chart_dir
 
     def connect_to_database(self, database_name: str = "postgres") -> None:
-        connection_model = PostgreSQLConnectionModel(
+        connection_model = PostgreSQLConnectionDto(
             logger=self._logger,
             host=os.getenv("POSTGRES_HOST"),
             user=os.getenv("POSTGRES_USER"),
@@ -88,7 +89,13 @@ class Visualizer:
         limit: int = None,
     ) -> pd.DataFrame:
         return self._database_driver.select(
-            schema_name=schema_name, table_name=table_name
+            schema_name=schema_name,
+            table_name=table_name,
+            columns=columns,
+            join_model=join_model,
+            conditions=conditions,
+            order_by=order_by,
+            limit=limit,
         )
 
     def plot_lines_chart(
@@ -191,7 +198,7 @@ class Visualizer:
             else:
                 figure_name = f"{figure_name}.png"
 
-            fig.savefig(os.path.join(CHARTS_DIR, figure_name), dpi=dpi)
+            fig.savefig(os.path.join(self._chart_dir, figure_name), dpi=dpi)
 
         return fig
 
@@ -348,6 +355,6 @@ class Visualizer:
             else:
                 figure_name = f"{figure_name}.png"
 
-            fig.savefig(os.path.join(CHARTS_DIR, figure_name), dpi=dpi)
+            fig.savefig(os.path.join(self._chart_dir, figure_name), dpi=dpi)
 
         return fig
