@@ -24,6 +24,13 @@ TA_LOG_FILE_BASE = f"{LOG_DIR}/ta"
 
 
 # ===========================
+# VISUALIZATION CONFIGURATION
+# ===========================
+SILVER_VISUALIZATION_LOG_FILE_BASE = f"../../{LOG_DIR}/silver_visualization"
+GOLD_VISUALIZATION_LOG_FILE_BASE = f"../../{LOG_DIR}/gold_visualization"
+
+
+# ===========================
 # THREAD MANAGER CONFIGURATION
 # ===========================
 THREAD_MANAGER_POWER = 50  # unit: %
