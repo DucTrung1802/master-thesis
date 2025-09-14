@@ -6,7 +6,7 @@ import pandas as pd
 from pathlib import Path
 
 from logger.logger import Logger
-from models.tabular_database_driver_models.tabular_database_driver_models import (
+from dtos.tabular_database_driver_dtos.tabular_database_driver_dtos import (
     DataType,
 )
 from utils.enums import *
