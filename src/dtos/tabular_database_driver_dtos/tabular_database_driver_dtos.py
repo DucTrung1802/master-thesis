@@ -91,7 +91,7 @@ class DataModel:
 
 @dataclass
 class Record:
-    data_model_list: List[DataModel]
+    data_dto_list: List[DataModel]
 
 
 @dataclass

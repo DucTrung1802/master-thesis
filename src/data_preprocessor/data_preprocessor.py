@@ -7,10 +7,10 @@ import numpy as np
 from datetime import datetime, timedelta
 
 from logger.logger import Logger
-from models.tabular_database_driver_models.postgre_sql_connection_model import (
-    PostgreSQLConnectionModel,
+from dtos.tabular_database_driver_dtos.postgre_sql_connection_dto import (
+    PostgreSQLConnectionDto,
 )
-from models.tabular_database_driver_models.tabular_database_driver_models import *
+from dtos.tabular_database_driver_dtos.tabular_database_driver_dtos import *
 from tabular_database_driver.postgre_sql_driver import PostgreSQLDriver
 from utils.constants import SCRAPER_BRONZE_DATA_DIR
 from utils.enums import *
@@ -44,7 +44,7 @@ class DataPreprocessor:
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
 
-        connection_model = PostgreSQLConnectionModel(
+        connection_model = PostgreSQLConnectionDto(
             logger=self._logger,
             host=os.getenv("POSTGRES_HOST"),
             user=os.getenv("POSTGRES_USER"),
@@ -137,11 +137,11 @@ class DataPreprocessor:
         records = []
 
         for row in df.itertuples(index=False, name=None):
-            data_model_list = [
+            data_dto_list = [
                 DataModel(column_name=col, value=(val if pd.notna(val) else None))
                 for col, val in zip(column_names, row)
             ]
-            records.append(Record(data_model_list=data_model_list))
+            records.append(Record(data_dto_list=data_dto_list))
 
         # Batch upsert once
         result = self._database_driver.upsert(
@@ -8791,7 +8791,7 @@ class DataPreprocessor:
                     schema_name=Schema.STOCK_MARKET.value,
                     table_name=Table.MARKET.name,
                     update_record=Record(
-                        data_model_list=[
+                        data_dto_list=[
                             DataModel(
                                 column_name=Table.MARKET.Column.SAVE_PROGRESS_YEAR.value,
                                 value=year,
@@ -8850,7 +8850,7 @@ class DataPreprocessor:
         self._logger.log_info(f'Start processing data for "{data_quality.value}".')
 
         # Macroeconomics
-        # self._process_macroeconomics_gdp(data_quality)
+        self._process_macroeconomics_gdp(data_quality)
         self._process_macroeconomics_cpi(data_quality)
         self._process_macroeconomics_ppi(data_quality)
         self._process_macroeconomics_ipi(data_quality)

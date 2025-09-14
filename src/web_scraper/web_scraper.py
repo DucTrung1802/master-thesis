@@ -19,7 +19,7 @@ from logger.logger import Logger
 from utils.constants import *
 from utils.enums import *
 from utils.utils import *
-from models.thread_manager_models.task import *
+from dtos.thread_manager_dtos.task import *
 from thread_manager.thread_manager import ThreadManager
 
 
