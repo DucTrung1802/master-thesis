@@ -2,16 +2,16 @@ from abc import ABC, abstractmethod
 from typing import List
 
 from utils.enums import DatabaseExecutionStatus
-from models.tabular_database_driver_models.base_tabular_database_connection_model import (
-    BaseTabularDatabaseModel,
+from dtos.tabular_database_driver_dtos.base_tabular_database_connection_dto import (
+    BaseTabularDatabaseDto,
 )
-from models.tabular_database_driver_models.tabular_database_driver_models import *
+from dtos.tabular_database_driver_dtos.tabular_database_driver_dtos import *
 
 
 class TabularDatabaseDriverInterface(ABC):
     @abstractmethod
     def connect(
-        self, connection_model: BaseTabularDatabaseModel
+        self, connection_model: BaseTabularDatabaseDto
     ) -> DatabaseExecutionStatus:
         """Establish a connection to the database."""
         pass

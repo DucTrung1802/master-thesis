@@ -8,10 +8,10 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
 from logger.logger import LogType, Logger
-from models.tabular_database_driver_models.postgre_sql_connection_model import (
-    PostgreSQLConnectionModel,
+from dtos.tabular_database_driver_dtos.postgre_sql_connection_dto import (
+    PostgreSQLConnectionDto,
 )
-from models.tabular_database_driver_models.tabular_database_driver_models import (
+from dtos.tabular_database_driver_dtos.tabular_database_driver_dtos import (
     Condition,
     DataType,
 )
@@ -1243,7 +1243,7 @@ def main():
     ta_logger = Logger(file_name=TA_LOG_FILE_BASE)
     ta_database_driver = PostgreSQLDriver(logger=ta_logger)
 
-    connection_model = PostgreSQLConnectionModel(
+    connection_model = PostgreSQLConnectionDto(
         logger=ta_logger,
         host=os.getenv("POSTGRES_HOST"),
         user=os.getenv("POSTGRES_USER"),
