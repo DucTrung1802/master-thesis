@@ -1,12 +1,12 @@
 from dataclasses import dataclass
 
-from models.tabular_database_driver_models.base_tabular_database_connection_model import (
-    BaseTabularDatabaseModel,
+from dtos.tabular_database_driver_dtos.base_tabular_database_connection_dto import (
+    BaseTabularDatabaseDto,
 )
 
 
 @dataclass
-class PostgreSQLConnectionModel(BaseTabularDatabaseModel):
+class PostgreSQLConnectionDto(BaseTabularDatabaseDto):
     port: int = 5432
     database: str = "postgres"
 

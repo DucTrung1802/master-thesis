@@ -4,7 +4,7 @@ from logger.logger import Logger
 
 
 @dataclass
-class BaseTabularDatabaseModel:
+class BaseTabularDatabaseDto:
     """
     Base class for tabular database models.
     This class serves as a template for creating specific database models.
