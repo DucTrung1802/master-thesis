@@ -96,6 +96,10 @@ class ArimaModel(BaseModel):
         max_q: int = 3,
         criterion: str = "aic",
     ) -> Tuple[int, int, int]:
+        """
+        Grid search ARIMA orders and pick the best according to the chosen criterion.
+        """
+
         def try_order(p, d, q):
             if p == d == q == 0:
                 return None
@@ -105,10 +109,26 @@ class ArimaModel(BaseModel):
                     res = ARIMA(series, order=(p, d, q)).fit(
                         method_kwargs={"warn_convergence": False}
                     )
-                score = res.aic if criterion == "aic" else res.bic
-                return (p, d, q), score
-            except Exception:
-                return None
+
+                scores = {
+                    "aic": res.aic,
+                    "bic": res.bic,
+                    "hqic": res.hqic,
+                    "aicc": getattr(res, "aicc", np.nan),
+                }
+                score = scores.get(criterion, res.aic)
+
+                msg = (
+                    f"(p={p}, d={d}, q={q}) → "
+                    f"AIC={scores['aic']:.2f}, "
+                    f"BIC={scores['bic']:.2f}, "
+                    f"HQIC={scores['hqic']:.2f}, "
+                    f"AICC={scores['aicc']:.2f}"
+                )
+                return (p, d, q), score, msg
+
+            except Exception as e:
+                return None, None, f"❌ Order (p={p}, d={d}, q={q}) failed: {repr(e)}"
 
         tasks = [
             (p, d, q)
@@ -120,10 +140,16 @@ class ArimaModel(BaseModel):
         n_jobs = max(1, os.cpu_count() - 1)
 
         results = []
-        with tqdm(total=len(tasks), desc="Searching ARIMA orders (parallelized)") as pbar:
+        with tqdm(
+            total=len(tasks), desc="Searching ARIMA orders (parallelized)"
+        ) as pbar:
             parallel = Parallel(n_jobs=n_jobs, return_as="generator", batch_size=1)
             for result in parallel(delayed(try_order)(*task) for task in tasks):
-                results.append(result)
+                order, score, msg = result
+                if msg:
+                    self._logger.log_info(msg)  # ✅ logs now from main process
+                if order is not None:
+                    results.append((order, score))
                 pbar.update(1)
 
         results = [r for r in results if r is not None]
