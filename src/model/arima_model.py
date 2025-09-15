@@ -39,6 +39,7 @@ class ArimaModel(BaseModel):
     """
 
     def __init__(self, logger: Logger, significance: float = 0.05):
+        super().__init__(logger)  # call BaseModel initializer
         self._logger = logger
         self._significance = significance
         self._result: Optional[StationarityResult] = None
@@ -170,6 +171,7 @@ class ArimaModel(BaseModel):
         max_d: int = 2,
         max_q: int = 3,
         criterion: str = "aic",
+        model_suffix: str = None,
     ):
         """
         Fit an ARIMA model to the given time series.
@@ -270,6 +272,22 @@ class ArimaModel(BaseModel):
 
         # Step 5: fit best model
         self._fit_model = ARIMA(series_transformed, order=order).fit()
+
+        # Step 6: save model to pickle with order in name
+        os.makedirs(TRAINED_MODELS_LOG_FILE_BASE, exist_ok=True)
+
+        order_str = f"{order[0]}_{order[1]}_{order[2]}"
+        suffix = (model_suffix or "").strip()
+
+        if suffix:
+            filename = f"arima_model_{order_str}_{suffix}.pkl"
+        else:
+            filename = f"arima_model_{order_str}.pkl"
+
+        model_path = os.path.join(TRAINED_MODELS_LOG_FILE_BASE, filename)
+        self._fit_model.save(model_path)
+
+        self._logger.log_info(f"Model saved to: {model_path}")
 
     def get_order(self) -> Tuple[int, int, int]:
         if self._result is None:

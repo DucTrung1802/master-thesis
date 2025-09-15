@@ -32,6 +32,12 @@ ARIMA_VISUALIZATION_LOG_FILE_BASE = f"../../{LOG_DIR}/arima_visualization"
 
 
 # ===========================
+# TRAINED MODELS CONFIGURATION
+# ===========================
+TRAINED_MODELS_LOG_FILE_BASE = f"../../trained_models"
+
+
+# ===========================
 # THREAD MANAGER CONFIGURATION
 # ===========================
 THREAD_MANAGER_POWER = 50  # unit: %
