@@ -28,6 +28,7 @@ TA_LOG_FILE_BASE = f"{LOG_DIR}/ta"
 # ===========================
 SILVER_VISUALIZATION_LOG_FILE_BASE = f"../../{LOG_DIR}/silver_visualization"
 GOLD_VISUALIZATION_LOG_FILE_BASE = f"../../{LOG_DIR}/gold_visualization"
+ARIMA_VISUALIZATION_LOG_FILE_BASE = f"../../{LOG_DIR}/arima_visualization"
 
 
 # ===========================
