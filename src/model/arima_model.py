@@ -9,6 +9,7 @@ from scipy.stats import boxcox
 from scipy.special import inv_boxcox
 from statsmodels.tsa.arima.model import ARIMA
 from statsmodels.tsa.stattools import adfuller, kpss, acf
+from joblib import Parallel, delayed
 
 from logger.logger import Logger
 from utils.constants import *
@@ -86,7 +87,7 @@ class ArimaModel(BaseModel):
                 return lag
         return None
 
-    # --- ARIMA order selection ---
+    # --- ARIMA order selection (parallelized) ---
     def _select_order(
         self,
         series: pd.Series,
@@ -95,41 +96,43 @@ class ArimaModel(BaseModel):
         max_q: int = 3,
         criterion: str = "aic",
     ) -> Tuple[int, int, int]:
-        best_score = np.inf
-        best_order = (0, 0, 0)
+        def try_order(p, d, q):
+            if p == d == q == 0:
+                return None
+            try:
+                with warnings.catch_warnings():
+                    warnings.filterwarnings("ignore", category=UserWarning)
+                    res = ARIMA(series, order=(p, d, q)).fit(
+                        method_kwargs={"warn_convergence": False}
+                    )
+                score = res.aic if criterion == "aic" else res.bic
+                return (p, d, q), score
+            except Exception:
+                return None
+
+        tasks = [
+            (p, d, q)
+            for p in range(max_p + 1)
+            for d in range(max_d + 1)
+            for q in range(max_q + 1)
+            if not (p == d == q == 0)
+        ]
+        n_jobs = max(1, os.cpu_count() - 1)
+
         results = []
+        with tqdm(total=len(tasks), desc="Searching ARIMA orders (parallelized)") as pbar:
+            parallel = Parallel(n_jobs=n_jobs, return_as="generator", batch_size=1)
+            for result in parallel(delayed(try_order)(*task) for task in tasks):
+                results.append(result)
+                pbar.update(1)
 
-        total = (max_p + 1) * (max_d + 1) * (max_q + 1)
+        results = [r for r in results if r is not None]
+        if not results:
+            raise RuntimeError("No valid ARIMA model could be fit.")
 
-        with tqdm(total=total, desc="Searching ARIMA orders") as pbar:
-            for p in range(max_p + 1):
-                for d in range(max_d + 1):
-                    for q in range(max_q + 1):
-                        pbar.update(1)
-                        if p == d == q == 0:
-                            continue
-                        try:
-                            with warnings.catch_warnings():
-                                warnings.filterwarnings("ignore", category=UserWarning)
-                                res = ARIMA(series, order=(p, d, q)).fit(
-                                    method_kwargs={"warn_convergence": False}
-                                )
-
-                            score = res.aic if criterion == "aic" else res.bic
-                            results.append(((p, d, q), score))
-
-                            if score < best_score:
-                                best_score = score
-                                best_order = (p, d, q)
-                                pbar.set_postfix(
-                                    best_order=best_order,
-                                    best_score=f"{best_score:.2f}",
-                                )
-                        except Exception:
-                            continue
-
+        best_order, best_score = min(results, key=lambda x: x[1])
         self._logger.log_info(
-            f"✅ Best order={best_order}, {criterion.upper()}={best_score:.2f}"
+            f"✅ Best order={best_order}, {criterion.upper()}={best_score:.2f} (using {n_jobs} cores)"
         )
         return best_order
 
@@ -266,6 +269,20 @@ class ArimaModel(BaseModel):
         test: Optional[pd.Series] = None,
         title: Optional[str] = None,
     ):
+        """
+        Plot training data, forecasted values, and optional test series.
+
+        Parameters
+        ----------
+        steps : int, default=12
+            Number of future steps to forecast.
+        test : pd.Series, optional
+            Test series to compare forecasts against.
+        title : str, optional
+            Custom plot title. If not provided, defaults to:
+            "Train vs Forecast" + (" vs Test" if test is not None else "")
+            and appends ARIMA order information.
+        """
         forecast = self.forecast(steps)
 
         plt.figure(figsize=(14, 6))
@@ -303,9 +320,15 @@ class ArimaModel(BaseModel):
             )
 
         plt.legend()
-        # Default title logic
+
+        # Build ARIMA order string
+        order_str = f"ARIMA{self._result.order}"
+        # if self._result.m and self._result.D > 0:
+        #     order_str += f" x (0,{self._result.D},0,{self._result.m})"  # seasonal part
+
+        # Title logic (append order string)
         default_title = "Train vs Forecast" + (" vs Test" if test is not None else "")
-        plt.title(title if title is not None else default_title)
+        plt.title((title if title is not None else default_title) + f" | {order_str}")
 
         plt.xlabel("Time")
         plt.ylabel("Value")
