@@ -172,13 +172,20 @@ class ArimaModel(BaseModel):
         max_q: int = 3,
         criterion: str = "aic",
         model_suffix: str = None,
+        transform: str = "auto",  # NEW: {"auto", "boxcox", "log", "none"}
     ):
         """
         Fit an ARIMA model to the given time series.
 
         This pipeline performs the following steps:
         1. Cleans the series by dropping NaN values.
-        2. Applies a transformation (Box-Cox if possible, otherwise log, otherwise none).
+        2. Applies a transformation (user-specified: "log", "boxcox", "none", or "auto").
+           - "none": no transformation.
+           - "log": natural logarithm, requires strictly positive values.
+           - "boxcox": Box-Cox transform, requires strictly positive values.
+           - "auto": tries log first, then Box-Cox if log fails, and falls back to
+             "none" if neither is valid. If both succeed, selects the one with the
+             lowest AIC based on a quick ARIMA fit.
         3. Detects seasonality and sets seasonal differencing parameter (D).
         4. Selects the best ARIMA order (p, d, q) based on the given information criterion.
         5. Stores intermediate results (stationarity tests, transformed data, etc.).
@@ -200,6 +207,13 @@ class ArimaModel(BaseModel):
             - "bic": Bayesian Information Criterion
             - "aicc": Corrected AIC (for small samples)
             - "hqic": Hannan–Quinn Information Criterion
+        transform : {"auto", "log", "boxcox", "none"}, default="auto"
+            Transformation strategy for variance stabilization:
+            - "none": no transform applied.
+            - "log": apply log transform (requires strictly positive series).
+            - "boxcox": apply Box-Cox transform (requires strictly positive series).
+            - "auto": try log first, then Box-Cox, selecting the better one based on AIC
+              if both succeed, or fallback to "none".
 
         Attributes (after fitting)
         --------------------------
@@ -210,7 +224,9 @@ class ArimaModel(BaseModel):
 
         Notes
         -----
-        - If the series contains non-positive values, Box-Cox/Log transformations are skipped.
+        - If the series contains non-positive values, "log" and "boxcox" are skipped.
+        - With transform="auto", log is tried first, then Box-Cox; if both succeed,
+          the best one is chosen using AIC from a quick ARIMA fit.
         - Seasonal differencing is applied if seasonality is detected.
         - Model order is selected by minimizing the chosen criterion across the search space.
 
@@ -222,22 +238,67 @@ class ArimaModel(BaseModel):
 
         series = series.dropna()
 
-        # Step 1: transformation
-        transform = "none"
+        # Step 1: transformation selection
+        transform = transform.lower()
         lam = None
         series_transformed = series
-        if (series <= 0).any():
+
+        if (series <= 0).any() and transform in ("log", "boxcox", "auto"):
             self._logger.log_warning(
                 "Series has non-positive values. Skipping Box-Cox/Log."
             )
-        else:
+            transform = "none"
+
+        if transform == "none":
+            series_transformed = series
+
+        elif transform == "log":
+            series_transformed = np.log(series)
+
+        elif transform == "boxcox":
+            series_boxcox, lam = boxcox(series)
+            series_transformed = pd.Series(series_boxcox, index=series.index)
+
+        elif transform == "auto":
+            candidates = {}
+
+            # Try log first
             try:
-                series_boxcox, lam = boxcox(series)
-                transform = "boxcox"
-                series_transformed = pd.Series(series_boxcox, index=series.index)
-            except Exception:
-                transform = "log"
-                series_transformed = np.log(series)
+                series_log = np.log(series)
+                res_log = ARIMA(series_log, order=(1, 0, 1)).fit()
+                candidates["log"] = (
+                    pd.Series(series_log, index=series.index),
+                    None,
+                    res_log.aic,
+                )
+            except Exception as e:
+                self._logger.log_warning(f"Log transform failed: {e}")
+
+            # Try Box-Cox second
+            try:
+                series_boxcox, lam_bc = boxcox(series)
+                res_bc = ARIMA(series_boxcox, order=(1, 0, 1)).fit()
+                candidates["boxcox"] = (
+                    pd.Series(series_boxcox, index=series.index),
+                    lam_bc,
+                    res_bc.aic,
+                )
+            except Exception as e:
+                self._logger.log_warning(f"Box-Cox transform failed: {e}")
+
+            # Choose best if available
+            if candidates:
+                best = min(candidates.items(), key=lambda kv: kv[1][2])  # lowest AIC
+                transform = best[0]
+                series_transformed = best[1][0]
+                lam = best[1][1]
+                self._logger.log_info(
+                    f"Selected transform: {transform} (AIC={best[1][2]:.2f})"
+                )
+            else:
+                transform = "none"
+                series_transformed = series
+                self._logger.log_info("No valid transform found, using 'none'.")
 
         # Step 2: detect seasonality
         m = self._detect_seasonality(series_transformed)
@@ -312,9 +373,11 @@ class ArimaModel(BaseModel):
         steps: int = 12,
         test: Optional[pd.Series] = None,
         title: Optional[str] = None,
+        file_name: Optional[str] = None,
     ):
         """
         Plot training data, forecasted values, and optional test series.
+        Optionally save the plot as a file inside CHARTS_DIR_ARIMA.
 
         Parameters
         ----------
@@ -326,20 +389,23 @@ class ArimaModel(BaseModel):
             Custom plot title. If not provided, defaults to:
             "Train vs Forecast" + (" vs Test" if test is not None else "")
             and appends ARIMA order information.
+        file_name : str, optional
+            If provided, the plot will be saved at
+            os.path.join(CHARTS_DIR_ARIMA, file_name).
         """
         forecast = self.forecast(steps)
 
-        plt.figure(figsize=(14, 6))
+        fig, ax = plt.subplots(figsize=(14, 6))
 
         # Plot train
-        plt.plot(self._result.series_original, label="Train", linewidth=2, color="blue")
+        ax.plot(self._result.series_original, label="Train", linewidth=2, color="blue")
 
         # Forecast line (dashed red)
         forecast_index = pd.RangeIndex(
             start=len(self._result.series_original),
             stop=len(self._result.series_original) + steps,
         )
-        plt.plot(
+        ax.plot(
             forecast_index,
             forecast.values,
             color="red",
@@ -354,7 +420,7 @@ class ArimaModel(BaseModel):
                 start=len(self._result.series_original),
                 stop=len(self._result.series_original) + len(test),
             )
-            plt.plot(
+            ax.plot(
                 test_index,
                 test.values,
                 color="green",
@@ -363,19 +429,35 @@ class ArimaModel(BaseModel):
                 label="Test",
             )
 
-        plt.legend()
+        ax.legend()
 
         # Build ARIMA order string
         order_str = f"ARIMA{self._result.order}"
-        # if self._result.m and self._result.D > 0:
-        #     order_str += f" x (0,{self._result.D},0,{self._result.m})"  # seasonal part
 
         # Title logic (append order string)
         default_title = "Train vs Forecast" + (" vs Test" if test is not None else "")
-        plt.title((title if title is not None else default_title) + f" | {order_str}")
+        final_title = (
+            title if title is not None else default_title
+        ) + f" | {order_str}"
+        ax.set_title(final_title)
 
-        plt.xlabel("Time")
-        plt.ylabel("Value")
-        plt.grid(True, linestyle="--", alpha=0.6)
-        plt.tight_layout()
+        ax.set_xlabel("Time")
+        ax.set_ylabel("Value")
+        ax.grid(True, linestyle="--", alpha=0.6)
+        fig.tight_layout()
+
+        # Save figure
+        os.makedirs(CHARTS_DIR_ARIMA, exist_ok=True)
+
+        order_str = "_".join(map(str, self._result.order))
+
+        if file_name is not None:
+            file_name = f"{file_name}_{order_str}.png"
+        else:
+            file_name = f"forecast_arima_{order_str}.png"
+
+        save_path = os.path.join(CHARTS_DIR_ARIMA, file_name)
+        fig.savefig(save_path, dpi=300)
+        print(f"Figure saved to: {save_path}")
+
         plt.show()
