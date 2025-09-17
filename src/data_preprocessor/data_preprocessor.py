@@ -3045,7 +3045,23 @@ class DataPreprocessor:
                 # fmt: on
 
             case DataQuality.GOLD:
-                pass
+                # MARKET
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.STOCK_MARKET.value,
+                    table_name=Table.MARKET.name,
+                    columns = [
+                        Column(name=Table.MARKET.Column.ID.value, data_type=DataType.SERIAL(), nullable=False),
+                        Column(name=Table.MARKET.Column.CODE.value, data_type=DataType.VARCHAR(), nullable=True),
+                        Column(name=Table.MARKET.Column.NAME.value, data_type=DataType.VARCHAR(), nullable=True),
+                        Column(name=Table.MARKET.Column.SAVE_PROGRESS_YEAR.value, data_type=DataType.INT(), nullable=True),
+                        Column(name=Table.MARKET.Column.CREATE_DATE.value, data_type=DataType.AUTO_TIMESTAMP(), nullable=True),
+                        Column(name=Table.MARKET.Column.UPDATE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
+                        Column(name=Table.MARKET.Column.DELETE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
+                    ],
+                    primary_keys=Table.MARKET.primary_key,
+                )
+                # fmt: on
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -3140,6 +3156,7 @@ class DataPreprocessor:
 
             case DataQuality.GOLD:
                 self._create_macroeconomics_tables(data_quality)
+                self._create_stock_market_tables(data_quality)
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}".')
@@ -7795,6 +7812,38 @@ class DataPreprocessor:
             f'Finish cleaning data in table "{Table.MARKET.__qualname__.lower()}".'
         )
 
+    def _transform_stock_market_market(self) -> None:
+        self._logger.log_info(
+            f'Start transforming data in "{Table.MARKET.__qualname__.lower()}".'
+        )
+
+        # Add logic for transforming data here
+        self._select_database(DataQuality.SILVER.value)
+        silver_df = self._select(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.MARKET.name,
+        )
+
+        gold_df = silver_df.drop(
+            columns=[
+                Table.MARKET.Column.CREATE_DATE.value,
+                Table.MARKET.Column.UPDATE_DATE.value,
+                Table.MARKET.Column.DELETE_DATE.value,
+            ]
+        )
+
+        self._select_database(DataQuality.GOLD.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.MARKET.name,
+            primary_keys=Table.MARKET.primary_key,
+            df=gold_df,
+        )
+
+        self._logger.log_info(
+            f'Finish transforming data in "{Table.MARKET.__qualname__.lower()}".'
+        )
+
     def _process_stock_market_market(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing stock market MARKET data for "{data_quality.value}".'
@@ -7808,7 +7857,7 @@ class DataPreprocessor:
                 self._clean_stock_market_market()
 
             case DataQuality.GOLD:
-                pass
+                self._transform_stock_market_market()
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
