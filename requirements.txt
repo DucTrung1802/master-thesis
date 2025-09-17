@@ -6,3 +6,7 @@ load_dotenv
 pandas
 nbformat
 matplotlib
+scipy
+statsmodels
+tqdm
+joblib

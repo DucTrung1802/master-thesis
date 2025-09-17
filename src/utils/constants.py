@@ -14,6 +14,7 @@ CHARTS_DIR_BASE = "../../charts"
 CHARTS_DIR_MACROECONOMICS = f"{CHARTS_DIR_BASE}/macroeconomics"
 CHARTS_DIR_STOCK_MARKET = f"{CHARTS_DIR_BASE}/stock_market"
 CHARTS_DIR_ENTERPRISE = f"{CHARTS_DIR_BASE}/enterprise"
+CHARTS_DIR_ARIMA = f"{CHARTS_DIR_BASE}/arima"
 
 PDF_OUTPUT_DIR = "../pdfs"
 
@@ -21,6 +22,20 @@ PDF_OUTPUT_DIR = "../pdfs"
 # TA CONFIGURATION
 # ===========================
 TA_LOG_FILE_BASE = f"{LOG_DIR}/ta"
+
+
+# ===========================
+# VISUALIZATION CONFIGURATION
+# ===========================
+SILVER_VISUALIZATION_LOG_FILE_BASE = f"../../{LOG_DIR}/silver_visualization"
+GOLD_VISUALIZATION_LOG_FILE_BASE = f"../../{LOG_DIR}/gold_visualization"
+ARIMA_VISUALIZATION_LOG_FILE_BASE = f"../../{LOG_DIR}/arima_visualization"
+
+
+# ===========================
+# TRAINED MODELS CONFIGURATION
+# ===========================
+TRAINED_MODELS_LOG_FILE_BASE = f"../../trained_models"
 
 
 # ===========================
