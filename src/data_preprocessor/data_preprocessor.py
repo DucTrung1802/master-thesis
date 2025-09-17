@@ -3128,7 +3128,31 @@ class DataPreprocessor:
                 # fmt: on
 
             case DataQuality.SILVER:
-                pass
+                # STOCK
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.ENTERPRISE.value,
+                    table_name=Table.STOCK.name,
+                    columns = [
+                        Column(name=Table.STOCK.Column.ID.value, data_type=DataType.SERIAL(), nullable=False),
+                        Column(name=Table.STOCK.Column.CODE.value, data_type=DataType.VARCHAR(), nullable=False),
+                        Column(name=Table.STOCK.Column.LISTED_SHARES.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(name=Table.STOCK.Column.OUTSTANDING_SHARES.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(name=Table.STOCK.Column.OUTSTANDING_RATE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.STOCK.Column.MARKET_CAP.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(name=Table.STOCK.Column.MARKET_ID.value, data_type=DataType.INT(), nullable=False),
+                        Column(name=Table.STOCK.Column.CREATE_DATE.value, data_type=DataType.AUTO_TIMESTAMP(), nullable=False),
+                        Column(name=Table.STOCK.Column.UPDATE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
+                        Column(name=Table.STOCK.Column.DELETE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
+                    ],
+                    primary_keys=Table.STOCK.primary_key,
+                    foreign_keys=[ForeignKey(
+                        column_name=Table.STOCK.Column.MARKET_ID.value, 
+                        ref_table=f"{Schema.STOCK_MARKET.value}.{Table.MARKET.name}", 
+                        ref_column=Table.MARKET.Column.ID.value,
+                    )],
+                )
+                # fmt: on
 
             case DataQuality.GOLD:
                 pass
@@ -8724,6 +8748,53 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish ingesting data in "{table_name}".')
 
+    def _clean_enterprise_stock_cafef(self) -> None:
+        key = (
+            ScrapeMainType.ENTERPRISE,
+            EnterpriseSubType.STOCK_INFORMATION,
+            StockInformationSource.CAFEF,
+        )
+
+        self._logger.log_info(
+            f'Start cleaning data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for cleaning data here
+        self._select_database(DataQuality.BRONZE.value)
+
+        bronze_df = self._select(
+            schema_name=Schema.ENTERPRISE.value,
+            table_name=Table.STOCK.name,
+        )
+
+        silver_df = bronze_df.drop(
+            columns=[
+                Table.STOCK.Column.ID.value,
+                Table.STOCK.Column.CREATE_DATE.value,
+                Table.STOCK.Column.UPDATE_DATE.value,
+                Table.STOCK.Column.DELETE_DATE.value,
+            ]
+        )
+
+        silver_df = self._clean(
+            df=silver_df,
+            clean_layer_list=[
+                CleanLayer.ORDER_BY([Table.STOCK.Column.CODE.value])
+            ],
+        )
+
+        self._select_database(DataQuality.SILVER.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.ENTERPRISE.value,
+            table_name=Table.STOCK.name,
+            primary_keys=Table.STOCK.primary_key,
+            df=silver_df,
+        )
+
+        self._logger.log_info(
+            f'Finish cleaning data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_enterprise_stock(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing enterprise STOCK data for "{data_quality.value}".'
@@ -8734,7 +8805,7 @@ class DataPreprocessor:
                 self._ingest_enterprise_stock_cafef()
 
             case DataQuality.SILVER:
-                pass
+                self._clean_enterprise_stock_cafef()
 
             case DataQuality.GOLD:
                 pass
