@@ -3181,6 +3181,30 @@ class DataPreprocessor:
                 )
                 # fmt: on
 
+                for stock_code in STOCK_CODES_TO_BE_EXPORTED_TO_GOLD_DB:
+                    # fmt: off
+                    self._database_driver.create_table(
+                        schema_name=Schema.ENTERPRISE.value,
+                        table_name=stock_code,
+                        columns = [
+                            Column(name="date", data_type=DataType.DATE(), nullable=False),
+                            Column(name="code", data_type=DataType.VARCHAR(), nullable=False),
+                            Column(name="market_id", data_type=DataType.INT(), nullable=True),
+                            Column(name="open", data_type=DataType.DECIMAL(), nullable=True),
+                            Column(name="high", data_type=DataType.DECIMAL(), nullable=True),
+                            Column(name="low", data_type=DataType.DECIMAL(), nullable=True),
+                            Column(name="close", data_type=DataType.DECIMAL(), nullable=True),
+                            Column(name="volume", data_type=DataType.DECIMAL(), nullable=True),
+                        ],
+                        primary_keys=["date"],
+                        foreign_keys=[ForeignKey(
+                            column_name="market_id", 
+                            ref_table=f"{Schema.STOCK_MARKET.value}.{Table.MARKET.name}", 
+                            ref_column=Table.MARKET.Column.ID.value,
+                        )],
+                    )
+                    # fmt: on
+
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
 
@@ -9004,6 +9028,94 @@ class DataPreprocessor:
                 ],
             )
 
+    def _transform_enterprise_daily_price_cafef(self) -> None:
+        key = (
+            ScrapeMainType.ENTERPRISE,
+            EnterpriseSubType.DAILY_PRICE,
+            DailyPriceSource.CAFEF,
+        )
+
+        self._logger.log_info(
+            f'Start transforming data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for transforming data here
+
+        # Get stock code from DB
+        if len(STOCK_CODES_TO_BE_EXPORTED_TO_GOLD_DB) == 0:
+            self.logger.error(
+                "No stock code to be exported to gold database. Please check the database."
+            )
+            return
+
+        available_stock_codes = []
+        for required_stock_code in STOCK_CODES_TO_BE_EXPORTED_TO_GOLD_DB:
+            self._select_database(DataQuality.GOLD.value)
+            stock_gold_df = self._select(
+                schema_name=Schema.ENTERPRISE.value,
+                table_name=Table.STOCK.name,
+                columns=[Table.STOCK.Column.CODE.value],
+                conditions=[
+                    Condition(
+                        column=Table.STOCK.Column.CODE.value,
+                        operator=SqlOperator.EQUAL_TO,
+                        value=str.upper(required_stock_code),
+                        data_type=DataType.VARCHAR,
+                    )
+                ],
+            )
+
+            stock_code = None
+            if stock_gold_df is not None and not stock_gold_df.empty:
+                stock_code = stock_gold_df.squeeze()
+                available_stock_codes.append(stock_code)
+
+            if not stock_code:
+                self.logger.error(
+                    f"Cannot find {stock_code} stock in database. Please check the database."
+                )
+                continue
+
+        if len(available_stock_codes) == 0:
+            self.logger.error(
+                "No stock code to be exported to gold database. Please check the database."
+            )
+            return
+
+        for stock_code in available_stock_codes:
+            self._select_database(DataQuality.BRONZE.value)
+            daily_price_bronze_df = self._select(
+                schema_name=Schema.ENTERPRISE.value,
+                table_name=Table.DAILY_PRICE.name,
+                conditions=[
+                    Condition(
+                        column=Table.STOCK.Column.CODE.value,
+                        operator=SqlOperator.EQUAL_TO,
+                        value=str.upper(required_stock_code),
+                        data_type=DataType.VARCHAR,
+                    )
+                ],
+            )
+
+            daily_price_gold_df = self._clean(
+                df=daily_price_bronze_df,
+                clean_layer_list=[
+                    CleanLayer.ORDER_BY([Table.DAILY_PRICE.Column.DATE.value])
+                ],
+            )
+
+            self._select_database(DataQuality.GOLD.value)
+            self._save_pandas_table_to_database(
+                schema_name=Schema.ENTERPRISE.value,
+                table_name=stock_code,
+                primary_keys=["date"],
+                df=daily_price_gold_df,
+            )
+
+        self._logger.log_info(
+            f'Finish transforming data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_enterprise_daily_price(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing enterprise DAILY PRICE data for "{data_quality.value}".'
@@ -9017,7 +9129,7 @@ class DataPreprocessor:
                 pass
 
             case DataQuality.GOLD:
-                pass
+                self._transform_enterprise_daily_price_cafef()
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
