@@ -19,7 +19,7 @@ from utils.utils import *
 load_dotenv()
 
 
-class TraninTestSplitter:
+class TrainTestSplitter:
     def __init__(self, logger: Logger):
         self._logger = logger
         self._database_driver = PostgreSQLDriver(logger=logger)
