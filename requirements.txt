@@ -15,3 +15,5 @@ nbformat
 matplotlib
 statsmodels
 tqdm
+sktime
+seaborn
