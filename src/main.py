@@ -2,7 +2,7 @@ import os
 
 from data_preprocessor.data_preprocessor import DataPreprocessor
 from logger.logger import Logger, LogType
-from train_test_splitter.train_test_splitter import TraninTestSplitter
+from train_test_splitter.train_test_splitter import TrainTestSplitter
 from utils.constants import LOG_FILE_BASE
 from web_scraper.web_scraper import WebScraper
 from utils.enums import *
@@ -19,7 +19,7 @@ def main():
     # my_data_preprocessor.ingest_silver_data()
     # my_data_preprocessor.ingest_gold_data()
 
-    my_train_test_splitter = TraninTestSplitter(logger=my_logger)
+    my_train_test_splitter = TrainTestSplitter(logger=my_logger)
 
     my_train_test_splitter.connect_to_database(
         database_name=os.getenv("GOLD_POSTGRES_DATABASE")
