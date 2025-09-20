@@ -164,6 +164,8 @@ class ArimaModel(BaseModel):
         elif mode == "sliding":
             if window_size is None:
                 raise ValueError("window_size must be set for sliding mode")
+
+            self._window_size = window_size
             train_init = df[
                 (df["ds"] < first_pet)
                 & (df["ds"] >= first_pet - pd.Timedelta(days=window_size))
@@ -249,7 +251,9 @@ class ArimaModel(BaseModel):
                 color="blue",
                 linestyle="--",
             )
-            axes[1].set_title("ARIMA Forecast vs Actual (Sliding Window)")
+            axes[1].set_title(
+                f"ARIMA Forecast vs Actual (Sliding Window, {self._window_size} days)"
+            )
             axes[1].set_xlabel("Date")
             axes[1].set_ylabel("Value")
             axes[1].legend()
