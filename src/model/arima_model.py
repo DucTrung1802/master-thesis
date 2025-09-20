@@ -123,132 +123,137 @@ class ArimaModel(BaseModel):
         self._model_fit = ARIMA(self._train_value_series, order=self._best_order)
         self._fitted = self._model_fit.fit()
 
-    def forecast(self, steps: int = None):
-        if not self._fitted:
-            raise ValueError("Model has not been fitted yet.")
-
-        if not steps:
-            steps = len(self._test_value_series)
-
-        self._forecast = self._fitted.forecast(steps)
-
-        return self._forecast
-
     def get_best_order(self):
         return self._best_order
 
-    def plot_forecast(
+    def rolling_forecast(
+        self, mode: str = "expanding", window_size: Optional[int] = None
+    ) -> pd.DataFrame:
+        """
+        Perform rolling forecast using ARIMA.append to avoid full refits.
+
+        Parameters
+        ----------
+        mode : str
+            "expanding" (default) or "sliding"
+        window_size : int, optional
+            Required if mode="sliding" (number of days for training window)
+        """
+        if not self._best_order:
+            raise ValueError("Model must be fitted before rolling_forecast.")
+
+        # Combine train + test for easy slicing
+        df = pd.DataFrame(
+            {
+                "ds": pd.concat([self._train_date_series, self._test_date_series]),
+                "y": pd.concat([self._train_value_series, self._test_value_series]),
+            }
+        ).sort_values("ds")
+
+        test = pd.DataFrame(
+            {"ds": self._test_date_series, "y": self._test_value_series}
+        )
+        test["ds_pet"] = test["ds"] - pd.Timedelta(days=7)
+
+        df_preds = []
+        first_pet = test.iloc[0]["ds_pet"]
+
+        # Initial training window
+        if mode == "expanding":
+            train_init = df[df["ds"] < first_pet]
+        elif mode == "sliding":
+            if window_size is None:
+                raise ValueError("window_size must be set for sliding mode")
+            train_init = df[
+                (df["ds"] < first_pet)
+                & (df["ds"] >= first_pet - pd.Timedelta(days=window_size))
+            ]
+        else:
+            raise ValueError("mode must be 'expanding' or 'sliding'")
+
+        # Fit once on initial window
+        model_refit = ARIMA(train_init["y"], order=self._best_order).fit()
+
+        # Iterate test set
+        for _, row in test.iterrows():
+            start_date = row["ds"]
+            test_point = df[df["ds"] == start_date]
+            if test_point.empty:
+                continue
+
+            # 1-step forecast
+            fc = model_refit.forecast(1).iloc[0]
+            df_preds.append(
+                {
+                    "ds": start_date,
+                    "actual_y": test_point.iloc[0]["y"],
+                    "test_pred": fc,
+                }
+            )
+
+            # Update with new observation
+            model_refit = model_refit.append([test_point.iloc[0]["y"]], refit=False)
+
+        return pd.DataFrame(df_preds)
+
+    def plot_rolling_forecast(
         self,
-        steps: int = None,
-        test: Optional[pd.Series] = None,
+        preds_expanding: pd.DataFrame,
+        preds_sliding: Optional[pd.DataFrame] = None,
         title: Optional[str] = None,
         file_name: Optional[str] = None,
     ):
         """
-        Plot training data, forecasted values, and optional test series.
-        Optionally save the plot as a file inside CHARTS_DIR_ARIMA.
-
-        Notes
-        -----
-        If a forecast has already been generated (via self.forecast),
-        it will be reused. Otherwise, a new forecast is computed.
+        Plot rolling forecast(s) vs test data.
+        Can show expanding and/or sliding in two subplots.
         """
-        if not self._fitted:
-            raise ValueError("Model has not been fitted yet.")
 
-        # Use existing forecast if available, else compute
-        if hasattr(self, "_forecast") and self._forecast is not None:
-            forecast = self._forecast
-        else:
-            if steps is None:
-                steps = len(test) if test is not None else 12
-            forecast = self.forecast(steps=steps)
-
-        # Forecast length
-        steps = len(forecast)
-
-        # Create figure with 2 subplots
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 10))
-
-        # ---------------- First subplot: Train + Forecast (+ Test) ----------------
-        ax1.plot(
-            self._train_date_series,
-            self._train_value_series,
-            label="Train",
-            linewidth=2,
-            color="blue",
+        fig, axes = plt.subplots(
+            2 if preds_sliding is not None else 1, 1, figsize=(14, 10), sharex=True
         )
 
-        # Forecast index
-        if test is not None:
-            forecast_index = self._test_date_series[:steps]
-        else:
-            forecast_index = pd.date_range(
-                start=self._train_date_series.iloc[-1],
-                periods=steps + 1,
-                freq=pd.infer_freq(self._train_date_series),
-            )[1:]
+        if preds_sliding is None:
+            axes = [axes]  # make iterable
 
-        # Plot forecast
-        ax1.plot(
-            forecast_index,
-            forecast.values,
+        # --- Expanding ---
+        axes[0].plot(
+            self._test_date_series,
+            self._test_value_series,
+            label="Test (Actual)",
+            color="green",
+        )
+        axes[0].plot(
+            preds_expanding["ds"],
+            preds_expanding["test_pred"],
+            label="Forecast (Expanding)",
             color="red",
             linestyle="--",
-            linewidth=2,
-            label="Forecast",
         )
+        axes[0].set_title("ARIMA Forecast vs Actual (Expanding Window)")
+        axes[0].set_ylabel("Value")
+        axes[0].legend()
+        axes[0].grid(True, linestyle="--", alpha=0.7)
 
-        # Plot test if provided
-        if test is not None:
-            ax1.plot(
-                self._test_date_series[:steps],
-                test.values[:steps],
+        # --- Sliding ---
+        if preds_sliding is not None:
+            axes[1].plot(
+                self._test_date_series,
+                self._test_value_series,
+                label="Test (Actual)",
                 color="green",
-                linestyle="-",
-                linewidth=2,
-                label="Test",
             )
-
-        ax1.legend()
-        order_str = f"ARIMA{self._best_order}"
-        default_title = "Train vs Forecast" + (" vs Test" if test is not None else "")
-        final_title = (
-            title if title is not None else default_title
-        ) + f" | {order_str}"
-        ax1.set_title(final_title)
-        ax1.set_ylabel("Value")
-        ax1.grid(True, linestyle="--", alpha=0.6)
-
-        # ---------------- Second subplot: Forecast vs Test only ----------------
-        if test is not None:
-            ax2.plot(
-                forecast_index,
-                forecast.values,
-                color="red",
+            axes[1].plot(
+                preds_sliding["ds"],
+                preds_sliding["test_pred"],
+                label="Forecast (Sliding)",
+                color="blue",
                 linestyle="--",
-                linewidth=2,
-                label="Forecast",
             )
-            ax2.plot(
-                self._test_date_series[:steps],
-                test.values[:steps],
-                color="green",
-                linestyle="-",
-                linewidth=2,
-                label="Test",
-            )
-
-            ax2.legend()
-            ax2.set_title("Forecast vs Test only (Zoomed)")
-            ax2.set_xlabel("Time")
-            ax2.set_ylabel("Value")
-            ax2.grid(True, linestyle="--", alpha=0.6)
-
-            # 🔑 Limit x-axis to test data only
-            ax2.set_xlim(
-                self._test_date_series.iloc[0], self._test_date_series.iloc[steps - 1]
-            )
+            axes[1].set_title("ARIMA Forecast vs Actual (Sliding Window)")
+            axes[1].set_xlabel("Date")
+            axes[1].set_ylabel("Value")
+            axes[1].legend()
+            axes[1].grid(True, linestyle="--", alpha=0.7)
 
         fig.tight_layout()
 
@@ -259,7 +264,7 @@ class ArimaModel(BaseModel):
         if file_name is not None:
             file_name = f"{file_name}_{order_str_filename}.png"
         else:
-            file_name = f"forecast_arima_{order_str_filename}.png"
+            file_name = f"rolling_forecast_arima_{order_str_filename}.png"
 
         save_path = os.path.join(CHARTS_DIR_ARIMA, file_name)
         fig.savefig(save_path, dpi=300)
