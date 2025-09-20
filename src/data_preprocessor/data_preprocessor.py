@@ -3045,7 +3045,23 @@ class DataPreprocessor:
                 # fmt: on
 
             case DataQuality.GOLD:
-                pass
+                # MARKET
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.STOCK_MARKET.value,
+                    table_name=Table.MARKET.name,
+                    columns = [
+                        Column(name=Table.MARKET.Column.ID.value, data_type=DataType.SERIAL(), nullable=False),
+                        Column(name=Table.MARKET.Column.CODE.value, data_type=DataType.VARCHAR(), nullable=True),
+                        Column(name=Table.MARKET.Column.NAME.value, data_type=DataType.VARCHAR(), nullable=True),
+                        Column(name=Table.MARKET.Column.SAVE_PROGRESS_YEAR.value, data_type=DataType.INT(), nullable=True),
+                        Column(name=Table.MARKET.Column.CREATE_DATE.value, data_type=DataType.AUTO_TIMESTAMP(), nullable=True),
+                        Column(name=Table.MARKET.Column.UPDATE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
+                        Column(name=Table.MARKET.Column.DELETE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
+                    ],
+                    primary_keys=Table.MARKET.primary_key,
+                )
+                # fmt: on
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -3112,10 +3128,82 @@ class DataPreprocessor:
                 # fmt: on
 
             case DataQuality.SILVER:
-                pass
+                # STOCK
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.ENTERPRISE.value,
+                    table_name=Table.STOCK.name,
+                    columns = [
+                        Column(name=Table.STOCK.Column.ID.value, data_type=DataType.SERIAL(), nullable=False),
+                        Column(name=Table.STOCK.Column.CODE.value, data_type=DataType.VARCHAR(), nullable=False),
+                        Column(name=Table.STOCK.Column.LISTED_SHARES.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(name=Table.STOCK.Column.OUTSTANDING_SHARES.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(name=Table.STOCK.Column.OUTSTANDING_RATE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.STOCK.Column.MARKET_CAP.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(name=Table.STOCK.Column.MARKET_ID.value, data_type=DataType.INT(), nullable=False),
+                        Column(name=Table.STOCK.Column.CREATE_DATE.value, data_type=DataType.AUTO_TIMESTAMP(), nullable=False),
+                        Column(name=Table.STOCK.Column.UPDATE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
+                        Column(name=Table.STOCK.Column.DELETE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
+                    ],
+                    primary_keys=Table.STOCK.primary_key,
+                    foreign_keys=[ForeignKey(
+                        column_name=Table.STOCK.Column.MARKET_ID.value, 
+                        ref_table=f"{Schema.STOCK_MARKET.value}.{Table.MARKET.name}", 
+                        ref_column=Table.MARKET.Column.ID.value,
+                    )],
+                )
+                # fmt: on
 
             case DataQuality.GOLD:
-                pass
+                # STOCK
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.ENTERPRISE.value,
+                    table_name=Table.STOCK.name,
+                    columns = [
+                        Column(name=Table.STOCK.Column.ID.value, data_type=DataType.SERIAL(), nullable=False),
+                        Column(name=Table.STOCK.Column.CODE.value, data_type=DataType.VARCHAR(), nullable=False),
+                        Column(name=Table.STOCK.Column.LISTED_SHARES.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(name=Table.STOCK.Column.OUTSTANDING_SHARES.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(name=Table.STOCK.Column.OUTSTANDING_RATE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.STOCK.Column.MARKET_CAP.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(name=Table.STOCK.Column.MARKET_ID.value, data_type=DataType.INT(), nullable=False),
+                        Column(name=Table.STOCK.Column.CREATE_DATE.value, data_type=DataType.AUTO_TIMESTAMP(), nullable=False),
+                        Column(name=Table.STOCK.Column.UPDATE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
+                        Column(name=Table.STOCK.Column.DELETE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
+                    ],
+                    primary_keys=Table.STOCK.primary_key,
+                    foreign_keys=[ForeignKey(
+                        column_name=Table.STOCK.Column.MARKET_ID.value, 
+                        ref_table=f"{Schema.STOCK_MARKET.value}.{Table.MARKET.name}", 
+                        ref_column=Table.MARKET.Column.ID.value,
+                    )],
+                )
+                # fmt: on
+
+                for stock_code in STOCK_CODES_TO_BE_EXPORTED_TO_GOLD_DB:
+                    # fmt: off
+                    self._database_driver.create_table(
+                        schema_name=Schema.ENTERPRISE.value,
+                        table_name=stock_code,
+                        columns = [
+                            Column(name="date", data_type=DataType.DATE(), nullable=False),
+                            Column(name="code", data_type=DataType.VARCHAR(), nullable=False),
+                            Column(name="market_id", data_type=DataType.INT(), nullable=True),
+                            Column(name="open", data_type=DataType.DECIMAL(), nullable=True),
+                            Column(name="high", data_type=DataType.DECIMAL(), nullable=True),
+                            Column(name="low", data_type=DataType.DECIMAL(), nullable=True),
+                            Column(name="close", data_type=DataType.DECIMAL(), nullable=True),
+                            Column(name="volume", data_type=DataType.DECIMAL(), nullable=True),
+                        ],
+                        primary_keys=["date"],
+                        foreign_keys=[ForeignKey(
+                            column_name="market_id", 
+                            ref_table=f"{Schema.STOCK_MARKET.value}.{Table.MARKET.name}", 
+                            ref_column=Table.MARKET.Column.ID.value,
+                        )],
+                    )
+                    # fmt: on
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -3140,6 +3228,8 @@ class DataPreprocessor:
 
             case DataQuality.GOLD:
                 self._create_macroeconomics_tables(data_quality)
+                self._create_stock_market_tables(data_quality)
+                self._create_enterprise_tables(data_quality)
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}".')
@@ -3423,7 +3513,9 @@ class DataPreprocessor:
         gold_df = standardize_time_frame(df=gold_df)
 
         cols_to_interpolate = gold_df.columns.difference(["date"])
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(method="linear")
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
+            method="linear"
+        )
 
         self._select_database(DataQuality.GOLD.value)
         self._save_pandas_table_to_database(
@@ -7795,6 +7887,38 @@ class DataPreprocessor:
             f'Finish cleaning data in table "{Table.MARKET.__qualname__.lower()}".'
         )
 
+    def _transform_stock_market_market(self) -> None:
+        self._logger.log_info(
+            f'Start transforming data in "{Table.MARKET.__qualname__.lower()}".'
+        )
+
+        # Add logic for transforming data here
+        self._select_database(DataQuality.SILVER.value)
+        silver_df = self._select(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.MARKET.name,
+        )
+
+        gold_df = silver_df.drop(
+            columns=[
+                Table.MARKET.Column.CREATE_DATE.value,
+                Table.MARKET.Column.UPDATE_DATE.value,
+                Table.MARKET.Column.DELETE_DATE.value,
+            ]
+        )
+
+        self._select_database(DataQuality.GOLD.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.MARKET.name,
+            primary_keys=Table.MARKET.primary_key,
+            df=gold_df,
+        )
+
+        self._logger.log_info(
+            f'Finish transforming data in "{Table.MARKET.__qualname__.lower()}".'
+        )
+
     def _process_stock_market_market(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing stock market MARKET data for "{data_quality.value}".'
@@ -7808,7 +7932,7 @@ class DataPreprocessor:
                 self._clean_stock_market_market()
 
             case DataQuality.GOLD:
-                pass
+                self._transform_stock_market_market()
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -8675,6 +8799,90 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish ingesting data in "{table_name}".')
 
+    def _clean_enterprise_stock_cafef(self) -> None:
+        key = (
+            ScrapeMainType.ENTERPRISE,
+            EnterpriseSubType.STOCK_INFORMATION,
+            StockInformationSource.CAFEF,
+        )
+
+        self._logger.log_info(
+            f'Start cleaning data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for cleaning data here
+        self._select_database(DataQuality.BRONZE.value)
+
+        bronze_df = self._select(
+            schema_name=Schema.ENTERPRISE.value,
+            table_name=Table.STOCK.name,
+        )
+
+        silver_df = bronze_df.drop(
+            columns=[
+                Table.STOCK.Column.ID.value,
+                Table.STOCK.Column.CREATE_DATE.value,
+                Table.STOCK.Column.UPDATE_DATE.value,
+                Table.STOCK.Column.DELETE_DATE.value,
+            ]
+        )
+
+        silver_df = self._clean(
+            df=silver_df,
+            clean_layer_list=[CleanLayer.ORDER_BY([Table.STOCK.Column.CODE.value])],
+        )
+
+        self._select_database(DataQuality.SILVER.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.ENTERPRISE.value,
+            table_name=Table.STOCK.name,
+            primary_keys=Table.STOCK.primary_key,
+            df=silver_df,
+        )
+
+        self._logger.log_info(
+            f'Finish cleaning data in table "{format_key_for_table(key)}".'
+        )
+
+    def _transform_enterprise_stock_cafef(self) -> None:
+        key = (
+            ScrapeMainType.ENTERPRISE,
+            EnterpriseSubType.STOCK_INFORMATION,
+            StockInformationSource.CAFEF,
+        )
+
+        self._logger.log_info(
+            f'Start transforming data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for transforming data here
+        self._select_database(DataQuality.SILVER.value)
+        silver_df = self._select(
+            schema_name=Schema.ENTERPRISE.value,
+            table_name=Table.STOCK.name,
+        )
+
+        gold_df = silver_df.drop(
+            columns=[
+                Table.STOCK.Column.ID.value,
+                Table.STOCK.Column.CREATE_DATE.value,
+                Table.STOCK.Column.UPDATE_DATE.value,
+                Table.STOCK.Column.DELETE_DATE.value,
+            ]
+        )
+
+        self._select_database(DataQuality.GOLD.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.ENTERPRISE.value,
+            table_name=Table.STOCK.name,
+            primary_keys=Table.STOCK.primary_key,
+            df=gold_df,
+        )
+
+        self._logger.log_info(
+            f'Finish transforming data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_enterprise_stock(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing enterprise STOCK data for "{data_quality.value}".'
@@ -8685,10 +8893,10 @@ class DataPreprocessor:
                 self._ingest_enterprise_stock_cafef()
 
             case DataQuality.SILVER:
-                pass
+                self._clean_enterprise_stock_cafef()
 
             case DataQuality.GOLD:
-                pass
+                self._transform_enterprise_stock_cafef()
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -8820,6 +9028,94 @@ class DataPreprocessor:
                 ],
             )
 
+    def _transform_enterprise_daily_price_cafef(self) -> None:
+        key = (
+            ScrapeMainType.ENTERPRISE,
+            EnterpriseSubType.DAILY_PRICE,
+            DailyPriceSource.CAFEF,
+        )
+
+        self._logger.log_info(
+            f'Start transforming data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for transforming data here
+
+        # Get stock code from DB
+        if len(STOCK_CODES_TO_BE_EXPORTED_TO_GOLD_DB) == 0:
+            self.logger.error(
+                "No stock code to be exported to gold database. Please check the database."
+            )
+            return
+
+        available_stock_codes = []
+        for required_stock_code in STOCK_CODES_TO_BE_EXPORTED_TO_GOLD_DB:
+            self._select_database(DataQuality.GOLD.value)
+            stock_gold_df = self._select(
+                schema_name=Schema.ENTERPRISE.value,
+                table_name=Table.STOCK.name,
+                columns=[Table.STOCK.Column.CODE.value],
+                conditions=[
+                    Condition(
+                        column=Table.STOCK.Column.CODE.value,
+                        operator=SqlOperator.EQUAL_TO,
+                        value=str.upper(required_stock_code),
+                        data_type=DataType.VARCHAR,
+                    )
+                ],
+            )
+
+            stock_code = None
+            if stock_gold_df is not None and not stock_gold_df.empty:
+                stock_code = stock_gold_df.squeeze()
+                available_stock_codes.append(stock_code)
+
+            if not stock_code:
+                self.logger.error(
+                    f"Cannot find {stock_code} stock in database. Please check the database."
+                )
+                continue
+
+        if len(available_stock_codes) == 0:
+            self.logger.error(
+                "No stock code to be exported to gold database. Please check the database."
+            )
+            return
+
+        for stock_code in available_stock_codes:
+            self._select_database(DataQuality.BRONZE.value)
+            daily_price_bronze_df = self._select(
+                schema_name=Schema.ENTERPRISE.value,
+                table_name=Table.DAILY_PRICE.name,
+                conditions=[
+                    Condition(
+                        column=Table.STOCK.Column.CODE.value,
+                        operator=SqlOperator.EQUAL_TO,
+                        value=str.upper(stock_code),
+                        data_type=DataType.VARCHAR,
+                    )
+                ],
+            )
+
+            daily_price_gold_df = self._clean(
+                df=daily_price_bronze_df,
+                clean_layer_list=[
+                    CleanLayer.ORDER_BY([Table.DAILY_PRICE.Column.DATE.value])
+                ],
+            )
+
+            self._select_database(DataQuality.GOLD.value)
+            self._save_pandas_table_to_database(
+                schema_name=Schema.ENTERPRISE.value,
+                table_name=stock_code,
+                primary_keys=["date"],
+                df=daily_price_gold_df,
+            )
+
+        self._logger.log_info(
+            f'Finish transforming data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_enterprise_daily_price(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing enterprise DAILY PRICE data for "{data_quality.value}".'
@@ -8833,7 +9129,7 @@ class DataPreprocessor:
                 pass
 
             case DataQuality.GOLD:
-                pass
+                self._transform_enterprise_daily_price_cafef()
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -8849,56 +9145,56 @@ class DataPreprocessor:
     def _process_data(self, data_quality: DataQuality) -> None:
         self._logger.log_info(f'Start processing data for "{data_quality.value}".')
 
-        # Macroeconomics
-        self._process_macroeconomics_gdp(data_quality)
-        self._process_macroeconomics_cpi(data_quality)
-        self._process_macroeconomics_ppi(data_quality)
-        self._process_macroeconomics_ipi(data_quality)
-        self._process_macroeconomics_xpi(data_quality)
-        self._process_macroeconomics_mpi(data_quality)
-        self._process_macroeconomics_population(data_quality)
-        self._process_macroeconomics_labor(data_quality)
-        self._process_macroeconomics_retail(data_quality)
-        self._process_macroeconomics_pmi(data_quality)
-        self._process_macroeconomics_iip(data_quality)
-        self._process_macroeconomics_ipv(data_quality)
-        self._process_macroeconomics_mip(data_quality)
-        self._process_macroeconomics_fa_by_house_types(data_quality)
-        self._process_macroeconomics_it_bop(data_quality)
-        self._process_macroeconomics_tsbr(data_quality)
-        self._process_macroeconomics_tsbe(data_quality)
-        self._process_macroeconomics_gd(data_quality)
-        self._process_macroeconomics_brd(data_quality)
-        self._process_macroeconomics_iisd(data_quality)
-        self._process_macroeconomics_treg(data_quality)
-        self._process_macroeconomics_credit(data_quality)
-        self._process_macroeconomics_mobilization(data_quality)
-        self._process_macroeconomics_exchange_rate(data_quality)
-        self._process_macroeconomics_iir(data_quality)
-        self._process_macroeconomics_rrrr(data_quality)
-        self._process_macroeconomics_fdi_sector(data_quality)
-        self._process_macroeconomics_fdi_rd(data_quality)
-        self._process_macroeconomics_export(data_quality)
-        self._process_macroeconomics_import(data_quality)
-        self._process_macroeconomics_gold_price(data_quality)
-        self._process_macroeconomics_oil_price(data_quality)
-        self._process_macroeconomics_dow_jones(data_quality)
-        self._process_macroeconomics_nyse_composite(data_quality)
-        self._process_macroeconomics_snp_500(data_quality)
-        self._process_macroeconomics_nasdaq_composite(data_quality)
-        self._process_macroeconomics_nasdaq_100(data_quality)
+        # # Macroeconomics
+        # self._process_macroeconomics_gdp(data_quality)
+        # self._process_macroeconomics_cpi(data_quality)
+        # self._process_macroeconomics_ppi(data_quality)
+        # self._process_macroeconomics_ipi(data_quality)
+        # self._process_macroeconomics_xpi(data_quality)
+        # self._process_macroeconomics_mpi(data_quality)
+        # self._process_macroeconomics_population(data_quality)
+        # self._process_macroeconomics_labor(data_quality)
+        # self._process_macroeconomics_retail(data_quality)
+        # self._process_macroeconomics_pmi(data_quality)
+        # self._process_macroeconomics_iip(data_quality)
+        # self._process_macroeconomics_ipv(data_quality)
+        # self._process_macroeconomics_mip(data_quality)
+        # self._process_macroeconomics_fa_by_house_types(data_quality)
+        # self._process_macroeconomics_it_bop(data_quality)
+        # self._process_macroeconomics_tsbr(data_quality)
+        # self._process_macroeconomics_tsbe(data_quality)
+        # self._process_macroeconomics_gd(data_quality)
+        # self._process_macroeconomics_brd(data_quality)
+        # self._process_macroeconomics_iisd(data_quality)
+        # self._process_macroeconomics_treg(data_quality)
+        # self._process_macroeconomics_credit(data_quality)
+        # self._process_macroeconomics_mobilization(data_quality)
+        # self._process_macroeconomics_exchange_rate(data_quality)
+        # self._process_macroeconomics_iir(data_quality)
+        # self._process_macroeconomics_rrrr(data_quality)
+        # self._process_macroeconomics_fdi_sector(data_quality)
+        # self._process_macroeconomics_fdi_rd(data_quality)
+        # self._process_macroeconomics_export(data_quality)
+        # self._process_macroeconomics_import(data_quality)
+        # self._process_macroeconomics_gold_price(data_quality)
+        # self._process_macroeconomics_oil_price(data_quality)
+        # self._process_macroeconomics_dow_jones(data_quality)
+        # self._process_macroeconomics_nyse_composite(data_quality)
+        # self._process_macroeconomics_snp_500(data_quality)
+        # self._process_macroeconomics_nasdaq_composite(data_quality)
+        # self._process_macroeconomics_nasdaq_100(data_quality)
 
-        # Stock market
-        self._process_stock_market_market(data_quality)
-        self._process_stock_market_vn_index(data_quality)
-        self._process_stock_market_hnx_index(data_quality)
-        self._process_stock_market_vn_30_index(data_quality)
-        self._process_stock_market_vn_100_index(data_quality)
-        self._process_stock_market_hnx_30_index(data_quality)
-        self._process_stock_market_upcom_index(data_quality)
+        # # Stock market
+        # self._process_stock_market_market(data_quality)
+        # self._process_stock_market_vn_index(data_quality)
+        # self._process_stock_market_hnx_index(data_quality)
+        # self._process_stock_market_vn_30_index(data_quality)
+        # self._process_stock_market_vn_100_index(data_quality)
+        # self._process_stock_market_hnx_30_index(data_quality)
+        # self._process_stock_market_upcom_index(data_quality)
 
-        # Enterprise
-        self._process_enterprise_stock(data_quality)
+        # # Enterprise
+        # self._process_enterprise_stock(data_quality)
         self._process_enterprise_daily_price(data_quality)
 
         self._logger.log_info(f'Finish processing data for "{data_quality.value}".')
