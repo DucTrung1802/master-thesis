@@ -17,3 +17,4 @@ statsmodels
 tqdm
 sktime
 seaborn
+xgboost
