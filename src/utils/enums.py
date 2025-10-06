@@ -2096,3 +2096,7 @@ class Table:
 
         name = "daily_price"
         primary_key = [Column.DATE.value, Column.CODE.value]
+
+
+class FeatureSelectorType(Enum):
+    XGB_REGRESSOR = "xgb_regressor"
