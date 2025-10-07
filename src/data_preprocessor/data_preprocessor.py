@@ -8985,6 +8985,9 @@ class DataPreprocessor:
             year_list = [year for year in year_list if year > process_year]
 
             for year in year_list:
+                self._logger.log_info(
+                    f'Ingesting data for market "{market_code}" in year "{year}".'
+                )
                 self._save_pandas_table_to_database(
                     schema_name=Schema.ENTERPRISE.value,
                     table_name=Table.DAILY_PRICE.name,
