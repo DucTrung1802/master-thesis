@@ -2861,6 +2861,51 @@ class DataPreprocessor:
                 )
                 # fmt: on
 
+                # G_IPV
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.G_IPV.name,
+                    columns=[
+                        Column(name=Table.G_IPV.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.G_IPV.Column.ALUMINIUM.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.ANIMAL_FEED.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.AQUATIC_FEED.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.BEER.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.CARS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.CASUAL_CLOTHES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.CEMENT.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.CHEMICAL_PAINTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.CIGARETTES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.COAL_CLEAN_COAL.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.COMMERCIAL_TAP_WATER.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.ELECTRICITY_PRODUCED.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.EXTRACTED_CRUDE_OIL.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.FRESH_MILK.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.GASOLINE_OIL.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.GRANULATED_SUGAR.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.IRON_CRUDE_STEEL.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.LEATHER_SHOES_AND_SANDALS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.LIQUIDIZED_GAS_LPG.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.MOBILE_PHONES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.MONONATRI_GLUTAMAT.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.MOTORCYCLES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.NPK_MIXED_FERTILIZERS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.NATURAL_FABRICS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.NATURAL_GAS_AIR.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.PHONE_ACCESSORIES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.POWDERED_MILK.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.PROCESSED_SEAFOOD.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.ROLLED_STEEL.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.STEEL_BARS_ANGLE_STEEL.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.SYNTHETIC_FABRICS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.TELEVISION.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.UREA_FERTILIZER.value, data_type=DataType.FLOAT(), nullable=True),
+                    ],
+                    primary_keys=Table.G_IPV.primary_key,
+                )
+                # fmt: on
+
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
 
@@ -4938,6 +4983,47 @@ class DataPreprocessor:
             f'Finish cleaning data in table "{format_key_for_table(key)}".'
         )
 
+    def _transform_macroeconomics_ipv_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.IPV,
+            IpvSource.VIETSTOCK,
+        )
+
+        self._logger.log_info(
+            f'Start transforming data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for transforming data here
+        self._select_database(DataQuality.SILVER.value)
+        silver_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.IPV.name,
+        )
+
+        gold_df = make_date_time_index_for_dataframe(df=silver_df)
+        gold_df = standardize_time_frame(df=gold_df)
+
+        cols_to_interpolate = gold_df.columns.difference(["date"])
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
+            pd.to_numeric, errors="coerce"
+        )
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
+            method="linear"
+        )
+
+        self._select_database(DataQuality.GOLD.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.G_IPV.name,
+            primary_keys=Table.G_IPV.primary_key,
+            df=gold_df,
+        )
+
+        self._logger.log_info(
+            f'Finish transforming data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_macroeconomics_ipv(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing macroeconomics IPV data for "{data_quality.value}".'
@@ -4951,7 +5037,7 @@ class DataPreprocessor:
                 self._clean_macroeconomics_ipv_vietstock()
 
             case DataQuality.GOLD:
-                pass
+                self._transform_macroeconomics_ipv_vietstock()
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -9440,11 +9526,11 @@ class DataPreprocessor:
         # self._process_macroeconomics_xpi(data_quality)
         # self._process_macroeconomics_mpi(data_quality)
         # self._process_macroeconomics_population(data_quality)
-        self._process_macroeconomics_labor(data_quality)
+        # self._process_macroeconomics_labor(data_quality)
         # self._process_macroeconomics_retail(data_quality)
         # self._process_macroeconomics_pmi(data_quality)
         # self._process_macroeconomics_iip(data_quality)
-        # self._process_macroeconomics_ipv(data_quality)
+        self._process_macroeconomics_ipv(data_quality)
         # self._process_macroeconomics_mip(data_quality)
         # self._process_macroeconomics_fa_by_house_types(data_quality)
         # self._process_macroeconomics_it_bop(data_quality)
