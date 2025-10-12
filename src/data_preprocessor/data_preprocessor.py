@@ -2906,6 +2906,101 @@ class DataPreprocessor:
                 )
                 # fmt: on
 
+                # G_MIP
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.G_MIP.name,
+                    columns=[
+                        Column(name=Table.G_MIP.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.G_MIP.Column.AIR_CONDITIONERS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.ANIMAL_AND_POULTRY_FEED.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.ANTIMONY_ORE_AND_ANTIMONY_CONCENTRATE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.APATITE_ORE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.AQUACULTURE_FEED.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.ASSEMBLED_CARS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.ASSEMBLED_MOTORCYCLES_AND_MOPEDS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.ASSEMBLED_TVS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.BATH_MILK_AND_FACIAL_CLEANSER.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.BEER.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.CANNED_FRUITS_AND_NUTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.CANNED_MEAT.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.CANNED_SEAFOOD.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.CANNED_VEGETABLES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.CAR_AND_TRACTOR_TIRES_INFLATABLE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.CAST_OR_OTHER_ROUGH_IRON_AND_STEEL.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.CASUAL_CLOTHING.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.CEMENT.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.CHEMICAL_FERTILIZERS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.CLEAN_COAL.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.COMMERCIAL_TAP_WATER.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.COPPER_ORE_AND_COPPER_CONCENTRATE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.CRUDE_OIL_EXTRACTION.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.DIGITAL_CAMERAS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.DOMESTIC_CERAMICS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.DOMESTIC_CRUDE_OIL_EXTRACTION.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.EXTRACTED_STONE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.FABRIC.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.FABRIC_SHOES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.FIBER.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.FIBER_CEMENT_ROOFING_SHEETS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.FIRED_BRICKS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.FIRED_TILES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.FISH_SAUCE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.FRESH_MILK.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.FROZEN_SEAFOOD.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.GENERATED_ELECTRICITY.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.GRANULATED_SUGAR.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.GRAVEL_AND_PEBBLES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.GROUND_COFFEE_AND_INSTANT_COFFEE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.HERBICIDES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.HOUSEHOLD_ELECTRIC_FANS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.HOUSEHOLD_REFRIGERATORS_AND_FREEZERS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.HOUSEHOLD_WASHING_MACHINES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.IRON_ORE_AND_IRON_CONCENTRATE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.LANDLINE_PHONES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.LAUNDRY_DETERGENT_AND_CLEANING_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.LEATHER_SHOES_AND_BOOTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.LIGHT_BULBS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.MILLED_RICE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.MINERAL_WATER.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.MOBILE_PHONES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.MOTORCYCLE_AND_BICYCLE_TIRES_INFLATABLE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.MSG_MONOSODIUM_GLUTAMATE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.NATURAL_GAS_IN_GAS_FORM.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.NPK_FERTILIZERS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.PAPER_AND_CARDBOARD.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.PESTICIDES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.PLASTIC_PACKAGING_AND_BAGS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.POWDERED_MILK.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.PRINTED_NEWSPAPERS_AND_OTHER_PRINTING_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.PRINTERS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.PROCESSED_TEA.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.PURIFIED_WATER.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.REFINED_VEGETABLE_OIL.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.ROLLED_STEEL_AND_SHAPED_STEEL.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.SANITARY_WARE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.SAWN_TIMBER.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.SEA_SALT.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.SHAMPOO_AND_CONDITIONER.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.SPIRITS_AND_WHITE_WINE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.SPORTS_SHOES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.STANDARD_BATTERIES_1_5V.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.THRESHING_MACHINES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.TITANIUM_ORE_AND_TITANIUM_CONCENTRATE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.TOBACCO.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.TOOTHPASTE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.TUBES_FOR_BICYCLES_AND_MOTORCYCLES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.TUBES_FOR_CARS_AND_AIRCRAFT.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.VARIOUS_TYPES_OF_BATTERIES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.VARIOUS_TYPES_OF_BICYCLES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.VARIOUS_TYPES_OF_SAND.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.YELLOW_PHOSPHORUS.value, data_type=DataType.FLOAT(), nullable=True),
+                    ],
+                    primary_keys=Table.G_MIP.primary_key,
+                )
+                # fmt: on
+
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
 
@@ -5127,6 +5222,47 @@ class DataPreprocessor:
             f'Finish cleaning data in table "{format_key_for_table(key)}".'
         )
 
+    def _transform_macroeconomics_mip_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.MIP,
+            MipSource.VIETSTOCK,
+        )
+
+        self._logger.log_info(
+            f'Start transforming data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for transforming data here
+        self._select_database(DataQuality.SILVER.value)
+        silver_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.MIP.name,
+        )
+
+        gold_df = make_date_time_index_for_dataframe(df=silver_df)
+        gold_df = standardize_time_frame(df=gold_df)
+
+        cols_to_interpolate = gold_df.columns.difference(["date"])
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
+            pd.to_numeric, errors="coerce"
+        )
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
+            method="linear"
+        )
+
+        self._select_database(DataQuality.GOLD.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.G_MIP.name,
+            primary_keys=Table.G_MIP.primary_key,
+            df=gold_df,
+        )
+
+        self._logger.log_info(
+            f'Finish transforming data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_macroeconomics_mip(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing macroeconomics MIP data for "{data_quality.value}".'
@@ -5140,7 +5276,7 @@ class DataPreprocessor:
                 self._clean_macroeconomics_mip_vietstock()
 
             case DataQuality.GOLD:
-                pass
+                self._transform_macroeconomics_mip_vietstock()
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -9530,8 +9666,8 @@ class DataPreprocessor:
         # self._process_macroeconomics_retail(data_quality)
         # self._process_macroeconomics_pmi(data_quality)
         # self._process_macroeconomics_iip(data_quality)
-        self._process_macroeconomics_ipv(data_quality)
-        # self._process_macroeconomics_mip(data_quality)
+        # self._process_macroeconomics_ipv(data_quality)
+        self._process_macroeconomics_mip(data_quality)
         # self._process_macroeconomics_fa_by_house_types(data_quality)
         # self._process_macroeconomics_it_bop(data_quality)
         # self._process_macroeconomics_tsbr(data_quality)

@@ -1497,6 +1497,108 @@ class Table:
         name = "mip"
         primary_key = [Column.YEAR.value]
 
+    class G_MIP:
+        class Column(Enum):
+            DATE = "date"
+            AIR_CONDITIONERS = "air_conditioners"
+            ANIMAL_AND_POULTRY_FEED = "animal_and_poultry_feed"
+            ANTIMONY_ORE_AND_ANTIMONY_CONCENTRATE = (
+                "antimony_ore_and_antimony_concentrate"
+            )
+            APATITE_ORE = "apatite_ore"
+            AQUACULTURE_FEED = "aquaculture_feed"
+            ASSEMBLED_CARS = "assembled_cars"
+            ASSEMBLED_MOTORCYCLES_AND_MOPEDS = "assembled_motorcycles_and_mopeds"
+            ASSEMBLED_TVS = "assembled_tvs"
+            BATH_MILK_AND_FACIAL_CLEANSER = "bath_milk_and_facial_cleanser"
+            BEER = "beer"
+            CANNED_FRUITS_AND_NUTS = "canned_fruits_and_nuts"
+            CANNED_MEAT = "canned_meat"
+            CANNED_SEAFOOD = "canned_seafood"
+            CANNED_VEGETABLES = "canned_vegetables"
+            CAR_AND_TRACTOR_TIRES_INFLATABLE = "car_and_tractor_tires_inflatable"
+            CAST_OR_OTHER_ROUGH_IRON_AND_STEEL = "cast_or_other_rough_iron_and_steel"
+            CASUAL_CLOTHING = "casual_clothing"
+            CEMENT = "cement"
+            CHEMICAL_FERTILIZERS = "chemical_fertilizers"
+            CLEAN_COAL = "clean_coal"
+            COMMERCIAL_TAP_WATER = "commercial_tap_water"
+            COPPER_ORE_AND_COPPER_CONCENTRATE = "copper_ore_and_copper_concentrate"
+            CRUDE_OIL_EXTRACTION = "crude_oil_extraction"
+            DIGITAL_CAMERAS = "digital_cameras"
+            DOMESTIC_CERAMICS = "domestic_ceramics"
+            DOMESTIC_CRUDE_OIL_EXTRACTION = "domestic_crude_oil_extraction"
+            EXTRACTED_STONE = "extracted_stone"
+            FABRIC = "fabric"
+            FABRIC_SHOES = "fabric_shoes"
+            FIBER = "fiber"
+            FIBER_CEMENT_ROOFING_SHEETS = "fiber_cement_roofing_sheets"
+            FIRED_BRICKS = "fired_bricks"
+            FIRED_TILES = "fired_tiles"
+            FISH_SAUCE = "fish_sauce"
+            FRESH_MILK = "fresh_milk"
+            FROZEN_SEAFOOD = "frozen_seafood"
+            GENERATED_ELECTRICITY = "generated_electricity"
+            GRANULATED_SUGAR = "granulated_sugar"
+            GRAVEL_AND_PEBBLES = "gravel_and_pebbles"
+            GROUND_COFFEE_AND_INSTANT_COFFEE = "ground_coffee_and_instant_coffee"
+            HERBICIDES = "herbicides"
+            HOUSEHOLD_ELECTRIC_FANS = "household_electric_fans"
+            HOUSEHOLD_REFRIGERATORS_AND_FREEZERS = (
+                "household_refrigerators_and_freezers"
+            )
+            HOUSEHOLD_WASHING_MACHINES = "household_washing_machines"
+            IRON_ORE_AND_IRON_CONCENTRATE = "iron_ore_and_iron_concentrate"
+            LANDLINE_PHONES = "landline_phones"
+            LAUNDRY_DETERGENT_AND_CLEANING_PRODUCTS = (
+                "laundry_detergent_and_cleaning_products"
+            )
+            LEATHER_SHOES_AND_BOOTS = "leather_shoes_and_boots"
+            LIGHT_BULBS = "light_bulbs"
+            MILLED_RICE = "milled_rice"
+            MINERAL_WATER = "mineral_water"
+            MOBILE_PHONES = "mobile_phones"
+            MOTORCYCLE_AND_BICYCLE_TIRES_INFLATABLE = (
+                "motorcycle_and_bicycle_tires_inflatable"
+            )
+            MSG_MONOSODIUM_GLUTAMATE = "msg_monosodium_glutamate"
+            NATURAL_GAS_IN_GAS_FORM = "natural_gas_in_gas_form"
+            NPK_FERTILIZERS = "npk_fertilizers"
+            PAPER_AND_CARDBOARD = "paper_and_cardboard"
+            PESTICIDES = "pesticides"
+            PLASTIC_PACKAGING_AND_BAGS = "plastic_packaging_and_bags"
+            POWDERED_MILK = "powdered_milk"
+            PRINTED_NEWSPAPERS_AND_OTHER_PRINTING_PRODUCTS = (
+                "printed_newspapers_and_other_printing_products"
+            )
+            PRINTERS = "printers"
+            PROCESSED_TEA = "processed_tea"
+            PURIFIED_WATER = "purified_water"
+            REFINED_VEGETABLE_OIL = "refined_vegetable_oil"
+            ROLLED_STEEL_AND_SHAPED_STEEL = "rolled_steel_and_shaped_steel"
+            SANITARY_WARE = "sanitary_ware"
+            SAWN_TIMBER = "sawn_timber"
+            SEA_SALT = "sea_salt"
+            SHAMPOO_AND_CONDITIONER = "shampoo_and_conditioner"
+            SPIRITS_AND_WHITE_WINE = "spirits_and_white_wine"
+            SPORTS_SHOES = "sports_shoes"
+            STANDARD_BATTERIES_1_5V = "standard_batteries_15v"
+            THRESHING_MACHINES = "threshing_machines"
+            TITANIUM_ORE_AND_TITANIUM_CONCENTRATE = (
+                "titanium_ore_and_titanium_concentrate"
+            )
+            TOBACCO = "tobacco"
+            TOOTHPASTE = "toothpaste"
+            TUBES_FOR_BICYCLES_AND_MOTORCYCLES = "tubes_for_bicycles_and_motorcycles"
+            TUBES_FOR_CARS_AND_AIRCRAFT = "tubes_for_cars_and_aircraft"
+            VARIOUS_TYPES_OF_BATTERIES = "various_types_of_batteries"
+            VARIOUS_TYPES_OF_BICYCLES = "various_types_of_bicycles"
+            VARIOUS_TYPES_OF_SAND = "various_types_of_sand"
+            YELLOW_PHOSPHORUS = "yellow_phosphorus"
+
+        name = "mip"
+        primary_key = [Column.DATE.value]
+
     class FA_BY_HOUSE_TYPES:
         class Column(Enum):
             YEAR = "year"
