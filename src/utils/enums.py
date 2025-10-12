@@ -1199,6 +1199,25 @@ class Table:
         name = "labor"
         primary_key = [Column.YEAR.value]
 
+    class G_LABOR:
+        class Column(Enum):
+            DATE = "date"
+            AGRICULTURE_FORESTRY_AND_FISHERY = "agriculture_forestry_and_fishery"
+            EMPLOYED_AMOUNT = "employed_amount"
+            FEMALE = "female"
+            INDUSTRY_CONSTRUCTION = "industry_construction"
+            LABOR_FORCE_ANNUAL_CHANGE_PERCENT = "labor_force_annual_change_percent"
+            LABOR_FORCE_PARTICIPATION_RATE_PERCENT = (
+                "labor_force_participation_rate_percent"
+            )
+            MALE = "male"
+            SERVICES = "services"
+            UNEMPLOYED = "unemployed"
+            URBAN_UNEMPLOYMENT_RATE = "urban_unemployment_rate"
+
+        name = "labor"
+        primary_key = [Column.DATE.value]
+
     class RETAIL:
         class Column(Enum):
             YEAR = "year"

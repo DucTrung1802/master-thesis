@@ -2839,6 +2839,28 @@ class DataPreprocessor:
                 )
                 # fmt: on
 
+                # G_LABOR
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.G_LABOR.name,
+                    columns=[
+                        Column(name=Table.G_LABOR.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.G_LABOR.Column.AGRICULTURE_FORESTRY_AND_FISHERY.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_LABOR.Column.EMPLOYED_AMOUNT.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_LABOR.Column.FEMALE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_LABOR.Column.INDUSTRY_CONSTRUCTION.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_LABOR.Column.LABOR_FORCE_ANNUAL_CHANGE_PERCENT.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_LABOR.Column.LABOR_FORCE_PARTICIPATION_RATE_PERCENT.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_LABOR.Column.MALE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_LABOR.Column.SERVICES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_LABOR.Column.UNEMPLOYED.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_LABOR.Column.URBAN_UNEMPLOYMENT_RATE.value, data_type=DataType.FLOAT(), nullable=True),
+                    ],
+                    primary_keys=Table.G_LABOR.primary_key,
+                )
+                # fmt: on
+
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
 
@@ -4445,6 +4467,47 @@ class DataPreprocessor:
             f'Finish cleaning data in table "{format_key_for_table(key)}".'
         )
 
+    def _transform_macroeconomics_labor_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.LABOR,
+            LaborSource.VIETSTOCK,
+        )
+
+        self._logger.log_info(
+            f'Start transforming data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for transforming data here
+        self._select_database(DataQuality.SILVER.value)
+        silver_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.LABOR.name,
+        )
+
+        gold_df = make_date_time_index_for_dataframe(df=silver_df)
+        gold_df = standardize_time_frame(df=gold_df)
+
+        cols_to_interpolate = gold_df.columns.difference(["date"])
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
+            pd.to_numeric, errors="coerce"
+        )
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
+            method="linear"
+        )
+
+        self._select_database(DataQuality.GOLD.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.G_LABOR.name,
+            primary_keys=Table.G_LABOR.primary_key,
+            df=gold_df,
+        )
+
+        self._logger.log_info(
+            f'Finish transforming data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_macroeconomics_labor(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing macroeconomics LABOR data for "{data_quality.value}".'
@@ -4458,7 +4521,7 @@ class DataPreprocessor:
                 self._clean_macroeconomics_labor_vietstock()
 
             case DataQuality.GOLD:
-                pass
+                self._transform_macroeconomics_labor_vietstock()
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -9376,8 +9439,8 @@ class DataPreprocessor:
         # self._process_macroeconomics_ipi(data_quality)
         # self._process_macroeconomics_xpi(data_quality)
         # self._process_macroeconomics_mpi(data_quality)
-        self._process_macroeconomics_population(data_quality)
-        # self._process_macroeconomics_labor(data_quality)
+        # self._process_macroeconomics_population(data_quality)
+        self._process_macroeconomics_labor(data_quality)
         # self._process_macroeconomics_retail(data_quality)
         # self._process_macroeconomics_pmi(data_quality)
         # self._process_macroeconomics_iip(data_quality)
