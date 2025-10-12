@@ -12,8 +12,8 @@ def main():
     # my_web_scraper = WebScraper(logger=my_logger, power=100)
     # my_web_scraper.start_scraping()
     my_data_preprocessor = DataPreprocessor(logger=my_logger)
-    my_data_preprocessor.ingest_bronze_data()
-    my_data_preprocessor.ingest_silver_data()
+    # my_data_preprocessor.ingest_bronze_data()
+    # my_data_preprocessor.ingest_silver_data()
     my_data_preprocessor.ingest_gold_data()
 
 

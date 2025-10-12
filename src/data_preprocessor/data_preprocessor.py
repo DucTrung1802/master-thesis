@@ -2741,6 +2741,32 @@ class DataPreprocessor:
                 )
                 # fmt: on
 
+                # PPI
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.G_PPI.name,
+                    columns = [
+                        Column(name=Table.G_PPI.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.G_PPI.Column.GENERAL_INDEX.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_PPI.Column.FORESTRY_SERVICES.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_PPI.Column.AGRICULTURAL_SERVICES.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_PPI.Column.FORESTRY_AND_RELATED_SERVICES.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_PPI.Column.EXPLOITED_FOREST_PRODUCTS.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_PPI.Column.COLLECTED_FOREST_PRODUCTS.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_PPI.Column.AGRICULTURE_AND_RELATED_SERVICES.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_PPI.Column.LIVESTOCK_PRODUCTS.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_PPI.Column.ANNUAL_CROP_PRODUCTS.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_PPI.Column.PERENNIAL_CROP_PRODUCTS.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_PPI.Column.EXPLOITED_AQUATIC_PRODUCTS.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_PPI.Column.AQUATIC_PRODUCTS_EXPLOITATION_AND_FARMING.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_PPI.Column.AQUATIC_FARMING_PRODUCTS.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_PPI.Column.FOREST_PLANTING_AND_CARE.value, data_type=DataType.DECIMAL(), nullable=True),
+                    ],
+                    primary_keys=Table.G_PPI.primary_key,
+                )
+                # fmt: on
+
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
 
@@ -3654,6 +3680,47 @@ class DataPreprocessor:
             f'Finish cleaning data in table "{format_key_for_table(key)}".'
         )
 
+    def _transform_macroeconomics_ppi_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.PPI,
+            PpiSource.VIETSTOCK,
+        )
+
+        self._logger.log_info(
+            f'Start transforming data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for transforming data here
+        self._select_database(DataQuality.SILVER.value)
+        silver_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.PPI.name,
+        )
+
+        gold_df = make_date_time_index_for_dataframe(df=silver_df)
+        gold_df = standardize_time_frame(df=gold_df)
+
+        cols_to_interpolate = gold_df.columns.difference(["date"])
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
+            pd.to_numeric, errors="coerce"
+        )
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
+            method="linear"
+        )
+
+        self._select_database(DataQuality.GOLD.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.G_PPI.name,
+            primary_keys=Table.G_PPI.primary_key,
+            df=gold_df,
+        )
+
+        self._logger.log_info(
+            f'Finish transforming data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_macroeconomics_ppi(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing macroeconomics PPI data for "{data_quality.value}".'
@@ -3667,7 +3734,7 @@ class DataPreprocessor:
                 self._clean_macroeconomics_ppi_vietstock()
 
             case DataQuality.GOLD:
-                pass
+                self._transform_macroeconomics_ppi_vietstock()
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -9149,56 +9216,56 @@ class DataPreprocessor:
         self._logger.log_info(f'Start processing data for "{data_quality.value}".')
 
         # Macroeconomics
-        self._process_macroeconomics_gdp(data_quality)
-        self._process_macroeconomics_cpi(data_quality)
+        # self._process_macroeconomics_gdp(data_quality)
+        # self._process_macroeconomics_cpi(data_quality)
         self._process_macroeconomics_ppi(data_quality)
-        self._process_macroeconomics_ipi(data_quality)
-        self._process_macroeconomics_xpi(data_quality)
-        self._process_macroeconomics_mpi(data_quality)
-        self._process_macroeconomics_population(data_quality)
-        self._process_macroeconomics_labor(data_quality)
-        self._process_macroeconomics_retail(data_quality)
-        self._process_macroeconomics_pmi(data_quality)
-        self._process_macroeconomics_iip(data_quality)
-        self._process_macroeconomics_ipv(data_quality)
-        self._process_macroeconomics_mip(data_quality)
-        self._process_macroeconomics_fa_by_house_types(data_quality)
-        self._process_macroeconomics_it_bop(data_quality)
-        self._process_macroeconomics_tsbr(data_quality)
-        self._process_macroeconomics_tsbe(data_quality)
-        self._process_macroeconomics_gd(data_quality)
-        self._process_macroeconomics_brd(data_quality)
-        self._process_macroeconomics_iisd(data_quality)
-        self._process_macroeconomics_treg(data_quality)
-        self._process_macroeconomics_credit(data_quality)
-        self._process_macroeconomics_mobilization(data_quality)
-        self._process_macroeconomics_exchange_rate(data_quality)
-        self._process_macroeconomics_iir(data_quality)
-        self._process_macroeconomics_rrrr(data_quality)
-        self._process_macroeconomics_fdi_sector(data_quality)
-        self._process_macroeconomics_fdi_rd(data_quality)
-        self._process_macroeconomics_export(data_quality)
-        self._process_macroeconomics_import(data_quality)
-        self._process_macroeconomics_gold_price(data_quality)
-        self._process_macroeconomics_oil_price(data_quality)
-        self._process_macroeconomics_dow_jones(data_quality)
-        self._process_macroeconomics_nyse_composite(data_quality)
-        self._process_macroeconomics_snp_500(data_quality)
-        self._process_macroeconomics_nasdaq_composite(data_quality)
-        self._process_macroeconomics_nasdaq_100(data_quality)
+        # self._process_macroeconomics_ipi(data_quality)
+        # self._process_macroeconomics_xpi(data_quality)
+        # self._process_macroeconomics_mpi(data_quality)
+        # self._process_macroeconomics_population(data_quality)
+        # self._process_macroeconomics_labor(data_quality)
+        # self._process_macroeconomics_retail(data_quality)
+        # self._process_macroeconomics_pmi(data_quality)
+        # self._process_macroeconomics_iip(data_quality)
+        # self._process_macroeconomics_ipv(data_quality)
+        # self._process_macroeconomics_mip(data_quality)
+        # self._process_macroeconomics_fa_by_house_types(data_quality)
+        # self._process_macroeconomics_it_bop(data_quality)
+        # self._process_macroeconomics_tsbr(data_quality)
+        # self._process_macroeconomics_tsbe(data_quality)
+        # self._process_macroeconomics_gd(data_quality)
+        # self._process_macroeconomics_brd(data_quality)
+        # self._process_macroeconomics_iisd(data_quality)
+        # self._process_macroeconomics_treg(data_quality)
+        # self._process_macroeconomics_credit(data_quality)
+        # self._process_macroeconomics_mobilization(data_quality)
+        # self._process_macroeconomics_exchange_rate(data_quality)
+        # self._process_macroeconomics_iir(data_quality)
+        # self._process_macroeconomics_rrrr(data_quality)
+        # self._process_macroeconomics_fdi_sector(data_quality)
+        # self._process_macroeconomics_fdi_rd(data_quality)
+        # self._process_macroeconomics_export(data_quality)
+        # self._process_macroeconomics_import(data_quality)
+        # self._process_macroeconomics_gold_price(data_quality)
+        # self._process_macroeconomics_oil_price(data_quality)
+        # self._process_macroeconomics_dow_jones(data_quality)
+        # self._process_macroeconomics_nyse_composite(data_quality)
+        # self._process_macroeconomics_snp_500(data_quality)
+        # self._process_macroeconomics_nasdaq_composite(data_quality)
+        # self._process_macroeconomics_nasdaq_100(data_quality)
 
-        # Stock market
-        self._process_stock_market_market(data_quality)
-        self._process_stock_market_vn_index(data_quality)
-        self._process_stock_market_hnx_index(data_quality)
-        self._process_stock_market_vn_30_index(data_quality)
-        self._process_stock_market_vn_100_index(data_quality)
-        self._process_stock_market_hnx_30_index(data_quality)
-        self._process_stock_market_upcom_index(data_quality)
+        # # Stock market
+        # self._process_stock_market_market(data_quality)
+        # self._process_stock_market_vn_index(data_quality)
+        # self._process_stock_market_hnx_index(data_quality)
+        # self._process_stock_market_vn_30_index(data_quality)
+        # self._process_stock_market_vn_100_index(data_quality)
+        # self._process_stock_market_hnx_30_index(data_quality)
+        # self._process_stock_market_upcom_index(data_quality)
 
-        # Enterprise
-        self._process_enterprise_stock(data_quality)
-        self._process_enterprise_daily_price(data_quality)
+        # # Enterprise
+        # self._process_enterprise_stock(data_quality)
+        # self._process_enterprise_daily_price(data_quality)
 
         self._logger.log_info(f'Finish processing data for "{data_quality.value}".')
 

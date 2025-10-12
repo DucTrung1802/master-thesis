@@ -880,6 +880,29 @@ class Table:
         name = "ppi"
         primary_key = [Column.YEAR.value]
 
+    class G_PPI:
+        class Column(Enum):
+            DATE = "date"
+            GENERAL_INDEX = "general_index"
+            FORESTRY_SERVICES = "forestry_services"
+            AGRICULTURAL_SERVICES = "agricultural_services"
+            FORESTRY_AND_RELATED_SERVICES = "forestry_and_related_services"
+            EXPLOITED_FOREST_PRODUCTS = "exploited_forest_products"
+            COLLECTED_FOREST_PRODUCTS = "collected_forest_products"
+            AGRICULTURE_AND_RELATED_SERVICES = "agriculture_and_related_services"
+            LIVESTOCK_PRODUCTS = "livestock_products"
+            ANNUAL_CROP_PRODUCTS = "annual_crop_products"
+            PERENNIAL_CROP_PRODUCTS = "perennial_crop_products"
+            EXPLOITED_AQUATIC_PRODUCTS = "exploited_aquatic_products"
+            AQUATIC_PRODUCTS_EXPLOITATION_AND_FARMING = (
+                "aquatic_products_exploitation_and_farming"
+            )
+            AQUATIC_FARMING_PRODUCTS = "aquatic_farming_products"
+            FOREST_PLANTING_AND_CARE = "forest_planting_and_care"
+
+        name = "ppi"
+        primary_key = [Column.DATE.value]
+
     class IPI:
         class Column(Enum):
             YEAR = "year"
