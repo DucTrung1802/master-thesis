@@ -1169,6 +1169,17 @@ class Table:
         name = "population"
         primary_key = [Column.YEAR.value]
 
+    class G_POPULATION:
+        class Column(Enum):
+            DATE = "date"
+            POPULATION = "population"
+            POPULATION_AREA_URBAN_RATE = "population_area_urban_rate"
+            POPULATION_DENSITY = "population_density"
+            POPULATION_GROWTH_RATE = "population_growth_rate"
+
+        name = "population"
+        primary_key = [Column.DATE.value]
+
     class LABOR:
         class Column(Enum):
             YEAR = "year"

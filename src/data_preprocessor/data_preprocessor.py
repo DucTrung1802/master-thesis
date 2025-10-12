@@ -2823,6 +2823,22 @@ class DataPreprocessor:
                 )
                 # fmt: on
 
+                # G_POPULATION
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.G_POPULATION.name,
+                    columns=[
+                        Column(name=Table.G_POPULATION.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.G_POPULATION.Column.POPULATION.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_POPULATION.Column.POPULATION_AREA_URBAN_RATE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_POPULATION.Column.POPULATION_DENSITY.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_POPULATION.Column.POPULATION_GROWTH_RATE.value, data_type=DataType.FLOAT(), nullable=True),
+                    ],
+                    primary_keys=Table.G_POPULATION.primary_key,
+                )
+                # fmt: on
+
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
 
@@ -4283,6 +4299,47 @@ class DataPreprocessor:
             f'Finish cleaning data in table "{format_key_for_table(key)}".'
         )
 
+    def _transform_macroeconomics_population_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.POPULATION,
+            PopulationSource.VIETSTOCK,
+        )
+
+        self._logger.log_info(
+            f'Start transforming data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for transforming data here
+        self._select_database(DataQuality.SILVER.value)
+        silver_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.POPULATION.name,
+        )
+
+        gold_df = make_date_time_index_for_dataframe(df=silver_df)
+        gold_df = standardize_time_frame(df=gold_df)
+
+        cols_to_interpolate = gold_df.columns.difference(["date"])
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
+            pd.to_numeric, errors="coerce"
+        )
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
+            method="linear"
+        )
+
+        self._select_database(DataQuality.GOLD.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.G_POPULATION.name,
+            primary_keys=Table.G_POPULATION.primary_key,
+            df=gold_df,
+        )
+
+        self._logger.log_info(
+            f'Finish transforming data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_macroeconomics_population(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing macroeconomics POPULATION data for "{data_quality.value}".'
@@ -4296,7 +4353,7 @@ class DataPreprocessor:
                 self._clean_macroeconomics_population_vietstock()
 
             case DataQuality.GOLD:
-                pass
+                self._transform_macroeconomics_population_vietstock()
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -9317,9 +9374,9 @@ class DataPreprocessor:
         # self._process_macroeconomics_cpi(data_quality)
         # self._process_macroeconomics_ppi(data_quality)
         # self._process_macroeconomics_ipi(data_quality)
-        self._process_macroeconomics_xpi(data_quality)
+        # self._process_macroeconomics_xpi(data_quality)
         # self._process_macroeconomics_mpi(data_quality)
-        # self._process_macroeconomics_population(data_quality)
+        self._process_macroeconomics_population(data_quality)
         # self._process_macroeconomics_labor(data_quality)
         # self._process_macroeconomics_retail(data_quality)
         # self._process_macroeconomics_pmi(data_quality)
