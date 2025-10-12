@@ -2096,3 +2096,22 @@ class Table:
 
         name = "daily_price"
         primary_key = [Column.DATE.value, Column.CODE.value]
+
+
+class FeatureSelectorType(Enum):
+    XGB_REGRESSOR = {
+        "name": "xgb_regressor",
+        "weight": 0.25,
+    }
+    LASSO = {
+        "name": "lasso",
+        "weight": 0.25,
+    }
+    ELASTIC_NET = {
+        "name": "elastic_net",
+        "weight": 0.25,
+    }
+    XGB_SHAP = {
+        "name": "xgb_shap",
+        "weight": 0.25,
+    }

@@ -33,6 +33,16 @@ ARIMA_VISUALIZATION_LOG_FILE_BASE = f"../../{LOG_DIR}/arima_visualization"
 
 
 # ===========================
+# FEATURE SELECTION CONFIGURATION
+# ===========================
+FEATURE_SELECTION_LOG_FILE_BASE = f"../../{LOG_DIR}/feature_selection"
+FEATURE_SELECTION_LOG_FILE_TEST = (
+    f"{FEATURE_SELECTION_LOG_FILE_BASE}/feature_selection_test"
+)
+FEATURE_SELECTION_CHARTS_DIR = f"{CHARTS_DIR_BASE}/feature_selection"
+
+
+# ===========================
 # TRAINED MODELS CONFIGURATION
 # ===========================
 TRAINED_MODELS_LOG_FILE_BASE = f"../../trained_models"
