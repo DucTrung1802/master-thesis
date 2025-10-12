@@ -34,6 +34,140 @@ except ImportError:
 load_dotenv()
 
 
+def summarize_feature_importances(
+    normalized_importances_dict: dict[str, pd.DataFrame],
+    weights: dict[str, float],
+) -> pd.DataFrame:
+    """
+    Combine normalized feature importances from multiple methods using specified weights.
+
+    Parameters
+    ----------
+    normalized_importances_dict : dict[str, pd.DataFrame]
+        Dictionary where keys are method names (e.g., 'lasso', 'xgb', 'shap')
+        and values are normalized DataFrames with columns ['feature', 'importance'].
+        Each DataFrame should already have its 'importance' values normalized (e.g., min-max scaled).
+    weights : dict[str, float]
+        Dictionary of weights for each method. Keys must match those in normalized_importances_dict.
+        Values should sum approximately to 1.
+
+    Returns
+    -------
+    pd.DataFrame
+        A DataFrame with all individual importances and the final weighted importance,
+        sorted by 'final_importance' descending.
+    """
+    if not normalized_importances_dict:
+        raise ValueError("normalized_importances_dict cannot be empty.")
+    if not weights:
+        raise ValueError("weights cannot be empty.")
+    if not set(normalized_importances_dict.keys()).issubset(set(weights.keys())):
+        raise ValueError(
+            "Weights must be provided for all methods in normalized_importances_dict."
+        )
+
+    # Collect all unique features
+    all_features = set()
+    for df in normalized_importances_dict.values():
+        if not {"feature", "importance"}.issubset(df.columns):
+            raise ValueError(
+                "Each DataFrame must contain ['feature', 'importance'] columns."
+            )
+        all_features.update(df["feature"].tolist())
+
+    combined_df = pd.DataFrame({"feature": sorted(all_features)})
+
+    # Merge all normalized importances
+    for method, df in normalized_importances_dict.items():
+        temp = df.copy().rename(columns={"importance": method})
+        combined_df = combined_df.merge(
+            temp[["feature", method]], on="feature", how="left"
+        )
+
+    combined_df = combined_df.fillna(0)
+
+    # Apply weights
+    for method, weight in weights.items():
+        if method not in combined_df.columns:
+            print(
+                f"Method '{method}' not found in normalized_importances_dict; skipping."
+            )
+            continue
+        combined_df[f"{method}_weighted"] = combined_df[method] * weight
+
+    # Compute final importance
+    weighted_cols = [
+        f"{m}_weighted"
+        for m in weights.keys()
+        if f"{m}_weighted" in combined_df.columns
+    ]
+    combined_df["final_importance"] = combined_df[weighted_cols].sum(axis=1)
+
+    # Sort by final score
+    combined_df = combined_df.sort_values(
+        "final_importance", ascending=False
+    ).reset_index(drop=True)
+
+    return combined_df
+
+
+def plot_final_feature_importances(
+    combined_df: pd.DataFrame, top_n: int = 20, filename: str | None = None
+) -> None:
+    """
+    Plot the top N features from the combined weighted importance DataFrame,
+    with numeric importance values displayed next to each bar.
+    Optionally save the plot to FEATURE_SELECTION_CHARTS_DIR.
+    """
+    if not {"feature", "final_importance"}.issubset(combined_df.columns):
+        raise ValueError(
+            "combined_df must contain 'feature' and 'final_importance' columns."
+        )
+
+    # Select and sort top N
+    df = (
+        combined_df[["feature", "final_importance"]]
+        .sort_values(by="final_importance", ascending=False)
+        .head(top_n)
+    )
+
+    plt.figure(figsize=(14, 8))
+    bars = plt.barh(df["feature"], df["final_importance"])
+
+    plt.title("Final Weighted Feature Importances (Combined Methods)")
+    plt.xlabel("Weighted Importance Score")
+    plt.ylabel("Features")
+    plt.gca().invert_yaxis()
+
+    # Annotate bars with values
+    for bar in bars:
+        width = bar.get_width()
+        plt.text(
+            width + 0.01,
+            bar.get_y() + bar.get_height() / 2,
+            f"{width:.3f}",
+            va="center",
+            ha="left",
+            fontsize=10,
+            color="black",
+        )
+
+    plt.tight_layout()
+
+    # Save plot if filename provided
+    if filename:
+        # Use cross-platform absolute path
+        charts_dir = os.path.abspath(FEATURE_SELECTION_CHARTS_DIR)
+        os.makedirs(charts_dir, exist_ok=True)
+
+        save_path = os.path.join(charts_dir, filename)
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+
+        print(f"✅ Plot saved to: {save_path}")
+
+    plt.show()
+
+
 class FeatureSelector:
     def __init__(self, logger: Logger, feature_selector_type: FeatureSelectorType):
         self._logger = logger
@@ -125,50 +259,17 @@ class FeatureSelector:
         mean_abs_shap = np.abs(shap_values).mean(axis=0)
         self.feature_importances_ = pd.Series(mean_abs_shap, index=X.columns)
 
-    def _fit_feature_clustering(self, X: pd.DataFrame, y: pd.Series):
-        """Cluster correlated features and select best representative."""
-        corr = X.corr().abs()
-        distance = 1 - corr.fillna(0)
-        clustering = AgglomerativeClustering(
-            n_clusters=None,
-            distance_threshold=0.3,
-            affinity="precomputed",
-            linkage="complete",
-        )
-        cluster_labels = clustering.fit_predict(distance)
-        cluster_map = pd.Series(cluster_labels, index=X.columns)
-
-        selected_features = []
-        for label in np.unique(cluster_labels):
-            features_in_cluster = X.columns[cluster_map == label]
-            corr_with_target = X[features_in_cluster].apply(
-                lambda c: np.abs(np.corrcoef(c, y)[0, 1])
-            )
-            best_feature = corr_with_target.idxmax()
-            selected_features.append(best_feature)
-
-        self.selected_features_ = selected_features
-        self.feature_importances_ = pd.Series(1.0, index=selected_features)
-
-    def _fit_tsfresh_lasso(self, dataframe: pd.DataFrame, target_column: str):
-        """Extract statistical time-series features using tsfresh, then apply LASSO."""
-        if extract_features is None:
-            raise ImportError("Install `tsfresh` to use this feature selector.")
-        X = extract_features(
-            dataframe,
-            column_id="id",
-            column_sort="time",
-            disable_progressbar=True,
-        ).dropna(axis=1, how="all")
-
-        y = dataframe.groupby("id")[target_column].last().values
-        self._fit_lasso(X, pd.Series(y))
-
     # =========================================================
     #  MAIN FIT METHOD
     # =========================================================
 
-    def fit(self, dataframe: pd.DataFrame, target_column: str) -> None:
+    def fit(
+        self,
+        dataframe: pd.DataFrame,
+        target_column: str,
+        id_column: str = None,
+        time_column: str = None,
+    ) -> None:
         """Train feature selector according to selected method."""
         if not self.feature_selector_type:
             raise ValueError("Feature selector type not set or not recognized.")
@@ -192,10 +293,6 @@ class FeatureSelector:
                 self._fit_elastic_net(X, y)
             case FeatureSelectorType.XGB_SHAP:
                 self._fit_xgb_shap(X, y)
-            case FeatureSelectorType.FEATURE_CLUSTERING:
-                self._fit_feature_clustering(X, y)
-            case FeatureSelectorType.TSFRESH_LASSO:
-                self._fit_tsfresh_lasso(dataframe, target_column)
             case _:
                 raise ValueError(
                     f"Unsupported feature selector type: {self.feature_selector_type}"
@@ -205,22 +302,88 @@ class FeatureSelector:
     #  FEATURE IMPORTANCE HANDLING
     # =========================================================
 
-    def get_feature_importances(self) -> pd.Series:
+    def get_feature_importances(self, normalize: bool = True) -> pd.DataFrame:
+        """
+        Return feature importances as a DataFrame with columns ['feature', 'importance'].
+        Optionally applies min-max normalization.
+
+        Parameters
+        ----------
+        normalize : bool, default=True
+            If True, applies min-max normalization: (x - min) / (max - min).
+
+        Returns
+        -------
+        pd.DataFrame
+            A DataFrame sorted by importance (descending) with columns ['feature', 'importance'].
+        """
         if (
             not hasattr(self, "feature_importances_")
             or self.feature_importances_ is None
         ):
             raise ValueError("Model has not been fitted yet.")
-        return self.feature_importances_.sort_values(ascending=False)
+
+        feature_importances = self.feature_importances_.copy()
+
+        if normalize:
+            min_val = feature_importances.min()
+            max_val = feature_importances.max()
+            if max_val != min_val:
+                feature_importances = (feature_importances - min_val) / (
+                    max_val - min_val
+                )
+            else:
+                self._logger.warning(
+                    "All feature importances are equal; skipping normalization."
+                )
+
+        # Convert to DataFrame
+        df = feature_importances.reset_index().rename(
+            columns={"index": "feature", 0: "importance"}
+        )
+
+        # Handle the case when reset_index() creates wrong column names
+        if "importance" not in df.columns:
+            df.columns = ["feature", "importance"]
+
+        # Ensure feature column is string type
+        df["feature"] = df["feature"].astype(str)
+
+        df = df.sort_values(by="importance", ascending=False).reset_index(drop=True)
+
+        return df
 
     def plot_feature_importances(self, top_n: int = 20) -> None:
-        feature_importances = self.get_feature_importances().head(top_n)
+        """
+        Plot the top N feature importances as a horizontal bar chart,
+        with numeric importance values displayed next to each bar.
+        """
+        df = self.get_feature_importances().head(top_n)
+
+        # Ensure we sort by importance for display
+        df = df.sort_values(by="importance", ascending=True)
+
         plt.figure(figsize=(14, 8))
-        feature_importances.sort_values(ascending=True).plot(kind="barh")
+        bars = plt.barh(df["feature"], df["importance"])
+
         plt.title(
             f"Using '{self.feature_selector_type.value}' - Top Feature Importances"
         )
         plt.xlabel("Importance Score")
         plt.ylabel("Features")
+
+        # Annotate bars with importance values
+        for bar in bars:
+            width = bar.get_width()
+            plt.text(
+                width + 0.01,  # position slightly to the right of bar
+                bar.get_y() + bar.get_height() / 2,
+                f"{width:.3f}",  # formatted importance value
+                va="center",
+                ha="left",
+                fontsize=10,
+                color="black",
+            )
+
         plt.tight_layout()
         plt.show()

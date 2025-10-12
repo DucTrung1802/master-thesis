@@ -2099,9 +2099,19 @@ class Table:
 
 
 class FeatureSelectorType(Enum):
-    XGB_REGRESSOR = "xgb_regressor"
-    LASSO = "lasso"
-    ELASTIC_NET = "elastic_net"
-    XGB_SHAP = "xgb_shap"
-    FEATURE_CLUSTERING = "feature_clustering"
-    TSFRESH_LASSO = "tsfresh_lasso"
+    XGB_REGRESSOR = {
+        "name": "xgb_regressor",
+        "weight": 0.25,
+    }
+    LASSO = {
+        "name": "lasso",
+        "weight": 0.25,
+    }
+    ELASTIC_NET = {
+        "name": "elastic_net",
+        "weight": 0.25,
+    }
+    XGB_SHAP = {
+        "name": "xgb_shap",
+        "weight": 0.25,
+    }
