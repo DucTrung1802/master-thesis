@@ -1620,6 +1620,27 @@ class Table:
         name = "fa_by_house_types"
         primary_key = [Column.YEAR.value]
 
+    class G_FA_BY_HOUSE_TYPES:
+        class Column(Enum):
+            DATE = "date"
+            _16_20_FLOORS = "_16_20_floors"
+            _21_25_FLOORS = "_21_25_floors"
+            _26_FLOORS_AND_ABOVE = "_26_floors_and_above"
+            _5_FLOORS_AND_BELOW = "_5_floors_and_below"
+            _6_8_FLOORS = "_6_8_floors"
+            _9_15_FLOORS = "_9_15_floors"
+            APARTMENT_BUILDINGS = "apartment_buildings"
+            SINGLE_FAMILY_HOMES = "single_family_homes"
+            SINGLE_FAMILY_HOMES_4_FLOORS_AND_ABOVE = (
+                "single_family_homes_4_floors_and_above"
+            )
+            SINGLE_FAMILY_HOMES_BELOW_4_FLOORS = "single_family_homes_below_4_floors"
+            TOTAL = "total"
+            VILLAS = "villas"
+
+        name = "fa_by_house_types"
+        primary_key = [Column.DATE.value]
+
     class IT_BOP:
         class Column(Enum):
             YEAR = "year"

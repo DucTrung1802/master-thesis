@@ -3001,6 +3001,30 @@ class DataPreprocessor:
                 )
                 # fmt: on
 
+                # G_FA_BY_HOUSE_TYPES
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.G_FA_BY_HOUSE_TYPES.name,
+                    columns=[
+                        Column(name=Table.G_FA_BY_HOUSE_TYPES.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.G_FA_BY_HOUSE_TYPES.Column._16_20_FLOORS.value, data_type=DataType.INT(), nullable=True),
+                        Column(name=Table.G_FA_BY_HOUSE_TYPES.Column._21_25_FLOORS.value, data_type=DataType.INT(), nullable=True),
+                        Column(name=Table.G_FA_BY_HOUSE_TYPES.Column._26_FLOORS_AND_ABOVE.value, data_type=DataType.INT(), nullable=True),
+                        Column(name=Table.G_FA_BY_HOUSE_TYPES.Column._5_FLOORS_AND_BELOW.value, data_type=DataType.INT(), nullable=True),
+                        Column(name=Table.G_FA_BY_HOUSE_TYPES.Column._6_8_FLOORS.value, data_type=DataType.INT(), nullable=True),
+                        Column(name=Table.G_FA_BY_HOUSE_TYPES.Column._9_15_FLOORS.value, data_type=DataType.INT(), nullable=True),
+                        Column(name=Table.G_FA_BY_HOUSE_TYPES.Column.APARTMENT_BUILDINGS.value, data_type=DataType.INT(), nullable=True),
+                        Column(name=Table.G_FA_BY_HOUSE_TYPES.Column.SINGLE_FAMILY_HOMES.value, data_type=DataType.INT(), nullable=True),
+                        Column(name=Table.G_FA_BY_HOUSE_TYPES.Column.SINGLE_FAMILY_HOMES_4_FLOORS_AND_ABOVE.value, data_type=DataType.INT(), nullable=True),
+                        Column(name=Table.G_FA_BY_HOUSE_TYPES.Column.SINGLE_FAMILY_HOMES_BELOW_4_FLOORS.value, data_type=DataType.INT(), nullable=True),
+                        Column(name=Table.G_FA_BY_HOUSE_TYPES.Column.TOTAL.value, data_type=DataType.INT(), nullable=True),
+                        Column(name=Table.G_FA_BY_HOUSE_TYPES.Column.VILLAS.value, data_type=DataType.INT(), nullable=True),
+                    ],
+                    primary_keys=Table.G_FA_BY_HOUSE_TYPES.primary_key,
+                )
+                # fmt: on
+
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
 
@@ -5379,6 +5403,47 @@ class DataPreprocessor:
             f'Finish cleaning data in table "{format_key_for_table(key)}".'
         )
 
+    def _transform_macroeconomics_fa_by_house_types_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.FA_BY_HOUSE_TYPES,
+            FaByHouseTypeSource.VIETSTOCK,
+        )
+
+        self._logger.log_info(
+            f'Start transforming data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for transforming data here
+        self._select_database(DataQuality.SILVER.value)
+        silver_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.FA_BY_HOUSE_TYPES.name,
+        )
+
+        gold_df = make_date_time_index_for_dataframe(df=silver_df)
+        gold_df = standardize_time_frame(df=gold_df)
+
+        cols_to_interpolate = gold_df.columns.difference(["date"])
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
+            pd.to_numeric, errors="coerce"
+        )
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
+            method="linear"
+        )
+
+        self._select_database(DataQuality.GOLD.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.G_FA_BY_HOUSE_TYPES.name,
+            primary_keys=Table.G_FA_BY_HOUSE_TYPES.primary_key,
+            df=gold_df,
+        )
+
+        self._logger.log_info(
+            f'Finish transforming data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_macroeconomics_fa_by_house_types(
         self, data_quality: DataQuality
     ) -> None:
@@ -5394,7 +5459,7 @@ class DataPreprocessor:
                 self._clean_macroeconomics_fa_by_house_types_vietstock()
 
             case DataQuality.GOLD:
-                pass
+                self._transform_macroeconomics_fa_by_house_types_vietstock()
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -9667,8 +9732,8 @@ class DataPreprocessor:
         # self._process_macroeconomics_pmi(data_quality)
         # self._process_macroeconomics_iip(data_quality)
         # self._process_macroeconomics_ipv(data_quality)
-        self._process_macroeconomics_mip(data_quality)
-        # self._process_macroeconomics_fa_by_house_types(data_quality)
+        # self._process_macroeconomics_mip(data_quality)
+        self._process_macroeconomics_fa_by_house_types(data_quality)
         # self._process_macroeconomics_it_bop(data_quality)
         # self._process_macroeconomics_tsbr(data_quality)
         # self._process_macroeconomics_tsbe(data_quality)
