@@ -3053,6 +3053,24 @@ class DataPreprocessor:
                 )
                 # fmt: on
 
+                # GOLD_PRICE
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.GOLD_PRICE.name,
+                    columns = [
+                        Column(name=Table.GOLD_PRICE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.GOLD_PRICE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.GOLD_PRICE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.GOLD_PRICE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.GOLD_PRICE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.GOLD_PRICE.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.GOLD_PRICE.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
+                    ],
+                    primary_keys=Table.GOLD_PRICE.primary_key,
+                )
+                # fmt: on
+
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
 
@@ -7655,6 +7673,47 @@ class DataPreprocessor:
             f'Finish cleaning data in table "{format_key_for_table(key)}".'
         )
 
+    def _transform_macroeconomics_gold_price_investing(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.GOLD_PRICE,
+            GoldPriceSource.INVESTING,
+        )
+
+        self._logger.log_info(
+            f'Start transforming data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for transforming data here
+        self._select_database(DataQuality.SILVER.value)
+        silver_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.GOLD_PRICE.name,
+        )
+
+        gold_df = make_date_time_index_for_dataframe(df=silver_df)
+        gold_df = standardize_time_frame(df=gold_df)
+
+        cols_to_interpolate = gold_df.columns.difference(["date"])
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
+            pd.to_numeric, errors="coerce"
+        )
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
+            method="linear"
+        )
+
+        self._select_database(DataQuality.GOLD.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.GOLD_PRICE.name,
+            primary_keys=Table.GOLD_PRICE.primary_key,
+            df=gold_df,
+        )
+
+        self._logger.log_info(
+            f'Finish transforming data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_macroeconomics_gold_price(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing macroeconomics GOLD_PRICE data for "{data_quality.value}".'
@@ -7668,7 +7727,7 @@ class DataPreprocessor:
                 self._clean_macroeconomics_gold_price_investing()
 
             case DataQuality.GOLD:
-                pass
+                self._transform_macroeconomics_gold_price_investing()
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -9838,12 +9897,12 @@ class DataPreprocessor:
         # self._process_macroeconomics_mobilization(data_quality)
         # self._process_macroeconomics_exchange_rate(data_quality)
         # self._process_macroeconomics_iir(data_quality)
-        self._process_macroeconomics_rrrr(data_quality)
+        # self._process_macroeconomics_rrrr(data_quality)
         # self._process_macroeconomics_fdi_sector(data_quality)
         # self._process_macroeconomics_fdi_rd(data_quality)
         # self._process_macroeconomics_export(data_quality)
         # self._process_macroeconomics_import(data_quality)
-        # self._process_macroeconomics_gold_price(data_quality)
+        self._process_macroeconomics_gold_price(data_quality)
         # self._process_macroeconomics_oil_price(data_quality)
         # self._process_macroeconomics_dow_jones(data_quality)
         # self._process_macroeconomics_nyse_composite(data_quality)
