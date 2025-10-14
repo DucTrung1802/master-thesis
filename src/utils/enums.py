@@ -1948,6 +1948,15 @@ class Table:
         name = "rrrr"
         primary_key = [Column.YEAR.value, Column.MONTH.value, Column.DAY.value]
 
+    class G_RRRR:
+        class Column(Enum):
+            DATE = "date"
+            DISCOUNT_RATE = "discount_rate"
+            REFINANCING_RATE = "refinancing_rate"
+
+        name = "rrrr"
+        primary_key = [Column.DATE.value]
+
     class FDI_SECTOR:
         class Column(Enum):
             YEAR = "year"

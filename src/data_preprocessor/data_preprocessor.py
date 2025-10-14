@@ -3039,6 +3039,20 @@ class DataPreprocessor:
                 )
                 # fmt: on
 
+                # G_RRRR
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.G_RRRR.name,
+                    columns=[
+                        Column(name=Table.G_RRRR.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.G_RRRR.Column.DISCOUNT_RATE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_RRRR.Column.REFINANCING_RATE.value, data_type=DataType.FLOAT(), nullable=True),
+                    ],
+                    primary_keys=[Table.G_RRRR.Column.DATE.value],
+                )
+                # fmt: on
+
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
 
@@ -6834,23 +6848,6 @@ class DataPreprocessor:
         # Fill timeline
         silver_df = make_date_time_index_for_dataframe(silver_df)
 
-        # Interpolate missing values
-        # make sure 'date' is datetime
-        silver_df["date"] = pd.to_datetime(
-            silver_df["date"], dayfirst=True, errors="coerce"
-        )
-
-        # set it as index for interpolation
-        silver_df = silver_df.set_index("date").sort_index()
-
-        # interpolate along the datetime index
-        silver_df[["discount_rate", "refinancing_rate"]] = silver_df[
-            ["discount_rate", "refinancing_rate"]
-        ].interpolate(method="time")
-
-        # fill edges (optional)
-        silver_df = silver_df.ffill().bfill().reset_index()
-
         self._select_database(DataQuality.SILVER.value)
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
@@ -6861,6 +6858,47 @@ class DataPreprocessor:
 
         self._logger.log_info(
             f'Finish cleaning data in table "{format_key_for_table(key)}".'
+        )
+
+    def _transform_macroeconomics_rrrr_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.RRRR,
+            RrrrSource.VIETSTOCK,
+        )
+
+        self._logger.log_info(
+            f'Start transforming data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for transforming data here
+        self._select_database(DataQuality.SILVER.value)
+        silver_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.RRRR.name,
+        )
+
+        gold_df = make_date_time_index_for_dataframe(df=silver_df)
+        gold_df = standardize_time_frame(df=gold_df)
+
+        cols_to_interpolate = gold_df.columns.difference(["date"])
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
+            pd.to_numeric, errors="coerce"
+        )
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
+            method="linear"
+        )
+
+        self._select_database(DataQuality.GOLD.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.G_RRRR.name,
+            primary_keys=Table.G_RRRR.primary_key,
+            df=gold_df,
+        )
+
+        self._logger.log_info(
+            f'Finish transforming data in table "{format_key_for_table(key)}".'
         )
 
     def _process_macroeconomics_rrrr(self, data_quality: DataQuality) -> None:
@@ -6876,7 +6914,7 @@ class DataPreprocessor:
                 self._clean_macroeconomics_rrrr_vietstock()
 
             case DataQuality.GOLD:
-                pass
+                self._transform_macroeconomics_rrrr_vietstock()
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -9795,12 +9833,12 @@ class DataPreprocessor:
         # self._process_macroeconomics_gd(data_quality)
         # self._process_macroeconomics_brd(data_quality)
         # self._process_macroeconomics_iisd(data_quality)
-        self._process_macroeconomics_treg(data_quality)
+        # self._process_macroeconomics_treg(data_quality)
         # self._process_macroeconomics_credit(data_quality)
         # self._process_macroeconomics_mobilization(data_quality)
         # self._process_macroeconomics_exchange_rate(data_quality)
         # self._process_macroeconomics_iir(data_quality)
-        # self._process_macroeconomics_rrrr(data_quality)
+        self._process_macroeconomics_rrrr(data_quality)
         # self._process_macroeconomics_fdi_sector(data_quality)
         # self._process_macroeconomics_fdi_rd(data_quality)
         # self._process_macroeconomics_export(data_quality)
