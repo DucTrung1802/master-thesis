@@ -880,6 +880,29 @@ class Table:
         name = "ppi"
         primary_key = [Column.YEAR.value]
 
+    class G_PPI:
+        class Column(Enum):
+            DATE = "date"
+            GENERAL_INDEX = "general_index"
+            FORESTRY_SERVICES = "forestry_services"
+            AGRICULTURAL_SERVICES = "agricultural_services"
+            FORESTRY_AND_RELATED_SERVICES = "forestry_and_related_services"
+            EXPLOITED_FOREST_PRODUCTS = "exploited_forest_products"
+            COLLECTED_FOREST_PRODUCTS = "collected_forest_products"
+            AGRICULTURE_AND_RELATED_SERVICES = "agriculture_and_related_services"
+            LIVESTOCK_PRODUCTS = "livestock_products"
+            ANNUAL_CROP_PRODUCTS = "annual_crop_products"
+            PERENNIAL_CROP_PRODUCTS = "perennial_crop_products"
+            EXPLOITED_AQUATIC_PRODUCTS = "exploited_aquatic_products"
+            AQUATIC_PRODUCTS_EXPLOITATION_AND_FARMING = (
+                "aquatic_products_exploitation_and_farming"
+            )
+            AQUATIC_FARMING_PRODUCTS = "aquatic_farming_products"
+            FOREST_PLANTING_AND_CARE = "forest_planting_and_care"
+
+        name = "ppi"
+        primary_key = [Column.DATE.value]
+
     class IPI:
         class Column(Enum):
             YEAR = "year"
@@ -1008,6 +1031,69 @@ class Table:
         name = "xpi"
         primary_key = [Column.YEAR.value, Column.MONTH.value]
 
+    class G_XPI:
+        class Column(Enum):
+            DATE = "date"
+            ANIMAL_FEED_AND_RAW_MATERIALS = "animal_feed_and_raw_materials"
+            AQUATIC_PRODUCTS = "aquatic_products"
+            CAMERAS_CAMCORDERS_AND_COMPONENTS = "cameras_camcorders_and_components"
+            CASHEW_NUTS = "cashew_nuts"
+            CASSAVA_AND_CASSAVA_PRODUCTS = "cassava_and_cassava_products"
+            CHEMICAL_PRODUCTS = "chemical_products"
+            CHEMICALS = "chemicals"
+            CLINKER_AND_CEMENT = "clinker_and_cement"
+            COFFEE = "coffee"
+            CONFECTIONERY_AND_CEREAL_PRODUCTS = "confectionery_and_cereal_products"
+            CRUDE_OIL = "crude_oil"
+            DOMESTIC_ECONOMIC_SECTOR = "domestic_economic_sector"
+            ELECTRICAL_WIRES_AND_CABLES = "electrical_wires_and_cables"
+            ELECTRONICS_COMPUTERS_AND_COMPONENTS = (
+                "electronics_computers_and_components"
+            )
+            FOOTWEAR = "footwear"
+            FOREIGN_INVESTED_SECTOR = "foreign_invested_sector"
+            FOREIGN_CRUDE_OIL = "foreign_crude_oil"
+            FURNITURE_PRODUCTS_FROM_MATERIALS_OTHER_THAN_WOOD = (
+                "furniture_products_from_materials_other_than_wood"
+            )
+            GLASS_AND_GLASS_PRODUCTS = "glass_and_glass_products"
+            HANDBAGS_WALLETS_SUITCASES_HATS_UMBRELLAS = (
+                "handbags_wallets_suitcases_hats_umbrellas"
+            )
+            IRON_AND_STEEL = "iron_and_steel"
+            IRON_AND_STEEL_PRODUCTS = "iron_and_steel_products"
+            MACHINERY_EQUIPMENT_TOOLS_SPARE_PARTS_OTHER = (
+                "machinery_equipment_tools_spare_parts_other"
+            )
+            MAIN_PRODUCTS = "main_products"
+            OTHER_BASE_METALS_AND_PRODUCTS = "other_base_metals_and_products"
+            OTHER_GOODS = "other_goods"
+            PAPER_AND_PAPER_PRODUCTS = "paper_and_paper_products"
+            PEPPER = "pepper"
+            PETROLEUM = "petroleum"
+            PHONES_AND_COMPONENTS = "phones_and_components"
+            PLASTIC_PRODUCTS = "plastic_products"
+            RAW_PLASTICS = "raw_plastics"
+            RICE = "rice"
+            RUBBER = "rubber"
+            RUBBER_PRODUCTS = "rubber_products"
+            TEA = "tea"
+            TEXTILE_FIBERS_YARNS_OF_ALL_KINDS = "textile_fibers_yarns_of_all_kinds"
+            TEXTILE_GARMENT_LEATHER_FOOTWEAR_RAW_MATERIALS = (
+                "textile_garment_leather_footwear_raw_materials"
+            )
+            TEXTILES_GARMENTS = "textiles_garments"
+            TOTAL_VALUE = "total_value"
+            TOYS_SPORTS_EQUIPMENT_AND_PARTS = "toys_sports_equipment_and_parts"
+            TRANSPORTATION_VEHICLES_AND_SPARE_PARTS = (
+                "transportation_vehicles_and_spare_parts"
+            )
+            VEGETABLES = "vegetables"
+            WOOD_AND_WOOD_PRODUCTS = "wood_and_wood_products"
+
+        name = "xpi"
+        primary_key = [Column.DATE.value]
+
     class MPI:
         class Column(Enum):
             YEAR = "year"
@@ -1083,6 +1169,17 @@ class Table:
         name = "population"
         primary_key = [Column.YEAR.value]
 
+    class G_POPULATION:
+        class Column(Enum):
+            DATE = "date"
+            POPULATION = "population"
+            POPULATION_AREA_URBAN_RATE = "population_area_urban_rate"
+            POPULATION_DENSITY = "population_density"
+            POPULATION_GROWTH_RATE = "population_growth_rate"
+
+        name = "population"
+        primary_key = [Column.DATE.value]
+
     class LABOR:
         class Column(Enum):
             YEAR = "year"
@@ -1101,6 +1198,25 @@ class Table:
 
         name = "labor"
         primary_key = [Column.YEAR.value]
+
+    class G_LABOR:
+        class Column(Enum):
+            DATE = "date"
+            AGRICULTURE_FORESTRY_AND_FISHERY = "agriculture_forestry_and_fishery"
+            EMPLOYED_AMOUNT = "employed_amount"
+            FEMALE = "female"
+            INDUSTRY_CONSTRUCTION = "industry_construction"
+            LABOR_FORCE_ANNUAL_CHANGE_PERCENT = "labor_force_annual_change_percent"
+            LABOR_FORCE_PARTICIPATION_RATE_PERCENT = (
+                "labor_force_participation_rate_percent"
+            )
+            MALE = "male"
+            SERVICES = "services"
+            UNEMPLOYED = "unemployed"
+            URBAN_UNEMPLOYMENT_RATE = "urban_unemployment_rate"
+
+        name = "labor"
+        primary_key = [Column.DATE.value]
 
     class RETAIL:
         class Column(Enum):
@@ -1239,6 +1355,46 @@ class Table:
         name = "ipv"
         primary_key = [Column.YEAR.value, Column.MONTH.value]
 
+    class G_IPV:
+        class Column(Enum):
+            DATE = "date"
+            ALUMINIUM = "aluminium"
+            ANIMAL_FEED = "animal_feed"
+            AQUATIC_FEED = "aquatic_feed"
+            BEER = "beer"
+            CARS = "cars"
+            CASUAL_CLOTHES = "casual_clothes"
+            CEMENT = "cement"
+            CHEMICAL_PAINTS = "chemical_paints"
+            CIGARETTES = "cigarettes"
+            COAL_CLEAN_COAL = "coal_clean_coal"
+            COMMERCIAL_TAP_WATER = "commercial_tap_water"
+            ELECTRICITY_PRODUCED = "electricity_produced"
+            EXTRACTED_CRUDE_OIL = "extracted_crude_oil"
+            FRESH_MILK = "fresh_milk"
+            GASOLINE_OIL = "gasoline_oil"
+            GRANULATED_SUGAR = "granulated_sugar"
+            IRON_CRUDE_STEEL = "iron_crude_steel"
+            LEATHER_SHOES_AND_SANDALS = "leather_shoes_and_sandals"
+            LIQUIDIZED_GAS_LPG = "liquidized_gas_lpg"
+            MOBILE_PHONES = "mobile_phones"
+            MONONATRI_GLUTAMAT = "mononatri_glutamat"
+            MOTORCYCLES = "motorcycles"
+            NPK_MIXED_FERTILIZERS = "npk_mixed_fertilizers"
+            NATURAL_FABRICS = "natural_fabrics"
+            NATURAL_GAS_AIR = "natural_gas_in_the_form_of_air"
+            PHONE_ACCESSORIES = "phone_accessories"
+            POWDERED_MILK = "powdered_milk"
+            PROCESSED_SEAFOOD = "processed_seafood"
+            ROLLED_STEEL = "rolled_steel"
+            STEEL_BARS_ANGLE_STEEL = "steel_bars_angle_steel"
+            SYNTHETIC_FABRICS = "synthetic_or_artificial_fabrics"
+            TELEVISION = "television"
+            UREA_FERTILIZER = "urea_fertilizer"
+
+        name = "ipv"
+        primary_key = [Column.DATE.value]
+
     class MIP:
         class Column(Enum):
             YEAR = "year"
@@ -1341,6 +1497,108 @@ class Table:
         name = "mip"
         primary_key = [Column.YEAR.value]
 
+    class G_MIP:
+        class Column(Enum):
+            DATE = "date"
+            AIR_CONDITIONERS = "air_conditioners"
+            ANIMAL_AND_POULTRY_FEED = "animal_and_poultry_feed"
+            ANTIMONY_ORE_AND_ANTIMONY_CONCENTRATE = (
+                "antimony_ore_and_antimony_concentrate"
+            )
+            APATITE_ORE = "apatite_ore"
+            AQUACULTURE_FEED = "aquaculture_feed"
+            ASSEMBLED_CARS = "assembled_cars"
+            ASSEMBLED_MOTORCYCLES_AND_MOPEDS = "assembled_motorcycles_and_mopeds"
+            ASSEMBLED_TVS = "assembled_tvs"
+            BATH_MILK_AND_FACIAL_CLEANSER = "bath_milk_and_facial_cleanser"
+            BEER = "beer"
+            CANNED_FRUITS_AND_NUTS = "canned_fruits_and_nuts"
+            CANNED_MEAT = "canned_meat"
+            CANNED_SEAFOOD = "canned_seafood"
+            CANNED_VEGETABLES = "canned_vegetables"
+            CAR_AND_TRACTOR_TIRES_INFLATABLE = "car_and_tractor_tires_inflatable"
+            CAST_OR_OTHER_ROUGH_IRON_AND_STEEL = "cast_or_other_rough_iron_and_steel"
+            CASUAL_CLOTHING = "casual_clothing"
+            CEMENT = "cement"
+            CHEMICAL_FERTILIZERS = "chemical_fertilizers"
+            CLEAN_COAL = "clean_coal"
+            COMMERCIAL_TAP_WATER = "commercial_tap_water"
+            COPPER_ORE_AND_COPPER_CONCENTRATE = "copper_ore_and_copper_concentrate"
+            CRUDE_OIL_EXTRACTION = "crude_oil_extraction"
+            DIGITAL_CAMERAS = "digital_cameras"
+            DOMESTIC_CERAMICS = "domestic_ceramics"
+            DOMESTIC_CRUDE_OIL_EXTRACTION = "domestic_crude_oil_extraction"
+            EXTRACTED_STONE = "extracted_stone"
+            FABRIC = "fabric"
+            FABRIC_SHOES = "fabric_shoes"
+            FIBER = "fiber"
+            FIBER_CEMENT_ROOFING_SHEETS = "fiber_cement_roofing_sheets"
+            FIRED_BRICKS = "fired_bricks"
+            FIRED_TILES = "fired_tiles"
+            FISH_SAUCE = "fish_sauce"
+            FRESH_MILK = "fresh_milk"
+            FROZEN_SEAFOOD = "frozen_seafood"
+            GENERATED_ELECTRICITY = "generated_electricity"
+            GRANULATED_SUGAR = "granulated_sugar"
+            GRAVEL_AND_PEBBLES = "gravel_and_pebbles"
+            GROUND_COFFEE_AND_INSTANT_COFFEE = "ground_coffee_and_instant_coffee"
+            HERBICIDES = "herbicides"
+            HOUSEHOLD_ELECTRIC_FANS = "household_electric_fans"
+            HOUSEHOLD_REFRIGERATORS_AND_FREEZERS = (
+                "household_refrigerators_and_freezers"
+            )
+            HOUSEHOLD_WASHING_MACHINES = "household_washing_machines"
+            IRON_ORE_AND_IRON_CONCENTRATE = "iron_ore_and_iron_concentrate"
+            LANDLINE_PHONES = "landline_phones"
+            LAUNDRY_DETERGENT_AND_CLEANING_PRODUCTS = (
+                "laundry_detergent_and_cleaning_products"
+            )
+            LEATHER_SHOES_AND_BOOTS = "leather_shoes_and_boots"
+            LIGHT_BULBS = "light_bulbs"
+            MILLED_RICE = "milled_rice"
+            MINERAL_WATER = "mineral_water"
+            MOBILE_PHONES = "mobile_phones"
+            MOTORCYCLE_AND_BICYCLE_TIRES_INFLATABLE = (
+                "motorcycle_and_bicycle_tires_inflatable"
+            )
+            MSG_MONOSODIUM_GLUTAMATE = "msg_monosodium_glutamate"
+            NATURAL_GAS_IN_GAS_FORM = "natural_gas_in_gas_form"
+            NPK_FERTILIZERS = "npk_fertilizers"
+            PAPER_AND_CARDBOARD = "paper_and_cardboard"
+            PESTICIDES = "pesticides"
+            PLASTIC_PACKAGING_AND_BAGS = "plastic_packaging_and_bags"
+            POWDERED_MILK = "powdered_milk"
+            PRINTED_NEWSPAPERS_AND_OTHER_PRINTING_PRODUCTS = (
+                "printed_newspapers_and_other_printing_products"
+            )
+            PRINTERS = "printers"
+            PROCESSED_TEA = "processed_tea"
+            PURIFIED_WATER = "purified_water"
+            REFINED_VEGETABLE_OIL = "refined_vegetable_oil"
+            ROLLED_STEEL_AND_SHAPED_STEEL = "rolled_steel_and_shaped_steel"
+            SANITARY_WARE = "sanitary_ware"
+            SAWN_TIMBER = "sawn_timber"
+            SEA_SALT = "sea_salt"
+            SHAMPOO_AND_CONDITIONER = "shampoo_and_conditioner"
+            SPIRITS_AND_WHITE_WINE = "spirits_and_white_wine"
+            SPORTS_SHOES = "sports_shoes"
+            STANDARD_BATTERIES_1_5V = "standard_batteries_15v"
+            THRESHING_MACHINES = "threshing_machines"
+            TITANIUM_ORE_AND_TITANIUM_CONCENTRATE = (
+                "titanium_ore_and_titanium_concentrate"
+            )
+            TOBACCO = "tobacco"
+            TOOTHPASTE = "toothpaste"
+            TUBES_FOR_BICYCLES_AND_MOTORCYCLES = "tubes_for_bicycles_and_motorcycles"
+            TUBES_FOR_CARS_AND_AIRCRAFT = "tubes_for_cars_and_aircraft"
+            VARIOUS_TYPES_OF_BATTERIES = "various_types_of_batteries"
+            VARIOUS_TYPES_OF_BICYCLES = "various_types_of_bicycles"
+            VARIOUS_TYPES_OF_SAND = "various_types_of_sand"
+            YELLOW_PHOSPHORUS = "yellow_phosphorus"
+
+        name = "mip"
+        primary_key = [Column.DATE.value]
+
     class FA_BY_HOUSE_TYPES:
         class Column(Enum):
             YEAR = "year"
@@ -1361,6 +1619,27 @@ class Table:
 
         name = "fa_by_house_types"
         primary_key = [Column.YEAR.value]
+
+    class G_FA_BY_HOUSE_TYPES:
+        class Column(Enum):
+            DATE = "date"
+            _16_20_FLOORS = "_16_20_floors"
+            _21_25_FLOORS = "_21_25_floors"
+            _26_FLOORS_AND_ABOVE = "_26_floors_and_above"
+            _5_FLOORS_AND_BELOW = "_5_floors_and_below"
+            _6_8_FLOORS = "_6_8_floors"
+            _9_15_FLOORS = "_9_15_floors"
+            APARTMENT_BUILDINGS = "apartment_buildings"
+            SINGLE_FAMILY_HOMES = "single_family_homes"
+            SINGLE_FAMILY_HOMES_4_FLOORS_AND_ABOVE = (
+                "single_family_homes_4_floors_and_above"
+            )
+            SINGLE_FAMILY_HOMES_BELOW_4_FLOORS = "single_family_homes_below_4_floors"
+            TOTAL = "total"
+            VILLAS = "villas"
+
+        name = "fa_by_house_types"
+        primary_key = [Column.DATE.value]
 
     class IT_BOP:
         class Column(Enum):
@@ -1595,6 +1874,17 @@ class Table:
         name = "treg"
         primary_key = [Column.YEAR.value, Column.MONTH.value]
 
+    class G_TREG:
+        class Column(Enum):
+            DATE = "date"
+            INTERNATIONAL_LIQUIDITY_TOTAL_RESERVES_EXCLUDING_GOLD_FOREIGN_EXCHANGE_US_DOLLARS = "international_liquidity_total_reserves_excluding_gold_foreign_exchange_us_dollars"
+            INTERNATIONAL_LIQUIDITY_TOTAL_RESERVES_EXCLUDING_GOLD_US_DOLLARS = (
+                "international_liquidity_total_reserves_excluding_gold_us_dollars"
+            )
+
+        name = "treg"
+        primary_key = [Column.DATE.value]
+
     class CREDIT:
         class Column(Enum):
             YEAR = "year"
@@ -1657,6 +1947,15 @@ class Table:
 
         name = "rrrr"
         primary_key = [Column.YEAR.value, Column.MONTH.value, Column.DAY.value]
+
+    class G_RRRR:
+        class Column(Enum):
+            DATE = "date"
+            DISCOUNT_RATE = "discount_rate"
+            REFINANCING_RATE = "refinancing_rate"
+
+        name = "rrrr"
+        primary_key = [Column.DATE.value]
 
     class FDI_SECTOR:
         class Column(Enum):
