@@ -2414,3 +2414,35 @@ class FeatureSelectorType(Enum):
         "name": "xgb_shap",
         "weight": 0.25,
     }
+
+
+class TTC_MacroeconomicTable(Enum):
+    DOW_JONES = Table.DOW_JONES.name
+    FA_BY_HOUSE_TYPES = Table.G_FA_BY_HOUSE_TYPES.name
+    GDP = Table.G_GDP.name
+    GOLD_PRICE = Table.GOLD_PRICE.name
+    IPV = Table.G_IPV.name
+    LABOR = Table.G_LABOR.name
+    MIP = Table.G_MIP.name
+    NASDAQ_100 = Table.NASDAQ_100.name
+    NYSE_COMPOSITE = Table.NYSE_COMPOSITE.name
+    OIL_PRICE = Table.OIL_PRICE.name
+    POPULATION = Table.G_POPULATION.name
+    PPI = Table.G_PPI.name
+    RRRR = Table.G_RRRR.name
+    SNP_500 = Table.SNP_500.name
+    TREG = Table.G_TREG.name
+    XPI = Table.G_XPI.name
+
+
+class TTC_StockMarketTable(Enum):
+    HNX_30_INDEX = Table.HNX_30_INDEX.name
+    HNX_INDEX = Table.HNX_INDEX.name
+    UPCOM_INDEX = Table.UPCOM_INDEX.name
+    VN_30_INDEX = Table.VN_30_INDEX.name
+    VN_100_INDEX = Table.VN_100_INDEX.name
+    VN_INDEX = Table.VN_INDEX.name
+
+
+class TTC_EnterpriseTable(Enum):
+    GAS = "gas"
