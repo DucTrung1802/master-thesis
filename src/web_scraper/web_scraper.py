@@ -106,7 +106,12 @@ class WebScraper:
     ) -> Tuple[List, List]:
         # Extract data from the table
         table = bs4_parser.find("table", id=id)
+        return self._extract_table(table)
 
+    def _extract_table_by_class(
+        bs4_parser: BeautifulSoup, class_name: str
+    ) -> Tuple[List, List]:
+        table = bs4_parser.find("table", class_=class_name)
         return self._extract_table(table)
 
     def _find_first_valid_element(self, web_driver: ChromiumDriver, xpaths: List[str]):
@@ -133,9 +138,7 @@ class WebScraper:
 
         try:
             # 1. Initialize folder path and file name
-            folder_path = (
-                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            )
+            folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             file_name = f"{key[2].value}"
 
             # 2. Initialize start time and current time
@@ -212,9 +215,7 @@ class WebScraper:
 
         try:
             # 1. Initialize folder path and file name
-            folder_path = (
-                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            )
+            folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             file_name = f"{key[2].value}"
 
             # 2. Initialize start time and current time
@@ -301,9 +302,7 @@ class WebScraper:
 
         try:
             # 1. Initialize folder path and file name
-            folder_path = (
-                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            )
+            folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             file_name = f"{key[2].value}"
 
             # 2. Initialize start time and current time
@@ -390,9 +389,7 @@ class WebScraper:
 
         try:
             # 1. Initialize folder path and file name
-            folder_path = (
-                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            )
+            folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             file_name = f"{key[2].value}"
 
             # 2. Initialize start time and current time
@@ -479,9 +476,7 @@ class WebScraper:
 
         try:
             # 1. Initialize folder path and file name
-            folder_path = (
-                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            )
+            folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             file_name = f"{key[2].value}"
 
             # 2. Initialize start time and current time
@@ -568,9 +563,7 @@ class WebScraper:
 
         try:
             # 1. Initialize folder path and file name
-            folder_path = (
-                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            )
+            folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             file_name = f"{key[2].value}"
 
             # 2. Initialize start time and current time
@@ -657,9 +650,7 @@ class WebScraper:
 
         try:
             # 1. Initialize folder path and file name
-            folder_path = (
-                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            )
+            folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             file_name = f"{key[2].value}"
 
             # 2. Initialize start time and current time
@@ -746,9 +737,7 @@ class WebScraper:
 
         try:
             # 1. Initialize folder path and file name
-            folder_path = (
-                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            )
+            folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             file_name = f"{key[2].value}"
 
             # 2. Initialize start time and current time
@@ -835,9 +824,7 @@ class WebScraper:
 
         try:
             # 1. Initialize folder path and file name
-            folder_path = (
-                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            )
+            folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             file_name = f"{key[2].value}"
 
             # 2. Initialize start time and current time
@@ -924,9 +911,7 @@ class WebScraper:
 
         try:
             # 1. Initialize folder path and file name
-            folder_path = (
-                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            )
+            folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             file_name = f"{key[2].value}"
 
             # 2. Initialize start time and current time
@@ -1013,9 +998,7 @@ class WebScraper:
 
         try:
             # 1. Initialize folder path and file name
-            folder_path = (
-                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            )
+            folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             file_name = f"{key[2].value}"
 
             # 2. Initialize start time and current time
@@ -1102,9 +1085,7 @@ class WebScraper:
 
         try:
             # 1. Initialize folder path and file name
-            folder_path = (
-                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            )
+            folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             file_name = f"{key[2].value}"
 
             # 2. Initialize start time and current time
@@ -1191,9 +1172,7 @@ class WebScraper:
 
         try:
             # 1. Initialize folder path and file name
-            folder_path = (
-                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            )
+            folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             file_name = f"{key[2].value}"
 
             # 2. Initialize start time and current time
@@ -1280,9 +1259,7 @@ class WebScraper:
 
         try:
             # 1. Initialize folder path and file name
-            folder_path = (
-                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            )
+            folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             file_name = f"{key[2].value}"
 
             # 2. Initialize start time and current time
@@ -1369,9 +1346,7 @@ class WebScraper:
 
         try:
             # 1. Initialize folder path and file name
-            folder_path = (
-                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            )
+            folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             file_name = f"{key[2].value}"
 
             # 2. Initialize start time and current time
@@ -1458,9 +1433,7 @@ class WebScraper:
 
         try:
             # 1. Initialize folder path and file name
-            folder_path = (
-                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            )
+            folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             file_name = f"{key[2].value}"
 
             # 2. Initialize start time and current time
@@ -1547,9 +1520,7 @@ class WebScraper:
 
         try:
             # 1. Initialize folder path and file name
-            folder_path = (
-                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            )
+            folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             file_name = f"{key[2].value}"
 
             # 2. Initialize start time and current time
@@ -1636,9 +1607,7 @@ class WebScraper:
 
         try:
             # 1. Initialize folder path and file name
-            folder_path = (
-                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            )
+            folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             file_name = f"{key[2].value}"
 
             # 2. Initialize start time and current time
@@ -1725,9 +1694,7 @@ class WebScraper:
 
         try:
             # 1. Initialize folder path and file name
-            folder_path = (
-                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            )
+            folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             file_name = f"{key[2].value}"
 
             # 2. Initialize start time and current time
@@ -1814,9 +1781,7 @@ class WebScraper:
 
         try:
             # 1. Initialize folder path and file name
-            folder_path = (
-                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            )
+            folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             file_name = f"{key[2].value}"
 
             # 2. Initialize start time and current time
@@ -1903,9 +1868,7 @@ class WebScraper:
 
         try:
             # 1. Initialize folder path and file name
-            folder_path = (
-                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            )
+            folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             file_name = f"{key[2].value}"
 
             # 2. Initialize start time and current time
@@ -1990,9 +1953,7 @@ class WebScraper:
 
         try:
             # 1. Initialize folder path and file name
-            folder_path = (
-                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            )
+            folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             file_name = f"{key[2].value}"
 
             # 2. Initialize start time and current time
@@ -2079,9 +2040,7 @@ class WebScraper:
 
         try:
             # 1. Initialize folder path and file name
-            folder_path = (
-                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            )
+            folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             file_name = f"{key[2].value}"
 
             # 2. Initialize start time and current time
@@ -2168,9 +2127,7 @@ class WebScraper:
 
         try:
             # 1. Initialize folder path and file name
-            folder_path = (
-                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            )
+            folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             file_name = f"{key[2].value}"
 
             # 2. Initialize start time and current time
@@ -2257,9 +2214,7 @@ class WebScraper:
 
         try:
             # 1. Initialize folder path and file name
-            folder_path = (
-                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            )
+            folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             file_name = f"{key[2].value}"
 
             # 2. Initialize start time and current time
@@ -2346,9 +2301,7 @@ class WebScraper:
 
         try:
             # 1. Initialize folder path and file name
-            folder_path = (
-                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            )
+            folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             file_name = f"{key[2].value}"
 
             # 2. Initialize start time and current time
@@ -2435,9 +2388,7 @@ class WebScraper:
 
         try:
             # 1. Initialize folder path and file name
-            folder_path = (
-                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            )
+            folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             file_name = f"{key[2].value}"
 
             # 2. Initialize start time and current time
@@ -2522,9 +2473,7 @@ class WebScraper:
 
         try:
             # 1. Initialize folder path and file name
-            folder_path = (
-                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            )
+            folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             file_name = f"{key[2].value}"
 
             # 2. Initialize start time and current time
@@ -2609,9 +2558,7 @@ class WebScraper:
 
         try:
             # 1. Initialize folder path and file name
-            folder_path = (
-                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            )
+            folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             file_name = f"{key[2].value}"
 
             # 2. Initialize start time and current time
@@ -2696,9 +2643,7 @@ class WebScraper:
 
         try:
             # 1. Initialize folder path and file name
-            folder_path = (
-                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            )
+            folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             file_name = f"{key[2].value}"
 
             # 2. Initialize start time and current time
@@ -2783,9 +2728,7 @@ class WebScraper:
 
         try:
             # 1. Initialize folder path and file name
-            folder_path = (
-                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            )
+            folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             file_name = f"{key[2].value}"
 
             # 2. Initialize start time and current time
@@ -2812,6 +2755,33 @@ class WebScraper:
 
             # 7. Logic for scraping
 
+            time_date_button_xpath = (
+                '//*[@id="main-content-wrapper"]/div[1]/div[1]/div[1]/button'
+            )
+            self._click_element(web_driver, time_date_button_xpath)
+
+            start_date_xpath = (
+                '//*[starts-with(@id, "menu-")]/div/section/div[2]/input[1]'
+            )
+            self._input_text(web_driver, start_date_xpath, "01/01/2024")
+
+            end_date_xpath = (
+                '//*[starts-with(@id, "menu-")]/div/section/div[2]/input[2]'
+            )
+            self._input_text(web_driver, end_date_xpath, "12/31/2024")
+
+            done_button_xpath = (
+                '//*[starts-with(@id, "menu-")]/div/section/div[3]/button[1]'
+            )
+            self._click_element(web_driver, done_button_xpath)
+
+            time.sleep(SCRAPER_BASE_WAIT_TIME)
+            bs4_parser = self._update_bs4_parser(web_driver)
+
+            # WORKING ON _extract_table_by_class
+            # headers, rows = self._extract_table_by_class(
+            #     bs4_parser=bs4_parser, class_name="table yf-1jecxey noDl hideOnPrint"
+            # )
 
             # # Write to CSV
             # with open(file_path, "w", newline="", encoding="utf-8") as f:
@@ -2834,9 +2804,7 @@ class WebScraper:
 
         try:
             # 1. Initialize folder path and file name
-            folder_path = (
-                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            )
+            folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             file_name = f"{key[2].value}"
 
             # 2. Initialize start time and current time
@@ -2901,9 +2869,7 @@ class WebScraper:
 
         try:
             # 1. Initialize folder path and file name
-            folder_path = (
-                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            )
+            folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             file_name = f"{key[2].value}"
 
             # 2. Initialize start time and current time
@@ -2985,9 +2951,7 @@ class WebScraper:
 
         try:
             # 1. Initialize folder path and file name
-            folder_path = (
-                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            )
+            folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             file_name = f"{key[2].value}"
 
             # 2. Initialize start time and current time
@@ -3069,9 +3033,7 @@ class WebScraper:
 
         try:
             # 1. Initialize folder path and file name
-            folder_path = (
-                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            )
+            folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             file_name = f"{key[2].value}"
 
             # 2. Initialize start time and current time
@@ -3153,9 +3115,7 @@ class WebScraper:
 
         try:
             # 1. Initialize folder path and file name
-            folder_path = (
-                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            )
+            folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             file_name = f"{key[2].value}"
 
             # 2. Initialize start time and current time
@@ -3237,9 +3197,7 @@ class WebScraper:
 
         try:
             # 1. Initialize folder path and file name
-            folder_path = (
-                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            )
+            folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             file_name = f"{key[2].value}"
 
             # 2. Initialize start time and current time
@@ -3330,9 +3288,7 @@ class WebScraper:
         try:
 
             # 1. Initialize folder path and file name
-            folder_path = (
-                f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            )
+            folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
             file_name = f"{key[2].value}"
 
             # 2. Initialize start time and current time
@@ -3813,13 +3769,15 @@ class WebScraper:
                 ImportSource.VIETSTOCK,
             ):
                 return self._scrape_data_macroeconomics_import_vietstock(key)
-            
+
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.NYSE_COMPOSITE,
                 NYSECompositeSource.YAHOO_FINANCE,
             ):
-                return self._scrape_data_macroeconomics_nyse_composite_yahoo_finance(key)
+                return self._scrape_data_macroeconomics_nyse_composite_yahoo_finance(
+                    key
+                )
 
             # STOCK_MARKET
             case (
@@ -3869,305 +3827,305 @@ class WebScraper:
         self._logger.log_info("Adding macroeconomic data scraping tasks.")
         number_of_task_before = self._thread_manager.get_current_number_of_task()
 
-        # MACROECONOMICS_GDP_VIETSTOCK
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.GDP,
-            GdpSource.VIETSTOCK,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # # MACROECONOMICS_GDP_VIETSTOCK
+        # key = (
+        #     ScrapeMainType.MACROECONOMICS,
+        #     MacroeconomicsSubType.GDP,
+        #     GdpSource.VIETSTOCK,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
 
-        # MACROECONOMICS_CPI_VIETSTOCK
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.CPI,
-            CpiSource.VIETSTOCK,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # # MACROECONOMICS_CPI_VIETSTOCK
+        # key = (
+        #     ScrapeMainType.MACROECONOMICS,
+        #     MacroeconomicsSubType.CPI,
+        #     CpiSource.VIETSTOCK,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
 
-        # MACROECONOMICS_PPI_VIETSTOCK
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.PPI,
-            PpiSource.VIETSTOCK,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # # MACROECONOMICS_PPI_VIETSTOCK
+        # key = (
+        #     ScrapeMainType.MACROECONOMICS,
+        #     MacroeconomicsSubType.PPI,
+        #     PpiSource.VIETSTOCK,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
 
-        # MACROECONOMICS_IPI_VIETSTOCK
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.IPI,
-            IpiSource.VIETSTOCK,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # # MACROECONOMICS_IPI_VIETSTOCK
+        # key = (
+        #     ScrapeMainType.MACROECONOMICS,
+        #     MacroeconomicsSubType.IPI,
+        #     IpiSource.VIETSTOCK,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
 
-        # MACROECONOMICS_XPI_VIETSTOCK
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.XPI,
-            XpiSource.VIETSTOCK,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # # MACROECONOMICS_XPI_VIETSTOCK
+        # key = (
+        #     ScrapeMainType.MACROECONOMICS,
+        #     MacroeconomicsSubType.XPI,
+        #     XpiSource.VIETSTOCK,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
 
-        # MACROECONOMICS_MPI_VIETSTOCK
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.MPI,
-            MpiSource.VIETSTOCK,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # # MACROECONOMICS_MPI_VIETSTOCK
+        # key = (
+        #     ScrapeMainType.MACROECONOMICS,
+        #     MacroeconomicsSubType.MPI,
+        #     MpiSource.VIETSTOCK,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
 
-        # MACROECONOMICS_POPULATION_VIETSTOCK
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.POPULATION,
-            PopulationSource.VIETSTOCK,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # # MACROECONOMICS_POPULATION_VIETSTOCK
+        # key = (
+        #     ScrapeMainType.MACROECONOMICS,
+        #     MacroeconomicsSubType.POPULATION,
+        #     PopulationSource.VIETSTOCK,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
 
-        # MACROECONOMICS_EMPLOYMENT_VIETSTOCK
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.LABOR,
-            LaborSource.VIETSTOCK,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # # MACROECONOMICS_EMPLOYMENT_VIETSTOCK
+        # key = (
+        #     ScrapeMainType.MACROECONOMICS,
+        #     MacroeconomicsSubType.LABOR,
+        #     LaborSource.VIETSTOCK,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
 
-        # MACROECONOMICS_RETAIL_VIETSTOCK
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.RETAIL,
-            RetailSource.VIETSTOCK,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # # MACROECONOMICS_RETAIL_VIETSTOCK
+        # key = (
+        #     ScrapeMainType.MACROECONOMICS,
+        #     MacroeconomicsSubType.RETAIL,
+        #     RetailSource.VIETSTOCK,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
 
-        # MACROECONOMICS_PMI_VIETSTOCK
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.PMI,
-            PmiSource.VIETSTOCK,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # # MACROECONOMICS_PMI_VIETSTOCK
+        # key = (
+        #     ScrapeMainType.MACROECONOMICS,
+        #     MacroeconomicsSubType.PMI,
+        #     PmiSource.VIETSTOCK,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
 
-        # MACROECONOMICS_IIP_VIETSTOCK
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.IIP,
-            IipSource.VIETSTOCK,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # # MACROECONOMICS_IIP_VIETSTOCK
+        # key = (
+        #     ScrapeMainType.MACROECONOMICS,
+        #     MacroeconomicsSubType.IIP,
+        #     IipSource.VIETSTOCK,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
 
-        # MACROECONOMICS_IPV_VIETSTOCK
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.IPV,
-            IpvSource.VIETSTOCK,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # # MACROECONOMICS_IPV_VIETSTOCK
+        # key = (
+        #     ScrapeMainType.MACROECONOMICS,
+        #     MacroeconomicsSubType.IPV,
+        #     IpvSource.VIETSTOCK,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
 
-        # MACROECONOMICS_MIP_VIETSTOCK
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.MIP,
-            MipSource.VIETSTOCK,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # # MACROECONOMICS_MIP_VIETSTOCK
+        # key = (
+        #     ScrapeMainType.MACROECONOMICS,
+        #     MacroeconomicsSubType.MIP,
+        #     MipSource.VIETSTOCK,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
 
-        # MACROECONOMICS_FA_BY_HOUSE_TYPES_VIETSTOCK
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.FA_BY_HOUSE_TYPES,
-            FaByHouseTypeSource.VIETSTOCK,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # # MACROECONOMICS_FA_BY_HOUSE_TYPES_VIETSTOCK
+        # key = (
+        #     ScrapeMainType.MACROECONOMICS,
+        #     MacroeconomicsSubType.FA_BY_HOUSE_TYPES,
+        #     FaByHouseTypeSource.VIETSTOCK,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
 
-        # MACROECONOMICS_IT_BOP_VIETSTOCK
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.IT_BOP,
-            ItBopSource.VIETSTOCK,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # # MACROECONOMICS_IT_BOP_VIETSTOCK
+        # key = (
+        #     ScrapeMainType.MACROECONOMICS,
+        #     MacroeconomicsSubType.IT_BOP,
+        #     ItBopSource.VIETSTOCK,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
 
-        # MACROECONOMICS_TSBR_VIETSTOCK
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.TSBR,
-            TsbrSource.VIETSTOCK,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # # MACROECONOMICS_TSBR_VIETSTOCK
+        # key = (
+        #     ScrapeMainType.MACROECONOMICS,
+        #     MacroeconomicsSubType.TSBR,
+        #     TsbrSource.VIETSTOCK,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
 
-        # MACROECONOMICS_TSBE_VIETSTOCK
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.TSBE,
-            TsbeSource.VIETSTOCK,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # # MACROECONOMICS_TSBE_VIETSTOCK
+        # key = (
+        #     ScrapeMainType.MACROECONOMICS,
+        #     MacroeconomicsSubType.TSBE,
+        #     TsbeSource.VIETSTOCK,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
 
-        # MACROECONOMICS_GD_VIETSTOCK
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.GD,
-            GdSource.VIETSTOCK,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # # MACROECONOMICS_GD_VIETSTOCK
+        # key = (
+        #     ScrapeMainType.MACROECONOMICS,
+        #     MacroeconomicsSubType.GD,
+        #     GdSource.VIETSTOCK,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
 
-        # MACROECONOMICS_BRD_VIETSTOCK
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.BRD,
-            BrdSource.VIETSTOCK,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # # MACROECONOMICS_BRD_VIETSTOCK
+        # key = (
+        #     ScrapeMainType.MACROECONOMICS,
+        #     MacroeconomicsSubType.BRD,
+        #     BrdSource.VIETSTOCK,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
 
-        # MACROECONOMICS_IISD_VIETSTOCK
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.IISD,
-            IisdSource.VIETSTOCK,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # # MACROECONOMICS_IISD_VIETSTOCK
+        # key = (
+        #     ScrapeMainType.MACROECONOMICS,
+        #     MacroeconomicsSubType.IISD,
+        #     IisdSource.VIETSTOCK,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
 
-        # MACROECONOMICS_TREG_VIETSTOCK
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.TREG,
-            TregSource.VIETSTOCK,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # # MACROECONOMICS_TREG_VIETSTOCK
+        # key = (
+        #     ScrapeMainType.MACROECONOMICS,
+        #     MacroeconomicsSubType.TREG,
+        #     TregSource.VIETSTOCK,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
 
-        # MACROECONOMICS_CREDIT_VIETSTOCK
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.CREDIT,
-            CreditSource.VIETSTOCK,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # # MACROECONOMICS_CREDIT_VIETSTOCK
+        # key = (
+        #     ScrapeMainType.MACROECONOMICS,
+        #     MacroeconomicsSubType.CREDIT,
+        #     CreditSource.VIETSTOCK,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
 
-        # MACROECONOMICS_MOBILIZATION_VIETSTOCK
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.MOBILIZATION,
-            MobilizationSource.VIETSTOCK,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # # MACROECONOMICS_MOBILIZATION_VIETSTOCK
+        # key = (
+        #     ScrapeMainType.MACROECONOMICS,
+        #     MacroeconomicsSubType.MOBILIZATION,
+        #     MobilizationSource.VIETSTOCK,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
 
-        # MACROECONOMICS_EXCHANGE_RATE_VIETSTOCK
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.EXCHANGE_RATE,
-            ExchangeRateSource.VIETSTOCK,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # # MACROECONOMICS_EXCHANGE_RATE_VIETSTOCK
+        # key = (
+        #     ScrapeMainType.MACROECONOMICS,
+        #     MacroeconomicsSubType.EXCHANGE_RATE,
+        #     ExchangeRateSource.VIETSTOCK,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
 
-        # MACROECONOMICS_IIR_VIETSTOCK
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.IIR,
-            IirSource.VIETSTOCK,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # # MACROECONOMICS_IIR_VIETSTOCK
+        # key = (
+        #     ScrapeMainType.MACROECONOMICS,
+        #     MacroeconomicsSubType.IIR,
+        #     IirSource.VIETSTOCK,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
 
-        # MACROECONOMICS_RRRR_VIETSTOCK
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.RRRR,
-            RrrrSource.VIETSTOCK,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # # MACROECONOMICS_RRRR_VIETSTOCK
+        # key = (
+        #     ScrapeMainType.MACROECONOMICS,
+        #     MacroeconomicsSubType.RRRR,
+        #     RrrrSource.VIETSTOCK,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
 
-        # MACROECONOMICS_FDI_SECTOR_VIETSTOCK
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.FDI_SECTOR,
-            FdiSectorSource.VIETSTOCK,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # # MACROECONOMICS_FDI_SECTOR_VIETSTOCK
+        # key = (
+        #     ScrapeMainType.MACROECONOMICS,
+        #     MacroeconomicsSubType.FDI_SECTOR,
+        #     FdiSectorSource.VIETSTOCK,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
 
-        # MACROECONOMICS_FDI_RD_VIETSTOCK
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.FDI_RD,
-            FdiRdSource.VIETSTOCK,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # # MACROECONOMICS_FDI_RD_VIETSTOCK
+        # key = (
+        #     ScrapeMainType.MACROECONOMICS,
+        #     MacroeconomicsSubType.FDI_RD,
+        #     FdiRdSource.VIETSTOCK,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
 
-        # MACROECONOMICS_EXPORT_VIETSTOCK
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.EXPORT,
-            ExportSource.VIETSTOCK,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # # MACROECONOMICS_EXPORT_VIETSTOCK
+        # key = (
+        #     ScrapeMainType.MACROECONOMICS,
+        #     MacroeconomicsSubType.EXPORT,
+        #     ExportSource.VIETSTOCK,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
 
-        # MACROECONOMICS_IMPORT_VIETSTOCK
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.IMPORT,
-            ImportSource.VIETSTOCK,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # # MACROECONOMICS_IMPORT_VIETSTOCK
+        # key = (
+        #     ScrapeMainType.MACROECONOMICS,
+        #     MacroeconomicsSubType.IMPORT,
+        #     ImportSource.VIETSTOCK,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
 
         # MACROECONOMICS_NYSE_COMPOSITE_YAHOO_FINANCE
         key = (
@@ -4368,10 +4326,10 @@ class WebScraper:
             f"Start executing {self._thread_manager.get_current_number_of_task()} tasks."
         )
 
-        self._thread_manager.execute(
-            final_callback=self._double_check_stock_information_cafef_result
-        )
+        # self._thread_manager.execute(
+        #     final_callback=self._double_check_stock_information_cafef_result
+        # )
 
-        # self._thread_manager.execute()
+        self._thread_manager.execute()
 
         self._logger.log_info("Finished scraping data.")
