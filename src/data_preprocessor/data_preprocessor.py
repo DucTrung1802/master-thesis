@@ -3071,6 +3071,114 @@ class DataPreprocessor:
                 )
                 # fmt: on
 
+                # OIL_PRICE
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.OIL_PRICE.name,
+                    columns = [
+                        Column(name=Table.OIL_PRICE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.OIL_PRICE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
+                        Column(name=Table.OIL_PRICE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.OIL_PRICE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.OIL_PRICE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.OIL_PRICE.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.OIL_PRICE.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
+                    ],
+                    primary_keys=Table.OIL_PRICE.primary_key,
+                )
+                # fmt: on
+
+                # DOW_JONES
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.DOW_JONES.name,
+                    columns = [
+                        Column(name=Table.DOW_JONES.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.DOW_JONES.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
+                        Column(name=Table.DOW_JONES.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.DOW_JONES.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.DOW_JONES.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.DOW_JONES.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.DOW_JONES.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
+                    ],
+                    primary_keys=Table.DOW_JONES.primary_key,
+                )
+                # fmt: on
+
+                # NYSE_COMPOSITE
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.NYSE_COMPOSITE.name,
+                    columns = [
+                        Column(name=Table.NYSE_COMPOSITE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.NYSE_COMPOSITE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
+                        Column(name=Table.NYSE_COMPOSITE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.NYSE_COMPOSITE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.NYSE_COMPOSITE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.NYSE_COMPOSITE.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.NYSE_COMPOSITE.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
+                    ],
+                    primary_keys=Table.NYSE_COMPOSITE.primary_key,
+                )
+                # fmt: on
+
+                # SNP_500
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.SNP_500.name,
+                    columns = [
+                        Column(name=Table.SNP_500.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.SNP_500.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
+                        Column(name=Table.SNP_500.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.SNP_500.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.SNP_500.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.SNP_500.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.SNP_500.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
+                    ],
+                    primary_keys=Table.SNP_500.primary_key,
+                )
+                # fmt: on
+                
+                # NASDAQ_COMPOSITE
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.NASDAQ_COMPOSITE.name,
+                    columns = [
+                        Column(name=Table.NASDAQ_COMPOSITE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.NASDAQ_COMPOSITE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
+                        Column(name=Table.NASDAQ_COMPOSITE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.NASDAQ_COMPOSITE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.NASDAQ_COMPOSITE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.NASDAQ_COMPOSITE.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.NASDAQ_COMPOSITE.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
+                    ],
+                    primary_keys=Table.NASDAQ_COMPOSITE.primary_key,
+                )
+                # fmt: on
+                
+                # NASDAQ_100
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.NASDAQ_100.name,
+                    columns = [
+                        Column(name=Table.NASDAQ_100.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.NASDAQ_100.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
+                        Column(name=Table.NASDAQ_100.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.NASDAQ_100.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.NASDAQ_100.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.NASDAQ_100.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.NASDAQ_100.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
+                    ],
+                    primary_keys=Table.NASDAQ_100.primary_key,
+                )
+                # fmt: on
+
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
 
@@ -7840,6 +7948,47 @@ class DataPreprocessor:
             f'Finish cleaning data in table "{format_key_for_table(key)}".'
         )
 
+    def _transform_macroeconomics_oil_price_investing(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.OIL_PRICE,
+            OilPriceSource.INVESTING,
+        )
+
+        self._logger.log_info(
+            f'Start transforming data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for transforming data here
+        self._select_database(DataQuality.SILVER.value)
+        silver_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.OIL_PRICE.name,
+        )
+
+        gold_df = make_date_time_index_for_dataframe(df=silver_df)
+        gold_df = standardize_time_frame(df=gold_df)
+
+        cols_to_interpolate = gold_df.columns.difference(["date"])
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
+            pd.to_numeric, errors="coerce"
+        )
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
+            method="linear"
+        )
+
+        self._select_database(DataQuality.GOLD.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.OIL_PRICE.name,
+            primary_keys=Table.OIL_PRICE.primary_key,
+            df=gold_df,
+        )
+
+        self._logger.log_info(
+            f'Finish transforming data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_macroeconomics_oil_price(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing macroeconomics OIL_PRICE data for "{data_quality.value}".'
@@ -7853,7 +8002,7 @@ class DataPreprocessor:
                 self._clean_macroeconomics_oil_price_investing()
 
             case DataQuality.GOLD:
-                pass
+                self._transform_macroeconomics_oil_price_investing()
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -7971,6 +8120,47 @@ class DataPreprocessor:
 
         self._logger.log_info(
             f'Finish cleaning data in table "{format_key_for_table(key)}".'
+        )
+
+    def _transform_macroeconomics_oil_price_investing(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.OIL_PRICE,
+            OilPriceSource.INVESTING,
+        )
+
+        self._logger.log_info(
+            f'Start transforming data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for transforming data here
+        self._select_database(DataQuality.SILVER.value)
+        silver_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.OIL_PRICE.name,
+        )
+
+        oil_df = make_date_time_index_for_dataframe(df=silver_df)
+        oil_df = standardize_time_frame(df=oil_df)
+
+        cols_to_interpolate = oil_df.columns.difference(["date"])
+        oil_df[cols_to_interpolate] = oil_df[cols_to_interpolate].apply(
+            pd.to_numeric, errors="coerce"
+        )
+        oil_df[cols_to_interpolate] = oil_df[cols_to_interpolate].interpolate(
+            method="linear"
+        )
+
+        self._select_database(DataQuality.GOLD.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.OIL_PRICE.name,
+            primary_keys=Table.OIL_PRICE.primary_key,
+            df=oil_df,
+        )
+
+        self._logger.log_info(
+            f'Finish transforming data in table "{format_key_for_table(key)}".'
         )
 
     def _process_macroeconomics_dow_jones(self, data_quality: DataQuality) -> None:
@@ -9902,13 +10092,13 @@ class DataPreprocessor:
         # self._process_macroeconomics_fdi_rd(data_quality)
         # self._process_macroeconomics_export(data_quality)
         # self._process_macroeconomics_import(data_quality)
-        self._process_macroeconomics_gold_price(data_quality)
+        # self._process_macroeconomics_gold_price(data_quality)
         # self._process_macroeconomics_oil_price(data_quality)
-        # self._process_macroeconomics_dow_jones(data_quality)
-        # self._process_macroeconomics_nyse_composite(data_quality)
-        # self._process_macroeconomics_snp_500(data_quality)
-        # self._process_macroeconomics_nasdaq_composite(data_quality)
-        # self._process_macroeconomics_nasdaq_100(data_quality)
+        self._process_macroeconomics_dow_jones(data_quality)
+        self._process_macroeconomics_nyse_composite(data_quality)
+        self._process_macroeconomics_snp_500(data_quality)
+        self._process_macroeconomics_nasdaq_composite(data_quality)
+        self._process_macroeconomics_nasdaq_100(data_quality)
 
         # # Stock market
         # self._process_stock_market_market(data_quality)
