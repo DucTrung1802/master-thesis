@@ -4,7 +4,7 @@ from typing import List, Set
 from logger.logger import Logger
 
 from utils.constants import THREAD_MANAGER_POWER
-from models.thread_manager_models.task import *
+from dtos.thread_manager_dtos.task import *
 
 
 class ThreadManager:

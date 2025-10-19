@@ -1,6 +1,14 @@
 
 *.pyc
 
-raw_data/
+bronze_data/
+
+silver_data/
+
+gold_data/
 
 .env
+
+logs/
+
+mt_env/
