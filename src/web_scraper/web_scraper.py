@@ -109,7 +109,7 @@ class WebScraper:
         return self._extract_table(table)
 
     def _extract_table_by_class(
-        bs4_parser: BeautifulSoup, class_name: str
+        self, bs4_parser: BeautifulSoup, class_name: str
     ) -> Tuple[List, List]:
         table = bs4_parser.find("table", class_=class_name)
         return self._extract_table(table)
@@ -2735,17 +2735,6 @@ class WebScraper:
             start_year = SCRAPER_START_DATE.year
             current_year = datetime.now().year
 
-            file_path = f"{folder_path}/{key[1].value}_{file_name}_{start_year}_{current_year}.csv"
-
-            # 3. Delete file if exists
-            if os.path.exists(file_path):
-                self._logger.log_info(f"File already exists: {file_path}, delete it.")
-                os.remove(file_path)
-
-            # 4. Create folder if not exists
-            if not os.path.exists(folder_path):
-                os.makedirs(folder_path, exist_ok=True)
-
             # 5. Get SourceInfo
             source_info = SCRAPE_MAPPING[key]
 
@@ -2755,39 +2744,57 @@ class WebScraper:
 
             # 7. Logic for scraping
 
-            time_date_button_xpath = (
-                '//*[@id="main-content-wrapper"]/div[1]/div[1]/div[1]/button'
+            self._logger.log_info(
+                f"Scraping NYSE Composite data from {start_year} to {current_year}."
             )
-            self._click_element(web_driver, time_date_button_xpath)
 
-            start_date_xpath = (
-                '//*[starts-with(@id, "menu-")]/div/section/div[2]/input[1]'
-            )
-            self._input_text(web_driver, start_date_xpath, "01/01/2024")
+            for year in range(start_year, current_year + 1):
+                file_path = f"{folder_path}/{key[1].value}_{file_name}_{year}.csv"
 
-            end_date_xpath = (
-                '//*[starts-with(@id, "menu-")]/div/section/div[2]/input[2]'
-            )
-            self._input_text(web_driver, end_date_xpath, "12/31/2024")
+                # 3. Delete file if exists
+                if os.path.exists(file_path):
+                    self._logger.log_info(
+                        f"File already exists: {file_path}, delete it."
+                    )
+                    os.remove(file_path)
 
-            done_button_xpath = (
-                '//*[starts-with(@id, "menu-")]/div/section/div[3]/button[1]'
-            )
-            self._click_element(web_driver, done_button_xpath)
+                # 4. Create folder if not exists
+                if not os.path.exists(folder_path):
+                    os.makedirs(folder_path, exist_ok=True)
 
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
-            bs4_parser = self._update_bs4_parser(web_driver)
+                time_date_button_xpath = (
+                    '//*[@id="main-content-wrapper"]/div[1]/div[1]/div[1]/button'
+                )
+                self._click_element(web_driver, time_date_button_xpath)
 
-            # WORKING ON _extract_table_by_class
-            # headers, rows = self._extract_table_by_class(
-            #     bs4_parser=bs4_parser, class_name="table yf-1jecxey noDl hideOnPrint"
-            # )
+                start_date_xpath = (
+                    '//*[starts-with(@id, "menu-")]/div/section/div[2]/input[1]'
+                )
+                self._input_text(web_driver, start_date_xpath, f"01/01/{year}")
 
-            # # Write to CSV
-            # with open(file_path, "w", newline="", encoding="utf-8") as f:
-            #     writer = csv.writer(f)
-            #     writer.writerow(headers)
-            #     writer.writerows(rows)
+                end_date_xpath = (
+                    '//*[starts-with(@id, "menu-")]/div/section/div[2]/input[2]'
+                )
+                self._input_text(web_driver, end_date_xpath, f"12/31/{year}")
+
+                done_button_xpath = (
+                    '//*[starts-with(@id, "menu-")]/div/section/div[3]/button[1]'
+                )
+                self._click_element(web_driver, done_button_xpath)
+
+                time.sleep(SCRAPER_BASE_WAIT_TIME)
+                bs4_parser = self._update_bs4_parser(web_driver)
+
+                headers, rows = self._extract_table_by_class(
+                    bs4_parser=bs4_parser,
+                    class_name="table yf-1jecxey noDl hideOnPrint",
+                )
+
+                # Write to CSV
+                with open(file_path, "w", newline="", encoding="utf-8") as f:
+                    writer = csv.writer(f)
+                    writer.writerow(headers)
+                    writer.writerows(rows)
 
         finally:
             web_driver.close()
