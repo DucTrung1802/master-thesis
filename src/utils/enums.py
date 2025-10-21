@@ -350,7 +350,7 @@ class DowJonesSource(Enum):
 
 
 class NYSECompositeSource(Enum):
-    INVESTING = "investing"
+    YAHOO_FINANCE = "yahoo_finance"
 
 
 class SNP500Source(Enum):
@@ -700,9 +700,9 @@ SCRAPE_MAPPING: Dict[Tuple[ScrapeMainType, ScrapeSubType, Source], SourceInfo] =
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.NYSE_COMPOSITE,
-        NYSECompositeSource.INVESTING,
+        NYSECompositeSource.YAHOO_FINANCE,
     ): SourceInfo(
-        url="https://vn.investing.com/indices/nyse-composite-historical-data",
+        url="https://finance.yahoo.com/quote/%5ENYA/history/",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
