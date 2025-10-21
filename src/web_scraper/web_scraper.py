@@ -3010,6 +3010,96 @@ class WebScraper:
 
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
+    def _scrape_data_macroeconomics_nasdaq_100_yahoo_finance(
+        self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
+    ):
+        self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
+
+        # Initialize web driver and bs4 parser
+        web_driver, bs4_parser = self._initialize_web_driver_and_bs4_parser()
+        web_driver.set_page_load_timeout(180)
+        web_driver.set_script_timeout(180)
+
+        try:
+            # 1. Initialize folder path and file name
+            folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            file_name = f"{key[2].value}"
+
+            # 2. Initialize start time and current time
+            start_year = SCRAPER_START_DATE.year
+            current_year = datetime.now().year
+
+            # 3. Create folder if not exists
+            if not os.path.exists(folder_path):
+                os.makedirs(folder_path, exist_ok=True)
+
+            # 4. Get SourceInfo
+            source_info = SCRAPE_MAPPING[key]
+
+            # 5. Navigate to URL
+            web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
+            time.sleep(SCRAPER_BASE_WAIT_TIME)
+
+            # 6. Logic for scraping
+            self._logger.log_info(
+                f"Scraping NASDAQ 100 data from {start_year} to {current_year}."
+            )
+
+            file_path = f"{folder_path}/{key[1].value}_{file_name}_{start_year}_{current_year}.csv"
+
+            if os.path.exists(file_path):
+                self._logger.log_info(f"File already exists: {file_path}, delete it.")
+                os.remove(file_path)
+
+            time_date_button_xpath = (
+                '//*[@id="main-content-wrapper"]/div[1]/div[1]/div[1]/button'
+            )
+            WebDriverWait(web_driver, 10).until(
+                EC.element_to_be_clickable((By.XPATH, time_date_button_xpath))
+            )
+            self._click_element(web_driver, time_date_button_xpath)
+
+            start_date_xpath = (
+                '//*[starts-with(@id, "menu-")]/div/section/div[2]/input[1]'
+            )
+            self._input_text(web_driver, start_date_xpath, f"01/01/{start_year}")
+
+            end_date_xpath = (
+                '//*[starts-with(@id, "menu-")]/div/section/div[2]/input[2]'
+            )
+            self._input_text(web_driver, end_date_xpath, f"12/31/{current_year}")
+
+            done_button_xpath = (
+                '//*[starts-with(@id, "menu-")]/div/section/div[3]/button[1]'
+            )
+            WebDriverWait(web_driver, 10).until(
+                EC.element_to_be_clickable((By.XPATH, done_button_xpath))
+            )
+            self._click_element(web_driver, done_button_xpath)
+
+            table_xpath = '//*[@id="main-content-wrapper"]/div[1]/div[3]/table'
+            WebDriverWait(web_driver, 40).until(
+                EC.visibility_of_all_elements_located((By.XPATH, f"{table_xpath}//tr"))
+            )
+            time.sleep(SCRAPER_BASE_WAIT_TIME * 3)
+            bs4_parser = self._update_bs4_parser(web_driver)
+
+            headers, rows = self._extract_table_by_class(
+                bs4_parser=bs4_parser,
+                class_name="table yf-1jecxey noDl hideOnPrint",
+            )
+
+            # Write to CSV
+            with open(file_path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(headers)
+                writer.writerows(rows)
+
+        finally:
+            web_driver.close()
+
+        self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
+
     def _scrape_data_stock_market_vn_hnx_index_cafef(
         self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
     ):
@@ -4008,6 +4098,13 @@ class WebScraper:
                 NASDAQCompositeSource.YAHOO_FINANCE,
             ):
                 return self._scrape_data_macroeconomics_nasdaq_composite_yahoo_finance(key)
+
+            case (
+                ScrapeMainType.MACROECONOMICS,
+                MacroeconomicsSubType.NASDAQ_100,
+                NASDAQ100Source.YAHOO_FINANCE,
+            ):
+                return self._scrape_data_macroeconomics_nasdaq_100_yahoo_finance(key)
             
             # STOCK_MARKET
             case (
@@ -4377,11 +4474,21 @@ class WebScraper:
         #     Task(format_key_for_name(key), self._scrape_data_from, key)
         # )
 
-        # MACROECONOMICS_NASDAQ_COMPOSITE_YAHOO_FINANCE
+        # # MACROECONOMICS_NASDAQ_COMPOSITE_YAHOO_FINANCE
+        # key = (
+        #     ScrapeMainType.MACROECONOMICS,
+        #     MacroeconomicsSubType.NASDAQ_COMPOSITE,
+        #     NASDAQCompositeSource.YAHOO_FINANCE,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
+
+        # MACROECONOMICS_NASDAQ_100_YAHOO_FINANCE
         key = (
             ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.NASDAQ_COMPOSITE,
-            NASDAQCompositeSource.YAHOO_FINANCE,
+            MacroeconomicsSubType.NASDAQ_100,
+            NASDAQ100Source.YAHOO_FINANCE,
         )
         self._thread_manager.add_task(
             Task(format_key_for_name(key), self._scrape_data_from, key)
@@ -4391,7 +4498,6 @@ class WebScraper:
         # Gold price is scraped MANUALLY from investing.com
         # Oil price is scraped MANUALLY from investing.com
         # Dow Jones index is scraped MANUALLY from investing.com
-        # NASDAQ 100 index is scraped MANUALLY from investing.com
 
         number_of_task_after = self._thread_manager.get_current_number_of_task()
         self._logger.log_info(

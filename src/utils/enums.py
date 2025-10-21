@@ -362,7 +362,7 @@ class NASDAQCompositeSource(Enum):
 
 
 class NASDAQ100Source(Enum):
-    INVESTING = "investing"
+    YAHOO_FINANCE = "yahoo_finance"
 
 
 # STOCK_MARKET
@@ -721,9 +721,9 @@ SCRAPE_MAPPING: Dict[Tuple[ScrapeMainType, ScrapeSubType, Source], SourceInfo] =
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.NASDAQ_100,
-        NASDAQ100Source.INVESTING,
+        NASDAQ100Source.YAHOO_FINANCE,
     ): SourceInfo(
-        url="https://vn.investing.com/indices/nq-100-historical-data",
+        url="https://finance.yahoo.com/quote/%5ENDX/history/",
     ),
     # STOCK_MARKET
     (
