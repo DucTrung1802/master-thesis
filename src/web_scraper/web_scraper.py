@@ -29,6 +29,14 @@ class WebScraper:
         self._thread_manager = ThreadManager(logger=self._logger, power=power)
 
         self._chrome_options = Options()
+        self._chrome_options.add_experimental_option(
+            "prefs",
+            {
+                "profile.managed_default_content_settings.images": 2,  # Disable images
+                "profile.managed_default_content_settings.stylesheets": 2,  # Disable CSS
+                "profile.managed_default_content_settings.javascript": 1,  # Keep JS if needed
+            },
+        )
         self._chrome_options.add_argument(
             "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
         )
@@ -114,9 +122,25 @@ class WebScraper:
         table = bs4_parser.find("table", class_=class_name)
         return self._extract_table(table)
 
-    def _find_first_valid_element(self, web_driver: ChromiumDriver, xpaths: List[str]):
+    def _find_first_valid_element_by_xpath(
+        self, web_driver: ChromiumDriver, xpaths: List[str]
+    ):
         for xpath in xpaths:
             elements = web_driver.find_elements(By.XPATH, xpath)
+            if elements:
+                return elements[0]
+        return False
+
+    def _find_first_valid_element_by_class(
+        self, web_driver: ChromiumDriver, class_names: List[str]
+    ):
+        for class_name in class_names:
+            if " " in class_name:
+                selector = "." + ".".join(class_name.split())
+                elements = web_driver.find_elements(By.CSS_SELECTOR, selector)
+            else:
+                elements = web_driver.find_elements(By.CLASS_NAME, class_name)
+
             if elements:
                 return elements[0]
         return False
@@ -2735,66 +2759,71 @@ class WebScraper:
             start_year = SCRAPER_START_DATE.year
             current_year = datetime.now().year
 
-            # 5. Get SourceInfo
+            # 3. Create folder if not exists
+            if not os.path.exists(folder_path):
+                os.makedirs(folder_path, exist_ok=True)
+
+            # 4. Get SourceInfo
             source_info = SCRAPE_MAPPING[key]
 
-            # 6. Navigate to URL
+            # 5. Navigate to URL
             web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
-            time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
+            time.sleep(SCRAPER_BASE_WAIT_TIME)
 
-            # 7. Logic for scraping
-
+            # 6. Logic for scraping
             self._logger.log_info(
                 f"Scraping NYSE Composite data from {start_year} to {current_year}."
             )
 
-            for year in range(start_year, current_year + 1):
-                file_path = f"{folder_path}/{key[1].value}_{file_name}_{year}.csv"
+            file_path = f"{folder_path}/{key[1].value}_{file_name}_{start_year}_{current_year}.csv"
 
-                # 3. Delete file if exists
-                if os.path.exists(file_path):
-                    self._logger.log_info(
-                        f"File already exists: {file_path}, delete it."
-                    )
-                    os.remove(file_path)
+            if os.path.exists(file_path):
+                self._logger.log_info(f"File already exists: {file_path}, delete it.")
+                os.remove(file_path)
 
-                # 4. Create folder if not exists
-                if not os.path.exists(folder_path):
-                    os.makedirs(folder_path, exist_ok=True)
+            time_date_button_xpath = (
+                '//*[@id="main-content-wrapper"]/div[1]/div[1]/div[1]/button'
+            )
+            WebDriverWait(web_driver, 10).until(
+                EC.element_to_be_clickable((By.XPATH, time_date_button_xpath))
+            )
+            self._click_element(web_driver, time_date_button_xpath)
 
-                time_date_button_xpath = (
-                    '//*[@id="main-content-wrapper"]/div[1]/div[1]/div[1]/button'
-                )
-                self._click_element(web_driver, time_date_button_xpath)
+            start_date_xpath = (
+                '//*[starts-with(@id, "menu-")]/div/section/div[2]/input[1]'
+            )
+            self._input_text(web_driver, start_date_xpath, f"01/01/{start_year}")
 
-                start_date_xpath = (
-                    '//*[starts-with(@id, "menu-")]/div/section/div[2]/input[1]'
-                )
-                self._input_text(web_driver, start_date_xpath, f"01/01/{year}")
+            end_date_xpath = (
+                '//*[starts-with(@id, "menu-")]/div/section/div[2]/input[2]'
+            )
+            self._input_text(web_driver, end_date_xpath, f"12/31/{current_year}")
 
-                end_date_xpath = (
-                    '//*[starts-with(@id, "menu-")]/div/section/div[2]/input[2]'
-                )
-                self._input_text(web_driver, end_date_xpath, f"12/31/{year}")
+            done_button_xpath = (
+                '//*[starts-with(@id, "menu-")]/div/section/div[3]/button[1]'
+            )
+            WebDriverWait(web_driver, 10).until(
+                EC.element_to_be_clickable((By.XPATH, done_button_xpath))
+            )
+            self._click_element(web_driver, done_button_xpath)
 
-                done_button_xpath = (
-                    '//*[starts-with(@id, "menu-")]/div/section/div[3]/button[1]'
-                )
-                self._click_element(web_driver, done_button_xpath)
+            table_xpath = '//*[@id="main-content-wrapper"]/div[1]/div[3]/table'
+            WebDriverWait(web_driver, 40).until(
+                EC.visibility_of_all_elements_located((By.XPATH, f"{table_xpath}//tr"))
+            )
+            time.sleep(SCRAPER_BASE_WAIT_TIME * 3)
+            bs4_parser = self._update_bs4_parser(web_driver)
 
-                time.sleep(SCRAPER_BASE_WAIT_TIME)
-                bs4_parser = self._update_bs4_parser(web_driver)
+            headers, rows = self._extract_table_by_class(
+                bs4_parser=bs4_parser,
+                class_name="table yf-1jecxey noDl hideOnPrint",
+            )
 
-                headers, rows = self._extract_table_by_class(
-                    bs4_parser=bs4_parser,
-                    class_name="table yf-1jecxey noDl hideOnPrint",
-                )
-
-                # Write to CSV
-                with open(file_path, "w", newline="", encoding="utf-8") as f:
-                    writer = csv.writer(f)
-                    writer.writerow(headers)
-                    writer.writerows(rows)
+            # Write to CSV
+            with open(file_path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(headers)
+                writer.writerows(rows)
 
         finally:
             web_driver.close()
@@ -3394,7 +3423,7 @@ class WebScraper:
                             '//*[@id="real-time-stock-exchange"]',
                         ]
                         WebDriverWait(web_driver, 10).until(
-                            lambda driver: self._find_first_valid_element(
+                            lambda driver: self._find_first_valid_element_by_xpath(
                                 web_driver=driver, xpaths=stock_name_xpaths
                             )
                         )
@@ -3410,7 +3439,7 @@ class WebScraper:
                             '//*[@id="transaction-information-table-right"]/div[8]/p[2]',
                         ]
                         listed_shares_component = WebDriverWait(web_driver, 10).until(
-                            lambda driver: self._find_first_valid_element(
+                            lambda driver: self._find_first_valid_element_by_xpath(
                                 web_driver=driver, xpaths=listed_shares_xpaths
                             )
                         )
@@ -3436,7 +3465,7 @@ class WebScraper:
                         outstanding_shares_component = WebDriverWait(
                             web_driver, 10
                         ).until(
-                            lambda driver: self._find_first_valid_element(
+                            lambda driver: self._find_first_valid_element_by_xpath(
                                 web_driver=driver, xpaths=outstanding_shares_xpaths
                             )
                         )
@@ -3460,7 +3489,7 @@ class WebScraper:
                             '//*[@id="transaction-information-table-right"]/div[6]/p[2]',
                         ]
                         market_cap_component = WebDriverWait(web_driver, 10).until(
-                            lambda driver: self._find_first_valid_element(
+                            lambda driver: self._find_first_valid_element_by_xpath(
                                 web_driver=driver, xpaths=market_cap_xpaths
                             )
                         )
