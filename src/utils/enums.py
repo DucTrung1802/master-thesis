@@ -2242,6 +2242,19 @@ class Table:
         name = "nasdaq_composite"
         primary_key = [Column.DATE.value]
 
+    class G_NASDAQ_COMPOSITE:
+        class Column(Enum):
+            DATE = "date"
+            CLOSE = "close"
+            ADJ_CLOSE = "adj_close"
+            OPEN = "open"
+            HIGH = "high"
+            LOW = "low"
+            VOLUME = "volume"
+
+        name = "nasdaq_composite"
+        primary_key = [Column.DATE.value]
+
     class NASDAQ_100:
         class Column(Enum):
             DATE = "date"
