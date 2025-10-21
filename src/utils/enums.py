@@ -2207,11 +2207,11 @@ class Table:
         class Column(Enum):
             DATE = "date"
             CLOSE = "close"
+            ADJ_CLOSE = "adj_close"
             OPEN = "open"
             HIGH = "high"
             LOW = "low"
             VOLUME = "volume"
-            CHANGE = "change"
 
         name = "nyse_composite"
         primary_key = [Column.DATE.value]
@@ -2220,11 +2220,11 @@ class Table:
         class Column(Enum):
             DATE = "date"
             CLOSE = "close"
+            ADJ_CLOSE = "adj_close"
             OPEN = "open"
             HIGH = "high"
             LOW = "low"
             VOLUME = "volume"
-            CHANGE = "change"
 
         name = "snp_500"
         primary_key = [Column.DATE.value]
@@ -2233,11 +2233,11 @@ class Table:
         class Column(Enum):
             DATE = "date"
             CLOSE = "close"
+            ADJ_CLOSE = "adj_close"
             OPEN = "open"
             HIGH = "high"
             LOW = "low"
             VOLUME = "volume"
-            CHANGE = "change"
 
         name = "nasdaq_composite"
         primary_key = [Column.DATE.value]
@@ -2246,11 +2246,11 @@ class Table:
         class Column(Enum):
             DATE = "date"
             CLOSE = "close"
+            ADJ_CLOSE = "adj_close"
             OPEN = "open"
             HIGH = "high"
             LOW = "low"
             VOLUME = "volume"
-            CHANGE = "change"
 
         name = "nasdaq_100"
         primary_key = [Column.DATE.value]
