@@ -1501,11 +1501,11 @@ class DataPreprocessor:
                     columns = [
                         Column(name=Table.NYSE_COMPOSITE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
                         Column(name=Table.NYSE_COMPOSITE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
+                        Column(name=Table.NYSE_COMPOSITE.Column.ADJ_CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
                         Column(name=Table.NYSE_COMPOSITE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
                         Column(name=Table.NYSE_COMPOSITE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
                         Column(name=Table.NYSE_COMPOSITE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
                         Column(name=Table.NYSE_COMPOSITE.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.NYSE_COMPOSITE.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
                     ],
                     primary_keys=Table.NYSE_COMPOSITE.primary_key,
                 )
@@ -1519,11 +1519,11 @@ class DataPreprocessor:
                     columns = [
                         Column(name=Table.SNP_500.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
                         Column(name=Table.SNP_500.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
+                        Column(name=Table.SNP_500.Column.ADJ_CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
                         Column(name=Table.SNP_500.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
                         Column(name=Table.SNP_500.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
                         Column(name=Table.SNP_500.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
                         Column(name=Table.SNP_500.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.SNP_500.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
                     ],
                     primary_keys=Table.SNP_500.primary_key,
                 )
@@ -1537,11 +1537,11 @@ class DataPreprocessor:
                     columns = [
                         Column(name=Table.NASDAQ_COMPOSITE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
                         Column(name=Table.NASDAQ_COMPOSITE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
+                        Column(name=Table.NASDAQ_COMPOSITE.Column.ADJ_CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
                         Column(name=Table.NASDAQ_COMPOSITE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
                         Column(name=Table.NASDAQ_COMPOSITE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
                         Column(name=Table.NASDAQ_COMPOSITE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
                         Column(name=Table.NASDAQ_COMPOSITE.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.NASDAQ_COMPOSITE.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
                     ],
                     primary_keys=Table.NASDAQ_COMPOSITE.primary_key,
                 )
@@ -1555,11 +1555,11 @@ class DataPreprocessor:
                     columns = [
                         Column(name=Table.NASDAQ_100.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
                         Column(name=Table.NASDAQ_100.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
+                        Column(name=Table.NASDAQ_100.Column.ADJ_CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
                         Column(name=Table.NASDAQ_100.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
                         Column(name=Table.NASDAQ_100.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
                         Column(name=Table.NASDAQ_100.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
                         Column(name=Table.NASDAQ_100.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.NASDAQ_100.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
                     ],
                     primary_keys=Table.NASDAQ_100.primary_key,
                 )
@@ -2591,7 +2591,7 @@ class DataPreprocessor:
                     primary_keys=Table.GOLD_PRICE.primary_key,
                 )
                 # fmt: on
-
+                
                 # OIL_PRICE
                 # fmt: off
                 self._database_driver.create_table(
@@ -2627,7 +2627,7 @@ class DataPreprocessor:
                     primary_keys=Table.DOW_JONES.primary_key,
                 )
                 # fmt: on
-
+                
                 # NYSE_COMPOSITE
                 # fmt: off
                 self._database_driver.create_table(
@@ -2636,11 +2636,11 @@ class DataPreprocessor:
                     columns = [
                         Column(name=Table.NYSE_COMPOSITE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
                         Column(name=Table.NYSE_COMPOSITE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
+                        Column(name=Table.NYSE_COMPOSITE.Column.ADJ_CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
                         Column(name=Table.NYSE_COMPOSITE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
                         Column(name=Table.NYSE_COMPOSITE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
                         Column(name=Table.NYSE_COMPOSITE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
                         Column(name=Table.NYSE_COMPOSITE.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.NYSE_COMPOSITE.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
                     ],
                     primary_keys=Table.NYSE_COMPOSITE.primary_key,
                 )
@@ -2654,11 +2654,11 @@ class DataPreprocessor:
                     columns = [
                         Column(name=Table.SNP_500.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
                         Column(name=Table.SNP_500.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
+                        Column(name=Table.SNP_500.Column.ADJ_CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
                         Column(name=Table.SNP_500.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
                         Column(name=Table.SNP_500.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
                         Column(name=Table.SNP_500.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
                         Column(name=Table.SNP_500.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.SNP_500.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
                     ],
                     primary_keys=Table.SNP_500.primary_key,
                 )
@@ -2672,11 +2672,11 @@ class DataPreprocessor:
                     columns = [
                         Column(name=Table.NASDAQ_COMPOSITE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
                         Column(name=Table.NASDAQ_COMPOSITE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
+                        Column(name=Table.NASDAQ_COMPOSITE.Column.ADJ_CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
                         Column(name=Table.NASDAQ_COMPOSITE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
                         Column(name=Table.NASDAQ_COMPOSITE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
                         Column(name=Table.NASDAQ_COMPOSITE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
                         Column(name=Table.NASDAQ_COMPOSITE.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.NASDAQ_COMPOSITE.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
                     ],
                     primary_keys=Table.NASDAQ_COMPOSITE.primary_key,
                 )
@@ -2690,11 +2690,11 @@ class DataPreprocessor:
                     columns = [
                         Column(name=Table.NASDAQ_100.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
                         Column(name=Table.NASDAQ_100.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
+                        Column(name=Table.NASDAQ_100.Column.ADJ_CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
                         Column(name=Table.NASDAQ_100.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
                         Column(name=Table.NASDAQ_100.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
                         Column(name=Table.NASDAQ_100.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
                         Column(name=Table.NASDAQ_100.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.NASDAQ_100.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
                     ],
                     primary_keys=Table.NASDAQ_100.primary_key,
                 )
@@ -8198,13 +8198,6 @@ class DataPreprocessor:
 
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.OIL_PRICE.name,
-            primary_keys=Table.OIL_PRICE.primary_key,
-            df=full_df,
-        )
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
             table_name=Table.DOW_JONES.name,
             primary_keys=Table.DOW_JONES.primary_key,
             df=full_df,
@@ -8318,7 +8311,7 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.NYSE_COMPOSITE,
-            NYSECompositeSource.INVESTING,
+            NYSECompositeSource.YAHOO_FINANCE,
         )
 
         folder_path = (
@@ -8342,40 +8335,32 @@ class DataPreprocessor:
 
             # Rename columns
             rename_map = {
-                "Ngày": "date",
-                "Lần cuối": "close",
-                "Mở": "open",
-                "Cao": "high",
-                "Thấp": "low",
-                "KL": "volume",
-                "% Thay đổi": "change",
+                "Date": "date",
+                "CloseClose price adjusted for splits.": "close",
+                "Adj CloseAdjusted close price adjusted for splits and dividend and/or capital gain distributions.": "adj_close",
+                "Open": "open",
+                "High": "high",
+                "Low": "low",
+                "Volume": "volume",
             }
             df = df.rename(columns=rename_map)
 
             # Convert 'date' to datetime
-            df["date"] = pd.to_datetime(df["date"], format="%d/%m/%Y", errors="coerce")
+            df["date"] = pd.to_datetime(df["date"], format="%b %d, %Y", errors="coerce")
 
             # Clean numeric columns: remove commas and symbols, then convert to float
-            for col in ["close", "open", "high", "low"]:
+            for col in ["close", "open", "high", "low", "adj_close"]:
                 df[col] = df[col].astype(str).str.replace(",", "").astype(float)
 
-            df["volume"] = df["volume"].apply(parse_volume)
+            df["volume"] = df["volume"].astype(str).replace("-", np.nan)
 
-            # Handle "change" column: remove '%' and convert to float
-            df["change"] = df["change"].astype(str).str.replace("%", "").astype(float)
+            df["volume"] = df["volume"].apply(parse_volume)
 
             dfs.append(df)
 
         # Combine and sort
         full_df = pd.concat(dfs, ignore_index=True)
         full_df = full_df.sort_values("date").reset_index(drop=True)
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.OIL_PRICE.name,
-            primary_keys=Table.OIL_PRICE.primary_key,
-            df=full_df,
-        )
 
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
@@ -8390,7 +8375,7 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.NYSE_COMPOSITE,
-            NYSECompositeSource.INVESTING,
+            NYSECompositeSource.YAHOO_FINANCE,
         )
 
         self._logger.log_info(
@@ -8428,7 +8413,7 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.NYSE_COMPOSITE,
-            NYSECompositeSource.INVESTING,
+            NYSECompositeSource.YAHOO_FINANCE,
         )
 
         self._logger.log_info(
@@ -8494,7 +8479,7 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.SNP_500,
-            SNP500Source.INVESTING,
+            SNP500Source.YAHOO_FINANCE,
         )
 
         folder_path = (
@@ -8518,40 +8503,32 @@ class DataPreprocessor:
 
             # Rename columns
             rename_map = {
-                "Ngày": "date",
-                "Lần cuối": "close",
-                "Mở": "open",
-                "Cao": "high",
-                "Thấp": "low",
-                "KL": "volume",
-                "% Thay đổi": "change",
+                "Date": "date",
+                "CloseClose price adjusted for splits.": "close",
+                "Adj CloseAdjusted close price adjusted for splits and dividend and/or capital gain distributions.": "adj_close",
+                "Open": "open",
+                "High": "high",
+                "Low": "low",
+                "Volume": "volume",
             }
             df = df.rename(columns=rename_map)
 
             # Convert 'date' to datetime
-            df["date"] = pd.to_datetime(df["date"], format="%d/%m/%Y", errors="coerce")
+            df["date"] = pd.to_datetime(df["date"], format="%b %d, %Y", errors="coerce")
 
             # Clean numeric columns: remove commas and symbols, then convert to float
-            for col in ["close", "open", "high", "low"]:
+            for col in ["close", "open", "high", "low", "adj_close"]:
                 df[col] = df[col].astype(str).str.replace(",", "").astype(float)
 
-            df["volume"] = df["volume"].apply(parse_volume)
+            df["volume"] = df["volume"].astype(str).replace("-", np.nan)
 
-            # Handle "change" column: remove '%' and convert to float
-            df["change"] = df["change"].astype(str).str.replace("%", "").astype(float)
+            df["volume"] = df["volume"].apply(parse_volume)
 
             dfs.append(df)
 
         # Combine and sort
         full_df = pd.concat(dfs, ignore_index=True)
         full_df = full_df.sort_values("date").reset_index(drop=True)
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.OIL_PRICE.name,
-            primary_keys=Table.OIL_PRICE.primary_key,
-            df=full_df,
-        )
 
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
@@ -8566,7 +8543,7 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.SNP_500,
-            SNP500Source.INVESTING,
+            SNP500Source.YAHOO_FINANCE,
         )
 
         self._logger.log_info(
@@ -8602,7 +8579,7 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.SNP_500,
-            SNP500Source.INVESTING,
+            SNP500Source.YAHOO_FINANCE,
         )
 
         self._logger.log_info(
@@ -8668,7 +8645,7 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.NASDAQ_COMPOSITE,
-            NASDAQCompositeSource.INVESTING,
+            NASDAQCompositeSource.YAHOO_FINANCE,
         )
 
         folder_path = (
@@ -8692,40 +8669,32 @@ class DataPreprocessor:
 
             # Rename columns
             rename_map = {
-                "Ngày": "date",
-                "Lần cuối": "close",
-                "Mở": "open",
-                "Cao": "high",
-                "Thấp": "low",
-                "KL": "volume",
-                "% Thay đổi": "change",
+                "Date": "date",
+                "CloseClose price adjusted for splits.": "close",
+                "Adj CloseAdjusted close price adjusted for splits and dividend and/or capital gain distributions.": "adj_close",
+                "Open": "open",
+                "High": "high",
+                "Low": "low",
+                "Volume": "volume",
             }
             df = df.rename(columns=rename_map)
 
             # Convert 'date' to datetime
-            df["date"] = pd.to_datetime(df["date"], format="%d/%m/%Y", errors="coerce")
+            df["date"] = pd.to_datetime(df["date"], format="%b %d, %Y", errors="coerce")
 
             # Clean numeric columns: remove commas and symbols, then convert to float
-            for col in ["close", "open", "high", "low"]:
+            for col in ["close", "open", "high", "low", "adj_close"]:
                 df[col] = df[col].astype(str).str.replace(",", "").astype(float)
 
-            df["volume"] = df["volume"].apply(parse_volume)
+            df["volume"] = df["volume"].astype(str).replace("-", np.nan)
 
-            # Handle "change" column: remove '%' and convert to float
-            df["change"] = df["change"].astype(str).str.replace("%", "").astype(float)
+            df["volume"] = df["volume"].apply(parse_volume)
 
             dfs.append(df)
 
         # Combine and sort
         full_df = pd.concat(dfs, ignore_index=True)
         full_df = full_df.sort_values("date").reset_index(drop=True)
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.OIL_PRICE.name,
-            primary_keys=Table.OIL_PRICE.primary_key,
-            df=full_df,
-        )
 
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
@@ -8740,7 +8709,7 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.NASDAQ_COMPOSITE,
-            NASDAQCompositeSource.INVESTING,
+            NASDAQCompositeSource.YAHOO_FINANCE,
         )
 
         self._logger.log_info(
@@ -8778,7 +8747,7 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.NASDAQ_COMPOSITE,
-            NASDAQCompositeSource.INVESTING,
+            NASDAQCompositeSource.YAHOO_FINANCE,
         )
 
         self._logger.log_info(
@@ -8846,7 +8815,7 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.NASDAQ_100,
-            NASDAQ100Source.INVESTING,
+            NASDAQ100Source.YAHOO_FINANCE,
         )
 
         folder_path = (
@@ -8870,40 +8839,32 @@ class DataPreprocessor:
 
             # Rename columns
             rename_map = {
-                "Ngày": "date",
-                "Lần cuối": "close",
-                "Mở": "open",
-                "Cao": "high",
-                "Thấp": "low",
-                "KL": "volume",
-                "% Thay đổi": "change",
+                "Date": "date",
+                "CloseClose price adjusted for splits.": "close",
+                "Adj CloseAdjusted close price adjusted for splits and dividend and/or capital gain distributions.": "adj_close",
+                "Open": "open",
+                "High": "high",
+                "Low": "low",
+                "Volume": "volume",
             }
             df = df.rename(columns=rename_map)
 
             # Convert 'date' to datetime
-            df["date"] = pd.to_datetime(df["date"], format="%d/%m/%Y", errors="coerce")
+            df["date"] = pd.to_datetime(df["date"], format="%b %d, %Y", errors="coerce")
 
             # Clean numeric columns: remove commas and symbols, then convert to float
-            for col in ["close", "open", "high", "low"]:
+            for col in ["close", "open", "high", "low", "adj_close"]:
                 df[col] = df[col].astype(str).str.replace(",", "").astype(float)
 
-            df["volume"] = df["volume"].apply(parse_volume)
+            df["volume"] = df["volume"].astype(str).replace("-", np.nan)
 
-            # Handle "change" column: remove '%' and convert to float
-            df["change"] = df["change"].astype(str).str.replace("%", "").astype(float)
+            df["volume"] = df["volume"].apply(parse_volume)
 
             dfs.append(df)
 
         # Combine and sort
         full_df = pd.concat(dfs, ignore_index=True)
         full_df = full_df.sort_values("date").reset_index(drop=True)
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.OIL_PRICE.name,
-            primary_keys=Table.OIL_PRICE.primary_key,
-            df=full_df,
-        )
 
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
@@ -8918,7 +8879,7 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.NASDAQ_100,
-            NASDAQ100Source.INVESTING,
+            NASDAQ100Source.YAHOO_FINANCE,
         )
 
         self._logger.log_info(
@@ -8956,7 +8917,7 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.NASDAQ_100,
-            NASDAQ100Source.INVESTING,
+            NASDAQ100Source.YAHOO_FINANCE,
         )
 
         self._logger.log_info(
@@ -10628,22 +10589,22 @@ class DataPreprocessor:
         # self._process_macroeconomics_fdi_rd(data_quality)
         # self._process_macroeconomics_export(data_quality)
         # self._process_macroeconomics_import(data_quality)
-        # self._process_macroeconomics_gold_price(data_quality)
-        # self._process_macroeconomics_oil_price(data_quality)
-        # self._process_macroeconomics_dow_jones(data_quality)
-        # self._process_macroeconomics_nyse_composite(data_quality)
-        # self._process_macroeconomics_snp_500(data_quality)
-        # self._process_macroeconomics_nasdaq_composite(data_quality)
-        # self._process_macroeconomics_nasdaq_100(data_quality)
+        self._process_macroeconomics_gold_price(data_quality)
+        self._process_macroeconomics_oil_price(data_quality)
+        self._process_macroeconomics_dow_jones(data_quality)
+        self._process_macroeconomics_nyse_composite(data_quality)
+        self._process_macroeconomics_snp_500(data_quality)
+        self._process_macroeconomics_nasdaq_composite(data_quality)
+        self._process_macroeconomics_nasdaq_100(data_quality)
 
         # # Stock market
         # self._process_stock_market_market(data_quality)
-        self._process_stock_market_vn_index(data_quality)
-        self._process_stock_market_hnx_index(data_quality)
-        self._process_stock_market_vn_30_index(data_quality)
-        self._process_stock_market_vn_100_index(data_quality)
-        self._process_stock_market_hnx_30_index(data_quality)
-        self._process_stock_market_upcom_index(data_quality)
+        # self._process_stock_market_vn_index(data_quality)
+        # self._process_stock_market_hnx_index(data_quality)
+        # self._process_stock_market_vn_30_index(data_quality)
+        # self._process_stock_market_vn_100_index(data_quality)
+        # self._process_stock_market_hnx_30_index(data_quality)
+        # self._process_stock_market_upcom_index(data_quality)
 
         # # Enterprise
         # self._process_enterprise_stock(data_quality)
