@@ -3161,21 +3161,21 @@ class DataPreprocessor:
                 )
                 # fmt: on
                 
-                # NASDAQ_100
+                # G_NASDAQ_100
                 # fmt: off
                 self._database_driver.create_table(
                     schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.NASDAQ_100.name,
+                    table_name=Table.G_NASDAQ_100.name,
                     columns = [
-                        Column(name=Table.NASDAQ_100.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.NASDAQ_100.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.NASDAQ_100.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.NASDAQ_100.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.NASDAQ_100.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.NASDAQ_100.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.NASDAQ_100.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_NASDAQ_100.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.G_NASDAQ_100.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_NASDAQ_100.Column.ADJ_CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_NASDAQ_100.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_NASDAQ_100.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_NASDAQ_100.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_NASDAQ_100.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
                     ],
-                    primary_keys=Table.NASDAQ_100.primary_key,
+                    primary_keys=Table.G_NASDAQ_100.primary_key,
                 )
                 # fmt: on
 
@@ -8811,7 +8811,7 @@ class DataPreprocessor:
     # endregion MACROECONOMICS.NASDAQ_COMPOSITE
 
     # region MACROECONOMICS.NASDAQ_100
-    def _ingest_macroeconomics_nasdaq_100_investing(self) -> None:
+    def _ingest_macroeconomics_nasdaq_100_yahoo_finance(self) -> None:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.NASDAQ_100,
@@ -8875,7 +8875,7 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish ingesting data in "{table_name}".')
 
-    def _clean_macroeconomics_nasdaq_100_investing(self) -> None:
+    def _clean_macroeconomics_nasdaq_100_yahoo_finance(self) -> None:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.NASDAQ_100,
@@ -8913,7 +8913,7 @@ class DataPreprocessor:
             f'Finish cleaning data in table "{format_key_for_table(key)}".'
         )
 
-    def _transform_macroeconomics_nasdaq_100_investing(self) -> None:
+    def _transform_macroeconomics_nasdaq_100_yahoo_finance(self) -> None:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.NASDAQ_100,
@@ -8945,8 +8945,8 @@ class DataPreprocessor:
         self._select_database(DataQuality.GOLD.value)
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.NASDAQ_100.name,
-            primary_keys=Table.NASDAQ_100.primary_key,
+            table_name=Table.G_NASDAQ_100.name,
+            primary_keys=Table.G_NASDAQ_100.primary_key,
             df=gold_df,
         )
 
@@ -8961,13 +8961,13 @@ class DataPreprocessor:
 
         match data_quality:
             case DataQuality.BRONZE:
-                self._ingest_macroeconomics_nasdaq_100_investing()
+                self._ingest_macroeconomics_nasdaq_100_yahoo_finance()
 
             case DataQuality.SILVER:
-                self._clean_macroeconomics_nasdaq_100_investing()
+                self._clean_macroeconomics_nasdaq_100_yahoo_finance()
 
             case DataQuality.GOLD:
-                self._transform_macroeconomics_nasdaq_100_investing()
+                self._transform_macroeconomics_nasdaq_100_yahoo_finance()
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
