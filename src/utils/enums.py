@@ -350,19 +350,19 @@ class DowJonesSource(Enum):
 
 
 class NYSECompositeSource(Enum):
-    INVESTING = "investing"
+    YAHOO_FINANCE = "yahoo_finance"
 
 
 class SNP500Source(Enum):
-    INVESTING = "investing"
+    YAHOO_FINANCE = "yahoo_finance"
 
 
 class NASDAQCompositeSource(Enum):
-    INVESTING = "investing"
+    YAHOO_FINANCE = "yahoo_finance"
 
 
 class NASDAQ100Source(Enum):
-    INVESTING = "investing"
+    YAHOO_FINANCE = "yahoo_finance"
 
 
 # STOCK_MARKET
@@ -700,30 +700,30 @@ SCRAPE_MAPPING: Dict[Tuple[ScrapeMainType, ScrapeSubType, Source], SourceInfo] =
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.NYSE_COMPOSITE,
-        NYSECompositeSource.INVESTING,
+        NYSECompositeSource.YAHOO_FINANCE,
     ): SourceInfo(
-        url="https://vn.investing.com/indices/nyse-composite-historical-data",
+        url="https://finance.yahoo.com/quote/%5ENYA/history/",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.SNP_500,
-        SNP500Source.INVESTING,
+        SNP500Source.YAHOO_FINANCE,
     ): SourceInfo(
-        url="https://vn.investing.com/indices/us-spx-500-historical-data",
+        url="https://finance.yahoo.com/quote/%5EGSPC/history/",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.NASDAQ_COMPOSITE,
-        NASDAQCompositeSource.INVESTING,
+        NASDAQCompositeSource.YAHOO_FINANCE,
     ): SourceInfo(
-        url="https://vn.investing.com/indices/nasdaq-composite-historical-data",
+        url="https://finance.yahoo.com/quote/%5EIXIC/history/",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.NASDAQ_100,
-        NASDAQ100Source.INVESTING,
+        NASDAQ100Source.YAHOO_FINANCE,
     ): SourceInfo(
-        url="https://vn.investing.com/indices/nq-100-historical-data",
+        url="https://finance.yahoo.com/quote/%5ENDX/history/",
     ),
     # STOCK_MARKET
     (
@@ -2177,7 +2177,33 @@ class Table:
         name = "gold_price"
         primary_key = [Column.DATE.value]
 
+    class G_GOLD_PRICE:
+        class Column(Enum):
+            DATE = "date"
+            CLOSE = "close"
+            OPEN = "open"
+            HIGH = "high"
+            LOW = "low"
+            VOLUME = "volume"
+            CHANGE = "change"
+
+        name = "gold_price"
+        primary_key = [Column.DATE.value]
+
     class OIL_PRICE:
+        class Column(Enum):
+            DATE = "date"
+            CLOSE = "close"
+            OPEN = "open"
+            HIGH = "high"
+            LOW = "low"
+            VOLUME = "volume"
+            CHANGE = "change"
+
+        name = "oil_price"
+        primary_key = [Column.DATE.value]
+
+    class G_OIL_PRICE:
         class Column(Enum):
             DATE = "date"
             CLOSE = "close"
@@ -2203,7 +2229,7 @@ class Table:
         name = "dow_jones"
         primary_key = [Column.DATE.value]
 
-    class NYSE_COMPOSITE:
+    class G_DOW_JONES:
         class Column(Enum):
             DATE = "date"
             CLOSE = "close"
@@ -2212,6 +2238,32 @@ class Table:
             LOW = "low"
             VOLUME = "volume"
             CHANGE = "change"
+
+        name = "dow_jones"
+        primary_key = [Column.DATE.value]
+
+    class NYSE_COMPOSITE:
+        class Column(Enum):
+            DATE = "date"
+            CLOSE = "close"
+            ADJ_CLOSE = "adj_close"
+            OPEN = "open"
+            HIGH = "high"
+            LOW = "low"
+            VOLUME = "volume"
+
+        name = "nyse_composite"
+        primary_key = [Column.DATE.value]
+
+    class G_NYSE_COMPOSITE:
+        class Column(Enum):
+            DATE = "date"
+            CLOSE = "close"
+            ADJ_CLOSE = "adj_close"
+            OPEN = "open"
+            HIGH = "high"
+            LOW = "low"
+            VOLUME = "volume"
 
         name = "nyse_composite"
         primary_key = [Column.DATE.value]
@@ -2220,11 +2272,24 @@ class Table:
         class Column(Enum):
             DATE = "date"
             CLOSE = "close"
+            ADJ_CLOSE = "adj_close"
             OPEN = "open"
             HIGH = "high"
             LOW = "low"
             VOLUME = "volume"
-            CHANGE = "change"
+
+        name = "snp_500"
+        primary_key = [Column.DATE.value]
+
+    class G_SNP_500:
+        class Column(Enum):
+            DATE = "date"
+            CLOSE = "close"
+            ADJ_CLOSE = "adj_close"
+            OPEN = "open"
+            HIGH = "high"
+            LOW = "low"
+            VOLUME = "volume"
 
         name = "snp_500"
         primary_key = [Column.DATE.value]
@@ -2233,11 +2298,24 @@ class Table:
         class Column(Enum):
             DATE = "date"
             CLOSE = "close"
+            ADJ_CLOSE = "adj_close"
             OPEN = "open"
             HIGH = "high"
             LOW = "low"
             VOLUME = "volume"
-            CHANGE = "change"
+
+        name = "nasdaq_composite"
+        primary_key = [Column.DATE.value]
+
+    class G_NASDAQ_COMPOSITE:
+        class Column(Enum):
+            DATE = "date"
+            CLOSE = "close"
+            ADJ_CLOSE = "adj_close"
+            OPEN = "open"
+            HIGH = "high"
+            LOW = "low"
+            VOLUME = "volume"
 
         name = "nasdaq_composite"
         primary_key = [Column.DATE.value]
@@ -2246,11 +2324,24 @@ class Table:
         class Column(Enum):
             DATE = "date"
             CLOSE = "close"
+            ADJ_CLOSE = "adj_close"
             OPEN = "open"
             HIGH = "high"
             LOW = "low"
             VOLUME = "volume"
-            CHANGE = "change"
+
+        name = "nasdaq_100"
+        primary_key = [Column.DATE.value]
+
+    class G_NASDAQ_100:
+        class Column(Enum):
+            DATE = "date"
+            CLOSE = "close"
+            ADJ_CLOSE = "adj_close"
+            OPEN = "open"
+            HIGH = "high"
+            LOW = "low"
+            VOLUME = "volume"
 
         name = "nasdaq_100"
         primary_key = [Column.DATE.value]
