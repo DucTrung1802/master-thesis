@@ -126,22 +126,23 @@ class TrainTestCreator:
             f" (Inserted: {inserted_count}, Updated: {updated_count}) successfully."
         )
 
-    def export_common_dataframe_to_db(self) -> pd.DataFrame:
-        # MACROECONOMIC INDICATORS
-        gold_table_enums = {
+    def extract_unified_macroeconomic_dataframe(self) -> pd.DataFrame:
+        macroeconomics_gold_table_enums = {
             name: cls
             for name, cls in vars(Table).items()
             if isinstance(cls, type) and name.startswith("G_")
         }
 
-        gold_table_names = [cls.name for cls in gold_table_enums.values()]
+        macroeconomics_gold_table_names = [
+            cls.name for cls in macroeconomics_gold_table_enums.values()
+        ]
 
         self._logger.log_info(
-            f"Selecting MACROECONOMIC data from tables: {gold_table_names}"
+            f"Selecting MACROECONOMIC data from tables: {macroeconomics_gold_table_names}"
         )
 
         macroeconomics_df_list = []
-        for table in gold_table_names:
+        for table in macroeconomics_gold_table_names:
             df = self.select(schema_name="macroeconomics", table_name=table)
             self._logger.log_info(f"Selected {len(df)} rows from table: '{table}'")
 
@@ -158,7 +159,7 @@ class TrainTestCreator:
                 macroeconomics_df_list,
             )
             self._logger.log_info(
-                f"Merged 'macroeconomics_df' has {len(macroeconomics_df)} rows and {len(macroeconomics_df.columns)} columns."
+                f"Original 'macroeconomics_df' has {len(macroeconomics_df)} rows and {len(macroeconomics_df.columns)} columns."
             )
 
             # Try casting each column to Float64 (skip if not possible)
@@ -169,36 +170,106 @@ class TrainTestCreator:
                     # Skip columns that can't be converted to Float64
                     pass
 
+            # Drop existng unified table if any
+            self._database_driver.drop_table(
+                schema_name=Schema.MACROECONOMICS.value,
+                table_name=Table.UNIFIED_MACROECONOMIC.name,
+            )
+
+            # Drop lack data columns
+            data_lack_threshold = 0.22
+            columns_to_drop = [
+                col
+                for col in macroeconomics_df.columns
+                if col != "date"
+                and macroeconomics_df[col].isna().sum() / len(macroeconomics_df)
+                > data_lack_threshold
+            ]
+
+            self._logger.log_info(
+                f"Dropping {len(columns_to_drop)} columns with more than {data_lack_threshold * 100}% missing data: {columns_to_drop}"
+            )
+            macroeconomics_df = macroeconomics_df.drop(columns=columns_to_drop)
+
+            # Cutoff according to available date range
+            start_date = TRAIN_TEST_CREATOR_START_DATE
+            end_date = TRAIN_TEST_CREATOR_END_DATE
+
+            self._logger.log_info(
+                f"Filtering 'macroeconomics_df' for dates between {start_date.date()} and {end_date.date()}."
+            )
+            macroeconomics_df = macroeconomics_df[
+                (macroeconomics_df["date"] >= start_date.date())
+                & (macroeconomics_df["date"] <= end_date.date())
+            ]
+
+            self._logger.log_info(
+                f"Filtered 'macroeconomics_df' has {len(macroeconomics_df)} rows and {len(macroeconomics_df.columns)} columns after filter."
+            )
+
             # Print each column name and its pandas dtype
             self._logger.log_info("\nMACROECONOMIC Column data types:\n")
             for col in macroeconomics_df.columns:
                 self._logger.log_info(f"{col:<60} → {macroeconomics_df[col].dtype}")
 
-            # Export to database
-            self.create_table(
-                schema_name=Schema.MACROECONOMICS.value,
-                table_name=Table.UNIFIED_MACROECONOMIC.name,
-                columns=[
-                    Column(name="date", data_type="DATE", nullable=False),
-                ]
-                + [
-                    Column(name=col, data_type=DataType.DECIMAL(), nullable=True)
-                    for col in macroeconomics_df.columns
-                    if col != "date"
-                ],
-                primary_keys=["date"],
-            )
-
-            self._save_pandas_table_to_database(
-                schema_name=Schema.MACROECONOMICS.value,
-                table_name=Table.UNIFIED_MACROECONOMIC.name,
-                primary_keys=Table.UNIFIED_MACROECONOMIC.primary_key,
-                df=macroeconomics_df,
-            )
+            return macroeconomics_df
 
         else:
             macroeconomics_df = pd.DataFrame()
-            self._logger.log_warning("No macroeconomics tables found to merge.")
+            self._logger.log_error("No macroeconomics tables found to merge.")
+            raise ValueError("No macroeconomics tables found to merge.")
+
+    def extract_unified_stock_market_dataframe(self) -> pd.DataFrame:
+        pass
+
+    def export_common_dataframe_to_db(self) -> pd.DataFrame:
+        # UNIFIED MACROECONOMIC DF
+        unified_macroeconomic_df = self.extract_unified_macroeconomic_dataframe()
+
+        self.create_table(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.UNIFIED_MACROECONOMIC.name,
+            columns=[
+                Column(name="date", data_type="DATE", nullable=False),
+            ]
+            + [
+                Column(name=col, data_type=DataType.DECIMAL(), nullable=True)
+                for col in unified_macroeconomic_df.columns
+                if col != "date"
+            ],
+            primary_keys=["date"],
+        )
+
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.UNIFIED_MACROECONOMIC.name,
+            primary_keys=Table.UNIFIED_MACROECONOMIC.primary_key,
+            df=unified_macroeconomic_df,
+        )
+
+        # UNIFIED STOCK MARKET DF
+        unified_stock_market_df = self.extract_unified_stock_market_dataframe()
+
+        self.create_table(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.UNIFIED_STOCK_MARKET.name,
+            columns=[
+                Column(name="date", data_type="DATE", nullable=False),
+            ]
+            + [
+                Column(name=col, data_type=DataType.DECIMAL(), nullable=True)
+                for col in unified_stock_market_df.columns
+                if col != "date"
+            ],
+            primary_keys=["date"],
+        )
+
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.UNIFIED_STOCK_MARKET.name,
+            primary_keys=Table.UNIFIED_STOCK_MARKET.primary_key,
+            df=unified_stock_market_df,
+        )
 
     def create_unified_dataframe(self, stock_code: str) -> pd.DataFrame:
         self.connect_to_database(database_name=os.getenv("GOLD_POSTGRES_DATABASE"))
