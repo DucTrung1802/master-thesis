@@ -3053,91 +3053,93 @@ class DataPreprocessor:
                 )
                 # fmt: on
 
-                # GOLD_PRICE
+                # G_GOLD_PRICE
                 # fmt: off
                 self._database_driver.create_table(
                     schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.GOLD_PRICE.name,
+                    table_name=Table.G_GOLD_PRICE.name,
                     columns = [
-                        Column(name=Table.GOLD_PRICE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.GOLD_PRICE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.GOLD_PRICE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.GOLD_PRICE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.GOLD_PRICE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.GOLD_PRICE.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.GOLD_PRICE.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_GOLD_PRICE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.G_GOLD_PRICE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_GOLD_PRICE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_GOLD_PRICE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_GOLD_PRICE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_GOLD_PRICE.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_GOLD_PRICE.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
                     ],
-                    primary_keys=Table.GOLD_PRICE.primary_key,
+                    primary_keys=Table.G_GOLD_PRICE.primary_key,
                 )
                 # fmt: on
 
-                # OIL_PRICE
+                # G_OIL_PRICE
                 # fmt: off
                 self._database_driver.create_table(
                     schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.OIL_PRICE.name,
+                    table_name=Table.G_OIL_PRICE.name,
                     columns = [
-                        Column(name=Table.OIL_PRICE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.OIL_PRICE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.OIL_PRICE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.OIL_PRICE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.OIL_PRICE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.OIL_PRICE.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.OIL_PRICE.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_OIL_PRICE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.G_OIL_PRICE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_OIL_PRICE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_OIL_PRICE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_OIL_PRICE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_OIL_PRICE.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_OIL_PRICE.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
                     ],
-                    primary_keys=Table.OIL_PRICE.primary_key,
+                    primary_keys=Table.G_OIL_PRICE.primary_key,
                 )
                 # fmt: on
 
-                # DOW_JONES
+                # G_DOW_JONES
                 # fmt: off
                 self._database_driver.create_table(
                     schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.DOW_JONES.name,
+                    table_name=Table.G_DOW_JONES.name,
                     columns = [
-                        Column(name=Table.DOW_JONES.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.DOW_JONES.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.DOW_JONES.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.DOW_JONES.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.DOW_JONES.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.DOW_JONES.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.DOW_JONES.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_DOW_JONES.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.G_DOW_JONES.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_DOW_JONES.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_DOW_JONES.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_DOW_JONES.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_DOW_JONES.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_DOW_JONES.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
                     ],
-                    primary_keys=Table.DOW_JONES.primary_key,
+                    primary_keys=Table.G_DOW_JONES.primary_key,
                 )
                 # fmt: on
 
-                # NYSE_COMPOSITE
+                # G_NYSE_COMPOSITE
                 # fmt: off
                 self._database_driver.create_table(
                     schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.NYSE_COMPOSITE.name,
+                    table_name=Table.G_NYSE_COMPOSITE.name,
                     columns = [
-                        Column(name=Table.NYSE_COMPOSITE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.NYSE_COMPOSITE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.NYSE_COMPOSITE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.NYSE_COMPOSITE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.NYSE_COMPOSITE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.NYSE_COMPOSITE.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_NYSE_COMPOSITE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.G_NYSE_COMPOSITE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_NYSE_COMPOSITE.Column.ADJ_CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_NYSE_COMPOSITE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_NYSE_COMPOSITE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_NYSE_COMPOSITE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_NYSE_COMPOSITE.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
                     ],
-                    primary_keys=Table.NYSE_COMPOSITE.primary_key,
+                    primary_keys=Table.G_NYSE_COMPOSITE.primary_key,
                 )
                 # fmt: on
 
-                # SNP_500
+                # G_SNP_500
                 # fmt: off
                 self._database_driver.create_table(
                     schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.SNP_500.name,
+                    table_name=Table.G_SNP_500.name,
                     columns = [
-                        Column(name=Table.SNP_500.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.SNP_500.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.SNP_500.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.SNP_500.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.SNP_500.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.SNP_500.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_SNP_500.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.G_SNP_500.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_SNP_500.Column.ADJ_CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_SNP_500.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_SNP_500.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_SNP_500.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_SNP_500.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
                     ],
-                    primary_keys=Table.SNP_500.primary_key,
+                    primary_keys=Table.G_SNP_500.primary_key,
                 )
                 # fmt: on
                 
@@ -7937,8 +7939,8 @@ class DataPreprocessor:
         self._select_database(DataQuality.GOLD.value)
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.GOLD_PRICE.name,
-            primary_keys=Table.GOLD_PRICE.primary_key,
+            table_name=Table.G_GOLD_PRICE.name,
+            primary_keys=Table.G_GOLD_PRICE.primary_key,
             df=gold_df,
         )
 
@@ -8104,8 +8106,8 @@ class DataPreprocessor:
         self._select_database(DataQuality.GOLD.value)
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.OIL_PRICE.name,
-            primary_keys=Table.OIL_PRICE.primary_key,
+            table_name=Table.G_OIL_PRICE.name,
+            primary_keys=Table.G_OIL_PRICE.primary_key,
             df=gold_df,
         )
 
@@ -8271,8 +8273,8 @@ class DataPreprocessor:
         self._select_database(DataQuality.GOLD.value)
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.DOW_JONES.name,
-            primary_keys=Table.DOW_JONES.primary_key,
+            table_name=Table.G_DOW_JONES.name,
+            primary_keys=Table.G_DOW_JONES.primary_key,
             df=gold_df,
         )
 
@@ -8305,7 +8307,7 @@ class DataPreprocessor:
     # endregion MACROECONOMICS.DOW_JONES
 
     # region MACROECONOMICS.NYSE_COMPOSITE
-    def _ingest_macroeconomics_nyse_composite_investing(self) -> None:
+    def _ingest_macroeconomics_nyse_composite_yahoo_finance(self) -> None:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.NYSE_COMPOSITE,
@@ -8369,7 +8371,7 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish ingesting data in "{table_name}".')
 
-    def _clean_macroeconomics_nyse_composite_investing(self) -> None:
+    def _clean_macroeconomics_nyse_composite_yahoo_finance(self) -> None:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.NYSE_COMPOSITE,
@@ -8407,7 +8409,7 @@ class DataPreprocessor:
             f'Finish cleaning data in table "{format_key_for_table(key)}".'
         )
 
-    def _transform_macroeconomics_nyse_composite_investing(self) -> None:
+    def _transform_macroeconomics_nyse_composite_yahoo_finance(self) -> None:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.NYSE_COMPOSITE,
@@ -8439,8 +8441,8 @@ class DataPreprocessor:
         self._select_database(DataQuality.GOLD.value)
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.NYSE_COMPOSITE.name,
-            primary_keys=Table.NYSE_COMPOSITE.primary_key,
+            table_name=Table.G_NYSE_COMPOSITE.name,
+            primary_keys=Table.G_NYSE_COMPOSITE.primary_key,
             df=gold_df,
         )
 
@@ -8455,13 +8457,13 @@ class DataPreprocessor:
 
         match data_quality:
             case DataQuality.BRONZE:
-                self._ingest_macroeconomics_nyse_composite_investing()
+                self._ingest_macroeconomics_nyse_composite_yahoo_finance()
 
             case DataQuality.SILVER:
-                self._clean_macroeconomics_nyse_composite_investing()
+                self._clean_macroeconomics_nyse_composite_yahoo_finance()
 
             case DataQuality.GOLD:
-                self._transform_macroeconomics_nyse_composite_investing()
+                self._transform_macroeconomics_nyse_composite_yahoo_finance()
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -8605,8 +8607,8 @@ class DataPreprocessor:
         self._select_database(DataQuality.GOLD.value)
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.SNP_500.name,
-            primary_keys=Table.SNP_500.primary_key,
+            table_name=Table.G_SNP_500.name,
+            primary_keys=Table.G_SNP_500.primary_key,
             df=gold_df,
         )
 
@@ -10587,13 +10589,13 @@ class DataPreprocessor:
         # self._process_macroeconomics_fdi_rd(data_quality)
         # self._process_macroeconomics_export(data_quality)
         # self._process_macroeconomics_import(data_quality)
-        # self._process_macroeconomics_gold_price(data_quality)
-        # self._process_macroeconomics_oil_price(data_quality)
-        # self._process_macroeconomics_dow_jones(data_quality)
-        # self._process_macroeconomics_nyse_composite(data_quality)
-        # self._process_macroeconomics_snp_500(data_quality)
+        self._process_macroeconomics_gold_price(data_quality)
+        self._process_macroeconomics_oil_price(data_quality)
+        self._process_macroeconomics_dow_jones(data_quality)
+        self._process_macroeconomics_nyse_composite(data_quality)
+        self._process_macroeconomics_snp_500(data_quality)
         self._process_macroeconomics_nasdaq_composite(data_quality)
-        # self._process_macroeconomics_nasdaq_100(data_quality)
+        self._process_macroeconomics_nasdaq_100(data_quality)
 
         # # Stock market
         # self._process_stock_market_market(data_quality)

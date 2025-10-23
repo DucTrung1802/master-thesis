@@ -2177,7 +2177,33 @@ class Table:
         name = "gold_price"
         primary_key = [Column.DATE.value]
 
+    class G_GOLD_PRICE:
+        class Column(Enum):
+            DATE = "date"
+            CLOSE = "close"
+            OPEN = "open"
+            HIGH = "high"
+            LOW = "low"
+            VOLUME = "volume"
+            CHANGE = "change"
+
+        name = "gold_price"
+        primary_key = [Column.DATE.value]
+
     class OIL_PRICE:
+        class Column(Enum):
+            DATE = "date"
+            CLOSE = "close"
+            OPEN = "open"
+            HIGH = "high"
+            LOW = "low"
+            VOLUME = "volume"
+            CHANGE = "change"
+
+        name = "oil_price"
+        primary_key = [Column.DATE.value]
+
+    class G_OIL_PRICE:
         class Column(Enum):
             DATE = "date"
             CLOSE = "close"
@@ -2203,6 +2229,19 @@ class Table:
         name = "dow_jones"
         primary_key = [Column.DATE.value]
 
+    class G_DOW_JONES:
+        class Column(Enum):
+            DATE = "date"
+            CLOSE = "close"
+            OPEN = "open"
+            HIGH = "high"
+            LOW = "low"
+            VOLUME = "volume"
+            CHANGE = "change"
+
+        name = "dow_jones"
+        primary_key = [Column.DATE.value]
+
     class NYSE_COMPOSITE:
         class Column(Enum):
             DATE = "date"
@@ -2216,7 +2255,33 @@ class Table:
         name = "nyse_composite"
         primary_key = [Column.DATE.value]
 
+    class G_NYSE_COMPOSITE:
+        class Column(Enum):
+            DATE = "date"
+            CLOSE = "close"
+            ADJ_CLOSE = "adj_close"
+            OPEN = "open"
+            HIGH = "high"
+            LOW = "low"
+            VOLUME = "volume"
+
+        name = "nyse_composite"
+        primary_key = [Column.DATE.value]
+
     class SNP_500:
+        class Column(Enum):
+            DATE = "date"
+            CLOSE = "close"
+            ADJ_CLOSE = "adj_close"
+            OPEN = "open"
+            HIGH = "high"
+            LOW = "low"
+            VOLUME = "volume"
+
+        name = "snp_500"
+        primary_key = [Column.DATE.value]
+
+    class G_SNP_500:
         class Column(Enum):
             DATE = "date"
             CLOSE = "close"
