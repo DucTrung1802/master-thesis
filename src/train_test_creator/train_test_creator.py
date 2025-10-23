@@ -351,10 +351,81 @@ class TrainTestCreator:
             if not stock_code:
                 raise ValueError("Stock code must be provided.")
 
-            stock_code = str.lower(stock_code)
-            stock_code_df = self.select(schema_name="enterprise", table_name=stock_code)
+            stock_code = stock_code.lower()
 
-            common_dataframe = self.select_common_dataframe()
+            # Load all three datasets
+            stock_code_df = self.select(
+                schema_name=Schema.ENTERPRISE.value, table_name=stock_code
+            )
+            stock_code_df = stock_code_df.drop(columns=["code"])
+
+            if len(stock_code_df) == 0:
+                self._logger.log_error(f"No data found for stock code: {stock_code}")
+                raise ValueError(f"No data found for stock code: {stock_code}")
+
+            # Drop existng unified table if any
+            self._database_driver.drop_table(
+                schema_name=Schema.ENTERPRISE.value,
+                table_name=f"unified_{stock_code}",
+            )
+
+            unified_macro_df = self.select(
+                schema_name=Schema.MACROECONOMICS.value,
+                table_name=Table.UNIFIED_MACROECONOMIC.name,
+            )
+            unified_stock_df = self.select(
+                schema_name=Schema.STOCK_MARKET.value,
+                table_name=Table.UNIFIED_STOCK_MARKET.name,
+            )
+
+            # Join all at once
+            unified_df = unified_macro_df.merge(
+                unified_stock_df, on="date", how="inner"
+            ).merge(stock_code_df, on="date", how="inner")
+
+            self._logger.log_info(
+                f"Original 'unified_df' has {len(unified_df)} rows and {len(unified_df.columns)} columns."
+            )
+
+            # Drop lack data columns
+            data_lack_threshold = 0.01
+            columns_to_drop = [
+                col
+                for col in unified_df.columns
+                if col != "date"
+                and unified_df[col].isna().sum() / len(unified_df) > data_lack_threshold
+            ]
+
+            columns_to_drop.append("market_id")
+
+            self._logger.log_info(
+                f"Dropping {len(columns_to_drop)} columns with more than {data_lack_threshold * 100}% missing data: {columns_to_drop}"
+            )
+            unified_df = unified_df.drop(columns=columns_to_drop)
+            self._logger.log_info(
+                f"Filtered 'stock_market_df' has {len(unified_df)} rows and {len(unified_df.columns)} columns after filter."
+            )
+
+            self.create_table(
+                schema_name=Schema.ENTERPRISE.value,
+                table_name=f"unified_{stock_code}",
+                columns=[
+                    Column(name="date", data_type="DATE", nullable=False),
+                ]
+                + [
+                    Column(name=col, data_type=DataType.DECIMAL(), nullable=True)
+                    for col in unified_df.columns
+                    if col != "date"
+                ],
+                primary_keys=["date"],
+            )
+
+            self._save_pandas_table_to_database(
+                schema_name=Schema.ENTERPRISE.value,
+                table_name=f"unified_{stock_code}",
+                primary_keys=["date"],
+                df=unified_df,
+            )
 
         except Exception as e:
             self._logger.log_error(

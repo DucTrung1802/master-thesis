@@ -19,8 +19,8 @@ def main():
     # my_data_preprocessor.ingest_gold_data()
 
     my_train_test_creator = TrainTestCreator(logger=my_logger)
-    my_train_test_creator.export_common_dataframe_to_db()
-    # my_train_test_creator.get_unified_dataframe(stock_code="FPT")
+    # my_train_test_creator.export_common_dataframe_to_db()
+    my_train_test_creator.create_unified_dataframe(stock_code="FPT")
 
 
 if __name__ == "__main__":
