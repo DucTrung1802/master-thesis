@@ -2487,6 +2487,14 @@ class Table:
         name = "daily_price"
         primary_key = [Column.DATE.value, Column.CODE.value]
 
+    # Unified Tables
+    class UNIFIED_MACROECONOMIC:
+        class Column(Enum):
+            DATE = "date"
+
+        name = "unified_macroeconomic"
+        primary_key = [Column.DATE.value]
+
 
 class FeatureSelectorType(Enum):
     XGB_REGRESSOR = {
