@@ -220,7 +220,81 @@ class TrainTestCreator:
             raise ValueError("No macroeconomics tables found to merge.")
 
     def extract_unified_stock_market_dataframe(self) -> pd.DataFrame:
-        pass
+        stock_market_gold_table_names = [
+            Table.HNX_30_INDEX.name,
+            Table.HNX_INDEX.name,
+            Table.UPCOM_INDEX.name,
+            Table.VN_30_INDEX.name,
+            Table.VN_100_INDEX.name,
+            Table.VN_INDEX.name,
+        ]
+
+        self._logger.log_info(
+            f"Selecting STOCK MARKET data from tables: {stock_market_gold_table_names}"
+        )
+
+        stock_market_df_list = []
+        for table in stock_market_gold_table_names:
+            df = self.select(schema_name="stock_market", table_name=table)
+            self._logger.log_info(f"Selected {len(df)} rows from table: '{table}'")
+
+            # ✅ Rename all columns except 'date' to include table name
+            df = df.rename(
+                columns={col: f"{table}_{col}" for col in df.columns if col != "date"}
+            )
+            stock_market_df_list.append(df)
+
+        # ✅ Merge on 'date'
+        if stock_market_df_list:
+            stock_market_df = reduce(
+                lambda left, right: pd.merge(left, right, on="date", how="outer"),
+                stock_market_df_list,
+            )
+            self._logger.log_info(
+                f"Original 'stock_market_df' has {len(stock_market_df)} rows and {len(stock_market_df.columns)} columns."
+            )
+
+            # Try casting each column to Float64 (skip if not possible)
+            for col in stock_market_df.columns:
+                try:
+                    stock_market_df[col] = stock_market_df[col].astype("Float64")
+                except Exception:
+                    # Skip columns that can't be converted to Float64
+                    pass
+
+            # Drop existng unified table if any
+            self._database_driver.drop_table(
+                schema_name=Schema.STOCK_MARKET.value,
+                table_name=Table.UNIFIED_STOCK_MARKET.name,
+            )
+
+            # Cutoff according to available date range
+            start_date = TRAIN_TEST_CREATOR_START_DATE
+            end_date = TRAIN_TEST_CREATOR_END_DATE
+
+            self._logger.log_info(
+                f"Filtering 'stock_market_df' for dates between {start_date.date()} and {end_date.date()}."
+            )
+            stock_market_df = stock_market_df[
+                (stock_market_df["date"] >= start_date.date())
+                & (stock_market_df["date"] <= end_date.date())
+            ]
+
+            self._logger.log_info(
+                f"Filtered 'stock_market_df' has {len(stock_market_df)} rows and {len(stock_market_df.columns)} columns after filter."
+            )
+
+            # Print each column name and its pandas dtype
+            self._logger.log_info("\nSTOCK MARKET Column data types:\n")
+            for col in stock_market_df.columns:
+                self._logger.log_info(f"{col:<60} → {stock_market_df[col].dtype}")
+
+            return stock_market_df
+
+        else:
+            stock_market_df = pd.DataFrame()
+            self._logger.log_error("No stock market tables found to merge.")
+            raise ValueError("No stock market tables found to merge.")
 
     def export_common_dataframe_to_db(self) -> pd.DataFrame:
         # UNIFIED MACROECONOMIC DF
@@ -251,7 +325,7 @@ class TrainTestCreator:
         unified_stock_market_df = self.extract_unified_stock_market_dataframe()
 
         self.create_table(
-            schema_name=Schema.MACROECONOMICS.value,
+            schema_name=Schema.STOCK_MARKET.value,
             table_name=Table.UNIFIED_STOCK_MARKET.name,
             columns=[
                 Column(name="date", data_type="DATE", nullable=False),
@@ -265,7 +339,7 @@ class TrainTestCreator:
         )
 
         self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
+            schema_name=Schema.STOCK_MARKET.value,
             table_name=Table.UNIFIED_STOCK_MARKET.name,
             primary_keys=Table.UNIFIED_STOCK_MARKET.primary_key,
             df=unified_stock_market_df,

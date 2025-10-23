@@ -2495,6 +2495,13 @@ class Table:
         name = "unified_macroeconomic"
         primary_key = [Column.DATE.value]
 
+    class UNIFIED_STOCK_MARKET:
+        class Column(Enum):
+            DATE = "date"
+
+        name = "unified_stock_market"
+        primary_key = [Column.DATE.value]
+
 
 class FeatureSelectorType(Enum):
     XGB_REGRESSOR = {
