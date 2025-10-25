@@ -33,6 +33,16 @@ ARIMA_VISUALIZATION_LOG_FILE_BASE = f"../../{LOG_DIR}/arima_visualization"
 
 
 # ===========================
+# FEATURE SELECTION CONFIGURATION
+# ===========================
+FEATURE_SELECTION_LOG_FILE_BASE = f"../../{LOG_DIR}/feature_selection"
+FEATURE_SELECTION_LOG_FILE_TEST = (
+    f"{FEATURE_SELECTION_LOG_FILE_BASE}/feature_selection_test"
+)
+FEATURE_SELECTION_CHARTS_DIR = f"{FEATURE_SELECTION_LOG_FILE_BASE}/feature_selection"
+
+
+# ===========================
 # TRAINED MODELS CONFIGURATION
 # ===========================
 TRAINED_MODELS_LOG_FILE_BASE = f"../../trained_models"
@@ -82,3 +92,16 @@ STOCK_CODES_TO_BE_EXPORTED_TO_GOLD_DB = ["FPT", "GAS"]
 # ENTERPRISE CONFIGURATION
 # ===========================
 PARALLEL_SCRAPE_ENTERPRISE_STOCK_INFORMATION = 8
+
+
+# ===========================
+# TRAIN TEST CREATOR CONFIGURATION
+# ===========================
+TRAIN_TEST_CREATOR_START_DATE = datetime(2005, 4, 1)
+TRAIN_TEST_CREATOR_END_DATE = datetime(2025, 6, 30)
+DEFAULT_INPUT_WINDOW_SIZE = 360  # days
+DEFAULT_FORECAST_HORIZON_SIZE = 30  # days
+DEFAULT_TRAIN_RATIO = 0.9
+
+
+UNIFIED_DATAFRAME_DIR = f"unified_dataframe"
