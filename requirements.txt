@@ -19,3 +19,4 @@ sktime
 seaborn
 xgboost
 shap
+torch
