@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 import os
 import pandas as pd
 from functools import reduce
+from math import ceil
 
 from logger.logger import Logger
 from dtos.tabular_database_driver_dtos.tabular_database_driver_dtos import (
@@ -17,6 +18,7 @@ from tabular_database_driver.postgre_sql_driver import PostgreSQLDriver
 from dtos.tabular_database_driver_dtos.postgre_sql_connection_dto import (
     PostgreSQLConnectionDto,
 )
+from train_test_creator.train_test_set import TrainTestSet
 from utils.constants import *
 from utils.utils import *
 
@@ -366,7 +368,7 @@ class TrainTestCreator:
             # Drop existng unified table if any
             self._database_driver.drop_table(
                 schema_name=Schema.ENTERPRISE.value,
-                table_name=f"unified_{stock_code}",
+                table_name=f"unified_{stock_code}",  # Template name in database
             )
 
             unified_macro_df = self.select(
@@ -432,3 +434,76 @@ class TrainTestCreator:
                 f"Error fetching data for stock code {stock_code}: {e}"
             )
             return None
+
+    def create_train_test_set(
+        self,
+        stock_code: str,
+        input_window_size: int,
+        forecast_horizon_size: int,
+        train_ratio: float = DEFAULT_TRAIN_RATIO,
+    ) -> "TrainTestSet":
+        # Validate inputs
+        if not (0 < train_ratio < 1):
+            raise ValueError("train_ratio must be between 0 and 1.")
+        if input_window_size <= 0 or forecast_horizon_size <= 0:
+            raise ValueError(
+                "input_window_size and forecast_horizon_size must be positive integers."
+            )
+
+        # Fetch unified dataframe
+        self.connect_to_database(database_name=os.getenv("GOLD_POSTGRES_DATABASE"))
+        unified_df = self.select(
+            schema_name=Schema.ENTERPRISE.value,
+            table_name=f"unified_{stock_code.lower()}",
+        )
+
+        if unified_df.empty:
+            raise ValueError(f"No data found for stock_code: {stock_code}")
+
+        # Sort by date or time index if available
+        if "date" in unified_df.columns:
+            unified_df = unified_df.sort_values("date").reset_index(drop=True)
+        else:
+            unified_df = unified_df.reset_index(drop=True)
+
+        # --- Adjusted split index logic ---
+        split_index = ceil(len(unified_df) * train_ratio)
+        split_index -= input_window_size  # ensure full input window fits
+
+        # Make split_index divisible by forecast_horizon_size
+        remainder = split_index % forecast_horizon_size
+        if remainder != 0:
+            split_index -= remainder
+
+        # Guard against invalid split index
+        if split_index <= 0 or split_index >= len(unified_df):
+            raise ValueError(
+                f"Adjusted split_index ({split_index}) is invalid for data length {len(unified_df)}"
+            )
+
+        # Add back input windwo size to split_index
+        split_index += input_window_size
+
+        # --- Split train/test ---
+        full_train_df = unified_df.iloc[:split_index].reset_index(drop=True)
+        test_set = unified_df.iloc[split_index:].reset_index(drop=True)
+
+        # --- Create sliding windows on training set ---
+        train_sets = []
+        total_window_size = input_window_size + forecast_horizon_size
+
+        for start_idx in range(
+            0, len(full_train_df) - total_window_size + 1, forecast_horizon_size
+        ):
+            end_idx = start_idx + total_window_size
+            window_df = full_train_df.iloc[start_idx:end_idx].reset_index(drop=True)
+            train_sets.append(window_df)
+
+        # --- Return TrainTestSet object ---
+        return TrainTestSet(
+            name=f"{stock_code}_{input_window_size}_{forecast_horizon_size}",
+            train_set=train_sets,
+            test_set=test_set,
+            input_window_size=input_window_size,
+            forecast_horizon_size=forecast_horizon_size,
+        )

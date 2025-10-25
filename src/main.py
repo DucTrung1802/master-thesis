@@ -20,7 +20,13 @@ def main():
 
     my_train_test_creator = TrainTestCreator(logger=my_logger)
     # my_train_test_creator.export_common_dataframe_to_db()
-    my_train_test_creator.create_unified_dataframe(stock_code="FPT")
+    # my_train_test_creator.create_unified_dataframe(stock_code="FPT")
+    # my_train_test_creator.create_unified_dataframe(stock_code="GAS")
+    gas_train_test_set = my_train_test_creator.create_train_test_set(
+        stock_code="GAS",
+        input_window_size=360,
+        forecast_horizon_size=30,
+    )
 
 
 if __name__ == "__main__":
