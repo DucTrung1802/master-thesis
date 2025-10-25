@@ -1,3 +1,4 @@
+import os
 from data_preprocessor.data_preprocessor import DataPreprocessor
 from logger.logger import Logger, LogType
 from train_test_creator.train_test_creator import TrainTestCreator
@@ -20,12 +21,23 @@ def main():
 
     my_train_test_creator = TrainTestCreator(logger=my_logger)
     # my_train_test_creator.export_common_dataframe_to_db()
-    # my_train_test_creator.create_unified_dataframe(stock_code="FPT")
-    # my_train_test_creator.create_unified_dataframe(stock_code="GAS")
-    gas_train_test_set = my_train_test_creator.create_train_test_set(
-        stock_code="GAS",
-        input_window_size=360,
-        forecast_horizon_size=30,
+
+    stock_code = "GAS"
+
+    my_train_test_creator.export_unified_dataframe(stock_code=stock_code)
+
+    # Load data with template "unified_dataframe/unified_{str.lower(stock_code)}.csv"
+    dataframe = my_train_test_creator.load_dataframe(stock_code=stock_code)
+
+    normalized_df = my_train_test_creator.normalize_unified_dataframe(
+        dataframe=dataframe
+    )
+
+    train_test_set = my_train_test_creator.create_train_test_set(
+        normalized_df=normalized_df,
+        stock_code=stock_code,
+        input_window_size=DEFAULT_INPUT_WINDOW_SIZE,
+        forecast_horizon_size=DEFAULT_FORECAST_HORIZON_SIZE,
     )
 
 

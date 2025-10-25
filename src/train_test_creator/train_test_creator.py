@@ -347,7 +347,7 @@ class TrainTestCreator:
             df=unified_stock_market_df,
         )
 
-    def create_unified_dataframe(self, stock_code: str) -> pd.DataFrame:
+    def export_unified_dataframe(self, stock_code: str) -> pd.DataFrame:
         self.connect_to_database(database_name=os.getenv("GOLD_POSTGRES_DATABASE"))
         try:
             if not stock_code:
@@ -408,6 +408,10 @@ class TrainTestCreator:
                 f"Filtered 'stock_market_df' has {len(unified_df)} rows and {len(unified_df.columns)} columns after filter."
             )
 
+            # Expand "date" column
+            unified_df = expand_date_column(unified_df)
+
+            # Export to dataframe
             self.create_table(
                 schema_name=Schema.ENTERPRISE.value,
                 table_name=f"unified_{stock_code}",
@@ -429,14 +433,54 @@ class TrainTestCreator:
                 df=unified_df,
             )
 
+            # Export to file
+            os.makedirs(UNIFIED_DATAFRAME_DIR, exist_ok=True)
+            file_path = os.path.join(UNIFIED_DATAFRAME_DIR, f"unified_{stock_code}.csv")
+            unified_df.to_csv(file_path, index=False)
+            self._logger.log_info(
+                f"Exported unified dataframe for stock code '{stock_code}' to file: {file_path}"
+            )
+
         except Exception as e:
             self._logger.log_error(
                 f"Error fetching data for stock code {stock_code}: {e}"
             )
             return None
 
+    def load_dataframe(self, stock_code: str) -> pd.DataFrame:
+        if not stock_code:
+            raise ValueError("Stock code must be provided.")
+
+        stock_code = stock_code.lower()
+
+        dataframe = pd.read_csv(
+            os.path.join(UNIFIED_DATAFRAME_DIR, f"unified_{stock_code}.csv")
+        )
+        self._logger.log_info(
+            f"Loaded unified dataframe for stock code '{stock_code}' from file with {len(dataframe)} rows and {len(dataframe.columns)} columns."
+        )
+        return dataframe
+
+    def normalize_unified_dataframe(self, dataframe: pd.DataFrame) -> pd.DataFrame:
+        df = dataframe.copy()
+
+        df.drop(columns=["date"], inplace=True)
+
+        # Identify numeric columns (floats or ints) except "date"
+        numeric_cols = df.select_dtypes(include=["float", "int"]).columns.difference(
+            ["date"]
+        )
+
+        # Apply min-max normalization
+        df[numeric_cols] = (df[numeric_cols] - df[numeric_cols].min()) / (
+            df[numeric_cols].max() - df[numeric_cols].min()
+        )
+
+        return df
+
     def create_train_test_set(
         self,
+        normalized_df: pd.DataFrame,
         stock_code: str,
         input_window_size: int,
         forecast_horizon_size: int,
@@ -450,24 +494,16 @@ class TrainTestCreator:
                 "input_window_size and forecast_horizon_size must be positive integers."
             )
 
-        # Fetch unified dataframe
-        self.connect_to_database(database_name=os.getenv("GOLD_POSTGRES_DATABASE"))
-        unified_df = self.select(
-            schema_name=Schema.ENTERPRISE.value,
-            table_name=f"unified_{stock_code.lower()}",
-        )
-
-        if unified_df.empty:
-            raise ValueError(f"No data found for stock_code: {stock_code}")
+        stock_code = str.lower(stock_code)
 
         # Sort by date or time index if available
-        if "date" in unified_df.columns:
-            unified_df = unified_df.sort_values("date").reset_index(drop=True)
+        if "date" in normalized_df.columns:
+            normalized_df = normalized_df.sort_values("date").reset_index(drop=True)
         else:
-            unified_df = unified_df.reset_index(drop=True)
+            normalized_df = normalized_df.reset_index(drop=True)
 
         # --- Adjusted split index logic ---
-        split_index = ceil(len(unified_df) * train_ratio)
+        split_index = ceil(len(normalized_df) * train_ratio)
         split_index -= input_window_size  # ensure full input window fits
 
         # Make split_index divisible by forecast_horizon_size
@@ -476,17 +512,17 @@ class TrainTestCreator:
             split_index -= remainder
 
         # Guard against invalid split index
-        if split_index <= 0 or split_index >= len(unified_df):
+        if split_index <= 0 or split_index >= len(normalized_df):
             raise ValueError(
-                f"Adjusted split_index ({split_index}) is invalid for data length {len(unified_df)}"
+                f"Adjusted split_index ({split_index}) is invalid for data length {len(normalized_df)}"
             )
 
         # Add back input windwo size to split_index
         split_index += input_window_size
 
         # --- Split train/test ---
-        full_train_df = unified_df.iloc[:split_index].reset_index(drop=True)
-        test_set = unified_df.iloc[split_index:].reset_index(drop=True)
+        full_train_df = normalized_df.iloc[:split_index].reset_index(drop=True)
+        test_set = normalized_df.iloc[split_index:].reset_index(drop=True)
 
         # --- Create sliding windows on training set ---
         train_sets = []
