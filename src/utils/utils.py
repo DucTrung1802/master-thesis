@@ -5,7 +5,9 @@ import requests
 from typing import Tuple, List, Optional
 import pandas as pd
 from pathlib import Path
+import matplotlib.pyplot as plt
 
+from dtos.model_dtos.model_output_dto import ModelOutputDto
 from logger.logger import Logger
 from dtos.tabular_database_driver_dtos.tabular_database_driver_dtos import (
     DataType,
@@ -544,3 +546,27 @@ def expand_date_column(df: pd.DataFrame) -> pd.DataFrame:
     df["day_of_year_cos"] = np.cos(2 * np.pi * df["day_of_year"] / 365)
 
     return df
+
+
+def plot_model_result(model_output_dto: ModelOutputDto):
+
+    plt.figure(figsize=(12, 6))
+    plt.plot(
+        model_output_dto.y_true_denorm,
+        label="True Values",
+        color="blue",
+        linewidth=2,
+    )
+    plt.plot(
+        model_output_dto.y_pred_denorm,
+        label="Predicted Values",
+        color="red",
+        linestyle="--",
+        linewidth=2,
+    )
+    plt.title("Model Predictions vs True Values")
+    plt.xlabel("Day")
+    plt.ylabel("Price")
+    plt.legend()
+    plt.grid(True)
+    plt.show()

@@ -194,6 +194,24 @@ class LSTM_Model:
             y_pred = model(X_input)
             test_loss = criterion(y_pred, y_true).item()
 
+            # Denormalize predictions
+            y_pred_denorm = (
+                y_pred
+                * (
+                    self._train_test_set.output_range[1]
+                    - self._train_test_set.output_range[0]
+                )
+                + self._train_test_set.output_range[0]
+            )
+            y_true_denorm = (
+                y_true
+                * (
+                    self._train_test_set.output_range[1]
+                    - self._train_test_set.output_range[0]
+                )
+                + self._train_test_set.output_range[0]
+            )
+
         training_time = time() - start_time
 
         print(f"\n✅ Test MSE (forecast horizon = {horizon}): {test_loss:.6f}")
@@ -213,7 +231,9 @@ class LSTM_Model:
             final_train_loss=avg_loss,
             test_loss=test_loss,
             y_pred=y_pred.cpu().numpy().flatten(),
+            y_pred_denorm=y_pred_denorm.cpu().numpy().flatten(),
             y_true=y_true.cpu().numpy().flatten(),
+            y_true_denorm=y_true_denorm.cpu().numpy().flatten(),
             input_window_size=self._train_test_set.input_window_size,
             horizon_size=horizon,
             training_time=training_time,

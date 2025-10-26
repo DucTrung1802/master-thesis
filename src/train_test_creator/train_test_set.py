@@ -10,6 +10,8 @@ class TrainTestSet:
         self,
         name: str,
         train_set: List[pd.DataFrame],
+        output_column: str,
+        output_range: tuple,
         test_set: pd.DataFrame,
         input_window_size: int,
         forecast_horizon_size: int,
@@ -22,6 +24,8 @@ class TrainTestSet:
         # Data
         self.train_set = train_set
         self.test_set = test_set
+        self.output_column = output_column
+        self.output_range = output_range
 
     def get_number_of_train_windows(self) -> int:
         return len(self.train_set)

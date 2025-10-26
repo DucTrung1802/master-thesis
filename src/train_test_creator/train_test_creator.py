@@ -463,7 +463,10 @@ class TrainTestCreator:
         return dataframe
 
     def normalize_unified_dataframe(
-        self, dataframe: pd.DataFrame, output_column: str = "close"
+        self,
+        dataframe: pd.DataFrame,
+        output_range: tuple,
+        output_column: str = "close",
     ) -> pd.DataFrame:
         df = dataframe.copy()
 
@@ -492,12 +495,17 @@ class TrainTestCreator:
             df[numeric_cols].max() - df[numeric_cols].min()
         )
 
+        # Scale to output range
+        min_range, max_range = output_range
+        df[output_column] = (df[output_column] - min_range) / (max_range - min_range)
+
         return df
 
     def create_train_test_set(
         self,
         normalized_df: pd.DataFrame,
         output_column: str,
+        output_range: tuple,
         stock_code: str,
         input_window_size: int,
         forecast_horizon_size: int,
@@ -558,6 +566,8 @@ class TrainTestCreator:
         return TrainTestSet(
             name=f"{stock_code}_{input_window_size}_{forecast_horizon_size}",
             train_set=train_sets,
+            output_column=output_column,
+            output_range=output_range,
             test_set=test_set,
             input_window_size=input_window_size,
             forecast_horizon_size=forecast_horizon_size,

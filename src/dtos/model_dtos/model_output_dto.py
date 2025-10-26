@@ -16,7 +16,9 @@ class ModelOutputDto:
     final_train_loss: float
     test_loss: float
     y_pred: np.ndarray
+    y_pred_denorm: np.ndarray
     y_true: np.ndarray
+    y_true_denorm: np.ndarray
     input_window_size: int
     horizon_size: int
     training_time: Any
