@@ -447,15 +447,16 @@ class TrainTestCreator:
             )
             return None
 
-    def load_dataframe(self, stock_code: str) -> pd.DataFrame:
+    def load_dataframe(self, stock_code: str, file_path: str = None) -> pd.DataFrame:
         if not stock_code:
             raise ValueError("Stock code must be provided.")
 
         stock_code = stock_code.lower()
 
-        dataframe = pd.read_csv(
-            os.path.join(UNIFIED_DATAFRAME_DIR, f"unified_{stock_code}.csv")
-        )
+        if not file_path:
+            file_path = os.path.join(UNIFIED_DATAFRAME_DIR, f"unified_{stock_code}.csv")
+
+        dataframe = pd.read_csv(file_path)
         self._logger.log_info(
             f"Loaded unified dataframe for stock code '{stock_code}' from file with {len(dataframe)} rows and {len(dataframe.columns)} columns."
         )
@@ -471,6 +472,16 @@ class TrainTestCreator:
             ["date"]
         )
 
+        # Remove columns with constant values (min == max)
+        constant_cols = [
+            col
+            for col in numeric_cols
+            if df[col].nunique() == 1 and df[col].min() == df[col].max()
+        ]
+        df.drop(columns=constant_cols, inplace=True)
+
+        numeric_cols = [col for col in numeric_cols if col not in constant_cols]
+
         # Apply min-max normalization
         df[numeric_cols] = (df[numeric_cols] - df[numeric_cols].min()) / (
             df[numeric_cols].max() - df[numeric_cols].min()
@@ -481,6 +492,7 @@ class TrainTestCreator:
     def create_train_test_set(
         self,
         normalized_df: pd.DataFrame,
+        output_column: str,
         stock_code: str,
         input_window_size: int,
         forecast_horizon_size: int,
@@ -495,6 +507,12 @@ class TrainTestCreator:
             )
 
         stock_code = str.lower(stock_code)
+
+        # Move the output column to the end
+        normalized_df = normalized_df[
+            [col for col in normalized_df.columns if col != output_column]
+            + [output_column]
+        ]
 
         # Sort by date or time index if available
         if "date" in normalized_df.columns:

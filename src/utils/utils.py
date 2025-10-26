@@ -508,15 +508,12 @@ def expand_date_column(df: pd.DataFrame) -> pd.DataFrame:
         "is_month_end",
         "is_quarter_start",
         "is_quarter_end",
-        "is_year_start",
-        "is_year_end",
     ]:
         df[col] = getattr(df["date"].dt, col).astype(int)
 
     # --- Additional features ---
     df["week_of_month"] = df["date"].apply(lambda d: int(np.ceil(d.day / 7)))
     df["half_of_year"] = np.where(df["month"] <= 6, 1, 2)
-    df["is_weekend"] = (df["day_of_week"] >= 5).astype(int)
 
     # --- Season mapping (encoded 1–4) ---
     # 1: Winter, 2: Spring, 3: Summer, 4: Fall
