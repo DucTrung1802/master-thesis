@@ -462,14 +462,19 @@ class TrainTestCreator:
         )
         return dataframe
 
-    def normalize_unified_dataframe(self, dataframe: pd.DataFrame) -> pd.DataFrame:
+    def normalize_unified_dataframe(
+        self, dataframe: pd.DataFrame, output_column: str = "close"
+    ) -> pd.DataFrame:
         df = dataframe.copy()
+
+        # Move the output column to the end
+        df = df[[col for col in df.columns if col != output_column] + [output_column]]
 
         df.drop(columns=["date"], inplace=True)
 
         # Identify numeric columns (floats or ints) except "date"
         numeric_cols = df.select_dtypes(include=["float", "int"]).columns.difference(
-            ["date"]
+            [output_column]
         )
 
         # Remove columns with constant values (min == max)
@@ -508,12 +513,6 @@ class TrainTestCreator:
 
         stock_code = str.lower(stock_code)
 
-        # Move the output column to the end
-        normalized_df = normalized_df[
-            [col for col in normalized_df.columns if col != output_column]
-            + [output_column]
-        ]
-
         # Sort by date or time index if available
         if "date" in normalized_df.columns:
             normalized_df = normalized_df.sort_values("date").reset_index(drop=True)
@@ -540,7 +539,9 @@ class TrainTestCreator:
 
         # --- Split train/test ---
         full_train_df = normalized_df.iloc[:split_index].reset_index(drop=True)
-        test_set = normalized_df.iloc[split_index:].reset_index(drop=True)
+        test_set = normalized_df.iloc[
+            split_index : split_index + forecast_horizon_size
+        ].reset_index(drop=True)
 
         # --- Create sliding windows on training set ---
         train_sets = []

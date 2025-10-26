@@ -1,3 +1,4 @@
+from time import time
 import numpy as np
 import pandas as pd
 import torch
@@ -6,6 +7,7 @@ from torch.utils.data import Dataset, DataLoader
 from tqdm.notebook import tqdm
 
 from dtos.model_dtos.model_config_dto import ModelConfigDto
+from dtos.model_dtos.model_output_dto import ModelOutputDto
 from logger.logger import Logger
 from train_test_creator.train_test_set import TrainTestSet
 
@@ -113,6 +115,7 @@ class LSTM_Model:
         self.logger.log_info("Model configuration validated successfully.")
 
     def train(self):
+        start_time = time()
         self.logger.log_info("Starting training process...")
 
         # Training logic would go here
@@ -121,16 +124,10 @@ class LSTM_Model:
             self._train_test_set.input_window_size,
             self._train_test_set.forecast_horizon_size,
         )
-        test_dataset = TimeSeriesDataset(
-            [self._train_test_set.test_set],
-            self._train_test_set.input_window_size,
-            self._train_test_set.forecast_horizon_size,
-        )
 
         train_loader = DataLoader(
             train_dataset, batch_size=self._model_config.batch_size, shuffle=False
         )
-        test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
 
         num_features = train_dataset.X.shape[-1]
         model = LSTMForecastModel(
@@ -176,15 +173,50 @@ class LSTM_Model:
         # --- Evaluate ---
         model.eval()
         with torch.no_grad():
-            test_losses = []
-            for X_batch, y_batch in tqdm(test_loader, desc="Evaluating", leave=False):
-                X_batch, y_batch = X_batch.to(self._device), y_batch.to(self._device)
-                y_pred = model(X_batch)
-                test_losses.append(criterion(y_pred, y_batch).item())
+            test_data = self._train_test_set.test_set.values
+            horizon = self._train_test_set.forecast_horizon_size
 
-        print(f"\n✅ Test MSE: {np.mean(test_losses):.6f}")
+            y_true = (
+                torch.tensor(test_data[:, -1], dtype=torch.float32)
+                .unsqueeze(0)
+                .to(self._device)
+            )
+            last_train_window = self._train_test_set.train_set[-1].values
+            X_input = (
+                torch.tensor(
+                    last_train_window[: self._train_test_set.input_window_size, :-1],
+                    dtype=torch.float32,
+                )
+                .unsqueeze(0)
+                .to(self._device)
+            )
 
-        self.logger.log_info(f"\n✅ Test MSE: {np.mean(test_losses):.6f}")
+            y_pred = model(X_input)
+            test_loss = criterion(y_pred, y_true).item()
+
+        training_time = time() - start_time
+
+        print(f"\n✅ Test MSE (forecast horizon = {horizon}): {test_loss:.6f}")
+        print("Training completed.")
+
+        self.logger.log_info(
+            f"\n✅ Test MSE (forecast horizon = {horizon}): {test_loss:.6f}"
+        )
         self.logger.log_info("Training completed.")
 
-        return model
+        # --- Return metadata ---
+        model_output = ModelOutputDto(
+            model=model,
+            model_state_dict=model.state_dict(),
+            model_config=self._model_config,
+            train_loss_history=[],  # optionally fill this during training
+            final_train_loss=avg_loss,
+            test_loss=test_loss,
+            y_pred=y_pred.cpu().numpy().flatten(),
+            y_true=y_true.cpu().numpy().flatten(),
+            input_window_size=self._train_test_set.input_window_size,
+            horizon_size=horizon,
+            training_time=training_time,
+        )
+
+        return model_output
