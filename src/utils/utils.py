@@ -1,5 +1,6 @@
 import os
 import zipfile
+import numpy as np
 import requests
 from typing import Tuple, List, Optional
 import pandas as pd
@@ -478,3 +479,71 @@ def standardize_time_frame(
 def remove_time_column_name(column_names: List[str]) -> List[str]:
     time_column_names = ["year", "quarter", "month", "day", "date"]
     return [name for name in column_names if name.lower() not in time_column_names]
+
+
+def cast_columns_to_float(df: pd.DataFrame) -> pd.DataFrame:
+    for col in df.columns:
+        if col.lower() != "date":
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+    return df
+
+
+def expand_date_column(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    df["date"] = pd.to_datetime(df["date"])
+
+    # --- Basic components ---
+    df["year"] = df["date"].dt.year
+    df["month"] = df["date"].dt.month
+    df["day"] = df["date"].dt.day
+    df["day_of_week"] = df["date"].dt.dayofweek
+    df["day_of_year"] = df["date"].dt.dayofyear
+    df["week"] = df["date"].dt.isocalendar().week.astype(int)
+    df["quarter"] = df["date"].dt.quarter
+    df["month_of_quarter"] = ((df["month"] - 1) % 3) + 1
+
+    # --- Boolean flags (convert to int) ---
+    for col in [
+        "is_month_start",
+        "is_month_end",
+        "is_quarter_start",
+        "is_quarter_end",
+        "is_year_start",
+        "is_year_end",
+    ]:
+        df[col] = getattr(df["date"].dt, col).astype(int)
+
+    # --- Additional features ---
+    df["week_of_month"] = df["date"].apply(lambda d: int(np.ceil(d.day / 7)))
+    df["half_of_year"] = np.where(df["month"] <= 6, 1, 2)
+    df["is_weekend"] = (df["day_of_week"] >= 5).astype(int)
+
+    # --- Season mapping (encoded 1–4) ---
+    # 1: Winter, 2: Spring, 3: Summer, 4: Fall
+    season_map = {
+        12: 1,
+        1: 1,
+        2: 1,  # Winter
+        3: 2,
+        4: 2,
+        5: 2,  # Spring
+        6: 3,
+        7: 3,
+        8: 3,  # Summer
+        9: 4,
+        10: 4,
+        11: 4,  # Fall
+    }
+    df["season"] = df["month"].map(season_map)
+
+    # --- Cyclical encoding for periodic features ---
+    df["month_sin"] = np.sin(2 * np.pi * df["month"] / 12)
+    df["month_cos"] = np.cos(2 * np.pi * df["month"] / 12)
+
+    df["day_of_week_sin"] = np.sin(2 * np.pi * df["day_of_week"] / 7)
+    df["day_of_week_cos"] = np.cos(2 * np.pi * df["day_of_week"] / 7)
+
+    df["day_of_year_sin"] = np.sin(2 * np.pi * df["day_of_year"] / 365)
+    df["day_of_year_cos"] = np.cos(2 * np.pi * df["day_of_year"] / 365)
+
+    return df

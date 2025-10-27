@@ -1,8 +1,21 @@
-psycopg2
+# requirements.txt
+
+# Require Python 3.12.10
+
+numpy<2
+scipy<1.14
+pmdarima
+psycopg2-binary
 selenium
 beautifulsoup4
 requests
-load_dotenv
+python-dotenv
 pandas
 nbformat
 matplotlib
+statsmodels
+tqdm
+sktime
+seaborn
+xgboost
+shap
