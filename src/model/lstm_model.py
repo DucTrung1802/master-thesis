@@ -192,7 +192,6 @@ class LSTM_Model:
             )
 
             y_pred = model(X_input)
-            test_loss = criterion(y_pred, y_true).item()
 
             # Denormalize predictions
             y_pred_denorm = (
@@ -211,6 +210,8 @@ class LSTM_Model:
                 )
                 + self._train_test_set.output_range[0]
             )
+
+            test_loss = criterion(y_pred_denorm, y_true_denorm).item()
 
         training_time = time() - start_time
 
