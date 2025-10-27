@@ -134,7 +134,9 @@ def plot_final_feature_importances(
     plt.figure(figsize=(14, 8))
     bars = plt.barh(df["feature"], df["final_importance"])
 
-    plt.title("Final Weighted Feature Importances (Combined Methods)")
+    plt.title(
+        f"Final Weighted Feature Importances ({", ".join([member.name for member in FeatureSelectorType])})"
+    )
     plt.xlabel("Weighted Importance Score")
     plt.ylabel("Features")
     plt.gca().invert_yaxis()
@@ -157,7 +159,7 @@ def plot_final_feature_importances(
     # Save plot if filename provided
     if filename:
         # Use cross-platform absolute path
-        charts_dir = os.path.abspath(FEATURE_SELECTION_CHARTS_DIR)
+        charts_dir = os.path.abspath(FEATURE_SELECTION_LOG_FILE_BASE)
         os.makedirs(charts_dir, exist_ok=True)
 
         save_path = os.path.join(charts_dir, filename)
@@ -172,41 +174,8 @@ class FeatureSelector:
     def __init__(self, logger: Logger, feature_selector_type: FeatureSelectorType):
         self._logger = logger
         self.feature_selector_type = feature_selector_type
-        self._database_driver = PostgreSQLDriver(logger=logger)
-        self.connect_to_database()
         self._model = None
         self.feature_importances_ = None
-
-    def connect_to_database(self, database_name: str = "postgres") -> None:
-        connection_model = PostgreSQLConnectionDto(
-            logger=self._logger,
-            host=os.getenv("POSTGRES_HOST"),
-            user=os.getenv("POSTGRES_USER"),
-            password=os.getenv("POSTGRES_PASSWORD"),
-            port=os.getenv("POSTGRES_PORT"),
-            database=database_name,
-        )
-        return self._database_driver.connect(connection_model)
-
-    def select(
-        self,
-        schema_name: str,
-        table_name: str,
-        columns: List[str] = None,
-        join_model: JoinModel = None,
-        conditions: List[Condition] = None,
-        order_by: List[str] = None,
-        limit: int = None,
-    ) -> pd.DataFrame:
-        return self._database_driver.select(
-            schema_name=schema_name,
-            table_name=table_name,
-            columns=columns,
-            join_model=join_model,
-            conditions=conditions,
-            order_by=order_by,
-            limit=limit,
-        )
 
     # =========================================================
     #  FEATURE SELECTION LOGIC
