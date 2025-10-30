@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import xgboost as xgb
 import shap
+import seaborn as sns
 
 from sklearn.linear_model import LassoCV, ElasticNetCV
 from sklearn.cluster import AgglomerativeClustering
@@ -112,13 +113,19 @@ def summarize_feature_importances(
 
 
 def plot_final_feature_importances(
-    combined_df: pd.DataFrame, top_n: int = 20, filename: str | None = None
+    stock_code: str,
+    combined_df: pd.DataFrame,
+    top_n: int = 20,
+    filename: str | None = None,
 ) -> None:
     """
     Plot the top N features from the combined weighted importance DataFrame,
     with numeric importance values displayed next to each bar.
     Optionally save the plot to FEATURE_SELECTION_CHARTS_DIR.
     """
+    if stock_code is None or stock_code.strip() == "":
+        raise ValueError("Stock code must be provided and cannot be empty.")
+
     if not {"feature", "final_importance"}.issubset(combined_df.columns):
         raise ValueError(
             "combined_df must contain 'feature' and 'final_importance' columns."
@@ -135,7 +142,7 @@ def plot_final_feature_importances(
     bars = plt.barh(df["feature"], df["final_importance"])
 
     plt.title(
-        f"Final Weighted Feature Importances ({", ".join([member.name for member in FeatureSelectorType])})"
+        f"Stock code: '{stock_code}' - Final Weighted Feature Importances ({", ".join([member.name for member in FeatureSelectorType])})"
     )
     plt.xlabel("Weighted Importance Score")
     plt.ylabel("Features")
@@ -170,12 +177,263 @@ def plot_final_feature_importances(
     plt.show()
 
 
+def get_important_features_df(
+    combined_df: pd.DataFrame, top_n: int = 20, filename: str | None = None
+) -> pd.DataFrame:
+    if not {"feature", "final_importance"}.issubset(combined_df.columns):
+        raise ValueError(
+            "combined_df must contain 'feature' and 'final_importance' columns."
+        )
+
+    # Select and sort top N
+    df = (
+        combined_df[["feature", "final_importance"]]
+        .sort_values(by="final_importance", ascending=False)
+        .head(top_n)
+    )
+
+    return df
+
+
+def plot_feature_correlation_heatmap(
+    stock_code: str,
+    df: pd.DataFrame,
+    feature_columns: List[str],
+    target_column: str,
+    top_corr_threshold: float | None = None,
+    filename: str | None = None,
+) -> None:
+    """
+    Plot a correlation heatmap of the top N most correlated numeric features,
+    excluding the target column. Optionally print highly correlated feature pairs.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input dataframe containing features and target.
+    feature_columns : list[str]
+        List of feature columns to include in correlation analysis.
+    target_column : str
+        The target column name to exclude.
+    top_corr_threshold : float, optional
+        If provided (e.g., 0.9), prints feature pairs with |correlation| above this threshold.
+    top_n : int, default=50
+        Maximum number of features (most correlated) to display in the heatmap.
+    filename : str, optional
+        If provided, saves the heatmap to the specified file path.
+    """
+    # Validate columns
+    if stock_code is None or stock_code.strip() == "":
+        raise ValueError("Stock code must be provided and cannot be empty.")
+
+    missing = [col for col in feature_columns if col not in df.columns]
+    if missing:
+        raise ValueError(f"Missing columns in dataframe: {missing}")
+
+    if target_column not in df.columns:
+        raise ValueError(f"Target column '{target_column}' not found in dataframe.")
+
+    # Extract numeric features (ignore target)
+    df_num = df[feature_columns].select_dtypes(include=[np.number])
+    if df_num.empty:
+        raise ValueError("No numeric features found in feature_columns.")
+
+    # Compute correlation matrix
+    corr = df_num.corr()
+
+    top_n = len(feature_columns)
+
+    # Select top N features by average absolute correlation
+    avg_corr = corr.abs().mean().sort_values(ascending=False)
+    top_features = avg_corr.head(top_n).index
+    corr_top = corr.loc[top_features, top_features]
+
+    # ===============================
+    # Plot heatmap
+    # ===============================
+    plt.figure(figsize=(12, 10))
+    sns.heatmap(
+        corr_top,
+        annot=False,
+        cmap="coolwarm",
+        center=0,
+        square=True,
+        linewidths=0.5,
+        cbar_kws={"shrink": 0.8},
+    )
+    plt.title(
+        f"Stock code: '{stock_code}' - Top {top_n} Feature Correlation Heatmap (excluding target '{target_column}')",
+        fontsize=14,
+    )
+    plt.tight_layout()
+
+    # Save if requested
+    if filename:
+        os.makedirs(os.path.dirname(filename) or ".", exist_ok=True)
+        plt.savefig(filename, dpi=300, bbox_inches="tight")
+        print(f"✅ Correlation heatmap saved to: {os.path.abspath(filename)}")
+
+    plt.show()
+
+    # ===============================
+    # Show highly correlated pairs
+    # ===============================
+    if top_corr_threshold is not None:
+        high_corr = corr_top.where(np.triu(np.ones(corr_top.shape), k=1).astype(bool))
+        high_corr_pairs = (
+            high_corr.stack()
+            .reset_index()
+            .rename(columns={"level_0": "feature_1", "level_1": "feature_2", 0: "corr"})
+            .query(f"abs(corr) > {top_corr_threshold}")
+            .sort_values(by="corr", ascending=False)
+        )
+
+
+def get_feature_correlation_df(
+    df: pd.DataFrame,
+    feature_columns: List[str],
+    target_column: str,
+    top_corr_threshold: float | None = None,
+    filename: str | None = None,
+) -> pd.DataFrame:
+    # Validate columns
+    missing = [col for col in feature_columns if col not in df.columns]
+    if missing:
+        raise ValueError(f"Missing columns in dataframe: {missing}")
+
+    if target_column not in df.columns:
+        raise ValueError(f"Target column '{target_column}' not found in dataframe.")
+
+    # Extract numeric features (ignore target)
+    df_num = df[feature_columns].select_dtypes(include=[np.number])
+    if df_num.empty:
+        raise ValueError("No numeric features found in feature_columns.")
+
+    # Compute correlation matrix
+    corr = df_num.corr()
+
+    top_n = len(feature_columns)
+
+    # Select top N features by average absolute correlation
+    avg_corr = corr.abs().mean().sort_values(ascending=False)
+    top_features = avg_corr.head(top_n).index
+    corr_top = corr.loc[top_features, top_features]
+
+    high_corr = corr_top.where(np.triu(np.ones(corr_top.shape), k=1).astype(bool))
+    high_corr_pairs = (
+        high_corr.stack()
+        .reset_index()
+        .rename(columns={"level_0": "feature_1", "level_1": "feature_2", 0: "corr"})
+        .query(f"abs(corr) > {top_corr_threshold}")
+        .sort_values(by="corr", ascending=False)
+    )
+
+    return high_corr_pairs.reset_index(drop=True)
+
+
+def drop_low_importance_correlated_features(
+    important_features_df: pd.DataFrame,
+    correlation_df: pd.DataFrame,
+    corr_threshold: float = 0.9,
+) -> tuple[list[str], list[str], pd.DataFrame]:
+    """
+    Remove features that are highly correlated but have lower importance.
+
+    Parameters
+    ----------
+    important_features_df : pd.DataFrame
+        DataFrame with columns ['feature', 'final_importance'].
+        Should contain the importance scores for features.
+    correlation_df : pd.DataFrame
+        DataFrame with columns ['feature_1', 'feature_2', 'corr'].
+        Each row represents a pair of correlated features.
+    corr_threshold : float, default=0.9
+        Correlation threshold above which features are considered highly correlated.
+
+    Returns
+    -------
+    kept_features : list[str]
+        List of kept (more important) features.
+    dropped_features : list[str]
+        List of dropped (less important) features.
+    pruned_importance_df : pd.DataFrame
+        Updated importance DataFrame after dropping redundant features.
+    """
+    # Validate input
+    if not {"feature", "final_importance"}.issubset(important_features_df.columns):
+        raise ValueError(
+            "important_features_df must contain ['feature', 'final_importance']"
+        )
+    if not {"feature_1", "feature_2", "corr"}.issubset(correlation_df.columns):
+        raise ValueError(
+            "correlation_df must contain ['feature_1', 'feature_2', 'corr']"
+        )
+
+    # Make sure correlation_df uses absolute correlation values
+    correlation_df = correlation_df.copy()
+    correlation_df["abs_corr"] = correlation_df["corr"].abs()
+
+    # Filter pairs above threshold
+    high_corr_pairs = correlation_df[correlation_df["abs_corr"] > corr_threshold].copy()
+
+    dropped_features = set()
+    kept_features = set(important_features_df["feature"].tolist())
+
+    # Map importance for fast lookup
+    importance_map = dict(
+        zip(important_features_df["feature"], important_features_df["final_importance"])
+    )
+
+    for _, row in high_corr_pairs.iterrows():
+        f1, f2 = row["feature_1"], row["feature_2"]
+
+        # Skip if already dropped
+        if f1 in dropped_features or f2 in dropped_features:
+            continue
+
+        imp1 = importance_map.get(f1, 0)
+        imp2 = importance_map.get(f2, 0)
+
+        # Drop the one with lower importance
+        if imp1 >= imp2:
+            dropped_features.add(f2)
+        else:
+            dropped_features.add(f1)
+
+    kept_features = [
+        f for f in important_features_df["feature"] if f not in dropped_features
+    ]
+
+    pruned_df = important_features_df[
+        important_features_df["feature"].isin(kept_features)
+    ].reset_index(drop=True)
+
+    print(
+        f"🔍 Dropped {len(dropped_features)} highly correlated features (|r| > {corr_threshold}):"
+    )
+    print(sorted(list(dropped_features)))
+    print(
+        f"✅ Kept {len(kept_features)} features after pruning correlation redundancy."
+    )
+
+    return kept_features, sorted(list(dropped_features)), pruned_df
+
+
 class FeatureSelector:
-    def __init__(self, logger: Logger, feature_selector_type: FeatureSelectorType):
+    def __init__(
+        self,
+        logger: Logger,
+        stock_code: str,
+        feature_selector_type: FeatureSelectorType,
+    ):
         self._logger = logger
-        self.feature_selector_type = feature_selector_type
+        self._stock_code = stock_code
+        self._feature_selector_type = feature_selector_type
         self._model = None
         self.feature_importances_ = None
+
+        if stock_code is None or stock_code.strip() == "":
+            raise ValueError("Stock code must be provided and cannot be empty.")
 
     # =========================================================
     #  FEATURE SELECTION LOGIC
@@ -240,7 +498,7 @@ class FeatureSelector:
         time_column: str = None,
     ) -> None:
         """Train feature selector according to selected method."""
-        if not self.feature_selector_type:
+        if not self._feature_selector_type:
             raise ValueError("Feature selector type not set or not recognized.")
         if target_column not in dataframe.columns:
             raise ValueError(f"Target column '{target_column}' not found in dataframe.")
@@ -253,7 +511,7 @@ class FeatureSelector:
         X = dataframe[feature_columns]
         y = dataframe[target_column]
 
-        match self.feature_selector_type:
+        match self._feature_selector_type:
             case FeatureSelectorType.XGB_REGRESSOR:
                 self._fit_xgb_regressor(dataframe, feature_columns, target_column)
             case FeatureSelectorType.LASSO:
@@ -264,7 +522,7 @@ class FeatureSelector:
                 self._fit_xgb_shap(X, y)
             case _:
                 raise ValueError(
-                    f"Unsupported feature selector type: {self.feature_selector_type}"
+                    f"Unsupported feature selector type: {self._feature_selector_type}"
                 )
 
     # =========================================================
@@ -336,7 +594,7 @@ class FeatureSelector:
         bars = plt.barh(df["feature"], df["importance"])
 
         plt.title(
-            f"Using '{self.feature_selector_type.value}' - Top Feature Importances"
+            f"Stock code: '{self._stock_code}' - Using '{self._feature_selector_type.value}' - Top Feature Importances"
         )
         plt.xlabel("Importance Score")
         plt.ylabel("Features")
