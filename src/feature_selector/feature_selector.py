@@ -419,138 +419,12 @@ def drop_low_importance_correlated_features(
     return kept_features, sorted(list(dropped_features)), pruned_df
 
 
-class FeatureSelector:
-    def __init__(
-        self,
-        logger: Logger,
-        stock_code: str,
-        feature_selector_type: FeatureSelectorType,
-    ):
-        self._logger = logger
-        self._stock_code = stock_code
-        self._feature_selector_type = feature_selector_type
-        self._model = None
-        self.feature_importances_ = None
-
-        if stock_code is None or stock_code.strip() == "":
-            raise ValueError("Stock code must be provided and cannot be empty.")
-
-    # =========================================================
-    #  FEATURE SELECTION LOGIC
-    # =========================================================
-
-    def _fit_xgb_regressor(
-        self, dataframe: pd.DataFrame, feature_columns: List[str], target_column: str
-    ):
-        """XGBoost regressor baseline."""
-        self._xgb_regressor = xgb.XGBRegressor(
-            base_score=0.5,
-            booster="gbtree",
-            n_estimators=1000,
-            early_stopping_rounds=50,
-            objective="reg:squarederror",
-            max_depth=3,
-            learning_rate=0.01,
-        )
-        self._xgb_regressor.fit(
-            dataframe[feature_columns],
-            dataframe[target_column],
-            eval_set=[(dataframe[feature_columns], dataframe[target_column])],
-            verbose=False,
-        )
-        self.feature_importances_ = pd.Series(
-            self._xgb_regressor.feature_importances_, index=feature_columns
-        )
-
-    def _fit_lasso(self, X: pd.DataFrame, y: pd.Series):
-        """LASSO regression with automatic feature shrinkage."""
-        model = LassoCV(cv=5, random_state=42)
-        X_scaled = StandardScaler().fit_transform(X)
-        model.fit(X_scaled, y)
-        self._model = model
-        self.feature_importances_ = pd.Series(np.abs(model.coef_), index=X.columns)
-
-    def _fit_elastic_net(self, X: pd.DataFrame, y: pd.Series):
-        """ElasticNet regression for correlated features."""
-        model = ElasticNetCV(cv=5, random_state=42, l1_ratio=0.5)
-        X_scaled = StandardScaler().fit_transform(X)
-        model.fit(X_scaled, y)
-        self._model = model
-        self.feature_importances_ = pd.Series(np.abs(model.coef_), index=X.columns)
-
-    def _fit_xgb_shap(self, X: pd.DataFrame, y: pd.Series):
-        """XGBoost model + SHAP for robust importance ranking."""
-        self._fit_xgb_regressor(pd.concat([X, y], axis=1), X.columns.tolist(), y.name)
-        explainer = shap.TreeExplainer(self._xgb_regressor)
-        shap_values = explainer.shap_values(X)
-        mean_abs_shap = np.abs(shap_values).mean(axis=0)
-        self.feature_importances_ = pd.Series(mean_abs_shap, index=X.columns)
-
-    # =========================================================
-    #  MAIN FIT METHOD
-    # =========================================================
-
-    def fit(
-        self,
-        dataframe: pd.DataFrame,
-        target_column: str,
-        id_column: str = None,
-        time_column: str = None,
-    ) -> None:
-        """Train feature selector according to selected method."""
-        if not self._feature_selector_type:
-            raise ValueError("Feature selector type not set or not recognized.")
-        if target_column not in dataframe.columns:
-            raise ValueError(f"Target column '{target_column}' not found in dataframe.")
-
-        feature_columns = dataframe.columns.tolist()
-        feature_columns.remove(target_column)
-        if not feature_columns:
-            raise ValueError("No feature columns available for training.")
-
-        X = dataframe[feature_columns]
-        y = dataframe[target_column]
-
-        match self._feature_selector_type:
-            case FeatureSelectorType.XGB_REGRESSOR:
-                self._fit_xgb_regressor(dataframe, feature_columns, target_column)
-            case FeatureSelectorType.LASSO:
-                self._fit_lasso(X, y)
-            case FeatureSelectorType.ELASTIC_NET:
-                self._fit_elastic_net(X, y)
-            case FeatureSelectorType.XGB_SHAP:
-                self._fit_xgb_shap(X, y)
-            case _:
-                raise ValueError(
-                    f"Unsupported feature selector type: {self._feature_selector_type}"
-                )
-
-    # =========================================================
-    #  FEATURE IMPORTANCE HANDLING
-    # =========================================================
+class BaseFeatureSelector:
+    def __init__(self):
+        pass
 
     def get_feature_importances(self, normalize: bool = True) -> pd.DataFrame:
-        """
-        Return feature importances as a DataFrame with columns ['feature', 'importance'].
-        Optionally applies min-max normalization.
-
-        Parameters
-        ----------
-        normalize : bool, default=True
-            If True, applies min-max normalization: (x - min) / (max - min).
-
-        Returns
-        -------
-        pd.DataFrame
-            A DataFrame sorted by importance (descending) with columns ['feature', 'importance'].
-        """
-        if (
-            not hasattr(self, "feature_importances_")
-            or self.feature_importances_ is None
-        ):
-            raise ValueError("Model has not been fitted yet.")
-
-        feature_importances = self.feature_importances_.copy()
+        feature_importances = self._feature_importance_series.copy()
 
         if normalize:
             min_val = feature_importances.min()
@@ -614,3 +488,126 @@ class FeatureSelector:
 
         plt.tight_layout()
         plt.show()
+
+
+class XGB_FeatureSelector(BaseFeatureSelector):
+    def __init__(self):
+        self._name = "XGB"
+        self._selector = xgb.XGBRegressor(
+            base_score=0.5,
+            booster="gbtree",
+            n_estimators=1000,
+            early_stopping_rounds=50,
+            objective="reg:squarederror",
+            max_depth=3,
+            learning_rate=0.01,
+        )
+
+    def fit(
+        self, dataframe: pd.DataFrame, feature_columns: List[str], target_column: str
+    ) -> None:
+        self._selector.fit(
+            dataframe[feature_columns],
+            dataframe[target_column],
+            eval_set=[(dataframe[feature_columns], dataframe[target_column])],
+            verbose=False,
+        )
+        self._feature_importance_series = pd.Series(
+            self._selector.feature_importances_, index=feature_columns
+        )
+
+
+class LASSO_FeatureSelector(BaseFeatureSelector):
+    def __init__(self):
+        self._name = "LASSO"
+        self._selector = LassoCV(cv=5, random_state=42)
+
+    def fit(
+        self, dataframe: pd.DataFrame, feature_columns: List[str], target_column: str
+    ) -> None:
+        X = dataframe[feature_columns]
+        y = dataframe[target_column]
+
+        X_scaled = StandardScaler().fit_transform(X)
+        self._selector.fit(X_scaled, y)
+
+        self._feature_importance_series = pd.Series(
+            np.abs(self._selector.coef_), index=X.columns
+        )
+
+
+class ELASTC_NET_FeatureSelector(BaseFeatureSelector):
+    def __init__(self):
+        self._name = "ELASTC_NET"
+        self._selector = ElasticNetCV(cv=5, random_state=42, l1_ratio=0.5)
+
+    def fit(
+        self, dataframe: pd.DataFrame, feature_columns: List[str], target_column: str
+    ) -> None:
+        X = dataframe[feature_columns]
+        y = dataframe[target_column]
+
+        X_scaled = StandardScaler().fit_transform(X)
+        self._selector.fit(X_scaled, y)
+
+        self._feature_importance_series = pd.Series(
+            np.abs(self._selector.coef_), index=X.columns
+        )
+
+
+class XGB_SHAP_FeatureSelector(BaseFeatureSelector):
+    def __init__(self):
+        self._name = "XGB_SHAP"
+        self._selector = None
+
+    def fit(
+        self, dataframe: pd.DataFrame, feature_columns: List[str], target_column: str
+    ) -> None:
+        X = dataframe[feature_columns]
+        y = dataframe[target_column]
+
+        xgb_regressor = XGB_FeatureSelector()
+        xgb_regressor.fit(pd.concat([X, y], axis=1), X.columns.tolist(), y.name)
+        explainer = shap.TreeExplainer(xgb_regressor)
+        shap_values = explainer.shap_values(X)
+        mean_abs_shap = np.abs(shap_values).mean(axis=0)
+
+        self._feature_importance_series = pd.Series(mean_abs_shap, index=X.columns)
+
+
+class FeatureSelector:
+    def __init__(
+        self,
+        logger: Logger,
+        stock_code: str,
+        dataframe: pd.DataFrame,
+        feature_columns: List[str],
+        target_column: str,
+        feature_selector_weight: FeatureSelectorWeight,
+    ):
+        self._logger = logger
+        self._stock_code = stock_code
+        self._feature_selector_weight = feature_selector_weight
+
+        if stock_code is None or stock_code.strip() == "":
+            raise ValueError("Stock code must be provided and cannot be empty.")
+
+        # XGB
+        xgb_feature_selector = XGB_FeatureSelector()
+        xgb_feature_selector.fit(dataframe, feature_columns, target_column)
+        xgb_df = xgb_feature_selector.get_feature_importances()
+
+        # LASSO
+        lasso_feature_selector = LASSO_FeatureSelector()
+        lasso_feature_selector.fit(dataframe, feature_columns, target_column)
+        lasso_df = lasso_feature_selector.get_feature_importances()
+
+        # ELASTC_NET
+        elastic_net_selector = ELASTC_NET_FeatureSelector()
+        elastic_net_selector.fit(dataframe, feature_columns, target_column)
+        elastic_net_df = elastic_net_selector.get_feature_importances()
+
+        # XGB SHAP
+        xgb_shap_selector = XGB_SHAP_FeatureSelector()
+        xgb_shap_selector.fit(dataframe, feature_columns, target_column)
+        xgb_shap_df = xgb_shap_selector.get_feature_importances()

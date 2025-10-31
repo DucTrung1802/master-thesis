@@ -2503,23 +2503,11 @@ class Table:
         primary_key = [Column.DATE.value]
 
 
-class FeatureSelectorType(Enum):
-    XGB_REGRESSOR = {
-        "name": "xgb_regressor",
-        "weight": 0.25,
-    }
-    LASSO = {
-        "name": "lasso",
-        "weight": 0.25,
-    }
-    ELASTIC_NET = {
-        "name": "elastic_net",
-        "weight": 0.25,
-    }
-    XGB_SHAP = {
-        "name": "xgb_shap",
-        "weight": 0.25,
-    }
+class FeatureSelectorWeight(Enum):
+    XGB_REGRESSOR = 0.25
+    LASSO = 0.25
+    ELASTIC_NET = 0.25
+    XGB_SHAP = 0.25
 
 
 class TTC_MacroeconomicTable(Enum):
