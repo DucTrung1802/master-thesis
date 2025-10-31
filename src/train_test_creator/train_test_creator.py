@@ -501,9 +501,99 @@ class TrainTestCreator:
 
         return df
 
+    def _validate_input(
+        self,
+        dataframe: pd.DataFrame,
+        output_column: str,
+        output_range: tuple,
+        stock_code: str,
+        input_window_size: int,
+        forecast_horizon_size: int,
+        train_ratio: float = DEFAULT_TRAIN_RATIO,
+    ) -> bool:
+        """
+        Validate input parameters for stock forecasting.
+
+        Validation Rules:
+        1. The length of `dataframe` must be greater than the sum of
+        `input_window_size` and `forecast_horizon_size`.
+        - i.e., len(dataframe) > input_window_size + forecast_horizon_size
+        2. The `output_column` must exist in `dataframe.columns`.
+        3. The `stock_code` must not be an empty string after stripping whitespace.
+        - i.e., bool(stock_code.strip()) must be True
+        4. `input_window_size` and `forecast_horizon_size` must:
+        - Be integers (`int` type)
+        - Be greater than 0
+        5. `train_ratio` must be a float greater than 0 and less than 1.
+        - i.e., 0 < train_ratio < 1
+
+        Parameters
+        ----------
+        dataframe : pd.DataFrame
+            Input data containing stock features and target column.
+        output_column : str
+            The column name in `dataframe` to be predicted.
+        output_range : tuple
+            The expected range of output values (used for scaling or validation).
+        stock_code : str
+            The identifier for the stock being analyzed.
+        input_window_size : int
+            Number of time steps used as input features.
+        forecast_horizon_size : int
+            Number of time steps to forecast ahead.
+        train_ratio : float, optional
+            Ratio of training data, by default `DEFAULT_TRAIN_RATIO`.
+
+        Returns
+        -------
+        bool
+            True if all validation rules pass, otherwise raises a ValueError.
+
+        Raises
+        ------
+        ValueError
+            If any validation rule is violated.
+        """
+
+        # 1. Check dataframe length
+        if len(dataframe) <= input_window_size + forecast_horizon_size:
+            raise ValueError(
+                f"Dataframe length ({len(dataframe)}) must be greater than "
+                f"input_window_size + forecast_horizon_size "
+                f"({input_window_size + forecast_horizon_size})."
+            )
+
+        # 2. Check output column existence
+        if output_column not in dataframe.columns:
+            raise ValueError(
+                f"Output column '{output_column}' not found in dataframe columns: {list(dataframe.columns)}."
+            )
+
+        # 3. Check stock_code validity
+        if not isinstance(stock_code, str) or not stock_code.strip():
+            raise ValueError(
+                "Stock code must be a non-empty string after stripping whitespace."
+            )
+
+        # 4. Check input_window_size and forecast_horizon_size
+        for name, value in {
+            "input_window_size": input_window_size,
+            "forecast_horizon_size": forecast_horizon_size,
+        }.items():
+            if not isinstance(value, int) or value <= 0:
+                raise ValueError(f"{name} must be a positive integer (got {value!r}).")
+
+        # 5. Check train_ratio
+        if not isinstance(train_ratio, (float, int)) or not (0 < train_ratio < 1):
+            raise ValueError(
+                f"train_ratio must be between 0 and 1 (got {train_ratio})."
+            )
+
+        return True
+
     def create_train_test_set(
         self,
-        normalized_df: pd.DataFrame,
+        dataframe: pd.DataFrame,
         output_column: str,
         output_range: tuple,
         stock_code: str,
@@ -511,13 +601,16 @@ class TrainTestCreator:
         forecast_horizon_size: int,
         train_ratio: float = DEFAULT_TRAIN_RATIO,
     ) -> "TrainTestSet":
-        # Validate inputs
-        if not (0 < train_ratio < 1):
-            raise ValueError("train_ratio must be between 0 and 1.")
-        if input_window_size <= 0 or forecast_horizon_size <= 0:
-            raise ValueError(
-                "input_window_size and forecast_horizon_size must be positive integers."
-            )
+        if not self._validate_input(
+            dataframe,
+            output_column,
+            output_range,
+            stock_code,
+            input_window_size,
+            forecast_horizon_size,
+            train_ratio,
+        ):
+            raise ValueError("Invalid input parameters for creating TrainTestSet.")
 
         stock_code = str.lower(stock_code)
 
