@@ -2504,22 +2504,10 @@ class Table:
 
 
 class FeatureSelectorType(Enum):
-    XGB_REGRESSOR = {
-        "name": "xgb_regressor",
-        "weight": 0.25,
-    }
-    LASSO = {
-        "name": "lasso",
-        "weight": 0.25,
-    }
-    ELASTIC_NET = {
-        "name": "elastic_net",
-        "weight": 0.25,
-    }
-    XGB_SHAP = {
-        "name": "xgb_shap",
-        "weight": 0.25,
-    }
+    XGB_REGRESSOR = {"name": "xgb_regressor", "weight": 0.25}
+    LASSO = {"name": "lasso", "weight": 0.25}
+    ELASTIC_NET = {"name": "elastic_net", "weight": 0.25}
+    XGB_SHAP = {"name": "xgb_shap", "weight": 0.25}
 
 
 class TTC_MacroeconomicTable(Enum):
