@@ -115,6 +115,7 @@ class LSTM_Model:
         self.logger.log_info("Model configuration validated successfully.")
 
     def train(self):
+        self.logger.log_info("START TRANING PROCESS...")
         output_range = self._train_test_set.output_range
 
         start_time = time()
@@ -254,5 +255,7 @@ class LSTM_Model:
 
         # Add MAPE to DTO for downstream reporting
         model_output.mape = mape
+
+        self.logger.log_info("DONE TRAINING PROCESS.\n")
 
         return model_output
