@@ -229,10 +229,12 @@ class LSTM_Model:
             ).item()
 
         training_time = time() - start_time
+        print(f"Trained with device: {self._device}")
         print(f"Training completed in {training_time:.2f}s")
         print(f"Test MAPE: {mape:.2f}%")
         self.logger.log_info(f"Training completed in {training_time:.2f}s")
         self.logger.log_info(f"Test MAPE: {mape:.2f}%")
+        self.logger.log_info(f"Trained with device: {self._device}")
 
         # --- Return DTO ---
         model_output = ModelOutputDto(
