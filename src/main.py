@@ -1,6 +1,8 @@
 import os
 from data_preprocessor.data_preprocessor import DataPreprocessor
+from dtos.model_dtos.model_config_dto import ModelConfigDto
 from logger.logger import Logger, LogType
+from model.lstm_model import LSTM_Model
 from train_test_creator.train_test_creator import TrainTestCreator
 from utils.constants import LOG_FILE_BASE
 from web_scraper.web_scraper import WebScraper

@@ -5,7 +5,9 @@ import requests
 from typing import Tuple, List, Optional
 import pandas as pd
 from pathlib import Path
+import matplotlib.pyplot as plt
 
+from dtos.model_dtos.model_output_dto import ModelOutputDto
 from logger.logger import Logger
 from dtos.tabular_database_driver_dtos.tabular_database_driver_dtos import (
     DataType,
@@ -508,15 +510,12 @@ def expand_date_column(df: pd.DataFrame) -> pd.DataFrame:
         "is_month_end",
         "is_quarter_start",
         "is_quarter_end",
-        "is_year_start",
-        "is_year_end",
     ]:
         df[col] = getattr(df["date"].dt, col).astype(int)
 
     # --- Additional features ---
     df["week_of_month"] = df["date"].apply(lambda d: int(np.ceil(d.day / 7)))
     df["half_of_year"] = np.where(df["month"] <= 6, 1, 2)
-    df["is_weekend"] = (df["day_of_week"] >= 5).astype(int)
 
     # --- Season mapping (encoded 1–4) ---
     # 1: Winter, 2: Spring, 3: Summer, 4: Fall
@@ -547,3 +546,66 @@ def expand_date_column(df: pd.DataFrame) -> pd.DataFrame:
     df["day_of_year_cos"] = np.cos(2 * np.pi * df["day_of_year"] / 365)
 
     return df
+
+
+def plot_model_result(model_output_dto: ModelOutputDto):
+
+    plt.figure(figsize=(12, 6))
+    plt.plot(
+        model_output_dto.y_true_denorm,
+        label="True Values",
+        color="blue",
+        linewidth=2,
+    )
+    plt.plot(
+        model_output_dto.y_pred_denorm,
+        label="Predicted Values",
+        color="red",
+        linestyle="--",
+        linewidth=2,
+    )
+    plt.title("Model Predictions vs True Values")
+    plt.xlabel("Day")
+    plt.ylabel("Price")
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
+
+def move_column_to_end(df: pd.DataFrame, output_column: str) -> pd.DataFrame:
+    """
+    Move a specified column to the end of a pandas DataFrame.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The input DataFrame.
+    output_column : str
+        The name of the column to move to the last position.
+
+    Returns
+    -------
+    pd.DataFrame
+        A new DataFrame with the specified column moved to the end.
+
+    Raises
+    ------
+    KeyError
+        If the specified column does not exist in the DataFrame.
+
+    Example
+    -------
+    >>> import pandas as pd
+    >>> df = pd.DataFrame({"A": [1, 2], "B": [3, 4], "C": [5, 6]})
+    >>> move_column_to_end(df, "B")
+       A  C  B
+    0  1  5  3
+    1  2  6  4
+    """
+    if output_column not in df.columns:
+        raise KeyError(f"Column '{output_column}' not found in DataFrame.")
+
+    reordered_columns = [col for col in df.columns if col != output_column] + [
+        output_column
+    ]
+    return df[reordered_columns]
