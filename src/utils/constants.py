@@ -45,7 +45,7 @@ FEATURE_SELECTION_CHARTS_DIR = f"{FEATURE_SELECTION_LOG_FILE_BASE}/feature_selec
 # ===========================
 # TRAINED MODELS CONFIGURATION
 # ===========================
-TRAINED_MODELS_LOG_FILE_BASE = f"../../trained_models"
+TRAINED_MODELS_LOG_FILE_BASE = f"../../{LOG_DIR}/train_model"
 
 
 # ===========================
@@ -97,7 +97,8 @@ PARALLEL_SCRAPE_ENTERPRISE_STOCK_INFORMATION = 8
 # ===========================
 # TRAIN TEST CREATOR CONFIGURATION
 # ===========================
-DEFAULT_CORRELATION_THRESHOLD = 0.9
+TOP_N_FEATURES = 40
+DEFAULT_CORRELATION_THRESHOLD = 0.85
 TRAIN_TEST_CREATOR_START_DATE = datetime(2005, 4, 1)
 TRAIN_TEST_CREATOR_END_DATE = datetime(2025, 6, 30)
 DEFAULT_INPUT_WINDOW_SIZE = 360  # days

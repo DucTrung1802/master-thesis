@@ -7,6 +7,14 @@ import numpy as np
 import xgboost as xgb
 import shap
 import seaborn as sns
+import random
+import numpy as np
+
+SEED = 42
+
+# Apply globally
+random.seed(SEED)
+np.random.seed(SEED)
 
 from sklearn.linear_model import LassoCV, ElasticNetCV
 from sklearn.cluster import AgglomerativeClustering
@@ -205,6 +213,9 @@ class FeatureSelector:
 
         if stock_code is None or stock_code.strip() == "":
             raise ValueError("Stock code must be provided and cannot be empty.")
+
+        # Force consistent dtypes
+        dataframe = dataframe.astype("float64").replace({pd.NA: np.nan}).round(9)
 
         self._dataframe = dataframe
         self._feature_columns = feature_columns
@@ -459,9 +470,7 @@ class FeatureSelector:
 
         plt.show()
 
-    def get_important_features_df(
-        self, top_n: int = 20, filename: str | None = None
-    ) -> pd.DataFrame:
+    def get_important_features_df(self, top_n: int = 20) -> pd.DataFrame:
         if not {"feature", "final_importance"}.issubset(self._combined_df.columns):
             raise ValueError(
                 "combined_df must contain 'feature' and 'final_importance' columns."
@@ -578,11 +587,12 @@ class FeatureSelector:
 
     def get_feature_correlation_df(
         self,
+        important_features_list: List[str],
         top_corr_threshold: float | None = None,
     ) -> pd.DataFrame:
 
         df = self._dataframe
-        feature_columns = self._feature_columns
+        feature_columns = important_features_list
         target_column = self._target_column
 
         # Validate columns
@@ -613,9 +623,11 @@ class FeatureSelector:
             high_corr.stack()
             .reset_index()
             .rename(columns={"level_0": "feature_1", "level_1": "feature_2", 0: "corr"})
-            .query(f"abs(corr) > {top_corr_threshold}")
-            .sort_values(by="corr", ascending=False)
         )
+
+        high_corr_pairs = high_corr_pairs.query(
+            f"abs(corr) >= {top_corr_threshold}"
+        ).sort_values(by="corr", ascending=False)
 
         return high_corr_pairs.reset_index(drop=True)
 
@@ -703,7 +715,7 @@ class FeatureSelector:
         ].reset_index(drop=True)
 
         print(
-            f"🔍 Dropped {len(dropped_features)} highly correlated features (|r| > {corr_threshold}):"
+            f"🔍 Dropped {len(dropped_features)} highly correlated features (|r| >= {corr_threshold}):"
         )
         print(sorted(list(dropped_features)))
         print(
@@ -711,3 +723,75 @@ class FeatureSelector:
         )
 
         return kept_features, sorted(list(dropped_features)), pruned_df
+
+    def get_features_to_drop(
+        self,
+        top_n: int = TOP_N_FEATURES,
+        top_corr_threshold: float = DEFAULT_CORRELATION_THRESHOLD,
+    ) -> List[str]:
+        """
+        ONE-FOR-ALL METHOD
+
+        Identify redundant features to drop based on combined feature importance
+        and correlation analysis.
+
+        This method:
+            1. Fits all feature selection models (XGB, LASSO, ElasticNet, XGB-SHAP).
+            2. Combines their importance scores into a weighted ranking.
+            3. Selects the top `top_n` most important features.
+            4. Computes pairwise correlations between these features.
+            5. Drops features that are highly correlated (|r| > `top_corr_threshold`)
+               while keeping the more important ones.
+
+        Parameters
+        ----------
+        top_n : int, optional, default=TOP_N_FEATURES
+            Number of top-ranked features to consider before correlation pruning.
+            Must be a positive integer.
+
+        top_corr_threshold : float, optional
+            Absolute correlation threshold above which two features are considered redundant.
+            Must be between 0 and 1 (exclusive).
+
+        Returns
+        -------
+        List[str]
+            A list of feature names that should be dropped due to high correlation.
+
+        Raises
+        ------
+        ValueError
+            If `top_n` is not a positive integer.
+            If `top_corr_threshold` is not a float between 0 and 1.
+        """
+
+        # --- Parameter validation ---
+        if not isinstance(top_n, int) or top_n <= 0:
+            raise ValueError(f"`top_n` must be a positive integer, got {top_n!r}.")
+        if not isinstance(top_corr_threshold, (int, float)) or not (
+            0 < top_corr_threshold < 1
+        ):
+            raise ValueError(
+                f"`top_corr_threshold` must be a float between 0 and 1, got {top_corr_threshold!r}."
+            )
+
+        # --- Core logic ---
+        self.fit()
+        self.get_feature_importance()
+
+        important_features_df = self.get_important_features_df(top_n=top_n)
+        important_features_list = important_features_df["feature"].tolist()
+        self._correlation_df = self.get_feature_correlation_df(
+            important_features_list=important_features_list,
+            top_corr_threshold=top_corr_threshold,
+        )
+
+        kept_features, dropped_features, pruned_importance_df = (
+            self.drop_low_importance_correlated_features(
+                important_features_df=important_features_df,
+                correlation_df=self._correlation_df,
+                corr_threshold=top_corr_threshold,
+            )
+        )
+
+        return dropped_features
