@@ -115,23 +115,32 @@ class LSTM_Model:
         self.logger.log_info("Model configuration validated successfully.")
 
     def train(self):
+        output_range = self._train_test_set.output_range
+
         start_time = time()
         self.logger.log_info("Starting training process...")
 
-        # Training logic would go here
+        # --- Prepare dataset ---
         train_dataset = TimeSeriesDataset(
-            self._train_test_set.train_set,
+            self._train_test_set.train_sets,
             self._train_test_set.input_window_size,
             self._train_test_set.forecast_horizon_size,
         )
 
+        if len(train_dataset) == 0:
+            raise ValueError(
+                "No valid training windows found in train_sets. Check input sizes."
+            )
+
         train_loader = DataLoader(
-            train_dataset, batch_size=self._model_config.batch_size, shuffle=False
+            train_dataset,
+            batch_size=self._model_config.batch_size,
+            shuffle=True,  # shuffle=True is better for training
         )
 
         num_features = train_dataset.X.shape[-1]
         model = LSTMForecastModel(
-            num_features,
+            num_features=num_features,
             hidden_size=128,
             num_layers=2,
             forecast_horizon=self._train_test_set.forecast_horizon_size,
@@ -142,11 +151,17 @@ class LSTM_Model:
             model.parameters(), lr=self._model_config.learning_rate
         )
 
+        self.logger.log_info(
+            f"Training on {self._device} for {self._model_config.epochs} epochs"
+        )
         print(f"Training on {self._device} for {self._model_config.epochs} epochs...\n")
 
+        # --- Training loop ---
+        train_loss_history = []
         for epoch in range(self._model_config.epochs):
             model.train()
             running_loss = 0.0
+
             progress_bar = tqdm(
                 train_loader,
                 desc=f"Epoch {epoch+1}/{self._model_config.epochs}",
@@ -155,7 +170,6 @@ class LSTM_Model:
 
             for X_batch, y_batch in progress_bar:
                 X_batch, y_batch = X_batch.to(self._device), y_batch.to(self._device)
-
                 optimizer.zero_grad()
                 y_pred = model(X_batch)
                 loss = criterion(y_pred, y_batch)
@@ -166,78 +180,77 @@ class LSTM_Model:
                 progress_bar.set_postfix(loss=loss.item())
 
             avg_loss = running_loss / len(train_loader)
+            train_loss_history.append(avg_loss)
             print(
                 f"Epoch [{epoch+1}/{self._model_config.epochs}] - Avg Train Loss: {avg_loss:.6f}"
             )
 
-        # --- Evaluate ---
+        # --- Evaluation ---
         model.eval()
         with torch.no_grad():
-            test_data = self._train_test_set.test_set.values
+            # Use the last available train window to forecast
+            last_train_window = self._train_test_set.train_sets[-1].values
+            input_window = self._train_test_set.input_window_size
             horizon = self._train_test_set.forecast_horizon_size
 
-            y_true = (
-                torch.tensor(test_data[:, -1], dtype=torch.float32)
-                .unsqueeze(0)
-                .to(self._device)
-            )
-            last_train_window = self._train_test_set.train_set[-1].values
+            if len(last_train_window) < input_window:
+                raise ValueError("Last training window shorter than input_window_size.")
+
+            # Prepare normalized input
             X_input = (
                 torch.tensor(
-                    last_train_window[: self._train_test_set.input_window_size, :-1],
-                    dtype=torch.float32,
+                    last_train_window[-input_window:, :-1], dtype=torch.float32
                 )
                 .unsqueeze(0)
                 .to(self._device)
             )
 
+            # Predict normalized output
             y_pred = model(X_input)
 
-            # Denormalize predictions
+            # Prepare normalized test target (already normalized using same scaler)
+            test_data = self._train_test_set.test_sets[0].values
+            y_true_np = np.array(test_data[:horizon, -1], dtype=np.float32)
+            y_true = torch.from_numpy(y_true_np).unsqueeze(0).to(self._device)
+
+            # --- Denormalize predictions and ground truth ---
             y_pred_denorm = (
-                y_pred
-                * (
-                    self._train_test_set.output_range[1]
-                    - self._train_test_set.output_range[0]
-                )
-                + self._train_test_set.output_range[0]
-            )
-            y_true_denorm = (
-                y_true
-                * (
-                    self._train_test_set.output_range[1]
-                    - self._train_test_set.output_range[0]
-                )
-                + self._train_test_set.output_range[0]
+                y_pred * (output_range[1] - output_range[0]) + output_range[0]
             )
 
-            test_loss = criterion(y_pred_denorm, y_true_denorm).item()
+            # --- Compute MSE Loss on denormalized data ---
+            test_loss = criterion(y_pred_denorm, y_true).item()
+
+            # --- Compute MAPE (Mean Absolute Percentage Error) ---
+            epsilon = 1e-8  # avoid division by zero
+            mape = (
+                torch.mean(torch.abs((y_true - y_pred_denorm) / (y_true + epsilon)))
+                * 100
+            ).item()
 
         training_time = time() - start_time
+        print(f"Training completed in {training_time:.2f}s")
+        print(f"Test MAPE: {mape:.2f}%")
+        self.logger.log_info(f"Training completed in {training_time:.2f}s")
+        self.logger.log_info(f"Test MAPE: {mape:.2f}%")
 
-        print(f"\n✅ Test MSE (forecast horizon = {horizon}): {test_loss:.6f}")
-        print("Training completed.")
-
-        self.logger.log_info(
-            f"\n✅ Test MSE (forecast horizon = {horizon}): {test_loss:.6f}"
-        )
-        self.logger.log_info("Training completed.")
-
-        # --- Return metadata ---
+        # --- Return DTO ---
         model_output = ModelOutputDto(
             model=model,
             model_state_dict=model.state_dict(),
             model_config=self._model_config,
-            train_loss_history=[],  # optionally fill this during training
+            train_loss_history=train_loss_history,
             final_train_loss=avg_loss,
             test_loss=test_loss,
             y_pred=y_pred.cpu().numpy().flatten(),
             y_pred_denorm=y_pred_denorm.cpu().numpy().flatten(),
             y_true=y_true.cpu().numpy().flatten(),
-            y_true_denorm=y_true_denorm.cpu().numpy().flatten(),
             input_window_size=self._train_test_set.input_window_size,
             horizon_size=horizon,
             training_time=training_time,
         )
+
+        # Add MAPE to DTO for downstream reporting
+        model_output.mape = mape
 
         return model_output
