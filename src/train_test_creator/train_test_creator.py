@@ -210,7 +210,7 @@ class TrainTestCreator:
             )
 
             # Print each column name and its pandas dtype
-            self._logger.log_info("\nMACROECONOMIC Column data types:\n")
+            self._logger.log_info("\n\nMACROECONOMIC Column data types:\n")
             for col in macroeconomics_df.columns:
                 self._logger.log_info(f"{col:<60} → {macroeconomics_df[col].dtype}")
 
@@ -287,7 +287,7 @@ class TrainTestCreator:
             )
 
             # Print each column name and its pandas dtype
-            self._logger.log_info("\nSTOCK MARKET Column data types:\n")
+            self._logger.log_info("\n\nSTOCK MARKET Column data types:\n")
             for col in stock_market_df.columns:
                 self._logger.log_info(f"{col:<60} → {stock_market_df[col].dtype}")
 
