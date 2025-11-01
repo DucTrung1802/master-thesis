@@ -570,3 +570,42 @@ def plot_model_result(model_output_dto: ModelOutputDto):
     plt.legend()
     plt.grid(True)
     plt.show()
+
+
+def move_column_to_end(df: pd.DataFrame, output_column: str) -> pd.DataFrame:
+    """
+    Move a specified column to the end of a pandas DataFrame.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The input DataFrame.
+    output_column : str
+        The name of the column to move to the last position.
+
+    Returns
+    -------
+    pd.DataFrame
+        A new DataFrame with the specified column moved to the end.
+
+    Raises
+    ------
+    KeyError
+        If the specified column does not exist in the DataFrame.
+
+    Example
+    -------
+    >>> import pandas as pd
+    >>> df = pd.DataFrame({"A": [1, 2], "B": [3, 4], "C": [5, 6]})
+    >>> move_column_to_end(df, "B")
+       A  C  B
+    0  1  5  3
+    1  2  6  4
+    """
+    if output_column not in df.columns:
+        raise KeyError(f"Column '{output_column}' not found in DataFrame.")
+
+    reordered_columns = [col for col in df.columns if col != output_column] + [
+        output_column
+    ]
+    return df[reordered_columns]

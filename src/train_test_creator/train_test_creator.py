@@ -5,6 +5,7 @@ import pandas as pd
 from functools import reduce
 from math import ceil
 
+from feature_selector.feature_selector import FeatureSelector
 from logger.logger import Logger
 from dtos.tabular_database_driver_dtos.tabular_database_driver_dtos import (
     Column,
@@ -31,6 +32,9 @@ class TrainTestCreator:
         self._logger = logger
         self._database_driver = PostgreSQLDriver(logger=logger)
         self.connect_to_database(database_name=os.getenv("GOLD_POSTGRES_DATABASE"))
+
+        self._full_train_df = None
+        self._full_test_df = None
 
     def connect_to_database(self, database_name: str = "postgres") -> None:
         connection_model = PostgreSQLConnectionDto(
@@ -591,6 +595,39 @@ class TrainTestCreator:
 
         return True
 
+    def _find_split_index(
+        self,
+        dataframe: pd.DataFrame,
+        input_window_size: int,
+        forecast_horizon_size: int,
+        train_ratio: float,
+    ) -> int:
+        # Sort by date or time index if available
+        if "date" in dataframe.columns:
+            dataframe = dataframe.sort_values("date").reset_index(drop=True)
+        else:
+            dataframe = dataframe.reset_index(drop=True)
+
+        # --- Adjusted split index logic ---
+        split_index = ceil(len(dataframe) * train_ratio)
+        split_index -= input_window_size  # ensure full input window fits
+
+        # Make split_index divisible by forecast_horizon_size
+        remainder = split_index % forecast_horizon_size
+        if remainder != 0:
+            split_index -= remainder
+
+        # Guard against invalid split index
+        if split_index <= 0 or split_index >= len(dataframe):
+            raise ValueError(
+                f"Adjusted split_index ({split_index}) is invalid for data length {len(dataframe)}"
+            )
+
+        # Add back input windwo size to split_index
+        split_index += input_window_size
+
+        return split_index
+
     def create_train_test_set(
         self,
         dataframe: pd.DataFrame,
@@ -614,54 +651,73 @@ class TrainTestCreator:
 
         stock_code = str.lower(stock_code)
 
-        # Sort by date or time index if available
-        if "date" in normalized_df.columns:
-            normalized_df = normalized_df.sort_values("date").reset_index(drop=True)
-        else:
-            normalized_df = normalized_df.reset_index(drop=True)
+        dataframe = move_column_to_end(dataframe, output_column)
 
-        # --- Adjusted split index logic ---
-        split_index = ceil(len(normalized_df) * train_ratio)
-        split_index -= input_window_size  # ensure full input window fits
-
-        # Make split_index divisible by forecast_horizon_size
-        remainder = split_index % forecast_horizon_size
-        if remainder != 0:
-            split_index -= remainder
-
-        # Guard against invalid split index
-        if split_index <= 0 or split_index >= len(normalized_df):
-            raise ValueError(
-                f"Adjusted split_index ({split_index}) is invalid for data length {len(normalized_df)}"
-            )
-
-        # Add back input windwo size to split_index
-        split_index += input_window_size
+        split_index = self._find_split_index(
+            dataframe, input_window_size, forecast_horizon_size, train_ratio
+        )
 
         # --- Split train/test ---
-        full_train_df = normalized_df.iloc[:split_index].reset_index(drop=True)
-        test_set = normalized_df.iloc[
-            split_index : split_index + forecast_horizon_size
-        ].reset_index(drop=True)
+        self._full_train_df = dataframe.iloc[:split_index].reset_index(drop=True)
+        self._full_test_df = dataframe.iloc[split_index:].reset_index(drop=True)
+
+        # --- Feature selection ---
+        feature_selector_df = self._full_train_df.drop(columns=["date"])
+        feature_columns = feature_selector_df.columns.tolist()
+        feature_columns.remove(output_column)
+        self._feature_selector = FeatureSelector(
+            logger=self._logger,
+            stock_code=stock_code,
+            dataframe=feature_selector_df,
+            feature_columns=feature_columns,
+            target_column=output_column,
+        )
+        features_to_drop = self._feature_selector.get_features_to_drop()
+
+        self._selected_full_train_df = self._full_train_df.drop(
+            columns=features_to_drop
+        )
+
+        self._normalized_selected_full_train_df = self.normalize_unified_dataframe(
+            dataframe=self._selected_full_train_df,
+            output_range=output_range,
+            output_column=output_column,
+        )
+
+        final_train_df = self._normalized_selected_full_train_df
 
         # --- Create sliding windows on training set ---
         train_sets = []
         total_window_size = input_window_size + forecast_horizon_size
 
         for start_idx in range(
-            0, len(full_train_df) - total_window_size + 1, forecast_horizon_size
+            0,
+            len(final_train_df) - total_window_size + 1,
+            forecast_horizon_size,
         ):
             end_idx = start_idx + total_window_size
-            window_df = full_train_df.iloc[start_idx:end_idx].reset_index(drop=True)
+            window_df = final_train_df.iloc[start_idx:end_idx].reset_index(drop=True)
             train_sets.append(window_df)
+
+        # --- Create test set ---
+        test_set = [
+            self._full_test_df.iloc[i : i + forecast_horizon_size].reset_index(
+                drop=True
+            )
+            for i in range(
+                0,
+                len(self._full_test_df) - forecast_horizon_size + 1,
+                forecast_horizon_size,
+            )
+        ]
 
         # --- Return TrainTestSet object ---
         return TrainTestSet(
             name=f"{stock_code}_{input_window_size}_{forecast_horizon_size}",
-            train_set=train_sets,
+            train_sets=train_sets,
             output_column=output_column,
             output_range=output_range,
-            test_set=test_set,
+            test_sets=test_set,
             input_window_size=input_window_size,
             forecast_horizon_size=forecast_horizon_size,
         )

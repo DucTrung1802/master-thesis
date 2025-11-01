@@ -9,34 +9,32 @@ class TrainTestSet:
     def __init__(
         self,
         name: str,
-        train_set: List[pd.DataFrame],
+        train_sets: List[pd.DataFrame],
         output_column: str,
         output_range: tuple,
-        test_set: pd.DataFrame,
+        test_sets: List[pd.DataFrame],
         input_window_size: int,
         forecast_horizon_size: int,
     ):
         # Meatadata
-        self.name = name
-        self.input_window_size = input_window_size
-        self.forecast_horizon_size = forecast_horizon_size
+        self.name: str = name
+        self.input_window_size: int = input_window_size
+        self.forecast_horizon_size: int = forecast_horizon_size
 
         # Data
-        self.train_set = train_set
-        self.test_set = test_set
-        self.output_column = output_column
-        self.output_range = output_range
+        self.train_sets: List[pd.DataFrame] = train_sets
+        self.test_sets: List[pd.DataFrame] = test_sets
+        self.output_column: str = output_column
+        self.output_range: Tuple[int, int] = output_range
 
     def get_number_of_train_windows(self) -> int:
-        return len(self.train_set)
+        return len(self.train_sets)
 
     def get_number_of_test_forecast_horizons(self) -> int:
-        return len(self.test_set) // self.forecast_horizon_size
+        return len(self.test_sets)
 
     def get_train_window(self, index: int = 0) -> pd.DataFrame:
-        return self.train_set[index]
+        return self.train_sets[index]
 
     def get_test_window(self, index: int = 0) -> pd.DataFrame:
-        start_idx = index * self.forecast_horizon_size
-        end_idx = start_idx + self.forecast_horizon_size
-        return self.test_set.iloc[start_idx:end_idx]
+        return self.test_sets[index]
