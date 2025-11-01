@@ -5,6 +5,7 @@ import pandas as pd
 from functools import reduce
 from math import ceil
 
+from feature_selector.feature_selector import FeatureSelector
 from logger.logger import Logger
 from dtos.tabular_database_driver_dtos.tabular_database_driver_dtos import (
     Column,
@@ -31,6 +32,9 @@ class TrainTestCreator:
         self._logger = logger
         self._database_driver = PostgreSQLDriver(logger=logger)
         self.connect_to_database(database_name=os.getenv("GOLD_POSTGRES_DATABASE"))
+
+        self._full_train_df = None
+        self._full_test_df = None
 
     def connect_to_database(self, database_name: str = "postgres") -> None:
         connection_model = PostgreSQLConnectionDto(
@@ -447,63 +451,165 @@ class TrainTestCreator:
             )
             return None
 
-    def load_dataframe(self, stock_code: str) -> pd.DataFrame:
+    def load_dataframe(self, stock_code: str, file_path: str = None) -> pd.DataFrame:
         if not stock_code:
             raise ValueError("Stock code must be provided.")
 
         stock_code = stock_code.lower()
 
-        dataframe = pd.read_csv(
-            os.path.join(UNIFIED_DATAFRAME_DIR, f"unified_{stock_code}.csv")
-        )
+        if not file_path:
+            file_path = os.path.join(UNIFIED_DATAFRAME_DIR, f"unified_{stock_code}.csv")
+
+        dataframe = pd.read_csv(file_path)
         self._logger.log_info(
             f"Loaded unified dataframe for stock code '{stock_code}' from file with {len(dataframe)} rows and {len(dataframe.columns)} columns."
         )
         return dataframe
 
-    def normalize_unified_dataframe(self, dataframe: pd.DataFrame) -> pd.DataFrame:
+    def normalize_unified_dataframe(
+        self,
+        dataframe: pd.DataFrame,
+        output_range: tuple,
+        output_column: str = "close",
+    ) -> pd.DataFrame:
         df = dataframe.copy()
+
+        # Move the output column to the end
+        df = df[[col for col in df.columns if col != output_column] + [output_column]]
 
         df.drop(columns=["date"], inplace=True)
 
         # Identify numeric columns (floats or ints) except "date"
         numeric_cols = df.select_dtypes(include=["float", "int"]).columns.difference(
-            ["date"]
+            [output_column]
         )
+
+        # Remove columns with constant values (min == max)
+        constant_cols = [
+            col
+            for col in numeric_cols
+            if df[col].nunique() == 1 and df[col].min() == df[col].max()
+        ]
+        df.drop(columns=constant_cols, inplace=True)
+
+        numeric_cols = [col for col in numeric_cols if col not in constant_cols]
 
         # Apply min-max normalization
         df[numeric_cols] = (df[numeric_cols] - df[numeric_cols].min()) / (
             df[numeric_cols].max() - df[numeric_cols].min()
         )
 
+        # Scale to output range
+        min_range, max_range = output_range
+        df[output_column] = (df[output_column] - min_range) / (max_range - min_range)
+
         return df
 
-    def create_train_test_set(
+    def _validate_input(
         self,
-        normalized_df: pd.DataFrame,
+        dataframe: pd.DataFrame,
+        output_column: str,
+        output_range: tuple,
         stock_code: str,
         input_window_size: int,
         forecast_horizon_size: int,
         train_ratio: float = DEFAULT_TRAIN_RATIO,
-    ) -> "TrainTestSet":
-        # Validate inputs
-        if not (0 < train_ratio < 1):
-            raise ValueError("train_ratio must be between 0 and 1.")
-        if input_window_size <= 0 or forecast_horizon_size <= 0:
+    ) -> bool:
+        """
+        Validate input parameters for stock forecasting.
+
+        Validation Rules:
+        1. The length of `dataframe` must be greater than the sum of
+        `input_window_size` and `forecast_horizon_size`.
+        - i.e., len(dataframe) > input_window_size + forecast_horizon_size
+        2. The `output_column` must exist in `dataframe.columns`.
+        3. The `stock_code` must not be an empty string after stripping whitespace.
+        - i.e., bool(stock_code.strip()) must be True
+        4. `input_window_size` and `forecast_horizon_size` must:
+        - Be integers (`int` type)
+        - Be greater than 0
+        5. `train_ratio` must be a float greater than 0 and less than 1.
+        - i.e., 0 < train_ratio < 1
+
+        Parameters
+        ----------
+        dataframe : pd.DataFrame
+            Input data containing stock features and target column.
+        output_column : str
+            The column name in `dataframe` to be predicted.
+        output_range : tuple
+            The expected range of output values (used for scaling or validation).
+        stock_code : str
+            The identifier for the stock being analyzed.
+        input_window_size : int
+            Number of time steps used as input features.
+        forecast_horizon_size : int
+            Number of time steps to forecast ahead.
+        train_ratio : float, optional
+            Ratio of training data, by default `DEFAULT_TRAIN_RATIO`.
+
+        Returns
+        -------
+        bool
+            True if all validation rules pass, otherwise raises a ValueError.
+
+        Raises
+        ------
+        ValueError
+            If any validation rule is violated.
+        """
+
+        # 1. Check dataframe length
+        if len(dataframe) <= input_window_size + forecast_horizon_size:
             raise ValueError(
-                "input_window_size and forecast_horizon_size must be positive integers."
+                f"Dataframe length ({len(dataframe)}) must be greater than "
+                f"input_window_size + forecast_horizon_size "
+                f"({input_window_size + forecast_horizon_size})."
             )
 
-        stock_code = str.lower(stock_code)
+        # 2. Check output column existence
+        if output_column not in dataframe.columns:
+            raise ValueError(
+                f"Output column '{output_column}' not found in dataframe columns: {list(dataframe.columns)}."
+            )
 
+        # 3. Check stock_code validity
+        if not isinstance(stock_code, str) or not stock_code.strip():
+            raise ValueError(
+                "Stock code must be a non-empty string after stripping whitespace."
+            )
+
+        # 4. Check input_window_size and forecast_horizon_size
+        for name, value in {
+            "input_window_size": input_window_size,
+            "forecast_horizon_size": forecast_horizon_size,
+        }.items():
+            if not isinstance(value, int) or value <= 0:
+                raise ValueError(f"{name} must be a positive integer (got {value!r}).")
+
+        # 5. Check train_ratio
+        if not isinstance(train_ratio, (float, int)) or not (0 < train_ratio < 1):
+            raise ValueError(
+                f"train_ratio must be between 0 and 1 (got {train_ratio})."
+            )
+
+        return True
+
+    def _find_split_index(
+        self,
+        dataframe: pd.DataFrame,
+        input_window_size: int,
+        forecast_horizon_size: int,
+        train_ratio: float,
+    ) -> int:
         # Sort by date or time index if available
-        if "date" in normalized_df.columns:
-            normalized_df = normalized_df.sort_values("date").reset_index(drop=True)
+        if "date" in dataframe.columns:
+            dataframe = dataframe.sort_values("date").reset_index(drop=True)
         else:
-            normalized_df = normalized_df.reset_index(drop=True)
+            dataframe = dataframe.reset_index(drop=True)
 
         # --- Adjusted split index logic ---
-        split_index = ceil(len(normalized_df) * train_ratio)
+        split_index = ceil(len(dataframe) * train_ratio)
         split_index -= input_window_size  # ensure full input window fits
 
         # Make split_index divisible by forecast_horizon_size
@@ -512,34 +618,106 @@ class TrainTestCreator:
             split_index -= remainder
 
         # Guard against invalid split index
-        if split_index <= 0 or split_index >= len(normalized_df):
+        if split_index <= 0 or split_index >= len(dataframe):
             raise ValueError(
-                f"Adjusted split_index ({split_index}) is invalid for data length {len(normalized_df)}"
+                f"Adjusted split_index ({split_index}) is invalid for data length {len(dataframe)}"
             )
 
         # Add back input windwo size to split_index
         split_index += input_window_size
 
+        return split_index
+
+    def create_train_test_set(
+        self,
+        dataframe: pd.DataFrame,
+        output_column: str,
+        output_range: tuple,
+        stock_code: str,
+        input_window_size: int,
+        forecast_horizon_size: int,
+        train_ratio: float = DEFAULT_TRAIN_RATIO,
+    ) -> "TrainTestSet":
+        if not self._validate_input(
+            dataframe,
+            output_column,
+            output_range,
+            stock_code,
+            input_window_size,
+            forecast_horizon_size,
+            train_ratio,
+        ):
+            raise ValueError("Invalid input parameters for creating TrainTestSet.")
+
+        stock_code = str.lower(stock_code)
+
+        dataframe = move_column_to_end(dataframe, output_column)
+
+        split_index = self._find_split_index(
+            dataframe, input_window_size, forecast_horizon_size, train_ratio
+        )
+
         # --- Split train/test ---
-        full_train_df = normalized_df.iloc[:split_index].reset_index(drop=True)
-        test_set = normalized_df.iloc[split_index:].reset_index(drop=True)
+        self._full_train_df = dataframe.iloc[:split_index].reset_index(drop=True)
+        self._full_test_df = dataframe.iloc[split_index:].reset_index(drop=True)
+
+        # --- Feature selection ---
+        feature_selector_df = self._full_train_df.drop(columns=["date"])
+        feature_columns = feature_selector_df.columns.tolist()
+        feature_columns.remove(output_column)
+        self._feature_selector = FeatureSelector(
+            logger=self._logger,
+            stock_code=stock_code,
+            dataframe=feature_selector_df,
+            feature_columns=feature_columns,
+            target_column=output_column,
+        )
+        features_to_drop = self._feature_selector.get_features_to_drop()
+
+        self._selected_full_train_df = self._full_train_df.drop(
+            columns=features_to_drop
+        )
+
+        self._normalized_selected_full_train_df = self.normalize_unified_dataframe(
+            dataframe=self._selected_full_train_df,
+            output_range=output_range,
+            output_column=output_column,
+        )
+
+        final_train_df = self._normalized_selected_full_train_df
 
         # --- Create sliding windows on training set ---
         train_sets = []
         total_window_size = input_window_size + forecast_horizon_size
 
         for start_idx in range(
-            0, len(full_train_df) - total_window_size + 1, forecast_horizon_size
+            0,
+            len(final_train_df) - total_window_size + 1,
+            forecast_horizon_size,
         ):
             end_idx = start_idx + total_window_size
-            window_df = full_train_df.iloc[start_idx:end_idx].reset_index(drop=True)
+            window_df = final_train_df.iloc[start_idx:end_idx].reset_index(drop=True)
             train_sets.append(window_df)
+
+        # --- Create test set ---
+        test_set = [
+            self._full_test_df.iloc[i : i + forecast_horizon_size].reset_index(
+                drop=True
+            )
+            for i in range(
+                0,
+                len(self._full_test_df) - forecast_horizon_size + 1,
+                forecast_horizon_size,
+            )
+        ]
 
         # --- Return TrainTestSet object ---
         return TrainTestSet(
             name=f"{stock_code}_{input_window_size}_{forecast_horizon_size}",
-            train_set=train_sets,
-            test_set=test_set,
+            train_sets=train_sets,
+            output_column=output_column,
+            output_range=output_range,
+            test_sets=test_set,
             input_window_size=input_window_size,
             forecast_horizon_size=forecast_horizon_size,
         )
