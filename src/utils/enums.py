@@ -2539,3 +2539,32 @@ class TTC_StockMarketTable(Enum):
 
 class TTC_EnterpriseTable(Enum):
     GAS = "gas"
+
+
+# MODEL TRAIN ENUMS
+class AchitectureType(Enum):
+    LSTM = "lstm"
+    CNN = "cnn"
+
+
+class WindowType(Enum):
+    EXPANDING = "expanding"
+    SLIDING = "sliding"
+
+
+class OptimizerType(Enum):
+    ADAM = "adam"
+    SGD = "sgd"
+
+
+class LossFunctionType(Enum):
+    MSE = "mse"
+
+
+class ScalerType(Enum):
+    MINMAX = "minmax"
+    STANDARD = "standard"
+
+
+class MetricType(Enum):
+    MAPE = "mape"

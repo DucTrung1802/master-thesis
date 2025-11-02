@@ -1,6 +1,11 @@
 from datetime import datetime
 
 # ===========================
+# COMMON CONFIGURATION
+# ===========================
+RANDOM_SEED = 42
+
+# ===========================
 # LOGGER CONFIGURATION
 # ===========================
 LOG_DIR = "logs"
@@ -105,3 +110,10 @@ DEFAULT_INPUT_WINDOW_SIZE = 360  # days
 DEFAULT_FORECAST_HORIZON_SIZE = 30  # days
 DEFAULT_TRAIN_RATIO = 0.9
 UNIFIED_DATAFRAME_DIR = f"unified_dataframe"
+
+
+# ===========================
+# WANDB CONFIGURATION
+# ===========================
+WANDB_ENTITY_NAME = "trung-lyduc18"
+WANDB_PROJECT_NAME = "master_thesis"
