@@ -183,7 +183,7 @@ class LSTM_Model:
             avg_loss = running_loss / len(train_loader)
             train_loss_history.append(avg_loss)
             print(
-                f"Epoch [{epoch+1}/{self._model_config.epochs}] - Avg Train Loss: {avg_loss:.6f}"
+                f"Epoch [{epoch+1}/{self._model_config.epochs}] - Avg Train Loss: {avg_loss:.8f}"
             )
 
         # --- Evaluation ---

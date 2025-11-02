@@ -19,6 +19,7 @@ sktime
 seaborn
 xgboost
 shap
+wandb
 
 # Deep learning (GPU-enabled PyTorch)
 torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu121
