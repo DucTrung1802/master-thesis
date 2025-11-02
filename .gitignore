@@ -13,4 +13,6 @@ logs/
 
 mt_env/
 
-src/train_model/wandb/
+wandb/
+
+*.json

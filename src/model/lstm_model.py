@@ -1,7 +1,6 @@
 import os
 from time import time
 import numpy as np
-import pandas as pd
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
@@ -13,35 +12,75 @@ from dtos.model_dtos.model_config_dto import ModelConfigDto
 from dtos.model_dtos.model_output_dto import ModelOutputDto
 from logger.logger import Logger
 from train_test_creator.train_test_set import TrainTestSet
-
+from utils.enums import (
+    AchitectureType,
+    LossFunctionType,
+    MetricType,
+    OptimizerType,
+    ScalerType,
+)
 
 load_dotenv()
 
 
+# =============================
+# DATASET
+# =============================
 class TimeSeriesDataset(Dataset):
-    def __init__(self, windows, input_window, horizon):
-        self.X, self.y = [], []
+    """
+    Each window is divided into:
+        - Training segment: train_window_size
+        - Validation segment: validation_window_size (optional)
+        - Testing segment: test_window_size
+    """
+
+    def __init__(
+        self, windows, train_window_size, test_window_size, validation_window_size=0
+    ):
+        self.X_train, self.y_train = [], []
+        self.X_val, self.y_val = [], []
 
         for window in windows:
             data = window.values
-            if len(data) < input_window + horizon:
+            total_needed = train_window_size + validation_window_size + test_window_size
+            if len(data) < total_needed:
                 continue  # skip incomplete window
 
-            self.X.append(data[:input_window, :-1])
-            self.y.append(data[input_window : input_window + horizon, -1])
+            # TRAIN segment
+            self.X_train.append(data[:train_window_size, :-1])
+            self.y_train.append(
+                data[train_window_size : train_window_size + test_window_size, -1]
+            )
 
-        self.X = torch.tensor(np.array(self.X), dtype=torch.float32)
-        self.y = torch.tensor(np.array(self.y), dtype=torch.float32)
+            # VALIDATION segment
+            if validation_window_size > 0:
+                val_start = train_window_size
+                val_end = train_window_size + validation_window_size
+                self.X_val.append(data[val_start:val_end, :-1])
+                self.y_val.append(data[val_end : val_end + test_window_size, -1])
+
+        # Convert to tensors
+        self.X_train = torch.tensor(np.array(self.X_train), dtype=torch.float32)
+        self.y_train = torch.tensor(np.array(self.y_train), dtype=torch.float32)
+
+        if validation_window_size > 0 and len(self.X_val) > 0:
+            self.X_val = torch.tensor(np.array(self.X_val), dtype=torch.float32)
+            self.y_val = torch.tensor(np.array(self.y_val), dtype=torch.float32)
+        else:
+            self.X_val = self.y_val = None
 
     def __len__(self):
-        return len(self.X)
+        return len(self.X_train)
 
     def __getitem__(self, idx):
-        return self.X[idx], self.y[idx]
+        return self.X_train[idx], self.y_train[idx]
 
 
+# =============================
+# MODEL
+# =============================
 class LSTMForecastModel(nn.Module):
-    def __init__(self, num_features, hidden_size, num_layers, forecast_horizon):
+    def __init__(self, num_features, hidden_size, num_layers, test_window_size):
         super(LSTMForecastModel, self).__init__()
         self.lstm = nn.LSTM(
             input_size=num_features,
@@ -50,73 +89,119 @@ class LSTMForecastModel(nn.Module):
             batch_first=True,
             dropout=0.2,
         )
-
         self.fc = nn.Sequential(
-            nn.Linear(hidden_size, 64), nn.ReLU(), nn.Linear(64, forecast_horizon)
+            nn.Linear(hidden_size, 64), nn.ReLU(), nn.Linear(64, test_window_size)
         )
 
     def forward(self, x):
-        output, _ = self.lstm(x)  # (batch, seq_len, hidden_size)
-        last_output = output[:, -1, :]  # take last time step
+        output, _ = self.lstm(x)
+        last_output = output[:, -1, :]
         return self.fc(last_output)
 
 
+# =============================
+# MAIN CLASS
+# =============================
 class LSTM_Model:
     def __init__(
         self, logger: Logger, train_test_set: TrainTestSet, model_config: ModelConfigDto
     ):
         self._logger = logger
+
+        if not self._validate_model_config_dto(model_config):
+            self._logger.log_error("Invalid ModelConfigDto")
+            raise ValueError("Invalid ModelConfigDto")
+
         self._train_test_set = train_test_set
         self._model_config = model_config
+        self._model_config.architecture = AchitectureType.LSTM
+        self._device = torch.device(model_config.device)
 
         self._logger.log_info(f"PyTorch version: {torch.__version__}")
         print(f"PyTorch version: {torch.__version__}")
 
         # Initialize WandB
-        self._logger.log_info(f"Initializing WandB...")
-        print(f"Initializing WandB...")
-
         wandb.login(key=os.getenv("WANDB_KEY"))
-
         self._run = wandb.init(
             entity=self._model_config.entity,
             project=self._model_config.project,
             config=self._model_config.to_dict(),
         )
 
-        self._run.finish()
+    # --------------------------
+    # CONFIG VALIDATION
+    # --------------------------
+    def _validate_model_config_dto(self, model_config: ModelConfigDto) -> bool:
+        errors = []
 
-    def train(self):
-        self._logger.log_info("START TRANING PROCESS...")
+        if not isinstance(model_config, ModelConfigDto):
+            raise TypeError("model_config must be an instance of ModelConfigDto.")
+
+        if not model_config.entity:
+            errors.append("Entity must not be empty.")
+        if not model_config.project:
+            errors.append("Project must not be empty.")
+        if not model_config.stock_code:
+            errors.append("Stock code must not be empty.")
+
+        if model_config.train_window_size <= 0:
+            errors.append("Train window size must be greater than 0.")
+        if model_config.test_window_size <= 0:
+            errors.append("Test window size must be greater than 0.")
+        if model_config.epochs <= 0:
+            errors.append("Epochs must be greater than 0.")
+        if model_config.batch_size <= 0:
+            errors.append("Batch size must be greater than 0.")
+        if not (0 < model_config.learning_rate <= 1):
+            errors.append("Learning rate must be between 0 and 1.")
+
+        if errors:
+            raise ValueError(
+                "Invalid model configuration:\n"
+                + "\n".join(f"- {err}" for err in errors)
+            )
+        return True
+
+    # --------------------------
+    # TRAIN FUNCTION
+    # --------------------------
+    def train(self, validation_window_size=30):
+        self._logger.log_info("START TRAINING PROCESS...")
         output_range = self._train_test_set.output_range
 
         start_time = time()
-        self._logger.log_info("Starting training process...")
 
         # --- Prepare dataset ---
         train_dataset = TimeSeriesDataset(
             self._train_test_set.train_sets,
-            self._train_test_set.input_window_size,
-            self._train_test_set.forecast_horizon_size,
+            self._train_test_set.train_window_size,
+            self._train_test_set.test_window_size,
+            validation_window_size=validation_window_size,
         )
 
         if len(train_dataset) == 0:
-            raise ValueError(
-                "No valid training windows found in train_sets. Check input sizes."
-            )
+            raise ValueError("No valid training windows found in train_sets.")
 
         train_loader = DataLoader(
-            train_dataset,
+            list(zip(train_dataset.X_train, train_dataset.y_train)),
             batch_size=self._model_config.batch_size,
-            shuffle=True,  # shuffle=True is better for training
+            shuffle=True,
         )
 
-        num_features = train_dataset.X.shape[-1]
+        val_loader = None
+        if train_dataset.X_val is not None:
+            val_loader = DataLoader(
+                list(zip(train_dataset.X_val, train_dataset.y_val)),
+                batch_size=self._model_config.batch_size,
+                shuffle=False,
+            )
+
+        num_features = train_dataset.X_train.shape[-1]
         model = LSTMForecastModel(
             num_features=num_features,
             hidden_size=128,
             num_layers=2,
-            forecast_horizon=self._train_test_set.forecast_horizon_size,
+            test_window_size=self._train_test_set.test_window_size,
         ).to(self._device)
 
         criterion = nn.MSELoss()
@@ -124,110 +209,103 @@ class LSTM_Model:
             model.parameters(), lr=self._model_config.learning_rate
         )
 
-        self._logger.log_info(
-            f"Training on {self._device} for {self._model_config.epochs} epochs"
-        )
         print(f"Training on {self._device} for {self._model_config.epochs} epochs...\n")
 
         # --- Training loop ---
-        train_loss_history = []
+        train_loss_history, val_loss_history = [], []
         for epoch in range(self._model_config.epochs):
             model.train()
             running_loss = 0.0
-
-            progress_bar = tqdm(
-                train_loader,
-                desc=f"Epoch {epoch+1}/{self._model_config.epochs}",
-                leave=False,
-            )
-
-            for X_batch, y_batch in progress_bar:
+            for X_batch, y_batch in tqdm(
+                train_loader, desc=f"Epoch {epoch+1}", leave=False
+            ):
                 X_batch, y_batch = X_batch.to(self._device), y_batch.to(self._device)
                 optimizer.zero_grad()
                 y_pred = model(X_batch)
                 loss = criterion(y_pred, y_batch)
                 loss.backward()
                 optimizer.step()
-
                 running_loss += loss.item()
-                progress_bar.set_postfix(loss=loss.item())
 
-            avg_loss = running_loss / len(train_loader)
-            train_loss_history.append(avg_loss)
+            avg_train_loss = running_loss / len(train_loader)
+            train_loss_history.append(avg_train_loss)
+
+            # --- Validation ---
+            avg_val_loss = None
+            if val_loader is not None:
+                model.eval()
+                val_running_loss = 0.0
+                with torch.no_grad():
+                    for X_val, y_val in val_loader:
+                        X_val, y_val = X_val.to(self._device), y_val.to(self._device)
+                        y_val_pred = model(X_val)
+                        val_loss = criterion(y_val_pred, y_val)
+                        val_running_loss += val_loss.item()
+                avg_val_loss = val_running_loss / len(val_loader)
+                val_loss_history.append(avg_val_loss)
+
+            # Log and print
+            log_dict = {"epoch": epoch, "train_loss": avg_train_loss}
+            if avg_val_loss is not None:
+                log_dict["val_loss"] = avg_val_loss
+
+            self._run.log(log_dict)
             print(
-                f"Epoch [{epoch+1}/{self._model_config.epochs}] - Avg Train Loss: {avg_loss:.8f}"
+                f"Epoch [{epoch+1}/{self._model_config.epochs}] - Train: {avg_train_loss:.6f} | Val: {avg_val_loss:.6f}"
+                if avg_val_loss
+                else f"Epoch [{epoch+1}] - Train: {avg_train_loss:.6f}"
             )
 
         # --- Evaluation ---
         model.eval()
         with torch.no_grad():
-            # Use the last available train window to forecast
             last_train_window = self._train_test_set.train_sets[-1].values
-            input_window = self._train_test_set.input_window_size
-            horizon = self._train_test_set.forecast_horizon_size
+            train_window = self._train_test_set.train_window_size
+            test_window = self._train_test_set.test_window_size
 
-            if len(last_train_window) < input_window:
-                raise ValueError("Last training window shorter than input_window_size.")
-
-            # Prepare normalized input
             X_input = (
                 torch.tensor(
-                    last_train_window[-input_window:, :-1], dtype=torch.float32
+                    last_train_window[-train_window:, :-1], dtype=torch.float32
                 )
                 .unsqueeze(0)
                 .to(self._device)
             )
-
-            # Predict normalized output
             y_pred = model(X_input)
 
-            # Prepare normalized test target (already normalized using same scaler)
             test_data = self._train_test_set.test_sets[0].values
-            y_true_np = np.array(test_data[:horizon, -1], dtype=np.float32)
+            y_true_np = np.array(test_data[:test_window, -1], dtype=np.float32)
             y_true = torch.from_numpy(y_true_np).unsqueeze(0).to(self._device)
 
-            # --- Denormalize predictions and ground truth ---
             y_pred_denorm = (
                 y_pred * (output_range[1] - output_range[0]) + output_range[0]
             )
-
-            # --- Compute MSE Loss on denormalized data ---
             test_loss = criterion(y_pred_denorm, y_true).item()
-
-            # --- Compute MAPE (Mean Absolute Percentage Error) ---
-            epsilon = 1e-8  # avoid division by zero
+            epsilon = 1e-8
             mape = (
                 torch.mean(torch.abs((y_true - y_pred_denorm) / (y_true + epsilon)))
                 * 100
             ).item()
 
         training_time = time() - start_time
-        print(f"Trained with device: {self._device}")
-        print(f"Training completed in {training_time:.2f}s")
-        print(f"Test MAPE: {mape:.2f}%")
-        self._logger.log_info(f"Training completed in {training_time:.2f}s")
-        self._logger.log_info(f"Test MAPE: {mape:.2f}%")
-        self._logger.log_info(f"Trained with device: {self._device}")
+        print(f"Training completed in {training_time:.2f}s | Test MAPE: {mape:.2f}%")
 
-        # --- Return DTO ---
         model_output = ModelOutputDto(
             model=model,
             model_state_dict=model.state_dict(),
             model_config=self._model_config,
             train_loss_history=train_loss_history,
-            final_train_loss=avg_loss,
+            final_train_loss=train_loss_history[-1],
             test_loss=test_loss,
             y_pred=y_pred.cpu().numpy().flatten(),
             y_pred_denorm=y_pred_denorm.cpu().numpy().flatten(),
             y_true=y_true.cpu().numpy().flatten(),
-            input_window_size=self._train_test_set.input_window_size,
-            horizon_size=horizon,
+            input_window_size=train_window,  # keep for backward compatibility
+            horizon_size=test_window,
             training_time=training_time,
         )
 
-        # Add MAPE to DTO for downstream reporting
+        model_output.validation_loss_history = val_loss_history
         model_output.mape = mape
 
         self._logger.log_info("DONE TRAINING PROCESS.\n")
-
         return model_output

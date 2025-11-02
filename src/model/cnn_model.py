@@ -4,7 +4,7 @@
 
 # Assumptions:
 # - Input shape: (batch_size, input_window_size, num_features)
-# - Output shape: (batch_size, forecast_horizon_size)
+# - Output shape: (batch_size, test_window_size)
 # """
 
 # import numpy as np
@@ -27,11 +27,11 @@
 #         train_set: List[pd.DataFrame],
 #         test_set: pd.DataFrame,
 #         input_window_size: int,
-#         forecast_horizon_size: int,
+#         test_window_size: int,
 #     ):
 #         self.name = name
 #         self.input_window_size = input_window_size
-#         self.forecast_horizon_size = forecast_horizon_size
+#         self.test_window_size = test_window_size
 #         self.train_set = train_set
 #         self.test_set = test_set
 
@@ -121,12 +121,12 @@
 #     train_dataset = TimeSeriesDataset(
 #         train_test_set.train_set,
 #         train_test_set.input_window_size,
-#         train_test_set.forecast_horizon_size,
+#         train_test_set.test_window_size,
 #     )
 #     test_dataset = TimeSeriesDataset(
 #         [train_test_set.test_set],
 #         train_test_set.input_window_size,
-#         train_test_set.forecast_horizon_size,
+#         train_test_set.test_window_size,
 #     )
 
 #     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
@@ -136,7 +136,7 @@
 #     model = CNNForecastModel(
 #         num_features,
 #         train_test_set.input_window_size,
-#         train_test_set.forecast_horizon_size,
+#         train_test_set.test_window_size,
 #     ).to(device)
 
 #     criterion = nn.MSELoss()
@@ -204,7 +204,7 @@
 #         train_set=train_windows,
 #         test_set=test_window,
 #         input_window_size=input_window,
-#         forecast_horizon_size=forecast_horizon,
+#         test_window_size=forecast_horizon,
 #     )
 
 #     trained_model = train_model(dataset)
