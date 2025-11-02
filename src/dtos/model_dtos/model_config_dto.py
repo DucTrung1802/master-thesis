@@ -40,16 +40,16 @@ class ModelConfigDto:
     device: str
     seed: int = RANDOM_SEED
 
-    def format_config(self):
-        """Pretty-print the model configuration as formatted JSON."""
-        data = {
+    def to_dict(self) -> dict:
+        """Return the model configuration as a Python dictionary."""
+        return {
             "entity": self.entity,
             "project": self.project,
             "architecture": self.architecture.value,
             "stock_code": self.stock_code,
             "window_type": self.window_type.value,
-            "input_window_size": int(self.input_window_size[0]),
-            "forecast_horizon_size": int(self.forecast_horizon_size[0]),
+            "input_window_size": self.input_window_size,
+            "forecast_horizon_size": self.forecast_horizon_size,
             "epochs": self.epochs,
             "learning_rate": self.learning_rate,
             "batch_size": self.batch_size,
@@ -60,4 +60,7 @@ class ModelConfigDto:
             "device": str(self.device),
             "seed": self.seed,
         }
-        print(json.dumps(data, indent=4))
+
+    def format_config(self):
+        """Pretty-print the model configuration as formatted JSON."""
+        print(json.dumps(self.to_dict(), indent=4))

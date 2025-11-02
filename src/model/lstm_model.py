@@ -1,3 +1,4 @@
+import os
 from time import time
 import numpy as np
 import pandas as pd
@@ -5,11 +6,16 @@ import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 from tqdm.notebook import tqdm
+import wandb
+from dotenv import load_dotenv
 
 from dtos.model_dtos.model_config_dto import ModelConfigDto
 from dtos.model_dtos.model_output_dto import ModelOutputDto
 from logger.logger import Logger
 from train_test_creator.train_test_set import TrainTestSet
+
+
+load_dotenv()
 
 
 class TimeSeriesDataset(Dataset):
@@ -59,67 +65,33 @@ class LSTM_Model:
     def __init__(
         self, logger: Logger, train_test_set: TrainTestSet, model_config: ModelConfigDto
     ):
-        self.logger = logger
+        self._logger = logger
         self._train_test_set = train_test_set
         self._model_config = model_config
 
-        self._validate_model_config()
-
-        self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-        self.logger.log_info(f"PyTorch version: {torch.__version__}")
-        self.logger.log_info(f"Using device: {self._device}")
-
+        self._logger.log_info(f"PyTorch version: {torch.__version__}")
         print(f"PyTorch version: {torch.__version__}")
-        print(f"Using device: {self._device}")
 
-    def _validate_model_config(self):
-        """
-        Validate the model configuration parameters.
-        Raises:
-            ValueError: if any configuration value is invalid.
-        """
-        cfg = self._model_config
+        # Initialize WandB
+        self._logger.log_info(f"Initializing WandB...")
+        print(f"Initializing WandB...")
 
-        # epochs: positive integer
-        if not isinstance(cfg.epochs, int) or cfg.epochs <= 0:
-            raise ValueError(
-                f"Invalid epochs ({cfg.epochs}): must be a positive integer."
-            )
+        wandb.login(key=os.getenv("WANDB_KEY"))
 
-        # learning_rate: positive float, usually < 1
-        if not isinstance(cfg.learning_rate, (float, int)) or cfg.learning_rate <= 0:
-            raise ValueError(
-                f"Invalid learning_rate ({cfg.learning_rate}): must be positive."
-            )
-        if cfg.learning_rate > 1:
-            raise ValueError(
-                f"Suspicious learning_rate ({cfg.learning_rate}): should usually be < 1."
-            )
+        self._run = wandb.init(
+            entity=self._model_config.entity,
+            project=self._model_config.project,
+            config=self._model_config.to_dict(),
+        )
 
-        # batch_size: positive integer
-        if not isinstance(cfg.batch_size, int) or cfg.batch_size <= 0:
-            raise ValueError(
-                f"Invalid batch_size ({cfg.batch_size}): must be a positive integer."
-            )
-
-        # Optionally check batch size divisibility if data size is known
-        train_len = getattr(self._train_test_set, "train_X", None)
-        if train_len is not None:
-            n_samples = len(train_len)
-            if cfg.batch_size > n_samples:
-                raise ValueError(
-                    f"batch_size ({cfg.batch_size}) cannot exceed number of training samples ({n_samples})."
-                )
-
-        self.logger.log_info("Model configuration validated successfully.")
+        self._run.finish()
 
     def train(self):
-        self.logger.log_info("START TRANING PROCESS...")
+        self._logger.log_info("START TRANING PROCESS...")
         output_range = self._train_test_set.output_range
 
         start_time = time()
-        self.logger.log_info("Starting training process...")
+        self._logger.log_info("Starting training process...")
 
         # --- Prepare dataset ---
         train_dataset = TimeSeriesDataset(
@@ -152,7 +124,7 @@ class LSTM_Model:
             model.parameters(), lr=self._model_config.learning_rate
         )
 
-        self.logger.log_info(
+        self._logger.log_info(
             f"Training on {self._device} for {self._model_config.epochs} epochs"
         )
         print(f"Training on {self._device} for {self._model_config.epochs} epochs...\n")
@@ -233,9 +205,9 @@ class LSTM_Model:
         print(f"Trained with device: {self._device}")
         print(f"Training completed in {training_time:.2f}s")
         print(f"Test MAPE: {mape:.2f}%")
-        self.logger.log_info(f"Training completed in {training_time:.2f}s")
-        self.logger.log_info(f"Test MAPE: {mape:.2f}%")
-        self.logger.log_info(f"Trained with device: {self._device}")
+        self._logger.log_info(f"Training completed in {training_time:.2f}s")
+        self._logger.log_info(f"Test MAPE: {mape:.2f}%")
+        self._logger.log_info(f"Trained with device: {self._device}")
 
         # --- Return DTO ---
         model_output = ModelOutputDto(
@@ -256,6 +228,6 @@ class LSTM_Model:
         # Add MAPE to DTO for downstream reporting
         model_output.mape = mape
 
-        self.logger.log_info("DONE TRAINING PROCESS.\n")
+        self._logger.log_info("DONE TRAINING PROCESS.\n")
 
         return model_output
