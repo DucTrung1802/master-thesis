@@ -30,20 +30,6 @@ def main():
         my_logger.log_info(f"Exporting unified dataframe for stock code: {stock_code}")
         my_train_test_creator.export_unified_dataframe(stock_code=stock_code)
 
-        # # Load data with template "unified_dataframe/unified_{str.lower(stock_code)}.csv"
-        # dataframe = my_train_test_creator.load_dataframe(stock_code=stock_code)
-
-        # normalized_df = my_train_test_creator.normalize_unified_dataframe(
-        #     dataframe=dataframe
-        # )
-
-        # train_test_set = my_train_test_creator.create_train_test_set(
-        #     normalized_df=normalized_df,
-        #     stock_code=stock_code,
-        #     input_window_size=DEFAULT_INPUT_WINDOW_SIZE,
-        #     forecast_horizon_size=DEFAULT_FORECAST_HORIZON_SIZE,
-        # )
-
 
 if __name__ == "__main__":
     main()

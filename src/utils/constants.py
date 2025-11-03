@@ -1,6 +1,11 @@
 from datetime import datetime
 
 # ===========================
+# COMMON CONFIGURATION
+# ===========================
+RANDOM_SEED = 42
+
+# ===========================
 # LOGGER CONFIGURATION
 # ===========================
 LOG_DIR = "logs"
@@ -101,7 +106,21 @@ TOP_N_FEATURES = 40
 DEFAULT_CORRELATION_THRESHOLD = 0.85
 TRAIN_TEST_CREATOR_START_DATE = datetime(2005, 4, 1)
 TRAIN_TEST_CREATOR_END_DATE = datetime(2025, 6, 30)
-DEFAULT_INPUT_WINDOW_SIZE = 360  # days
-DEFAULT_FORECAST_HORIZON_SIZE = 30  # days
+DEFAULT_TRAIN_WINDOW_SIZE = 300  # days
+DEFAULT_VALIDATION_WINDOW_SIZE = 30  # days
+DEFAULT_TEST_WINDOW_SIZE = 30  # days
 DEFAULT_TRAIN_RATIO = 0.9
 UNIFIED_DATAFRAME_DIR = f"unified_dataframe"
+
+
+# ===========================
+# MODEL CONFIGURATION
+# ===========================
+PATIENCE = 15  # Continuous epoches that the validation loss does not decrease
+
+
+# ===========================
+# WANDB CONFIGURATION
+# ===========================
+WANDB_ENTITY_NAME = "trung-lyduc18"
+WANDB_PROJECT_NAME = "master_thesis"

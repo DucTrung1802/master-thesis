@@ -511,25 +511,23 @@ class TrainTestCreator:
         output_column: str,
         output_range: tuple,
         stock_code: str,
-        input_window_size: int,
-        forecast_horizon_size: int,
+        train_window_size: int,
+        validation_window_size: int,
+        test_window_size: int,
         train_ratio: float = DEFAULT_TRAIN_RATIO,
     ) -> bool:
         """
         Validate input parameters for stock forecasting.
 
         Validation Rules:
-        1. The length of `dataframe` must be greater than the sum of
-        `input_window_size` and `forecast_horizon_size`.
-        - i.e., len(dataframe) > input_window_size + forecast_horizon_size
-        2. The `output_column` must exist in `dataframe.columns`.
-        3. The `stock_code` must not be an empty string after stripping whitespace.
-        - i.e., bool(stock_code.strip()) must be True
-        4. `input_window_size` and `forecast_horizon_size` must:
+        1. len(dataframe) must be greater than the sum of
+        train_window_size + validation_window_size + test_window_size.
+        2. output_column must exist in dataframe.columns.
+        3. stock_code must be a non-empty string after stripping whitespace.
+        4. train_window_size, validation_window_size, and test_window_size must:
         - Be integers (`int` type)
         - Be greater than 0
-        5. `train_ratio` must be a float greater than 0 and less than 1.
-        - i.e., 0 < train_ratio < 1
+        5. train_ratio must be a float greater than 0 and less than 1.
 
         Parameters
         ----------
@@ -538,15 +536,17 @@ class TrainTestCreator:
         output_column : str
             The column name in `dataframe` to be predicted.
         output_range : tuple
-            The expected range of output values (used for scaling or validation).
+            Expected range of output values (used for scaling/validation).
         stock_code : str
             The identifier for the stock being analyzed.
-        input_window_size : int
-            Number of time steps used as input features.
-        forecast_horizon_size : int
-            Number of time steps to forecast ahead.
+        train_window_size : int
+            Number of time steps used for training input.
+        validation_window_size : int
+            Number of time steps used for validation.
+        test_window_size : int
+            Number of time steps to forecast ahead (testing).
         train_ratio : float, optional
-            Ratio of training data, by default `DEFAULT_TRAIN_RATIO`.
+            Ratio of training data (default: DEFAULT_TRAIN_RATIO).
 
         Returns
         -------
@@ -560,11 +560,12 @@ class TrainTestCreator:
         """
 
         # 1. Check dataframe length
-        if len(dataframe) <= input_window_size + forecast_horizon_size:
+        total_required = train_window_size + validation_window_size + test_window_size
+        if len(dataframe) <= total_required:
             raise ValueError(
                 f"Dataframe length ({len(dataframe)}) must be greater than "
-                f"input_window_size + forecast_horizon_size "
-                f"({input_window_size + forecast_horizon_size})."
+                f"train_window_size + validation_window_size + test_window_size "
+                f"({total_required})."
             )
 
         # 2. Check output column existence
@@ -579,10 +580,11 @@ class TrainTestCreator:
                 "Stock code must be a non-empty string after stripping whitespace."
             )
 
-        # 4. Check input_window_size and forecast_horizon_size
+        # 4. Check each window size
         for name, value in {
-            "input_window_size": input_window_size,
-            "forecast_horizon_size": forecast_horizon_size,
+            "train_window_size": train_window_size,
+            "validation_window_size": validation_window_size,
+            "test_window_size": test_window_size,
         }.items():
             if not isinstance(value, int) or value <= 0:
                 raise ValueError(f"{name} must be a positive integer (got {value!r}).")
@@ -598,33 +600,54 @@ class TrainTestCreator:
     def _find_split_index(
         self,
         dataframe: pd.DataFrame,
-        input_window_size: int,
-        forecast_horizon_size: int,
+        train_window_size: int,
+        validation_window_size: int,
+        test_window_size: int,
         train_ratio: float,
     ) -> int:
-        # Sort by date or time index if available
+        """
+        Determine the index to split the dataframe into training and testing portions
+        for time series forecasting with explicit validation and test windows.
+
+        Rules:
+        1. Split based on `train_ratio`.
+        2. Ensure there's enough data left for both validation and test windows.
+        3. Ensure the split index aligns cleanly with test window size for consistency.
+        """
+
+        # --- Sort chronologically if 'date' column exists ---
         if "date" in dataframe.columns:
             dataframe = dataframe.sort_values("date").reset_index(drop=True)
         else:
             dataframe = dataframe.reset_index(drop=True)
 
-        # --- Adjusted split index logic ---
-        split_index = ceil(len(dataframe) * train_ratio)
-        split_index -= input_window_size  # ensure full input window fits
+        total_len = len(dataframe)
+        min_required = train_window_size + validation_window_size + test_window_size
 
-        # Make split_index divisible by forecast_horizon_size
-        remainder = split_index % forecast_horizon_size
+        if total_len <= min_required:
+            raise ValueError(
+                f"Data length ({total_len}) must exceed total required window size "
+                f"({min_required})."
+            )
+
+        # --- Initial rough split ---
+        split_index = ceil(total_len * train_ratio)
+
+        # --- Adjust to ensure validation & test windows fit after split ---
+        split_index = min(
+            split_index, total_len - (validation_window_size + test_window_size)
+        )
+
+        # --- Align to multiple of test_window_size (optional smoothing) ---
+        remainder = split_index % test_window_size
         if remainder != 0:
             split_index -= remainder
 
-        # Guard against invalid split index
-        if split_index <= 0 or split_index >= len(dataframe):
+        # --- Guard against invalid split ---
+        if split_index <= train_window_size or split_index >= total_len:
             raise ValueError(
-                f"Adjusted split_index ({split_index}) is invalid for data length {len(dataframe)}"
+                f"Adjusted split_index ({split_index}) invalid for data length {total_len}"
             )
-
-        # Add back input windwo size to split_index
-        split_index += input_window_size
 
         return split_index
 
@@ -634,30 +657,42 @@ class TrainTestCreator:
         output_column: str,
         output_range: tuple,
         stock_code: str,
-        input_window_size: int,
-        forecast_horizon_size: int,
+        train_window_size: int,
+        validation_window_size: int,
+        test_window_size: int,
         train_ratio: float = DEFAULT_TRAIN_RATIO,
     ) -> "TrainTestSet":
+        """
+        Create train, validation, and test rolling windows for time series forecasting.
+        """
+
+        # --- Validate input ---
         if not self._validate_input(
-            dataframe,
-            output_column,
-            output_range,
-            stock_code,
-            input_window_size,
-            forecast_horizon_size,
-            train_ratio,
+            dataframe=dataframe,
+            output_column=output_column,
+            output_range=output_range,
+            stock_code=stock_code,
+            train_window_size=train_window_size,
+            validation_window_size=validation_window_size,
+            test_window_size=test_window_size,
+            train_ratio=train_ratio,
         ):
             raise ValueError("Invalid input parameters for creating TrainTestSet.")
 
         stock_code = str.lower(stock_code)
 
+        # Ensure output column is last
         dataframe = move_column_to_end(dataframe, output_column)
 
+        # --- Split train/test base ---
         split_index = self._find_split_index(
-            dataframe, input_window_size, forecast_horizon_size, train_ratio
+            dataframe=dataframe,
+            train_window_size=train_window_size,
+            validation_window_size=validation_window_size,
+            test_window_size=test_window_size,
+            train_ratio=train_ratio,
         )
 
-        # --- Split train/test ---
         self._full_train_df = dataframe.iloc[:split_index].reset_index(drop=True)
         self._full_test_df = dataframe.iloc[split_index:].reset_index(drop=True)
 
@@ -665,6 +700,7 @@ class TrainTestCreator:
         feature_selector_df = self._full_train_df.drop(columns=["date"])
         feature_columns = feature_selector_df.columns.tolist()
         feature_columns.remove(output_column)
+
         self._feature_selector = FeatureSelector(
             logger=self._logger,
             stock_code=stock_code,
@@ -678,6 +714,7 @@ class TrainTestCreator:
             columns=features_to_drop
         )
 
+        # --- Normalize ---
         self._normalized_selected_full_train_df = self.normalize_unified_dataframe(
             dataframe=self._selected_full_train_df,
             output_range=output_range,
@@ -686,38 +723,39 @@ class TrainTestCreator:
 
         final_train_df = self._normalized_selected_full_train_df
 
-        # --- Create sliding windows on training set ---
+        # --- Create rolling windows ---
         train_sets = []
-        total_window_size = input_window_size + forecast_horizon_size
+        total_window_size = (
+            train_window_size + validation_window_size + test_window_size
+        )
 
         for start_idx in range(
             0,
             len(final_train_df) - total_window_size + 1,
-            forecast_horizon_size,
+            test_window_size,  # shift by test window each time
         ):
             end_idx = start_idx + total_window_size
-            window_df = final_train_df.iloc[start_idx:end_idx].reset_index(drop=True)
-            train_sets.append(window_df)
+            train_df = final_train_df.iloc[start_idx:end_idx].reset_index(drop=True)
+            train_sets.append(train_df)
 
-        # --- Create test set ---
-        test_set = [
-            self._full_test_df.iloc[i : i + forecast_horizon_size].reset_index(
-                drop=True
-            )
+        # --- Create test set from unseen data ---
+        test_sets = [
+            self._full_test_df.iloc[i : i + test_window_size].reset_index(drop=True)
             for i in range(
                 0,
-                len(self._full_test_df) - forecast_horizon_size + 1,
-                forecast_horizon_size,
+                len(self._full_test_df) - test_window_size + 1,
+                test_window_size,
             )
         ]
 
         # --- Return TrainTestSet object ---
         return TrainTestSet(
-            name=f"{stock_code}_{input_window_size}_{forecast_horizon_size}",
+            name=f"{stock_code}_{train_window_size}_{validation_window_size}_{test_window_size}",
             train_sets=train_sets,
+            test_sets=test_sets,
             output_column=output_column,
             output_range=output_range,
-            test_sets=test_set,
-            input_window_size=input_window_size,
-            forecast_horizon_size=forecast_horizon_size,
+            train_window_size=train_window_size,
+            validation_window_size=validation_window_size,
+            test_window_size=test_window_size,
         )
