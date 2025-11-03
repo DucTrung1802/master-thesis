@@ -12,3 +12,7 @@ gold_data/
 logs/
 
 mt_env/
+
+wandb/
+
+*.json
