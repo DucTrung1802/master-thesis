@@ -114,6 +114,12 @@ UNIFIED_DATAFRAME_DIR = f"unified_dataframe"
 
 
 # ===========================
+# MODEL CONFIGURATION
+# ===========================
+PATIENCE = 15  # Continuous epoches that the validation loss does not decrease
+
+
+# ===========================
 # WANDB CONFIGURATION
 # ===========================
 WANDB_ENTITY_NAME = "trung-lyduc18"

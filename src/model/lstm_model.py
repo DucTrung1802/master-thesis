@@ -14,6 +14,7 @@ from dtos.model_dtos.model_config_dto import ModelConfigDto
 from dtos.model_dtos.model_output_dto import ModelOutputDto
 from logger.logger import Logger
 from train_test_creator.train_test_set import TrainTestSet
+from utils.constants import PATIENCE
 from utils.enums import (
     AchitectureType,
     LossFunctionType,
@@ -164,7 +165,6 @@ class LSTM_Model:
     def train(self):
         self._logger.log_info("START TRAINING PROCESS...")
         output_range = self._train_test_set.output_range
-
         start_time = time()
 
         # --- Prepare dataset ---
@@ -207,8 +207,13 @@ class LSTM_Model:
 
         print(f"Training on {self._device} for {self._model_config.epochs} epochs...\n")
 
-        # --- Training loop ---
+        # --- Early Stopping setup ---
+        best_val_loss = float("inf")
+        best_model_state = None
+        epochs_no_improve = 0
+
         train_loss_history, val_loss_history = [], []
+
         for epoch in range(self._model_config.epochs):
             # ---------------- TRAIN ----------------
             model.train()
@@ -238,6 +243,25 @@ class LSTM_Model:
                     val_running_loss += val_loss.item()
             avg_val_loss = val_running_loss / len(val_loader)
             val_loss_history.append(avg_val_loss)
+
+            # --- Early stopping check ---
+            if avg_val_loss < best_val_loss:
+                best_val_loss = avg_val_loss
+                best_model_state = model.state_dict()
+                epochs_no_improve = 0
+            else:
+                epochs_no_improve += 1
+                if epochs_no_improve >= PATIENCE:
+                    self._logger.log_info(
+                        f"Early stopping triggered at epoch {epoch+1}. "
+                        f"No improvement for {PATIENCE} consecutive epochs."
+                    )
+                    print(
+                        f"Early stopping at epoch {epoch+1} (best val loss: {best_val_loss:.6f})"
+                    )
+                    # Restore best model state
+                    model.load_state_dict(best_model_state)
+                    break
 
             # Log & print
             log_dict = {
@@ -292,7 +316,7 @@ class LSTM_Model:
             train_loss_history=train_loss_history,
             final_train_loss=train_loss_history[-1],
             validation_loss_history=val_loss_history,
-            final_validation_loss=val_loss_history[-1],
+            final_validation_loss=best_val_loss,
             test_loss=test_loss,
             y_pred=y_pred.cpu().numpy().flatten(),
             y_pred_denorm=y_pred_denorm.cpu().numpy().flatten(),
@@ -303,6 +327,7 @@ class LSTM_Model:
             mape=mape,
         )
 
+        # --- Save outputs ---
         training_output_file = f"training_output.json"
         with open(training_output_file, "w") as f:
             json.dump(model_output.to_dict(), f, indent=4)
@@ -314,6 +339,6 @@ class LSTM_Model:
         self._run.save(output_pickle_file)
 
         self._run.finish()
-
         self._logger.log_info("DONE TRAINING PROCESS.\n")
+
         return model_output
