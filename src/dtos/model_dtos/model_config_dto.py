@@ -23,8 +23,8 @@ class ModelConfigDto:
     # Windowing
     window_type: WindowType
     train_window_size: int
-    test_window_size: int
     validation_window_size: int
+    test_window_size: int
 
     # Training
     epochs: int

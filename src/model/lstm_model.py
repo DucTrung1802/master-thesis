@@ -29,13 +29,13 @@ load_dotenv()
 class TimeSeriesDataset(Dataset):
     """
     Each window is divided into:
-        - Training segment: train_window_size
-        - Validation segment: validation_window_size (optional)
-        - Testing segment: test_window_size
+        - Training segment: train_window_size (input)
+        - Validation segment: validation_window_size (input)
+        - Testing segment: test_window_size (target)
     """
 
     def __init__(
-        self, windows, train_window_size, test_window_size, validation_window_size=0
+        self, windows, train_window_size, validation_window_size, test_window_size
     ):
         self.X_train, self.y_train = [], []
         self.X_val, self.y_val = [], []
@@ -44,30 +44,24 @@ class TimeSeriesDataset(Dataset):
             data = window.values
             total_needed = train_window_size + validation_window_size + test_window_size
             if len(data) < total_needed:
-                continue  # skip incomplete window
+                continue
 
-            # TRAIN segment
+            # --- TRAIN segment
             self.X_train.append(data[:train_window_size, :-1])
             self.y_train.append(
                 data[train_window_size : train_window_size + test_window_size, -1]
             )
 
-            # VALIDATION segment
-            if validation_window_size > 0:
-                val_start = train_window_size
-                val_end = train_window_size + validation_window_size
-                self.X_val.append(data[val_start:val_end, :-1])
-                self.y_val.append(data[val_end : val_end + test_window_size, -1])
+            # --- VALIDATION segment
+            val_end = train_window_size + validation_window_size
+            self.X_val.append(data[val_end - train_window_size : val_end, :-1])
+            self.y_val.append(data[val_end : val_end + test_window_size, -1])
 
         # Convert to tensors
         self.X_train = torch.tensor(np.array(self.X_train), dtype=torch.float32)
         self.y_train = torch.tensor(np.array(self.y_train), dtype=torch.float32)
-
-        if validation_window_size > 0 and len(self.X_val) > 0:
-            self.X_val = torch.tensor(np.array(self.X_val), dtype=torch.float32)
-            self.y_val = torch.tensor(np.array(self.y_val), dtype=torch.float32)
-        else:
-            self.X_val = self.y_val = None
+        self.X_val = torch.tensor(np.array(self.X_val), dtype=torch.float32)
+        self.y_val = torch.tensor(np.array(self.y_val), dtype=torch.float32)
 
     def __len__(self):
         return len(self.X_train)
@@ -185,7 +179,7 @@ class LSTM_Model:
         train_loader = DataLoader(
             list(zip(train_dataset.X_train, train_dataset.y_train)),
             batch_size=self._model_config.batch_size,
-            shuffle=True,
+            shuffle=False,
         )
 
         val_loader = None
