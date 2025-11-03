@@ -1,3 +1,4 @@
+import json
 import os
 from time import time
 import numpy as np
@@ -7,6 +8,7 @@ from torch.utils.data import Dataset, DataLoader
 from tqdm.notebook import tqdm
 import wandb
 from dotenv import load_dotenv
+import pickle
 
 from dtos.model_dtos.model_config_dto import ModelConfigDto
 from dtos.model_dtos.model_output_dto import ModelOutputDto
@@ -159,7 +161,7 @@ class LSTM_Model:
     # --------------------------
     # TRAIN FUNCTION
     # --------------------------
-    def train(self, validation_window_size=30):
+    def train(self):
         self._logger.log_info("START TRAINING PROCESS...")
         output_range = self._train_test_set.output_range
 
@@ -167,29 +169,29 @@ class LSTM_Model:
 
         # --- Prepare dataset ---
         train_dataset = TimeSeriesDataset(
-            self._train_test_set.train_sets,
-            self._train_test_set.train_window_size,
-            self._train_test_set.test_window_size,
-            validation_window_size=validation_window_size,
+            windows=self._train_test_set.train_sets,
+            train_window_size=self._train_test_set.train_window_size,
+            validation_window_size=self._train_test_set.validation_window_size,
+            test_window_size=self._train_test_set.test_window_size,
         )
 
         if len(train_dataset) == 0:
             raise ValueError("No valid training windows found in train_sets.")
 
+        # --- DataLoaders ---
         train_loader = DataLoader(
             list(zip(train_dataset.X_train, train_dataset.y_train)),
             batch_size=self._model_config.batch_size,
             shuffle=False,
         )
 
-        val_loader = None
-        if train_dataset.X_val is not None:
-            val_loader = DataLoader(
-                list(zip(train_dataset.X_val, train_dataset.y_val)),
-                batch_size=self._model_config.batch_size,
-                shuffle=False,
-            )
+        val_loader = DataLoader(
+            list(zip(train_dataset.X_val, train_dataset.y_val)),
+            batch_size=self._model_config.batch_size,
+            shuffle=False,
+        )
 
+        # --- Model Setup ---
         num_features = train_dataset.X_train.shape[-1]
         model = LSTMForecastModel(
             num_features=num_features,
@@ -208,6 +210,7 @@ class LSTM_Model:
         # --- Training loop ---
         train_loss_history, val_loss_history = [], []
         for epoch in range(self._model_config.epochs):
+            # ---------------- TRAIN ----------------
             model.train()
             running_loss = 0.0
             for X_batch, y_batch in tqdm(
@@ -224,33 +227,31 @@ class LSTM_Model:
             avg_train_loss = running_loss / len(train_loader)
             train_loss_history.append(avg_train_loss)
 
-            # --- Validation ---
-            avg_val_loss = None
-            if val_loader is not None:
-                model.eval()
-                val_running_loss = 0.0
-                with torch.no_grad():
-                    for X_val, y_val in val_loader:
-                        X_val, y_val = X_val.to(self._device), y_val.to(self._device)
-                        y_val_pred = model(X_val)
-                        val_loss = criterion(y_val_pred, y_val)
-                        val_running_loss += val_loss.item()
-                avg_val_loss = val_running_loss / len(val_loader)
-                val_loss_history.append(avg_val_loss)
+            # ---------------- VALIDATION ----------------
+            model.eval()
+            val_running_loss = 0.0
+            with torch.no_grad():
+                for X_val, y_val in val_loader:
+                    X_val, y_val = X_val.to(self._device), y_val.to(self._device)
+                    y_val_pred = model(X_val)
+                    val_loss = criterion(y_val_pred, y_val)
+                    val_running_loss += val_loss.item()
+            avg_val_loss = val_running_loss / len(val_loader)
+            val_loss_history.append(avg_val_loss)
 
-            # Log and print
-            log_dict = {"epoch": epoch, "train_loss": avg_train_loss}
-            if avg_val_loss is not None:
-                log_dict["val_loss"] = avg_val_loss
-
+            # Log & print
+            log_dict = {
+                "epoch": epoch + 1,
+                "train_loss": avg_train_loss,
+                "val_loss": avg_val_loss,
+            }
             self._run.log(log_dict)
             print(
-                f"Epoch [{epoch+1}/{self._model_config.epochs}] - Train: {avg_train_loss:.6f} | Val: {avg_val_loss:.6f}"
-                if avg_val_loss
-                else f"Epoch [{epoch+1}] - Train: {avg_train_loss:.6f}"
+                f"Epoch [{epoch+1}/{self._model_config.epochs}] "
+                f"- Train: {avg_train_loss:.8f} | Val: {avg_val_loss:.8f}"
             )
 
-        # --- Evaluation ---
+        # ---------------- TEST EVALUATION ----------------
         model.eval()
         with torch.no_grad():
             last_train_window = self._train_test_set.train_sets[-1].values
@@ -283,23 +284,36 @@ class LSTM_Model:
         training_time = time() - start_time
         print(f"Training completed in {training_time:.2f}s | Test MAPE: {mape:.2f}%")
 
+        # --- Prepare model output ---
         model_output = ModelOutputDto(
             model=model,
             model_state_dict=model.state_dict(),
             model_config=self._model_config,
             train_loss_history=train_loss_history,
             final_train_loss=train_loss_history[-1],
+            validation_loss_history=val_loss_history,
+            final_validation_loss=val_loss_history[-1],
             test_loss=test_loss,
             y_pred=y_pred.cpu().numpy().flatten(),
             y_pred_denorm=y_pred_denorm.cpu().numpy().flatten(),
             y_true=y_true.cpu().numpy().flatten(),
-            input_window_size=train_window,  # keep for backward compatibility
+            input_window_size=train_window,
             horizon_size=test_window,
             training_time=training_time,
+            mape=mape,
         )
 
-        model_output.validation_loss_history = val_loss_history
-        model_output.mape = mape
+        training_output_file = f"training_output.json"
+        with open(training_output_file, "w") as f:
+            json.dump(model_output.to_dict(), f, indent=4)
+        self._run.save(training_output_file)
+
+        output_pickle_file = "training_output.pkl"
+        with open(output_pickle_file, "wb") as f:
+            pickle.dump(model_output, f)
+        self._run.save(output_pickle_file)
+
+        self._run.finish()
 
         self._logger.log_info("DONE TRAINING PROCESS.\n")
         return model_output
