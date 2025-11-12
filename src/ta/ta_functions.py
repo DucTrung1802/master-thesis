@@ -58,30 +58,31 @@ def validate_column(df: pd.DataFrame, column_name: str) -> None:
 
 
 # region TREND INDICATORS
-def add_ema(df: pd.DataFrame, n: int, column_name: str = "close") -> pd.DataFrame:
+def add_sma(df: pd.DataFrame, n: int, column_name: str = "close") -> pd.DataFrame:
     """
-    Add an Exponential Moving Average (EMA) column to the DataFrame.
+    Add a Simple Moving Average (SMA) column to the DataFrame.
 
-    The EMA applies exponentially decreasing weights, giving more
-    significance to recent values from the specified column.
+    The SMA is the unweighted mean of the previous `n` values from the specified column.
 
     Parameters
     ----------
     df : pd.DataFrame
         Input DataFrame that must contain the specified column (default is 'close').
     n : int
-        Span for the EMA calculation.
+        Window size for the SMA.
     column_name : str, optional
-        Name of the column to calculate the EMA on. Defaults to 'close'.
+        Name of the column to calculate the SMA on. Defaults to 'close'.
 
     Returns
     -------
     pd.DataFrame
-        Copy of the input DataFrame with an added column '{column_name}_ema_{n}'.
+        Copy of the input DataFrame with an added column '{column_name}_sma_{n}'.
     """
     validate_column(df, column_name)
     df = df.copy()
-    df[f"{column_name}_ema_{n}"] = df[column_name].ewm(span=n, adjust=False).mean()
+    df[f"{column_name}_sma_{n}"] = (
+        df[column_name].rolling(window=n, min_periods=1).mean()
+    )
     return df
 
 
