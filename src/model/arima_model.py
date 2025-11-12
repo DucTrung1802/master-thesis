@@ -198,6 +198,34 @@ class ArimaModel(BaseModel):
 
         return pd.DataFrame(df_preds)
 
+    def forecast_future(self, steps: int = 90) -> pd.DataFrame:
+        """
+        Forecast future values for a given number of steps beyond the training data.
+
+        Parameters
+        ----------
+        steps : int
+            Number of periods to forecast into the future (default: 90).
+
+        Returns
+        -------
+        pd.DataFrame
+            DataFrame with forecasted dates and values.
+        """
+        if not self._fitted:
+            raise ValueError("Model must be fitted before forecasting.")
+
+        # Forecast future values
+        forecast = self._fitted.forecast(steps=steps)
+
+        # Build future date index
+        last_date = self._train_date_series.iloc[-1]
+        future_dates = pd.date_range(
+            start=last_date + pd.Timedelta(days=1), periods=steps
+        )
+
+        return pd.DataFrame({"ds": future_dates, "forecast": forecast})
+
     def plot_rolling_forecast(
         self,
         preds_expanding: pd.DataFrame,
@@ -271,6 +299,67 @@ class ArimaModel(BaseModel):
             file_name = f"rolling_forecast_arima_{order_str_filename}.png"
 
         save_path = os.path.join(CHARTS_DIR_ARIMA, file_name)
+        fig.savefig(save_path, dpi=300)
+        print(f"Figure saved to: {save_path}")
+
+        plt.show()
+
+    def plot_future_forecast(
+        self,
+        forecast_df: pd.DataFrame,
+        title: str = "ARIMA Future Forecast",
+        file_name: Optional[str] = None,
+    ):
+        """
+        Plot forecasted values vs test data only (no training history).
+
+        Parameters
+        ----------
+        forecast_df : pd.DataFrame
+            Must contain ["ds", "forecast"] (from forecast_future()).
+        title : str
+            Chart title.
+        file_name : str, optional
+            If given, save the plot to CHARTS_DIR_ARIMA/file_name.png
+        """
+        fig, ax = plt.subplots(figsize=(14, 6))
+
+        # Plot test (actual values)
+        ax.plot(
+            self._test_date_series,
+            self._test_value_series,
+            label="Test (Actual)",
+            color="green",
+        )
+
+        # Plot forecast
+        ax.plot(
+            forecast_df["ds"],
+            forecast_df["forecast"],
+            label="Forecast",
+            color="blue",
+            linestyle="--",
+        )
+
+        ax.set_title(title)
+        ax.set_xlabel("Date")
+        ax.set_ylabel("Value")
+        ax.legend()
+        ax.grid(True, linestyle="--", alpha=0.7)
+
+        fig.tight_layout()
+
+        # Save figure
+        os.makedirs(CHARTS_DIR_ARIMA, exist_ok=True)
+
+        if file_name is not None:
+            save_path = os.path.join(CHARTS_DIR_ARIMA, f"{file_name}.png")
+        else:
+            order_str_filename = "_".join(map(str, self._best_order))
+            save_path = os.path.join(
+                CHARTS_DIR_ARIMA, f"future_forecast_arima_{order_str_filename}.png"
+            )
+
         fig.savefig(save_path, dpi=300)
         print(f"Figure saved to: {save_path}")
 

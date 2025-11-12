@@ -5,6 +5,40 @@ from typing import Dict, List, Union, Tuple, Optional
 from utils.constants import *
 
 
+# COMMON ENUMS
+class FileExtension(Enum):
+    CSV = "csv"
+    TXT = "txt"
+    LOG = "log"
+    JSON = "json"
+    XML = "xml"
+    ZIP = "zip"
+    PDF = "pdf"
+    XLSX = "xlsx"
+    DOCX = "docx"
+    PNG = "png"
+    JPG = "jpg"
+    MP4 = "mp4"
+
+
+class TimeFormat(Enum):
+    YEAR = "2000"
+    MONTH_NAME_YEAR = "Feb-2000"  # month name + year
+    DAY_MONTH_YEAR = "18/02/2000"  # full date (day, month, year)
+    QUARTER_YEAR = "Q1/2000"  # quarter + year
+    MONTH_INDEX_YEAR = "M2/2000"  # month index + year
+    THREE_MONTH_INDEX_YEAR = "3M/2000"  # 3 month index + year
+
+
+class GenerateDateTimeType(Enum):
+    YEAR = "year"
+    QUARTER = "quarter"
+    MONTH = "month"
+    DAY = "day"
+    DATE = "date"
+
+
+# DATABASE DRIVER ENUMS
 class DatabaseExecutionStatus(Enum):
     """
     Enum for representing the status of a database query.
@@ -63,38 +97,6 @@ class SqlJoinType(Enum):
     CROSS_JOIN = "CROSS JOIN"
 
 
-class FileExtension(Enum):
-    CSV = "csv"
-    TXT = "txt"
-    LOG = "log"
-    JSON = "json"
-    XML = "xml"
-    ZIP = "zip"
-    PDF = "pdf"
-    XLSX = "xlsx"
-    DOCX = "docx"
-    PNG = "png"
-    JPG = "jpg"
-    MP4 = "mp4"
-
-
-class TimeFormat(Enum):
-    YEAR = "2000"
-    MONTH_NAME_YEAR = "Feb-2000"  # month name + year
-    DAY_MONTH_YEAR = "18/02/2000"  # full date (day, month, year)
-    QUARTER_YEAR = "Q1/2000"  # quarter + year
-    MONTH_INDEX_YEAR = "M2/2000"  # month index + year
-    THREE_MONTH_INDEX_YEAR = "3M/2000"  # 3 month index + year
-
-
-class GenerateDateTimeType(Enum):
-    YEAR = "year"
-    QUARTER = "quarter"
-    MONTH = "month"
-    DAY = "day"
-    DATE = "date"
-
-
 class DataQuality(Enum):
     BRONZE = "bronze"
     SILVER = "silver"
@@ -134,17 +136,14 @@ class CleanLayer:
         return cls(CleanAction.REMOVE_COLUMN, column_list=column_list)
 
 
-# Enum for Main Scraping Types
+# MAIN SCRAPING TYPE ENUMS
 class ScrapeMainType(Enum):
     MACROECONOMICS = "macroeconomics"
     STOCK_MARKET = "stock_market"
     ENTERPRISE = "enterprise"
 
 
-# ================================================
-
-
-# Enums for Macroeconomics, Stock Market, and Enterprise Subtypes
+# MACROECONOMICS, STOCK MARKET, AND ENTERPRISE SUBTYPE ENUMS
 class MacroeconomicsSubType(Enum):
     GDP = "gdp"  # Gross Domestic Product
     CPI = "cpi"  # Consumer Price Index
@@ -205,14 +204,9 @@ ScrapeSubType = Union[
     EnterpriseSubType,
 ]
 
-# ================================================
 
-
-# Enum for sources
-
-
-# MACROECONOMICS
-# region Automatically scraped from Vietstock
+# SCRAPE SOURCE ENUMS
+# region SCRAPE SOURCE MACROECONOMICS
 class GdpSource(Enum):
     VIETSTOCK = "vietstock"
 
@@ -333,10 +327,6 @@ class ImportSource(Enum):
     VIETSTOCK = "vietstock"
 
 
-# endregion Automatically scraped from Vietstock
-
-
-# region Manually scraped from Investing.com
 class GoldPriceSource(Enum):
     INVESTING = "investing"
 
@@ -365,7 +355,10 @@ class NASDAQ100Source(Enum):
     YAHOO_FINANCE = "yahoo_finance"
 
 
-# STOCK_MARKET
+# endregion SCRAPE SOURCE MACROECONOMICS
+
+
+# region SCRAPE SOURCE STOCK_MARKET
 class VnHnxIndexSource(Enum):
     CAFEF = "cafef"
 
@@ -386,7 +379,10 @@ class UpcomIndexSource(Enum):
     CAFEF = "cafef"
 
 
-# ENTERPRISE
+# endregion SCRAPE SOURCE STOCK_MARKET
+
+
+# region SCRAPE SOURCE ENTERPRISE
 class FinanceInfoSource(Enum):
     CAFEF = "cafef"
 
@@ -399,10 +395,10 @@ class StockInformationSource(Enum):
     CAFEF = "cafef"
 
 
-# endregion Manually scraped from Investing.com
+# endregion SCRAPE SOURCE ENTERPRISE
 
 
-# Union of all sources
+# UNION OF ALL SOURCES
 Source = Union[
     # MACROECONOMICS
     # Automatically scraped from Vietstock
@@ -778,6 +774,7 @@ SCRAPE_MAPPING: Dict[Tuple[ScrapeMainType, ScrapeSubType, Source], SourceInfo] =
 }
 
 
+# DATABASE ENUMS
 class Schema(Enum):
     MACROECONOMICS = "macroeconomics"
     STOCK_MARKET = "stock_market"
@@ -2503,25 +2500,15 @@ class Table:
         primary_key = [Column.DATE.value]
 
 
+# FEATURE SELECTOR ENUMS
 class FeatureSelectorType(Enum):
-    XGB_REGRESSOR = {
-        "name": "xgb_regressor",
-        "weight": 0.25,
-    }
-    LASSO = {
-        "name": "lasso",
-        "weight": 0.25,
-    }
-    ELASTIC_NET = {
-        "name": "elastic_net",
-        "weight": 0.25,
-    }
-    XGB_SHAP = {
-        "name": "xgb_shap",
-        "weight": 0.25,
-    }
+    XGB_REGRESSOR = {"name": "xgb_regressor", "weight": 0.25}
+    LASSO = {"name": "lasso", "weight": 0.25}
+    ELASTIC_NET = {"name": "elastic_net", "weight": 0.25}
+    XGB_SHAP = {"name": "xgb_shap", "weight": 0.25}
 
 
+# TRAIN TEST CREATOR ENUMS
 class TTC_MacroeconomicTable(Enum):
     DOW_JONES = Table.DOW_JONES.name
     FA_BY_HOUSE_TYPES = Table.G_FA_BY_HOUSE_TYPES.name
@@ -2552,3 +2539,32 @@ class TTC_StockMarketTable(Enum):
 
 class TTC_EnterpriseTable(Enum):
     GAS = "gas"
+
+
+# MODEL TRAIN ENUMS
+class AchitectureType(Enum):
+    LSTM = "lstm"
+    CNN = "cnn"
+
+
+class WindowType(Enum):
+    EXPANDING = "expanding"
+    SLIDING = "sliding"
+
+
+class OptimizerType(Enum):
+    ADAM = "adam"
+    SGD = "sgd"
+
+
+class LossFunctionType(Enum):
+    MSE = "mse"
+
+
+class ScalerType(Enum):
+    MINMAX = "minmax"
+    STANDARD = "standard"
+
+
+class MetricType(Enum):
+    MAPE = "mape"

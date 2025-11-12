@@ -1,11 +1,7 @@
-import pandas as pd
+import torch
 
-data = {
-    "date": ["2000-01-01", "2000-01-02", "2000-01-03", "2000-01-04"],
-    "gdp_growth": [None, 9, None, 7],
-}
-df = pd.DataFrame(data)
-df["date"] = pd.to_datetime(df["date"])
-
-df["gdp_growth"] = df["gdp_growth"].interpolate(method="linear")
-print(df)
+print("PyTorch version:", torch.__version__)
+print("CUDA available:", torch.cuda.is_available())
+print("CUDA version (PyTorch):", torch.version.cuda)
+if torch.cuda.is_available():
+    print("GPU Name:", torch.cuda.get_device_name(0))
