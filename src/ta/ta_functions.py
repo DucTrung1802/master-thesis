@@ -785,43 +785,58 @@ def add_roc(
 
 
 def add_macd(
-    df: pd.DataFrame, short_n: int = 12, long_n: int = 26, signal_n: int = 9
+    df: pd.DataFrame,
+    short_n: int | list[int] = 12,
+    long_n: int | list[int] = 26,
+    signal_n: int | list[int] = 9,
 ) -> pd.DataFrame:
     """
-    Add Moving Average Convergence/Divergence (MACD) to the dataframe.
+    Add Moving Average Convergence/Divergence (MACD) to the DataFrame.
 
-    MACD is calculated as the difference between a short-term EMA
-    and a long-term EMA. A signal line (EMA of MACD) is also added.
+    Default popular MACD parameters:
+        short_n = 12, long_n = 26, signal_n = 9
 
     Parameters
     ----------
     df : pd.DataFrame
         DataFrame with at least a 'close' column.
-    short_n : int, default 12
-        Period for short-term EMA.
-    long_n : int, default 26
-        Period for long-term EMA.
-    signal_n : int, default 9
-        Period for the signal line EMA.
+    short_n : int or list[int], optional
+        Short-term EMA period(s). Default 12.
+    long_n : int or list[int], optional
+        Long-term EMA period(s). Default 26.
+    signal_n : int or list[int], optional
+        Signal line EMA period(s). Default 9.
 
     Returns
     -------
     pd.DataFrame
-        Original DataFrame with added columns:
-        - 'macd_{short_n}_{long_n}'
-        - 'macd_signal_{signal_n}'
-        - 'macd_hist_{short_n}_{long_n}_{signal_n}'
+        Original DataFrame with added MACD columns:
+        - 'macd_{short}_{long}'
+        - 'macd_signal_{signal}'
+        - 'macd_hist_{short}_{long}_{signal}'
     """
-    short_ema = df["close"].ewm(span=short_n, adjust=False).mean()
-    long_ema = df["close"].ewm(span=long_n, adjust=False).mean()
+    df = df.copy()
 
-    macd = short_ema - long_ema
-    signal = macd.ewm(span=signal_n, adjust=False).mean()
-    hist = macd - signal
+    # Ensure lists for iteration
+    short_list = [short_n] if isinstance(short_n, int) else list(short_n)
+    long_list = [long_n] if isinstance(long_n, int) else list(long_n)
+    signal_list = [signal_n] if isinstance(signal_n, int) else list(signal_n)
 
-    df[f"macd_{short_n}_{long_n}"] = macd
-    df[f"macd_signal_{signal_n}"] = signal
-    df[f"macd_hist_{short_n}_{long_n}_{signal_n}"] = hist
+    for s in short_list:
+        for l in long_list:
+            if l <= s:
+                continue  # long EMA must be greater than short EMA
+            macd_series = (
+                df["close"].ewm(span=s, adjust=False).mean()
+                - df["close"].ewm(span=l, adjust=False).mean()
+            )
+            for sig in signal_list:
+                signal_series = macd_series.ewm(span=sig, adjust=False).mean()
+                hist_series = macd_series - signal_series
+
+                df[f"macd_{s}_{l}"] = macd_series
+                df[f"macd_signal_{sig}"] = signal_series
+                df[f"macd_hist_{s}_{l}_{sig}"] = hist_series
 
     return df
 
@@ -1897,11 +1912,11 @@ def main():
         order_by=[Table.VN_INDEX.Column.DATE.value],
     )
 
-    df = add_roc(df)
+    df = add_macd(df)
 
     plot_with_indicators(
         df,
-        indicators=["roc_*"],
+        indicators=["macd_*"],
     )
 
 
