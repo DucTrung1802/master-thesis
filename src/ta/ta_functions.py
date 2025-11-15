@@ -985,7 +985,7 @@ def add_ado(
     close_col: str = "close",
 ) -> pd.DataFrame:
     """
-    Add Larry Williams’ Accumulation/Distribution (AD) Oscillator to the DataFrame.
+    Add Larry Williams' Accumulation/Distribution (AD) Oscillator to the DataFrame.
 
     Formula:
         ADO = ((Close - Open) / (High - Low)) * 100
@@ -1019,7 +1019,7 @@ def add_ado(
     low = pd.to_numeric(df[low_col], errors="coerce").astype("float64")
 
     ado = ((close - open_) / (high - low).replace(0, np.nan)) * 100
-    df["ad"] = ado
+    df["ado"] = ado
 
     return df
 
@@ -1930,24 +1930,24 @@ def main():
             Condition(
                 column=Table.VN_INDEX.Column.DATE.value,
                 operator=SqlOperator.GREATER_THAN_OR_EQUAL_TO,
-                value="2020-01-01",
+                value="2022-01-01",
                 data_type=DataType.DATE,
             ),
             Condition(
                 column=Table.VN_INDEX.Column.DATE.value,
                 operator=SqlOperator.LESS_THAN_OR_EQUAL_TO,
-                value="2021-12-31",
+                value="2024-12-31",
                 data_type=DataType.DATE,
             ),
         ],
         order_by=[Table.VN_INDEX.Column.DATE.value],
     )
 
-    df = add_williams_r(df)
+    df = add_ado(df)
 
     plot_with_indicators(
         df,
-        indicators=["williams_*"],
+        indicators=["ado"],
     )
 
 
