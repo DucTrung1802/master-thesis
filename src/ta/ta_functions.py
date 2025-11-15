@@ -1776,6 +1776,7 @@ def plot_with_indicators(
     Plot price with optional indicators using regex patterns.
     - Left y-axis: price + price-style indicators
     - Right y-axis: oscillators / relative indicators
+    Prints a warning for any indicators that do not match DataFrame columns.
     """
 
     fig, ax1 = plt.subplots(figsize=(12, 6))
@@ -1794,15 +1795,25 @@ def plot_with_indicators(
 
     # Collect matched columns
     matched_columns = set()
+    unmatched_patterns = []
 
     for pattern in indicators:
         regex = re.compile(pattern.replace("*", ".*"))  # simple wildcard -> regex
-        for col in df.columns:
-            if regex.fullmatch(col):
-                matched_columns.add(col)
+        matched = [col for col in df.columns if regex.fullmatch(col)]
+        if matched:
+            matched_columns.update(matched)
+        else:
+            unmatched_patterns.append(pattern)
 
+    # Print warnings for unmatched indicators
+    if unmatched_patterns:
+        print(
+            f"Warning: The following indicators did not match any columns: {unmatched_patterns}"
+        )
+
+    # Plot matched columns
     for col in sorted(matched_columns):
-        ax2.plot(df["date"], df[col], label=col, linestyle="--")
+        ax2.plot(df[time_column_name], df[col], label=col, linestyle="--")
 
     ax1.set_xlabel("Date")
     ax1.set_ylabel("Price / Price-based Indicators")
