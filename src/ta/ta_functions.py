@@ -735,35 +735,51 @@ def add_rsi(
     return df
 
 
-def add_roc(df: pd.DataFrame, n: int = 14, column_name: str = "close") -> pd.DataFrame:
+def add_roc(
+    df: pd.DataFrame,
+    n: int | list[int] | None = None,
+    column_name: str = "close",
+    default_roc_periods: list[int] = None,
+) -> pd.DataFrame:
     """
     Add Rate of Change (ROC) indicator to the DataFrame.
 
-    ROC measures the percentage change in the price compared to
-    the price n periods ago, indicating the speed of price movements.
+    Default popular ROC periods: 9, 12, 14, 20, 25
 
     Parameters
     ----------
     df : pd.DataFrame
-        Input DataFrame that must contain the specified column (default is 'close').
-    n : int, optional
-        Lookback period for ROC calculation (default is 14).
+        Input DataFrame containing the target column.
+    n : int or list[int], optional
+        Lookback period(s) for ROC. If None, popular defaults are used.
     column_name : str, optional
-        Name of the column to calculate ROC on. Defaults to 'close'.
+        Column to calculate ROC on. Default is 'close'.
+    default_roc_periods : list[int], optional
+        Override the default ROC periods.
 
     Returns
     -------
     pd.DataFrame
-        Copy of the input DataFrame with an added column 'roc_{n}'.
+        DataFrame with added 'roc_{period}' columns.
     """
     validate_column(df, column_name)
     df = df.copy()
 
-    close = np.asarray(df[column_name], dtype="float64")
-    roc = (
-        (pd.Series(close) - pd.Series(close).shift(n)) / pd.Series(close).shift(n) * 100
-    )
-    df[f"roc_{n}"] = roc
+    if default_roc_periods is None:
+        default_roc_periods = [9, 12, 14, 20, 25]
+
+    if n is None:
+        periods = default_roc_periods
+    elif isinstance(n, int):
+        periods = [n]
+    else:
+        periods = list(n)
+
+    close = pd.Series(df[column_name], dtype="float64")
+
+    for period in periods:
+        roc = ((close - close.shift(period)) / close.shift(period)) * 100
+        df[f"roc_{period}"] = roc
 
     return df
 
@@ -1868,24 +1884,24 @@ def main():
             Condition(
                 column=Table.VN_INDEX.Column.DATE.value,
                 operator=SqlOperator.GREATER_THAN_OR_EQUAL_TO,
-                value="2022-05-01",
+                value="2020-01-01",
                 data_type=DataType.DATE,
             ),
             Condition(
                 column=Table.VN_INDEX.Column.DATE.value,
                 operator=SqlOperator.LESS_THAN_OR_EQUAL_TO,
-                value="2023-12-31",
+                value="2021-12-31",
                 data_type=DataType.DATE,
             ),
         ],
         order_by=[Table.VN_INDEX.Column.DATE.value],
     )
 
-    df = add_ema(df)
+    df = add_roc(df)
 
     plot_with_indicators(
         df,
-        indicators=["close_ema_*"],
+        indicators=["roc_*"],
     )
 
 
