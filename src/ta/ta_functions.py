@@ -96,30 +96,57 @@ def add_sma(
     return df
 
 
-def add_ema(df: pd.DataFrame, n: int, column_name: str = "close") -> pd.DataFrame:
+def add_ema(
+    df: pd.DataFrame,
+    n: int | list[int] | None = None,
+    column_name: str = "close",
+    default_ema_periods: list[int] = None,
+) -> pd.DataFrame:
     """
-    Add an Exponential Moving Average (EMA) column to the DataFrame.
+    Add one or multiple Exponential Moving Average (EMA) columns.
 
-    The EMA applies exponentially decreasing weights, giving more
-    significance to recent values from the specified column.
+    Default EMA values reflect commonly used technical analysis periods:
+    12, 26, 50, 100, 200.
 
     Parameters
     ----------
     df : pd.DataFrame
-        Input DataFrame that must contain the specified column (default is 'close').
-    n : int
-        Span for the EMA calculation.
+        Input DataFrame containing the target column.
+    n : int or list[int], optional
+        EMA span(s). If None, default popular spans will be used.
     column_name : str, optional
-        Name of the column to calculate the EMA on. Defaults to 'close'.
+        Column to compute EMA on. Default is 'close'.
+    default_ema_periods : list[int], optional
+        Override the predefined popular EMA spans if desired.
 
     Returns
     -------
     pd.DataFrame
-        Copy of the input DataFrame with an added column '{column_name}_ema_{n}'.
+        DataFrame including added EMA column(s).
     """
     validate_column(df, column_name)
     df = df.copy()
-    df[f"{column_name}_ema_{n}"] = df[column_name].ewm(span=n, adjust=False).mean()
+
+    # Default EMA spans widely used in trading
+    if default_ema_periods is None:
+        default_ema_periods = [12, 26, 50, 100, 200]
+
+    # If user provides nothing → use defaults
+    if n is None:
+        periods = default_ema_periods
+    # If user provides a single int
+    elif isinstance(n, int):
+        periods = [n]
+    # If user provides list of ints
+    else:
+        periods = list(n)
+
+    # Compute EMAs
+    for period in periods:
+        df[f"{column_name}_ema_{period}"] = (
+            df[column_name].ewm(span=period, adjust=False).mean()
+        )
+
     return df
 
 
@@ -1734,11 +1761,11 @@ def main():
         order_by=[Table.VN_INDEX.Column.DATE.value],
     )
 
-    df = add_sma(df)
+    df = add_ema(df)
 
     plot_with_indicators(
         df,
-        indicators=["close_sma_*"],
+        indicators=["close_ema_*"],
     )
 
 
