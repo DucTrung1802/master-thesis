@@ -678,44 +678,60 @@ def add_divergence_index(
 # region MOMENTUN INDICATORS
 
 
-def add_rsi(df: pd.DataFrame, n: int = 14, column_name: str = "close") -> pd.DataFrame:
+def add_rsi(
+    df: pd.DataFrame,
+    n: int | list[int] | None = None,
+    column_name: str = "close",
+    default_rsi_periods: list[int] = None,
+) -> pd.DataFrame:
     """
     Add Relative Strength Index (RSI) to the DataFrame.
 
-    The RSI measures the magnitude of recent price changes to evaluate
-    overbought or oversold conditions in the market.
+    Default popular RSI periods: 7, 14, 21, 28
 
     Parameters
     ----------
     df : pd.DataFrame
-        Input DataFrame that must contain the specified column (default is 'close').
-    n : int, optional
-        Lookback period for RSI calculation (default is 14).
+        Input DataFrame containing the target column.
+    n : int or list[int], optional
+        RSI lookback period(s). If None, popular defaults are used.
     column_name : str, optional
-        Name of the column to calculate RSI on. Defaults to 'close'.
+        Column to calculate RSI on. Default is 'close'.
+    default_rsi_periods : list[int], optional
+        Override the default RSI periods.
 
     Returns
     -------
     pd.DataFrame
-        Copy of the input DataFrame with an added column 'rsi_{n}'.
+        DataFrame with added 'rsi_{period}' columns.
     """
     validate_column(df, column_name)
     df = df.copy()
 
-    # Ensure float array to avoid Decimal issues
+    if default_rsi_periods is None:
+        default_rsi_periods = [7, 14, 21, 28]
+
+    if n is None:
+        periods = default_rsi_periods
+    elif isinstance(n, int):
+        periods = [n]
+    else:
+        periods = list(n)
+
     close = np.asarray(df[column_name], dtype="float64")
     delta = np.diff(close, prepend=close[0])
-
     gain = np.where(delta > 0, delta, 0.0)
     loss = np.where(delta < 0, -delta, 0.0)
 
-    avg_gain = pd.Series(gain).rolling(n, min_periods=n).mean()
-    avg_loss = pd.Series(loss).rolling(n, min_periods=n).mean()
+    for period in periods:
+        avg_gain = pd.Series(gain).rolling(period, min_periods=period).mean()
+        avg_loss = pd.Series(loss).rolling(period, min_periods=period).mean()
 
-    rs = avg_gain / avg_loss.replace(0, np.nan)
-    rsi = 100 - (100 / (1 + rs))
+        rs = avg_gain / avg_loss.replace(0, np.nan)
+        rsi = 100 - (100 / (1 + rs))
 
-    df[f"rsi_{n}"] = rsi
+        df[f"rsi_{period}"] = rsi
+
     return df
 
 
