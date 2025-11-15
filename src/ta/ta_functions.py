@@ -922,48 +922,57 @@ def add_stochastic(
 
 def add_williams_r(
     df: pd.DataFrame,
-    n: int = 14,
+    n: int | list[int] | None = None,
     high_col: str = "high",
     low_col: str = "low",
     close_col: str = "close",
+    default_periods: list[int] = None,
 ) -> pd.DataFrame:
     """
-    Add William's %R indicator to the DataFrame.
+    Add Williams %R indicator to the DataFrame.
 
-    %R = (HighestHigh - Close) / (HighestHigh - LowestLow) * -100
+    Default popular periods: 9, 14, 21
 
     Parameters
     ----------
     df : pd.DataFrame
-        Input DataFrame that must contain the specified high, low, and close columns.
-    n : int, optional
-        Lookback period for calculation (default is 14).
-    high_col : str, optional
-        Name of the high price column. Defaults to 'high'.
-    low_col : str, optional
-        Name of the low price column. Defaults to 'low'.
-    close_col : str, optional
-        Name of the close price column. Defaults to 'close'.
+        Input DataFrame with high, low, close columns.
+    n : int or list[int], optional
+        Lookback period(s). If None, popular defaults are used.
+    high_col, low_col, close_col : str, optional
+        Column names for high, low, close prices.
+    default_periods : list[int], optional
+        Override the default periods.
 
     Returns
     -------
     pd.DataFrame
-        Copy of the input DataFrame with an added column 'williams_r_{n}'.
+        DataFrame with added 'williams_r_{period}' columns.
     """
     for col in [high_col, low_col, close_col]:
         validate_column(df, col)
 
     df = df.copy()
 
+    if default_periods is None:
+        default_periods = [9, 14, 21]
+
+    if n is None:
+        periods = default_periods
+    elif isinstance(n, int):
+        periods = [n]
+    else:
+        periods = list(n)
+
     close = pd.to_numeric(df[close_col], errors="coerce").astype("float64")
     high = pd.to_numeric(df[high_col], errors="coerce").astype("float64")
     low = pd.to_numeric(df[low_col], errors="coerce").astype("float64")
 
-    highest_high = high.rolling(window=n, min_periods=1).max()
-    lowest_low = low.rolling(window=n, min_periods=1).min()
-
-    williams_r = (highest_high - close) / (highest_high - lowest_low) * -100
-    df[f"williams_r_{n}"] = williams_r
+    for period in periods:
+        highest_high = high.rolling(window=period, min_periods=1).max()
+        lowest_low = low.rolling(window=period, min_periods=1).min()
+        williams_r = (highest_high - close) / (highest_high - lowest_low) * -100
+        df[f"williams_r_{period}"] = williams_r
 
     return df
 
@@ -1934,11 +1943,11 @@ def main():
         order_by=[Table.VN_INDEX.Column.DATE.value],
     )
 
-    df = add_macd(df)
+    df = add_williams_r(df)
 
     plot_with_indicators(
         df,
-        indicators=["macd_*"],
+        indicators=["williams_*"],
     )
 
 
