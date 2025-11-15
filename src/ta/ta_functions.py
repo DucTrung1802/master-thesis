@@ -843,57 +843,79 @@ def add_macd(
 
 def add_stochastic(
     df: pd.DataFrame,
-    k_period: int = 14,
-    d_period: int = 3,
+    k_period: int | list[int] | None = None,
+    d_period: int | list[int] | None = None,
     high_col: str = "high",
     low_col: str = "low",
     close_col: str = "close",
+    default_k_periods: list[int] = None,
+    default_d_periods: list[int] = None,
 ) -> pd.DataFrame:
     """
     Add Stochastic Oscillator (%K and %D) to the DataFrame.
 
-    %K = (Close - LowestLow) / (HighestHigh - LowestLow) * 100
-    %D = SMA of %K
+    Default popular periods:
+        %K: 14
+        %D: 3
 
     Parameters
     ----------
     df : pd.DataFrame
-        Input DataFrame that must contain the specified high, low, and close columns.
-    k_period : int, optional
-        Lookback period for %K calculation (default is 14).
-    d_period : int, optional
-        Lookback period for %D calculation (smoothing of %K, default is 3).
-    high_col : str, optional
-        Name of the high price column. Defaults to 'high'.
-    low_col : str, optional
-        Name of the low price column. Defaults to 'low'.
-    close_col : str, optional
-        Name of the close price column. Defaults to 'close'.
+        Input DataFrame with high, low, close columns.
+    k_period : int or list[int], optional
+        Lookback period(s) for %K. If None, default 14 is used.
+    d_period : int or list[int], optional
+        Lookback period(s) for %D. If None, default 3 is used.
+    high_col, low_col, close_col : str, optional
+        Column names for high, low, close prices.
+    default_k_periods : list[int], optional
+        Override default %K periods.
+    default_d_periods : list[int], optional
+        Override default %D periods.
 
     Returns
     -------
     pd.DataFrame
-        Copy of the input DataFrame with added columns:
-        - 'stoch_k_{k_period}'
-        - 'stoch_d_{d_period}'
+        DataFrame with added 'stoch_k_{k}' and 'stoch_d_{d}' columns.
     """
     for col in [high_col, low_col, close_col]:
         validate_column(df, col)
 
     df = df.copy()
 
+    # Default periods
+    if default_k_periods is None:
+        default_k_periods = [14]
+    if default_d_periods is None:
+        default_d_periods = [3]
+
+    if k_period is None:
+        k_list = default_k_periods
+    elif isinstance(k_period, int):
+        k_list = [k_period]
+    else:
+        k_list = list(k_period)
+
+    if d_period is None:
+        d_list = default_d_periods
+    elif isinstance(d_period, int):
+        d_list = [d_period]
+    else:
+        d_list = list(d_period)
+
     close = pd.to_numeric(df[close_col], errors="coerce").astype("float64")
     high = pd.to_numeric(df[high_col], errors="coerce").astype("float64")
     low = pd.to_numeric(df[low_col], errors="coerce").astype("float64")
 
-    low_min = low.rolling(window=k_period, min_periods=1).min()
-    high_max = high.rolling(window=k_period, min_periods=1).max()
+    for k in k_list:
+        low_min = low.rolling(window=k, min_periods=1).min()
+        high_max = high.rolling(window=k, min_periods=1).max()
+        stoch_k = 100 * (close - low_min) / (high_max - low_min)
+        df[f"stoch_k_{k}"] = stoch_k
 
-    stoch_k = 100 * (close - low_min) / (high_max - low_min)
-    stoch_d = stoch_k.rolling(window=d_period, min_periods=1).mean()
-
-    df[f"stoch_k_{k_period}"] = stoch_k
-    df[f"stoch_d_{d_period}"] = stoch_d
+        for d in d_list:
+            stoch_d = stoch_k.rolling(window=d, min_periods=1).mean()
+            df[f"stoch_d_{d}"] = stoch_d
 
     return df
 
