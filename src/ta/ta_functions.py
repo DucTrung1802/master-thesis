@@ -1,3 +1,4 @@
+import re
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -58,9 +59,11 @@ def validate_column(df: pd.DataFrame, column_name: str) -> None:
 
 
 # region TREND INDICATORS
-def add_sma(df: pd.DataFrame, n: int, column_name: str = "close") -> pd.DataFrame:
+def add_sma(
+    df: pd.DataFrame, n: list[int] = None, column_name: str = "close"
+) -> pd.DataFrame:
     """
-    Add a Simple Moving Average (SMA) column to the DataFrame.
+    Add one or multiple Simple Moving Average (SMA) columns to the DataFrame.
 
     The SMA is the unweighted mean of the previous `n` values from the specified column.
 
@@ -68,21 +71,28 @@ def add_sma(df: pd.DataFrame, n: int, column_name: str = "close") -> pd.DataFram
     ----------
     df : pd.DataFrame
         Input DataFrame that must contain the specified column (default is 'close').
-    n : int
-        Window size for the SMA.
+    n : list[int], optional
+        List of window sizes for the SMAs. Defaults to [50, 100, 200].
     column_name : str, optional
         Name of the column to calculate the SMA on. Defaults to 'close'.
 
     Returns
     -------
     pd.DataFrame
-        Copy of the input DataFrame with an added column '{column_name}_sma_{n}'.
+        Copy of the input DataFrame with added SMA columns for all values in `n`.
     """
     validate_column(df, column_name)
+
+    if n is None:
+        n = [50, 100, 200]
+
     df = df.copy()
-    df[f"{column_name}_sma_{n}"] = (
-        df[column_name].rolling(window=n, min_periods=1).mean()
-    )
+
+    for window in n:
+        df[f"{column_name}_sma_{window}"] = (
+            df[column_name].rolling(window=window, min_periods=1).mean()
+        )
+
     return df
 
 
@@ -1636,26 +1646,43 @@ def add_demand_oscillator(
 # endregion VOLUME INDICATORS
 
 
-def plot_with_indicators(df: pd.DataFrame, indicators: list):
+def plot_with_indicators(
+    df: pd.DataFrame,
+    indicators: list,
+    time_column_name: str = "date",
+    price_column_name: str = "close",
+):
     """
-    Plot price with optional indicators using up to 2 y-axes:
-      - Left y-axis for price-based indicators
-      - Right y-axis for oscillators or relative indicators
+    Plot price with optional indicators using regex patterns.
+    - Left y-axis: price + price-style indicators
+    - Right y-axis: oscillators / relative indicators
     """
+
     fig, ax1 = plt.subplots(figsize=(12, 6))
 
     # Main price axis
-    ax1.plot(df["date"], df["close"], label="Close", color="black", linewidth=2)
-    # ax1.plot(df["date"], df["volume"], label="Volume", color="brown", linewidth=2)
+    ax1.plot(
+        df[time_column_name],
+        df[price_column_name],
+        label=price_column_name,
+        color="black",
+        linewidth=2,
+    )
 
     # Second axis for oscillators
     ax2 = ax1.twinx()
 
-    for col in indicators:
-        if col not in df.columns:
-            continue
+    # Collect matched columns
+    matched_columns = set()
 
-        ax2.plot(df["date"], df[col], label=col.upper(), linestyle="--")
+    for pattern in indicators:
+        regex = re.compile(pattern.replace("*", ".*"))  # simple wildcard -> regex
+        for col in df.columns:
+            if regex.fullmatch(col):
+                matched_columns.add(col)
+
+    for col in sorted(matched_columns):
+        ax2.plot(df["date"], df[col], label=col, linestyle="--")
 
     ax1.set_xlabel("Date")
     ax1.set_ylabel("Price / Price-based Indicators")
@@ -1694,26 +1721,24 @@ def main():
             Condition(
                 column=Table.VN_INDEX.Column.DATE.value,
                 operator=SqlOperator.GREATER_THAN_OR_EQUAL_TO,
-                value="2025-01-01",
+                value="2022-05-01",
                 data_type=DataType.DATE,
             ),
             Condition(
                 column=Table.VN_INDEX.Column.DATE.value,
                 operator=SqlOperator.LESS_THAN_OR_EQUAL_TO,
-                value="2025-06-30",
+                value="2023-12-31",
                 data_type=DataType.DATE,
             ),
         ],
         order_by=[Table.VN_INDEX.Column.DATE.value],
     )
 
-    df = add_demand_oscillator(df)
+    df = add_sma(df)
 
     plot_with_indicators(
         df,
-        indicators=[
-            "demand_osc",
-        ],
+        indicators=["close_sma_*"],
     )
 
 
