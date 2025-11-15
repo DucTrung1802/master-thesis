@@ -150,37 +150,57 @@ def add_ema(
     return df
 
 
-def add_lwma(df: pd.DataFrame, n: int, column_name: str = "close") -> pd.DataFrame:
+def add_lwma(
+    df: pd.DataFrame,
+    n: int | list[int] | None = None,
+    column_name: str = "close",
+    default_lwma_periods: list[int] = None,
+) -> pd.DataFrame:
     """
-    Add a Linear Weighted Moving Average (LWMA) column to the DataFrame.
+    Add one or multiple Linear Weighted Moving Average (LWMA) columns.
 
-    The LWMA assigns linearly increasing weights to values within the
-    window, where the most recent value gets the highest weight (n),
-    and the oldest gets weight 1.
+    Default LWMA values:
+        12, 26, 50, 100, 200
 
     Parameters
     ----------
     df : pd.DataFrame
-        Input DataFrame that must contain the specified column (default is 'close').
-    n : int
-        Window size for the LWMA.
+        Input DataFrame containing the target column.
+    n : int or list[int], optional
+        LWMA window size(s). If None, default periods are used.
     column_name : str, optional
-        Name of the column to calculate the LWMA on. Defaults to 'close'.
+        Column to compute LWMA on. Default is 'close'.
+    default_lwma_periods : list[int], optional
+        Override the predefined LWMA spans.
 
     Returns
     -------
     pd.DataFrame
-        Copy of the input DataFrame with an added column '{column_name}_lwma_{n}'.
+        DataFrame including added LWMA column(s).
     """
     validate_column(df, column_name)
     df = df.copy()
-    weights = np.arange(1, n + 1)
 
-    df[f"{column_name}_lwma_{n}"] = (
-        df[column_name]
-        .rolling(window=n)
-        .apply(lambda x: np.dot(x, weights) / weights.sum(), raw=True)
-    )
+    # Default LWMA periods you requested
+    if default_lwma_periods is None:
+        default_lwma_periods = [12, 26, 50, 100, 200]
+
+    # Determine which periods to compute
+    if n is None:
+        periods = default_lwma_periods
+    elif isinstance(n, int):
+        periods = [n]
+    else:
+        periods = list(n)
+
+    # Compute LWMA for each period
+    for period in periods:
+        weights = np.arange(1, period + 1)
+        df[f"{column_name}_lwma_{period}"] = (
+            df[column_name]
+            .rolling(window=period)
+            .apply(lambda x: np.dot(x, weights) / weights.sum(), raw=True)
+        )
 
     return df
 
@@ -189,7 +209,7 @@ def add_wma(df: pd.DataFrame, n: int, column_name: str = "close") -> pd.DataFram
     """
     Add Wilder's Moving Average (WMA) column to the DataFrame.
 
-    Wilder’s MA is similar to an EMA but uses an alpha = 1/n.
+    Wilder's MA is similar to an EMA but uses an alpha = 1/n.
     It smooths value movements more slowly than a regular EMA.
 
     Parameters
