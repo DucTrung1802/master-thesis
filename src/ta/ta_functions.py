@@ -260,49 +260,63 @@ def add_wma(
 
 def add_adx(
     df: pd.DataFrame,
-    n: int = 14,
+    n: int | list[int] | None = None,
     high_col: str = "high",
     low_col: str = "low",
     close_col: str = "close",
+    default_adx_periods: list[int] = None,
 ) -> pd.DataFrame:
     """
-    Add the Average Directional Movement Index (ADX) and related indicators to the DataFrame.
+    Add the Average Directional Movement Index (ADX) and related indicators
+    (+DI, -DI) to the DataFrame.
 
-    The ADX measures the strength of a trend by comparing the values of the
-    positive directional indicator (+DI) and negative directional indicator (-DI).
-    It is based on Wilder’s smoothing technique and helps identify whether a market
-    is trending or ranging.
+    Default popular ADX periods:
+        7, 14, 20, 28, 50
 
     Parameters
     ----------
     df : pd.DataFrame
-        Input DataFrame that must contain the specified high, low, and close columns.
-    n : int, optional
-        Period for the ADX calculation. Defaults to 14.
+        Input DataFrame containing high, low, close columns.
+    n : int or list[int], optional
+        ADX period(s). If None, use popular defaults.
     high_col : str, optional
-        Name of the high price column. Defaults to 'high'.
+        Column name for high prices. Default 'high'.
     low_col : str, optional
-        Name of the low price column. Defaults to 'low'.
+        Column name for low prices. Default 'low'.
     close_col : str, optional
-        Name of the close price column. Defaults to 'close'.
+        Column name for close prices. Default 'close'.
+    default_adx_periods : list[int], optional
+        Optionally override the default period list.
 
     Returns
     -------
     pd.DataFrame
-        Copy of the input DataFrame with added columns:
-        '+di', '-di', and 'adx_{n}'.
+        DataFrame with +di, -di, and adx_{period} columns added.
     """
+
+    # Validate required columns
     for col in [high_col, low_col, close_col]:
         validate_column(df, col)
 
     df = df.copy()
 
-    # Ensure numeric types
+    # Numeric enforcement
     df[high_col] = pd.to_numeric(df[high_col], errors="coerce")
     df[low_col] = pd.to_numeric(df[low_col], errors="coerce")
     df[close_col] = pd.to_numeric(df[close_col], errors="coerce")
 
-    # True Range (TR)
+    # Defaults
+    if default_adx_periods is None:
+        default_adx_periods = [7, 14, 20, 28, 50]
+
+    if n is None:
+        periods = default_adx_periods
+    elif isinstance(n, int):
+        periods = [n]
+    else:
+        periods = list(n)
+
+    # Compute directional movement values once
     df["tr"] = np.maximum(
         df[high_col] - df[low_col],
         np.maximum(
@@ -311,26 +325,41 @@ def add_adx(
         ),
     )
 
-    # Directional Movement
-    df["+dm"] = df[high_col].diff()
-    df["-dm"] = -df[low_col].diff()
-    df["+dm"] = df["+dm"].where((df["+dm"] > df["-dm"]) & (df["+dm"] > 0), 0.0)
-    df["-dm"] = df["-dm"].where((df["-dm"] > df["+dm"]) & (df["-dm"] > 0), 0.0)
+    df["+dm"] = (
+        df[high_col]
+        .diff()
+        .where(
+            (df[high_col].diff() > df[low_col].diff() * -1) & (df[high_col].diff() > 0),
+            0.0,
+        )
+    )
 
-    # Wilder’s smoothing (RMA approximation using rolling mean)
-    tr_n = df["tr"].rolling(window=n, min_periods=1).sum()
-    plus_dm_n = df["+dm"].rolling(window=n, min_periods=1).sum()
-    minus_dm_n = df["-dm"].rolling(window=n, min_periods=1).sum()
+    df["-dm"] = (-df[low_col].diff()).where(
+        (-df[low_col].diff() > df[high_col].diff()) & (-df[low_col].diff() > 0), 0.0
+    )
 
-    # +DI and -DI
-    df["+di"] = 100 * (plus_dm_n / tr_n)
-    df["-di"] = 100 * (minus_dm_n / tr_n)
+    # +DI and -DI are same for all ADX periods, so compute once using raw DM/TR
+    # Smoothing is applied separately for each n
+    base_tr = df["tr"]
+    base_plus_dm = df["+dm"]
+    base_minus_dm = df["-dm"]
 
-    # DX
-    df["dx"] = (100 * abs(df["+di"] - df["-di"]) / (df["+di"] + df["-di"])).fillna(0)
+    # Compute ADX for each period
+    for period in periods:
+        tr_n = base_tr.rolling(window=period, min_periods=1).sum()
+        plus_dm_n = base_plus_dm.rolling(window=period, min_periods=1).sum()
+        minus_dm_n = base_minus_dm.rolling(window=period, min_periods=1).sum()
 
-    # ADX = smoothed DX
-    df[f"adx_{n}"] = df["dx"].rolling(window=n, min_periods=1).mean()
+        df[f"+di_{period}"] = 100 * (plus_dm_n / tr_n)
+        df[f"-di_{period}"] = 100 * (minus_dm_n / tr_n)
+
+        dx = (
+            100
+            * abs(df[f"+di_{period}"] - df[f"-di_{period}"])
+            / (df[f"+di_{period}"] + df[f"-di_{period}"]).replace(0, np.nan)
+        ).fillna(0)
+
+        df[f"adx_{period}"] = dx.rolling(window=period, min_periods=1).mean()
 
     return df
 
