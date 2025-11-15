@@ -205,31 +205,56 @@ def add_lwma(
     return df
 
 
-def add_wma(df: pd.DataFrame, n: int, column_name: str = "close") -> pd.DataFrame:
+def add_wma(
+    df: pd.DataFrame,
+    n: int | list[int] | None = None,
+    column_name: str = "close",
+    default_wma_periods: list[int] = None,
+) -> pd.DataFrame:
     """
-    Add Wilder's Moving Average (WMA) column to the DataFrame.
+    Add one or multiple Wilder's Moving Average (WMA) columns.
 
-    Wilder's MA is similar to an EMA but uses an alpha = 1/n.
-    It smooths value movements more slowly than a regular EMA.
+    Default WMA values:
+        7, 14, 21, 50, 100
 
     Parameters
     ----------
     df : pd.DataFrame
-        Input DataFrame that must contain the specified column (default is 'close').
-    n : int
-        Period for the WMA calculation.
+        Input DataFrame containing the target column.
+    n : int or list[int], optional
+        WMA period(s). If None, default popular periods are used.
     column_name : str, optional
-        Name of the column to calculate the WMA on. Defaults to 'close'.
+        Column to compute WMA on. Default is 'close'.
+    default_wma_periods : list[int], optional
+        Override the predefined WMA periods.
 
     Returns
     -------
     pd.DataFrame
-        Copy of the input DataFrame with an added column '{column_name}_wma_{n}'.
+        DataFrame including added WMA column(s).
     """
     validate_column(df, column_name)
     df = df.copy()
-    alpha = 1 / n
-    df[f"{column_name}_wma_{n}"] = df[column_name].ewm(alpha=alpha, adjust=False).mean()
+
+    # Default Wilder MA periods
+    if default_wma_periods is None:
+        default_wma_periods = [7, 14, 21, 50, 100]
+
+    # Determine which periods to compute
+    if n is None:
+        periods = default_wma_periods
+    elif isinstance(n, int):
+        periods = [n]
+    else:
+        periods = list(n)
+
+    # Compute Wilder MA for each period
+    for period in periods:
+        alpha = 1 / period
+        df[f"{column_name}_wma_{period}"] = (
+            df[column_name].ewm(alpha=alpha, adjust=False).mean()
+        )
+
     return df
 
 
