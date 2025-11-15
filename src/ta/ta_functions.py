@@ -369,40 +369,59 @@ def add_adx(
 
 # region VOLATILITY INDICATORS
 def add_bollinger_bands(
-    df: pd.DataFrame, n: int = 20, k: float = 2.0, column_name: str = "close"
+    df: pd.DataFrame,
+    n: int | list[int] | None = None,
+    k: float = 2.0,
+    column_name: str = "close",
+    default_bb_periods: list[int] = None,
 ) -> pd.DataFrame:
     """
     Add Bollinger Bands (upper, middle, lower) to the DataFrame.
 
-    Bollinger Bands consist of a middle band (SMA) and upper/lower bands
-    calculated as the SMA ± k times the rolling standard deviation. They
-    are used to measure volatility and identify potential overbought/oversold conditions.
+    Default popular Bollinger Band periods:
+        20 (SMA period), standard deviation multiplier k=2.0
 
     Parameters
     ----------
     df : pd.DataFrame
-        Input DataFrame that must contain the specified column (default is 'close').
-    n : int, optional
-        Period for SMA and rolling standard deviation (default is 20).
+        Input DataFrame containing the target column.
+    n : int or list[int], optional
+        SMA period(s) for Bollinger Bands. If None, default period 20 is used.
     k : float, optional
-        Number of standard deviations for the upper/lower bands (default is 2.0).
+        Number of standard deviations for upper/lower bands (default 2.0)
     column_name : str, optional
-        Name of the column to calculate the Bollinger Bands on. Defaults to 'close'.
+        Column to calculate Bollinger Bands on. Default is 'close'.
+    default_bb_periods : list[int], optional
+        Override the default SMA period(s).
 
     Returns
     -------
     pd.DataFrame
-        Copy of the input DataFrame with added columns:
-        '{column_name}_bb_middle_{n}', '{column_name}_bb_upper_{n}', '{column_name}_bb_lower_{n}'.
+        DataFrame with Bollinger Bands added:
+        '{column_name}_bb_middle_{n}', '{column_name}_bb_upper_{n}', '{column_name}_bb_lower_{n}'
     """
     validate_column(df, column_name)
     df = df.copy()
-    sma = df[column_name].rolling(window=n, min_periods=1).mean()
-    std = df[column_name].rolling(window=n, min_periods=1).std()
 
-    df[f"{column_name}_bb_middle_{n}"] = sma
-    df[f"{column_name}_bb_upper_{n}"] = sma + (k * std)
-    df[f"{column_name}_bb_lower_{n}"] = sma - (k * std)
+    # Default period
+    if default_bb_periods is None:
+        default_bb_periods = [20]
+
+    # Determine periods to compute
+    if n is None:
+        periods = default_bb_periods
+    elif isinstance(n, int):
+        periods = [n]
+    else:
+        periods = list(n)
+
+    for period in periods:
+        sma = df[column_name].rolling(window=period, min_periods=1).mean()
+        std = df[column_name].rolling(window=period, min_periods=1).std()
+
+        df[f"{column_name}_bb_middle_{period}"] = sma
+        df[f"{column_name}_bb_upper_{period}"] = sma + (k * std)
+        df[f"{column_name}_bb_lower_{period}"] = sma - (k * std)
 
     return df
 
