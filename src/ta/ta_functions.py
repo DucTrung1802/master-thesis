@@ -1252,37 +1252,57 @@ def add_vortex(
 
 # region VOLUME INDICATORS
 def add_obv(
-    df: pd.DataFrame, close_col: str = "close", volume_col: str = "volume"
+    df: pd.DataFrame,
+    close_col: str = "close",
+    volume_col: str = "volume",
+    ema_periods: list[int] = None,
+    sma_periods: list[int] = None,
 ) -> pd.DataFrame:
     """
-    Add On-Balance Volume (OBV) indicator to the DataFrame.
+    Add On-Balance Volume (OBV) and optional smoothed OBV indicators.
 
-    OBV measures cumulative buying/selling pressure by adding
-    volume on up days and subtracting volume on down days.
+    Popular OBV smoothing periods:
+        EMA: 20, 50, 100
+        SMA: 10, 20, 50
 
     Parameters
     ----------
     df : pd.DataFrame
-        Input DataFrame that must contain the specified close and volume columns.
+        Input DataFrame containing close and volume columns.
     close_col : str, optional
         Name of the close price column. Defaults to 'close'.
     volume_col : str, optional
         Name of the volume column. Defaults to 'volume'.
+    ema_periods : list[int], optional
+        EMA smoothing periods for OBV. Defaults to [20, 50, 100].
+    sma_periods : list[int], optional
+        SMA smoothing periods for OBV. Defaults to [10, 20, 50].
 
     Returns
     -------
     pd.DataFrame
-        Copy of the input DataFrame with an added column 'obv'.
+        DataFrame with columns:
+            obv
+            obv_ema_{p}
+            obv_sma_{p}
     """
+
     for col in [close_col, volume_col]:
         validate_column(df, col)
 
     df = df.copy()
 
+    # Defaults for popular smoothing periods
+    if ema_periods is None:
+        ema_periods = [20, 50, 100]
+    if sma_periods is None:
+        sma_periods = [10, 20, 50]
+
     close = pd.to_numeric(df[close_col], errors="coerce").astype("float64")
     volume = pd.to_numeric(df[volume_col], errors="coerce").astype("float64")
 
-    obv = [0]  # start OBV at 0
+    # Base OBV
+    obv = [0]
     for i in range(1, len(close)):
         if close.iloc[i] > close.iloc[i - 1]:
             obv.append(obv[-1] + volume.iloc[i])
@@ -1292,6 +1312,14 @@ def add_obv(
             obv.append(obv[-1])
 
     df["obv"] = obv
+
+    # Add smoothed versions
+    for p in ema_periods:
+        df[f"obv_ema_{p}"] = df["obv"].ewm(span=p, adjust=False).mean()
+
+    for p in sma_periods:
+        df[f"obv_sma_{p}"] = df["obv"].rolling(p, min_periods=1).mean()
+
     return df
 
 
@@ -1997,11 +2025,11 @@ def main():
         order_by=[Table.VN_INDEX.Column.DATE.value],
     )
 
-    df = add_vortex(df)
+    df = add_obv(df)
 
     plot_with_indicators(
         df,
-        indicators=["vi_*14"],
+        indicators=["obv_*"],
     )
 
 
