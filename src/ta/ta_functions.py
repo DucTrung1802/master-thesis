@@ -1325,65 +1325,66 @@ def add_obv(
 
 def add_mfi(
     df: pd.DataFrame,
-    n: int = 14,
+    n_list: list[int] = None,
     high_col: str = "high",
     low_col: str = "low",
     close_col: str = "close",
     volume_col: str = "volume",
 ) -> pd.DataFrame:
     """
-    Add Money Flow Index (MFI) to the DataFrame.
+    Add Money Flow Index (MFI) indicators to the DataFrame for multiple popular periods.
 
-    The MFI uses price and volume to identify overbought/oversold
-    conditions, similar to RSI but volume-adjusted.
+    Popular MFI periods:
+        5 (very fast)
+        7 (fast)
+        10 (medium-fast)
+        14 (standard)
+        20 (slow)
 
     Parameters
     ----------
     df : pd.DataFrame
-        Input DataFrame that must contain the specified high, low, close, and volume columns.
-    n : int, optional
-        Lookback period for MFI calculation (default is 14).
-    high_col : str, optional
-        Name of the high price column. Defaults to 'high'.
-    low_col : str, optional
-        Name of the low price column. Defaults to 'low'.
-    close_col : str, optional
-        Name of the close price column. Defaults to 'close'.
-    volume_col : str, optional
-        Name of the volume column. Defaults to 'volume'.
+        Input DataFrame with high, low, close, and volume columns.
+    n_list : list[int], optional
+        List of MFI periods to compute. Defaults to [5, 7, 10, 14, 20].
+    high_col : str
+    low_col : str
+    close_col : str
+    volume_col : str
 
     Returns
     -------
     pd.DataFrame
-        Copy of the input DataFrame with an added column 'mfi_{n}'.
+        DataFrame with added columns: mfi_{n} for each n in n_list.
     """
     for col in [high_col, low_col, close_col, volume_col]:
         validate_column(df, col)
 
     df = df.copy()
 
+    if n_list is None:
+        n_list = [5, 7, 10, 14, 20]  # popular defaults
+
     high = pd.to_numeric(df[high_col], errors="coerce").astype("float64")
     low = pd.to_numeric(df[low_col], errors="coerce").astype("float64")
     close = pd.to_numeric(df[close_col], errors="coerce").astype("float64")
     volume = pd.to_numeric(df[volume_col], errors="coerce").astype("float64")
 
-    # Typical Price
     tp = (high + low + close) / 3
-
-    # Raw Money Flow
     rmf = tp * volume
 
-    # Positive & Negative Money Flow
     pos_mf = np.where(tp > tp.shift(1), rmf, 0.0)
     neg_mf = np.where(tp < tp.shift(1), rmf, 0.0)
 
-    # Sum over n periods
-    pos_mf_sum = pd.Series(pos_mf).rolling(n, min_periods=1).sum()
-    neg_mf_sum = pd.Series(neg_mf).rolling(n, min_periods=1).sum()
+    pos_mf_series = pd.Series(pos_mf)
+    neg_mf_series = pd.Series(neg_mf)
 
-    # Money Flow Index
-    mfi = 100 * (pos_mf_sum / (pos_mf_sum + neg_mf_sum))
-    df[f"mfi_{n}"] = mfi
+    for n in n_list:
+        pos_sum = pos_mf_series.rolling(n, min_periods=1).sum()
+        neg_sum = neg_mf_series.rolling(n, min_periods=1).sum()
+
+        mfi = 100 * (pos_sum / (pos_sum + neg_sum))
+        df[f"mfi_{n}"] = mfi
 
     return df
 
@@ -2025,11 +2026,11 @@ def main():
         order_by=[Table.VN_INDEX.Column.DATE.value],
     )
 
-    df = add_obv(df)
+    df = add_mfi(df)
 
     plot_with_indicators(
         df,
-        indicators=["obv_*"],
+        indicators=["mfi_*"],
     )
 
 
