@@ -1485,48 +1485,41 @@ def add_chaikin_ad(
 
 def add_cmf(
     df: pd.DataFrame,
-    n: int = 20,
+    periods: list[int] = None,
     high_col: str = "high",
     low_col: str = "low",
     close_col: str = "close",
     volume_col: str = "volume",
 ) -> pd.DataFrame:
     """
-    Add Chaikin’s Money Flow (CMF) indicator to the DataFrame.
+    Add Chaikin Money Flow (CMF) indicators for multiple popular periods.
 
-    CMF measures the amount of Money Flow Volume over a specific period.
-    It oscillates between -1 and +1, indicating buying/selling pressure.
-
-    Formula
-    -------
-    CLV = ((Close - Low) - (High - Close)) / (High - Low)
-    MFV = CLV * Volume
-    CMF = (Sum of MFV over n periods) / (Sum of Volume over n periods)
+    Popular CMF periods:
+        10, 20 (default), 21, 34, 50
 
     Parameters
     ----------
     df : pd.DataFrame
-        Input DataFrame that must contain the specified high, low, close, and volume columns.
-    n : int, optional
-        Lookback period for CMF calculation (default is 20).
-    high_col : str, optional
-        Name of the high price column. Defaults to 'high'.
-    low_col : str, optional
-        Name of the low price column. Defaults to 'low'.
-    close_col : str, optional
-        Name of the close price column. Defaults to 'close'.
-    volume_col : str, optional
-        Name of the volume column. Defaults to 'volume'.
+        Input DataFrame with high, low, close, and volume columns.
+    periods : list[int], optional
+        List of lookback periods for CMF. Defaults to [10, 20, 21, 34, 50].
+    high_col : str
+    low_col : str
+    close_col : str
+    volume_col : str
 
     Returns
     -------
     pd.DataFrame
-        Copy of the input DataFrame with an added column 'cmf_{n}'.
+        DataFrame with added columns: cmf_{n} for each period in periods.
     """
     for col in [high_col, low_col, close_col, volume_col]:
         validate_column(df, col)
 
     df = df.copy()
+
+    if periods is None:
+        periods = [10, 20, 21, 34, 50]
 
     high = pd.to_numeric(df[high_col], errors="coerce").astype("float64")
     low = pd.to_numeric(df[low_col], errors="coerce").astype("float64")
@@ -1536,6 +1529,7 @@ def add_cmf(
     clv = ((close - low) - (high - close)) / np.where(high != low, (high - low), 1e-10)
     mfv = clv * volume
 
+    for n in periods:
     cmf = (
         mfv.rolling(window=n, min_periods=1).sum()
         / volume.rolling(window=n, min_periods=1).sum()
