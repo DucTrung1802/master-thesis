@@ -1887,6 +1887,43 @@ def add_demand_oscillator(
 # endregion VOLUME INDICATORS
 
 
+def add_one_for_all_ta(df: pd.DataFrame) -> pd.DataFrame:
+    new_df = df.copy()
+    new_df = add_sma(new_df)
+    new_df = add_ema(new_df)
+    new_df = add_lwma(new_df)
+    new_df = add_wma(new_df)
+    new_df = add_adx(new_df)
+    new_df = add_bollinger_bands(new_df)
+    new_df = add_keltner_channel(new_df)
+    new_df = add_keltner_channel(new_df)
+    new_df = add_starc_band(new_df)
+    new_df = add_atr(new_df)
+    new_df = add_divergence_index(new_df)
+    new_df = add_rsi(new_df)
+    new_df = add_roc(new_df)
+    new_df = add_macd(new_df)
+    new_df = add_stochastic(new_df)
+    new_df = add_williams_r(new_df)
+    new_df = add_ado(new_df)
+    new_df = add_rvi(new_df)
+    new_df = add_tsi(new_df)
+    new_df = add_vortex(new_df)
+    new_df = add_obv(new_df)
+    new_df = add_mfi(new_df)
+    new_df = add_adl(new_df)
+    new_df = add_chaikin_ad(new_df)
+    new_df = add_cmf(new_df)
+    new_df = add_vroc(new_df)
+    new_df = add_eom(new_df)
+    new_df = add_pvi_nvi(new_df)
+    new_df = add_vw_macd(new_df)
+    new_df = add_kvo(new_df)
+    new_df = add_demand_oscillator(new_df)
+
+    return new_df
+
+
 def plot_with_indicators(
     df: pd.DataFrame,
     indicators: list,
@@ -1986,12 +2023,14 @@ def main():
         order_by=[Table.VN_INDEX.Column.DATE.value],
     )
 
-    df = add_demand_oscillator(df)
+    df = add_one_for_all_ta(df)
 
-    plot_with_indicators(
-        df,
-        indicators=["demand_*"],
-    )
+    # plot_with_indicators(
+    #     df,
+    #     indicators=["demand_*"],
+    # )
+
+    print(len(df.columns))
 
 
 if __name__ == "__main__":
