@@ -1539,37 +1539,41 @@ def add_cmf(
     return df
 
 
-def add_vroc(df: pd.DataFrame, n: int = 14, volume_col: str = "volume") -> pd.DataFrame:
+def add_vroc(
+    df: pd.DataFrame,
+    periods: list[int] = None,
+    volume_col: str = "volume",
+) -> pd.DataFrame:
     """
-    Add Volume Rate of Change (VROC) indicator to the DataFrame.
+    Add Volume Rate of Change (VROC) indicators for multiple popular periods.
 
-    VROC measures the percentage change in volume compared to
-    the volume n periods ago, indicating surges or drops in trading activity.
-
-    Formula
-    -------
-    VROC = (Volume_t - Volume_{t-n}) / Volume_{t-n} * 100
+    Popular VROC periods:
+        5, 10, 14 (default), 20, 50
 
     Parameters
     ----------
     df : pd.DataFrame
-        Input DataFrame that must contain the specified volume column.
-    n : int, optional
-        Lookback period for VROC calculation (default is 14).
+        Input DataFrame with a volume column.
+    periods : list[int], optional
+        List of lookback periods for VROC. Defaults to [5, 10, 14, 20, 50].
     volume_col : str, optional
         Name of the volume column. Defaults to 'volume'.
 
     Returns
     -------
     pd.DataFrame
-        Copy of the input DataFrame with an added column 'vroc_{n}'.
+        DataFrame with added columns: vroc_{n} for each period in periods.
     """
     validate_column(df, volume_col)
     df = df.copy()
 
+    if periods is None:
+        periods = [5, 10, 14, 20, 50]
+
     volume = pd.to_numeric(df[volume_col], errors="coerce").astype("float64")
-    vroc = (volume - volume.shift(n)) / volume.shift(n) * 100
-    df[f"vroc_{n}"] = vroc
+
+    for n in periods:
+        df[f"vroc_{n}"] = (volume - volume.shift(n)) / volume.shift(n) * 100
 
     return df
 
