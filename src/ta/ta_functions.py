@@ -1530,11 +1530,11 @@ def add_cmf(
     mfv = clv * volume
 
     for n in periods:
-    cmf = (
-        mfv.rolling(window=n, min_periods=1).sum()
-        / volume.rolling(window=n, min_periods=1).sum()
-    )
-    df[f"cmf_{n}"] = cmf
+        cmf = (
+            mfv.rolling(window=n, min_periods=1).sum()
+            / volume.rolling(window=n, min_periods=1).sum()
+        )
+        df[f"cmf_{n}"] = cmf
 
     return df
 
@@ -1703,72 +1703,61 @@ def add_pvi_nvi(
 
 def add_vw_macd(
     df: pd.DataFrame,
-    fast: int = 12,
-    slow: int = 26,
-    signal: int = 9,
+    param_sets: list[tuple[int, int, int]] = None,
     close_col: str = "close",
     volume_col: str = "volume",
 ) -> pd.DataFrame:
     """
-    Add Volume-Weighted MACD (VW-MACD) and signal line to the DataFrame.
+    Add Volume-Weighted MACD (VW-MACD) and signal line for multiple popular parameter sets.
 
-    VW-MACD uses volume-weighted prices instead of closing prices to measure momentum.
-
-    Formula
-    -------
-    vp = close * volume
-    vw_price = cumulative(vp) / cumulative(volume)
-
-    MACD = EMA_fast(vw_price) - EMA_slow(vw_price)
-    Signal = EMA_signal(MACD)
-    Histogram = MACD - Signal
+    Popular parameter sets:
+        (12, 26, 9) -> standard
+        (5, 13, 6)  -> short-term
+        (8, 21, 5)  -> medium-term
 
     Parameters
     ----------
     df : pd.DataFrame
-        Input DataFrame that must contain the specified close and volume columns.
-    fast : int, optional
-        Fast EMA period (default 12).
-    slow : int, optional
-        Slow EMA period (default 26).
-    signal : int, optional
-        Signal EMA period (default 9).
-    close_col : str, optional
-        Name of the close price column. Defaults to 'close'.
-    volume_col : str, optional
-        Name of the volume column. Defaults to 'volume'.
+        Input DataFrame with close and volume columns.
+    param_sets : list of tuples, optional
+        List of (fast, slow, signal) parameter sets. Defaults to [(12, 26, 9)].
+    close_col : str
+    volume_col : str
 
     Returns
     -------
     pd.DataFrame
-        Copy of the input DataFrame with added columns:
-        - 'vw_macd'
-        - 'vw_macd_signal'
-        - 'vw_macd_hist'
+        DataFrame with VW-MACD columns for each parameter set:
+            - vw_macd_{fast}_{slow}
+            - vw_macd_signal_{signal}
+            - vw_macd_hist_{fast}_{slow}_{signal}
     """
     for col in [close_col, volume_col]:
         validate_column(df, col)
 
     df = df.copy()
 
+    if param_sets is None:
+        param_sets = [(12, 26, 9)]
+
     close = pd.to_numeric(df[close_col], errors="coerce").astype("float64")
     volume = pd.to_numeric(df[volume_col], errors="coerce").astype("float64")
 
-    # Volume-weighted price (cumulative)
+    # Volume-weighted price
     vp = close * volume
     vw_price = vp.cumsum() / volume.cumsum()
 
-    # MACD calculation
-    ema_fast = vw_price.ewm(span=fast, adjust=False).mean()
-    ema_slow = vw_price.ewm(span=slow, adjust=False).mean()
+    for fast, slow, signal in param_sets:
+        ema_fast = vw_price.ewm(span=fast, adjust=False).mean()
+        ema_slow = vw_price.ewm(span=slow, adjust=False).mean()
 
-    vw_macd = ema_fast - ema_slow
-    vw_signal = vw_macd.ewm(span=signal, adjust=False).mean()
-    vw_hist = vw_macd - vw_signal
+        vw_macd = ema_fast - ema_slow
+        vw_signal = vw_macd.ewm(span=signal, adjust=False).mean()
+        vw_hist = vw_macd - vw_signal
 
-    df["vw_macd"] = vw_macd
-    df["vw_macd_signal"] = vw_signal
-    df["vw_macd_hist"] = vw_hist
+        df[f"vw_macd_{fast}_{slow}"] = vw_macd
+        df[f"vw_macd_signal_{signal}"] = vw_signal
+        df[f"vw_macd_hist_{fast}_{slow}_{signal}"] = vw_hist
 
     return df
 
@@ -2017,11 +2006,11 @@ def main():
         order_by=[Table.VN_INDEX.Column.DATE.value],
     )
 
-    df = add_mfi(df)
+    df = add_vw_macd(df)
 
     plot_with_indicators(
         df,
-        indicators=["mfi_*"],
+        indicators=["vw_macd_*"],
     )
 
 
