@@ -1175,47 +1175,57 @@ def add_tsi(
 
 def add_vortex(
     df: pd.DataFrame,
-    n: int = 14,
+    n: int | list[int] | None = None,
     high_col: str = "high",
     low_col: str = "low",
     close_col: str = "close",
+    default_periods: list[int] = None,
 ) -> pd.DataFrame:
     """
-    Add Vortex Indicator (VI) to the DataFrame.
+    Add Vortex Indicator (+VI and -VI) for one or multiple popular parameter sets.
 
-    The Vortex Indicator consists of two lines, +VI and -VI,
-    that are derived from True Range (TR) and directional movements,
-    helping identify trend direction and strength.
+    Popular periods: 7, 14, 21, 28 (14 is standard)
 
     Parameters
     ----------
     df : pd.DataFrame
-        Input DataFrame that must contain the specified high, low, and close columns.
-    n : int, optional
-        Lookback period for calculation (default is 14).
-    high_col : str, optional
-        Name of the high price column. Defaults to 'high'.
-    low_col : str, optional
-        Name of the low price column. Defaults to 'low'.
-    close_col : str, optional
-        Name of the close price column. Defaults to 'close'.
+        Input DataFrame that must contain high, low, and close columns.
+    n : int | list[int] | None, optional
+        Single period or list of periods to compute. If None, uses default popular periods.
+    high_col, low_col, close_col : str
+        Column names for OHLC values.
+    default_periods : list[int], optional
+        Override list of default popular periods.
 
     Returns
     -------
     pd.DataFrame
-        Copy of the input DataFrame with added columns:
-        'vi_plus_{n}' and 'vi_minus_{n}'.
+        DataFrame with added vortex indicator columns:
+        vi_plus_{n}, vi_minus_{n}
     """
+
     for col in [high_col, low_col, close_col]:
         validate_column(df, col)
 
     df = df.copy()
 
+    # Default popular periods
+    if default_periods is None:
+        default_periods = [7, 14, 21, 28]
+
+    # Normalize input
+    if n is None:
+        periods = default_periods
+    elif isinstance(n, int):
+        periods = [n]
+    else:
+        periods = list(n)
+
     high = pd.to_numeric(df[high_col], errors="coerce").astype("float64")
     low = pd.to_numeric(df[low_col], errors="coerce").astype("float64")
     close = pd.to_numeric(df[close_col], errors="coerce").astype("float64")
 
-    # True Range
+    # True Range (TR)
     tr1 = high - low
     tr2 = (high - close.shift(1)).abs()
     tr3 = (low - close.shift(1)).abs()
@@ -1225,13 +1235,14 @@ def add_vortex(
     vm_plus = (high - low.shift(1)).abs()
     vm_minus = (low - high.shift(1)).abs()
 
-    # Rolling sums
-    tr_n = tr.rolling(n, min_periods=1).sum()
-    vm_plus_n = vm_plus.rolling(n, min_periods=1).sum()
-    vm_minus_n = vm_minus.rolling(n, min_periods=1).sum()
+    # Compute for each period
+    for p in periods:
+        tr_p = tr.rolling(p, min_periods=1).sum()
+        vm_plus_p = vm_plus.rolling(p, min_periods=1).sum()
+        vm_minus_p = vm_minus.rolling(p, min_periods=1).sum()
 
-    df[f"vi_plus_{n}"] = vm_plus_n / tr_n
-    df[f"vi_minus_{n}"] = vm_minus_n / tr_n
+        df[f"vi_plus_{p}"] = vm_plus_p / tr_p
+        df[f"vi_minus_{p}"] = vm_minus_p / tr_p
 
     return df
 
@@ -1986,11 +1997,11 @@ def main():
         order_by=[Table.VN_INDEX.Column.DATE.value],
     )
 
-    df = add_tsi(df)
+    df = add_vortex(df)
 
     plot_with_indicators(
         df,
-        indicators=["tsi_13*"],
+        indicators=["vi_*14"],
     )
 
 
