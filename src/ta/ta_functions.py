@@ -1580,49 +1580,40 @@ def add_vroc(
 
 def add_eom(
     df: pd.DataFrame,
-    n: int = 14,
+    smooth_periods: list[int] = None,
     high_col: str = "high",
     low_col: str = "low",
     volume_col: str = "volume",
 ) -> pd.DataFrame:
     """
-    Add Ease of Movement (EoM) indicator to the DataFrame.
+    Add Ease of Movement (EoM) indicator with smoothed values for multiple popular periods.
 
-    EoM relates price change to volume, showing how much volume is
-    required to move prices. A smoothed version (SMA of EoM) is
-    often used.
-
-    Formula
-    -------
-    Midpoint Move = ((High + Low)/2) - ((High[-1] + Low[-1])/2)
-    Box Ratio     = (Volume / 1e6) / (High - Low)
-    EoM           = Midpoint Move / Box Ratio
-    EoM_smooth    = SMA(EoM, n)
+    Popular smoothing periods: 5, 10, 14 (default), 20, 50
 
     Parameters
     ----------
     df : pd.DataFrame
-        Input DataFrame that must contain the specified high, low, and volume columns.
-    n : int, optional
-        Smoothing period for EoM (default is 14).
+        Input DataFrame with high, low, and volume columns.
+    smooth_periods : list[int], optional
+        List of SMA periods to smooth EoM. Defaults to [5, 10, 14, 20, 50].
     high_col : str, optional
-        Name of the high price column. Defaults to 'high'.
     low_col : str, optional
-        Name of the low price column. Defaults to 'low'.
     volume_col : str, optional
-        Name of the volume column. Defaults to 'volume'.
 
     Returns
     -------
     pd.DataFrame
-        Copy of the input DataFrame with added columns:
-        - 'eom' (raw values)
-        - 'eom_{n}' (smoothed values)
+        DataFrame with columns:
+            - 'eom' (raw values)
+            - 'eom_{n}' for each period in smooth_periods
     """
     for col in [high_col, low_col, volume_col]:
         validate_column(df, col)
 
     df = df.copy()
+
+    if smooth_periods is None:
+        smooth_periods = [5, 10, 14, 20, 50]
 
     high = pd.to_numeric(df[high_col], errors="coerce").astype("float64")
     low = pd.to_numeric(df[low_col], errors="coerce").astype("float64")
@@ -1633,7 +1624,9 @@ def add_eom(
     eom = np.where(box_ratio != 0, midpoint_move / box_ratio, 0)
 
     df["eom"] = eom
-    df[f"eom_{n}"] = pd.Series(eom).rolling(window=n, min_periods=1).mean()
+
+    for n in smooth_periods:
+        df[f"eom_{n}"] = pd.Series(eom).rolling(window=n, min_periods=1).mean()
 
     return df
 
