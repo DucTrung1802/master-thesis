@@ -1026,60 +1026,73 @@ def add_ado(
 
 def add_rvi(
     df: pd.DataFrame,
-    n: int = 10,
-    signal: int = 4,
+    n: int | list[int] | None = None,
+    signal: int | list[int] | None = None,
     open_col: str = "open",
     high_col: str = "high",
     low_col: str = "low",
     close_col: str = "close",
+    default_n: list[int] = None,
+    default_signal: list[int] = None,
 ) -> pd.DataFrame:
     """
     Add Relative Vigor Index (RVI) and its signal line to the DataFrame.
+
+    Default popular parameters:
+        n periods: [10, 14]
+        signal:   [4]
 
     Formula:
         RV = (Close - Open) / (High - Low)
         RVI = SMA(RV, n)
         Signal = SMA(RVI, signal)
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Input DataFrame that must contain the specified open, high, low, and close columns.
-    n : int, optional
-        Period for main RVI smoothing (default is 10).
-    signal : int, optional
-        Period for RVI signal line smoothing (default is 4).
-    open_col : str, optional
-        Name of the open price column. Defaults to 'open'.
-    high_col : str, optional
-        Name of the high price column. Defaults to 'high'.
-    low_col : str, optional
-        Name of the low price column. Defaults to 'low'.
-    close_col : str, optional
-        Name of the close price column. Defaults to 'close'.
-
-    Returns
-    -------
-    pd.DataFrame
-        Copy of the input DataFrame with added columns:
-        'rvi_{n}' and 'rvi_signal_{signal}'.
     """
+
+    # Validate columns
     for col in [open_col, high_col, low_col, close_col]:
         validate_column(df, col)
 
     df = df.copy()
 
+    # Defaults
+    if default_n is None:
+        default_n = [10, 14]  # Popular RVI periods
+    if default_signal is None:
+        default_signal = [4]  # Standard signal length
+
+    # Parse user inputs
+    if n is None:
+        n_list = default_n
+    elif isinstance(n, int):
+        n_list = [n]
+    else:
+        n_list = list(n)
+
+    if signal is None:
+        signal_list = default_signal
+    elif isinstance(signal, int):
+        signal_list = [signal]
+    else:
+        signal_list = list(signal)
+
+    # Numeric columns
     close = pd.to_numeric(df[close_col], errors="coerce").astype("float64")
     open_ = pd.to_numeric(df[open_col], errors="coerce").astype("float64")
     high = pd.to_numeric(df[high_col], errors="coerce").astype("float64")
     low = pd.to_numeric(df[low_col], errors="coerce").astype("float64")
 
+    # Raw RV value
     rv = (close - open_) / (high - low).replace(0, np.nan)
-    rvi = rv.rolling(window=n, min_periods=1).mean()
-    rvi_signal = rvi.rolling(window=signal, min_periods=1).mean()
 
-    df[f"rvi_{n}"] = rvi
-    df[f"rvi_signal_{signal}"] = rvi_signal
+    # Calculate RVI + signals
+    for n_period in n_list:
+        rvi = rv.rolling(window=n_period, min_periods=1).mean()
+        df[f"rvi_{n_period}"] = rvi
+
+        for sig in signal_list:
+            df[f"rvi_signal_{n_period}_{sig}"] = rvi.rolling(
+                window=sig, min_periods=1
+            ).mean()
 
     return df
 
@@ -1943,11 +1956,11 @@ def main():
         order_by=[Table.VN_INDEX.Column.DATE.value],
     )
 
-    df = add_ado(df)
+    df = add_rvi(df)
 
     plot_with_indicators(
         df,
-        indicators=["ado"],
+        indicators=["rvi_*"],
     )
 
 
