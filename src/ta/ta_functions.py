@@ -1827,8 +1827,7 @@ def add_kvo(
 
 def add_demand_oscillator(
     df: pd.DataFrame,
-    fast: int = 5,
-    slow: int = 10,
+    param_sets: list[tuple[int, int]] = None,
     open_col: str = "open",
     high_col: str = "high",
     low_col: str = "low",
@@ -1836,43 +1835,35 @@ def add_demand_oscillator(
     volume_col: str = "volume",
 ) -> pd.DataFrame:
     """
-    Add Aspray's Demand Oscillator (ADO) to the DataFrame.
+    Add Aspray's Demand Oscillator (ADO) to the DataFrame for multiple parameter sets.
 
-    Formula
-    -------
-    UpMove = High - min(Open, PrevClose)
-    DownMove = max(Open, PrevClose) - Low
-    Demand = ((UpMove - DownMove) / (UpMove + DownMove)) * Volume
-    ADO = EMA_fast(Demand) - EMA_slow(Demand)
+    Popular parameter sets:
+        (5, 10)  -> standard short-term
+        (3, 7)   -> very fast
+        (8, 14)  -> medium-term
 
     Parameters
     ----------
     df : pd.DataFrame
-        Input DataFrame that must contain the specified open, high, low, close, and volume columns.
-    fast : int, optional
-        Fast EMA period (default 5).
-    slow : int, optional
-        Slow EMA period (default 10).
-    open_col : str, optional
-        Name of the open price column. Defaults to 'open'.
-    high_col : str, optional
-        Name of the high price column. Defaults to 'high'.
-    low_col : str, optional
-        Name of the low price column. Defaults to 'low'.
-    close_col : str, optional
-        Name of the close price column. Defaults to 'close'.
-    volume_col : str, optional
-        Name of the volume column. Defaults to 'volume'.
+        Input DataFrame with open, high, low, close, and volume columns.
+    param_sets : list of tuples, optional
+        List of (fast, slow) EMA periods. Defaults to [(5, 10)].
+    open_col, high_col, low_col, close_col, volume_col : str
+        Column names for OHLCV data.
 
     Returns
     -------
     pd.DataFrame
-        Copy of the input DataFrame with an added 'demand_osc' column.
+        Copy of DataFrame with added ADO columns for each parameter set:
+        - 'demand_osc_{fast}_{slow}'
     """
     for col in [open_col, high_col, low_col, close_col, volume_col]:
         validate_column(df, col)
 
     df = df.copy()
+
+    if param_sets is None:
+        param_sets = [(5, 10)]
 
     open_ = pd.to_numeric(df[open_col], errors="coerce").astype("float64")
     high = pd.to_numeric(df[high_col], errors="coerce").astype("float64")
@@ -1881,16 +1872,14 @@ def add_demand_oscillator(
     volume = pd.to_numeric(df[volume_col], errors="coerce").astype("float64")
 
     prev_close = close.shift(1)
-
     up_move = high - np.minimum(open_, prev_close)
     down_move = np.maximum(open_, prev_close) - low
-
     demand = ((up_move - down_move) / (up_move + down_move + 1e-9)) * volume
 
-    ema_fast = demand.ewm(span=fast, adjust=False).mean()
-    ema_slow = demand.ewm(span=slow, adjust=False).mean()
-
-    df["demand_osc"] = ema_fast - ema_slow
+    for fast, slow in param_sets:
+        ema_fast = demand.ewm(span=fast, adjust=False).mean()
+        ema_slow = demand.ewm(span=slow, adjust=False).mean()
+        df[f"demand_osc_{fast}_{slow}"] = ema_fast - ema_slow
 
     return df
 
@@ -1997,11 +1986,11 @@ def main():
         order_by=[Table.VN_INDEX.Column.DATE.value],
     )
 
-    df = add_vw_macd(df)
+    df = add_demand_oscillator(df)
 
     plot_with_indicators(
         df,
-        indicators=["vw_macd_*"],
+        indicators=["demand_*"],
     )
 
 
