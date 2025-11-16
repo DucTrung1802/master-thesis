@@ -1764,53 +1764,45 @@ def add_vw_macd(
 
 def add_kvo(
     df: pd.DataFrame,
-    fast: int = 34,
-    slow: int = 55,
-    signal: int = 13,
+    param_sets: list[tuple[int, int, int]] = None,
     high_col: str = "high",
     low_col: str = "low",
     close_col: str = "close",
     volume_col: str = "volume",
 ) -> pd.DataFrame:
     """
-    Add Klinger Volume Oscillator (KVO) and signal line to the DataFrame.
+    Add Klinger Volume Oscillator (KVO) and signal line for multiple popular parameter sets.
 
-    Formula
-    -------
-    - Typical Price (TP) = (High + Low + Close) / 3
-    - Trend = 1 if today's TP > yesterday's TP, else -1
-    - Volume Force (VF) = Trend * 2 * ((High - Low) / (High + Low)) * Volume
-    - KVO = EMA_fast(VF) - EMA_slow(VF)
-    - Signal = EMA_signal(KVO)
+    Popular parameter sets:
+        (34, 55, 13) -> standard
+        (13, 34, 5)  -> short-term
+        (21, 55, 13) -> medium-term
 
     Parameters
     ----------
     df : pd.DataFrame
-        Input DataFrame that must contain the specified high, low, close, and volume columns.
-    fast : int, optional
-        Fast EMA period for KVO (default 34).
-    slow : int, optional
-        Slow EMA period for KVO (default 55).
-    signal : int, optional
-        Signal EMA period for KVO (default 13).
-    high_col : str, optional
-        Name of the high price column. Defaults to 'high'.
-    low_col : str, optional
-        Name of the low price column. Defaults to 'low'.
-    close_col : str, optional
-        Name of the close price column. Defaults to 'close'.
-    volume_col : str, optional
-        Name of the volume column. Defaults to 'volume'.
+        Input DataFrame with high, low, close, and volume columns.
+    param_sets : list of tuples, optional
+        List of (fast, slow, signal) parameter sets. Defaults to [(34, 55, 13)].
+    high_col : str
+    low_col : str
+    close_col : str
+    volume_col : str
 
     Returns
     -------
     pd.DataFrame
-        Copy of the input DataFrame with added columns 'kvo' and 'kvo_signal'.
+        DataFrame with KVO columns for each parameter set:
+            - kvo_{fast}_{slow}
+            - kvo_signal_{signal}
     """
     for col in [high_col, low_col, close_col, volume_col]:
         validate_column(df, col)
 
     df = df.copy()
+
+    if param_sets is None:
+        param_sets = [(34, 55, 13)]
 
     high = pd.to_numeric(df[high_col], errors="coerce").astype("float64")
     low = pd.to_numeric(df[low_col], errors="coerce").astype("float64")
@@ -1819,17 +1811,16 @@ def add_kvo(
 
     tp = (high + low + close) / 3
     trend = np.where(tp > tp.shift(1), 1, -1)
-
     vf = trend * 2 * ((high - low) / (high + low + 1e-9)) * volume
 
-    ema_fast = pd.Series(vf).ewm(span=fast, adjust=False).mean()
-    ema_slow = pd.Series(vf).ewm(span=slow, adjust=False).mean()
-    kvo = ema_fast - ema_slow
+    for fast, slow, signal in param_sets:
+        ema_fast = pd.Series(vf).ewm(span=fast, adjust=False).mean()
+        ema_slow = pd.Series(vf).ewm(span=slow, adjust=False).mean()
+        kvo = ema_fast - ema_slow
+        kvo_signal = kvo.ewm(span=signal, adjust=False).mean()
 
-    kvo_signal = kvo.ewm(span=signal, adjust=False).mean()
-
-    df["kvo"] = kvo
-    df["kvo_signal"] = kvo_signal
+        df[f"kvo_{fast}_{slow}"] = kvo
+        df[f"kvo_signal_{signal}"] = kvo_signal
 
     return df
 
