@@ -1098,47 +1098,77 @@ def add_rvi(
 
 
 def add_tsi(
-    df: pd.DataFrame, r: int = 25, s: int = 13, column_name: str = "close"
+    df: pd.DataFrame,
+    r: int | list[int] | None = None,
+    s: int | list[int] | None = None,
+    column_name: str = "close",
+    default_r: list[int] = None,
+    default_s: list[int] = None,
+    add_signal: bool = True,
+    signal_period: int = 7,
 ) -> pd.DataFrame:
     """
-    Add True Strength Index (TSI) to the DataFrame.
+    Add True Strength Index (TSI) to the DataFrame with support for
+    multiple popular parameter sets.
+
+    Popular defaults:
+        r (long periods): [25, 13, 50]
+        s (short periods): [13, 7, 25]
+        signal: 7 (optional)
 
     Formula:
         m_t = Close_t - Close_{t-1}
         TSI = 100 * (EMA_r(EMA_s(m_t)) / EMA_r(EMA_s(|m_t|)))
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Input DataFrame that must contain the specified column (default is 'close').
-    r : int, optional
-        Long smoothing period (default is 25).
-    s : int, optional
-        Short smoothing period (default is 13).
-    column_name : str, optional
-        Name of the column to calculate TSI on. Defaults to 'close'.
-
-    Returns
-    -------
-    pd.DataFrame
-        Copy of the input DataFrame with an added column 'tsi_{r}_{s}'.
     """
+
     validate_column(df, column_name)
     df = df.copy()
 
+    # Default parameter lists
+    if default_r is None:
+        default_r = [25, 13, 50]
+    if default_s is None:
+        default_s = [13, 7, 25]
+
+    # Normalize inputs
+    if r is None:
+        r_list = default_r
+    elif isinstance(r, int):
+        r_list = [r]
+    else:
+        r_list = list(r)
+
+    if s is None:
+        s_list = default_s
+    elif isinstance(s, int):
+        s_list = [s]
+    else:
+        s_list = list(s)
+
+    # Price series
     close = pd.to_numeric(df[column_name], errors="coerce").astype("float64")
     momentum = close.diff()
 
-    # Short EMA
-    ema_mom_s = momentum.ewm(span=s, adjust=False).mean()
-    ema_abs_s = momentum.abs().ewm(span=s, adjust=False).mean()
+    # Loop through combinations
+    for rr in r_list:
+        for ss in s_list:
+            # Short EMAs
+            ema_mom_s = momentum.ewm(span=ss, adjust=False).mean()
+            ema_abs_s = momentum.abs().ewm(span=ss, adjust=False).mean()
 
-    # Long EMA
-    ema_mom_r = ema_mom_s.ewm(span=r, adjust=False).mean()
-    ema_abs_r = ema_abs_s.ewm(span=r, adjust=False).mean()
+            # Long EMAs
+            ema_mom_r = ema_mom_s.ewm(span=rr, adjust=False).mean()
+            ema_abs_r = ema_abs_s.ewm(span=rr, adjust=False).mean()
 
-    tsi = 100 * (ema_mom_r / ema_abs_r)
-    df[f"tsi_{r}_{s}"] = tsi
+            tsi = 100 * (ema_mom_r / ema_abs_r)
+            name = f"tsi_{rr}_{ss}"
+            df[name] = tsi
+
+            # Optional TSI Signal line (common period = 7)
+            if add_signal:
+                df[f"{name}_signal_{signal_period}"] = tsi.ewm(
+                    span=signal_period, adjust=False
+                ).mean()
 
     return df
 
@@ -1956,11 +1986,11 @@ def main():
         order_by=[Table.VN_INDEX.Column.DATE.value],
     )
 
-    df = add_rvi(df)
+    df = add_tsi(df)
 
     plot_with_indicators(
         df,
-        indicators=["rvi_*"],
+        indicators=["tsi_13*"],
     )
 
 
