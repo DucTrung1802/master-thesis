@@ -552,7 +552,7 @@ def plot_model_result(model_output_dto: ModelOutputDto):
 
     plt.figure(figsize=(12, 6))
     plt.plot(
-        model_output_dto.y_true_denorm,
+        model_output_dto.y_true,
         label="True Values",
         color="blue",
         linewidth=2,

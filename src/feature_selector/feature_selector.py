@@ -10,11 +10,6 @@ import seaborn as sns
 import random
 import numpy as np
 
-SEED = 42
-
-# Apply globally
-random.seed(SEED)
-np.random.seed(SEED)
 
 from sklearn.linear_model import LassoCV, ElasticNetCV
 from sklearn.cluster import AgglomerativeClustering
@@ -41,6 +36,13 @@ except ImportError:
 
 
 load_dotenv()
+
+
+SEED = RANDOM_SEED
+
+# Apply globally
+random.seed(SEED)
+np.random.seed(SEED)
 
 
 class BaseFeatureSelector:
