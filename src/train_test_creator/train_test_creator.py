@@ -129,7 +129,7 @@ class TrainTestCreator:
             inserted_count = updated_count = 0
 
         self._logger.log_info(
-            f"Saved {inserted_count + updated_count}/{len(df)} records into table '{schema_name}.{table_name}'."
+            f"Saved {inserted_count + updated_count}/{len(df)} records with {len(column_names)} columns into table '{schema_name}.{table_name}'."
             f" (Inserted: {inserted_count}, Updated: {updated_count}) successfully."
         )
 
