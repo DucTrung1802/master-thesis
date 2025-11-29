@@ -15,6 +15,7 @@ from dtos.tabular_database_driver_dtos.tabular_database_driver_dtos import (
     JoinModel,
     Record,
 )
+from ta.ta_functions import add_one_for_all_ta
 from tabular_database_driver.postgre_sql_driver import PostgreSQLDriver
 from dtos.tabular_database_driver_dtos.postgre_sql_connection_dto import (
     PostgreSQLConnectionDto,
@@ -414,6 +415,9 @@ class TrainTestCreator:
 
             # Expand "date" column
             unified_df = expand_date_column(unified_df)
+
+            # Add technical analysis columns
+            unified_df = add_one_for_all_ta(unified_df)
 
             # Export to dataframe
             self.create_table(
