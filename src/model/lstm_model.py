@@ -304,6 +304,8 @@ class LSTM_Model:
                 torch.mean(torch.abs((y_true - y_pred_denorm) / (y_true + epsilon)))
                 * 100
             ).item()
+            log_dict["test_mape"] = mape
+            self._run.log(log_dict)
 
         training_time = time() - start_time
         print(f"Training completed in {training_time:.2f}s | Test MAPE: {mape:.2f}%")

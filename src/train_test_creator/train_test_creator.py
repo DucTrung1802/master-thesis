@@ -418,6 +418,14 @@ class TrainTestCreator:
 
             # Add technical analysis columns
             unified_df = add_one_for_all_ta(unified_df)
+            self._logger.log_info(
+                f"Unified dataframe after TA has {len(unified_df)} rows and {len(unified_df.columns)} columns."
+            )
+
+            unified_df = unified_df.dropna()
+            self._logger.log_info(
+                f"Unified dataframe after dropping NA has {len(unified_df)} rows and {len(unified_df.columns)} columns."
+            )
 
             # Export to dataframe
             self.create_table(
