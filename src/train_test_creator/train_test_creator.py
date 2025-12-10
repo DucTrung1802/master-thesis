@@ -1,7 +1,12 @@
+from typing import List, Optional, Tuple
 from dotenv import load_dotenv
 import os
 import pandas as pd
 from math import ceil
+
+
+from sklearn.preprocessing import MinMaxScaler
+
 
 from feature_selector.feature_selector import FeatureSelector
 from logger.logger import Logger
@@ -17,8 +22,9 @@ class TrainTestCreator:
     def __init__(self, logger: Logger):
         self._logger = logger
 
-        self._full_train_df = None
-        self._full_test_df = None
+        self.train_set: Optional[pd.DataFrame] = None
+        self.val_set: Optional[pd.DataFrame] = None
+        self.test_set: Optional[pd.DataFrame] = None
 
     def load_dataframe(self, stock_code: str, file_path: str = None) -> pd.DataFrame:
         if not stock_code:
@@ -35,296 +41,238 @@ class TrainTestCreator:
         )
         return dataframe
 
-    def normalize_unified_dataframe(
-        self,
-        dataframe: pd.DataFrame,
-        output_range: tuple,
-        output_column: str = "close",
-    ) -> pd.DataFrame:
-        df = dataframe.copy()
+    # ------------------------------------------------------------------
+    # NORMALIZATION: fit scalers only on TRAINING portion and apply consistently
+    # ------------------------------------------------------------------
+    def _fit_scalers(
+        self, train_df: pd.DataFrame, output_column: str
+    ) -> Tuple[MinMaxScaler, MinMaxScaler, List[str]]:
+        """Fit feature and target scalers on the training dataframe only.
 
-        # Move the output column to the end
-        df = df[[col for col in df.columns if col != output_column] + [output_column]]
-
-        df.drop(columns=["date"], inplace=True)
-
-        # Identify numeric columns (floats or ints) except "date"
-        numeric_cols = df.select_dtypes(include=["float", "int"]).columns.difference(
-            [output_column]
-        )
-
-        # Remove columns with constant values (min == max)
-        constant_cols = [
-            col
-            for col in numeric_cols
-            if df[col].nunique() == 1 and df[col].min() == df[col].max()
-        ]
-        df.drop(columns=constant_cols, inplace=True)
-
-        numeric_cols = [col for col in numeric_cols if col not in constant_cols]
-
-        # Apply min-max normalization
-        df[numeric_cols] = (df[numeric_cols] - df[numeric_cols].min()) / (
-            df[numeric_cols].max() - df[numeric_cols].min()
-        )
-
-        # Scale to output range
-        min_range, max_range = output_range
-        df[output_column] = (df[output_column] - min_range) / (max_range - min_range)
-
-        return df
-
-    def _validate_input(
-        self,
-        dataframe: pd.DataFrame,
-        output_column: str,
-        output_range: tuple,
-        stock_code: str,
-        train_window_size: int,
-        validation_window_size: int,
-        test_window_size: int,
-        train_ratio: float = DEFAULT_TRAIN_RATIO,
-    ) -> bool:
+        Returns: (feature_scaler, target_scaler, numeric_feature_cols)
         """
-        Validate input parameters for stock forecasting.
+        df = train_df.copy()
+        df = df.drop(columns=["date"]) if "date" in df.columns else df
 
-        Validation Rules:
-        1. len(dataframe) must be greater than the sum of
-        train_window_size + validation_window_size + test_window_size.
-        2. output_column must exist in dataframe.columns.
-        3. stock_code must be a non-empty string after stripping whitespace.
-        4. train_window_size, validation_window_size, and test_window_size must:
-        - Be integers (`int` type)
-        - Be greater than 0
-        5. train_ratio must be a float greater than 0 and less than 1.
+        # numeric features (exclude output)
+        numeric_cols = df.select_dtypes(include=["number"]).columns.tolist()
+        if output_column in numeric_cols:
+            numeric_cols.remove(output_column)
 
-        Parameters
-        ----------
-        dataframe : pd.DataFrame
-            Input data containing stock features and target column.
-        output_column : str
-            The column name in `dataframe` to be predicted.
-        output_range : tuple
-            Expected range of output values (used for scaling/validation).
-        stock_code : str
-            The identifier for the stock being analyzed.
-        train_window_size : int
-            Number of time steps used for training input.
-        validation_window_size : int
-            Number of time steps used for validation.
-        test_window_size : int
-            Number of time steps to forecast ahead (testing).
-        train_ratio : float, optional
-            Ratio of training data (default: DEFAULT_TRAIN_RATIO).
+        # drop constant columns (computed on train only)
+        constant_cols = [c for c in numeric_cols if df[c].nunique() <= 1]
+        if constant_cols:
+            self._logger.log_info(f"Dropping constant feature columns: {constant_cols}")
+            numeric_cols = [c for c in numeric_cols if c not in constant_cols]
 
-        Returns
-        -------
-        bool
-            True if all validation rules pass, otherwise raises a ValueError.
-
-        Raises
-        ------
-        ValueError
-            If any validation rule is violated.
-        """
-
-        # 1. Check dataframe length
-        total_required = train_window_size + validation_window_size + test_window_size
-        if len(dataframe) <= total_required:
-            raise ValueError(
-                f"Dataframe length ({len(dataframe)}) must be greater than "
-                f"train_window_size + validation_window_size + test_window_size "
-                f"({total_required})."
-            )
-
-        # 2. Check output column existence
-        if output_column not in dataframe.columns:
-            raise ValueError(
-                f"Output column '{output_column}' not found in dataframe columns: {list(dataframe.columns)}."
-            )
-
-        # 3. Check stock_code validity
-        if not isinstance(stock_code, str) or not stock_code.strip():
-            raise ValueError(
-                "Stock code must be a non-empty string after stripping whitespace."
-            )
-
-        # 4. Check each window size
-        for name, value in {
-            "train_window_size": train_window_size,
-            "validation_window_size": validation_window_size,
-            "test_window_size": test_window_size,
-        }.items():
-            if not isinstance(value, int) or value <= 0:
-                raise ValueError(f"{name} must be a positive integer (got {value!r}).")
-
-        # 5. Check train_ratio
-        if not isinstance(train_ratio, (float, int)) or not (0 < train_ratio < 1):
-            raise ValueError(
-                f"train_ratio must be between 0 and 1 (got {train_ratio})."
-            )
-
-        return True
-
-    def _find_split_index(
-        self,
-        dataframe: pd.DataFrame,
-        train_window_size: int,
-        validation_window_size: int,
-        test_window_size: int,
-        train_ratio: float,
-    ) -> int:
-        """
-        Determine the index to split the dataframe into training and testing portions
-        for time series forecasting with explicit validation and test windows.
-
-        Rules:
-        1. Split based on `train_ratio`.
-        2. Ensure there's enough data left for both validation and test windows.
-        3. Ensure the split index aligns cleanly with test window size for consistency.
-        """
-
-        # --- Sort chronologically if 'date' column exists ---
-        if "date" in dataframe.columns:
-            dataframe = dataframe.sort_values("date").reset_index(drop=True)
+        # Fit feature scaler on numeric_cols
+        feature_scaler = MinMaxScaler()
+        if numeric_cols:
+            feature_scaler.fit(df[numeric_cols].values)
         else:
-            dataframe = dataframe.reset_index(drop=True)
+            # empty scaler placeholder
+            feature_scaler = None
 
-        total_len = len(dataframe)
-        min_required = train_window_size + validation_window_size + test_window_size
+        # Fit target scaler (1D)
+        target_scaler = MinMaxScaler()
+        target_values = df[[output_column]].values
+        target_scaler.fit(target_values)
 
-        if total_len <= min_required:
-            raise ValueError(
-                f"Data length ({total_len}) must exceed total required window size "
-                f"({min_required})."
+        return feature_scaler, target_scaler, numeric_cols
+
+    def _apply_scalers_to_df(
+        self,
+        df: pd.DataFrame,
+        feature_scaler: Optional[MinMaxScaler],
+        target_scaler: MinMaxScaler,
+        numeric_feature_cols: List[str],
+        output_column: str,
+    ) -> pd.DataFrame:
+        """Apply previously fitted scalers to a dataframe (do NOT re-fit)."""
+        out = df.copy()
+        if "date" in out.columns:
+            out = out.drop(columns=["date"])  # keep order consistent
+
+        if numeric_feature_cols and feature_scaler is not None:
+            out[numeric_feature_cols] = feature_scaler.transform(
+                out[numeric_feature_cols].values
             )
 
-        # --- Initial rough split ---
-        split_index = ceil(total_len * train_ratio)
+        # transform target
+        out[[output_column]] = target_scaler.transform(out[[output_column]].values)
+        return out
 
-        # --- Adjust to ensure validation & test windows fit after split ---
-        split_index = min(
-            split_index, total_len - (validation_window_size + test_window_size)
-        )
-
-        # --- Align to multiple of test_window_size (optional smoothing) ---
-        remainder = split_index % test_window_size
-        if remainder != 0:
-            split_index -= remainder
-
-        # --- Guard against invalid split ---
-        if split_index <= train_window_size or split_index >= total_len:
-            raise ValueError(
-                f"Adjusted split_index ({split_index}) invalid for data length {total_len}"
-            )
-
-        return split_index
-
+    # ------------------------------------------------------------------
+    # Main: create_train_test_set (rewritten)
+    # ------------------------------------------------------------------
     def create_train_test_set(
         self,
         dataframe: pd.DataFrame,
         output_column: str,
-        output_range: tuple,
         stock_code: str,
-        train_window_size: int,
-        validation_window_size: int,
-        test_window_size: int,
-        train_ratio: float = DEFAULT_TRAIN_RATIO,
+        input_size: int,
+        forecast_size: int,
     ) -> "TrainTestSet":
-        """
-        Create train, validation, and test rolling windows for time series forecasting.
-        """
 
-        # --- Validate input ---
-        if not self._validate_input(
+        # --- Basic validation (reuse your validator) ---
+        self._validate_input(
             dataframe=dataframe,
             output_column=output_column,
-            output_range=output_range,
             stock_code=stock_code,
-            train_window_size=train_window_size,
-            validation_window_size=validation_window_size,
-            test_window_size=test_window_size,
-            train_ratio=train_ratio,
-        ):
-            raise ValueError("Invalid input parameters for creating TrainTestSet.")
+            input_size=input_size,
+            forecast_size=forecast_size,
+        )
 
         stock_code = str.lower(stock_code)
 
-        # Ensure output column is last
+        # Ensure output column is last in ordering (keeps consistent ordering)
         dataframe = move_column_to_end(dataframe, output_column)
 
-        # --- Split train/test base ---
-        split_index = self._find_split_index(
-            dataframe=dataframe,
-            train_window_size=train_window_size,
-            validation_window_size=validation_window_size,
-            test_window_size=test_window_size,
-            train_ratio=train_ratio,
+        # Expand date
+        dataframe = expand_date_column(dataframe)
+        dataframe = (
+            dataframe.drop(columns=["date"])
+            if "date" in dataframe.columns
+            else dataframe
         )
 
-        self._full_train_df = dataframe.iloc[:split_index].reset_index(drop=True)
-        self._full_test_df = dataframe.iloc[split_index:].reset_index(drop=True)
+        val_set_size = input_size + forecast_size
+        test_set_size = input_size + forecast_size
+        train_set_size = len(dataframe) - (val_set_size + test_set_size)
 
-        # --- Feature selection ---
-        feature_selector_df = self._full_train_df.drop(columns=["date"])
-        feature_columns = feature_selector_df.columns.tolist()
-        feature_columns.remove(output_column)
+        self.train_set = dataframe.iloc[0:train_set_size].reset_index(drop=True).copy()
+        self.val_set = (
+            dataframe.iloc[train_set_size : train_set_size + val_set_size]
+            .reset_index(drop=True)
+            .copy()
+        )
+        self.test_set = (
+            dataframe.iloc[train_set_size + val_set_size :]
+            .reset_index(drop=True)
+            .copy()
+        )
+
+        self._logger.log_info(f"Train portion:  {len(self.train_set)}   rows")
+        self._logger.log_info(f"Val portion:    {len(self.val_set)}     rows")
+        self._logger.log_info(f"Test portion:   {len(self.test_set)}    rows")
+
+        # --- Feature selection should be based on training portion only ---
+        train_for_fs = (
+            self.train_set.drop(columns=["date"])
+            if "date" in self._full_train_df.columns
+            else self.train_set
+        )
+        feature_columns = train_for_fs.columns.tolist()
+        if output_column in feature_columns:
+            feature_columns.remove(output_column)
 
         self._feature_selector = FeatureSelector(
             logger=self._logger,
             stock_code=stock_code,
-            dataframe=feature_selector_df,
+            dataframe=train_for_fs,
             feature_columns=feature_columns,
             target_column=output_column,
         )
         features_to_drop = self._feature_selector.get_features_to_drop()
 
-        self._selected_full_train_df = self._full_train_df.drop(
-            columns=features_to_drop
+        selected_train_set = self.train_set.drop(columns=features_to_drop)
+        selected_val_set = self.val_set.drop(
+            columns=[c for c in features_to_drop if c in self.val_set.columns]
+        )
+        selected_test_set = self.test_set.drop(
+            columns=[c for c in features_to_drop if c in self.test_set.columns]
         )
 
-        # --- Normalize ---
-        self._normalized_selected_full_train_df = self.normalize_unified_dataframe(
-            dataframe=self._selected_full_train_df,
-            output_range=output_range,
-            output_column=output_column,
+        # --- Fit scalers on TRAINING PORTION ONLY ---
+        feature_scaler, target_scaler, numeric_feature_cols = self._fit_scalers(
+            train_df=selected_train_set, output_column=output_column
         )
 
-        final_train_df = self._normalized_selected_full_train_df
-
-        # --- Create rolling windows ---
-        train_sets = []
-        total_window_size = (
-            train_window_size + validation_window_size + test_window_size
+        # --- Apply scalers ---
+        normalized_train_df = self._apply_scalers_to_df(
+            selected_train_set,
+            feature_scaler,
+            target_scaler,
+            numeric_feature_cols,
+            output_column,
         )
 
-        for start_idx in range(
-            0,
-            len(final_train_df) - total_window_size + 1,
-            test_window_size,  # shift by test window each time
-        ):
+        # --- Build rolling windows from normalized_train_df ---
+        train_windows: List[pd.DataFrame] = []
+        total_window_size = input_size + forecast_size
+
+        window_stride = 1
+
+        for start_idx in range(0, train_set_size, window_stride):
             end_idx = start_idx + total_window_size
-            train_df = final_train_df.iloc[start_idx:end_idx].reset_index(drop=True)
-            train_sets.append(train_df)
-
-        # --- Create test set from unseen data ---
-        test_sets = [
-            self._full_test_df.iloc[i : i + test_window_size].reset_index(drop=True)
-            for i in range(
-                0,
-                len(self._full_test_df) - test_window_size + 1,
-                test_window_size,
+            window_df = normalized_train_df.iloc[start_idx:end_idx].reset_index(
+                drop=True
             )
-        ]
+            # Sanity: each window length must equal total_window_size
+            if len(window_df) == total_window_size:
+                train_windows.append(window_df)
 
-        # --- Return TrainTestSet object ---
-        return TrainTestSet(
-            name=f"{stock_code}_{train_window_size}_{validation_window_size}_{test_window_size}",
-            train_sets=train_sets,
-            test_sets=test_sets,
-            output_column=output_column,
-            output_range=output_range,
-            train_window_size=train_window_size,
-            validation_window_size=validation_window_size,
-            test_window_size=test_window_size,
+        self._logger.log_info(
+            f"Created {len(train_windows)} training windows (stride={window_stride})."
         )
+
+        # --- Create TrainTestSet and attach scalers for downstream use ---
+        tts = TrainTestSet(
+            name=f"{stock_code}_{input_size}_{forecast_size}_{window_stride}",
+            train_set=selected_train_set,
+            val_set=selected_val_set,
+            test_set=selected_test_set,
+            output_column=output_column,
+            input_size=input_size,
+            forecast_size=forecast_size,
+            train_windows=train_windows,
+        )
+
+        # attach scalers & metadata so training code can inverse-transform
+        setattr(tts, "feature_scaler", feature_scaler)
+        setattr(tts, "target_scaler", target_scaler)
+        setattr(tts, "numeric_feature_cols", numeric_feature_cols)
+
+        self._logger.log_info(
+            "TrainTestSet created successfully with scalers fitted on training portion."
+        )
+
+        return tts
+
+    # --------------------------
+    # Input validator - reuse your original implementation (kept as-is)
+    # --------------------------
+    def _validate_input(
+        self,
+        dataframe: pd.DataFrame,
+        output_column: str,
+        stock_code: str,
+        input_size: int,
+        forecast_size: int,
+    ) -> bool:
+        total_required = (input_size + forecast_size) * 3
+        if len(dataframe) <= total_required:
+            raise ValueError(
+                f"Dataframe length ({len(dataframe)}) must be greater than "
+                f"3 * (input_size + forecast_size)"
+                f"({total_required})."
+            )
+
+        if output_column not in dataframe.columns:
+            raise ValueError(
+                f"Output column '{output_column}' not found in dataframe columns: {list(dataframe.columns)}."
+            )
+
+        if not isinstance(stock_code, str) or not stock_code.strip():
+            raise ValueError(
+                "Stock code must be a non-empty string after stripping whitespace."
+            )
+
+        for name, value in {
+            "input_size": input_size,
+            "forecast_size": forecast_size,
+        }.items():
+            if not isinstance(value, int) or value <= 0:
+                raise ValueError(f"{name} must be a positive integer (got {value!r}).")
+
+        return True
