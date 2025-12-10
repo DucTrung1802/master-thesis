@@ -32,45 +32,31 @@ load_dotenv()
 class TimeSeriesDataset(Dataset):
     """
     Each window is divided into:
-        - Training segment: train_window_size (input)
-        - Validation segment: validation_window_size (input)
-        - Testing segment: test_window_size (target)
+        - Training segment: input_size (input)
+        - Testing segment: forecast_size (forecast)
     """
 
-    def __init__(
-        self, windows, train_window_size, validation_window_size, test_window_size
-    ):
-        self.X_train, self.y_train = [], []
-        self.X_val, self.y_val = [], []
+    def __init__(self, windows, input_size, forecast_size):
+        self.X_, self.y_ = [], []
 
         for window in windows:
             data = window.values
-            total_needed = train_window_size + validation_window_size + test_window_size
+            total_needed = input_size + forecast_size
             if len(data) < total_needed:
                 continue
 
-            # --- TRAIN segment
-            self.X_train.append(data[:train_window_size, :-1])
-            self.y_train.append(
-                data[train_window_size : train_window_size + test_window_size, -1]
-            )
-
-            # --- VALIDATION segment
-            val_end = train_window_size + validation_window_size
-            self.X_val.append(data[val_end - train_window_size : val_end, :-1])
-            self.y_val.append(data[val_end : val_end + test_window_size, -1])
+            self.X_.append(data[:input_size, :-1])
+            self.y_.append(data[input_size : input_size + forecast_size, -1])
 
         # Convert to tensors
-        self.X_train = torch.tensor(np.array(self.X_train), dtype=torch.float32)
-        self.y_train = torch.tensor(np.array(self.y_train), dtype=torch.float32)
-        self.X_val = torch.tensor(np.array(self.X_val), dtype=torch.float32)
-        self.y_val = torch.tensor(np.array(self.y_val), dtype=torch.float32)
+        self.X_ = torch.tensor(np.array(self.X_), dtype=torch.float32)
+        self.y_ = torch.tensor(np.array(self.y_), dtype=torch.float32)
 
     def __len__(self):
-        return len(self.X_train)
+        return len(self.X_)
 
     def __getitem__(self, idx):
-        return self.X_train[idx], self.y_train[idx]
+        return self.X_[idx], self.y_[idx]
 
 
 # =============================
