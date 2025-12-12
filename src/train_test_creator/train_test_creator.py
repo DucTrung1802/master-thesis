@@ -159,7 +159,7 @@ class TrainTestCreator:
         # --- Feature selection should be based on training portion only ---
         train_for_fs = (
             self.train_set.drop(columns=["date"])
-            if "date" in self._full_train_df.columns
+            if "date" in self.train_set.columns
             else self.train_set
         )
         feature_columns = train_for_fs.columns.tolist()

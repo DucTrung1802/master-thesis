@@ -22,9 +22,8 @@ class ModelConfigDto:
 
     # Windowing
     window_type: WindowType
-    train_window_size: int
-    validation_window_size: int
-    test_window_size: int
+    input_size: int
+    forecast_size: int
 
     # Training
     epochs: int
@@ -56,9 +55,8 @@ class ModelConfigDto:
             "architecture": self.architecture.value,
             "stock_code": self.stock_code,
             "window_type": self.window_type.value,
-            "train_window_size": self.train_window_size,
-            "validation_window_size": self.validation_window_size,
-            "test_window_size": self.test_window_size,
+            "input_size": self.input_size,
+            "forecast_size": self.forecast_size,
             "epochs": self.epochs,
             "learning_rate": self.learning_rate,
             "batch_size": self.batch_size,

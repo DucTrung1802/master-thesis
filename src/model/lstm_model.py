@@ -95,8 +95,8 @@ class LSTM_Model:
             self._logger.log_error("Invalid ModelConfigDto")
             raise ValueError("Invalid ModelConfigDto")
 
-        self._train_test_set = train_test_set
-        self._model_config = model_config
+        self._train_test_set: TrainTestSet = train_test_set
+        self._model_config: ModelConfigDto = model_config
         self._model_config.architecture = AchitectureType.LSTM
         self._device = torch.device(model_config.device)
 
@@ -119,10 +119,11 @@ class LSTM_Model:
         if not model_config.stock_code:
             errors.append("Stock code must not be empty.")
 
-        if model_config.train_window_size <= 0:
-            errors.append("Train window size must be greater than 0.")
-        if model_config.test_window_size <= 0:
-            errors.append("Test window size must be greater than 0.")
+        if model_config.input_size <= 0:
+            errors.append("Input size must be greater than 0.")
+        if model_config.forecast_size <= 0:
+            errors.append("Forecast size must be greater than 0.")
+
         if model_config.epochs <= 0:
             errors.append("Epochs must be greater than 0.")
         if model_config.batch_size <= 0:
@@ -147,10 +148,15 @@ class LSTM_Model:
 
         # --- Prepare dataset ---
         train_dataset = TimeSeriesDataset(
-            windows=self._train_test_set.train_sets,
-            train_window_size=self._train_test_set.train_window_size,
-            validation_window_size=self._train_test_set.validation_window_size,
-            test_window_size=self._train_test_set.test_window_size,
+            windows=self._train_test_set.train_windows,
+            input_size=self._train_test_set.input_size,
+            forecast_size=self._train_test_set.forecast_size,
+        )
+
+        val_dataset = TimeSeriesDataset(
+            windows=[self._train_test_set.val_set],
+            input_size=self._train_test_set.input_size,
+            forecast_size=self._train_test_set.forecast_size,
         )
 
         if len(train_dataset) == 0:
@@ -158,13 +164,13 @@ class LSTM_Model:
 
         # --- DataLoaders ---
         train_loader = DataLoader(
-            list(zip(train_dataset.X_train, train_dataset.y_train)),
+            list(zip(train_dataset.X_, train_dataset.y_)),
             batch_size=self._model_config.batch_size,
-            shuffle=False,
+            shuffle=True,
         )
 
         val_loader = DataLoader(
-            list(zip(train_dataset.X_val, train_dataset.y_val)),
+            list(zip(val_dataset.X_, train_dataset.y_)),
             batch_size=self._model_config.batch_size,
             shuffle=False,
         )

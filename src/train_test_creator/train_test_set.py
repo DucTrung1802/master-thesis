@@ -153,4 +153,10 @@ class TrainTestSet:
         return len(self.train_windows)
 
     def get_train_window(self, index: int = 0) -> pd.DataFrame:
-        return self.train_sets[index]
+        return self.train_windows[index]
+
+    def get_val_set(self) -> pd.DataFrame:
+        return self.val_set
+
+    def get_test_set(self) -> pd.DataFrame:
+        return self.test_set
