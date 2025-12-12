@@ -19,8 +19,8 @@ class ModelOutputDto:
     y_pred: np.ndarray
     y_pred_denorm: np.ndarray
     y_true: np.ndarray
-    input_window_size: int
-    horizon_size: int
+    input_size: int
+    forecast_size: int
     training_time: Any
     mape: float
 
@@ -29,8 +29,8 @@ class ModelOutputDto:
         return {
             # --- Metadata ---
             "model_config": self.model_config.to_dict(),
-            "input_window_size": self.input_window_size,
-            "horizon_size": self.horizon_size,
+            "input_size": self.input_size,
+            "forecast_size": self.forecast_size,
             "training_time": float(self.training_time),
             # --- Training metrics ---
             "train_loss_history": list(map(float, self.train_loss_history)),

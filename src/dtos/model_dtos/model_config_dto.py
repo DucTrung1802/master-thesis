@@ -37,7 +37,6 @@ class ModelConfigDto:
     metric: MetricType
 
     # Output scale
-    output_range_scale: float
     output_range: tuple[float, float]
 
     # Reproducibility & runtime
@@ -65,7 +64,6 @@ class ModelConfigDto:
             "scaler_type": self.scaler_type.value,
             "metric": self.metric.value,
             "device": str(self.device),
-            "output_range_scale": self.output_range_scale,
             "output_range": self.output_range,
             "seed": self.seed,
             "lr_scheduler": self.lr_scheduler,

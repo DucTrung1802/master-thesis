@@ -63,7 +63,7 @@ class TimeSeriesDataset(Dataset):
 # MODEL
 # =============================
 class LSTMForecastModel(nn.Module):
-    def __init__(self, num_features, hidden_size, num_layers, test_window_size):
+    def __init__(self, num_features, hidden_size, num_layers, forecast_size):
         super(LSTMForecastModel, self).__init__()
         self.lstm = nn.LSTM(
             input_size=num_features,
@@ -73,7 +73,7 @@ class LSTMForecastModel(nn.Module):
             dropout=0.2,
         )
         self.fc = nn.Sequential(
-            nn.Linear(hidden_size, 64), nn.ReLU(), nn.Linear(64, test_window_size)
+            nn.Linear(hidden_size, 64), nn.ReLU(), nn.Linear(64, forecast_size)
         )
 
     def forward(self, x):
@@ -143,7 +143,7 @@ class LSTM_Model:
     # --------------------------
     def train(self):
         self._logger.log_info("START TRAINING PROCESS...")
-        output_range = self._train_test_set.output_range
+        output_range = self._model_config.output_range
         start_time = time()
 
         # --- Prepare dataset ---
@@ -160,7 +160,7 @@ class LSTM_Model:
         )
 
         if len(train_dataset) == 0:
-            raise ValueError("No valid training windows found in train_sets.")
+            raise ValueError("No valid training windows found in train windows.")
 
         # --- DataLoaders ---
         train_loader = DataLoader(
@@ -176,12 +176,12 @@ class LSTM_Model:
         )
 
         # --- Model Setup ---
-        num_features = train_dataset.X_train.shape[-1]
+        num_features = train_dataset.X_.shape[-1]
         model = LSTMForecastModel(
             num_features=num_features,
             hidden_size=128,
             num_layers=2,
-            test_window_size=self._train_test_set.test_window_size,
+            forecast_size=self._train_test_set.forecast_size,
         ).to(self._device)
 
         criterion = nn.MSELoss()
@@ -281,21 +281,22 @@ class LSTM_Model:
         # ---------------- TEST EVALUATION ----------------
         model.eval()
         with torch.no_grad():
-            last_train_window = self._train_test_set.train_sets[-1].values
-            train_window = self._train_test_set.train_window_size
-            test_window = self._train_test_set.test_window_size
+            input_size = self._train_test_set.input_size
+            forecast_size = self._train_test_set.forecast_size
 
             X_input = (
                 torch.tensor(
-                    last_train_window[-train_window:, :-1], dtype=torch.float32
+                    np.array(self._train_test_set.test_set.iloc[:input_size, :-1]),
+                    dtype=torch.float32,
                 )
                 .unsqueeze(0)
                 .to(self._device)
             )
             y_pred = model(X_input)
 
-            test_data = self._train_test_set.test_sets[0].values
-            y_true_np = np.array(test_data[:test_window, -1], dtype=np.float32)
+            y_true_np = np.array(
+                self._train_test_set.test_set.iloc[input_size:, -1], dtype=np.float32
+            )
             y_true = torch.from_numpy(y_true_np).unsqueeze(0).to(self._device)
 
             y_pred_denorm = (
@@ -326,8 +327,8 @@ class LSTM_Model:
             y_pred=y_pred.cpu().numpy().flatten(),
             y_pred_denorm=y_pred_denorm.cpu().numpy().flatten(),
             y_true=y_true.cpu().numpy().flatten(),
-            input_window_size=train_window,
-            horizon_size=test_window,
+            input_size=input_size,
+            forecast_size=forecast_size,
             training_time=training_time,
             mape=mape,
         )
