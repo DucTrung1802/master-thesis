@@ -22,6 +22,7 @@ from utils.enums import (
     OptimizerType,
     ScalerType,
 )
+from utils.utils import set_seed
 
 load_dotenv()
 
@@ -89,6 +90,8 @@ class LSTM_Model:
     def __init__(
         self, logger: Logger, train_test_set: TrainTestSet, model_config: ModelConfigDto
     ):
+        set_seed(model_config.seed)
+
         self._logger = logger
 
         if not self._validate_model_config_dto(model_config):
