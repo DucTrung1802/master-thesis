@@ -112,7 +112,7 @@ class TrainTestCreator:
         stock_code: str,
         input_size: int,
         forecast_size: int,
-    ) -> "TrainTestSet":
+    ) -> TrainTestSet:
 
         # --- Basic validation (reuse your validator) ---
         self._validate_input(
@@ -183,13 +183,13 @@ class TrainTestCreator:
             columns=[c for c in features_to_drop if c in self.test_set.columns]
         )
 
-        # --- Fit scalers on TRAINING PORTION ONLY ---
+        # --- Create fit scalers from train set ---
         feature_scaler, target_scaler, numeric_feature_cols = self._fit_scalers(
             train_df=selected_train_set, output_column=output_column
         )
 
-        # --- Apply scalers ---
-        normalized_train_df = self._apply_scalers_to_df(
+        # --- Apply scalers for train set ---
+        normalized_train_set = self._apply_scalers_to_df(
             selected_train_set,
             feature_scaler,
             target_scaler,
@@ -197,7 +197,25 @@ class TrainTestCreator:
             output_column,
         )
 
-        # --- Build rolling windows from normalized_train_df ---
+        # --- Apply scalers for val set ---
+        normalized_val_set = self._apply_scalers_to_df(
+            selected_val_set,
+            feature_scaler,
+            target_scaler,
+            numeric_feature_cols,
+            output_column,
+        )
+
+        # --- Apply scalers for test set ---
+        normalized_test_set = self._apply_scalers_to_df(
+            selected_test_set,
+            feature_scaler,
+            target_scaler,
+            numeric_feature_cols,
+            output_column,
+        )
+
+        # --- Build rolling windows from normalized_train_set ---
         train_windows: List[pd.DataFrame] = []
         total_window_size = input_size + forecast_size
 
@@ -205,7 +223,7 @@ class TrainTestCreator:
 
         for start_idx in range(0, train_set_size, window_stride):
             end_idx = start_idx + total_window_size
-            window_df = normalized_train_df.iloc[start_idx:end_idx].reset_index(
+            window_df = normalized_train_set.iloc[start_idx:end_idx].reset_index(
                 drop=True
             )
             # Sanity: each window length must equal total_window_size
@@ -218,7 +236,7 @@ class TrainTestCreator:
 
         # --- Create TrainTestSet and attach scalers for downstream use ---
         tts = TrainTestSet(
-            name=f"{stock_code}_{input_size}_{forecast_size}_{window_stride}",
+            name=f"{stock_code}_input_size_{input_size}_forecast_size_{forecast_size}_window_stride_{window_stride}",
             train_set=selected_train_set,
             val_set=selected_val_set,
             test_set=selected_test_set,
@@ -226,12 +244,13 @@ class TrainTestCreator:
             input_size=input_size,
             forecast_size=forecast_size,
             train_windows=train_windows,
+            norm_train_set=normalized_train_set,
+            norm_val_set=normalized_val_set,
+            norm_test_set=normalized_test_set,
+            feature_scaler=feature_scaler,
+            target_scaler=target_scaler,
+            numeric_feature_cols=numeric_feature_cols,
         )
-
-        # attach scalers & metadata so training code can inverse-transform
-        setattr(tts, "feature_scaler", feature_scaler)
-        setattr(tts, "target_scaler", target_scaler)
-        setattr(tts, "numeric_feature_cols", numeric_feature_cols)
 
         self._logger.log_info(
             "TrainTestSet created successfully with scalers fitted on training portion."

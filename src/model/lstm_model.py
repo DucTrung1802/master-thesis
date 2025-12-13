@@ -170,7 +170,7 @@ class LSTM_Model:
         )
 
         val_loader = DataLoader(
-            list(zip(val_dataset.X_, train_dataset.y_)),
+            list(zip(val_dataset.X_, val_dataset.y_)),
             batch_size=self._model_config.batch_size,
             shuffle=False,
         )

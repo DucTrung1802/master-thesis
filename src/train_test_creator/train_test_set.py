@@ -3,6 +3,7 @@ from typing import List, Tuple
 
 from utils.constants import *
 from utils.utils import *
+from sklearn.preprocessing import MinMaxScaler
 
 
 class TrainTestSet:
@@ -16,6 +17,12 @@ class TrainTestSet:
         input_size: int,
         forecast_size: int,
         train_windows: List[pd.DataFrame],
+        norm_train_set: pd.DataFrame,
+        norm_val_set: pd.DataFrame,
+        norm_test_set: pd.DataFrame,
+        feature_scaler: MinMaxScaler,
+        target_scaler: MinMaxScaler,
+        numeric_feature_cols: List[str],
     ):
         if not self._validate_input(
             name=name,
@@ -39,6 +46,18 @@ class TrainTestSet:
         self.train_set: pd.DataFrame = train_set
         self.val_set: pd.DataFrame = val_set
         self.test_set: pd.DataFrame = test_set
+
+        # --- Normalized Data ---
+        self.norm_train_set: pd.DataFrame = norm_train_set
+        self.norm_val_set: pd.DataFrame = norm_val_set
+        self.norm_test_set: pd.DataFrame = norm_test_set
+
+        # --- Scalers ---
+        self.feature_scaler: MinMaxScaler = feature_scaler
+        self.target_scaler: MinMaxScaler = target_scaler
+        self.numeric_feature_cols: List[str] = numeric_feature_cols
+
+        # --- Train windows ---
         self.train_windows: List[pd.DataFrame] = train_windows
 
     # ------------------------------------------------------------------ #
@@ -48,33 +67,52 @@ class TrainTestSet:
         train_set: pd.DataFrame,
         val_set: pd.DataFrame,
         test_set: pd.DataFrame,
+        norm_train_set: pd.DataFrame,
+        norm_val_set: pd.DataFrame,
+        norm_test_set: pd.DataFrame,
         output_column: str,
         input_size: int,
         forecast_size: int,
         train_windows: List[pd.DataFrame],
+        feature_scaler: MinMaxScaler,
+        target_scaler: MinMaxScaler,
+        numeric_feature_cols: List[str],
     ) -> bool:
         """
         Validate all inputs for TrainTestSet initialization.
-        Returns True if all validations pass, otherwise raises ValueError.
+        Raises ValueError if any validation fails.
         """
 
-        # ---- Basic type checks ----
+        # ------------------------------------------------------------------
+        # Basic metadata
+        # ------------------------------------------------------------------
         if not isinstance(name, str) or not name.strip():
             raise ValueError("`name` must be a non-empty string.")
 
-        # Validate datasets
-        for label, df in {
-            "train_set": train_set,
-            "val_set": val_set,
-            "test_set": test_set,
-        }.items():
-            if not isinstance(df, pd.DataFrame):
-                raise ValueError(f"`{label}` must be a pandas DataFrame.")
-
-        # Output column
         if not isinstance(output_column, str) or not output_column.strip():
             raise ValueError("`output_column` must be a non-empty string.")
 
+        # ------------------------------------------------------------------
+        # Dataset validation
+        # ------------------------------------------------------------------
+        datasets = {
+            "train_set": train_set,
+            "val_set": val_set,
+            "test_set": test_set,
+            "norm_train_set": norm_train_set,
+            "norm_val_set": norm_val_set,
+            "norm_test_set": norm_test_set,
+        }
+
+        for label, df in datasets.items():
+            if not isinstance(df, pd.DataFrame):
+                raise ValueError(f"`{label}` must be a pandas DataFrame.")
+            if df.empty:
+                raise ValueError(f"`{label}` must not be empty.")
+
+        # ------------------------------------------------------------------
+        # Column checks
+        # ------------------------------------------------------------------
         for label, df in {
             "train_set": train_set,
             "val_set": val_set,
@@ -82,10 +120,23 @@ class TrainTestSet:
         }.items():
             if output_column not in df.columns:
                 raise ValueError(
-                    f"`output_column` '{output_column}' not found in {label} columns."
+                    f"`output_column` '{output_column}' not found in {label}."
                 )
 
+        # Normalized sets must have identical columns to raw sets
+        for raw, norm, label in [
+            (train_set, norm_train_set, "train"),
+            (val_set, norm_val_set, "val"),
+            (test_set, norm_test_set, "test"),
+        ]:
+            if list(raw.columns) != list(norm.columns):
+                raise ValueError(
+                    f"Column mismatch between {label}_set and norm_{label}_set."
+                )
+
+        # ------------------------------------------------------------------
         # Window sizes
+        # ------------------------------------------------------------------
         for label, value in {
             "input_size": input_size,
             "forecast_size": forecast_size,
@@ -93,35 +144,60 @@ class TrainTestSet:
             if not isinstance(value, int) or value <= 0:
                 raise ValueError(f"`{label}` must be a positive integer.")
 
-        # Validate that datasets are at least large enough for windowing
+        min_len = input_size + forecast_size
         for label, df in {
             "train_set": train_set,
             "val_set": val_set,
             "test_set": test_set,
         }.items():
-            min_len = input_size + forecast_size
             if len(df) < min_len:
                 raise ValueError(
-                    f"{label} has {len(df)} rows but needs at least {min_len} "
-                    f"for input_size={input_size} and forecast_size={forecast_size}."
+                    f"{label} has {len(df)} rows but needs at least {min_len}."
                 )
 
-        # Validate train_windows (list of DataFrames)
-        if not isinstance(train_windows, list) or not all(
-            isinstance(w, pd.DataFrame) for w in train_windows
-        ):
+        # ------------------------------------------------------------------
+        # Train windows
+        # ------------------------------------------------------------------
+        if not isinstance(train_windows, list):
             raise ValueError("`train_windows` must be a list of pandas DataFrames.")
 
         for i, w in enumerate(train_windows):
-            if len(w) < input_size + forecast_size:
+            if not isinstance(w, pd.DataFrame):
+                raise ValueError(f"train_windows[{i}] is not a DataFrame.")
+            if len(w) < min_len:
                 raise ValueError(
-                    f"train_windows[{i}] has {len(w)} rows but must have at least "
-                    f"{input_size + forecast_size}."
+                    f"train_windows[{i}] has {len(w)} rows but needs at least {min_len}."
                 )
             if output_column not in w.columns:
                 raise ValueError(
-                    f"train_windows[{i}] does not contain required column '{output_column}'."
+                    f"train_windows[{i}] missing required column '{output_column}'."
                 )
+
+        # ------------------------------------------------------------------
+        # Scalers
+        # ------------------------------------------------------------------
+        if not isinstance(feature_scaler, MinMaxScaler):
+            raise ValueError("`feature_scaler` must be a MinMaxScaler instance.")
+
+        if not isinstance(target_scaler, MinMaxScaler):
+            raise ValueError("`target_scaler` must be a MinMaxScaler instance.")
+
+        # ------------------------------------------------------------------
+        # Numeric feature columns
+        # ------------------------------------------------------------------
+        if not isinstance(numeric_feature_cols, list) or not all(
+            isinstance(c, str) for c in numeric_feature_cols
+        ):
+            raise ValueError("`numeric_feature_cols` must be a list of strings.")
+
+        if output_column not in numeric_feature_cols:
+            raise ValueError("`numeric_feature_cols` must include the output_column.")
+
+        missing_cols = set(numeric_feature_cols) - set(train_set.columns)
+        if missing_cols:
+            raise ValueError(
+                f"`numeric_feature_cols` contains columns not in train_set: {missing_cols}"
+            )
 
         return True
 
