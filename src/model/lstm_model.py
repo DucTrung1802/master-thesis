@@ -143,7 +143,6 @@ class LSTM_Model:
     # --------------------------
     def train(self):
         self._logger.log_info("START TRAINING PROCESS...")
-        output_range = self._model_config.output_range
         start_time = time()
 
         # --- Prepare dataset ---
@@ -154,7 +153,7 @@ class LSTM_Model:
         )
 
         val_dataset = TimeSeriesDataset(
-            windows=[self._train_test_set.val_set],
+            windows=[self._train_test_set.norm_val_set],
             input_size=self._train_test_set.input_size,
             forecast_size=self._train_test_set.forecast_size,
         )
@@ -284,30 +283,49 @@ class LSTM_Model:
             input_size = self._train_test_set.input_size
             forecast_size = self._train_test_set.forecast_size
 
+            # 1️⃣ Normalized input (CORRECT)
             X_input = (
                 torch.tensor(
-                    np.array(self._train_test_set.test_set.iloc[:input_size, :-1]),
+                    self._train_test_set.norm_test_set.iloc[:input_size, :-1].values,
                     dtype=torch.float32,
                 )
                 .unsqueeze(0)
                 .to(self._device)
             )
-            y_pred = model(X_input)
 
-            y_true_np = np.array(
-                self._train_test_set.test_set.iloc[input_size:, -1], dtype=np.float32
-            )
-            y_true = torch.from_numpy(y_true_np).unsqueeze(0).to(self._device)
+            # 2️⃣ Model prediction (normalized scale)
+            y_pred_norm = model(X_input)  # shape: (1, forecast_size)
 
-            y_pred_denorm = (
-                y_pred * (output_range[1] - output_range[0]) + output_range[0]
+            # 3️⃣ Inverse transform prediction
+            y_pred_denorm = self._train_test_set.target_scaler.inverse_transform(
+                y_pred_norm.cpu().numpy()
             )
-            test_loss = criterion(y_pred_denorm, y_true).item()
+            y_pred_denorm = torch.tensor(y_pred_denorm, device=self._device)
+
+            # 4️⃣ Get REAL y_true (inverse transform)
+            y_true_norm = self._train_test_set.norm_test_set.iloc[
+                input_size : input_size + forecast_size, -1
+            ].values.reshape(1, -1)
+
+            y_true_denorm = self._train_test_set.target_scaler.inverse_transform(
+                y_true_norm
+            )
+            y_true_denorm = torch.tensor(y_true_denorm, device=self._device)
+
+            # 5️⃣ Compute metrics on REAL scale
+            criterion = nn.MSELoss()
+            test_loss = criterion(y_pred_denorm, y_true_denorm).item()
+
             epsilon = 1e-8
             mape = (
-                torch.mean(torch.abs((y_true - y_pred_denorm) / (y_true + epsilon)))
+                torch.mean(
+                    torch.abs(
+                        (y_true_denorm - y_pred_denorm) / (y_true_denorm + epsilon)
+                    )
+                ).item()
                 * 100
-            ).item()
+            )
+
             log_dict["test_mape"] = mape
             self._run.log(log_dict)
 
@@ -324,9 +342,10 @@ class LSTM_Model:
             validation_loss_history=val_loss_history,
             final_validation_loss=best_val_loss,
             test_loss=test_loss,
-            y_pred=y_pred.cpu().numpy().flatten(),
-            y_pred_denorm=y_pred_denorm.cpu().numpy().flatten(),
-            y_true=y_true.cpu().numpy().flatten(),
+            # Flatten (1, forecast_size) -> (forecast_size,)
+            y_pred=y_pred_norm.detach().cpu().numpy().squeeze().tolist(),
+            y_pred_denorm=y_pred_denorm.detach().cpu().numpy().squeeze().tolist(),
+            y_true=y_true_denorm.detach().cpu().numpy().squeeze().tolist(),
             input_size=input_size,
             forecast_size=forecast_size,
             training_time=training_time,

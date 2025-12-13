@@ -29,10 +29,16 @@ class TrainTestSet:
             train_set=train_set,
             val_set=val_set,
             test_set=test_set,
+            norm_train_set=norm_train_set,
+            norm_val_set=norm_val_set,
+            norm_test_set=norm_test_set,
             output_column=output_column,
             input_size=input_size,
             forecast_size=forecast_size,
             train_windows=train_windows,
+            feature_scaler=feature_scaler,
+            target_scaler=target_scaler,
+            numeric_feature_cols=numeric_feature_cols,
         ):
             return
 
@@ -190,15 +196,6 @@ class TrainTestSet:
         ):
             raise ValueError("`numeric_feature_cols` must be a list of strings.")
 
-        if output_column not in numeric_feature_cols:
-            raise ValueError("`numeric_feature_cols` must include the output_column.")
-
-        missing_cols = set(numeric_feature_cols) - set(train_set.columns)
-        if missing_cols:
-            raise ValueError(
-                f"`numeric_feature_cols` contains columns not in train_set: {missing_cols}"
-            )
-
         return True
 
     # ------------------------------------------------------------------ #
@@ -216,23 +213,26 @@ class TrainTestSet:
     def get_output_column(self) -> str:
         return self.output_column
 
-    def get_train_set_size(self) -> int:
-        return len(self.train_set)
-
-    def get_val_set_size(self) -> int:
-        return len(self.val_set)
-
-    def get_test_set_size(self) -> int:
-        return len(self.test_set)
-
-    def get_number_of_train_windows(self) -> int:
-        return len(self.train_windows)
-
-    def get_train_window(self, index: int = 0) -> pd.DataFrame:
-        return self.train_windows[index]
+    def get_train_set(self) -> int:
+        return self.train_set
 
     def get_val_set(self) -> pd.DataFrame:
         return self.val_set
 
     def get_test_set(self) -> pd.DataFrame:
         return self.test_set
+
+    def get_norm_train_set(self) -> pd.DataFrame:
+        return self.norm_train_set
+
+    def get_norm_val_set(self) -> pd.DataFrame:
+        return self.norm_val_set
+
+    def get_norm_test_set(self) -> pd.DataFrame:
+        return self.norm_test_set
+
+    def get_number_of_train_windows(self) -> int:
+        return len(self.train_windows)
+
+    def get_train_window(self, index: int = 0) -> pd.DataFrame:
+        return self.train_windows[index]

@@ -36,9 +36,6 @@ class ModelConfigDto:
     scaler_type: ScalerType
     metric: MetricType
 
-    # Output scale
-    output_range: tuple[float, float]
-
     # Reproducibility & runtime
     device: str
     seed: int = RANDOM_SEED
@@ -64,7 +61,6 @@ class ModelConfigDto:
             "scaler_type": self.scaler_type.value,
             "metric": self.metric.value,
             "device": str(self.device),
-            "output_range": self.output_range,
             "seed": self.seed,
             "lr_scheduler": self.lr_scheduler,
         }
