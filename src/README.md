@@ -1,13 +1,14 @@
 # 📌 How to Split Train – Validation – Test
 
-### Branch: `train_test_creator_1`
+### Branch: `method_1`
+
+
 ### Input size: `240`
 ### Forecast horizon: `30`
 ### Example dataset size: `3000`
 
----
 
-# 📊 Overall Structure
+## Overall Structure
 
 `|<------------------------------ 3000 data points ------------------------------->|`
 
@@ -23,9 +24,11 @@
 - **Validation set:** previous **270** points = **240 input days + 30 forecast days**
 - **Train set:** all earlier points
 
----
 
-# 🛠️ How to Create Training Windows
+## Loss function: `MSE`
+
+
+## How to Create Training Windows
 
 Training uses sliding windows across the Train block:
 
@@ -40,9 +43,8 @@ Training uses sliding windows across the Train block:
      - `X_train[i] = data[i : i + 240]`
      - `Y_train[i] = data[i + 240 : i + 240 + 30]`
 
----
 
-# 🟦 Validation Windows (not sliding)
+## Validation Windows (not sliding)
 
 Validation uses **only one window**:
 
@@ -52,9 +54,8 @@ Validation uses **only one window**:
 This matches real forecasting:  
 240 days of recent history → forecast next 30 days.
 
----
 
-# 🟥 Test Windows (not sliding)
+## Test Windows (not sliding)
 
 Test uses **only one final window**:
 
@@ -63,9 +64,14 @@ Test uses **only one final window**:
 
 Test must be evaluated **once**, without sliding, to simulate true future forecasting.
 
----
 
-# ✅ Summary
+## Metric for evaluation
+
+- MSE
+- MAPE
+
+
+## Summary
 
 - Train uses **many** sliding windows (240→30).
 - Validation and Test each use **one** window:
