@@ -9,24 +9,34 @@ from dtos.model_dtos.model_config_dto import ModelConfigDto
 
 @dataclass
 class ModelOutputDto:
-    model: nn.Module
-    model_state_dict: dict[str, Any]
+    # Metadata
     model_config: ModelConfigDto
+    training_time: Any
+
+    # Model
+    model_state_dict: dict[str, Any]
+    model: nn.Module
+
+    # Training history
     train_loss_history: List[float]
-    final_train_loss: float
     validation_loss_history: List[float] | None
+
+    # Loss history
+    final_train_loss: float
     final_validation_loss: float | None
     test_loss: float
 
-    # Enforced as lists
+    # Result
     y_pred: List[float]
     y_pred_denorm: List[float]
     y_true: List[float]
 
-    input_size: int
-    forecast_size: int
-    training_time: Any
+    # Metrics
     mape: float
+    rsme: float
+    mae: float
+    mase: float
+    r2: float
 
     def __post_init__(self):
         """Ensure predictions and targets are stored as Python lists."""
@@ -45,12 +55,10 @@ class ModelOutputDto:
     def to_dict(self) -> dict:
         """Return model output metadata and results as a serializable dictionary."""
         return {
-            # --- Metadata ---
+            # Metadata
             "model_config": self.model_config.to_dict(),
-            "input_size": self.input_size,
-            "forecast_size": self.forecast_size,
             "training_time": float(self.training_time),
-            # --- Training metrics ---
+            # Model
             "train_loss_history": self.train_loss_history,
             "final_train_loss": float(self.final_train_loss),
             "validation_loss_history": self.validation_loss_history,
