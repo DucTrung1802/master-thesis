@@ -237,6 +237,7 @@ class TrainTestCreator:
         # --- Create TrainTestSet and attach scalers for downstream use ---
         tts = TrainTestSet(
             name=f"{stock_code}_input_size_{input_size}_forecast_size_{forecast_size}_window_stride_{window_stride}",
+            data_set=dataframe,
             train_set=selected_train_set,
             val_set=selected_val_set,
             test_set=selected_test_set,
@@ -244,6 +245,8 @@ class TrainTestCreator:
             input_size=input_size,
             forecast_size=forecast_size,
             train_windows=train_windows,
+            val_windows=[normalized_val_set],
+            test_windows=[normalized_test_set],
             norm_train_set=normalized_train_set,
             norm_val_set=normalized_val_set,
             norm_test_set=normalized_test_set,

@@ -9,6 +9,13 @@ from tqdm.notebook import tqdm
 import wandb
 from dotenv import load_dotenv
 import pickle
+from sklearn.metrics import (
+    mean_absolute_error,
+    mean_absolute_percentage_error,
+    root_mean_squared_error,
+    r2_score,
+)
+
 
 from dtos.model_dtos.model_config_dto import ModelConfigDto
 from dtos.model_dtos.model_output_dto import ModelOutputDto
@@ -81,6 +88,9 @@ class LSTMForecastModel(nn.Module):
         output, _ = self.lstm(x)
         last_output = output[:, -1, :]
         return self.fc(last_output)
+
+    def get_name(self):
+        return self._get_name()
 
 
 # =============================
@@ -286,7 +296,7 @@ class LSTM_Model:
             input_size = self._train_test_set.input_size
             forecast_size = self._train_test_set.forecast_size
 
-            # 1️⃣ Normalized input (CORRECT)
+            # Normalized input
             X_input = (
                 torch.tensor(
                     self._train_test_set.norm_test_set.iloc[:input_size, :-1].values,
@@ -296,16 +306,16 @@ class LSTM_Model:
                 .to(self._device)
             )
 
-            # 2️⃣ Model prediction (normalized scale)
+            # Model prediction
             y_pred_norm = model(X_input)  # shape: (1, forecast_size)
 
-            # 3️⃣ Inverse transform prediction
+            # Inverse transform prediction
             y_pred_denorm = self._train_test_set.target_scaler.inverse_transform(
                 y_pred_norm.cpu().numpy()
             )
             y_pred_denorm = torch.tensor(y_pred_denorm, device=self._device)
 
-            # 4️⃣ Get REAL y_true (inverse transform)
+            # Get REAL y_true (inverse transform)
             y_true_norm = self._train_test_set.norm_test_set.iloc[
                 input_size : input_size + forecast_size, -1
             ].values.reshape(1, -1)
@@ -315,21 +325,28 @@ class LSTM_Model:
             )
             y_true_denorm = torch.tensor(y_true_denorm, device=self._device)
 
-            # 5️⃣ Compute metrics on REAL scale
+            # Compute loss on REAL scale
             criterion = nn.MSELoss()
             test_loss = criterion(y_pred_denorm, y_true_denorm).item()
 
-            epsilon = 1e-8
-            mape = (
-                torch.mean(
-                    torch.abs(
-                        (y_true_denorm - y_pred_denorm) / (y_true_denorm + epsilon)
-                    )
-                ).item()
-                * 100
+            # Compute metrics
+            y_true_np = y_true_denorm.detach().cpu().numpy().reshape(-1)
+            y_pred_np = y_pred_denorm.detach().cpu().numpy().reshape(-1)
+
+            mae = mean_absolute_error(y_true_np, y_pred_np)
+            mape = mean_absolute_percentage_error(y_true_np, y_pred_np) * 100
+            rmse = root_mean_squared_error(y_true_np, y_pred_np)
+            r2 = r2_score(y_true_np, y_pred_np)
+
+            log_dict.update(
+                {
+                    "test_mae": mae,
+                    "test_mape": mape,
+                    "test_rmse": rmse,
+                    "test_r2": r2,
+                }
             )
 
-            log_dict["test_mape"] = mape
             self._run.log(log_dict)
 
         training_time = time() - start_time
@@ -337,22 +354,36 @@ class LSTM_Model:
 
         # --- Prepare model output ---
         model_output = ModelOutputDto(
-            model=model,
-            model_state_dict=model.state_dict(),
+            # Dataset metadata
+            dataset_name=self._train_test_set.get_name(),
+            data_set_size=len(self._train_test_set.get_data_set()),
+            train_set_size=len(self._train_test_set.get_train_set()),
+            val_set_size=len(self._train_test_set.get_val_set()),
+            test_set_size=len(self._train_test_set.get_test_set()),
+            number_of_train_window=len(self._train_test_set.get_train_windows()),
+            number_of_val_window=len(self._train_test_set.get_val_windows()),
+            number_of_test_window=len(self._train_test_set.get_test_windows()),
+            input_size=self._train_test_set.input_size,
+            forecast_size=self._train_test_set.forecast_size,
+            # Model metadata
+            model_name=model.get_name(),
             model_config=self._model_config,
+            training_time=training_time,
+            # Training history
             train_loss_history=train_loss_history,
-            final_train_loss=train_loss_history[-1],
             validation_loss_history=val_loss_history,
+            final_train_loss=train_loss_history[-1],
             final_validation_loss=best_val_loss,
             test_loss=test_loss,
-            # Flatten (1, forecast_size) -> (forecast_size,)
+            # Result
             y_pred=y_pred_norm.detach().cpu().numpy().squeeze().tolist(),
             y_pred_denorm=y_pred_denorm.detach().cpu().numpy().squeeze().tolist(),
             y_true=y_true_denorm.detach().cpu().numpy().squeeze().tolist(),
-            input_size=input_size,
-            forecast_size=forecast_size,
-            training_time=training_time,
+            # Metrics
+            mae=mae,
             mape=mape,
+            rmse=rmse,
+            r2=r2,
         )
 
         # --- Save outputs ---
