@@ -41,7 +41,6 @@ class ModelOutputDto:
     # Metrics
     mae: float | None
     mape: float | None
-    mase: float | None
     rmse: float | None
     r2: float | None
 
@@ -92,7 +91,6 @@ class ModelOutputDto:
             # --- Metrics ---
             "mae": float(self.mae) if self.mae is not None else None,
             "mape": float(self.mape) if self.mape is not None else None,
-            "mase": float(self.mase) if self.mase is not None else None,
             "rmse": float(self.rmse) if self.rmse is not None else None,
             "r2": float(self.r2) if self.r2 is not None else None,
         }
