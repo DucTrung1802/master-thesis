@@ -9,19 +9,26 @@ from dtos.model_dtos.model_config_dto import ModelConfigDto
 
 @dataclass
 class ModelOutputDto:
-    # Metadata
-    model_config: ModelConfigDto
-    training_time: Any
+    # Dataset metadata
+    dataset_name: str
+    data_set_size: int
+    train_set_size: int
+    val_set_size: int
+    test_set_size: int
+    number_of_train_window: int
+    number_of_val_window: int
+    number_of_test_window: int
+    input_size: int
+    forecast_size: int
 
-    # Model
-    model_state_dict: dict[str, Any]
-    model: nn.Module
+    # Model metadata
+    model_name: str
+    model_config: ModelConfigDto
+    training_time: float
 
     # Training history
     train_loss_history: List[float]
     validation_loss_history: List[float] | None
-
-    # Loss history
     final_train_loss: float
     final_validation_loss: float | None
     test_loss: float
@@ -32,11 +39,11 @@ class ModelOutputDto:
     y_true: List[float]
 
     # Metrics
-    mape: float
-    rsme: float
-    mae: float
-    mase: float
-    r2: float
+    mae: float | None
+    mape: float | None
+    mase: float | None
+    rmse: float | None
+    r2: float | None
 
     def __post_init__(self):
         """Ensure predictions and targets are stored as Python lists."""
@@ -53,23 +60,41 @@ class ModelOutputDto:
         return list(value)
 
     def to_dict(self) -> dict:
-        """Return model output metadata and results as a serializable dictionary."""
+        """Return model output metadata, metrics, and results as a serializable dictionary."""
         return {
-            # Metadata
-            "model_config": self.model_config.to_dict(),
-            "training_time": float(self.training_time),
-            # Model
+            # --- Metadata ---
+            "model_name": self.model_name,
+            "model_config": (
+                self.model_config.to_dict()
+                if hasattr(self.model_config, "to_dict")
+                else self.model_config
+            ),
+            "training_time": self.training_time,
+            # --- Training history ---
             "train_loss_history": self.train_loss_history,
-            "final_train_loss": float(self.final_train_loss),
             "validation_loss_history": self.validation_loss_history,
-            "final_validation_loss": self.final_validation_loss,
-            # --- Test metrics ---
-            "test_loss": float(self.test_loss),
-            "mape": float(self.mape),
+            "final_train_loss": (
+                float(self.final_train_loss)
+                if self.final_train_loss is not None
+                else None
+            ),
+            "final_validation_loss": (
+                float(self.final_validation_loss)
+                if self.final_validation_loss is not None
+                else None
+            ),
+            # --- Test ---
+            "test_loss": float(self.test_loss) if self.test_loss is not None else None,
             # --- Predictions ---
             "y_pred": self.y_pred,
             "y_pred_denorm": self.y_pred_denorm,
             "y_true": self.y_true,
+            # --- Metrics ---
+            "mae": float(self.mae) if self.mae is not None else None,
+            "mape": float(self.mape) if self.mape is not None else None,
+            "mase": float(self.mase) if self.mase is not None else None,
+            "rmse": float(self.rmse) if self.rmse is not None else None,
+            "r2": float(self.r2) if self.r2 is not None else None,
         }
 
     def format_output(self):
