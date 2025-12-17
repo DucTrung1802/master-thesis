@@ -1,8 +1,5 @@
 import pandas as pd
-from typing import List, Tuple
-
-from utils.constants import *
-from utils.utils import *
+from typing import List
 from sklearn.preprocessing import MinMaxScaler
 
 
@@ -10,6 +7,7 @@ class TrainTestSet:
     def __init__(
         self,
         name: str,
+        data_set: pd.DataFrame,
         train_set: pd.DataFrame,
         val_set: pd.DataFrame,
         test_set: pd.DataFrame,
@@ -24,8 +22,10 @@ class TrainTestSet:
         target_scaler: MinMaxScaler,
         numeric_feature_cols: List[str],
     ):
-        if not self._validate_input(
+        # Validate input (raises ValueError on failure)
+        self._validate_input(
             name=name,
+            data_set=data_set,
             train_set=train_set,
             val_set=val_set,
             test_set=test_set,
@@ -39,8 +39,7 @@ class TrainTestSet:
             feature_scaler=feature_scaler,
             target_scaler=target_scaler,
             numeric_feature_cols=numeric_feature_cols,
-        ):
-            return
+        )
 
         # --- Metadata ---
         self.name: str = name
@@ -49,6 +48,7 @@ class TrainTestSet:
         self.output_column: str = output_column
 
         # --- Data ---
+        self.data_set: pd.DataFrame = data_set
         self.train_set: pd.DataFrame = train_set
         self.val_set: pd.DataFrame = val_set
         self.test_set: pd.DataFrame = test_set
@@ -63,13 +63,14 @@ class TrainTestSet:
         self.target_scaler: MinMaxScaler = target_scaler
         self.numeric_feature_cols: List[str] = numeric_feature_cols
 
-        # --- Train windows ---
+        # --- Train windows (raw rolling windows) ---
         self.train_windows: List[pd.DataFrame] = train_windows
 
     # ------------------------------------------------------------------ #
     def _validate_input(
         self,
         name: str,
+        data_set: pd.DataFrame,
         train_set: pd.DataFrame,
         val_set: pd.DataFrame,
         test_set: pd.DataFrame,
@@ -83,7 +84,7 @@ class TrainTestSet:
         feature_scaler: MinMaxScaler,
         target_scaler: MinMaxScaler,
         numeric_feature_cols: List[str],
-    ) -> bool:
+    ) -> None:
         """
         Validate all inputs for TrainTestSet initialization.
         Raises ValueError if any validation fails.
@@ -102,6 +103,7 @@ class TrainTestSet:
         # Dataset validation
         # ------------------------------------------------------------------
         datasets = {
+            "data_set": data_set,
             "train_set": train_set,
             "val_set": val_set,
             "test_set": test_set,
@@ -120,6 +122,7 @@ class TrainTestSet:
         # Column checks
         # ------------------------------------------------------------------
         for label, df in {
+            "data_set": data_set,
             "train_set": train_set,
             "val_set": val_set,
             "test_set": test_set,
@@ -129,12 +132,16 @@ class TrainTestSet:
                     f"`output_column` '{output_column}' not found in {label}."
                 )
 
-        # Normalized sets must have identical columns to raw sets
+        # Normalized sets must match raw sets (columns + shape)
         for raw, norm, label in [
             (train_set, norm_train_set, "train"),
             (val_set, norm_val_set, "val"),
             (test_set, norm_test_set, "test"),
         ]:
+            if raw.shape != norm.shape:
+                raise ValueError(
+                    f"Shape mismatch between {label}_set and norm_{label}_set."
+                )
             if list(raw.columns) != list(norm.columns):
                 raise ValueError(
                     f"Column mismatch between {label}_set and norm_{label}_set."
@@ -152,6 +159,7 @@ class TrainTestSet:
 
         min_len = input_size + forecast_size
         for label, df in {
+            "data_set": data_set,
             "train_set": train_set,
             "val_set": val_set,
             "test_set": test_set,
@@ -184,9 +192,13 @@ class TrainTestSet:
         # ------------------------------------------------------------------
         if not isinstance(feature_scaler, MinMaxScaler):
             raise ValueError("`feature_scaler` must be a MinMaxScaler instance.")
+        if not hasattr(feature_scaler, "scale_"):
+            raise ValueError("`feature_scaler` must be fitted.")
 
         if not isinstance(target_scaler, MinMaxScaler):
             raise ValueError("`target_scaler` must be a MinMaxScaler instance.")
+        if not hasattr(target_scaler, "scale_"):
+            raise ValueError("`target_scaler` must be fitted.")
 
         # ------------------------------------------------------------------
         # Numeric feature columns
@@ -196,12 +208,16 @@ class TrainTestSet:
         ):
             raise ValueError("`numeric_feature_cols` must be a list of strings.")
 
-        return True
+        for col in numeric_feature_cols:
+            if col not in data_set.columns:
+                raise ValueError(
+                    f"Numeric feature column '{col}' not found in data_set."
+                )
 
     # ------------------------------------------------------------------ #
-    # Getter Methods
+    # Getter Methods (optional, attributes are public)
     # ------------------------------------------------------------------ #
-    def get_name(self) -> int:
+    def get_name(self) -> str:
         return self.name
 
     def get_input_size(self) -> int:
@@ -213,7 +229,10 @@ class TrainTestSet:
     def get_output_column(self) -> str:
         return self.output_column
 
-    def get_train_set(self) -> int:
+    def get_data_set(self) -> pd.DataFrame:
+        return self.data_set
+
+    def get_train_set(self) -> pd.DataFrame:
         return self.train_set
 
     def get_val_set(self) -> pd.DataFrame:
