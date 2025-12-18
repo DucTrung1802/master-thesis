@@ -21,7 +21,6 @@ from dtos.model_dtos.model_config_dto import ModelConfigDto
 from dtos.model_dtos.model_output_dto import ModelOutputDto
 from logger.logger import Logger
 from train_test_creator.train_test_set import TrainTestSet
-from utils.constants import PATIENCE
 from utils.enums import (
     AchitectureType,
     LossFunctionType,
@@ -132,17 +131,19 @@ class LSTM_Model:
         if not model_config.stock_code:
             errors.append("Stock code must not be empty.")
 
-        if model_config.input_size <= 0:
+        if int(model_config.input_size) <= 0:
             errors.append("Input size must be greater than 0.")
-        if model_config.forecast_size <= 0:
+        if int(model_config.forecast_size) <= 0:
             errors.append("Forecast size must be greater than 0.")
 
-        if model_config.epochs <= 0:
+        if int(model_config.epochs) <= 0:
             errors.append("Epochs must be greater than 0.")
-        if model_config.batch_size <= 0:
+        if int(model_config.batch_size) <= 0:
             errors.append("Batch size must be greater than 0.")
         if not (0 < model_config.learning_rate <= 1):
             errors.append("Learning rate must be between 0 and 1.")
+        if int(model_config.patience) < 0:
+            errors.append("Patience must be non-negative.")
 
         if errors:
             raise ValueError(
@@ -264,10 +265,10 @@ class LSTM_Model:
                 epochs_no_improve = 0
             else:
                 epochs_no_improve += 1
-                if epochs_no_improve >= PATIENCE:
+                if epochs_no_improve >= self._model_config.patience:
                     self._logger.log_info(
                         f"Early stopping triggered at epoch {epoch+1}. "
-                        f"No improvement for {PATIENCE} consecutive epochs."
+                        f"No improvement for {self._model_config.patience} consecutive epochs."
                     )
                     print(
                         f"Early stopping at epoch {epoch+1} "
@@ -350,7 +351,11 @@ class LSTM_Model:
             self._run.log(log_dict)
 
         training_time = time() - start_time
-        print(f"Training completed in {training_time:.2f}s | Test MAPE: {mape:.2f}%")
+        print(f"Training completed in {training_time:.2f}s")
+        print(f"Test MAE: {mae:.6f}")
+        print(f"Test MAPE: {mape:.2f}%")
+        print(f"Test RMSE: {rmse:.6f}")
+        print(f"Test R2: {r2:.6f}\n")
 
         # --- Prepare model output ---
         model_output = ModelOutputDto(
