@@ -1,6 +1,6 @@
 # 📌 How to Split Train – Validation – Test
 
-### Branch: `method_1`
+### Branch: `method_2`
 
 
 ### Input size: `240`
@@ -12,16 +12,16 @@
 
 `|<------------------------------ 3000 data points ------------------------------->|`
 
-`[-------------------- Train (~2460 points) --------------------]`
+`[-------------------- Train (~2820 points) --------------------]`
 
-`[----- Validation: 240 + 30 -----]`
+`[----- Validation: 240 (overlap from Train) + 30 + 60 = 90 -----]`
 
-`[----- Test: 240 + 30 -----]`
+`[----- Test: 240 (overlap from Validation) + 30 + 60 = 90 -----]`
 
 
 
-- **Test set:** last **270** points = **240 input days + 30 forecast days**
-- **Validation set:** previous **270** points = **240 input days + 30 forecast days**
+- **Test set:** last **90** points
+- **Validation set: **90** points before Test set
 - **Train set:** all earlier points
 
 
@@ -44,25 +44,33 @@ Training uses sliding windows across the Train block:
      - `Y_train[i] = data[i + 240 : i + 240 + 30]`
 
 
-## Validation Windows (not sliding)
+## Validation Windows (sliding)
 
-Validation uses **only one window**:
+Validation uses **60** windows:
 
-- `X_val  = validation_block[0 : 240]`
-- `Y_val  = validation_block[240 : 270]`
+- `X_val[0]  = train_block[-240 : ]`
+- `Y_val[0]  = validation_block[0 : 30]`
 
-This matches real forecasting:  
-240 days of recent history → forecast next 30 days.
+- ...
+
+- `X_val[59]  = train_block[-180 : ] + validation_block[0 : 60]`
+- `Y_val[59]  = validation_block[60 : 90]`
 
 
-## Test Windows (not sliding)
 
-Test uses **only one final window**:
+## Test Windows (sliding)
 
-- `X_test = test_block[0 : 240]`
-- `Y_test = test_block[240 : 270]`
+Test uses **60** windows:
 
-Test must be evaluated **once**, without sliding, to simulate true future forecasting.
+- `X_test[0] = train_block[-150 : ] + validation_block[0 : 90]`
+- `Y_test = test_block[0 : 30]`
+
+- ...
+
+- `X_test[59] = train_block[-90 : ] + validation[0 : 90] + test_block[0 : 60]`
+- `y_test[69] = test_block[60 : 90]`
+
+Test is evaluated by average MSE, with sliding, to simulate true future forecasting.
 
 
 ## Metric for evaluation
