@@ -67,8 +67,10 @@ Test must be evaluated **once**, without sliding, to simulate true future foreca
 
 ## Metric for evaluation
 
-- MSE
+- MAE
 - MAPE
+- RMSE
+- R2
 
 
 ## Summary
