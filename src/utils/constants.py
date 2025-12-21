@@ -109,6 +109,8 @@ TRAIN_TEST_CREATOR_END_DATE = datetime(2025, 6, 30)
 DEFAULT_INPUT_SIZE = 240  # days
 DEFAULT_FORECAST_SIZE = 30  # days
 UNIFIED_DATAFRAME_DIR = f"unified_dataframe"
+VAL_SET_SIZE = 90
+TEST_SET_SIZE = 90
 
 
 # ===========================

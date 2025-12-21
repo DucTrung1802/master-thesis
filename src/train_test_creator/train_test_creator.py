@@ -136,8 +136,8 @@ class TrainTestCreator:
             else dataframe
         )
 
-        val_set_size = input_size + forecast_size
-        test_set_size = input_size + forecast_size
+        val_set_size = VAL_SET_SIZE
+        test_set_size = TEST_SET_SIZE
         train_set_size = len(dataframe) - (val_set_size + test_set_size)
 
         self.train_set = dataframe.iloc[0:train_set_size].reset_index(drop=True).copy()
@@ -215,13 +215,16 @@ class TrainTestCreator:
             output_column,
         )
 
-        # --- Build rolling windows from normalized_train_set ---
-        train_windows: List[pd.DataFrame] = []
         total_window_size = input_size + forecast_size
 
-        window_stride = 1
+        # --- Build Train windows ---
+        train_windows: List[pd.DataFrame] = []
 
-        for start_idx in range(0, train_set_size, window_stride):
+        train_window_stride = 1
+
+        for start_idx in range(
+            0, train_set_size - total_window_size, train_window_stride
+        ):
             end_idx = start_idx + total_window_size
             window_df = normalized_train_set.iloc[start_idx:end_idx].reset_index(
                 drop=True
@@ -231,8 +234,34 @@ class TrainTestCreator:
                 train_windows.append(window_df)
 
         self._logger.log_info(
-            f"Created {len(train_windows)} training windows (stride={window_stride})."
+            f"Created {len(train_windows)} training windows (stride={train_window_stride})."
         )
+
+        # --- Build Val windows ---
+        val_windows: List[pd.DataFrame] = []
+
+        val_window_stride = 1
+
+        for start_idx in range(
+            0, input_size + val_set_size - total_window_size, val_window_stride
+        ):
+            end_idx = start_idx + total_window_size
+            window_df = (
+                pd.concat(
+                    [
+                        normalized_train_set.iloc[train_set_size - input_size :],
+                        normalized_val_set,
+                    ],
+                    ignore_index=True,
+                )
+                .iloc[start_idx:end_idx]
+                .reset_index(drop=True)
+            )
+            # Sanity: each window length must equal total_window_size
+            if len(window_df) == total_window_size:
+                val_windows.append(window_df)
+
+        # --- Build Test windows ---
 
         # --- Create TrainTestSet and attach scalers for downstream use ---
         tts = TrainTestSet(
