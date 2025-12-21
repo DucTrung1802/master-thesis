@@ -242,30 +242,57 @@ class TrainTestCreator:
 
         val_window_stride = 1
 
+        val_window_set = pd.concat(
+            [
+                normalized_train_set.iloc[train_set_size - input_size :],
+                normalized_val_set,
+            ],
+            ignore_index=True,
+        )
+
         for start_idx in range(
             0, input_size + val_set_size - total_window_size, val_window_stride
         ):
             end_idx = start_idx + total_window_size
-            window_df = (
-                pd.concat(
-                    [
-                        normalized_train_set.iloc[train_set_size - input_size :],
-                        normalized_val_set,
-                    ],
-                    ignore_index=True,
-                )
-                .iloc[start_idx:end_idx]
-                .reset_index(drop=True)
-            )
+            window_df = val_window_set.iloc[start_idx:end_idx].reset_index(drop=True)
             # Sanity: each window length must equal total_window_size
             if len(window_df) == total_window_size:
                 val_windows.append(window_df)
 
+        self._logger.log_info(
+            f"Created {len(val_windows)} validation windows (stride={val_window_stride})."
+        )
+
         # --- Build Test windows ---
+        test_windows: List[pd.DataFrame] = []
+
+        test_window_stride = 1
+
+        test_window_set = pd.concat(
+            [
+                normalized_train_set.iloc[train_set_size + val_set_size - input_size :],
+                normalized_val_set,
+                normalized_test_set,
+            ],
+            ignore_index=True,
+        )
+
+        for start_idx in range(
+            0, input_size + test_set_size - total_window_size, test_window_stride
+        ):
+            end_idx = start_idx + total_window_size
+            window_df = test_window_set.iloc[start_idx:end_idx].reset_index(drop=True)
+            # Sanity: each window length must equal total_window_size
+            if len(window_df) == total_window_size:
+                test_windows.append(window_df)
+
+        self._logger.log_info(
+            f"Created {len(test_windows)} test windows (stride={test_window_stride})."
+        )
 
         # --- Create TrainTestSet and attach scalers for downstream use ---
         tts = TrainTestSet(
-            name=f"{stock_code}_input_size_{input_size}_forecast_size_{forecast_size}_window_stride_{window_stride}",
+            name=f"{stock_code}_input_size_{input_size}_forecast_size_{forecast_size}_mehthod_2",
             data_set=dataframe,
             train_set=selected_train_set,
             val_set=selected_val_set,
@@ -274,8 +301,8 @@ class TrainTestCreator:
             input_size=input_size,
             forecast_size=forecast_size,
             train_windows=train_windows,
-            val_windows=[normalized_val_set],
-            test_windows=[normalized_test_set],
+            val_windows=val_windows,
+            test_windows=test_windows,
             norm_train_set=normalized_train_set,
             norm_val_set=normalized_val_set,
             norm_test_set=normalized_test_set,
