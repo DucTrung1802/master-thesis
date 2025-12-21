@@ -303,122 +303,118 @@ class LSTM_Model:
                 f"- Train: {avg_train_loss:.8f} | Val: {avg_val_loss:.8f} | LR: {current_lr:.6e}"
             )
 
-            # ---------------- TEST EVALUATION ----------------
-            model.eval()
-            test_running_loss = 0.0
+        # ---------------- TEST EVALUATION ----------------
+        model.eval()
+        test_running_loss = 0.0
 
-            all_y_true = []
-            all_y_pred = []
+        all_y_true = []
+        all_y_pred = []
 
-            with torch.no_grad():
-                for X_test, y_test in test_loader:
-                    X_test = X_test.to(self._device)
-                    y_test = y_test.to(self._device)
+        with torch.no_grad():
+            for X_test, y_test in test_loader:
+                X_test = X_test.to(self._device)
+                y_test = y_test.to(self._device)
 
-                    # Forward pass (normalized)
-                    y_pred_norm = model(X_test)
+                # Forward pass (normalized)
+                y_pred_norm = model(X_test)
 
-                    # Inverse transform predictions
-                    y_pred_denorm = (
-                        self._train_test_set.target_scaler.inverse_transform(
-                            y_pred_norm.cpu().numpy()
-                        )
-                    )
-                    y_pred_denorm = torch.tensor(y_pred_denorm, device=self._device)
+                # Inverse transform predictions
+                y_pred_denorm = self._train_test_set.target_scaler.inverse_transform(
+                    y_pred_norm.cpu().numpy()
+                )
+                y_pred_denorm = torch.tensor(y_pred_denorm, device=self._device)
 
-                    # Inverse transform ground truth
-                    y_test_denorm = (
-                        self._train_test_set.target_scaler.inverse_transform(
-                            y_test.cpu().numpy()
-                        )
-                    )
-                    y_test_denorm = torch.tensor(y_test_denorm, device=self._device)
+                # Inverse transform ground truth
+                y_test_denorm = self._train_test_set.target_scaler.inverse_transform(
+                    y_test.cpu().numpy()
+                )
+                y_test_denorm = torch.tensor(y_test_denorm, device=self._device)
 
-                    # Loss on real scale
-                    loss = criterion(y_pred_denorm, y_test_denorm)
-                    test_running_loss += loss.item()
+                # Loss on real scale
+                loss = criterion(y_pred_denorm, y_test_denorm)
+                test_running_loss += loss.item()
 
-                    # Store outputs
-                    all_y_true.append(y_test_denorm.detach().cpu())
-                    all_y_pred.append(y_pred_denorm.detach().cpu())
+                # Store outputs
+                all_y_true.append(y_test_denorm.detach().cpu())
+                all_y_pred.append(y_pred_denorm.detach().cpu())
 
-            # Average test loss
-            test_loss = test_running_loss / len(test_loader)
+        # Average test loss
+        test_loss = test_running_loss / len(test_loader)
 
-            # Concatenate all windows
-            y_true_np = torch.cat(all_y_true, dim=0).numpy().reshape(-1)
-            y_pred_np = torch.cat(all_y_pred, dim=0).numpy().reshape(-1)
+        # Concatenate all windows
+        y_true_np = torch.cat(all_y_true, dim=0).numpy().reshape(-1)
+        y_pred_np = torch.cat(all_y_pred, dim=0).numpy().reshape(-1)
 
+        # Metrics
+        mae = mean_absolute_error(y_true_np, y_pred_np)
+        mape = mean_absolute_percentage_error(y_true_np, y_pred_np) * 100
+        rmse = root_mean_squared_error(y_true_np, y_pred_np)
+        r2 = r2_score(y_true_np, y_pred_np)
+
+        # Log test metrics
+        self._run.log(
+            {
+                "test_loss": test_loss,
+                "test_mae": mae,
+                "test_mape": mape,
+                "test_rmse": rmse,
+                "test_r2": r2,
+            }
+        )
+
+        training_time = time() - start_time
+
+        print(f"Training completed in {training_time:.2f}s")
+        print(f"Test MAE: {mae:.6f}")
+        print(f"Test MAPE: {mape:.2f}%")
+        print(f"Test RMSE: {rmse:.6f}")
+        print(f"Test R2: {r2:.6f}\n")
+
+        # ---------------- MODEL OUTPUT ----------------
+        model_output = ModelOutputDto(
+            # Dataset metadata
+            dataset_name=self._train_test_set.get_name(),
+            data_set_size=len(self._train_test_set.get_data_set()),
+            train_set_size=len(self._train_test_set.get_train_set()),
+            val_set_size=len(self._train_test_set.get_val_set()),
+            test_set_size=len(self._train_test_set.get_test_set()),
+            number_of_train_window=len(self._train_test_set.get_train_windows()),
+            number_of_val_window=len(self._train_test_set.get_val_windows()),
+            number_of_test_window=len(self._train_test_set.get_test_windows()),
+            input_size=self._train_test_set.input_size,
+            forecast_size=self._train_test_set.forecast_size,
+            # Model metadata
+            model_name=model.get_name(),
+            model_config=self._model_config,
+            training_time=training_time,
+            # Training history
+            train_loss_history=train_loss_history,
+            validation_loss_history=val_loss_history,
+            final_train_loss=train_loss_history[-1],
+            final_validation_loss=best_val_loss,
+            test_loss=test_loss,
+            # Predictions (ALL test windows, flattened)
+            y_pred_denorm=y_pred_np.tolist(),
+            y_true=y_true_np.tolist(),
             # Metrics
-            mae = mean_absolute_error(y_true_np, y_pred_np)
-            mape = mean_absolute_percentage_error(y_true_np, y_pred_np) * 100
-            rmse = root_mean_squared_error(y_true_np, y_pred_np)
-            r2 = r2_score(y_true_np, y_pred_np)
+            mae=mae,
+            mape=mape,
+            rmse=rmse,
+            r2=r2,
+        )
 
-            # Log test metrics
-            self._run.log(
-                {
-                    "test_loss": test_loss,
-                    "test_mae": mae,
-                    "test_mape": mape,
-                    "test_rmse": rmse,
-                    "test_r2": r2,
-                }
-            )
+        # ---------------- SAVE OUTPUTS ----------------
+        training_output_file = "training_output.json"
+        with open(training_output_file, "w") as f:
+            json.dump(model_output.to_dict(), f, indent=4)
+        self._run.save(training_output_file)
 
-            training_time = time() - start_time
+        output_pickle_file = "training_output.pkl"
+        with open(output_pickle_file, "wb") as f:
+            pickle.dump(model_output, f)
+        self._run.save(output_pickle_file)
 
-            print(f"Training completed in {training_time:.2f}s")
-            print(f"Test MAE: {mae:.6f}")
-            print(f"Test MAPE: {mape:.2f}%")
-            print(f"Test RMSE: {rmse:.6f}")
-            print(f"Test R2: {r2:.6f}\n")
+        self._run.finish()
+        self._logger.log_info("DONE TRAINING PROCESS.\n")
 
-            # ---------------- MODEL OUTPUT ----------------
-            model_output = ModelOutputDto(
-                # Dataset metadata
-                dataset_name=self._train_test_set.get_name(),
-                data_set_size=len(self._train_test_set.get_data_set()),
-                train_set_size=len(self._train_test_set.get_train_set()),
-                val_set_size=len(self._train_test_set.get_val_set()),
-                test_set_size=len(self._train_test_set.get_test_set()),
-                number_of_train_window=len(self._train_test_set.get_train_windows()),
-                number_of_val_window=len(self._train_test_set.get_val_windows()),
-                number_of_test_window=len(self._train_test_set.get_test_windows()),
-                input_size=self._train_test_set.input_size,
-                forecast_size=self._train_test_set.forecast_size,
-                # Model metadata
-                model_name=model.get_name(),
-                model_config=self._model_config,
-                training_time=training_time,
-                # Training history
-                train_loss_history=train_loss_history,
-                validation_loss_history=val_loss_history,
-                final_train_loss=train_loss_history[-1],
-                final_validation_loss=best_val_loss,
-                test_loss=test_loss,
-                # Predictions (ALL test windows, flattened)
-                y_pred_denorm=y_pred_np.tolist(),
-                y_true=y_true_np.tolist(),
-                # Metrics
-                mae=mae,
-                mape=mape,
-                rmse=rmse,
-                r2=r2,
-            )
-
-            # ---------------- SAVE OUTPUTS ----------------
-            training_output_file = "training_output.json"
-            with open(training_output_file, "w") as f:
-                json.dump(model_output.to_dict(), f, indent=4)
-            self._run.save(training_output_file)
-
-            output_pickle_file = "training_output.pkl"
-            with open(output_pickle_file, "wb") as f:
-                pickle.dump(model_output, f)
-            self._run.save(output_pickle_file)
-
-            self._run.finish()
-            self._logger.log_info("DONE TRAINING PROCESS.\n")
-
-            return model_output
+        return model_output

@@ -34,7 +34,6 @@ class ModelOutputDto:
     test_loss: float
 
     # Result
-    y_pred: List[float]
     y_pred_denorm: List[float]
     y_true: List[float]
 
@@ -46,7 +45,6 @@ class ModelOutputDto:
 
     def __post_init__(self):
         """Ensure predictions and targets are stored as Python lists."""
-        self.y_pred = self._to_list(self.y_pred)
         self.y_pred_denorm = self._to_list(self.y_pred_denorm)
         self.y_true = self._to_list(self.y_true)
 
@@ -85,7 +83,6 @@ class ModelOutputDto:
             # --- Test ---
             "test_loss": float(self.test_loss) if self.test_loss is not None else None,
             # --- Predictions ---
-            "y_pred": self.y_pred,
             "y_pred_denorm": self.y_pred_denorm,
             "y_true": self.y_true,
             # --- Metrics ---
