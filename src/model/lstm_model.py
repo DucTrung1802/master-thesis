@@ -89,7 +89,11 @@ class LSTMForecastModel(nn.Module):
         return self.fc(last_output)
 
     def get_name(self):
-        return self._get_name()
+        method = getattr(self, "_get_name", None)
+        if callable(method):
+            return method()
+        else:
+            return "LSTMForecastModel"
 
 
 # =============================

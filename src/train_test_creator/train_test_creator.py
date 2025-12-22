@@ -268,17 +268,10 @@ class TrainTestCreator:
 
         test_window_stride = 1
 
-        test_window_set = pd.concat(
-            [
-                normalized_train_set.iloc[train_set_size + val_set_size - input_size :],
-                normalized_val_set,
-                normalized_test_set,
-            ],
-            ignore_index=True,
-        )
+        test_window_set = normalized_test_set
 
         for start_idx in range(
-            0, input_size + test_set_size - total_window_size, test_window_stride
+            0, test_set_size - total_window_size, test_window_stride
         ):
             end_idx = start_idx + total_window_size
             window_df = test_window_set.iloc[start_idx:end_idx].reset_index(drop=True)
