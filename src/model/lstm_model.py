@@ -379,7 +379,12 @@ class LSTM_Model:
         # ---------------- CREATE PREDICTIONS ----------------
         output_windows = []
         for i in range(
-            0, len(self._train_test_set.test_set), self._train_test_set.forecast_size
+            0,
+            len(self._train_test_set.test_set)
+            - self._train_test_set.input_size
+            - self._train_test_set.forecast_size
+            + 1,
+            self._train_test_set.forecast_size,
         ):
             total_window_size = (
                 self._train_test_set.input_size + self._train_test_set.forecast_size
