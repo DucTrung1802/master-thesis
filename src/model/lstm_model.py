@@ -20,7 +20,7 @@ from sklearn.metrics import (
 
 from dtos.model_dtos.model_config_dto import ModelConfigDto
 from dtos.model_dtos.model_output_dto import ModelOutputDto
-from dtos.model_dtos.model_output_predict_true_dto import ModelOutputPredictTrueDto
+from dtos.model_dtos.model_output_predict_true_dto import ModelPredictTrueWindowDto
 from logger.logger import Logger
 from train_test_creator.train_test_set import TrainTestSet
 from utils.enums import (
@@ -405,45 +405,51 @@ class LSTM_Model:
             shuffle=False,
         )
 
-        model_output_predict_true_dtos: List[ModelOutputPredictTrueDto] = []
+        model_output_predict_true_dtos: List[ModelPredictTrueWindowDto] = []
         idx = 0
-        for X_test, y_test in output_loader:
-            X_test = X_test.to(self._device)
-            y_test = y_test.to(self._device)
+        with torch.no_grad():
+            for X_test, y_test in output_loader:
+                X_test = X_test.to(self._device)
+                y_test = y_test.to(self._device)
 
-            # Forward pass (normalized)
-            y_pred_norm = model(X_test)
+                # Forward pass (normalized)
+                y_pred_norm = model(X_test)
 
-            # Inverse transform predictions
-            y_pred_denorm = self._train_test_set.target_scaler.inverse_transform(
-                y_pred_norm.cpu().numpy()
-            )
-            y_pred_denorm = torch.tensor(y_pred_denorm, device=self._device)
+                # Inverse transform predictions
+                y_pred_denorm = self._train_test_set.target_scaler.inverse_transform(
+                    y_pred_norm.cpu().numpy()
+                )
 
-            # Inverse transform ground truth
-            y_test_denorm = self._train_test_set.target_scaler.inverse_transform(
-                y_test.cpu().numpy()
-            )
-            y_test_denorm = torch.tensor(y_test_denorm, device=self._device)
+                y_pred_denorm = torch.tensor(y_pred_denorm, device=self._device)
 
-            # Create data for ModelOutputPredictTrueDto
-            history_data = self._train_test_set.train_set.iloc[
-                self._train_test_set.forecast_size
-                * idx : self._train_test_set.forecast_size
-                * idx
-                + self._train_test_set.input_size,
-                -1,
-            ].tolist()
+                # Inverse transform ground truth
+                y_test_denorm = self._train_test_set.target_scaler.inverse_transform(
+                    y_test.cpu().numpy()
+                )
+                y_test_denorm = torch.tensor(y_test_denorm, device=self._device)
 
-            model_output_predict_true_dto = ModelOutputPredictTrueDto(
-                index=idx,
-                history_data=history_data,
-                y_pred_denorm=y_pred_denorm.detach().cpu().numpy().reshape(-1).tolist(),
-                y_true=y_test_denorm.detach().cpu().numpy().reshape(-1).tolist(),
-            )
-            model_output_predict_true_dtos.append(model_output_predict_true_dto)
+                # Create data for ModelPredictTrueWindowDto
+                history_data = self._train_test_set.train_set.iloc[
+                    self._train_test_set.forecast_size
+                    * idx : self._train_test_set.forecast_size
+                    * idx
+                    + self._train_test_set.input_size,
+                    -1,
+                ].tolist()
 
-            idx += 1
+                model_output_predict_true_dto = ModelPredictTrueWindowDto(
+                    index=idx,
+                    history_data=history_data,
+                    y_pred_denorm=y_pred_denorm.detach()
+                    .cpu()
+                    .numpy()
+                    .reshape(-1)
+                    .tolist(),
+                    y_true=y_test_denorm.detach().cpu().numpy().reshape(-1).tolist(),
+                )
+                model_output_predict_true_dtos.append(model_output_predict_true_dto)
+
+                idx += 1
 
         # ---------------- MODEL OUTPUT ----------------
         model_output = ModelOutputDto(

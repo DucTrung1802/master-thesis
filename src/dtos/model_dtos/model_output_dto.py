@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 
 from dtos.model_dtos.model_config_dto import ModelConfigDto
-from dtos.model_dtos.model_output_predict_true_dto import ModelOutputPredictTrueDto
+from dtos.model_dtos.model_output_predict_true_dto import ModelPredictTrueWindowDto
 
 
 @dataclass
@@ -35,18 +35,13 @@ class ModelOutputDto:
     test_loss: float
 
     # Result
-    model_output_predict_true_dtos: List[ModelOutputPredictTrueDto]
+    model_output_predict_true_dtos: List[ModelPredictTrueWindowDto]
 
     # Metrics
     mae: float | None
     mape: float | None
     rmse: float | None
     r2: float | None
-
-    def __post_init__(self):
-        """Ensure predictions and targets are stored as Python lists."""
-        self.y_pred_denorm = self._to_list(self.y_pred_denorm)
-        self.y_true = self._to_list(self.y_true)
 
     @staticmethod
     def _to_list(value):
@@ -83,8 +78,9 @@ class ModelOutputDto:
             # --- Test ---
             "test_loss": float(self.test_loss) if self.test_loss is not None else None,
             # --- Result ---
-            "y_pred_denorm": self.y_pred_denorm,
-            "y_true": self.y_true,
+            "model_output_predict_true_dtos": [
+                element.to_dict() for element in self.model_output_predict_true_dtos
+            ],
             # --- Metrics ---
             "mae": float(self.mae) if self.mae is not None else None,
             "mape": float(self.mape) if self.mape is not None else None,
