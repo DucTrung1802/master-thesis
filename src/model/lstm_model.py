@@ -1,6 +1,7 @@
 import json
 import os
 from time import time
+from typing import List
 import numpy as np
 import torch
 import torch.nn as nn
@@ -19,6 +20,7 @@ from sklearn.metrics import (
 
 from dtos.model_dtos.model_config_dto import ModelConfigDto
 from dtos.model_dtos.model_output_dto import ModelOutputDto
+from dtos.model_dtos.model_output_predict_true_dto import ModelOutputPredictTrueDto
 from logger.logger import Logger
 from train_test_creator.train_test_set import TrainTestSet
 from utils.enums import (
@@ -374,6 +376,75 @@ class LSTM_Model:
         print(f"Test RMSE: {rmse:.6f}")
         print(f"Test R2: {r2:.6f}\n")
 
+        # ---------------- CREATE PREDICTIONS ----------------
+        output_windows = []
+        for i in range(
+            0, len(self._train_test_set.test_set), self._train_test_set.forecast_size
+        ):
+            total_window_size = (
+                self._train_test_set.input_size + self._train_test_set.forecast_size
+            )
+            window_df = self._train_test_set.test_set.iloc[
+                i : i
+                + self._train_test_set.input_size
+                + self._train_test_set.forecast_size
+            ].reset_index(drop=True)
+
+            if len(window_df) == total_window_size:
+                output_windows.append(window_df)
+
+        output_dataset = TimeSeriesDataset(
+            windows=output_windows,
+            input_size=self._train_test_set.input_size,
+            forecast_size=self._train_test_set.forecast_size,
+        )
+
+        output_loader = DataLoader(
+            list(zip(output_dataset.X_, output_dataset.y_)),
+            batch_size=self._model_config.batch_size,
+            shuffle=False,
+        )
+
+        model_output_predict_true_dtos: List[ModelOutputPredictTrueDto] = []
+        idx = 0
+        for X_test, y_test in output_loader:
+            X_test = X_test.to(self._device)
+            y_test = y_test.to(self._device)
+
+            # Forward pass (normalized)
+            y_pred_norm = model(X_test)
+
+            # Inverse transform predictions
+            y_pred_denorm = self._train_test_set.target_scaler.inverse_transform(
+                y_pred_norm.cpu().numpy()
+            )
+            y_pred_denorm = torch.tensor(y_pred_denorm, device=self._device)
+
+            # Inverse transform ground truth
+            y_test_denorm = self._train_test_set.target_scaler.inverse_transform(
+                y_test.cpu().numpy()
+            )
+            y_test_denorm = torch.tensor(y_test_denorm, device=self._device)
+
+            # Create data for ModelOutputPredictTrueDto
+            history_data = self._train_test_set.train_set.iloc[
+                self._train_test_set.forecast_size
+                * idx : self._train_test_set.forecast_size
+                * idx
+                + self._train_test_set.input_size,
+                -1,
+            ].tolist()
+
+            model_output_predict_true_dto = ModelOutputPredictTrueDto(
+                index=idx,
+                history_data=history_data,
+                y_pred_denorm=y_pred_denorm.detach().cpu().numpy().reshape(-1).tolist(),
+                y_true=y_test_denorm.detach().cpu().numpy().reshape(-1).tolist(),
+            )
+            model_output_predict_true_dtos.append(model_output_predict_true_dto)
+
+            idx += 1
+
         # ---------------- MODEL OUTPUT ----------------
         model_output = ModelOutputDto(
             # Dataset metadata
@@ -397,9 +468,8 @@ class LSTM_Model:
             final_train_loss=train_loss_history[-1],
             final_validation_loss=best_val_loss,
             test_loss=test_loss,
-            # Predictions (ALL test windows, flattened)
-            y_pred_denorm=y_pred_np.tolist(),
-            y_true=y_true_np.tolist(),
+            # Result
+            model_output_predict_true_dtos=model_output_predict_true_dtos,
             # Metrics
             mae=mae,
             mape=mape,

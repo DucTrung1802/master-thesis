@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 
 from dtos.model_dtos.model_config_dto import ModelConfigDto
+from dtos.model_dtos.model_output_predict_true_dto import ModelOutputPredictTrueDto
 
 
 @dataclass
@@ -34,8 +35,7 @@ class ModelOutputDto:
     test_loss: float
 
     # Result
-    y_pred_denorm: List[float]
-    y_true: List[float]
+    model_output_predict_true_dtos: List[ModelOutputPredictTrueDto]
 
     # Metrics
     mae: float | None
@@ -82,7 +82,7 @@ class ModelOutputDto:
             ),
             # --- Test ---
             "test_loss": float(self.test_loss) if self.test_loss is not None else None,
-            # --- Predictions ---
+            # --- Result ---
             "y_pred_denorm": self.y_pred_denorm,
             "y_true": self.y_true,
             # --- Metrics ---

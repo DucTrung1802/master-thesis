@@ -148,6 +148,12 @@ class TrainTestSet:
 
         min_len = input_size + forecast_size
 
+        if len(test_set) < min_len:
+            raise ValueError(
+                f"`test_set` must have at least {min_len} rows "
+                f"(input_size + forecast_size)."
+            )
+
         def _validate_windows(windows: List[pd.DataFrame], label: str):
             if not isinstance(windows, list):
                 raise ValueError(f"`{label}_windows` must be a list.")
