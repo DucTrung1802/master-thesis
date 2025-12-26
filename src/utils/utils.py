@@ -8,6 +8,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 
 from dtos.model_dtos.model_output_dto import ModelOutputDto
+from dtos.model_dtos.model_output_predict_true_dto import ModelPredictTrueWindowDto
 from logger.logger import Logger
 from dtos.tabular_database_driver_dtos.tabular_database_driver_dtos import (
     DataType,
@@ -548,27 +549,68 @@ def expand_date_column(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def plot_model_result(model_output_dto: ModelOutputDto):
+def plot_model_result_vertical(
+    model_predict_true_window_dto_list: List[ModelPredictTrueWindowDto],
+):
+    n = len(model_predict_true_window_dto_list)
 
-    plt.figure(figsize=(12, 6))
-    plt.plot(
-        model_output_dto.y_true,
-        label="True Values",
-        color="blue",
-        linewidth=2,
+    fig, axes = plt.subplots(
+        nrows=n,
+        ncols=1,
+        figsize=(14, 4 * n),
+        sharex=False,
     )
-    plt.plot(
-        model_output_dto.y_pred_denorm,
-        label="Predicted Values",
-        color="red",
-        linestyle="--",
-        linewidth=2,
-    )
-    plt.title("Model Predictions vs True Values")
-    plt.xlabel("Day")
-    plt.ylabel("Price")
-    plt.legend()
-    plt.grid(True)
+
+    # If only one subplot, make axes iterable
+    if n == 1:
+        axes = [axes]
+
+    for ax, dto in zip(axes, model_predict_true_window_dto_list):
+        history = list(dto.history_data)
+        y_true = list(dto.y_true)
+        y_pred = list(dto.y_pred_denorm)
+
+        h_len = len(history)
+        p_len = len(y_true)
+
+        history_x = list(range(h_len))
+        future_x = list(range(h_len, h_len + p_len))
+
+        # Plot history
+        ax.plot(
+            history_x,
+            history,
+            label="History",
+            color="black",
+            linewidth=2,
+        )
+
+        # Plot true values
+        ax.plot(
+            future_x,
+            y_true,
+            label="True",
+            color="blue",
+            linewidth=2,
+        )
+
+        # Plot predictions
+        ax.plot(
+            future_x,
+            y_pred,
+            label="Predicted",
+            color="red",
+            linestyle="--",
+            linewidth=2,
+        )
+
+        ax.set_title(f"Window Index {dto.index}")
+        ax.set_ylabel("Value")
+        ax.grid(True)
+        ax.legend()
+
+    axes[-1].set_xlabel("Time Index")
+    plt.tight_layout()
     plt.show()
 
 

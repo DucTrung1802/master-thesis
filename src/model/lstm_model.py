@@ -58,8 +58,8 @@ class TimeSeriesDataset(Dataset):
             self.y_.append(data[input_size : input_size + forecast_size, -1])
 
         # Convert to tensors
-        self.X_ = torch.tensor(np.array(self.X_), dtype=torch.float32)
-        self.y_ = torch.tensor(np.array(self.y_), dtype=torch.float32)
+        self.X_ = torch.from_numpy(np.asarray(self.X_)).float()
+        self.y_ = torch.from_numpy(np.asarray(self.y_)).float()
 
     def __len__(self):
         return len(self.X_)
@@ -189,19 +189,19 @@ class LSTM_Model:
 
         # --- DataLoaders ---
         train_loader = DataLoader(
-            list(zip(train_dataset.X_, train_dataset.y_)),
+            train_dataset,
             batch_size=self._model_config.batch_size,
             shuffle=True,
         )
 
         val_loader = DataLoader(
-            list(zip(val_dataset.X_, val_dataset.y_)),
+            val_dataset,
             batch_size=self._model_config.batch_size,
             shuffle=False,
         )
 
         test_loader = DataLoader(
-            list(zip(test_dataset.X_, test_dataset.y_)),
+            test_dataset,
             batch_size=self._model_config.batch_size,
             shuffle=False,
         )
@@ -242,17 +242,22 @@ class LSTM_Model:
         )
 
         for epoch in range(self._model_config.epochs):
+
             # ---------------- TRAIN ----------------
             model.train()
             running_loss = 0.0
+
             for X_batch, y_batch in tqdm(
                 train_loader, desc=f"Epoch {epoch+1}", leave=False
             ):
-                X_batch, y_batch = X_batch.to(self._device), y_batch.to(self._device)
+                X_batch = X_batch.to(self._device)
+                y_batch = y_batch.to(self._device)
+
                 optimizer.zero_grad()
                 y_pred = model(X_batch)
                 loss = criterion(y_pred, y_batch)
                 loss.backward()
+
                 optimizer.step()
                 running_loss += loss.item()
 
@@ -264,7 +269,9 @@ class LSTM_Model:
             val_running_loss = 0.0
             with torch.no_grad():
                 for X_val, y_val in val_loader:
-                    X_val, y_val = X_val.to(self._device), y_val.to(self._device)
+                    X_val = X_val.to(self._device)
+                    y_val = y_val.to(self._device)
+
                     y_val_pred = model(X_val)
                     val_loss = criterion(y_val_pred, y_val)
                     val_running_loss += val_loss.item()
@@ -405,36 +412,40 @@ class LSTM_Model:
         )
 
         output_loader = DataLoader(
-            list(zip(output_dataset.X_, output_dataset.y_)),
-            batch_size=self._model_config.batch_size,
+            output_dataset,
+            batch_size=1,
             shuffle=False,
         )
 
         model_output_predict_true_dtos: List[ModelPredictTrueWindowDto] = []
         idx = 0
+
         with torch.no_grad():
-            for X_test, y_test in output_loader:
-                X_test = X_test.to(self._device)
-                y_test = y_test.to(self._device)
+            for X_output, y_output in output_loader:
+                # Shapes:
+                # X_output: [1, 240, 328]
+                # y_output: [1, 30]
 
-                # Forward pass (normalized)
-                y_pred_norm = model(X_test)
+                X_output = X_output.to(self._device)
+                y_output = y_output.to(self._device)
 
-                # Inverse transform predictions
-                y_pred_denorm = self._train_test_set.target_scaler.inverse_transform(
-                    y_pred_norm.cpu().numpy()
+                # Forward pass
+                y_pred_norm = model(X_output)  # [1, 30]
+
+                # Inverse transform prediction
+                y_pred_denorm = (
+                    self._train_test_set.target_scaler.inverse_transform(
+                        y_pred_norm.squeeze(0).cpu().numpy().reshape(1, -1)  # [1, 30]
+                    )
+                    .reshape(-1)  # [30]
+                    .tolist()
                 )
 
-                y_pred_denorm = torch.tensor(y_pred_denorm, device=self._device)
+                # Ground truth
+                y_true = y_output.squeeze(0).cpu().numpy().tolist()  # [30]
 
-                # Inverse transform ground truth
-                y_test_denorm = self._train_test_set.target_scaler.inverse_transform(
-                    y_test.cpu().numpy()
-                )
-                y_test_denorm = torch.tensor(y_test_denorm, device=self._device)
-
-                # Create data for ModelPredictTrueWindowDto
-                history_data = self._train_test_set.train_set.iloc[
+                # History data
+                history_data = self._train_test_set.test_set.iloc[
                     self._train_test_set.forecast_size
                     * idx : self._train_test_set.forecast_size
                     * idx
@@ -445,15 +456,11 @@ class LSTM_Model:
                 model_output_predict_true_dto = ModelPredictTrueWindowDto(
                     index=idx,
                     history_data=history_data,
-                    y_pred_denorm=y_pred_denorm.detach()
-                    .cpu()
-                    .numpy()
-                    .reshape(-1)
-                    .tolist(),
-                    y_true=y_test_denorm.detach().cpu().numpy().reshape(-1).tolist(),
+                    y_pred_denorm=y_pred_denorm,
+                    y_true=y_true,
                 )
-                model_output_predict_true_dtos.append(model_output_predict_true_dto)
 
+                model_output_predict_true_dtos.append(model_output_predict_true_dto)
                 idx += 1
 
         # ---------------- MODEL OUTPUT ----------------
