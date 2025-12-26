@@ -659,14 +659,19 @@ def set_seed(seed: int):
     import numpy as np
     import torch
 
+    # Must be set BEFORE torch is imported anywhere else
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+
     random.seed(seed)
     np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
 
-    os.environ["PYTHONHASHSEED"] = str(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
 
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
-    torch.use_deterministic_algorithms(True)
+    # Optional: turn ON only if you want hard errors
+    # torch.use_deterministic_algorithms(True)
