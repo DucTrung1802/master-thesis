@@ -283,6 +283,26 @@ class TrainTestCreator:
             f"Created {len(test_windows)} test windows (stride={test_window_stride})."
         )
 
+        # --- Build Output windows (for visualization and deployment) ---
+        output_windows: List[pd.DataFrame] = []
+
+        output_window_stride = forecast_size
+
+        output_window_set = normalized_test_set
+
+        for start_idx in range(
+            0, test_set_size - total_window_size + 1, output_window_stride
+        ):
+            end_idx = start_idx + total_window_size
+            window_df = output_window_set.iloc[start_idx:end_idx].reset_index(drop=True)
+            # Sanity: each window length must equal total_window_size
+            if len(window_df) == total_window_size:
+                output_windows.append(window_df)
+
+        self._logger.log_info(
+            f"Created {len(output_windows)} output windows (stride={output_window_stride})."
+        )
+
         # --- Create TrainTestSet and attach scalers for downstream use ---
         tts = TrainTestSet(
             name=f"{stock_code}_input_size_{input_size}_forecast_size_{forecast_size}_mehthod_2",
@@ -296,6 +316,7 @@ class TrainTestCreator:
             train_windows=train_windows,
             val_windows=val_windows,
             test_windows=test_windows,
+            output_windows=output_windows,
             norm_train_set=normalized_train_set,
             norm_val_set=normalized_val_set,
             norm_test_set=normalized_test_set,

@@ -182,8 +182,11 @@ class LSTM_Model:
             forecast_size=self._train_test_set.forecast_size,
         )
 
-        if len(train_dataset) == 0:
-            raise ValueError("No valid training windows found in train windows.")
+        output_dataset = TimeSeriesDataset(
+            windows=self._train_test_set.output_windows,
+            input_size=self._train_test_set.input_size,
+            forecast_size=self._train_test_set.forecast_size,
+        )
 
         # --- DataLoaders ---
         train_loader = DataLoader(
@@ -201,6 +204,12 @@ class LSTM_Model:
         test_loader = DataLoader(
             test_dataset,
             batch_size=self._model_config.batch_size,
+            shuffle=False,
+        )
+
+        output_loader = DataLoader(
+            output_dataset,
+            batch_size=1,
             shuffle=False,
         )
 
@@ -382,42 +391,10 @@ class LSTM_Model:
         print(f"Test R2: {r2:.6f}\n")
 
         # ---------------- CREATE PREDICTIONS ----------------
-        output_windows = []
-        for i in range(
-            0,
-            len(self._train_test_set.test_set)
-            - self._train_test_set.input_size
-            - self._train_test_set.forecast_size
-            + 1,
-            self._train_test_set.forecast_size,
-        ):
-            total_window_size = (
-                self._train_test_set.input_size + self._train_test_set.forecast_size
-            )
-            window_df = self._train_test_set.test_set.iloc[
-                i : i
-                + self._train_test_set.input_size
-                + self._train_test_set.forecast_size
-            ].reset_index(drop=True)
-
-            if len(window_df) == total_window_size:
-                output_windows.append(window_df)
-
-        output_dataset = TimeSeriesDataset(
-            windows=output_windows,
-            input_size=self._train_test_set.input_size,
-            forecast_size=self._train_test_set.forecast_size,
-        )
-
-        output_loader = DataLoader(
-            output_dataset,
-            batch_size=1,
-            shuffle=False,
-        )
-
         model_output_predict_true_dtos: List[ModelPredictTrueWindowDto] = []
         idx = 0
 
+        model.eval()
         with torch.no_grad():
             for X_output, y_output in output_loader:
                 # Shapes:
@@ -439,8 +416,14 @@ class LSTM_Model:
                     .tolist()
                 )
 
-                # Ground truth
-                y_true = y_output.squeeze(0).cpu().numpy().tolist()  # [30]
+                # Inverse transform ground truth
+                y_true = (
+                    self._train_test_set.target_scaler.inverse_transform(
+                        y_output.squeeze(0).cpu().numpy().reshape(1, -1)  # [1, 30]
+                    )
+                    .reshape(-1)  # [30]
+                    .tolist()
+                )
 
                 # History data
                 history_data = self._train_test_set.test_set.iloc[

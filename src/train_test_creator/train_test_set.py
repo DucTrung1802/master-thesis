@@ -17,6 +17,7 @@ class TrainTestSet:
         train_windows: List[pd.DataFrame],
         val_windows: List[pd.DataFrame],
         test_windows: List[pd.DataFrame],
+        output_windows: List[pd.DataFrame],
         norm_train_set: pd.DataFrame,
         norm_val_set: pd.DataFrame,
         norm_test_set: pd.DataFrame,
@@ -39,6 +40,7 @@ class TrainTestSet:
             train_windows=train_windows,
             val_windows=val_windows,
             test_windows=test_windows,
+            output_windows=output_windows,
             feature_scaler=feature_scaler,
             target_scaler=target_scaler,
             numeric_feature_cols=numeric_feature_cols,
@@ -65,6 +67,7 @@ class TrainTestSet:
         self.train_windows = train_windows
         self.val_windows = val_windows
         self.test_windows = test_windows
+        self.output_windows = output_windows
 
         # --- Scalers & features ---
         self.feature_scaler = feature_scaler
@@ -90,6 +93,7 @@ class TrainTestSet:
         train_windows: List[pd.DataFrame],
         val_windows: List[pd.DataFrame],
         test_windows: List[pd.DataFrame],
+        output_windows: List[pd.DataFrame],
         feature_scaler: MinMaxScaler,
         target_scaler: MinMaxScaler,
         numeric_feature_cols: List[str],
@@ -172,6 +176,7 @@ class TrainTestSet:
         _validate_windows(train_windows, "train")
         _validate_windows(val_windows, "val")
         _validate_windows(test_windows, "test")
+        _validate_windows(output_windows, "output")
 
         if not isinstance(feature_scaler, MinMaxScaler) or not hasattr(
             feature_scaler, "scale_"
@@ -236,6 +241,9 @@ class TrainTestSet:
 
     def get_test_windows(self) -> List[pd.DataFrame]:
         return self.test_windows
+
+    def get_output_windows(self) -> List[pd.DataFrame]:
+        return self.output_windows
 
     def get_feature_scaler(self) -> MinMaxScaler:
         return self.feature_scaler
