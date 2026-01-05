@@ -325,7 +325,7 @@ def add_adx(
         ),
     )
 
-    df["+dm"] = (
+    df["dm_pos"] = (
         df[high_col]
         .diff()
         .where(
@@ -334,15 +334,15 @@ def add_adx(
         )
     )
 
-    df["-dm"] = (-df[low_col].diff()).where(
+    df["dm_neg"] = (-df[low_col].diff()).where(
         (-df[low_col].diff() > df[high_col].diff()) & (-df[low_col].diff() > 0), 0.0
     )
 
     # +DI and -DI are same for all ADX periods, so compute once using raw DM/TR
     # Smoothing is applied separately for each n
     base_tr = df["tr"]
-    base_plus_dm = df["+dm"]
-    base_minus_dm = df["-dm"]
+    base_plus_dm = df["dm_pos"]
+    base_minus_dm = df["dm_neg"]
 
     # Compute ADX for each period
     for period in periods:
@@ -350,13 +350,13 @@ def add_adx(
         plus_dm_n = base_plus_dm.rolling(window=period, min_periods=1).sum()
         minus_dm_n = base_minus_dm.rolling(window=period, min_periods=1).sum()
 
-        df[f"+di_{period}"] = 100 * (plus_dm_n / tr_n)
-        df[f"-di_{period}"] = 100 * (minus_dm_n / tr_n)
+        df[f"di_pos_{period}"] = 100 * (plus_dm_n / tr_n)
+        df[f"di_neg_{period}"] = 100 * (minus_dm_n / tr_n)
 
         dx = (
             100
-            * abs(df[f"+di_{period}"] - df[f"-di_{period}"])
-            / (df[f"+di_{period}"] + df[f"-di_{period}"]).replace(0, np.nan)
+            * abs(df[f"di_pos_{period}"] - df[f"di_neg_{period}"])
+            / (df[f"di_pos_{period}"] + df[f"di_neg_{period}"]).replace(0, np.nan)
         ).fillna(0)
 
         df[f"adx_{period}"] = dx.rolling(window=period, min_periods=1).mean()
@@ -853,31 +853,9 @@ def add_stochastic(
 ) -> pd.DataFrame:
     """
     Add Stochastic Oscillator (%K and %D) to the DataFrame.
-
-    Default popular periods:
-        %K: 14
-        %D: 3
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Input DataFrame with high, low, close columns.
-    k_period : int or list[int], optional
-        Lookback period(s) for %K. If None, default 14 is used.
-    d_period : int or list[int], optional
-        Lookback period(s) for %D. If None, default 3 is used.
-    high_col, low_col, close_col : str, optional
-        Column names for high, low, close prices.
-    default_k_periods : list[int], optional
-        Override default %K periods.
-    default_d_periods : list[int], optional
-        Override default %D periods.
-
-    Returns
-    -------
-    pd.DataFrame
-        DataFrame with added 'stoch_k_{k}' and 'stoch_d_{d}' columns.
+    Replaces inf values with NULL (NaN).
     """
+
     for col in [high_col, low_col, close_col]:
         validate_column(df, col)
 
@@ -910,12 +888,17 @@ def add_stochastic(
     for k in k_list:
         low_min = low.rolling(window=k, min_periods=1).min()
         high_max = high.rolling(window=k, min_periods=1).max()
+
+        # Prevent division by zero by producing inf (we will convert to NaN later)
         stoch_k = 100 * (close - low_min) / (high_max - low_min)
         df[f"stoch_k_{k}"] = stoch_k
 
         for d in d_list:
             stoch_d = stoch_k.rolling(window=d, min_periods=1).mean()
             df[f"stoch_d_{d}"] = stoch_d
+
+    # 🔍 Replace infinite values with NULL (NaN)
+    df.replace([np.inf, -np.inf], np.nan, inplace=True)
 
     return df
 
@@ -973,6 +956,9 @@ def add_williams_r(
         lowest_low = low.rolling(window=period, min_periods=1).min()
         williams_r = (highest_high - close) / (highest_high - lowest_low) * -100
         df[f"williams_r_{period}"] = williams_r
+
+    # 🔍 Replace infinite values with NULL (NaN)
+    df.replace([np.inf, -np.inf], np.nan, inplace=True)
 
     return df
 

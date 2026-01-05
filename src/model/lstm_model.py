@@ -117,14 +117,6 @@ class LSTM_Model:
         self._logger.log_info(f"PyTorch version: {torch.__version__}")
         print(f"PyTorch version: {torch.__version__}")
 
-        # Initialize WandB
-        wandb.login(key=os.getenv("WANDB_KEY"))
-        self._run = wandb.init(
-            entity=self._model_config.entity,
-            project=self._model_config.project,
-            config=self._model_config.to_dict(),
-        )
-
     # --------------------------
     # CONFIG VALIDATION
     # --------------------------
@@ -204,6 +196,10 @@ class LSTM_Model:
         optimizer = torch.optim.Adam(
             model.parameters(), lr=self._model_config.learning_rate
         )
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer, T_max=self._model_config.epochs
+        )
+        self._model_config.lr_scheduler = scheduler.__class__.__name__
 
         print(f"Training on {self._device} for {self._model_config.epochs} epochs...\n")
 
@@ -213,6 +209,14 @@ class LSTM_Model:
         epochs_no_improve = 0
 
         train_loss_history, val_loss_history = [], []
+
+        # Initialize WandB
+        wandb.login(key=os.getenv("WANDB_KEY"))
+        self._run = wandb.init(
+            entity=self._model_config.entity,
+            project=self._model_config.project,
+            config=self._model_config.to_dict(),
+        )
 
         for epoch in range(self._model_config.epochs):
             # ---------------- TRAIN ----------------
@@ -241,8 +245,13 @@ class LSTM_Model:
                     y_val_pred = model(X_val)
                     val_loss = criterion(y_val_pred, y_val)
                     val_running_loss += val_loss.item()
+
             avg_val_loss = val_running_loss / len(val_loader)
             val_loss_history.append(avg_val_loss)
+
+            # ---- Scheduler Step (after validation) ----
+            scheduler.step()
+            current_lr = scheduler.get_last_lr()[0]
 
             # --- Early stopping check ---
             if avg_val_loss < best_val_loss:
@@ -257,22 +266,24 @@ class LSTM_Model:
                         f"No improvement for {PATIENCE} consecutive epochs."
                     )
                     print(
-                        f"Early stopping at epoch {epoch+1} (best val loss: {best_val_loss:.6f})"
+                        f"Early stopping at epoch {epoch+1} "
+                        f"(best val loss: {best_val_loss:.6f})"
                     )
-                    # Restore best model state
                     model.load_state_dict(best_model_state)
                     break
 
-            # Log & print
+            # ---- Logging ----
             log_dict = {
                 "epoch": epoch + 1,
                 "train_loss": avg_train_loss,
                 "val_loss": avg_val_loss,
+                "learning_rate": current_lr,
             }
             self._run.log(log_dict)
+
             print(
                 f"Epoch [{epoch+1}/{self._model_config.epochs}] "
-                f"- Train: {avg_train_loss:.8f} | Val: {avg_val_loss:.8f}"
+                f"- Train: {avg_train_loss:.8f} | Val: {avg_val_loss:.8f} | LR: {current_lr:.6e}"
             )
 
         # ---------------- TEST EVALUATION ----------------
@@ -304,6 +315,8 @@ class LSTM_Model:
                 torch.mean(torch.abs((y_true - y_pred_denorm) / (y_true + epsilon)))
                 * 100
             ).item()
+            log_dict["test_mape"] = mape
+            self._run.log(log_dict)
 
         training_time = time() - start_time
         print(f"Training completed in {training_time:.2f}s | Test MAPE: {mape:.2f}%")

@@ -37,9 +37,16 @@ class ModelConfigDto:
     scaler_type: ScalerType
     metric: MetricType
 
+    # Output scale
+    output_range_scale: float
+    output_range: tuple[float, float]
+
     # Reproducibility & runtime
     device: str
     seed: int = RANDOM_SEED
+
+    # Configurations with default value
+    lr_scheduler: str | None = None
 
     def to_dict(self) -> dict:
         """Return the model configuration as a Python dictionary."""
@@ -60,7 +67,10 @@ class ModelConfigDto:
             "scaler_type": self.scaler_type.value,
             "metric": self.metric.value,
             "device": str(self.device),
+            "output_range_scale": self.output_range_scale,
+            "output_range": self.output_range,
             "seed": self.seed,
+            "lr_scheduler": self.lr_scheduler,
         }
 
     def format_config(self):
