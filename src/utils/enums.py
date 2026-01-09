@@ -300,7 +300,7 @@ class MobilizationSource(Enum):
 
 
 class ExchangeRateSource(Enum):
-    VIETSTOCK = "vietstock"
+    INVESTING = "investing"
 
 
 class IirSource(Enum):
@@ -626,7 +626,7 @@ SCRAPE_MAPPING: Dict[Tuple[ScrapeMainType, ScrapeSubType, Source], SourceInfo] =
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.EXCHANGE_RATE,
-        ExchangeRateSource.VIETSTOCK,
+        ExchangeRateSource.INVESTING,
     ): SourceInfo(
         url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
     ),
@@ -1909,13 +1909,29 @@ class Table:
 
     class EXCHANGE_RATE:
         class Column(Enum):
-            YEAR = "year"
-            MONTH = "month"
-            DAY = "day"
-            CENTRAL_RATE = "central_rate"
+            DATE = "date"
+            CLOSE = "close"
+            OPEN = "open"
+            HIGH = "high"
+            LOW = "low"
+            VOLUME = "volume"
+            CHANGE = "change"
 
         name = "exchange_rate"
-        primary_key = [Column.YEAR.value, Column.MONTH.value, Column.DAY.value]
+        primary_key = [Column.DATE.value]
+
+    class G_EXCHANGE_RATE:
+        class Column(Enum):
+            DATE = "date"
+            CLOSE = "close"
+            OPEN = "open"
+            HIGH = "high"
+            LOW = "low"
+            VOLUME = "volume"
+            CHANGE = "change"
+
+        name = "exchange_rate"
+        primary_key = [Column.DATE.value]
 
     class IIR:
         class Column(Enum):
