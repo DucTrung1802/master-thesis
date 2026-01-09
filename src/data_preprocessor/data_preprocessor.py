@@ -1177,11 +1177,14 @@ class DataPreprocessor:
                 self._database_driver.create_table(
                     schema_name=Schema.MACROECONOMICS.value,
                     table_name=Table.EXCHANGE_RATE.name,
-                    columns=[
-                        Column(name=Table.EXCHANGE_RATE.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.EXCHANGE_RATE.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.EXCHANGE_RATE.Column.DAY.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.EXCHANGE_RATE.Column.CENTRAL_RATE.value, data_type=DataType.FLOAT(), nullable=True),
+                    columns = [
+                        Column(name=Table.EXCHANGE_RATE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.EXCHANGE_RATE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
+                        Column(name=Table.EXCHANGE_RATE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.EXCHANGE_RATE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.EXCHANGE_RATE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.EXCHANGE_RATE.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.EXCHANGE_RATE.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
                     ],
                     primary_keys=Table.EXCHANGE_RATE.primary_key,
                 )
@@ -2309,18 +2312,21 @@ class DataPreprocessor:
                 )
                 # fmt: on
 
-                # EXCHANGE_RATE
+                # G_EXCHANGE_RATE
                 # fmt: off
                 self._database_driver.create_table(
                     schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.EXCHANGE_RATE.name,
-                    columns=[
-                        Column(name=Table.EXCHANGE_RATE.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.EXCHANGE_RATE.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.EXCHANGE_RATE.Column.DAY.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.EXCHANGE_RATE.Column.CENTRAL_RATE.value, data_type=DataType.FLOAT(), nullable=True),
+                    table_name=Table.G_EXCHANGE_RATE.name,
+                    columns = [
+                        Column(name=Table.G_EXCHANGE_RATE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.G_EXCHANGE_RATE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
+                        Column(name=Table.G_EXCHANGE_RATE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_EXCHANGE_RATE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_EXCHANGE_RATE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_EXCHANGE_RATE.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_EXCHANGE_RATE.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
                     ],
-                    primary_keys=Table.EXCHANGE_RATE.primary_key,
+                    primary_keys=Table.G_EXCHANGE_RATE.primary_key,
                 )
                 # fmt: on
 
@@ -3036,6 +3042,24 @@ class DataPreprocessor:
                         Column(name=Table.G_TREG.Column.INTERNATIONAL_LIQUIDITY_TOTAL_RESERVES_EXCLUDING_GOLD_US_DOLLARS.value, data_type=DataType.FLOAT(), nullable=True),
                     ],
                     primary_keys=Table.G_TREG.primary_key,
+                )
+                # fmt: on
+
+                # G_EXCHANGE_RATE
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.EXCHANGE_RATE.name,
+                    columns = [
+                        Column(name=Table.EXCHANGE_RATE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.EXCHANGE_RATE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
+                        Column(name=Table.EXCHANGE_RATE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.EXCHANGE_RATE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.EXCHANGE_RATE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.EXCHANGE_RATE.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.EXCHANGE_RATE.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
+                    ],
+                    primary_keys=Table.EXCHANGE_RATE.primary_key,
                 )
                 # fmt: on
 
@@ -6786,11 +6810,11 @@ class DataPreprocessor:
     # endregion MACROECONOMICS.MOBILIZATION
 
     # region MACROECONOMICS.EXCHANGE_RATE
-    def _ingest_macroeconomics_exchange_rate_vietstock(self) -> None:
+    def _ingest_macroeconomics_exchange_rate_investing(self) -> None:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.EXCHANGE_RATE,
-            ExchangeRateSource.VIETSTOCK,
+            ExchangeRateSource.INVESTING,
         )
 
         folder_path = (
@@ -6808,34 +6832,56 @@ class DataPreprocessor:
         self._logger.log_info(f'Start ingesting data in "{file_path}".')
 
         # Add logic for processing data here
-        df = pd.read_csv(file_path)
+        file_paths = glob(os.path.join(folder_path, "*.csv"))
 
-        # Set indicator names as lowercase with underscores
-        df = self._standardize_column_name_before_melting(df=df)
+        dfs = []
+        for file in file_paths:
+            df = pd.read_csv(file)
 
-        df = self._melt_dataframe_by_time_format(
-            df=df,
-            time_format=TimeFormat.DAY_MONTH_YEAR,
-            id_vars=["Chỉ tiêu", "Đơn vị tính"],
-        )
+            # Rename columns
+            rename_map = {
+                "Ngày": "date",
+                "Lần cuối": "close",
+                "Mở": "open",
+                "Cao": "high",
+                "Thấp": "low",
+                "KL": "volume",
+                "% Thay đổi": "change",
+            }
+            df = df.rename(columns=rename_map)
 
-        # Rename columns
-        df.rename(columns={"central_rate_from_04012016": "central_rate"}, inplace=True)
+            # Convert 'date' to datetime
+            df["date"] = pd.to_datetime(df["date"], format="%d/%m/%Y", errors="coerce")
+
+            # Clean numeric columns: remove commas and symbols, then convert to float
+            for col in ["close", "open", "high", "low"]:
+                df[col] = df[col].astype(str).str.replace(",", "").astype(float)
+
+            df["volume"] = df["volume"].apply(parse_volume)
+
+            # Handle "change" column: remove '%' and convert to float
+            df["change"] = df["change"].astype(str).str.replace("%", "").astype(float)
+
+            dfs.append(df)
+
+        # Combine and sort
+        full_df = pd.concat(dfs, ignore_index=True)
+        full_df = full_df.sort_values("date").reset_index(drop=True)
 
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
             table_name=Table.EXCHANGE_RATE.name,
             primary_keys=Table.EXCHANGE_RATE.primary_key,
-            df=df,
+            df=full_df,
         )
 
-        self._logger.log_info(f'Finish ingesting data in "{file_path}".')
+        self._logger.log_info(f'Finish ingesting data in "{table_name}".')
 
-    def _clean_macroeconomics_exchange_rate_vietstock(self) -> None:
+    def _clean_macroeconomics_exchange_rate_investing(self) -> None:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.EXCHANGE_RATE,
-            ExchangeRateSource.VIETSTOCK,
+            ExchangeRateSource.INVESTING,
         )
 
         self._logger.log_info(
@@ -6853,12 +6899,7 @@ class DataPreprocessor:
         silver_df = self._clean(
             df=bronze_df,
             clean_layer_list=[
-                CleanLayer.ORDER_BY(
-                    [
-                        Table.EXCHANGE_RATE.Column.YEAR.value,
-                        Table.EXCHANGE_RATE.Column.MONTH.value,
-                    ]
-                )
+                CleanLayer.ORDER_BY([Table.EXCHANGE_RATE.Column.DATE.value])
             ],
         )
 
@@ -6874,6 +6915,49 @@ class DataPreprocessor:
             f'Finish cleaning data in table "{format_key_for_table(key)}".'
         )
 
+    def _transform_macroeconomics_exchange_rate_investing(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.EXCHANGE_RATE,
+            ExchangeRateSource.INVESTING,
+        )
+
+        self._logger.log_info(
+            f'Start transforming data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for transforming data here
+        self._select_database(DataQuality.SILVER.value)
+        silver_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.EXCHANGE_RATE.name,
+        )
+
+        gold_df = make_date_time_index_for_dataframe(df=silver_df)
+        gold_df = standardize_time_frame(df=gold_df)
+
+        cols_to_interpolate = gold_df.columns.difference(["date"])
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
+            pd.to_numeric, errors="coerce"
+        )
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
+            method="linear"
+        )
+        gold_df = gold_df.dropna(subset=["close"])
+
+        self._select_database(DataQuality.GOLD.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.G_EXCHANGE_RATE.name,
+            primary_keys=Table.G_EXCHANGE_RATE.primary_key,
+            df=gold_df,
+        )
+
+        self._logger.log_info(
+            f'Finish transforming data in table "{format_key_for_table(key)}".'
+        )
+
+
     def _process_macroeconomics_exchange_rate(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing macroeconomics EXCHANGE_RATE data for "{data_quality.value}".'
@@ -6881,13 +6965,13 @@ class DataPreprocessor:
 
         match data_quality:
             case DataQuality.BRONZE:
-                self._ingest_macroeconomics_exchange_rate_vietstock()
+                self._ingest_macroeconomics_exchange_rate_investing()
 
             case DataQuality.SILVER:
-                self._clean_macroeconomics_exchange_rate_vietstock()
+                self._clean_macroeconomics_exchange_rate_investing()
 
             case DataQuality.GOLD:
-                pass
+                self._transform_macroeconomics_exchange_rate_investing()
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -7820,10 +7904,6 @@ class DataPreprocessor:
         self._logger.log_info(f'Start ingesting data in "{table_name}".')
 
         # Add logic for processing data here
-        combined_file_path = os.path.join(folder_path, "Gold_Futures_Combined.csv")
-        if os.path.isfile(combined_file_path):
-            os.remove(combined_file_path)
-
         file_paths = glob(os.path.join(folder_path, "*.csv"))
 
         dfs = []
@@ -7989,10 +8069,6 @@ class DataPreprocessor:
         self._logger.log_info(f'Start ingesting data in "{table_name}".')
 
         # Add logic for processing data here
-        combined_file_path = os.path.join(folder_path, "Gold_Futures_Combined.csv")
-        if os.path.isfile(combined_file_path):
-            os.remove(combined_file_path)
-
         file_paths = glob(os.path.join(folder_path, "*.csv"))
 
         dfs = []
@@ -8156,10 +8232,6 @@ class DataPreprocessor:
         self._logger.log_info(f'Start ingesting data in "{table_name}".')
 
         # Add logic for processing data here
-        combined_file_path = os.path.join(folder_path, "Gold_Futures_Combined.csv")
-        if os.path.isfile(combined_file_path):
-            os.remove(combined_file_path)
-
         file_paths = glob(os.path.join(folder_path, "*.csv"))
 
         dfs = []
@@ -8323,10 +8395,6 @@ class DataPreprocessor:
         self._logger.log_info(f'Start ingesting data in "{table_name}".')
 
         # Add logic for processing data here
-        combined_file_path = os.path.join(folder_path, "Gold_Futures_Combined.csv")
-        if os.path.isfile(combined_file_path):
-            os.remove(combined_file_path)
-
         file_paths = glob(os.path.join(folder_path, "*.csv"))
 
         dfs = []
@@ -8491,10 +8559,6 @@ class DataPreprocessor:
         self._logger.log_info(f'Start ingesting data in "{table_name}".')
 
         # Add logic for processing data here
-        combined_file_path = os.path.join(folder_path, "Gold_Futures_Combined.csv")
-        if os.path.isfile(combined_file_path):
-            os.remove(combined_file_path)
-
         file_paths = glob(os.path.join(folder_path, "*.csv"))
 
         dfs = []
@@ -8657,10 +8721,6 @@ class DataPreprocessor:
         self._logger.log_info(f'Start ingesting data in "{table_name}".')
 
         # Add logic for processing data here
-        combined_file_path = os.path.join(folder_path, "Gold_Futures_Combined.csv")
-        if os.path.isfile(combined_file_path):
-            os.remove(combined_file_path)
-
         file_paths = glob(os.path.join(folder_path, "*.csv"))
 
         dfs = []
@@ -8827,10 +8887,6 @@ class DataPreprocessor:
         self._logger.log_info(f'Start ingesting data in "{table_name}".')
 
         # Add logic for processing data here
-        combined_file_path = os.path.join(folder_path, "Gold_Futures_Combined.csv")
-        if os.path.isfile(combined_file_path):
-            os.remove(combined_file_path)
-
         file_paths = glob(os.path.join(folder_path, "*.csv"))
 
         dfs = []
@@ -10582,20 +10638,20 @@ class DataPreprocessor:
         # self._process_macroeconomics_treg(data_quality)
         # self._process_macroeconomics_credit(data_quality)
         # self._process_macroeconomics_mobilization(data_quality)
-        # self._process_macroeconomics_exchange_rate(data_quality)
+        self._process_macroeconomics_exchange_rate(data_quality)
         # self._process_macroeconomics_iir(data_quality)
         # self._process_macroeconomics_rrrr(data_quality)
         # self._process_macroeconomics_fdi_sector(data_quality)
         # self._process_macroeconomics_fdi_rd(data_quality)
         # self._process_macroeconomics_export(data_quality)
         # self._process_macroeconomics_import(data_quality)
-        self._process_macroeconomics_gold_price(data_quality)
-        self._process_macroeconomics_oil_price(data_quality)
-        self._process_macroeconomics_dow_jones(data_quality)
-        self._process_macroeconomics_nyse_composite(data_quality)
-        self._process_macroeconomics_snp_500(data_quality)
-        self._process_macroeconomics_nasdaq_composite(data_quality)
-        self._process_macroeconomics_nasdaq_100(data_quality)
+        # self._process_macroeconomics_gold_price(data_quality)
+        # self._process_macroeconomics_oil_price(data_quality)
+        # self._process_macroeconomics_dow_jones(data_quality)
+        # self._process_macroeconomics_nyse_composite(data_quality)
+        # self._process_macroeconomics_snp_500(data_quality)
+        # self._process_macroeconomics_nasdaq_composite(data_quality)
+        # self._process_macroeconomics_nasdaq_100(data_quality)
 
         # # Stock market
         # self._process_stock_market_market(data_quality)
