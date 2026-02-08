@@ -18,3 +18,5 @@ wandb/
 *.json
 
 *.pkl
+
+lightning_logs/
