@@ -4,6 +4,7 @@ import os
 import pandas as pd
 import matplotlib.pyplot as plt
 from datetime import datetime
+import matplotlib.dates as mdates
 
 from logger.logger import Logger
 from dtos.tabular_database_driver_dtos.tabular_database_driver_dtos import (
@@ -112,6 +113,8 @@ class Visualizer:
         style: str = "fivethirtyeight",
         marker: str = "o",
         indicate_number_of_indicators: bool = True,
+        min_date_offset: pd.DateOffset = pd.DateOffset(years=1),
+        max_date_offset: pd.DateOffset = pd.DateOffset(years=1),
     ) -> plt.Figure:
         """
         Plots a line chart using Matplotlib.
@@ -167,8 +170,8 @@ class Visualizer:
             ax.set_xlabel(x_axis_title, fontsize=font_size)
             ax.set_ylabel(y_axis_label, fontsize=font_size)
 
-            x_min = df[x_column].min() - pd.DateOffset(years=1)
-            x_max = df[x_column].max() + pd.DateOffset(years=1)
+            x_min = df[x_column].min() - min_date_offset
+            x_max = df[x_column].max() + max_date_offset
             ax.set_xlim([x_min, x_max])
 
             # Legend with flexible position
@@ -214,6 +217,7 @@ class Visualizer:
         font_size: int = 16,
         figure_name: str = None,
         prefix_figure_name: str = None,
+        suffix_figure_name: str = None,
         dpi: int = 1000,
         style: str = "fivethirtyeight",
         marker: str = "o",
@@ -222,6 +226,8 @@ class Visualizer:
         show_line_grid: bool = True,
         show_bar_grid: bool = False,
         bar_height_ratio: float = 0.33,
+        min_date_offset: pd.DateOffset = pd.DateOffset(years=1),
+        max_date_offset: pd.DateOffset = pd.DateOffset(years=1),
     ) -> plt.Figure:
         """
         Plots a combined line (top portion) and bar (bottom portion) chart using Matplotlib.
@@ -269,20 +275,26 @@ class Visualizer:
 
             colors = plt.cm.Set1.colors
 
+            # Convert dates to matplotlib numeric values
+            x_vals = mdates.date2num(df[x_column])
+
             # --- Plot bar columns (bottom axis) ---
             if y_bar_columns:
+                n_bars = len(y_bar_columns)
+                bar_width = 1 / n_bars
+
                 for i, col in enumerate(y_bar_columns):
                     ax_bar.bar(
-                        df[x_column]
-                        + pd.DateOffset(
-                            days=i * 10
-                        ),  # slight offset if multiple bar series
+                        x_vals,
                         df[col],
-                        width=20,
+                        width=bar_width,
                         color=colors[i % len(colors)],
                         alpha=bar_alpha,
                         label=col,
                     )
+
+                # convert axis back to date format
+                ax_bar.xaxis_date()
 
             # --- Plot line columns (top axis) ---
             offset = len(y_bar_columns)
@@ -308,8 +320,8 @@ class Visualizer:
             ax_bar.set_xlabel(x_axis_title, fontsize=font_size)
 
             # X axis range
-            x_min = df[x_column].min() - pd.DateOffset(years=1)
-            x_max = df[x_column].max() + pd.DateOffset(years=1)
+            x_min = df[x_column].min() - min_date_offset
+            x_max = df[x_column].max() + max_date_offset
             ax_line.set_xlim([x_min, x_max])
 
             # Combine legends from both axes
@@ -347,7 +359,14 @@ class Visualizer:
 
             # Default file name if not specified
             if figure_name is None:
-                figure_name = f"{f"{prefix_figure_name}_" if prefix_figure_name else ''}{"_".join(title.lower().split())}.png"
+                base_name = "_".join(title.lower().split())
+
+                figure_name = (
+                    f"{prefix_figure_name + '_' if prefix_figure_name else ''}"
+                    f"{base_name}"
+                    f"{'_' + suffix_figure_name if suffix_figure_name else ''}"
+                    ".png"
+                )
             else:
                 figure_name = f"{figure_name}.png"
 
