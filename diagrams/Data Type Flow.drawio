@@ -1,0 +1,96 @@
+<mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36" version="29.3.8">
+  <diagram name="Page-1" id="VrIT3RPadGb_JeIyrIXd">
+    <mxGraphModel dx="2131" dy="561" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="bvsKaKmhD9jSZta3uqpN-4" edge="1" parent="1" source="bvsKaKmhD9jSZta3uqpN-1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="bvsKaKmhD9jSZta3uqpN-2" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="bvsKaKmhD9jSZta3uqpN-5" connectable="0" parent="bvsKaKmhD9jSZta3uqpN-4" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" value="Extract features" vertex="1">
+          <mxGeometry relative="1" x="-0.0512" y="-1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="bvsKaKmhD9jSZta3uqpN-1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="&lt;div&gt;original data frame&lt;/div&gt;DataFrame(# day, # feature)" vertex="1">
+          <mxGeometry height="40" width="200" x="200" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="bvsKaKmhD9jSZta3uqpN-9" edge="1" parent="1" source="bvsKaKmhD9jSZta3uqpN-2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="bvsKaKmhD9jSZta3uqpN-8">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="bvsKaKmhD9jSZta3uqpN-10" edge="1" parent="1" source="bvsKaKmhD9jSZta3uqpN-2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="bvsKaKmhD9jSZta3uqpN-6" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="bvsKaKmhD9jSZta3uqpN-12" edge="1" parent="1" source="bvsKaKmhD9jSZta3uqpN-2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="bvsKaKmhD9jSZta3uqpN-11">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="bvsKaKmhD9jSZta3uqpN-2" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="&lt;div&gt;extracted data frame&lt;/div&gt;DataFrame(# day, # feature)" vertex="1">
+          <mxGeometry height="40" width="200" x="200" y="200" as="geometry" />
+        </mxCell>
+        <mxCell id="bvsKaKmhD9jSZta3uqpN-16" edge="1" parent="1" source="bvsKaKmhD9jSZta3uqpN-6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="bvsKaKmhD9jSZta3uqpN-15" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="bvsKaKmhD9jSZta3uqpN-6" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="&lt;div&gt;validation_set&lt;/div&gt;&lt;div&gt;ndarray(# day, # feature)&lt;/div&gt;" vertex="1">
+          <mxGeometry height="40" width="200" x="200" y="320" as="geometry" />
+        </mxCell>
+        <mxCell id="bvsKaKmhD9jSZta3uqpN-14" edge="1" parent="1" source="bvsKaKmhD9jSZta3uqpN-8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="bvsKaKmhD9jSZta3uqpN-13" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="bvsKaKmhD9jSZta3uqpN-8" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="&lt;div&gt;train_set&lt;/div&gt;&lt;div&gt;ndarray(# day, # feature)&lt;/div&gt;" vertex="1">
+          <mxGeometry height="40" width="200" x="-280" y="320" as="geometry" />
+        </mxCell>
+        <mxCell id="bvsKaKmhD9jSZta3uqpN-18" edge="1" parent="1" source="bvsKaKmhD9jSZta3uqpN-11" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="bvsKaKmhD9jSZta3uqpN-17" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="bvsKaKmhD9jSZta3uqpN-11" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="&lt;div&gt;test_set&lt;/div&gt;&lt;div&gt;ndarray(# day, # feature)&lt;/div&gt;" vertex="1">
+          <mxGeometry height="40" width="200" x="680" y="320" as="geometry" />
+        </mxCell>
+        <mxCell id="bvsKaKmhD9jSZta3uqpN-20" edge="1" parent="1" source="bvsKaKmhD9jSZta3uqpN-13" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="bvsKaKmhD9jSZta3uqpN-19" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="bvsKaKmhD9jSZta3uqpN-23" edge="1" parent="1" source="bvsKaKmhD9jSZta3uqpN-13" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="bvsKaKmhD9jSZta3uqpN-22">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="bvsKaKmhD9jSZta3uqpN-13" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="&lt;div&gt;train_scaled&lt;/div&gt;&lt;div&gt;ndarray(# day, # feature)&lt;/div&gt;" vertex="1">
+          <mxGeometry height="40" width="200" x="-280" y="440" as="geometry" />
+        </mxCell>
+        <mxCell id="bvsKaKmhD9jSZta3uqpN-24" edge="1" parent="1" source="bvsKaKmhD9jSZta3uqpN-15" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="bvsKaKmhD9jSZta3uqpN-21">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="bvsKaKmhD9jSZta3uqpN-26" edge="1" parent="1" source="bvsKaKmhD9jSZta3uqpN-15" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="bvsKaKmhD9jSZta3uqpN-25">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="bvsKaKmhD9jSZta3uqpN-15" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="&lt;div&gt;validation_scaled&lt;/div&gt;&lt;div&gt;ndarray(# day, # feature)&lt;/div&gt;" vertex="1">
+          <mxGeometry height="40" width="200" x="200" y="440" as="geometry" />
+        </mxCell>
+        <mxCell id="bvsKaKmhD9jSZta3uqpN-29" edge="1" parent="1" source="bvsKaKmhD9jSZta3uqpN-17" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="bvsKaKmhD9jSZta3uqpN-27">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="bvsKaKmhD9jSZta3uqpN-30" edge="1" parent="1" source="bvsKaKmhD9jSZta3uqpN-17" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="bvsKaKmhD9jSZta3uqpN-28">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="bvsKaKmhD9jSZta3uqpN-17" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="&lt;div&gt;test_scaled&lt;/div&gt;&lt;div&gt;ndarray(# day, # feature)&lt;/div&gt;" vertex="1">
+          <mxGeometry height="40" width="200" x="680" y="440" as="geometry" />
+        </mxCell>
+        <mxCell id="bvsKaKmhD9jSZta3uqpN-19" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="&lt;div&gt;train_inputs&lt;/div&gt;&lt;div&gt;tensor(# window, # day, # feature)&lt;/div&gt;" vertex="1">
+          <mxGeometry height="40" width="200" x="-400" y="560" as="geometry" />
+        </mxCell>
+        <mxCell id="bvsKaKmhD9jSZta3uqpN-21" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="&lt;div&gt;validation_inputs&lt;/div&gt;&lt;div&gt;tensor(# window, # day, # feature)&lt;/div&gt;" vertex="1">
+          <mxGeometry height="40" width="200" x="80" y="560" as="geometry" />
+        </mxCell>
+        <mxCell id="bvsKaKmhD9jSZta3uqpN-22" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="&lt;div&gt;train_outputs&lt;/div&gt;&lt;div&gt;tensor(# window, # day, # feature)&lt;/div&gt;" vertex="1">
+          <mxGeometry height="40" width="200" x="-160" y="560" as="geometry" />
+        </mxCell>
+        <mxCell id="bvsKaKmhD9jSZta3uqpN-25" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="&lt;div&gt;validation_outputs&lt;/div&gt;&lt;div&gt;tensor(# window, # day, # feature)&lt;/div&gt;" vertex="1">
+          <mxGeometry height="40" width="200" x="320" y="560" as="geometry" />
+        </mxCell>
+        <mxCell id="bvsKaKmhD9jSZta3uqpN-27" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="&lt;div&gt;test_inputs&lt;/div&gt;&lt;div&gt;tensor(# window, # day, # feature)&lt;/div&gt;" vertex="1">
+          <mxGeometry height="40" width="200" x="560" y="560" as="geometry" />
+        </mxCell>
+        <mxCell id="bvsKaKmhD9jSZta3uqpN-28" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="&lt;div&gt;test_outputs&lt;/div&gt;&lt;div&gt;tensor(# window, # day, # feature)&lt;/div&gt;" vertex="1">
+          <mxGeometry height="40" width="200" x="800" y="560" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
