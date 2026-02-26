@@ -4097,7 +4097,9 @@ class WebScraper:
                 MacroeconomicsSubType.NASDAQ_COMPOSITE,
                 NASDAQCompositeSource.YAHOO_FINANCE,
             ):
-                return self._scrape_data_macroeconomics_nasdaq_composite_yahoo_finance(key)
+                return self._scrape_data_macroeconomics_nasdaq_composite_yahoo_finance(
+                    key
+                )
 
             case (
                 ScrapeMainType.MACROECONOMICS,
@@ -4105,7 +4107,7 @@ class WebScraper:
                 NASDAQ100Source.YAHOO_FINANCE,
             ):
                 return self._scrape_data_macroeconomics_nasdaq_100_yahoo_finance(key)
-            
+
             # STOCK_MARKET
             case (
                 ScrapeMainType.STOCK_MARKET,
@@ -4485,14 +4487,14 @@ class WebScraper:
         # )
 
         # MACROECONOMICS_NASDAQ_100_YAHOO_FINANCE
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.NASDAQ_100,
-            NASDAQ100Source.YAHOO_FINANCE,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # key = (
+        #     ScrapeMainType.MACROECONOMICS,
+        #     MacroeconomicsSubType.NASDAQ_100,
+        #     NASDAQ100Source.YAHOO_FINANCE,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
 
         # MACROECONOMICS_POPULATION_GOLD_PRICE_INVESTING
         # Gold price is scraped MANUALLY from investing.com
@@ -4518,45 +4520,45 @@ class WebScraper:
             Task(format_key_for_name(key), self._scrape_data_from, key)
         )
 
-        # VN30_INDEX
-        key = (
-            ScrapeMainType.STOCK_MARKET,
-            StockMarketSubType.VN_30_INDEX,
-            Vn30IndexSource.CAFEF,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # # VN30_INDEX
+        # key = (
+        #     ScrapeMainType.STOCK_MARKET,
+        #     StockMarketSubType.VN_30_INDEX,
+        #     Vn30IndexSource.CAFEF,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
 
-        # VN100_INDEX
-        key = (
-            ScrapeMainType.STOCK_MARKET,
-            StockMarketSubType.VN_100_INDEX,
-            Vn100IndexSource.CAFEF,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # # VN100_INDEX
+        # key = (
+        #     ScrapeMainType.STOCK_MARKET,
+        #     StockMarketSubType.VN_100_INDEX,
+        #     Vn100IndexSource.CAFEF,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
 
-        # HNX30_INDEX
-        key = (
-            ScrapeMainType.STOCK_MARKET,
-            StockMarketSubType.HNX_30_INDEX,
-            Hnx30IndexSource.CAFEF,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # # HNX30_INDEX
+        # key = (
+        #     ScrapeMainType.STOCK_MARKET,
+        #     StockMarketSubType.HNX_30_INDEX,
+        #     Hnx30IndexSource.CAFEF,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
 
-        # UPCOM_INDEX
-        key = (
-            ScrapeMainType.STOCK_MARKET,
-            StockMarketSubType.UPCOM_INDEX,
-            UpcomIndexSource.CAFEF,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # # UPCOM_INDEX
+        # key = (
+        #     ScrapeMainType.STOCK_MARKET,
+        #     StockMarketSubType.UPCOM_INDEX,
+        #     UpcomIndexSource.CAFEF,
+        # )
+        # self._thread_manager.add_task(
+        #     Task(format_key_for_name(key), self._scrape_data_from, key)
+        # )
 
         number_of_task_after = self._thread_manager.get_current_number_of_task()
         self._logger.log_info(
@@ -4666,8 +4668,8 @@ class WebScraper:
         self._logger.log_info("Adding data scraping tasks.")
         number_of_task_before = self._thread_manager.get_current_number_of_task()
 
-        self.add_macroeconomics_data_scraping_tasks()
-        # self.add_stock_market_data_scraping_tasks()
+        # self.add_macroeconomics_data_scraping_tasks()
+        self.add_stock_market_data_scraping_tasks()
         # self.add_enterprise_data_scraping_tasks()
 
         number_of_task_after = self._thread_manager.get_current_number_of_task()

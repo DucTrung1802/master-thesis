@@ -10638,7 +10638,7 @@ class DataPreprocessor:
         # self._process_macroeconomics_treg(data_quality)
         # self._process_macroeconomics_credit(data_quality)
         # self._process_macroeconomics_mobilization(data_quality)
-        self._process_macroeconomics_exchange_rate(data_quality)
+        # self._process_macroeconomics_exchange_rate(data_quality)
         # self._process_macroeconomics_iir(data_quality)
         # self._process_macroeconomics_rrrr(data_quality)
         # self._process_macroeconomics_fdi_sector(data_quality)
@@ -10655,7 +10655,7 @@ class DataPreprocessor:
 
         # # Stock market
         # self._process_stock_market_market(data_quality)
-        # self._process_stock_market_vn_index(data_quality)
+        self._process_stock_market_vn_index(data_quality)
         # self._process_stock_market_hnx_index(data_quality)
         # self._process_stock_market_vn_30_index(data_quality)
         # self._process_stock_market_vn_100_index(data_quality)

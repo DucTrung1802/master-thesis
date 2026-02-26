@@ -124,7 +124,9 @@ class ThreadManager:
 
             # If no task is ready but tasks remain, it means dependencies failed or circular dependency
             if not ready_tasks:
-                self._logger.log_error("No ready tasks found. Possible dependency issue.")
+                self._logger.log_error(
+                    "No ready tasks found. Possible dependency issue."
+                )
                 break
 
             # Remove ready tasks from task list
@@ -132,7 +134,9 @@ class ThreadManager:
                 self._task_list.remove(task)
 
             with ThreadPoolExecutor(max_workers=self._max_workers) as executor:
-                future_to_task = {executor.submit(task.run): task for task in ready_tasks}
+                future_to_task = {
+                    executor.submit(task.run): task for task in ready_tasks
+                }
 
                 futures = list(future_to_task.keys())
                 wait(futures)
@@ -142,7 +146,9 @@ class ThreadManager:
                     try:
                         result = future.result()
                         successful_tasks[task.name] = result
-                        self._logger.log_info(f"Task '{task.name}' completed successfully.")
+                        self._logger.log_info(
+                            f"Task '{task.name}' completed successfully."
+                        )
                     except Exception as e:
                         failed_tasks[task.name] = str(e)
                         self._logger.log_error(f"Task '{task.name}' failed: {e}")

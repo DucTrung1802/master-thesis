@@ -1,10 +1,6 @@
-import os
 from data_postprocessor.data_postprocessor import DataPostprocessor
 from data_preprocessor.data_preprocessor import DataPreprocessor
-from dtos.model_dtos.model_config_dto import ModelConfigDto
-from logger.logger import Logger, LogType
-from model.lstm_model import LSTM_Model
-from train_test_creator.train_test_creator import TrainTestCreator
+from logger.logger import Logger
 from utils.constants import LOG_FILE_BASE
 from web_scraper.web_scraper import WebScraper
 from utils.enums import *
@@ -17,10 +13,10 @@ def main():
     # my_web_scraper = WebScraper(logger=my_logger, power=100)
     # my_web_scraper.start_scraping()
 
-    # my_data_preprocessor = DataPreprocessor(logger=my_logger)
+    my_data_preprocessor = DataPreprocessor(logger=my_logger)
     # my_data_preprocessor.ingest_bronze_data()
     # my_data_preprocessor.ingest_silver_data()
-    # my_data_preprocessor.ingest_gold_data()
+    my_data_preprocessor.ingest_gold_data()
 
     my_data_postprocessor = DataPostprocessor(logger=my_logger)
     my_data_postprocessor.export_common_dataframe_to_db()
