@@ -205,159 +205,6 @@ ScrapeSubType = Union[
 ]
 
 
-# SCRAPE SOURCE ENUMS
-# region SCRAPE SOURCE MACROECONOMICS
-class GdpSource(Enum):
-    VIETSTOCK = "vietstock"
-
-
-class CpiSource(Enum):
-    VIETSTOCK = "vietstock"
-
-
-class PpiSource(Enum):
-    VIETSTOCK = "vietstock"
-
-
-class IpiSource(Enum):
-    VIETSTOCK = "vietstock"
-
-
-class XpiSource(Enum):
-    VIETSTOCK = "vietstock"
-
-
-class MpiSource(Enum):
-    VIETSTOCK = "vietstock"
-
-
-class PopulationSource(Enum):
-    VIETSTOCK = "vietstock"
-
-
-class LaborSource(Enum):
-    VIETSTOCK = "vietstock"
-
-
-class RetailSource(Enum):
-    VIETSTOCK = "vietstock"
-
-
-class PmiSource(Enum):
-    VIETSTOCK = "vietstock"
-
-
-class IipSource(Enum):
-    VIETSTOCK = "vietstock"
-
-
-class IpvSource(Enum):
-    VIETSTOCK = "vietstock"
-
-
-class MipSource(Enum):
-    VIETSTOCK = "vietstock"
-
-
-class FaByHouseTypeSource(Enum):
-    VIETSTOCK = "vietstock"
-
-
-class ItBopSource(Enum):
-    VIETSTOCK = "vietstock"
-
-
-class TsbrSource(Enum):
-    VIETSTOCK = "vietstock"
-
-
-class TsbeSource(Enum):
-    VIETSTOCK = "vietstock"
-
-
-class GdSource(Enum):
-    VIETSTOCK = "vietstock"
-
-
-class BrdSource(Enum):
-    VIETSTOCK = "vietstock"
-
-
-class IisdSource(Enum):
-    VIETSTOCK = "vietstock"
-
-
-class TregSource(Enum):
-    VIETSTOCK = "vietstock"
-
-
-class CreditSource(Enum):
-    VIETSTOCK = "vietstock"
-
-
-class MobilizationSource(Enum):
-    VIETSTOCK = "vietstock"
-
-
-class ExchangeRateSource(Enum):
-    INVESTING = "investing"
-
-
-class IirSource(Enum):
-    VIETSTOCK = "vietstock"
-
-
-class RrrrSource(Enum):
-    VIETSTOCK = "vietstock"
-
-
-class FdiSectorSource(Enum):
-    VIETSTOCK = "vietstock"
-
-
-class FdiRdSource(Enum):
-    VIETSTOCK = "vietstock"
-
-
-class ExportSource(Enum):
-    VIETSTOCK = "vietstock"
-
-
-class ImportSource(Enum):
-    VIETSTOCK = "vietstock"
-
-
-class GoldPriceSource(Enum):
-    INVESTING = "investing"
-
-
-class OilPriceSource(Enum):
-    INVESTING = "investing"
-
-
-class DowJonesSource(Enum):
-    INVESTING = "investing"
-
-
-class NYSECompositeSource(Enum):
-    YAHOO_FINANCE = "yahoo_finance"
-
-
-class SNP500Source(Enum):
-    YAHOO_FINANCE = "yahoo_finance"
-
-
-class NASDAQCompositeSource(Enum):
-    YAHOO_FINANCE = "yahoo_finance"
-
-
-class NASDAQ100Source(Enum):
-    YAHOO_FINANCE = "yahoo_finance"
-
-
-# endregion SCRAPE SOURCE MACROECONOMICS
-
-
 # region SCRAPE SOURCE STOCK_MARKET
 class VnHnxIndexSource(Enum):
     CAFEF = "cafef"
@@ -398,60 +245,6 @@ class StockInformationSource(Enum):
 # endregion SCRAPE SOURCE ENTERPRISE
 
 
-# UNION OF ALL SOURCES
-Source = Union[
-    # MACROECONOMICS
-    # Automatically scraped from Vietstock
-    GdpSource,
-    CpiSource,
-    PpiSource,
-    IpiSource,
-    XpiSource,
-    MpiSource,
-    PopulationSource,
-    LaborSource,
-    RetailSource,
-    PmiSource,
-    IipSource,
-    IpvSource,
-    MipSource,
-    FaByHouseTypeSource,
-    ItBopSource,
-    TsbrSource,
-    TsbeSource,
-    GdSource,
-    BrdSource,
-    IisdSource,
-    TregSource,
-    CreditSource,
-    MobilizationSource,
-    ExchangeRateSource,
-    IirSource,
-    RrrrSource,
-    FdiSectorSource,
-    FdiRdSource,
-    ExportSource,
-    ImportSource,
-    # Manually scraped from Investing.com
-    GoldPriceSource,
-    OilPriceSource,
-    DowJonesSource,
-    NYSECompositeSource,
-    SNP500Source,
-    NASDAQCompositeSource,
-    NASDAQ100Source,
-    # STOCK_MARKET
-    VnHnxIndexSource,
-    Vn30IndexSource,
-    Vn100IndexSource,
-    Hnx30IndexSource,
-    UpcomIndexSource,
-    # ENTERPRISE
-    FinanceInfoSource,
-    DailyPriceSource,
-    StockInformationSource,
-]
-
 # ================================================
 
 
@@ -460,264 +253,227 @@ class SourceInfo:
     url: str
 
 
-SCRAPE_MAPPING: Dict[Tuple[ScrapeMainType, ScrapeSubType, Source], SourceInfo] = {
+SCRAPE_MAPPING: Dict[Tuple[ScrapeMainType, ScrapeSubType], SourceInfo] = {
     # MACROECONOMICS
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.GDP,
-        GdpSource.VIETSTOCK,
     ): SourceInfo(
-        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
+        url="https://data360files.worldbank.org/data360-data/data/WB_CLEAR/WB_CLEAR_NY_GDP_MKTP_KD_ZG.csv",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.CPI,
-        CpiSource.VIETSTOCK,
     ): SourceInfo(
         url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.PPI,
-        PpiSource.VIETSTOCK,
     ): SourceInfo(
         url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.IPI,
-        IpiSource.VIETSTOCK,
     ): SourceInfo(
         url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.XPI,
-        XpiSource.VIETSTOCK,
     ): SourceInfo(
         url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.MPI,
-        MpiSource.VIETSTOCK,
     ): SourceInfo(
         url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.POPULATION,
-        PopulationSource.VIETSTOCK,
     ): SourceInfo(
         url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.LABOR,
-        LaborSource.VIETSTOCK,
     ): SourceInfo(
         url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.RETAIL,
-        RetailSource.VIETSTOCK,
     ): SourceInfo(
         url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.PMI,
-        PmiSource.VIETSTOCK,
     ): SourceInfo(
         url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.IIP,
-        IipSource.VIETSTOCK,
     ): SourceInfo(
         url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.IPV,
-        IpvSource.VIETSTOCK,
     ): SourceInfo(
         url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.MIP,
-        MipSource.VIETSTOCK,
     ): SourceInfo(
         url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.FA_BY_HOUSE_TYPES,
-        FaByHouseTypeSource.VIETSTOCK,
     ): SourceInfo(
         url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.IT_BOP,
-        ItBopSource.VIETSTOCK,
     ): SourceInfo(
         url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.TSBR,
-        TsbrSource.VIETSTOCK,
     ): SourceInfo(
         url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.TSBE,
-        TsbeSource.VIETSTOCK,
     ): SourceInfo(
         url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.GD,
-        GdSource.VIETSTOCK,
     ): SourceInfo(
         url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.BRD,
-        BrdSource.VIETSTOCK,
     ): SourceInfo(
         url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.IISD,
-        IisdSource.VIETSTOCK,
     ): SourceInfo(
         url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.TREG,
-        TregSource.VIETSTOCK,
     ): SourceInfo(
         url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.CREDIT,
-        CreditSource.VIETSTOCK,
     ): SourceInfo(
         url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.MOBILIZATION,
-        MobilizationSource.VIETSTOCK,
     ): SourceInfo(
         url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.EXCHANGE_RATE,
-        ExchangeRateSource.INVESTING,
     ): SourceInfo(
         url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.IIR,
-        IirSource.VIETSTOCK,
     ): SourceInfo(
         url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.RRRR,
-        RrrrSource.VIETSTOCK,
     ): SourceInfo(
         url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.FDI_SECTOR,
-        FdiSectorSource.VIETSTOCK,
     ): SourceInfo(
         url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.FDI_RD,
-        FdiRdSource.VIETSTOCK,
     ): SourceInfo(
         url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.EXPORT,
-        ExportSource.VIETSTOCK,
     ): SourceInfo(
         url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.IMPORT,
-        ImportSource.VIETSTOCK,
     ): SourceInfo(
         url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.GOLD_PRICE,
-        GoldPriceSource.INVESTING,
     ): SourceInfo(
         url="https://vn.investing.com/commodities/gold-historical-data",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.OIL_PRICE,
-        OilPriceSource.INVESTING,
     ): SourceInfo(
         url="https://vn.investing.com/commodities/brent-oil-historical-data",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.DOW_JONES,
-        DowJonesSource.INVESTING,
     ): SourceInfo(
         url="https://vn.investing.com/indices/us-30-historical-data",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.NYSE_COMPOSITE,
-        NYSECompositeSource.YAHOO_FINANCE,
     ): SourceInfo(
         url="https://finance.yahoo.com/quote/%5ENYA/history/",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.SNP_500,
-        SNP500Source.YAHOO_FINANCE,
     ): SourceInfo(
         url="https://finance.yahoo.com/quote/%5EGSPC/history/",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.NASDAQ_COMPOSITE,
-        NASDAQCompositeSource.YAHOO_FINANCE,
     ): SourceInfo(
         url="https://finance.yahoo.com/quote/%5EIXIC/history/",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.NASDAQ_100,
-        NASDAQ100Source.YAHOO_FINANCE,
     ): SourceInfo(
         url="https://finance.yahoo.com/quote/%5ENDX/history/",
     ),
@@ -725,49 +481,41 @@ SCRAPE_MAPPING: Dict[Tuple[ScrapeMainType, ScrapeSubType, Source], SourceInfo] =
     (
         ScrapeMainType.STOCK_MARKET,
         StockMarketSubType.VN_HNX_INDEX,
-        VnHnxIndexSource.CAFEF,
     ): SourceInfo(url="https://cafef.vn/du-lieu/du-lieu-download.chn"),
     (
         ScrapeMainType.STOCK_MARKET,
         StockMarketSubType.VN_30_INDEX,
-        Vn30IndexSource.CAFEF,
     ): SourceInfo(
         url="https://cafef.vn/du-lieu/lich-su-giao-dich-vn30index-1.chn#data",
     ),
     (
         ScrapeMainType.STOCK_MARKET,
         StockMarketSubType.VN_100_INDEX,
-        Vn100IndexSource.CAFEF,
     ): SourceInfo(
         url="https://cafef.vn/du-lieu/lich-su-giao-dich-vn100-index-1.chn",
     ),
     (
         ScrapeMainType.STOCK_MARKET,
         StockMarketSubType.HNX_30_INDEX,
-        Hnx30IndexSource.CAFEF,
     ): SourceInfo(
         url="https://cafef.vn/du-lieu/lich-su-giao-dich-hnx30-index-1.chn",
     ),
     (
         ScrapeMainType.STOCK_MARKET,
         StockMarketSubType.UPCOM_INDEX,
-        UpcomIndexSource.CAFEF,
     ): SourceInfo(url="https://cafef.vn/du-lieu/lich-su-giao-dich-upcom-index-1.chn"),
     # ENTERPRISE
     (
         ScrapeMainType.ENTERPRISE,
         EnterpriseSubType.FINANCE_INFO,
-        FinanceInfoSource.CAFEF,
     ): SourceInfo(url="https://cafef.vn/"),
     (
         ScrapeMainType.ENTERPRISE,
         EnterpriseSubType.DAILY_PRICE,
-        DailyPriceSource.CAFEF,
     ): SourceInfo(url="https://cafef.vn/du-lieu/du-lieu-download.chn"),
     (
         ScrapeMainType.ENTERPRISE,
         EnterpriseSubType.STOCK_INFORMATION,
-        StockInformationSource.CAFEF,
     ): SourceInfo(
         url="https://cafef.vn/du-lieu/hose/vic-tap-doan-vingroup-cong-ty-co-phan.chn"
     ),

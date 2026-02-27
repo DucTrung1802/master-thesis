@@ -218,11 +218,11 @@ def download_file(download_url, file_path, logger):
         return
 
 
-def format_key_for_name(key: Tuple[ScrapeMainType, ScrapeSubType, Source]):
+def format_key_for_name(key: Tuple[ScrapeMainType, ScrapeSubType]):
     return "_".join(k.name.lower() for k in key)
 
 
-def format_key_for_table(key: Tuple[ScrapeMainType, ScrapeSubType, Source]):
+def format_key_for_table(key: Tuple[ScrapeMainType, ScrapeSubType]):
     return ".".join(k.name.lower() for k in key)
 
 

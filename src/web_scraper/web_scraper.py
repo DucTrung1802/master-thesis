@@ -152,24 +152,25 @@ class WebScraper:
                 return xpath
         return False
 
-    def _scrape_data_macroeconomics_gdp_vietstock(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
+    def _scrape_data_macroeconomics_gdp(
+        self, key: Tuple[ScrapeMainType, ScrapeSubType]
     ):
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
 
-        # Initialize web driver and bs4 parser
-        web_driver, bs4_parser = self._initialize_web_driver_and_bs4_parser()
-
         try:
             # 1. Initialize folder path and file name
-            folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            file_name = f"{key[2].value}"
+            scrape_main_type = key[0].value
+            scrape_sub_type = key[1].value
+            folder_path = (
+                f"{SCRAPER_BRONZE_DATA_DIR}/{scrape_main_type}/{scrape_sub_type}"
+            )
+            file_name = f"{scrape_sub_type}"
 
             # 2. Initialize start time and current time
             start_year = SCRAPER_START_DATE.year
             current_year = datetime.now().year
 
-            file_path = f"{folder_path}/{key[1].value}_{file_name}_{start_year}_{current_year}.csv"
+            file_path = f"{folder_path}/{file_name}_{start_year}_{current_year}.csv"
 
             # 3. Delete file if exists
             if os.path.exists(file_path):
@@ -184,53 +185,25 @@ class WebScraper:
             source_info = SCRAPE_MAPPING[key]
 
             # 6. Navigate to URL
-            web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
-            time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
 
             # 7. Logic for scraping
             self._logger.log_info(
-                f"Scraping GDP data from {start_year} to {current_year}."
+                f"Scraping {scrape_sub_type} data from {start_year} to {current_year}."
             )
 
-            gdp_panel_xpath = (
-                '//*[@id="macro-data"]/div[3]/div[1]/div[1]/div[2]/div[1]/div[2]/div[2]'
-            )
-            self._click_element(
-                web_driver=web_driver,
-                xpath=gdp_panel_xpath,
-            )
-            time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
-            all_time_button_xpath = '//*[@id="macro-data"]/div[3]/div[2]/div[1]/div[1]/div[1]/div[1]/div[2]/div[1]/div[10]'
-            self._click_element(
-                web_driver=web_driver,
-                xpath=all_time_button_xpath,
-            )
-
-            table_title_xpath = '//*[@id="tbl-macro-data"]/tbody/tr[1]/td/div'
-            WebDriverWait(web_driver, 10).until(
-                EC.presence_of_element_located((By.XPATH, table_title_xpath))
-            )
-            time.sleep(3)
-
-            bs4_parser = self._update_bs4_parser(web_driver)
-
-            headers, rows = self._extract_table_by_id(
-                bs4_parser=bs4_parser, id="tbl-macro-data"
-            )
+            url = source_info.url
+            scraped_df = pd.read_csv(url)
 
             # Write to CSV
-            with open(file_path, "w", newline="", encoding="utf-8") as f:
-                writer = csv.writer(f)
-                writer.writerow(headers)
-                writer.writerows(rows)
+            scraped_df.to_csv(file_path, index=False)
 
         finally:
-            web_driver.close()
+            pass
 
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
     def _scrape_data_macroeconomics_cpi_vietstock(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
+        self, key: Tuple[ScrapeMainType, ScrapeSubType]
     ):
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
 
@@ -317,7 +290,7 @@ class WebScraper:
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
     def _scrape_data_macroeconomics_ppi_vietstock(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
+        self, key: Tuple[ScrapeMainType, ScrapeSubType]
     ):
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
 
@@ -404,7 +377,7 @@ class WebScraper:
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
     def _scrape_data_macroeconomics_ipi_vietstock(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
+        self, key: Tuple[ScrapeMainType, ScrapeSubType]
     ):
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
 
@@ -491,7 +464,7 @@ class WebScraper:
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
     def _scrape_data_macroeconomics_xpi_vietstock(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
+        self, key: Tuple[ScrapeMainType, ScrapeSubType]
     ):
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
 
@@ -578,7 +551,7 @@ class WebScraper:
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
     def _scrape_data_macroeconomics_mpi_vietstock(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
+        self, key: Tuple[ScrapeMainType, ScrapeSubType]
     ):
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
 
@@ -665,7 +638,7 @@ class WebScraper:
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
     def _scrape_data_macroeconomics_population_vietstock(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
+        self, key: Tuple[ScrapeMainType, ScrapeSubType]
     ):
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
 
@@ -752,7 +725,7 @@ class WebScraper:
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
     def _scrape_data_macroeconomics_labor_vietstock(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
+        self, key: Tuple[ScrapeMainType, ScrapeSubType]
     ):
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
 
@@ -839,7 +812,7 @@ class WebScraper:
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
     def _scrape_data_macroeconomics_retail_vietstock(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
+        self, key: Tuple[ScrapeMainType, ScrapeSubType]
     ):
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
 
@@ -926,7 +899,7 @@ class WebScraper:
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
     def _scrape_data_macroeconomics_pmi_vietstock(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
+        self, key: Tuple[ScrapeMainType, ScrapeSubType]
     ):
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
 
@@ -1013,7 +986,7 @@ class WebScraper:
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
     def _scrape_data_macroeconomics_iip_vietstock(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
+        self, key: Tuple[ScrapeMainType, ScrapeSubType]
     ):
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
 
@@ -1100,7 +1073,7 @@ class WebScraper:
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
     def _scrape_data_macroeconomics_ipv_vietstock(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
+        self, key: Tuple[ScrapeMainType, ScrapeSubType]
     ):
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
 
@@ -1187,7 +1160,7 @@ class WebScraper:
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
     def _scrape_data_macroeconomics_mip_vietstock(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
+        self, key: Tuple[ScrapeMainType, ScrapeSubType]
     ):
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
 
@@ -1274,7 +1247,7 @@ class WebScraper:
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
     def _scrape_data_macroeconomics_fa_by_house_type_vietstock(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
+        self, key: Tuple[ScrapeMainType, ScrapeSubType]
     ):
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
 
@@ -1361,7 +1334,7 @@ class WebScraper:
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
     def _scrape_data_macroeconomics_it_bop_vietstock(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
+        self, key: Tuple[ScrapeMainType, ScrapeSubType]
     ):
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
 
@@ -1448,7 +1421,7 @@ class WebScraper:
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
     def _scrape_data_macroeconomics_tsbr_vietstock(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
+        self, key: Tuple[ScrapeMainType, ScrapeSubType]
     ):
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
 
@@ -1535,7 +1508,7 @@ class WebScraper:
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
     def _scrape_data_macroeconomics_tsbe_vietstock(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
+        self, key: Tuple[ScrapeMainType, ScrapeSubType]
     ):
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
 
@@ -1622,7 +1595,7 @@ class WebScraper:
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
     def _scrape_data_macroeconomics_gd_vietstock(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
+        self, key: Tuple[ScrapeMainType, ScrapeSubType]
     ):
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
 
@@ -1709,7 +1682,7 @@ class WebScraper:
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
     def _scrape_data_macroeconomics_brd_vietstock(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
+        self, key: Tuple[ScrapeMainType, ScrapeSubType]
     ):
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
 
@@ -1796,7 +1769,7 @@ class WebScraper:
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
     def _scrape_data_macroeconomics_iisd_vietstock(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
+        self, key: Tuple[ScrapeMainType, ScrapeSubType]
     ):
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
 
@@ -1883,7 +1856,7 @@ class WebScraper:
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
     def _scrape_data_macroeconomics_treg_vietstock(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
+        self, key: Tuple[ScrapeMainType, ScrapeSubType]
     ):
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
 
@@ -1968,7 +1941,7 @@ class WebScraper:
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
     def _scrape_data_macroeconomics_credit_vietstock(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
+        self, key: Tuple[ScrapeMainType, ScrapeSubType]
     ):
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
 
@@ -2055,7 +2028,7 @@ class WebScraper:
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
     def _scrape_data_macroeconomics_mobilization_vietstock(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
+        self, key: Tuple[ScrapeMainType, ScrapeSubType]
     ):
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
 
@@ -2142,7 +2115,7 @@ class WebScraper:
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
     def _scrape_data_macroeconomics_exchange_rate_vietstock(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
+        self, key: Tuple[ScrapeMainType, ScrapeSubType]
     ):
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
 
@@ -2229,7 +2202,7 @@ class WebScraper:
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
     def _scrape_data_macroeconomics_iir_vietstock(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
+        self, key: Tuple[ScrapeMainType, ScrapeSubType]
     ):
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
 
@@ -2316,7 +2289,7 @@ class WebScraper:
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
     def _scrape_data_macroeconomics_rrrr_vietstock(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
+        self, key: Tuple[ScrapeMainType, ScrapeSubType]
     ):
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
 
@@ -2403,7 +2376,7 @@ class WebScraper:
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
     def _scrape_data_macroeconomics_fdi_sector_vietstock(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
+        self, key: Tuple[ScrapeMainType, ScrapeSubType]
     ):
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
 
@@ -2488,7 +2461,7 @@ class WebScraper:
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
     def _scrape_data_macroeconomics_fdi_rd_vietstock(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
+        self, key: Tuple[ScrapeMainType, ScrapeSubType]
     ):
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
 
@@ -2573,7 +2546,7 @@ class WebScraper:
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
     def _scrape_data_macroeconomics_export_vietstock(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
+        self, key: Tuple[ScrapeMainType, ScrapeSubType]
     ):
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
 
@@ -2658,7 +2631,7 @@ class WebScraper:
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
     def _scrape_data_macroeconomics_import_vietstock(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
+        self, key: Tuple[ScrapeMainType, ScrapeSubType]
     ):
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
 
@@ -2743,7 +2716,7 @@ class WebScraper:
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
     def _scrape_data_macroeconomics_nyse_composite_yahoo_finance(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
+        self, key: Tuple[ScrapeMainType, ScrapeSubType]
     ):
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
 
@@ -2831,7 +2804,7 @@ class WebScraper:
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
     def _scrape_data_macroeconomics_snp_500_yahoo_finance(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
+        self, key: Tuple[ScrapeMainType, ScrapeSubType]
     ):
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
 
@@ -2921,7 +2894,7 @@ class WebScraper:
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
     def _scrape_data_macroeconomics_nasdaq_composite_yahoo_finance(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
+        self, key: Tuple[ScrapeMainType, ScrapeSubType]
     ):
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
 
@@ -3011,7 +2984,7 @@ class WebScraper:
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
     def _scrape_data_macroeconomics_nasdaq_100_yahoo_finance(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
+        self, key: Tuple[ScrapeMainType, ScrapeSubType]
     ):
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
 
@@ -3101,7 +3074,7 @@ class WebScraper:
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
     def _scrape_data_stock_market_vn_hnx_index_cafef(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
+        self, key: Tuple[ScrapeMainType, ScrapeSubType]
     ):
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
 
@@ -3166,7 +3139,7 @@ class WebScraper:
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
     def _scrape_data_stock_market_vn_30_index_cafef(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
+        self, key: Tuple[ScrapeMainType, ScrapeSubType]
     ):
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
 
@@ -3248,7 +3221,7 @@ class WebScraper:
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
     def _scrape_data_stock_market_vn_100_index_cafef(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
+        self, key: Tuple[ScrapeMainType, ScrapeSubType]
     ):
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
 
@@ -3330,7 +3303,7 @@ class WebScraper:
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
     def _scrape_data_stock_market_hnx_30_index_cafef(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
+        self, key: Tuple[ScrapeMainType, ScrapeSubType]
     ):
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
 
@@ -3412,7 +3385,7 @@ class WebScraper:
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
     def _scrape_data_stock_market_upcom_index_cafef(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
+        self, key: Tuple[ScrapeMainType, ScrapeSubType]
     ):
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
 
@@ -3494,7 +3467,7 @@ class WebScraper:
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
     def _scrape_data_enterprise_daily_price_cafef(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
+        self, key: Tuple[ScrapeMainType, ScrapeSubType]
     ):
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
 
@@ -3823,7 +3796,7 @@ class WebScraper:
         )
 
     def _scrape_data_enterprise_stock_information_cafef(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]
+        self, key: Tuple[ScrapeMainType, ScrapeSubType]
     ):
         folder_path = (
             f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
@@ -3859,7 +3832,7 @@ class WebScraper:
                 )
             )
 
-    def _scrape_data_from(self, key: Tuple[ScrapeMainType, ScrapeSubType, Source]):
+    def _scrape_data_from(self, key: Tuple[ScrapeMainType, ScrapeSubType]):
         if key not in SCRAPE_MAPPING:
             raise ValueError(f"No mapping found for {key}")
 
@@ -3869,217 +3842,186 @@ class WebScraper:
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.GDP,
-                GdpSource.VIETSTOCK,
             ):
-                return self._scrape_data_macroeconomics_gdp_vietstock(key)
+                return self._scrape_data_macroeconomics_gdp(key)
 
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.CPI,
-                CpiSource.VIETSTOCK,
             ):
                 return self._scrape_data_macroeconomics_cpi_vietstock(key)
 
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.PPI,
-                PpiSource.VIETSTOCK,
             ):
                 return self._scrape_data_macroeconomics_ppi_vietstock(key)
 
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.IPI,
-                IpiSource.VIETSTOCK,
             ):
                 return self._scrape_data_macroeconomics_ipi_vietstock(key)
 
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.XPI,
-                XpiSource.VIETSTOCK,
             ):
                 return self._scrape_data_macroeconomics_xpi_vietstock(key)
 
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.MPI,
-                MpiSource.VIETSTOCK,
             ):
                 return self._scrape_data_macroeconomics_mpi_vietstock(key)
 
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.POPULATION,
-                PopulationSource.VIETSTOCK,
             ):
                 return self._scrape_data_macroeconomics_population_vietstock(key)
 
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.LABOR,
-                LaborSource.VIETSTOCK,
             ):
                 return self._scrape_data_macroeconomics_labor_vietstock(key)
 
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.RETAIL,
-                RetailSource.VIETSTOCK,
             ):
                 return self._scrape_data_macroeconomics_retail_vietstock(key)
 
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.PMI,
-                PmiSource.VIETSTOCK,
             ):
                 return self._scrape_data_macroeconomics_pmi_vietstock(key)
 
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.IIP,
-                IipSource.VIETSTOCK,
             ):
                 return self._scrape_data_macroeconomics_iip_vietstock(key)
 
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.IPV,
-                IpvSource.VIETSTOCK,
             ):
                 return self._scrape_data_macroeconomics_ipv_vietstock(key)
 
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.MIP,
-                MipSource.VIETSTOCK,
             ):
                 return self._scrape_data_macroeconomics_mip_vietstock(key)
 
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.FA_BY_HOUSE_TYPES,
-                FaByHouseTypeSource.VIETSTOCK,
             ):
                 return self._scrape_data_macroeconomics_fa_by_house_type_vietstock(key)
 
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.IT_BOP,
-                ItBopSource.VIETSTOCK,
             ):
                 return self._scrape_data_macroeconomics_it_bop_vietstock(key)
 
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.TSBR,
-                TsbrSource.VIETSTOCK,
             ):
                 return self._scrape_data_macroeconomics_tsbr_vietstock(key)
 
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.TSBE,
-                TsbeSource.VIETSTOCK,
             ):
                 return self._scrape_data_macroeconomics_tsbe_vietstock(key)
 
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.GD,
-                GdSource.VIETSTOCK,
             ):
                 return self._scrape_data_macroeconomics_gd_vietstock(key)
 
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.BRD,
-                BrdSource.VIETSTOCK,
             ):
                 return self._scrape_data_macroeconomics_brd_vietstock(key)
 
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.IISD,
-                IisdSource.VIETSTOCK,
             ):
                 return self._scrape_data_macroeconomics_iisd_vietstock(key)
 
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.TREG,
-                TregSource.VIETSTOCK,
             ):
                 return self._scrape_data_macroeconomics_treg_vietstock(key)
 
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.CREDIT,
-                CreditSource.VIETSTOCK,
             ):
                 return self._scrape_data_macroeconomics_credit_vietstock(key)
 
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.MOBILIZATION,
-                MobilizationSource.VIETSTOCK,
             ):
                 return self._scrape_data_macroeconomics_mobilization_vietstock(key)
 
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.EXCHANGE_RATE,
-                ExchangeRateSource.VIETSTOCK,
             ):
                 return self._scrape_data_macroeconomics_exchange_rate_vietstock(key)
 
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.IIR,
-                IirSource.VIETSTOCK,
             ):
                 return self._scrape_data_macroeconomics_iir_vietstock(key)
 
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.RRRR,
-                RrrrSource.VIETSTOCK,
             ):
                 return self._scrape_data_macroeconomics_rrrr_vietstock(key)
 
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.FDI_SECTOR,
-                FdiSectorSource.VIETSTOCK,
             ):
                 return self._scrape_data_macroeconomics_fdi_sector_vietstock(key)
 
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.FDI_RD,
-                FdiRdSource.VIETSTOCK,
             ):
                 return self._scrape_data_macroeconomics_fdi_rd_vietstock(key)
 
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.EXPORT,
-                ExportSource.VIETSTOCK,
             ):
                 return self._scrape_data_macroeconomics_export_vietstock(key)
 
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.IMPORT,
-                ImportSource.VIETSTOCK,
             ):
                 return self._scrape_data_macroeconomics_import_vietstock(key)
 
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.NYSE_COMPOSITE,
-                NYSECompositeSource.YAHOO_FINANCE,
             ):
                 return self._scrape_data_macroeconomics_nyse_composite_yahoo_finance(
                     key
@@ -4088,14 +4030,12 @@ class WebScraper:
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.SNP_500,
-                SNP500Source.YAHOO_FINANCE,
             ):
                 return self._scrape_data_macroeconomics_snp_500_yahoo_finance(key)
 
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.NASDAQ_COMPOSITE,
-                NASDAQCompositeSource.YAHOO_FINANCE,
             ):
                 return self._scrape_data_macroeconomics_nasdaq_composite_yahoo_finance(
                     key
@@ -4104,7 +4044,6 @@ class WebScraper:
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.NASDAQ_100,
-                NASDAQ100Source.YAHOO_FINANCE,
             ):
                 return self._scrape_data_macroeconomics_nasdaq_100_yahoo_finance(key)
 
@@ -4156,21 +4095,19 @@ class WebScraper:
         self._logger.log_info("Adding macroeconomic data scraping tasks.")
         number_of_task_before = self._thread_manager.get_current_number_of_task()
 
-        # # MACROECONOMICS_GDP_VIETSTOCK
-        # key = (
-        #     ScrapeMainType.MACROECONOMICS,
-        #     MacroeconomicsSubType.GDP,
-        #     GdpSource.VIETSTOCK,
-        # )
-        # self._thread_manager.add_task(
-        #     Task(format_key_for_name(key), self._scrape_data_from, key)
-        # )
+        # MACROECONOMICS_GDP
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.GDP,
+        )
+        self._thread_manager.add_task(
+            Task(format_key_for_name(key), self._scrape_data_from, key)
+        )
 
         # # MACROECONOMICS_CPI_VIETSTOCK
         # key = (
         #     ScrapeMainType.MACROECONOMICS,
         #     MacroeconomicsSubType.CPI,
-        #     CpiSource.VIETSTOCK,
         # )
         # self._thread_manager.add_task(
         #     Task(format_key_for_name(key), self._scrape_data_from, key)
@@ -4180,7 +4117,6 @@ class WebScraper:
         # key = (
         #     ScrapeMainType.MACROECONOMICS,
         #     MacroeconomicsSubType.PPI,
-        #     PpiSource.VIETSTOCK,
         # )
         # self._thread_manager.add_task(
         #     Task(format_key_for_name(key), self._scrape_data_from, key)
@@ -4190,7 +4126,6 @@ class WebScraper:
         # key = (
         #     ScrapeMainType.MACROECONOMICS,
         #     MacroeconomicsSubType.IPI,
-        #     IpiSource.VIETSTOCK,
         # )
         # self._thread_manager.add_task(
         #     Task(format_key_for_name(key), self._scrape_data_from, key)
@@ -4200,7 +4135,6 @@ class WebScraper:
         # key = (
         #     ScrapeMainType.MACROECONOMICS,
         #     MacroeconomicsSubType.XPI,
-        #     XpiSource.VIETSTOCK,
         # )
         # self._thread_manager.add_task(
         #     Task(format_key_for_name(key), self._scrape_data_from, key)
@@ -4210,7 +4144,6 @@ class WebScraper:
         # key = (
         #     ScrapeMainType.MACROECONOMICS,
         #     MacroeconomicsSubType.MPI,
-        #     MpiSource.VIETSTOCK,
         # )
         # self._thread_manager.add_task(
         #     Task(format_key_for_name(key), self._scrape_data_from, key)
@@ -4220,7 +4153,6 @@ class WebScraper:
         # key = (
         #     ScrapeMainType.MACROECONOMICS,
         #     MacroeconomicsSubType.POPULATION,
-        #     PopulationSource.VIETSTOCK,
         # )
         # self._thread_manager.add_task(
         #     Task(format_key_for_name(key), self._scrape_data_from, key)
@@ -4230,7 +4162,6 @@ class WebScraper:
         # key = (
         #     ScrapeMainType.MACROECONOMICS,
         #     MacroeconomicsSubType.LABOR,
-        #     LaborSource.VIETSTOCK,
         # )
         # self._thread_manager.add_task(
         #     Task(format_key_for_name(key), self._scrape_data_from, key)
@@ -4240,7 +4171,6 @@ class WebScraper:
         # key = (
         #     ScrapeMainType.MACROECONOMICS,
         #     MacroeconomicsSubType.RETAIL,
-        #     RetailSource.VIETSTOCK,
         # )
         # self._thread_manager.add_task(
         #     Task(format_key_for_name(key), self._scrape_data_from, key)
@@ -4250,7 +4180,6 @@ class WebScraper:
         # key = (
         #     ScrapeMainType.MACROECONOMICS,
         #     MacroeconomicsSubType.PMI,
-        #     PmiSource.VIETSTOCK,
         # )
         # self._thread_manager.add_task(
         #     Task(format_key_for_name(key), self._scrape_data_from, key)
@@ -4260,7 +4189,6 @@ class WebScraper:
         # key = (
         #     ScrapeMainType.MACROECONOMICS,
         #     MacroeconomicsSubType.IIP,
-        #     IipSource.VIETSTOCK,
         # )
         # self._thread_manager.add_task(
         #     Task(format_key_for_name(key), self._scrape_data_from, key)
@@ -4270,7 +4198,6 @@ class WebScraper:
         # key = (
         #     ScrapeMainType.MACROECONOMICS,
         #     MacroeconomicsSubType.IPV,
-        #     IpvSource.VIETSTOCK,
         # )
         # self._thread_manager.add_task(
         #     Task(format_key_for_name(key), self._scrape_data_from, key)
@@ -4280,7 +4207,6 @@ class WebScraper:
         # key = (
         #     ScrapeMainType.MACROECONOMICS,
         #     MacroeconomicsSubType.MIP,
-        #     MipSource.VIETSTOCK,
         # )
         # self._thread_manager.add_task(
         #     Task(format_key_for_name(key), self._scrape_data_from, key)
@@ -4290,7 +4216,6 @@ class WebScraper:
         # key = (
         #     ScrapeMainType.MACROECONOMICS,
         #     MacroeconomicsSubType.FA_BY_HOUSE_TYPES,
-        #     FaByHouseTypeSource.VIETSTOCK,
         # )
         # self._thread_manager.add_task(
         #     Task(format_key_for_name(key), self._scrape_data_from, key)
@@ -4300,7 +4225,6 @@ class WebScraper:
         # key = (
         #     ScrapeMainType.MACROECONOMICS,
         #     MacroeconomicsSubType.IT_BOP,
-        #     ItBopSource.VIETSTOCK,
         # )
         # self._thread_manager.add_task(
         #     Task(format_key_for_name(key), self._scrape_data_from, key)
@@ -4310,7 +4234,6 @@ class WebScraper:
         # key = (
         #     ScrapeMainType.MACROECONOMICS,
         #     MacroeconomicsSubType.TSBR,
-        #     TsbrSource.VIETSTOCK,
         # )
         # self._thread_manager.add_task(
         #     Task(format_key_for_name(key), self._scrape_data_from, key)
@@ -4320,7 +4243,6 @@ class WebScraper:
         # key = (
         #     ScrapeMainType.MACROECONOMICS,
         #     MacroeconomicsSubType.TSBE,
-        #     TsbeSource.VIETSTOCK,
         # )
         # self._thread_manager.add_task(
         #     Task(format_key_for_name(key), self._scrape_data_from, key)
@@ -4330,7 +4252,6 @@ class WebScraper:
         # key = (
         #     ScrapeMainType.MACROECONOMICS,
         #     MacroeconomicsSubType.GD,
-        #     GdSource.VIETSTOCK,
         # )
         # self._thread_manager.add_task(
         #     Task(format_key_for_name(key), self._scrape_data_from, key)
@@ -4340,7 +4261,6 @@ class WebScraper:
         # key = (
         #     ScrapeMainType.MACROECONOMICS,
         #     MacroeconomicsSubType.BRD,
-        #     BrdSource.VIETSTOCK,
         # )
         # self._thread_manager.add_task(
         #     Task(format_key_for_name(key), self._scrape_data_from, key)
@@ -4350,7 +4270,6 @@ class WebScraper:
         # key = (
         #     ScrapeMainType.MACROECONOMICS,
         #     MacroeconomicsSubType.IISD,
-        #     IisdSource.VIETSTOCK,
         # )
         # self._thread_manager.add_task(
         #     Task(format_key_for_name(key), self._scrape_data_from, key)
@@ -4360,7 +4279,6 @@ class WebScraper:
         # key = (
         #     ScrapeMainType.MACROECONOMICS,
         #     MacroeconomicsSubType.TREG,
-        #     TregSource.VIETSTOCK,
         # )
         # self._thread_manager.add_task(
         #     Task(format_key_for_name(key), self._scrape_data_from, key)
@@ -4370,7 +4288,6 @@ class WebScraper:
         # key = (
         #     ScrapeMainType.MACROECONOMICS,
         #     MacroeconomicsSubType.CREDIT,
-        #     CreditSource.VIETSTOCK,
         # )
         # self._thread_manager.add_task(
         #     Task(format_key_for_name(key), self._scrape_data_from, key)
@@ -4380,7 +4297,6 @@ class WebScraper:
         # key = (
         #     ScrapeMainType.MACROECONOMICS,
         #     MacroeconomicsSubType.MOBILIZATION,
-        #     MobilizationSource.VIETSTOCK,
         # )
         # self._thread_manager.add_task(
         #     Task(format_key_for_name(key), self._scrape_data_from, key)
@@ -4390,7 +4306,6 @@ class WebScraper:
         # key = (
         #     ScrapeMainType.MACROECONOMICS,
         #     MacroeconomicsSubType.EXCHANGE_RATE,
-        #     ExchangeRateSource.VIETSTOCK,
         # )
         # self._thread_manager.add_task(
         #     Task(format_key_for_name(key), self._scrape_data_from, key)
@@ -4400,7 +4315,6 @@ class WebScraper:
         # key = (
         #     ScrapeMainType.MACROECONOMICS,
         #     MacroeconomicsSubType.IIR,
-        #     IirSource.VIETSTOCK,
         # )
         # self._thread_manager.add_task(
         #     Task(format_key_for_name(key), self._scrape_data_from, key)
@@ -4410,7 +4324,6 @@ class WebScraper:
         # key = (
         #     ScrapeMainType.MACROECONOMICS,
         #     MacroeconomicsSubType.RRRR,
-        #     RrrrSource.VIETSTOCK,
         # )
         # self._thread_manager.add_task(
         #     Task(format_key_for_name(key), self._scrape_data_from, key)
@@ -4420,7 +4333,6 @@ class WebScraper:
         # key = (
         #     ScrapeMainType.MACROECONOMICS,
         #     MacroeconomicsSubType.FDI_SECTOR,
-        #     FdiSectorSource.VIETSTOCK,
         # )
         # self._thread_manager.add_task(
         #     Task(format_key_for_name(key), self._scrape_data_from, key)
@@ -4430,7 +4342,6 @@ class WebScraper:
         # key = (
         #     ScrapeMainType.MACROECONOMICS,
         #     MacroeconomicsSubType.FDI_RD,
-        #     FdiRdSource.VIETSTOCK,
         # )
         # self._thread_manager.add_task(
         #     Task(format_key_for_name(key), self._scrape_data_from, key)
@@ -4440,7 +4351,6 @@ class WebScraper:
         # key = (
         #     ScrapeMainType.MACROECONOMICS,
         #     MacroeconomicsSubType.EXPORT,
-        #     ExportSource.VIETSTOCK,
         # )
         # self._thread_manager.add_task(
         #     Task(format_key_for_name(key), self._scrape_data_from, key)
@@ -4450,7 +4360,6 @@ class WebScraper:
         # key = (
         #     ScrapeMainType.MACROECONOMICS,
         #     MacroeconomicsSubType.IMPORT,
-        #     ImportSource.VIETSTOCK,
         # )
         # self._thread_manager.add_task(
         #     Task(format_key_for_name(key), self._scrape_data_from, key)
@@ -4460,7 +4369,6 @@ class WebScraper:
         # key = (
         #     ScrapeMainType.MACROECONOMICS,
         #     MacroeconomicsSubType.NYSE_COMPOSITE,
-        #     NYSECompositeSource.YAHOO_FINANCE,
         # )
         # self._thread_manager.add_task(
         #     Task(format_key_for_name(key), self._scrape_data_from, key)
@@ -4470,7 +4378,6 @@ class WebScraper:
         # key = (
         #     ScrapeMainType.MACROECONOMICS,
         #     MacroeconomicsSubType.SNP_500,
-        #     SNP500Source.YAHOO_FINANCE,
         # )
         # self._thread_manager.add_task(
         #     Task(format_key_for_name(key), self._scrape_data_from, key)
@@ -4480,7 +4387,6 @@ class WebScraper:
         # key = (
         #     ScrapeMainType.MACROECONOMICS,
         #     MacroeconomicsSubType.NASDAQ_COMPOSITE,
-        #     NASDAQCompositeSource.YAHOO_FINANCE,
         # )
         # self._thread_manager.add_task(
         #     Task(format_key_for_name(key), self._scrape_data_from, key)
@@ -4490,7 +4396,6 @@ class WebScraper:
         # key = (
         #     ScrapeMainType.MACROECONOMICS,
         #     MacroeconomicsSubType.NASDAQ_100,
-        #     NASDAQ100Source.YAHOO_FINANCE,
         # )
         # self._thread_manager.add_task(
         #     Task(format_key_for_name(key), self._scrape_data_from, key)
@@ -4668,8 +4573,8 @@ class WebScraper:
         self._logger.log_info("Adding data scraping tasks.")
         number_of_task_before = self._thread_manager.get_current_number_of_task()
 
-        # self.add_macroeconomics_data_scraping_tasks()
-        self.add_stock_market_data_scraping_tasks()
+        self.add_macroeconomics_data_scraping_tasks()
+        # self.add_stock_market_data_scraping_tasks()
         # self.add_enterprise_data_scraping_tasks()
 
         number_of_task_after = self._thread_manager.get_current_number_of_task()
