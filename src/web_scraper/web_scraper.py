@@ -202,24 +202,25 @@ class WebScraper:
 
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
-    def _scrape_data_macroeconomics_cpi_vietstock(
+    def _scrape_data_macroeconomics_inflation(
         self, key: Tuple[ScrapeMainType, ScrapeSubType]
     ):
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
 
-        # Initialize web driver and bs4 parser
-        web_driver, bs4_parser = self._initialize_web_driver_and_bs4_parser()
-
         try:
             # 1. Initialize folder path and file name
-            folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            file_name = f"{key[2].value}"
+            scrape_main_type = key[0].value
+            scrape_sub_type = key[1].value
+            folder_path = (
+                f"{SCRAPER_BRONZE_DATA_DIR}/{scrape_main_type}/{scrape_sub_type}"
+            )
+            file_name = f"{scrape_sub_type}"
 
             # 2. Initialize start time and current time
             start_year = SCRAPER_START_DATE.year
             current_year = datetime.now().year
 
-            file_path = f"{folder_path}/{key[1].value}_{file_name}_{start_year}_{current_year}.csv"
+            file_path = f"{folder_path}/{file_name}_{start_year}_{current_year}.csv"
 
             # 3. Delete file if exists
             if os.path.exists(file_path):
@@ -234,58 +235,20 @@ class WebScraper:
             source_info = SCRAPE_MAPPING[key]
 
             # 6. Navigate to URL
-            web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
-            time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
 
             # 7. Logic for scraping
             self._logger.log_info(
-                f"Scraping CPI data from {start_year} to {current_year}."
+                f"Scraping {scrape_sub_type} data from {start_year} to {current_year}."
             )
 
-            cpi_panel_xpath = (
-                '//*[@id="macro-data"]/div[3]/div[1]/div[1]/div[2]/div[2]/div[1]/span'
-            )
-            self._click_element(
-                web_driver=web_driver,
-                xpath=cpi_panel_xpath,
-            )
-            time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
-            cpi_xpath = (
-                '//*[@id="macro-data"]/div[3]/div[1]/div[1]/div[2]/div[2]/div[2]/div[1]'
-            )
-            self._click_element(
-                web_driver=web_driver,
-                xpath=cpi_xpath,
-            )
-            time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
-            all_time_button_xpath = '//*[@id="macro-data"]/div[3]/div[2]/div[1]/div[1]/div[1]/div[1]/div[2]/div[1]/div[10]'
-            self._click_element(
-                web_driver=web_driver,
-                xpath=all_time_button_xpath,
-            )
-
-            table_title_xpath = (
-                '//*[@id="macro-data"]/div[3]/div[2]/div[2]/div[1]/div[1]'
-            )
-            WebDriverWait(web_driver, 10).until(
-                EC.presence_of_element_located((By.XPATH, table_title_xpath))
-            )
-            time.sleep(3)
-
-            bs4_parser = self._update_bs4_parser(web_driver)
-
-            headers, rows = self._extract_table_by_id(
-                bs4_parser=bs4_parser, id="tbl-macro-data"
-            )
+            url = source_info.url
+            scraped_df = pd.read_csv(url)
 
             # Write to CSV
-            with open(file_path, "w", newline="", encoding="utf-8") as f:
-                writer = csv.writer(f)
-                writer.writerow(headers)
-                writer.writerows(rows)
+            scraped_df.to_csv(file_path, index=False)
 
         finally:
-            web_driver.close()
+            pass
 
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
@@ -3847,9 +3810,9 @@ class WebScraper:
 
             case (
                 ScrapeMainType.MACROECONOMICS,
-                MacroeconomicsSubType.CPI,
+                MacroeconomicsSubType.INFLATION,
             ):
-                return self._scrape_data_macroeconomics_cpi_vietstock(key)
+                return self._scrape_data_macroeconomics_inflation(key)
 
             case (
                 ScrapeMainType.MACROECONOMICS,
@@ -4104,14 +4067,14 @@ class WebScraper:
             Task(format_key_for_name(key), self._scrape_data_from, key)
         )
 
-        # # MACROECONOMICS_CPI_VIETSTOCK
-        # key = (
-        #     ScrapeMainType.MACROECONOMICS,
-        #     MacroeconomicsSubType.CPI,
-        # )
-        # self._thread_manager.add_task(
-        #     Task(format_key_for_name(key), self._scrape_data_from, key)
-        # )
+        # MACROECONOMICS_INFLATION
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.INFLATION,
+        )
+        self._thread_manager.add_task(
+            Task(format_key_for_name(key), self._scrape_data_from, key)
+        )
 
         # # MACROECONOMICS_PPI_VIETSTOCK
         # key = (

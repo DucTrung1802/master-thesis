@@ -146,7 +146,7 @@ class ScrapeMainType(Enum):
 # MACROECONOMICS, STOCK MARKET, AND ENTERPRISE SUBTYPE ENUMS
 class MacroeconomicsSubType(Enum):
     GDP = "gdp"  # Gross Domestic Product
-    CPI = "cpi"  # Consumer Price Index
+    INFLATION = "inflation"  # Inflation
     PPI = "ppi"  # Producer Price Index
     IPI = "ipi"  # Industrial Production Index
     XPI = "xpi"  # Export Price Index
@@ -263,9 +263,9 @@ SCRAPE_MAPPING: Dict[Tuple[ScrapeMainType, ScrapeSubType], SourceInfo] = {
     ),
     (
         ScrapeMainType.MACROECONOMICS,
-        MacroeconomicsSubType.CPI,
+        MacroeconomicsSubType.INFLATION,
     ): SourceInfo(
-        url="https://finance.vietstock.vn/du-lieu-vi-mo/macro-data?group=7&languageid=2",
+        url="https://data360files.worldbank.org/data360-data/data/IMF_WEO/IMF_WEO_PCPIEPCH.csv",
     ),
     (
         ScrapeMainType.MACROECONOMICS,
