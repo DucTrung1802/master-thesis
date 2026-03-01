@@ -3036,7 +3036,7 @@ class WebScraper:
 
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
-    def _scrape_data_stock_market_vn_hnx_index_cafef(
+    def _scrape_data_stock_market_vn_hnx_index_price(
         self, key: Tuple[ScrapeMainType, ScrapeSubType]
     ):
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
@@ -3046,14 +3046,18 @@ class WebScraper:
 
         try:
             # 1. Initialize folder path and file name
-            folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            file_name = f"{key[2].value}"
+            scrape_main_type = key[0].value
+            scrape_sub_type = key[1].value
+            folder_path = (
+                f"{SCRAPER_BRONZE_DATA_DIR}/{scrape_main_type}/{scrape_sub_type}"
+            )
+            file_name = f"{scrape_sub_type}"
 
             # 2. Initialize start time and current time
             current_date = datetime.now()
 
             file_path = (
-                f"{folder_path}/{file_name}_upto_{current_date.strftime('%Y%m%d')}.csv"
+                f"{folder_path}/{file_name}_upto_{current_date.strftime('%Y%m%d')}.xlsx"
             )
 
             # 3. Check if file(s) already exists
@@ -3073,28 +3077,14 @@ class WebScraper:
             time.sleep(SCRAPER_BASE_WAIT_TIME)
 
             # 7. Logic for scraping
-            xpath = '//*[@id="container"]/div/div[1]/div/div/div/div[2]/div[2]/table/tbody/tr[4]/td[3]/a'
-            download_link_element = web_driver.find_element("xpath", xpath)
-            download_url = download_link_element.get_attribute("href")
+            xpath = '//*[@id="tabletoExcel"]/img'
+            self._click_element(web_driver, xpath)
 
-            zip_path = file_path.replace(".csv", ".zip")
-            self._logger.log_info(f"Downloading ZIP file from: {download_url}")
-
-            # Download file
-            download_file(download_url, zip_path, self._logger)
-
-            # Extract ZIP file
-            extracted_files = extract_zip_file(self._logger, zip_path, folder_path)
-
-            # Rename the first .csv found to the target file_path
-            rename_first_csv_file(self._logger, extracted_files, folder_path, file_path)
-
-            os.remove(zip_path)
-            self._logger.log_info(f"Removed temporary ZIP file: {zip_path}")
-
-            self._logger.log_info(
-                f"Scraping VN_HNX_INDEX data upto {current_date.strftime('%d/%m/%Y')}."
+            download_file_path = get_newest_file_path(
+                folder_path="C:/Users/ADMIN/Downloads", extension=FileExtension.XLSX
             )
+
+            move_file(path_a=download_file_path, path_b=file_path)
 
         finally:
             web_driver.close()
@@ -4013,36 +4003,31 @@ class WebScraper:
             # STOCK_MARKET
             case (
                 ScrapeMainType.STOCK_MARKET,
-                StockMarketSubType.VN_HNX_INDEX,
-                VnHnxIndexSource.CAFEF,
+                StockMarketSubType.VN_HNX_INDEX_PRICE,
             ):
-                return self._scrape_data_stock_market_vn_hnx_index_cafef(key)
+                return self._scrape_data_stock_market_vn_hnx_index_price(key)
 
             case (
                 ScrapeMainType.STOCK_MARKET,
                 StockMarketSubType.VN_30_INDEX,
-                Vn30IndexSource.CAFEF,
             ):
                 return self._scrape_data_stock_market_vn_30_index_cafef(key)
 
             case (
                 ScrapeMainType.STOCK_MARKET,
                 StockMarketSubType.VN_100_INDEX,
-                Vn100IndexSource.CAFEF,
             ):
                 return self._scrape_data_stock_market_vn_100_index_cafef(key)
 
             case (
                 ScrapeMainType.STOCK_MARKET,
                 StockMarketSubType.HNX_30_INDEX,
-                Hnx30IndexSource.CAFEF,
             ):
                 return self._scrape_data_stock_market_hnx_30_index_cafef(key)
 
             case (
                 ScrapeMainType.STOCK_MARKET,
                 StockMarketSubType.UPCOM_INDEX,
-                UpcomIndexSource.CAFEF,
             ):
                 return self._scrape_data_stock_market_upcom_index_cafef(key)
 
@@ -4378,11 +4363,10 @@ class WebScraper:
         self._logger.log_info("Adding stock market data scraping tasks.")
         number_of_task_before = self._thread_manager.get_current_number_of_task()
 
-        # VN_HNX_INDEX
+        # VN_HNX_INDEX_PRICE
         key = (
             ScrapeMainType.STOCK_MARKET,
-            StockMarketSubType.VN_HNX_INDEX,
-            VnHnxIndexSource.CAFEF,
+            StockMarketSubType.VN_HNX_INDEX_PRICE,
         )
         self._thread_manager.add_task(
             Task(format_key_for_name(key), self._scrape_data_from, key)
@@ -4536,8 +4520,8 @@ class WebScraper:
         self._logger.log_info("Adding data scraping tasks.")
         number_of_task_before = self._thread_manager.get_current_number_of_task()
 
-        self.add_macroeconomics_data_scraping_tasks()
-        # self.add_stock_market_data_scraping_tasks()
+        # self.add_macroeconomics_data_scraping_tasks()
+        self.add_stock_market_data_scraping_tasks()
         # self.add_enterprise_data_scraping_tasks()
 
         number_of_task_after = self._thread_manager.get_current_number_of_task()

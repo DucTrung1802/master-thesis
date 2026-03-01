@@ -1,4 +1,5 @@
 import os
+import shutil
 import zipfile
 import numpy as np
 import requests
@@ -609,3 +610,20 @@ def move_column_to_end(df: pd.DataFrame, output_column: str) -> pd.DataFrame:
         output_column
     ]
     return df[reordered_columns]
+
+
+def move_file(path_a, path_b):
+    """
+    Move a file from path_a to path_b.
+
+    :param path_a: Source file path
+    :param path_b: Destination file path (including filename)
+    """
+    if not os.path.isfile(path_a):
+        raise FileNotFoundError(f"Source file not found: {path_a}")
+
+    # Create destination directory if it doesn't exist
+    os.makedirs(os.path.dirname(path_b), exist_ok=True)
+
+    shutil.move(path_a, path_b)
+    print(f"File moved from '{path_a}' to '{path_b}'")
