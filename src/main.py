@@ -1,8 +1,8 @@
+from logger.logger import Logger
+from web_scraper.web_scraper import WebScraper
 from data_postprocessor.data_postprocessor import DataPostprocessor
 from data_preprocessor.data_preprocessor import DataPreprocessor
-from logger.logger import Logger
 from utils.constants import LOG_FILE_BASE
-from web_scraper.web_scraper import WebScraper
 from utils.enums import *
 
 

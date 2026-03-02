@@ -4,6 +4,7 @@ from datetime import datetime
 # COMMON CONFIGURATION
 # ===========================
 RANDOM_SEED = 42
+DOWNLOAD_FOLDER_PATH = "C:/Users/ADMIN/Downloads"
 
 # ===========================
 # LOGGER CONFIGURATION

@@ -3081,7 +3081,7 @@ class WebScraper:
             self._click_element(web_driver, xpath)
 
             download_file_path = get_newest_file_path(
-                folder_path="C:/Users/ADMIN/Downloads", extension=FileExtension.XLSX
+                folder_path=DOWNLOAD_FOLDER_PATH, extension=FileExtension.XLSX
             )
 
             move_file(path_a=download_file_path, path_b=file_path)
@@ -3090,6 +3090,62 @@ class WebScraper:
             web_driver.close()
 
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
+
+    def _scrape_data_stock_market_vn_hnx_index_order(
+        self, key: Tuple[ScrapeMainType, ScrapeSubType]
+    ):
+        self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
+
+        # Initialize web driver and bs4 parser
+        web_driver, bs4_parser = self._initialize_web_driver_and_bs4_parser()
+
+        try:
+            # 1. Initialize folder path and file name
+            scrape_main_type = key[0].value
+            scrape_sub_type = key[1].value
+            folder_path = (
+                f"{SCRAPER_BRONZE_DATA_DIR}/{scrape_main_type}/{scrape_sub_type}"
+            )
+            file_name = f"{scrape_sub_type}"
+
+            # 2. Initialize start time and current time
+            current_date = datetime.now()
+
+            file_path = (
+                f"{folder_path}/{file_name}_upto_{current_date.strftime('%Y%m%d')}.xlsx"
+            )
+
+            # 3. Check if file(s) already exists
+            if os.path.exists(file_path):
+                self._logger.log_info(f"File already exists: {file_path}")
+                return
+
+            # 4. Create folder if not exists
+            if not os.path.exists(folder_path):
+                os.makedirs(folder_path, exist_ok=True)
+
+            # 5. Get SourceInfo
+            source_info = SCRAPE_MAPPING[key]
+
+            # 6. Navigate to URL
+            web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
+            time.sleep(SCRAPER_BASE_WAIT_TIME)
+
+            # 7. Logic for scraping
+            xpath = '//*[@id="tabletoExcel"]/img'
+            self._click_element(web_driver, xpath)
+
+            download_file_path = get_newest_file_path(
+                folder_path=DOWNLOAD_FOLDER_PATH, extension=FileExtension.XLSX
+            )
+
+            move_file(path_a=download_file_path, path_b=file_path)
+
+        finally:
+            web_driver.close()
+
+        self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
+
 
     def _scrape_data_stock_market_vn_30_index_cafef(
         self, key: Tuple[ScrapeMainType, ScrapeSubType]
@@ -3791,7 +3847,7 @@ class WebScraper:
 
         match (key):
 
-            # MACROECONOMICS
+            # region MACROECONOMICS
             case (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.GDP,
@@ -4000,12 +4056,20 @@ class WebScraper:
             ):
                 return self._scrape_data_macroeconomics_nasdaq_100_yahoo_finance(key)
 
-            # STOCK_MARKET
+            # endregion MACROECONOMICS
+
+            # region STOCK_MARKET
             case (
                 ScrapeMainType.STOCK_MARKET,
                 StockMarketSubType.VN_HNX_INDEX_PRICE,
             ):
                 return self._scrape_data_stock_market_vn_hnx_index_price(key)
+
+            case (
+                ScrapeMainType.STOCK_MARKET,
+                StockMarketSubType.VN_HNX_INDEX_ORDER,
+            ):
+                return self._scrape_data_stock_market_vn_hnx_index_order(key)
 
             case (
                 ScrapeMainType.STOCK_MARKET,
@@ -4031,13 +4095,17 @@ class WebScraper:
             ):
                 return self._scrape_data_stock_market_upcom_index_cafef(key)
 
-            # ENTERPRISE
+            # endregion STOCK_MARKET
+
+            # region ENTERPRISE
             case (
                 ScrapeMainType.ENTERPRISE,
                 EnterpriseSubType.DAILY_PRICE,
                 DailyPriceSource.CAFEF,
             ):
                 return self._scrape_data_enterprise_daily_price_cafef(key)
+
+            # endregion ENTERPRISE
 
     def add_macroeconomics_data_scraping_tasks(self):
         self._logger.log_info("Adding macroeconomic data scraping tasks.")
@@ -4367,6 +4435,15 @@ class WebScraper:
         key = (
             ScrapeMainType.STOCK_MARKET,
             StockMarketSubType.VN_HNX_INDEX_PRICE,
+        )
+        self._thread_manager.add_task(
+            Task(format_key_for_name(key), self._scrape_data_from, key)
+        )
+
+        # VN_HNX_INDEX_ORDER
+        key = (
+            ScrapeMainType.STOCK_MARKET,
+            StockMarketSubType.VN_HNX_INDEX_ORDER,
         )
         self._thread_manager.add_task(
             Task(format_key_for_name(key), self._scrape_data_from, key)
