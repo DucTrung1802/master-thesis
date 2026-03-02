@@ -139,7 +139,7 @@ class ThreadManager:
                 }
 
                 futures = list(future_to_task.keys())
-                wait(futures)
+                wait(futures, timeout=120)
 
                 for future in future_to_task:
                     task = future_to_task[future]

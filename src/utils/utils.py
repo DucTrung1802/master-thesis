@@ -7,6 +7,7 @@ from typing import Tuple, List, Optional
 import pandas as pd
 from pathlib import Path
 import matplotlib.pyplot as plt
+import time
 
 from dtos.model_dtos.model_output_dto import ModelOutputDto
 from logger.logger import Logger
@@ -627,3 +628,55 @@ def move_file(path_a, path_b):
 
     shutil.move(path_a, path_b)
     print(f"File moved from '{path_a}' to '{path_b}'")
+
+
+def convert_xlsx_to_csv(file_path, remove_original=True):
+    """
+    Convert an Excel (.xlsx) file to CSV.
+
+    Parameters:
+        file_path (str): Path to the .xlsx file
+        remove_original (bool): Whether to delete the original .xlsx file (default=True)
+
+    Returns:
+        str: Path to the generated .csv file
+    """
+    if not file_path.lower().endswith(".xlsx"):
+        raise ValueError("The provided file is not an .xlsx file")
+
+    # Read Excel file
+    df = pd.read_excel(file_path)
+
+    # Create output CSV path
+    csv_path = os.path.splitext(file_path)[0] + ".csv"
+
+    # Save as CSV
+    df.to_csv(csv_path, index=False)
+
+    # Remove original file if requested
+    if remove_original:
+        os.remove(file_path)
+
+    return csv_path
+
+
+def wait_for_file(file_path, timeout=10, poll_interval=0.25):
+    """
+    Wait until a file exists or timeout is reached.
+
+    Parameters:
+        file_path (str): Path to the file to wait for
+        timeout (float): Maximum time to wait in seconds
+        poll_interval (float): How often to check (seconds), default=0.25
+
+    Returns:
+        bool: True if file exists within timeout, False otherwise
+    """
+    start_time = time.time()
+
+    while time.time() - start_time < timeout:
+        if os.path.exists(file_path):
+            return True
+        time.sleep(poll_interval)
+
+    return False

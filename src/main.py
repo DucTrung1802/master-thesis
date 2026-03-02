@@ -1,7 +1,7 @@
 from logger.logger import Logger
 from web_scraper.web_scraper import WebScraper
-from data_postprocessor.data_postprocessor import DataPostprocessor
-from data_preprocessor.data_preprocessor import DataPreprocessor
+# from data_postprocessor.data_postprocessor import DataPostprocessor
+# from data_preprocessor.data_preprocessor import DataPreprocessor
 from utils.constants import LOG_FILE_BASE
 from utils.enums import *
 
@@ -14,7 +14,7 @@ def main():
     my_web_scraper.start_scraping()
 
     # my_data_preprocessor = DataPreprocessor(logger=my_logger)
-    # # my_data_preprocessor.ingest_bronze_data()
+    # my_data_preprocessor.ingest_bronze_data()
     # # my_data_preprocessor.ingest_silver_data()
     # my_data_preprocessor.ingest_gold_data()
 

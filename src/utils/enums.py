@@ -185,8 +185,8 @@ class MacroeconomicsSubType(Enum):
 
 
 class StockMarketSubType(Enum):
-    VN_HNX_INDEX_PRICE = "vn_hnx_index_price"
-    VN_HNX_INDEX_ORDER = "vn_hnx_index_order"
+    VN_INDEX_PRICE = "vn_index_price"
+    VN_INDEX_ORDER = "vn_index_order"
     VN_30_INDEX = "vn30_index"
     VN_100_INDEX = "vn100_index"
     HNX_30_INDEX = "hnx30_index"
@@ -457,11 +457,11 @@ SCRAPE_MAPPING: Dict[Tuple[ScrapeMainType, ScrapeSubType], SourceInfo] = {
     # STOCK_MARKET
     (
         ScrapeMainType.STOCK_MARKET,
-        StockMarketSubType.VN_HNX_INDEX_PRICE,
+        StockMarketSubType.VN_INDEX_PRICE,
     ): SourceInfo(url="https://cafef.vn/du-lieu/Lich-su-giao-dich-vnindex-1.chn"),
     (
         ScrapeMainType.STOCK_MARKET,
-        StockMarketSubType.VN_HNX_INDEX_ORDER,
+        StockMarketSubType.VN_INDEX_ORDER,
     ): SourceInfo(url="https://cafef.vn/du-lieu/Lich-su-giao-dich-vnindex-2.chn"),
     (
         ScrapeMainType.STOCK_MARKET,

@@ -21,6 +21,7 @@ xgboost
 shap
 wandb
 ipynbname
+openpyxl
 
 # Deep learning (GPU-enabled PyTorch)
 torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu121

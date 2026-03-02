@@ -6957,7 +6957,6 @@ class DataPreprocessor:
             f'Finish transforming data in table "{format_key_for_table(key)}".'
         )
 
-
     def _process_macroeconomics_exchange_rate(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing macroeconomics EXCHANGE_RATE data for "{data_quality.value}".'
@@ -9162,19 +9161,16 @@ class DataPreprocessor:
     # endregion STOCK MARKET.MARKET
 
     # region STOCK_MARKET.VN_INDEX
-    def _ingest_stock_market_vn_index_cafef(self) -> None:
+    def _ingest_stock_market_vn_index_price(self) -> None:
         key = (
             ScrapeMainType.STOCK_MARKET,
-            StockMarketSubType.VN_HNX_INDEX,
-            VnHnxIndexSource.CAFEF,
+            StockMarketSubType.VN_INDEX_PRICE,
         )
 
-        folder_path = (
-            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
+        folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}"
 
         file_path = get_newest_file_path(
-            folder_path=folder_path, extension=FileExtension.CSV
+            folder_path=folder_path, extension=FileExtension.XLSX
         )
 
         if not file_path:
@@ -9184,7 +9180,7 @@ class DataPreprocessor:
         self._logger.log_info(f'Start ingesting data in "{file_path}".')
 
         # Add logic for processing data here
-        df = pd.read_csv(file_path, encoding="utf-8")
+        df = pd.read_excel(file_path, encoding="utf-8")
         vn_index_df = df[df["<Ticker>"] == "VNINDEX"]
         rename_map = {
             "<Ticker>": "ticker",
@@ -9209,7 +9205,7 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish ingesting data in "{file_path}".')
 
-    def _clean_stock_market_vn_index_cafef(self) -> None:
+    def _clean_stock_market_vn_index_price(self) -> None:
         key = (
             ScrapeMainType.STOCK_MARKET,
             StockMarketSubType.VN_HNX_INDEX,
@@ -9245,7 +9241,7 @@ class DataPreprocessor:
             f'Finish cleaning data in table "{format_key_for_table(key)}".'
         )
 
-    def _transform_stock_market_vn_index_cafef(self) -> None:
+    def _transform_stock_market_vn_index_price(self) -> None:
         key = (
             ScrapeMainType.STOCK_MARKET,
             StockMarketSubType.VN_HNX_INDEX,
@@ -9293,13 +9289,13 @@ class DataPreprocessor:
 
         match data_quality:
             case DataQuality.BRONZE:
-                self._ingest_stock_market_vn_index_cafef()
+                self._ingest_stock_market_vn_index_price()
 
             case DataQuality.SILVER:
-                self._clean_stock_market_vn_index_cafef()
+                self._clean_stock_market_vn_index_price()
 
             case DataQuality.GOLD:
-                self._transform_stock_market_vn_index_cafef()
+                self._transform_stock_market_vn_index_price()
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')

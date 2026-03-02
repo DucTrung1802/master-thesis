@@ -3036,7 +3036,7 @@ class WebScraper:
 
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
-    def _scrape_data_stock_market_vn_hnx_index_price(
+    def _scrape_data_stock_market_vn_index_price(
         self, key: Tuple[ScrapeMainType, ScrapeSubType]
     ):
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
@@ -3080,18 +3080,19 @@ class WebScraper:
             xpath = '//*[@id="tabletoExcel"]/img'
             self._click_element(web_driver, xpath)
 
-            download_file_path = get_newest_file_path(
-                folder_path=DOWNLOAD_FOLDER_PATH, extension=FileExtension.XLSX
-            )
+            download_file_name = "LichSuGia_VNINDEX__.xlsx"
+            download_file_path = os.path.join(DOWNLOAD_FOLDER_PATH, download_file_name)
 
+            wait_for_file(download_file_path)
             move_file(path_a=download_file_path, path_b=file_path)
+            convert_xlsx_to_csv(file_path)
 
         finally:
             web_driver.close()
 
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
-    def _scrape_data_stock_market_vn_hnx_index_order(
+    def _scrape_data_stock_market_vn_index_order(
         self, key: Tuple[ScrapeMainType, ScrapeSubType]
     ):
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
@@ -3135,17 +3136,17 @@ class WebScraper:
             xpath = '//*[@id="tabletoExcel"]/img'
             self._click_element(web_driver, xpath)
 
-            download_file_path = get_newest_file_path(
-                folder_path=DOWNLOAD_FOLDER_PATH, extension=FileExtension.XLSX
-            )
+            download_file_name = "ThongKeDatLenh_VNINDEX__.xlsx"
+            download_file_path = os.path.join(DOWNLOAD_FOLDER_PATH, download_file_name)
 
+            wait_for_file(download_file_path)
             move_file(path_a=download_file_path, path_b=file_path)
+            convert_xlsx_to_csv(file_path)
 
         finally:
             web_driver.close()
 
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
-
 
     def _scrape_data_stock_market_vn_30_index_cafef(
         self, key: Tuple[ScrapeMainType, ScrapeSubType]
@@ -4061,15 +4062,15 @@ class WebScraper:
             # region STOCK_MARKET
             case (
                 ScrapeMainType.STOCK_MARKET,
-                StockMarketSubType.VN_HNX_INDEX_PRICE,
+                StockMarketSubType.VN_INDEX_PRICE,
             ):
-                return self._scrape_data_stock_market_vn_hnx_index_price(key)
+                return self._scrape_data_stock_market_vn_index_price(key)
 
             case (
                 ScrapeMainType.STOCK_MARKET,
-                StockMarketSubType.VN_HNX_INDEX_ORDER,
+                StockMarketSubType.VN_INDEX_ORDER,
             ):
-                return self._scrape_data_stock_market_vn_hnx_index_order(key)
+                return self._scrape_data_stock_market_vn_index_order(key)
 
             case (
                 ScrapeMainType.STOCK_MARKET,
@@ -4431,19 +4432,19 @@ class WebScraper:
         self._logger.log_info("Adding stock market data scraping tasks.")
         number_of_task_before = self._thread_manager.get_current_number_of_task()
 
-        # VN_HNX_INDEX_PRICE
+        # VN_INDEX_PRICE
         key = (
             ScrapeMainType.STOCK_MARKET,
-            StockMarketSubType.VN_HNX_INDEX_PRICE,
+            StockMarketSubType.VN_INDEX_PRICE,
         )
         self._thread_manager.add_task(
             Task(format_key_for_name(key), self._scrape_data_from, key)
         )
 
-        # VN_HNX_INDEX_ORDER
+        # VN_INDEX_ORDER
         key = (
             ScrapeMainType.STOCK_MARKET,
-            StockMarketSubType.VN_HNX_INDEX_ORDER,
+            StockMarketSubType.VN_INDEX_ORDER,
         )
         self._thread_manager.add_task(
             Task(format_key_for_name(key), self._scrape_data_from, key)
