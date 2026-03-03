@@ -3235,20 +3235,26 @@ class DataPreprocessor:
                 )
                 # fmt: on
                 
-                # VN_INDEX
+                # B_VN_INDEX
                 # fmt: off
                 self._database_driver.create_table(
                     schema_name=Schema.STOCK_MARKET.value,
-                    table_name=Table.VN_INDEX.name,
-                    columns = [
-                        Column(name=Table.VN_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.VN_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_INDEX.Column.VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                    table_name=Table.B_VN_INDEX.name,
+                    columns=[
+                        Column(name=Table.B_VN_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.B_VN_INDEX.Column.ADJUST.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.B_VN_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.B_VN_INDEX.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.B_VN_INDEX.Column.PERCENT_CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.B_VN_INDEX.Column.MATCHING_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(name=Table.B_VN_INDEX.Column.MATCHING_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.B_VN_INDEX.Column.NEGOTIATE_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(name=Table.B_VN_INDEX.Column.NEGOTIATE_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.B_VN_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.B_VN_INDEX.Column.HIGHEST.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.B_VN_INDEX.Column.LOWEST.value, data_type=DataType.DECIMAL(), nullable=True),
                     ],
-                    primary_keys=Table.VN_INDEX.primary_key,
+                    primary_keys=Table.B_VN_INDEX.primary_key,
                 )
                 # fmt: on
                 
@@ -9170,6 +9176,59 @@ class DataPreprocessor:
         folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}"
 
         file_path = get_newest_file_path(
+            folder_path=folder_path, extension=FileExtension.CSV
+        )
+
+        if not file_path:
+            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
+            return
+
+        self._logger.log_info(f'Start ingesting data in "{file_path}".')
+
+        # Add logic for processing data here
+        df = pd.read_csv(file_path, encoding="utf-8")
+        rename_map = {
+            "Ngay": "date",
+            "GiaDieuChinh": "adjust",
+            "GiaDongCua": "close",
+            "ThayDoi": "change",
+            "KhoiLuongKhopLenh": "matching_volume",
+            "GiaTriKhopLenh": "matching_value",
+            "KLThoaThuan": "negotiate_volume",
+            "GtThoaThuan": "negotiate_value",
+            "GiaMoCua": "open",
+            "GiaCaoNhat": "highest",
+            "GiaThapNhat": "lowest",
+        }
+        vn_index_df = df.rename(columns=rename_map)
+        # Extract percentage
+        vn_index_df["percent_change"] = (
+            vn_index_df["change"].str.extract(r"\(([-\d\.]+)").astype(float)
+        )
+        vn_index_df["change"] = (
+            vn_index_df["change"].str.extract(r"([-\d\.]+)").astype(float)
+        )
+        vn_index_df["date"] = pd.to_datetime(vn_index_df["date"], format="%d/%m/%Y")
+        vn_index_df = vn_index_df.sort_values(by="date").reset_index(drop=True)
+
+        self._save_pandas_table_to_database(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.B_VN_INDEX.name,
+            primary_keys=Table.B_VN_INDEX.primary_key,
+            df=vn_index_df,
+        )
+
+        self._logger.log_info(f'Finish ingesting data in "{file_path}".')
+
+    def _ingest_stock_market_vn_index_order(self) -> None:
+        key = (
+            ScrapeMainType.STOCK_MARKET,
+            StockMarketSubType.VN_INDEX_ORDER,
+        )
+
+        folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}"
+
+        file_path = get_newest_file_path(
             folder_path=folder_path, extension=FileExtension.XLSX
         )
 
@@ -9180,19 +9239,27 @@ class DataPreprocessor:
         self._logger.log_info(f'Start ingesting data in "{file_path}".')
 
         # Add logic for processing data here
-        df = pd.read_excel(file_path, encoding="utf-8")
-        vn_index_df = df[df["<Ticker>"] == "VNINDEX"]
+        df = pd.read_csv(file_path, encoding="utf-8")
         rename_map = {
-            "<Ticker>": "ticker",
-            "<DTYYYYMMDD>": "date",
-            "<Open>": "open",
-            "<High>": "high",
-            "<Low>": "low",
-            "<Close>": "close",
-            "<Volume>": "volume",
+            "Ngày": "date",
+            "Thay đổi": "close_change",
+            "Số lệnh mua": "number_of_buy_orders",
+            "Khối lượng mua": "buy_volume",
+            "KLTB 1 lệnh mua": "average_volume_per_buy_order",
+            "Số lệnh bán": "number_of_sell_orders",
+            "Khối lượng bán": "sell_volume",
+            "KLTB 1 lệnh bán": "average_volume_per_sell_order",
+            "Khối lượng ròng": "net_volume",
         }
-        vn_index_df = vn_index_df.rename(columns=rename_map)
-        vn_index_df.drop(columns=["ticker"], inplace=True)
+        vn_index_df = df.rename(columns=rename_map)
+        vn_index_df["close_price"] = (
+            vn_index_df["close_change"].str.extract(r"([\d\.]+)").astype(float)
+        )
+        # Extract percentage
+        vn_index_df["percent_change"] = (
+            vn_index_df["close_change"].str.extract(r"\(([-\d\.]+)").astype(float)
+        )
+        vn_index_df.drop(columns=["close_change"], inplace=True)
         vn_index_df["date"] = pd.to_datetime(vn_index_df["date"], format="%Y%m%d")
         vn_index_df = vn_index_df.sort_values(by="date").reset_index(drop=True)
 

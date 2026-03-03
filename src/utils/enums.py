@@ -2102,14 +2102,20 @@ class Table:
         name = "market"
         primary_key = [Column.ID.value]
 
-    class VN_INDEX:
+    class B_VN_INDEX:
         class Column(Enum):
             DATE = "date"
-            OPEN = "open"
-            HIGH = "high"
-            LOW = "low"
+            ADJUST = "adjust"
             CLOSE = "close"
-            VOLUME = "volume"
+            CHANGE = "change"
+            PERCENT_CHANGE = "percent_change"
+            MATCHING_VOLUME = "matching_volume"
+            MATCHING_VALUE = "matching_value"
+            NEGOTIATE_VOLUME = "negotiate_volume"
+            NEGOTIATE_VALUE = "negotiate_value"
+            OPEN = "open"
+            HIGHEST = "highest"
+            LOWEST = "lowest"
 
         name = "vn_index"
         primary_key = [Column.DATE.value]
@@ -2279,7 +2285,7 @@ class TTC_StockMarketTable(Enum):
     UPCOM_INDEX = Table.UPCOM_INDEX.name
     VN_30_INDEX = Table.VN_30_INDEX.name
     VN_100_INDEX = Table.VN_100_INDEX.name
-    VN_INDEX = Table.VN_INDEX.name
+    VN_INDEX = Table.B_VN_INDEX.name
 
 
 class TTC_EnterpriseTable(Enum):
