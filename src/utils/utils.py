@@ -1,10 +1,15 @@
 import os
+import shutil
 import zipfile
+import numpy as np
 import requests
 from typing import Tuple, List, Optional
 import pandas as pd
 from pathlib import Path
+import matplotlib.pyplot as plt
+import time
 
+from dtos.model_dtos.model_output_dto import ModelOutputDto
 from logger.logger import Logger
 from dtos.tabular_database_driver_dtos.tabular_database_driver_dtos import (
     DataType,
@@ -215,11 +220,11 @@ def download_file(download_url, file_path, logger):
         return
 
 
-def format_key_for_name(key: Tuple[ScrapeMainType, ScrapeSubType, Source]):
+def format_key_for_name(key: Tuple[ScrapeMainType, ScrapeSubType]):
     return "_".join(k.name.lower() for k in key)
 
 
-def format_key_for_table(key: Tuple[ScrapeMainType, ScrapeSubType, Source]):
+def format_key_for_table(key: Tuple[ScrapeMainType, ScrapeSubType]):
     return ".".join(k.name.lower() for k in key)
 
 
@@ -478,3 +483,200 @@ def standardize_time_frame(
 def remove_time_column_name(column_names: List[str]) -> List[str]:
     time_column_names = ["year", "quarter", "month", "day", "date"]
     return [name for name in column_names if name.lower() not in time_column_names]
+
+
+def cast_columns_to_float(df: pd.DataFrame) -> pd.DataFrame:
+    for col in df.columns:
+        if col.lower() != "date":
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+    return df
+
+
+def expand_date_column(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    df["date"] = pd.to_datetime(df["date"])
+
+    # --- Basic components ---
+    df["year"] = df["date"].dt.year
+    df["month"] = df["date"].dt.month
+    df["day"] = df["date"].dt.day
+    df["day_of_week"] = df["date"].dt.dayofweek
+    df["day_of_year"] = df["date"].dt.dayofyear
+    df["week"] = df["date"].dt.isocalendar().week.astype(int)
+    df["quarter"] = df["date"].dt.quarter
+    df["month_of_quarter"] = ((df["month"] - 1) % 3) + 1
+
+    # --- Boolean flags (convert to int) ---
+    for col in [
+        "is_month_start",
+        "is_month_end",
+        "is_quarter_start",
+        "is_quarter_end",
+    ]:
+        df[col] = getattr(df["date"].dt, col).astype(int)
+
+    # --- Additional features ---
+    df["week_of_month"] = df["date"].apply(lambda d: int(np.ceil(d.day / 7)))
+    df["half_of_year"] = np.where(df["month"] <= 6, 1, 2)
+
+    # --- Season mapping (encoded 1–4) ---
+    # 1: Winter, 2: Spring, 3: Summer, 4: Fall
+    season_map = {
+        12: 1,
+        1: 1,
+        2: 1,  # Winter
+        3: 2,
+        4: 2,
+        5: 2,  # Spring
+        6: 3,
+        7: 3,
+        8: 3,  # Summer
+        9: 4,
+        10: 4,
+        11: 4,  # Fall
+    }
+    df["season"] = df["month"].map(season_map)
+
+    # --- Cyclical encoding for periodic features ---
+    df["month_sin"] = np.sin(2 * np.pi * df["month"] / 12)
+    df["month_cos"] = np.cos(2 * np.pi * df["month"] / 12)
+
+    df["day_of_week_sin"] = np.sin(2 * np.pi * df["day_of_week"] / 7)
+    df["day_of_week_cos"] = np.cos(2 * np.pi * df["day_of_week"] / 7)
+
+    df["day_of_year_sin"] = np.sin(2 * np.pi * df["day_of_year"] / 365)
+    df["day_of_year_cos"] = np.cos(2 * np.pi * df["day_of_year"] / 365)
+
+    return df
+
+
+def plot_model_result(model_output_dto: ModelOutputDto):
+
+    plt.figure(figsize=(12, 6))
+    plt.plot(
+        model_output_dto.y_true,
+        label="True Values",
+        color="blue",
+        linewidth=2,
+    )
+    plt.plot(
+        model_output_dto.y_pred_denorm,
+        label="Predicted Values",
+        color="red",
+        linestyle="--",
+        linewidth=2,
+    )
+    plt.title("Model Predictions vs True Values")
+    plt.xlabel("Day")
+    plt.ylabel("Price")
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
+
+def move_column_to_end(df: pd.DataFrame, output_column: str) -> pd.DataFrame:
+    """
+    Move a specified column to the end of a pandas DataFrame.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The input DataFrame.
+    output_column : str
+        The name of the column to move to the last position.
+
+    Returns
+    -------
+    pd.DataFrame
+        A new DataFrame with the specified column moved to the end.
+
+    Raises
+    ------
+    KeyError
+        If the specified column does not exist in the DataFrame.
+
+    Example
+    -------
+    >>> import pandas as pd
+    >>> df = pd.DataFrame({"A": [1, 2], "B": [3, 4], "C": [5, 6]})
+    >>> move_column_to_end(df, "B")
+       A  C  B
+    0  1  5  3
+    1  2  6  4
+    """
+    if output_column not in df.columns:
+        raise KeyError(f"Column '{output_column}' not found in DataFrame.")
+
+    reordered_columns = [col for col in df.columns if col != output_column] + [
+        output_column
+    ]
+    return df[reordered_columns]
+
+
+def move_file(path_a, path_b):
+    """
+    Move a file from path_a to path_b.
+
+    :param path_a: Source file path
+    :param path_b: Destination file path (including filename)
+    """
+    if not os.path.isfile(path_a):
+        raise FileNotFoundError(f"Source file not found: {path_a}")
+
+    # Create destination directory if it doesn't exist
+    os.makedirs(os.path.dirname(path_b), exist_ok=True)
+
+    shutil.move(path_a, path_b)
+    print(f"File moved from '{path_a}' to '{path_b}'")
+
+
+def convert_xlsx_to_csv(file_path, remove_original=True):
+    """
+    Convert an Excel (.xlsx) file to CSV.
+
+    Parameters:
+        file_path (str): Path to the .xlsx file
+        remove_original (bool): Whether to delete the original .xlsx file (default=True)
+
+    Returns:
+        str: Path to the generated .csv file
+    """
+    if not file_path.lower().endswith(".xlsx"):
+        raise ValueError("The provided file is not an .xlsx file")
+
+    # Read Excel file
+    df = pd.read_excel(file_path)
+
+    # Create output CSV path
+    csv_path = os.path.splitext(file_path)[0] + ".csv"
+
+    # Save as CSV
+    df.to_csv(csv_path, index=False)
+
+    # Remove original file if requested
+    if remove_original:
+        os.remove(file_path)
+
+    return csv_path
+
+
+def wait_for_file(file_path, timeout=10, poll_interval=0.25):
+    """
+    Wait until a file exists or timeout is reached.
+
+    Parameters:
+        file_path (str): Path to the file to wait for
+        timeout (float): Maximum time to wait in seconds
+        poll_interval (float): How often to check (seconds), default=0.25
+
+    Returns:
+        bool: True if file exists within timeout, False otherwise
+    """
+    start_time = time.time()
+
+    while time.time() - start_time < timeout:
+        if os.path.exists(file_path):
+            return True
+        time.sleep(poll_interval)
+
+    return False

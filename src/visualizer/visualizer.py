@@ -18,15 +18,11 @@ from utils.enums import GenerateDateTimeType
 from utils.constants import *
 from utils.utils import *
 
-parent_dir = os.path.dirname(os.getcwd())
-
 load_dotenv()
-
-my_logger = Logger(file_name=os.path.join(parent_dir, "logs/visualizer"))
 
 
 class Visualizer:
-    def __init__(self, logger: Logger = my_logger):
+    def __init__(self, logger: Logger):
         self._logger = logger
         self._database_driver = PostgreSQLDriver(logger=logger)
         self._chart_dir = CHARTS_DIR_BASE

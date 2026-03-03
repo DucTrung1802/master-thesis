@@ -1,0 +1,6 @@
+For vn_index
+gold_price: v
+fed_interest_rate: v (https://fred.stlouisfed.org/series/FEDFUNDS#)
+oil_price: v
+nyse_composite: v
+exchange_rate: x

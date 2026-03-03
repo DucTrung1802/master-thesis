@@ -1,3 +1,4 @@
+import re
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -35,163 +36,330 @@ def prepare_data(date_series: pd.Series, price_series: pd.Series) -> pd.DataFram
     return df
 
 
+def validate_column(df: pd.DataFrame, column_name: str) -> None:
+    """
+    Validate that the specified column exists in the DataFrame.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input DataFrame.
+    column_name : str
+        Column name to validate.
+
+    Raises
+    ------
+    ValueError
+        If the column does not exist in the DataFrame.
+    """
+    if column_name not in df.columns:
+        raise ValueError(
+            f"Column '{column_name}' not found in DataFrame. Available columns: {list(df.columns)}"
+        )
+
+
 # region TREND INDICATORS
-def add_sma(df: pd.DataFrame, n: int) -> pd.DataFrame:
+def add_sma(
+    df: pd.DataFrame, n: list[int] = None, column_name: str = "close"
+) -> pd.DataFrame:
     """
-    Add a Simple Moving Average (SMA) column to the DataFrame.
+    Add one or multiple Simple Moving Average (SMA) columns to the DataFrame.
 
-    The SMA is the unweighted mean of the previous `n` prices.
+    The SMA is the unweighted mean of the previous `n` values from the specified column.
 
     Parameters
     ----------
     df : pd.DataFrame
-        Input DataFrame that must contain a 'price' column.
-    n : int
-        Window size for the SMA.
+        Input DataFrame that must contain the specified column (default is 'close').
+    n : list[int], optional
+        List of window sizes for the SMAs. Defaults to [50, 100, 200].
+    column_name : str, optional
+        Name of the column to calculate the SMA on. Defaults to 'close'.
 
     Returns
     -------
     pd.DataFrame
-        Copy of the input DataFrame with an added column 'sma_{n}'.
+        Copy of the input DataFrame with added SMA columns for all values in `n`.
     """
+    validate_column(df, column_name)
+
+    if n is None:
+        n = [50, 100, 200]
+
     df = df.copy()
-    df[f"sma_{n}"] = df["close"].rolling(window=n, min_periods=1).mean()
-    return df
 
-
-def add_ema(df: pd.DataFrame, n: int) -> pd.DataFrame:
-    """
-    Add an Exponential Moving Average (EMA) column to the DataFrame.
-
-    The EMA applies exponentially decreasing weights, giving more
-    significance to recent prices.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Input DataFrame that must contain a 'price' column.
-    n : int
-        Span for the EMA calculation.
-
-    Returns
-    -------
-    pd.DataFrame
-        Copy of the input DataFrame with an added column 'ema_{n}'.
-    """
-    df = df.copy()
-    df[f"ema_{n}"] = df["close"].ewm(span=n, adjust=False).mean()
-    return df
-
-
-def add_lwma(df: pd.DataFrame, n: int) -> pd.DataFrame:
-    """
-    Add a Linear Weighted Moving Average (LWMA) column to the DataFrame.
-
-    The LWMA assigns linearly increasing weights to prices within the
-    window, where the most recent price gets the highest weight (n),
-    and the oldest gets weight 1.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Input DataFrame that must contain a 'price' column.
-    n : int
-        Window size for the LWMA.
-
-    Returns
-    -------
-    pd.DataFrame
-        Copy of the input DataFrame with an added column 'lwma_{n}'.
-    """
-    df = df.copy()
-    weights = np.arange(1, n + 1)
-
-    df[f"lwma_{n}"] = (
-        df["close"]
-        .rolling(window=n)
-        .apply(lambda x: np.dot(x, weights) / weights.sum(), raw=True)
-    )
+    for window in n:
+        df[f"{column_name}_sma_{window}"] = (
+            df[column_name].rolling(window=window, min_periods=1).mean()
+        )
 
     return df
 
 
-def add_wma(df: pd.DataFrame, n: int) -> pd.DataFrame:
+def add_ema(
+    df: pd.DataFrame,
+    n: int | list[int] | None = None,
+    column_name: str = "close",
+    default_ema_periods: list[int] = None,
+) -> pd.DataFrame:
     """
-    Add Wilder's Moving Average (WMA) column to the DataFrame.
+    Add one or multiple Exponential Moving Average (EMA) columns.
 
-    Wilder’s MA is similar to an EMA but uses an alpha = 1/n.
-    It smooths price movements more slowly than a regular EMA.
+    Default EMA values reflect commonly used technical analysis periods:
+    12, 26, 50, 100, 200.
 
     Parameters
     ----------
     df : pd.DataFrame
-        Input DataFrame that must contain a 'price' column.
-    n : int
-        Period for the WMA calculation.
+        Input DataFrame containing the target column.
+    n : int or list[int], optional
+        EMA span(s). If None, default popular spans will be used.
+    column_name : str, optional
+        Column to compute EMA on. Default is 'close'.
+    default_ema_periods : list[int], optional
+        Override the predefined popular EMA spans if desired.
 
     Returns
     -------
     pd.DataFrame
-        Copy of the input DataFrame with an added column 'wma_{n}'.
+        DataFrame including added EMA column(s).
     """
+    validate_column(df, column_name)
     df = df.copy()
-    alpha = 1 / n
-    df[f"wma_{n}"] = df["close"].ewm(alpha=alpha, adjust=False).mean()
+
+    # Default EMA spans widely used in trading
+    if default_ema_periods is None:
+        default_ema_periods = [12, 26, 50, 100, 200]
+
+    # If user provides nothing → use defaults
+    if n is None:
+        periods = default_ema_periods
+    # If user provides a single int
+    elif isinstance(n, int):
+        periods = [n]
+    # If user provides list of ints
+    else:
+        periods = list(n)
+
+    # Compute EMAs
+    for period in periods:
+        df[f"{column_name}_ema_{period}"] = (
+            df[column_name].ewm(span=period, adjust=False).mean()
+        )
+
     return df
 
 
-def add_adx(df: pd.DataFrame, n: int = 14) -> pd.DataFrame:
+def add_lwma(
+    df: pd.DataFrame,
+    n: int | list[int] | None = None,
+    column_name: str = "close",
+    default_lwma_periods: list[int] = None,
+) -> pd.DataFrame:
     """
-    Add Average Directional Movement Index (ADX) to the DataFrame.
+    Add one or multiple Linear Weighted Moving Average (LWMA) columns.
+
+    Default LWMA values:
+        12, 26, 50, 100, 200
 
     Parameters
     ----------
     df : pd.DataFrame
-        Input DataFrame that must contain 'high', 'low', and 'close' columns.
-    n : int, optional
-        Period for ADX calculation (default is 14).
+        Input DataFrame containing the target column.
+    n : int or list[int], optional
+        LWMA window size(s). If None, default periods are used.
+    column_name : str, optional
+        Column to compute LWMA on. Default is 'close'.
+    default_lwma_periods : list[int], optional
+        Override the predefined LWMA spans.
 
     Returns
     -------
     pd.DataFrame
-        Copy of the input DataFrame with columns:
-        '+di', '-di', 'adx_{n}'.
+        DataFrame including added LWMA column(s).
     """
+    validate_column(df, column_name)
     df = df.copy()
 
-    # Ensure numeric types
-    df["high"] = pd.to_numeric(df["high"], errors="coerce")
-    df["low"] = pd.to_numeric(df["low"], errors="coerce")
-    df["close"] = pd.to_numeric(df["close"], errors="coerce")
+    # Default LWMA periods you requested
+    if default_lwma_periods is None:
+        default_lwma_periods = [12, 26, 50, 100, 200]
 
-    # True Range (TR)
+    # Determine which periods to compute
+    if n is None:
+        periods = default_lwma_periods
+    elif isinstance(n, int):
+        periods = [n]
+    else:
+        periods = list(n)
+
+    # Compute LWMA for each period
+    for period in periods:
+        weights = np.arange(1, period + 1)
+        df[f"{column_name}_lwma_{period}"] = (
+            df[column_name]
+            .rolling(window=period)
+            .apply(lambda x: np.dot(x, weights) / weights.sum(), raw=True)
+        )
+
+    return df
+
+
+def add_wma(
+    df: pd.DataFrame,
+    n: int | list[int] | None = None,
+    column_name: str = "close",
+    default_wma_periods: list[int] = None,
+) -> pd.DataFrame:
+    """
+    Add one or multiple Wilder's Moving Average (WMA) columns.
+
+    Default WMA values:
+        7, 14, 21, 50, 100
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input DataFrame containing the target column.
+    n : int or list[int], optional
+        WMA period(s). If None, default popular periods are used.
+    column_name : str, optional
+        Column to compute WMA on. Default is 'close'.
+    default_wma_periods : list[int], optional
+        Override the predefined WMA periods.
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame including added WMA column(s).
+    """
+    validate_column(df, column_name)
+    df = df.copy()
+
+    # Default Wilder MA periods
+    if default_wma_periods is None:
+        default_wma_periods = [7, 14, 21, 50, 100]
+
+    # Determine which periods to compute
+    if n is None:
+        periods = default_wma_periods
+    elif isinstance(n, int):
+        periods = [n]
+    else:
+        periods = list(n)
+
+    # Compute Wilder MA for each period
+    for period in periods:
+        alpha = 1 / period
+        df[f"{column_name}_wma_{period}"] = (
+            df[column_name].ewm(alpha=alpha, adjust=False).mean()
+        )
+
+    return df
+
+
+def add_adx(
+    df: pd.DataFrame,
+    n: int | list[int] | None = None,
+    high_col: str = "high",
+    low_col: str = "low",
+    close_col: str = "close",
+    default_adx_periods: list[int] = None,
+) -> pd.DataFrame:
+    """
+    Add the Average Directional Movement Index (ADX) and related indicators
+    (+DI, -DI) to the DataFrame.
+
+    Default popular ADX periods:
+        7, 14, 20, 28, 50
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input DataFrame containing high, low, close columns.
+    n : int or list[int], optional
+        ADX period(s). If None, use popular defaults.
+    high_col : str, optional
+        Column name for high prices. Default 'high'.
+    low_col : str, optional
+        Column name for low prices. Default 'low'.
+    close_col : str, optional
+        Column name for close prices. Default 'close'.
+    default_adx_periods : list[int], optional
+        Optionally override the default period list.
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with +di, -di, and adx_{period} columns added.
+    """
+
+    # Validate required columns
+    for col in [high_col, low_col, close_col]:
+        validate_column(df, col)
+
+    df = df.copy()
+
+    # Numeric enforcement
+    df[high_col] = pd.to_numeric(df[high_col], errors="coerce")
+    df[low_col] = pd.to_numeric(df[low_col], errors="coerce")
+    df[close_col] = pd.to_numeric(df[close_col], errors="coerce")
+
+    # Defaults
+    if default_adx_periods is None:
+        default_adx_periods = [7, 14, 20, 28, 50]
+
+    if n is None:
+        periods = default_adx_periods
+    elif isinstance(n, int):
+        periods = [n]
+    else:
+        periods = list(n)
+
+    # Compute directional movement values once
     df["tr"] = np.maximum(
-        df["high"] - df["low"],
+        df[high_col] - df[low_col],
         np.maximum(
-            abs(df["high"] - df["close"].shift()), abs(df["low"] - df["close"].shift())
+            abs(df[high_col] - df[close_col].shift()),
+            abs(df[low_col] - df[close_col].shift()),
         ),
     )
 
-    # Directional Movement
-    df["+dm"] = df["high"].diff()
-    df["-dm"] = -df["low"].diff()
-    df["+dm"] = df["+dm"].where((df["+dm"] > df["-dm"]) & (df["+dm"] > 0), 0.0)
-    df["-dm"] = df["-dm"].where((df["-dm"] > df["+dm"]) & (df["-dm"] > 0), 0.0)
+    df["dm_pos"] = (
+        df[high_col]
+        .diff()
+        .where(
+            (df[high_col].diff() > df[low_col].diff() * -1) & (df[high_col].diff() > 0),
+            0.0,
+        )
+    )
 
-    # Wilder’s smoothing (RMA)
-    tr_n = df["tr"].rolling(n).sum()
-    plus_dm_n = df["+dm"].rolling(n).sum()
-    minus_dm_n = df["-dm"].rolling(n).sum()
+    df["dm_neg"] = (-df[low_col].diff()).where(
+        (-df[low_col].diff() > df[high_col].diff()) & (-df[low_col].diff() > 0), 0.0
+    )
 
-    # +DI and -DI
-    df["+di"] = 100 * (plus_dm_n / tr_n)
-    df["-di"] = 100 * (minus_dm_n / tr_n)
+    # +DI and -DI are same for all ADX periods, so compute once using raw DM/TR
+    # Smoothing is applied separately for each n
+    base_tr = df["tr"]
+    base_plus_dm = df["dm_pos"]
+    base_minus_dm = df["dm_neg"]
 
-    # DX
-    df["dx"] = (100 * abs(df["+di"] - df["-di"]) / (df["+di"] + df["-di"])).fillna(0)
+    # Compute ADX for each period
+    for period in periods:
+        tr_n = base_tr.rolling(window=period, min_periods=1).sum()
+        plus_dm_n = base_plus_dm.rolling(window=period, min_periods=1).sum()
+        minus_dm_n = base_minus_dm.rolling(window=period, min_periods=1).sum()
 
-    # ADX = smoothed DX
-    df[f"adx_{n}"] = df["dx"].rolling(n).mean()
+        df[f"di_pos_{period}"] = 100 * (plus_dm_n / tr_n)
+        df[f"di_neg_{period}"] = 100 * (minus_dm_n / tr_n)
+
+        dx = (
+            100
+            * abs(df[f"di_pos_{period}"] - df[f"di_neg_{period}"])
+            / (df[f"di_pos_{period}"] + df[f"di_neg_{period}"]).replace(0, np.nan)
+        ).fillna(0)
+
+        df[f"adx_{period}"] = dx.rolling(window=period, min_periods=1).mean()
 
     return df
 
@@ -200,72 +368,120 @@ def add_adx(df: pd.DataFrame, n: int = 14) -> pd.DataFrame:
 
 
 # region VOLATILITY INDICATORS
-def add_bollinger_bands(df: pd.DataFrame, n: int = 20, k: float = 2.0) -> pd.DataFrame:
+def add_bollinger_bands(
+    df: pd.DataFrame,
+    n: int | list[int] | None = None,
+    k: float = 2.0,
+    column_name: str = "close",
+    default_bb_periods: list[int] = None,
+) -> pd.DataFrame:
     """
     Add Bollinger Bands (upper, middle, lower) to the DataFrame.
+
+    Default popular Bollinger Band periods:
+        20 (SMA period), standard deviation multiplier k=2.0
 
     Parameters
     ----------
     df : pd.DataFrame
-        Input DataFrame that must contain 'close' column.
-    n : int, optional
-        Period for SMA and rolling std (default 20).
+        Input DataFrame containing the target column.
+    n : int or list[int], optional
+        SMA period(s) for Bollinger Bands. If None, default period 20 is used.
     k : float, optional
-        Number of standard deviations for bands (default 2.0).
+        Number of standard deviations for upper/lower bands (default 2.0)
+    column_name : str, optional
+        Column to calculate Bollinger Bands on. Default is 'close'.
+    default_bb_periods : list[int], optional
+        Override the default SMA period(s).
 
     Returns
     -------
     pd.DataFrame
-        Copy of the input DataFrame with columns:
-        'bb_middle_{n}', 'bb_upper_{n}', 'bb_lower_{n}'.
+        DataFrame with Bollinger Bands added:
+        '{column_name}_bb_middle_{n}', '{column_name}_bb_upper_{n}', '{column_name}_bb_lower_{n}'
     """
+    validate_column(df, column_name)
     df = df.copy()
-    sma = df["close"].rolling(window=n, min_periods=1).mean()
-    std = df["close"].rolling(window=n, min_periods=1).std()
 
-    df[f"bb_middle_{n}"] = sma
-    df[f"bb_upper_{n}"] = sma + (k * std)
-    df[f"bb_lower_{n}"] = sma - (k * std)
+    # Default period
+    if default_bb_periods is None:
+        default_bb_periods = [20]
+
+    # Determine periods to compute
+    if n is None:
+        periods = default_bb_periods
+    elif isinstance(n, int):
+        periods = [n]
+    else:
+        periods = list(n)
+
+    for period in periods:
+        sma = df[column_name].rolling(window=period, min_periods=1).mean()
+        std = df[column_name].rolling(window=period, min_periods=1).std()
+
+        df[f"{column_name}_bb_middle_{period}"] = sma
+        df[f"{column_name}_bb_upper_{period}"] = sma + (k * std)
+        df[f"{column_name}_bb_lower_{period}"] = sma - (k * std)
 
     return df
 
 
-def add_keltner_channel(df: pd.DataFrame, n: int = 20, k: float = 2.0) -> pd.DataFrame:
+def add_keltner_channel(
+    df: pd.DataFrame,
+    n: int = 20,
+    k: float = 2.0,
+    high_col: str = "high",
+    low_col: str = "low",
+    close_col: str = "close",
+) -> pd.DataFrame:
     """
     Add Keltner Channel (upper, middle, lower) to the DataFrame.
+
+    The Keltner Channel consists of a middle line (EMA of the close) and
+    upper/lower bands calculated as the EMA ± k times the ATR. It is used
+    to measure volatility and identify potential breakouts.
 
     Parameters
     ----------
     df : pd.DataFrame
-        Input DataFrame that must contain 'high', 'low', 'close'.
+        Input DataFrame that must contain the specified high, low, and close columns.
     n : int, optional
-        Period for EMA and ATR (default 20).
+        Period for EMA and ATR calculation (default is 20).
     k : float, optional
-        Multiplier for ATR (default 2.0).
+        Multiplier for ATR to calculate upper and lower bands (default is 2.0).
+    high_col : str, optional
+        Name of the high price column. Defaults to 'high'.
+    low_col : str, optional
+        Name of the low price column. Defaults to 'low'.
+    close_col : str, optional
+        Name of the close price column. Defaults to 'close'.
 
     Returns
     -------
     pd.DataFrame
-        Copy of the input DataFrame with columns:
+        Copy of the input DataFrame with added columns:
         'kc_middle_{n}', 'kc_upper_{n}', 'kc_lower_{n}'.
     """
+    for col in [high_col, low_col, close_col]:
+        validate_column(df, col)
+
     df = df.copy()
 
     # Middle line (EMA of close)
-    df[f"kc_middle_{n}"] = df["close"].ewm(span=n, adjust=False).mean()
+    df[f"kc_middle_{n}"] = df[close_col].ewm(span=n, adjust=False).mean()
 
     # True Range
     tr = pd.concat(
         [
-            df["high"] - df["low"],
-            (df["high"] - df["close"].shift()).abs(),
-            (df["low"] - df["close"].shift()).abs(),
+            df[high_col] - df[low_col],
+            (df[high_col] - df[close_col].shift()).abs(),
+            (df[low_col] - df[close_col].shift()).abs(),
         ],
         axis=1,
     ).max(axis=1)
 
     # ATR (Wilder’s moving average of TR)
-    atr = tr.rolling(n).mean()
+    atr = tr.rolling(window=n, min_periods=1).mean()
 
     # Upper & Lower bands
     df[f"kc_upper_{n}"] = df[f"kc_middle_{n}"] + k * atr
@@ -274,42 +490,62 @@ def add_keltner_channel(df: pd.DataFrame, n: int = 20, k: float = 2.0) -> pd.Dat
     return df
 
 
-def add_starc_band(df: pd.DataFrame, n: int = 20, k: float = 2.0) -> pd.DataFrame:
+def add_starc_band(
+    df: pd.DataFrame,
+    n: int = 20,
+    k: float = 2.0,
+    high_col: str = "high",
+    low_col: str = "low",
+    close_col: str = "close",
+) -> pd.DataFrame:
     """
     Add STARC Bands (upper, middle, lower) to the DataFrame.
+
+    STARC Bands consist of a middle band (SMA of the close) and upper/lower
+    bands calculated as the SMA ± k times the ATR. They are used to measure
+    volatility and potential overbought/oversold conditions.
 
     Parameters
     ----------
     df : pd.DataFrame
-        Input DataFrame that must contain 'high', 'low', 'close'.
+        Input DataFrame that must contain the specified high, low, and close columns.
     n : int, optional
-        Period for SMA and ATR (default 20).
+        Period for SMA and ATR calculation (default is 20).
     k : float, optional
-        Multiplier for ATR (default 2.0).
+        Multiplier for ATR to calculate upper and lower bands (default is 2.0).
+    high_col : str, optional
+        Name of the high price column. Defaults to 'high'.
+    low_col : str, optional
+        Name of the low price column. Defaults to 'low'.
+    close_col : str, optional
+        Name of the close price column. Defaults to 'close'.
 
     Returns
     -------
     pd.DataFrame
-        Copy of the input DataFrame with columns:
+        Copy of the input DataFrame with added columns:
         'starc_middle_{n}', 'starc_upper_{n}', 'starc_lower_{n}'.
     """
+    for col in [high_col, low_col, close_col]:
+        validate_column(df, col)
+
     df = df.copy()
 
     # Middle Band (SMA of close)
-    df[f"starc_middle_{n}"] = df["close"].rolling(window=n, min_periods=1).mean()
+    df[f"starc_middle_{n}"] = df[close_col].rolling(window=n, min_periods=1).mean()
 
     # True Range
     tr = pd.concat(
         [
-            df["high"] - df["low"],
-            (df["high"] - df["close"].shift()).abs(),
-            (df["low"] - df["close"].shift()).abs(),
+            df[high_col] - df[low_col],
+            (df[high_col] - df[close_col].shift()).abs(),
+            (df[low_col] - df[close_col].shift()).abs(),
         ],
         axis=1,
     ).max(axis=1)
 
     # ATR (simple rolling mean)
-    atr = tr.rolling(n, min_periods=1).mean()
+    atr = tr.rolling(window=n, min_periods=1).mean()
 
     # Upper & Lower Bands
     df[f"starc_upper_{n}"] = df[f"starc_middle_{n}"] + k * atr
@@ -318,30 +554,48 @@ def add_starc_band(df: pd.DataFrame, n: int = 20, k: float = 2.0) -> pd.DataFram
     return df
 
 
-def add_atr(df: pd.DataFrame, n: int = 14) -> pd.DataFrame:
+def add_atr(
+    df: pd.DataFrame,
+    n: int = 14,
+    high_col: str = "high",
+    low_col: str = "low",
+    close_col: str = "close",
+) -> pd.DataFrame:
     """
     Add Average True Range (ATR) to the DataFrame.
+
+    ATR measures market volatility by calculating the smoothed average
+    of True Range over a specified period.
 
     Parameters
     ----------
     df : pd.DataFrame
-        Input DataFrame that must contain 'high', 'low', 'close'.
+        Input DataFrame that must contain the specified high, low, and close columns.
     n : int, optional
         Period for ATR calculation (default is 14).
+    high_col : str, optional
+        Name of the high price column. Defaults to 'high'.
+    low_col : str, optional
+        Name of the low price column. Defaults to 'low'.
+    close_col : str, optional
+        Name of the close price column. Defaults to 'close'.
 
     Returns
     -------
     pd.DataFrame
         Copy of the input DataFrame with an added column 'atr_{n}'.
     """
+    for col in [high_col, low_col, close_col]:
+        validate_column(df, col)
+
     df = df.copy()
 
     # True Range
     tr = pd.concat(
         [
-            df["high"] - df["low"],
-            (df["high"] - df["close"].shift()).abs(),
-            (df["low"] - df["close"].shift()).abs(),
+            df[high_col] - df[low_col],
+            (df[high_col] - df[close_col].shift()).abs(),
+            (df[low_col] - df[close_col].shift()).abs(),
         ],
         axis=1,
     ).max(axis=1)
@@ -352,22 +606,59 @@ def add_atr(df: pd.DataFrame, n: int = 14) -> pd.DataFrame:
     return df
 
 
-def add_divergence_index(df: pd.DataFrame, n: int = 14, k: float = 1.0) -> pd.DataFrame:
+def add_divergence_index(
+    df: pd.DataFrame,
+    n: int = 14,
+    k: float = 1.0,
+    high_col: str = "high",
+    low_col: str = "low",
+    close_col: str = "close",
+) -> pd.DataFrame:
+    """
+    Add Divergence Index (DVI) to the DataFrame.
+
+    The Divergence Index measures the distance of the price from its SMA
+    relative to market volatility (ATR), helping identify overbought or oversold conditions.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input DataFrame that must contain the specified high, low, and close columns.
+    n : int, optional
+        Period for SMA and ATR calculation (default is 14).
+    k : float, optional
+        Scaling factor for ATR in the calculation (default is 1.0).
+    high_col : str, optional
+        Name of the high price column. Defaults to 'high'.
+    low_col : str, optional
+        Name of the low price column. Defaults to 'low'.
+    close_col : str, optional
+        Name of the close price column. Defaults to 'close'.
+
+    Returns
+    -------
+    pd.DataFrame
+        Copy of the input DataFrame with an added column 'dvi_{n}'.
+    """
+    for col in [high_col, low_col, close_col]:
+        validate_column(df, col)
+
     df = df.copy()
 
-    # Ensure numeric (convert Decimal → float)
-    for col in ["high", "low", "close"]:
-        df[col] = pd.to_numeric(df[col], errors="coerce")
+    # Ensure numeric
+    df[high_col] = pd.to_numeric(df[high_col], errors="coerce")
+    df[low_col] = pd.to_numeric(df[low_col], errors="coerce")
+    df[close_col] = pd.to_numeric(df[close_col], errors="coerce")
 
     # SMA of close
-    sma = df["close"].rolling(window=n, min_periods=1).mean()
+    sma = df[close_col].rolling(window=n, min_periods=1).mean()
 
     # True Range
     tr = pd.concat(
         [
-            df["high"] - df["low"],
-            (df["high"] - df["close"].shift()).abs(),
-            (df["low"] - df["close"].shift()).abs(),
+            df[high_col] - df[low_col],
+            (df[high_col] - df[close_col].shift()).abs(),
+            (df[low_col] - df[close_col].shift()).abs(),
         ],
         axis=1,
     ).max(axis=1)
@@ -376,7 +667,7 @@ def add_divergence_index(df: pd.DataFrame, n: int = 14, k: float = 1.0) -> pd.Da
     atr = tr.ewm(alpha=1 / n, adjust=False).mean()
 
     # Divergence Index
-    df[f"dvi_{n}"] = (df["close"] - sma) / (k * atr)
+    df[f"dvi_{n}"] = (df[close_col] - sma) / (k * atr)
 
     return df
 
@@ -387,183 +678,300 @@ def add_divergence_index(df: pd.DataFrame, n: int = 14, k: float = 1.0) -> pd.Da
 # region MOMENTUN INDICATORS
 
 
-def add_rsi(df: pd.DataFrame, n: int = 14) -> pd.DataFrame:
+def add_rsi(
+    df: pd.DataFrame,
+    n: int | list[int] | None = None,
+    column_name: str = "close",
+    default_rsi_periods: list[int] = None,
+) -> pd.DataFrame:
     """
-    Add Relative Strength Index (RSI) to the dataframe.
+    Add Relative Strength Index (RSI) to the DataFrame.
+
+    Default popular RSI periods: 7, 14, 21, 28
 
     Parameters
     ----------
     df : pd.DataFrame
-        DataFrame with at least a 'close' column.
-    n : int, default 14
-        Lookback period.
+        Input DataFrame containing the target column.
+    n : int or list[int], optional
+        RSI lookback period(s). If None, popular defaults are used.
+    column_name : str, optional
+        Column to calculate RSI on. Default is 'close'.
+    default_rsi_periods : list[int], optional
+        Override the default RSI periods.
 
     Returns
     -------
     pd.DataFrame
-        Original DataFrame with an added 'rsi_{n}' column.
+        DataFrame with added 'rsi_{period}' columns.
     """
+    validate_column(df, column_name)
+    df = df.copy()
 
-    # Ensure float array to avoid Decimal issues
-    close = np.asarray(df["close"], dtype="float64")
+    if default_rsi_periods is None:
+        default_rsi_periods = [7, 14, 21, 28]
+
+    if n is None:
+        periods = default_rsi_periods
+    elif isinstance(n, int):
+        periods = [n]
+    else:
+        periods = list(n)
+
+    close = np.asarray(df[column_name], dtype="float64")
     delta = np.diff(close, prepend=close[0])
-
     gain = np.where(delta > 0, delta, 0.0)
     loss = np.where(delta < 0, -delta, 0.0)
 
-    avg_gain = pd.Series(gain).rolling(n, min_periods=n).mean()
-    avg_loss = pd.Series(loss).rolling(n, min_periods=n).mean()
+    for period in periods:
+        avg_gain = pd.Series(gain).rolling(period, min_periods=period).mean()
+        avg_loss = pd.Series(loss).rolling(period, min_periods=period).mean()
 
-    rs = avg_gain / avg_loss.replace(0, np.nan)
-    rsi = 100 - (100 / (1 + rs))
+        rs = avg_gain / avg_loss.replace(0, np.nan)
+        rsi = 100 - (100 / (1 + rs))
 
-    df[f"rsi_{n}"] = rsi
+        df[f"rsi_{period}"] = rsi
+
     return df
 
 
-def add_roc(df: pd.DataFrame, n: int = 14) -> pd.DataFrame:
+def add_roc(
+    df: pd.DataFrame,
+    n: int | list[int] | None = None,
+    column_name: str = "close",
+    default_roc_periods: list[int] = None,
+) -> pd.DataFrame:
     """
-    Add Rate of Change (ROC) indicator to the dataframe.
+    Add Rate of Change (ROC) indicator to the DataFrame.
 
-    ROC measures the percentage change in price compared to
-    the price n periods ago.
+    Default popular ROC periods: 9, 12, 14, 20, 25
 
     Parameters
     ----------
     df : pd.DataFrame
-        DataFrame with at least a 'close' column.
-    n : int, default 14
-        Lookback period for ROC calculation.
+        Input DataFrame containing the target column.
+    n : int or list[int], optional
+        Lookback period(s) for ROC. If None, popular defaults are used.
+    column_name : str, optional
+        Column to calculate ROC on. Default is 'close'.
+    default_roc_periods : list[int], optional
+        Override the default ROC periods.
 
     Returns
     -------
     pd.DataFrame
-        Original DataFrame with an added 'roc_{n}' column.
+        DataFrame with added 'roc_{period}' columns.
     """
-    close = np.asarray(df["close"], dtype="float64")
-    roc = (
-        (pd.Series(close) - pd.Series(close).shift(n)) / pd.Series(close).shift(n) * 100
-    )
-    df[f"roc_{n}"] = roc
+    validate_column(df, column_name)
+    df = df.copy()
+
+    if default_roc_periods is None:
+        default_roc_periods = [9, 12, 14, 20, 25]
+
+    if n is None:
+        periods = default_roc_periods
+    elif isinstance(n, int):
+        periods = [n]
+    else:
+        periods = list(n)
+
+    close = pd.Series(df[column_name], dtype="float64")
+
+    for period in periods:
+        roc = ((close - close.shift(period)) / close.shift(period)) * 100
+        df[f"roc_{period}"] = roc
+
     return df
 
 
 def add_macd(
-    df: pd.DataFrame, short_n: int = 12, long_n: int = 26, signal_n: int = 9
+    df: pd.DataFrame,
+    short_n: int | list[int] = 12,
+    long_n: int | list[int] = 26,
+    signal_n: int | list[int] = 9,
 ) -> pd.DataFrame:
     """
-    Add Moving Average Convergence/Divergence (MACD) to the dataframe.
+    Add Moving Average Convergence/Divergence (MACD) to the DataFrame.
 
-    MACD is calculated as the difference between a short-term EMA
-    and a long-term EMA. A signal line (EMA of MACD) is also added.
+    Default popular MACD parameters:
+        short_n = 12, long_n = 26, signal_n = 9
 
     Parameters
     ----------
     df : pd.DataFrame
         DataFrame with at least a 'close' column.
-    short_n : int, default 12
-        Period for short-term EMA.
-    long_n : int, default 26
-        Period for long-term EMA.
-    signal_n : int, default 9
-        Period for the signal line EMA.
+    short_n : int or list[int], optional
+        Short-term EMA period(s). Default 12.
+    long_n : int or list[int], optional
+        Long-term EMA period(s). Default 26.
+    signal_n : int or list[int], optional
+        Signal line EMA period(s). Default 9.
 
     Returns
     -------
     pd.DataFrame
-        Original DataFrame with added columns:
-        - 'macd_{short_n}_{long_n}'
-        - 'macd_signal_{signal_n}'
-        - 'macd_hist_{short_n}_{long_n}_{signal_n}'
+        Original DataFrame with added MACD columns:
+        - 'macd_{short}_{long}'
+        - 'macd_signal_{signal}'
+        - 'macd_hist_{short}_{long}_{signal}'
     """
-    short_ema = df["close"].ewm(span=short_n, adjust=False).mean()
-    long_ema = df["close"].ewm(span=long_n, adjust=False).mean()
+    df = df.copy()
 
-    macd = short_ema - long_ema
-    signal = macd.ewm(span=signal_n, adjust=False).mean()
-    hist = macd - signal
+    # Ensure lists for iteration
+    short_list = [short_n] if isinstance(short_n, int) else list(short_n)
+    long_list = [long_n] if isinstance(long_n, int) else list(long_n)
+    signal_list = [signal_n] if isinstance(signal_n, int) else list(signal_n)
 
-    df[f"macd_{short_n}_{long_n}"] = macd
-    df[f"macd_signal_{signal_n}"] = signal
-    df[f"macd_hist_{short_n}_{long_n}_{signal_n}"] = hist
+    for s in short_list:
+        for l in long_list:
+            if l <= s:
+                continue  # long EMA must be greater than short EMA
+            macd_series = (
+                df["close"].ewm(span=s, adjust=False).mean()
+                - df["close"].ewm(span=l, adjust=False).mean()
+            )
+            for sig in signal_list:
+                signal_series = macd_series.ewm(span=sig, adjust=False).mean()
+                hist_series = macd_series - signal_series
+
+                df[f"macd_{s}_{l}"] = macd_series
+                df[f"macd_signal_{sig}"] = signal_series
+                df[f"macd_hist_{s}_{l}_{sig}"] = hist_series
 
     return df
 
 
 def add_stochastic(
-    df: pd.DataFrame, k_period: int = 14, d_period: int = 3
+    df: pd.DataFrame,
+    k_period: int | list[int] | None = None,
+    d_period: int | list[int] | None = None,
+    high_col: str = "high",
+    low_col: str = "low",
+    close_col: str = "close",
+    default_k_periods: list[int] = None,
+    default_d_periods: list[int] = None,
 ) -> pd.DataFrame:
     """
-    Add Stochastic Oscillator (%K and %D) to the dataframe.
-
-    %K = (Close - LowestLow) / (HighestHigh - LowestLow) * 100
-    %D = SMA of %K
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        DataFrame with 'high', 'low', and 'close' columns.
-    k_period : int, default 14
-        Lookback period for %K.
-    d_period : int, default 3
-        Lookback period for %D (smoothing of %K).
-
-    Returns
-    -------
-    pd.DataFrame
-        Original DataFrame with added columns:
-        - 'stoch_k_{k_period}'
-        - 'stoch_d_{d_period}'
+    Add Stochastic Oscillator (%K and %D) to the DataFrame.
+    Replaces inf values with NULL (NaN).
     """
-    close = pd.to_numeric(df["close"], errors="coerce").astype("float64")
-    high = pd.to_numeric(df["high"], errors="coerce").astype("float64")
-    low = pd.to_numeric(df["low"], errors="coerce").astype("float64")
 
-    low_min = low.rolling(window=k_period, min_periods=1).min()
-    high_max = high.rolling(window=k_period, min_periods=1).max()
+    for col in [high_col, low_col, close_col]:
+        validate_column(df, col)
 
-    stoch_k = 100 * (close - low_min) / (high_max - low_min)
-    stoch_d = stoch_k.rolling(window=d_period, min_periods=1).mean()
+    df = df.copy()
 
-    df[f"stoch_k_{k_period}"] = stoch_k
-    df[f"stoch_d_{d_period}"] = stoch_d
-    return df
+    # Default periods
+    if default_k_periods is None:
+        default_k_periods = [14]
+    if default_d_periods is None:
+        default_d_periods = [3]
 
+    if k_period is None:
+        k_list = default_k_periods
+    elif isinstance(k_period, int):
+        k_list = [k_period]
+    else:
+        k_list = list(k_period)
 
-def add_williams_r(df: pd.DataFrame, n: int = 14) -> pd.DataFrame:
-    """
-    Add William's %R indicator to the dataframe.
+    if d_period is None:
+        d_list = default_d_periods
+    elif isinstance(d_period, int):
+        d_list = [d_period]
+    else:
+        d_list = list(d_period)
 
-    %R = (HighestHigh - Close) / (HighestHigh - LowestLow) * -100
+    close = pd.to_numeric(df[close_col], errors="coerce").astype("float64")
+    high = pd.to_numeric(df[high_col], errors="coerce").astype("float64")
+    low = pd.to_numeric(df[low_col], errors="coerce").astype("float64")
 
-    Parameters
-    ----------
-    df : pd.DataFrame
-        DataFrame with 'high', 'low', and 'close' columns.
-    n : int, default 14
-        Lookback period.
+    for k in k_list:
+        low_min = low.rolling(window=k, min_periods=1).min()
+        high_max = high.rolling(window=k, min_periods=1).max()
 
-    Returns
-    -------
-    pd.DataFrame
-        Original DataFrame with an added 'williams_r_{n}' column.
-    """
-    close = pd.to_numeric(df["close"], errors="coerce").astype("float64")
-    high = pd.to_numeric(df["high"], errors="coerce").astype("float64")
-    low = pd.to_numeric(df["low"], errors="coerce").astype("float64")
+        # Prevent division by zero by producing inf (we will convert to NaN later)
+        stoch_k = 100 * (close - low_min) / (high_max - low_min)
+        df[f"stoch_k_{k}"] = stoch_k
 
-    highest_high = high.rolling(window=n, min_periods=1).max()
-    lowest_low = low.rolling(window=n, min_periods=1).min()
+        for d in d_list:
+            stoch_d = stoch_k.rolling(window=d, min_periods=1).mean()
+            df[f"stoch_d_{d}"] = stoch_d
 
-    williams_r = (highest_high - close) / (highest_high - lowest_low) * -100
-    df[f"williams_r_{n}"] = williams_r
+    # 🔍 Replace infinite values with NULL (NaN)
+    df.replace([np.inf, -np.inf], np.nan, inplace=True)
 
     return df
 
 
-def add_ado(df: pd.DataFrame) -> pd.DataFrame:
+def add_williams_r(
+    df: pd.DataFrame,
+    n: int | list[int] | None = None,
+    high_col: str = "high",
+    low_col: str = "low",
+    close_col: str = "close",
+    default_periods: list[int] = None,
+) -> pd.DataFrame:
     """
-    Add Larry Williams’ Accumulation/Distribution (AD) Oscillator.
+    Add Williams %R indicator to the DataFrame.
+
+    Default popular periods: 9, 14, 21
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input DataFrame with high, low, close columns.
+    n : int or list[int], optional
+        Lookback period(s). If None, popular defaults are used.
+    high_col, low_col, close_col : str, optional
+        Column names for high, low, close prices.
+    default_periods : list[int], optional
+        Override the default periods.
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with added 'williams_r_{period}' columns.
+    """
+    for col in [high_col, low_col, close_col]:
+        validate_column(df, col)
+
+    df = df.copy()
+
+    if default_periods is None:
+        default_periods = [9, 14, 21]
+
+    if n is None:
+        periods = default_periods
+    elif isinstance(n, int):
+        periods = [n]
+    else:
+        periods = list(n)
+
+    close = pd.to_numeric(df[close_col], errors="coerce").astype("float64")
+    high = pd.to_numeric(df[high_col], errors="coerce").astype("float64")
+    low = pd.to_numeric(df[low_col], errors="coerce").astype("float64")
+
+    for period in periods:
+        highest_high = high.rolling(window=period, min_periods=1).max()
+        lowest_low = low.rolling(window=period, min_periods=1).min()
+        williams_r = (highest_high - close) / (highest_high - lowest_low) * -100
+        df[f"williams_r_{period}"] = williams_r
+
+    # 🔍 Replace infinite values with NULL (NaN)
+    df.replace([np.inf, -np.inf], np.nan, inplace=True)
+
+    return df
+
+
+def add_ado(
+    df: pd.DataFrame,
+    open_col: str = "open",
+    high_col: str = "high",
+    low_col: str = "low",
+    close_col: str = "close",
+) -> pd.DataFrame:
+    """
+    Add Larry Williams' Accumulation/Distribution (AD) Oscillator to the DataFrame.
 
     Formula:
         ADO = ((Close - Open) / (High - Low)) * 100
@@ -571,127 +979,239 @@ def add_ado(df: pd.DataFrame) -> pd.DataFrame:
     Parameters
     ----------
     df : pd.DataFrame
-        DataFrame with 'open', 'high', 'low', 'close' columns.
+        Input DataFrame that must contain the specified open, high, low, and close columns.
+    open_col : str, optional
+        Name of the open price column. Defaults to 'open'.
+    high_col : str, optional
+        Name of the high price column. Defaults to 'high'.
+    low_col : str, optional
+        Name of the low price column. Defaults to 'low'.
+    close_col : str, optional
+        Name of the close price column. Defaults to 'close'.
 
     Returns
     -------
     pd.DataFrame
-        Original DataFrame with an added 'ad' column.
+        Copy of the input DataFrame with an added column 'ad'.
     """
-    close = pd.to_numeric(df["close"], errors="coerce").astype("float64")
-    open = pd.to_numeric(df["open"], errors="coerce").astype("float64")
-    high = pd.to_numeric(df["high"], errors="coerce").astype("float64")
-    low = pd.to_numeric(df["low"], errors="coerce").astype("float64")
+    for col in [open_col, high_col, low_col, close_col]:
+        validate_column(df, col)
 
-    ado = ((close - open) / (high - low).replace(0, np.nan)) * 100
-    df["ad"] = ado
+    df = df.copy()
+
+    close = pd.to_numeric(df[close_col], errors="coerce").astype("float64")
+    open_ = pd.to_numeric(df[open_col], errors="coerce").astype("float64")
+    high = pd.to_numeric(df[high_col], errors="coerce").astype("float64")
+    low = pd.to_numeric(df[low_col], errors="coerce").astype("float64")
+
+    ado = ((close - open_) / (high - low).replace(0, np.nan)) * 100
+    df["ado"] = ado
 
     return df
 
 
-def add_rvi(df: pd.DataFrame, n: int = 10, signal: int = 4) -> pd.DataFrame:
+def add_rvi(
+    df: pd.DataFrame,
+    n: int | list[int] | None = None,
+    signal: int | list[int] | None = None,
+    open_col: str = "open",
+    high_col: str = "high",
+    low_col: str = "low",
+    close_col: str = "close",
+    default_n: list[int] = None,
+    default_signal: list[int] = None,
+) -> pd.DataFrame:
     """
-    Add Relative Vigor Index (RVI) and signal line.
+    Add Relative Vigor Index (RVI) and its signal line to the DataFrame.
+
+    Default popular parameters:
+        n periods: [10, 14]
+        signal:   [4]
 
     Formula:
         RV = (Close - Open) / (High - Low)
         RVI = SMA(RV, n)
         Signal = SMA(RVI, signal)
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        DataFrame with 'open', 'high', 'low', 'close' columns.
-    n : int, optional (default=10)
-        Period for main RVI smoothing.
-    signal : int, optional (default=4)
-        Period for RVI signal line smoothing.
-
-    Returns
-    -------
-    pd.DataFrame
-        Original DataFrame with added 'rvi_{n}' and 'rvi_signal_{signal}' columns.
     """
-    close = pd.to_numeric(df["close"], errors="coerce").astype("float64")
-    open = pd.to_numeric(df["open"], errors="coerce").astype("float64")
-    high = pd.to_numeric(df["high"], errors="coerce").astype("float64")
-    low = pd.to_numeric(df["low"], errors="coerce").astype("float64")
 
-    rv = (close - open) / (high - low).replace(0, np.nan)
-    rvi = rv.rolling(window=n, min_periods=1).mean()
-    rvi_signal = rvi.rolling(window=signal, min_periods=1).mean()
+    # Validate columns
+    for col in [open_col, high_col, low_col, close_col]:
+        validate_column(df, col)
 
-    df[f"rvi_{n}"] = rvi
-    df[f"rvi_signal_{signal}"] = rvi_signal
+    df = df.copy()
+
+    # Defaults
+    if default_n is None:
+        default_n = [10, 14]  # Popular RVI periods
+    if default_signal is None:
+        default_signal = [4]  # Standard signal length
+
+    # Parse user inputs
+    if n is None:
+        n_list = default_n
+    elif isinstance(n, int):
+        n_list = [n]
+    else:
+        n_list = list(n)
+
+    if signal is None:
+        signal_list = default_signal
+    elif isinstance(signal, int):
+        signal_list = [signal]
+    else:
+        signal_list = list(signal)
+
+    # Numeric columns
+    close = pd.to_numeric(df[close_col], errors="coerce").astype("float64")
+    open_ = pd.to_numeric(df[open_col], errors="coerce").astype("float64")
+    high = pd.to_numeric(df[high_col], errors="coerce").astype("float64")
+    low = pd.to_numeric(df[low_col], errors="coerce").astype("float64")
+
+    # Raw RV value
+    rv = (close - open_) / (high - low).replace(0, np.nan)
+
+    # Calculate RVI + signals
+    for n_period in n_list:
+        rvi = rv.rolling(window=n_period, min_periods=1).mean()
+        df[f"rvi_{n_period}"] = rvi
+
+        for sig in signal_list:
+            df[f"rvi_signal_{n_period}_{sig}"] = rvi.rolling(
+                window=sig, min_periods=1
+            ).mean()
 
     return df
 
 
-def add_tsi(df: pd.DataFrame, r: int = 25, s: int = 13) -> pd.DataFrame:
+def add_tsi(
+    df: pd.DataFrame,
+    r: int | list[int] | None = None,
+    s: int | list[int] | None = None,
+    column_name: str = "close",
+    default_r: list[int] = None,
+    default_s: list[int] = None,
+    add_signal: bool = True,
+    signal_period: int = 7,
+) -> pd.DataFrame:
     """
-    Add True Strength Index (TSI) to the DataFrame.
+    Add True Strength Index (TSI) to the DataFrame with support for
+    multiple popular parameter sets.
+
+    Popular defaults:
+        r (long periods): [25, 13, 50]
+        s (short periods): [13, 7, 25]
+        signal: 7 (optional)
 
     Formula:
         m_t = Close_t - Close_{t-1}
         TSI = 100 * (EMA_r(EMA_s(m_t)) / EMA_r(EMA_s(|m_t|)))
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        DataFrame with 'close' column.
-    r : int, optional (default=25)
-        Long smoothing period.
-    s : int, optional (default=13)
-        Short smoothing period.
-
-    Returns
-    -------
-    pd.DataFrame
-        Original DataFrame with an added 'tsi_{r}_{s}' column.
     """
-    close = pd.to_numeric(df["close"], errors="coerce").astype("float64")
+
+    validate_column(df, column_name)
+    df = df.copy()
+
+    # Default parameter lists
+    if default_r is None:
+        default_r = [25, 13, 50]
+    if default_s is None:
+        default_s = [13, 7, 25]
+
+    # Normalize inputs
+    if r is None:
+        r_list = default_r
+    elif isinstance(r, int):
+        r_list = [r]
+    else:
+        r_list = list(r)
+
+    if s is None:
+        s_list = default_s
+    elif isinstance(s, int):
+        s_list = [s]
+    else:
+        s_list = list(s)
+
+    # Price series
+    close = pd.to_numeric(df[column_name], errors="coerce").astype("float64")
     momentum = close.diff()
 
-    # short EMA
-    ema_mom_s = momentum.ewm(span=s, adjust=False).mean()
-    ema_abs_s = momentum.abs().ewm(span=s, adjust=False).mean()
+    # Loop through combinations
+    for rr in r_list:
+        for ss in s_list:
+            # Short EMAs
+            ema_mom_s = momentum.ewm(span=ss, adjust=False).mean()
+            ema_abs_s = momentum.abs().ewm(span=ss, adjust=False).mean()
 
-    # long EMA
-    ema_mom_r = ema_mom_s.ewm(span=r, adjust=False).mean()
-    ema_abs_r = ema_abs_s.ewm(span=r, adjust=False).mean()
+            # Long EMAs
+            ema_mom_r = ema_mom_s.ewm(span=rr, adjust=False).mean()
+            ema_abs_r = ema_abs_s.ewm(span=rr, adjust=False).mean()
 
-    tsi = 100 * (ema_mom_r / ema_abs_r)
-    df[f"tsi_{r}_{s}"] = tsi
+            tsi = 100 * (ema_mom_r / ema_abs_r)
+            name = f"tsi_{rr}_{ss}"
+            df[name] = tsi
+
+            # Optional TSI Signal line (common period = 7)
+            if add_signal:
+                df[f"{name}_signal_{signal_period}"] = tsi.ewm(
+                    span=signal_period, adjust=False
+                ).mean()
 
     return df
 
 
-def add_vortex(df: pd.DataFrame, n: int = 14) -> pd.DataFrame:
+def add_vortex(
+    df: pd.DataFrame,
+    n: int | list[int] | None = None,
+    high_col: str = "high",
+    low_col: str = "low",
+    close_col: str = "close",
+    default_periods: list[int] = None,
+) -> pd.DataFrame:
     """
-    Add Vortex Indicator (VI) to the DataFrame.
+    Add Vortex Indicator (+VI and -VI) for one or multiple popular parameter sets.
 
-    The Vortex Indicator consists of two lines, +VI and -VI,
-    that are derived from True Range (TR) and directional movement.
+    Popular periods: 7, 14, 21, 28 (14 is standard)
 
     Parameters
     ----------
     df : pd.DataFrame
-        DataFrame with 'high', 'low', and 'close' columns.
-    n : int, default 14
-        Lookback period.
+        Input DataFrame that must contain high, low, and close columns.
+    n : int | list[int] | None, optional
+        Single period or list of periods to compute. If None, uses default popular periods.
+    high_col, low_col, close_col : str
+        Column names for OHLC values.
+    default_periods : list[int], optional
+        Override list of default popular periods.
 
     Returns
     -------
     pd.DataFrame
-        Original DataFrame with added columns:
-        - 'vi_plus_{n}'
-        - 'vi_minus_{n}'
+        DataFrame with added vortex indicator columns:
+        vi_plus_{n}, vi_minus_{n}
     """
-    high = df["high"].astype("float64")
-    low = df["low"].astype("float64")
-    close = df["close"].astype("float64")
 
-    # True Range
+    for col in [high_col, low_col, close_col]:
+        validate_column(df, col)
+
+    df = df.copy()
+
+    # Default popular periods
+    if default_periods is None:
+        default_periods = [7, 14, 21, 28]
+
+    # Normalize input
+    if n is None:
+        periods = default_periods
+    elif isinstance(n, int):
+        periods = [n]
+    else:
+        periods = list(n)
+
+    high = pd.to_numeric(df[high_col], errors="coerce").astype("float64")
+    low = pd.to_numeric(df[low_col], errors="coerce").astype("float64")
+    close = pd.to_numeric(df[close_col], errors="coerce").astype("float64")
+
+    # True Range (TR)
     tr1 = high - low
     tr2 = (high - close.shift(1)).abs()
     tr3 = (low - close.shift(1)).abs()
@@ -701,13 +1221,14 @@ def add_vortex(df: pd.DataFrame, n: int = 14) -> pd.DataFrame:
     vm_plus = (high - low.shift(1)).abs()
     vm_minus = (low - high.shift(1)).abs()
 
-    # Rolling sums
-    tr_n = tr.rolling(n).sum()
-    vm_plus_n = vm_plus.rolling(n).sum()
-    vm_minus_n = vm_minus.rolling(n).sum()
+    # Compute for each period
+    for p in periods:
+        tr_p = tr.rolling(p, min_periods=1).sum()
+        vm_plus_p = vm_plus.rolling(p, min_periods=1).sum()
+        vm_minus_p = vm_minus.rolling(p, min_periods=1).sum()
 
-    df[f"vi_plus_{n}"] = vm_plus_n / tr_n
-    df[f"vi_minus_{n}"] = vm_minus_n / tr_n
+        df[f"vi_plus_{p}"] = vm_plus_p / tr_p
+        df[f"vi_minus_{p}"] = vm_minus_p / tr_p
 
     return df
 
@@ -716,80 +1237,140 @@ def add_vortex(df: pd.DataFrame, n: int = 14) -> pd.DataFrame:
 
 
 # region VOLUME INDICATORS
-def add_obv(df: pd.DataFrame) -> pd.DataFrame:
+def add_obv(
+    df: pd.DataFrame,
+    close_col: str = "close",
+    volume_col: str = "volume",
+    ema_periods: list[int] = None,
+    sma_periods: list[int] = None,
+) -> pd.DataFrame:
     """
-    Add On-Balance Volume (OBV) indicator to the DataFrame.
+    Add On-Balance Volume (OBV) and optional smoothed OBV indicators.
 
-    OBV measures cumulative buying/selling pressure by adding
-    volume on up days and subtracting volume on down days.
+    Popular OBV smoothing periods:
+        EMA: 20, 50, 100
+        SMA: 10, 20, 50
 
     Parameters
     ----------
     df : pd.DataFrame
-        DataFrame with 'close' and 'volume' columns.
+        Input DataFrame containing close and volume columns.
+    close_col : str, optional
+        Name of the close price column. Defaults to 'close'.
+    volume_col : str, optional
+        Name of the volume column. Defaults to 'volume'.
+    ema_periods : list[int], optional
+        EMA smoothing periods for OBV. Defaults to [20, 50, 100].
+    sma_periods : list[int], optional
+        SMA smoothing periods for OBV. Defaults to [10, 20, 50].
 
     Returns
     -------
     pd.DataFrame
-        Original DataFrame with added 'obv' column.
+        DataFrame with columns:
+            obv
+            obv_ema_{p}
+            obv_sma_{p}
     """
-    close = df["close"].astype("float64")
-    volume = df["volume"].astype("float64")
 
-    obv = [0]  # start OBV at 0
+    for col in [close_col, volume_col]:
+        validate_column(df, col)
+
+    df = df.copy()
+
+    # Defaults for popular smoothing periods
+    if ema_periods is None:
+        ema_periods = [20, 50, 100]
+    if sma_periods is None:
+        sma_periods = [10, 20, 50]
+
+    close = pd.to_numeric(df[close_col], errors="coerce").astype("float64")
+    volume = pd.to_numeric(df[volume_col], errors="coerce").astype("float64")
+
+    # Base OBV
+    obv = [0]
     for i in range(1, len(close)):
-        if close[i] > close[i - 1]:
+        if close.iloc[i] > close.iloc[i - 1]:
             obv.append(obv[-1] + volume.iloc[i])
-        elif close[i] < close[i - 1]:
+        elif close.iloc[i] < close.iloc[i - 1]:
             obv.append(obv[-1] - volume.iloc[i])
         else:
             obv.append(obv[-1])
 
     df["obv"] = obv
+
+    # Add smoothed versions
+    for p in ema_periods:
+        df[f"obv_ema_{p}"] = df["obv"].ewm(span=p, adjust=False).mean()
+
+    for p in sma_periods:
+        df[f"obv_sma_{p}"] = df["obv"].rolling(p, min_periods=1).mean()
+
     return df
 
 
-def add_mfi(df: pd.DataFrame, n: int = 14) -> pd.DataFrame:
+def add_mfi(
+    df: pd.DataFrame,
+    n_list: list[int] = None,
+    high_col: str = "high",
+    low_col: str = "low",
+    close_col: str = "close",
+    volume_col: str = "volume",
+) -> pd.DataFrame:
     """
-    Add Money Flow Index (MFI) to the DataFrame.
+    Add Money Flow Index (MFI) indicators to the DataFrame for multiple popular periods.
 
-    The MFI uses price and volume to identify overbought/oversold
-    conditions, similar to RSI but volume-adjusted.
+    Popular MFI periods:
+        5 (very fast)
+        7 (fast)
+        10 (medium-fast)
+        14 (standard)
+        20 (slow)
 
     Parameters
     ----------
     df : pd.DataFrame
-        DataFrame with 'high', 'low', 'close', and 'volume' columns.
-    n : int, default 14
-        Lookback period.
+        Input DataFrame with high, low, close, and volume columns.
+    n_list : list[int], optional
+        List of MFI periods to compute. Defaults to [5, 7, 10, 14, 20].
+    high_col : str
+    low_col : str
+    close_col : str
+    volume_col : str
 
     Returns
     -------
     pd.DataFrame
-        Original DataFrame with added 'mfi_{n}' column.
+        DataFrame with added columns: mfi_{n} for each n in n_list.
     """
-    high = df["high"].astype("float64")
-    low = df["low"].astype("float64")
-    close = df["close"].astype("float64")
-    volume = df["volume"].astype("float64")
+    for col in [high_col, low_col, close_col, volume_col]:
+        validate_column(df, col)
 
-    # Typical Price
+    df = df.copy()
+
+    if n_list is None:
+        n_list = [5, 7, 10, 14, 20]  # popular defaults
+
+    high = pd.to_numeric(df[high_col], errors="coerce").astype("float64")
+    low = pd.to_numeric(df[low_col], errors="coerce").astype("float64")
+    close = pd.to_numeric(df[close_col], errors="coerce").astype("float64")
+    volume = pd.to_numeric(df[volume_col], errors="coerce").astype("float64")
+
     tp = (high + low + close) / 3
-
-    # Raw Money Flow
     rmf = tp * volume
 
-    # Positive & Negative Money Flow
     pos_mf = np.where(tp > tp.shift(1), rmf, 0.0)
     neg_mf = np.where(tp < tp.shift(1), rmf, 0.0)
 
-    # Sum over n periods
-    pos_mf_sum = pd.Series(pos_mf).rolling(n).sum()
-    neg_mf_sum = pd.Series(neg_mf).rolling(n).sum()
+    pos_mf_series = pd.Series(pos_mf)
+    neg_mf_series = pd.Series(neg_mf)
 
-    # Money Flow Index
-    mfi = 100 * (pos_mf_sum / (pos_mf_sum + neg_mf_sum))
-    df[f"mfi_{n}"] = mfi
+    for n in n_list:
+        pos_sum = pos_mf_series.rolling(n, min_periods=1).sum()
+        neg_sum = neg_mf_series.rolling(n, min_periods=1).sum()
+
+        mfi = 100 * (pos_sum / (pos_sum + neg_sum))
+        df[f"mfi_{n}"] = mfi
 
     return df
 
@@ -829,7 +1410,13 @@ def add_adl(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def add_chaikin_ad(df: pd.DataFrame) -> pd.DataFrame:
+def add_chaikin_ad(
+    df: pd.DataFrame,
+    high_col: str = "high",
+    low_col: str = "low",
+    close_col: str = "close",
+    volume_col: str = "volume",
+) -> pd.DataFrame:
     """
     Add Marc Chaikin’s Accumulation/Distribution (AD) Line to the DataFrame.
 
@@ -845,17 +1432,30 @@ def add_chaikin_ad(df: pd.DataFrame) -> pd.DataFrame:
     Parameters
     ----------
     df : pd.DataFrame
-        DataFrame with 'high', 'low', 'close', and 'volume' columns.
+        Input DataFrame that must contain the specified high, low, close, and volume columns.
+    high_col : str, optional
+        Name of the high price column. Defaults to 'high'.
+    low_col : str, optional
+        Name of the low price column. Defaults to 'low'.
+    close_col : str, optional
+        Name of the close price column. Defaults to 'close'.
+    volume_col : str, optional
+        Name of the volume column. Defaults to 'volume'.
 
     Returns
     -------
     pd.DataFrame
-        Original DataFrame with added 'chaikin_ad' column.
+        Copy of the input DataFrame with an added column 'chaikin_ad'.
     """
-    high = df["high"].astype("float64")
-    low = df["low"].astype("float64")
-    close = df["close"].astype("float64")
-    volume = df["volume"].astype("float64")
+    for col in [high_col, low_col, close_col, volume_col]:
+        validate_column(df, col)
+
+    df = df.copy()
+
+    high = pd.to_numeric(df[high_col], errors="coerce").astype("float64")
+    low = pd.to_numeric(df[low_col], errors="coerce").astype("float64")
+    close = pd.to_numeric(df[close_col], errors="coerce").astype("float64")
+    volume = pd.to_numeric(df[volume_col], errors="coerce").astype("float64")
 
     # Close Location Value (CLV)
     clv = ((close - low) - (high - close)) / np.where(high != low, (high - low), 1e-10)
@@ -869,119 +1469,157 @@ def add_chaikin_ad(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def add_cmf(df: pd.DataFrame, n: int = 20) -> pd.DataFrame:
+def add_cmf(
+    df: pd.DataFrame,
+    periods: list[int] = None,
+    high_col: str = "high",
+    low_col: str = "low",
+    close_col: str = "close",
+    volume_col: str = "volume",
+) -> pd.DataFrame:
     """
-    Add Chaikin’s Money Flow (CMF) indicator to the DataFrame.
+    Add Chaikin Money Flow (CMF) indicators for multiple popular periods.
 
-    CMF measures the amount of Money Flow Volume over a specific period.
-    It oscillates between -1 and +1.
-
-    Formula
-    -------
-    CLV = ((Close - Low) - (High - Close)) / (High - Low)
-    MFV = CLV * Volume
-    CMF = (Sum of MFV over n periods) / (Sum of Volume over n periods)
+    Popular CMF periods:
+        10, 20 (default), 21, 34, 50
 
     Parameters
     ----------
     df : pd.DataFrame
-        DataFrame with 'high', 'low', 'close', and 'volume' columns.
-    n : int, default 20
-        Lookback period.
+        Input DataFrame with high, low, close, and volume columns.
+    periods : list[int], optional
+        List of lookback periods for CMF. Defaults to [10, 20, 21, 34, 50].
+    high_col : str
+    low_col : str
+    close_col : str
+    volume_col : str
 
     Returns
     -------
     pd.DataFrame
-        Original DataFrame with added 'cmf_{n}' column.
+        DataFrame with added columns: cmf_{n} for each period in periods.
     """
-    high = df["high"].astype("float64")
-    low = df["low"].astype("float64")
-    close = df["close"].astype("float64")
-    volume = df["volume"].astype("float64")
+    for col in [high_col, low_col, close_col, volume_col]:
+        validate_column(df, col)
+
+    df = df.copy()
+
+    if periods is None:
+        periods = [10, 20, 21, 34, 50]
+
+    high = pd.to_numeric(df[high_col], errors="coerce").astype("float64")
+    low = pd.to_numeric(df[low_col], errors="coerce").astype("float64")
+    close = pd.to_numeric(df[close_col], errors="coerce").astype("float64")
+    volume = pd.to_numeric(df[volume_col], errors="coerce").astype("float64")
 
     clv = ((close - low) - (high - close)) / np.where(high != low, (high - low), 1e-10)
     mfv = clv * volume
 
-    cmf = mfv.rolling(n).sum() / volume.rolling(n).sum()
-    df[f"cmf_{n}"] = cmf
+    for n in periods:
+        cmf = (
+            mfv.rolling(window=n, min_periods=1).sum()
+            / volume.rolling(window=n, min_periods=1).sum()
+        )
+        df[f"cmf_{n}"] = cmf
 
     return df
 
 
-def add_vroc(df: pd.DataFrame, n: int = 14) -> pd.DataFrame:
+def add_vroc(
+    df: pd.DataFrame,
+    periods: list[int] = None,
+    volume_col: str = "volume",
+) -> pd.DataFrame:
     """
-    Add Volume Rate of Change (VROC) indicator to the DataFrame.
+    Add Volume Rate of Change (VROC) indicators for multiple popular periods.
 
-    VROC measures the percentage change in volume compared to
-    the volume n periods ago.
-
-    Formula
-    -------
-    VROC = (Volume_t - Volume_{t-n}) / Volume_{t-n} * 100
+    Popular VROC periods:
+        5, 10, 14 (default), 20, 50
 
     Parameters
     ----------
     df : pd.DataFrame
-        DataFrame with 'volume' column.
-    n : int, default 14
-        Lookback period.
+        Input DataFrame with a volume column.
+    periods : list[int], optional
+        List of lookback periods for VROC. Defaults to [5, 10, 14, 20, 50].
+    volume_col : str, optional
+        Name of the volume column. Defaults to 'volume'.
 
     Returns
     -------
     pd.DataFrame
-        Original DataFrame with added 'vroc_{n}' column.
+        DataFrame with added columns: vroc_{n} for each period in periods.
     """
-    volume = df["volume"].astype("float64")
-    vroc = (volume - volume.shift(n)) / volume.shift(n) * 100
-    df[f"vroc_{n}"] = vroc
+    validate_column(df, volume_col)
+    df = df.copy()
+
+    if periods is None:
+        periods = [5, 10, 14, 20, 50]
+
+    volume = pd.to_numeric(df[volume_col], errors="coerce").astype("float64")
+
+    for n in periods:
+        df[f"vroc_{n}"] = (volume - volume.shift(n)) / volume.shift(n) * 100
+
     return df
 
 
-def add_eom(df: pd.DataFrame, n: int = 14) -> pd.DataFrame:
+def add_eom(
+    df: pd.DataFrame,
+    smooth_periods: list[int] = None,
+    high_col: str = "high",
+    low_col: str = "low",
+    volume_col: str = "volume",
+) -> pd.DataFrame:
     """
-    Add Ease of Movement (EoM) indicator to the DataFrame.
+    Add Ease of Movement (EoM) indicator with smoothed values for multiple popular periods.
 
-    EoM relates price change to volume, showing how much volume is
-    required to move prices. A smoothed version (SMA of EoM) is
-    often used.
-
-    Formula
-    -------
-    Midpoint Move = ((High + Low)/2) - ((High[-1] + Low[-1])/2)
-    Box Ratio     = (Volume / 1e6) / (High - Low)
-    EoM           = Midpoint Move / Box Ratio
-    EoM_smooth    = SMA(EoM, n)
+    Popular smoothing periods: 5, 10, 14 (default), 20, 50
 
     Parameters
     ----------
     df : pd.DataFrame
-        DataFrame with 'high', 'low', and 'volume' columns.
-    n : int, default 14
-        Smoothing period.
+        Input DataFrame with high, low, and volume columns.
+    smooth_periods : list[int], optional
+        List of SMA periods to smooth EoM. Defaults to [5, 10, 14, 20, 50].
+    high_col : str, optional
+    low_col : str, optional
+    volume_col : str, optional
 
     Returns
     -------
     pd.DataFrame
-        Original DataFrame with added:
-        - 'eom' (raw values)
-        - 'eom_{n}' (smoothed version)
+        DataFrame with columns:
+            - 'eom' (raw values)
+            - 'eom_{n}' for each period in smooth_periods
     """
-    high = df["high"].astype("float64")
-    low = df["low"].astype("float64")
-    volume = df["volume"].astype("float64")
+    for col in [high_col, low_col, volume_col]:
+        validate_column(df, col)
+
+    df = df.copy()
+
+    if smooth_periods is None:
+        smooth_periods = [5, 10, 14, 20, 50]
+
+    high = pd.to_numeric(df[high_col], errors="coerce").astype("float64")
+    low = pd.to_numeric(df[low_col], errors="coerce").astype("float64")
+    volume = pd.to_numeric(df[volume_col], errors="coerce").astype("float64")
 
     midpoint_move = ((high + low) / 2) - ((high.shift(1) + low.shift(1)) / 2)
     box_ratio = np.where((high - low) != 0, (volume / 1e6) / (high - low), 0)
-
     eom = np.where(box_ratio != 0, midpoint_move / box_ratio, 0)
 
     df["eom"] = eom
-    df[f"eom_{n}"] = pd.Series(eom).rolling(n).mean()
+
+    for n in smooth_periods:
+        df[f"eom_{n}"] = pd.Series(eom).rolling(window=n, min_periods=1).mean()
 
     return df
 
 
-def add_pvi_nvi(df: pd.DataFrame) -> pd.DataFrame:
+def add_pvi_nvi(
+    df: pd.DataFrame, close_col: str = "close", volume_col: str = "volume"
+) -> pd.DataFrame:
     """
     Add Positive Volume Index (PVI) and Negative Volume Index (NVI) to the DataFrame.
 
@@ -991,27 +1629,38 @@ def add_pvi_nvi(df: pd.DataFrame) -> pd.DataFrame:
     Formula
     -------
     If Volume[t] > Volume[t-1]:
-        PVI[t] = PVI[t-1] + ( (Close[t] - Close[t-1]) / Close[t-1] ) * PVI[t-1]
-        else PVI[t] = PVI[t-1]
+        PVI[t] = PVI[t-1] + ((Close[t] - Close[t-1]) / Close[t-1]) * PVI[t-1]
+    else:
+        PVI[t] = PVI[t-1]
 
     If Volume[t] < Volume[t-1]:
-        NVI[t] = NVI[t-1] + ( (Close[t] - Close[t-1]) / Close[t-1] ) * NVI[t-1]
-        else NVI[t] = NVI[t-1]
+        NVI[t] = NVI[t-1] + ((Close[t] - Close[t-1]) / Close[t-1]) * NVI[t-1]
+    else:
+        NVI[t] = NVI[t-1]
 
     Both series usually start from 1000.
 
     Parameters
     ----------
     df : pd.DataFrame
-        DataFrame with 'close' and 'volume' columns.
+        Input DataFrame that must contain the specified close and volume columns.
+    close_col : str, optional
+        Name of the close price column. Defaults to 'close'.
+    volume_col : str, optional
+        Name of the volume column. Defaults to 'volume'.
 
     Returns
     -------
     pd.DataFrame
-        Original DataFrame with added 'pvi' and 'nvi'.
+        Copy of the input DataFrame with added columns 'pvi' and 'nvi'.
     """
-    close = df["close"].astype("float64").values
-    volume = df["volume"].astype("float64").values
+    for col in [close_col, volume_col]:
+        validate_column(df, col)
+
+    df = df.copy()
+
+    close = pd.to_numeric(df[close_col], errors="coerce").astype("float64").values
+    volume = pd.to_numeric(df[volume_col], errors="coerce").astype("float64").values
 
     pvi = np.zeros(len(df))
     nvi = np.zeros(len(df))
@@ -1039,163 +1688,184 @@ def add_pvi_nvi(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def add_vw_macd(
-    df: pd.DataFrame, fast: int = 12, slow: int = 26, signal: int = 9
+    df: pd.DataFrame,
+    param_sets: list[tuple[int, int, int]] = None,
+    close_col: str = "close",
+    volume_col: str = "volume",
 ) -> pd.DataFrame:
     """
-    Add Volume-Weighted MACD (VW-MACD) and signal line to the DataFrame.
+    Add Volume-Weighted MACD (VW-MACD) and signal line for multiple popular parameter sets.
 
-    VW-MACD uses volume-weighted prices instead of closing prices.
-
-    Formula
-    -------
-    vp = close * volume
-    vw_price = cumulative(vp) / cumulative(volume)
-
-    MACD = EMA_fast(vw_price) - EMA_slow(vw_price)
-    Signal = EMA_signal(MACD)
-    Histogram = MACD - Signal
+    Popular parameter sets:
+        (12, 26, 9) -> standard
+        (5, 13, 6)  -> short-term
+        (8, 21, 5)  -> medium-term
 
     Parameters
     ----------
     df : pd.DataFrame
-        DataFrame with 'close' and 'volume' columns.
-    fast : int, default=12
-        Fast EMA period.
-    slow : int, default=26
-        Slow EMA period.
-    signal : int, default=9
-        Signal EMA period.
+        Input DataFrame with close and volume columns.
+    param_sets : list of tuples, optional
+        List of (fast, slow, signal) parameter sets. Defaults to [(12, 26, 9)].
+    close_col : str
+    volume_col : str
 
     Returns
     -------
     pd.DataFrame
-        Original DataFrame with 'vw_macd', 'vw_macd_signal', 'vw_macd_hist'.
+        DataFrame with VW-MACD columns for each parameter set:
+            - vw_macd_{fast}_{slow}
+            - vw_macd_signal_{signal}
+            - vw_macd_hist_{fast}_{slow}_{signal}
     """
-    # Convert to float64 to avoid Decimal vs float errors
-    close = df["close"].astype("float64")
-    volume = df["volume"].astype("float64")
+    for col in [close_col, volume_col]:
+        validate_column(df, col)
 
-    # Volume-weighted price (VWAP style cumulative)
+    df = df.copy()
+
+    if param_sets is None:
+        param_sets = [(12, 26, 9)]
+
+    close = pd.to_numeric(df[close_col], errors="coerce").astype("float64")
+    volume = pd.to_numeric(df[volume_col], errors="coerce").astype("float64")
+
+    # Volume-weighted price
     vp = close * volume
     vw_price = vp.cumsum() / volume.cumsum()
 
-    # MACD calculation
-    ema_fast = vw_price.ewm(span=fast, adjust=False).mean()
-    ema_slow = vw_price.ewm(span=slow, adjust=False).mean()
+    for fast, slow, signal in param_sets:
+        ema_fast = vw_price.ewm(span=fast, adjust=False).mean()
+        ema_slow = vw_price.ewm(span=slow, adjust=False).mean()
 
-    vw_macd = ema_fast - ema_slow
-    vw_signal = vw_macd.ewm(span=signal, adjust=False).mean()
-    vw_hist = vw_macd - vw_signal
+        vw_macd = ema_fast - ema_slow
+        vw_signal = vw_macd.ewm(span=signal, adjust=False).mean()
+        vw_hist = vw_macd - vw_signal
 
-    df["vw_macd"] = vw_macd
-    df["vw_macd_signal"] = vw_signal
-    df["vw_macd_hist"] = vw_hist
+        df[f"vw_macd_{fast}_{slow}"] = vw_macd
+        df[f"vw_macd_signal_{signal}"] = vw_signal
+        df[f"vw_macd_hist_{fast}_{slow}_{signal}"] = vw_hist
 
     return df
 
 
 def add_kvo(
-    df: pd.DataFrame, fast: int = 34, slow: int = 55, signal: int = 13
+    df: pd.DataFrame,
+    param_sets: list[tuple[int, int, int]] = None,
+    high_col: str = "high",
+    low_col: str = "low",
+    close_col: str = "close",
+    volume_col: str = "volume",
 ) -> pd.DataFrame:
     """
-    Add Klinger Volume Oscillator (KVO) and signal line to the DataFrame.
+    Add Klinger Volume Oscillator (KVO) and signal line for multiple popular parameter sets.
 
-    Formula
-    -------
-    - Trend = 1 if today's (high+low+close)/3 > yesterday's, else -1
-    - Volume Force (VF) = Trend * 2 * ((High - Low) / (High + Low)) * Volume
-    - KVO = EMA_fast(VF) - EMA_slow(VF)
-    - Signal = EMA_signal(KVO)
+    Popular parameter sets:
+        (34, 55, 13) -> standard
+        (13, 34, 5)  -> short-term
+        (21, 55, 13) -> medium-term
 
     Parameters
     ----------
     df : pd.DataFrame
-        DataFrame with 'high', 'low', 'close', 'volume'.
-    fast : int, default=34
-        Fast EMA period.
-    slow : int, default=55
-        Slow EMA period.
-    signal : int, default=13
-        Signal EMA period.
+        Input DataFrame with high, low, close, and volume columns.
+    param_sets : list of tuples, optional
+        List of (fast, slow, signal) parameter sets. Defaults to [(34, 55, 13)].
+    high_col : str
+    low_col : str
+    close_col : str
+    volume_col : str
 
     Returns
     -------
     pd.DataFrame
-        Original DataFrame with 'kvo' and 'kvo_signal'.
+        DataFrame with KVO columns for each parameter set:
+            - kvo_{fast}_{slow}
+            - kvo_signal_{signal}
     """
-    high = df["high"].astype("float64")
-    low = df["low"].astype("float64")
-    close = df["close"].astype("float64")
-    volume = df["volume"].astype("float64")
+    for col in [high_col, low_col, close_col, volume_col]:
+        validate_column(df, col)
 
-    # Typical price
+    df = df.copy()
+
+    if param_sets is None:
+        param_sets = [(34, 55, 13)]
+
+    high = pd.to_numeric(df[high_col], errors="coerce").astype("float64")
+    low = pd.to_numeric(df[low_col], errors="coerce").astype("float64")
+    close = pd.to_numeric(df[close_col], errors="coerce").astype("float64")
+    volume = pd.to_numeric(df[volume_col], errors="coerce").astype("float64")
+
     tp = (high + low + close) / 3
-    prev_tp = tp.shift(1)
-
-    # Trend direction
-    trend = np.where(tp > prev_tp, 1, -1)
-
-    # Volume Force (VF)
+    trend = np.where(tp > tp.shift(1), 1, -1)
     vf = trend * 2 * ((high - low) / (high + low + 1e-9)) * volume
 
-    # KVO calculation
-    ema_fast = pd.Series(vf).ewm(span=fast, adjust=False).mean()
-    ema_slow = pd.Series(vf).ewm(span=slow, adjust=False).mean()
-    kvo = ema_fast - ema_slow
+    for fast, slow, signal in param_sets:
+        ema_fast = pd.Series(vf).ewm(span=fast, adjust=False).mean()
+        ema_slow = pd.Series(vf).ewm(span=slow, adjust=False).mean()
+        kvo = ema_fast - ema_slow
+        kvo_signal = kvo.ewm(span=signal, adjust=False).mean()
 
-    # Signal line
-    kvo_signal = kvo.ewm(span=signal, adjust=False).mean()
-
-    df["kvo"] = kvo
-    df["kvo_signal"] = kvo_signal
+        df[f"kvo_{fast}_{slow}"] = kvo
+        df[f"kvo_signal_{signal}"] = kvo_signal
 
     return df
 
 
 def add_demand_oscillator(
-    df: pd.DataFrame, fast: int = 5, slow: int = 10
+    df: pd.DataFrame,
+    param_sets: list[tuple[int, int]] = None,
+    open_col: str = "open",
+    high_col: str = "high",
+    low_col: str = "low",
+    close_col: str = "close",
+    volume_col: str = "volume",
 ) -> pd.DataFrame:
     """
-    Add Aspray's Demand Oscillator (ADO) to the DataFrame.
+    Add Aspray's Demand Oscillator (ADO) to the DataFrame for multiple parameter sets.
 
-    Formula
-    -------
-    UpMove = High - min(Open, PrevClose)
-    DownMove = max(Open, PrevClose) - Low
-    Demand = ((UpMove - DownMove) / (UpMove + DownMove)) * Volume
-    ADO = EMA_fast(Demand) - EMA_slow(Demand)
+    Popular parameter sets:
+        (5, 10)  -> standard short-term
+        (3, 7)   -> very fast
+        (8, 14)  -> medium-term
 
     Parameters
     ----------
     df : pd.DataFrame
-        DataFrame with 'open', 'high', 'low', 'close', 'volume'.
-    fast : int, default=5
-        Fast EMA period.
-    slow : int, default=10
-        Slow EMA period.
+        Input DataFrame with open, high, low, close, and volume columns.
+    param_sets : list of tuples, optional
+        List of (fast, slow) EMA periods. Defaults to [(5, 10)].
+    open_col, high_col, low_col, close_col, volume_col : str
+        Column names for OHLCV data.
 
     Returns
     -------
     pd.DataFrame
-        Original DataFrame with 'demand_osc'.
+        Copy of DataFrame with added ADO columns for each parameter set:
+        - 'demand_osc_{fast}_{slow}'
     """
-    open_ = df["open"].astype("float64")
-    high = df["high"].astype("float64")
-    low = df["low"].astype("float64")
-    close = df["close"].astype("float64")
-    volume = df["volume"].astype("float64")
+    for col in [open_col, high_col, low_col, close_col, volume_col]:
+        validate_column(df, col)
+
+    df = df.copy()
+
+    if param_sets is None:
+        param_sets = [(5, 10)]
+
+    open_ = pd.to_numeric(df[open_col], errors="coerce").astype("float64")
+    high = pd.to_numeric(df[high_col], errors="coerce").astype("float64")
+    low = pd.to_numeric(df[low_col], errors="coerce").astype("float64")
+    close = pd.to_numeric(df[close_col], errors="coerce").astype("float64")
+    volume = pd.to_numeric(df[volume_col], errors="coerce").astype("float64")
 
     prev_close = close.shift(1)
-
     up_move = high - np.minimum(open_, prev_close)
     down_move = np.maximum(open_, prev_close) - low
-
     demand = ((up_move - down_move) / (up_move + down_move + 1e-9)) * volume
 
-    ema_fast = demand.ewm(span=fast, adjust=False).mean()
-    ema_slow = demand.ewm(span=slow, adjust=False).mean()
-
-    df["demand_osc"] = ema_fast - ema_slow
+    for fast, slow in param_sets:
+        ema_fast = demand.ewm(span=fast, adjust=False).mean()
+        ema_slow = demand.ewm(span=slow, adjust=False).mean()
+        df[f"demand_osc_{fast}_{slow}"] = ema_fast - ema_slow
 
     return df
 
@@ -1203,26 +1873,91 @@ def add_demand_oscillator(
 # endregion VOLUME INDICATORS
 
 
-def plot_with_indicators(df: pd.DataFrame, indicators: list):
+def add_one_for_all_ta(df: pd.DataFrame) -> pd.DataFrame:
+    new_df = df.copy()
+    new_df = add_sma(new_df)
+    new_df = add_ema(new_df)
+    new_df = add_lwma(new_df)
+    new_df = add_wma(new_df)
+    new_df = add_adx(new_df)
+    new_df = add_bollinger_bands(new_df)
+    new_df = add_keltner_channel(new_df)
+    new_df = add_keltner_channel(new_df)
+    new_df = add_starc_band(new_df)
+    new_df = add_atr(new_df)
+    new_df = add_divergence_index(new_df)
+    new_df = add_rsi(new_df)
+    new_df = add_roc(new_df)
+    new_df = add_macd(new_df)
+    new_df = add_stochastic(new_df)
+    new_df = add_williams_r(new_df)
+    new_df = add_ado(new_df)
+    new_df = add_rvi(new_df)
+    new_df = add_tsi(new_df)
+    new_df = add_vortex(new_df)
+    new_df = add_obv(new_df)
+    new_df = add_mfi(new_df)
+    new_df = add_adl(new_df)
+    new_df = add_chaikin_ad(new_df)
+    new_df = add_cmf(new_df)
+    new_df = add_vroc(new_df)
+    new_df = add_eom(new_df)
+    new_df = add_pvi_nvi(new_df)
+    new_df = add_vw_macd(new_df)
+    new_df = add_kvo(new_df)
+    new_df = add_demand_oscillator(new_df)
+
+    return new_df
+
+
+def plot_with_indicators(
+    df: pd.DataFrame,
+    indicators: list,
+    time_column_name: str = "date",
+    price_column_name: str = "close",
+):
     """
-    Plot price with optional indicators using up to 2 y-axes:
-      - Left y-axis for price-based indicators
-      - Right y-axis for oscillators or relative indicators
+    Plot price with optional indicators using regex patterns.
+    - Left y-axis: price + price-style indicators
+    - Right y-axis: oscillators / relative indicators
+    Prints a warning for any indicators that do not match DataFrame columns.
     """
+
     fig, ax1 = plt.subplots(figsize=(12, 6))
 
     # Main price axis
-    ax1.plot(df["date"], df["close"], label="Close", color="black", linewidth=2)
-    # ax1.plot(df["date"], df["volume"], label="Volume", color="brown", linewidth=2)
+    ax1.plot(
+        df[time_column_name],
+        df[price_column_name],
+        label=price_column_name,
+        color="black",
+        linewidth=2,
+    )
 
     # Second axis for oscillators
     ax2 = ax1.twinx()
 
-    for col in indicators:
-        if col not in df.columns:
-            continue
+    # Collect matched columns
+    matched_columns = set()
+    unmatched_patterns = []
 
-        ax2.plot(df["date"], df[col], label=col.upper(), linestyle="--")
+    for pattern in indicators:
+        regex = re.compile(pattern.replace("*", ".*"))  # simple wildcard -> regex
+        matched = [col for col in df.columns if regex.fullmatch(col)]
+        if matched:
+            matched_columns.update(matched)
+        else:
+            unmatched_patterns.append(pattern)
+
+    # Print warnings for unmatched indicators
+    if unmatched_patterns:
+        print(
+            f"Warning: The following indicators did not match any columns: {unmatched_patterns}"
+        )
+
+    # Plot matched columns
+    for col in sorted(matched_columns):
+        ax2.plot(df[time_column_name], df[col], label=col, linestyle="--")
 
     ax1.set_xlabel("Date")
     ax1.set_ylabel("Price / Price-based Indicators")
@@ -1261,27 +1996,27 @@ def main():
             Condition(
                 column=Table.VN_INDEX.Column.DATE.value,
                 operator=SqlOperator.GREATER_THAN_OR_EQUAL_TO,
-                value="2025-01-01",
+                value="2022-01-01",
                 data_type=DataType.DATE,
             ),
             Condition(
                 column=Table.VN_INDEX.Column.DATE.value,
                 operator=SqlOperator.LESS_THAN_OR_EQUAL_TO,
-                value="2025-06-30",
+                value="2024-12-31",
                 data_type=DataType.DATE,
             ),
         ],
         order_by=[Table.VN_INDEX.Column.DATE.value],
     )
 
-    df = add_demand_oscillator(df)
+    df = add_one_for_all_ta(df)
 
-    plot_with_indicators(
-        df,
-        indicators=[
-            "demand_osc",
-        ],
-    )
+    # plot_with_indicators(
+    #     df,
+    #     indicators=["demand_*"],
+    # )
+
+    print(len(df.columns))
 
 
 if __name__ == "__main__":

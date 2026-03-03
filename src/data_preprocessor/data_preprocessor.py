@@ -1177,11 +1177,14 @@ class DataPreprocessor:
                 self._database_driver.create_table(
                     schema_name=Schema.MACROECONOMICS.value,
                     table_name=Table.EXCHANGE_RATE.name,
-                    columns=[
-                        Column(name=Table.EXCHANGE_RATE.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.EXCHANGE_RATE.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.EXCHANGE_RATE.Column.DAY.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.EXCHANGE_RATE.Column.CENTRAL_RATE.value, data_type=DataType.FLOAT(), nullable=True),
+                    columns = [
+                        Column(name=Table.EXCHANGE_RATE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.EXCHANGE_RATE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
+                        Column(name=Table.EXCHANGE_RATE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.EXCHANGE_RATE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.EXCHANGE_RATE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.EXCHANGE_RATE.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.EXCHANGE_RATE.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
                     ],
                     primary_keys=Table.EXCHANGE_RATE.primary_key,
                 )
@@ -1501,11 +1504,11 @@ class DataPreprocessor:
                     columns = [
                         Column(name=Table.NYSE_COMPOSITE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
                         Column(name=Table.NYSE_COMPOSITE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
+                        Column(name=Table.NYSE_COMPOSITE.Column.ADJ_CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
                         Column(name=Table.NYSE_COMPOSITE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
                         Column(name=Table.NYSE_COMPOSITE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
                         Column(name=Table.NYSE_COMPOSITE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
                         Column(name=Table.NYSE_COMPOSITE.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.NYSE_COMPOSITE.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
                     ],
                     primary_keys=Table.NYSE_COMPOSITE.primary_key,
                 )
@@ -1519,11 +1522,11 @@ class DataPreprocessor:
                     columns = [
                         Column(name=Table.SNP_500.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
                         Column(name=Table.SNP_500.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
+                        Column(name=Table.SNP_500.Column.ADJ_CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
                         Column(name=Table.SNP_500.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
                         Column(name=Table.SNP_500.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
                         Column(name=Table.SNP_500.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
                         Column(name=Table.SNP_500.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.SNP_500.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
                     ],
                     primary_keys=Table.SNP_500.primary_key,
                 )
@@ -1537,11 +1540,11 @@ class DataPreprocessor:
                     columns = [
                         Column(name=Table.NASDAQ_COMPOSITE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
                         Column(name=Table.NASDAQ_COMPOSITE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
+                        Column(name=Table.NASDAQ_COMPOSITE.Column.ADJ_CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
                         Column(name=Table.NASDAQ_COMPOSITE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
                         Column(name=Table.NASDAQ_COMPOSITE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
                         Column(name=Table.NASDAQ_COMPOSITE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
                         Column(name=Table.NASDAQ_COMPOSITE.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.NASDAQ_COMPOSITE.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
                     ],
                     primary_keys=Table.NASDAQ_COMPOSITE.primary_key,
                 )
@@ -1555,11 +1558,11 @@ class DataPreprocessor:
                     columns = [
                         Column(name=Table.NASDAQ_100.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
                         Column(name=Table.NASDAQ_100.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
+                        Column(name=Table.NASDAQ_100.Column.ADJ_CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
                         Column(name=Table.NASDAQ_100.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
                         Column(name=Table.NASDAQ_100.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
                         Column(name=Table.NASDAQ_100.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
                         Column(name=Table.NASDAQ_100.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.NASDAQ_100.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
                     ],
                     primary_keys=Table.NASDAQ_100.primary_key,
                 )
@@ -2309,18 +2312,21 @@ class DataPreprocessor:
                 )
                 # fmt: on
 
-                # EXCHANGE_RATE
+                # G_EXCHANGE_RATE
                 # fmt: off
                 self._database_driver.create_table(
                     schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.EXCHANGE_RATE.name,
-                    columns=[
-                        Column(name=Table.EXCHANGE_RATE.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.EXCHANGE_RATE.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.EXCHANGE_RATE.Column.DAY.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.EXCHANGE_RATE.Column.CENTRAL_RATE.value, data_type=DataType.FLOAT(), nullable=True),
+                    table_name=Table.G_EXCHANGE_RATE.name,
+                    columns = [
+                        Column(name=Table.G_EXCHANGE_RATE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.G_EXCHANGE_RATE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
+                        Column(name=Table.G_EXCHANGE_RATE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_EXCHANGE_RATE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_EXCHANGE_RATE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_EXCHANGE_RATE.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_EXCHANGE_RATE.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
                     ],
-                    primary_keys=Table.EXCHANGE_RATE.primary_key,
+                    primary_keys=Table.G_EXCHANGE_RATE.primary_key,
                 )
                 # fmt: on
 
@@ -2591,7 +2597,7 @@ class DataPreprocessor:
                     primary_keys=Table.GOLD_PRICE.primary_key,
                 )
                 # fmt: on
-
+                
                 # OIL_PRICE
                 # fmt: off
                 self._database_driver.create_table(
@@ -2627,7 +2633,7 @@ class DataPreprocessor:
                     primary_keys=Table.DOW_JONES.primary_key,
                 )
                 # fmt: on
-
+                
                 # NYSE_COMPOSITE
                 # fmt: off
                 self._database_driver.create_table(
@@ -2635,12 +2641,12 @@ class DataPreprocessor:
                     table_name=Table.NYSE_COMPOSITE.name,
                     columns = [
                         Column(name=Table.NYSE_COMPOSITE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.NYSE_COMPOSITE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
+                        Column(name=Table.NYSE_COMPOSITE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.NYSE_COMPOSITE.Column.ADJ_CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
                         Column(name=Table.NYSE_COMPOSITE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
                         Column(name=Table.NYSE_COMPOSITE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
                         Column(name=Table.NYSE_COMPOSITE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
                         Column(name=Table.NYSE_COMPOSITE.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.NYSE_COMPOSITE.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
                     ],
                     primary_keys=Table.NYSE_COMPOSITE.primary_key,
                 )
@@ -2654,11 +2660,11 @@ class DataPreprocessor:
                     columns = [
                         Column(name=Table.SNP_500.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
                         Column(name=Table.SNP_500.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
+                        Column(name=Table.SNP_500.Column.ADJ_CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
                         Column(name=Table.SNP_500.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
                         Column(name=Table.SNP_500.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
                         Column(name=Table.SNP_500.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
                         Column(name=Table.SNP_500.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.SNP_500.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
                     ],
                     primary_keys=Table.SNP_500.primary_key,
                 )
@@ -2672,11 +2678,11 @@ class DataPreprocessor:
                     columns = [
                         Column(name=Table.NASDAQ_COMPOSITE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
                         Column(name=Table.NASDAQ_COMPOSITE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
+                        Column(name=Table.NASDAQ_COMPOSITE.Column.ADJ_CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
                         Column(name=Table.NASDAQ_COMPOSITE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
                         Column(name=Table.NASDAQ_COMPOSITE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
                         Column(name=Table.NASDAQ_COMPOSITE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
                         Column(name=Table.NASDAQ_COMPOSITE.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.NASDAQ_COMPOSITE.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
                     ],
                     primary_keys=Table.NASDAQ_COMPOSITE.primary_key,
                 )
@@ -2690,11 +2696,11 @@ class DataPreprocessor:
                     columns = [
                         Column(name=Table.NASDAQ_100.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
                         Column(name=Table.NASDAQ_100.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
+                        Column(name=Table.NASDAQ_100.Column.ADJ_CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
                         Column(name=Table.NASDAQ_100.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
                         Column(name=Table.NASDAQ_100.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
                         Column(name=Table.NASDAQ_100.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
                         Column(name=Table.NASDAQ_100.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.NASDAQ_100.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
                     ],
                     primary_keys=Table.NASDAQ_100.primary_key,
                 )
@@ -2714,7 +2720,7 @@ class DataPreprocessor:
                 )
                 # fmt: on
 
-                # CPI
+                # G_CPI
                 # fmt: off
                 self._database_driver.create_table(
                     schema_name=Schema.MACROECONOMICS.value,
@@ -2738,6 +2744,462 @@ class DataPreprocessor:
                         Column(name=Table.G_CPI.Column.TRAFFIC.value, data_type=DataType.FLOAT(), nullable=True),
                     ],
                     primary_keys=Table.G_CPI.primary_key,
+                )
+                # fmt: on
+
+                # G_PPI
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.G_PPI.name,
+                    columns = [
+                        Column(name=Table.G_PPI.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.G_PPI.Column.GENERAL_INDEX.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_PPI.Column.FORESTRY_SERVICES.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_PPI.Column.AGRICULTURAL_SERVICES.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_PPI.Column.FORESTRY_AND_RELATED_SERVICES.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_PPI.Column.EXPLOITED_FOREST_PRODUCTS.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_PPI.Column.COLLECTED_FOREST_PRODUCTS.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_PPI.Column.AGRICULTURE_AND_RELATED_SERVICES.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_PPI.Column.LIVESTOCK_PRODUCTS.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_PPI.Column.ANNUAL_CROP_PRODUCTS.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_PPI.Column.PERENNIAL_CROP_PRODUCTS.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_PPI.Column.EXPLOITED_AQUATIC_PRODUCTS.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_PPI.Column.AQUATIC_PRODUCTS_EXPLOITATION_AND_FARMING.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_PPI.Column.AQUATIC_FARMING_PRODUCTS.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_PPI.Column.FOREST_PLANTING_AND_CARE.value, data_type=DataType.DECIMAL(), nullable=True),
+                    ],
+                    primary_keys=Table.G_PPI.primary_key,
+                )
+                # fmt: on
+
+                # G_XPI
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.G_XPI.name,
+                    columns=[
+                        Column(name=Table.G_XPI.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.G_XPI.Column.ANIMAL_FEED_AND_RAW_MATERIALS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_XPI.Column.AQUATIC_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_XPI.Column.CAMERAS_CAMCORDERS_AND_COMPONENTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_XPI.Column.CASHEW_NUTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_XPI.Column.CASSAVA_AND_CASSAVA_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_XPI.Column.CHEMICAL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_XPI.Column.CHEMICALS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_XPI.Column.CLINKER_AND_CEMENT.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_XPI.Column.COFFEE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_XPI.Column.CONFECTIONERY_AND_CEREAL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_XPI.Column.CRUDE_OIL.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_XPI.Column.DOMESTIC_ECONOMIC_SECTOR.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_XPI.Column.ELECTRICAL_WIRES_AND_CABLES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_XPI.Column.ELECTRONICS_COMPUTERS_AND_COMPONENTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_XPI.Column.FOOTWEAR.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_XPI.Column.FOREIGN_INVESTED_SECTOR.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_XPI.Column.FOREIGN_CRUDE_OIL.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_XPI.Column.FURNITURE_PRODUCTS_FROM_MATERIALS_OTHER_THAN_WOOD.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_XPI.Column.GLASS_AND_GLASS_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_XPI.Column.HANDBAGS_WALLETS_SUITCASES_HATS_UMBRELLAS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_XPI.Column.IRON_AND_STEEL.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_XPI.Column.IRON_AND_STEEL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_XPI.Column.MACHINERY_EQUIPMENT_TOOLS_SPARE_PARTS_OTHER.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_XPI.Column.MAIN_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_XPI.Column.OTHER_BASE_METALS_AND_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_XPI.Column.OTHER_GOODS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_XPI.Column.PAPER_AND_PAPER_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_XPI.Column.PEPPER.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_XPI.Column.PETROLEUM.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_XPI.Column.PHONES_AND_COMPONENTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_XPI.Column.PLASTIC_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_XPI.Column.RAW_PLASTICS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_XPI.Column.RICE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_XPI.Column.RUBBER.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_XPI.Column.RUBBER_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_XPI.Column.TEA.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_XPI.Column.TEXTILE_FIBERS_YARNS_OF_ALL_KINDS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_XPI.Column.TEXTILE_GARMENT_LEATHER_FOOTWEAR_RAW_MATERIALS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_XPI.Column.TEXTILES_GARMENTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_XPI.Column.TOTAL_VALUE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_XPI.Column.TOYS_SPORTS_EQUIPMENT_AND_PARTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_XPI.Column.TRANSPORTATION_VEHICLES_AND_SPARE_PARTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_XPI.Column.VEGETABLES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_XPI.Column.WOOD_AND_WOOD_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                    ],
+                    primary_keys=Table.G_XPI.primary_key,
+                )
+                # fmt: on
+
+                # G_POPULATION
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.G_POPULATION.name,
+                    columns=[
+                        Column(name=Table.G_POPULATION.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.G_POPULATION.Column.POPULATION.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_POPULATION.Column.POPULATION_AREA_URBAN_RATE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_POPULATION.Column.POPULATION_DENSITY.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_POPULATION.Column.POPULATION_GROWTH_RATE.value, data_type=DataType.FLOAT(), nullable=True),
+                    ],
+                    primary_keys=Table.G_POPULATION.primary_key,
+                )
+                # fmt: on
+
+                # G_LABOR
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.G_LABOR.name,
+                    columns=[
+                        Column(name=Table.G_LABOR.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.G_LABOR.Column.AGRICULTURE_FORESTRY_AND_FISHERY.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_LABOR.Column.EMPLOYED_AMOUNT.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_LABOR.Column.FEMALE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_LABOR.Column.INDUSTRY_CONSTRUCTION.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_LABOR.Column.LABOR_FORCE_ANNUAL_CHANGE_PERCENT.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_LABOR.Column.LABOR_FORCE_PARTICIPATION_RATE_PERCENT.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_LABOR.Column.MALE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_LABOR.Column.SERVICES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_LABOR.Column.UNEMPLOYED.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_LABOR.Column.URBAN_UNEMPLOYMENT_RATE.value, data_type=DataType.FLOAT(), nullable=True),
+                    ],
+                    primary_keys=Table.G_LABOR.primary_key,
+                )
+                # fmt: on
+
+                # G_IPV
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.G_IPV.name,
+                    columns=[
+                        Column(name=Table.G_IPV.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.G_IPV.Column.ALUMINIUM.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.ANIMAL_FEED.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.AQUATIC_FEED.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.BEER.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.CARS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.CASUAL_CLOTHES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.CEMENT.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.CHEMICAL_PAINTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.CIGARETTES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.COAL_CLEAN_COAL.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.COMMERCIAL_TAP_WATER.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.ELECTRICITY_PRODUCED.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.EXTRACTED_CRUDE_OIL.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.FRESH_MILK.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.GASOLINE_OIL.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.GRANULATED_SUGAR.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.IRON_CRUDE_STEEL.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.LEATHER_SHOES_AND_SANDALS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.LIQUIDIZED_GAS_LPG.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.MOBILE_PHONES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.MONONATRI_GLUTAMAT.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.MOTORCYCLES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.NPK_MIXED_FERTILIZERS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.NATURAL_FABRICS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.NATURAL_GAS_AIR.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.PHONE_ACCESSORIES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.POWDERED_MILK.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.PROCESSED_SEAFOOD.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.ROLLED_STEEL.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.STEEL_BARS_ANGLE_STEEL.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.SYNTHETIC_FABRICS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.TELEVISION.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_IPV.Column.UREA_FERTILIZER.value, data_type=DataType.FLOAT(), nullable=True),
+                    ],
+                    primary_keys=Table.G_IPV.primary_key,
+                )
+                # fmt: on
+
+                # G_MIP
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.G_MIP.name,
+                    columns=[
+                        Column(name=Table.G_MIP.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.G_MIP.Column.AIR_CONDITIONERS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.ANIMAL_AND_POULTRY_FEED.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.ANTIMONY_ORE_AND_ANTIMONY_CONCENTRATE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.APATITE_ORE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.AQUACULTURE_FEED.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.ASSEMBLED_CARS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.ASSEMBLED_MOTORCYCLES_AND_MOPEDS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.ASSEMBLED_TVS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.BATH_MILK_AND_FACIAL_CLEANSER.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.BEER.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.CANNED_FRUITS_AND_NUTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.CANNED_MEAT.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.CANNED_SEAFOOD.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.CANNED_VEGETABLES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.CAR_AND_TRACTOR_TIRES_INFLATABLE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.CAST_OR_OTHER_ROUGH_IRON_AND_STEEL.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.CASUAL_CLOTHING.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.CEMENT.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.CHEMICAL_FERTILIZERS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.CLEAN_COAL.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.COMMERCIAL_TAP_WATER.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.COPPER_ORE_AND_COPPER_CONCENTRATE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.CRUDE_OIL_EXTRACTION.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.DIGITAL_CAMERAS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.DOMESTIC_CERAMICS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.DOMESTIC_CRUDE_OIL_EXTRACTION.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.EXTRACTED_STONE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.FABRIC.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.FABRIC_SHOES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.FIBER.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.FIBER_CEMENT_ROOFING_SHEETS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.FIRED_BRICKS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.FIRED_TILES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.FISH_SAUCE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.FRESH_MILK.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.FROZEN_SEAFOOD.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.GENERATED_ELECTRICITY.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.GRANULATED_SUGAR.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.GRAVEL_AND_PEBBLES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.GROUND_COFFEE_AND_INSTANT_COFFEE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.HERBICIDES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.HOUSEHOLD_ELECTRIC_FANS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.HOUSEHOLD_REFRIGERATORS_AND_FREEZERS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.HOUSEHOLD_WASHING_MACHINES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.IRON_ORE_AND_IRON_CONCENTRATE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.LANDLINE_PHONES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.LAUNDRY_DETERGENT_AND_CLEANING_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.LEATHER_SHOES_AND_BOOTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.LIGHT_BULBS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.MILLED_RICE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.MINERAL_WATER.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.MOBILE_PHONES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.MOTORCYCLE_AND_BICYCLE_TIRES_INFLATABLE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.MSG_MONOSODIUM_GLUTAMATE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.NATURAL_GAS_IN_GAS_FORM.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.NPK_FERTILIZERS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.PAPER_AND_CARDBOARD.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.PESTICIDES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.PLASTIC_PACKAGING_AND_BAGS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.POWDERED_MILK.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.PRINTED_NEWSPAPERS_AND_OTHER_PRINTING_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.PRINTERS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.PROCESSED_TEA.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.PURIFIED_WATER.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.REFINED_VEGETABLE_OIL.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.ROLLED_STEEL_AND_SHAPED_STEEL.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.SANITARY_WARE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.SAWN_TIMBER.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.SEA_SALT.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.SHAMPOO_AND_CONDITIONER.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.SPIRITS_AND_WHITE_WINE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.SPORTS_SHOES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.STANDARD_BATTERIES_1_5V.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.THRESHING_MACHINES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.TITANIUM_ORE_AND_TITANIUM_CONCENTRATE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.TOBACCO.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.TOOTHPASTE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.TUBES_FOR_BICYCLES_AND_MOTORCYCLES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.TUBES_FOR_CARS_AND_AIRCRAFT.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.VARIOUS_TYPES_OF_BATTERIES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.VARIOUS_TYPES_OF_BICYCLES.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.VARIOUS_TYPES_OF_SAND.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_MIP.Column.YELLOW_PHOSPHORUS.value, data_type=DataType.FLOAT(), nullable=True),
+                    ],
+                    primary_keys=Table.G_MIP.primary_key,
+                )
+                # fmt: on
+
+                # G_FA_BY_HOUSE_TYPES
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.G_FA_BY_HOUSE_TYPES.name,
+                    columns=[
+                        Column(name=Table.G_FA_BY_HOUSE_TYPES.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.G_FA_BY_HOUSE_TYPES.Column._16_20_FLOORS.value, data_type=DataType.INT(), nullable=True),
+                        Column(name=Table.G_FA_BY_HOUSE_TYPES.Column._21_25_FLOORS.value, data_type=DataType.INT(), nullable=True),
+                        Column(name=Table.G_FA_BY_HOUSE_TYPES.Column._26_FLOORS_AND_ABOVE.value, data_type=DataType.INT(), nullable=True),
+                        Column(name=Table.G_FA_BY_HOUSE_TYPES.Column._5_FLOORS_AND_BELOW.value, data_type=DataType.INT(), nullable=True),
+                        Column(name=Table.G_FA_BY_HOUSE_TYPES.Column._6_8_FLOORS.value, data_type=DataType.INT(), nullable=True),
+                        Column(name=Table.G_FA_BY_HOUSE_TYPES.Column._9_15_FLOORS.value, data_type=DataType.INT(), nullable=True),
+                        Column(name=Table.G_FA_BY_HOUSE_TYPES.Column.APARTMENT_BUILDINGS.value, data_type=DataType.INT(), nullable=True),
+                        Column(name=Table.G_FA_BY_HOUSE_TYPES.Column.SINGLE_FAMILY_HOMES.value, data_type=DataType.INT(), nullable=True),
+                        Column(name=Table.G_FA_BY_HOUSE_TYPES.Column.SINGLE_FAMILY_HOMES_4_FLOORS_AND_ABOVE.value, data_type=DataType.INT(), nullable=True),
+                        Column(name=Table.G_FA_BY_HOUSE_TYPES.Column.SINGLE_FAMILY_HOMES_BELOW_4_FLOORS.value, data_type=DataType.INT(), nullable=True),
+                        Column(name=Table.G_FA_BY_HOUSE_TYPES.Column.TOTAL.value, data_type=DataType.INT(), nullable=True),
+                        Column(name=Table.G_FA_BY_HOUSE_TYPES.Column.VILLAS.value, data_type=DataType.INT(), nullable=True),
+                    ],
+                    primary_keys=Table.G_FA_BY_HOUSE_TYPES.primary_key,
+                )
+                # fmt: on
+
+                # G_TREG
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.G_TREG.name,
+                    columns=[
+                        Column(name=Table.G_TREG.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.G_TREG.Column.INTERNATIONAL_LIQUIDITY_TOTAL_RESERVES_EXCLUDING_GOLD_FOREIGN_EXCHANGE_US_DOLLARS.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_TREG.Column.INTERNATIONAL_LIQUIDITY_TOTAL_RESERVES_EXCLUDING_GOLD_US_DOLLARS.value, data_type=DataType.FLOAT(), nullable=True),
+                    ],
+                    primary_keys=Table.G_TREG.primary_key,
+                )
+                # fmt: on
+
+                # G_EXCHANGE_RATE
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.EXCHANGE_RATE.name,
+                    columns = [
+                        Column(name=Table.EXCHANGE_RATE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.EXCHANGE_RATE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
+                        Column(name=Table.EXCHANGE_RATE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.EXCHANGE_RATE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.EXCHANGE_RATE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.EXCHANGE_RATE.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.EXCHANGE_RATE.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
+                    ],
+                    primary_keys=Table.EXCHANGE_RATE.primary_key,
+                )
+                # fmt: on
+
+                # G_RRRR
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.G_RRRR.name,
+                    columns=[
+                        Column(name=Table.G_RRRR.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.G_RRRR.Column.DISCOUNT_RATE.value, data_type=DataType.FLOAT(), nullable=True),
+                        Column(name=Table.G_RRRR.Column.REFINANCING_RATE.value, data_type=DataType.FLOAT(), nullable=True),
+                    ],
+                    primary_keys=[Table.G_RRRR.Column.DATE.value],
+                )
+                # fmt: on
+
+                # G_GOLD_PRICE
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.G_GOLD_PRICE.name,
+                    columns = [
+                        Column(name=Table.G_GOLD_PRICE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.G_GOLD_PRICE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_GOLD_PRICE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_GOLD_PRICE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_GOLD_PRICE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_GOLD_PRICE.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_GOLD_PRICE.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
+                    ],
+                    primary_keys=Table.G_GOLD_PRICE.primary_key,
+                )
+                # fmt: on
+
+                # G_OIL_PRICE
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.G_OIL_PRICE.name,
+                    columns = [
+                        Column(name=Table.G_OIL_PRICE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.G_OIL_PRICE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_OIL_PRICE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_OIL_PRICE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_OIL_PRICE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_OIL_PRICE.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_OIL_PRICE.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
+                    ],
+                    primary_keys=Table.G_OIL_PRICE.primary_key,
+                )
+                # fmt: on
+
+                # G_DOW_JONES
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.G_DOW_JONES.name,
+                    columns = [
+                        Column(name=Table.G_DOW_JONES.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.G_DOW_JONES.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_DOW_JONES.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_DOW_JONES.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_DOW_JONES.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_DOW_JONES.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_DOW_JONES.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
+                    ],
+                    primary_keys=Table.G_DOW_JONES.primary_key,
+                )
+                # fmt: on
+
+                # G_NYSE_COMPOSITE
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.G_NYSE_COMPOSITE.name,
+                    columns = [
+                        Column(name=Table.G_NYSE_COMPOSITE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.G_NYSE_COMPOSITE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_NYSE_COMPOSITE.Column.ADJ_CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_NYSE_COMPOSITE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_NYSE_COMPOSITE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_NYSE_COMPOSITE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_NYSE_COMPOSITE.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
+                    ],
+                    primary_keys=Table.G_NYSE_COMPOSITE.primary_key,
+                )
+                # fmt: on
+
+                # G_SNP_500
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.G_SNP_500.name,
+                    columns = [
+                        Column(name=Table.G_SNP_500.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.G_SNP_500.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_SNP_500.Column.ADJ_CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_SNP_500.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_SNP_500.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_SNP_500.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_SNP_500.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
+                    ],
+                    primary_keys=Table.G_SNP_500.primary_key,
+                )
+                # fmt: on
+                
+                # G_NASDAQ_COMPOSITE
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.G_NASDAQ_COMPOSITE.name,
+                    columns = [
+                        Column(name=Table.G_NASDAQ_COMPOSITE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.G_NASDAQ_COMPOSITE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_NASDAQ_COMPOSITE.Column.ADJ_CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_NASDAQ_COMPOSITE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_NASDAQ_COMPOSITE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_NASDAQ_COMPOSITE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_NASDAQ_COMPOSITE.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
+                    ],
+                    primary_keys=Table.G_NASDAQ_COMPOSITE.primary_key,
+                )
+                # fmt: on
+                
+                # G_NASDAQ_100
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.MACROECONOMICS.value,
+                    table_name=Table.G_NASDAQ_100.name,
+                    columns = [
+                        Column(name=Table.G_NASDAQ_100.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.G_NASDAQ_100.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_NASDAQ_100.Column.ADJ_CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_NASDAQ_100.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_NASDAQ_100.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_NASDAQ_100.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_NASDAQ_100.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
+                    ],
+                    primary_keys=Table.G_NASDAQ_100.primary_key,
                 )
                 # fmt: on
 
@@ -2773,20 +3235,46 @@ class DataPreprocessor:
                 )
                 # fmt: on
                 
-                # VN_INDEX
+                # B_VN_INDEX_PRICE
                 # fmt: off
                 self._database_driver.create_table(
                     schema_name=Schema.STOCK_MARKET.value,
-                    table_name=Table.VN_INDEX.name,
-                    columns = [
-                        Column(name=Table.VN_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.VN_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_INDEX.Column.VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                    table_name=Table.B_VN_INDEX_PRICE.name,
+                    columns=[
+                        Column(name=Table.B_VN_INDEX_PRICE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.B_VN_INDEX_PRICE.Column.ADJUST.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.B_VN_INDEX_PRICE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.B_VN_INDEX_PRICE.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.B_VN_INDEX_PRICE.Column.PERCENT_CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.B_VN_INDEX_PRICE.Column.MATCHING_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(name=Table.B_VN_INDEX_PRICE.Column.MATCHING_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.B_VN_INDEX_PRICE.Column.NEGOTIATE_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(name=Table.B_VN_INDEX_PRICE.Column.NEGOTIATE_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.B_VN_INDEX_PRICE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.B_VN_INDEX_PRICE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.B_VN_INDEX_PRICE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
                     ],
-                    primary_keys=Table.VN_INDEX.primary_key,
+                    primary_keys=Table.B_VN_INDEX_PRICE.primary_key,
+                )
+                # fmt: on
+
+                # B_VN_INDEX_ORDER
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.STOCK_MARKET.value,
+                    table_name=Table.B_VN_INDEX_ORDER.name,
+                    columns=[
+                        Column(name=Table.B_VN_INDEX_ORDER.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.B_VN_INDEX_ORDER.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.B_VN_INDEX_ORDER.Column.NUMBER_OF_BUY_ORDERS.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(name=Table.B_VN_INDEX_ORDER.Column.BUY_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(name=Table.B_VN_INDEX_ORDER.Column.AVERAGE_VOLUME_PER_BUY_ORDER.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.B_VN_INDEX_ORDER.Column.NUMBER_OF_SELL_ORDERS.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(name=Table.B_VN_INDEX_ORDER.Column.SELL_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(name=Table.B_VN_INDEX_ORDER.Column.AVERAGE_VOLUME_PER_SELL_ORDER.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.B_VN_INDEX_ORDER.Column.NET_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                    ],
+                    primary_keys=Table.B_VN_INDEX_ORDER.primary_key,
                 )
                 # fmt: on
                 
@@ -3045,7 +3533,149 @@ class DataPreprocessor:
                 # fmt: on
 
             case DataQuality.GOLD:
-                pass
+                # MARKET
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.STOCK_MARKET.value,
+                    table_name=Table.MARKET.name,
+                    columns = [
+                        Column(name=Table.MARKET.Column.ID.value, data_type=DataType.SERIAL(), nullable=False),
+                        Column(name=Table.MARKET.Column.CODE.value, data_type=DataType.VARCHAR(), nullable=True),
+                        Column(name=Table.MARKET.Column.NAME.value, data_type=DataType.VARCHAR(), nullable=True),
+                        Column(name=Table.MARKET.Column.SAVE_PROGRESS_YEAR.value, data_type=DataType.INT(), nullable=True),
+                        Column(name=Table.MARKET.Column.CREATE_DATE.value, data_type=DataType.AUTO_TIMESTAMP(), nullable=True),
+                        Column(name=Table.MARKET.Column.UPDATE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
+                        Column(name=Table.MARKET.Column.DELETE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
+                    ],
+                    primary_keys=Table.MARKET.primary_key,
+                )
+                # fmt: on
+
+                # VN_INDEX
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.STOCK_MARKET.value,
+                    table_name=Table.VN_INDEX.name,
+                    columns = [
+                        Column(name=Table.VN_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.VN_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.VN_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.VN_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.VN_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.VN_INDEX.Column.VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                    ],
+                    primary_keys=Table.VN_INDEX.primary_key,
+                )
+                # fmt: on
+                
+                # HNX_INDEX
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.STOCK_MARKET.value,
+                    table_name=Table.HNX_INDEX.name,
+                    columns = [
+                        Column(name=Table.HNX_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.HNX_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.HNX_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.HNX_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.HNX_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.HNX_INDEX.Column.VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                    ],
+                    primary_keys=Table.HNX_INDEX.primary_key,
+                )
+                # fmt: on
+                
+                # VN_30_INDEX
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.STOCK_MARKET.value,
+                    table_name=Table.VN_30_INDEX.name,
+                    columns = [
+                        Column(name=Table.VN_30_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.VN_30_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.VN_30_INDEX.Column.ADJUSTED_CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.VN_30_INDEX.Column.MATCHED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(name=Table.VN_30_INDEX.Column.MATCHED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.VN_30_INDEX.Column.NEGOTIATED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(name=Table.VN_30_INDEX.Column.NEGOTIATED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.VN_30_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.VN_30_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.VN_30_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.VN_30_INDEX.Column.CHANGE_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.VN_30_INDEX.Column.CHANGE_PERCENTAGE.value, data_type=DataType.DECIMAL(), nullable=True),
+                    ],
+                    primary_keys=Table.VN_30_INDEX.primary_key,
+                )
+                # fmt: on
+                
+                # VN_100_INDEX
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.STOCK_MARKET.value,
+                    table_name=Table.VN_100_INDEX.name,
+                    columns = [
+                        Column(name=Table.VN_100_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.VN_100_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.VN_100_INDEX.Column.ADJUSTED_CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.VN_100_INDEX.Column.MATCHED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(name=Table.VN_100_INDEX.Column.MATCHED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.VN_100_INDEX.Column.NEGOTIATED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(name=Table.VN_100_INDEX.Column.NEGOTIATED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.VN_100_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.VN_100_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.VN_100_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.VN_100_INDEX.Column.CHANGE_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.VN_100_INDEX.Column.CHANGE_PERCENTAGE.value, data_type=DataType.DECIMAL(), nullable=True),
+                    ],
+                    primary_keys=Table.VN_100_INDEX.primary_key,
+                )
+                # fmt: on
+                
+                # HNX_30_INDEX
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.STOCK_MARKET.value,
+                    table_name=Table.HNX_30_INDEX.name,
+                    columns = [
+                        Column(name=Table.HNX_30_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.HNX_30_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.HNX_30_INDEX.Column.ADJUSTED_CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.HNX_30_INDEX.Column.MATCHED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(name=Table.HNX_30_INDEX.Column.MATCHED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.HNX_30_INDEX.Column.NEGOTIATED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(name=Table.HNX_30_INDEX.Column.NEGOTIATED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.HNX_30_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.HNX_30_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.HNX_30_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.HNX_30_INDEX.Column.CHANGE_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.HNX_30_INDEX.Column.CHANGE_PERCENTAGE.value, data_type=DataType.DECIMAL(), nullable=True),
+                    ],
+                    primary_keys=Table.HNX_30_INDEX.primary_key,
+                )
+                # fmt: on
+                
+                # UPCOM_INDEX
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.STOCK_MARKET.value,
+                    table_name=Table.UPCOM_INDEX.name,
+                    columns = [
+                        Column(name=Table.UPCOM_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.UPCOM_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.UPCOM_INDEX.Column.ADJUSTED_CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.UPCOM_INDEX.Column.MATCHED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(name=Table.UPCOM_INDEX.Column.MATCHED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.UPCOM_INDEX.Column.NEGOTIATED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(name=Table.UPCOM_INDEX.Column.NEGOTIATED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.UPCOM_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.UPCOM_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.UPCOM_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.UPCOM_INDEX.Column.CHANGE_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.UPCOM_INDEX.Column.CHANGE_PERCENTAGE.value, data_type=DataType.DECIMAL(), nullable=True),
+                    ],
+                    primary_keys=Table.UPCOM_INDEX.primary_key,
+                )
+                # fmt: on
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -3112,10 +3742,82 @@ class DataPreprocessor:
                 # fmt: on
 
             case DataQuality.SILVER:
-                pass
+                # STOCK
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.ENTERPRISE.value,
+                    table_name=Table.STOCK.name,
+                    columns = [
+                        Column(name=Table.STOCK.Column.ID.value, data_type=DataType.SERIAL(), nullable=False),
+                        Column(name=Table.STOCK.Column.CODE.value, data_type=DataType.VARCHAR(), nullable=False),
+                        Column(name=Table.STOCK.Column.LISTED_SHARES.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(name=Table.STOCK.Column.OUTSTANDING_SHARES.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(name=Table.STOCK.Column.OUTSTANDING_RATE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.STOCK.Column.MARKET_CAP.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(name=Table.STOCK.Column.MARKET_ID.value, data_type=DataType.INT(), nullable=False),
+                        Column(name=Table.STOCK.Column.CREATE_DATE.value, data_type=DataType.AUTO_TIMESTAMP(), nullable=False),
+                        Column(name=Table.STOCK.Column.UPDATE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
+                        Column(name=Table.STOCK.Column.DELETE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
+                    ],
+                    primary_keys=Table.STOCK.primary_key,
+                    foreign_keys=[ForeignKey(
+                        column_name=Table.STOCK.Column.MARKET_ID.value, 
+                        ref_table=f"{Schema.STOCK_MARKET.value}.{Table.MARKET.name}", 
+                        ref_column=Table.MARKET.Column.ID.value,
+                    )],
+                )
+                # fmt: on
 
             case DataQuality.GOLD:
-                pass
+                # STOCK
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.ENTERPRISE.value,
+                    table_name=Table.STOCK.name,
+                    columns = [
+                        Column(name=Table.STOCK.Column.ID.value, data_type=DataType.SERIAL(), nullable=False),
+                        Column(name=Table.STOCK.Column.CODE.value, data_type=DataType.VARCHAR(), nullable=False),
+                        Column(name=Table.STOCK.Column.LISTED_SHARES.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(name=Table.STOCK.Column.OUTSTANDING_SHARES.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(name=Table.STOCK.Column.OUTSTANDING_RATE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.STOCK.Column.MARKET_CAP.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(name=Table.STOCK.Column.MARKET_ID.value, data_type=DataType.INT(), nullable=False),
+                        Column(name=Table.STOCK.Column.CREATE_DATE.value, data_type=DataType.AUTO_TIMESTAMP(), nullable=False),
+                        Column(name=Table.STOCK.Column.UPDATE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
+                        Column(name=Table.STOCK.Column.DELETE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
+                    ],
+                    primary_keys=Table.STOCK.primary_key,
+                    foreign_keys=[ForeignKey(
+                        column_name=Table.STOCK.Column.MARKET_ID.value, 
+                        ref_table=f"{Schema.STOCK_MARKET.value}.{Table.MARKET.name}", 
+                        ref_column=Table.MARKET.Column.ID.value,
+                    )],
+                )
+                # fmt: on
+
+                for stock_code in STOCK_CODES_TO_BE_EXPORTED_TO_GOLD_DB:
+                    # fmt: off
+                    self._database_driver.create_table(
+                        schema_name=Schema.ENTERPRISE.value,
+                        table_name=stock_code,
+                        columns = [
+                            Column(name="date", data_type=DataType.DATE(), nullable=False),
+                            Column(name="code", data_type=DataType.VARCHAR(), nullable=False),
+                            Column(name="market_id", data_type=DataType.INT(), nullable=True),
+                            Column(name="open", data_type=DataType.DECIMAL(), nullable=True),
+                            Column(name="high", data_type=DataType.DECIMAL(), nullable=True),
+                            Column(name="low", data_type=DataType.DECIMAL(), nullable=True),
+                            Column(name="close", data_type=DataType.DECIMAL(), nullable=True),
+                            Column(name="volume", data_type=DataType.DECIMAL(), nullable=True),
+                        ],
+                        primary_keys=["date"],
+                        foreign_keys=[ForeignKey(
+                            column_name="market_id", 
+                            ref_table=f"{Schema.STOCK_MARKET.value}.{Table.MARKET.name}", 
+                            ref_column=Table.MARKET.Column.ID.value,
+                        )],
+                    )
+                    # fmt: on
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -3140,6 +3842,8 @@ class DataPreprocessor:
 
             case DataQuality.GOLD:
                 self._create_macroeconomics_tables(data_quality)
+                self._create_stock_market_tables(data_quality)
+                self._create_enterprise_tables(data_quality)
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}".')
@@ -3423,7 +4127,9 @@ class DataPreprocessor:
         gold_df = standardize_time_frame(df=gold_df)
 
         cols_to_interpolate = gold_df.columns.difference(["date"])
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(method="linear")
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
+            method="linear"
+        )
 
         self._select_database(DataQuality.GOLD.value)
         self._save_pandas_table_to_database(
@@ -3562,6 +4268,47 @@ class DataPreprocessor:
             f'Finish cleaning data in table "{format_key_for_table(key)}".'
         )
 
+    def _transform_macroeconomics_ppi_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.PPI,
+            PpiSource.VIETSTOCK,
+        )
+
+        self._logger.log_info(
+            f'Start transforming data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for transforming data here
+        self._select_database(DataQuality.SILVER.value)
+        silver_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.PPI.name,
+        )
+
+        gold_df = make_date_time_index_for_dataframe(df=silver_df)
+        gold_df = standardize_time_frame(df=gold_df)
+
+        cols_to_interpolate = gold_df.columns.difference(["date"])
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
+            pd.to_numeric, errors="coerce"
+        )
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
+            method="linear"
+        )
+
+        self._select_database(DataQuality.GOLD.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.G_PPI.name,
+            primary_keys=Table.G_PPI.primary_key,
+            df=gold_df,
+        )
+
+        self._logger.log_info(
+            f'Finish transforming data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_macroeconomics_ppi(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing macroeconomics PPI data for "{data_quality.value}".'
@@ -3575,7 +4322,7 @@ class DataPreprocessor:
                 self._clean_macroeconomics_ppi_vietstock()
 
             case DataQuality.GOLD:
-                pass
+                self._transform_macroeconomics_ppi_vietstock()
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -3815,6 +4562,47 @@ class DataPreprocessor:
             f'Finish cleaning data in table "{format_key_for_table(key)}".'
         )
 
+    def _transform_macroeconomics_xpi_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.XPI,
+            XpiSource.VIETSTOCK,
+        )
+
+        self._logger.log_info(
+            f'Start transforming data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for transforming data here
+        self._select_database(DataQuality.SILVER.value)
+        silver_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.XPI.name,
+        )
+
+        gold_df = make_date_time_index_for_dataframe(df=silver_df)
+        gold_df = standardize_time_frame(df=gold_df)
+
+        cols_to_interpolate = gold_df.columns.difference(["date"])
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
+            pd.to_numeric, errors="coerce"
+        )
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
+            method="linear"
+        )
+
+        self._select_database(DataQuality.GOLD.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.G_XPI.name,
+            primary_keys=Table.G_XPI.primary_key,
+            df=gold_df,
+        )
+
+        self._logger.log_info(
+            f'Finish transforming data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_macroeconomics_xpi(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing macroeconomics XPI data for "{data_quality.value}".'
@@ -3828,7 +4616,7 @@ class DataPreprocessor:
                 self._clean_macroeconomics_xpi_vietstock()
 
             case DataQuality.GOLD:
-                pass
+                self._transform_macroeconomics_xpi_vietstock()
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -4027,6 +4815,47 @@ class DataPreprocessor:
             f'Finish cleaning data in table "{format_key_for_table(key)}".'
         )
 
+    def _transform_macroeconomics_population_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.POPULATION,
+            PopulationSource.VIETSTOCK,
+        )
+
+        self._logger.log_info(
+            f'Start transforming data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for transforming data here
+        self._select_database(DataQuality.SILVER.value)
+        silver_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.POPULATION.name,
+        )
+
+        gold_df = make_date_time_index_for_dataframe(df=silver_df)
+        gold_df = standardize_time_frame(df=gold_df)
+
+        cols_to_interpolate = gold_df.columns.difference(["date"])
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
+            pd.to_numeric, errors="coerce"
+        )
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
+            method="linear"
+        )
+
+        self._select_database(DataQuality.GOLD.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.G_POPULATION.name,
+            primary_keys=Table.G_POPULATION.primary_key,
+            df=gold_df,
+        )
+
+        self._logger.log_info(
+            f'Finish transforming data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_macroeconomics_population(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing macroeconomics POPULATION data for "{data_quality.value}".'
@@ -4040,7 +4869,7 @@ class DataPreprocessor:
                 self._clean_macroeconomics_population_vietstock()
 
             case DataQuality.GOLD:
-                pass
+                self._transform_macroeconomics_population_vietstock()
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -4132,6 +4961,47 @@ class DataPreprocessor:
             f'Finish cleaning data in table "{format_key_for_table(key)}".'
         )
 
+    def _transform_macroeconomics_labor_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.LABOR,
+            LaborSource.VIETSTOCK,
+        )
+
+        self._logger.log_info(
+            f'Start transforming data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for transforming data here
+        self._select_database(DataQuality.SILVER.value)
+        silver_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.LABOR.name,
+        )
+
+        gold_df = make_date_time_index_for_dataframe(df=silver_df)
+        gold_df = standardize_time_frame(df=gold_df)
+
+        cols_to_interpolate = gold_df.columns.difference(["date"])
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
+            pd.to_numeric, errors="coerce"
+        )
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
+            method="linear"
+        )
+
+        self._select_database(DataQuality.GOLD.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.G_LABOR.name,
+            primary_keys=Table.G_LABOR.primary_key,
+            df=gold_df,
+        )
+
+        self._logger.log_info(
+            f'Finish transforming data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_macroeconomics_labor(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing macroeconomics LABOR data for "{data_quality.value}".'
@@ -4145,7 +5015,7 @@ class DataPreprocessor:
                 self._clean_macroeconomics_labor_vietstock()
 
             case DataQuality.GOLD:
-                pass
+                self._transform_macroeconomics_labor_vietstock()
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -4562,6 +5432,47 @@ class DataPreprocessor:
             f'Finish cleaning data in table "{format_key_for_table(key)}".'
         )
 
+    def _transform_macroeconomics_ipv_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.IPV,
+            IpvSource.VIETSTOCK,
+        )
+
+        self._logger.log_info(
+            f'Start transforming data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for transforming data here
+        self._select_database(DataQuality.SILVER.value)
+        silver_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.IPV.name,
+        )
+
+        gold_df = make_date_time_index_for_dataframe(df=silver_df)
+        gold_df = standardize_time_frame(df=gold_df)
+
+        cols_to_interpolate = gold_df.columns.difference(["date"])
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
+            pd.to_numeric, errors="coerce"
+        )
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
+            method="linear"
+        )
+
+        self._select_database(DataQuality.GOLD.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.G_IPV.name,
+            primary_keys=Table.G_IPV.primary_key,
+            df=gold_df,
+        )
+
+        self._logger.log_info(
+            f'Finish transforming data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_macroeconomics_ipv(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing macroeconomics IPV data for "{data_quality.value}".'
@@ -4575,7 +5486,7 @@ class DataPreprocessor:
                 self._clean_macroeconomics_ipv_vietstock()
 
             case DataQuality.GOLD:
-                pass
+                self._transform_macroeconomics_ipv_vietstock()
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -4665,6 +5576,47 @@ class DataPreprocessor:
             f'Finish cleaning data in table "{format_key_for_table(key)}".'
         )
 
+    def _transform_macroeconomics_mip_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.MIP,
+            MipSource.VIETSTOCK,
+        )
+
+        self._logger.log_info(
+            f'Start transforming data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for transforming data here
+        self._select_database(DataQuality.SILVER.value)
+        silver_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.MIP.name,
+        )
+
+        gold_df = make_date_time_index_for_dataframe(df=silver_df)
+        gold_df = standardize_time_frame(df=gold_df)
+
+        cols_to_interpolate = gold_df.columns.difference(["date"])
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
+            pd.to_numeric, errors="coerce"
+        )
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
+            method="linear"
+        )
+
+        self._select_database(DataQuality.GOLD.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.G_MIP.name,
+            primary_keys=Table.G_MIP.primary_key,
+            df=gold_df,
+        )
+
+        self._logger.log_info(
+            f'Finish transforming data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_macroeconomics_mip(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing macroeconomics MIP data for "{data_quality.value}".'
@@ -4678,7 +5630,7 @@ class DataPreprocessor:
                 self._clean_macroeconomics_mip_vietstock()
 
             case DataQuality.GOLD:
-                pass
+                self._transform_macroeconomics_mip_vietstock()
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -4781,6 +5733,47 @@ class DataPreprocessor:
             f'Finish cleaning data in table "{format_key_for_table(key)}".'
         )
 
+    def _transform_macroeconomics_fa_by_house_types_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.FA_BY_HOUSE_TYPES,
+            FaByHouseTypeSource.VIETSTOCK,
+        )
+
+        self._logger.log_info(
+            f'Start transforming data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for transforming data here
+        self._select_database(DataQuality.SILVER.value)
+        silver_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.FA_BY_HOUSE_TYPES.name,
+        )
+
+        gold_df = make_date_time_index_for_dataframe(df=silver_df)
+        gold_df = standardize_time_frame(df=gold_df)
+
+        cols_to_interpolate = gold_df.columns.difference(["date"])
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
+            pd.to_numeric, errors="coerce"
+        )
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
+            method="linear"
+        )
+
+        self._select_database(DataQuality.GOLD.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.G_FA_BY_HOUSE_TYPES.name,
+            primary_keys=Table.G_FA_BY_HOUSE_TYPES.primary_key,
+            df=gold_df,
+        )
+
+        self._logger.log_info(
+            f'Finish transforming data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_macroeconomics_fa_by_house_types(
         self, data_quality: DataQuality
     ) -> None:
@@ -4796,7 +5789,7 @@ class DataPreprocessor:
                 self._clean_macroeconomics_fa_by_house_types_vietstock()
 
             case DataQuality.GOLD:
-                pass
+                self._transform_macroeconomics_fa_by_house_types_vietstock()
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -5560,6 +6553,47 @@ class DataPreprocessor:
             f'Finish cleaning data in table "{format_key_for_table(key)}".'
         )
 
+    def _transform_macroeconomics_treg_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.TREG,
+            TregSource.VIETSTOCK,
+        )
+
+        self._logger.log_info(
+            f'Start transforming data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for transforming data here
+        self._select_database(DataQuality.SILVER.value)
+        silver_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.TREG.name,
+        )
+
+        gold_df = make_date_time_index_for_dataframe(df=silver_df)
+        gold_df = standardize_time_frame(df=gold_df)
+
+        cols_to_interpolate = gold_df.columns.difference(["date"])
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
+            pd.to_numeric, errors="coerce"
+        )
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
+            method="linear"
+        )
+
+        self._select_database(DataQuality.GOLD.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.G_TREG.name,
+            primary_keys=Table.G_TREG.primary_key,
+            df=gold_df,
+        )
+
+        self._logger.log_info(
+            f'Finish transforming data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_macroeconomics_treg(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing macroeconomics TREG data for "{data_quality.value}".'
@@ -5573,7 +6607,7 @@ class DataPreprocessor:
                 self._clean_macroeconomics_treg_vietstock()
 
             case DataQuality.GOLD:
-                pass
+                self._transform_macroeconomics_treg_vietstock()
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -5802,11 +6836,11 @@ class DataPreprocessor:
     # endregion MACROECONOMICS.MOBILIZATION
 
     # region MACROECONOMICS.EXCHANGE_RATE
-    def _ingest_macroeconomics_exchange_rate_vietstock(self) -> None:
+    def _ingest_macroeconomics_exchange_rate_investing(self) -> None:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.EXCHANGE_RATE,
-            ExchangeRateSource.VIETSTOCK,
+            ExchangeRateSource.INVESTING,
         )
 
         folder_path = (
@@ -5824,34 +6858,56 @@ class DataPreprocessor:
         self._logger.log_info(f'Start ingesting data in "{file_path}".')
 
         # Add logic for processing data here
-        df = pd.read_csv(file_path)
+        file_paths = glob(os.path.join(folder_path, "*.csv"))
 
-        # Set indicator names as lowercase with underscores
-        df = self._standardize_column_name_before_melting(df=df)
+        dfs = []
+        for file in file_paths:
+            df = pd.read_csv(file)
 
-        df = self._melt_dataframe_by_time_format(
-            df=df,
-            time_format=TimeFormat.DAY_MONTH_YEAR,
-            id_vars=["Chỉ tiêu", "Đơn vị tính"],
-        )
+            # Rename columns
+            rename_map = {
+                "Ngày": "date",
+                "Lần cuối": "close",
+                "Mở": "open",
+                "Cao": "high",
+                "Thấp": "low",
+                "KL": "volume",
+                "% Thay đổi": "change",
+            }
+            df = df.rename(columns=rename_map)
 
-        # Rename columns
-        df.rename(columns={"central_rate_from_04012016": "central_rate"}, inplace=True)
+            # Convert 'date' to datetime
+            df["date"] = pd.to_datetime(df["date"], format="%d/%m/%Y", errors="coerce")
+
+            # Clean numeric columns: remove commas and symbols, then convert to float
+            for col in ["close", "open", "high", "low"]:
+                df[col] = df[col].astype(str).str.replace(",", "").astype(float)
+
+            df["volume"] = df["volume"].apply(parse_volume)
+
+            # Handle "change" column: remove '%' and convert to float
+            df["change"] = df["change"].astype(str).str.replace("%", "").astype(float)
+
+            dfs.append(df)
+
+        # Combine and sort
+        full_df = pd.concat(dfs, ignore_index=True)
+        full_df = full_df.sort_values("date").reset_index(drop=True)
 
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
             table_name=Table.EXCHANGE_RATE.name,
             primary_keys=Table.EXCHANGE_RATE.primary_key,
-            df=df,
+            df=full_df,
         )
 
-        self._logger.log_info(f'Finish ingesting data in "{file_path}".')
+        self._logger.log_info(f'Finish ingesting data in "{table_name}".')
 
-    def _clean_macroeconomics_exchange_rate_vietstock(self) -> None:
+    def _clean_macroeconomics_exchange_rate_investing(self) -> None:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.EXCHANGE_RATE,
-            ExchangeRateSource.VIETSTOCK,
+            ExchangeRateSource.INVESTING,
         )
 
         self._logger.log_info(
@@ -5869,12 +6925,7 @@ class DataPreprocessor:
         silver_df = self._clean(
             df=bronze_df,
             clean_layer_list=[
-                CleanLayer.ORDER_BY(
-                    [
-                        Table.EXCHANGE_RATE.Column.YEAR.value,
-                        Table.EXCHANGE_RATE.Column.MONTH.value,
-                    ]
-                )
+                CleanLayer.ORDER_BY([Table.EXCHANGE_RATE.Column.DATE.value])
             ],
         )
 
@@ -5890,6 +6941,48 @@ class DataPreprocessor:
             f'Finish cleaning data in table "{format_key_for_table(key)}".'
         )
 
+    def _transform_macroeconomics_exchange_rate_investing(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.EXCHANGE_RATE,
+            ExchangeRateSource.INVESTING,
+        )
+
+        self._logger.log_info(
+            f'Start transforming data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for transforming data here
+        self._select_database(DataQuality.SILVER.value)
+        silver_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.EXCHANGE_RATE.name,
+        )
+
+        gold_df = make_date_time_index_for_dataframe(df=silver_df)
+        gold_df = standardize_time_frame(df=gold_df)
+
+        cols_to_interpolate = gold_df.columns.difference(["date"])
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
+            pd.to_numeric, errors="coerce"
+        )
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
+            method="linear"
+        )
+        gold_df = gold_df.dropna(subset=["close"])
+
+        self._select_database(DataQuality.GOLD.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.G_EXCHANGE_RATE.name,
+            primary_keys=Table.G_EXCHANGE_RATE.primary_key,
+            df=gold_df,
+        )
+
+        self._logger.log_info(
+            f'Finish transforming data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_macroeconomics_exchange_rate(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing macroeconomics EXCHANGE_RATE data for "{data_quality.value}".'
@@ -5897,13 +6990,13 @@ class DataPreprocessor:
 
         match data_quality:
             case DataQuality.BRONZE:
-                self._ingest_macroeconomics_exchange_rate_vietstock()
+                self._ingest_macroeconomics_exchange_rate_investing()
 
             case DataQuality.SILVER:
-                self._clean_macroeconomics_exchange_rate_vietstock()
+                self._clean_macroeconomics_exchange_rate_investing()
 
             case DataQuality.GOLD:
-                pass
+                self._transform_macroeconomics_exchange_rate_investing()
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -6116,23 +7209,6 @@ class DataPreprocessor:
         # Fill timeline
         silver_df = make_date_time_index_for_dataframe(silver_df)
 
-        # Interpolate missing values
-        # make sure 'date' is datetime
-        silver_df["date"] = pd.to_datetime(
-            silver_df["date"], dayfirst=True, errors="coerce"
-        )
-
-        # set it as index for interpolation
-        silver_df = silver_df.set_index("date").sort_index()
-
-        # interpolate along the datetime index
-        silver_df[["discount_rate", "refinancing_rate"]] = silver_df[
-            ["discount_rate", "refinancing_rate"]
-        ].interpolate(method="time")
-
-        # fill edges (optional)
-        silver_df = silver_df.ffill().bfill().reset_index()
-
         self._select_database(DataQuality.SILVER.value)
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
@@ -6143,6 +7219,47 @@ class DataPreprocessor:
 
         self._logger.log_info(
             f'Finish cleaning data in table "{format_key_for_table(key)}".'
+        )
+
+    def _transform_macroeconomics_rrrr_vietstock(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.RRRR,
+            RrrrSource.VIETSTOCK,
+        )
+
+        self._logger.log_info(
+            f'Start transforming data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for transforming data here
+        self._select_database(DataQuality.SILVER.value)
+        silver_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.RRRR.name,
+        )
+
+        gold_df = make_date_time_index_for_dataframe(df=silver_df)
+        gold_df = standardize_time_frame(df=gold_df)
+
+        cols_to_interpolate = gold_df.columns.difference(["date"])
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
+            pd.to_numeric, errors="coerce"
+        )
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
+            method="linear"
+        )
+
+        self._select_database(DataQuality.GOLD.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.G_RRRR.name,
+            primary_keys=Table.G_RRRR.primary_key,
+            df=gold_df,
+        )
+
+        self._logger.log_info(
+            f'Finish transforming data in table "{format_key_for_table(key)}".'
         )
 
     def _process_macroeconomics_rrrr(self, data_quality: DataQuality) -> None:
@@ -6158,7 +7275,7 @@ class DataPreprocessor:
                 self._clean_macroeconomics_rrrr_vietstock()
 
             case DataQuality.GOLD:
-                pass
+                self._transform_macroeconomics_rrrr_vietstock()
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -6812,10 +7929,6 @@ class DataPreprocessor:
         self._logger.log_info(f'Start ingesting data in "{table_name}".')
 
         # Add logic for processing data here
-        combined_file_path = os.path.join(folder_path, "Gold_Futures_Combined.csv")
-        if os.path.isfile(combined_file_path):
-            os.remove(combined_file_path)
-
         file_paths = glob(os.path.join(folder_path, "*.csv"))
 
         dfs = []
@@ -6899,6 +8012,47 @@ class DataPreprocessor:
             f'Finish cleaning data in table "{format_key_for_table(key)}".'
         )
 
+    def _transform_macroeconomics_gold_price_investing(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.GOLD_PRICE,
+            GoldPriceSource.INVESTING,
+        )
+
+        self._logger.log_info(
+            f'Start transforming data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for transforming data here
+        self._select_database(DataQuality.SILVER.value)
+        silver_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.GOLD_PRICE.name,
+        )
+
+        gold_df = make_date_time_index_for_dataframe(df=silver_df)
+        gold_df = standardize_time_frame(df=gold_df)
+
+        cols_to_interpolate = gold_df.columns.difference(["date"])
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
+            pd.to_numeric, errors="coerce"
+        )
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
+            method="linear"
+        )
+
+        self._select_database(DataQuality.GOLD.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.G_GOLD_PRICE.name,
+            primary_keys=Table.G_GOLD_PRICE.primary_key,
+            df=gold_df,
+        )
+
+        self._logger.log_info(
+            f'Finish transforming data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_macroeconomics_gold_price(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing macroeconomics GOLD_PRICE data for "{data_quality.value}".'
@@ -6912,7 +8066,7 @@ class DataPreprocessor:
                 self._clean_macroeconomics_gold_price_investing()
 
             case DataQuality.GOLD:
-                pass
+                self._transform_macroeconomics_gold_price_investing()
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -6940,10 +8094,6 @@ class DataPreprocessor:
         self._logger.log_info(f'Start ingesting data in "{table_name}".')
 
         # Add logic for processing data here
-        combined_file_path = os.path.join(folder_path, "Gold_Futures_Combined.csv")
-        if os.path.isfile(combined_file_path):
-            os.remove(combined_file_path)
-
         file_paths = glob(os.path.join(folder_path, "*.csv"))
 
         dfs = []
@@ -7025,6 +8175,47 @@ class DataPreprocessor:
             f'Finish cleaning data in table "{format_key_for_table(key)}".'
         )
 
+    def _transform_macroeconomics_oil_price_investing(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.OIL_PRICE,
+            OilPriceSource.INVESTING,
+        )
+
+        self._logger.log_info(
+            f'Start transforming data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for transforming data here
+        self._select_database(DataQuality.SILVER.value)
+        silver_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.OIL_PRICE.name,
+        )
+
+        gold_df = make_date_time_index_for_dataframe(df=silver_df)
+        gold_df = standardize_time_frame(df=gold_df)
+
+        cols_to_interpolate = gold_df.columns.difference(["date"])
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
+            pd.to_numeric, errors="coerce"
+        )
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
+            method="linear"
+        )
+
+        self._select_database(DataQuality.GOLD.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.G_OIL_PRICE.name,
+            primary_keys=Table.G_OIL_PRICE.primary_key,
+            df=gold_df,
+        )
+
+        self._logger.log_info(
+            f'Finish transforming data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_macroeconomics_oil_price(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing macroeconomics OIL_PRICE data for "{data_quality.value}".'
@@ -7038,7 +8229,7 @@ class DataPreprocessor:
                 self._clean_macroeconomics_oil_price_investing()
 
             case DataQuality.GOLD:
-                pass
+                self._transform_macroeconomics_oil_price_investing()
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -7066,10 +8257,6 @@ class DataPreprocessor:
         self._logger.log_info(f'Start ingesting data in "{table_name}".')
 
         # Add logic for processing data here
-        combined_file_path = os.path.join(folder_path, "Gold_Futures_Combined.csv")
-        if os.path.isfile(combined_file_path):
-            os.remove(combined_file_path)
-
         file_paths = glob(os.path.join(folder_path, "*.csv"))
 
         dfs = []
@@ -7105,13 +8292,6 @@ class DataPreprocessor:
         # Combine and sort
         full_df = pd.concat(dfs, ignore_index=True)
         full_df = full_df.sort_values("date").reset_index(drop=True)
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.OIL_PRICE.name,
-            primary_keys=Table.OIL_PRICE.primary_key,
-            df=full_df,
-        )
 
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
@@ -7158,6 +8338,47 @@ class DataPreprocessor:
             f'Finish cleaning data in table "{format_key_for_table(key)}".'
         )
 
+    def _transform_macroeconomics_dow_jones_investing(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.DOW_JONES,
+            DowJonesSource.INVESTING,
+        )
+
+        self._logger.log_info(
+            f'Start transforming data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for transforming data here
+        self._select_database(DataQuality.SILVER.value)
+        silver_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.DOW_JONES.name,
+        )
+
+        gold_df = make_date_time_index_for_dataframe(df=silver_df)
+        gold_df = standardize_time_frame(df=gold_df)
+
+        cols_to_interpolate = gold_df.columns.difference(["date"])
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
+            pd.to_numeric, errors="coerce"
+        )
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
+            method="linear"
+        )
+
+        self._select_database(DataQuality.GOLD.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.G_DOW_JONES.name,
+            primary_keys=Table.G_DOW_JONES.primary_key,
+            df=gold_df,
+        )
+
+        self._logger.log_info(
+            f'Finish transforming data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_macroeconomics_dow_jones(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing macroeconomics DOW_JONES data for "{data_quality.value}".'
@@ -7171,7 +8392,7 @@ class DataPreprocessor:
                 self._clean_macroeconomics_dow_jones_investing()
 
             case DataQuality.GOLD:
-                pass
+                self._transform_macroeconomics_dow_jones_investing()
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -7183,11 +8404,11 @@ class DataPreprocessor:
     # endregion MACROECONOMICS.DOW_JONES
 
     # region MACROECONOMICS.NYSE_COMPOSITE
-    def _ingest_macroeconomics_nyse_composite_investing(self) -> None:
+    def _ingest_macroeconomics_nyse_composite_yahoo_finance(self) -> None:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.NYSE_COMPOSITE,
-            NYSECompositeSource.INVESTING,
+            NYSECompositeSource.YAHOO_FINANCE,
         )
 
         folder_path = (
@@ -7199,10 +8420,6 @@ class DataPreprocessor:
         self._logger.log_info(f'Start ingesting data in "{table_name}".')
 
         # Add logic for processing data here
-        combined_file_path = os.path.join(folder_path, "Gold_Futures_Combined.csv")
-        if os.path.isfile(combined_file_path):
-            os.remove(combined_file_path)
-
         file_paths = glob(os.path.join(folder_path, "*.csv"))
 
         dfs = []
@@ -7211,40 +8428,32 @@ class DataPreprocessor:
 
             # Rename columns
             rename_map = {
-                "Ngày": "date",
-                "Lần cuối": "close",
-                "Mở": "open",
-                "Cao": "high",
-                "Thấp": "low",
-                "KL": "volume",
-                "% Thay đổi": "change",
+                "Date": "date",
+                "CloseClose price adjusted for splits.": "close",
+                "Adj CloseAdjusted close price adjusted for splits and dividend and/or capital gain distributions.": "adj_close",
+                "Open": "open",
+                "High": "high",
+                "Low": "low",
+                "Volume": "volume",
             }
             df = df.rename(columns=rename_map)
 
             # Convert 'date' to datetime
-            df["date"] = pd.to_datetime(df["date"], format="%d/%m/%Y", errors="coerce")
+            df["date"] = pd.to_datetime(df["date"], format="%b %d, %Y", errors="coerce")
 
             # Clean numeric columns: remove commas and symbols, then convert to float
-            for col in ["close", "open", "high", "low"]:
+            for col in ["close", "open", "high", "low", "adj_close"]:
                 df[col] = df[col].astype(str).str.replace(",", "").astype(float)
 
-            df["volume"] = df["volume"].apply(parse_volume)
+            df["volume"] = df["volume"].astype(str).replace("-", np.nan)
 
-            # Handle "change" column: remove '%' and convert to float
-            df["change"] = df["change"].astype(str).str.replace("%", "").astype(float)
+            df["volume"] = df["volume"].apply(parse_volume)
 
             dfs.append(df)
 
         # Combine and sort
         full_df = pd.concat(dfs, ignore_index=True)
         full_df = full_df.sort_values("date").reset_index(drop=True)
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.OIL_PRICE.name,
-            primary_keys=Table.OIL_PRICE.primary_key,
-            df=full_df,
-        )
 
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
@@ -7255,11 +8464,11 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish ingesting data in "{table_name}".')
 
-    def _clean_macroeconomics_nyse_composite_investing(self) -> None:
+    def _clean_macroeconomics_nyse_composite_yahoo_finance(self) -> None:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.NYSE_COMPOSITE,
-            NYSECompositeSource.INVESTING,
+            NYSECompositeSource.YAHOO_FINANCE,
         )
 
         self._logger.log_info(
@@ -7293,6 +8502,47 @@ class DataPreprocessor:
             f'Finish cleaning data in table "{format_key_for_table(key)}".'
         )
 
+    def _transform_macroeconomics_nyse_composite_yahoo_finance(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.NYSE_COMPOSITE,
+            NYSECompositeSource.YAHOO_FINANCE,
+        )
+
+        self._logger.log_info(
+            f'Start transforming data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for transforming data here
+        self._select_database(DataQuality.SILVER.value)
+        silver_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.NYSE_COMPOSITE.name,
+        )
+
+        gold_df = make_date_time_index_for_dataframe(df=silver_df)
+        gold_df = standardize_time_frame(df=gold_df)
+
+        cols_to_interpolate = gold_df.columns.difference(["date"])
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
+            pd.to_numeric, errors="coerce"
+        )
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
+            method="linear"
+        )
+
+        self._select_database(DataQuality.GOLD.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.G_NYSE_COMPOSITE.name,
+            primary_keys=Table.G_NYSE_COMPOSITE.primary_key,
+            df=gold_df,
+        )
+
+        self._logger.log_info(
+            f'Finish transforming data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_macroeconomics_nyse_composite(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing macroeconomics NYSE_COMPOSITE data for "{data_quality.value}".'
@@ -7300,13 +8550,13 @@ class DataPreprocessor:
 
         match data_quality:
             case DataQuality.BRONZE:
-                self._ingest_macroeconomics_nyse_composite_investing()
+                self._ingest_macroeconomics_nyse_composite_yahoo_finance()
 
             case DataQuality.SILVER:
-                self._clean_macroeconomics_nyse_composite_investing()
+                self._clean_macroeconomics_nyse_composite_yahoo_finance()
 
             case DataQuality.GOLD:
-                pass
+                self._transform_macroeconomics_nyse_composite_yahoo_finance()
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -7322,7 +8572,7 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.SNP_500,
-            SNP500Source.INVESTING,
+            SNP500Source.YAHOO_FINANCE,
         )
 
         folder_path = (
@@ -7334,10 +8584,6 @@ class DataPreprocessor:
         self._logger.log_info(f'Start ingesting data in "{table_name}".')
 
         # Add logic for processing data here
-        combined_file_path = os.path.join(folder_path, "Gold_Futures_Combined.csv")
-        if os.path.isfile(combined_file_path):
-            os.remove(combined_file_path)
-
         file_paths = glob(os.path.join(folder_path, "*.csv"))
 
         dfs = []
@@ -7346,40 +8592,32 @@ class DataPreprocessor:
 
             # Rename columns
             rename_map = {
-                "Ngày": "date",
-                "Lần cuối": "close",
-                "Mở": "open",
-                "Cao": "high",
-                "Thấp": "low",
-                "KL": "volume",
-                "% Thay đổi": "change",
+                "Date": "date",
+                "CloseClose price adjusted for splits.": "close",
+                "Adj CloseAdjusted close price adjusted for splits and dividend and/or capital gain distributions.": "adj_close",
+                "Open": "open",
+                "High": "high",
+                "Low": "low",
+                "Volume": "volume",
             }
             df = df.rename(columns=rename_map)
 
             # Convert 'date' to datetime
-            df["date"] = pd.to_datetime(df["date"], format="%d/%m/%Y", errors="coerce")
+            df["date"] = pd.to_datetime(df["date"], format="%b %d, %Y", errors="coerce")
 
             # Clean numeric columns: remove commas and symbols, then convert to float
-            for col in ["close", "open", "high", "low"]:
+            for col in ["close", "open", "high", "low", "adj_close"]:
                 df[col] = df[col].astype(str).str.replace(",", "").astype(float)
 
-            df["volume"] = df["volume"].apply(parse_volume)
+            df["volume"] = df["volume"].astype(str).replace("-", np.nan)
 
-            # Handle "change" column: remove '%' and convert to float
-            df["change"] = df["change"].astype(str).str.replace("%", "").astype(float)
+            df["volume"] = df["volume"].apply(parse_volume)
 
             dfs.append(df)
 
         # Combine and sort
         full_df = pd.concat(dfs, ignore_index=True)
         full_df = full_df.sort_values("date").reset_index(drop=True)
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.OIL_PRICE.name,
-            primary_keys=Table.OIL_PRICE.primary_key,
-            df=full_df,
-        )
 
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
@@ -7394,7 +8632,7 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.SNP_500,
-            SNP500Source.INVESTING,
+            SNP500Source.YAHOO_FINANCE,
         )
 
         self._logger.log_info(
@@ -7426,6 +8664,47 @@ class DataPreprocessor:
             f'Finish cleaning data in table "{format_key_for_table(key)}".'
         )
 
+    def _transform_macroeconomics_snp_500_investing(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.SNP_500,
+            SNP500Source.YAHOO_FINANCE,
+        )
+
+        self._logger.log_info(
+            f'Start transforming data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for transforming data here
+        self._select_database(DataQuality.SILVER.value)
+        silver_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.SNP_500.name,
+        )
+
+        gold_df = make_date_time_index_for_dataframe(df=silver_df)
+        gold_df = standardize_time_frame(df=gold_df)
+
+        cols_to_interpolate = gold_df.columns.difference(["date"])
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
+            pd.to_numeric, errors="coerce"
+        )
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
+            method="linear"
+        )
+
+        self._select_database(DataQuality.GOLD.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.G_SNP_500.name,
+            primary_keys=Table.G_SNP_500.primary_key,
+            df=gold_df,
+        )
+
+        self._logger.log_info(
+            f'Finish transforming data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_macroeconomics_snp_500(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing macroeconomics SNP_500 data for "{data_quality.value}".'
@@ -7439,7 +8718,7 @@ class DataPreprocessor:
                 self._clean_macroeconomics_snp_500_investing()
 
             case DataQuality.GOLD:
-                pass
+                self._transform_macroeconomics_snp_500_investing()
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -7451,11 +8730,11 @@ class DataPreprocessor:
     # endregion MACROECONOMICS.SNP_500
 
     # region MACROECONOMICS.NASDAQ_COMPOSITE
-    def _ingest_macroeconomics_nasdaq_composite_investing(self) -> None:
+    def _ingest_macroeconomics_nasdaq_composite_yahoo_finance(self) -> None:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.NASDAQ_COMPOSITE,
-            NASDAQCompositeSource.INVESTING,
+            NASDAQCompositeSource.YAHOO_FINANCE,
         )
 
         folder_path = (
@@ -7467,10 +8746,6 @@ class DataPreprocessor:
         self._logger.log_info(f'Start ingesting data in "{table_name}".')
 
         # Add logic for processing data here
-        combined_file_path = os.path.join(folder_path, "Gold_Futures_Combined.csv")
-        if os.path.isfile(combined_file_path):
-            os.remove(combined_file_path)
-
         file_paths = glob(os.path.join(folder_path, "*.csv"))
 
         dfs = []
@@ -7479,40 +8754,32 @@ class DataPreprocessor:
 
             # Rename columns
             rename_map = {
-                "Ngày": "date",
-                "Lần cuối": "close",
-                "Mở": "open",
-                "Cao": "high",
-                "Thấp": "low",
-                "KL": "volume",
-                "% Thay đổi": "change",
+                "Date": "date",
+                "CloseClose price adjusted for splits.": "close",
+                "Adj CloseAdjusted close price adjusted for splits and dividend and/or capital gain distributions.": "adj_close",
+                "Open": "open",
+                "High": "high",
+                "Low": "low",
+                "Volume": "volume",
             }
             df = df.rename(columns=rename_map)
 
             # Convert 'date' to datetime
-            df["date"] = pd.to_datetime(df["date"], format="%d/%m/%Y", errors="coerce")
+            df["date"] = pd.to_datetime(df["date"], format="%b %d, %Y", errors="coerce")
 
             # Clean numeric columns: remove commas and symbols, then convert to float
-            for col in ["close", "open", "high", "low"]:
+            for col in ["close", "open", "high", "low", "adj_close"]:
                 df[col] = df[col].astype(str).str.replace(",", "").astype(float)
 
-            df["volume"] = df["volume"].apply(parse_volume)
+            df["volume"] = df["volume"].astype(str).replace("-", np.nan)
 
-            # Handle "change" column: remove '%' and convert to float
-            df["change"] = df["change"].astype(str).str.replace("%", "").astype(float)
+            df["volume"] = df["volume"].apply(parse_volume)
 
             dfs.append(df)
 
         # Combine and sort
         full_df = pd.concat(dfs, ignore_index=True)
         full_df = full_df.sort_values("date").reset_index(drop=True)
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.OIL_PRICE.name,
-            primary_keys=Table.OIL_PRICE.primary_key,
-            df=full_df,
-        )
 
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
@@ -7523,11 +8790,11 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish ingesting data in "{table_name}".')
 
-    def _clean_macroeconomics_nasdaq_composite_investing(self) -> None:
+    def _clean_macroeconomics_nasdaq_composite_yahoo_finance(self) -> None:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.NASDAQ_COMPOSITE,
-            NASDAQCompositeSource.INVESTING,
+            NASDAQCompositeSource.YAHOO_FINANCE,
         )
 
         self._logger.log_info(
@@ -7561,6 +8828,47 @@ class DataPreprocessor:
             f'Finish cleaning data in table "{format_key_for_table(key)}".'
         )
 
+    def _transform_macroeconomics_nasdaq_composite_yahoo_finance(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.NASDAQ_COMPOSITE,
+            NASDAQCompositeSource.YAHOO_FINANCE,
+        )
+
+        self._logger.log_info(
+            f'Start transforming data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for transforming data here
+        self._select_database(DataQuality.SILVER.value)
+        silver_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.NASDAQ_COMPOSITE.name,
+        )
+
+        gold_df = make_date_time_index_for_dataframe(df=silver_df)
+        gold_df = standardize_time_frame(df=gold_df)
+
+        cols_to_interpolate = gold_df.columns.difference(["date"])
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
+            pd.to_numeric, errors="coerce"
+        )
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
+            method="linear"
+        )
+
+        self._select_database(DataQuality.GOLD.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.G_NASDAQ_COMPOSITE.name,
+            primary_keys=Table.G_NASDAQ_COMPOSITE.primary_key,
+            df=gold_df,
+        )
+
+        self._logger.log_info(
+            f'Finish transforming data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_macroeconomics_nasdaq_composite(
         self, data_quality: DataQuality
     ) -> None:
@@ -7570,13 +8878,13 @@ class DataPreprocessor:
 
         match data_quality:
             case DataQuality.BRONZE:
-                self._ingest_macroeconomics_nasdaq_composite_investing()
+                self._ingest_macroeconomics_nasdaq_composite_yahoo_finance()
 
             case DataQuality.SILVER:
-                self._clean_macroeconomics_nasdaq_composite_investing()
+                self._clean_macroeconomics_nasdaq_composite_yahoo_finance()
 
             case DataQuality.GOLD:
-                pass
+                self._transform_macroeconomics_nasdaq_composite_yahoo_finance()
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -7588,11 +8896,11 @@ class DataPreprocessor:
     # endregion MACROECONOMICS.NASDAQ_COMPOSITE
 
     # region MACROECONOMICS.NASDAQ_100
-    def _ingest_macroeconomics_nasdaq_100_investing(self) -> None:
+    def _ingest_macroeconomics_nasdaq_100_yahoo_finance(self) -> None:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.NASDAQ_100,
-            NASDAQ100Source.INVESTING,
+            NASDAQ100Source.YAHOO_FINANCE,
         )
 
         folder_path = (
@@ -7604,10 +8912,6 @@ class DataPreprocessor:
         self._logger.log_info(f'Start ingesting data in "{table_name}".')
 
         # Add logic for processing data here
-        combined_file_path = os.path.join(folder_path, "Gold_Futures_Combined.csv")
-        if os.path.isfile(combined_file_path):
-            os.remove(combined_file_path)
-
         file_paths = glob(os.path.join(folder_path, "*.csv"))
 
         dfs = []
@@ -7616,40 +8920,32 @@ class DataPreprocessor:
 
             # Rename columns
             rename_map = {
-                "Ngày": "date",
-                "Lần cuối": "close",
-                "Mở": "open",
-                "Cao": "high",
-                "Thấp": "low",
-                "KL": "volume",
-                "% Thay đổi": "change",
+                "Date": "date",
+                "CloseClose price adjusted for splits.": "close",
+                "Adj CloseAdjusted close price adjusted for splits and dividend and/or capital gain distributions.": "adj_close",
+                "Open": "open",
+                "High": "high",
+                "Low": "low",
+                "Volume": "volume",
             }
             df = df.rename(columns=rename_map)
 
             # Convert 'date' to datetime
-            df["date"] = pd.to_datetime(df["date"], format="%d/%m/%Y", errors="coerce")
+            df["date"] = pd.to_datetime(df["date"], format="%b %d, %Y", errors="coerce")
 
             # Clean numeric columns: remove commas and symbols, then convert to float
-            for col in ["close", "open", "high", "low"]:
+            for col in ["close", "open", "high", "low", "adj_close"]:
                 df[col] = df[col].astype(str).str.replace(",", "").astype(float)
 
-            df["volume"] = df["volume"].apply(parse_volume)
+            df["volume"] = df["volume"].astype(str).replace("-", np.nan)
 
-            # Handle "change" column: remove '%' and convert to float
-            df["change"] = df["change"].astype(str).str.replace("%", "").astype(float)
+            df["volume"] = df["volume"].apply(parse_volume)
 
             dfs.append(df)
 
         # Combine and sort
         full_df = pd.concat(dfs, ignore_index=True)
         full_df = full_df.sort_values("date").reset_index(drop=True)
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.OIL_PRICE.name,
-            primary_keys=Table.OIL_PRICE.primary_key,
-            df=full_df,
-        )
 
         self._save_pandas_table_to_database(
             schema_name=Schema.MACROECONOMICS.value,
@@ -7660,11 +8956,11 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish ingesting data in "{table_name}".')
 
-    def _clean_macroeconomics_nasdaq_100_investing(self) -> None:
+    def _clean_macroeconomics_nasdaq_100_yahoo_finance(self) -> None:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.NASDAQ_100,
-            NASDAQ100Source.INVESTING,
+            NASDAQ100Source.YAHOO_FINANCE,
         )
 
         self._logger.log_info(
@@ -7698,6 +8994,47 @@ class DataPreprocessor:
             f'Finish cleaning data in table "{format_key_for_table(key)}".'
         )
 
+    def _transform_macroeconomics_nasdaq_100_yahoo_finance(self) -> None:
+        key = (
+            ScrapeMainType.MACROECONOMICS,
+            MacroeconomicsSubType.NASDAQ_100,
+            NASDAQ100Source.YAHOO_FINANCE,
+        )
+
+        self._logger.log_info(
+            f'Start transforming data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for transforming data here
+        self._select_database(DataQuality.SILVER.value)
+        silver_df = self._select(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.NASDAQ_100.name,
+        )
+
+        gold_df = make_date_time_index_for_dataframe(df=silver_df)
+        gold_df = standardize_time_frame(df=gold_df)
+
+        cols_to_interpolate = gold_df.columns.difference(["date"])
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
+            pd.to_numeric, errors="coerce"
+        )
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
+            method="linear"
+        )
+
+        self._select_database(DataQuality.GOLD.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.MACROECONOMICS.value,
+            table_name=Table.G_NASDAQ_100.name,
+            primary_keys=Table.G_NASDAQ_100.primary_key,
+            df=gold_df,
+        )
+
+        self._logger.log_info(
+            f'Finish transforming data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_macroeconomics_nasdaq_100(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing macroeconomics NASDAQ_100 data for "{data_quality.value}".'
@@ -7705,13 +9042,13 @@ class DataPreprocessor:
 
         match data_quality:
             case DataQuality.BRONZE:
-                self._ingest_macroeconomics_nasdaq_100_investing()
+                self._ingest_macroeconomics_nasdaq_100_yahoo_finance()
 
             case DataQuality.SILVER:
-                self._clean_macroeconomics_nasdaq_100_investing()
+                self._clean_macroeconomics_nasdaq_100_yahoo_finance()
 
             case DataQuality.GOLD:
-                pass
+                self._transform_macroeconomics_nasdaq_100_yahoo_finance()
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -7795,6 +9132,38 @@ class DataPreprocessor:
             f'Finish cleaning data in table "{Table.MARKET.__qualname__.lower()}".'
         )
 
+    def _transform_stock_market_market(self) -> None:
+        self._logger.log_info(
+            f'Start transforming data in "{Table.MARKET.__qualname__.lower()}".'
+        )
+
+        # Add logic for transforming data here
+        self._select_database(DataQuality.SILVER.value)
+        silver_df = self._select(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.MARKET.name,
+        )
+
+        gold_df = silver_df.drop(
+            columns=[
+                Table.MARKET.Column.CREATE_DATE.value,
+                Table.MARKET.Column.UPDATE_DATE.value,
+                Table.MARKET.Column.DELETE_DATE.value,
+            ]
+        )
+
+        self._select_database(DataQuality.GOLD.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.MARKET.name,
+            primary_keys=Table.MARKET.primary_key,
+            df=gold_df,
+        )
+
+        self._logger.log_info(
+            f'Finish transforming data in "{Table.MARKET.__qualname__.lower()}".'
+        )
+
     def _process_stock_market_market(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing stock market MARKET data for "{data_quality.value}".'
@@ -7808,7 +9177,7 @@ class DataPreprocessor:
                 self._clean_stock_market_market()
 
             case DataQuality.GOLD:
-                pass
+                self._transform_stock_market_market()
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -7818,16 +9187,13 @@ class DataPreprocessor:
     # endregion STOCK MARKET.MARKET
 
     # region STOCK_MARKET.VN_INDEX
-    def _ingest_stock_market_vn_index_cafef(self) -> None:
+    def _ingest_stock_market_vn_index_price(self) -> None:
         key = (
             ScrapeMainType.STOCK_MARKET,
-            StockMarketSubType.VN_HNX_INDEX,
-            VnHnxIndexSource.CAFEF,
+            StockMarketSubType.VN_INDEX_PRICE,
         )
 
-        folder_path = (
-            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
+        folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}"
 
         file_path = get_newest_file_path(
             folder_path=folder_path, extension=FileExtension.CSV
@@ -7841,35 +9207,95 @@ class DataPreprocessor:
 
         # Add logic for processing data here
         df = pd.read_csv(file_path, encoding="utf-8")
-        vn_index_df = df[df["<Ticker>"] == "VNINDEX"]
         rename_map = {
-            "<Ticker>": "ticker",
-            "<DTYYYYMMDD>": "date",
-            "<Open>": "open",
-            "<High>": "high",
-            "<Low>": "low",
-            "<Close>": "close",
-            "<Volume>": "volume",
+            "Ngay": "date",
+            "GiaDieuChinh": "adjust",
+            "GiaDongCua": "close",
+            "ThayDoi": "change",
+            "KhoiLuongKhopLenh": "matching_volume",
+            "GiaTriKhopLenh": "matching_value",
+            "KLThoaThuan": "negotiate_volume",
+            "GtThoaThuan": "negotiate_value",
+            "GiaMoCua": "open",
+            "GiaCaoNhat": "high",
+            "GiaThapNhat": "low",
         }
-        vn_index_df = vn_index_df.rename(columns=rename_map)
-        vn_index_df.drop(columns=["ticker"], inplace=True)
-        vn_index_df["date"] = pd.to_datetime(vn_index_df["date"], format="%Y%m%d")
+        vn_index_df = df.rename(columns=rename_map)
+        # Extract percentage
+        vn_index_df["percent_change"] = (
+            vn_index_df["change"].str.extract(r"\(([-\d\.]+)").astype(float)
+        )
+        vn_index_df["change"] = (
+            vn_index_df["change"].str.extract(r"([-\d\.]+)").astype(float)
+        )
+        vn_index_df["date"] = pd.to_datetime(vn_index_df["date"], format="%d/%m/%Y")
         vn_index_df = vn_index_df.sort_values(by="date").reset_index(drop=True)
 
         self._save_pandas_table_to_database(
             schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.VN_INDEX.name,
-            primary_keys=Table.VN_INDEX.primary_key,
+            table_name=Table.B_VN_INDEX_PRICE.name,
+            primary_keys=Table.B_VN_INDEX_PRICE.primary_key,
             df=vn_index_df,
         )
 
         self._logger.log_info(f'Finish ingesting data in "{file_path}".')
 
-    def _clean_stock_market_vn_index_cafef(self) -> None:
+    def _ingest_stock_market_vn_index_order(self) -> None:
+        key = (
+            ScrapeMainType.STOCK_MARKET,
+            StockMarketSubType.VN_INDEX_ORDER,
+        )
+
+        folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}"
+
+        file_path = get_newest_file_path(
+            folder_path=folder_path, extension=FileExtension.CSV
+        )
+
+        if not file_path:
+            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
+            return
+
+        self._logger.log_info(f'Start ingesting data in "{file_path}".')
+
+        # Add logic for processing data here
+        df = pd.read_csv(file_path, encoding="utf-8")
+        rename_map = {
+            "Ngày": "date",
+            "Thay đổi": "close_change",
+            "Số lệnh mua": "number_of_buy_orders",
+            "Khối lượng mua": "buy_volume",
+            " KLTB 1 lệnh mua": "average_volume_per_buy_order",
+            "Số lệnh bán": "number_of_sell_orders",
+            "Khối lượng bán": "sell_volume",
+            "KLTB 1 lệnh bán": "average_volume_per_sell_order",
+            "Khối lượng ròng": "net_volume",
+        }
+        vn_index_df = df.rename(columns=rename_map)
+        vn_index_df["close"] = (
+            vn_index_df["close_change"].str.extract(r"([\d\.]+)").astype(float)
+        )
+        for col in ["number_of_buy_orders", "buy_volume",  "number_of_sell_orders", "sell_volume", "net_volume"]:
+            vn_index_df[col] = vn_index_df[col].str.replace(",", "", regex=False).astype(int)
+        for col in ["average_volume_per_buy_order", "average_volume_per_sell_order"]:
+            vn_index_df[col] = vn_index_df[col].str.replace(",", "", regex=False).astype(float)
+        vn_index_df.drop(columns=["close_change"], inplace=True)
+        vn_index_df["date"] = pd.to_datetime(vn_index_df["date"], format="%d/%m/%Y")
+        vn_index_df = vn_index_df.sort_values(by="date").reset_index(drop=True)
+
+        self._save_pandas_table_to_database(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.B_VN_INDEX_ORDER.name,
+            primary_keys=Table.B_VN_INDEX_ORDER.primary_key,
+            df=vn_index_df,
+        )
+
+        self._logger.log_info(f'Finish ingesting data in "{file_path}".')
+
+    def _clean_stock_market_vn_index_price(self) -> None:
         key = (
             ScrapeMainType.STOCK_MARKET,
             StockMarketSubType.VN_HNX_INDEX,
-            VnHnxIndexSource.CAFEF,
         )
 
         self._logger.log_info(
@@ -7901,6 +9327,47 @@ class DataPreprocessor:
             f'Finish cleaning data in table "{format_key_for_table(key)}".'
         )
 
+    def _transform_stock_market_vn_index_price(self) -> None:
+        key = (
+            ScrapeMainType.STOCK_MARKET,
+            StockMarketSubType.VN_HNX_INDEX,
+            VnHnxIndexSource.CAFEF,
+        )
+
+        self._logger.log_info(
+            f'Start transforming data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for transforming data here
+        self._select_database(DataQuality.SILVER.value)
+        silver_df = self._select(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.VN_INDEX.name,
+        )
+
+        gold_df = make_date_time_index_for_dataframe(df=silver_df)
+        gold_df = standardize_time_frame(df=gold_df)
+
+        cols_to_interpolate = gold_df.columns.difference(["date"])
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
+            pd.to_numeric, errors="coerce"
+        )
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
+            method="linear"
+        )
+
+        self._select_database(DataQuality.GOLD.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.VN_INDEX.name,
+            primary_keys=Table.VN_INDEX.primary_key,
+            df=gold_df,
+        )
+
+        self._logger.log_info(
+            f'Finish transforming data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_stock_market_vn_index(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing stock market VN_INDEX data for "{data_quality.value}".'
@@ -7908,13 +9375,14 @@ class DataPreprocessor:
 
         match data_quality:
             case DataQuality.BRONZE:
-                self._ingest_stock_market_vn_index_cafef()
+                self._ingest_stock_market_vn_index_price()
+                self._ingest_stock_market_vn_index_order()
 
             case DataQuality.SILVER:
-                self._clean_stock_market_vn_index_cafef()
+                self._clean_stock_market_vn_index_price()
 
             case DataQuality.GOLD:
-                pass
+                self._transform_stock_market_vn_index_price()
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -8009,6 +9477,47 @@ class DataPreprocessor:
             f'Finish cleaning data in table "{format_key_for_table(key)}".'
         )
 
+    def _transform_stock_market_hnx_index_cafef(self) -> None:
+        key = (
+            ScrapeMainType.STOCK_MARKET,
+            StockMarketSubType.VN_HNX_INDEX,
+            VnHnxIndexSource.CAFEF,
+        )
+
+        self._logger.log_info(
+            f'Start transforming data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for transforming data here
+        self._select_database(DataQuality.SILVER.value)
+        silver_df = self._select(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.HNX_INDEX.name,
+        )
+
+        gold_df = make_date_time_index_for_dataframe(df=silver_df)
+        gold_df = standardize_time_frame(df=gold_df)
+
+        cols_to_interpolate = gold_df.columns.difference(["date"])
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
+            pd.to_numeric, errors="coerce"
+        )
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
+            method="linear"
+        )
+
+        self._select_database(DataQuality.GOLD.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.HNX_INDEX.name,
+            primary_keys=Table.HNX_INDEX.primary_key,
+            df=gold_df,
+        )
+
+        self._logger.log_info(
+            f'Finish transforming data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_stock_market_hnx_index(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing stock market HNX_INDEX data for "{data_quality.value}".'
@@ -8022,7 +9531,7 @@ class DataPreprocessor:
                 self._clean_stock_market_hnx_index_cafef()
 
             case DataQuality.GOLD:
-                pass
+                self._transform_stock_market_hnx_index_cafef()
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -8135,6 +9644,47 @@ class DataPreprocessor:
             f'Finish cleaning data in table "{format_key_for_table(key)}".'
         )
 
+    def _transform_stock_market_vn_30_index_cafef(self) -> None:
+        key = (
+            ScrapeMainType.STOCK_MARKET,
+            StockMarketSubType.VN_30_INDEX,
+            Vn30IndexSource.CAFEF,
+        )
+
+        self._logger.log_info(
+            f'Start transforming data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for transforming data here
+        self._select_database(DataQuality.SILVER.value)
+        silver_df = self._select(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.VN_30_INDEX.name,
+        )
+
+        gold_df = make_date_time_index_for_dataframe(df=silver_df)
+        gold_df = standardize_time_frame(df=gold_df)
+
+        cols_to_interpolate = gold_df.columns.difference(["date"])
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
+            pd.to_numeric, errors="coerce"
+        )
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
+            method="linear"
+        )
+
+        self._select_database(DataQuality.GOLD.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.VN_30_INDEX.name,
+            primary_keys=Table.VN_30_INDEX.primary_key,
+            df=gold_df,
+        )
+
+        self._logger.log_info(
+            f'Finish transforming data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_stock_market_vn_30_index(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing stock market VN_30_INDEX data for "{data_quality.value}".'
@@ -8148,7 +9698,7 @@ class DataPreprocessor:
                 self._clean_stock_market_vn_30_index_cafef()
 
             case DataQuality.GOLD:
-                pass
+                self._transform_stock_market_vn_30_index_cafef()
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -8261,6 +9811,47 @@ class DataPreprocessor:
             f'Finish cleaning data in table "{format_key_for_table(key)}".'
         )
 
+    def _transform_stock_market_vn_100_index_cafef(self) -> None:
+        key = (
+            ScrapeMainType.STOCK_MARKET,
+            StockMarketSubType.VN_100_INDEX,
+            Vn100IndexSource.CAFEF,
+        )
+
+        self._logger.log_info(
+            f'Start transforming data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for transforming data here
+        self._select_database(DataQuality.SILVER.value)
+        silver_df = self._select(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.VN_100_INDEX.name,
+        )
+
+        gold_df = make_date_time_index_for_dataframe(df=silver_df)
+        gold_df = standardize_time_frame(df=gold_df)
+
+        cols_to_interpolate = gold_df.columns.difference(["date"])
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
+            pd.to_numeric, errors="coerce"
+        )
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
+            method="linear"
+        )
+
+        self._select_database(DataQuality.GOLD.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.VN_100_INDEX.name,
+            primary_keys=Table.VN_100_INDEX.primary_key,
+            df=gold_df,
+        )
+
+        self._logger.log_info(
+            f'Finish transforming data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_stock_market_vn_100_index(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing stock market VN_100_INDEX data for "{data_quality.value}".'
@@ -8274,7 +9865,7 @@ class DataPreprocessor:
                 self._clean_stock_market_vn_100_index_cafef()
 
             case DataQuality.GOLD:
-                pass
+                self._transform_stock_market_vn_100_index_cafef()
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -8393,6 +9984,47 @@ class DataPreprocessor:
             f'Finish cleaning data in table "{format_key_for_table(key)}".'
         )
 
+    def _transform_stock_market_hnx_30_index_cafef(self) -> None:
+        key = (
+            ScrapeMainType.STOCK_MARKET,
+            StockMarketSubType.HNX_30_INDEX,
+            Hnx30IndexSource.CAFEF,
+        )
+
+        self._logger.log_info(
+            f'Start transforming data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for transforming data here
+        self._select_database(DataQuality.SILVER.value)
+        silver_df = self._select(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.HNX_30_INDEX.name,
+        )
+
+        gold_df = make_date_time_index_for_dataframe(df=silver_df)
+        gold_df = standardize_time_frame(df=gold_df)
+
+        cols_to_interpolate = gold_df.columns.difference(["date"])
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
+            pd.to_numeric, errors="coerce"
+        )
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
+            method="linear"
+        )
+
+        self._select_database(DataQuality.GOLD.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.HNX_30_INDEX.name,
+            primary_keys=Table.HNX_30_INDEX.primary_key,
+            df=gold_df,
+        )
+
+        self._logger.log_info(
+            f'Finish transforming data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_stock_market_hnx_30_index(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing stock market HNX_30_INDEX data for "{data_quality.value}".'
@@ -8406,7 +10038,7 @@ class DataPreprocessor:
                 self._clean_stock_market_hnx_30_index_cafef()
 
             case DataQuality.GOLD:
-                pass
+                self._transform_stock_market_hnx_30_index_cafef()
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -8525,6 +10157,47 @@ class DataPreprocessor:
             f'Finish cleaning data in table "{format_key_for_table(key)}".'
         )
 
+    def _transform_stock_market_upcom_index_cafef(self) -> None:
+        key = (
+            ScrapeMainType.STOCK_MARKET,
+            StockMarketSubType.UPCOM_INDEX,
+            UpcomIndexSource.CAFEF,
+        )
+
+        self._logger.log_info(
+            f'Start transforming data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for transforming data here
+        self._select_database(DataQuality.SILVER.value)
+        silver_df = self._select(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.UPCOM_INDEX.name,
+        )
+
+        gold_df = make_date_time_index_for_dataframe(df=silver_df)
+        gold_df = standardize_time_frame(df=gold_df)
+
+        cols_to_interpolate = gold_df.columns.difference(["date"])
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
+            pd.to_numeric, errors="coerce"
+        )
+        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
+            method="linear"
+        )
+
+        self._select_database(DataQuality.GOLD.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.UPCOM_INDEX.name,
+            primary_keys=Table.UPCOM_INDEX.primary_key,
+            df=gold_df,
+        )
+
+        self._logger.log_info(
+            f'Finish transforming data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_stock_market_upcom_index(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing stock market UPCOM_INDEX data for "{data_quality.value}".'
@@ -8538,7 +10211,7 @@ class DataPreprocessor:
                 self._clean_stock_market_upcom_index_cafef()
 
             case DataQuality.GOLD:
-                pass
+                self._transform_stock_market_upcom_index_cafef()
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -8675,6 +10348,90 @@ class DataPreprocessor:
 
         self._logger.log_info(f'Finish ingesting data in "{table_name}".')
 
+    def _clean_enterprise_stock_cafef(self) -> None:
+        key = (
+            ScrapeMainType.ENTERPRISE,
+            EnterpriseSubType.STOCK_INFORMATION,
+            StockInformationSource.CAFEF,
+        )
+
+        self._logger.log_info(
+            f'Start cleaning data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for cleaning data here
+        self._select_database(DataQuality.BRONZE.value)
+
+        bronze_df = self._select(
+            schema_name=Schema.ENTERPRISE.value,
+            table_name=Table.STOCK.name,
+        )
+
+        silver_df = bronze_df.drop(
+            columns=[
+                Table.STOCK.Column.ID.value,
+                Table.STOCK.Column.CREATE_DATE.value,
+                Table.STOCK.Column.UPDATE_DATE.value,
+                Table.STOCK.Column.DELETE_DATE.value,
+            ]
+        )
+
+        silver_df = self._clean(
+            df=silver_df,
+            clean_layer_list=[CleanLayer.ORDER_BY([Table.STOCK.Column.CODE.value])],
+        )
+
+        self._select_database(DataQuality.SILVER.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.ENTERPRISE.value,
+            table_name=Table.STOCK.name,
+            primary_keys=Table.STOCK.primary_key,
+            df=silver_df,
+        )
+
+        self._logger.log_info(
+            f'Finish cleaning data in table "{format_key_for_table(key)}".'
+        )
+
+    def _transform_enterprise_stock_cafef(self) -> None:
+        key = (
+            ScrapeMainType.ENTERPRISE,
+            EnterpriseSubType.STOCK_INFORMATION,
+            StockInformationSource.CAFEF,
+        )
+
+        self._logger.log_info(
+            f'Start transforming data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for transforming data here
+        self._select_database(DataQuality.SILVER.value)
+        silver_df = self._select(
+            schema_name=Schema.ENTERPRISE.value,
+            table_name=Table.STOCK.name,
+        )
+
+        gold_df = silver_df.drop(
+            columns=[
+                Table.STOCK.Column.ID.value,
+                Table.STOCK.Column.CREATE_DATE.value,
+                Table.STOCK.Column.UPDATE_DATE.value,
+                Table.STOCK.Column.DELETE_DATE.value,
+            ]
+        )
+
+        self._select_database(DataQuality.GOLD.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.ENTERPRISE.value,
+            table_name=Table.STOCK.name,
+            primary_keys=Table.STOCK.primary_key,
+            df=gold_df,
+        )
+
+        self._logger.log_info(
+            f'Finish transforming data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_enterprise_stock(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing enterprise STOCK data for "{data_quality.value}".'
@@ -8685,10 +10442,10 @@ class DataPreprocessor:
                 self._ingest_enterprise_stock_cafef()
 
             case DataQuality.SILVER:
-                pass
+                self._clean_enterprise_stock_cafef()
 
             case DataQuality.GOLD:
-                pass
+                self._transform_enterprise_stock_cafef()
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -8777,6 +10534,9 @@ class DataPreprocessor:
             year_list = [year for year in year_list if year > process_year]
 
             for year in year_list:
+                self._logger.log_info(
+                    f'Ingesting data for market "{market_code}" in year "{year}".'
+                )
                 self._save_pandas_table_to_database(
                     schema_name=Schema.ENTERPRISE.value,
                     table_name=Table.DAILY_PRICE.name,
@@ -8820,6 +10580,94 @@ class DataPreprocessor:
                 ],
             )
 
+    def _transform_enterprise_daily_price_cafef(self) -> None:
+        key = (
+            ScrapeMainType.ENTERPRISE,
+            EnterpriseSubType.DAILY_PRICE,
+            DailyPriceSource.CAFEF,
+        )
+
+        self._logger.log_info(
+            f'Start transforming data in table "{format_key_for_table(key)}".'
+        )
+
+        # Add logic for transforming data here
+
+        # Get stock code from DB
+        if len(STOCK_CODES_TO_BE_EXPORTED_TO_GOLD_DB) == 0:
+            self.logger.error(
+                "No stock code to be exported to gold database. Please check the database."
+            )
+            return
+
+        available_stock_codes = []
+        for required_stock_code in STOCK_CODES_TO_BE_EXPORTED_TO_GOLD_DB:
+            self._select_database(DataQuality.GOLD.value)
+            stock_gold_df = self._select(
+                schema_name=Schema.ENTERPRISE.value,
+                table_name=Table.STOCK.name,
+                columns=[Table.STOCK.Column.CODE.value],
+                conditions=[
+                    Condition(
+                        column=Table.STOCK.Column.CODE.value,
+                        operator=SqlOperator.EQUAL_TO,
+                        value=str.upper(required_stock_code),
+                        data_type=DataType.VARCHAR,
+                    )
+                ],
+            )
+
+            stock_code = None
+            if stock_gold_df is not None and not stock_gold_df.empty:
+                stock_code = stock_gold_df.squeeze()
+                available_stock_codes.append(stock_code)
+
+            if not stock_code:
+                self.logger.error(
+                    f"Cannot find {stock_code} stock in database. Please check the database."
+                )
+                continue
+
+        if len(available_stock_codes) == 0:
+            self.logger.error(
+                "No stock code to be exported to gold database. Please check the database."
+            )
+            return
+
+        for stock_code in available_stock_codes:
+            self._select_database(DataQuality.BRONZE.value)
+            daily_price_bronze_df = self._select(
+                schema_name=Schema.ENTERPRISE.value,
+                table_name=Table.DAILY_PRICE.name,
+                conditions=[
+                    Condition(
+                        column=Table.STOCK.Column.CODE.value,
+                        operator=SqlOperator.EQUAL_TO,
+                        value=str.upper(stock_code),
+                        data_type=DataType.VARCHAR,
+                    )
+                ],
+            )
+
+            daily_price_gold_df = self._clean(
+                df=daily_price_bronze_df,
+                clean_layer_list=[
+                    CleanLayer.ORDER_BY([Table.DAILY_PRICE.Column.DATE.value])
+                ],
+            )
+
+            self._select_database(DataQuality.GOLD.value)
+            self._save_pandas_table_to_database(
+                schema_name=Schema.ENTERPRISE.value,
+                table_name=stock_code,
+                primary_keys=["date"],
+                df=daily_price_gold_df,
+            )
+
+        self._logger.log_info(
+            f'Finish transforming data in table "{format_key_for_table(key)}".'
+        )
+
     def _process_enterprise_daily_price(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing enterprise DAILY PRICE data for "{data_quality.value}".'
@@ -8833,7 +10681,7 @@ class DataPreprocessor:
                 pass
 
             case DataQuality.GOLD:
-                pass
+                self._transform_enterprise_daily_price_cafef()
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -8850,56 +10698,56 @@ class DataPreprocessor:
         self._logger.log_info(f'Start processing data for "{data_quality.value}".')
 
         # Macroeconomics
-        self._process_macroeconomics_gdp(data_quality)
-        self._process_macroeconomics_cpi(data_quality)
-        self._process_macroeconomics_ppi(data_quality)
-        self._process_macroeconomics_ipi(data_quality)
-        self._process_macroeconomics_xpi(data_quality)
-        self._process_macroeconomics_mpi(data_quality)
-        self._process_macroeconomics_population(data_quality)
-        self._process_macroeconomics_labor(data_quality)
-        self._process_macroeconomics_retail(data_quality)
-        self._process_macroeconomics_pmi(data_quality)
-        self._process_macroeconomics_iip(data_quality)
-        self._process_macroeconomics_ipv(data_quality)
-        self._process_macroeconomics_mip(data_quality)
-        self._process_macroeconomics_fa_by_house_types(data_quality)
-        self._process_macroeconomics_it_bop(data_quality)
-        self._process_macroeconomics_tsbr(data_quality)
-        self._process_macroeconomics_tsbe(data_quality)
-        self._process_macroeconomics_gd(data_quality)
-        self._process_macroeconomics_brd(data_quality)
-        self._process_macroeconomics_iisd(data_quality)
-        self._process_macroeconomics_treg(data_quality)
-        self._process_macroeconomics_credit(data_quality)
-        self._process_macroeconomics_mobilization(data_quality)
-        self._process_macroeconomics_exchange_rate(data_quality)
-        self._process_macroeconomics_iir(data_quality)
-        self._process_macroeconomics_rrrr(data_quality)
-        self._process_macroeconomics_fdi_sector(data_quality)
-        self._process_macroeconomics_fdi_rd(data_quality)
-        self._process_macroeconomics_export(data_quality)
-        self._process_macroeconomics_import(data_quality)
-        self._process_macroeconomics_gold_price(data_quality)
-        self._process_macroeconomics_oil_price(data_quality)
-        self._process_macroeconomics_dow_jones(data_quality)
-        self._process_macroeconomics_nyse_composite(data_quality)
-        self._process_macroeconomics_snp_500(data_quality)
-        self._process_macroeconomics_nasdaq_composite(data_quality)
-        self._process_macroeconomics_nasdaq_100(data_quality)
+        # self._process_macroeconomics_gdp(data_quality)
+        # self._process_macroeconomics_cpi(data_quality)
+        # self._process_macroeconomics_ppi(data_quality)
+        # self._process_macroeconomics_ipi(data_quality)
+        # self._process_macroeconomics_xpi(data_quality)
+        # self._process_macroeconomics_mpi(data_quality)
+        # self._process_macroeconomics_population(data_quality)
+        # self._process_macroeconomics_labor(data_quality)
+        # self._process_macroeconomics_retail(data_quality)
+        # self._process_macroeconomics_pmi(data_quality)
+        # self._process_macroeconomics_iip(data_quality)
+        # self._process_macroeconomics_ipv(data_quality)
+        # self._process_macroeconomics_mip(data_quality)
+        # self._process_macroeconomics_fa_by_house_types(data_quality)
+        # self._process_macroeconomics_it_bop(data_quality)
+        # self._process_macroeconomics_tsbr(data_quality)
+        # self._process_macroeconomics_tsbe(data_quality)
+        # self._process_macroeconomics_gd(data_quality)
+        # self._process_macroeconomics_brd(data_quality)
+        # self._process_macroeconomics_iisd(data_quality)
+        # self._process_macroeconomics_treg(data_quality)
+        # self._process_macroeconomics_credit(data_quality)
+        # self._process_macroeconomics_mobilization(data_quality)
+        # self._process_macroeconomics_exchange_rate(data_quality)
+        # self._process_macroeconomics_iir(data_quality)
+        # self._process_macroeconomics_rrrr(data_quality)
+        # self._process_macroeconomics_fdi_sector(data_quality)
+        # self._process_macroeconomics_fdi_rd(data_quality)
+        # self._process_macroeconomics_export(data_quality)
+        # self._process_macroeconomics_import(data_quality)
+        # self._process_macroeconomics_gold_price(data_quality)
+        # self._process_macroeconomics_oil_price(data_quality)
+        # self._process_macroeconomics_dow_jones(data_quality)
+        # self._process_macroeconomics_nyse_composite(data_quality)
+        # self._process_macroeconomics_snp_500(data_quality)
+        # self._process_macroeconomics_nasdaq_composite(data_quality)
+        # self._process_macroeconomics_nasdaq_100(data_quality)
 
-        # Stock market
-        self._process_stock_market_market(data_quality)
+        # # Stock market
+        # self._process_stock_market_market(data_quality)
         self._process_stock_market_vn_index(data_quality)
-        self._process_stock_market_hnx_index(data_quality)
-        self._process_stock_market_vn_30_index(data_quality)
-        self._process_stock_market_vn_100_index(data_quality)
-        self._process_stock_market_hnx_30_index(data_quality)
-        self._process_stock_market_upcom_index(data_quality)
+        # self._process_stock_market_hnx_index(data_quality)
+        # self._process_stock_market_vn_30_index(data_quality)
+        # self._process_stock_market_vn_100_index(data_quality)
+        # self._process_stock_market_hnx_30_index(data_quality)
+        # self._process_stock_market_upcom_index(data_quality)
 
-        # Enterprise
-        self._process_enterprise_stock(data_quality)
-        self._process_enterprise_daily_price(data_quality)
+        # # Enterprise
+        # self._process_enterprise_stock(data_quality)
+        # self._process_enterprise_daily_price(data_quality)
 
         self._logger.log_info(f'Finish processing data for "{data_quality.value}".')
 

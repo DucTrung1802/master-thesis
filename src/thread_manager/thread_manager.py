@@ -27,8 +27,8 @@ class ThreadManager:
                 f'Power of ThreadManager is invalid: "{power}". Power is set as default: 50%.'
             )
 
-        self._max_workers = int(os.process_cpu_count() * self._power / 100) * 0.4
-        self._logger.log_info(f"Total logical processors: {os.process_cpu_count()}.")
+        self._max_workers = int(os.cpu_count() * self._power / 100) * 0.4
+        self._logger.log_info(f"Total logical processors: {os.cpu_count()}.")
         self._logger.log_info(f"The number of max workers is {self._max_workers}.")
 
         self._task_name_set: Set[str] = set()
@@ -124,7 +124,9 @@ class ThreadManager:
 
             # If no task is ready but tasks remain, it means dependencies failed or circular dependency
             if not ready_tasks:
-                self._logger.log_error("No ready tasks found. Possible dependency issue.")
+                self._logger.log_error(
+                    "No ready tasks found. Possible dependency issue."
+                )
                 break
 
             # Remove ready tasks from task list
@@ -132,17 +134,21 @@ class ThreadManager:
                 self._task_list.remove(task)
 
             with ThreadPoolExecutor(max_workers=self._max_workers) as executor:
-                future_to_task = {executor.submit(task.run): task for task in ready_tasks}
+                future_to_task = {
+                    executor.submit(task.run): task for task in ready_tasks
+                }
 
                 futures = list(future_to_task.keys())
-                wait(futures)
+                wait(futures, timeout=120)
 
                 for future in future_to_task:
                     task = future_to_task[future]
                     try:
                         result = future.result()
                         successful_tasks[task.name] = result
-                        self._logger.log_info(f"Task '{task.name}' completed successfully.")
+                        self._logger.log_info(
+                            f"Task '{task.name}' completed successfully."
+                        )
                     except Exception as e:
                         failed_tasks[task.name] = str(e)
                         self._logger.log_error(f"Task '{task.name}' failed: {e}")

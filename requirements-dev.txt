@@ -1,8 +1,0 @@
-psycopg2
-selenium
-beautifulsoup4
-requests
-load_dotenv
-pandas
-nbformat
-matplotlib
