@@ -3251,8 +3251,8 @@ class DataPreprocessor:
                         Column(name=Table.B_VN_INDEX_PRICE.Column.NEGOTIATE_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
                         Column(name=Table.B_VN_INDEX_PRICE.Column.NEGOTIATE_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
                         Column(name=Table.B_VN_INDEX_PRICE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.B_VN_INDEX_PRICE.Column.HIGHEST.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.B_VN_INDEX_PRICE.Column.LOWEST.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.B_VN_INDEX_PRICE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.B_VN_INDEX_PRICE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
                     ],
                     primary_keys=Table.B_VN_INDEX_PRICE.primary_key,
                 )
@@ -9217,8 +9217,8 @@ class DataPreprocessor:
             "KLThoaThuan": "negotiate_volume",
             "GtThoaThuan": "negotiate_value",
             "GiaMoCua": "open",
-            "GiaCaoNhat": "highest",
-            "GiaThapNhat": "lowest",
+            "GiaCaoNhat": "high",
+            "GiaThapNhat": "low",
         }
         vn_index_df = df.rename(columns=rename_map)
         # Extract percentage

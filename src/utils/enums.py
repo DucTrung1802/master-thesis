@@ -2114,8 +2114,8 @@ class Table:
             NEGOTIATE_VOLUME = "negotiate_volume"
             NEGOTIATE_VALUE = "negotiate_value"
             OPEN = "open"
-            HIGHEST = "highest"
-            LOWEST = "lowest"
+            HIGH = "high"
+            LOW = "low"
 
         name = "vn_index_price"
         primary_key = [Column.DATE.value]
