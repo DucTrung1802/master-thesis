@@ -2102,7 +2102,7 @@ class Table:
         name = "market"
         primary_key = [Column.ID.value]
 
-    class B_VN_INDEX:
+    class B_VN_INDEX_PRICE:
         class Column(Enum):
             DATE = "date"
             ADJUST = "adjust"
@@ -2117,7 +2117,22 @@ class Table:
             HIGHEST = "highest"
             LOWEST = "lowest"
 
-        name = "vn_index"
+        name = "vn_index_price"
+        primary_key = [Column.DATE.value]
+
+    class B_VN_INDEX_ORDER:
+        class Column(Enum):
+            DATE = "date"
+            CLOSE = "close"
+            NUMBER_OF_BUY_ORDERS = "number_of_buy_orders"
+            BUY_VOLUME = "buy_volume"
+            AVERAGE_VOLUME_PER_BUY_ORDER = "average_volume_per_buy_order"
+            NUMBER_OF_SELL_ORDERS = "number_of_sell_orders"
+            SELL_VOLUME = "sell_volume"
+            AVERAGE_VOLUME_PER_SELL_ORDER = "average_volume_per_sell_order"
+            NET_VOLUME = "net_volume"
+
+        name = "vn_index_order"
         primary_key = [Column.DATE.value]
 
     class HNX_INDEX:
@@ -2285,7 +2300,7 @@ class TTC_StockMarketTable(Enum):
     UPCOM_INDEX = Table.UPCOM_INDEX.name
     VN_30_INDEX = Table.VN_30_INDEX.name
     VN_100_INDEX = Table.VN_100_INDEX.name
-    VN_INDEX = Table.B_VN_INDEX.name
+    VN_INDEX = Table.B_VN_INDEX_PRICE.name
 
 
 class TTC_EnterpriseTable(Enum):

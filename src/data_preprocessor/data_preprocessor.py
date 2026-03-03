@@ -3235,26 +3235,46 @@ class DataPreprocessor:
                 )
                 # fmt: on
                 
-                # B_VN_INDEX
+                # B_VN_INDEX_PRICE
                 # fmt: off
                 self._database_driver.create_table(
                     schema_name=Schema.STOCK_MARKET.value,
-                    table_name=Table.B_VN_INDEX.name,
+                    table_name=Table.B_VN_INDEX_PRICE.name,
                     columns=[
-                        Column(name=Table.B_VN_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.B_VN_INDEX.Column.ADJUST.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.B_VN_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.B_VN_INDEX.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.B_VN_INDEX.Column.PERCENT_CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.B_VN_INDEX.Column.MATCHING_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.B_VN_INDEX.Column.MATCHING_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.B_VN_INDEX.Column.NEGOTIATE_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.B_VN_INDEX.Column.NEGOTIATE_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.B_VN_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.B_VN_INDEX.Column.HIGHEST.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.B_VN_INDEX.Column.LOWEST.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.B_VN_INDEX_PRICE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.B_VN_INDEX_PRICE.Column.ADJUST.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.B_VN_INDEX_PRICE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.B_VN_INDEX_PRICE.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.B_VN_INDEX_PRICE.Column.PERCENT_CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.B_VN_INDEX_PRICE.Column.MATCHING_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(name=Table.B_VN_INDEX_PRICE.Column.MATCHING_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.B_VN_INDEX_PRICE.Column.NEGOTIATE_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(name=Table.B_VN_INDEX_PRICE.Column.NEGOTIATE_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.B_VN_INDEX_PRICE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.B_VN_INDEX_PRICE.Column.HIGHEST.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.B_VN_INDEX_PRICE.Column.LOWEST.value, data_type=DataType.DECIMAL(), nullable=True),
                     ],
-                    primary_keys=Table.B_VN_INDEX.primary_key,
+                    primary_keys=Table.B_VN_INDEX_PRICE.primary_key,
+                )
+                # fmt: on
+
+                # B_VN_INDEX_ORDER
+                # fmt: off
+                self._database_driver.create_table(
+                    schema_name=Schema.STOCK_MARKET.value,
+                    table_name=Table.B_VN_INDEX_ORDER.name,
+                    columns=[
+                        Column(name=Table.B_VN_INDEX_ORDER.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.B_VN_INDEX_ORDER.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.B_VN_INDEX_ORDER.Column.NUMBER_OF_BUY_ORDERS.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(name=Table.B_VN_INDEX_ORDER.Column.BUY_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(name=Table.B_VN_INDEX_ORDER.Column.AVERAGE_VOLUME_PER_BUY_ORDER.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.B_VN_INDEX_ORDER.Column.NUMBER_OF_SELL_ORDERS.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(name=Table.B_VN_INDEX_ORDER.Column.SELL_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(name=Table.B_VN_INDEX_ORDER.Column.AVERAGE_VOLUME_PER_SELL_ORDER.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.B_VN_INDEX_ORDER.Column.NET_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                    ],
+                    primary_keys=Table.B_VN_INDEX_ORDER.primary_key,
                 )
                 # fmt: on
                 
@@ -9213,8 +9233,8 @@ class DataPreprocessor:
 
         self._save_pandas_table_to_database(
             schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.B_VN_INDEX.name,
-            primary_keys=Table.B_VN_INDEX.primary_key,
+            table_name=Table.B_VN_INDEX_PRICE.name,
+            primary_keys=Table.B_VN_INDEX_PRICE.primary_key,
             df=vn_index_df,
         )
 
@@ -9229,7 +9249,7 @@ class DataPreprocessor:
         folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}"
 
         file_path = get_newest_file_path(
-            folder_path=folder_path, extension=FileExtension.XLSX
+            folder_path=folder_path, extension=FileExtension.CSV
         )
 
         if not file_path:
@@ -9245,28 +9265,28 @@ class DataPreprocessor:
             "Thay đổi": "close_change",
             "Số lệnh mua": "number_of_buy_orders",
             "Khối lượng mua": "buy_volume",
-            "KLTB 1 lệnh mua": "average_volume_per_buy_order",
+            " KLTB 1 lệnh mua": "average_volume_per_buy_order",
             "Số lệnh bán": "number_of_sell_orders",
             "Khối lượng bán": "sell_volume",
             "KLTB 1 lệnh bán": "average_volume_per_sell_order",
             "Khối lượng ròng": "net_volume",
         }
         vn_index_df = df.rename(columns=rename_map)
-        vn_index_df["close_price"] = (
+        vn_index_df["close"] = (
             vn_index_df["close_change"].str.extract(r"([\d\.]+)").astype(float)
         )
-        # Extract percentage
-        vn_index_df["percent_change"] = (
-            vn_index_df["close_change"].str.extract(r"\(([-\d\.]+)").astype(float)
-        )
+        for col in ["number_of_buy_orders", "buy_volume",  "number_of_sell_orders", "sell_volume", "net_volume"]:
+            vn_index_df[col] = vn_index_df[col].str.replace(",", "", regex=False).astype(int)
+        for col in ["average_volume_per_buy_order", "average_volume_per_sell_order"]:
+            vn_index_df[col] = vn_index_df[col].str.replace(",", "", regex=False).astype(float)
         vn_index_df.drop(columns=["close_change"], inplace=True)
-        vn_index_df["date"] = pd.to_datetime(vn_index_df["date"], format="%Y%m%d")
+        vn_index_df["date"] = pd.to_datetime(vn_index_df["date"], format="%d/%m/%Y")
         vn_index_df = vn_index_df.sort_values(by="date").reset_index(drop=True)
 
         self._save_pandas_table_to_database(
             schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.VN_INDEX.name,
-            primary_keys=Table.VN_INDEX.primary_key,
+            table_name=Table.B_VN_INDEX_ORDER.name,
+            primary_keys=Table.B_VN_INDEX_ORDER.primary_key,
             df=vn_index_df,
         )
 
@@ -9276,7 +9296,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.STOCK_MARKET,
             StockMarketSubType.VN_HNX_INDEX,
-            VnHnxIndexSource.CAFEF,
         )
 
         self._logger.log_info(
@@ -9357,6 +9376,7 @@ class DataPreprocessor:
         match data_quality:
             case DataQuality.BRONZE:
                 self._ingest_stock_market_vn_index_price()
+                self._ingest_stock_market_vn_index_order()
 
             case DataQuality.SILVER:
                 self._clean_stock_market_vn_index_price()
