@@ -15,8 +15,8 @@ def main():
 
     my_data_preprocessor = DataPreprocessor(logger=my_logger)
     # my_data_preprocessor.ingest_bronze_data()
-    my_data_preprocessor.ingest_silver_data()
-    # my_data_preprocessor.ingest_gold_data()
+    # my_data_preprocessor.ingest_silver_data()
+    my_data_preprocessor.ingest_gold_data()
 
     # my_data_postprocessor = DataPostprocessor(logger=my_logger)
     # my_data_postprocessor.export_common_dataframe_to_db()

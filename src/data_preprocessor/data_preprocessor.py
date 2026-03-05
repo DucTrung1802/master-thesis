@@ -3564,20 +3564,33 @@ class DataPreprocessor:
                 )
                 # fmt: on
 
-                # VN_INDEX
+                # G_VN_INDEX
                 # fmt: off
                 self._database_driver.create_table(
                     schema_name=Schema.STOCK_MARKET.value,
-                    table_name=Table.VN_INDEX.name,
-                    columns = [
-                        Column(name=Table.VN_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.VN_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_INDEX.Column.VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                    table_name=Table.G_VN_INDEX.name,
+                    columns=[
+                        Column(name=Table.G_VN_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.G_VN_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_VN_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_VN_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_VN_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_VN_INDEX.Column.ADJUST.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_VN_INDEX.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_VN_INDEX.Column.PERCENT_CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_VN_INDEX.Column.MATCHING_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(name=Table.G_VN_INDEX.Column.MATCHING_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_VN_INDEX.Column.NEGOTIATE_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(name=Table.G_VN_INDEX.Column.NEGOTIATE_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_VN_INDEX.Column.NUMBER_OF_BUY_ORDERS.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(name=Table.G_VN_INDEX.Column.BUY_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(name=Table.G_VN_INDEX.Column.AVERAGE_VOLUME_PER_BUY_ORDER.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_VN_INDEX.Column.NUMBER_OF_SELL_ORDERS.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(name=Table.G_VN_INDEX.Column.SELL_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(name=Table.G_VN_INDEX.Column.AVERAGE_VOLUME_PER_SELL_ORDER.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.G_VN_INDEX.Column.NET_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
                     ],
-                    primary_keys=Table.VN_INDEX.primary_key,
+                    primary_keys=Table.G_VN_INDEX.primary_key,
                 )
                 # fmt: on
                 
@@ -9364,11 +9377,10 @@ class DataPreprocessor:
             f'Finish cleaning data in table "{format_key_for_table(key)}".'
         )
 
-    def _transform_stock_market_vn_index_price(self) -> None:
+    def _transform_stock_market_vn_index(self) -> None:
         key = (
             ScrapeMainType.STOCK_MARKET,
-            StockMarketSubType.VN_HNX_INDEX,
-            VnHnxIndexSource.CAFEF,
+            StockMarketSubType.VN_INDEX,
         )
 
         self._logger.log_info(
@@ -9379,7 +9391,7 @@ class DataPreprocessor:
         self._select_database(DataQuality.SILVER.value)
         silver_df = self._select(
             schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.VN_INDEX.name,
+            table_name=Table.S_VN_INDEX.name,
         )
 
         gold_df = make_date_time_index_for_dataframe(df=silver_df)
@@ -9396,8 +9408,8 @@ class DataPreprocessor:
         self._select_database(DataQuality.GOLD.value)
         self._save_pandas_table_to_database(
             schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.VN_INDEX.name,
-            primary_keys=Table.VN_INDEX.primary_key,
+            table_name=Table.G_VN_INDEX.name,
+            primary_keys=Table.G_VN_INDEX.primary_key,
             df=gold_df,
         )
 
@@ -9419,7 +9431,7 @@ class DataPreprocessor:
                 self._clean_stock_market_vn_index()
 
             case DataQuality.GOLD:
-                self._transform_stock_market_vn_index_price()
+                self._transform_stock_market_vn_index()
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')

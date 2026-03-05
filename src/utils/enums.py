@@ -2161,6 +2161,31 @@ class Table:
         name = "vn_index"
         primary_key = [Column.DATE.value]
 
+    class G_VN_INDEX:
+        class Column(Enum):
+            DATE = "date"
+            OPEN = "open"
+            HIGH = "high"
+            LOW = "low"
+            CLOSE = "close"
+            ADJUST = "adjust"
+            CHANGE = "change"
+            PERCENT_CHANGE = "percent_change"
+            MATCHING_VOLUME = "matching_volume"
+            MATCHING_VALUE = "matching_value"
+            NEGOTIATE_VOLUME = "negotiate_volume"
+            NEGOTIATE_VALUE = "negotiate_value"
+            NUMBER_OF_BUY_ORDERS = "number_of_buy_orders"
+            BUY_VOLUME = "buy_volume"
+            AVERAGE_VOLUME_PER_BUY_ORDER = "average_volume_per_buy_order"
+            NUMBER_OF_SELL_ORDERS = "number_of_sell_orders"
+            SELL_VOLUME = "sell_volume"
+            AVERAGE_VOLUME_PER_SELL_ORDER = "average_volume_per_sell_order"
+            NET_VOLUME = "net_volume"
+
+        name = "vn_index"
+        primary_key = [Column.DATE.value]
+
     class HNX_INDEX:
         class Column(Enum):
             DATE = "date"

@@ -351,7 +351,7 @@ VALUES
                         for join_model in join_model_list
                     ]
                 )
-                if len(join_model_list) > 0
+                if join_model_list
                 else ""
             )
 
@@ -509,7 +509,7 @@ FROM upserted;
                         for join_model in join_model_list
                     ]
                 )
-                if len(join_model_list) > 0
+                if join_model_list
                 else ""
             )
 
@@ -645,7 +645,7 @@ WHERE {where_clause}
                         for join_model in join_model_list
                     ]
                 )
-                if len(join_model_list) > 0
+                if join_model_list
                 else ""
             )
             order_by_clause = (
