@@ -322,7 +322,7 @@ VALUES
         schema_name: str,
         table_name: str,
         update_record: Record,
-        join_model: JoinModel = None,
+        join_model_list: List[JoinModel] = None,
         conditions: List[Condition] = None,
     ):
         """Update records in a table."""
@@ -345,15 +345,20 @@ VALUES
                 else ""
             )
             join_clause = (
-                f"JOIN {join_model.table_right} ON {join_model.table_left}.{join_model.column_left} = {join_model.table_right}.{join_model.column_right}"
-                if join_model
+                " ".join(
+                    [
+                        f"{join_model.join_type.value} {join_model.schema_right}.{join_model.table_right} ON {join_model.table_left}.{join_model.column_left} = {join_model.table_right}.{join_model.column_right}"
+                        for join_model in join_model_list
+                    ]
+                )
+                if len(join_model_list) > 0
                 else ""
             )
 
             query = f"""
 UPDATE {schema_name}.{table_name}
 SET
-    {set_clause} {f"\n    {join_clause}" if join_clause else ""}
+    {set_clause} {f"\n{join_clause}" if join_clause else ""}
 {where_clause}
 """
             self.execute_query(query)
@@ -481,7 +486,7 @@ FROM upserted;
         self,
         schema_name: str,
         table_name: str,
-        join_model: JoinModel = None,
+        join_model_list: List[JoinModel] = None,
         conditions: List[Condition] = None,
     ):
         """Delete records in a table."""
@@ -498,14 +503,19 @@ FROM upserted;
                 else ""
             )
             join_clause = (
-                f"JOIN {join_model.table_right} ON {join_model.table_left}.{join_model.column_left} = {join_model.table_right}.{join_model.column_right}"
-                if join_model
+                " ".join(
+                    [
+                        f"{join_model.join_type.value} {join_model.schema_right}.{join_model.table_right} ON {join_model.table_left}.{join_model.column_left} = {join_model.table_right}.{join_model.column_right}"
+                        for join_model in join_model_list
+                    ]
+                )
+                if len(join_model_list) > 0
                 else ""
             )
 
             query = f"""
 DELETE FROM {schema_name}.{table_name}
-{f"\n    {join_clause}" if join_clause else ""}
+{f"\n{join_clause}" if join_clause else ""}
 {where_clause}
             """
             self.execute_query(query)
@@ -606,7 +616,7 @@ WHERE {where_clause}
         schema_name: str,
         table_name: str,
         columns: List[str] = None,
-        join_model: JoinModel = None,
+        join_model_list: List[JoinModel] = None,
         conditions: List[Condition] = None,
         order_by: List[str] = None,
         limit: int = None,
@@ -629,8 +639,13 @@ WHERE {where_clause}
                 else ""
             )
             join_clause = (
-                f"JOIN {join_model.table_right} ON {join_model.table_left}.{join_model.column_left} = {join_model.table_right}.{join_model.column_right}"
-                if join_model
+                " ".join(
+                    [
+                        f"{join_model.join_type.value} {join_model.schema_right}.{join_model.table_right} ON {join_model.table_left}.{join_model.column_left} = {join_model.table_right}.{join_model.column_right}"
+                        for join_model in join_model_list
+                    ]
+                )
+                if len(join_model_list) > 0
                 else ""
             )
             order_by_clause = (
@@ -641,7 +656,7 @@ WHERE {where_clause}
 SELECT
     {columns_clause}
 FROM
-    {schema_name}.{table_name} {f"\n    {join_clause}" if join_clause else ""}
+    {schema_name}.{table_name} {f"\n{join_clause}" if join_clause else ""}
 {where_clause}
 {order_by_clause}
 {f"LIMIT {limit}" if limit else ""}

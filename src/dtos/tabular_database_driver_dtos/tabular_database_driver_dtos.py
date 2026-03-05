@@ -103,16 +103,11 @@ class Condition:
 
 
 @dataclass
-class JoinCombination:
+class JoinModel:
     join_type: SqlJoinType
+    schema_left: str
+    schema_right: str
     table_left: str
     table_right: str
     column_left: str
     column_right: str
-
-
-@dataclass
-class JoinModel:
-    database: str
-    table: str
-    join_combinations: List[JoinCombination]

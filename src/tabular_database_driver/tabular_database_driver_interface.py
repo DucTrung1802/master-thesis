@@ -76,7 +76,7 @@ class TabularDatabaseDriverInterface(ABC):
         schema_name: str,
         table_name: str,
         update_record: Record,
-        join_model: JoinModel = None,
+        join_model_list: List[JoinModel] = None,
         conditions: List[Condition] = None,
     ) -> DatabaseExecutionStatus:
         """Update records in a table."""
@@ -87,7 +87,7 @@ class TabularDatabaseDriverInterface(ABC):
         self,
         schema_name: str,
         table_name: str,
-        join_model: JoinModel = None,
+        join_model_list: List[JoinModel] = None,
         conditions: List[Condition] = None,
     ) -> DatabaseExecutionStatus:
         """Delete records from a table."""
@@ -99,7 +99,7 @@ class TabularDatabaseDriverInterface(ABC):
         schema_name: str,
         table_name: str,
         columns: List[str],
-        join_model: JoinModel = None,
+        join_model_list: List[JoinModel] = None,
         conditions: List[Condition] = None,
     ) -> DatabaseExecutionStatus:
         """Select records from a table."""
