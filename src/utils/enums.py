@@ -187,6 +187,7 @@ class MacroeconomicsSubType(Enum):
 class StockMarketSubType(Enum):
     VN_INDEX_PRICE = "vn_index_price"
     VN_INDEX_ORDER = "vn_index_order"
+    VN_INDEX = "vn_index"
     VN_30_INDEX = "vn30_index"
     VN_100_INDEX = "vn100_index"
     HNX_30_INDEX = "hnx30_index"
@@ -2133,6 +2134,31 @@ class Table:
             NET_VOLUME = "net_volume"
 
         name = "vn_index_order"
+        primary_key = [Column.DATE.value]
+
+    class S_VN_INDEX:
+        class Column(Enum):
+            DATE = "date"
+            OPEN = "open"
+            HIGH = "high"
+            LOW = "low"
+            CLOSE = "close"
+            ADJUST = "adjust"
+            CHANGE = "change"
+            PERCENT_CHANGE = "percent_change"
+            MATCHING_VOLUME = "matching_volume"
+            MATCHING_VALUE = "matching_value"
+            NEGOTIATE_VOLUME = "negotiate_volume"
+            NEGOTIATE_VALUE = "negotiate_value"
+            NUMBER_OF_BUY_ORDERS = "number_of_buy_orders"
+            BUY_VOLUME = "buy_volume"
+            AVERAGE_VOLUME_PER_BUY_ORDER = "average_volume_per_buy_order"
+            NUMBER_OF_SELL_ORDERS = "number_of_sell_orders"
+            SELL_VOLUME = "sell_volume"
+            AVERAGE_VOLUME_PER_SELL_ORDER = "average_volume_per_sell_order"
+            NET_VOLUME = "net_volume"
+
+        name = "vn_index"
         primary_key = [Column.DATE.value]
 
     class HNX_INDEX:
