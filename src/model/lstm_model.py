@@ -16,7 +16,7 @@ from logger.logger import Logger
 from train_test_creator.train_test_set import TrainTestSet
 from utils.constants import PATIENCE
 from utils.enums import (
-    AchitectureType,
+    ModelAchitectureType,
     LossFunctionType,
     MetricType,
     OptimizerType,
@@ -111,7 +111,7 @@ class LSTM_Model:
 
         self._train_test_set = train_test_set
         self._model_config = model_config
-        self._model_config.architecture = AchitectureType.LSTM
+        self._model_config.architecture = ModelAchitectureType.LSTM
         self._device = torch.device(model_config.device)
 
         self._logger.log_info(f"PyTorch version: {torch.__version__}")

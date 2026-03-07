@@ -3,7 +3,7 @@ import json
 
 from utils.constants import RANDOM_SEED
 from utils.enums import (
-    AchitectureType,
+    ModelAchitectureType,
     LossFunctionType,
     MetricType,
     OptimizerType,
@@ -17,7 +17,7 @@ class ModelConfigDto:
     # Metadata
     entity: str
     project: str
-    architecture: AchitectureType
+    architecture: ModelAchitectureType
     stock_code: str
 
     # Windowing

@@ -2359,7 +2359,7 @@ class TTC_EnterpriseTable(Enum):
 
 
 # MODEL TRAIN ENUMS
-class AchitectureType(Enum):
+class ModelAchitectureType(Enum):
     LSTM = "lstm"
     CNN = "cnn"
 
