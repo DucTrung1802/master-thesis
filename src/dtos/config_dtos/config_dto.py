@@ -10,7 +10,7 @@ from utils.enums import (
 
 
 @dataclass
-class ResultDto:
+class ConfigDto:
     # Data
     base_features: List[str]
     stock_code: str
@@ -38,8 +38,3 @@ class ResultDto:
     optimizer: OptimizerType
     loss_fn: LossFunctionType
     patience: int
-
-    # Evaluation
-    mse: float
-    mape: float
-    rmsse: float

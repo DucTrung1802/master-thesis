@@ -125,9 +125,3 @@ PATIENCE = 15  # Continuous epoches that the validation loss does not decrease
 # ===========================
 WANDB_ENTITY_NAME = "trung-lyduc18"
 WANDB_PROJECT_NAME = "master_thesis"
-
-
-# ===========================
-# RESULT CONFIGURATION
-# ===========================
-RESULT_BASE_DIR = "../../results"

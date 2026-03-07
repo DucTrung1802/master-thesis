@@ -10,9 +10,9 @@ import pandas as pd
 from pathlib import Path
 import matplotlib.pyplot as plt
 import time
+from pathlib import Path
 
 from dtos.model_dtos.model_output_dto import ModelOutputDto
-from dtos.result_dtos.result_dto import ResultDto
 from logger.logger import Logger
 from dtos.tabular_database_driver_dtos.tabular_database_driver_dtos import (
     DataType,
@@ -685,25 +685,12 @@ def wait_for_file(file_path, timeout=10, poll_interval=0.25):
     return False
 
 
-def create_next_directory(base_path, prefix):
-    i = 1
-    while True:
-        directory_name = f"{prefix}_{i}"
-        directory_path = os.path.join(base_path, directory_name)
+def get_current_run_path():
+    log_dir = Path("lightning_logs")
+    versions = [d for d in log_dir.iterdir() if d.is_dir() and d.name.startswith("version_")]
+    latest = max(versions, key=lambda x: int(x.name.split("_")[1]))
 
-        try:
-            os.makedirs(directory_path)
-            return directory_path
-        except FileExistsError:
-            i += 1
-
-
-def save_result_dto(save_path, result_dto: ResultDto):
-    full_path = os.path.join(save_path, "result_dto.json")
-
-    with open(full_path, "w") as f:
-        json.dump(asdict(result_dto), f, indent=4, default=str)
-
+    return latest
 
 def save_prediction_figure(y_test, y_predict, save_path, title):
     """Save prediction vs actual plot."""
