@@ -14,5 +14,3 @@ logs/
 mt_env/
 
 wandb/
-
-src/model/lightning_logs/
