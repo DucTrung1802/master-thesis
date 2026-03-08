@@ -1,0 +1,21 @@
+base_features:
+- close
+batch_size: 128
+epochs: 1000
+forecast_window_size: 1
+learning_rate: 1.0e-05
+lookback_window_size: 100
+loss_fn: MSE
+model_architecture: CNN
+model_params: {}
+optimizer: ADAM
+patience: 35
+random_seed: 18
+scaler_type: MINMAX
+stock_code: vn_index
+test_end_date: '2026-02-26'
+test_start_date: '2024-01-01'
+train_end_date: '2021-12-31'
+train_start_date: '2000-01-01'
+validation_end_date: '2023-12-31'
+validation_start_date: '2022-01-01'
