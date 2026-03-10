@@ -1,27 +1,31 @@
-# requirements.txt
-
 # Require Python 3.12.10
 
 numpy<2
 scipy<1.14
-pmdarima
-psycopg2-binary
-selenium
-beautifulsoup4
-requests
-python-dotenv
-pandas
-nbformat
-matplotlib
-statsmodels
-tqdm
-sktime
-seaborn
-xgboost
-shap
-wandb
-ipynbname
-openpyxl
+pmdarima==2.1.1
+psycopg2-binary==2.9.11
+selenium==4.41.0
+beautifulsoup4==4.14.3
+requests==2.32.5
+python-dotenv==1.2.2
+pandas==2.3.3
+nbformat==5.10.4
+matplotlib==3.10.8
+statsmodels==0.14.6
+tqdm==4.67.3
+sktime==0.40.1
+seaborn==0.13.2
+xgboost==3.2.0
+shap==0.49.1
+wandb==0.25.0
+ipynbname==2025.8.0.0
+openpyxl==3.1.5
+lightning==2.6.1
+tsfresh==0.20.2
+setuptools<81.0.0
 
 # Deep learning (GPU-enabled PyTorch)
-torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu121
+--extra-index-url https://download.pytorch.org/whl/cu121
+torch==2.10.0
+torchvision==0.25.0
+torchaudio==2.10.0
