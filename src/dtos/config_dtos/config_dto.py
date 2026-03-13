@@ -23,7 +23,8 @@ class ConfigDto:
 
     # Data Hyperparameters
     random_seed: int
-    lookback_window_size: int
+    min_lookback_window_size: int
+    max_lookback_window_size: int
     forecast_window_size: int
     scaler_type: ScalerType
 
