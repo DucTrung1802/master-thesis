@@ -1,7 +1,7 @@
 base_features:
 - close
 batch_size: 32
-epochs: 3
+epochs: 1000
 forecast_window_size: 1
 learning_rate: 0.0001
 loss_fn: MSE
