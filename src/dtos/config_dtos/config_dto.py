@@ -12,6 +12,7 @@ from utils.enums import (
 @dataclass
 class ConfigDto:
     # Data
+    notebook_name: str
     base_features: List[str]
     stock_code: str
     train_start_date: str
@@ -30,7 +31,7 @@ class ConfigDto:
 
     # Model
     model_architecture: ModelAchitectureType
-    model_params: Dict[str, any]
+    model_params: Dict
 
     # Training Hyperparameters
     epochs: int
