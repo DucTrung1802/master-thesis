@@ -1,4 +1,5 @@
 from dataclasses import asdict
+from datetime import datetime, timedelta
 import json
 import os
 import shutil
@@ -687,10 +688,13 @@ def wait_for_file(file_path, timeout=10, poll_interval=0.25):
 
 def get_current_run_path():
     log_dir = Path("lightning_logs")
-    versions = [d for d in log_dir.iterdir() if d.is_dir() and d.name.startswith("version_")]
+    versions = [
+        d for d in log_dir.iterdir() if d.is_dir() and d.name.startswith("version_")
+    ]
     latest = max(versions, key=lambda x: int(x.name.split("_")[1]))
 
     return latest
+
 
 def save_prediction_figure(y_test, y_predict, save_path, title):
     """Save prediction vs actual plot."""
@@ -704,3 +708,18 @@ def save_prediction_figure(y_test, y_predict, save_path, title):
     fig.tight_layout()
     fig.savefig(save_path, dpi=300)
     plt.close(fig)
+
+
+def get_weekends(from_date: str, to_date: str):
+    start = datetime.strptime(from_date, "%Y-%m-%d")
+    end = datetime.strptime(to_date, "%Y-%m-%d")
+
+    weekends = []
+    current = start
+
+    while current <= end:
+        if current.weekday() in (5, 6):  # 5 = Saturday, 6 = Sunday
+            weekends.append(current.strftime("%Y-%m-%d"))
+        current += timedelta(days=1)
+
+    return weekends
