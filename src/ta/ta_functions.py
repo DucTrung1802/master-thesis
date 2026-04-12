@@ -253,6 +253,67 @@ def add_kaufman_adaptive_moving_average(
     return df
 
 
+# def add_mesa_adaptive_moving_average(
+#     df: pd.DataFrame,
+#     n: list[tuple[float, float]] = None,
+#     column_name: str = "close",
+# ) -> pd.DataFrame:
+#     """
+#     Add MESA Adaptive Moving Average (MAMA) and Following Adaptive Moving Average (FAMA)
+#     columns, their slopes, and pairwise distances.
+
+#     Parameters:
+#     - n: list of (fastlimit, slowlimit) tuples
+#     """
+
+#     validate_column(df, column_name)
+
+#     if n is None:
+#         n = [(0.5, 0.05), (0.25, 0.02)]
+
+#     df = df.copy()
+
+#     mama_cols = []
+#     fama_cols = []
+
+#     # --- MAMA + FAMA + slopes ---
+#     for fastlimit, slowlimit in n:
+#         suffix = f"{fastlimit}_{slowlimit}".replace(".", "")
+
+#         mama_col = f"{column_name}_mama_{suffix}"
+#         fama_col = f"{column_name}_fama_{suffix}"
+
+#         mama_slope_col = f"{mama_col}_slope"
+#         fama_slope_col = f"{fama_col}_slope"
+
+#         mama, fama = talib.MAMA(
+#             df[column_name].to_numpy(),
+#             fastlimit=fastlimit,
+#             slowlimit=slowlimit,
+#         )
+
+#         df[mama_col] = mama
+#         df[fama_col] = fama
+
+#         df[mama_slope_col] = df[mama_col].diff()
+#         df[fama_slope_col] = df[fama_col].diff()
+
+#         mama_cols.append(((fastlimit, slowlimit), mama_col))
+#         fama_cols.append(((fastlimit, slowlimit), fama_col))
+
+#     # --- pairwise distances (MAMA only) ---
+#     for (p1, col1), (p2, col2) in combinations(mama_cols, 2):
+#         dist_col = f"{column_name}_mama_{p1}_{p2}_dist".replace(".", "")
+#         df[dist_col] = df[col1] - df[col2]
+
+#     # --- pairwise distances (FAMA only) ---
+#     for (p1, col1), (p2, col2) in combinations(fama_cols, 2):
+#         dist_col = f"{column_name}_fama_{p1}_{p2}_dist".replace(".", "")
+#         df[dist_col] = df[col1] - df[col2]
+
+#     return df
+
+
 def add_sma(
     df: pd.DataFrame, n: list[int] = None, column_name: str = "close"
 ) -> pd.DataFrame:
