@@ -314,6 +314,43 @@ def add_kaufman_adaptive_moving_average(
 #     return df
 
 
+def add_mid_point(
+    df: pd.DataFrame, n: list[int] = None, column_name: str = "close"
+) -> pd.DataFrame:
+    """
+    Add MIDPOINT columns, their slopes, and pairwise distances.
+    """
+
+    validate_column(df, column_name)
+
+    if n is None:
+        n = [14, 50, 100]
+
+    df = df.copy()
+
+    midpoint_cols = []
+
+    # --- MIDPOINT + slope ---
+    for window in n:
+        midpoint_col = f"{column_name}_mid_point_{window}"
+        slope_col = f"{midpoint_col}_slope"
+
+        df[midpoint_col] = talib.MIDPOINT(
+            df[column_name].to_numpy(),
+            timeperiod=window,
+        )
+        df[slope_col] = df[midpoint_col].diff()
+
+        midpoint_cols.append((window, midpoint_col))
+
+    # --- pairwise distances ---
+    for (w1, col1), (w2, col2) in combinations(midpoint_cols, 2):
+        dist_col = f"{column_name}_mid_point_{w1}_{w2}_dist"
+        df[dist_col] = df[col1] - df[col2]
+
+    return df
+
+
 def add_sma(
     df: pd.DataFrame, n: list[int] = None, column_name: str = "close"
 ) -> pd.DataFrame:
