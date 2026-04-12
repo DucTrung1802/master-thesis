@@ -351,6 +351,54 @@ def add_mid_point(
     return df
 
 
+def add_mid_price(
+    df: pd.DataFrame,
+    n: list[int] = None,
+    high_column: str = "high",
+    low_column: str = "low",
+) -> pd.DataFrame:
+    """
+    Add MIDPRICE columns, their slopes, and pairwise distances.
+
+    MIDPRICE uses high and low prices.
+    """
+
+    validate_column(df, high_column)
+    validate_column(df, low_column)
+
+    if n is None:
+        n = [14, 50, 100]
+
+    df = df.copy()
+
+    # ✅ ensure correct dtype for TA-Lib
+    high = df[high_column].to_numpy(dtype=np.float64)
+    low = df[low_column].to_numpy(dtype=np.float64)
+
+    midprice_cols = []
+
+    # --- MIDPRICE + slope ---
+    for window in n:
+        midprice_col = f"mid_price_{window}"
+        slope_col = f"{midprice_col}_slope"
+
+        df[midprice_col] = talib.MIDPRICE(
+            high,
+            low,
+            timeperiod=window,
+        )
+        df[slope_col] = df[midprice_col].diff()
+
+        midprice_cols.append((window, midprice_col))
+
+    # --- pairwise distances ---
+    for (w1, col1), (w2, col2) in combinations(midprice_cols, 2):
+        dist_col = f"mid_price_{w1}_{w2}_dist"
+        df[dist_col] = df[col1] - df[col2]
+
+    return df
+
+
 def add_sma(
     df: pd.DataFrame, n: list[int] = None, column_name: str = "close"
 ) -> pd.DataFrame:
