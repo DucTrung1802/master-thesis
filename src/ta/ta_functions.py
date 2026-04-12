@@ -204,6 +204,20 @@ def add_ema(
     return df
 
 
+# def add_hilbert_transform(df: pd.DataFrame, column_name: str = "close") -> pd.DataFrame:
+#     validate_column(df, column_name)
+
+#     df = df.copy()
+
+#     ht_col = f"{column_name}_ht_trendline"
+#     slope_col = f"{ht_col}_slope"
+
+#     df[ht_col] = talib.HT_TRENDLINE(df[column_name].to_numpy())
+#     df[slope_col] = df[ht_col].diff()
+
+#     return df
+
+
 def add_sma(
     df: pd.DataFrame, n: list[int] = None, column_name: str = "close"
 ) -> pd.DataFrame:
