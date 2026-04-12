@@ -136,6 +136,40 @@ def add_bollinger_bands(
     return df
 
 
+def add_double_exponential_moving_average(
+    df: pd.DataFrame, n: list[int] = None, column_name: str = "close"
+) -> pd.DataFrame:
+    """
+    Add DEMA columns, their slopes, and pairwise DEMA distances.
+    """
+
+    validate_column(df, column_name)
+
+    if n is None:
+        n = [50, 100, 200]
+
+    df = df.copy()
+
+    dema_cols = []
+
+    # --- DEMA + slope ---
+    for window in n:
+        dema_col = f"{column_name}_dema_{window}"
+        slope_col = f"{dema_col}_slope"
+
+        df[dema_col] = talib.DEMA(df[column_name].to_numpy(), timeperiod=window)
+        df[slope_col] = df[dema_col].diff()
+
+        dema_cols.append((window, dema_col))
+
+    # --- pairwise distances ---
+    for (w1, col1), (w2, col2) in combinations(dema_cols, 2):
+        dist_col = f"{column_name}_dema_{w1}_{w2}_dist"
+        df[dist_col] = df[col1] - df[col2]
+
+    return df
+
+
 def add_sma(
     df: pd.DataFrame, n: list[int] = None, column_name: str = "close"
 ) -> pd.DataFrame:
