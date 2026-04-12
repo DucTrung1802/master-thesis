@@ -218,6 +218,41 @@ def add_ema(
 #     return df
 
 
+def add_kaufman_adaptive_moving_average(
+    df: pd.DataFrame, n: list[int] = None, column_name: str = "close"
+) -> pd.DataFrame:
+    """
+    Add KAMA (Kaufman Adaptive Moving Average) columns,
+    their slopes, and pairwise distances.
+    """
+
+    validate_column(df, column_name)
+
+    if n is None:
+        n = [50, 100, 200]
+
+    df = df.copy()
+
+    kama_cols = []
+
+    # --- KAMA + slope ---
+    for window in n:
+        kama_col = f"{column_name}_kama_{window}"
+        slope_col = f"{kama_col}_slope"
+
+        df[kama_col] = talib.KAMA(df[column_name].to_numpy(), timeperiod=window)
+        df[slope_col] = df[kama_col].diff()
+
+        kama_cols.append((window, kama_col))
+
+    # --- pairwise distances ---
+    for (w1, col1), (w2, col2) in combinations(kama_cols, 2):
+        dist_col = f"{column_name}_kama_{w1}_{w2}_dist"
+        df[dist_col] = df[col1] - df[col2]
+
+    return df
+
+
 def add_sma(
     df: pd.DataFrame, n: list[int] = None, column_name: str = "close"
 ) -> pd.DataFrame:
