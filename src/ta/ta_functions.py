@@ -170,6 +170,40 @@ def add_double_exponential_moving_average(
     return df
 
 
+def add_ema(
+    df: pd.DataFrame, n: list[int] = None, column_name: str = "close"
+) -> pd.DataFrame:
+    """
+    Add EMA columns, their slopes, and pairwise EMA distances.
+    """
+
+    validate_column(df, column_name)
+
+    if n is None:
+        n = [50, 100, 200]
+
+    df = df.copy()
+
+    ema_cols = []
+
+    # --- EMA + slope ---
+    for window in n:
+        ema_col = f"{column_name}_ema_{window}"
+        slope_col = f"{ema_col}_slope"
+
+        df[ema_col] = talib.EMA(df[column_name].to_numpy(), timeperiod=window)
+        df[slope_col] = df[ema_col].diff()
+
+        ema_cols.append((window, ema_col))
+
+    # --- pairwise distances ---
+    for (w1, col1), (w2, col2) in combinations(ema_cols, 2):
+        dist_col = f"{column_name}_ema_{w1}_{w2}_dist"
+        df[dist_col] = df[col1] - df[col2]
+
+    return df
+
+
 def add_sma(
     df: pd.DataFrame, n: list[int] = None, column_name: str = "close"
 ) -> pd.DataFrame:
@@ -200,60 +234,6 @@ def add_sma(
     for (w1, col1), (w2, col2) in combinations(sma_cols, 2):
         dist_col = f"{column_name}_sma_{w1}_{w2}_dist"
         df[dist_col] = df[col1] - df[col2]
-
-    return df
-
-
-def add_ema(
-    df: pd.DataFrame,
-    n: int | list[int] | None = None,
-    column_name: str = "close",
-    default_ema_periods: list[int] = None,
-) -> pd.DataFrame:
-    """
-    Add one or multiple Exponential Moving Average (EMA) columns.
-
-    Default EMA values reflect commonly used technical analysis periods:
-    12, 26, 50, 100, 200.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Input DataFrame containing the target column.
-    n : int or list[int], optional
-        EMA span(s). If None, default popular spans will be used.
-    column_name : str, optional
-        Column to compute EMA on. Default is 'close'.
-    default_ema_periods : list[int], optional
-        Override the predefined popular EMA spans if desired.
-
-    Returns
-    -------
-    pd.DataFrame
-        DataFrame including added EMA column(s).
-    """
-    validate_column(df, column_name)
-    df = df.copy()
-
-    # Default EMA spans widely used in trading
-    if default_ema_periods is None:
-        default_ema_periods = [12, 26, 50, 100, 200]
-
-    # If user provides nothing → use defaults
-    if n is None:
-        periods = default_ema_periods
-    # If user provides a single int
-    elif isinstance(n, int):
-        periods = [n]
-    # If user provides list of ints
-    else:
-        periods = list(n)
-
-    # Compute EMAs
-    for period in periods:
-        df[f"{column_name}_ema_{period}"] = (
-            df[column_name].ewm(span=period, adjust=False).mean()
-        )
 
     return df
 
