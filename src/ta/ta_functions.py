@@ -4,6 +4,8 @@ import numpy as np
 import pandas as pd
 import sys, os
 from dotenv import load_dotenv
+from itertools import combinations
+import talib
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -19,7 +21,7 @@ from dtos.tabular_database_driver_dtos.tabular_database_driver_dtos import (
 from tabular_database_driver.postgre_sql_driver import PostgreSQLDriver
 from utils.constants import *
 from utils.enums import *
-
+from utils.utils import get_weekends
 
 load_dotenv()
 
@@ -58,29 +60,14 @@ def validate_column(df: pd.DataFrame, column_name: str) -> None:
         )
 
 
-# region TREND INDICATORS
+# region OVERLAP STUDIES
 def add_sma(
     df: pd.DataFrame, n: list[int] = None, column_name: str = "close"
 ) -> pd.DataFrame:
     """
-    Add one or multiple Simple Moving Average (SMA) columns to the DataFrame.
-
-    The SMA is the unweighted mean of the previous `n` values from the specified column.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Input DataFrame that must contain the specified column (default is 'close').
-    n : list[int], optional
-        List of window sizes for the SMAs. Defaults to [50, 100, 200].
-    column_name : str, optional
-        Name of the column to calculate the SMA on. Defaults to 'close'.
-
-    Returns
-    -------
-    pd.DataFrame
-        Copy of the input DataFrame with added SMA columns for all values in `n`.
+    Add SMA columns, their slopes, and pairwise SMA distances.
     """
+
     validate_column(df, column_name)
 
     if n is None:
@@ -88,10 +75,22 @@ def add_sma(
 
     df = df.copy()
 
+    sma_cols = []
+
+    # --- SMA + slope ---
     for window in n:
-        df[f"{column_name}_sma_{window}"] = (
-            df[column_name].rolling(window=window, min_periods=1).mean()
-        )
+        sma_col = f"{column_name}_sma_{window}"
+        slope_col = f"{sma_col}_slope"
+
+        df[sma_col] = talib.SMA(df[column_name].values, window)
+        df[slope_col] = df[sma_col].diff()
+
+        sma_cols.append((window, sma_col))
+
+    # --- pairwise distances ---
+    for (w1, col1), (w2, col2) in combinations(sma_cols, 2):
+        dist_col = f"{column_name}_sma_{w1}_{w2}_dist"
+        df[dist_col] = df[col1] - df[col2]
 
     return df
 
