@@ -61,6 +61,81 @@ def validate_column(df: pd.DataFrame, column_name: str) -> None:
 
 
 # region OVERLAP STUDIES
+def add_bollinger_bands(
+    df: pd.DataFrame,
+    n: int | list[int] | None = None,
+    k: float = 2.0,
+    ma_type: int = 0,
+    column_name: str = "close",
+    default_bb_periods: list[int] = None,
+) -> pd.DataFrame:
+    """
+    Add Bollinger Bands (upper, middle, lower) to the DataFrame.
+
+    Default popular Bollinger Band periods:
+        20 (SMA period), standard deviation multiplier k=2.0
+
+    class MA_Type(Enum):
+        SMA = 0
+        EMA = 1
+        WMA = 2
+        DEMA = 3
+        TEMA = 4
+        TRIMA = 5
+        KAMA = 6
+        MAMA = 7
+        T3 = 8
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input DataFrame containing the target column.
+    n : int or list[int], optional
+        SMA period(s) for Bollinger Bands. If None, default period 20 is used.
+    k : float, optional
+        Number of standard deviations for upper/lower bands (default 2.0)
+    column_name : str, optional
+        Column to calculate Bollinger Bands on. Default is 'close'.
+    default_bb_periods : list[int], optional
+        Override the default SMA period(s).
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with Bollinger Bands added:
+        '{column_name}_bb_middle_{n}', '{column_name}_bb_upper_{n}', '{column_name}_bb_lower_{n}'
+    """
+    validate_column(df, column_name)
+    df = df.copy()
+
+    # Default period
+    if default_bb_periods is None:
+        default_bb_periods = [20]
+
+    # Determine periods to compute
+    if n is None:
+        periods = default_bb_periods
+    elif isinstance(n, int):
+        periods = [n]
+    else:
+        periods = list(n)
+
+    for period in periods:
+        upperband, middleband, lowerband = talib.BBANDS(
+            df[column_name].values,
+            timeperiod=period,
+            nbdevup=k,
+            nbdevdn=k,
+            matype=ma_type,
+        )
+
+        df[f"{column_name}_bb_upper_{period}"] = upperband
+        df[f"{column_name}_bb_middle_{period}"] = middleband
+        df[f"{column_name}_bb_lower_{period}"] = lowerband
+
+    return df
+
+
 def add_sma(
     df: pd.DataFrame, n: list[int] = None, column_name: str = "close"
 ) -> pd.DataFrame:
