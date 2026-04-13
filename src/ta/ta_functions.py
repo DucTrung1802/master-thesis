@@ -61,7 +61,7 @@ def validate_column(df: pd.DataFrame, column_name: str) -> None:
 
 
 # region OVERLAP STUDIES
-def add_bollinger_bands(
+def add_bbands(
     df: pd.DataFrame,
     n: int | list[int] | None = None,
     k: float = 2.0,
@@ -136,7 +136,7 @@ def add_bollinger_bands(
     return df
 
 
-def add_double_exponential_moving_average(
+def add_dema(
     df: pd.DataFrame, n: list[int] = None, column_name: str = "close"
 ) -> pd.DataFrame:
     """
@@ -218,7 +218,7 @@ def add_ema(
 #     return df
 
 
-def add_kaufman_adaptive_moving_average(
+def add_kama(
     df: pd.DataFrame, n: list[int] = None, column_name: str = "close"
 ) -> pd.DataFrame:
     """
@@ -314,7 +314,7 @@ def add_kaufman_adaptive_moving_average(
 #     return df
 
 
-def add_mid_point(
+def add_midpoint(
     df: pd.DataFrame, n: list[int] = None, column_name: str = "close"
 ) -> pd.DataFrame:
     """
@@ -332,7 +332,7 @@ def add_mid_point(
 
     # --- MIDPOINT + slope ---
     for window in n:
-        midpoint_col = f"{column_name}_mid_point_{window}"
+        midpoint_col = f"{column_name}_midpoint_{window}"
         slope_col = f"{midpoint_col}_slope"
 
         df[midpoint_col] = talib.MIDPOINT(
@@ -345,13 +345,13 @@ def add_mid_point(
 
     # --- pairwise distances ---
     for (w1, col1), (w2, col2) in combinations(midpoint_cols, 2):
-        dist_col = f"{column_name}_mid_point_{w1}_{w2}_dist"
+        dist_col = f"{column_name}_midpoint_{w1}_{w2}_dist"
         df[dist_col] = df[col1] - df[col2]
 
     return df
 
 
-def add_mid_price(
+def add_midprice(
     df: pd.DataFrame,
     n: list[int] = None,
     high_column: str = "high",
@@ -379,7 +379,7 @@ def add_mid_price(
 
     # --- MIDPRICE + slope ---
     for window in n:
-        midprice_col = f"mid_price_{window}"
+        midprice_col = f"midprice_{window}"
         slope_col = f"{midprice_col}_slope"
 
         df[midprice_col] = talib.MIDPRICE(
@@ -393,13 +393,13 @@ def add_mid_price(
 
     # --- pairwise distances ---
     for (w1, col1), (w2, col2) in combinations(midprice_cols, 2):
-        dist_col = f"mid_price_{w1}_{w2}_dist"
+        dist_col = f"midprice_{w1}_{w2}_dist"
         df[dist_col] = df[col1] - df[col2]
 
     return df
 
 
-def add_parabolic_sar(
+def add_sar(
     df: pd.DataFrame,
     acceleration: list[float] = None,
     maximum: list[float] = None,
