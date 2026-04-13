@@ -590,6 +590,50 @@ def add_t3(
     return df
 
 
+def add_tema(
+    df: pd.DataFrame,
+    n: list[int] = None,
+    column_name: str = "close",
+) -> pd.DataFrame:
+    """
+    Add TEMA columns, their slopes, pairwise TEMA distances,
+    and distances between price and TEMA.
+    """
+
+    validate_column(df, column_name)
+
+    if n is None:
+        n = [30]  # default based on TA-Lib example
+
+    df = df.copy()
+
+    tema_cols = []
+
+    # --- TEMA + slope ---
+    for window in n:
+        tema_col = f"{column_name}_tema_{window}"
+        slope_col = f"{tema_col}_slope"
+
+        df[tema_col] = talib.TEMA(
+            df[column_name].to_numpy(),
+            timeperiod=window,
+        )
+        df[slope_col] = df[tema_col].diff()
+
+        # --- distance: price vs TEMA ---
+        price_dist_col = f"{column_name}_tema_{window}_dist"
+        df[price_dist_col] = df[column_name] - df[tema_col]
+
+        tema_cols.append((window, tema_col))
+
+    # --- pairwise distances between TEMAs ---
+    for (w1, col1), (w2, col2) in combinations(tema_cols, 2):
+        dist_col = f"{column_name}_tema_{w1}_{w2}_dist"
+        df[dist_col] = df[col1] - df[col2]
+
+    return df
+
+
 def add_lwma(
     df: pd.DataFrame,
     n: int | list[int] | None = None,
