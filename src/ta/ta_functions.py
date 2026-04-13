@@ -544,6 +544,52 @@ def add_sma(
     return df
 
 
+def add_t3(
+    df: pd.DataFrame,
+    n: list[int] = None,
+    column_name: str = "close",
+    vfactor: float = 0.7,
+) -> pd.DataFrame:
+    """
+    Add T3 columns, their slopes, pairwise T3 distances,
+    and distances between price and T3.
+    """
+
+    validate_column(df, column_name)
+
+    if n is None:
+        n = [5]
+
+    df = df.copy()
+
+    t3_cols = []
+
+    # --- T3 + slope ---
+    for window in n:
+        t3_col = f"{column_name}_t3_{window}"
+        slope_col = f"{t3_col}_slope"
+
+        df[t3_col] = talib.T3(
+            df[column_name].to_numpy(),
+            timeperiod=window,
+            vfactor=vfactor,
+        )
+        df[slope_col] = df[t3_col].diff()
+
+        # --- distance: price vs T3 ---
+        price_dist_col = f"{column_name}_t3_{window}_dist"
+        df[price_dist_col] = df[column_name] - df[t3_col]
+
+        t3_cols.append((window, t3_col))
+
+    # --- pairwise distances between T3s ---
+    for (w1, col1), (w2, col2) in combinations(t3_cols, 2):
+        dist_col = f"{column_name}_t3_{w1}_{w2}_dist"
+        df[dist_col] = df[col1] - df[col2]
+
+    return df
+
+
 def add_lwma(
     df: pd.DataFrame,
     n: int | list[int] | None = None,
