@@ -399,6 +399,117 @@ def add_mid_price(
     return df
 
 
+def add_parabolic_sar(
+    df: pd.DataFrame,
+    acceleration: list[float] = None,
+    maximum: list[float] = None,
+    high_column: str = "high",
+    low_column: str = "low",
+    price_column: str = "close",
+) -> pd.DataFrame:
+    """
+    Add Parabolic SAR features:
+    - SAR values
+    - SAR slopes
+    - SAR pairwise distances
+    - Price vs SAR distances
+    - 3-period trend agreement (price & SAR)
+
+    Parameters:
+    - acceleration: list of acceleration factors
+    - maximum: list of maximum acceleration values
+    - price_column: column used to compare with SAR
+    """
+
+    validate_column(df, high_column)
+    validate_column(df, low_column)
+    validate_column(df, price_column)
+
+    if acceleration is None:
+        acceleration = [0.02, 0.04]
+
+    if maximum is None:
+        maximum = [0.2]
+
+    df = df.copy()
+
+    # Ensure TA-Lib compatible dtype
+    high = df[high_column].to_numpy(dtype=np.float64)
+    low = df[low_column].to_numpy(dtype=np.float64)
+
+    sar_cols = []
+
+    # =========================
+    # 1. SAR + slope
+    # =========================
+    for acc in acceleration:
+        for max_val in maximum:
+            suffix = f"{acc}_{max_val}".replace(".", "")
+
+            sar_col = f"sar_{suffix}"
+            slope_col = f"{sar_col}_slope"
+
+            df[sar_col] = talib.SAR(
+                high,
+                low,
+                acceleration=acc,
+                maximum=max_val,
+            )
+
+            df[slope_col] = df[sar_col].diff()
+
+            sar_cols.append(((acc, max_val), sar_col))
+
+    # =========================
+    # 2. SAR ↔ SAR distances
+    # =========================
+    for (p1, col1), (p2, col2) in combinations(sar_cols, 2):
+        dist_col = f"sar_{p1}_{p2}_dist".replace(".", "")
+        df[dist_col] = df[col1] - df[col2]
+
+    # =========================
+    # 3. Price ↔ SAR distances
+    # =========================
+    for params, sar_col in sar_cols:
+        suffix = f"{params[0]}_{params[1]}".replace(".", "")
+        base_name = f"{price_column}_to_sar_{suffix}"
+
+        diff = df[price_column] - df[sar_col]
+
+        df[base_name] = diff  # raw distance
+        df[f"{base_name}_abs"] = diff.abs()  # absolute distance
+        df[f"{base_name}_pct"] = diff / df[price_column]  # normalized
+        df[f"{base_name}_sign"] = np.sign(diff)  # direction
+
+    # =========================
+    # 4. Trend agreement (3 periods)
+    # =========================
+    price_diff = df[price_column].diff()
+
+    price_up_3 = (price_diff > 0).rolling(3).sum() == 3
+    price_down_3 = (price_diff < 0).rolling(3).sum() == 3
+
+    for params, sar_col in sar_cols:
+        suffix = f"{params[0]}_{params[1]}".replace(".", "")
+
+        sar_diff = df[sar_col].diff()
+
+        sar_up_3 = (sar_diff > 0).rolling(3).sum() == 3
+        sar_down_3 = (sar_diff < 0).rolling(3).sum() == 3
+
+        # Boolean signals
+        df[f"{price_column}_sar_{suffix}_up3"] = price_up_3 & sar_up_3
+        df[f"{price_column}_sar_{suffix}_down3"] = price_down_3 & sar_down_3
+
+        # Encoded signal: 1 (up), -1 (down), 0 (neutral)
+        trend_col = f"{price_column}_sar_{suffix}_trend3"
+        df[trend_col] = 0
+        df.loc[price_up_3 & sar_up_3, trend_col] = 1
+        df.loc[price_down_3 & sar_down_3, trend_col] = -1
+
+    return df
+
+
 def add_sma(
     df: pd.DataFrame, n: list[int] = None, column_name: str = "close"
 ) -> pd.DataFrame:
