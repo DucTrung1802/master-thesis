@@ -634,57 +634,46 @@ def add_tema(
     return df
 
 
-def add_lwma(
+def add_trima(
     df: pd.DataFrame,
-    n: int | list[int] | None = None,
+    n: list[int] = None,
     column_name: str = "close",
-    default_lwma_periods: list[int] = None,
 ) -> pd.DataFrame:
     """
-    Add one or multiple Linear Weighted Moving Average (LWMA) columns.
-
-    Default LWMA values:
-        12, 26, 50, 100, 200
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Input DataFrame containing the target column.
-    n : int or list[int], optional
-        LWMA window size(s). If None, default periods are used.
-    column_name : str, optional
-        Column to compute LWMA on. Default is 'close'.
-    default_lwma_periods : list[int], optional
-        Override the predefined LWMA spans.
-
-    Returns
-    -------
-    pd.DataFrame
-        DataFrame including added LWMA column(s).
+    Add TRIMA columns, their slopes, pairwise TRIMA distances,
+    and distances between price and TRIMA.
     """
+
     validate_column(df, column_name)
+
+    if n is None:
+        n = [30]  # default based on TA-Lib example
+
     df = df.copy()
 
-    # Default LWMA periods you requested
-    if default_lwma_periods is None:
-        default_lwma_periods = [12, 26, 50, 100, 200]
+    trima_cols = []
 
-    # Determine which periods to compute
-    if n is None:
-        periods = default_lwma_periods
-    elif isinstance(n, int):
-        periods = [n]
-    else:
-        periods = list(n)
+    # --- TRIMA + slope ---
+    for window in n:
+        trima_col = f"{column_name}_trima_{window}"
+        slope_col = f"{trima_col}_slope"
 
-    # Compute LWMA for each period
-    for period in periods:
-        weights = np.arange(1, period + 1)
-        df[f"{column_name}_lwma_{period}"] = (
-            df[column_name]
-            .rolling(window=period)
-            .apply(lambda x: np.dot(x, weights) / weights.sum(), raw=True)
+        df[trima_col] = talib.TRIMA(
+            df[column_name].to_numpy(),
+            timeperiod=window,
         )
+        df[slope_col] = df[trima_col].diff()
+
+        # --- distance: price vs TRIMA ---
+        price_dist_col = f"{column_name}_trima_{window}_dist"
+        df[price_dist_col] = df[column_name] - df[trima_col]
+
+        trima_cols.append((window, trima_col))
+
+    # --- pairwise distances between TRIMAs ---
+    for (w1, col1), (w2, col2) in combinations(trima_cols, 2):
+        dist_col = f"{column_name}_trima_{w1}_{w2}_dist"
+        df[dist_col] = df[col1] - df[col2]
 
     return df
 
@@ -696,27 +685,13 @@ def add_wma(
     default_wma_periods: list[int] = None,
 ) -> pd.DataFrame:
     """
-    Add one or multiple Wilder's Moving Average (WMA) columns.
+    Add Wilder's Moving Average (WMA) columns, their slopes,
+    and pairwise WMA distances.
 
     Default WMA values:
         7, 14, 21, 50, 100
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Input DataFrame containing the target column.
-    n : int or list[int], optional
-        WMA period(s). If None, default popular periods are used.
-    column_name : str, optional
-        Column to compute WMA on. Default is 'close'.
-    default_wma_periods : list[int], optional
-        Override the predefined WMA periods.
-
-    Returns
-    -------
-    pd.DataFrame
-        DataFrame including added WMA column(s).
     """
+
     validate_column(df, column_name)
     df = df.copy()
 
@@ -724,7 +699,7 @@ def add_wma(
     if default_wma_periods is None:
         default_wma_periods = [7, 14, 21, 50, 100]
 
-    # Determine which periods to compute
+    # Resolve periods
     if n is None:
         periods = default_wma_periods
     elif isinstance(n, int):
@@ -732,184 +707,32 @@ def add_wma(
     else:
         periods = list(n)
 
-    # Compute Wilder MA for each period
+    wma_cols = []
+
+    # --- WMA + slope ---
     for period in periods:
+        wma_col = f"{column_name}_wma_{period}"
+        slope_col = f"{wma_col}_slope"
+
         alpha = 1 / period
-        df[f"{column_name}_wma_{period}"] = (
-            df[column_name].ewm(alpha=alpha, adjust=False).mean()
-        )
+
+        df[wma_col] = df[column_name].ewm(alpha=alpha, adjust=False).mean()
+        df[slope_col] = df[wma_col].diff()
+
+        wma_cols.append((period, wma_col))
+
+    # --- pairwise distances ---
+    for (p1, col1), (p2, col2) in combinations(wma_cols, 2):
+        dist_col = f"{column_name}_wma_{p1}_{p2}_dist"
+        df[dist_col] = df[col1] - df[col2]
 
     return df
 
 
-def add_adx(
-    df: pd.DataFrame,
-    n: int | list[int] | None = None,
-    high_col: str = "high",
-    low_col: str = "low",
-    close_col: str = "close",
-    default_adx_periods: list[int] = None,
-) -> pd.DataFrame:
-    """
-    Add the Average Directional Movement Index (ADX) and related indicators
-    (+DI, -DI) to the DataFrame.
-
-    Default popular ADX periods:
-        7, 14, 20, 28, 50
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Input DataFrame containing high, low, close columns.
-    n : int or list[int], optional
-        ADX period(s). If None, use popular defaults.
-    high_col : str, optional
-        Column name for high prices. Default 'high'.
-    low_col : str, optional
-        Column name for low prices. Default 'low'.
-    close_col : str, optional
-        Column name for close prices. Default 'close'.
-    default_adx_periods : list[int], optional
-        Optionally override the default period list.
-
-    Returns
-    -------
-    pd.DataFrame
-        DataFrame with +di, -di, and adx_{period} columns added.
-    """
-
-    # Validate required columns
-    for col in [high_col, low_col, close_col]:
-        validate_column(df, col)
-
-    df = df.copy()
-
-    # Numeric enforcement
-    df[high_col] = pd.to_numeric(df[high_col], errors="coerce")
-    df[low_col] = pd.to_numeric(df[low_col], errors="coerce")
-    df[close_col] = pd.to_numeric(df[close_col], errors="coerce")
-
-    # Defaults
-    if default_adx_periods is None:
-        default_adx_periods = [7, 14, 20, 28, 50]
-
-    if n is None:
-        periods = default_adx_periods
-    elif isinstance(n, int):
-        periods = [n]
-    else:
-        periods = list(n)
-
-    # Compute directional movement values once
-    df["tr"] = np.maximum(
-        df[high_col] - df[low_col],
-        np.maximum(
-            abs(df[high_col] - df[close_col].shift()),
-            abs(df[low_col] - df[close_col].shift()),
-        ),
-    )
-
-    df["dm_pos"] = (
-        df[high_col]
-        .diff()
-        .where(
-            (df[high_col].diff() > df[low_col].diff() * -1) & (df[high_col].diff() > 0),
-            0.0,
-        )
-    )
-
-    df["dm_neg"] = (-df[low_col].diff()).where(
-        (-df[low_col].diff() > df[high_col].diff()) & (-df[low_col].diff() > 0), 0.0
-    )
-
-    # +DI and -DI are same for all ADX periods, so compute once using raw DM/TR
-    # Smoothing is applied separately for each n
-    base_tr = df["tr"]
-    base_plus_dm = df["dm_pos"]
-    base_minus_dm = df["dm_neg"]
-
-    # Compute ADX for each period
-    for period in periods:
-        tr_n = base_tr.rolling(window=period, min_periods=1).sum()
-        plus_dm_n = base_plus_dm.rolling(window=period, min_periods=1).sum()
-        minus_dm_n = base_minus_dm.rolling(window=period, min_periods=1).sum()
-
-        df[f"di_pos_{period}"] = 100 * (plus_dm_n / tr_n)
-        df[f"di_neg_{period}"] = 100 * (minus_dm_n / tr_n)
-
-        dx = (
-            100
-            * abs(df[f"di_pos_{period}"] - df[f"di_neg_{period}"])
-            / (df[f"di_pos_{period}"] + df[f"di_neg_{period}"]).replace(0, np.nan)
-        ).fillna(0)
-
-        df[f"adx_{period}"] = dx.rolling(window=period, min_periods=1).mean()
-
-    return df
-
-
-# endregion TREND INDICATORS
+# endregion OVERLAP STUDIES
 
 
 # region VOLATILITY INDICATORS
-def add_bollinger_bands(
-    df: pd.DataFrame,
-    n: int | list[int] | None = None,
-    k: float = 2.0,
-    column_name: str = "close",
-    default_bb_periods: list[int] = None,
-) -> pd.DataFrame:
-    """
-    Add Bollinger Bands (upper, middle, lower) to the DataFrame.
-
-    Default popular Bollinger Band periods:
-        20 (SMA period), standard deviation multiplier k=2.0
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Input DataFrame containing the target column.
-    n : int or list[int], optional
-        SMA period(s) for Bollinger Bands. If None, default period 20 is used.
-    k : float, optional
-        Number of standard deviations for upper/lower bands (default 2.0)
-    column_name : str, optional
-        Column to calculate Bollinger Bands on. Default is 'close'.
-    default_bb_periods : list[int], optional
-        Override the default SMA period(s).
-
-    Returns
-    -------
-    pd.DataFrame
-        DataFrame with Bollinger Bands added:
-        '{column_name}_bb_middle_{n}', '{column_name}_bb_upper_{n}', '{column_name}_bb_lower_{n}'
-    """
-    validate_column(df, column_name)
-    df = df.copy()
-
-    # Default period
-    if default_bb_periods is None:
-        default_bb_periods = [20]
-
-    # Determine periods to compute
-    if n is None:
-        periods = default_bb_periods
-    elif isinstance(n, int):
-        periods = [n]
-    else:
-        periods = list(n)
-
-    for period in periods:
-        sma = df[column_name].rolling(window=period, min_periods=1).mean()
-        std = df[column_name].rolling(window=period, min_periods=1).std()
-
-        df[f"{column_name}_bb_middle_{period}"] = sma
-        df[f"{column_name}_bb_upper_{period}"] = sma + (k * std)
-        df[f"{column_name}_bb_lower_{period}"] = sma - (k * std)
-
-    return df
-
-
 def add_keltner_channel(
     df: pd.DataFrame,
     n: int = 20,
