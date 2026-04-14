@@ -983,8 +983,6 @@ def add_divergence_index(
 
 
 # region MOMENTUN INDICATORS
-
-
 def add_rsi(
     df: pd.DataFrame,
     n: int | list[int] | None = None,
@@ -1547,7 +1545,7 @@ def add_vortex(
 def add_obv(
     df: pd.DataFrame,
     close_col: str = "close",
-    volume_col: str = "volume",
+    volume_col: str = "matching_volume",
     ema_periods: list[int] = None,
     sma_periods: list[int] = None,
 ) -> pd.DataFrame:
@@ -1622,7 +1620,7 @@ def add_mfi(
     high_col: str = "high",
     low_col: str = "low",
     close_col: str = "close",
-    volume_col: str = "volume",
+    volume_col: str = "matching_volume",
 ) -> pd.DataFrame:
     """
     Add Money Flow Index (MFI) indicators to the DataFrame for multiple popular periods.
@@ -1703,7 +1701,7 @@ def add_adl(df: pd.DataFrame) -> pd.DataFrame:
     high = df["high"].astype("float64")
     low = df["low"].astype("float64")
     close = df["close"].astype("float64")
-    volume = df["volume"].astype("float64")
+    volume = df["matching_volume"].astype("float64")
 
     # Avoid division by zero
     clv = ((close - low) - (high - close)) / np.where(high != low, (high - low), 1e-10)
@@ -1722,7 +1720,7 @@ def add_chaikin_ad(
     high_col: str = "high",
     low_col: str = "low",
     close_col: str = "close",
-    volume_col: str = "volume",
+    volume_col: str = "matching_volume",
 ) -> pd.DataFrame:
     """
     Add Marc Chaikin’s Accumulation/Distribution (AD) Line to the DataFrame.
@@ -1782,7 +1780,7 @@ def add_cmf(
     high_col: str = "high",
     low_col: str = "low",
     close_col: str = "close",
-    volume_col: str = "volume",
+    volume_col: str = "matching_volume",
 ) -> pd.DataFrame:
     """
     Add Chaikin Money Flow (CMF) indicators for multiple popular periods.
@@ -1835,7 +1833,7 @@ def add_cmf(
 def add_vroc(
     df: pd.DataFrame,
     periods: list[int] = None,
-    volume_col: str = "volume",
+    volume_col: str = "matching_volume",
 ) -> pd.DataFrame:
     """
     Add Volume Rate of Change (VROC) indicators for multiple popular periods.
@@ -1876,7 +1874,7 @@ def add_eom(
     smooth_periods: list[int] = None,
     high_col: str = "high",
     low_col: str = "low",
-    volume_col: str = "volume",
+    volume_col: str = "matching_volume",
 ) -> pd.DataFrame:
     """
     Add Ease of Movement (EoM) indicator with smoothed values for multiple popular periods.
@@ -1925,7 +1923,7 @@ def add_eom(
 
 
 def add_pvi_nvi(
-    df: pd.DataFrame, close_col: str = "close", volume_col: str = "volume"
+    df: pd.DataFrame, close_col: str = "close", volume_col: str = "matching_volume"
 ) -> pd.DataFrame:
     """
     Add Positive Volume Index (PVI) and Negative Volume Index (NVI) to the DataFrame.
@@ -1998,7 +1996,7 @@ def add_vw_macd(
     df: pd.DataFrame,
     param_sets: list[tuple[int, int, int]] = None,
     close_col: str = "close",
-    volume_col: str = "volume",
+    volume_col: str = "matching_volume",
 ) -> pd.DataFrame:
     """
     Add Volume-Weighted MACD (VW-MACD) and signal line for multiple popular parameter sets.
@@ -2061,7 +2059,7 @@ def add_kvo(
     high_col: str = "high",
     low_col: str = "low",
     close_col: str = "close",
-    volume_col: str = "volume",
+    volume_col: str = "matching_volume",
 ) -> pd.DataFrame:
     """
     Add Klinger Volume Oscillator (KVO) and signal line for multiple popular parameter sets.
@@ -2125,7 +2123,7 @@ def add_demand_oscillator(
     high_col: str = "high",
     low_col: str = "low",
     close_col: str = "close",
-    volume_col: str = "volume",
+    volume_col: str = "matching_volume",
 ) -> pd.DataFrame:
     """
     Add Aspray's Demand Oscillator (ADO) to the DataFrame for multiple parameter sets.
@@ -2182,37 +2180,55 @@ def add_demand_oscillator(
 
 def add_one_for_all_ta(df: pd.DataFrame) -> pd.DataFrame:
     new_df = df.copy()
-    new_df = add_sma(new_df)
-    new_df = add_ema(new_df)
-    new_df = add_lwma(new_df)
-    new_df = add_wma(new_df)
-    new_df = add_adx(new_df)
-    new_df = add_bollinger_bands(new_df)
-    new_df = add_keltner_channel(new_df)
-    new_df = add_keltner_channel(new_df)
-    new_df = add_starc_band(new_df)
-    new_df = add_atr(new_df)
-    new_df = add_divergence_index(new_df)
-    new_df = add_rsi(new_df)
-    new_df = add_roc(new_df)
-    new_df = add_macd(new_df)
-    new_df = add_stochastic(new_df)
-    new_df = add_williams_r(new_df)
-    new_df = add_ado(new_df)
-    new_df = add_rvi(new_df)
-    new_df = add_tsi(new_df)
-    new_df = add_vortex(new_df)
-    new_df = add_obv(new_df)
-    new_df = add_mfi(new_df)
-    new_df = add_adl(new_df)
-    new_df = add_chaikin_ad(new_df)
-    new_df = add_cmf(new_df)
-    new_df = add_vroc(new_df)
-    new_df = add_eom(new_df)
-    new_df = add_pvi_nvi(new_df)
-    new_df = add_vw_macd(new_df)
-    new_df = add_kvo(new_df)
-    new_df = add_demand_oscillator(new_df)
+
+    # OVERLAP STUDIES
+    new_df = add_bbands(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_dema(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_ema(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_kama(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_midpoint(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_midprice(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_sar(
+        new_df,
+    )
+    new_df = add_sma(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_t3(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_tema(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_trima(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_wma(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
 
     return new_df
 
@@ -2296,31 +2312,100 @@ def main():
     ta_database_driver.connect(connection_model)
 
     # Select df
+    from_date = "2016-06-01"
+    to_date = "2016-12-30"
+
     df = ta_database_driver.select(
         schema_name=Schema.STOCK_MARKET.value,
-        table_name=Table.VN_INDEX.name,
+        table_name=Table.G_VN_INDEX.name,
         conditions=[
             Condition(
-                column=Table.VN_INDEX.Column.DATE.value,
+                column=Table.G_VN_INDEX.Column.DATE.value,
                 operator=SqlOperator.GREATER_THAN_OR_EQUAL_TO,
-                value="2022-01-01",
+                value=from_date,
                 data_type=DataType.DATE,
             ),
             Condition(
-                column=Table.VN_INDEX.Column.DATE.value,
+                column=Table.G_VN_INDEX.Column.DATE.value,
                 operator=SqlOperator.LESS_THAN_OR_EQUAL_TO,
-                value="2024-12-31",
+                value=to_date,
                 data_type=DataType.DATE,
             ),
         ],
-        order_by=[Table.VN_INDEX.Column.DATE.value],
+        order_by=[Table.G_VN_INDEX.Column.DATE.value],
     )
+
+    WEEKENDS = get_weekends(from_date, to_date)
+    HOLIDAYS = []
+
+    DAYOFFS = []
+    DAYOFFS.extend(WEEKENDS)
+    DAYOFFS.extend(HOLIDAYS)
+
+    df = df[~df["date"].isin(DAYOFFS)]
+
+    df["close"] = df["close"].astype(float)
+
+    FORECAST_HORIZON = 5
+
+    df[f"return_{FORECAST_HORIZON}"] = (
+        df["close"].shift(-FORECAST_HORIZON) - df["close"]
+    )
+
+    # df[f"log_return_{FORECAST_HORIZON}"] = np.log(
+    #     df["close"].shift(-FORECAST_HORIZON) / df["close"]
+    # )
 
     df = add_one_for_all_ta(df)
 
+    # OVERLAP STUDIES
+    # df = add_bollinger_bands(df, n=[5, 10, 15])
+    # df = add_dema(df, n=[5, 10, 15])
+    # df = add_ema(df, n=[5, 10, 15])
+    # df = add_hilbert_transform(df)
+    # df = add_kama(df, n=[5, 10, 15])
+    # df = add_mesa_adaptive_moving_average(df)
+    # df = add_midpoint(df, n=[5, 10, 15])
+    # df = add_midprice(df, n=[5, 10, 15])
+    # df = add_sar(df)
+    # df = add_sma(df, n=[5, 10, 15])
+    # df = add_t3(df, n=[5, 10, 15])
+    # df = add_tema(df, n=[5, 10, 15])
+    # df = add_adx(df, n=[5, 10, 15])
+
+    # df = add_atr(df, n=5)
+    # df = add_atr(df, n=10)
+    # df = add_atr(df, n=15)
+    # df = add_keltner_channel(df, n=5)
+
+    # df = add_macd(df)
+    # df = add_rsi(df)
+    # df = add_tsi(df, r=13, s=7)
+
+    # df = add_obv(df, ema_periods=[5, 10, 15])
+
+    # df = add_mfi(df, n_list=[5, 10, 15])
+
+    # plot_with_indicators(
+    #     df, indicators=["*ema*"], price_column_name=f"log_return_{FORECAST_HORIZON}"
+    # )
+
     # plot_with_indicators(
     #     df,
-    #     indicators=["demand_*"],
+    #     indicators=["*_ama_*"],
+    #     price_column_name=f"return_{FORECAST_HORIZON}",
+    # )
+
+    plot_with_indicators(
+        df,
+        indicators=["close_tema_5", "close_tema_10", "close_tema_15"],
+        price_column_name=f"close",
+    )
+
+    # plot_with_indicators(
+    #     df,
+    #     indicators=["close_t3_5", "close_t3_10", "close_t3_15"],
+    #     price_column_name=f"return_{FORECAST_HORIZON}",
     # )
 
     print(len(df.columns))
