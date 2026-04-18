@@ -4,6 +4,7 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait, Select
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException
 
 from bs4 import BeautifulSoup, Tag
 
@@ -151,6 +152,25 @@ class WebScraper:
             if elements:
                 return xpath
         return False
+
+    def _wait_until_text_not_equals(
+        self,
+        web_driver: ChromiumDriver,
+        xpath: str,
+        expected_text: str,
+        timeout: int = 10,
+    ) -> bool:
+        try:
+            WebDriverWait(web_driver, timeout).until(
+                lambda driver: driver.find_element(By.XPATH, xpath).text
+                != expected_text
+            )
+            return True
+        except TimeoutException:
+            self._logger.log_warning(
+                f"Timeout waiting for text to NOT equal '{expected_text}' at xpath: {xpath}"
+            )
+            return False
 
     def _scrape_data_macroeconomics_gdp(
         self, key: Tuple[ScrapeMainType, ScrapeSubType]
