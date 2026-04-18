@@ -3077,7 +3077,7 @@ class WebScraper:
             current_date = datetime.now()
 
             file_path = (
-                f"{folder_path}/{file_name}_upto_{current_date.strftime('%Y%m%d')}.xlsx"
+                f"{folder_path}/{file_name}_upto_{current_date.strftime('%Y%m%d')}.csv"
             )
 
             # 3. Check if file(s) already exists
