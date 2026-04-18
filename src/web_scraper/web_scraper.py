@@ -3218,16 +3218,35 @@ class WebScraper:
 
             # 6. Navigate to URL
             web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
+
+            date_expect_change_xpath = '//*[@id="render-table-owner"]/tr[1]/td[2]'
+            WebDriverWait(web_driver, 10).until(
+                EC.presence_of_element_located((By.XPATH, date_expect_change_xpath))
+            )
 
             # 7. Logic for scraping
-            xpath = '//*[@id="tabletoExcel"]/img'
-            self._click_element(web_driver, xpath)
+            from_date_xpath = '//*[@id="date-from"]'
+            self._input_text(
+                web_driver,
+                from_date_xpath,
+                f"{SCRAPER_START_DATE.strftime('%d/%m/%Y')}",
+            )
 
-            download_file_name = "ThongKeDatLenh_VNINDEX__.xlsx"
-            download_file_path = os.path.join(DOWNLOAD_FOLDER_PATH, download_file_name)
+            escape_xpath = '//*[@id="summary-table"]/tbody/tr[1]/td[1]'
+            self._click_element(web_driver, escape_xpath)
 
-            wait_for_file(download_file_path)
+            find_button_xpath = '//*[@id="divStart"]/div/div[1]/div[1]/div/div[3]/div[1]'
+            self._click_element(web_driver, find_button_xpath)
+
+            xpath = '//*[@id="tabletoExcel"]/img' 
+            self._click_element(web_driver, xpath) 
+ 
+            from_date = SCRAPER_START_DATE.strftime("%d_%m_%Y")
+            to_date = datetime.now().strftime("%d_%m_%Y")
+            download_file_name = f"ThongKeDatLenh_VNINDEX_{from_date}_{to_date}.xlsx" 
+            download_file_path = os.path.join(DOWNLOAD_FOLDER_PATH, download_file_name) 
+ 
+            wait_for_file(download_file_path) 
             move_file(path_a=download_file_path, path_b=file_path)
             convert_xlsx_to_csv(file_path)
 
