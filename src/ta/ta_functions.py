@@ -68,51 +68,92 @@ def add_bbands(
     ma_type: int = 0,
     column_name: str = "close",
     default_bb_periods: list[int] = None,
+    distance_mode: str = "pct",  # "abs" or "pct"
+    slope_mode: str = "diff",  # "diff" or "pct"
 ) -> pd.DataFrame:
     """
-    Add Bollinger Bands (upper, middle, lower) to the DataFrame.
+    Add Bollinger Bands (BB) along with distance and slope features to a DataFrame.
 
-    Default popular Bollinger Band periods:
-        20 (SMA period), standard deviation multiplier k=2.0
+    This function computes Bollinger Bands (upper, middle, lower) using TA-Lib and
+    augments the DataFrame with additional derived features:
+    - Distance between price and each band
+    - Slope (rate of change) of each band
 
-    class MA_Type(Enum):
-        SMA = 0
-        EMA = 1
-        WMA = 2
-        DEMA = 3
-        TEMA = 4
-        TRIMA = 5
-        KAMA = 6
-        MAMA = 7
-        T3 = 8
+    Column naming convention:
+        {column_name}_bb_{period}_{feature}
+
+    Generated features per period:
+        Bands:
+            '{col}_bb_{n}_upper'
+            '{col}_bb_{n}_middle'
+            '{col}_bb_{n}_lower'
+
+        Distance:
+            '{col}_bb_{n}_dist_upper'
+            '{col}_bb_{n}_dist_middle'
+            '{col}_bb_{n}_dist_lower'
+
+        Slope:
+            '{col}_bb_{n}_slope_upper'
+            '{col}_bb_{n}_slope_middle'
+            '{col}_bb_{n}_slope_lower'
+
+    Default Bollinger Band settings:
+        - Period: 20
+        - Standard deviation multiplier (k): 2.0
+
+    Moving average types (TA-Lib MA_Type):
+        0 = SMA (Simple Moving Average)
+        1 = EMA (Exponential Moving Average)
+        2 = WMA (Weighted Moving Average)
+        3 = DEMA
+        4 = TEMA
+        5 = TRIMA
+        6 = KAMA
+        7 = MAMA
+        8 = T3
 
     Parameters
     ----------
     df : pd.DataFrame
-        Input DataFrame containing the target column.
+        Input DataFrame containing price data.
     n : int or list[int], optional
-        SMA period(s) for Bollinger Bands. If None, default period 20 is used.
+        Bollinger Band period(s). If None, defaults to `default_bb_periods`.
     k : float, optional
-        Number of standard deviations for upper/lower bands (default 2.0)
+        Standard deviation multiplier for upper/lower bands (default is 2.0).
+    ma_type : int, optional
+        Type of moving average used in BB calculation (default is 0 = SMA).
     column_name : str, optional
-        Column to calculate Bollinger Bands on. Default is 'close'.
+        Column on which to compute Bollinger Bands (default is 'close').
     default_bb_periods : list[int], optional
-        Override the default SMA period(s).
+        Default periods used when `n` is None (default is [20]).
+    distance_mode : str, optional
+        Method to compute distance between price and bands:
+            - 'abs': absolute difference (price - band)
+            - 'pct': percentage difference (price - band) / band (default)
+    slope_mode : str, optional
+        Method to compute slope of bands:
+            - 'diff': simple difference (current - previous) (default)
+            - 'pct': percentage change
 
     Returns
     -------
     pd.DataFrame
-        DataFrame with Bollinger Bands added:
-        '{column_name}_bb_middle_{n}', '{column_name}_bb_upper_{n}', '{column_name}_bb_lower_{n}'
+        A new DataFrame with Bollinger Bands and derived features added.
+
+    Notes
+    -----
+    - Percentage distance is generally more useful for normalization across assets.
+    - Slope features can be noisy; smoothing (e.g., rolling mean) may improve usability.
+    - All computations are vectorized for performance using NumPy and pandas.
     """
+
     validate_column(df, column_name)
     df = df.copy()
 
-    # Default period
     if default_bb_periods is None:
         default_bb_periods = [20]
 
-    # Determine periods to compute
     if n is None:
         periods = default_bb_periods
     elif isinstance(n, int):
@@ -121,7 +162,7 @@ def add_bbands(
         periods = list(n)
 
     for period in periods:
-        upperband, middleband, lowerband = talib.BBANDS(
+        upper, middle, lower = talib.BBANDS(
             df[column_name].values,
             timeperiod=period,
             nbdevup=k,
@@ -129,9 +170,40 @@ def add_bbands(
             matype=ma_type,
         )
 
-        df[f"{column_name}_bb_upper_{period}"] = upperband
-        df[f"{column_name}_bb_middle_{period}"] = middleband
-        df[f"{column_name}_bb_lower_{period}"] = lowerband
+        base = f"{column_name}_bb_{period}"
+
+        # --- bands ---
+        df[f"{base}_upper"] = upper
+        df[f"{base}_middle"] = middle
+        df[f"{base}_lower"] = lower
+
+        price = df[column_name]
+
+        # --- distance ---
+        if distance_mode == "abs":
+            df[f"{base}_dist_upper"] = price - df[f"{base}_upper"]
+            df[f"{base}_dist_middle"] = price - df[f"{base}_middle"]
+            df[f"{base}_dist_lower"] = price - df[f"{base}_lower"]
+        else:  # pct
+            df[f"{base}_dist_upper"] = (price - df[f"{base}_upper"]) / df[
+                f"{base}_upper"
+            ]
+            df[f"{base}_dist_middle"] = (price - df[f"{base}_middle"]) / df[
+                f"{base}_middle"
+            ]
+            df[f"{base}_dist_lower"] = (price - df[f"{base}_lower"]) / df[
+                f"{base}_lower"
+            ]
+
+        # --- slope ---
+        if slope_mode == "pct":
+            df[f"{base}_slope_upper"] = df[f"{base}_upper"].pct_change()
+            df[f"{base}_slope_middle"] = df[f"{base}_middle"].pct_change()
+            df[f"{base}_slope_lower"] = df[f"{base}_lower"].pct_change()
+        else:  # diff
+            df[f"{base}_slope_upper"] = df[f"{base}_upper"].diff()
+            df[f"{base}_slope_middle"] = df[f"{base}_middle"].diff()
+            df[f"{base}_slope_lower"] = df[f"{base}_lower"].diff()
 
     return df
 
