@@ -9233,29 +9233,64 @@ class DataPreprocessor:
 
         # Add logic for processing data here
         df = pd.read_csv(file_path, encoding="utf-8")
-        rename_map = {
-            "Ngay": "date",
-            "GiaDieuChinh": "adjust",
-            "GiaDongCua": "close",
-            "ThayDoi": "change",
-            "KhoiLuongKhopLenh": "matching_volume",
-            "GiaTriKhopLenh": "matching_value",
-            "KLThoaThuan": "negotiate_volume",
-            "GtThoaThuan": "negotiate_value",
-            "GiaMoCua": "open",
-            "GiaCaoNhat": "high",
-            "GiaThapNhat": "low",
-        }
-        vn_index_df = df.rename(columns=rename_map)
+
+        vn_index_df = df.drop(columns=["code"])
+
         # Extract percentage
         vn_index_df["percent_change"] = (
-            vn_index_df["change"].str.extract(r"\(([-\d\.]+)").astype(float)
+            vn_index_df["change"]
+            .str.extract(r"\(([+-]?\d+\.\d+)%\)", expand=False)
+            .astype(float)
         )
+
         vn_index_df["change"] = (
-            vn_index_df["change"].str.extract(r"([-\d\.]+)").astype(float)
+            vn_index_df["change"]
+            .str.extract(r"([+-]?\d+\.\d+)", expand=False)
+            .astype(float)
         )
+
         vn_index_df["date"] = pd.to_datetime(vn_index_df["date"], format="%d/%m/%Y")
         vn_index_df = vn_index_df.sort_values(by="date").reset_index(drop=True)
+
+        # DATE
+        vn_index_df["date"] = pd.to_datetime(vn_index_df["date"]).dt.date
+
+        # DECIMAL columns
+        decimal_cols = [
+            "adjust",
+            "close",
+            "change",
+            "percent_change",
+            "matching_value",
+            "negotiate_value",
+            "open",
+            "high",
+            "low",
+        ]
+
+        for col in decimal_cols:
+            vn_index_df[col] = (
+                vn_index_df[col]
+                .astype(str)
+                .str.replace(",", "", regex=False)
+                .pipe(pd.to_numeric, errors="raise")
+                .astype("Float64")
+            )
+
+        # BIGINT columns
+        bigint_cols = [
+            "matching_volume",
+            "negotiate_volume",
+        ]
+
+        for col in bigint_cols:
+            vn_index_df[col] = (
+                vn_index_df[col]
+                .astype(str)
+                .str.replace(",", "", regex=False)
+                .pipe(pd.to_numeric, errors="raise")
+                .astype("Int64")
+            )
 
         self._save_pandas_table_to_database(
             schema_name=Schema.STOCK_MARKET.value,
@@ -9287,34 +9322,30 @@ class DataPreprocessor:
         # Add logic for processing data here
         df = pd.read_csv(file_path, encoding="utf-8")
         rename_map = {
+            "Mã": "code",
             "Ngày": "date",
             "Thay đổi": "close_change",
             "Số lệnh mua": "number_of_buy_orders",
             "Khối lượng mua": "buy_volume",
-            " KLTB 1 lệnh mua": "average_volume_per_buy_order",
+            "KLTB/lệnh mua": "average_volume_per_buy_order",
             "Số lệnh bán": "number_of_sell_orders",
             "Khối lượng bán": "sell_volume",
-            "KLTB 1 lệnh bán": "average_volume_per_sell_order",
+            "KLTB/lệnh bán": "average_volume_per_sell_order",
             "Khối lượng ròng": "net_volume",
         }
         vn_index_df = df.rename(columns=rename_map)
+        vn_index_df = vn_index_df.drop(columns=["code"])
         vn_index_df["close"] = (
-            vn_index_df["close_change"].str.extract(r"([\d\.]+)").astype(float)
+            vn_index_df["close_change"].str.extract(r"([\d\.]+)").astype("Float64")
         )
+        
         for col in [
-            "number_of_buy_orders",
-            "buy_volume",
-            "number_of_sell_orders",
-            "sell_volume",
             "net_volume",
         ]:
             vn_index_df[col] = (
-                vn_index_df[col].str.replace(",", "", regex=False).astype(int)
+                vn_index_df[col].str.replace(".", "", regex=False).astype("Int64")
             )
-        for col in ["average_volume_per_buy_order", "average_volume_per_sell_order"]:
-            vn_index_df[col] = (
-                vn_index_df[col].str.replace(",", "", regex=False).astype(float)
-            )
+
         vn_index_df.drop(columns=["close_change"], inplace=True)
         vn_index_df["date"] = pd.to_datetime(vn_index_df["date"], format="%d/%m/%Y")
         vn_index_df = vn_index_df.sort_values(by="date").reset_index(drop=True)
@@ -9424,7 +9455,7 @@ class DataPreprocessor:
 
         match data_quality:
             case DataQuality.BRONZE:
-                self._ingest_stock_market_vn_index_price()
+                # self._ingest_stock_market_vn_index_price()
                 self._ingest_stock_market_vn_index_order()
 
             case DataQuality.SILVER:
