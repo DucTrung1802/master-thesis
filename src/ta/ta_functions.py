@@ -1621,6 +1621,86 @@ def add_mfi(
     return df
 
 
+def add_mom(
+    df: pd.DataFrame,
+    n: list[int] = None,
+    column_name: str = "close",
+) -> pd.DataFrame:
+    """
+    Add Momentum (MOM) columns for each period in n.
+
+    MOM = close - close[n periods ago]. Unbounded — scale depends on price level.
+    Positive = price higher than n bars ago (bullish), negative = lower (bearish).
+
+    Columns added (per period, e.g. n=10 → suffix '_10')
+    -------------
+    mom_{n}                     : raw MOM value
+    mom_{n}_slope               : first difference of MOM (acceleration)
+    mom_{n}_acceleration        : second difference of MOM (jerk)
+    mom_{n}_abs                 : |MOM| (magnitude regardless of direction)
+    mom_{n}_direction           : +1 if MOM > 0, -1 otherwise
+    mom_{n}_gt_0                : MOM > 0 (price higher than n bars ago)
+    mom_{n}_lt_0                : MOM < 0 (price lower than n bars ago)
+    mom_{n}_pct                 : MOM / close[n periods ago] (normalised, scale-free)
+    mom_{n}_pct_slope           : first difference of normalised MOM
+    mom_{n}_signal              : SMA of MOM over same period (smoothed signal line)
+    mom_{n}_signal_slope        : first difference of signal line
+    mom_{n}_hist                : MOM - signal (raw vs smoothed divergence)
+    mom_{n}_hist_slope          : first difference of histogram
+    mom_{n}_hist_acceleration   : second difference of histogram
+    mom_{n}_hist_gt_0           : histogram > 0 (momentum turning bullish)
+    mom_{n}_hist_lt_0           : histogram < 0 (momentum turning bearish)
+    mom_{n}_hist_abs            : |histogram| (divergence magnitude)
+    mom_{n}_strength            : mom_abs × hist_abs (raw momentum × divergence score)
+    """
+
+    validate_column(df, column_name)
+
+    if n is None:
+        n = [10]
+
+    df = df.copy()
+
+    source = df[column_name].to_numpy(dtype=float)
+    price = df[column_name]
+
+    for period in n:
+        s = f"_{period}"
+
+        # --- core indicator ---
+        df[f"mom{s}"] = talib.MOM(source, timeperiod=period)
+
+        # --- derivatives ---
+        df[f"mom{s}_slope"] = df[f"mom{s}"].diff()
+        df[f"mom{s}_acceleration"] = df[f"mom{s}_slope"].diff()
+        df[f"mom{s}_abs"] = df[f"mom{s}"].abs()
+        df[f"mom{s}_direction"] = df[f"mom{s}"].apply(lambda x: 1 if x > 0 else -1)
+
+        # --- zero-line flags ---
+        df[f"mom{s}_gt_0"] = df[f"mom{s}"] > 0
+        df[f"mom{s}_lt_0"] = df[f"mom{s}"] < 0
+
+        # --- normalised momentum (scale-free) ---
+        lagged = price.shift(period).replace(0, float("nan"))
+        df[f"mom{s}_pct"] = df[f"mom{s}"] / lagged
+        df[f"mom{s}_pct_slope"] = df[f"mom{s}_pct"].diff()
+
+        # --- signal line & histogram ---
+        df[f"mom{s}_signal"] = df[f"mom{s}"].rolling(window=period).mean()
+        df[f"mom{s}_signal_slope"] = df[f"mom{s}_signal"].diff()
+        df[f"mom{s}_hist"] = df[f"mom{s}"] - df[f"mom{s}_signal"]
+        df[f"mom{s}_hist_slope"] = df[f"mom{s}_hist"].diff()
+        df[f"mom{s}_hist_acceleration"] = df[f"mom{s}_hist_slope"].diff()
+        df[f"mom{s}_hist_gt_0"] = df[f"mom{s}_hist"] > 0
+        df[f"mom{s}_hist_lt_0"] = df[f"mom{s}_hist"] < 0
+        df[f"mom{s}_hist_abs"] = df[f"mom{s}_hist"].abs()
+
+        # --- combined conviction score ---
+        df[f"mom{s}_strength"] = df[f"mom{s}_abs"] * df[f"mom{s}_hist_abs"]
+
+    return df
+
+
 # endregion MOMENTUM INDICATORS
 
 
