@@ -482,10 +482,30 @@ def add_kama(
 
 
 def add_midpoint(
-    df: pd.DataFrame, n: list[int] = None, column_name: str = "close"
+    df: pd.DataFrame,
+    n: list[int] = None,
+    column_name: str = "close",
 ) -> pd.DataFrame:
     """
     Add MIDPOINT columns, their slopes, and pairwise distances.
+
+    MIDPOINT = (highest + lowest) / 2 over a lookback period.
+
+    Columns added (per period, e.g. n=14 → suffix '_14')
+    -------------
+    {col}_midpoint_{n}                  : MIDPOINT value
+    {col}_midpoint_{n}_slope            : first difference of MIDPOINT (momentum)
+    {col}_midpoint_{n}_acceleration     : second difference of MIDPOINT
+    {col}_gt_midpoint_{n}               : price > MIDPOINT (bullish bias)
+    {col}_midpoint_{n}_dist             : price - MIDPOINT (signed distance from price)
+    {col}_midpoint_{n}_dist_abs         : |price - MIDPOINT| (magnitude only)
+
+    Pairwise columns (per combination, e.g. n=[14,50] → '_14_50')
+    ----------------------------------------------------------------
+    {col}_midpoint_{n1}_{n2}_dist       : midpoint_{n1} - midpoint_{n2} (signed, fast - slow)
+    {col}_midpoint_{n1}_{n2}_dist_abs   : |midpoint_{n1} - midpoint_{n2}|
+    {col}_midpoint_{n1}_{n2}_direction  : +1 if fast > slow, -1 otherwise
+    {col}_midpoint_{n1}_{n2}_dist_slope : first difference of pairwise distance (crossover momentum)
     """
 
     validate_column(df, column_name)
@@ -495,25 +515,30 @@ def add_midpoint(
 
     df = df.copy()
 
+    source = df[column_name].to_numpy(dtype=float)
     midpoint_cols = []
 
-    # --- MIDPOINT + slope ---
+    # --- MIDPOINT + per-period derivatives ---
     for window in n:
         midpoint_col = f"{column_name}_midpoint_{window}"
-        slope_col = f"{midpoint_col}_slope"
 
-        df[midpoint_col] = talib.MIDPOINT(
-            df[column_name].to_numpy(),
-            timeperiod=window,
-        )
-        df[slope_col] = df[midpoint_col].diff()
+        df[midpoint_col]                               = talib.MIDPOINT(source, timeperiod=window)
+        df[f"{midpoint_col}_slope"]                    = df[midpoint_col].diff()
+        df[f"{midpoint_col}_acceleration"]             = df[f"{midpoint_col}_slope"].diff()
+        df[f"{column_name}_gt_midpoint_{window}"]      = df[column_name] > df[midpoint_col]
+        df[f"{midpoint_col}_dist"]                     = df[column_name] - df[midpoint_col]
+        df[f"{midpoint_col}_dist_abs"]                 = df[f"{midpoint_col}_dist"].abs()
 
         midpoint_cols.append((window, midpoint_col))
 
     # --- pairwise distances ---
     for (w1, col1), (w2, col2) in combinations(midpoint_cols, 2):
-        dist_col = f"{column_name}_midpoint_{w1}_{w2}_dist"
-        df[dist_col] = df[col1] - df[col2]
+        pair = f"{column_name}_midpoint_{w1}_{w2}"
+
+        df[f"{pair}_dist"]       = df[col1] - df[col2]
+        df[f"{pair}_dist_abs"]   = df[f"{pair}_dist"].abs()
+        df[f"{pair}_direction"]  = df[f"{pair}_dist"].apply(lambda x: 1 if x > 0 else -1)
+        df[f"{pair}_dist_slope"] = df[f"{pair}_dist"].diff()
 
     return df
 
