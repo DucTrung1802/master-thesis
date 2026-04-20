@@ -767,12 +767,12 @@ def add_sma(
     for window in n:
         sma_col = f"{column_name}_sma_{window}"
 
-        df[sma_col]                           = talib.SMA(source, timeperiod=window)
-        df[f"{sma_col}_slope"]                = df[sma_col].diff()
-        df[f"{sma_col}_acceleration"]         = df[f"{sma_col}_slope"].diff()
-        df[f"{column_name}_gt_sma_{window}"]  = df[column_name] > df[sma_col]
-        df[f"{sma_col}_dist"]                 = df[column_name] - df[sma_col]
-        df[f"{sma_col}_dist_abs"]             = df[f"{sma_col}_dist"].abs()
+        df[sma_col] = talib.SMA(source, timeperiod=window)
+        df[f"{sma_col}_slope"] = df[sma_col].diff()
+        df[f"{sma_col}_acceleration"] = df[f"{sma_col}_slope"].diff()
+        df[f"{column_name}_gt_sma_{window}"] = df[column_name] > df[sma_col]
+        df[f"{sma_col}_dist"] = df[column_name] - df[sma_col]
+        df[f"{sma_col}_dist_abs"] = df[f"{sma_col}_dist"].abs()
 
         sma_cols.append((window, sma_col))
 
@@ -780,9 +780,9 @@ def add_sma(
     for (w1, col1), (w2, col2) in combinations(sma_cols, 2):
         pair = f"{column_name}_sma_{w1}_{w2}"
 
-        df[f"{pair}_dist"]       = df[col1] - df[col2]
-        df[f"{pair}_dist_abs"]   = df[f"{pair}_dist"].abs()
-        df[f"{pair}_direction"]  = df[f"{pair}_dist"].apply(lambda x: 1 if x > 0 else -1)
+        df[f"{pair}_dist"] = df[col1] - df[col2]
+        df[f"{pair}_dist_abs"] = df[f"{pair}_dist"].abs()
+        df[f"{pair}_direction"] = df[f"{pair}_dist"].apply(lambda x: 1 if x > 0 else -1)
         df[f"{pair}_dist_slope"] = df[f"{pair}_dist"].diff()
 
     return df
@@ -831,12 +831,12 @@ def add_t3(
     for window in n:
         t3_col = f"{column_name}_t3_{window}"
 
-        df[t3_col]                           = talib.T3(source, timeperiod=window, vfactor=vfactor)
-        df[f"{t3_col}_slope"]                = df[t3_col].diff()
-        df[f"{t3_col}_acceleration"]         = df[f"{t3_col}_slope"].diff()
-        df[f"{column_name}_gt_t3_{window}"]  = df[column_name] > df[t3_col]
-        df[f"{t3_col}_dist"]                 = df[column_name] - df[t3_col]
-        df[f"{t3_col}_dist_abs"]             = df[f"{t3_col}_dist"].abs()
+        df[t3_col] = talib.T3(source, timeperiod=window, vfactor=vfactor)
+        df[f"{t3_col}_slope"] = df[t3_col].diff()
+        df[f"{t3_col}_acceleration"] = df[f"{t3_col}_slope"].diff()
+        df[f"{column_name}_gt_t3_{window}"] = df[column_name] > df[t3_col]
+        df[f"{t3_col}_dist"] = df[column_name] - df[t3_col]
+        df[f"{t3_col}_dist_abs"] = df[f"{t3_col}_dist"].abs()
 
         t3_cols.append((window, t3_col))
 
@@ -844,9 +844,9 @@ def add_t3(
     for (w1, col1), (w2, col2) in combinations(t3_cols, 2):
         pair = f"{column_name}_t3_{w1}_{w2}"
 
-        df[f"{pair}_dist"]       = df[col1] - df[col2]
-        df[f"{pair}_dist_abs"]   = df[f"{pair}_dist"].abs()
-        df[f"{pair}_direction"]  = df[f"{pair}_dist"].apply(lambda x: 1 if x > 0 else -1)
+        df[f"{pair}_dist"] = df[col1] - df[col2]
+        df[f"{pair}_dist_abs"] = df[f"{pair}_dist"].abs()
+        df[f"{pair}_direction"] = df[f"{pair}_dist"].apply(lambda x: 1 if x > 0 else -1)
         df[f"{pair}_dist_slope"] = df[f"{pair}_dist"].diff()
 
     return df
@@ -893,12 +893,12 @@ def add_tema(
     for window in n:
         tema_col = f"{column_name}_tema_{window}"
 
-        df[tema_col]                           = talib.TEMA(source, timeperiod=window)
-        df[f"{tema_col}_slope"]                = df[tema_col].diff()
-        df[f"{tema_col}_acceleration"]         = df[f"{tema_col}_slope"].diff()
-        df[f"{column_name}_gt_tema_{window}"]  = df[column_name] > df[tema_col]
-        df[f"{tema_col}_dist"]                 = df[column_name] - df[tema_col]
-        df[f"{tema_col}_dist_abs"]             = df[f"{tema_col}_dist"].abs()
+        df[tema_col] = talib.TEMA(source, timeperiod=window)
+        df[f"{tema_col}_slope"] = df[tema_col].diff()
+        df[f"{tema_col}_acceleration"] = df[f"{tema_col}_slope"].diff()
+        df[f"{column_name}_gt_tema_{window}"] = df[column_name] > df[tema_col]
+        df[f"{tema_col}_dist"] = df[column_name] - df[tema_col]
+        df[f"{tema_col}_dist_abs"] = df[f"{tema_col}_dist"].abs()
 
         tema_cols.append((window, tema_col))
 
@@ -906,9 +906,9 @@ def add_tema(
     for (w1, col1), (w2, col2) in combinations(tema_cols, 2):
         pair = f"{column_name}_tema_{w1}_{w2}"
 
-        df[f"{pair}_dist"]       = df[col1] - df[col2]
-        df[f"{pair}_dist_abs"]   = df[f"{pair}_dist"].abs()
-        df[f"{pair}_direction"]  = df[f"{pair}_dist"].apply(lambda x: 1 if x > 0 else -1)
+        df[f"{pair}_dist"] = df[col1] - df[col2]
+        df[f"{pair}_dist_abs"] = df[f"{pair}_dist"].abs()
+        df[f"{pair}_direction"] = df[f"{pair}_dist"].apply(lambda x: 1 if x > 0 else -1)
         df[f"{pair}_dist_slope"] = df[f"{pair}_dist"].diff()
 
     return df
@@ -955,12 +955,12 @@ def add_trima(
     for window in n:
         trima_col = f"{column_name}_trima_{window}"
 
-        df[trima_col]                            = talib.TRIMA(source, timeperiod=window)
-        df[f"{trima_col}_slope"]                 = df[trima_col].diff()
-        df[f"{trima_col}_acceleration"]          = df[f"{trima_col}_slope"].diff()
-        df[f"{column_name}_gt_trima_{window}"]   = df[column_name] > df[trima_col]
-        df[f"{trima_col}_dist"]                  = df[column_name] - df[trima_col]
-        df[f"{trima_col}_dist_abs"]              = df[f"{trima_col}_dist"].abs()
+        df[trima_col] = talib.TRIMA(source, timeperiod=window)
+        df[f"{trima_col}_slope"] = df[trima_col].diff()
+        df[f"{trima_col}_acceleration"] = df[f"{trima_col}_slope"].diff()
+        df[f"{column_name}_gt_trima_{window}"] = df[column_name] > df[trima_col]
+        df[f"{trima_col}_dist"] = df[column_name] - df[trima_col]
+        df[f"{trima_col}_dist_abs"] = df[f"{trima_col}_dist"].abs()
 
         trima_cols.append((window, trima_col))
 
@@ -968,9 +968,9 @@ def add_trima(
     for (w1, col1), (w2, col2) in combinations(trima_cols, 2):
         pair = f"{column_name}_trima_{w1}_{w2}"
 
-        df[f"{pair}_dist"]       = df[col1] - df[col2]
-        df[f"{pair}_dist_abs"]   = df[f"{pair}_dist"].abs()
-        df[f"{pair}_direction"]  = df[f"{pair}_dist"].apply(lambda x: 1 if x > 0 else -1)
+        df[f"{pair}_dist"] = df[col1] - df[col2]
+        df[f"{pair}_dist_abs"] = df[f"{pair}_dist"].abs()
+        df[f"{pair}_direction"] = df[f"{pair}_dist"].apply(lambda x: 1 if x > 0 else -1)
         df[f"{pair}_dist_slope"] = df[f"{pair}_dist"].diff()
 
     return df
@@ -980,49 +980,69 @@ def add_wma(
     df: pd.DataFrame,
     n: int | list[int] | None = None,
     column_name: str = "close",
-    default_wma_periods: list[int] = None,
 ) -> pd.DataFrame:
     """
-    Add Wilder's Moving Average (WMA) columns, their slopes,
+    Add WMA (Weighted Moving Average) columns, their slopes,
     and pairwise WMA distances.
 
-    Default WMA values:
-        7, 14, 21, 50, 100
+    WMA applies a linearly increasing weight to each period
+    (most recent bar gets highest weight). Computed via talib.WMA.
+
+    Note: the previous implementation used ewm(alpha=1/period) which
+    is Wilder's Smoothed MA (SMMA/RMA) — a different indicator entirely.
+
+    Columns added (per period, e.g. n=50 → suffix '_50')
+    -------------
+    {col}_wma_{n}                   : WMA value
+    {col}_wma_{n}_slope             : first difference of WMA (momentum)
+    {col}_wma_{n}_acceleration      : second difference of WMA
+    {col}_gt_wma_{n}                : price > WMA (bullish bias)
+    {col}_wma_{n}_dist              : price - WMA (signed distance from price)
+    {col}_wma_{n}_dist_abs          : |price - WMA| (magnitude only)
+
+    Pairwise columns (per combination, e.g. n=[50,100] → '_50_100')
+    ----------------------------------------------------------------
+    {col}_wma_{n1}_{n2}_dist        : wma_{n1} - wma_{n2} (signed, fast - slow)
+    {col}_wma_{n1}_{n2}_dist_abs    : |wma_{n1} - wma_{n2}|
+    {col}_wma_{n1}_{n2}_direction   : +1 if fast > slow, -1 otherwise
+    {col}_wma_{n1}_{n2}_dist_slope  : first difference of pairwise distance (crossover momentum)
     """
 
     validate_column(df, column_name)
+
+    if n is None:
+        n = [7, 14, 21, 50, 100]
+    elif isinstance(n, int):
+        n = [n]
+    else:
+        n = list(n)
+
     df = df.copy()
 
-    # Default Wilder MA periods
-    if default_wma_periods is None:
-        default_wma_periods = [7, 14, 21, 50, 100]
-
-    # Resolve periods
-    if n is None:
-        periods = default_wma_periods
-    elif isinstance(n, int):
-        periods = [n]
-    else:
-        periods = list(n)
-
+    source = df[column_name].to_numpy(dtype=float)
     wma_cols = []
 
-    # --- WMA + slope ---
-    for period in periods:
+    # --- WMA + per-period derivatives ---
+    for period in n:
         wma_col = f"{column_name}_wma_{period}"
-        slope_col = f"{wma_col}_slope"
 
-        alpha = 1 / period
-
-        df[wma_col] = df[column_name].ewm(alpha=alpha, adjust=False).mean()
-        df[slope_col] = df[wma_col].diff()
+        df[wma_col] = talib.WMA(source, timeperiod=period)
+        df[f"{wma_col}_slope"] = df[wma_col].diff()
+        df[f"{wma_col}_acceleration"] = df[f"{wma_col}_slope"].diff()
+        df[f"{column_name}_gt_wma_{period}"] = df[column_name] > df[wma_col]
+        df[f"{wma_col}_dist"] = df[column_name] - df[wma_col]
+        df[f"{wma_col}_dist_abs"] = df[f"{wma_col}_dist"].abs()
 
         wma_cols.append((period, wma_col))
 
     # --- pairwise distances ---
-    for (p1, col1), (p2, col2) in combinations(wma_cols, 2):
-        dist_col = f"{column_name}_wma_{p1}_{p2}_dist"
-        df[dist_col] = df[col1] - df[col2]
+    for (w1, col1), (w2, col2) in combinations(wma_cols, 2):
+        pair = f"{column_name}_wma_{w1}_{w2}"
+
+        df[f"{pair}_dist"] = df[col1] - df[col2]
+        df[f"{pair}_dist_abs"] = df[f"{pair}_dist"].abs()
+        df[f"{pair}_direction"] = df[f"{pair}_dist"].apply(lambda x: 1 if x > 0 else -1)
+        df[f"{pair}_dist_slope"] = df[f"{pair}_dist"].diff()
 
     return df
 
