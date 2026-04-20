@@ -858,40 +858,58 @@ def add_tema(
     column_name: str = "close",
 ) -> pd.DataFrame:
     """
-    Add TEMA columns, their slopes, pairwise TEMA distances,
-    and distances between price and TEMA.
+    Add TEMA columns, their slopes, and pairwise TEMA distances.
+
+    TEMA = 3*EMA - 3*EMA(EMA) + EMA(EMA(EMA)) — reduced lag vs EMA/DEMA.
+
+    Columns added (per period, e.g. n=30 → suffix '_30')
+    -------------
+    {col}_tema_{n}                  : TEMA value
+    {col}_tema_{n}_slope            : first difference of TEMA (momentum)
+    {col}_tema_{n}_acceleration     : second difference of TEMA
+    {col}_gt_tema_{n}               : price > TEMA (bullish bias)
+    {col}_tema_{n}_dist             : price - TEMA (signed distance from price)
+    {col}_tema_{n}_dist_abs         : |price - TEMA| (magnitude only)
+
+    Pairwise columns (per combination, e.g. n=[30,60] → '_30_60')
+    ----------------------------------------------------------------
+    {col}_tema_{n1}_{n2}_dist       : tema_{n1} - tema_{n2} (signed, fast - slow)
+    {col}_tema_{n1}_{n2}_dist_abs   : |tema_{n1} - tema_{n2}|
+    {col}_tema_{n1}_{n2}_direction  : +1 if fast > slow, -1 otherwise
+    {col}_tema_{n1}_{n2}_dist_slope : first difference of pairwise distance (crossover momentum)
     """
 
     validate_column(df, column_name)
 
     if n is None:
-        n = [30]  # default based on TA-Lib example
+        n = [30]
 
     df = df.copy()
 
+    source = df[column_name].to_numpy(dtype=float)
     tema_cols = []
 
-    # --- TEMA + slope ---
+    # --- TEMA + per-period derivatives ---
     for window in n:
         tema_col = f"{column_name}_tema_{window}"
-        slope_col = f"{tema_col}_slope"
 
-        df[tema_col] = talib.TEMA(
-            df[column_name].to_numpy(),
-            timeperiod=window,
-        )
-        df[slope_col] = df[tema_col].diff()
-
-        # --- distance: price vs TEMA ---
-        price_dist_col = f"{column_name}_tema_{window}_dist"
-        df[price_dist_col] = df[column_name] - df[tema_col]
+        df[tema_col]                           = talib.TEMA(source, timeperiod=window)
+        df[f"{tema_col}_slope"]                = df[tema_col].diff()
+        df[f"{tema_col}_acceleration"]         = df[f"{tema_col}_slope"].diff()
+        df[f"{column_name}_gt_tema_{window}"]  = df[column_name] > df[tema_col]
+        df[f"{tema_col}_dist"]                 = df[column_name] - df[tema_col]
+        df[f"{tema_col}_dist_abs"]             = df[f"{tema_col}_dist"].abs()
 
         tema_cols.append((window, tema_col))
 
-    # --- pairwise distances between TEMAs ---
+    # --- pairwise distances ---
     for (w1, col1), (w2, col2) in combinations(tema_cols, 2):
-        dist_col = f"{column_name}_tema_{w1}_{w2}_dist"
-        df[dist_col] = df[col1] - df[col2]
+        pair = f"{column_name}_tema_{w1}_{w2}"
+
+        df[f"{pair}_dist"]       = df[col1] - df[col2]
+        df[f"{pair}_dist_abs"]   = df[f"{pair}_dist"].abs()
+        df[f"{pair}_direction"]  = df[f"{pair}_dist"].apply(lambda x: 1 if x > 0 else -1)
+        df[f"{pair}_dist_slope"] = df[f"{pair}_dist"].diff()
 
     return df
 
