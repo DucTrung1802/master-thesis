@@ -286,10 +286,28 @@ def add_dema(
 
 
 def add_ema(
-    df: pd.DataFrame, n: list[int] = None, column_name: str = "close"
+    df: pd.DataFrame,
+    n: list[int] = None,
+    column_name: str = "close",
 ) -> pd.DataFrame:
     """
     Add EMA columns, their slopes, and pairwise EMA distances.
+
+    Columns added (per period, e.g. n=50 → suffix '_50')
+    -------------
+    {col}_ema_{n}                   : EMA value
+    {col}_ema_{n}_slope             : first difference of EMA (momentum)
+    {col}_ema_{n}_acceleration      : second difference of EMA
+    {col}_gt_ema_{n}                : price > EMA (bullish bias)
+    {col}_ema_{n}_dist              : price - EMA (signed distance from price)
+    {col}_ema_{n}_dist_abs          : |price - EMA| (magnitude only)
+
+    Pairwise columns (per combination, e.g. n=[50,100] → '_50_100')
+    ----------------------------------------------------------------
+    {col}_ema_{n1}_{n2}_dist        : ema_{n1} - ema_{n2} (signed, fast - slow)
+    {col}_ema_{n1}_{n2}_dist_abs    : |ema_{n1} - ema_{n2}|
+    {col}_ema_{n1}_{n2}_direction   : +1 if fast > slow, -1 otherwise
+    {col}_ema_{n1}_{n2}_dist_slope  : first difference of pairwise distance (crossover momentum)
     """
 
     validate_column(df, column_name)
@@ -299,22 +317,30 @@ def add_ema(
 
     df = df.copy()
 
+    source = df[column_name].to_numpy(dtype=float)
     ema_cols = []
 
-    # --- EMA + slope ---
+    # --- EMA + per-period derivatives ---
     for window in n:
         ema_col = f"{column_name}_ema_{window}"
-        slope_col = f"{ema_col}_slope"
 
-        df[ema_col] = talib.EMA(df[column_name].to_numpy(), timeperiod=window)
-        df[slope_col] = df[ema_col].diff()
+        df[ema_col] = talib.EMA(source, timeperiod=window)
+        df[f"{ema_col}_slope"] = df[ema_col].diff()
+        df[f"{ema_col}_acceleration"] = df[f"{ema_col}_slope"].diff()
+        df[f"{column_name}_gt_ema_{window}"] = df[column_name] > df[ema_col]
+        df[f"{ema_col}_dist"] = df[column_name] - df[ema_col]
+        df[f"{ema_col}_dist_abs"] = df[f"{ema_col}_dist"].abs()
 
         ema_cols.append((window, ema_col))
 
     # --- pairwise distances ---
     for (w1, col1), (w2, col2) in combinations(ema_cols, 2):
-        dist_col = f"{column_name}_ema_{w1}_{w2}_dist"
-        df[dist_col] = df[col1] - df[col2]
+        pair = f"{column_name}_ema_{w1}_{w2}"
+
+        df[f"{pair}_dist"] = df[col1] - df[col2]
+        df[f"{pair}_dist_abs"] = df[f"{pair}_dist"].abs()
+        df[f"{pair}_direction"] = df[f"{pair}_dist"].apply(lambda x: 1 if x > 0 else -1)
+        df[f"{pair}_dist_slope"] = df[f"{pair}_dist"].diff()
 
     return df
 
