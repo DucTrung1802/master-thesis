@@ -360,11 +360,29 @@ def add_ema(
 
 
 def add_kama(
-    df: pd.DataFrame, n: list[int] = None, column_name: str = "close"
+    df: pd.DataFrame,
+    n: list[int] = None,
+    column_name: str = "close",
 ) -> pd.DataFrame:
     """
-    Add KAMA (Kaufman Adaptive Moving Average) columns,
-    their slopes, and pairwise distances.
+    Add KAMA (Kaufman Adaptive Moving Average) columns, their slopes,
+    and pairwise distances.
+
+    Columns added (per period, e.g. n=50 → suffix '_50')
+    -------------
+    {col}_kama_{n}                  : KAMA value
+    {col}_kama_{n}_slope            : first difference of KAMA (momentum)
+    {col}_kama_{n}_acceleration     : second difference of KAMA
+    {col}_gt_kama_{n}               : price > KAMA (bullish bias)
+    {col}_kama_{n}_dist             : price - KAMA (signed distance from price)
+    {col}_kama_{n}_dist_abs         : |price - KAMA| (magnitude only)
+
+    Pairwise columns (per combination, e.g. n=[50,100] → '_50_100')
+    ----------------------------------------------------------------
+    {col}_kama_{n1}_{n2}_dist       : kama_{n1} - kama_{n2} (signed, fast - slow)
+    {col}_kama_{n1}_{n2}_dist_abs   : |kama_{n1} - kama_{n2}|
+    {col}_kama_{n1}_{n2}_direction  : +1 if fast > slow, -1 otherwise
+    {col}_kama_{n1}_{n2}_dist_slope : first difference of pairwise distance (crossover momentum)
     """
 
     validate_column(df, column_name)
@@ -374,22 +392,30 @@ def add_kama(
 
     df = df.copy()
 
+    source = df[column_name].to_numpy(dtype=float)
     kama_cols = []
 
-    # --- KAMA + slope ---
+    # --- KAMA + per-period derivatives ---
     for window in n:
         kama_col = f"{column_name}_kama_{window}"
-        slope_col = f"{kama_col}_slope"
 
-        df[kama_col] = talib.KAMA(df[column_name].to_numpy(), timeperiod=window)
-        df[slope_col] = df[kama_col].diff()
+        df[kama_col] = talib.KAMA(source, timeperiod=window)
+        df[f"{kama_col}_slope"] = df[kama_col].diff()
+        df[f"{kama_col}_acceleration"] = df[f"{kama_col}_slope"].diff()
+        df[f"{column_name}_gt_kama_{window}"] = df[column_name] > df[kama_col]
+        df[f"{kama_col}_dist"] = df[column_name] - df[kama_col]
+        df[f"{kama_col}_dist_abs"] = df[f"{kama_col}_dist"].abs()
 
         kama_cols.append((window, kama_col))
 
     # --- pairwise distances ---
     for (w1, col1), (w2, col2) in combinations(kama_cols, 2):
-        dist_col = f"{column_name}_kama_{w1}_{w2}_dist"
-        df[dist_col] = df[col1] - df[col2]
+        pair = f"{column_name}_kama_{w1}_{w2}"
+
+        df[f"{pair}_dist"] = df[col1] - df[col2]
+        df[f"{pair}_dist_abs"] = df[f"{pair}_dist"].abs()
+        df[f"{pair}_direction"] = df[f"{pair}_dist"].apply(lambda x: 1 if x > 0 else -1)
+        df[f"{pair}_dist_slope"] = df[f"{pair}_dist"].diff()
 
     return df
 
