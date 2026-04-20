@@ -1701,6 +1701,115 @@ def add_mom(
     return df
 
 
+def add_ppo(
+    df: pd.DataFrame,
+    fast: list[int] = None,
+    slow: list[int] = None,
+    signal: list[int] = None,
+    ma_type: int = 1,
+    column_name: str = "close",
+) -> pd.DataFrame:
+    """
+    Add Percentage Price Oscillator (PPO) columns for each (fast, slow, signal) combo.
+
+    PPO = (EMA(fast) - EMA(slow)) / EMA(slow) × 100.
+    Scale-free version of MACD — expressed as a percentage, comparable across assets.
+
+    Suffix format: ppo_{fast}_{slow}_{signal}, e.g. (12, 26, 9) → 'ppo_12_26_9'
+
+    Moving average types (TA-Lib MA_Type):
+        0 = SMA  1 = EMA  2 = WMA  3 = DEMA  4 = TEMA
+        5 = TRIMA  6 = KAMA  7 = MAMA  8 = T3
+
+    Columns added (per combo)
+    -------------------------
+    ppo_{f}_{sl}_{sg}                   : PPO line (% distance between fast and slow MA)
+    ppo_{f}_{sl}_{sg}_slope             : first difference of PPO line
+    ppo_{f}_{sl}_{sg}_acceleration      : second difference of PPO line
+    ppo_{f}_{sl}_{sg}_abs               : |PPO| (magnitude regardless of direction)
+    ppo_{f}_{sl}_{sg}_direction         : +1 if PPO > 0, -1 otherwise
+    ppo_{f}_{sl}_{sg}_gt_0              : PPO > 0 (fast MA above slow MA, bullish)
+    ppo_{f}_{sl}_{sg}_lt_0              : PPO < 0 (fast MA below slow MA, bearish)
+
+    ppo_{f}_{sl}_{sg}_signal            : signal line (MA of PPO)
+    ppo_{f}_{sl}_{sg}_signal_slope      : first difference of signal line
+    ppo_{f}_{sl}_{sg}_signal_gt_0       : signal line > 0
+    ppo_{f}_{sl}_{sg}_signal_lt_0       : signal line < 0
+
+    ppo_{f}_{sl}_{sg}_hist              : histogram (PPO - signal)
+    ppo_{f}_{sl}_{sg}_hist_slope        : first difference of histogram (momentum shift)
+    ppo_{f}_{sl}_{sg}_hist_acceleration : second difference of histogram
+    ppo_{f}_{sl}_{sg}_hist_gt_0         : histogram > 0 (bullish momentum)
+    ppo_{f}_{sl}_{sg}_hist_lt_0         : histogram < 0 (bearish momentum)
+    ppo_{f}_{sl}_{sg}_hist_abs          : |histogram| (conviction magnitude)
+
+    ppo_{f}_{sl}_{sg}_cross_above       : PPO crossed above signal this bar
+    ppo_{f}_{sl}_{sg}_cross_below       : PPO crossed below signal this bar
+    ppo_{f}_{sl}_{sg}_strength          : ppo_abs × hist_abs (trend strength × momentum conviction)
+    """
+
+    validate_column(df, column_name)
+
+    if fast is None:
+        fast = [12]
+    if slow is None:
+        slow = [26]
+    if signal is None:
+        signal = [9]
+
+    df = df.copy()
+
+    source = df[column_name].to_numpy(dtype=float)
+
+    for f, sl, sg in product(fast, slow, signal):
+        if f >= sl:
+            continue  # fast must be strictly less than slow
+
+        s = f"_{f}_{sl}_{sg}"
+
+        # --- core indicator ---
+        ppo_line = talib.PPO(source, fastperiod=f, slowperiod=sl, matype=ma_type)
+
+        # TA-Lib PPO does not return a signal/hist — compute manually
+        signal_line = pd.Series(ppo_line).rolling(window=sg).mean().values
+        hist = ppo_line - signal_line
+
+        # --- PPO line ---
+        df[f"ppo{s}"] = ppo_line
+        df[f"ppo{s}_slope"] = pd.Series(ppo_line).diff().values
+        df[f"ppo{s}_acceleration"] = pd.Series(df[f"ppo{s}_slope"]).diff().values
+        df[f"ppo{s}_abs"] = np.abs(ppo_line)
+        df[f"ppo{s}_direction"] = np.where(ppo_line > 0, 1, -1)
+        df[f"ppo{s}_gt_0"] = ppo_line > 0
+        df[f"ppo{s}_lt_0"] = ppo_line < 0
+
+        # --- signal line ---
+        df[f"ppo{s}_signal"] = signal_line
+        df[f"ppo{s}_signal_slope"] = pd.Series(signal_line).diff().values
+        df[f"ppo{s}_signal_gt_0"] = signal_line > 0
+        df[f"ppo{s}_signal_lt_0"] = signal_line < 0
+
+        # --- histogram ---
+        df[f"ppo{s}_hist"] = hist
+        df[f"ppo{s}_hist_slope"] = pd.Series(hist).diff().values
+        df[f"ppo{s}_hist_acceleration"] = (
+            pd.Series(df[f"ppo{s}_hist_slope"]).diff().values
+        )
+        df[f"ppo{s}_hist_gt_0"] = hist > 0
+        df[f"ppo{s}_hist_lt_0"] = hist < 0
+        df[f"ppo{s}_hist_abs"] = np.abs(hist)
+
+        # --- crossover signals ---
+        prev_hist = pd.Series(hist).shift(1)
+        df[f"ppo{s}_cross_above"] = (pd.Series(hist) > 0) & (prev_hist <= 0)
+        df[f"ppo{s}_cross_below"] = (pd.Series(hist) < 0) & (prev_hist >= 0)
+
+        # --- combined conviction score ---
+        df[f"ppo{s}_strength"] = df[f"ppo{s}_abs"] * df[f"ppo{s}_hist_abs"]
+
+    return df
+
+
 # endregion MOMENTUM INDICATORS
 
 
