@@ -1358,6 +1358,82 @@ def add_cci(
     return df
 
 
+def add_cmo(
+    df: pd.DataFrame,
+    n: list[int] = None,
+    column_name: str = "close",
+) -> pd.DataFrame:
+    """
+    Add Chande Momentum Oscillator (CMO) columns for each period in n.
+
+    CMO measures momentum as (sum of up days - sum of down days) / total sum × 100.
+    Range is -100 to +100. Unlike RSI, it uses both up and down days in the denominator.
+
+    Columns added (per period, e.g. n=14 → suffix '_14')
+    -------------
+    cmo_{n}                     : raw CMO value (-100 to +100)
+    cmo_{n}_slope               : first difference of CMO (momentum)
+    cmo_{n}_acceleration        : second difference of CMO
+    cmo_{n}_abs                 : |CMO| (conviction magnitude regardless of direction)
+    cmo_{n}_direction           : +1 if CMO > 0, -1 otherwise
+    cmo_{n}_gt_50               : CMO > +50 (strong bullish momentum)
+    cmo_{n}_lt_minus50          : CMO < -50 (strong bearish momentum)
+    cmo_{n}_gt_0                : CMO > 0 (bullish bias)
+    cmo_{n}_lt_0                : CMO < 0 (bearish bias)
+    cmo_{n}_extreme             : +1 if CMO > +50, -1 if CMO < -50, 0 if between
+    cmo_{n}_signal              : SMA of CMO over same period (smoothed signal line)
+    cmo_{n}_signal_slope        : first difference of signal line
+    cmo_{n}_hist                : CMO - signal (raw vs smoothed divergence)
+    cmo_{n}_hist_slope          : first difference of histogram
+    cmo_{n}_hist_gt_0           : histogram > 0 (momentum turning bullish)
+    cmo_{n}_hist_lt_0           : histogram < 0 (momentum turning bearish)
+    cmo_{n}_strength            : cmo_abs × |cmo_hist| (conviction × divergence score)
+    """
+
+    validate_column(df, column_name)
+
+    if n is None:
+        n = [14]
+
+    df = df.copy()
+
+    source = df[column_name].to_numpy(dtype=float)
+
+    for period in n:
+        s = f"_{period}"
+
+        # --- core indicator ---
+        df[f"cmo{s}"] = talib.CMO(source, timeperiod=period)
+
+        # --- derivatives ---
+        df[f"cmo{s}_slope"] = df[f"cmo{s}"].diff()
+        df[f"cmo{s}_acceleration"] = df[f"cmo{s}_slope"].diff()
+        df[f"cmo{s}_abs"] = df[f"cmo{s}"].abs()
+        df[f"cmo{s}_direction"] = df[f"cmo{s}"].apply(lambda x: 1 if x > 0 else -1)
+
+        # --- threshold flags ---
+        df[f"cmo{s}_gt_50"] = df[f"cmo{s}"] > 50
+        df[f"cmo{s}_lt_minus50"] = df[f"cmo{s}"] < -50
+        df[f"cmo{s}_gt_0"] = df[f"cmo{s}"] > 0
+        df[f"cmo{s}_lt_0"] = df[f"cmo{s}"] < 0
+        df[f"cmo{s}_extreme"] = df[f"cmo{s}"].apply(
+            lambda x: 1 if x > 50 else (-1 if x < -50 else 0)
+        )
+
+        # --- signal line & histogram ---
+        df[f"cmo{s}_signal"] = df[f"cmo{s}"].rolling(window=period).mean()
+        df[f"cmo{s}_signal_slope"] = df[f"cmo{s}_signal"].diff()
+        df[f"cmo{s}_hist"] = df[f"cmo{s}"] - df[f"cmo{s}_signal"]
+        df[f"cmo{s}_hist_slope"] = df[f"cmo{s}_hist"].diff()
+        df[f"cmo{s}_hist_gt_0"] = df[f"cmo{s}_hist"] > 0
+        df[f"cmo{s}_hist_lt_0"] = df[f"cmo{s}_hist"] < 0
+
+        # --- combined conviction score ---
+        df[f"cmo{s}_strength"] = df[f"cmo{s}_abs"] * df[f"cmo{s}_hist"].abs()
+
+    return df
+
+
 # endregion MOMENTUM INDICATORS
 
 
