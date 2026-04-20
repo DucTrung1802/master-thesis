@@ -956,6 +956,82 @@ def add_aroon(
     return df
 
 
+def add_bop(
+    df: pd.DataFrame,
+    n: list[int] = None,
+    open_col: str = "open",
+    high_col: str = "high",
+    low_col: str = "low",
+    close_col: str = "close",
+) -> pd.DataFrame:
+    """
+    Add Balance of Power (BOP) indicator columns.
+
+    BOP has no timeperiod parameter — n defines smoothing windows
+    applied to the raw BOP signal (like a signal line).
+
+    Base columns (computed once)
+    ----------------------------
+    bop                     : raw BOP value (open–close / high–low), range [-1, +1]
+    bop_slope               : first difference of raw BOP
+    bop_acceleration        : second difference of raw BOP
+    bop_gt_0                : BOP > 0 (buyers in control)
+    bop_lt_0                : BOP < 0 (sellers in control)
+    bop_abs                 : |BOP| (conviction magnitude regardless of direction)
+    bop_direction           : +1 if BOP > 0, -1 otherwise
+
+    Per smoothing window (e.g. n=14 → suffix '_14')
+    ------------------------------------------------
+    bop_signal_{n}          : SMA of raw BOP over n periods
+    bop_signal_{n}_slope    : first difference of signal line
+    bop_hist_{n}            : bop - bop_signal (raw vs smoothed divergence)
+    bop_hist_{n}_slope      : first difference of histogram
+    bop_hist_{n}_gt_0       : histogram > 0 (momentum turning bullish)
+    bop_hist_{n}_lt_0       : histogram < 0 (momentum turning bearish)
+    bop_{n}_strength        : bop_abs × |bop_hist| (conviction × divergence score)
+    """
+
+    for col in (open_col, high_col, low_col, close_col):
+        validate_column(df, col)
+
+    if n is None:
+        n = [14]
+
+    df = df.copy()
+
+    open_ = df[open_col].to_numpy(dtype=float)
+    high = df[high_col].to_numpy(dtype=float)
+    low = df[low_col].to_numpy(dtype=float)
+    close = df[close_col].to_numpy(dtype=float)
+
+    # --- raw BOP (computed once, no period) ---
+    df["bop"] = talib.BOP(open_, high, low, close)
+
+    # --- base derivatives ---
+    df["bop_slope"] = df["bop"].diff()
+    df["bop_acceleration"] = df["bop_slope"].diff()
+    df["bop_gt_0"] = df["bop"] > 0
+    df["bop_lt_0"] = df["bop"] < 0
+    df["bop_abs"] = df["bop"].abs()
+    df["bop_direction"] = df["bop"].apply(lambda x: 1 if x > 0 else -1)
+
+    # --- per smoothing window ---
+    for period in n:
+        s = f"_{period}"
+
+        df[f"bop_signal{s}"] = df["bop"].rolling(window=period).mean()
+        df[f"bop_signal{s}_slope"] = df[f"bop_signal{s}"].diff()
+
+        df[f"bop_hist{s}"] = df["bop"] - df[f"bop_signal{s}"]
+        df[f"bop_hist{s}_slope"] = df[f"bop_hist{s}"].diff()
+        df[f"bop_hist{s}_gt_0"] = df[f"bop_hist{s}"] > 0
+        df[f"bop_hist{s}_lt_0"] = df[f"bop_hist{s}"] < 0
+
+        df[f"bop{s}_strength"] = df["bop_abs"] * df[f"bop_hist{s}"].abs()
+
+    return df
+
+
 # endregion MOMENTUM INDICATORS
 
 
@@ -2466,6 +2542,10 @@ def add_one_for_all_ta(df: pd.DataFrame) -> pd.DataFrame:
         new_df,
         n=[5, 10, 15, 20],
     )
+    new_df = add_bop(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
 
     return new_df
 
@@ -2635,7 +2715,7 @@ def main():
 
     plot_with_indicators(
         df,
-        indicators=["aroon_*5*"],
+        indicators=["*bop*"],
         price_column_name=f"close",
     )
 
