@@ -920,40 +920,58 @@ def add_trima(
     column_name: str = "close",
 ) -> pd.DataFrame:
     """
-    Add TRIMA columns, their slopes, pairwise TRIMA distances,
-    and distances between price and TRIMA.
+    Add TRIMA columns, their slopes, and pairwise TRIMA distances.
+
+    TRIMA = double-smoothed SMA (SMA of SMA) — smoother than SMA with more lag.
+
+    Columns added (per period, e.g. n=30 → suffix '_30')
+    -------------
+    {col}_trima_{n}                  : TRIMA value
+    {col}_trima_{n}_slope            : first difference of TRIMA (momentum)
+    {col}_trima_{n}_acceleration     : second difference of TRIMA
+    {col}_gt_trima_{n}               : price > TRIMA (bullish bias)
+    {col}_trima_{n}_dist             : price - TRIMA (signed distance from price)
+    {col}_trima_{n}_dist_abs         : |price - TRIMA| (magnitude only)
+
+    Pairwise columns (per combination, e.g. n=[30,60] → '_30_60')
+    ----------------------------------------------------------------
+    {col}_trima_{n1}_{n2}_dist       : trima_{n1} - trima_{n2} (signed, fast - slow)
+    {col}_trima_{n1}_{n2}_dist_abs   : |trima_{n1} - trima_{n2}|
+    {col}_trima_{n1}_{n2}_direction  : +1 if fast > slow, -1 otherwise
+    {col}_trima_{n1}_{n2}_dist_slope : first difference of pairwise distance (crossover momentum)
     """
 
     validate_column(df, column_name)
 
     if n is None:
-        n = [30]  # default based on TA-Lib example
+        n = [30]
 
     df = df.copy()
 
+    source = df[column_name].to_numpy(dtype=float)
     trima_cols = []
 
-    # --- TRIMA + slope ---
+    # --- TRIMA + per-period derivatives ---
     for window in n:
         trima_col = f"{column_name}_trima_{window}"
-        slope_col = f"{trima_col}_slope"
 
-        df[trima_col] = talib.TRIMA(
-            df[column_name].to_numpy(),
-            timeperiod=window,
-        )
-        df[slope_col] = df[trima_col].diff()
-
-        # --- distance: price vs TRIMA ---
-        price_dist_col = f"{column_name}_trima_{window}_dist"
-        df[price_dist_col] = df[column_name] - df[trima_col]
+        df[trima_col]                            = talib.TRIMA(source, timeperiod=window)
+        df[f"{trima_col}_slope"]                 = df[trima_col].diff()
+        df[f"{trima_col}_acceleration"]          = df[f"{trima_col}_slope"].diff()
+        df[f"{column_name}_gt_trima_{window}"]   = df[column_name] > df[trima_col]
+        df[f"{trima_col}_dist"]                  = df[column_name] - df[trima_col]
+        df[f"{trima_col}_dist_abs"]              = df[f"{trima_col}_dist"].abs()
 
         trima_cols.append((window, trima_col))
 
-    # --- pairwise distances between TRIMAs ---
+    # --- pairwise distances ---
     for (w1, col1), (w2, col2) in combinations(trima_cols, 2):
-        dist_col = f"{column_name}_trima_{w1}_{w2}_dist"
-        df[dist_col] = df[col1] - df[col2]
+        pair = f"{column_name}_trima_{w1}_{w2}"
+
+        df[f"{pair}_dist"]       = df[col1] - df[col2]
+        df[f"{pair}_dist_abs"]   = df[f"{pair}_dist"].abs()
+        df[f"{pair}_direction"]  = df[f"{pair}_dist"].apply(lambda x: 1 if x > 0 else -1)
+        df[f"{pair}_dist_slope"] = df[f"{pair}_dist"].diff()
 
     return df
 
