@@ -804,6 +804,84 @@ def add_wma(
 # endregion OVERLAP STUDIES
 
 
+# region MOMENTUM INDICATORS
+def add_adx(
+    df: pd.DataFrame,
+    n: list[int] = None,
+    high_col: str = "high",
+    low_col: str = "low",
+    close_col: str = "close",
+) -> pd.DataFrame:
+    """
+    Add ADX, DI lines, and derived signal columns for each period in n.
+
+    Columns added (per period, e.g. n=14 → suffix '_14')
+    -------------
+    adx_{n}                 : raw ADX value
+    adx_{n}_gt_20           : ADX > 20 (weak trend threshold)
+    adx_{n}_gt_25           : ADX > 25 (strong trend threshold)
+    adx_{n}_slope           : first difference of ADX (momentum)
+    adx_{n}_acceleration    : second difference of ADX (rate of change of momentum)
+    plus_di_{n}             : +DI line
+    minus_di_{n}            : -DI line
+    plus_di_{n}_slope       : first difference of +DI
+    minus_di_{n}_slope      : first difference of -DI
+    di_{n}_distance         : +DI - -DI  (signed, positive = bullish bias)
+    di_{n}_distance_abs     : |+DI - -DI| (magnitude only)
+    di_{n}_ratio            : +DI / -DI  (NaN-safe)
+    trend_{n}_direction     : +1 if +DI > -DI, -1 otherwise
+    adx_{n}_di_strength     : ADX x di_distance_abs (combines trend strength + clarity)
+    """
+
+    for col in (high_col, low_col, close_col):
+        validate_column(df, col)
+
+    if n is None:
+        n = [14]
+
+    df = df.copy()
+
+    high = df[high_col].to_numpy(dtype=float)
+    low = df[low_col].to_numpy(dtype=float)
+    close = df[close_col].to_numpy(dtype=float)
+
+    for period in n:
+        s = f"_{period}"  # suffix
+
+        # --- core indicators ---
+        df[f"adx{s}"] = talib.ADX(high, low, close, timeperiod=period)
+        df[f"plus_di{s}"] = talib.PLUS_DI(high, low, close, timeperiod=period)
+        df[f"minus_di{s}"] = talib.MINUS_DI(high, low, close, timeperiod=period)
+
+        # --- ADX derivatives ---
+        df[f"adx{s}_gt_20"] = df[f"adx{s}"] > 20
+        df[f"adx{s}_gt_25"] = df[f"adx{s}"] > 25
+        df[f"adx{s}_slope"] = df[f"adx{s}"].diff()
+        df[f"adx{s}_acceleration"] = df[f"adx{s}_slope"].diff()
+
+        # --- DI slopes ---
+        df[f"plus_di{s}_slope"] = df[f"plus_di{s}"].diff()
+        df[f"minus_di{s}_slope"] = df[f"minus_di{s}"].diff()
+
+        # --- DI relationship ---
+        df[f"di{s}_distance"] = df[f"plus_di{s}"] - df[f"minus_di{s}"]
+        df[f"di{s}_distance_abs"] = df[f"di{s}_distance"].abs()
+        df[f"di{s}_ratio"] = df[f"plus_di{s}"] / df[f"minus_di{s}"].replace(
+            0, float("nan")
+        )
+        df[f"trend{s}_direction"] = df[f"di{s}_distance"].apply(
+            lambda x: 1 if x > 0 else -1
+        )
+
+        # --- combined strength signal ---
+        df[f"adx{s}_di_strength"] = df[f"adx{s}"] * df[f"di{s}_distance_abs"]
+
+    return df
+
+
+# endregion MOMENTUM INDICATORS
+
+
 # region VOLATILITY INDICATORS
 def add_keltner_channel(
     df: pd.DataFrame,
@@ -2302,6 +2380,12 @@ def add_one_for_all_ta(df: pd.DataFrame) -> pd.DataFrame:
         n=[5, 10, 15, 20],
     )
 
+    # MOMENTUM INDICATORS
+    new_df = add_adx(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+
     return new_df
 
 
@@ -2470,7 +2554,7 @@ def main():
 
     plot_with_indicators(
         df,
-        indicators=["close_tema_5", "close_tema_10", "close_tema_15"],
+        indicators=["adx_10", "plus_di_10", "minus_di_10"],
         price_column_name=f"close",
     )
 
