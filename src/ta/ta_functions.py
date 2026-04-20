@@ -795,8 +795,26 @@ def add_t3(
     vfactor: float = 0.7,
 ) -> pd.DataFrame:
     """
-    Add T3 columns, their slopes, pairwise T3 distances,
-    and distances between price and T3.
+    Add T3 columns, their slopes, and pairwise T3 distances.
+
+    T3 is a smoothed MA using 6 EMAs weighted by vfactor (default 0.7).
+    Lower vfactor → closer to EMA; higher → more smoothing with less lag.
+
+    Columns added (per period, e.g. n=5 → suffix '_5')
+    -------------
+    {col}_t3_{n}                    : T3 value
+    {col}_t3_{n}_slope              : first difference of T3 (momentum)
+    {col}_t3_{n}_acceleration       : second difference of T3
+    {col}_gt_t3_{n}                 : price > T3 (bullish bias)
+    {col}_t3_{n}_dist               : price - T3 (signed distance from price)
+    {col}_t3_{n}_dist_abs           : |price - T3| (magnitude only)
+
+    Pairwise columns (per combination, e.g. n=[5,10] → '_5_10')
+    ----------------------------------------------------------------
+    {col}_t3_{n1}_{n2}_dist         : t3_{n1} - t3_{n2} (signed, fast - slow)
+    {col}_t3_{n1}_{n2}_dist_abs     : |t3_{n1} - t3_{n2}|
+    {col}_t3_{n1}_{n2}_direction    : +1 if fast > slow, -1 otherwise
+    {col}_t3_{n1}_{n2}_dist_slope   : first difference of pairwise distance (crossover momentum)
     """
 
     validate_column(df, column_name)
@@ -806,30 +824,30 @@ def add_t3(
 
     df = df.copy()
 
+    source = df[column_name].to_numpy(dtype=float)
     t3_cols = []
 
-    # --- T3 + slope ---
+    # --- T3 + per-period derivatives ---
     for window in n:
         t3_col = f"{column_name}_t3_{window}"
-        slope_col = f"{t3_col}_slope"
 
-        df[t3_col] = talib.T3(
-            df[column_name].to_numpy(),
-            timeperiod=window,
-            vfactor=vfactor,
-        )
-        df[slope_col] = df[t3_col].diff()
-
-        # --- distance: price vs T3 ---
-        price_dist_col = f"{column_name}_t3_{window}_dist"
-        df[price_dist_col] = df[column_name] - df[t3_col]
+        df[t3_col]                           = talib.T3(source, timeperiod=window, vfactor=vfactor)
+        df[f"{t3_col}_slope"]                = df[t3_col].diff()
+        df[f"{t3_col}_acceleration"]         = df[f"{t3_col}_slope"].diff()
+        df[f"{column_name}_gt_t3_{window}"]  = df[column_name] > df[t3_col]
+        df[f"{t3_col}_dist"]                 = df[column_name] - df[t3_col]
+        df[f"{t3_col}_dist_abs"]             = df[f"{t3_col}_dist"].abs()
 
         t3_cols.append((window, t3_col))
 
-    # --- pairwise distances between T3s ---
+    # --- pairwise distances ---
     for (w1, col1), (w2, col2) in combinations(t3_cols, 2):
-        dist_col = f"{column_name}_t3_{w1}_{w2}_dist"
-        df[dist_col] = df[col1] - df[col2]
+        pair = f"{column_name}_t3_{w1}_{w2}"
+
+        df[f"{pair}_dist"]       = df[col1] - df[col2]
+        df[f"{pair}_dist_abs"]   = df[f"{pair}_dist"].abs()
+        df[f"{pair}_direction"]  = df[f"{pair}_dist"].apply(lambda x: 1 if x > 0 else -1)
+        df[f"{pair}_dist_slope"] = df[f"{pair}_dist"].diff()
 
     return df
 
