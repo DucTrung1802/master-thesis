@@ -1032,6 +1032,86 @@ def add_bop(
     return df
 
 
+def add_cci(
+    df: pd.DataFrame,
+    n: list[int] = None,
+    high_col: str = "high",
+    low_col: str = "low",
+    close_col: str = "close",
+) -> pd.DataFrame:
+    """
+    Add Commodity Channel Index (CCI) columns for each period in n.
+
+    Columns added (per period, e.g. n=14 → suffix '_14')
+    -------------
+    cci_{n}                 : raw CCI value
+    cci_{n}_slope           : first difference of CCI (momentum)
+    cci_{n}_acceleration    : second difference of CCI (rate of change of momentum)
+    cci_{n}_gt_100          : CCI > +100 (overbought / strong bullish trend)
+    cci_{n}_lt_minus100     : CCI < -100 (oversold / strong bearish trend)
+    cci_{n}_gt_0            : CCI > 0 (above zero-line, bullish bias)
+    cci_{n}_lt_0            : CCI < 0 (below zero-line, bearish bias)
+    cci_{n}_abs             : |CCI| (magnitude regardless of direction)
+    cci_{n}_direction       : +1 if CCI > 0, -1 otherwise
+    cci_{n}_extreme         : +1 if CCI > +100, -1 if CCI < -100, 0 if between
+    cci_{n}_signal          : SMA of CCI over same period (smoothed signal line)
+    cci_{n}_signal_slope    : first difference of signal line
+    cci_{n}_hist            : CCI - signal (raw vs smoothed divergence)
+    cci_{n}_hist_slope      : first difference of histogram
+    cci_{n}_hist_gt_0       : histogram > 0 (momentum turning bullish)
+    cci_{n}_hist_lt_0       : histogram < 0 (momentum turning bearish)
+    cci_{n}_strength        : cci_abs × |cci_hist| (conviction × divergence score)
+    """
+
+    for col in (high_col, low_col, close_col):
+        validate_column(df, col)
+
+    if n is None:
+        n = [14]
+
+    df = df.copy()
+
+    high = df[high_col].to_numpy(dtype=float)
+    low = df[low_col].to_numpy(dtype=float)
+    close = df[close_col].to_numpy(dtype=float)
+
+    for period in n:
+        s = f"_{period}"
+
+        # --- core indicator ---
+        df[f"cci{s}"] = talib.CCI(high, low, close, timeperiod=period)
+
+        # --- derivatives ---
+        df[f"cci{s}_slope"] = df[f"cci{s}"].diff()
+        df[f"cci{s}_acceleration"] = df[f"cci{s}_slope"].diff()
+
+        # --- threshold flags ---
+        df[f"cci{s}_gt_100"] = df[f"cci{s}"] > 100
+        df[f"cci{s}_lt_minus100"] = df[f"cci{s}"] < -100
+        df[f"cci{s}_gt_0"] = df[f"cci{s}"] > 0
+        df[f"cci{s}_lt_0"] = df[f"cci{s}"] < 0
+
+        # --- magnitude & direction ---
+        df[f"cci{s}_abs"] = df[f"cci{s}"].abs()
+        df[f"cci{s}_direction"] = df[f"cci{s}"].apply(lambda x: 1 if x > 0 else -1)
+        df[f"cci{s}_extreme"] = df[f"cci{s}"].apply(
+            lambda x: 1 if x > 100 else (-1 if x < -100 else 0)
+        )
+
+        # --- signal line & histogram ---
+        df[f"cci{s}_signal"] = df[f"cci{s}"].rolling(window=period).mean()
+        df[f"cci{s}_signal_slope"] = df[f"cci{s}_signal"].diff()
+        df[f"cci{s}_hist"] = df[f"cci{s}"] - df[f"cci{s}_signal"]
+        df[f"cci{s}_hist_slope"] = df[f"cci{s}_hist"].diff()
+        df[f"cci{s}_hist_gt_0"] = df[f"cci{s}_hist"] > 0
+        df[f"cci{s}_hist_lt_0"] = df[f"cci{s}_hist"] < 0
+
+        # --- combined conviction score ---
+        df[f"cci{s}_strength"] = df[f"cci{s}_abs"] * df[f"cci{s}_hist"].abs()
+
+    return df
+
+
 # endregion MOMENTUM INDICATORS
 
 
@@ -2546,6 +2626,10 @@ def add_one_for_all_ta(df: pd.DataFrame) -> pd.DataFrame:
         new_df,
         n=[5, 10, 15, 20],
     )
+    new_df = add_cci(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
 
     return new_df
 
@@ -2715,7 +2799,7 @@ def main():
 
     plot_with_indicators(
         df,
-        indicators=["*bop*"],
+        indicators=["*cci*"],
         price_column_name=f"close",
     )
 
