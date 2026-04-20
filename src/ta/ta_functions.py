@@ -729,10 +729,28 @@ def add_sar(
 
 
 def add_sma(
-    df: pd.DataFrame, n: list[int] = None, column_name: str = "close"
+    df: pd.DataFrame,
+    n: list[int] = None,
+    column_name: str = "close",
 ) -> pd.DataFrame:
     """
     Add SMA columns, their slopes, and pairwise SMA distances.
+
+    Columns added (per period, e.g. n=50 → suffix '_50')
+    -------------
+    {col}_sma_{n}                   : SMA value
+    {col}_sma_{n}_slope             : first difference of SMA (momentum)
+    {col}_sma_{n}_acceleration      : second difference of SMA
+    {col}_gt_sma_{n}                : price > SMA (bullish bias)
+    {col}_sma_{n}_dist              : price - SMA (signed distance from price)
+    {col}_sma_{n}_dist_abs          : |price - SMA| (magnitude only)
+
+    Pairwise columns (per combination, e.g. n=[50,100] → '_50_100')
+    ----------------------------------------------------------------
+    {col}_sma_{n1}_{n2}_dist        : sma_{n1} - sma_{n2} (signed, fast - slow)
+    {col}_sma_{n1}_{n2}_dist_abs    : |sma_{n1} - sma_{n2}|
+    {col}_sma_{n1}_{n2}_direction   : +1 if fast > slow, -1 otherwise
+    {col}_sma_{n1}_{n2}_dist_slope  : first difference of pairwise distance (crossover momentum)
     """
 
     validate_column(df, column_name)
@@ -742,22 +760,30 @@ def add_sma(
 
     df = df.copy()
 
+    source = df[column_name].to_numpy(dtype=float)
     sma_cols = []
 
-    # --- SMA + slope ---
+    # --- SMA + per-period derivatives ---
     for window in n:
         sma_col = f"{column_name}_sma_{window}"
-        slope_col = f"{sma_col}_slope"
 
-        df[sma_col] = talib.SMA(df[column_name].values, window)
-        df[slope_col] = df[sma_col].diff()
+        df[sma_col]                           = talib.SMA(source, timeperiod=window)
+        df[f"{sma_col}_slope"]                = df[sma_col].diff()
+        df[f"{sma_col}_acceleration"]         = df[f"{sma_col}_slope"].diff()
+        df[f"{column_name}_gt_sma_{window}"]  = df[column_name] > df[sma_col]
+        df[f"{sma_col}_dist"]                 = df[column_name] - df[sma_col]
+        df[f"{sma_col}_dist_abs"]             = df[f"{sma_col}_dist"].abs()
 
         sma_cols.append((window, sma_col))
 
     # --- pairwise distances ---
     for (w1, col1), (w2, col2) in combinations(sma_cols, 2):
-        dist_col = f"{column_name}_sma_{w1}_{w2}_dist"
-        df[dist_col] = df[col1] - df[col2]
+        pair = f"{column_name}_sma_{w1}_{w2}"
+
+        df[f"{pair}_dist"]       = df[col1] - df[col2]
+        df[f"{pair}_dist_abs"]   = df[f"{pair}_dist"].abs()
+        df[f"{pair}_direction"]  = df[f"{pair}_dist"].apply(lambda x: 1 if x > 0 else -1)
+        df[f"{pair}_dist_slope"] = df[f"{pair}_dist"].diff()
 
     return df
 
