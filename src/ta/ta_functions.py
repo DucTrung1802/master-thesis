@@ -522,12 +522,12 @@ def add_midpoint(
     for window in n:
         midpoint_col = f"{column_name}_midpoint_{window}"
 
-        df[midpoint_col]                               = talib.MIDPOINT(source, timeperiod=window)
-        df[f"{midpoint_col}_slope"]                    = df[midpoint_col].diff()
-        df[f"{midpoint_col}_acceleration"]             = df[f"{midpoint_col}_slope"].diff()
-        df[f"{column_name}_gt_midpoint_{window}"]      = df[column_name] > df[midpoint_col]
-        df[f"{midpoint_col}_dist"]                     = df[column_name] - df[midpoint_col]
-        df[f"{midpoint_col}_dist_abs"]                 = df[f"{midpoint_col}_dist"].abs()
+        df[midpoint_col] = talib.MIDPOINT(source, timeperiod=window)
+        df[f"{midpoint_col}_slope"] = df[midpoint_col].diff()
+        df[f"{midpoint_col}_acceleration"] = df[f"{midpoint_col}_slope"].diff()
+        df[f"{column_name}_gt_midpoint_{window}"] = df[column_name] > df[midpoint_col]
+        df[f"{midpoint_col}_dist"] = df[column_name] - df[midpoint_col]
+        df[f"{midpoint_col}_dist_abs"] = df[f"{midpoint_col}_dist"].abs()
 
         midpoint_cols.append((window, midpoint_col))
 
@@ -535,9 +535,9 @@ def add_midpoint(
     for (w1, col1), (w2, col2) in combinations(midpoint_cols, 2):
         pair = f"{column_name}_midpoint_{w1}_{w2}"
 
-        df[f"{pair}_dist"]       = df[col1] - df[col2]
-        df[f"{pair}_dist_abs"]   = df[f"{pair}_dist"].abs()
-        df[f"{pair}_direction"]  = df[f"{pair}_dist"].apply(lambda x: 1 if x > 0 else -1)
+        df[f"{pair}_dist"] = df[col1] - df[col2]
+        df[f"{pair}_dist_abs"] = df[f"{pair}_dist"].abs()
+        df[f"{pair}_direction"] = df[f"{pair}_dist"].apply(lambda x: 1 if x > 0 else -1)
         df[f"{pair}_dist_slope"] = df[f"{pair}_dist"].diff()
 
     return df
@@ -546,47 +546,72 @@ def add_midpoint(
 def add_midprice(
     df: pd.DataFrame,
     n: list[int] = None,
-    high_column: str = "high",
-    low_column: str = "low",
+    high_col: str = "high",
+    low_col: str = "low",
+    close_col: str = "close",
 ) -> pd.DataFrame:
     """
     Add MIDPRICE columns, their slopes, and pairwise distances.
 
-    MIDPRICE uses high and low prices.
+    MIDPRICE = (highest high + lowest low) / 2 over a lookback period.
+
+    Columns added (per period, e.g. n=14 → suffix '_14')
+    -------------
+    midprice_{n}                  : MIDPRICE value
+    midprice_{n}_slope            : first difference of MIDPRICE (momentum)
+    midprice_{n}_acceleration     : second difference of MIDPRICE
+    close_gt_midprice_{n}         : close > MIDPRICE (bullish bias, if close_col present)
+    midprice_{n}_dist             : close - MIDPRICE (signed distance, if close_col present)
+    midprice_{n}_dist_abs         : |close - MIDPRICE| (magnitude only, if close_col present)
+
+    Pairwise columns (per combination, e.g. n=[14,50] → '_14_50')
+    ----------------------------------------------------------------
+    midprice_{n1}_{n2}_dist       : midprice_{n1} - midprice_{n2} (signed, fast - slow)
+    midprice_{n1}_{n2}_dist_abs   : |midprice_{n1} - midprice_{n2}|
+    midprice_{n1}_{n2}_direction  : +1 if fast > slow, -1 otherwise
+    midprice_{n1}_{n2}_dist_slope : first difference of pairwise distance (crossover momentum)
     """
 
-    validate_column(df, high_column)
-    validate_column(df, low_column)
+    validate_column(df, high_col)
+    validate_column(df, low_col)
 
     if n is None:
         n = [14, 50, 100]
 
     df = df.copy()
 
-    # ✅ ensure correct dtype for TA-Lib
-    high = df[high_column].to_numpy(dtype=np.float64)
-    low = df[low_column].to_numpy(dtype=np.float64)
+    high = df[high_col].to_numpy(dtype=float)
+    low = df[low_col].to_numpy(dtype=float)
+
+    has_close = close_col and close_col in df.columns
+    if has_close:
+        close = df[close_col]
 
     midprice_cols = []
 
-    # --- MIDPRICE + slope ---
+    # --- MIDPRICE + per-period derivatives ---
     for window in n:
         midprice_col = f"midprice_{window}"
-        slope_col = f"{midprice_col}_slope"
 
-        df[midprice_col] = talib.MIDPRICE(
-            high,
-            low,
-            timeperiod=window,
-        )
-        df[slope_col] = df[midprice_col].diff()
+        df[midprice_col] = talib.MIDPRICE(high, low, timeperiod=window)
+        df[f"{midprice_col}_slope"] = df[midprice_col].diff()
+        df[f"{midprice_col}_acceleration"] = df[f"{midprice_col}_slope"].diff()
+
+        if has_close:
+            df[f"close_gt_midprice_{window}"] = close > df[midprice_col]
+            df[f"{midprice_col}_dist"] = close - df[midprice_col]
+            df[f"{midprice_col}_dist_abs"] = df[f"{midprice_col}_dist"].abs()
 
         midprice_cols.append((window, midprice_col))
 
     # --- pairwise distances ---
     for (w1, col1), (w2, col2) in combinations(midprice_cols, 2):
-        dist_col = f"midprice_{w1}_{w2}_dist"
-        df[dist_col] = df[col1] - df[col2]
+        pair = f"midprice_{w1}_{w2}"
+
+        df[f"{pair}_dist"] = df[col1] - df[col2]
+        df[f"{pair}_dist_abs"] = df[f"{pair}_dist"].abs()
+        df[f"{pair}_direction"] = df[f"{pair}_dist"].apply(lambda x: 1 if x > 0 else -1)
+        df[f"{pair}_dist_slope"] = df[f"{pair}_dist"].diff()
 
     return df
 
