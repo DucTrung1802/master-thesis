@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import sys, os
 from dotenv import load_dotenv
-from itertools import combinations
+from itertools import combinations, product
 import talib
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -1430,6 +1430,110 @@ def add_cmo(
 
         # --- combined conviction score ---
         df[f"cmo{s}_strength"] = df[f"cmo{s}_abs"] * df[f"cmo{s}_hist"].abs()
+
+    return df
+
+
+def add_macd(
+    df: pd.DataFrame,
+    fast: list[int] = None,
+    slow: list[int] = None,
+    signal: list[int] = None,
+    column_name: str = "close",
+) -> pd.DataFrame:
+    """
+    Add MACD columns for each (fast, slow, signal) combination.
+
+    MACD = EMA(fast) - EMA(slow). Signal = EMA(MACD, signal). Hist = MACD - Signal.
+
+    Suffix format: macd_{fast}_{slow}_{signal}, e.g. (12, 26, 9) → 'macd_12_26_9'
+
+    Columns added (per combo)
+    -------------------------
+    macd_{f}_{sl}_{sg}                  : MACD line (fast EMA - slow EMA)
+    macd_{f}_{sl}_{sg}_slope            : first difference of MACD line
+    macd_{f}_{sl}_{sg}_acceleration     : second difference of MACD line
+    macd_{f}_{sl}_{sg}_abs              : |MACD| (magnitude regardless of direction)
+    macd_{f}_{sl}_{sg}_direction        : +1 if MACD > 0, -1 otherwise
+    macd_{f}_{sl}_{sg}_gt_0             : MACD > 0 (bullish bias)
+    macd_{f}_{sl}_{sg}_lt_0             : MACD < 0 (bearish bias)
+
+    macd_{f}_{sl}_{sg}_signal           : signal line (EMA of MACD)
+    macd_{f}_{sl}_{sg}_signal_slope     : first difference of signal line
+    macd_{f}_{sl}_{sg}_signal_gt_0      : signal line > 0
+    macd_{f}_{sl}_{sg}_signal_lt_0      : signal line < 0
+
+    macd_{f}_{sl}_{sg}_hist             : histogram (MACD - signal)
+    macd_{f}_{sl}_{sg}_hist_slope       : first difference of histogram (momentum shift)
+    macd_{f}_{sl}_{sg}_hist_acceleration: second difference of histogram
+    macd_{f}_{sl}_{sg}_hist_gt_0        : histogram > 0 (bullish momentum)
+    macd_{f}_{sl}_{sg}_hist_lt_0        : histogram < 0 (bearish momentum)
+    macd_{f}_{sl}_{sg}_hist_abs         : |histogram| (conviction magnitude)
+
+    macd_{f}_{sl}_{sg}_cross_above      : MACD crossed above signal this bar (golden cross)
+    macd_{f}_{sl}_{sg}_cross_below      : MACD crossed below signal this bar (death cross)
+    macd_{f}_{sl}_{sg}_strength         : macd_abs × hist_abs (trend strength × momentum conviction)
+    """
+
+    validate_column(df, column_name)
+
+    if fast is None:
+        fast = [12]
+    if slow is None:
+        slow = [26]
+    if signal is None:
+        signal = [9]
+
+    df = df.copy()
+
+    source = df[column_name].to_numpy(dtype=float)
+
+    for f, sl, sg in product(fast, slow, signal):
+        if f >= sl:
+            continue  # fast must be strictly less than slow
+
+        s = f"_{f}_{sl}_{sg}"
+
+        # --- core indicator ---
+        macd_line, signal_line, hist = talib.MACD(
+            source,
+            fastperiod=f,
+            slowperiod=sl,
+            signalperiod=sg,
+        )
+
+        # --- MACD line ---
+        df[f"macd{s}"] = macd_line
+        df[f"macd{s}_slope"] = pd.Series(macd_line).diff().values
+        df[f"macd{s}_acceleration"] = pd.Series(df[f"macd{s}_slope"]).diff().values
+        df[f"macd{s}_abs"] = np.abs(macd_line)
+        df[f"macd{s}_direction"] = np.where(macd_line > 0, 1, -1)
+        df[f"macd{s}_gt_0"] = macd_line > 0
+        df[f"macd{s}_lt_0"] = macd_line < 0
+
+        # --- signal line ---
+        df[f"macd{s}_signal"] = signal_line
+        df[f"macd{s}_signal_slope"] = pd.Series(signal_line).diff().values
+        df[f"macd{s}_signal_gt_0"] = signal_line > 0
+        df[f"macd{s}_signal_lt_0"] = signal_line < 0
+
+        # --- histogram ---
+        df[f"macd{s}_hist"] = hist
+        df[f"macd{s}_hist_slope"] = pd.Series(hist).diff().values
+        df[f"macd{s}_hist_acceleration"] = (
+            pd.Series(df[f"macd{s}_hist_slope"]).diff().values
+        )
+        df[f"macd{s}_hist_gt_0"] = hist > 0
+        df[f"macd{s}_hist_lt_0"] = hist < 0
+        df[f"macd{s}_hist_abs"] = np.abs(hist)
+
+        # --- crossover signals ---
+        prev_hist = pd.Series(hist).shift(1)
+        df[f"macd{s}_cross_above"] = (pd.Series(hist) > 0) & (prev_hist <= 0)
+        df[f"macd{s}_cross_below"] = (pd.Series(hist) < 0) & (prev_hist >= 0)
+
+        # --- combined conviction score ---
+        df[f"macd{s}_strength"] = df[f"macd{s}_abs"] * df[f"macd{s}_hist_abs"]
 
     return df
 
