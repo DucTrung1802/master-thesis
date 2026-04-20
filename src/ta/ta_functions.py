@@ -226,10 +226,28 @@ def add_bbands(
 
 
 def add_dema(
-    df: pd.DataFrame, n: list[int] = None, column_name: str = "close"
+    df: pd.DataFrame,
+    n: list[int] = None,
+    column_name: str = "close",
 ) -> pd.DataFrame:
     """
     Add DEMA columns, their slopes, and pairwise DEMA distances.
+
+    Columns added (per period, e.g. n=50 → suffix '_50')
+    -------------
+    {col}_dema_{n}                      : DEMA value
+    {col}_dema_{n}_slope                : first difference of DEMA (momentum)
+    {col}_dema_{n}_acceleration         : second difference of DEMA
+    {col}_gt_dema_{n}                   : price > DEMA (bullish bias)
+    {col}_dema_{n}_dist                 : price - DEMA (signed distance from price)
+    {col}_dema_{n}_dist_abs             : |price - DEMA| (magnitude only)
+
+    Pairwise columns (per combination, e.g. n=[50,100] → '_50_100')
+    ----------------------------------------------------------------
+    {col}_dema_{n1}_{n2}_dist           : dema_{n1} - dema_{n2} (signed, fast - slow)
+    {col}_dema_{n1}_{n2}_dist_abs       : |dema_{n1} - dema_{n2}|
+    {col}_dema_{n1}_{n2}_direction      : +1 if fast > slow, -1 otherwise (trend alignment)
+    {col}_dema_{n1}_{n2}_dist_slope     : first difference of pairwise distance (crossover momentum)
     """
 
     validate_column(df, column_name)
@@ -239,22 +257,30 @@ def add_dema(
 
     df = df.copy()
 
+    source = df[column_name].to_numpy(dtype=float)
     dema_cols = []
 
-    # --- DEMA + slope ---
+    # --- DEMA + per-period derivatives ---
     for window in n:
         dema_col = f"{column_name}_dema_{window}"
-        slope_col = f"{dema_col}_slope"
 
-        df[dema_col] = talib.DEMA(df[column_name].to_numpy(), timeperiod=window)
-        df[slope_col] = df[dema_col].diff()
+        df[dema_col] = talib.DEMA(source, timeperiod=window)
+        df[f"{dema_col}_slope"] = df[dema_col].diff()
+        df[f"{dema_col}_acceleration"] = df[f"{dema_col}_slope"].diff()
+        df[f"{column_name}_gt_dema_{window}"] = df[column_name] > df[dema_col]
+        df[f"{dema_col}_dist"] = df[column_name] - df[dema_col]
+        df[f"{dema_col}_dist_abs"] = df[f"{dema_col}_dist"].abs()
 
         dema_cols.append((window, dema_col))
 
     # --- pairwise distances ---
     for (w1, col1), (w2, col2) in combinations(dema_cols, 2):
-        dist_col = f"{column_name}_dema_{w1}_{w2}_dist"
-        df[dist_col] = df[col1] - df[col2]
+        pair = f"{column_name}_dema_{w1}_{w2}"
+
+        df[f"{pair}_dist"] = df[col1] - df[col2]
+        df[f"{pair}_dist_abs"] = df[f"{pair}_dist"].abs()
+        df[f"{pair}_direction"] = df[f"{pair}_dist"].apply(lambda x: 1 if x > 0 else -1)
+        df[f"{pair}_dist_slope"] = df[f"{pair}_dist"].diff()
 
     return df
 
