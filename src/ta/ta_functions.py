@@ -72,80 +72,66 @@ def add_bbands(
     slope_mode: str = "diff",  # "diff" or "pct"
 ) -> pd.DataFrame:
     """
-    Add Bollinger Bands (BB) along with distance and slope features to a DataFrame.
-
-    This function computes Bollinger Bands (upper, middle, lower) using TA-Lib and
-    augments the DataFrame with additional derived features:
-    - Distance between price and each band
-    - Slope (rate of change) of each band
-
-    Column naming convention:
-        {column_name}_bb_{period}_{feature}
-
-    Generated features per period:
-        Bands:
-            '{col}_bb_{n}_upper'
-            '{col}_bb_{n}_middle'
-            '{col}_bb_{n}_lower'
-
-        Distance:
-            '{col}_bb_{n}_dist_upper'
-            '{col}_bb_{n}_dist_middle'
-            '{col}_bb_{n}_dist_lower'
-
-        Slope:
-            '{col}_bb_{n}_slope_upper'
-            '{col}_bb_{n}_slope_middle'
-            '{col}_bb_{n}_slope_lower'
-
-    Default Bollinger Band settings:
-        - Period: 20
-        - Standard deviation multiplier (k): 2.0
+    Add Bollinger Bands (BB) along with derived features to a DataFrame.
 
     Moving average types (TA-Lib MA_Type):
-        0 = SMA (Simple Moving Average)
-        1 = EMA (Exponential Moving Average)
-        2 = WMA (Weighted Moving Average)
-        3 = DEMA
-        4 = TEMA
-        5 = TRIMA
-        6 = KAMA
-        7 = MAMA
-        8 = T3
+        0 = SMA  1 = EMA  2 = WMA  3 = DEMA  4 = TEMA
+        5 = TRIMA  6 = KAMA  7 = MAMA  8 = T3
+
+    Columns added (per period, e.g. n=20 → base = '{col}_bb_20')
+    -------------------------------------------------------------
+    Bands:
+        {base}_upper                : upper band
+        {base}_middle               : middle band (MA)
+        {base}_lower                : lower band
+
+    Distance (mode = 'abs' → price−band, 'pct' → (price−band)/band):
+        {base}_dist_upper
+        {base}_dist_middle
+        {base}_dist_lower
+
+    Slope (mode = 'diff' → .diff(), 'pct' → .pct_change()):
+        {base}_slope_upper
+        {base}_slope_middle
+        {base}_slope_lower
+        {base}_slope_upper_acceleration     : second diff of upper slope
+        {base}_slope_middle_acceleration    : second diff of middle slope
+        {base}_slope_lower_acceleration     : second diff of lower slope
+
+    Bandwidth & squeeze:
+        {base}_bandwidth            : (upper − lower) / middle  (volatility proxy)
+        {base}_bandwidth_slope      : first difference of bandwidth
+        {base}_bandwidth_acceleration : second difference of bandwidth
+
+    %B (position within bands):
+        {base}_pct_b                : (price − lower) / (upper − lower), 0=lower, 1=upper
+        {base}_pct_b_slope          : first difference of %B
+        {base}_pct_b_gt_1           : price above upper band
+        {base}_pct_b_lt_0           : price below lower band
+
+    Position flags:
+        {base}_above_upper          : price > upper band
+        {base}_below_lower          : price < lower band
+        {base}_inside_bands         : price between upper and lower bands
+        {base}_position             : +1 above upper, -1 below lower, 0 inside
 
     Parameters
     ----------
     df : pd.DataFrame
-        Input DataFrame containing price data.
     n : int or list[int], optional
-        Bollinger Band period(s). If None, defaults to `default_bb_periods`.
-    k : float, optional
-        Standard deviation multiplier for upper/lower bands (default is 2.0).
-    ma_type : int, optional
-        Type of moving average used in BB calculation (default is 0 = SMA).
-    column_name : str, optional
-        Column on which to compute Bollinger Bands (default is 'close').
-    default_bb_periods : list[int], optional
-        Default periods used when `n` is None (default is [20]).
-    distance_mode : str, optional
-        Method to compute distance between price and bands:
-            - 'abs': absolute difference (price - band)
-            - 'pct': percentage difference (price - band) / band (default)
-    slope_mode : str, optional
-        Method to compute slope of bands:
-            - 'diff': simple difference (current - previous) (default)
-            - 'pct': percentage change
-
-    Returns
-    -------
-    pd.DataFrame
-        A new DataFrame with Bollinger Bands and derived features added.
-
-    Notes
-    -----
-    - Percentage distance is generally more useful for normalization across assets.
-    - Slope features can be noisy; smoothing (e.g., rolling mean) may improve usability.
-    - All computations are vectorized for performance using NumPy and pandas.
+        BB period(s). If None, defaults to default_bb_periods.
+    k : float
+        Std dev multiplier for upper/lower bands (default 2.0).
+    ma_type : int
+        TA-Lib MA type (default 0 = SMA).
+    column_name : str
+        Source column (default 'close').
+    default_bb_periods : list[int]
+        Fallback periods when n is None (default [20]).
+    distance_mode : str
+        'abs' or 'pct' distance from price to bands (default 'pct').
+    slope_mode : str
+        'diff' or 'pct' slope of bands (default 'diff').
     """
 
     validate_column(df, column_name)
@@ -161,9 +147,12 @@ def add_bbands(
     else:
         periods = list(n)
 
+    source = df[column_name].to_numpy(dtype=float)
+    price = df[column_name]
+
     for period in periods:
         upper, middle, lower = talib.BBANDS(
-            df[column_name].values,
+            source,
             timeperiod=period,
             nbdevup=k,
             nbdevdn=k,
@@ -176,8 +165,6 @@ def add_bbands(
         df[f"{base}_upper"] = upper
         df[f"{base}_middle"] = middle
         df[f"{base}_lower"] = lower
-
-        price = df[column_name]
 
         # --- distance ---
         if distance_mode == "abs":
@@ -195,15 +182,45 @@ def add_bbands(
                 f"{base}_lower"
             ]
 
-        # --- slope ---
-        if slope_mode == "pct":
-            df[f"{base}_slope_upper"] = df[f"{base}_upper"].pct_change()
-            df[f"{base}_slope_middle"] = df[f"{base}_middle"].pct_change()
-            df[f"{base}_slope_lower"] = df[f"{base}_lower"].pct_change()
-        else:  # diff
-            df[f"{base}_slope_upper"] = df[f"{base}_upper"].diff()
-            df[f"{base}_slope_middle"] = df[f"{base}_middle"].diff()
-            df[f"{base}_slope_lower"] = df[f"{base}_lower"].diff()
+        # --- slope + acceleration ---
+        for band in ("upper", "middle", "lower"):
+            band_col = f"{base}_{band}"
+            if slope_mode == "pct":
+                df[f"{base}_slope_{band}"] = df[band_col].pct_change()
+            else:
+                df[f"{base}_slope_{band}"] = df[band_col].diff()
+            df[f"{base}_slope_{band}_acceleration"] = df[f"{base}_slope_{band}"].diff()
+
+        # --- bandwidth ---
+        df[f"{base}_bandwidth"] = (df[f"{base}_upper"] - df[f"{base}_lower"]) / df[
+            f"{base}_middle"
+        ]
+        df[f"{base}_bandwidth_slope"] = df[f"{base}_bandwidth"].diff()
+        df[f"{base}_bandwidth_acceleration"] = df[f"{base}_bandwidth_slope"].diff()
+
+        # --- %B ---
+        band_range = df[f"{base}_upper"] - df[f"{base}_lower"]
+        df[f"{base}_pct_b"] = (price - df[f"{base}_lower"]) / band_range.replace(
+            0, float("nan")
+        )
+        df[f"{base}_pct_b_slope"] = df[f"{base}_pct_b"].diff()
+        df[f"{base}_pct_b_gt_1"] = df[f"{base}_pct_b"] > 1
+        df[f"{base}_pct_b_lt_0"] = df[f"{base}_pct_b"] < 0
+
+        # --- position flags ---
+        df[f"{base}_above_upper"] = price > df[f"{base}_upper"]
+        df[f"{base}_below_lower"] = price < df[f"{base}_lower"]
+        df[f"{base}_inside_bands"] = (price <= df[f"{base}_upper"]) & (
+            price >= df[f"{base}_lower"]
+        )
+        df[f"{base}_position"] = df.apply(
+            lambda r: (
+                1
+                if r[f"{base}_above_upper"]
+                else (-1 if r[f"{base}_below_lower"] else 0)
+            ),
+            axis=1,
+        )
 
     return df
 
