@@ -620,109 +620,110 @@ def add_sar(
     df: pd.DataFrame,
     acceleration: list[float] = None,
     maximum: list[float] = None,
-    high_column: str = "high",
-    low_column: str = "low",
-    price_column: str = "close",
+    high_col: str = "high",
+    low_col: str = "low",
+    close_col: str = "close",
 ) -> pd.DataFrame:
     """
-    Add Parabolic SAR features:
-    - SAR values
-    - SAR slopes
-    - SAR pairwise distances
-    - Price vs SAR distances
-    - 3-period trend agreement (price & SAR)
+    Add Parabolic SAR columns and derived features for each (acceleration, maximum) combo.
 
-    Parameters:
-    - acceleration: list of acceleration factors
-    - maximum: list of maximum acceleration values
-    - price_column: column used to compare with SAR
+    Suffix format: sar_{acc}_{max} with dots stripped, e.g. acc=0.02, max=0.2 → 'sar_002_02'
+
+    Columns added (per combo)
+    -------------------------
+    sar_{s}                         : raw SAR value
+    sar_{s}_slope                   : first difference of SAR (momentum)
+    sar_{s}_acceleration            : second difference of SAR
+    sar_{s}_above                   : SAR > close (bearish — price below SAR)
+    sar_{s}_below                   : SAR < close (bullish — price above SAR)
+    sar_{s}_direction               : +1 if close > SAR, -1 otherwise
+    sar_{s}_dist                    : close - SAR (signed)
+    sar_{s}_dist_abs                : |close - SAR|
+    sar_{s}_dist_pct                : (close - SAR) / close (normalised)
+
+    Pairwise SAR columns (per combo pair)
+    --------------------------------------
+    sar_{s1}_{s2}_dist              : sar_{s1} - sar_{s2} (signed)
+    sar_{s1}_{s2}_dist_abs          : |sar_{s1} - sar_{s2}|
+    sar_{s1}_{s2}_direction         : +1 if sar_{s1} > sar_{s2}, -1 otherwise
+    sar_{s1}_{s2}_dist_slope        : first difference of pairwise distance
+
+    Trend agreement (3-period rolling)
+    ------------------------------------
+    sar_{s}_trend3                  : +1 both price & SAR rising 3 bars, -1 both falling, 0 neutral
+    sar_{s}_up3                     : bool — price and SAR both up 3 consecutive bars
+    sar_{s}_down3                   : bool — price and SAR both down 3 consecutive bars
     """
 
-    validate_column(df, high_column)
-    validate_column(df, low_column)
-    validate_column(df, price_column)
+    validate_column(df, high_col)
+    validate_column(df, low_col)
+    validate_column(df, close_col)
 
     if acceleration is None:
         acceleration = [0.02, 0.04]
-
     if maximum is None:
         maximum = [0.2]
 
     df = df.copy()
 
-    # Ensure TA-Lib compatible dtype
-    high = df[high_column].to_numpy(dtype=np.float64)
-    low = df[low_column].to_numpy(dtype=np.float64)
+    high = df[high_col].to_numpy(dtype=float)
+    low = df[low_col].to_numpy(dtype=float)
+    close = df[close_col]
 
     sar_cols = []
 
+    def _suffix(acc, max_val) -> str:
+        return f"{acc}_{max_val}".replace(".", "")
+
     # =========================
-    # 1. SAR + slope
+    # 1. SAR + per-combo derivatives
     # =========================
+    price_diff = close.diff()
+    price_up3 = (price_diff > 0).rolling(3).sum() == 3
+    price_down3 = (price_diff < 0).rolling(3).sum() == 3
+
     for acc in acceleration:
         for max_val in maximum:
-            suffix = f"{acc}_{max_val}".replace(".", "")
+            s = _suffix(acc, max_val)
+            sar_col = f"sar_{s}"
 
-            sar_col = f"sar_{suffix}"
-            slope_col = f"{sar_col}_slope"
+            df[sar_col] = talib.SAR(high, low, acceleration=acc, maximum=max_val)
+            df[f"{sar_col}_slope"] = df[sar_col].diff()
+            df[f"{sar_col}_acceleration"] = df[f"{sar_col}_slope"].diff()
 
-            df[sar_col] = talib.SAR(
-                high,
-                low,
-                acceleration=acc,
-                maximum=max_val,
-            )
+            # --- price vs SAR ---
+            dist = close - df[sar_col]
+            df[f"{sar_col}_above"] = df[sar_col] > close  # bearish
+            df[f"{sar_col}_below"] = df[sar_col] < close  # bullish
+            df[f"{sar_col}_direction"] = dist.apply(lambda x: 1 if x > 0 else -1)
+            df[f"{sar_col}_dist"] = dist
+            df[f"{sar_col}_dist_abs"] = dist.abs()
+            df[f"{sar_col}_dist_pct"] = dist / close.replace(0, float("nan"))
 
-            df[slope_col] = df[sar_col].diff()
+            # --- trend agreement ---
+            sar_diff = df[sar_col].diff()
+            sar_up3 = (sar_diff > 0).rolling(3).sum() == 3
+            sar_down3 = (sar_diff < 0).rolling(3).sum() == 3
 
-            sar_cols.append(((acc, max_val), sar_col))
+            df[f"{sar_col}_up3"] = price_up3 & sar_up3
+            df[f"{sar_col}_down3"] = price_down3 & sar_down3
+            trend_col = f"{sar_col}_trend3"
+            df[trend_col] = 0
+            df.loc[price_up3 & sar_up3, trend_col] = 1
+            df.loc[price_down3 & sar_down3, trend_col] = -1
 
-    # =========================
-    # 2. SAR ↔ SAR distances
-    # =========================
-    for (p1, col1), (p2, col2) in combinations(sar_cols, 2):
-        dist_col = f"sar_{p1}_{p2}_dist".replace(".", "")
-        df[dist_col] = df[col1] - df[col2]
-
-    # =========================
-    # 3. Price ↔ SAR distances
-    # =========================
-    for params, sar_col in sar_cols:
-        suffix = f"{params[0]}_{params[1]}".replace(".", "")
-        base_name = f"{price_column}_to_sar_{suffix}"
-
-        diff = df[price_column] - df[sar_col]
-
-        df[base_name] = diff  # raw distance
-        df[f"{base_name}_abs"] = diff.abs()  # absolute distance
-        df[f"{base_name}_pct"] = diff / df[price_column]  # normalized
-        df[f"{base_name}_sign"] = np.sign(diff)  # direction
+            sar_cols.append((s, sar_col))
 
     # =========================
-    # 4. Trend agreement (3 periods)
+    # 2. Pairwise SAR distances
     # =========================
-    price_diff = df[price_column].diff()
+    for (s1, col1), (s2, col2) in combinations(sar_cols, 2):
+        pair = f"sar_{s1}_{s2}"
 
-    price_up_3 = (price_diff > 0).rolling(3).sum() == 3
-    price_down_3 = (price_diff < 0).rolling(3).sum() == 3
-
-    for params, sar_col in sar_cols:
-        suffix = f"{params[0]}_{params[1]}".replace(".", "")
-
-        sar_diff = df[sar_col].diff()
-
-        sar_up_3 = (sar_diff > 0).rolling(3).sum() == 3
-        sar_down_3 = (sar_diff < 0).rolling(3).sum() == 3
-
-        # Boolean signals
-        df[f"{price_column}_sar_{suffix}_up3"] = price_up_3 & sar_up_3
-        df[f"{price_column}_sar_{suffix}_down3"] = price_down_3 & sar_down_3
-
-        # Encoded signal: 1 (up), -1 (down), 0 (neutral)
-        trend_col = f"{price_column}_sar_{suffix}_trend3"
-        df[trend_col] = 0
-        df.loc[price_up_3 & sar_up_3, trend_col] = 1
-        df.loc[price_down_3 & sar_down_3, trend_col] = -1
+        df[f"{pair}_dist"] = df[col1] - df[col2]
+        df[f"{pair}_dist_abs"] = df[f"{pair}_dist"].abs()
+        df[f"{pair}_direction"] = df[f"{pair}_dist"].apply(lambda x: 1 if x > 0 else -1)
+        df[f"{pair}_dist_slope"] = df[f"{pair}_dist"].diff()
 
     return df
 
