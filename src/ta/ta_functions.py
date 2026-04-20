@@ -1538,6 +1538,89 @@ def add_macd(
     return df
 
 
+def add_mfi(
+    df: pd.DataFrame,
+    n: list[int] = None,
+    high_col: str = "high",
+    low_col: str = "low",
+    close_col: str = "close",
+    volume_col: str = "volume",
+) -> pd.DataFrame:
+    """
+    Add Money Flow Index (MFI) columns for each period in n.
+
+    MFI is a volume-weighted RSI — it measures buying and selling pressure
+    using both price and volume. Range is 0 to 100.
+
+    Columns added (per period, e.g. n=14 → suffix '_14')
+    -------------
+    mfi_{n}                     : raw MFI value (0 to 100)
+    mfi_{n}_slope               : first difference of MFI (momentum)
+    mfi_{n}_acceleration        : second difference of MFI
+    mfi_{n}_abs                 : |MFI - 50| (deviation from neutral midpoint)
+    mfi_{n}_direction           : +1 if MFI > 50, -1 otherwise
+    mfi_{n}_gt_80               : MFI > 80 (overbought)
+    mfi_{n}_lt_20               : MFI < 20 (oversold)
+    mfi_{n}_gt_50               : MFI > 50 (bullish bias)
+    mfi_{n}_lt_50               : MFI < 50 (bearish bias)
+    mfi_{n}_extreme             : +1 if MFI > 80, -1 if MFI < 20, 0 if between
+    mfi_{n}_signal              : SMA of MFI over same period (smoothed signal line)
+    mfi_{n}_signal_slope        : first difference of signal line
+    mfi_{n}_hist                : MFI - signal (raw vs smoothed divergence)
+    mfi_{n}_hist_slope          : first difference of histogram
+    mfi_{n}_hist_gt_0           : histogram > 0 (momentum turning bullish)
+    mfi_{n}_hist_lt_0           : histogram < 0 (momentum turning bearish)
+    mfi_{n}_strength            : mfi_abs × |mfi_hist| (deviation × divergence score)
+    """
+
+    for col in (high_col, low_col, close_col, volume_col):
+        validate_column(df, col)
+
+    if n is None:
+        n = [14]
+
+    df = df.copy()
+
+    high = df[high_col].to_numpy(dtype=float)
+    low = df[low_col].to_numpy(dtype=float)
+    close = df[close_col].to_numpy(dtype=float)
+    volume = df[volume_col].to_numpy(dtype=float)
+
+    for period in n:
+        s = f"_{period}"
+
+        # --- core indicator ---
+        df[f"mfi{s}"] = talib.MFI(high, low, close, volume, timeperiod=period)
+
+        # --- derivatives ---
+        df[f"mfi{s}_slope"] = df[f"mfi{s}"].diff()
+        df[f"mfi{s}_acceleration"] = df[f"mfi{s}_slope"].diff()
+        df[f"mfi{s}_abs"] = (df[f"mfi{s}"] - 50).abs()  # deviation from neutral
+        df[f"mfi{s}_direction"] = df[f"mfi{s}"].apply(lambda x: 1 if x > 50 else -1)
+
+        # --- threshold flags ---
+        df[f"mfi{s}_gt_80"] = df[f"mfi{s}"] > 80
+        df[f"mfi{s}_lt_20"] = df[f"mfi{s}"] < 20
+        df[f"mfi{s}_gt_50"] = df[f"mfi{s}"] > 50
+        df[f"mfi{s}_lt_50"] = df[f"mfi{s}"] < 50
+        df[f"mfi{s}_extreme"] = df[f"mfi{s}"].apply(
+            lambda x: 1 if x > 80 else (-1 if x < 20 else 0)
+        )
+
+        # --- signal line & histogram ---
+        df[f"mfi{s}_signal"] = df[f"mfi{s}"].rolling(window=period).mean()
+        df[f"mfi{s}_signal_slope"] = df[f"mfi{s}_signal"].diff()
+        df[f"mfi{s}_hist"] = df[f"mfi{s}"] - df[f"mfi{s}_signal"]
+        df[f"mfi{s}_hist_slope"] = df[f"mfi{s}_hist"].diff()
+        df[f"mfi{s}_hist_gt_0"] = df[f"mfi{s}_hist"] > 0
+        df[f"mfi{s}_hist_lt_0"] = df[f"mfi{s}_hist"] < 0
+
+        # --- combined conviction score ---
+        df[f"mfi{s}_strength"] = df[f"mfi{s}_abs"] * df[f"mfi{s}_hist"].abs()
+
+    return df
+
+
 # endregion MOMENTUM INDICATORS
 
 
