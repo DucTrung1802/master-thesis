@@ -879,6 +879,83 @@ def add_adx(
     return df
 
 
+def add_aroon(
+    df: pd.DataFrame,
+    n: list[int] = None,
+    high_col: str = "high",
+    low_col: str = "low",
+) -> pd.DataFrame:
+    """
+    Add Aroon indicator columns for each period in n.
+
+    Columns added (per period, e.g. n=25 → suffix '_25')
+    -------------
+    aroon_up_{n}            : Aroon Up line (0–100)
+    aroon_down_{n}          : Aroon Down line (0–100)
+    aroon_osc_{n}           : Aroon Oscillator = Up - Down (-100 to +100)
+    aroon_up_{n}_slope      : first difference of Aroon Up
+    aroon_down_{n}_slope    : first difference of Aroon Down
+    aroon_osc_{n}_slope     : first difference of Aroon Oscillator
+    aroon_{n}_distance      : Aroon Up - Aroon Down (signed, positive = bullish)
+    aroon_{n}_distance_abs  : |Aroon Up - Aroon Down| (magnitude only)
+    aroon_{n}_ratio         : Aroon Up / Aroon Down (NaN-safe)
+    aroon_{n}_direction     : +1 if Up > Down, -1 otherwise
+    aroon_up_{n}_gt_70      : Aroon Up > 70 (strong uptrend signal)
+    aroon_down_{n}_gt_70    : Aroon Down > 70 (strong downtrend signal)
+    aroon_up_{n}_lt_30      : Aroon Up < 30 (weak uptrend / trend absent)
+    aroon_down_{n}_lt_30    : Aroon Down < 30 (weak downtrend / trend absent)
+    aroon_{n}_strength      : |osc| × distance_abs (combined conviction score)
+    """
+
+    for col in (high_col, low_col):
+        validate_column(df, col)
+
+    if n is None:
+        n = [25]
+
+    df = df.copy()
+
+    high = df[high_col].to_numpy(dtype=float)
+    low = df[low_col].to_numpy(dtype=float)
+
+    for period in n:
+        s = f"_{period}"  # suffix
+
+        # --- core indicators ---
+        aroon_down, aroon_up = talib.AROON(high, low, timeperiod=period)
+        df[f"aroon_up{s}"] = aroon_up
+        df[f"aroon_down{s}"] = aroon_down
+        df[f"aroon_osc{s}"] = talib.AROONOSC(high, low, timeperiod=period)
+
+        # --- slopes ---
+        df[f"aroon_up{s}_slope"] = df[f"aroon_up{s}"].diff()
+        df[f"aroon_down{s}_slope"] = df[f"aroon_down{s}"].diff()
+        df[f"aroon_osc{s}_slope"] = df[f"aroon_osc{s}"].diff()
+
+        # --- up/down relationship ---
+        df[f"aroon{s}_distance"] = df[f"aroon_up{s}"] - df[f"aroon_down{s}"]
+        df[f"aroon{s}_distance_abs"] = df[f"aroon{s}_distance"].abs()
+        df[f"aroon{s}_ratio"] = df[f"aroon_up{s}"] / df[f"aroon_down{s}"].replace(
+            0, float("nan")
+        )
+        df[f"aroon{s}_direction"] = df[f"aroon{s}_distance"].apply(
+            lambda x: 1 if x > 0 else -1
+        )
+
+        # --- threshold flags ---
+        df[f"aroon_up{s}_gt_70"] = df[f"aroon_up{s}"] > 70
+        df[f"aroon_down{s}_gt_70"] = df[f"aroon_down{s}"] > 70
+        df[f"aroon_up{s}_lt_30"] = df[f"aroon_up{s}"] < 30
+        df[f"aroon_down{s}_lt_30"] = df[f"aroon_down{s}"] < 30
+
+        # --- combined conviction score ---
+        df[f"aroon{s}_strength"] = (
+            df[f"aroon_osc{s}"].abs() * df[f"aroon{s}_distance_abs"]
+        )
+
+    return df
+
+
 # endregion MOMENTUM INDICATORS
 
 
@@ -2385,6 +2462,10 @@ def add_one_for_all_ta(df: pd.DataFrame) -> pd.DataFrame:
         new_df,
         n=[5, 10, 15, 20],
     )
+    new_df = add_aroon(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
 
     return new_df
 
@@ -2554,7 +2635,7 @@ def main():
 
     plot_with_indicators(
         df,
-        indicators=["adx_10", "plus_di_10", "minus_di_10"],
+        indicators=["aroon_*5*"],
         price_column_name=f"close",
     )
 
