@@ -3487,6 +3487,111 @@ def add_wclprice(
 # endregion PRICE TRANSFORM
 
 
+# region VOLATILITY INDICATORS
+def add_atr(
+    df: pd.DataFrame,
+    n: list[int] = None,
+    high_col: str = "high",
+    low_col: str = "low",
+    close_col: str = "close",
+) -> pd.DataFrame:
+    """
+    Add Average True Range (ATR) and derived features.
+
+    ATR measures market volatility (not direction).
+    Based on True Range:
+        TR = max(
+            high - low,
+            abs(high - prev_close),
+            abs(low - prev_close)
+        )
+
+    Base columns (computed once)
+    ----------------------------
+    atr                         : ATR (default 14 if n not specified)
+    atr_slope                   : first difference (volatility change)
+    atr_acceleration            : second difference
+    atr_gt_prev                 : ATR increasing (volatility expanding)
+    atr_lt_prev                 : ATR decreasing (volatility contracting)
+    atr_direction               : +1 if rising, -1 otherwise
+    atr_normalized              : ATR / close (relative volatility)
+
+    Per period (e.g. n=14 → suffix '_14')
+    -------------------------------------
+    atr_{n}                     : ATR with period n
+    atr_{n}_slope               : first difference
+    atr_{n}_acceleration        : second difference
+    atr_{n}_gt_prev             : increasing volatility
+    atr_{n}_lt_prev             : decreasing volatility
+    atr_{n}_normalized          : ATR / close
+    atr_{n}_signal              : EMA of ATR
+    atr_{n}_signal_slope        : first difference of signal
+    atr_{n}_hist                : ATR - signal
+    atr_{n}_hist_slope          : first difference of histogram
+    atr_{n}_hist_acceleration   : second difference
+    atr_{n}_hist_gt_0           : ATR above signal
+    atr_{n}_hist_lt_0           : ATR below signal
+    atr_{n}_hist_abs            : |histogram|
+    atr_{n}_strength            : |slope| × hist_abs
+    """
+
+    for col in (high_col, low_col, close_col):
+        validate_column(df, col)
+
+    if n is None:
+        n = [14]
+
+    df = df.copy()
+
+    high = df[high_col].to_numpy(dtype=float)
+    low = df[low_col].to_numpy(dtype=float)
+    close = df[close_col].to_numpy(dtype=float)
+
+    # --- base ATR (use first period as default reference) ---
+    base_period = n[0]
+    df["atr"] = talib.ATR(high, low, close, timeperiod=base_period)
+
+    # --- base derivatives ---
+    df["atr_slope"] = df["atr"].diff()
+    df["atr_acceleration"] = df["atr_slope"].diff()
+    df["atr_gt_prev"] = df["atr"] > df["atr"].shift(1)
+    df["atr_lt_prev"] = df["atr"] < df["atr"].shift(1)
+    df["atr_direction"] = df["atr_slope"].apply(lambda x: 1 if x > 0 else -1)
+    df["atr_normalized"] = df["atr"] / df["close"]
+
+    # --- per period ---
+    for period in n:
+        s = f"_{period}"
+
+        atr_series = talib.ATR(high, low, close, timeperiod=period)
+        df[f"atr{s}"] = atr_series
+
+        df[f"atr{s}_slope"] = df[f"atr{s}"].diff()
+        df[f"atr{s}_acceleration"] = df[f"atr{s}_slope"].diff()
+        df[f"atr{s}_gt_prev"] = df[f"atr{s}"] > df[f"atr{s}"].shift(1)
+        df[f"atr{s}_lt_prev"] = df[f"atr{s}"] < df[f"atr{s}"].shift(1)
+        df[f"atr{s}_normalized"] = df[f"atr{s}"] / df["close"]
+
+        # signal + histogram
+        df[f"atr{s}_signal"] = df[f"atr{s}"].ewm(span=period, adjust=False).mean()
+        df[f"atr{s}_signal_slope"] = df[f"atr{s}_signal"].diff()
+
+        df[f"atr{s}_hist"] = df[f"atr{s}"] - df[f"atr{s}_signal"]
+        df[f"atr{s}_hist_slope"] = df[f"atr{s}_hist"].diff()
+        df[f"atr{s}_hist_acceleration"] = df[f"atr{s}_hist_slope"].diff()
+
+        df[f"atr{s}_hist_gt_0"] = df[f"atr{s}_hist"] > 0
+        df[f"atr{s}_hist_lt_0"] = df[f"atr{s}_hist"] < 0
+        df[f"atr{s}_hist_abs"] = df[f"atr{s}_hist"].abs()
+
+        df[f"atr{s}_strength"] = df[f"atr{s}_slope"].abs() * df[f"atr{s}_hist_abs"]
+
+    return df
+
+
+# endregion VOLATILITY INDICATORS
+
+
 def add_one_for_all_ta(df: pd.DataFrame) -> pd.DataFrame:
     new_df = df.copy()
 
@@ -3641,7 +3746,11 @@ def add_one_for_all_ta(df: pd.DataFrame) -> pd.DataFrame:
     #     new_df,
     #     n=[5, 10, 15, 20],
     # )
-    new_df = add_wclprice(
+    # new_df = add_wclprice(
+    #     new_df,
+    #     n=[5, 10, 15, 20],
+    # )
+    new_df = add_atr(
         new_df,
         n=[5, 10, 15, 20],
     )
@@ -3776,7 +3885,7 @@ def main():
 
     plot_with_indicators(
         df,
-        indicators=["*wclprice*"],
+        indicators=["*atr*"],
         price_column_name=f"close",
     )
 
