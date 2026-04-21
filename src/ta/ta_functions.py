@@ -2658,10 +2658,17 @@ def add_obv(
         df[f"obv_hist{s}_lt_0"] = df[f"obv_hist{s}"] < 0
         df[f"obv_hist{s}_abs"] = df[f"obv_hist{s}"].abs()
         df[f"obv{s}_strength"] = df["obv_slope"].abs() * df[f"obv_hist{s}_abs"]
-        df[f"obv{s}_cross_above"] = (df[f"obv_hist{s}"] > 0) & (df[f"obv_hist{s}"].shift(1) <= 0)
-        df[f"obv{s}_cross_below"] = (df[f"obv_hist{s}"] < 0) & (df[f"obv_hist{s}"].shift(1) >= 0)
+        df[f"obv{s}_cross_above"] = (df[f"obv_hist{s}"] > 0) & (
+            df[f"obv_hist{s}"].shift(1) <= 0
+        )
+        df[f"obv{s}_cross_below"] = (df[f"obv_hist{s}"] < 0) & (
+            df[f"obv_hist{s}"].shift(1) >= 0
+        )
     
     return df
+
+
+# endregion VOLUME INDICATORS
 
 
 def add_one_for_all_ta(df: pd.DataFrame) -> pd.DataFrame:
@@ -2771,6 +2778,8 @@ def add_one_for_all_ta(df: pd.DataFrame) -> pd.DataFrame:
     #     new_df,
     #     n=[5, 10, 15, 20],
     # )
+
+    # # VOLUME INDICATORS
     # new_df = add_ad(
     #     new_df,
     #     n=[5, 10, 15, 20],
@@ -2778,10 +2787,10 @@ def add_one_for_all_ta(df: pd.DataFrame) -> pd.DataFrame:
     # new_df = add_adosc(
     #     new_df,
     # )
-    new_df = add_obv(
-        new_df,
-        n=[5, 10, 15, 20],
-    )
+    # new_df = add_obv(
+    #     new_df,
+    #     n=[5, 10, 15, 20],
+    # )
 
     return new_df
 
