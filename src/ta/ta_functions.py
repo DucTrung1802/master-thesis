@@ -1544,7 +1544,7 @@ def add_mfi(
     high_col: str = "high",
     low_col: str = "low",
     close_col: str = "close",
-    volume_col: str = "volume",
+    volume_col: str = "matching_volume",
 ) -> pd.DataFrame:
     """
     Add Money Flow Index (MFI) columns for each period in n.
@@ -1806,6 +1806,79 @@ def add_ppo(
 
         # --- combined conviction score ---
         df[f"ppo{s}_strength"] = df[f"ppo{s}_abs"] * df[f"ppo{s}_hist_abs"]
+
+    return df
+
+
+def add_roc(
+    df: pd.DataFrame,
+    n: list[int] = None,
+    column_name: str = "close",
+) -> pd.DataFrame:
+    """
+    Add Rate of Change (ROC) columns for each period in n.
+
+    ROC = ((price / price[n periods ago]) - 1) × 100.
+    Scale-free momentum — already expressed as %, comparable across assets.
+    Positive = price higher than n bars ago (bullish), negative = lower (bearish).
+
+    Columns added (per period, e.g. n=10 → suffix '_10')
+    -------------
+    roc_{n}                     : raw ROC value (%)
+    roc_{n}_slope               : first difference of ROC (acceleration)
+    roc_{n}_acceleration        : second difference of ROC (jerk)
+    roc_{n}_abs                 : |ROC| (magnitude regardless of direction)
+    roc_{n}_direction           : +1 if ROC > 0, -1 otherwise
+    roc_{n}_gt_0                : ROC > 0 (price higher than n bars ago)
+    roc_{n}_lt_0                : ROC < 0 (price lower than n bars ago)
+    roc_{n}_signal              : SMA of ROC over same period (smoothed signal line)
+    roc_{n}_signal_slope        : first difference of signal line
+    roc_{n}_hist                : ROC - signal (raw vs smoothed divergence)
+    roc_{n}_hist_slope          : first difference of histogram
+    roc_{n}_hist_acceleration   : second difference of histogram
+    roc_{n}_hist_gt_0           : histogram > 0 (momentum turning bullish)
+    roc_{n}_hist_lt_0           : histogram < 0 (momentum turning bearish)
+    roc_{n}_hist_abs            : |histogram| (divergence magnitude)
+    roc_{n}_strength            : roc_abs × hist_abs (momentum × divergence score)
+    """
+
+    validate_column(df, column_name)
+
+    if n is None:
+        n = [10]
+
+    df = df.copy()
+
+    source = df[column_name].to_numpy(dtype=float)
+
+    for period in n:
+        s = f"_{period}"
+
+        # --- core indicator ---
+        df[f"roc{s}"] = talib.ROC(source, timeperiod=period)
+
+        # --- derivatives ---
+        df[f"roc{s}_slope"] = df[f"roc{s}"].diff()
+        df[f"roc{s}_acceleration"] = df[f"roc{s}_slope"].diff()
+        df[f"roc{s}_abs"] = df[f"roc{s}"].abs()
+        df[f"roc{s}_direction"] = df[f"roc{s}"].apply(lambda x: 1 if x > 0 else -1)
+
+        # --- zero-line flags ---
+        df[f"roc{s}_gt_0"] = df[f"roc{s}"] > 0
+        df[f"roc{s}_lt_0"] = df[f"roc{s}"] < 0
+
+        # --- signal line & histogram ---
+        df[f"roc{s}_signal"] = df[f"roc{s}"].rolling(window=period).mean()
+        df[f"roc{s}_signal_slope"] = df[f"roc{s}_signal"].diff()
+        df[f"roc{s}_hist"] = df[f"roc{s}"] - df[f"roc{s}_signal"]
+        df[f"roc{s}_hist_slope"] = df[f"roc{s}_hist"].diff()
+        df[f"roc{s}_hist_acceleration"] = df[f"roc{s}_hist_slope"].diff()
+        df[f"roc{s}_hist_gt_0"] = df[f"roc{s}_hist"] > 0
+        df[f"roc{s}_hist_lt_0"] = df[f"roc{s}_hist"] < 0
+        df[f"roc{s}_hist_abs"] = df[f"roc{s}_hist"].abs()
+
+        # --- combined conviction score ---
+        df[f"roc{s}_strength"] = df[f"roc{s}_abs"] * df[f"roc{s}_hist_abs"]
 
     return df
 
@@ -2695,72 +2768,6 @@ def add_obv(
     return df
 
 
-def add_mfi(
-    df: pd.DataFrame,
-    n_list: list[int] = None,
-    high_col: str = "high",
-    low_col: str = "low",
-    close_col: str = "close",
-    volume_col: str = "matching_volume",
-) -> pd.DataFrame:
-    """
-    Add Money Flow Index (MFI) indicators to the DataFrame for multiple popular periods.
-
-    Popular MFI periods:
-        5 (very fast)
-        7 (fast)
-        10 (medium-fast)
-        14 (standard)
-        20 (slow)
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Input DataFrame with high, low, close, and volume columns.
-    n_list : list[int], optional
-        List of MFI periods to compute. Defaults to [5, 7, 10, 14, 20].
-    high_col : str
-    low_col : str
-    close_col : str
-    volume_col : str
-
-    Returns
-    -------
-    pd.DataFrame
-        DataFrame with added columns: mfi_{n} for each n in n_list.
-    """
-    for col in [high_col, low_col, close_col, volume_col]:
-        validate_column(df, col)
-
-    df = df.copy()
-
-    if n_list is None:
-        n_list = [5, 7, 10, 14, 20]  # popular defaults
-
-    high = pd.to_numeric(df[high_col], errors="coerce").astype("float64")
-    low = pd.to_numeric(df[low_col], errors="coerce").astype("float64")
-    close = pd.to_numeric(df[close_col], errors="coerce").astype("float64")
-    volume = pd.to_numeric(df[volume_col], errors="coerce").astype("float64")
-
-    tp = (high + low + close) / 3
-    rmf = tp * volume
-
-    pos_mf = np.where(tp > tp.shift(1), rmf, 0.0)
-    neg_mf = np.where(tp < tp.shift(1), rmf, 0.0)
-
-    pos_mf_series = pd.Series(pos_mf)
-    neg_mf_series = pd.Series(neg_mf)
-
-    for n in n_list:
-        pos_sum = pos_mf_series.rolling(n, min_periods=1).sum()
-        neg_sum = neg_mf_series.rolling(n, min_periods=1).sum()
-
-        mfi = 100 * (pos_sum / (pos_sum + neg_sum))
-        df[f"mfi_{n}"] = mfi
-
-    return df
-
-
 def add_adl(df: pd.DataFrame) -> pd.DataFrame:
     """
     Add Larry Williams’ Accumulation/Distribution Line (ADL) to the DataFrame.
@@ -3325,6 +3332,24 @@ def add_one_for_all_ta(df: pd.DataFrame) -> pd.DataFrame:
         n=[5, 10, 15, 20],
     )
     new_df = add_cci(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_cmo(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_macd(new_df)
+    new_df = add_mfi(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_mom(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_ppo(new_df)
+    new_df = add_roc(
         new_df,
         n=[5, 10, 15, 20],
     )
