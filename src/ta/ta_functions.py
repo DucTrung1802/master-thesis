@@ -3069,6 +3069,104 @@ def add_ht_sine(
     return df
 
 
+def add_ht_trendmode(
+    df: pd.DataFrame,
+    n: list[int] = None,
+    close_col: str = "close",
+) -> pd.DataFrame:
+    """
+    Add Hilbert Transform - Trend vs Cycle Mode (HT_TRENDMODE) features.
+
+    HT_TRENDMODE outputs:
+        1 → Trending mode
+        0 → Cycle (mean-reverting) mode
+
+    This is a regime classifier — extremely useful for switching strategies.
+
+    Base columns (computed once)
+    ----------------------------
+    ht_trendmode                 : 1 (trend) or 0 (cycle)
+    ht_trendmode_slope           : first difference (state change signal)
+    ht_trendmode_acceleration    : second difference
+    ht_trendmode_direction       : +1 if trending, -1 if cycle
+    ht_trendmode_is_trend        : boolean (trend regime)
+    ht_trendmode_is_cycle        : boolean (cycle regime)
+    ht_trendmode_switch_on       : switched into trend this bar
+    ht_trendmode_switch_off      : switched into cycle this bar
+    ht_trendmode_valid           : finite values
+
+    Per smoothing window (e.g. n=10 → suffix '_10')
+    ------------------------------------------------
+    ht_trendmode_signal_{n}      : EMA of trendmode (probability-like smoothing)
+    ht_trendmode_signal_{n}_slope: first difference of signal
+    ht_trendmode_hist_{n}        : raw - signal (regime divergence)
+    ht_trendmode_hist_{n}_slope  : first difference of histogram
+    ht_trendmode_hist_{n}_acceleration : second difference
+    ht_trendmode_hist_{n}_gt_0   : regime strengthening toward trend
+    ht_trendmode_hist_{n}_lt_0   : regime weakening toward cycle
+    ht_trendmode_hist_{n}_abs    : |histogram|
+    ht_trendmode_{n}_strength    : |slope| × hist_abs
+    """
+
+    validate_column(df, close_col)
+
+    if n is None:
+        n = [10]
+
+    df = df.copy()
+    close = df[close_col].to_numpy(dtype=float)
+
+    # --- core trendmode ---
+    trendmode = talib.HT_TRENDMODE(close)
+    df["ht_trendmode"] = trendmode
+
+    # --- base features ---
+    df["ht_trendmode_slope"] = df["ht_trendmode"].diff()
+    df["ht_trendmode_acceleration"] = df["ht_trendmode_slope"].diff()
+
+    df["ht_trendmode_direction"] = df["ht_trendmode"].apply(
+        lambda x: 1 if x == 1 else -1
+    )
+
+    df["ht_trendmode_is_trend"] = df["ht_trendmode"] == 1
+    df["ht_trendmode_is_cycle"] = df["ht_trendmode"] == 0
+
+    # --- regime switches ---
+    prev = df["ht_trendmode"].shift(1)
+
+    df["ht_trendmode_switch_on"] = (df["ht_trendmode"] == 1) & (prev == 0)
+
+    df["ht_trendmode_switch_off"] = (df["ht_trendmode"] == 0) & (prev == 1)
+
+    # validity (HT unstable early)
+    df["ht_trendmode_valid"] = np.isfinite(df["ht_trendmode"])
+
+    # --- per smoothing window ---
+    for period in n:
+        s = f"_{period}"
+
+        df[f"ht_trendmode_signal{s}"] = (
+            df["ht_trendmode"].ewm(span=period, adjust=False).mean()
+        )
+        df[f"ht_trendmode_signal{s}_slope"] = df[f"ht_trendmode_signal{s}"].diff()
+
+        df[f"ht_trendmode_hist{s}"] = df["ht_trendmode"] - df[f"ht_trendmode_signal{s}"]
+        df[f"ht_trendmode_hist{s}_slope"] = df[f"ht_trendmode_hist{s}"].diff()
+        df[f"ht_trendmode_hist{s}_acceleration"] = df[
+            f"ht_trendmode_hist{s}_slope"
+        ].diff()
+
+        df[f"ht_trendmode_hist{s}_gt_0"] = df[f"ht_trendmode_hist{s}"] > 0
+        df[f"ht_trendmode_hist{s}_lt_0"] = df[f"ht_trendmode_hist{s}"] < 0
+        df[f"ht_trendmode_hist{s}_abs"] = df[f"ht_trendmode_hist{s}"].abs()
+
+        df[f"ht_trendmode{s}_strength"] = (
+            df["ht_trendmode_slope"].abs() * df[f"ht_trendmode_hist{s}_abs"]
+        )
+
+    return df
+
+
 def add_one_for_all_ta(df: pd.DataFrame) -> pd.DataFrame:
     new_df = df.copy()
 
@@ -3207,6 +3305,10 @@ def add_one_for_all_ta(df: pd.DataFrame) -> pd.DataFrame:
     #     new_df,
     #     n=[5, 10, 15, 20],
     # )
+    new_df = add_ht_trendmode(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
 
     return new_df
 
@@ -3338,7 +3440,7 @@ def main():
 
     plot_with_indicators(
         df,
-        indicators=["*ht_sine*"],
+        indicators=["*ht_trendmode*"],
         price_column_name=f"close",
     )
 
