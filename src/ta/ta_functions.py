@@ -1963,6 +1963,139 @@ def add_rsi(
     return df
 
 
+def add_stoch(
+    df: pd.DataFrame,
+    fastk: list[int] = None,
+    slowk: list[int] = None,
+    slowd: list[int] = None,
+    slowk_matype: int = 0,
+    slowd_matype: int = 0,
+    high_col: str = "high",
+    low_col: str = "low",
+    close_col: str = "close",
+) -> pd.DataFrame:
+    """
+    Add Stochastic Oscillator columns for each (fastk, slowk, slowd) combination.
+
+    %K = (close - lowest_low) / (highest_high - lowest_low) × 100  over fastk periods.
+    Slow %K = MA(%K, slowk). Slow %D = MA(Slow %K, slowd).
+    Range is 0 to 100. Neutral midpoint is 50.
+
+    Suffix format: stoch_{fastk}_{slowk}_{slowd}, e.g. (5, 3, 3) → 'stoch_5_3_3'
+
+    Moving average types (TA-Lib MA_Type):
+        0 = SMA  1 = EMA  2 = WMA  3 = DEMA  4 = TEMA
+        5 = TRIMA  6 = KAMA  7 = MAMA  8 = T3
+
+    Columns added (per combo)
+    -------------------------
+    stoch_{fk}_{sk}_{sd}_k              : Slow %K line (0 to 100)
+    stoch_{fk}_{sk}_{sd}_k_slope        : first difference of %K
+    stoch_{fk}_{sk}_{sd}_k_acceleration : second difference of %K
+    stoch_{fk}_{sk}_{sd}_k_abs          : |%K - 50| (deviation from neutral)
+    stoch_{fk}_{sk}_{sd}_k_direction    : +1 if %K > 50, -1 otherwise
+    stoch_{fk}_{sk}_{sd}_k_gt_80        : %K > 80 (overbought)
+    stoch_{fk}_{sk}_{sd}_k_lt_20        : %K < 20 (oversold)
+    stoch_{fk}_{sk}_{sd}_k_gt_50        : %K > 50 (bullish bias)
+    stoch_{fk}_{sk}_{sd}_k_lt_50        : %K < 50 (bearish bias)
+    stoch_{fk}_{sk}_{sd}_k_extreme      : +1 if %K > 80, -1 if %K < 20, 0 if between
+
+    stoch_{fk}_{sk}_{sd}_d              : Slow %D line (0 to 100)
+    stoch_{fk}_{sk}_{sd}_d_slope        : first difference of %D
+    stoch_{fk}_{sk}_{sd}_d_acceleration : second difference of %D
+    stoch_{fk}_{sk}_{sd}_d_gt_80        : %D > 80 (overbought)
+    stoch_{fk}_{sk}_{sd}_d_lt_20        : %D < 20 (oversold)
+    stoch_{fk}_{sk}_{sd}_d_gt_50        : %D > 50 (bullish bias)
+    stoch_{fk}_{sk}_{sd}_d_lt_50        : %D < 50 (bearish bias)
+
+    stoch_{fk}_{sk}_{sd}_kd_dist        : %K - %D (signed, momentum lead/lag)
+    stoch_{fk}_{sk}_{sd}_kd_dist_abs    : |%K - %D|
+    stoch_{fk}_{sk}_{sd}_kd_direction   : +1 if %K > %D, -1 otherwise
+    stoch_{fk}_{sk}_{sd}_kd_dist_slope  : first difference of %K-%D distance
+    stoch_{fk}_{sk}_{sd}_cross_above    : %K crossed above %D this bar (bullish)
+    stoch_{fk}_{sk}_{sd}_cross_below    : %K crossed below %D this bar (bearish)
+    stoch_{fk}_{sk}_{sd}_both_gt_80     : both %K and %D > 80 (confirmed overbought)
+    stoch_{fk}_{sk}_{sd}_both_lt_20     : both %K and %D < 20 (confirmed oversold)
+    stoch_{fk}_{sk}_{sd}_strength       : k_abs × kd_dist_abs (deviation × divergence score)
+    """
+
+    for col in (high_col, low_col, close_col):
+        validate_column(df, col)
+
+    if fastk is None:
+        fastk = [5]
+    if slowk is None:
+        slowk = [3]
+    if slowd is None:
+        slowd = [3]
+
+    df = df.copy()
+
+    high = df[high_col].to_numpy(dtype=float)
+    low = df[low_col].to_numpy(dtype=float)
+    close = df[close_col].to_numpy(dtype=float)
+
+    for fk, sk, sd in product(fastk, slowk, slowd):
+        s = f"_{fk}_{sk}_{sd}"
+
+        # --- core indicator ---
+        k, d = talib.STOCH(
+            high,
+            low,
+            close,
+            fastk_period=fk,
+            slowk_period=sk,
+            slowk_matype=slowk_matype,
+            slowd_period=sd,
+            slowd_matype=slowd_matype,
+        )
+
+        k_series = pd.Series(k, index=df.index)
+        d_series = pd.Series(d, index=df.index)
+
+        # --- %K line ---
+        df[f"stoch{s}_k"] = k_series
+        df[f"stoch{s}_k_slope"] = k_series.diff()
+        df[f"stoch{s}_k_acceleration"] = k_series.diff().diff()
+        df[f"stoch{s}_k_abs"] = (k_series - 50).abs()
+        df[f"stoch{s}_k_direction"] = np.where(k > 50, 1, -1)
+        df[f"stoch{s}_k_gt_80"] = k_series > 80
+        df[f"stoch{s}_k_lt_20"] = k_series < 20
+        df[f"stoch{s}_k_gt_50"] = k_series > 50
+        df[f"stoch{s}_k_lt_50"] = k_series < 50
+        df[f"stoch{s}_k_extreme"] = np.where(k > 80, 1, np.where(k < 20, -1, 0))
+
+        # --- %D line ---
+        df[f"stoch{s}_d"] = d_series
+        df[f"stoch{s}_d_slope"] = d_series.diff()
+        df[f"stoch{s}_d_acceleration"] = d_series.diff().diff()
+        df[f"stoch{s}_d_gt_80"] = d_series > 80
+        df[f"stoch{s}_d_lt_20"] = d_series < 20
+        df[f"stoch{s}_d_gt_50"] = d_series > 50
+        df[f"stoch{s}_d_lt_50"] = d_series < 50
+
+        # --- %K vs %D relationship ---
+        kd_dist = k_series - d_series
+        prev_kd_dist = kd_dist.shift(1)
+        df[f"stoch{s}_kd_dist"] = kd_dist
+        df[f"stoch{s}_kd_dist_abs"] = kd_dist.abs()
+        df[f"stoch{s}_kd_direction"] = np.where(k > d, 1, -1)
+        df[f"stoch{s}_kd_dist_slope"] = kd_dist.diff()
+
+        # --- crossover signals ---
+        df[f"stoch{s}_cross_above"] = (kd_dist > 0) & (prev_kd_dist <= 0)
+        df[f"stoch{s}_cross_below"] = (kd_dist < 0) & (prev_kd_dist >= 0)
+
+        # --- confirmed extreme zone flags ---
+        df[f"stoch{s}_both_gt_80"] = (k_series > 80) & (d_series > 80)
+        df[f"stoch{s}_both_lt_20"] = (k_series < 20) & (d_series < 20)
+
+        # --- combined conviction score ---
+        df[f"stoch{s}_strength"] = df[f"stoch{s}_k_abs"] * df[f"stoch{s}_kd_dist_abs"]
+
+    return df
+
+
 # endregion MOMENTUM INDICATORS
 
 
@@ -3437,6 +3570,7 @@ def add_one_for_all_ta(df: pd.DataFrame) -> pd.DataFrame:
         new_df,
         n=[5, 10, 15, 20],
     )
+    new_df = add_stoch(new_df)
 
     return new_df
 
