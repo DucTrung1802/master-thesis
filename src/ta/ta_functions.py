@@ -2864,6 +2864,106 @@ def add_ht_dcphase(
     return df
 
 
+def add_ht_phasor(
+    df: pd.DataFrame,
+    n: list[int] = None,
+    close_col: str = "close",
+) -> pd.DataFrame:
+    """
+    Add Hilbert Transform - Phasor Components (HT_PHASOR) features.
+
+    HT_PHASOR returns two components:
+        - inphase     (I)
+        - quadrature  (Q)
+
+    These form a complex signal representation:
+        amplitude = sqrt(I^2 + Q^2)
+        phase     = arctan(Q / I)
+
+    Base columns (computed once)
+    ----------------------------
+    ht_phasor_inphase            : in-phase component (I)
+    ht_phasor_quadrature         : quadrature component (Q)
+    ht_phasor_amplitude          : sqrt(I^2 + Q^2)
+    ht_phasor_phase              : arctan2(Q, I) in degrees
+    ht_phasor_phase_wrapped      : phase mapped to [0, 360)
+    ht_phasor_slope              : first difference of amplitude (energy change)
+    ht_phasor_acceleration       : second difference of amplitude
+    ht_phasor_direction          : +1 if amplitude rising, -1 otherwise
+    ht_phasor_valid              : finite values
+
+    Per smoothing window (e.g. n=10 → suffix '_10')
+    ------------------------------------------------
+    ht_phasor_signal_{n}         : EMA of amplitude
+    ht_phasor_signal_{n}_slope   : first difference of signal
+    ht_phasor_hist_{n}           : amplitude - signal
+    ht_phasor_hist_{n}_slope     : first difference of histogram
+    ht_phasor_hist_{n}_acceleration : second difference
+    ht_phasor_hist_{n}_gt_0      : amplitude above signal
+    ht_phasor_hist_{n}_lt_0      : amplitude below signal
+    ht_phasor_hist_{n}_abs       : |histogram|
+    ht_phasor_{n}_strength       : |slope| × hist_abs
+    """
+
+    validate_column(df, close_col)
+
+    if n is None:
+        n = [10]
+
+    df = df.copy()
+    close = df[close_col].to_numpy(dtype=float)
+
+    # --- core phasor components ---
+    inphase, quadrature = talib.HT_PHASOR(close)
+
+    df["ht_phasor_inphase"] = inphase
+    df["ht_phasor_quadrature"] = quadrature
+
+    # --- derived features ---
+    df["ht_phasor_amplitude"] = np.sqrt(inphase**2 + quadrature**2)
+
+    phase_rad = np.arctan2(quadrature, inphase)
+    df["ht_phasor_phase"] = np.degrees(phase_rad)
+    df["ht_phasor_phase_wrapped"] = np.mod(df["ht_phasor_phase"], 360.0)
+
+    # amplitude dynamics
+    df["ht_phasor_slope"] = df["ht_phasor_amplitude"].diff()
+    df["ht_phasor_acceleration"] = df["ht_phasor_slope"].diff()
+    df["ht_phasor_direction"] = df["ht_phasor_slope"].apply(
+        lambda x: 1 if x > 0 else -1
+    )
+
+    # validity
+    df["ht_phasor_valid"] = np.isfinite(df["ht_phasor_inphase"]) & np.isfinite(
+        df["ht_phasor_quadrature"]
+    )
+
+    # --- per smoothing window ---
+    for period in n:
+        s = f"_{period}"
+
+        df[f"ht_phasor_signal{s}"] = (
+            df["ht_phasor_amplitude"].ewm(span=period, adjust=False).mean()
+        )
+        df[f"ht_phasor_signal{s}_slope"] = df[f"ht_phasor_signal{s}"].diff()
+
+        df[f"ht_phasor_hist{s}"] = (
+            df["ht_phasor_amplitude"] - df[f"ht_phasor_signal{s}"]
+        )
+        df[f"ht_phasor_hist{s}_slope"] = df[f"ht_phasor_hist{s}"].diff()
+        df[f"ht_phasor_hist{s}_acceleration"] = df[f"ht_phasor_hist{s}_slope"].diff()
+
+        df[f"ht_phasor_hist{s}_gt_0"] = df[f"ht_phasor_hist{s}"] > 0
+        df[f"ht_phasor_hist{s}_lt_0"] = df[f"ht_phasor_hist{s}"] < 0
+        df[f"ht_phasor_hist{s}_abs"] = df[f"ht_phasor_hist{s}"].abs()
+
+        df[f"ht_phasor{s}_strength"] = (
+            df["ht_phasor_slope"].abs() * df[f"ht_phasor_hist{s}_abs"]
+        )
+
+    return df
+
+
 def add_one_for_all_ta(df: pd.DataFrame) -> pd.DataFrame:
     new_df = df.copy()
 
@@ -2990,7 +3090,11 @@ def add_one_for_all_ta(df: pd.DataFrame) -> pd.DataFrame:
     #     new_df,
     #     n=[5, 10, 15, 20],
     # )
-    new_df = add_ht_dcphase(
+    # new_df = add_ht_dcphase(
+    #     new_df,
+    #     n=[5, 10, 15, 20],
+    # )
+    new_df = add_ht_phasor(
         new_df,
         n=[5, 10, 15, 20],
     )
@@ -3125,7 +3229,7 @@ def main():
 
     plot_with_indicators(
         df,
-        indicators=["*ht_dcphase*"],
+        indicators=["*ht_phasor*"],
         price_column_name=f"close",
     )
 
