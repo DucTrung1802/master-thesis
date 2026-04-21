@@ -46,7 +46,7 @@ FEATURE_SELECTION_LOG_FILE_TEST = (
     f"{FEATURE_SELECTION_LOG_FILE_BASE}/feature_selection_test"
 )
 FEATURE_SELECTION_CHARTS_DIR = f"{FEATURE_SELECTION_LOG_FILE_BASE}/feature_selection"
-
+FEATURE_SELECTION_RESULT_DIR = f"../../src/feature_selection/feature_selection_result"
 
 # ===========================
 # TRAINED MODELS CONFIGURATION
