@@ -2664,11 +2664,97 @@ def add_obv(
         df[f"obv{s}_cross_below"] = (df[f"obv_hist{s}"] < 0) & (
             df[f"obv_hist{s}"].shift(1) >= 0
         )
-    
+
     return df
 
 
 # endregion VOLUME INDICATORS
+
+
+# region CYCLE INDICATORS
+def add_ht_dcperiod(
+    df: pd.DataFrame,
+    n: list[int] = None,
+    close_col: str = "close",
+) -> pd.DataFrame:
+    """
+    Add Hilbert Transform - Dominant Cycle Period (HT_DCPERIOD) features.
+
+    HT_DCPERIOD estimates the dominant market cycle length (in bars).
+    Useful for adapting indicators dynamically (e.g., adaptive MA, RSI length).
+
+    Base columns (computed once)
+    ----------------------------
+    ht_dcperiod                  : dominant cycle period (float, typically 10–40 range)
+    ht_dcperiod_slope            : first difference (cycle length expansion/contraction)
+    ht_dcperiod_acceleration     : second difference
+    ht_dcperiod_gt_prev          : period increasing (cycle slowing / lengthening)
+    ht_dcperiod_lt_prev          : period decreasing (cycle speeding up)
+    ht_dcperiod_direction        : +1 if increasing, -1 otherwise
+    ht_dcperiod_valid            : period is finite and > 0
+
+    Per smoothing window (e.g. n=10 → suffix '_10')
+    ------------------------------------------------
+    ht_dcperiod_signal_{n}       : EMA of period (smoothed cycle estimate)
+    ht_dcperiod_signal_{n}_slope : first difference of signal
+    ht_dcperiod_hist_{n}         : period - signal (cycle deviation)
+    ht_dcperiod_hist_{n}_slope   : first difference of histogram
+    ht_dcperiod_hist_{n}_acceleration : second difference of histogram
+    ht_dcperiod_hist_{n}_gt_0    : period above signal (cycle expanding)
+    ht_dcperiod_hist_{n}_lt_0    : period below signal (cycle contracting)
+    ht_dcperiod_hist_{n}_abs     : |histogram|
+    ht_dcperiod_{n}_strength     : |slope| × hist_abs (cycle momentum × deviation)
+    """
+
+    validate_column(df, close_col)
+
+    if n is None:
+        n = [10]
+
+    df = df.copy()
+
+    close = df[close_col].to_numpy(dtype=float)
+
+    # --- raw dominant cycle period ---
+    dcperiod = talib.HT_DCPERIOD(close)
+    df["ht_dcperiod"] = dcperiod
+
+    # --- base derivatives ---
+    df["ht_dcperiod_slope"] = df["ht_dcperiod"].diff()
+    df["ht_dcperiod_acceleration"] = df["ht_dcperiod_slope"].diff()
+    df["ht_dcperiod_gt_prev"] = df["ht_dcperiod"] > df["ht_dcperiod"].shift(1)
+    df["ht_dcperiod_lt_prev"] = df["ht_dcperiod"] < df["ht_dcperiod"].shift(1)
+    df["ht_dcperiod_direction"] = df["ht_dcperiod_slope"].apply(
+        lambda x: 1 if x > 0 else -1
+    )
+
+    # validity (important for HT indicators — initial unstable values)
+    df["ht_dcperiod_valid"] = np.isfinite(df["ht_dcperiod"]) & (df["ht_dcperiod"] > 0)
+
+    # --- per smoothing window ---
+    for period in n:
+        s = f"_{period}"
+
+        df[f"ht_dcperiod_signal{s}"] = (
+            df["ht_dcperiod"].ewm(span=period, adjust=False).mean()
+        )
+        df[f"ht_dcperiod_signal{s}_slope"] = df[f"ht_dcperiod_signal{s}"].diff()
+
+        df[f"ht_dcperiod_hist{s}"] = df["ht_dcperiod"] - df[f"ht_dcperiod_signal{s}"]
+        df[f"ht_dcperiod_hist{s}_slope"] = df[f"ht_dcperiod_hist{s}"].diff()
+        df[f"ht_dcperiod_hist{s}_acceleration"] = df[
+            f"ht_dcperiod_hist{s}_slope"
+        ].diff()
+
+        df[f"ht_dcperiod_hist{s}_gt_0"] = df[f"ht_dcperiod_hist{s}"] > 0
+        df[f"ht_dcperiod_hist{s}_lt_0"] = df[f"ht_dcperiod_hist{s}"] < 0
+        df[f"ht_dcperiod_hist{s}_abs"] = df[f"ht_dcperiod_hist{s}"].abs()
+
+        df[f"ht_dcperiod{s}_strength"] = (
+            df["ht_dcperiod_slope"].abs() * df[f"ht_dcperiod_hist{s}_abs"]
+        )
+
+    return df
 
 
 def add_one_for_all_ta(df: pd.DataFrame) -> pd.DataFrame:
@@ -2791,6 +2877,12 @@ def add_one_for_all_ta(df: pd.DataFrame) -> pd.DataFrame:
     #     new_df,
     #     n=[5, 10, 15, 20],
     # )
+    
+    # CYCLE INDICATORS
+    new_df = add_ht_dcperiod(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
 
     return new_df
 
@@ -2922,7 +3014,7 @@ def main():
 
     plot_with_indicators(
         df,
-        indicators=["*obv*"],
+        indicators=["*ht_dcperiod*"],
         price_column_name=f"close",
     )
 
