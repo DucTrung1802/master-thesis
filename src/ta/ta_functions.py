@@ -2408,6 +2408,84 @@ def add_willr(
 # endregion MOMENTUM INDICATORS
 
 
+# region VOLUME INDICATORS
+def add_ad(
+    df: pd.DataFrame,
+    n: list[int] = None,
+    high_col: str = "high",
+    low_col: str = "low",
+    close_col: str = "close",
+    volume_col: str = "volume",
+) -> pd.DataFrame:
+    """
+    Add Chaikin A/D Line columns and smoothed signal derivatives.
+
+    AD is a cumulative volume-weighted indicator — it has no timeperiod.
+    n defines smoothing windows applied to the raw AD line (like a signal line).
+
+    Base columns (computed once)
+    ----------------------------
+    ad                          : raw cumulative A/D line
+    ad_slope                    : first difference of AD (momentum — Chaikin Oscillator numerator)
+    ad_acceleration             : second difference of AD
+    ad_gt_0                     : AD > 0 (cumulative buying pressure dominates)
+    ad_lt_0                     : AD < 0 (cumulative selling pressure dominates)
+    ad_direction                : +1 if AD slope > 0 (rising), -1 otherwise
+
+    Per smoothing window (e.g. n=10 → suffix '_10')
+    ------------------------------------------------
+    ad_signal_{n}               : EMA of AD over n periods (Chaikin Oscillator fast line)
+    ad_signal_{n}_slope         : first difference of signal line
+    ad_hist_{n}                 : AD - signal (divergence from smoothed line)
+    ad_hist_{n}_slope           : first difference of histogram
+    ad_hist_{n}_acceleration    : second difference of histogram
+    ad_hist_{n}_gt_0            : histogram > 0 (AD accelerating above signal)
+    ad_hist_{n}_lt_0            : histogram < 0 (AD decelerating below signal)
+    ad_hist_{n}_abs             : |histogram| (divergence magnitude)
+    ad_{n}_strength             : |ad_slope| × hist_abs (momentum × divergence score)
+    """
+
+    for col in (high_col, low_col, close_col, volume_col):
+        validate_column(df, col)
+
+    if n is None:
+        n = [10]
+
+    df = df.copy()
+
+    high   = df[high_col].to_numpy(dtype=float)
+    low    = df[low_col].to_numpy(dtype=float)
+    close  = df[close_col].to_numpy(dtype=float)
+    volume = df[volume_col].to_numpy(dtype=float)
+
+    # --- raw AD line (computed once, no period) ---
+    df["ad"]              = talib.AD(high, low, close, volume)
+
+    # --- base derivatives ---
+    df["ad_slope"]        = df["ad"].diff()
+    df["ad_acceleration"] = df["ad_slope"].diff()
+    df["ad_gt_0"]         = df["ad"] > 0
+    df["ad_lt_0"]         = df["ad"] < 0
+    df["ad_direction"]    = df["ad_slope"].apply(lambda x: 1 if x > 0 else -1)
+
+    # --- per smoothing window ---
+    for period in n:
+        s = f"_{period}"
+
+        df[f"ad_signal{s}"]            = df["ad"].ewm(span=period, adjust=False).mean()
+        df[f"ad_signal{s}_slope"]      = df[f"ad_signal{s}"].diff()
+        df[f"ad_hist{s}"]              = df["ad"] - df[f"ad_signal{s}"]
+        df[f"ad_hist{s}_slope"]        = df[f"ad_hist{s}"].diff()
+        df[f"ad_hist{s}_acceleration"] = df[f"ad_hist{s}_slope"].diff()
+        df[f"ad_hist{s}_gt_0"]         = df[f"ad_hist{s}"] > 0
+        df[f"ad_hist{s}_lt_0"]         = df[f"ad_hist{s}"] < 0
+        df[f"ad_hist{s}_abs"]          = df[f"ad_hist{s}"].abs()
+        df[f"ad{s}_strength"]          = df["ad_slope"].abs() * df[f"ad_hist{s}_abs"]
+
+    return df
+
+
+
 def add_one_for_all_ta(df: pd.DataFrame) -> pd.DataFrame:
     new_df = df.copy()
 
@@ -2512,6 +2590,10 @@ def add_one_for_all_ta(df: pd.DataFrame) -> pd.DataFrame:
         new_df,
     )
     new_df = add_willr(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_ad(
         new_df,
         n=[5, 10, 15, 20],
     )
