@@ -3589,6 +3589,101 @@ def add_atr(
     return df
 
 
+def add_natr(
+    df: pd.DataFrame,
+    n: list[int] = None,
+    high_col: str = "high",
+    low_col: str = "low",
+    close_col: str = "close",
+) -> pd.DataFrame:
+    """
+    Add Normalized Average True Range (NATR) and derived features.
+
+    NATR = (ATR / close) * 100
+
+    Unlike ATR:
+        - Scale-independent (percentage)
+        - Comparable across assets
+
+    Base columns (computed once)
+    ----------------------------
+    natr                        : normalized ATR (percentage)
+    natr_slope                  : first difference (volatility change)
+    natr_acceleration           : second difference
+    natr_gt_prev                : volatility increasing
+    natr_lt_prev                : volatility decreasing
+    natr_direction              : +1 if rising, -1 otherwise
+
+    Per period (e.g. n=14 → suffix '_14')
+    -------------------------------------
+    natr_{n}                    : NATR with period n
+    natr_{n}_slope              : first difference
+    natr_{n}_acceleration       : second difference
+    natr_{n}_gt_prev            : increasing volatility
+    natr_{n}_lt_prev            : decreasing volatility
+    natr_{n}_signal             : EMA of NATR
+    natr_{n}_signal_slope       : first difference of signal
+    natr_{n}_hist               : NATR - signal
+    natr_{n}_hist_slope         : first difference of histogram
+    natr_{n}_hist_acceleration  : second difference
+    natr_{n}_hist_gt_0          : NATR above signal
+    natr_{n}_hist_lt_0          : NATR below signal
+    natr_{n}_hist_abs           : |histogram|
+    natr_{n}_strength           : |slope| × hist_abs
+    """
+
+    for col in (high_col, low_col, close_col):
+        validate_column(df, col)
+
+    if n is None:
+        n = [14]
+
+    df = df.copy()
+
+    high = df[high_col].to_numpy(dtype=float)
+    low = df[low_col].to_numpy(dtype=float)
+    close = df[close_col].to_numpy(dtype=float)
+
+    # --- base NATR (use first period as default reference) ---
+    base_period = n[0]
+    df["natr"] = talib.NATR(high, low, close, timeperiod=base_period)
+
+    # --- base derivatives ---
+    df["natr_slope"] = df["natr"].diff()
+    df["natr_acceleration"] = df["natr_slope"].diff()
+    df["natr_gt_prev"] = df["natr"] > df["natr"].shift(1)
+    df["natr_lt_prev"] = df["natr"] < df["natr"].shift(1)
+    df["natr_direction"] = df["natr_slope"].apply(lambda x: 1 if x > 0 else -1)
+
+    # --- per period ---
+    for period in n:
+        s = f"_{period}"
+
+        natr_series = talib.NATR(high, low, close, timeperiod=period)
+        df[f"natr{s}"] = natr_series
+
+        df[f"natr{s}_slope"] = df[f"natr{s}"].diff()
+        df[f"natr{s}_acceleration"] = df[f"natr{s}_slope"].diff()
+        df[f"natr{s}_gt_prev"] = df[f"natr{s}"] > df[f"natr{s}"].shift(1)
+        df[f"natr{s}_lt_prev"] = df[f"natr{s}"] < df[f"natr{s}"].shift(1)
+
+        # signal + histogram
+        df[f"natr{s}_signal"] = df[f"natr{s}"].ewm(span=period, adjust=False).mean()
+        df[f"natr{s}_signal_slope"] = df[f"natr{s}_signal"].diff()
+
+        df[f"natr{s}_hist"] = df[f"natr{s}"] - df[f"natr{s}_signal"]
+        df[f"natr{s}_hist_slope"] = df[f"natr{s}_hist"].diff()
+        df[f"natr{s}_hist_acceleration"] = df[f"natr{s}_hist_slope"].diff()
+
+        df[f"natr{s}_hist_gt_0"] = df[f"natr{s}_hist"] > 0
+        df[f"natr{s}_hist_lt_0"] = df[f"natr{s}_hist"] < 0
+        df[f"natr{s}_hist_abs"] = df[f"natr{s}_hist"].abs()
+
+        df[f"natr{s}_strength"] = df[f"natr{s}_slope"].abs() * df[f"natr{s}_hist_abs"]
+
+    return df
+
+
 # endregion VOLATILITY INDICATORS
 
 
@@ -3713,7 +3808,7 @@ def add_one_for_all_ta(df: pd.DataFrame) -> pd.DataFrame:
     #     n=[5, 10, 15, 20],
     # )
 
-    # CYCLE INDICATORS
+    # # CYCLE INDICATORS
     # new_df = add_ht_dcperiod(
     #     new_df,
     #     n=[5, 10, 15, 20],
@@ -3734,6 +3829,8 @@ def add_one_for_all_ta(df: pd.DataFrame) -> pd.DataFrame:
     #     new_df,
     #     n=[5, 10, 15, 20],
     # )
+
+    # # PRICE TRANSFORM
     # new_df = add_avgprice(
     #     new_df,
     #     n=[5, 10, 15, 20],
@@ -3750,7 +3847,13 @@ def add_one_for_all_ta(df: pd.DataFrame) -> pd.DataFrame:
     #     new_df,
     #     n=[5, 10, 15, 20],
     # )
-    new_df = add_atr(
+
+    # # VOLATILITY INDICATORS
+    # new_df = add_atr(
+    #     new_df,
+    #     n=[5, 10, 15, 20],
+    # )
+    new_df = add_natr(
         new_df,
         n=[5, 10, 15, 20],
     )
@@ -3885,7 +3988,7 @@ def main():
 
     plot_with_indicators(
         df,
-        indicators=["*atr*"],
+        indicators=["*natr*"],
         price_column_name=f"close",
     )
 
