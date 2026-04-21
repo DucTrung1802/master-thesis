@@ -2391,6 +2391,93 @@ def add_ultosc(
 
     return df
 
+def add_willr(
+    df: pd.DataFrame,
+    n: list[int] = None,
+    high_col: str = "high",
+    low_col: str = "low",
+    close_col: str = "close",
+) -> pd.DataFrame:
+    """
+    Add Williams' %R columns for each period in n.
+
+    %R = (highest_high - close) / (highest_high - lowest_low) × -100.
+    Range is -100 to 0. Neutral midpoint is -50.
+    Inverted Stochastic — readings near 0 = overbought, near -100 = oversold.
+
+    Columns added (per period, e.g. n=14 → suffix '_14')
+    -------------
+    willr_{n}                     : raw %R value (-100 to 0)
+    willr_{n}_slope               : first difference of %R (momentum)
+    willr_{n}_acceleration        : second difference of %R
+    willr_{n}_abs                 : |%R + 50| (deviation from neutral midpoint)
+    willr_{n}_direction           : +1 if %R > -50, -1 otherwise
+    willr_{n}_gt_minus20          : %R > -20 (overbought)
+    willr_{n}_lt_minus80          : %R < -80 (oversold)
+    willr_{n}_gt_minus50          : %R > -50 (bullish bias)
+    willr_{n}_lt_minus50          : %R < -50 (bearish bias)
+    willr_{n}_extreme             : +1 if %R > -20, -1 if %R < -80, 0 if between
+    willr_{n}_signal              : SMA of %R over same period (smoothed signal line)
+    willr_{n}_signal_slope        : first difference of signal line
+    willr_{n}_hist                : %R - signal (raw vs smoothed divergence)
+    willr_{n}_hist_slope          : first difference of histogram
+    willr_{n}_hist_acceleration   : second difference of histogram
+    willr_{n}_hist_gt_0           : histogram > 0 (momentum turning bullish)
+    willr_{n}_hist_lt_0           : histogram < 0 (momentum turning bearish)
+    willr_{n}_hist_abs            : |histogram| (divergence magnitude)
+    willr_{n}_strength            : willr_abs × hist_abs (deviation × divergence score)
+    """
+
+    for col in (high_col, low_col, close_col):
+        validate_column(df, col)
+
+    if n is None:
+        n = [14]
+
+    df = df.copy()
+
+    high  = df[high_col].to_numpy(dtype=float)
+    low   = df[low_col].to_numpy(dtype=float)
+    close = df[close_col].to_numpy(dtype=float)
+
+    for period in n:
+        s = f"_{period}"
+
+        # --- core indicator ---
+        willr = talib.WILLR(high, low, close, timeperiod=period)
+        willr_series = pd.Series(willr, index=df.index)
+
+        # --- derivatives ---
+        df[f"willr{s}"]              = willr_series
+        df[f"willr{s}_slope"]        = willr_series.diff()
+        df[f"willr{s}_acceleration"] = willr_series.diff().diff()
+        df[f"willr{s}_abs"]          = (willr_series + 50).abs()   # deviation from -50 neutral
+        df[f"willr{s}_direction"]    = np.where(willr > -50, 1, -1)
+
+        # --- threshold flags ---
+        df[f"willr{s}_gt_minus20"]   = willr_series > -20           # overbought
+        df[f"willr{s}_lt_minus80"]   = willr_series < -80           # oversold
+        df[f"willr{s}_gt_minus50"]   = willr_series > -50           # bullish bias
+        df[f"willr{s}_lt_minus50"]   = willr_series < -50           # bearish bias
+        df[f"willr{s}_extreme"]      = np.where(
+            willr > -20, 1, np.where(willr < -80, -1, 0)
+        )
+
+        # --- signal line & histogram ---
+        df[f"willr{s}_signal"]            = willr_series.rolling(window=period).mean()
+        df[f"willr{s}_signal_slope"]      = df[f"willr{s}_signal"].diff()
+        df[f"willr{s}_hist"]              = willr_series - df[f"willr{s}_signal"]
+        df[f"willr{s}_hist_slope"]        = df[f"willr{s}_hist"].diff()
+        df[f"willr{s}_hist_acceleration"] = df[f"willr{s}_hist_slope"].diff()
+        df[f"willr{s}_hist_gt_0"]         = df[f"willr{s}_hist"] > 0
+        df[f"willr{s}_hist_lt_0"]         = df[f"willr{s}_hist"] < 0
+        df[f"willr{s}_hist_abs"]          = df[f"willr{s}_hist"].abs()
+
+        # --- combined conviction score ---
+        df[f"willr{s}_strength"]          = df[f"willr{s}_abs"] * df[f"willr{s}_hist_abs"]
+
+    return df
+
 
 # endregion MOMENTUM INDICATORS
 
@@ -3878,6 +3965,10 @@ def add_one_for_all_ta(df: pd.DataFrame) -> pd.DataFrame:
     new_df = add_ultosc(
         new_df,
     )
+    new_df = add_willr(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
 
     return new_df
 
@@ -4047,7 +4138,7 @@ def main():
 
     plot_with_indicators(
         df,
-        indicators=["*uo*"],
+        indicators=["*willr*"],
         price_column_name=f"close",
     )
 
