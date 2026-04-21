@@ -3941,10 +3941,10 @@ def add_one_for_all_ta(df: pd.DataFrame) -> pd.DataFrame:
     #     new_df,
     #     n=[5, 10, 15, 20],
     # )
-    new_df = add_trange(
-        new_df,
-        n=[5, 10, 15, 20],
-    )
+    # new_df = add_trange(
+    #     new_df,
+    #     n=[5, 10, 15, 20],
+    # )
 
     return new_df
 
