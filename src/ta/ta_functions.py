@@ -2588,119 +2588,199 @@ def add_adosc(
     return df
 
 
+def add_obv(
+    df: pd.DataFrame,
+    n: list[int] = None,
+    close_col: str = "close",
+    volume_col: str = "matching_volume",
+) -> pd.DataFrame:
+    """
+    Add On Balance Volume (OBV) columns and smoothed signal derivatives.
+
+    OBV is a cumulative volume indicator:
+        - Add volume when close > previous close
+        - Subtract volume when close < previous close
+        - No change when equal
+
+    Base columns (computed once)
+    ----------------------------
+    obv                         : raw OBV line
+    obv_slope                   : first difference of OBV (momentum)
+    obv_acceleration            : second difference of OBV
+    obv_gt_0                    : OBV > 0 (net buying pressure over time)
+    obv_lt_0                    : OBV < 0 (net selling pressure)
+    obv_direction               : +1 if OBV rising, -1 otherwise
+
+    Per smoothing window (e.g. n=10 → suffix '_10')
+    ------------------------------------------------
+    obv_signal_{n}              : EMA of OBV over n periods
+    obv_signal_{n}_slope        : first difference of signal line
+    obv_hist_{n}                : OBV - signal (divergence)
+    obv_hist_{n}_slope          : first difference of histogram
+    obv_hist_{n}_acceleration   : second difference of histogram
+    obv_hist_{n}_gt_0           : histogram > 0 (OBV above signal)
+    obv_hist_{n}_lt_0           : histogram < 0 (OBV below signal)
+    obv_hist_{n}_abs            : |histogram| (divergence magnitude)
+    obv_{n}_strength            : |obv_slope| × hist_abs (momentum × divergence score)
+    """
+
+    for col in (close_col, volume_col):
+        validate_column(df, col)
+
+    if n is None:
+        n = [10]
+
+    df = df.copy()
+
+    close = df[close_col].to_numpy(dtype=float)
+    volume = df[volume_col].to_numpy(dtype=float)
+
+    # --- raw OBV (computed once, no period) ---
+    df["obv"] = talib.OBV(close, volume)
+
+    # --- base derivatives ---
+    df["obv_slope"] = df["obv"].diff()
+    df["obv_acceleration"] = df["obv_slope"].diff()
+    df["obv_gt_0"] = df["obv"] > 0
+    df["obv_lt_0"] = df["obv"] < 0
+    df["obv_direction"] = df["obv_slope"].apply(lambda x: 1 if x > 0 else -1)
+
+    # --- per smoothing window ---
+    for period in n:
+        s = f"_{period}"
+
+        df[f"obv_signal{s}"] = df["obv"].ewm(span=period, adjust=False).mean()
+        df[f"obv_signal{s}_slope"] = df[f"obv_signal{s}"].diff()
+        df[f"obv_hist{s}"] = df["obv"] - df[f"obv_signal{s}"]
+        df[f"obv_hist{s}_slope"] = df[f"obv_hist{s}"].diff()
+        df[f"obv_hist{s}_acceleration"] = df[f"obv_hist{s}_slope"].diff()
+        df[f"obv_hist{s}_gt_0"] = df[f"obv_hist{s}"] > 0
+        df[f"obv_hist{s}_lt_0"] = df[f"obv_hist{s}"] < 0
+        df[f"obv_hist{s}_abs"] = df[f"obv_hist{s}"].abs()
+        df[f"obv{s}_strength"] = df["obv_slope"].abs() * df[f"obv_hist{s}_abs"]
+        df[f"obv{s}_cross_above"] = (df[f"obv_hist{s}"] > 0) & (df[f"obv_hist{s}"].shift(1) <= 0)
+        df[f"obv{s}_cross_below"] = (df[f"obv_hist{s}"] < 0) & (df[f"obv_hist{s}"].shift(1) >= 0)
+    
+    return df
+
+
 def add_one_for_all_ta(df: pd.DataFrame) -> pd.DataFrame:
     new_df = df.copy()
 
-    # OVERLAP STUDIES
-    new_df = add_bbands(
-        new_df,
-        n=[5, 10, 15, 20],
-    )
-    new_df = add_dema(
-        new_df,
-        n=[5, 10, 15, 20],
-    )
-    new_df = add_ema(
-        new_df,
-        n=[5, 10, 15, 20],
-    )
-    new_df = add_kama(
-        new_df,
-        n=[5, 10, 15, 20],
-    )
-    new_df = add_midpoint(
-        new_df,
-        n=[5, 10, 15, 20],
-    )
-    new_df = add_midprice(
-        new_df,
-        n=[5, 10, 15, 20],
-    )
-    new_df = add_sar(
-        new_df,
-    )
-    new_df = add_sma(
-        new_df,
-        n=[5, 10, 15, 20],
-    )
-    new_df = add_t3(
-        new_df,
-        n=[5, 10, 15, 20],
-    )
-    new_df = add_tema(
-        new_df,
-        n=[5, 10, 15, 20],
-    )
-    new_df = add_trima(
-        new_df,
-        n=[5, 10, 15, 20],
-    )
-    new_df = add_wma(
-        new_df,
-        n=[5, 10, 15, 20],
-    )
+    # # OVERLAP STUDIES
+    # new_df = add_bbands(
+    #     new_df,
+    #     n=[5, 10, 15, 20],
+    # )
+    # new_df = add_dema(
+    #     new_df,
+    #     n=[5, 10, 15, 20],
+    # )
+    # new_df = add_ema(
+    #     new_df,
+    #     n=[5, 10, 15, 20],
+    # )
+    # new_df = add_kama(
+    #     new_df,
+    #     n=[5, 10, 15, 20],
+    # )
+    # new_df = add_midpoint(
+    #     new_df,
+    #     n=[5, 10, 15, 20],
+    # )
+    # new_df = add_midprice(
+    #     new_df,
+    #     n=[5, 10, 15, 20],
+    # )
+    # new_df = add_sar(
+    #     new_df,
+    # )
+    # new_df = add_sma(
+    #     new_df,
+    #     n=[5, 10, 15, 20],
+    # )
+    # new_df = add_t3(
+    #     new_df,
+    #     n=[5, 10, 15, 20],
+    # )
+    # new_df = add_tema(
+    #     new_df,
+    #     n=[5, 10, 15, 20],
+    # )
+    # new_df = add_trima(
+    #     new_df,
+    #     n=[5, 10, 15, 20],
+    # )
+    # new_df = add_wma(
+    #     new_df,
+    #     n=[5, 10, 15, 20],
+    # )
 
-    # MOMENTUM INDICATORS
-    new_df = add_adx(
+    # # MOMENTUM INDICATORS
+    # new_df = add_adx(
+    #     new_df,
+    #     n=[5, 10, 15, 20],
+    # )
+    # new_df = add_aroon(
+    #     new_df,
+    #     n=[5, 10, 15, 20],
+    # )
+    # new_df = add_bop(
+    #     new_df,
+    #     n=[5, 10, 15, 20],
+    # )
+    # new_df = add_cci(
+    #     new_df,
+    #     n=[5, 10, 15, 20],
+    # )
+    # new_df = add_cmo(
+    #     new_df,
+    #     n=[5, 10, 15, 20],
+    # )
+    # new_df = add_macd(new_df)
+    # new_df = add_mfi(
+    #     new_df,
+    #     n=[5, 10, 15, 20],
+    # )
+    # new_df = add_mom(
+    #     new_df,
+    #     n=[5, 10, 15, 20],
+    # )
+    # new_df = add_ppo(new_df)
+    # new_df = add_roc(
+    #     new_df,
+    #     n=[5, 10, 15, 20],
+    # )
+    # new_df = add_rsi(
+    #     new_df,
+    #     n=[5, 10, 15, 20],
+    # )
+    # new_df = add_stoch(new_df)
+    # new_df = add_stoch_rsi(
+    #     new_df,
+    #     n=[5, 10, 15, 20],
+    # )
+    # new_df = add_trix(
+    #     new_df,
+    #     n=[5, 10, 15, 20],
+    # )
+    # new_df = add_ultosc(
+    #     new_df,
+    # )
+    # new_df = add_willr(
+    #     new_df,
+    #     n=[5, 10, 15, 20],
+    # )
+    # new_df = add_ad(
+    #     new_df,
+    #     n=[5, 10, 15, 20],
+    # )
+    # new_df = add_adosc(
+    #     new_df,
+    # )
+    new_df = add_obv(
         new_df,
         n=[5, 10, 15, 20],
-    )
-    new_df = add_aroon(
-        new_df,
-        n=[5, 10, 15, 20],
-    )
-    new_df = add_bop(
-        new_df,
-        n=[5, 10, 15, 20],
-    )
-    new_df = add_cci(
-        new_df,
-        n=[5, 10, 15, 20],
-    )
-    new_df = add_cmo(
-        new_df,
-        n=[5, 10, 15, 20],
-    )
-    new_df = add_macd(new_df)
-    new_df = add_mfi(
-        new_df,
-        n=[5, 10, 15, 20],
-    )
-    new_df = add_mom(
-        new_df,
-        n=[5, 10, 15, 20],
-    )
-    new_df = add_ppo(new_df)
-    new_df = add_roc(
-        new_df,
-        n=[5, 10, 15, 20],
-    )
-    new_df = add_rsi(
-        new_df,
-        n=[5, 10, 15, 20],
-    )
-    new_df = add_stoch(new_df)
-    new_df = add_stoch_rsi(
-        new_df,
-        n=[5, 10, 15, 20],
-    )
-    new_df = add_trix(
-        new_df,
-        n=[5, 10, 15, 20],
-    )
-    new_df = add_ultosc(
-        new_df,
-    )
-    new_df = add_willr(
-        new_df,
-        n=[5, 10, 15, 20],
-    )
-    new_df = add_ad(
-        new_df,
-        n=[5, 10, 15, 20],
-    )
-    new_df = add_adosc(
-        new_df,
     )
 
     return new_df
@@ -2833,7 +2913,7 @@ def main():
 
     plot_with_indicators(
         df,
-        indicators=["*ad*"],
+        indicators=["*obv*"],
         price_column_name=f"close",
     )
 
