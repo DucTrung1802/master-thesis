@@ -2757,6 +2757,113 @@ def add_ht_dcperiod(
     return df
 
 
+def add_ht_dcphase(
+    df: pd.DataFrame,
+    n: list[int] = None,
+    close_col: str = "close",
+) -> pd.DataFrame:
+    """
+    Add Hilbert Transform - Dominant Cycle Phase (HT_DCPHASE) features.
+
+    HT_DCPHASE estimates the phase position (in degrees) within the dominant cycle.
+    Range is typically 0–360:
+        - ~0° / 360° → cycle start
+        - ~90°       → rising phase
+        - ~180°      → peak
+        - ~270°      → falling phase
+
+    Base columns (computed once)
+    ----------------------------
+    ht_dcphase                   : dominant cycle phase (degrees)
+    ht_dcphase_slope             : first difference (phase velocity)
+    ht_dcphase_acceleration      : second difference
+    ht_dcphase_wrapped           : phase wrapped to [0, 360)
+    ht_dcphase_sin               : sin(phase) (cycle representation)
+    ht_dcphase_cos               : cos(phase)
+    ht_dcphase_quadrant          : 1–4 (cycle stage)
+    ht_dcphase_direction         : +1 if phase increasing, -1 otherwise
+    ht_dcphase_valid             : finite values
+
+    Per smoothing window (e.g. n=10 → suffix '_10')
+    ------------------------------------------------
+    ht_dcphase_signal_{n}        : EMA of phase
+    ht_dcphase_signal_{n}_slope  : first difference of signal
+    ht_dcphase_hist_{n}          : phase - signal (deviation)
+    ht_dcphase_hist_{n}_slope    : first difference of histogram
+    ht_dcphase_hist_{n}_acceleration : second difference of histogram
+    ht_dcphase_hist_{n}_gt_0     : phase above signal
+    ht_dcphase_hist_{n}_lt_0     : phase below signal
+    ht_dcphase_hist_{n}_abs      : |histogram|
+    ht_dcphase_{n}_strength      : |slope| × hist_abs
+    """
+
+    validate_column(df, close_col)
+
+    if n is None:
+        n = [10]
+
+    df = df.copy()
+
+    close = df[close_col].to_numpy(dtype=float)
+
+    # --- raw phase ---
+    phase = talib.HT_DCPHASE(close)
+    df["ht_dcphase"] = phase
+
+    # --- base transforms ---
+    df["ht_dcphase_wrapped"] = np.mod(df["ht_dcphase"], 360.0)
+
+    # radians for trig features
+    phase_rad = np.deg2rad(df["ht_dcphase_wrapped"])
+    df["ht_dcphase_sin"] = np.sin(phase_rad)
+    df["ht_dcphase_cos"] = np.cos(phase_rad)
+
+    # derivatives
+    df["ht_dcphase_slope"] = df["ht_dcphase_wrapped"].diff()
+    df["ht_dcphase_acceleration"] = df["ht_dcphase_slope"].diff()
+
+    # quadrant (cycle stage)
+    df["ht_dcphase_quadrant"] = pd.cut(
+        df["ht_dcphase_wrapped"],
+        bins=[0, 90, 180, 270, 360],
+        labels=[1, 2, 3, 4],
+        include_lowest=True,
+    )
+
+    # direction
+    df["ht_dcphase_direction"] = df["ht_dcphase_slope"].apply(
+        lambda x: 1 if x > 0 else -1
+    )
+
+    # validity (HT indicators unstable early)
+    df["ht_dcphase_valid"] = np.isfinite(df["ht_dcphase"])
+
+    # --- per smoothing window ---
+    for period in n:
+        s = f"_{period}"
+
+        df[f"ht_dcphase_signal{s}"] = (
+            df["ht_dcphase_wrapped"].ewm(span=period, adjust=False).mean()
+        )
+        df[f"ht_dcphase_signal{s}_slope"] = df[f"ht_dcphase_signal{s}"].diff()
+
+        df[f"ht_dcphase_hist{s}"] = (
+            df["ht_dcphase_wrapped"] - df[f"ht_dcphase_signal{s}"]
+        )
+        df[f"ht_dcphase_hist{s}_slope"] = df[f"ht_dcphase_hist{s}"].diff()
+        df[f"ht_dcphase_hist{s}_acceleration"] = df[f"ht_dcphase_hist{s}_slope"].diff()
+
+        df[f"ht_dcphase_hist{s}_gt_0"] = df[f"ht_dcphase_hist{s}"] > 0
+        df[f"ht_dcphase_hist{s}_lt_0"] = df[f"ht_dcphase_hist{s}"] < 0
+        df[f"ht_dcphase_hist{s}_abs"] = df[f"ht_dcphase_hist{s}"].abs()
+
+        df[f"ht_dcphase{s}_strength"] = (
+            df["ht_dcphase_slope"].abs() * df[f"ht_dcphase_hist{s}_abs"]
+        )
+
+    return df
+
+
 def add_one_for_all_ta(df: pd.DataFrame) -> pd.DataFrame:
     new_df = df.copy()
 
@@ -2877,9 +2984,13 @@ def add_one_for_all_ta(df: pd.DataFrame) -> pd.DataFrame:
     #     new_df,
     #     n=[5, 10, 15, 20],
     # )
-    
+
     # CYCLE INDICATORS
-    new_df = add_ht_dcperiod(
+    # new_df = add_ht_dcperiod(
+    #     new_df,
+    #     n=[5, 10, 15, 20],
+    # )
+    new_df = add_ht_dcphase(
         new_df,
         n=[5, 10, 15, 20],
     )
@@ -3014,7 +3125,7 @@ def main():
 
     plot_with_indicators(
         df,
-        indicators=["*ht_dcperiod*"],
+        indicators=["*ht_dcphase*"],
         price_column_name=f"close",
     )
 
