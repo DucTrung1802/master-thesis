@@ -3382,26 +3382,18 @@ def add_typprice(
     df["typprice_acceleration"] = df["typprice_slope"].diff()
     df["typprice_gt_close"] = df["typprice"] > df["close"]
     df["typprice_lt_close"] = df["typprice"] < df["close"]
-    df["typprice_direction"] = df["typprice_slope"].apply(
-        lambda x: 1 if x > 0 else -1
-    )
+    df["typprice_direction"] = df["typprice_slope"].apply(lambda x: 1 if x > 0 else -1)
 
     # --- per smoothing window ---
     for period in n:
         s = f"_{period}"
 
-        df[f"typprice_signal{s}"] = (
-            df["typprice"].ewm(span=period, adjust=False).mean()
-        )
+        df[f"typprice_signal{s}"] = df["typprice"].ewm(span=period, adjust=False).mean()
         df[f"typprice_signal{s}_slope"] = df[f"typprice_signal{s}"].diff()
 
-        df[f"typprice_hist{s}"] = (
-            df["typprice"] - df[f"typprice_signal{s}"]
-        )
+        df[f"typprice_hist{s}"] = df["typprice"] - df[f"typprice_signal{s}"]
         df[f"typprice_hist{s}_slope"] = df[f"typprice_hist{s}"].diff()
-        df[f"typprice_hist{s}_acceleration"] = (
-            df[f"typprice_hist{s}_slope"].diff()
-        )
+        df[f"typprice_hist{s}_acceleration"] = df[f"typprice_hist{s}_slope"].diff()
 
         df[f"typprice_hist{s}_gt_0"] = df[f"typprice_hist{s}"] > 0
         df[f"typprice_hist{s}_lt_0"] = df[f"typprice_hist{s}"] < 0
@@ -3412,6 +3404,85 @@ def add_typprice(
         )
 
     return df
+
+
+def add_wclprice(
+    df: pd.DataFrame,
+    n: list[int] = None,
+    high_col: str = "high",
+    low_col: str = "low",
+    close_col: str = "close",
+) -> pd.DataFrame:
+    """
+    Add Weighted Close Price (WCLPRICE) and derived features.
+
+    WCLPRICE = (high + low + 2 * close) / 4
+
+    Base columns (computed once)
+    ----------------------------
+    wclprice                    : weighted close price
+    wclprice_slope              : first difference (momentum)
+    wclprice_acceleration       : second difference
+    wclprice_gt_close           : wclprice > close
+    wclprice_lt_close           : wclprice < close
+    wclprice_direction          : +1 if rising, -1 otherwise
+
+    Per smoothing window (e.g. n=10 → suffix '_10')
+    ------------------------------------------------
+    wclprice_signal_{n}         : EMA of wclprice
+    wclprice_signal_{n}_slope   : first difference of signal
+    wclprice_hist_{n}           : wclprice - signal
+    wclprice_hist_{n}_slope     : first difference of histogram
+    wclprice_hist_{n}_acceleration : second difference
+    wclprice_hist_{n}_gt_0      : wclprice above signal
+    wclprice_hist_{n}_lt_0      : wclprice below signal
+    wclprice_hist_{n}_abs       : |histogram|
+    wclprice_{n}_strength       : |slope| × hist_abs
+    """
+
+    for col in (high_col, low_col, close_col):
+        validate_column(df, col)
+
+    if n is None:
+        n = [10]
+
+    df = df.copy()
+
+    high = df[high_col].to_numpy(dtype=float)
+    low = df[low_col].to_numpy(dtype=float)
+    close = df[close_col].to_numpy(dtype=float)
+
+    # --- core WCLPRICE ---
+    df["wclprice"] = talib.WCLPRICE(high, low, close)
+
+    # --- base derivatives ---
+    df["wclprice_slope"] = df["wclprice"].diff()
+    df["wclprice_acceleration"] = df["wclprice_slope"].diff()
+    df["wclprice_gt_close"] = df["wclprice"] > df["close"]
+    df["wclprice_lt_close"] = df["wclprice"] < df["close"]
+    df["wclprice_direction"] = df["wclprice_slope"].apply(lambda x: 1 if x > 0 else -1)
+
+    # --- per smoothing window ---
+    for period in n:
+        s = f"_{period}"
+
+        df[f"wclprice_signal{s}"] = df["wclprice"].ewm(span=period, adjust=False).mean()
+        df[f"wclprice_signal{s}_slope"] = df[f"wclprice_signal{s}"].diff()
+
+        df[f"wclprice_hist{s}"] = df["wclprice"] - df[f"wclprice_signal{s}"]
+        df[f"wclprice_hist{s}_slope"] = df[f"wclprice_hist{s}"].diff()
+        df[f"wclprice_hist{s}_acceleration"] = df[f"wclprice_hist{s}_slope"].diff()
+
+        df[f"wclprice_hist{s}_gt_0"] = df[f"wclprice_hist{s}"] > 0
+        df[f"wclprice_hist{s}_lt_0"] = df[f"wclprice_hist{s}"] < 0
+        df[f"wclprice_hist{s}_abs"] = df[f"wclprice_hist{s}"].abs()
+
+        df[f"wclprice{s}_strength"] = (
+            df["wclprice_slope"].abs() * df[f"wclprice_hist{s}_abs"]
+        )
+
+    return df
+
 
 # endregion PRICE TRANSFORM
 
@@ -3566,7 +3637,11 @@ def add_one_for_all_ta(df: pd.DataFrame) -> pd.DataFrame:
     #     new_df,
     #     n=[5, 10, 15, 20],
     # )
-    new_df = add_typprice(
+    # new_df = add_typprice(
+    #     new_df,
+    #     n=[5, 10, 15, 20],
+    # )
+    new_df = add_wclprice(
         new_df,
         n=[5, 10, 15, 20],
     )
@@ -3701,7 +3776,7 @@ def main():
 
     plot_with_indicators(
         df,
-        indicators=["*typprice*"],
+        indicators=["*wclprice*"],
         price_column_name=f"close",
     )
 
