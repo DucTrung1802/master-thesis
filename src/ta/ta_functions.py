@@ -2295,6 +2295,103 @@ def add_trix(
     return df
 
 
+def add_ultosc(
+    df: pd.DataFrame,
+    period1: list[int] = None,
+    period2: list[int] = None,
+    period3: list[int] = None,
+    high_col: str = "high",
+    low_col: str = "low",
+    close_col: str = "close",
+) -> pd.DataFrame:
+    """
+    Add Ultimate Oscillator (ULTOSC) columns for each (period1, period2, period3) combination.
+
+    UO combines three timeframes of buying pressure / true range to reduce
+    false divergence signals common in single-period oscillators.
+    Range is 0 to 100. Neutral midpoint is 50.
+
+    Suffix format: ultosc_{p1}_{p2}_{p3}, e.g. (7, 14, 28) → 'ultosc_7_14_28'
+
+    Columns added (per combo)
+    -------------------------
+    ultosc_{p1}_{p2}_{p3}                   : raw UO value (0 to 100)
+    ultosc_{p1}_{p2}_{p3}_slope             : first difference of UO (momentum)
+    ultosc_{p1}_{p2}_{p3}_acceleration      : second difference of UO
+    ultosc_{p1}_{p2}_{p3}_abs               : |UO - 50| (deviation from neutral midpoint)
+    ultosc_{p1}_{p2}_{p3}_direction         : +1 if UO > 50, -1 otherwise
+    ultosc_{p1}_{p2}_{p3}_gt_70             : UO > 70 (overbought)
+    ultosc_{p1}_{p2}_{p3}_lt_30             : UO < 30 (oversold)
+    ultosc_{p1}_{p2}_{p3}_gt_50             : UO > 50 (bullish bias)
+    ultosc_{p1}_{p2}_{p3}_lt_50             : UO < 50 (bearish bias)
+    ultosc_{p1}_{p2}_{p3}_extreme           : +1 if UO > 70, -1 if UO < 30, 0 if between
+    ultosc_{p1}_{p2}_{p3}_signal            : SMA of UO over period1 (smoothed signal line)
+    ultosc_{p1}_{p2}_{p3}_signal_slope      : first difference of signal line
+    ultosc_{p1}_{p2}_{p3}_hist              : UO - signal (raw vs smoothed divergence)
+    ultosc_{p1}_{p2}_{p3}_hist_slope        : first difference of histogram
+    ultosc_{p1}_{p2}_{p3}_hist_acceleration : second difference of histogram
+    ultosc_{p1}_{p2}_{p3}_hist_gt_0         : histogram > 0 (momentum turning bullish)
+    ultosc_{p1}_{p2}_{p3}_hist_lt_0         : histogram < 0 (momentum turning bearish)
+    ultosc_{p1}_{p2}_{p3}_hist_abs          : |histogram| (divergence magnitude)
+    ultosc_{p1}_{p2}_{p3}_strength          : uo_abs × hist_abs (deviation × divergence score)
+    """
+
+    for col in (high_col, low_col, close_col):
+        validate_column(df, col)
+
+    if period1 is None:
+        period1 = [7]
+    if period2 is None:
+        period2 = [14]
+    if period3 is None:
+        period3 = [28]
+
+    df = df.copy()
+
+    high  = df[high_col].to_numpy(dtype=float)
+    low   = df[low_col].to_numpy(dtype=float)
+    close = df[close_col].to_numpy(dtype=float)
+
+    for p1, p2, p3 in product(period1, period2, period3):
+        if not (p1 < p2 < p3):
+            continue  # periods must be strictly ascending: short < medium < long
+
+        s = f"_{p1}_{p2}_{p3}"
+
+        # --- core indicator ---
+        uo = talib.ULTOSC(high, low, close, timeperiod1=p1, timeperiod2=p2, timeperiod3=p3)
+        uo_series = pd.Series(uo, index=df.index)
+
+        # --- derivatives ---
+        df[f"ultosc{s}"]              = uo_series
+        df[f"ultosc{s}_slope"]        = uo_series.diff()
+        df[f"ultosc{s}_acceleration"] = uo_series.diff().diff()
+        df[f"ultosc{s}_abs"]          = (uo_series - 50).abs()
+        df[f"ultosc{s}_direction"]    = np.where(uo > 50, 1, -1)
+
+        # --- threshold flags ---
+        df[f"ultosc{s}_gt_70"]        = uo_series > 70
+        df[f"ultosc{s}_lt_30"]        = uo_series < 30
+        df[f"ultosc{s}_gt_50"]        = uo_series > 50
+        df[f"ultosc{s}_lt_50"]        = uo_series < 50
+        df[f"ultosc{s}_extreme"]      = np.where(uo > 70, 1, np.where(uo < 30, -1, 0))
+
+        # --- signal line & histogram ---
+        df[f"ultosc{s}_signal"]            = uo_series.rolling(window=p1).mean()
+        df[f"ultosc{s}_signal_slope"]      = df[f"ultosc{s}_signal"].diff()
+        df[f"ultosc{s}_hist"]              = uo_series - df[f"ultosc{s}_signal"]
+        df[f"ultosc{s}_hist_slope"]        = df[f"ultosc{s}_hist"].diff()
+        df[f"ultosc{s}_hist_acceleration"] = df[f"ultosc{s}_hist_slope"].diff()
+        df[f"ultosc{s}_hist_gt_0"]         = df[f"ultosc{s}_hist"] > 0
+        df[f"ultosc{s}_hist_lt_0"]         = df[f"ultosc{s}_hist"] < 0
+        df[f"ultosc{s}_hist_abs"]          = df[f"ultosc{s}_hist"].abs()
+
+        # --- combined conviction score ---
+        df[f"ultosc{s}_strength"]          = df[f"ultosc{s}_abs"] * df[f"ultosc{s}_hist_abs"]
+
+    return df
+
+
 # endregion MOMENTUM INDICATORS
 
 
@@ -3778,6 +3875,9 @@ def add_one_for_all_ta(df: pd.DataFrame) -> pd.DataFrame:
         new_df,
         n=[5, 10, 15, 20],
     )
+    new_df = add_ultosc(
+        new_df,
+    )
 
     return new_df
 
@@ -3947,7 +4047,7 @@ def main():
 
     plot_with_indicators(
         df,
-        indicators=["*cci*"],
+        indicators=["*uo*"],
         price_column_name=f"close",
     )
 
