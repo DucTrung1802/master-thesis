@@ -2222,6 +2222,79 @@ def add_stoch_rsi(
     return df
 
 
+def add_trix(
+    df: pd.DataFrame,
+    n: list[int] = None,
+    column_name: str = "close",
+) -> pd.DataFrame:
+    """
+    Add TRIX columns for each period in n.
+
+    TRIX = 1-day ROC of a triple-smoothed EMA.
+    Oscillates around zero — positive = upward momentum, negative = downward.
+    Triple smoothing filters out insignificant price movements and noise.
+
+    Columns added (per period, e.g. n=15 → suffix '_15')
+    -------------
+    trix_{n}                    : raw TRIX value (%)
+    trix_{n}_slope              : first difference of TRIX (acceleration)
+    trix_{n}_acceleration       : second difference of TRIX (jerk)
+    trix_{n}_abs                : |TRIX| (magnitude regardless of direction)
+    trix_{n}_direction          : +1 if TRIX > 0, -1 otherwise
+    trix_{n}_gt_0               : TRIX > 0 (bullish momentum)
+    trix_{n}_lt_0               : TRIX < 0 (bearish momentum)
+    trix_{n}_signal             : SMA of TRIX over same period (smoothed signal line)
+    trix_{n}_signal_slope       : first difference of signal line
+    trix_{n}_hist               : TRIX - signal (raw vs smoothed divergence)
+    trix_{n}_hist_slope         : first difference of histogram
+    trix_{n}_hist_acceleration  : second difference of histogram
+    trix_{n}_hist_gt_0          : histogram > 0 (momentum turning bullish)
+    trix_{n}_hist_lt_0          : histogram < 0 (momentum turning bearish)
+    trix_{n}_hist_abs           : |histogram| (divergence magnitude)
+    trix_{n}_strength           : trix_abs × hist_abs (momentum × divergence score)
+    """
+
+    validate_column(df, column_name)
+
+    if n is None:
+        n = [15]
+
+    df = df.copy()
+
+    source = df[column_name].to_numpy(dtype=float)
+
+    for period in n:
+        s = f"_{period}"
+
+        # --- core indicator ---
+        df[f"trix{s}"] = talib.TRIX(source, timeperiod=period)
+
+        # --- derivatives ---
+        df[f"trix{s}_slope"] = df[f"trix{s}"].diff()
+        df[f"trix{s}_acceleration"] = df[f"trix{s}_slope"].diff()
+        df[f"trix{s}_abs"] = df[f"trix{s}"].abs()
+        df[f"trix{s}_direction"] = df[f"trix{s}"].apply(lambda x: 1 if x > 0 else -1)
+
+        # --- zero-line flags ---
+        df[f"trix{s}_gt_0"] = df[f"trix{s}"] > 0
+        df[f"trix{s}_lt_0"] = df[f"trix{s}"] < 0
+
+        # --- signal line & histogram ---
+        df[f"trix{s}_signal"] = df[f"trix{s}"].rolling(window=period).mean()
+        df[f"trix{s}_signal_slope"] = df[f"trix{s}_signal"].diff()
+        df[f"trix{s}_hist"] = df[f"trix{s}"] - df[f"trix{s}_signal"]
+        df[f"trix{s}_hist_slope"] = df[f"trix{s}_hist"].diff()
+        df[f"trix{s}_hist_acceleration"] = df[f"trix{s}_hist_slope"].diff()
+        df[f"trix{s}_hist_gt_0"] = df[f"trix{s}_hist"] > 0
+        df[f"trix{s}_hist_lt_0"] = df[f"trix{s}_hist"] < 0
+        df[f"trix{s}_hist_abs"] = df[f"trix{s}_hist"].abs()
+
+        # --- combined conviction score ---
+        df[f"trix{s}_strength"] = df[f"trix{s}_abs"] * df[f"trix{s}_hist_abs"]
+
+    return df
+
+
 # endregion MOMENTUM INDICATORS
 
 
@@ -3698,6 +3771,10 @@ def add_one_for_all_ta(df: pd.DataFrame) -> pd.DataFrame:
     )
     new_df = add_stoch(new_df)
     new_df = add_stoch_rsi(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_trix(
         new_df,
         n=[5, 10, 15, 20],
     )
