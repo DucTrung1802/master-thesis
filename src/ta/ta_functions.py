@@ -3227,26 +3227,18 @@ def add_avgprice(
     df["avgprice_acceleration"] = df["avgprice_slope"].diff()
     df["avgprice_gt_close"] = df["avgprice"] > df["close"]
     df["avgprice_lt_close"] = df["avgprice"] < df["close"]
-    df["avgprice_direction"] = df["avgprice_slope"].apply(
-        lambda x: 1 if x > 0 else -1
-    )
+    df["avgprice_direction"] = df["avgprice_slope"].apply(lambda x: 1 if x > 0 else -1)
 
     # --- per smoothing window ---
     for period in n:
         s = f"_{period}"
 
-        df[f"avgprice_signal{s}"] = (
-            df["avgprice"].ewm(span=period, adjust=False).mean()
-        )
+        df[f"avgprice_signal{s}"] = df["avgprice"].ewm(span=period, adjust=False).mean()
         df[f"avgprice_signal{s}_slope"] = df[f"avgprice_signal{s}"].diff()
 
-        df[f"avgprice_hist{s}"] = (
-            df["avgprice"] - df[f"avgprice_signal{s}"]
-        )
+        df[f"avgprice_hist{s}"] = df["avgprice"] - df[f"avgprice_signal{s}"]
         df[f"avgprice_hist{s}_slope"] = df[f"avgprice_hist{s}"].diff()
-        df[f"avgprice_hist{s}_acceleration"] = (
-            df[f"avgprice_hist{s}_slope"].diff()
-        )
+        df[f"avgprice_hist{s}_acceleration"] = df[f"avgprice_hist{s}_slope"].diff()
 
         df[f"avgprice_hist{s}_gt_0"] = df[f"avgprice_hist{s}"] > 0
         df[f"avgprice_hist{s}_lt_0"] = df[f"avgprice_hist{s}"] < 0
@@ -3258,7 +3250,86 @@ def add_avgprice(
 
     return df
 
+
+def add_medprice(
+    df: pd.DataFrame,
+    n: list[int] = None,
+    high_col: str = "high",
+    low_col: str = "low",
+    close_col: str = "close",
+) -> pd.DataFrame:
+    """
+    Add Median Price (MEDPRICE) and derived features.
+
+    MEDPRICE = (high + low) / 2
+
+    Base columns (computed once)
+    ----------------------------
+    medprice                    : high-low midpoint
+    medprice_slope              : first difference (momentum)
+    medprice_acceleration       : second difference
+    medprice_gt_close           : medprice > close
+    medprice_lt_close           : medprice < close
+    medprice_direction          : +1 if rising, -1 otherwise
+
+    Per smoothing window (e.g. n=10 → suffix '_10')
+    ------------------------------------------------
+    medprice_signal_{n}         : EMA of medprice
+    medprice_signal_{n}_slope   : first difference of signal
+    medprice_hist_{n}           : medprice - signal
+    medprice_hist_{n}_slope     : first difference of histogram
+    medprice_hist_{n}_acceleration : second difference
+    medprice_hist_{n}_gt_0      : medprice above signal
+    medprice_hist_{n}_lt_0      : medprice below signal
+    medprice_hist_{n}_abs       : |histogram|
+    medprice_{n}_strength       : |slope| × hist_abs
+    """
+
+    for col in (high_col, low_col, close_col):
+        validate_column(df, col)
+
+    if n is None:
+        n = [10]
+
+    df = df.copy()
+
+    high = df[high_col].to_numpy(dtype=float)
+    low = df[low_col].to_numpy(dtype=float)
+
+    # --- core MEDPRICE ---
+    df["medprice"] = talib.MEDPRICE(high, low)
+
+    # --- base derivatives ---
+    df["medprice_slope"] = df["medprice"].diff()
+    df["medprice_acceleration"] = df["medprice_slope"].diff()
+    df["medprice_gt_close"] = df["medprice"] > df["close"]
+    df["medprice_lt_close"] = df["medprice"] < df["close"]
+    df["medprice_direction"] = df["medprice_slope"].apply(lambda x: 1 if x > 0 else -1)
+
+    # --- per smoothing window ---
+    for period in n:
+        s = f"_{period}"
+
+        df[f"medprice_signal{s}"] = df["medprice"].ewm(span=period, adjust=False).mean()
+        df[f"medprice_signal{s}_slope"] = df[f"medprice_signal{s}"].diff()
+
+        df[f"medprice_hist{s}"] = df["medprice"] - df[f"medprice_signal{s}"]
+        df[f"medprice_hist{s}_slope"] = df[f"medprice_hist{s}"].diff()
+        df[f"medprice_hist{s}_acceleration"] = df[f"medprice_hist{s}_slope"].diff()
+
+        df[f"medprice_hist{s}_gt_0"] = df[f"medprice_hist{s}"] > 0
+        df[f"medprice_hist{s}_lt_0"] = df[f"medprice_hist{s}"] < 0
+        df[f"medprice_hist{s}_abs"] = df[f"medprice_hist{s}"].abs()
+
+        df[f"medprice{s}_strength"] = (
+            df["medprice_slope"].abs() * df[f"medprice_hist{s}_abs"]
+        )
+
+    return df
+
+
 # endregion PRICE TRANSFORM
+
 
 def add_one_for_all_ta(df: pd.DataFrame) -> pd.DataFrame:
     new_df = df.copy()
@@ -3402,7 +3473,11 @@ def add_one_for_all_ta(df: pd.DataFrame) -> pd.DataFrame:
     #     new_df,
     #     n=[5, 10, 15, 20],
     # )
-    new_df = add_avgprice(
+    # new_df = add_avgprice(
+    #     new_df,
+    #     n=[5, 10, 15, 20],
+    # )
+    new_df = add_medprice(
         new_df,
         n=[5, 10, 15, 20],
     )
@@ -3537,7 +3612,7 @@ def main():
 
     plot_with_indicators(
         df,
-        indicators=["*avgprice*"],
+        indicators=["*medprice*"],
         price_column_name=f"close",
     )
 
