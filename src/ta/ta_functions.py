@@ -2415,7 +2415,7 @@ def add_ad(
     high_col: str = "high",
     low_col: str = "low",
     close_col: str = "close",
-    volume_col: str = "volume",
+    volume_col: str = "matching_volume",
 ) -> pd.DataFrame:
     """
     Add Chaikin A/D Line columns and smoothed signal derivatives.
@@ -2453,37 +2453,139 @@ def add_ad(
 
     df = df.copy()
 
-    high   = df[high_col].to_numpy(dtype=float)
-    low    = df[low_col].to_numpy(dtype=float)
-    close  = df[close_col].to_numpy(dtype=float)
+    high = df[high_col].to_numpy(dtype=float)
+    low = df[low_col].to_numpy(dtype=float)
+    close = df[close_col].to_numpy(dtype=float)
     volume = df[volume_col].to_numpy(dtype=float)
 
     # --- raw AD line (computed once, no period) ---
-    df["ad"]              = talib.AD(high, low, close, volume)
+    df["ad"] = talib.AD(high, low, close, volume)
 
     # --- base derivatives ---
-    df["ad_slope"]        = df["ad"].diff()
+    df["ad_slope"] = df["ad"].diff()
     df["ad_acceleration"] = df["ad_slope"].diff()
-    df["ad_gt_0"]         = df["ad"] > 0
-    df["ad_lt_0"]         = df["ad"] < 0
-    df["ad_direction"]    = df["ad_slope"].apply(lambda x: 1 if x > 0 else -1)
+    df["ad_gt_0"] = df["ad"] > 0
+    df["ad_lt_0"] = df["ad"] < 0
+    df["ad_direction"] = df["ad_slope"].apply(lambda x: 1 if x > 0 else -1)
 
     # --- per smoothing window ---
     for period in n:
         s = f"_{period}"
 
-        df[f"ad_signal{s}"]            = df["ad"].ewm(span=period, adjust=False).mean()
-        df[f"ad_signal{s}_slope"]      = df[f"ad_signal{s}"].diff()
-        df[f"ad_hist{s}"]              = df["ad"] - df[f"ad_signal{s}"]
-        df[f"ad_hist{s}_slope"]        = df[f"ad_hist{s}"].diff()
+        df[f"ad_signal{s}"] = df["ad"].ewm(span=period, adjust=False).mean()
+        df[f"ad_signal{s}_slope"] = df[f"ad_signal{s}"].diff()
+        df[f"ad_hist{s}"] = df["ad"] - df[f"ad_signal{s}"]
+        df[f"ad_hist{s}_slope"] = df[f"ad_hist{s}"].diff()
         df[f"ad_hist{s}_acceleration"] = df[f"ad_hist{s}_slope"].diff()
-        df[f"ad_hist{s}_gt_0"]         = df[f"ad_hist{s}"] > 0
-        df[f"ad_hist{s}_lt_0"]         = df[f"ad_hist{s}"] < 0
-        df[f"ad_hist{s}_abs"]          = df[f"ad_hist{s}"].abs()
-        df[f"ad{s}_strength"]          = df["ad_slope"].abs() * df[f"ad_hist{s}_abs"]
+        df[f"ad_hist{s}_gt_0"] = df[f"ad_hist{s}"] > 0
+        df[f"ad_hist{s}_lt_0"] = df[f"ad_hist{s}"] < 0
+        df[f"ad_hist{s}_abs"] = df[f"ad_hist{s}"].abs()
+        df[f"ad{s}_strength"] = df["ad_slope"].abs() * df[f"ad_hist{s}_abs"]
 
     return df
 
+
+def add_adosc(
+    df: pd.DataFrame,
+    fast: list[int] = None,
+    slow: list[int] = None,
+    high_col: str = "high",
+    low_col: str = "low",
+    close_col: str = "close",
+    volume_col: str = "matching_volume",
+) -> pd.DataFrame:
+    """
+    Add Chaikin A/D Oscillator (ADOSC) columns for each (fast, slow) combination.
+
+    ADOSC = EMA(fast, AD) - EMA(slow, AD).
+    Measures momentum of the A/D line — positive = AD accelerating up, negative = down.
+    Unbounded — scale depends on price and volume levels.
+
+    Suffix format: adosc_{fast}_{slow}, e.g. (3, 10) → 'adosc_3_10'
+
+    Base columns (computed once)
+    ----------------------------
+    ad                              : raw cumulative A/D line (shared with add_ad if present)
+
+    Columns added (per combo)
+    -------------------------
+    adosc_{f}_{sl}                  : raw ADOSC value
+    adosc_{f}_{sl}_slope            : first difference of ADOSC (momentum)
+    adosc_{f}_{sl}_acceleration     : second difference of ADOSC
+    adosc_{f}_{sl}_abs              : |ADOSC| (magnitude regardless of direction)
+    adosc_{f}_{sl}_direction        : +1 if ADOSC > 0, -1 otherwise
+    adosc_{f}_{sl}_gt_0             : ADOSC > 0 (AD accelerating upward — bullish)
+    adosc_{f}_{sl}_lt_0             : ADOSC < 0 (AD decelerating — bearish)
+    adosc_{f}_{sl}_signal           : SMA of ADOSC over fast period (smoothed signal line)
+    adosc_{f}_{sl}_signal_slope     : first difference of signal line
+    adosc_{f}_{sl}_hist             : ADOSC - signal (raw vs smoothed divergence)
+    adosc_{f}_{sl}_hist_slope       : first difference of histogram
+    adosc_{f}_{sl}_hist_acceleration: second difference of histogram
+    adosc_{f}_{sl}_hist_gt_0        : histogram > 0 (momentum turning bullish)
+    adosc_{f}_{sl}_hist_lt_0        : histogram < 0 (momentum turning bearish)
+    adosc_{f}_{sl}_hist_abs         : |histogram| (divergence magnitude)
+    adosc_{f}_{sl}_cross_above      : ADOSC crossed above zero this bar (bullish)
+    adosc_{f}_{sl}_cross_below      : ADOSC crossed below zero this bar (bearish)
+    adosc_{f}_{sl}_strength         : adosc_abs × hist_abs (momentum × divergence score)
+    """
+
+    for col in (high_col, low_col, close_col, volume_col):
+        validate_column(df, col)
+
+    if fast is None:
+        fast = [3]
+    if slow is None:
+        slow = [10]
+
+    df = df.copy()
+
+    high = df[high_col].to_numpy(dtype=float)
+    low = df[low_col].to_numpy(dtype=float)
+    close = df[close_col].to_numpy(dtype=float)
+    volume = df[volume_col].to_numpy(dtype=float)
+
+    # --- raw AD line (computed once, shared across combos) ---
+    if "ad" not in df.columns:
+        df["ad"] = talib.AD(high, low, close, volume)
+
+    # --- per fast/slow combo ---
+    for f, sl in product(fast, slow):
+        if f >= sl:
+            continue  # fast must be strictly less than slow
+
+        s = f"_{f}_{sl}"
+
+        adosc = talib.ADOSC(high, low, close, volume, fastperiod=f, slowperiod=sl)
+        adosc_series = pd.Series(adosc, index=df.index)
+
+        # --- core ---
+        df[f"adosc{s}"] = adosc_series
+        df[f"adosc{s}_slope"] = adosc_series.diff()
+        df[f"adosc{s}_acceleration"] = adosc_series.diff().diff()
+        df[f"adosc{s}_abs"] = adosc_series.abs()
+        df[f"adosc{s}_direction"] = np.where(adosc > 0, 1, -1)
+        df[f"adosc{s}_gt_0"] = adosc_series > 0
+        df[f"adosc{s}_lt_0"] = adosc_series < 0
+
+        # --- signal line & histogram ---
+        df[f"adosc{s}_signal"] = adosc_series.rolling(window=f).mean()
+        df[f"adosc{s}_signal_slope"] = df[f"adosc{s}_signal"].diff()
+        df[f"adosc{s}_hist"] = adosc_series - df[f"adosc{s}_signal"]
+        df[f"adosc{s}_hist_slope"] = df[f"adosc{s}_hist"].diff()
+        df[f"adosc{s}_hist_acceleration"] = df[f"adosc{s}_hist_slope"].diff()
+        df[f"adosc{s}_hist_gt_0"] = df[f"adosc{s}_hist"] > 0
+        df[f"adosc{s}_hist_lt_0"] = df[f"adosc{s}_hist"] < 0
+        df[f"adosc{s}_hist_abs"] = df[f"adosc{s}_hist"].abs()
+
+        # --- zero-line crossover signals ---
+        prev_adosc = adosc_series.shift(1)
+        df[f"adosc{s}_cross_above"] = (adosc_series > 0) & (prev_adosc <= 0)
+        df[f"adosc{s}_cross_below"] = (adosc_series < 0) & (prev_adosc >= 0)
+
+        # --- combined conviction score ---
+        df[f"adosc{s}_strength"] = df[f"adosc{s}_abs"] * df[f"adosc{s}_hist_abs"]
+
+    return df
 
 
 def add_one_for_all_ta(df: pd.DataFrame) -> pd.DataFrame:
@@ -2596,6 +2698,9 @@ def add_one_for_all_ta(df: pd.DataFrame) -> pd.DataFrame:
     new_df = add_ad(
         new_df,
         n=[5, 10, 15, 20],
+    )
+    new_df = add_adosc(
+        new_df,
     )
 
     return new_df
@@ -2728,7 +2833,7 @@ def main():
 
     plot_with_indicators(
         df,
-        indicators=["*willr*"],
+        indicators=["*ad*"],
         price_column_name=f"close",
     )
 
