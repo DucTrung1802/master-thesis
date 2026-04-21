@@ -3328,6 +3328,91 @@ def add_medprice(
     return df
 
 
+def add_typprice(
+    df: pd.DataFrame,
+    n: list[int] = None,
+    high_col: str = "high",
+    low_col: str = "low",
+    close_col: str = "close",
+) -> pd.DataFrame:
+    """
+    Add Typical Price (TYPPRICE) and derived features.
+
+    TYPPRICE = (high + low + close) / 3
+
+    Base columns (computed once)
+    ----------------------------
+    typprice                    : HLC average price
+    typprice_slope              : first difference (momentum)
+    typprice_acceleration       : second difference
+    typprice_gt_close           : typprice > close
+    typprice_lt_close           : typprice < close
+    typprice_direction          : +1 if rising, -1 otherwise
+
+    Per smoothing window (e.g. n=10 → suffix '_10')
+    ------------------------------------------------
+    typprice_signal_{n}         : EMA of typprice
+    typprice_signal_{n}_slope   : first difference of signal
+    typprice_hist_{n}           : typprice - signal
+    typprice_hist_{n}_slope     : first difference of histogram
+    typprice_hist_{n}_acceleration : second difference
+    typprice_hist_{n}_gt_0      : typprice above signal
+    typprice_hist_{n}_lt_0      : typprice below signal
+    typprice_hist_{n}_abs       : |histogram|
+    typprice_{n}_strength       : |slope| × hist_abs
+    """
+
+    for col in (high_col, low_col, close_col):
+        validate_column(df, col)
+
+    if n is None:
+        n = [10]
+
+    df = df.copy()
+
+    high = df[high_col].to_numpy(dtype=float)
+    low = df[low_col].to_numpy(dtype=float)
+    close = df[close_col].to_numpy(dtype=float)
+
+    # --- core TYPPRICE ---
+    df["typprice"] = talib.TYPPRICE(high, low, close)
+
+    # --- base derivatives ---
+    df["typprice_slope"] = df["typprice"].diff()
+    df["typprice_acceleration"] = df["typprice_slope"].diff()
+    df["typprice_gt_close"] = df["typprice"] > df["close"]
+    df["typprice_lt_close"] = df["typprice"] < df["close"]
+    df["typprice_direction"] = df["typprice_slope"].apply(
+        lambda x: 1 if x > 0 else -1
+    )
+
+    # --- per smoothing window ---
+    for period in n:
+        s = f"_{period}"
+
+        df[f"typprice_signal{s}"] = (
+            df["typprice"].ewm(span=period, adjust=False).mean()
+        )
+        df[f"typprice_signal{s}_slope"] = df[f"typprice_signal{s}"].diff()
+
+        df[f"typprice_hist{s}"] = (
+            df["typprice"] - df[f"typprice_signal{s}"]
+        )
+        df[f"typprice_hist{s}_slope"] = df[f"typprice_hist{s}"].diff()
+        df[f"typprice_hist{s}_acceleration"] = (
+            df[f"typprice_hist{s}_slope"].diff()
+        )
+
+        df[f"typprice_hist{s}_gt_0"] = df[f"typprice_hist{s}"] > 0
+        df[f"typprice_hist{s}_lt_0"] = df[f"typprice_hist{s}"] < 0
+        df[f"typprice_hist{s}_abs"] = df[f"typprice_hist{s}"].abs()
+
+        df[f"typprice{s}_strength"] = (
+            df["typprice_slope"].abs() * df[f"typprice_hist{s}_abs"]
+        )
+
+    return df
+
 # endregion PRICE TRANSFORM
 
 
@@ -3477,7 +3562,11 @@ def add_one_for_all_ta(df: pd.DataFrame) -> pd.DataFrame:
     #     new_df,
     #     n=[5, 10, 15, 20],
     # )
-    new_df = add_medprice(
+    # new_df = add_medprice(
+    #     new_df,
+    #     n=[5, 10, 15, 20],
+    # )
+    new_df = add_typprice(
         new_df,
         n=[5, 10, 15, 20],
     )
@@ -3612,7 +3701,7 @@ def main():
 
     plot_with_indicators(
         df,
-        indicators=["*medprice*"],
+        indicators=["*typprice*"],
         price_column_name=f"close",
     )
 
