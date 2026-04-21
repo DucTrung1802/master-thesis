@@ -1883,6 +1883,86 @@ def add_roc(
     return df
 
 
+def add_rsi(
+    df: pd.DataFrame,
+    n: list[int] = None,
+    column_name: str = "close",
+) -> pd.DataFrame:
+    """
+    Add Relative Strength Index (RSI) columns for each period in n.
+
+    RSI = 100 - (100 / (1 + RS)) where RS = avg up / avg down over n periods.
+    Range is 0 to 100. Neutral midpoint is 50.
+
+    Columns added (per period, e.g. n=14 → suffix '_14')
+    -------------
+    rsi_{n}                     : raw RSI value (0 to 100)
+    rsi_{n}_slope               : first difference of RSI (momentum)
+    rsi_{n}_acceleration        : second difference of RSI
+    rsi_{n}_abs                 : |RSI - 50| (deviation from neutral midpoint)
+    rsi_{n}_direction           : +1 if RSI > 50, -1 otherwise
+    rsi_{n}_gt_70               : RSI > 70 (overbought)
+    rsi_{n}_lt_30               : RSI < 30 (oversold)
+    rsi_{n}_gt_50               : RSI > 50 (bullish bias)
+    rsi_{n}_lt_50               : RSI < 50 (bearish bias)
+    rsi_{n}_extreme             : +1 if RSI > 70, -1 if RSI < 30, 0 if between
+    rsi_{n}_signal              : SMA of RSI over same period (smoothed signal line)
+    rsi_{n}_signal_slope        : first difference of signal line
+    rsi_{n}_hist                : RSI - signal (raw vs smoothed divergence)
+    rsi_{n}_hist_slope          : first difference of histogram
+    rsi_{n}_hist_acceleration   : second difference of histogram
+    rsi_{n}_hist_gt_0           : histogram > 0 (momentum turning bullish)
+    rsi_{n}_hist_lt_0           : histogram < 0 (momentum turning bearish)
+    rsi_{n}_hist_abs            : |histogram| (divergence magnitude)
+    rsi_{n}_strength            : rsi_abs × hist_abs (deviation × divergence score)
+    """
+
+    validate_column(df, column_name)
+
+    if n is None:
+        n = [14]
+
+    df = df.copy()
+
+    source = df[column_name].to_numpy(dtype=float)
+
+    for period in n:
+        s = f"_{period}"
+
+        # --- core indicator ---
+        df[f"rsi{s}"] = talib.RSI(source, timeperiod=period)
+
+        # --- derivatives ---
+        df[f"rsi{s}_slope"] = df[f"rsi{s}"].diff()
+        df[f"rsi{s}_acceleration"] = df[f"rsi{s}_slope"].diff()
+        df[f"rsi{s}_abs"] = (df[f"rsi{s}"] - 50).abs()  # deviation from neutral
+        df[f"rsi{s}_direction"] = df[f"rsi{s}"].apply(lambda x: 1 if x > 50 else -1)
+
+        # --- threshold flags ---
+        df[f"rsi{s}_gt_70"] = df[f"rsi{s}"] > 70
+        df[f"rsi{s}_lt_30"] = df[f"rsi{s}"] < 30
+        df[f"rsi{s}_gt_50"] = df[f"rsi{s}"] > 50
+        df[f"rsi{s}_lt_50"] = df[f"rsi{s}"] < 50
+        df[f"rsi{s}_extreme"] = df[f"rsi{s}"].apply(
+            lambda x: 1 if x > 70 else (-1 if x < 30 else 0)
+        )
+
+        # --- signal line & histogram ---
+        df[f"rsi{s}_signal"] = df[f"rsi{s}"].rolling(window=period).mean()
+        df[f"rsi{s}_signal_slope"] = df[f"rsi{s}_signal"].diff()
+        df[f"rsi{s}_hist"] = df[f"rsi{s}"] - df[f"rsi{s}_signal"]
+        df[f"rsi{s}_hist_slope"] = df[f"rsi{s}_hist"].diff()
+        df[f"rsi{s}_hist_acceleration"] = df[f"rsi{s}_hist_slope"].diff()
+        df[f"rsi{s}_hist_gt_0"] = df[f"rsi{s}_hist"] > 0
+        df[f"rsi{s}_hist_lt_0"] = df[f"rsi{s}_hist"] < 0
+        df[f"rsi{s}_hist_abs"] = df[f"rsi{s}_hist"].abs()
+
+        # --- combined conviction score ---
+        df[f"rsi{s}_strength"] = df[f"rsi{s}_abs"] * df[f"rsi{s}_hist_abs"]
+
+    return df
+
+
 # endregion MOMENTUM INDICATORS
 
 
@@ -3350,6 +3430,10 @@ def add_one_for_all_ta(df: pd.DataFrame) -> pd.DataFrame:
     )
     new_df = add_ppo(new_df)
     new_df = add_roc(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_rsi(
         new_df,
         n=[5, 10, 15, 20],
     )
