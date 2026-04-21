@@ -2964,6 +2964,111 @@ def add_ht_phasor(
     return df
 
 
+def add_ht_sine(
+    df: pd.DataFrame,
+    n: list[int] = None,
+    close_col: str = "close",
+) -> pd.DataFrame:
+    """
+    Add Hilbert Transform - SineWave (HT_SINE) features.
+
+    HT_SINE returns two series:
+        - sine      : sine of dominant cycle phase
+        - leadsine  : leading sine (phase advanced ~45°)
+
+    These are powerful for cycle turning points:
+        - sine crossing leadsine → potential reversal signals
+
+    Base columns (computed once)
+    ----------------------------
+    ht_sine                      : sine component
+    ht_leadsine                  : leading sine component
+    ht_sine_diff                 : sine - leadsine (core signal)
+    ht_sine_slope                : first difference of sine
+    ht_sine_acceleration         : second difference
+    ht_sine_direction            : +1 if sine rising, -1 otherwise
+    ht_sine_cross_above          : sine crossed above leadsine (bullish)
+    ht_sine_cross_below          : sine crossed below leadsine (bearish)
+    ht_sine_gt_0                 : sine > 0 (cycle upper half)
+    ht_sine_lt_0                 : sine < 0 (cycle lower half)
+    ht_sine_valid                : finite values
+
+    Per smoothing window (e.g. n=10 → suffix '_10')
+    ------------------------------------------------
+    ht_sine_signal_{n}           : EMA of sine
+    ht_sine_signal_{n}_slope     : first difference of signal
+    ht_sine_hist_{n}             : sine - signal
+    ht_sine_hist_{n}_slope       : first difference of histogram
+    ht_sine_hist_{n}_acceleration: second difference
+    ht_sine_hist_{n}_gt_0        : sine above signal
+    ht_sine_hist_{n}_lt_0        : sine below signal
+    ht_sine_hist_{n}_abs         : |histogram|
+    ht_sine_{n}_strength         : |slope| × hist_abs
+    """
+
+    validate_column(df, close_col)
+
+    if n is None:
+        n = [10]
+
+    df = df.copy()
+    close = df[close_col].to_numpy(dtype=float)
+
+    # --- core sinewave ---
+    sine, leadsine = talib.HT_SINE(close)
+
+    df["ht_sine"] = sine
+    df["ht_leadsine"] = leadsine
+
+    # --- core relationships ---
+    df["ht_sine_diff"] = df["ht_sine"] - df["ht_leadsine"]
+
+    # derivatives
+    df["ht_sine_slope"] = df["ht_sine"].diff()
+    df["ht_sine_acceleration"] = df["ht_sine_slope"].diff()
+    df["ht_sine_direction"] = df["ht_sine_slope"].apply(lambda x: 1 if x > 0 else -1)
+
+    # regime / position
+    df["ht_sine_gt_0"] = df["ht_sine"] > 0
+    df["ht_sine_lt_0"] = df["ht_sine"] < 0
+
+    # --- crossover signals ---
+    prev_sine = df["ht_sine"].shift(1)
+    prev_leadsine = df["ht_leadsine"].shift(1)
+
+    df["ht_sine_cross_above"] = (df["ht_sine"] > df["ht_leadsine"]) & (
+        prev_sine <= prev_leadsine
+    )
+
+    df["ht_sine_cross_below"] = (df["ht_sine"] < df["ht_leadsine"]) & (
+        prev_sine >= prev_leadsine
+    )
+
+    # validity (HT unstable early)
+    df["ht_sine_valid"] = np.isfinite(df["ht_sine"]) & np.isfinite(df["ht_leadsine"])
+
+    # --- per smoothing window ---
+    for period in n:
+        s = f"_{period}"
+
+        df[f"ht_sine_signal{s}"] = df["ht_sine"].ewm(span=period, adjust=False).mean()
+        df[f"ht_sine_signal{s}_slope"] = df[f"ht_sine_signal{s}"].diff()
+
+        df[f"ht_sine_hist{s}"] = df["ht_sine"] - df[f"ht_sine_signal{s}"]
+        df[f"ht_sine_hist{s}_slope"] = df[f"ht_sine_hist{s}"].diff()
+        df[f"ht_sine_hist{s}_acceleration"] = df[f"ht_sine_hist{s}_slope"].diff()
+
+        df[f"ht_sine_hist{s}_gt_0"] = df[f"ht_sine_hist{s}"] > 0
+        df[f"ht_sine_hist{s}_lt_0"] = df[f"ht_sine_hist{s}"] < 0
+        df[f"ht_sine_hist{s}_abs"] = df[f"ht_sine_hist{s}"].abs()
+
+        df[f"ht_sine{s}_strength"] = (
+            df["ht_sine_slope"].abs() * df[f"ht_sine_hist{s}_abs"]
+        )
+
+    return df
+
+
 def add_one_for_all_ta(df: pd.DataFrame) -> pd.DataFrame:
     new_df = df.copy()
 
@@ -3094,10 +3199,14 @@ def add_one_for_all_ta(df: pd.DataFrame) -> pd.DataFrame:
     #     new_df,
     #     n=[5, 10, 15, 20],
     # )
-    new_df = add_ht_phasor(
-        new_df,
-        n=[5, 10, 15, 20],
-    )
+    # new_df = add_ht_phasor(
+    #     new_df,
+    #     n=[5, 10, 15, 20],
+    # )
+    # new_df = add_ht_sine(
+    #     new_df,
+    #     n=[5, 10, 15, 20],
+    # )
 
     return new_df
 
@@ -3229,7 +3338,7 @@ def main():
 
     plot_with_indicators(
         df,
-        indicators=["*ht_phasor*"],
+        indicators=["*ht_sine*"],
         price_column_name=f"close",
     )
 
