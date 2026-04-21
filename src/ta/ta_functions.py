@@ -3684,6 +3684,90 @@ def add_natr(
     return df
 
 
+def add_trange(
+    df: pd.DataFrame,
+    n: list[int] = None,
+    high_col: str = "high",
+    low_col: str = "low",
+    close_col: str = "close",
+) -> pd.DataFrame:
+    """
+    Add True Range (TRANGE) and derived features.
+
+    TRANGE = max(
+        high - low,
+        abs(high - prev_close),
+        abs(low - prev_close)
+    )
+
+    This is the raw volatility component used in ATR.
+
+    Base columns (computed once)
+    ----------------------------
+    trange                     : true range
+    trange_slope               : first difference (volatility change)
+    trange_acceleration        : second difference
+    trange_gt_prev             : volatility increasing
+    trange_lt_prev             : volatility decreasing
+    trange_direction           : +1 if rising, -1 otherwise
+    trange_normalized          : trange / close (relative volatility)
+
+    Per smoothing window (e.g. n=14 → suffix '_14')
+    ------------------------------------------------
+    trange_signal_{n}          : EMA of trange
+    trange_signal_{n}_slope    : first difference of signal
+    trange_hist_{n}            : trange - signal
+    trange_hist_{n}_slope      : first difference of histogram
+    trange_hist_{n}_acceleration : second difference
+    trange_hist_{n}_gt_0       : trange above signal
+    trange_hist_{n}_lt_0       : trange below signal
+    trange_hist_{n}_abs        : |histogram|
+    trange_{n}_strength        : |slope| × hist_abs
+    """
+
+    for col in (high_col, low_col, close_col):
+        validate_column(df, col)
+
+    if n is None:
+        n = [14]
+
+    df = df.copy()
+
+    high = df[high_col].to_numpy(dtype=float)
+    low = df[low_col].to_numpy(dtype=float)
+    close = df[close_col].to_numpy(dtype=float)
+
+    # --- core TRANGE ---
+    df["trange"] = talib.TRANGE(high, low, close)
+
+    # --- base derivatives ---
+    df["trange_slope"] = df["trange"].diff()
+    df["trange_acceleration"] = df["trange_slope"].diff()
+    df["trange_gt_prev"] = df["trange"] > df["trange"].shift(1)
+    df["trange_lt_prev"] = df["trange"] < df["trange"].shift(1)
+    df["trange_direction"] = df["trange_slope"].apply(lambda x: 1 if x > 0 else -1)
+    df["trange_normalized"] = df["trange"] / df["close"]
+
+    # --- per smoothing window ---
+    for period in n:
+        s = f"_{period}"
+
+        df[f"trange_signal{s}"] = df["trange"].ewm(span=period, adjust=False).mean()
+        df[f"trange_signal{s}_slope"] = df[f"trange_signal{s}"].diff()
+
+        df[f"trange_hist{s}"] = df["trange"] - df[f"trange_signal{s}"]
+        df[f"trange_hist{s}_slope"] = df[f"trange_hist{s}"].diff()
+        df[f"trange_hist{s}_acceleration"] = df[f"trange_hist{s}_slope"].diff()
+
+        df[f"trange_hist{s}_gt_0"] = df[f"trange_hist{s}"] > 0
+        df[f"trange_hist{s}_lt_0"] = df[f"trange_hist{s}"] < 0
+        df[f"trange_hist{s}_abs"] = df[f"trange_hist{s}"].abs()
+
+        df[f"trange{s}_strength"] = df["trange_slope"].abs() * df[f"trange_hist{s}_abs"]
+
+    return df
+
+
 # endregion VOLATILITY INDICATORS
 
 
@@ -3853,7 +3937,11 @@ def add_one_for_all_ta(df: pd.DataFrame) -> pd.DataFrame:
     #     new_df,
     #     n=[5, 10, 15, 20],
     # )
-    new_df = add_natr(
+    # new_df = add_natr(
+    #     new_df,
+    #     n=[5, 10, 15, 20],
+    # )
+    new_df = add_trange(
         new_df,
         n=[5, 10, 15, 20],
     )
@@ -3988,7 +4076,7 @@ def main():
 
     plot_with_indicators(
         df,
-        indicators=["*natr*"],
+        indicators=["*trange*"],
         price_column_name=f"close",
     )
 
