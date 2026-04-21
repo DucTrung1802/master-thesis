@@ -3167,6 +3167,99 @@ def add_ht_trendmode(
     return df
 
 
+# endregion CYCLE INDICATORS
+
+
+# region PRICE TRANSFORM
+def add_avgprice(
+    df: pd.DataFrame,
+    n: list[int] = None,
+    open_col: str = "open",
+    high_col: str = "high",
+    low_col: str = "low",
+    close_col: str = "close",
+) -> pd.DataFrame:
+    """
+    Add Average Price (AVGPRICE) and derived features.
+
+    AVGPRICE = (open + high + low + close) / 4
+
+    Base columns (computed once)
+    ----------------------------
+    avgprice                    : OHLC average price
+    avgprice_slope              : first difference (momentum)
+    avgprice_acceleration       : second difference
+    avgprice_gt_close           : avgprice > close
+    avgprice_lt_close           : avgprice < close
+    avgprice_direction          : +1 if rising, -1 otherwise
+
+    Per smoothing window (e.g. n=10 → suffix '_10')
+    ------------------------------------------------
+    avgprice_signal_{n}         : EMA of avgprice
+    avgprice_signal_{n}_slope   : first difference of signal
+    avgprice_hist_{n}           : avgprice - signal
+    avgprice_hist_{n}_slope     : first difference of histogram
+    avgprice_hist_{n}_acceleration : second difference
+    avgprice_hist_{n}_gt_0      : avgprice above signal
+    avgprice_hist_{n}_lt_0      : avgprice below signal
+    avgprice_hist_{n}_abs       : |histogram|
+    avgprice_{n}_strength       : |slope| × hist_abs
+    """
+
+    for col in (open_col, high_col, low_col, close_col):
+        validate_column(df, col)
+
+    if n is None:
+        n = [10]
+
+    df = df.copy()
+
+    open_ = df[open_col].to_numpy(dtype=float)
+    high = df[high_col].to_numpy(dtype=float)
+    low = df[low_col].to_numpy(dtype=float)
+    close = df[close_col].to_numpy(dtype=float)
+
+    # --- core AVGPRICE ---
+    df["avgprice"] = talib.AVGPRICE(open_, high, low, close)
+
+    # --- base derivatives ---
+    df["avgprice_slope"] = df["avgprice"].diff()
+    df["avgprice_acceleration"] = df["avgprice_slope"].diff()
+    df["avgprice_gt_close"] = df["avgprice"] > df["close"]
+    df["avgprice_lt_close"] = df["avgprice"] < df["close"]
+    df["avgprice_direction"] = df["avgprice_slope"].apply(
+        lambda x: 1 if x > 0 else -1
+    )
+
+    # --- per smoothing window ---
+    for period in n:
+        s = f"_{period}"
+
+        df[f"avgprice_signal{s}"] = (
+            df["avgprice"].ewm(span=period, adjust=False).mean()
+        )
+        df[f"avgprice_signal{s}_slope"] = df[f"avgprice_signal{s}"].diff()
+
+        df[f"avgprice_hist{s}"] = (
+            df["avgprice"] - df[f"avgprice_signal{s}"]
+        )
+        df[f"avgprice_hist{s}_slope"] = df[f"avgprice_hist{s}"].diff()
+        df[f"avgprice_hist{s}_acceleration"] = (
+            df[f"avgprice_hist{s}_slope"].diff()
+        )
+
+        df[f"avgprice_hist{s}_gt_0"] = df[f"avgprice_hist{s}"] > 0
+        df[f"avgprice_hist{s}_lt_0"] = df[f"avgprice_hist{s}"] < 0
+        df[f"avgprice_hist{s}_abs"] = df[f"avgprice_hist{s}"].abs()
+
+        df[f"avgprice{s}_strength"] = (
+            df["avgprice_slope"].abs() * df[f"avgprice_hist{s}_abs"]
+        )
+
+    return df
+
+# endregion PRICE TRANSFORM
+
 def add_one_for_all_ta(df: pd.DataFrame) -> pd.DataFrame:
     new_df = df.copy()
 
@@ -3305,7 +3398,11 @@ def add_one_for_all_ta(df: pd.DataFrame) -> pd.DataFrame:
     #     new_df,
     #     n=[5, 10, 15, 20],
     # )
-    new_df = add_ht_trendmode(
+    # new_df = add_ht_trendmode(
+    #     new_df,
+    #     n=[5, 10, 15, 20],
+    # )
+    new_df = add_avgprice(
         new_df,
         n=[5, 10, 15, 20],
     )
@@ -3440,7 +3537,7 @@ def main():
 
     plot_with_indicators(
         df,
-        indicators=["*ht_trendmode*"],
+        indicators=["*avgprice*"],
         price_column_name=f"close",
     )
 
