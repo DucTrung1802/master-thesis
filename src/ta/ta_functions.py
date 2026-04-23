@@ -3774,177 +3774,177 @@ def add_trange(
 def add_one_for_all_ta(df: pd.DataFrame) -> pd.DataFrame:
     new_df = df.copy()
 
-    # # OVERLAP STUDIES
-    # new_df = add_bbands(
-    #     new_df,
-    #     n=[5, 10, 15, 20],
-    # )
-    # new_df = add_dema(
-    #     new_df,
-    #     n=[5, 10, 15, 20],
-    # )
-    # new_df = add_ema(
-    #     new_df,
-    #     n=[5, 10, 15, 20],
-    # )
-    # new_df = add_kama(
-    #     new_df,
-    #     n=[5, 10, 15, 20],
-    # )
-    # new_df = add_midpoint(
-    #     new_df,
-    #     n=[5, 10, 15, 20],
-    # )
-    # new_df = add_midprice(
-    #     new_df,
-    #     n=[5, 10, 15, 20],
-    # )
-    # new_df = add_sar(
-    #     new_df,
-    # )
-    # new_df = add_sma(
-    #     new_df,
-    #     n=[5, 10, 15, 20],
-    # )
-    # new_df = add_t3(
-    #     new_df,
-    #     n=[5, 10, 15, 20],
-    # )
-    # new_df = add_tema(
-    #     new_df,
-    #     n=[5, 10, 15, 20],
-    # )
-    # new_df = add_trima(
-    #     new_df,
-    #     n=[5, 10, 15, 20],
-    # )
-    # new_df = add_wma(
-    #     new_df,
-    #     n=[5, 10, 15, 20],
-    # )
+    # OVERLAP STUDIES
+    new_df = add_bbands(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_dema(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_ema(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_kama(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_midpoint(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_midprice(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_sar(
+        new_df,
+    )
+    new_df = add_sma(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_t3(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_tema(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_trima(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_wma(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
 
-    # # MOMENTUM INDICATORS
-    # new_df = add_adx(
-    #     new_df,
-    #     n=[5, 10, 15, 20],
-    # )
-    # new_df = add_aroon(
-    #     new_df,
-    #     n=[5, 10, 15, 20],
-    # )
-    # new_df = add_bop(
-    #     new_df,
-    #     n=[5, 10, 15, 20],
-    # )
-    # new_df = add_cci(
-    #     new_df,
-    #     n=[5, 10, 15, 20],
-    # )
-    # new_df = add_cmo(
-    #     new_df,
-    #     n=[5, 10, 15, 20],
-    # )
-    # new_df = add_macd(new_df)
-    # new_df = add_mfi(
-    #     new_df,
-    #     n=[5, 10, 15, 20],
-    # )
-    # new_df = add_mom(
-    #     new_df,
-    #     n=[5, 10, 15, 20],
-    # )
-    # new_df = add_ppo(new_df)
-    # new_df = add_roc(
-    #     new_df,
-    #     n=[5, 10, 15, 20],
-    # )
-    # new_df = add_rsi(
-    #     new_df,
-    #     n=[5, 10, 15, 20],
-    # )
-    # new_df = add_stoch(new_df)
-    # new_df = add_stoch_rsi(
-    #     new_df,
-    #     n=[5, 10, 15, 20],
-    # )
-    # new_df = add_trix(
-    #     new_df,
-    #     n=[5, 10, 15, 20],
-    # )
-    # new_df = add_ultosc(
-    #     new_df,
-    # )
-    # new_df = add_willr(
-    #     new_df,
-    #     n=[5, 10, 15, 20],
-    # )
+    # MOMENTUM INDICATORS
+    new_df = add_adx(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_aroon(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_bop(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_cci(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_cmo(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_macd(new_df)
+    new_df = add_mfi(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_mom(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_ppo(new_df)
+    new_df = add_roc(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_rsi(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_stoch(new_df)
+    new_df = add_stoch_rsi(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_trix(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_ultosc(
+        new_df,
+    )
+    new_df = add_willr(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
 
-    # # VOLUME INDICATORS
-    # new_df = add_ad(
-    #     new_df,
-    #     n=[5, 10, 15, 20],
-    # )
-    # new_df = add_adosc(
-    #     new_df,
-    # )
-    # new_df = add_obv(
-    #     new_df,
-    #     n=[5, 10, 15, 20],
-    # )
+    # VOLUME INDICATORS
+    new_df = add_ad(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_adosc(
+        new_df,
+    )
+    new_df = add_obv(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
 
-    # # CYCLE INDICATORS
-    # new_df = add_ht_dcperiod(
-    #     new_df,
-    #     n=[5, 10, 15, 20],
-    # )
-    # new_df = add_ht_dcphase(
-    #     new_df,
-    #     n=[5, 10, 15, 20],
-    # )
-    # new_df = add_ht_phasor(
-    #     new_df,
-    #     n=[5, 10, 15, 20],
-    # )
-    # new_df = add_ht_sine(
-    #     new_df,
-    #     n=[5, 10, 15, 20],
-    # )
-    # new_df = add_ht_trendmode(
-    #     new_df,
-    #     n=[5, 10, 15, 20],
-    # )
+    # CYCLE INDICATORS
+    new_df = add_ht_dcperiod(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_ht_dcphase(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_ht_phasor(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_ht_sine(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_ht_trendmode(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
 
-    # # PRICE TRANSFORM
-    # new_df = add_avgprice(
-    #     new_df,
-    #     n=[5, 10, 15, 20],
-    # )
-    # new_df = add_medprice(
-    #     new_df,
-    #     n=[5, 10, 15, 20],
-    # )
-    # new_df = add_typprice(
-    #     new_df,
-    #     n=[5, 10, 15, 20],
-    # )
-    # new_df = add_wclprice(
-    #     new_df,
-    #     n=[5, 10, 15, 20],
-    # )
+    # PRICE TRANSFORM
+    new_df = add_avgprice(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_medprice(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_typprice(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_wclprice(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
 
-    # # VOLATILITY INDICATORS
-    # new_df = add_atr(
-    #     new_df,
-    #     n=[5, 10, 15, 20],
-    # )
-    # new_df = add_natr(
-    #     new_df,
-    #     n=[5, 10, 15, 20],
-    # )
-    # new_df = add_trange(
-    #     new_df,
-    #     n=[5, 10, 15, 20],
-    # )
+    # VOLATILITY INDICATORS
+    new_df = add_atr(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_natr(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_trange(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
 
     return new_df
 
@@ -4068,17 +4068,19 @@ def main():
         df["close"].shift(-FORECAST_HORIZON) - df["close"]
     )
 
+    df = add_one_for_all_ta(df)
+
+    print(len(list(df.columns)))
+
     # df[f"log_return_{FORECAST_HORIZON}"] = np.log(
     #     df["close"].shift(-FORECAST_HORIZON) / df["close"]
     # )
 
-    df = add_one_for_all_ta(df)
-
-    plot_with_indicators(
-        df,
-        indicators=["*trange*"],
-        price_column_name=f"close",
-    )
+    # plot_with_indicators(
+    #     df,
+    #     indicators=["*trange*"],
+    #     price_column_name=f"close",
+    # )
 
     # plot_with_indicators(
     #     df,
