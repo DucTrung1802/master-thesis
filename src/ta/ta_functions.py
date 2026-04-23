@@ -68,78 +68,14 @@ def add_bbands(
     ma_type: int = 0,
     column_name: str = "close",
     default_bb_periods: list[int] = None,
-    distance_mode: str = "pct",  # "abs" or "pct"
-    slope_mode: str = "diff",  # "diff" or "pct"
+    distance_mode: str = "pct",
+    slope_mode: str = "diff",
 ) -> pd.DataFrame:
-    """
-    Add Bollinger Bands (BB) along with derived features to a DataFrame.
-
-    Moving average types (TA-Lib MA_Type):
-        0 = SMA  1 = EMA  2 = WMA  3 = DEMA  4 = TEMA
-        5 = TRIMA  6 = KAMA  7 = MAMA  8 = T3
-
-    Columns added (per period, e.g. n=20 → base = '{col}_bb_20')
-    -------------------------------------------------------------
-    Bands:
-        {base}_upper                : upper band
-        {base}_middle               : middle band (MA)
-        {base}_lower                : lower band
-
-    Distance (mode = 'abs' → price−band, 'pct' → (price−band)/band):
-        {base}_dist_upper
-        {base}_dist_middle
-        {base}_dist_lower
-
-    Slope (mode = 'diff' → .diff(), 'pct' → .pct_change()):
-        {base}_slope_upper
-        {base}_slope_middle
-        {base}_slope_lower
-        {base}_slope_upper_acceleration     : second diff of upper slope
-        {base}_slope_middle_acceleration    : second diff of middle slope
-        {base}_slope_lower_acceleration     : second diff of lower slope
-
-    Bandwidth & squeeze:
-        {base}_bandwidth            : (upper − lower) / middle  (volatility proxy)
-        {base}_bandwidth_slope      : first difference of bandwidth
-        {base}_bandwidth_acceleration : second difference of bandwidth
-
-    %B (position within bands):
-        {base}_pct_b                : (price − lower) / (upper − lower), 0=lower, 1=upper
-        {base}_pct_b_slope          : first difference of %B
-        {base}_pct_b_gt_1           : price above upper band
-        {base}_pct_b_lt_0           : price below lower band
-
-    Position flags:
-        {base}_above_upper          : price > upper band
-        {base}_below_lower          : price < lower band
-        {base}_inside_bands         : price between upper and lower bands
-        {base}_position             : +1 above upper, -1 below lower, 0 inside
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-    n : int or list[int], optional
-        BB period(s). If None, defaults to default_bb_periods.
-    k : float
-        Std dev multiplier for upper/lower bands (default 2.0).
-    ma_type : int
-        TA-Lib MA type (default 0 = SMA).
-    column_name : str
-        Source column (default 'close').
-    default_bb_periods : list[int]
-        Fallback periods when n is None (default [20]).
-    distance_mode : str
-        'abs' or 'pct' distance from price to bands (default 'pct').
-    slope_mode : str
-        'diff' or 'pct' slope of bands (default 'diff').
-    """
-
     validate_column(df, column_name)
     df = df.copy()
 
     if default_bb_periods is None:
         default_bb_periods = [20]
-
     if n is None:
         periods = default_bb_periods
     elif isinstance(n, int):
@@ -150,77 +86,64 @@ def add_bbands(
     source = df[column_name].to_numpy(dtype=float)
     price = df[column_name]
 
+    # ── collect ALL new columns here, concat once at the end ──────────────
+    new_cols = {}
+
     for period in periods:
         upper, middle, lower = talib.BBANDS(
-            source,
-            timeperiod=period,
-            nbdevup=k,
-            nbdevdn=k,
-            matype=ma_type,
+            source, timeperiod=period, nbdevup=k, nbdevdn=k, matype=ma_type,
         )
+        upper  = pd.Series(upper,  index=df.index)
+        middle = pd.Series(middle, index=df.index)
+        lower  = pd.Series(lower,  index=df.index)
 
         base = f"{column_name}_bb_{period}"
 
         # --- bands ---
-        df[f"{base}_upper"] = upper
-        df[f"{base}_middle"] = middle
-        df[f"{base}_lower"] = lower
+        new_cols[f"{base}_upper"]  = upper
+        new_cols[f"{base}_middle"] = middle
+        new_cols[f"{base}_lower"]  = lower
 
         # --- distance ---
         if distance_mode == "abs":
-            df[f"{base}_dist_upper"] = price - df[f"{base}_upper"]
-            df[f"{base}_dist_middle"] = price - df[f"{base}_middle"]
-            df[f"{base}_dist_lower"] = price - df[f"{base}_lower"]
+            new_cols[f"{base}_dist_upper"]  = price - upper
+            new_cols[f"{base}_dist_middle"] = price - middle
+            new_cols[f"{base}_dist_lower"]  = price - lower
         else:  # pct
-            df[f"{base}_dist_upper"] = (price - df[f"{base}_upper"]) / df[
-                f"{base}_upper"
-            ]
-            df[f"{base}_dist_middle"] = (price - df[f"{base}_middle"]) / df[
-                f"{base}_middle"
-            ]
-            df[f"{base}_dist_lower"] = (price - df[f"{base}_lower"]) / df[
-                f"{base}_lower"
-            ]
+            new_cols[f"{base}_dist_upper"]  = (price - upper)  / upper
+            new_cols[f"{base}_dist_middle"] = (price - middle) / middle
+            new_cols[f"{base}_dist_lower"]  = (price - lower)  / lower
 
         # --- slope + acceleration ---
-        for band in ("upper", "middle", "lower"):
-            band_col = f"{base}_{band}"
-            if slope_mode == "pct":
-                df[f"{base}_slope_{band}"] = df[band_col].pct_change()
-            else:
-                df[f"{base}_slope_{band}"] = df[band_col].diff()
-            df[f"{base}_slope_{band}_acceleration"] = df[f"{base}_slope_{band}"].diff()
+        for band_name, band_series in [("upper", upper), ("middle", middle), ("lower", lower)]:
+            slope = band_series.pct_change() if slope_mode == "pct" else band_series.diff()
+            new_cols[f"{base}_slope_{band_name}"]              = slope
+            new_cols[f"{base}_slope_{band_name}_acceleration"] = slope.diff()
 
         # --- bandwidth ---
-        df[f"{base}_bandwidth"] = (df[f"{base}_upper"] - df[f"{base}_lower"]) / df[
-            f"{base}_middle"
-        ]
-        df[f"{base}_bandwidth_slope"] = df[f"{base}_bandwidth"].diff()
-        df[f"{base}_bandwidth_acceleration"] = df[f"{base}_bandwidth_slope"].diff()
+        bandwidth = (upper - lower) / middle
+        new_cols[f"{base}_bandwidth"]              = bandwidth
+        new_cols[f"{base}_bandwidth_slope"]        = bandwidth.diff()
+        new_cols[f"{base}_bandwidth_acceleration"] = bandwidth.diff().diff()
 
         # --- %B ---
-        band_range = df[f"{base}_upper"] - df[f"{base}_lower"]
-        df[f"{base}_pct_b"] = (price - df[f"{base}_lower"]) / band_range.replace(
-            0, float("nan")
-        )
-        df[f"{base}_pct_b_slope"] = df[f"{base}_pct_b"].diff()
-        df[f"{base}_pct_b_gt_1"] = df[f"{base}_pct_b"] > 1
-        df[f"{base}_pct_b_lt_0"] = df[f"{base}_pct_b"] < 0
+        band_range = (upper - lower).replace(0, float("nan"))
+        pct_b = (price - lower) / band_range
+        new_cols[f"{base}_pct_b"]       = pct_b
+        new_cols[f"{base}_pct_b_slope"] = pct_b.diff()
+        new_cols[f"{base}_pct_b_gt_1"]  = pct_b > 1
+        new_cols[f"{base}_pct_b_lt_0"]  = pct_b < 0
 
         # --- position flags ---
-        df[f"{base}_above_upper"] = price > df[f"{base}_upper"]
-        df[f"{base}_below_lower"] = price < df[f"{base}_lower"]
-        df[f"{base}_inside_bands"] = (price <= df[f"{base}_upper"]) & (
-            price >= df[f"{base}_lower"]
-        )
-        df[f"{base}_position"] = df.apply(
-            lambda r: (
-                1
-                if r[f"{base}_above_upper"]
-                else (-1 if r[f"{base}_below_lower"] else 0)
-            ),
-            axis=1,
-        )
+        above = price > upper
+        below = price < lower
+        new_cols[f"{base}_above_upper"]  = above
+        new_cols[f"{base}_below_lower"]  = below
+        new_cols[f"{base}_inside_bands"] = ~above & ~below
+        new_cols[f"{base}_position"]     = np.where(above, 1, np.where(below, -1, 0))
+
+    # ── single concat replaces all fragmented df[col] = ... assignments ───
+    df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
     return df
 
@@ -230,60 +153,46 @@ def add_dema(
     n: list[int] = None,
     column_name: str = "close",
 ) -> pd.DataFrame:
-    """
-    Add DEMA columns, their slopes, and pairwise DEMA distances.
-
-    Columns added (per period, e.g. n=50 → suffix '_50')
-    -------------
-    {col}_dema_{n}                      : DEMA value
-    {col}_dema_{n}_slope                : first difference of DEMA (momentum)
-    {col}_dema_{n}_acceleration         : second difference of DEMA
-    {col}_gt_dema_{n}                   : price > DEMA (bullish bias)
-    {col}_dema_{n}_dist                 : price - DEMA (signed distance from price)
-    {col}_dema_{n}_dist_abs             : |price - DEMA| (magnitude only)
-
-    Pairwise columns (per combination, e.g. n=[50,100] → '_50_100')
-    ----------------------------------------------------------------
-    {col}_dema_{n1}_{n2}_dist           : dema_{n1} - dema_{n2} (signed, fast - slow)
-    {col}_dema_{n1}_{n2}_dist_abs       : |dema_{n1} - dema_{n2}|
-    {col}_dema_{n1}_{n2}_direction      : +1 if fast > slow, -1 otherwise (trend alignment)
-    {col}_dema_{n1}_{n2}_dist_slope     : first difference of pairwise distance (crossover momentum)
-    """
-
     validate_column(df, column_name)
 
     if n is None:
         n = [50, 100, 200]
 
     df = df.copy()
-
     source = df[column_name].to_numpy(dtype=float)
-    dema_cols = []
+    price = df[column_name]
+
+    new_cols = {}
+    dema_series = {}  # store Series for reuse in pairwise section
 
     # --- DEMA + per-period derivatives ---
     for window in n:
-        dema_col = f"{column_name}_dema_{window}"
+        base = f"{column_name}_dema_{window}"
+        dema = pd.Series(talib.DEMA(source, timeperiod=window), index=df.index)
+        slope = dema.diff()
 
-        df[dema_col] = talib.DEMA(source, timeperiod=window)
-        df[f"{dema_col}_slope"] = df[dema_col].diff()
-        df[f"{dema_col}_acceleration"] = df[f"{dema_col}_slope"].diff()
-        df[f"{column_name}_gt_dema_{window}"] = df[column_name] > df[dema_col]
-        df[f"{dema_col}_dist"] = df[column_name] - df[dema_col]
-        df[f"{dema_col}_dist_abs"] = df[f"{dema_col}_dist"].abs()
+        new_cols[base]                               = dema
+        new_cols[f"{base}_slope"]                    = slope
+        new_cols[f"{base}_acceleration"]             = slope.diff()
+        new_cols[f"{column_name}_gt_dema_{window}"]  = price > dema
+        new_cols[f"{base}_dist"]                     = price - dema
+        new_cols[f"{base}_dist_abs"]                 = (price - dema).abs()
 
-        dema_cols.append((window, dema_col))
+        dema_series[window] = dema  # save for pairwise
 
     # --- pairwise distances ---
-    for (w1, col1), (w2, col2) in combinations(dema_cols, 2):
+    for (w1, w2) in combinations(dema_series.keys(), 2):
         pair = f"{column_name}_dema_{w1}_{w2}"
+        dist = dema_series[w1] - dema_series[w2]
 
-        df[f"{pair}_dist"] = df[col1] - df[col2]
-        df[f"{pair}_dist_abs"] = df[f"{pair}_dist"].abs()
-        df[f"{pair}_direction"] = df[f"{pair}_dist"].apply(lambda x: 1 if x > 0 else -1)
-        df[f"{pair}_dist_slope"] = df[f"{pair}_dist"].diff()
+        new_cols[f"{pair}_dist"]       = dist
+        new_cols[f"{pair}_dist_abs"]   = dist.abs()
+        new_cols[f"{pair}_direction"]  = np.where(dist > 0, 1, -1)
+        new_cols[f"{pair}_dist_slope"] = dist.diff()
+
+    df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
     return df
-
 
 def add_ema(
     df: pd.DataFrame,
