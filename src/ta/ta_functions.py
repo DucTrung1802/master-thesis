@@ -91,56 +91,66 @@ def add_bbands(
 
     for period in periods:
         upper, middle, lower = talib.BBANDS(
-            source, timeperiod=period, nbdevup=k, nbdevdn=k, matype=ma_type,
+            source,
+            timeperiod=period,
+            nbdevup=k,
+            nbdevdn=k,
+            matype=ma_type,
         )
-        upper  = pd.Series(upper,  index=df.index)
+        upper = pd.Series(upper, index=df.index)
         middle = pd.Series(middle, index=df.index)
-        lower  = pd.Series(lower,  index=df.index)
+        lower = pd.Series(lower, index=df.index)
 
         base = f"{column_name}_bb_{period}"
 
         # --- bands ---
-        new_cols[f"{base}_upper"]  = upper
+        new_cols[f"{base}_upper"] = upper
         new_cols[f"{base}_middle"] = middle
-        new_cols[f"{base}_lower"]  = lower
+        new_cols[f"{base}_lower"] = lower
 
         # --- distance ---
         if distance_mode == "abs":
-            new_cols[f"{base}_dist_upper"]  = price - upper
+            new_cols[f"{base}_dist_upper"] = price - upper
             new_cols[f"{base}_dist_middle"] = price - middle
-            new_cols[f"{base}_dist_lower"]  = price - lower
+            new_cols[f"{base}_dist_lower"] = price - lower
         else:  # pct
-            new_cols[f"{base}_dist_upper"]  = (price - upper)  / upper
+            new_cols[f"{base}_dist_upper"] = (price - upper) / upper
             new_cols[f"{base}_dist_middle"] = (price - middle) / middle
-            new_cols[f"{base}_dist_lower"]  = (price - lower)  / lower
+            new_cols[f"{base}_dist_lower"] = (price - lower) / lower
 
         # --- slope + acceleration ---
-        for band_name, band_series in [("upper", upper), ("middle", middle), ("lower", lower)]:
-            slope = band_series.pct_change() if slope_mode == "pct" else band_series.diff()
-            new_cols[f"{base}_slope_{band_name}"]              = slope
+        for band_name, band_series in [
+            ("upper", upper),
+            ("middle", middle),
+            ("lower", lower),
+        ]:
+            slope = (
+                band_series.pct_change() if slope_mode == "pct" else band_series.diff()
+            )
+            new_cols[f"{base}_slope_{band_name}"] = slope
             new_cols[f"{base}_slope_{band_name}_acceleration"] = slope.diff()
 
         # --- bandwidth ---
         bandwidth = (upper - lower) / middle
-        new_cols[f"{base}_bandwidth"]              = bandwidth
-        new_cols[f"{base}_bandwidth_slope"]        = bandwidth.diff()
+        new_cols[f"{base}_bandwidth"] = bandwidth
+        new_cols[f"{base}_bandwidth_slope"] = bandwidth.diff()
         new_cols[f"{base}_bandwidth_acceleration"] = bandwidth.diff().diff()
 
         # --- %B ---
         band_range = (upper - lower).replace(0, float("nan"))
         pct_b = (price - lower) / band_range
-        new_cols[f"{base}_pct_b"]       = pct_b
+        new_cols[f"{base}_pct_b"] = pct_b
         new_cols[f"{base}_pct_b_slope"] = pct_b.diff()
-        new_cols[f"{base}_pct_b_gt_1"]  = pct_b > 1
-        new_cols[f"{base}_pct_b_lt_0"]  = pct_b < 0
+        new_cols[f"{base}_pct_b_gt_1"] = pct_b > 1
+        new_cols[f"{base}_pct_b_lt_0"] = pct_b < 0
 
         # --- position flags ---
         above = price > upper
         below = price < lower
-        new_cols[f"{base}_above_upper"]  = above
-        new_cols[f"{base}_below_lower"]  = below
+        new_cols[f"{base}_above_upper"] = above
+        new_cols[f"{base}_below_lower"] = below
         new_cols[f"{base}_inside_bands"] = ~above & ~below
-        new_cols[f"{base}_position"]     = np.where(above, 1, np.where(below, -1, 0))
+        new_cols[f"{base}_position"] = np.where(above, 1, np.where(below, -1, 0))
 
     # ── single concat replaces all fragmented df[col] = ... assignments ───
     df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
@@ -171,85 +181,73 @@ def add_dema(
         dema = pd.Series(talib.DEMA(source, timeperiod=window), index=df.index)
         slope = dema.diff()
 
-        new_cols[base]                               = dema
-        new_cols[f"{base}_slope"]                    = slope
-        new_cols[f"{base}_acceleration"]             = slope.diff()
-        new_cols[f"{column_name}_gt_dema_{window}"]  = price > dema
-        new_cols[f"{base}_dist"]                     = price - dema
-        new_cols[f"{base}_dist_abs"]                 = (price - dema).abs()
+        new_cols[base] = dema
+        new_cols[f"{base}_slope"] = slope
+        new_cols[f"{base}_acceleration"] = slope.diff()
+        new_cols[f"{column_name}_gt_dema_{window}"] = price > dema
+        new_cols[f"{base}_dist"] = price - dema
+        new_cols[f"{base}_dist_abs"] = (price - dema).abs()
 
         dema_series[window] = dema  # save for pairwise
 
     # --- pairwise distances ---
-    for (w1, w2) in combinations(dema_series.keys(), 2):
+    for w1, w2 in combinations(dema_series.keys(), 2):
         pair = f"{column_name}_dema_{w1}_{w2}"
         dist = dema_series[w1] - dema_series[w2]
 
-        new_cols[f"{pair}_dist"]       = dist
-        new_cols[f"{pair}_dist_abs"]   = dist.abs()
-        new_cols[f"{pair}_direction"]  = np.where(dist > 0, 1, -1)
+        new_cols[f"{pair}_dist"] = dist
+        new_cols[f"{pair}_dist_abs"] = dist.abs()
+        new_cols[f"{pair}_direction"] = np.where(dist > 0, 1, -1)
         new_cols[f"{pair}_dist_slope"] = dist.diff()
 
     df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
     return df
 
+
 def add_ema(
     df: pd.DataFrame,
     n: list[int] = None,
     column_name: str = "close",
 ) -> pd.DataFrame:
-    """
-    Add EMA columns, their slopes, and pairwise EMA distances.
-
-    Columns added (per period, e.g. n=50 → suffix '_50')
-    -------------
-    {col}_ema_{n}                   : EMA value
-    {col}_ema_{n}_slope             : first difference of EMA (momentum)
-    {col}_ema_{n}_acceleration      : second difference of EMA
-    {col}_gt_ema_{n}                : price > EMA (bullish bias)
-    {col}_ema_{n}_dist              : price - EMA (signed distance from price)
-    {col}_ema_{n}_dist_abs          : |price - EMA| (magnitude only)
-
-    Pairwise columns (per combination, e.g. n=[50,100] → '_50_100')
-    ----------------------------------------------------------------
-    {col}_ema_{n1}_{n2}_dist        : ema_{n1} - ema_{n2} (signed, fast - slow)
-    {col}_ema_{n1}_{n2}_dist_abs    : |ema_{n1} - ema_{n2}|
-    {col}_ema_{n1}_{n2}_direction   : +1 if fast > slow, -1 otherwise
-    {col}_ema_{n1}_{n2}_dist_slope  : first difference of pairwise distance (crossover momentum)
-    """
-
     validate_column(df, column_name)
 
     if n is None:
         n = [50, 100, 200]
 
     df = df.copy()
-
     source = df[column_name].to_numpy(dtype=float)
-    ema_cols = []
+    price = df[column_name]
+
+    new_cols = {}
+    ema_series = {}
 
     # --- EMA + per-period derivatives ---
     for window in n:
-        ema_col = f"{column_name}_ema_{window}"
+        base = f"{column_name}_ema_{window}"
+        ema = pd.Series(talib.EMA(source, timeperiod=window), index=df.index)
+        slope = ema.diff()
 
-        df[ema_col] = talib.EMA(source, timeperiod=window)
-        df[f"{ema_col}_slope"] = df[ema_col].diff()
-        df[f"{ema_col}_acceleration"] = df[f"{ema_col}_slope"].diff()
-        df[f"{column_name}_gt_ema_{window}"] = df[column_name] > df[ema_col]
-        df[f"{ema_col}_dist"] = df[column_name] - df[ema_col]
-        df[f"{ema_col}_dist_abs"] = df[f"{ema_col}_dist"].abs()
+        new_cols[base] = ema
+        new_cols[f"{base}_slope"] = slope
+        new_cols[f"{base}_acceleration"] = slope.diff()
+        new_cols[f"{column_name}_gt_ema_{window}"] = price > ema
+        new_cols[f"{base}_dist"] = price - ema
+        new_cols[f"{base}_dist_abs"] = (price - ema).abs()
 
-        ema_cols.append((window, ema_col))
+        ema_series[window] = ema
 
     # --- pairwise distances ---
-    for (w1, col1), (w2, col2) in combinations(ema_cols, 2):
+    for w1, w2 in combinations(ema_series.keys(), 2):
         pair = f"{column_name}_ema_{w1}_{w2}"
+        dist = ema_series[w1] - ema_series[w2]
 
-        df[f"{pair}_dist"] = df[col1] - df[col2]
-        df[f"{pair}_dist_abs"] = df[f"{pair}_dist"].abs()
-        df[f"{pair}_direction"] = df[f"{pair}_dist"].apply(lambda x: 1 if x > 0 else -1)
-        df[f"{pair}_dist_slope"] = df[f"{pair}_dist"].diff()
+        new_cols[f"{pair}_dist"] = dist
+        new_cols[f"{pair}_dist_abs"] = dist.abs()
+        new_cols[f"{pair}_direction"] = np.where(dist > 0, 1, -1)
+        new_cols[f"{pair}_dist_slope"] = dist.diff()
+
+    df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
     return df
 
@@ -259,58 +257,44 @@ def add_kama(
     n: list[int] = None,
     column_name: str = "close",
 ) -> pd.DataFrame:
-    """
-    Add KAMA (Kaufman Adaptive Moving Average) columns, their slopes,
-    and pairwise distances.
-
-    Columns added (per period, e.g. n=50 → suffix '_50')
-    -------------
-    {col}_kama_{n}                  : KAMA value
-    {col}_kama_{n}_slope            : first difference of KAMA (momentum)
-    {col}_kama_{n}_acceleration     : second difference of KAMA
-    {col}_gt_kama_{n}               : price > KAMA (bullish bias)
-    {col}_kama_{n}_dist             : price - KAMA (signed distance from price)
-    {col}_kama_{n}_dist_abs         : |price - KAMA| (magnitude only)
-
-    Pairwise columns (per combination, e.g. n=[50,100] → '_50_100')
-    ----------------------------------------------------------------
-    {col}_kama_{n1}_{n2}_dist       : kama_{n1} - kama_{n2} (signed, fast - slow)
-    {col}_kama_{n1}_{n2}_dist_abs   : |kama_{n1} - kama_{n2}|
-    {col}_kama_{n1}_{n2}_direction  : +1 if fast > slow, -1 otherwise
-    {col}_kama_{n1}_{n2}_dist_slope : first difference of pairwise distance (crossover momentum)
-    """
-
     validate_column(df, column_name)
 
     if n is None:
         n = [50, 100, 200]
 
     df = df.copy()
-
     source = df[column_name].to_numpy(dtype=float)
-    kama_cols = []
+    price = df[column_name]
+
+    new_cols = {}
+    kama_series = {}
 
     # --- KAMA + per-period derivatives ---
     for window in n:
-        kama_col = f"{column_name}_kama_{window}"
+        base = f"{column_name}_kama_{window}"
+        kama = pd.Series(talib.KAMA(source, timeperiod=window), index=df.index)
+        slope = kama.diff()
 
-        df[kama_col] = talib.KAMA(source, timeperiod=window)
-        df[f"{kama_col}_slope"] = df[kama_col].diff()
-        df[f"{kama_col}_acceleration"] = df[f"{kama_col}_slope"].diff()
-        df[f"{column_name}_gt_kama_{window}"] = df[column_name] > df[kama_col]
-        df[f"{kama_col}_dist"] = df[column_name] - df[kama_col]
-        df[f"{kama_col}_dist_abs"] = df[f"{kama_col}_dist"].abs()
+        new_cols[base] = kama
+        new_cols[f"{base}_slope"] = slope
+        new_cols[f"{base}_acceleration"] = slope.diff()
+        new_cols[f"{column_name}_gt_kama_{window}"] = price > kama
+        new_cols[f"{base}_dist"] = price - kama
+        new_cols[f"{base}_dist_abs"] = (price - kama).abs()
 
-        kama_cols.append((window, kama_col))
+        kama_series[window] = kama
 
     # --- pairwise distances ---
-    for (w1, col1), (w2, col2) in combinations(kama_cols, 2):
+    for w1, w2 in combinations(kama_series.keys(), 2):
         pair = f"{column_name}_kama_{w1}_{w2}"
+        dist = kama_series[w1] - kama_series[w2]
 
-        df[f"{pair}_dist"] = df[col1] - df[col2]
-        df[f"{pair}_dist_abs"] = df[f"{pair}_dist"].abs()
-        df[f"{pair}_direction"] = df[f"{pair}_dist"].apply(lambda x: 1 if x > 0 else -1)
-        df[f"{pair}_dist_slope"] = df[f"{pair}_dist"].diff()
+        new_cols[f"{pair}_dist"] = dist
+        new_cols[f"{pair}_dist_abs"] = dist.abs()
+        new_cols[f"{pair}_direction"] = np.where(dist > 0, 1, -1)
+        new_cols[f"{pair}_dist_slope"] = dist.diff()
+
+    df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
     return df
 
@@ -320,59 +304,44 @@ def add_midpoint(
     n: list[int] = None,
     column_name: str = "close",
 ) -> pd.DataFrame:
-    """
-    Add MIDPOINT columns, their slopes, and pairwise distances.
-
-    MIDPOINT = (highest + lowest) / 2 over a lookback period.
-
-    Columns added (per period, e.g. n=14 → suffix '_14')
-    -------------
-    {col}_midpoint_{n}                  : MIDPOINT value
-    {col}_midpoint_{n}_slope            : first difference of MIDPOINT (momentum)
-    {col}_midpoint_{n}_acceleration     : second difference of MIDPOINT
-    {col}_gt_midpoint_{n}               : price > MIDPOINT (bullish bias)
-    {col}_midpoint_{n}_dist             : price - MIDPOINT (signed distance from price)
-    {col}_midpoint_{n}_dist_abs         : |price - MIDPOINT| (magnitude only)
-
-    Pairwise columns (per combination, e.g. n=[14,50] → '_14_50')
-    ----------------------------------------------------------------
-    {col}_midpoint_{n1}_{n2}_dist       : midpoint_{n1} - midpoint_{n2} (signed, fast - slow)
-    {col}_midpoint_{n1}_{n2}_dist_abs   : |midpoint_{n1} - midpoint_{n2}|
-    {col}_midpoint_{n1}_{n2}_direction  : +1 if fast > slow, -1 otherwise
-    {col}_midpoint_{n1}_{n2}_dist_slope : first difference of pairwise distance (crossover momentum)
-    """
-
     validate_column(df, column_name)
 
     if n is None:
         n = [14, 50, 100]
 
     df = df.copy()
-
     source = df[column_name].to_numpy(dtype=float)
-    midpoint_cols = []
+    price = df[column_name]
+
+    new_cols = {}
+    midpoint_series = {}
 
     # --- MIDPOINT + per-period derivatives ---
     for window in n:
-        midpoint_col = f"{column_name}_midpoint_{window}"
+        base = f"{column_name}_midpoint_{window}"
+        midpoint = pd.Series(talib.MIDPOINT(source, timeperiod=window), index=df.index)
+        slope = midpoint.diff()
 
-        df[midpoint_col] = talib.MIDPOINT(source, timeperiod=window)
-        df[f"{midpoint_col}_slope"] = df[midpoint_col].diff()
-        df[f"{midpoint_col}_acceleration"] = df[f"{midpoint_col}_slope"].diff()
-        df[f"{column_name}_gt_midpoint_{window}"] = df[column_name] > df[midpoint_col]
-        df[f"{midpoint_col}_dist"] = df[column_name] - df[midpoint_col]
-        df[f"{midpoint_col}_dist_abs"] = df[f"{midpoint_col}_dist"].abs()
+        new_cols[base] = midpoint
+        new_cols[f"{base}_slope"] = slope
+        new_cols[f"{base}_acceleration"] = slope.diff()
+        new_cols[f"{column_name}_gt_midpoint_{window}"] = price > midpoint
+        new_cols[f"{base}_dist"] = price - midpoint
+        new_cols[f"{base}_dist_abs"] = (price - midpoint).abs()
 
-        midpoint_cols.append((window, midpoint_col))
+        midpoint_series[window] = midpoint
 
     # --- pairwise distances ---
-    for (w1, col1), (w2, col2) in combinations(midpoint_cols, 2):
+    for w1, w2 in combinations(midpoint_series.keys(), 2):
         pair = f"{column_name}_midpoint_{w1}_{w2}"
+        dist = midpoint_series[w1] - midpoint_series[w2]
 
-        df[f"{pair}_dist"] = df[col1] - df[col2]
-        df[f"{pair}_dist_abs"] = df[f"{pair}_dist"].abs()
-        df[f"{pair}_direction"] = df[f"{pair}_dist"].apply(lambda x: 1 if x > 0 else -1)
-        df[f"{pair}_dist_slope"] = df[f"{pair}_dist"].diff()
+        new_cols[f"{pair}_dist"] = dist
+        new_cols[f"{pair}_dist_abs"] = dist.abs()
+        new_cols[f"{pair}_direction"] = np.where(dist > 0, 1, -1)
+        new_cols[f"{pair}_dist_slope"] = dist.diff()
+
+    df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
     return df
 
@@ -384,28 +353,6 @@ def add_midprice(
     low_col: str = "low",
     close_col: str = "close",
 ) -> pd.DataFrame:
-    """
-    Add MIDPRICE columns, their slopes, and pairwise distances.
-
-    MIDPRICE = (highest high + lowest low) / 2 over a lookback period.
-
-    Columns added (per period, e.g. n=14 → suffix '_14')
-    -------------
-    midprice_{n}                  : MIDPRICE value
-    midprice_{n}_slope            : first difference of MIDPRICE (momentum)
-    midprice_{n}_acceleration     : second difference of MIDPRICE
-    close_gt_midprice_{n}         : close > MIDPRICE (bullish bias, if close_col present)
-    midprice_{n}_dist             : close - MIDPRICE (signed distance, if close_col present)
-    midprice_{n}_dist_abs         : |close - MIDPRICE| (magnitude only, if close_col present)
-
-    Pairwise columns (per combination, e.g. n=[14,50] → '_14_50')
-    ----------------------------------------------------------------
-    midprice_{n1}_{n2}_dist       : midprice_{n1} - midprice_{n2} (signed, fast - slow)
-    midprice_{n1}_{n2}_dist_abs   : |midprice_{n1} - midprice_{n2}|
-    midprice_{n1}_{n2}_direction  : +1 if fast > slow, -1 otherwise
-    midprice_{n1}_{n2}_dist_slope : first difference of pairwise distance (crossover momentum)
-    """
-
     validate_column(df, high_col)
     validate_column(df, low_col)
 
@@ -413,39 +360,45 @@ def add_midprice(
         n = [14, 50, 100]
 
     df = df.copy()
-
     high = df[high_col].to_numpy(dtype=float)
     low = df[low_col].to_numpy(dtype=float)
 
     has_close = close_col and close_col in df.columns
-    if has_close:
-        close = df[close_col]
+    close = df[close_col] if has_close else None
 
-    midprice_cols = []
+    new_cols = {}
+    midprice_series = {}
 
     # --- MIDPRICE + per-period derivatives ---
     for window in n:
-        midprice_col = f"midprice_{window}"
+        base = f"midprice_{window}"
+        midprice = pd.Series(
+            talib.MIDPRICE(high, low, timeperiod=window), index=df.index
+        )
+        slope = midprice.diff()
 
-        df[midprice_col] = talib.MIDPRICE(high, low, timeperiod=window)
-        df[f"{midprice_col}_slope"] = df[midprice_col].diff()
-        df[f"{midprice_col}_acceleration"] = df[f"{midprice_col}_slope"].diff()
+        new_cols[base] = midprice
+        new_cols[f"{base}_slope"] = slope
+        new_cols[f"{base}_acceleration"] = slope.diff()
 
         if has_close:
-            df[f"close_gt_midprice_{window}"] = close > df[midprice_col]
-            df[f"{midprice_col}_dist"] = close - df[midprice_col]
-            df[f"{midprice_col}_dist_abs"] = df[f"{midprice_col}_dist"].abs()
+            new_cols[f"close_gt_midprice_{window}"] = close > midprice
+            new_cols[f"{base}_dist"] = close - midprice
+            new_cols[f"{base}_dist_abs"] = (close - midprice).abs()
 
-        midprice_cols.append((window, midprice_col))
+        midprice_series[window] = midprice
 
     # --- pairwise distances ---
-    for (w1, col1), (w2, col2) in combinations(midprice_cols, 2):
+    for w1, w2 in combinations(midprice_series.keys(), 2):
         pair = f"midprice_{w1}_{w2}"
+        dist = midprice_series[w1] - midprice_series[w2]
 
-        df[f"{pair}_dist"] = df[col1] - df[col2]
-        df[f"{pair}_dist_abs"] = df[f"{pair}_dist"].abs()
-        df[f"{pair}_direction"] = df[f"{pair}_dist"].apply(lambda x: 1 if x > 0 else -1)
-        df[f"{pair}_dist_slope"] = df[f"{pair}_dist"].diff()
+        new_cols[f"{pair}_dist"] = dist
+        new_cols[f"{pair}_dist_abs"] = dist.abs()
+        new_cols[f"{pair}_direction"] = np.where(dist > 0, 1, -1)
+        new_cols[f"{pair}_dist_slope"] = dist.diff()
+
+    df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
     return df
 
@@ -458,37 +411,6 @@ def add_sar(
     low_col: str = "low",
     close_col: str = "close",
 ) -> pd.DataFrame:
-    """
-    Add Parabolic SAR columns and derived features for each (acceleration, maximum) combo.
-
-    Suffix format: sar_{acc}_{max} with dots stripped, e.g. acc=0.02, max=0.2 → 'sar_002_02'
-
-    Columns added (per combo)
-    -------------------------
-    sar_{s}                         : raw SAR value
-    sar_{s}_slope                   : first difference of SAR (momentum)
-    sar_{s}_acceleration            : second difference of SAR
-    sar_{s}_above                   : SAR > close (bearish — price below SAR)
-    sar_{s}_below                   : SAR < close (bullish — price above SAR)
-    sar_{s}_direction               : +1 if close > SAR, -1 otherwise
-    sar_{s}_dist                    : close - SAR (signed)
-    sar_{s}_dist_abs                : |close - SAR|
-    sar_{s}_dist_pct                : (close - SAR) / close (normalised)
-
-    Pairwise SAR columns (per combo pair)
-    --------------------------------------
-    sar_{s1}_{s2}_dist              : sar_{s1} - sar_{s2} (signed)
-    sar_{s1}_{s2}_dist_abs          : |sar_{s1} - sar_{s2}|
-    sar_{s1}_{s2}_direction         : +1 if sar_{s1} > sar_{s2}, -1 otherwise
-    sar_{s1}_{s2}_dist_slope        : first difference of pairwise distance
-
-    Trend agreement (3-period rolling)
-    ------------------------------------
-    sar_{s}_trend3                  : +1 both price & SAR rising 3 bars, -1 both falling, 0 neutral
-    sar_{s}_up3                     : bool — price and SAR both up 3 consecutive bars
-    sar_{s}_down3                   : bool — price and SAR both down 3 consecutive bars
-    """
-
     validate_column(df, high_col)
     validate_column(df, low_col)
     validate_column(df, close_col)
@@ -499,65 +421,70 @@ def add_sar(
         maximum = [0.2]
 
     df = df.copy()
-
     high = df[high_col].to_numpy(dtype=float)
     low = df[low_col].to_numpy(dtype=float)
     close = df[close_col]
 
-    sar_cols = []
+    new_cols = {}
+    sar_series = {}
 
     def _suffix(acc, max_val) -> str:
         return f"{acc}_{max_val}".replace(".", "")
 
-    # =========================
-    # 1. SAR + per-combo derivatives
-    # =========================
+    # pre-compute price trend flags once (shared across all combos)
     price_diff = close.diff()
     price_up3 = (price_diff > 0).rolling(3).sum() == 3
     price_down3 = (price_diff < 0).rolling(3).sum() == 3
 
+    # =========================
+    # 1. SAR + per-combo derivatives
+    # =========================
     for acc in acceleration:
         for max_val in maximum:
             s = _suffix(acc, max_val)
-            sar_col = f"sar_{s}"
+            base = f"sar_{s}"
+            sar = pd.Series(
+                talib.SAR(high, low, acceleration=acc, maximum=max_val), index=df.index
+            )
+            slope = sar.diff()
+            dist = close - sar
 
-            df[sar_col] = talib.SAR(high, low, acceleration=acc, maximum=max_val)
-            df[f"{sar_col}_slope"] = df[sar_col].diff()
-            df[f"{sar_col}_acceleration"] = df[f"{sar_col}_slope"].diff()
-
-            # --- price vs SAR ---
-            dist = close - df[sar_col]
-            df[f"{sar_col}_above"] = df[sar_col] > close  # bearish
-            df[f"{sar_col}_below"] = df[sar_col] < close  # bullish
-            df[f"{sar_col}_direction"] = dist.apply(lambda x: 1 if x > 0 else -1)
-            df[f"{sar_col}_dist"] = dist
-            df[f"{sar_col}_dist_abs"] = dist.abs()
-            df[f"{sar_col}_dist_pct"] = dist / close.replace(0, float("nan"))
+            new_cols[base] = sar
+            new_cols[f"{base}_slope"] = slope
+            new_cols[f"{base}_acceleration"] = slope.diff()
+            new_cols[f"{base}_above"] = sar > close  # bearish
+            new_cols[f"{base}_below"] = sar < close  # bullish
+            new_cols[f"{base}_direction"] = np.where(dist > 0, 1, -1)
+            new_cols[f"{base}_dist"] = dist
+            new_cols[f"{base}_dist_abs"] = dist.abs()
+            new_cols[f"{base}_dist_pct"] = dist / close.replace(0, float("nan"))
 
             # --- trend agreement ---
-            sar_diff = df[sar_col].diff()
+            sar_diff = sar.diff()
             sar_up3 = (sar_diff > 0).rolling(3).sum() == 3
             sar_down3 = (sar_diff < 0).rolling(3).sum() == 3
 
-            df[f"{sar_col}_up3"] = price_up3 & sar_up3
-            df[f"{sar_col}_down3"] = price_down3 & sar_down3
-            trend_col = f"{sar_col}_trend3"
-            df[trend_col] = 0
-            df.loc[price_up3 & sar_up3, trend_col] = 1
-            df.loc[price_down3 & sar_down3, trend_col] = -1
+            new_cols[f"{base}_up3"] = price_up3 & sar_up3
+            new_cols[f"{base}_down3"] = price_down3 & sar_down3
+            new_cols[f"{base}_trend3"] = np.where(
+                price_up3 & sar_up3, 1, np.where(price_down3 & sar_down3, -1, 0)
+            )
 
-            sar_cols.append((s, sar_col))
+            sar_series[s] = sar
 
     # =========================
     # 2. Pairwise SAR distances
     # =========================
-    for (s1, col1), (s2, col2) in combinations(sar_cols, 2):
+    for s1, s2 in combinations(sar_series.keys(), 2):
         pair = f"sar_{s1}_{s2}"
+        dist = sar_series[s1] - sar_series[s2]
 
-        df[f"{pair}_dist"] = df[col1] - df[col2]
-        df[f"{pair}_dist_abs"] = df[f"{pair}_dist"].abs()
-        df[f"{pair}_direction"] = df[f"{pair}_dist"].apply(lambda x: 1 if x > 0 else -1)
-        df[f"{pair}_dist_slope"] = df[f"{pair}_dist"].diff()
+        new_cols[f"{pair}_dist"] = dist
+        new_cols[f"{pair}_dist_abs"] = dist.abs()
+        new_cols[f"{pair}_direction"] = np.where(dist > 0, 1, -1)
+        new_cols[f"{pair}_dist_slope"] = dist.diff()
+
+    df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
     return df
 
@@ -567,57 +494,44 @@ def add_sma(
     n: list[int] = None,
     column_name: str = "close",
 ) -> pd.DataFrame:
-    """
-    Add SMA columns, their slopes, and pairwise SMA distances.
-
-    Columns added (per period, e.g. n=50 → suffix '_50')
-    -------------
-    {col}_sma_{n}                   : SMA value
-    {col}_sma_{n}_slope             : first difference of SMA (momentum)
-    {col}_sma_{n}_acceleration      : second difference of SMA
-    {col}_gt_sma_{n}                : price > SMA (bullish bias)
-    {col}_sma_{n}_dist              : price - SMA (signed distance from price)
-    {col}_sma_{n}_dist_abs          : |price - SMA| (magnitude only)
-
-    Pairwise columns (per combination, e.g. n=[50,100] → '_50_100')
-    ----------------------------------------------------------------
-    {col}_sma_{n1}_{n2}_dist        : sma_{n1} - sma_{n2} (signed, fast - slow)
-    {col}_sma_{n1}_{n2}_dist_abs    : |sma_{n1} - sma_{n2}|
-    {col}_sma_{n1}_{n2}_direction   : +1 if fast > slow, -1 otherwise
-    {col}_sma_{n1}_{n2}_dist_slope  : first difference of pairwise distance (crossover momentum)
-    """
-
     validate_column(df, column_name)
 
     if n is None:
         n = [50, 100, 200]
 
     df = df.copy()
-
     source = df[column_name].to_numpy(dtype=float)
-    sma_cols = []
+    price = df[column_name]
+
+    new_cols = {}
+    sma_series = {}
 
     # --- SMA + per-period derivatives ---
     for window in n:
-        sma_col = f"{column_name}_sma_{window}"
+        base = f"{column_name}_sma_{window}"
+        sma = pd.Series(talib.SMA(source, timeperiod=window), index=df.index)
+        slope = sma.diff()
 
-        df[sma_col] = talib.SMA(source, timeperiod=window)
-        df[f"{sma_col}_slope"] = df[sma_col].diff()
-        df[f"{sma_col}_acceleration"] = df[f"{sma_col}_slope"].diff()
-        df[f"{column_name}_gt_sma_{window}"] = df[column_name] > df[sma_col]
-        df[f"{sma_col}_dist"] = df[column_name] - df[sma_col]
-        df[f"{sma_col}_dist_abs"] = df[f"{sma_col}_dist"].abs()
+        new_cols[base] = sma
+        new_cols[f"{base}_slope"] = slope
+        new_cols[f"{base}_acceleration"] = slope.diff()
+        new_cols[f"{column_name}_gt_sma_{window}"] = price > sma
+        new_cols[f"{base}_dist"] = price - sma
+        new_cols[f"{base}_dist_abs"] = (price - sma).abs()
 
-        sma_cols.append((window, sma_col))
+        sma_series[window] = sma
 
     # --- pairwise distances ---
-    for (w1, col1), (w2, col2) in combinations(sma_cols, 2):
+    for w1, w2 in combinations(sma_series.keys(), 2):
         pair = f"{column_name}_sma_{w1}_{w2}"
+        dist = sma_series[w1] - sma_series[w2]
 
-        df[f"{pair}_dist"] = df[col1] - df[col2]
-        df[f"{pair}_dist_abs"] = df[f"{pair}_dist"].abs()
-        df[f"{pair}_direction"] = df[f"{pair}_dist"].apply(lambda x: 1 if x > 0 else -1)
-        df[f"{pair}_dist_slope"] = df[f"{pair}_dist"].diff()
+        new_cols[f"{pair}_dist"] = dist
+        new_cols[f"{pair}_dist_abs"] = dist.abs()
+        new_cols[f"{pair}_direction"] = np.where(dist > 0, 1, -1)
+        new_cols[f"{pair}_dist_slope"] = dist.diff()
+
+    df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
     return df
 
@@ -628,60 +542,46 @@ def add_t3(
     column_name: str = "close",
     vfactor: float = 0.7,
 ) -> pd.DataFrame:
-    """
-    Add T3 columns, their slopes, and pairwise T3 distances.
-
-    T3 is a smoothed MA using 6 EMAs weighted by vfactor (default 0.7).
-    Lower vfactor → closer to EMA; higher → more smoothing with less lag.
-
-    Columns added (per period, e.g. n=5 → suffix '_5')
-    -------------
-    {col}_t3_{n}                    : T3 value
-    {col}_t3_{n}_slope              : first difference of T3 (momentum)
-    {col}_t3_{n}_acceleration       : second difference of T3
-    {col}_gt_t3_{n}                 : price > T3 (bullish bias)
-    {col}_t3_{n}_dist               : price - T3 (signed distance from price)
-    {col}_t3_{n}_dist_abs           : |price - T3| (magnitude only)
-
-    Pairwise columns (per combination, e.g. n=[5,10] → '_5_10')
-    ----------------------------------------------------------------
-    {col}_t3_{n1}_{n2}_dist         : t3_{n1} - t3_{n2} (signed, fast - slow)
-    {col}_t3_{n1}_{n2}_dist_abs     : |t3_{n1} - t3_{n2}|
-    {col}_t3_{n1}_{n2}_direction    : +1 if fast > slow, -1 otherwise
-    {col}_t3_{n1}_{n2}_dist_slope   : first difference of pairwise distance (crossover momentum)
-    """
-
     validate_column(df, column_name)
 
     if n is None:
         n = [5]
 
     df = df.copy()
-
     source = df[column_name].to_numpy(dtype=float)
-    t3_cols = []
+    price = df[column_name]
+
+    new_cols = {}
+    t3_series = {}
 
     # --- T3 + per-period derivatives ---
     for window in n:
-        t3_col = f"{column_name}_t3_{window}"
+        base = f"{column_name}_t3_{window}"
+        t3 = pd.Series(
+            talib.T3(source, timeperiod=window, vfactor=vfactor), index=df.index
+        )
+        slope = t3.diff()
 
-        df[t3_col] = talib.T3(source, timeperiod=window, vfactor=vfactor)
-        df[f"{t3_col}_slope"] = df[t3_col].diff()
-        df[f"{t3_col}_acceleration"] = df[f"{t3_col}_slope"].diff()
-        df[f"{column_name}_gt_t3_{window}"] = df[column_name] > df[t3_col]
-        df[f"{t3_col}_dist"] = df[column_name] - df[t3_col]
-        df[f"{t3_col}_dist_abs"] = df[f"{t3_col}_dist"].abs()
+        new_cols[base] = t3
+        new_cols[f"{base}_slope"] = slope
+        new_cols[f"{base}_acceleration"] = slope.diff()
+        new_cols[f"{column_name}_gt_t3_{window}"] = price > t3
+        new_cols[f"{base}_dist"] = price - t3
+        new_cols[f"{base}_dist_abs"] = (price - t3).abs()
 
-        t3_cols.append((window, t3_col))
+        t3_series[window] = t3
 
     # --- pairwise distances ---
-    for (w1, col1), (w2, col2) in combinations(t3_cols, 2):
+    for w1, w2 in combinations(t3_series.keys(), 2):
         pair = f"{column_name}_t3_{w1}_{w2}"
+        dist = t3_series[w1] - t3_series[w2]
 
-        df[f"{pair}_dist"] = df[col1] - df[col2]
-        df[f"{pair}_dist_abs"] = df[f"{pair}_dist"].abs()
-        df[f"{pair}_direction"] = df[f"{pair}_dist"].apply(lambda x: 1 if x > 0 else -1)
-        df[f"{pair}_dist_slope"] = df[f"{pair}_dist"].diff()
+        new_cols[f"{pair}_dist"] = dist
+        new_cols[f"{pair}_dist_abs"] = dist.abs()
+        new_cols[f"{pair}_direction"] = np.where(dist > 0, 1, -1)
+        new_cols[f"{pair}_dist_slope"] = dist.diff()
+
+    df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
     return df
 
@@ -691,59 +591,44 @@ def add_tema(
     n: list[int] = None,
     column_name: str = "close",
 ) -> pd.DataFrame:
-    """
-    Add TEMA columns, their slopes, and pairwise TEMA distances.
-
-    TEMA = 3*EMA - 3*EMA(EMA) + EMA(EMA(EMA)) — reduced lag vs EMA/DEMA.
-
-    Columns added (per period, e.g. n=30 → suffix '_30')
-    -------------
-    {col}_tema_{n}                  : TEMA value
-    {col}_tema_{n}_slope            : first difference of TEMA (momentum)
-    {col}_tema_{n}_acceleration     : second difference of TEMA
-    {col}_gt_tema_{n}               : price > TEMA (bullish bias)
-    {col}_tema_{n}_dist             : price - TEMA (signed distance from price)
-    {col}_tema_{n}_dist_abs         : |price - TEMA| (magnitude only)
-
-    Pairwise columns (per combination, e.g. n=[30,60] → '_30_60')
-    ----------------------------------------------------------------
-    {col}_tema_{n1}_{n2}_dist       : tema_{n1} - tema_{n2} (signed, fast - slow)
-    {col}_tema_{n1}_{n2}_dist_abs   : |tema_{n1} - tema_{n2}|
-    {col}_tema_{n1}_{n2}_direction  : +1 if fast > slow, -1 otherwise
-    {col}_tema_{n1}_{n2}_dist_slope : first difference of pairwise distance (crossover momentum)
-    """
-
     validate_column(df, column_name)
 
     if n is None:
         n = [30]
 
     df = df.copy()
-
     source = df[column_name].to_numpy(dtype=float)
-    tema_cols = []
+    price = df[column_name]
+
+    new_cols = {}
+    tema_series = {}
 
     # --- TEMA + per-period derivatives ---
     for window in n:
-        tema_col = f"{column_name}_tema_{window}"
+        base = f"{column_name}_tema_{window}"
+        tema = pd.Series(talib.TEMA(source, timeperiod=window), index=df.index)
+        slope = tema.diff()
 
-        df[tema_col] = talib.TEMA(source, timeperiod=window)
-        df[f"{tema_col}_slope"] = df[tema_col].diff()
-        df[f"{tema_col}_acceleration"] = df[f"{tema_col}_slope"].diff()
-        df[f"{column_name}_gt_tema_{window}"] = df[column_name] > df[tema_col]
-        df[f"{tema_col}_dist"] = df[column_name] - df[tema_col]
-        df[f"{tema_col}_dist_abs"] = df[f"{tema_col}_dist"].abs()
+        new_cols[base] = tema
+        new_cols[f"{base}_slope"] = slope
+        new_cols[f"{base}_acceleration"] = slope.diff()
+        new_cols[f"{column_name}_gt_tema_{window}"] = price > tema
+        new_cols[f"{base}_dist"] = price - tema
+        new_cols[f"{base}_dist_abs"] = (price - tema).abs()
 
-        tema_cols.append((window, tema_col))
+        tema_series[window] = tema
 
     # --- pairwise distances ---
-    for (w1, col1), (w2, col2) in combinations(tema_cols, 2):
+    for w1, w2 in combinations(tema_series.keys(), 2):
         pair = f"{column_name}_tema_{w1}_{w2}"
+        dist = tema_series[w1] - tema_series[w2]
 
-        df[f"{pair}_dist"] = df[col1] - df[col2]
-        df[f"{pair}_dist_abs"] = df[f"{pair}_dist"].abs()
-        df[f"{pair}_direction"] = df[f"{pair}_dist"].apply(lambda x: 1 if x > 0 else -1)
-        df[f"{pair}_dist_slope"] = df[f"{pair}_dist"].diff()
+        new_cols[f"{pair}_dist"] = dist
+        new_cols[f"{pair}_dist_abs"] = dist.abs()
+        new_cols[f"{pair}_direction"] = np.where(dist > 0, 1, -1)
+        new_cols[f"{pair}_dist_slope"] = dist.diff()
+
+    df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
     return df
 
@@ -753,59 +638,44 @@ def add_trima(
     n: list[int] = None,
     column_name: str = "close",
 ) -> pd.DataFrame:
-    """
-    Add TRIMA columns, their slopes, and pairwise TRIMA distances.
-
-    TRIMA = double-smoothed SMA (SMA of SMA) — smoother than SMA with more lag.
-
-    Columns added (per period, e.g. n=30 → suffix '_30')
-    -------------
-    {col}_trima_{n}                  : TRIMA value
-    {col}_trima_{n}_slope            : first difference of TRIMA (momentum)
-    {col}_trima_{n}_acceleration     : second difference of TRIMA
-    {col}_gt_trima_{n}               : price > TRIMA (bullish bias)
-    {col}_trima_{n}_dist             : price - TRIMA (signed distance from price)
-    {col}_trima_{n}_dist_abs         : |price - TRIMA| (magnitude only)
-
-    Pairwise columns (per combination, e.g. n=[30,60] → '_30_60')
-    ----------------------------------------------------------------
-    {col}_trima_{n1}_{n2}_dist       : trima_{n1} - trima_{n2} (signed, fast - slow)
-    {col}_trima_{n1}_{n2}_dist_abs   : |trima_{n1} - trima_{n2}|
-    {col}_trima_{n1}_{n2}_direction  : +1 if fast > slow, -1 otherwise
-    {col}_trima_{n1}_{n2}_dist_slope : first difference of pairwise distance (crossover momentum)
-    """
-
     validate_column(df, column_name)
 
     if n is None:
         n = [30]
 
     df = df.copy()
-
     source = df[column_name].to_numpy(dtype=float)
-    trima_cols = []
+    price = df[column_name]
+
+    new_cols = {}
+    trima_series = {}
 
     # --- TRIMA + per-period derivatives ---
     for window in n:
-        trima_col = f"{column_name}_trima_{window}"
+        base = f"{column_name}_trima_{window}"
+        trima = pd.Series(talib.TRIMA(source, timeperiod=window), index=df.index)
+        slope = trima.diff()
 
-        df[trima_col] = talib.TRIMA(source, timeperiod=window)
-        df[f"{trima_col}_slope"] = df[trima_col].diff()
-        df[f"{trima_col}_acceleration"] = df[f"{trima_col}_slope"].diff()
-        df[f"{column_name}_gt_trima_{window}"] = df[column_name] > df[trima_col]
-        df[f"{trima_col}_dist"] = df[column_name] - df[trima_col]
-        df[f"{trima_col}_dist_abs"] = df[f"{trima_col}_dist"].abs()
+        new_cols[base] = trima
+        new_cols[f"{base}_slope"] = slope
+        new_cols[f"{base}_acceleration"] = slope.diff()
+        new_cols[f"{column_name}_gt_trima_{window}"] = price > trima
+        new_cols[f"{base}_dist"] = price - trima
+        new_cols[f"{base}_dist_abs"] = (price - trima).abs()
 
-        trima_cols.append((window, trima_col))
+        trima_series[window] = trima
 
     # --- pairwise distances ---
-    for (w1, col1), (w2, col2) in combinations(trima_cols, 2):
+    for w1, w2 in combinations(trima_series.keys(), 2):
         pair = f"{column_name}_trima_{w1}_{w2}"
+        dist = trima_series[w1] - trima_series[w2]
 
-        df[f"{pair}_dist"] = df[col1] - df[col2]
-        df[f"{pair}_dist_abs"] = df[f"{pair}_dist"].abs()
-        df[f"{pair}_direction"] = df[f"{pair}_dist"].apply(lambda x: 1 if x > 0 else -1)
-        df[f"{pair}_dist_slope"] = df[f"{pair}_dist"].diff()
+        new_cols[f"{pair}_dist"] = dist
+        new_cols[f"{pair}_dist_abs"] = dist.abs()
+        new_cols[f"{pair}_direction"] = np.where(dist > 0, 1, -1)
+        new_cols[f"{pair}_dist_slope"] = dist.diff()
+
+    df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
     return df
 
@@ -815,33 +685,6 @@ def add_wma(
     n: int | list[int] | None = None,
     column_name: str = "close",
 ) -> pd.DataFrame:
-    """
-    Add WMA (Weighted Moving Average) columns, their slopes,
-    and pairwise WMA distances.
-
-    WMA applies a linearly increasing weight to each period
-    (most recent bar gets highest weight). Computed via talib.WMA.
-
-    Note: the previous implementation used ewm(alpha=1/period) which
-    is Wilder's Smoothed MA (SMMA/RMA) — a different indicator entirely.
-
-    Columns added (per period, e.g. n=50 → suffix '_50')
-    -------------
-    {col}_wma_{n}                   : WMA value
-    {col}_wma_{n}_slope             : first difference of WMA (momentum)
-    {col}_wma_{n}_acceleration      : second difference of WMA
-    {col}_gt_wma_{n}                : price > WMA (bullish bias)
-    {col}_wma_{n}_dist              : price - WMA (signed distance from price)
-    {col}_wma_{n}_dist_abs          : |price - WMA| (magnitude only)
-
-    Pairwise columns (per combination, e.g. n=[50,100] → '_50_100')
-    ----------------------------------------------------------------
-    {col}_wma_{n1}_{n2}_dist        : wma_{n1} - wma_{n2} (signed, fast - slow)
-    {col}_wma_{n1}_{n2}_dist_abs    : |wma_{n1} - wma_{n2}|
-    {col}_wma_{n1}_{n2}_direction   : +1 if fast > slow, -1 otherwise
-    {col}_wma_{n1}_{n2}_dist_slope  : first difference of pairwise distance (crossover momentum)
-    """
-
     validate_column(df, column_name)
 
     if n is None:
@@ -852,31 +695,38 @@ def add_wma(
         n = list(n)
 
     df = df.copy()
-
     source = df[column_name].to_numpy(dtype=float)
-    wma_cols = []
+    price = df[column_name]
+
+    new_cols = {}
+    wma_series = {}
 
     # --- WMA + per-period derivatives ---
     for period in n:
-        wma_col = f"{column_name}_wma_{period}"
+        base = f"{column_name}_wma_{period}"
+        wma = pd.Series(talib.WMA(source, timeperiod=period), index=df.index)
+        slope = wma.diff()
 
-        df[wma_col] = talib.WMA(source, timeperiod=period)
-        df[f"{wma_col}_slope"] = df[wma_col].diff()
-        df[f"{wma_col}_acceleration"] = df[f"{wma_col}_slope"].diff()
-        df[f"{column_name}_gt_wma_{period}"] = df[column_name] > df[wma_col]
-        df[f"{wma_col}_dist"] = df[column_name] - df[wma_col]
-        df[f"{wma_col}_dist_abs"] = df[f"{wma_col}_dist"].abs()
+        new_cols[base] = wma
+        new_cols[f"{base}_slope"] = slope
+        new_cols[f"{base}_acceleration"] = slope.diff()
+        new_cols[f"{column_name}_gt_wma_{period}"] = price > wma
+        new_cols[f"{base}_dist"] = price - wma
+        new_cols[f"{base}_dist_abs"] = (price - wma).abs()
 
-        wma_cols.append((period, wma_col))
+        wma_series[period] = wma
 
     # --- pairwise distances ---
-    for (w1, col1), (w2, col2) in combinations(wma_cols, 2):
+    for w1, w2 in combinations(wma_series.keys(), 2):
         pair = f"{column_name}_wma_{w1}_{w2}"
+        dist = wma_series[w1] - wma_series[w2]
 
-        df[f"{pair}_dist"] = df[col1] - df[col2]
-        df[f"{pair}_dist_abs"] = df[f"{pair}_dist"].abs()
-        df[f"{pair}_direction"] = df[f"{pair}_dist"].apply(lambda x: 1 if x > 0 else -1)
-        df[f"{pair}_dist_slope"] = df[f"{pair}_dist"].diff()
+        new_cols[f"{pair}_dist"] = dist
+        new_cols[f"{pair}_dist_abs"] = dist.abs()
+        new_cols[f"{pair}_direction"] = np.where(dist > 0, 1, -1)
+        new_cols[f"{pair}_dist_slope"] = dist.diff()
+
+    df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
     return df
 
@@ -892,27 +742,6 @@ def add_adx(
     low_col: str = "low",
     close_col: str = "close",
 ) -> pd.DataFrame:
-    """
-    Add ADX, DI lines, and derived signal columns for each period in n.
-
-    Columns added (per period, e.g. n=14 → suffix '_14')
-    -------------
-    adx_{n}                 : raw ADX value
-    adx_{n}_gt_20           : ADX > 20 (weak trend threshold)
-    adx_{n}_gt_25           : ADX > 25 (strong trend threshold)
-    adx_{n}_slope           : first difference of ADX (momentum)
-    adx_{n}_acceleration    : second difference of ADX (rate of change of momentum)
-    plus_di_{n}             : +DI line
-    minus_di_{n}            : -DI line
-    plus_di_{n}_slope       : first difference of +DI
-    minus_di_{n}_slope      : first difference of -DI
-    di_{n}_distance         : +DI - -DI  (signed, positive = bullish bias)
-    di_{n}_distance_abs     : |+DI - -DI| (magnitude only)
-    di_{n}_ratio            : +DI / -DI  (NaN-safe)
-    trend_{n}_direction     : +1 if +DI > -DI, -1 otherwise
-    adx_{n}_di_strength     : ADX x di_distance_abs (combines trend strength + clarity)
-    """
-
     for col in (high_col, low_col, close_col):
         validate_column(df, col)
 
@@ -920,41 +749,49 @@ def add_adx(
         n = [14]
 
     df = df.copy()
-
     high = df[high_col].to_numpy(dtype=float)
     low = df[low_col].to_numpy(dtype=float)
     close = df[close_col].to_numpy(dtype=float)
 
+    new_cols = {}
+
     for period in n:
-        s = f"_{period}"  # suffix
+        s = f"_{period}"
 
         # --- core indicators ---
-        df[f"adx{s}"] = talib.ADX(high, low, close, timeperiod=period)
-        df[f"plus_di{s}"] = talib.PLUS_DI(high, low, close, timeperiod=period)
-        df[f"minus_di{s}"] = talib.MINUS_DI(high, low, close, timeperiod=period)
+        adx = pd.Series(talib.ADX(high, low, close, timeperiod=period), index=df.index)
+        plus_di = pd.Series(
+            talib.PLUS_DI(high, low, close, timeperiod=period), index=df.index
+        )
+        minus_di = pd.Series(
+            talib.MINUS_DI(high, low, close, timeperiod=period), index=df.index
+        )
+        adx_slope = adx.diff()
+        di_dist = plus_di - minus_di
 
-        # --- ADX derivatives ---
-        df[f"adx{s}_gt_20"] = df[f"adx{s}"] > 20
-        df[f"adx{s}_gt_25"] = df[f"adx{s}"] > 25
-        df[f"adx{s}_slope"] = df[f"adx{s}"].diff()
-        df[f"adx{s}_acceleration"] = df[f"adx{s}_slope"].diff()
+        # --- ADX ---
+        new_cols[f"adx{s}"] = adx
+        new_cols[f"adx{s}_gt_20"] = adx > 20
+        new_cols[f"adx{s}_gt_25"] = adx > 25
+        new_cols[f"adx{s}_slope"] = adx_slope
+        new_cols[f"adx{s}_acceleration"] = adx_slope.diff()
 
-        # --- DI slopes ---
-        df[f"plus_di{s}_slope"] = df[f"plus_di{s}"].diff()
-        df[f"minus_di{s}_slope"] = df[f"minus_di{s}"].diff()
+        # --- DI lines + slopes ---
+        new_cols[f"plus_di{s}"] = plus_di
+        new_cols[f"minus_di{s}"] = minus_di
+        new_cols[f"plus_di{s}_slope"] = plus_di.diff()
+        new_cols[f"minus_di{s}_slope"] = minus_di.diff()
 
         # --- DI relationship ---
-        df[f"di{s}_distance"] = df[f"plus_di{s}"] - df[f"minus_di{s}"]
-        df[f"di{s}_distance_abs"] = df[f"di{s}_distance"].abs()
-        df[f"di{s}_ratio"] = df[f"plus_di{s}"] / df[f"minus_di{s}"].replace(
-            0, float("nan")
-        )
-        df[f"trend{s}_direction"] = df[f"di{s}_distance"].apply(
-            lambda x: 1 if x > 0 else -1
-        )
+        new_cols[f"di{s}_distance"] = di_dist
+        new_cols[f"di{s}_distance_abs"] = di_dist.abs()
+        new_cols[f"di{s}_ratio"] = plus_di / minus_di.replace(0, float("nan"))
+        new_cols[f"trend{s}_direction"] = np.where(di_dist > 0, 1, -1)
 
         # --- combined strength signal ---
-        df[f"adx{s}_di_strength"] = df[f"adx{s}"] * df[f"di{s}_distance_abs"]
+        new_cols[f"adx{s}_di_strength"] = adx * di_dist.abs()
+
+    df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
     return df
 
@@ -965,28 +802,6 @@ def add_aroon(
     high_col: str = "high",
     low_col: str = "low",
 ) -> pd.DataFrame:
-    """
-    Add Aroon indicator columns for each period in n.
-
-    Columns added (per period, e.g. n=25 → suffix '_25')
-    -------------
-    aroon_up_{n}            : Aroon Up line (0–100)
-    aroon_down_{n}          : Aroon Down line (0–100)
-    aroon_osc_{n}           : Aroon Oscillator = Up - Down (-100 to +100)
-    aroon_up_{n}_slope      : first difference of Aroon Up
-    aroon_down_{n}_slope    : first difference of Aroon Down
-    aroon_osc_{n}_slope     : first difference of Aroon Oscillator
-    aroon_{n}_distance      : Aroon Up - Aroon Down (signed, positive = bullish)
-    aroon_{n}_distance_abs  : |Aroon Up - Aroon Down| (magnitude only)
-    aroon_{n}_ratio         : Aroon Up / Aroon Down (NaN-safe)
-    aroon_{n}_direction     : +1 if Up > Down, -1 otherwise
-    aroon_up_{n}_gt_70      : Aroon Up > 70 (strong uptrend signal)
-    aroon_down_{n}_gt_70    : Aroon Down > 70 (strong downtrend signal)
-    aroon_up_{n}_lt_30      : Aroon Up < 30 (weak uptrend / trend absent)
-    aroon_down_{n}_lt_30    : Aroon Down < 30 (weak downtrend / trend absent)
-    aroon_{n}_strength      : |osc| × distance_abs (combined conviction score)
-    """
-
     for col in (high_col, low_col):
         validate_column(df, col)
 
@@ -994,44 +809,49 @@ def add_aroon(
         n = [25]
 
     df = df.copy()
-
     high = df[high_col].to_numpy(dtype=float)
     low = df[low_col].to_numpy(dtype=float)
 
+    new_cols = {}
+
     for period in n:
-        s = f"_{period}"  # suffix
+        s = f"_{period}"
 
         # --- core indicators ---
         aroon_down, aroon_up = talib.AROON(high, low, timeperiod=period)
-        df[f"aroon_up{s}"] = aroon_up
-        df[f"aroon_down{s}"] = aroon_down
-        df[f"aroon_osc{s}"] = talib.AROONOSC(high, low, timeperiod=period)
+        aroon_up = pd.Series(aroon_up, index=df.index)
+        aroon_down = pd.Series(aroon_down, index=df.index)
+        aroon_osc = pd.Series(
+            talib.AROONOSC(high, low, timeperiod=period), index=df.index
+        )
+        dist = aroon_up - aroon_down
+
+        # --- core ---
+        new_cols[f"aroon_up{s}"] = aroon_up
+        new_cols[f"aroon_down{s}"] = aroon_down
+        new_cols[f"aroon_osc{s}"] = aroon_osc
 
         # --- slopes ---
-        df[f"aroon_up{s}_slope"] = df[f"aroon_up{s}"].diff()
-        df[f"aroon_down{s}_slope"] = df[f"aroon_down{s}"].diff()
-        df[f"aroon_osc{s}_slope"] = df[f"aroon_osc{s}"].diff()
+        new_cols[f"aroon_up{s}_slope"] = aroon_up.diff()
+        new_cols[f"aroon_down{s}_slope"] = aroon_down.diff()
+        new_cols[f"aroon_osc{s}_slope"] = aroon_osc.diff()
 
         # --- up/down relationship ---
-        df[f"aroon{s}_distance"] = df[f"aroon_up{s}"] - df[f"aroon_down{s}"]
-        df[f"aroon{s}_distance_abs"] = df[f"aroon{s}_distance"].abs()
-        df[f"aroon{s}_ratio"] = df[f"aroon_up{s}"] / df[f"aroon_down{s}"].replace(
-            0, float("nan")
-        )
-        df[f"aroon{s}_direction"] = df[f"aroon{s}_distance"].apply(
-            lambda x: 1 if x > 0 else -1
-        )
+        new_cols[f"aroon{s}_distance"] = dist
+        new_cols[f"aroon{s}_distance_abs"] = dist.abs()
+        new_cols[f"aroon{s}_ratio"] = aroon_up / aroon_down.replace(0, float("nan"))
+        new_cols[f"aroon{s}_direction"] = np.where(dist > 0, 1, -1)
 
         # --- threshold flags ---
-        df[f"aroon_up{s}_gt_70"] = df[f"aroon_up{s}"] > 70
-        df[f"aroon_down{s}_gt_70"] = df[f"aroon_down{s}"] > 70
-        df[f"aroon_up{s}_lt_30"] = df[f"aroon_up{s}"] < 30
-        df[f"aroon_down{s}_lt_30"] = df[f"aroon_down{s}"] < 30
+        new_cols[f"aroon_up{s}_gt_70"] = aroon_up > 70
+        new_cols[f"aroon_down{s}_gt_70"] = aroon_down > 70
+        new_cols[f"aroon_up{s}_lt_30"] = aroon_up < 30
+        new_cols[f"aroon_down{s}_lt_30"] = aroon_down < 30
 
         # --- combined conviction score ---
-        df[f"aroon{s}_strength"] = (
-            df[f"aroon_osc{s}"].abs() * df[f"aroon{s}_distance_abs"]
-        )
+        new_cols[f"aroon{s}_strength"] = aroon_osc.abs() * dist.abs()
+
+    df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
     return df
 
@@ -1044,33 +864,6 @@ def add_bop(
     low_col: str = "low",
     close_col: str = "close",
 ) -> pd.DataFrame:
-    """
-    Add Balance of Power (BOP) indicator columns.
-
-    BOP has no timeperiod parameter — n defines smoothing windows
-    applied to the raw BOP signal (like a signal line).
-
-    Base columns (computed once)
-    ----------------------------
-    bop                     : raw BOP value (open–close / high–low), range [-1, +1]
-    bop_slope               : first difference of raw BOP
-    bop_acceleration        : second difference of raw BOP
-    bop_gt_0                : BOP > 0 (buyers in control)
-    bop_lt_0                : BOP < 0 (sellers in control)
-    bop_abs                 : |BOP| (conviction magnitude regardless of direction)
-    bop_direction           : +1 if BOP > 0, -1 otherwise
-
-    Per smoothing window (e.g. n=14 → suffix '_14')
-    ------------------------------------------------
-    bop_signal_{n}          : SMA of raw BOP over n periods
-    bop_signal_{n}_slope    : first difference of signal line
-    bop_hist_{n}            : bop - bop_signal (raw vs smoothed divergence)
-    bop_hist_{n}_slope      : first difference of histogram
-    bop_hist_{n}_gt_0       : histogram > 0 (momentum turning bullish)
-    bop_hist_{n}_lt_0       : histogram < 0 (momentum turning bearish)
-    bop_{n}_strength        : bop_abs × |bop_hist| (conviction × divergence score)
-    """
-
     for col in (open_col, high_col, low_col, close_col):
         validate_column(df, col)
 
@@ -1078,36 +871,41 @@ def add_bop(
         n = [14]
 
     df = df.copy()
-
     open_ = df[open_col].to_numpy(dtype=float)
     high = df[high_col].to_numpy(dtype=float)
     low = df[low_col].to_numpy(dtype=float)
     close = df[close_col].to_numpy(dtype=float)
 
-    # --- raw BOP (computed once, no period) ---
-    df["bop"] = talib.BOP(open_, high, low, close)
+    new_cols = {}
 
-    # --- base derivatives ---
-    df["bop_slope"] = df["bop"].diff()
-    df["bop_acceleration"] = df["bop_slope"].diff()
-    df["bop_gt_0"] = df["bop"] > 0
-    df["bop_lt_0"] = df["bop"] < 0
-    df["bop_abs"] = df["bop"].abs()
-    df["bop_direction"] = df["bop"].apply(lambda x: 1 if x > 0 else -1)
+    # --- raw BOP (computed once, no period) ---
+    bop = pd.Series(talib.BOP(open_, high, low, close), index=df.index)
+    bop_slope = bop.diff()
+    bop_abs = bop.abs()
+
+    new_cols["bop"] = bop
+    new_cols["bop_slope"] = bop_slope
+    new_cols["bop_acceleration"] = bop_slope.diff()
+    new_cols["bop_gt_0"] = bop > 0
+    new_cols["bop_lt_0"] = bop < 0
+    new_cols["bop_abs"] = bop_abs
+    new_cols["bop_direction"] = np.where(bop > 0, 1, -1)
 
     # --- per smoothing window ---
     for period in n:
         s = f"_{period}"
+        signal = bop.rolling(window=period).mean()
+        hist = bop - signal
 
-        df[f"bop_signal{s}"] = df["bop"].rolling(window=period).mean()
-        df[f"bop_signal{s}_slope"] = df[f"bop_signal{s}"].diff()
+        new_cols[f"bop_signal{s}"] = signal
+        new_cols[f"bop_signal{s}_slope"] = signal.diff()
+        new_cols[f"bop_hist{s}"] = hist
+        new_cols[f"bop_hist{s}_slope"] = hist.diff()
+        new_cols[f"bop_hist{s}_gt_0"] = hist > 0
+        new_cols[f"bop_hist{s}_lt_0"] = hist < 0
+        new_cols[f"bop{s}_strength"] = bop_abs * hist.abs()
 
-        df[f"bop_hist{s}"] = df["bop"] - df[f"bop_signal{s}"]
-        df[f"bop_hist{s}_slope"] = df[f"bop_hist{s}"].diff()
-        df[f"bop_hist{s}_gt_0"] = df[f"bop_hist{s}"] > 0
-        df[f"bop_hist{s}_lt_0"] = df[f"bop_hist{s}"] < 0
-
-        df[f"bop{s}_strength"] = df["bop_abs"] * df[f"bop_hist{s}"].abs()
+    df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
     return df
 
@@ -1119,30 +917,6 @@ def add_cci(
     low_col: str = "low",
     close_col: str = "close",
 ) -> pd.DataFrame:
-    """
-    Add Commodity Channel Index (CCI) columns for each period in n.
-
-    Columns added (per period, e.g. n=14 → suffix '_14')
-    -------------
-    cci_{n}                 : raw CCI value
-    cci_{n}_slope           : first difference of CCI (momentum)
-    cci_{n}_acceleration    : second difference of CCI (rate of change of momentum)
-    cci_{n}_gt_100          : CCI > +100 (overbought / strong bullish trend)
-    cci_{n}_lt_minus100     : CCI < -100 (oversold / strong bearish trend)
-    cci_{n}_gt_0            : CCI > 0 (above zero-line, bullish bias)
-    cci_{n}_lt_0            : CCI < 0 (below zero-line, bearish bias)
-    cci_{n}_abs             : |CCI| (magnitude regardless of direction)
-    cci_{n}_direction       : +1 if CCI > 0, -1 otherwise
-    cci_{n}_extreme         : +1 if CCI > +100, -1 if CCI < -100, 0 if between
-    cci_{n}_signal          : SMA of CCI over same period (smoothed signal line)
-    cci_{n}_signal_slope    : first difference of signal line
-    cci_{n}_hist            : CCI - signal (raw vs smoothed divergence)
-    cci_{n}_hist_slope      : first difference of histogram
-    cci_{n}_hist_gt_0       : histogram > 0 (momentum turning bullish)
-    cci_{n}_hist_lt_0       : histogram < 0 (momentum turning bearish)
-    cci_{n}_strength        : cci_abs × |cci_hist| (conviction × divergence score)
-    """
-
     for col in (high_col, low_col, close_col):
         validate_column(df, col)
 
@@ -1150,44 +924,52 @@ def add_cci(
         n = [14]
 
     df = df.copy()
-
     high = df[high_col].to_numpy(dtype=float)
     low = df[low_col].to_numpy(dtype=float)
     close = df[close_col].to_numpy(dtype=float)
+
+    new_cols = {}
 
     for period in n:
         s = f"_{period}"
 
         # --- core indicator ---
-        df[f"cci{s}"] = talib.CCI(high, low, close, timeperiod=period)
+        cci = pd.Series(talib.CCI(high, low, close, timeperiod=period), index=df.index)
+        cci_slope = cci.diff()
+        cci_abs = cci.abs()
+        signal = cci.rolling(window=period).mean()
+        hist = cci - signal
 
-        # --- derivatives ---
-        df[f"cci{s}_slope"] = df[f"cci{s}"].diff()
-        df[f"cci{s}_acceleration"] = df[f"cci{s}_slope"].diff()
+        # --- core + derivatives ---
+        new_cols[f"cci{s}"] = cci
+        new_cols[f"cci{s}_slope"] = cci_slope
+        new_cols[f"cci{s}_acceleration"] = cci_slope.diff()
 
         # --- threshold flags ---
-        df[f"cci{s}_gt_100"] = df[f"cci{s}"] > 100
-        df[f"cci{s}_lt_minus100"] = df[f"cci{s}"] < -100
-        df[f"cci{s}_gt_0"] = df[f"cci{s}"] > 0
-        df[f"cci{s}_lt_0"] = df[f"cci{s}"] < 0
+        new_cols[f"cci{s}_gt_100"] = cci > 100
+        new_cols[f"cci{s}_lt_minus100"] = cci < -100
+        new_cols[f"cci{s}_gt_0"] = cci > 0
+        new_cols[f"cci{s}_lt_0"] = cci < 0
 
         # --- magnitude & direction ---
-        df[f"cci{s}_abs"] = df[f"cci{s}"].abs()
-        df[f"cci{s}_direction"] = df[f"cci{s}"].apply(lambda x: 1 if x > 0 else -1)
-        df[f"cci{s}_extreme"] = df[f"cci{s}"].apply(
-            lambda x: 1 if x > 100 else (-1 if x < -100 else 0)
+        new_cols[f"cci{s}_abs"] = cci_abs
+        new_cols[f"cci{s}_direction"] = np.where(cci > 0, 1, -1)
+        new_cols[f"cci{s}_extreme"] = np.where(
+            cci > 100, 1, np.where(cci < -100, -1, 0)
         )
 
         # --- signal line & histogram ---
-        df[f"cci{s}_signal"] = df[f"cci{s}"].rolling(window=period).mean()
-        df[f"cci{s}_signal_slope"] = df[f"cci{s}_signal"].diff()
-        df[f"cci{s}_hist"] = df[f"cci{s}"] - df[f"cci{s}_signal"]
-        df[f"cci{s}_hist_slope"] = df[f"cci{s}_hist"].diff()
-        df[f"cci{s}_hist_gt_0"] = df[f"cci{s}_hist"] > 0
-        df[f"cci{s}_hist_lt_0"] = df[f"cci{s}_hist"] < 0
+        new_cols[f"cci{s}_signal"] = signal
+        new_cols[f"cci{s}_signal_slope"] = signal.diff()
+        new_cols[f"cci{s}_hist"] = hist
+        new_cols[f"cci{s}_hist_slope"] = hist.diff()
+        new_cols[f"cci{s}_hist_gt_0"] = hist > 0
+        new_cols[f"cci{s}_hist_lt_0"] = hist < 0
 
         # --- combined conviction score ---
-        df[f"cci{s}_strength"] = df[f"cci{s}_abs"] * df[f"cci{s}_hist"].abs()
+        new_cols[f"cci{s}_strength"] = cci_abs * hist.abs()
+
+    df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
     return df
 
@@ -1197,73 +979,52 @@ def add_cmo(
     n: list[int] = None,
     column_name: str = "close",
 ) -> pd.DataFrame:
-    """
-    Add Chande Momentum Oscillator (CMO) columns for each period in n.
-
-    CMO measures momentum as (sum of up days - sum of down days) / total sum × 100.
-    Range is -100 to +100. Unlike RSI, it uses both up and down days in the denominator.
-
-    Columns added (per period, e.g. n=14 → suffix '_14')
-    -------------
-    cmo_{n}                     : raw CMO value (-100 to +100)
-    cmo_{n}_slope               : first difference of CMO (momentum)
-    cmo_{n}_acceleration        : second difference of CMO
-    cmo_{n}_abs                 : |CMO| (conviction magnitude regardless of direction)
-    cmo_{n}_direction           : +1 if CMO > 0, -1 otherwise
-    cmo_{n}_gt_50               : CMO > +50 (strong bullish momentum)
-    cmo_{n}_lt_minus50          : CMO < -50 (strong bearish momentum)
-    cmo_{n}_gt_0                : CMO > 0 (bullish bias)
-    cmo_{n}_lt_0                : CMO < 0 (bearish bias)
-    cmo_{n}_extreme             : +1 if CMO > +50, -1 if CMO < -50, 0 if between
-    cmo_{n}_signal              : SMA of CMO over same period (smoothed signal line)
-    cmo_{n}_signal_slope        : first difference of signal line
-    cmo_{n}_hist                : CMO - signal (raw vs smoothed divergence)
-    cmo_{n}_hist_slope          : first difference of histogram
-    cmo_{n}_hist_gt_0           : histogram > 0 (momentum turning bullish)
-    cmo_{n}_hist_lt_0           : histogram < 0 (momentum turning bearish)
-    cmo_{n}_strength            : cmo_abs × |cmo_hist| (conviction × divergence score)
-    """
-
     validate_column(df, column_name)
 
     if n is None:
         n = [14]
 
     df = df.copy()
-
     source = df[column_name].to_numpy(dtype=float)
+
+    new_cols = {}
 
     for period in n:
         s = f"_{period}"
 
         # --- core indicator ---
-        df[f"cmo{s}"] = talib.CMO(source, timeperiod=period)
+        cmo = pd.Series(talib.CMO(source, timeperiod=period), index=df.index)
+        cmo_slope = cmo.diff()
+        cmo_abs = cmo.abs()
+        signal = cmo.rolling(window=period).mean()
+        hist = cmo - signal
 
-        # --- derivatives ---
-        df[f"cmo{s}_slope"] = df[f"cmo{s}"].diff()
-        df[f"cmo{s}_acceleration"] = df[f"cmo{s}_slope"].diff()
-        df[f"cmo{s}_abs"] = df[f"cmo{s}"].abs()
-        df[f"cmo{s}_direction"] = df[f"cmo{s}"].apply(lambda x: 1 if x > 0 else -1)
+        # --- core + derivatives ---
+        new_cols[f"cmo{s}"] = cmo
+        new_cols[f"cmo{s}_slope"] = cmo_slope
+        new_cols[f"cmo{s}_acceleration"] = cmo_slope.diff()
+        new_cols[f"cmo{s}_abs"] = cmo_abs
+        new_cols[f"cmo{s}_direction"] = np.where(cmo > 0, 1, -1)
 
         # --- threshold flags ---
-        df[f"cmo{s}_gt_50"] = df[f"cmo{s}"] > 50
-        df[f"cmo{s}_lt_minus50"] = df[f"cmo{s}"] < -50
-        df[f"cmo{s}_gt_0"] = df[f"cmo{s}"] > 0
-        df[f"cmo{s}_lt_0"] = df[f"cmo{s}"] < 0
-        df[f"cmo{s}_extreme"] = df[f"cmo{s}"].apply(
-            lambda x: 1 if x > 50 else (-1 if x < -50 else 0)
-        )
+        new_cols[f"cmo{s}_gt_50"] = cmo > 50
+        new_cols[f"cmo{s}_lt_minus50"] = cmo < -50
+        new_cols[f"cmo{s}_gt_0"] = cmo > 0
+        new_cols[f"cmo{s}_lt_0"] = cmo < 0
+        new_cols[f"cmo{s}_extreme"] = np.where(cmo > 50, 1, np.where(cmo < -50, -1, 0))
 
         # --- signal line & histogram ---
-        df[f"cmo{s}_signal"] = df[f"cmo{s}"].rolling(window=period).mean()
-        df[f"cmo{s}_signal_slope"] = df[f"cmo{s}_signal"].diff()
-        df[f"cmo{s}_hist"] = df[f"cmo{s}"] - df[f"cmo{s}_signal"]
-        df[f"cmo{s}_hist_slope"] = df[f"cmo{s}_hist"].diff()
-        df[f"cmo{s}_hist_gt_0"] = df[f"cmo{s}_hist"] > 0
-        df[f"cmo{s}_hist_lt_0"] = df[f"cmo{s}_hist"] < 0
+        new_cols[f"cmo{s}_signal"] = signal
+        new_cols[f"cmo{s}_signal_slope"] = signal.diff()
+        new_cols[f"cmo{s}_hist"] = hist
+        new_cols[f"cmo{s}_hist_slope"] = hist.diff()
+        new_cols[f"cmo{s}_hist_gt_0"] = hist > 0
+        new_cols[f"cmo{s}_hist_lt_0"] = hist < 0
 
         # --- combined conviction score ---
-        df[f"cmo{s}_strength"] = df[f"cmo{s}_abs"] * df[f"cmo{s}_hist"].abs()
+        new_cols[f"cmo{s}_strength"] = cmo_abs * hist.abs()
+
+    df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
     return df
 
@@ -1275,39 +1036,6 @@ def add_macd(
     signal: list[int] = None,
     column_name: str = "close",
 ) -> pd.DataFrame:
-    """
-    Add MACD columns for each (fast, slow, signal) combination.
-
-    MACD = EMA(fast) - EMA(slow). Signal = EMA(MACD, signal). Hist = MACD - Signal.
-
-    Suffix format: macd_{fast}_{slow}_{signal}, e.g. (12, 26, 9) → 'macd_12_26_9'
-
-    Columns added (per combo)
-    -------------------------
-    macd_{f}_{sl}_{sg}                  : MACD line (fast EMA - slow EMA)
-    macd_{f}_{sl}_{sg}_slope            : first difference of MACD line
-    macd_{f}_{sl}_{sg}_acceleration     : second difference of MACD line
-    macd_{f}_{sl}_{sg}_abs              : |MACD| (magnitude regardless of direction)
-    macd_{f}_{sl}_{sg}_direction        : +1 if MACD > 0, -1 otherwise
-    macd_{f}_{sl}_{sg}_gt_0             : MACD > 0 (bullish bias)
-    macd_{f}_{sl}_{sg}_lt_0             : MACD < 0 (bearish bias)
-
-    macd_{f}_{sl}_{sg}_signal           : signal line (EMA of MACD)
-    macd_{f}_{sl}_{sg}_signal_slope     : first difference of signal line
-    macd_{f}_{sl}_{sg}_signal_gt_0      : signal line > 0
-    macd_{f}_{sl}_{sg}_signal_lt_0      : signal line < 0
-
-    macd_{f}_{sl}_{sg}_hist             : histogram (MACD - signal)
-    macd_{f}_{sl}_{sg}_hist_slope       : first difference of histogram (momentum shift)
-    macd_{f}_{sl}_{sg}_hist_acceleration: second difference of histogram
-    macd_{f}_{sl}_{sg}_hist_gt_0        : histogram > 0 (bullish momentum)
-    macd_{f}_{sl}_{sg}_hist_lt_0        : histogram < 0 (bearish momentum)
-    macd_{f}_{sl}_{sg}_hist_abs         : |histogram| (conviction magnitude)
-
-    macd_{f}_{sl}_{sg}_cross_above      : MACD crossed above signal this bar (golden cross)
-    macd_{f}_{sl}_{sg}_cross_below      : MACD crossed below signal this bar (death cross)
-    macd_{f}_{sl}_{sg}_strength         : macd_abs × hist_abs (trend strength × momentum conviction)
-    """
 
     validate_column(df, column_name)
 
@@ -1319,12 +1047,13 @@ def add_macd(
         signal = [9]
 
     df = df.copy()
-
     source = df[column_name].to_numpy(dtype=float)
+
+    new_cols = {}
 
     for f, sl, sg in product(fast, slow, signal):
         if f >= sl:
-            continue  # fast must be strictly less than slow
+            continue
 
         s = f"_{f}_{sl}_{sg}"
 
@@ -1336,38 +1065,50 @@ def add_macd(
             signalperiod=sg,
         )
 
+        macd = pd.Series(macd_line, index=df.index)
+        signal = pd.Series(signal_line, index=df.index)
+        hist_s = pd.Series(hist, index=df.index)
+
+        # --- derivatives ---
+        macd_slope = macd.diff()
+        hist_slope = hist_s.diff()
+
+        # --- reusable ---
+        macd_abs = macd.abs()
+        hist_abs = hist_s.abs()
+        prev_hist = hist_s.shift(1)
+
         # --- MACD line ---
-        df[f"macd{s}"] = macd_line
-        df[f"macd{s}_slope"] = pd.Series(macd_line).diff().values
-        df[f"macd{s}_acceleration"] = pd.Series(df[f"macd{s}_slope"]).diff().values
-        df[f"macd{s}_abs"] = np.abs(macd_line)
-        df[f"macd{s}_direction"] = np.where(macd_line > 0, 1, -1)
-        df[f"macd{s}_gt_0"] = macd_line > 0
-        df[f"macd{s}_lt_0"] = macd_line < 0
+        new_cols[f"macd{s}"] = macd
+        new_cols[f"macd{s}_slope"] = macd_slope
+        new_cols[f"macd{s}_acceleration"] = macd_slope.diff()
+        new_cols[f"macd{s}_abs"] = macd_abs
+        new_cols[f"macd{s}_direction"] = np.where(macd > 0, 1, -1)
+        new_cols[f"macd{s}_gt_0"] = macd > 0
+        new_cols[f"macd{s}_lt_0"] = macd < 0
 
         # --- signal line ---
-        df[f"macd{s}_signal"] = signal_line
-        df[f"macd{s}_signal_slope"] = pd.Series(signal_line).diff().values
-        df[f"macd{s}_signal_gt_0"] = signal_line > 0
-        df[f"macd{s}_signal_lt_0"] = signal_line < 0
+        new_cols[f"macd{s}_signal"] = signal
+        new_cols[f"macd{s}_signal_slope"] = signal.diff()
+        new_cols[f"macd{s}_signal_gt_0"] = signal > 0
+        new_cols[f"macd{s}_signal_lt_0"] = signal < 0
 
         # --- histogram ---
-        df[f"macd{s}_hist"] = hist
-        df[f"macd{s}_hist_slope"] = pd.Series(hist).diff().values
-        df[f"macd{s}_hist_acceleration"] = (
-            pd.Series(df[f"macd{s}_hist_slope"]).diff().values
-        )
-        df[f"macd{s}_hist_gt_0"] = hist > 0
-        df[f"macd{s}_hist_lt_0"] = hist < 0
-        df[f"macd{s}_hist_abs"] = np.abs(hist)
+        new_cols[f"macd{s}_hist"] = hist_s
+        new_cols[f"macd{s}_hist_slope"] = hist_slope
+        new_cols[f"macd{s}_hist_acceleration"] = hist_slope.diff()
+        new_cols[f"macd{s}_hist_gt_0"] = hist_s > 0
+        new_cols[f"macd{s}_hist_lt_0"] = hist_s < 0
+        new_cols[f"macd{s}_hist_abs"] = hist_abs
 
         # --- crossover signals ---
-        prev_hist = pd.Series(hist).shift(1)
-        df[f"macd{s}_cross_above"] = (pd.Series(hist) > 0) & (prev_hist <= 0)
-        df[f"macd{s}_cross_below"] = (pd.Series(hist) < 0) & (prev_hist >= 0)
+        new_cols[f"macd{s}_cross_above"] = (hist_s > 0) & (prev_hist <= 0)
+        new_cols[f"macd{s}_cross_below"] = (hist_s < 0) & (prev_hist >= 0)
 
         # --- combined conviction score ---
-        df[f"macd{s}_strength"] = df[f"macd{s}_abs"] * df[f"macd{s}_hist_abs"]
+        new_cols[f"macd{s}_strength"] = macd_abs * hist_abs
+
+    df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
     return df
 
@@ -1380,32 +1121,6 @@ def add_mfi(
     close_col: str = "close",
     volume_col: str = "matching_volume",
 ) -> pd.DataFrame:
-    """
-    Add Money Flow Index (MFI) columns for each period in n.
-
-    MFI is a volume-weighted RSI — it measures buying and selling pressure
-    using both price and volume. Range is 0 to 100.
-
-    Columns added (per period, e.g. n=14 → suffix '_14')
-    -------------
-    mfi_{n}                     : raw MFI value (0 to 100)
-    mfi_{n}_slope               : first difference of MFI (momentum)
-    mfi_{n}_acceleration        : second difference of MFI
-    mfi_{n}_abs                 : |MFI - 50| (deviation from neutral midpoint)
-    mfi_{n}_direction           : +1 if MFI > 50, -1 otherwise
-    mfi_{n}_gt_80               : MFI > 80 (overbought)
-    mfi_{n}_lt_20               : MFI < 20 (oversold)
-    mfi_{n}_gt_50               : MFI > 50 (bullish bias)
-    mfi_{n}_lt_50               : MFI < 50 (bearish bias)
-    mfi_{n}_extreme             : +1 if MFI > 80, -1 if MFI < 20, 0 if between
-    mfi_{n}_signal              : SMA of MFI over same period (smoothed signal line)
-    mfi_{n}_signal_slope        : first difference of signal line
-    mfi_{n}_hist                : MFI - signal (raw vs smoothed divergence)
-    mfi_{n}_hist_slope          : first difference of histogram
-    mfi_{n}_hist_gt_0           : histogram > 0 (momentum turning bullish)
-    mfi_{n}_hist_lt_0           : histogram < 0 (momentum turning bearish)
-    mfi_{n}_strength            : mfi_abs × |mfi_hist| (deviation × divergence score)
-    """
 
     for col in (high_col, low_col, close_col, volume_col):
         validate_column(df, col)
@@ -1420,37 +1135,51 @@ def add_mfi(
     close = df[close_col].to_numpy(dtype=float)
     volume = df[volume_col].to_numpy(dtype=float)
 
+    new_cols = {}
+
     for period in n:
         s = f"_{period}"
 
         # --- core indicator ---
-        df[f"mfi{s}"] = talib.MFI(high, low, close, volume, timeperiod=period)
-
-        # --- derivatives ---
-        df[f"mfi{s}_slope"] = df[f"mfi{s}"].diff()
-        df[f"mfi{s}_acceleration"] = df[f"mfi{s}_slope"].diff()
-        df[f"mfi{s}_abs"] = (df[f"mfi{s}"] - 50).abs()  # deviation from neutral
-        df[f"mfi{s}_direction"] = df[f"mfi{s}"].apply(lambda x: 1 if x > 50 else -1)
-
-        # --- threshold flags ---
-        df[f"mfi{s}_gt_80"] = df[f"mfi{s}"] > 80
-        df[f"mfi{s}_lt_20"] = df[f"mfi{s}"] < 20
-        df[f"mfi{s}_gt_50"] = df[f"mfi{s}"] > 50
-        df[f"mfi{s}_lt_50"] = df[f"mfi{s}"] < 50
-        df[f"mfi{s}_extreme"] = df[f"mfi{s}"].apply(
-            lambda x: 1 if x > 80 else (-1 if x < 20 else 0)
+        mfi = pd.Series(
+            talib.MFI(high, low, close, volume, timeperiod=period),
+            index=df.index,
         )
 
+        # --- derivatives ---
+        mfi_slope = mfi.diff()
+
+        # --- reusable ---
+        mfi_abs = (mfi - 50).abs()
+        signal = mfi.rolling(window=period).mean()
+        hist = mfi - signal
+
+        # --- core + derivatives ---
+        new_cols[f"mfi{s}"] = mfi
+        new_cols[f"mfi{s}_slope"] = mfi_slope
+        new_cols[f"mfi{s}_acceleration"] = mfi_slope.diff()
+        new_cols[f"mfi{s}_abs"] = mfi_abs
+        new_cols[f"mfi{s}_direction"] = np.where(mfi > 50, 1, -1)
+
+        # --- threshold flags ---
+        new_cols[f"mfi{s}_gt_80"] = mfi > 80
+        new_cols[f"mfi{s}_lt_20"] = mfi < 20
+        new_cols[f"mfi{s}_gt_50"] = mfi > 50
+        new_cols[f"mfi{s}_lt_50"] = mfi < 50
+        new_cols[f"mfi{s}_extreme"] = np.where(mfi > 80, 1, np.where(mfi < 20, -1, 0))
+
         # --- signal line & histogram ---
-        df[f"mfi{s}_signal"] = df[f"mfi{s}"].rolling(window=period).mean()
-        df[f"mfi{s}_signal_slope"] = df[f"mfi{s}_signal"].diff()
-        df[f"mfi{s}_hist"] = df[f"mfi{s}"] - df[f"mfi{s}_signal"]
-        df[f"mfi{s}_hist_slope"] = df[f"mfi{s}_hist"].diff()
-        df[f"mfi{s}_hist_gt_0"] = df[f"mfi{s}_hist"] > 0
-        df[f"mfi{s}_hist_lt_0"] = df[f"mfi{s}_hist"] < 0
+        new_cols[f"mfi{s}_signal"] = signal
+        new_cols[f"mfi{s}_signal_slope"] = signal.diff()
+        new_cols[f"mfi{s}_hist"] = hist
+        new_cols[f"mfi{s}_hist_slope"] = hist.diff()
+        new_cols[f"mfi{s}_hist_gt_0"] = hist > 0
+        new_cols[f"mfi{s}_hist_lt_0"] = hist < 0
 
         # --- combined conviction score ---
-        df[f"mfi{s}_strength"] = df[f"mfi{s}_abs"] * df[f"mfi{s}_hist"].abs()
+        new_cols[f"mfi{s}_strength"] = mfi_abs * hist.abs()
+
+    df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
     return df
 
@@ -1460,33 +1189,6 @@ def add_mom(
     n: list[int] = None,
     column_name: str = "close",
 ) -> pd.DataFrame:
-    """
-    Add Momentum (MOM) columns for each period in n.
-
-    MOM = close - close[n periods ago]. Unbounded — scale depends on price level.
-    Positive = price higher than n bars ago (bullish), negative = lower (bearish).
-
-    Columns added (per period, e.g. n=10 → suffix '_10')
-    -------------
-    mom_{n}                     : raw MOM value
-    mom_{n}_slope               : first difference of MOM (acceleration)
-    mom_{n}_acceleration        : second difference of MOM (jerk)
-    mom_{n}_abs                 : |MOM| (magnitude regardless of direction)
-    mom_{n}_direction           : +1 if MOM > 0, -1 otherwise
-    mom_{n}_gt_0                : MOM > 0 (price higher than n bars ago)
-    mom_{n}_lt_0                : MOM < 0 (price lower than n bars ago)
-    mom_{n}_pct                 : MOM / close[n periods ago] (normalised, scale-free)
-    mom_{n}_pct_slope           : first difference of normalised MOM
-    mom_{n}_signal              : SMA of MOM over same period (smoothed signal line)
-    mom_{n}_signal_slope        : first difference of signal line
-    mom_{n}_hist                : MOM - signal (raw vs smoothed divergence)
-    mom_{n}_hist_slope          : first difference of histogram
-    mom_{n}_hist_acceleration   : second difference of histogram
-    mom_{n}_hist_gt_0           : histogram > 0 (momentum turning bullish)
-    mom_{n}_hist_lt_0           : histogram < 0 (momentum turning bearish)
-    mom_{n}_hist_abs            : |histogram| (divergence magnitude)
-    mom_{n}_strength            : mom_abs × hist_abs (raw momentum × divergence score)
-    """
 
     validate_column(df, column_name)
 
@@ -1498,39 +1200,56 @@ def add_mom(
     source = df[column_name].to_numpy(dtype=float)
     price = df[column_name]
 
+    new_cols = {}
+
     for period in n:
         s = f"_{period}"
 
         # --- core indicator ---
-        df[f"mom{s}"] = talib.MOM(source, timeperiod=period)
+        mom = pd.Series(talib.MOM(source, timeperiod=period), index=df.index)
 
         # --- derivatives ---
-        df[f"mom{s}_slope"] = df[f"mom{s}"].diff()
-        df[f"mom{s}_acceleration"] = df[f"mom{s}_slope"].diff()
-        df[f"mom{s}_abs"] = df[f"mom{s}"].abs()
-        df[f"mom{s}_direction"] = df[f"mom{s}"].apply(lambda x: 1 if x > 0 else -1)
+        mom_slope = mom.diff()
+
+        # --- reusable ---
+        mom_abs = mom.abs()
+        lagged = price.shift(period).replace(0, float("nan"))
+        mom_pct = mom / lagged
+
+        signal = mom.rolling(window=period).mean()
+        hist = mom - signal
+        hist_slope = hist.diff()
+        hist_abs = hist.abs()
+
+        # --- core + derivatives ---
+        new_cols[f"mom{s}"] = mom
+        new_cols[f"mom{s}_slope"] = mom_slope
+        new_cols[f"mom{s}_acceleration"] = mom_slope.diff()
+        new_cols[f"mom{s}_abs"] = mom_abs
+        new_cols[f"mom{s}_direction"] = np.where(mom > 0, 1, -1)
 
         # --- zero-line flags ---
-        df[f"mom{s}_gt_0"] = df[f"mom{s}"] > 0
-        df[f"mom{s}_lt_0"] = df[f"mom{s}"] < 0
+        new_cols[f"mom{s}_gt_0"] = mom > 0
+        new_cols[f"mom{s}_lt_0"] = mom < 0
 
-        # --- normalised momentum (scale-free) ---
-        lagged = price.shift(period).replace(0, float("nan"))
-        df[f"mom{s}_pct"] = df[f"mom{s}"] / lagged
-        df[f"mom{s}_pct_slope"] = df[f"mom{s}_pct"].diff()
+        # --- normalised momentum ---
+        new_cols[f"mom{s}_pct"] = mom_pct
+        new_cols[f"mom{s}_pct_slope"] = mom_pct.diff()
 
         # --- signal line & histogram ---
-        df[f"mom{s}_signal"] = df[f"mom{s}"].rolling(window=period).mean()
-        df[f"mom{s}_signal_slope"] = df[f"mom{s}_signal"].diff()
-        df[f"mom{s}_hist"] = df[f"mom{s}"] - df[f"mom{s}_signal"]
-        df[f"mom{s}_hist_slope"] = df[f"mom{s}_hist"].diff()
-        df[f"mom{s}_hist_acceleration"] = df[f"mom{s}_hist_slope"].diff()
-        df[f"mom{s}_hist_gt_0"] = df[f"mom{s}_hist"] > 0
-        df[f"mom{s}_hist_lt_0"] = df[f"mom{s}_hist"] < 0
-        df[f"mom{s}_hist_abs"] = df[f"mom{s}_hist"].abs()
+        new_cols[f"mom{s}_signal"] = signal
+        new_cols[f"mom{s}_signal_slope"] = signal.diff()
+        new_cols[f"mom{s}_hist"] = hist
+        new_cols[f"mom{s}_hist_slope"] = hist_slope
+        new_cols[f"mom{s}_hist_acceleration"] = hist_slope.diff()
+        new_cols[f"mom{s}_hist_gt_0"] = hist > 0
+        new_cols[f"mom{s}_hist_lt_0"] = hist < 0
+        new_cols[f"mom{s}_hist_abs"] = hist_abs
 
         # --- combined conviction score ---
-        df[f"mom{s}_strength"] = df[f"mom{s}_abs"] * df[f"mom{s}_hist_abs"]
+        new_cols[f"mom{s}_strength"] = mom_abs * hist_abs
+
+    df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
     return df
 
@@ -1543,44 +1262,6 @@ def add_ppo(
     ma_type: int = 1,
     column_name: str = "close",
 ) -> pd.DataFrame:
-    """
-    Add Percentage Price Oscillator (PPO) columns for each (fast, slow, signal) combo.
-
-    PPO = (EMA(fast) - EMA(slow)) / EMA(slow) × 100.
-    Scale-free version of MACD — expressed as a percentage, comparable across assets.
-
-    Suffix format: ppo_{fast}_{slow}_{signal}, e.g. (12, 26, 9) → 'ppo_12_26_9'
-
-    Moving average types (TA-Lib MA_Type):
-        0 = SMA  1 = EMA  2 = WMA  3 = DEMA  4 = TEMA
-        5 = TRIMA  6 = KAMA  7 = MAMA  8 = T3
-
-    Columns added (per combo)
-    -------------------------
-    ppo_{f}_{sl}_{sg}                   : PPO line (% distance between fast and slow MA)
-    ppo_{f}_{sl}_{sg}_slope             : first difference of PPO line
-    ppo_{f}_{sl}_{sg}_acceleration      : second difference of PPO line
-    ppo_{f}_{sl}_{sg}_abs               : |PPO| (magnitude regardless of direction)
-    ppo_{f}_{sl}_{sg}_direction         : +1 if PPO > 0, -1 otherwise
-    ppo_{f}_{sl}_{sg}_gt_0              : PPO > 0 (fast MA above slow MA, bullish)
-    ppo_{f}_{sl}_{sg}_lt_0              : PPO < 0 (fast MA below slow MA, bearish)
-
-    ppo_{f}_{sl}_{sg}_signal            : signal line (MA of PPO)
-    ppo_{f}_{sl}_{sg}_signal_slope      : first difference of signal line
-    ppo_{f}_{sl}_{sg}_signal_gt_0       : signal line > 0
-    ppo_{f}_{sl}_{sg}_signal_lt_0       : signal line < 0
-
-    ppo_{f}_{sl}_{sg}_hist              : histogram (PPO - signal)
-    ppo_{f}_{sl}_{sg}_hist_slope        : first difference of histogram (momentum shift)
-    ppo_{f}_{sl}_{sg}_hist_acceleration : second difference of histogram
-    ppo_{f}_{sl}_{sg}_hist_gt_0         : histogram > 0 (bullish momentum)
-    ppo_{f}_{sl}_{sg}_hist_lt_0         : histogram < 0 (bearish momentum)
-    ppo_{f}_{sl}_{sg}_hist_abs          : |histogram| (conviction magnitude)
-
-    ppo_{f}_{sl}_{sg}_cross_above       : PPO crossed above signal this bar
-    ppo_{f}_{sl}_{sg}_cross_below       : PPO crossed below signal this bar
-    ppo_{f}_{sl}_{sg}_strength          : ppo_abs × hist_abs (trend strength × momentum conviction)
-    """
 
     validate_column(df, column_name)
 
@@ -1592,56 +1273,65 @@ def add_ppo(
         signal = [9]
 
     df = df.copy()
-
     source = df[column_name].to_numpy(dtype=float)
+
+    new_cols = {}
 
     for f, sl, sg in product(fast, slow, signal):
         if f >= sl:
-            continue  # fast must be strictly less than slow
+            continue
 
         s = f"_{f}_{sl}_{sg}"
 
         # --- core indicator ---
-        ppo_line = talib.PPO(source, fastperiod=f, slowperiod=sl, matype=ma_type)
+        ppo_line = pd.Series(
+            talib.PPO(source, fastperiod=f, slowperiod=sl, matype=ma_type),
+            index=df.index,
+        )
 
-        # TA-Lib PPO does not return a signal/hist — compute manually
-        signal_line = pd.Series(ppo_line).rolling(window=sg).mean().values
+        signal_line = ppo_line.rolling(window=sg).mean()
         hist = ppo_line - signal_line
 
-        # --- PPO line ---
-        df[f"ppo{s}"] = ppo_line
-        df[f"ppo{s}_slope"] = pd.Series(ppo_line).diff().values
-        df[f"ppo{s}_acceleration"] = pd.Series(df[f"ppo{s}_slope"]).diff().values
-        df[f"ppo{s}_abs"] = np.abs(ppo_line)
-        df[f"ppo{s}_direction"] = np.where(ppo_line > 0, 1, -1)
-        df[f"ppo{s}_gt_0"] = ppo_line > 0
-        df[f"ppo{s}_lt_0"] = ppo_line < 0
+        # --- derivatives ---
+        ppo_slope = ppo_line.diff()
+        hist_slope = hist.diff()
 
-        # --- signal line ---
-        df[f"ppo{s}_signal"] = signal_line
-        df[f"ppo{s}_signal_slope"] = pd.Series(signal_line).diff().values
-        df[f"ppo{s}_signal_gt_0"] = signal_line > 0
-        df[f"ppo{s}_signal_lt_0"] = signal_line < 0
+        # --- reusable ---
+        ppo_abs = ppo_line.abs()
+        hist_abs = hist.abs()
+        prev_hist = hist.shift(1)
+
+        # --- PPO line ---
+        new_cols[f"ppo{s}"] = ppo_line
+        new_cols[f"ppo{s}_slope"] = ppo_slope
+        new_cols[f"ppo{s}_acceleration"] = ppo_slope.diff()
+        new_cols[f"ppo{s}_abs"] = ppo_abs
+        new_cols[f"ppo{s}_direction"] = np.where(ppo_line > 0, 1, -1)
+        new_cols[f"ppo{s}_gt_0"] = ppo_line > 0
+        new_cols[f"ppo{s}_lt_0"] = ppo_line < 0
+
+        # --- signal ---
+        new_cols[f"ppo{s}_signal"] = signal_line
+        new_cols[f"ppo{s}_signal_slope"] = signal_line.diff()
+        new_cols[f"ppo{s}_signal_gt_0"] = signal_line > 0
+        new_cols[f"ppo{s}_signal_lt_0"] = signal_line < 0
 
         # --- histogram ---
-        df[f"ppo{s}_hist"] = hist
-        df[f"ppo{s}_hist_slope"] = pd.Series(hist).diff().values
-        df[f"ppo{s}_hist_acceleration"] = (
-            pd.Series(df[f"ppo{s}_hist_slope"]).diff().values
-        )
-        df[f"ppo{s}_hist_gt_0"] = hist > 0
-        df[f"ppo{s}_hist_lt_0"] = hist < 0
-        df[f"ppo{s}_hist_abs"] = np.abs(hist)
+        new_cols[f"ppo{s}_hist"] = hist
+        new_cols[f"ppo{s}_hist_slope"] = hist_slope
+        new_cols[f"ppo{s}_hist_acceleration"] = hist_slope.diff()
+        new_cols[f"ppo{s}_hist_gt_0"] = hist > 0
+        new_cols[f"ppo{s}_hist_lt_0"] = hist < 0
+        new_cols[f"ppo{s}_hist_abs"] = hist_abs
 
-        # --- crossover signals ---
-        prev_hist = pd.Series(hist).shift(1)
-        df[f"ppo{s}_cross_above"] = (pd.Series(hist) > 0) & (prev_hist <= 0)
-        df[f"ppo{s}_cross_below"] = (pd.Series(hist) < 0) & (prev_hist >= 0)
+        # --- crossover ---
+        new_cols[f"ppo{s}_cross_above"] = (hist > 0) & (prev_hist <= 0)
+        new_cols[f"ppo{s}_cross_below"] = (hist < 0) & (prev_hist >= 0)
 
-        # --- combined conviction score ---
-        df[f"ppo{s}_strength"] = df[f"ppo{s}_abs"] * df[f"ppo{s}_hist_abs"]
+        # --- strength ---
+        new_cols[f"ppo{s}_strength"] = ppo_abs * hist_abs
 
-    return df
+    return pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
 
 def add_roc(
@@ -1649,32 +1339,6 @@ def add_roc(
     n: list[int] = None,
     column_name: str = "close",
 ) -> pd.DataFrame:
-    """
-    Add Rate of Change (ROC) columns for each period in n.
-
-    ROC = ((price / price[n periods ago]) - 1) × 100.
-    Scale-free momentum — already expressed as %, comparable across assets.
-    Positive = price higher than n bars ago (bullish), negative = lower (bearish).
-
-    Columns added (per period, e.g. n=10 → suffix '_10')
-    -------------
-    roc_{n}                     : raw ROC value (%)
-    roc_{n}_slope               : first difference of ROC (acceleration)
-    roc_{n}_acceleration        : second difference of ROC (jerk)
-    roc_{n}_abs                 : |ROC| (magnitude regardless of direction)
-    roc_{n}_direction           : +1 if ROC > 0, -1 otherwise
-    roc_{n}_gt_0                : ROC > 0 (price higher than n bars ago)
-    roc_{n}_lt_0                : ROC < 0 (price lower than n bars ago)
-    roc_{n}_signal              : SMA of ROC over same period (smoothed signal line)
-    roc_{n}_signal_slope        : first difference of signal line
-    roc_{n}_hist                : ROC - signal (raw vs smoothed divergence)
-    roc_{n}_hist_slope          : first difference of histogram
-    roc_{n}_hist_acceleration   : second difference of histogram
-    roc_{n}_hist_gt_0           : histogram > 0 (momentum turning bullish)
-    roc_{n}_hist_lt_0           : histogram < 0 (momentum turning bearish)
-    roc_{n}_hist_abs            : |histogram| (divergence magnitude)
-    roc_{n}_strength            : roc_abs × hist_abs (momentum × divergence score)
-    """
 
     validate_column(df, column_name)
 
@@ -1682,39 +1346,51 @@ def add_roc(
         n = [10]
 
     df = df.copy()
-
     source = df[column_name].to_numpy(dtype=float)
+
+    new_cols = {}
 
     for period in n:
         s = f"_{period}"
 
         # --- core indicator ---
-        df[f"roc{s}"] = talib.ROC(source, timeperiod=period)
+        roc = pd.Series(talib.ROC(source, timeperiod=period), index=df.index)
 
         # --- derivatives ---
-        df[f"roc{s}_slope"] = df[f"roc{s}"].diff()
-        df[f"roc{s}_acceleration"] = df[f"roc{s}_slope"].diff()
-        df[f"roc{s}_abs"] = df[f"roc{s}"].abs()
-        df[f"roc{s}_direction"] = df[f"roc{s}"].apply(lambda x: 1 if x > 0 else -1)
+        roc_slope = roc.diff()
 
-        # --- zero-line flags ---
-        df[f"roc{s}_gt_0"] = df[f"roc{s}"] > 0
-        df[f"roc{s}_lt_0"] = df[f"roc{s}"] < 0
+        # --- reusable ---
+        roc_abs = roc.abs()
+        signal = roc.rolling(window=period).mean()
+        hist = roc - signal
+        hist_slope = hist.diff()
+        hist_abs = hist.abs()
 
-        # --- signal line & histogram ---
-        df[f"roc{s}_signal"] = df[f"roc{s}"].rolling(window=period).mean()
-        df[f"roc{s}_signal_slope"] = df[f"roc{s}_signal"].diff()
-        df[f"roc{s}_hist"] = df[f"roc{s}"] - df[f"roc{s}_signal"]
-        df[f"roc{s}_hist_slope"] = df[f"roc{s}_hist"].diff()
-        df[f"roc{s}_hist_acceleration"] = df[f"roc{s}_hist_slope"].diff()
-        df[f"roc{s}_hist_gt_0"] = df[f"roc{s}_hist"] > 0
-        df[f"roc{s}_hist_lt_0"] = df[f"roc{s}_hist"] < 0
-        df[f"roc{s}_hist_abs"] = df[f"roc{s}_hist"].abs()
+        # --- core ---
+        new_cols[f"roc{s}"] = roc
+        new_cols[f"roc{s}_slope"] = roc_slope
+        new_cols[f"roc{s}_acceleration"] = roc_slope.diff()
+        new_cols[f"roc{s}_abs"] = roc_abs
+        new_cols[f"roc{s}_direction"] = np.where(roc > 0, 1, -1)
 
-        # --- combined conviction score ---
-        df[f"roc{s}_strength"] = df[f"roc{s}_abs"] * df[f"roc{s}_hist_abs"]
+        # --- flags ---
+        new_cols[f"roc{s}_gt_0"] = roc > 0
+        new_cols[f"roc{s}_lt_0"] = roc < 0
 
-    return df
+        # --- signal & hist ---
+        new_cols[f"roc{s}_signal"] = signal
+        new_cols[f"roc{s}_signal_slope"] = signal.diff()
+        new_cols[f"roc{s}_hist"] = hist
+        new_cols[f"roc{s}_hist_slope"] = hist_slope
+        new_cols[f"roc{s}_hist_acceleration"] = hist_slope.diff()
+        new_cols[f"roc{s}_hist_gt_0"] = hist > 0
+        new_cols[f"roc{s}_hist_lt_0"] = hist < 0
+        new_cols[f"roc{s}_hist_abs"] = hist_abs
+
+        # --- strength ---
+        new_cols[f"roc{s}_strength"] = roc_abs * hist_abs
+
+    return pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
 
 def add_rsi(
@@ -1722,34 +1398,6 @@ def add_rsi(
     n: list[int] = None,
     column_name: str = "close",
 ) -> pd.DataFrame:
-    """
-    Add Relative Strength Index (RSI) columns for each period in n.
-
-    RSI = 100 - (100 / (1 + RS)) where RS = avg up / avg down over n periods.
-    Range is 0 to 100. Neutral midpoint is 50.
-
-    Columns added (per period, e.g. n=14 → suffix '_14')
-    -------------
-    rsi_{n}                     : raw RSI value (0 to 100)
-    rsi_{n}_slope               : first difference of RSI (momentum)
-    rsi_{n}_acceleration        : second difference of RSI
-    rsi_{n}_abs                 : |RSI - 50| (deviation from neutral midpoint)
-    rsi_{n}_direction           : +1 if RSI > 50, -1 otherwise
-    rsi_{n}_gt_70               : RSI > 70 (overbought)
-    rsi_{n}_lt_30               : RSI < 30 (oversold)
-    rsi_{n}_gt_50               : RSI > 50 (bullish bias)
-    rsi_{n}_lt_50               : RSI < 50 (bearish bias)
-    rsi_{n}_extreme             : +1 if RSI > 70, -1 if RSI < 30, 0 if between
-    rsi_{n}_signal              : SMA of RSI over same period (smoothed signal line)
-    rsi_{n}_signal_slope        : first difference of signal line
-    rsi_{n}_hist                : RSI - signal (raw vs smoothed divergence)
-    rsi_{n}_hist_slope          : first difference of histogram
-    rsi_{n}_hist_acceleration   : second difference of histogram
-    rsi_{n}_hist_gt_0           : histogram > 0 (momentum turning bullish)
-    rsi_{n}_hist_lt_0           : histogram < 0 (momentum turning bearish)
-    rsi_{n}_hist_abs            : |histogram| (divergence magnitude)
-    rsi_{n}_strength            : rsi_abs × hist_abs (deviation × divergence score)
-    """
 
     validate_column(df, column_name)
 
@@ -1757,44 +1405,54 @@ def add_rsi(
         n = [14]
 
     df = df.copy()
-
     source = df[column_name].to_numpy(dtype=float)
+
+    new_cols = {}
 
     for period in n:
         s = f"_{period}"
 
         # --- core indicator ---
-        df[f"rsi{s}"] = talib.RSI(source, timeperiod=period)
+        rsi = pd.Series(talib.RSI(source, timeperiod=period), index=df.index)
 
         # --- derivatives ---
-        df[f"rsi{s}_slope"] = df[f"rsi{s}"].diff()
-        df[f"rsi{s}_acceleration"] = df[f"rsi{s}_slope"].diff()
-        df[f"rsi{s}_abs"] = (df[f"rsi{s}"] - 50).abs()  # deviation from neutral
-        df[f"rsi{s}_direction"] = df[f"rsi{s}"].apply(lambda x: 1 if x > 50 else -1)
+        rsi_slope = rsi.diff()
 
-        # --- threshold flags ---
-        df[f"rsi{s}_gt_70"] = df[f"rsi{s}"] > 70
-        df[f"rsi{s}_lt_30"] = df[f"rsi{s}"] < 30
-        df[f"rsi{s}_gt_50"] = df[f"rsi{s}"] > 50
-        df[f"rsi{s}_lt_50"] = df[f"rsi{s}"] < 50
-        df[f"rsi{s}_extreme"] = df[f"rsi{s}"].apply(
-            lambda x: 1 if x > 70 else (-1 if x < 30 else 0)
-        )
+        # --- reusable ---
+        rsi_abs = (rsi - 50).abs()
+        signal = rsi.rolling(window=period).mean()
+        hist = rsi - signal
+        hist_slope = hist.diff()
+        hist_abs = hist.abs()
 
-        # --- signal line & histogram ---
-        df[f"rsi{s}_signal"] = df[f"rsi{s}"].rolling(window=period).mean()
-        df[f"rsi{s}_signal_slope"] = df[f"rsi{s}_signal"].diff()
-        df[f"rsi{s}_hist"] = df[f"rsi{s}"] - df[f"rsi{s}_signal"]
-        df[f"rsi{s}_hist_slope"] = df[f"rsi{s}_hist"].diff()
-        df[f"rsi{s}_hist_acceleration"] = df[f"rsi{s}_hist_slope"].diff()
-        df[f"rsi{s}_hist_gt_0"] = df[f"rsi{s}_hist"] > 0
-        df[f"rsi{s}_hist_lt_0"] = df[f"rsi{s}_hist"] < 0
-        df[f"rsi{s}_hist_abs"] = df[f"rsi{s}_hist"].abs()
+        # --- core ---
+        new_cols[f"rsi{s}"] = rsi
+        new_cols[f"rsi{s}_slope"] = rsi_slope
+        new_cols[f"rsi{s}_acceleration"] = rsi_slope.diff()
+        new_cols[f"rsi{s}_abs"] = rsi_abs
+        new_cols[f"rsi{s}_direction"] = np.where(rsi > 50, 1, -1)
 
-        # --- combined conviction score ---
-        df[f"rsi{s}_strength"] = df[f"rsi{s}_abs"] * df[f"rsi{s}_hist_abs"]
+        # --- flags ---
+        new_cols[f"rsi{s}_gt_70"] = rsi > 70
+        new_cols[f"rsi{s}_lt_30"] = rsi < 30
+        new_cols[f"rsi{s}_gt_50"] = rsi > 50
+        new_cols[f"rsi{s}_lt_50"] = rsi < 50
+        new_cols[f"rsi{s}_extreme"] = np.where(rsi > 70, 1, np.where(rsi < 30, -1, 0))
 
-    return df
+        # --- signal & hist ---
+        new_cols[f"rsi{s}_signal"] = signal
+        new_cols[f"rsi{s}_signal_slope"] = signal.diff()
+        new_cols[f"rsi{s}_hist"] = hist
+        new_cols[f"rsi{s}_hist_slope"] = hist_slope
+        new_cols[f"rsi{s}_hist_acceleration"] = hist_slope.diff()
+        new_cols[f"rsi{s}_hist_gt_0"] = hist > 0
+        new_cols[f"rsi{s}_hist_lt_0"] = hist < 0
+        new_cols[f"rsi{s}_hist_abs"] = hist_abs
+
+        # --- strength ---
+        new_cols[f"rsi{s}_strength"] = rsi_abs * hist_abs
+
+    return pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
 
 def add_stoch(
@@ -1808,50 +1466,6 @@ def add_stoch(
     low_col: str = "low",
     close_col: str = "close",
 ) -> pd.DataFrame:
-    """
-    Add Stochastic Oscillator columns for each (fastk, slowk, slowd) combination.
-
-    %K = (close - lowest_low) / (highest_high - lowest_low) × 100  over fastk periods.
-    Slow %K = MA(%K, slowk). Slow %D = MA(Slow %K, slowd).
-    Range is 0 to 100. Neutral midpoint is 50.
-
-    Suffix format: stoch_{fastk}_{slowk}_{slowd}, e.g. (5, 3, 3) → 'stoch_5_3_3'
-
-    Moving average types (TA-Lib MA_Type):
-        0 = SMA  1 = EMA  2 = WMA  3 = DEMA  4 = TEMA
-        5 = TRIMA  6 = KAMA  7 = MAMA  8 = T3
-
-    Columns added (per combo)
-    -------------------------
-    stoch_{fk}_{sk}_{sd}_k              : Slow %K line (0 to 100)
-    stoch_{fk}_{sk}_{sd}_k_slope        : first difference of %K
-    stoch_{fk}_{sk}_{sd}_k_acceleration : second difference of %K
-    stoch_{fk}_{sk}_{sd}_k_abs          : |%K - 50| (deviation from neutral)
-    stoch_{fk}_{sk}_{sd}_k_direction    : +1 if %K > 50, -1 otherwise
-    stoch_{fk}_{sk}_{sd}_k_gt_80        : %K > 80 (overbought)
-    stoch_{fk}_{sk}_{sd}_k_lt_20        : %K < 20 (oversold)
-    stoch_{fk}_{sk}_{sd}_k_gt_50        : %K > 50 (bullish bias)
-    stoch_{fk}_{sk}_{sd}_k_lt_50        : %K < 50 (bearish bias)
-    stoch_{fk}_{sk}_{sd}_k_extreme      : +1 if %K > 80, -1 if %K < 20, 0 if between
-
-    stoch_{fk}_{sk}_{sd}_d              : Slow %D line (0 to 100)
-    stoch_{fk}_{sk}_{sd}_d_slope        : first difference of %D
-    stoch_{fk}_{sk}_{sd}_d_acceleration : second difference of %D
-    stoch_{fk}_{sk}_{sd}_d_gt_80        : %D > 80 (overbought)
-    stoch_{fk}_{sk}_{sd}_d_lt_20        : %D < 20 (oversold)
-    stoch_{fk}_{sk}_{sd}_d_gt_50        : %D > 50 (bullish bias)
-    stoch_{fk}_{sk}_{sd}_d_lt_50        : %D < 50 (bearish bias)
-
-    stoch_{fk}_{sk}_{sd}_kd_dist        : %K - %D (signed, momentum lead/lag)
-    stoch_{fk}_{sk}_{sd}_kd_dist_abs    : |%K - %D|
-    stoch_{fk}_{sk}_{sd}_kd_direction   : +1 if %K > %D, -1 otherwise
-    stoch_{fk}_{sk}_{sd}_kd_dist_slope  : first difference of %K-%D distance
-    stoch_{fk}_{sk}_{sd}_cross_above    : %K crossed above %D this bar (bullish)
-    stoch_{fk}_{sk}_{sd}_cross_below    : %K crossed below %D this bar (bearish)
-    stoch_{fk}_{sk}_{sd}_both_gt_80     : both %K and %D > 80 (confirmed overbought)
-    stoch_{fk}_{sk}_{sd}_both_lt_20     : both %K and %D < 20 (confirmed oversold)
-    stoch_{fk}_{sk}_{sd}_strength       : k_abs × kd_dist_abs (deviation × divergence score)
-    """
 
     for col in (high_col, low_col, close_col):
         validate_column(df, col)
@@ -1869,10 +1483,11 @@ def add_stoch(
     low = df[low_col].to_numpy(dtype=float)
     close = df[close_col].to_numpy(dtype=float)
 
+    new_cols = {}
+
     for fk, sk, sd in product(fastk, slowk, slowd):
         s = f"_{fk}_{sk}_{sd}"
 
-        # --- core indicator ---
         k, d = talib.STOCH(
             high,
             low,
@@ -1884,50 +1499,50 @@ def add_stoch(
             slowd_matype=slowd_matype,
         )
 
-        k_series = pd.Series(k, index=df.index)
-        d_series = pd.Series(d, index=df.index)
+        k = pd.Series(k, index=df.index)
+        d = pd.Series(d, index=df.index)
 
-        # --- %K line ---
-        df[f"stoch{s}_k"] = k_series
-        df[f"stoch{s}_k_slope"] = k_series.diff()
-        df[f"stoch{s}_k_acceleration"] = k_series.diff().diff()
-        df[f"stoch{s}_k_abs"] = (k_series - 50).abs()
-        df[f"stoch{s}_k_direction"] = np.where(k > 50, 1, -1)
-        df[f"stoch{s}_k_gt_80"] = k_series > 80
-        df[f"stoch{s}_k_lt_20"] = k_series < 20
-        df[f"stoch{s}_k_gt_50"] = k_series > 50
-        df[f"stoch{s}_k_lt_50"] = k_series < 50
-        df[f"stoch{s}_k_extreme"] = np.where(k > 80, 1, np.where(k < 20, -1, 0))
+        k_slope = k.diff()
+        d_slope = d.diff()
 
-        # --- %D line ---
-        df[f"stoch{s}_d"] = d_series
-        df[f"stoch{s}_d_slope"] = d_series.diff()
-        df[f"stoch{s}_d_acceleration"] = d_series.diff().diff()
-        df[f"stoch{s}_d_gt_80"] = d_series > 80
-        df[f"stoch{s}_d_lt_20"] = d_series < 20
-        df[f"stoch{s}_d_gt_50"] = d_series > 50
-        df[f"stoch{s}_d_lt_50"] = d_series < 50
+        k_abs = (k - 50).abs()
+        kd_dist = k - d
+        kd_dist_abs = kd_dist.abs()
+        kd_slope = kd_dist.diff()
+        prev_kd = kd_dist.shift(1)
 
-        # --- %K vs %D relationship ---
-        kd_dist = k_series - d_series
-        prev_kd_dist = kd_dist.shift(1)
-        df[f"stoch{s}_kd_dist"] = kd_dist
-        df[f"stoch{s}_kd_dist_abs"] = kd_dist.abs()
-        df[f"stoch{s}_kd_direction"] = np.where(k > d, 1, -1)
-        df[f"stoch{s}_kd_dist_slope"] = kd_dist.diff()
+        new_cols.update(
+            {
+                f"stoch{s}_k": k,
+                f"stoch{s}_k_slope": k_slope,
+                f"stoch{s}_k_acceleration": k_slope.diff(),
+                f"stoch{s}_k_abs": k_abs,
+                f"stoch{s}_k_direction": np.where(k > 50, 1, -1),
+                f"stoch{s}_k_gt_80": k > 80,
+                f"stoch{s}_k_lt_20": k < 20,
+                f"stoch{s}_k_gt_50": k > 50,
+                f"stoch{s}_k_lt_50": k < 50,
+                f"stoch{s}_k_extreme": np.where(k > 80, 1, np.where(k < 20, -1, 0)),
+                f"stoch{s}_d": d,
+                f"stoch{s}_d_slope": d_slope,
+                f"stoch{s}_d_acceleration": d_slope.diff(),
+                f"stoch{s}_d_gt_80": d > 80,
+                f"stoch{s}_d_lt_20": d < 20,
+                f"stoch{s}_d_gt_50": d > 50,
+                f"stoch{s}_d_lt_50": d < 50,
+                f"stoch{s}_kd_dist": kd_dist,
+                f"stoch{s}_kd_dist_abs": kd_dist_abs,
+                f"stoch{s}_kd_direction": np.where(k > d, 1, -1),
+                f"stoch{s}_kd_dist_slope": kd_slope,
+                f"stoch{s}_cross_above": (kd_dist > 0) & (prev_kd <= 0),
+                f"stoch{s}_cross_below": (kd_dist < 0) & (prev_kd >= 0),
+                f"stoch{s}_both_gt_80": (k > 80) & (d > 80),
+                f"stoch{s}_both_lt_20": (k < 20) & (d < 20),
+                f"stoch{s}_strength": k_abs * kd_dist_abs,
+            }
+        )
 
-        # --- crossover signals ---
-        df[f"stoch{s}_cross_above"] = (kd_dist > 0) & (prev_kd_dist <= 0)
-        df[f"stoch{s}_cross_below"] = (kd_dist < 0) & (prev_kd_dist >= 0)
-
-        # --- confirmed extreme zone flags ---
-        df[f"stoch{s}_both_gt_80"] = (k_series > 80) & (d_series > 80)
-        df[f"stoch{s}_both_lt_20"] = (k_series < 20) & (d_series < 20)
-
-        # --- combined conviction score ---
-        df[f"stoch{s}_strength"] = df[f"stoch{s}_k_abs"] * df[f"stoch{s}_kd_dist_abs"]
-
-    return df
+    return pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
 
 def add_stoch_rsi(
@@ -1938,50 +1553,6 @@ def add_stoch_rsi(
     fastd_matype: int = 0,
     column_name: str = "close",
 ) -> pd.DataFrame:
-    """
-    Add Stochastic RSI columns for each (n, fastk, fastd) combination.
-
-    StochRSI = (RSI - lowest RSI[n]) / (highest RSI[n] - lowest RSI[n]).
-    Applies Stochastic formula to RSI values instead of price.
-    Range is 0 to 100. Neutral midpoint is 50.
-
-    Suffix format: stoch_rsi_{n}_{fastk}_{fastd}, e.g. (14, 5, 3) → 'stoch_rsi_14_5_3'
-
-    Moving average types (TA-Lib MA_Type):
-        0 = SMA  1 = EMA  2 = WMA  3 = DEMA  4 = TEMA
-        5 = TRIMA  6 = KAMA  7 = MAMA  8 = T3
-
-    Columns added (per combo)
-    -------------------------
-    stoch_rsi_{n}_{fk}_{fd}_k              : FastK line (raw stochastic of RSI, 0–100)
-    stoch_rsi_{n}_{fk}_{fd}_k_slope        : first difference of %K
-    stoch_rsi_{n}_{fk}_{fd}_k_acceleration : second difference of %K
-    stoch_rsi_{n}_{fk}_{fd}_k_abs          : |%K - 50| (deviation from neutral)
-    stoch_rsi_{n}_{fk}_{fd}_k_direction    : +1 if %K > 50, -1 otherwise
-    stoch_rsi_{n}_{fk}_{fd}_k_gt_80        : %K > 80 (overbought)
-    stoch_rsi_{n}_{fk}_{fd}_k_lt_20        : %K < 20 (oversold)
-    stoch_rsi_{n}_{fk}_{fd}_k_gt_50        : %K > 50 (bullish bias)
-    stoch_rsi_{n}_{fk}_{fd}_k_lt_50        : %K < 50 (bearish bias)
-    stoch_rsi_{n}_{fk}_{fd}_k_extreme      : +1 if %K > 80, -1 if %K < 20, 0 if between
-
-    stoch_rsi_{n}_{fk}_{fd}_d              : FastD line (MA of FastK, 0–100)
-    stoch_rsi_{n}_{fk}_{fd}_d_slope        : first difference of %D
-    stoch_rsi_{n}_{fk}_{fd}_d_acceleration : second difference of %D
-    stoch_rsi_{n}_{fk}_{fd}_d_gt_80        : %D > 80 (overbought)
-    stoch_rsi_{n}_{fk}_{fd}_d_lt_20        : %D < 20 (oversold)
-    stoch_rsi_{n}_{fk}_{fd}_d_gt_50        : %D > 50 (bullish bias)
-    stoch_rsi_{n}_{fk}_{fd}_d_lt_50        : %D < 50 (bearish bias)
-
-    stoch_rsi_{n}_{fk}_{fd}_kd_dist        : %K - %D (signed, momentum lead/lag)
-    stoch_rsi_{n}_{fk}_{fd}_kd_dist_abs    : |%K - %D|
-    stoch_rsi_{n}_{fk}_{fd}_kd_direction   : +1 if %K > %D, -1 otherwise
-    stoch_rsi_{n}_{fk}_{fd}_kd_dist_slope  : first difference of %K-%D distance
-    stoch_rsi_{n}_{fk}_{fd}_cross_above    : %K crossed above %D this bar (bullish)
-    stoch_rsi_{n}_{fk}_{fd}_cross_below    : %K crossed below %D this bar (bearish)
-    stoch_rsi_{n}_{fk}_{fd}_both_gt_80     : both %K and %D > 80 (confirmed overbought)
-    stoch_rsi_{n}_{fk}_{fd}_both_lt_20     : both %K and %D < 20 (confirmed oversold)
-    stoch_rsi_{n}_{fk}_{fd}_strength       : k_abs × kd_dist_abs (deviation × divergence score)
-    """
 
     validate_column(df, column_name)
 
@@ -1993,13 +1564,13 @@ def add_stoch_rsi(
         fastd = [3]
 
     df = df.copy()
-
     source = df[column_name].to_numpy(dtype=float)
+
+    new_cols = {}
 
     for period, fk, fd in product(n, fastk, fastd):
         s = f"_{period}_{fk}_{fd}"
 
-        # --- core indicator ---
         k, d = talib.STOCHRSI(
             source,
             timeperiod=period,
@@ -2008,52 +1579,50 @@ def add_stoch_rsi(
             fastd_matype=fastd_matype,
         )
 
-        k_series = pd.Series(k, index=df.index)
-        d_series = pd.Series(d, index=df.index)
+        k = pd.Series(k, index=df.index)
+        d = pd.Series(d, index=df.index)
 
-        # --- %K line ---
-        df[f"stoch_rsi{s}_k"] = k_series
-        df[f"stoch_rsi{s}_k_slope"] = k_series.diff()
-        df[f"stoch_rsi{s}_k_acceleration"] = k_series.diff().diff()
-        df[f"stoch_rsi{s}_k_abs"] = (k_series - 50).abs()
-        df[f"stoch_rsi{s}_k_direction"] = np.where(k > 50, 1, -1)
-        df[f"stoch_rsi{s}_k_gt_80"] = k_series > 80
-        df[f"stoch_rsi{s}_k_lt_20"] = k_series < 20
-        df[f"stoch_rsi{s}_k_gt_50"] = k_series > 50
-        df[f"stoch_rsi{s}_k_lt_50"] = k_series < 50
-        df[f"stoch_rsi{s}_k_extreme"] = np.where(k > 80, 1, np.where(k < 20, -1, 0))
+        k_slope = k.diff()
+        d_slope = d.diff()
 
-        # --- %D line ---
-        df[f"stoch_rsi{s}_d"] = d_series
-        df[f"stoch_rsi{s}_d_slope"] = d_series.diff()
-        df[f"stoch_rsi{s}_d_acceleration"] = d_series.diff().diff()
-        df[f"stoch_rsi{s}_d_gt_80"] = d_series > 80
-        df[f"stoch_rsi{s}_d_lt_20"] = d_series < 20
-        df[f"stoch_rsi{s}_d_gt_50"] = d_series > 50
-        df[f"stoch_rsi{s}_d_lt_50"] = d_series < 50
+        k_abs = (k - 50).abs()
+        kd_dist = k - d
+        kd_dist_abs = kd_dist.abs()
+        kd_slope = kd_dist.diff()
+        prev_kd = kd_dist.shift(1)
 
-        # --- %K vs %D relationship ---
-        kd_dist = k_series - d_series
-        prev_kd_dist = kd_dist.shift(1)
-        df[f"stoch_rsi{s}_kd_dist"] = kd_dist
-        df[f"stoch_rsi{s}_kd_dist_abs"] = kd_dist.abs()
-        df[f"stoch_rsi{s}_kd_direction"] = np.where(k > d, 1, -1)
-        df[f"stoch_rsi{s}_kd_dist_slope"] = kd_dist.diff()
-
-        # --- crossover signals ---
-        df[f"stoch_rsi{s}_cross_above"] = (kd_dist > 0) & (prev_kd_dist <= 0)
-        df[f"stoch_rsi{s}_cross_below"] = (kd_dist < 0) & (prev_kd_dist >= 0)
-
-        # --- confirmed extreme zone flags ---
-        df[f"stoch_rsi{s}_both_gt_80"] = (k_series > 80) & (d_series > 80)
-        df[f"stoch_rsi{s}_both_lt_20"] = (k_series < 20) & (d_series < 20)
-
-        # --- combined conviction score ---
-        df[f"stoch_rsi{s}_strength"] = (
-            df[f"stoch_rsi{s}_k_abs"] * df[f"stoch_rsi{s}_kd_dist_abs"]
+        new_cols.update(
+            {
+                f"stoch_rsi{s}_k": k,
+                f"stoch_rsi{s}_k_slope": k_slope,
+                f"stoch_rsi{s}_k_acceleration": k_slope.diff(),
+                f"stoch_rsi{s}_k_abs": k_abs,
+                f"stoch_rsi{s}_k_direction": np.where(k > 50, 1, -1),
+                f"stoch_rsi{s}_k_gt_80": k > 80,
+                f"stoch_rsi{s}_k_lt_20": k < 20,
+                f"stoch_rsi{s}_k_gt_50": k > 50,
+                f"stoch_rsi{s}_k_lt_50": k < 50,
+                f"stoch_rsi{s}_k_extreme": np.where(k > 80, 1, np.where(k < 20, -1, 0)),
+                f"stoch_rsi{s}_d": d,
+                f"stoch_rsi{s}_d_slope": d_slope,
+                f"stoch_rsi{s}_d_acceleration": d_slope.diff(),
+                f"stoch_rsi{s}_d_gt_80": d > 80,
+                f"stoch_rsi{s}_d_lt_20": d < 20,
+                f"stoch_rsi{s}_d_gt_50": d > 50,
+                f"stoch_rsi{s}_d_lt_50": d < 50,
+                f"stoch_rsi{s}_kd_dist": kd_dist,
+                f"stoch_rsi{s}_kd_dist_abs": kd_dist_abs,
+                f"stoch_rsi{s}_kd_direction": np.where(k > d, 1, -1),
+                f"stoch_rsi{s}_kd_dist_slope": kd_slope,
+                f"stoch_rsi{s}_cross_above": (kd_dist > 0) & (prev_kd <= 0),
+                f"stoch_rsi{s}_cross_below": (kd_dist < 0) & (prev_kd >= 0),
+                f"stoch_rsi{s}_both_gt_80": (k > 80) & (d > 80),
+                f"stoch_rsi{s}_both_lt_20": (k < 20) & (d < 20),
+                f"stoch_rsi{s}_strength": k_abs * kd_dist_abs,
+            }
         )
 
-    return df
+    return pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
 
 def add_trix(
@@ -2061,32 +1630,6 @@ def add_trix(
     n: list[int] = None,
     column_name: str = "close",
 ) -> pd.DataFrame:
-    """
-    Add TRIX columns for each period in n.
-
-    TRIX = 1-day ROC of a triple-smoothed EMA.
-    Oscillates around zero — positive = upward momentum, negative = downward.
-    Triple smoothing filters out insignificant price movements and noise.
-
-    Columns added (per period, e.g. n=15 → suffix '_15')
-    -------------
-    trix_{n}                    : raw TRIX value (%)
-    trix_{n}_slope              : first difference of TRIX (acceleration)
-    trix_{n}_acceleration       : second difference of TRIX (jerk)
-    trix_{n}_abs                : |TRIX| (magnitude regardless of direction)
-    trix_{n}_direction          : +1 if TRIX > 0, -1 otherwise
-    trix_{n}_gt_0               : TRIX > 0 (bullish momentum)
-    trix_{n}_lt_0               : TRIX < 0 (bearish momentum)
-    trix_{n}_signal             : SMA of TRIX over same period (smoothed signal line)
-    trix_{n}_signal_slope       : first difference of signal line
-    trix_{n}_hist               : TRIX - signal (raw vs smoothed divergence)
-    trix_{n}_hist_slope         : first difference of histogram
-    trix_{n}_hist_acceleration  : second difference of histogram
-    trix_{n}_hist_gt_0          : histogram > 0 (momentum turning bullish)
-    trix_{n}_hist_lt_0          : histogram < 0 (momentum turning bearish)
-    trix_{n}_hist_abs           : |histogram| (divergence magnitude)
-    trix_{n}_strength           : trix_abs × hist_abs (momentum × divergence score)
-    """
 
     validate_column(df, column_name)
 
@@ -2094,39 +1637,45 @@ def add_trix(
         n = [15]
 
     df = df.copy()
-
     source = df[column_name].to_numpy(dtype=float)
+
+    new_cols = {}
 
     for period in n:
         s = f"_{period}"
 
-        # --- core indicator ---
-        df[f"trix{s}"] = talib.TRIX(source, timeperiod=period)
+        trix = pd.Series(talib.TRIX(source, timeperiod=period), index=df.index)
 
-        # --- derivatives ---
-        df[f"trix{s}_slope"] = df[f"trix{s}"].diff()
-        df[f"trix{s}_acceleration"] = df[f"trix{s}_slope"].diff()
-        df[f"trix{s}_abs"] = df[f"trix{s}"].abs()
-        df[f"trix{s}_direction"] = df[f"trix{s}"].apply(lambda x: 1 if x > 0 else -1)
+        trix_slope = trix.diff()
+        trix_abs = trix.abs()
 
-        # --- zero-line flags ---
-        df[f"trix{s}_gt_0"] = df[f"trix{s}"] > 0
-        df[f"trix{s}_lt_0"] = df[f"trix{s}"] < 0
+        signal = trix.rolling(window=period).mean()
+        hist = trix - signal
+        hist_slope = hist.diff()
+        hist_abs = hist.abs()
 
-        # --- signal line & histogram ---
-        df[f"trix{s}_signal"] = df[f"trix{s}"].rolling(window=period).mean()
-        df[f"trix{s}_signal_slope"] = df[f"trix{s}_signal"].diff()
-        df[f"trix{s}_hist"] = df[f"trix{s}"] - df[f"trix{s}_signal"]
-        df[f"trix{s}_hist_slope"] = df[f"trix{s}_hist"].diff()
-        df[f"trix{s}_hist_acceleration"] = df[f"trix{s}_hist_slope"].diff()
-        df[f"trix{s}_hist_gt_0"] = df[f"trix{s}_hist"] > 0
-        df[f"trix{s}_hist_lt_0"] = df[f"trix{s}_hist"] < 0
-        df[f"trix{s}_hist_abs"] = df[f"trix{s}_hist"].abs()
+        new_cols.update(
+            {
+                f"trix{s}": trix,
+                f"trix{s}_slope": trix_slope,
+                f"trix{s}_acceleration": trix_slope.diff(),
+                f"trix{s}_abs": trix_abs,
+                f"trix{s}_direction": np.where(trix > 0, 1, -1),
+                f"trix{s}_gt_0": trix > 0,
+                f"trix{s}_lt_0": trix < 0,
+                f"trix{s}_signal": signal,
+                f"trix{s}_signal_slope": signal.diff(),
+                f"trix{s}_hist": hist,
+                f"trix{s}_hist_slope": hist_slope,
+                f"trix{s}_hist_acceleration": hist_slope.diff(),
+                f"trix{s}_hist_gt_0": hist > 0,
+                f"trix{s}_hist_lt_0": hist < 0,
+                f"trix{s}_hist_abs": hist_abs,
+                f"trix{s}_strength": trix_abs * hist_abs,
+            }
+        )
 
-        # --- combined conviction score ---
-        df[f"trix{s}_strength"] = df[f"trix{s}_abs"] * df[f"trix{s}_hist_abs"]
-
-    return df
+    return pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
 
 def add_ultosc(
@@ -2138,37 +1687,6 @@ def add_ultosc(
     low_col: str = "low",
     close_col: str = "close",
 ) -> pd.DataFrame:
-    """
-    Add Ultimate Oscillator (ULTOSC) columns for each (period1, period2, period3) combination.
-
-    UO combines three timeframes of buying pressure / true range to reduce
-    false divergence signals common in single-period oscillators.
-    Range is 0 to 100. Neutral midpoint is 50.
-
-    Suffix format: ultosc_{p1}_{p2}_{p3}, e.g. (7, 14, 28) → 'ultosc_7_14_28'
-
-    Columns added (per combo)
-    -------------------------
-    ultosc_{p1}_{p2}_{p3}                   : raw UO value (0 to 100)
-    ultosc_{p1}_{p2}_{p3}_slope             : first difference of UO (momentum)
-    ultosc_{p1}_{p2}_{p3}_acceleration      : second difference of UO
-    ultosc_{p1}_{p2}_{p3}_abs               : |UO - 50| (deviation from neutral midpoint)
-    ultosc_{p1}_{p2}_{p3}_direction         : +1 if UO > 50, -1 otherwise
-    ultosc_{p1}_{p2}_{p3}_gt_70             : UO > 70 (overbought)
-    ultosc_{p1}_{p2}_{p3}_lt_30             : UO < 30 (oversold)
-    ultosc_{p1}_{p2}_{p3}_gt_50             : UO > 50 (bullish bias)
-    ultosc_{p1}_{p2}_{p3}_lt_50             : UO < 50 (bearish bias)
-    ultosc_{p1}_{p2}_{p3}_extreme           : +1 if UO > 70, -1 if UO < 30, 0 if between
-    ultosc_{p1}_{p2}_{p3}_signal            : SMA of UO over period1 (smoothed signal line)
-    ultosc_{p1}_{p2}_{p3}_signal_slope      : first difference of signal line
-    ultosc_{p1}_{p2}_{p3}_hist              : UO - signal (raw vs smoothed divergence)
-    ultosc_{p1}_{p2}_{p3}_hist_slope        : first difference of histogram
-    ultosc_{p1}_{p2}_{p3}_hist_acceleration : second difference of histogram
-    ultosc_{p1}_{p2}_{p3}_hist_gt_0         : histogram > 0 (momentum turning bullish)
-    ultosc_{p1}_{p2}_{p3}_hist_lt_0         : histogram < 0 (momentum turning bearish)
-    ultosc_{p1}_{p2}_{p3}_hist_abs          : |histogram| (divergence magnitude)
-    ultosc_{p1}_{p2}_{p3}_strength          : uo_abs × hist_abs (deviation × divergence score)
-    """
 
     for col in (high_col, low_col, close_col):
         validate_column(df, col)
@@ -2186,46 +1704,52 @@ def add_ultosc(
     low = df[low_col].to_numpy(dtype=float)
     close = df[close_col].to_numpy(dtype=float)
 
+    new_cols = {}
+
     for p1, p2, p3 in product(period1, period2, period3):
         if not (p1 < p2 < p3):
-            continue  # periods must be strictly ascending: short < medium < long
+            continue
 
         s = f"_{p1}_{p2}_{p3}"
 
-        # --- core indicator ---
-        uo = talib.ULTOSC(
-            high, low, close, timeperiod1=p1, timeperiod2=p2, timeperiod3=p3
+        uo = pd.Series(
+            talib.ULTOSC(high, low, close, p1, p2, p3),
+            index=df.index,
         )
-        uo_series = pd.Series(uo, index=df.index)
 
-        # --- derivatives ---
-        df[f"ultosc{s}"] = uo_series
-        df[f"ultosc{s}_slope"] = uo_series.diff()
-        df[f"ultosc{s}_acceleration"] = uo_series.diff().diff()
-        df[f"ultosc{s}_abs"] = (uo_series - 50).abs()
-        df[f"ultosc{s}_direction"] = np.where(uo > 50, 1, -1)
+        uo_slope = uo.diff()
+        uo_abs = (uo - 50).abs()
 
-        # --- threshold flags ---
-        df[f"ultosc{s}_gt_70"] = uo_series > 70
-        df[f"ultosc{s}_lt_30"] = uo_series < 30
-        df[f"ultosc{s}_gt_50"] = uo_series > 50
-        df[f"ultosc{s}_lt_50"] = uo_series < 50
-        df[f"ultosc{s}_extreme"] = np.where(uo > 70, 1, np.where(uo < 30, -1, 0))
+        signal = uo.rolling(window=p1).mean()
+        hist = uo - signal
+        hist_slope = hist.diff()
+        hist_abs = hist.abs()
 
-        # --- signal line & histogram ---
-        df[f"ultosc{s}_signal"] = uo_series.rolling(window=p1).mean()
-        df[f"ultosc{s}_signal_slope"] = df[f"ultosc{s}_signal"].diff()
-        df[f"ultosc{s}_hist"] = uo_series - df[f"ultosc{s}_signal"]
-        df[f"ultosc{s}_hist_slope"] = df[f"ultosc{s}_hist"].diff()
-        df[f"ultosc{s}_hist_acceleration"] = df[f"ultosc{s}_hist_slope"].diff()
-        df[f"ultosc{s}_hist_gt_0"] = df[f"ultosc{s}_hist"] > 0
-        df[f"ultosc{s}_hist_lt_0"] = df[f"ultosc{s}_hist"] < 0
-        df[f"ultosc{s}_hist_abs"] = df[f"ultosc{s}_hist"].abs()
+        new_cols.update(
+            {
+                f"ultosc{s}": uo,
+                f"ultosc{s}_slope": uo_slope,
+                f"ultosc{s}_acceleration": uo_slope.diff(),
+                f"ultosc{s}_abs": uo_abs,
+                f"ultosc{s}_direction": np.where(uo > 50, 1, -1),
+                f"ultosc{s}_gt_70": uo > 70,
+                f"ultosc{s}_lt_30": uo < 30,
+                f"ultosc{s}_gt_50": uo > 50,
+                f"ultosc{s}_lt_50": uo < 50,
+                f"ultosc{s}_extreme": np.where(uo > 70, 1, np.where(uo < 30, -1, 0)),
+                f"ultosc{s}_signal": signal,
+                f"ultosc{s}_signal_slope": signal.diff(),
+                f"ultosc{s}_hist": hist,
+                f"ultosc{s}_hist_slope": hist_slope,
+                f"ultosc{s}_hist_acceleration": hist_slope.diff(),
+                f"ultosc{s}_hist_gt_0": hist > 0,
+                f"ultosc{s}_hist_lt_0": hist < 0,
+                f"ultosc{s}_hist_abs": hist_abs,
+                f"ultosc{s}_strength": uo_abs * hist_abs,
+            }
+        )
 
-        # --- combined conviction score ---
-        df[f"ultosc{s}_strength"] = df[f"ultosc{s}_abs"] * df[f"ultosc{s}_hist_abs"]
-
-    return df
+    return pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
 
 def add_willr(
@@ -2235,35 +1759,6 @@ def add_willr(
     low_col: str = "low",
     close_col: str = "close",
 ) -> pd.DataFrame:
-    """
-    Add Williams' %R columns for each period in n.
-
-    %R = (highest_high - close) / (highest_high - lowest_low) × -100.
-    Range is -100 to 0. Neutral midpoint is -50.
-    Inverted Stochastic — readings near 0 = overbought, near -100 = oversold.
-
-    Columns added (per period, e.g. n=14 → suffix '_14')
-    -------------
-    willr_{n}                     : raw %R value (-100 to 0)
-    willr_{n}_slope               : first difference of %R (momentum)
-    willr_{n}_acceleration        : second difference of %R
-    willr_{n}_abs                 : |%R + 50| (deviation from neutral midpoint)
-    willr_{n}_direction           : +1 if %R > -50, -1 otherwise
-    willr_{n}_gt_minus20          : %R > -20 (overbought)
-    willr_{n}_lt_minus80          : %R < -80 (oversold)
-    willr_{n}_gt_minus50          : %R > -50 (bullish bias)
-    willr_{n}_lt_minus50          : %R < -50 (bearish bias)
-    willr_{n}_extreme             : +1 if %R > -20, -1 if %R < -80, 0 if between
-    willr_{n}_signal              : SMA of %R over same period (smoothed signal line)
-    willr_{n}_signal_slope        : first difference of signal line
-    willr_{n}_hist                : %R - signal (raw vs smoothed divergence)
-    willr_{n}_hist_slope          : first difference of histogram
-    willr_{n}_hist_acceleration   : second difference of histogram
-    willr_{n}_hist_gt_0           : histogram > 0 (momentum turning bullish)
-    willr_{n}_hist_lt_0           : histogram < 0 (momentum turning bearish)
-    willr_{n}_hist_abs            : |histogram| (divergence magnitude)
-    willr_{n}_strength            : willr_abs × hist_abs (deviation × divergence score)
-    """
 
     for col in (high_col, low_col, close_col):
         validate_column(df, col)
@@ -2277,41 +1772,57 @@ def add_willr(
     low = df[low_col].to_numpy(dtype=float)
     close = df[close_col].to_numpy(dtype=float)
 
+    new_cols = {}
+
     for period in n:
         s = f"_{period}"
 
         # --- core indicator ---
-        willr = talib.WILLR(high, low, close, timeperiod=period)
-        willr_series = pd.Series(willr, index=df.index)
+        willr = pd.Series(
+            talib.WILLR(high, low, close, timeperiod=period),
+            index=df.index,
+        )
 
         # --- derivatives ---
-        df[f"willr{s}"] = willr_series
-        df[f"willr{s}_slope"] = willr_series.diff()
-        df[f"willr{s}_acceleration"] = willr_series.diff().diff()
-        df[f"willr{s}_abs"] = (willr_series + 50).abs()  # deviation from -50 neutral
-        df[f"willr{s}_direction"] = np.where(willr > -50, 1, -1)
+        willr_slope = willr.diff()
+
+        # --- reusable ---
+        willr_abs = (willr + 50).abs()
+        signal = willr.rolling(window=period).mean()
+        hist = willr - signal
+        hist_slope = hist.diff()
+        hist_abs = hist.abs()
+
+        # --- core ---
+        new_cols[f"willr{s}"] = willr
+        new_cols[f"willr{s}_slope"] = willr_slope
+        new_cols[f"willr{s}_acceleration"] = willr_slope.diff()
+        new_cols[f"willr{s}_abs"] = willr_abs
+        new_cols[f"willr{s}_direction"] = np.where(willr > -50, 1, -1)
 
         # --- threshold flags ---
-        df[f"willr{s}_gt_minus20"] = willr_series > -20  # overbought
-        df[f"willr{s}_lt_minus80"] = willr_series < -80  # oversold
-        df[f"willr{s}_gt_minus50"] = willr_series > -50  # bullish bias
-        df[f"willr{s}_lt_minus50"] = willr_series < -50  # bearish bias
-        df[f"willr{s}_extreme"] = np.where(willr > -20, 1, np.where(willr < -80, -1, 0))
+        new_cols[f"willr{s}_gt_minus20"] = willr > -20
+        new_cols[f"willr{s}_lt_minus80"] = willr < -80
+        new_cols[f"willr{s}_gt_minus50"] = willr > -50
+        new_cols[f"willr{s}_lt_minus50"] = willr < -50
+        new_cols[f"willr{s}_extreme"] = np.where(
+            willr > -20, 1, np.where(willr < -80, -1, 0)
+        )
 
-        # --- signal line & histogram ---
-        df[f"willr{s}_signal"] = willr_series.rolling(window=period).mean()
-        df[f"willr{s}_signal_slope"] = df[f"willr{s}_signal"].diff()
-        df[f"willr{s}_hist"] = willr_series - df[f"willr{s}_signal"]
-        df[f"willr{s}_hist_slope"] = df[f"willr{s}_hist"].diff()
-        df[f"willr{s}_hist_acceleration"] = df[f"willr{s}_hist_slope"].diff()
-        df[f"willr{s}_hist_gt_0"] = df[f"willr{s}_hist"] > 0
-        df[f"willr{s}_hist_lt_0"] = df[f"willr{s}_hist"] < 0
-        df[f"willr{s}_hist_abs"] = df[f"willr{s}_hist"].abs()
+        # --- signal & histogram ---
+        new_cols[f"willr{s}_signal"] = signal
+        new_cols[f"willr{s}_signal_slope"] = signal.diff()
+        new_cols[f"willr{s}_hist"] = hist
+        new_cols[f"willr{s}_hist_slope"] = hist_slope
+        new_cols[f"willr{s}_hist_acceleration"] = hist_slope.diff()
+        new_cols[f"willr{s}_hist_gt_0"] = hist > 0
+        new_cols[f"willr{s}_hist_lt_0"] = hist < 0
+        new_cols[f"willr{s}_hist_abs"] = hist_abs
 
-        # --- combined conviction score ---
-        df[f"willr{s}_strength"] = df[f"willr{s}_abs"] * df[f"willr{s}_hist_abs"]
+        # --- strength ---
+        new_cols[f"willr{s}_strength"] = willr_abs * hist_abs
 
-    return df
+    return pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
 
 # endregion MOMENTUM INDICATORS
@@ -2326,72 +1837,53 @@ def add_ad(
     close_col: str = "close",
     volume_col: str = "matching_volume",
 ) -> pd.DataFrame:
-    """
-    Add Chaikin A/D Line columns and smoothed signal derivatives.
-
-    AD is a cumulative volume-weighted indicator — it has no timeperiod.
-    n defines smoothing windows applied to the raw AD line (like a signal line).
-
-    Base columns (computed once)
-    ----------------------------
-    ad                          : raw cumulative A/D line
-    ad_slope                    : first difference of AD (momentum — Chaikin Oscillator numerator)
-    ad_acceleration             : second difference of AD
-    ad_gt_0                     : AD > 0 (cumulative buying pressure dominates)
-    ad_lt_0                     : AD < 0 (cumulative selling pressure dominates)
-    ad_direction                : +1 if AD slope > 0 (rising), -1 otherwise
-
-    Per smoothing window (e.g. n=10 → suffix '_10')
-    ------------------------------------------------
-    ad_signal_{n}               : EMA of AD over n periods (Chaikin Oscillator fast line)
-    ad_signal_{n}_slope         : first difference of signal line
-    ad_hist_{n}                 : AD - signal (divergence from smoothed line)
-    ad_hist_{n}_slope           : first difference of histogram
-    ad_hist_{n}_acceleration    : second difference of histogram
-    ad_hist_{n}_gt_0            : histogram > 0 (AD accelerating above signal)
-    ad_hist_{n}_lt_0            : histogram < 0 (AD decelerating below signal)
-    ad_hist_{n}_abs             : |histogram| (divergence magnitude)
-    ad_{n}_strength             : |ad_slope| × hist_abs (momentum × divergence score)
-    """
-
     for col in (high_col, low_col, close_col, volume_col):
         validate_column(df, col)
 
     if n is None:
         n = [10]
 
-    df = df.copy()
-
     high = df[high_col].to_numpy(dtype=float)
     low = df[low_col].to_numpy(dtype=float)
     close = df[close_col].to_numpy(dtype=float)
     volume = df[volume_col].to_numpy(dtype=float)
 
-    # --- raw AD line (computed once, no period) ---
-    df["ad"] = talib.AD(high, low, close, volume)
+    new_cols = {}
 
-    # --- base derivatives ---
-    df["ad_slope"] = df["ad"].diff()
-    df["ad_acceleration"] = df["ad_slope"].diff()
-    df["ad_gt_0"] = df["ad"] > 0
-    df["ad_lt_0"] = df["ad"] < 0
-    df["ad_direction"] = df["ad_slope"].apply(lambda x: 1 if x > 0 else -1)
+    # --- raw AD line (computed once) ---
+    ad_series = pd.Series(talib.AD(high, low, close, volume), index=df.index)
+    ad_slope = ad_series.diff()
+
+    new_cols["ad"] = ad_series
+    new_cols["ad_slope"] = ad_slope
+    new_cols["ad_acceleration"] = ad_slope.diff()
+    new_cols["ad_gt_0"] = ad_series > 0
+    new_cols["ad_lt_0"] = ad_series < 0
+    new_cols["ad_direction"] = np.where(ad_slope > 0, 1, -1)
 
     # --- per smoothing window ---
     for period in n:
         s = f"_{period}"
 
-        df[f"ad_signal{s}"] = df["ad"].ewm(span=period, adjust=False).mean()
-        df[f"ad_signal{s}_slope"] = df[f"ad_signal{s}"].diff()
-        df[f"ad_hist{s}"] = df["ad"] - df[f"ad_signal{s}"]
-        df[f"ad_hist{s}_slope"] = df[f"ad_hist{s}"].diff()
-        df[f"ad_hist{s}_acceleration"] = df[f"ad_hist{s}_slope"].diff()
-        df[f"ad_hist{s}_gt_0"] = df[f"ad_hist{s}"] > 0
-        df[f"ad_hist{s}_lt_0"] = df[f"ad_hist{s}"] < 0
-        df[f"ad_hist{s}_abs"] = df[f"ad_hist{s}"].abs()
-        df[f"ad{s}_strength"] = df["ad_slope"].abs() * df[f"ad_hist{s}_abs"]
+        signal = ad_series.ewm(span=period, adjust=False).mean()
+        hist = ad_series - signal
+        hist_slope = hist.diff()
+        hist_abs = hist.abs()
 
-    return df
+        new_cols[f"ad_signal{s}"] = signal
+        new_cols[f"ad_signal{s}_slope"] = signal.diff()
+        new_cols[f"ad_hist{s}"] = hist
+        new_cols[f"ad_hist{s}_slope"] = hist_slope
+        new_cols[f"ad_hist{s}_acceleration"] = hist_slope.diff()
+        new_cols[f"ad_hist{s}_gt_0"] = hist > 0
+        new_cols[f"ad_hist{s}_lt_0"] = hist < 0
+        new_cols[f"ad_hist{s}_abs"] = hist_abs
+        new_cols[f"ad{s}_strength"] = ad_slope.abs() * hist_abs
+
+    return pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
+
+
+from itertools import product
 
 
 def add_adosc(
@@ -2403,98 +1895,66 @@ def add_adosc(
     close_col: str = "close",
     volume_col: str = "matching_volume",
 ) -> pd.DataFrame:
-    """
-    Add Chaikin A/D Oscillator (ADOSC) columns for each (fast, slow) combination.
-
-    ADOSC = EMA(fast, AD) - EMA(slow, AD).
-    Measures momentum of the A/D line — positive = AD accelerating up, negative = down.
-    Unbounded — scale depends on price and volume levels.
-
-    Suffix format: adosc_{fast}_{slow}, e.g. (3, 10) → 'adosc_3_10'
-
-    Base columns (computed once)
-    ----------------------------
-    ad                              : raw cumulative A/D line (shared with add_ad if present)
-
-    Columns added (per combo)
-    -------------------------
-    adosc_{f}_{sl}                  : raw ADOSC value
-    adosc_{f}_{sl}_slope            : first difference of ADOSC (momentum)
-    adosc_{f}_{sl}_acceleration     : second difference of ADOSC
-    adosc_{f}_{sl}_abs              : |ADOSC| (magnitude regardless of direction)
-    adosc_{f}_{sl}_direction        : +1 if ADOSC > 0, -1 otherwise
-    adosc_{f}_{sl}_gt_0             : ADOSC > 0 (AD accelerating upward — bullish)
-    adosc_{f}_{sl}_lt_0             : ADOSC < 0 (AD decelerating — bearish)
-    adosc_{f}_{sl}_signal           : SMA of ADOSC over fast period (smoothed signal line)
-    adosc_{f}_{sl}_signal_slope     : first difference of signal line
-    adosc_{f}_{sl}_hist             : ADOSC - signal (raw vs smoothed divergence)
-    adosc_{f}_{sl}_hist_slope       : first difference of histogram
-    adosc_{f}_{sl}_hist_acceleration: second difference of histogram
-    adosc_{f}_{sl}_hist_gt_0        : histogram > 0 (momentum turning bullish)
-    adosc_{f}_{sl}_hist_lt_0        : histogram < 0 (momentum turning bearish)
-    adosc_{f}_{sl}_hist_abs         : |histogram| (divergence magnitude)
-    adosc_{f}_{sl}_cross_above      : ADOSC crossed above zero this bar (bullish)
-    adosc_{f}_{sl}_cross_below      : ADOSC crossed below zero this bar (bearish)
-    adosc_{f}_{sl}_strength         : adosc_abs × hist_abs (momentum × divergence score)
-    """
-
     for col in (high_col, low_col, close_col, volume_col):
         validate_column(df, col)
 
-    if fast is None:
-        fast = [3]
-    if slow is None:
-        slow = [10]
-
-    df = df.copy()
+    fast = fast or [3]
+    slow = slow or [10]
 
     high = df[high_col].to_numpy(dtype=float)
     low = df[low_col].to_numpy(dtype=float)
     close = df[close_col].to_numpy(dtype=float)
     volume = df[volume_col].to_numpy(dtype=float)
 
-    # --- raw AD line (computed once, shared across combos) ---
-    if "ad" not in df.columns:
-        df["ad"] = talib.AD(high, low, close, volume)
+    new_cols = {}
 
-    # --- per fast/slow combo ---
+    # --- raw AD line (shared) ---
+    if "ad" not in df.columns:
+        new_cols["ad"] = pd.Series(talib.AD(high, low, close, volume), index=df.index)
+
     for f, sl in product(fast, slow):
         if f >= sl:
-            continue  # fast must be strictly less than slow
+            continue
 
         s = f"_{f}_{sl}"
+        adosc = pd.Series(
+            talib.ADOSC(high, low, close, volume, fastperiod=f, slowperiod=sl),
+            index=df.index,
+        )
 
-        adosc = talib.ADOSC(high, low, close, volume, fastperiod=f, slowperiod=sl)
-        adosc_series = pd.Series(adosc, index=df.index)
+        adosc_slope = adosc.diff()
+        signal = adosc.rolling(window=f).mean()
+        hist = adosc - signal
+        hist_slope = hist.diff()
 
-        # --- core ---
-        df[f"adosc{s}"] = adosc_series
-        df[f"adosc{s}_slope"] = adosc_series.diff()
-        df[f"adosc{s}_acceleration"] = adosc_series.diff().diff()
-        df[f"adosc{s}_abs"] = adosc_series.abs()
-        df[f"adosc{s}_direction"] = np.where(adosc > 0, 1, -1)
-        df[f"adosc{s}_gt_0"] = adosc_series > 0
-        df[f"adosc{s}_lt_0"] = adosc_series < 0
+        # --- core & derivatives ---
+        new_cols[f"adosc{s}"] = adosc
+        new_cols[f"adosc{s}_slope"] = adosc_slope
+        new_cols[f"adosc{s}_acceleration"] = adosc_slope.diff()
+        new_cols[f"adosc{s}_abs"] = adosc.abs()
+        new_cols[f"adosc{s}_direction"] = np.where(adosc > 0, 1, -1)
+        new_cols[f"adosc{s}_gt_0"] = adosc > 0
+        new_cols[f"adosc{s}_lt_0"] = adosc < 0
 
         # --- signal line & histogram ---
-        df[f"adosc{s}_signal"] = adosc_series.rolling(window=f).mean()
-        df[f"adosc{s}_signal_slope"] = df[f"adosc{s}_signal"].diff()
-        df[f"adosc{s}_hist"] = adosc_series - df[f"adosc{s}_signal"]
-        df[f"adosc{s}_hist_slope"] = df[f"adosc{s}_hist"].diff()
-        df[f"adosc{s}_hist_acceleration"] = df[f"adosc{s}_hist_slope"].diff()
-        df[f"adosc{s}_hist_gt_0"] = df[f"adosc{s}_hist"] > 0
-        df[f"adosc{s}_hist_lt_0"] = df[f"adosc{s}_hist"] < 0
-        df[f"adosc{s}_hist_abs"] = df[f"adosc{s}_hist"].abs()
+        new_cols[f"adosc{s}_signal"] = signal
+        new_cols[f"adosc{s}_signal_slope"] = signal.diff()
+        new_cols[f"adosc{s}_hist"] = hist
+        new_cols[f"adosc{s}_hist_slope"] = hist_slope
+        new_cols[f"adosc{s}_hist_acceleration"] = hist_slope.diff()
+        new_cols[f"adosc{s}_hist_gt_0"] = hist > 0
+        new_cols[f"adosc{s}_hist_lt_0"] = hist < 0
+        new_cols[f"adosc{s}_hist_abs"] = hist.abs()
 
-        # --- zero-line crossover signals ---
-        prev_adosc = adosc_series.shift(1)
-        df[f"adosc{s}_cross_above"] = (adosc_series > 0) & (prev_adosc <= 0)
-        df[f"adosc{s}_cross_below"] = (adosc_series < 0) & (prev_adosc >= 0)
+        # --- crossovers ---
+        prev_adosc = adosc.shift(1)
+        new_cols[f"adosc{s}_cross_above"] = (adosc > 0) & (prev_adosc <= 0)
+        new_cols[f"adosc{s}_cross_below"] = (adosc < 0) & (prev_adosc >= 0)
 
-        # --- combined conviction score ---
-        df[f"adosc{s}_strength"] = df[f"adosc{s}_abs"] * df[f"adosc{s}_hist_abs"]
+        # --- strength ---
+        new_cols[f"adosc{s}_strength"] = adosc.abs() * hist.abs()
 
-    return df
+    return pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
 
 def add_obv(
@@ -2503,78 +1963,53 @@ def add_obv(
     close_col: str = "close",
     volume_col: str = "matching_volume",
 ) -> pd.DataFrame:
-    """
-    Add On Balance Volume (OBV) columns and smoothed signal derivatives.
-
-    OBV is a cumulative volume indicator:
-        - Add volume when close > previous close
-        - Subtract volume when close < previous close
-        - No change when equal
-
-    Base columns (computed once)
-    ----------------------------
-    obv                         : raw OBV line
-    obv_slope                   : first difference of OBV (momentum)
-    obv_acceleration            : second difference of OBV
-    obv_gt_0                    : OBV > 0 (net buying pressure over time)
-    obv_lt_0                    : OBV < 0 (net selling pressure)
-    obv_direction               : +1 if OBV rising, -1 otherwise
-
-    Per smoothing window (e.g. n=10 → suffix '_10')
-    ------------------------------------------------
-    obv_signal_{n}              : EMA of OBV over n periods
-    obv_signal_{n}_slope        : first difference of signal line
-    obv_hist_{n}                : OBV - signal (divergence)
-    obv_hist_{n}_slope          : first difference of histogram
-    obv_hist_{n}_acceleration   : second difference of histogram
-    obv_hist_{n}_gt_0           : histogram > 0 (OBV above signal)
-    obv_hist_{n}_lt_0           : histogram < 0 (OBV below signal)
-    obv_hist_{n}_abs            : |histogram| (divergence magnitude)
-    obv_{n}_strength            : |obv_slope| × hist_abs (momentum × divergence score)
-    """
-
     for col in (close_col, volume_col):
         validate_column(df, col)
 
     if n is None:
         n = [10]
 
-    df = df.copy()
-
     close = df[close_col].to_numpy(dtype=float)
     volume = df[volume_col].to_numpy(dtype=float)
 
-    # --- raw OBV (computed once, no period) ---
-    df["obv"] = talib.OBV(close, volume)
+    new_cols = {}
 
-    # --- base derivatives ---
-    df["obv_slope"] = df["obv"].diff()
-    df["obv_acceleration"] = df["obv_slope"].diff()
-    df["obv_gt_0"] = df["obv"] > 0
-    df["obv_lt_0"] = df["obv"] < 0
-    df["obv_direction"] = df["obv_slope"].apply(lambda x: 1 if x > 0 else -1)
+    # --- raw OBV (computed once) ---
+    obv_series = pd.Series(talib.OBV(close, volume), index=df.index)
+    obv_slope = obv_series.diff()
+
+    new_cols["obv"] = obv_series
+    new_cols["obv_slope"] = obv_slope
+    new_cols["obv_acceleration"] = obv_slope.diff()
+    new_cols["obv_gt_0"] = obv_series > 0
+    new_cols["obv_lt_0"] = obv_series < 0
+    new_cols["obv_direction"] = np.where(obv_slope > 0, 1, -1)
 
     # --- per smoothing window ---
     for period in n:
         s = f"_{period}"
 
-        df[f"obv_signal{s}"] = df["obv"].ewm(span=period, adjust=False).mean()
-        df[f"obv_signal{s}_slope"] = df[f"obv_signal{s}"].diff()
-        df[f"obv_hist{s}"] = df["obv"] - df[f"obv_signal{s}"]
-        df[f"obv_hist{s}_slope"] = df[f"obv_hist{s}"].diff()
-        df[f"obv_hist{s}_acceleration"] = df[f"obv_hist{s}_slope"].diff()
-        df[f"obv_hist{s}_gt_0"] = df[f"obv_hist{s}"] > 0
-        df[f"obv_hist{s}_lt_0"] = df[f"obv_hist{s}"] < 0
-        df[f"obv_hist{s}_abs"] = df[f"obv_hist{s}"].abs()
-        df[f"obv{s}_strength"] = df["obv_slope"].abs() * df[f"obv_hist{s}_abs"]
-        df[f"obv{s}_cross_above"] = (df[f"obv_hist{s}"] > 0) & (
-            df[f"obv_hist{s}"].shift(1) <= 0
-        )
-        df[f"obv{s}_cross_below"] = (df[f"obv_hist{s}"] < 0) & (
-            df[f"obv_hist{s}"].shift(1) >= 0
-        )
+        signal = obv_series.ewm(span=period, adjust=False).mean()
+        hist = obv_series - signal
+        hist_slope = hist.diff()
+        hist_abs = hist.abs()
 
-    return df
+        new_cols[f"obv_signal{s}"] = signal
+        new_cols[f"obv_signal{s}_slope"] = signal.diff()
+        new_cols[f"obv_hist{s}"] = hist
+        new_cols[f"obv_hist{s}_slope"] = hist_slope
+        new_cols[f"obv_hist{s}_acceleration"] = hist_slope.diff()
+        new_cols[f"obv_hist{s}_gt_0"] = hist > 0
+        new_cols[f"obv_hist{s}_lt_0"] = hist < 0
+        new_cols[f"obv_hist{s}_abs"] = hist_abs
+        new_cols[f"obv{s}_strength"] = obv_slope.abs() * hist_abs
+
+        # --- crossovers ---
+        prev_hist = hist.shift(1)
+        new_cols[f"obv{s}_cross_above"] = (hist > 0) & (prev_hist <= 0)
+        new_cols[f"obv{s}_cross_below"] = (hist < 0) & (prev_hist >= 0)
+
+    return pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
 
 # endregion VOLUME INDICATORS
@@ -2586,84 +2021,47 @@ def add_ht_dcperiod(
     n: list[int] = None,
     close_col: str = "close",
 ) -> pd.DataFrame:
-    """
-    Add Hilbert Transform - Dominant Cycle Period (HT_DCPERIOD) features.
-
-    HT_DCPERIOD estimates the dominant market cycle length (in bars).
-    Useful for adapting indicators dynamically (e.g., adaptive MA, RSI length).
-
-    Base columns (computed once)
-    ----------------------------
-    ht_dcperiod                  : dominant cycle period (float, typically 10–40 range)
-    ht_dcperiod_slope            : first difference (cycle length expansion/contraction)
-    ht_dcperiod_acceleration     : second difference
-    ht_dcperiod_gt_prev          : period increasing (cycle slowing / lengthening)
-    ht_dcperiod_lt_prev          : period decreasing (cycle speeding up)
-    ht_dcperiod_direction        : +1 if increasing, -1 otherwise
-    ht_dcperiod_valid            : period is finite and > 0
-
-    Per smoothing window (e.g. n=10 → suffix '_10')
-    ------------------------------------------------
-    ht_dcperiod_signal_{n}       : EMA of period (smoothed cycle estimate)
-    ht_dcperiod_signal_{n}_slope : first difference of signal
-    ht_dcperiod_hist_{n}         : period - signal (cycle deviation)
-    ht_dcperiod_hist_{n}_slope   : first difference of histogram
-    ht_dcperiod_hist_{n}_acceleration : second difference of histogram
-    ht_dcperiod_hist_{n}_gt_0    : period above signal (cycle expanding)
-    ht_dcperiod_hist_{n}_lt_0    : period below signal (cycle contracting)
-    ht_dcperiod_hist_{n}_abs     : |histogram|
-    ht_dcperiod_{n}_strength     : |slope| × hist_abs (cycle momentum × deviation)
-    """
-
     validate_column(df, close_col)
 
     if n is None:
         n = [10]
 
-    df = df.copy()
-
     close = df[close_col].to_numpy(dtype=float)
+    new_cols = {}
 
     # --- raw dominant cycle period ---
-    dcperiod = talib.HT_DCPERIOD(close)
-    df["ht_dcperiod"] = dcperiod
+    dcperiod = pd.Series(talib.HT_DCPERIOD(close), index=df.index)
+    dcperiod_slope = dcperiod.diff()
 
     # --- base derivatives ---
-    df["ht_dcperiod_slope"] = df["ht_dcperiod"].diff()
-    df["ht_dcperiod_acceleration"] = df["ht_dcperiod_slope"].diff()
-    df["ht_dcperiod_gt_prev"] = df["ht_dcperiod"] > df["ht_dcperiod"].shift(1)
-    df["ht_dcperiod_lt_prev"] = df["ht_dcperiod"] < df["ht_dcperiod"].shift(1)
-    df["ht_dcperiod_direction"] = df["ht_dcperiod_slope"].apply(
-        lambda x: 1 if x > 0 else -1
-    )
-
-    # validity (important for HT indicators — initial unstable values)
-    df["ht_dcperiod_valid"] = np.isfinite(df["ht_dcperiod"]) & (df["ht_dcperiod"] > 0)
+    new_cols["ht_dcperiod"] = dcperiod
+    new_cols["ht_dcperiod_slope"] = dcperiod_slope
+    new_cols["ht_dcperiod_acceleration"] = dcperiod_slope.diff()
+    new_cols["ht_dcperiod_gt_prev"] = dcperiod > dcperiod.shift(1)
+    new_cols["ht_dcperiod_lt_prev"] = dcperiod < dcperiod.shift(1)
+    new_cols["ht_dcperiod_direction"] = np.where(dcperiod_slope > 0, 1, -1)
+    new_cols["ht_dcperiod_valid"] = np.isfinite(dcperiod) & (dcperiod > 0)
 
     # --- per smoothing window ---
     for period in n:
         s = f"_{period}"
 
-        df[f"ht_dcperiod_signal{s}"] = (
-            df["ht_dcperiod"].ewm(span=period, adjust=False).mean()
-        )
-        df[f"ht_dcperiod_signal{s}_slope"] = df[f"ht_dcperiod_signal{s}"].diff()
+        signal = dcperiod.ewm(span=period, adjust=False).mean()
+        hist = dcperiod - signal
+        hist_slope = hist.diff()
+        hist_abs = hist.abs()
 
-        df[f"ht_dcperiod_hist{s}"] = df["ht_dcperiod"] - df[f"ht_dcperiod_signal{s}"]
-        df[f"ht_dcperiod_hist{s}_slope"] = df[f"ht_dcperiod_hist{s}"].diff()
-        df[f"ht_dcperiod_hist{s}_acceleration"] = df[
-            f"ht_dcperiod_hist{s}_slope"
-        ].diff()
+        new_cols[f"ht_dcperiod_signal{s}"] = signal
+        new_cols[f"ht_dcperiod_signal{s}_slope"] = signal.diff()
+        new_cols[f"ht_dcperiod_hist{s}"] = hist
+        new_cols[f"ht_dcperiod_hist{s}_slope"] = hist_slope
+        new_cols[f"ht_dcperiod_hist{s}_acceleration"] = hist_slope.diff()
+        new_cols[f"ht_dcperiod_hist{s}_gt_0"] = hist > 0
+        new_cols[f"ht_dcperiod_hist{s}_lt_0"] = hist < 0
+        new_cols[f"ht_dcperiod_hist{s}_abs"] = hist_abs
+        new_cols[f"ht_dcperiod{s}_strength"] = dcperiod_slope.abs() * hist_abs
 
-        df[f"ht_dcperiod_hist{s}_gt_0"] = df[f"ht_dcperiod_hist{s}"] > 0
-        df[f"ht_dcperiod_hist{s}_lt_0"] = df[f"ht_dcperiod_hist{s}"] < 0
-        df[f"ht_dcperiod_hist{s}_abs"] = df[f"ht_dcperiod_hist{s}"].abs()
-
-        df[f"ht_dcperiod{s}_strength"] = (
-            df["ht_dcperiod_slope"].abs() * df[f"ht_dcperiod_hist{s}_abs"]
-        )
-
-    return df
+    return pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
 
 def add_ht_dcphase(
@@ -2671,106 +2069,57 @@ def add_ht_dcphase(
     n: list[int] = None,
     close_col: str = "close",
 ) -> pd.DataFrame:
-    """
-    Add Hilbert Transform - Dominant Cycle Phase (HT_DCPHASE) features.
-
-    HT_DCPHASE estimates the phase position (in degrees) within the dominant cycle.
-    Range is typically 0–360:
-        - ~0° / 360° → cycle start
-        - ~90°       → rising phase
-        - ~180°      → peak
-        - ~270°      → falling phase
-
-    Base columns (computed once)
-    ----------------------------
-    ht_dcphase                   : dominant cycle phase (degrees)
-    ht_dcphase_slope             : first difference (phase velocity)
-    ht_dcphase_acceleration      : second difference
-    ht_dcphase_wrapped           : phase wrapped to [0, 360)
-    ht_dcphase_sin               : sin(phase) (cycle representation)
-    ht_dcphase_cos               : cos(phase)
-    ht_dcphase_quadrant          : 1–4 (cycle stage)
-    ht_dcphase_direction         : +1 if phase increasing, -1 otherwise
-    ht_dcphase_valid             : finite values
-
-    Per smoothing window (e.g. n=10 → suffix '_10')
-    ------------------------------------------------
-    ht_dcphase_signal_{n}        : EMA of phase
-    ht_dcphase_signal_{n}_slope  : first difference of signal
-    ht_dcphase_hist_{n}          : phase - signal (deviation)
-    ht_dcphase_hist_{n}_slope    : first difference of histogram
-    ht_dcphase_hist_{n}_acceleration : second difference of histogram
-    ht_dcphase_hist_{n}_gt_0     : phase above signal
-    ht_dcphase_hist_{n}_lt_0     : phase below signal
-    ht_dcphase_hist_{n}_abs      : |histogram|
-    ht_dcphase_{n}_strength      : |slope| × hist_abs
-    """
-
     validate_column(df, close_col)
 
     if n is None:
         n = [10]
 
-    df = df.copy()
-
     close = df[close_col].to_numpy(dtype=float)
+    new_cols = {}
 
     # --- raw phase ---
-    phase = talib.HT_DCPHASE(close)
-    df["ht_dcphase"] = phase
+    phase = pd.Series(talib.HT_DCPHASE(close), index=df.index)
+    wrapped = np.mod(phase, 360.0)
 
-    # --- base transforms ---
-    df["ht_dcphase_wrapped"] = np.mod(df["ht_dcphase"], 360.0)
+    # trig features
+    phase_rad = np.deg2rad(wrapped)
+    slope = wrapped.diff()
 
-    # radians for trig features
-    phase_rad = np.deg2rad(df["ht_dcphase_wrapped"])
-    df["ht_dcphase_sin"] = np.sin(phase_rad)
-    df["ht_dcphase_cos"] = np.cos(phase_rad)
-
-    # derivatives
-    df["ht_dcphase_slope"] = df["ht_dcphase_wrapped"].diff()
-    df["ht_dcphase_acceleration"] = df["ht_dcphase_slope"].diff()
+    new_cols["ht_dcphase"] = phase
+    new_cols["ht_dcphase_wrapped"] = wrapped
+    new_cols["ht_dcphase_sin"] = np.sin(phase_rad)
+    new_cols["ht_dcphase_cos"] = np.cos(phase_rad)
+    new_cols["ht_dcphase_slope"] = slope
+    new_cols["ht_dcphase_acceleration"] = slope.diff()
 
     # quadrant (cycle stage)
-    df["ht_dcphase_quadrant"] = pd.cut(
-        df["ht_dcphase_wrapped"],
-        bins=[0, 90, 180, 270, 360],
-        labels=[1, 2, 3, 4],
-        include_lowest=True,
+    new_cols["ht_dcphase_quadrant"] = pd.cut(
+        wrapped, bins=[0, 90, 180, 270, 360], labels=[1, 2, 3, 4], include_lowest=True
     )
 
-    # direction
-    df["ht_dcphase_direction"] = df["ht_dcphase_slope"].apply(
-        lambda x: 1 if x > 0 else -1
-    )
-
-    # validity (HT indicators unstable early)
-    df["ht_dcphase_valid"] = np.isfinite(df["ht_dcphase"])
+    new_cols["ht_dcphase_direction"] = np.where(slope > 0, 1, -1)
+    new_cols["ht_dcphase_valid"] = np.isfinite(phase)
 
     # --- per smoothing window ---
     for period in n:
         s = f"_{period}"
 
-        df[f"ht_dcphase_signal{s}"] = (
-            df["ht_dcphase_wrapped"].ewm(span=period, adjust=False).mean()
-        )
-        df[f"ht_dcphase_signal{s}_slope"] = df[f"ht_dcphase_signal{s}"].diff()
+        signal = wrapped.ewm(span=period, adjust=False).mean()
+        hist = wrapped - signal
+        hist_slope = hist.diff()
+        hist_abs = hist.abs()
 
-        df[f"ht_dcphase_hist{s}"] = (
-            df["ht_dcphase_wrapped"] - df[f"ht_dcphase_signal{s}"]
-        )
-        df[f"ht_dcphase_hist{s}_slope"] = df[f"ht_dcphase_hist{s}"].diff()
-        df[f"ht_dcphase_hist{s}_acceleration"] = df[f"ht_dcphase_hist{s}_slope"].diff()
+        new_cols[f"ht_dcphase_signal{s}"] = signal
+        new_cols[f"ht_dcphase_signal{s}_slope"] = signal.diff()
+        new_cols[f"ht_dcphase_hist{s}"] = hist
+        new_cols[f"ht_dcphase_hist{s}_slope"] = hist_slope
+        new_cols[f"ht_dcphase_hist{s}_acceleration"] = hist_slope.diff()
+        new_cols[f"ht_dcphase_hist{s}_gt_0"] = hist > 0
+        new_cols[f"ht_dcphase_hist{s}_lt_0"] = hist < 0
+        new_cols[f"ht_dcphase_hist{s}_abs"] = hist_abs
+        new_cols[f"ht_dcphase{s}_strength"] = slope.abs() * hist_abs
 
-        df[f"ht_dcphase_hist{s}_gt_0"] = df[f"ht_dcphase_hist{s}"] > 0
-        df[f"ht_dcphase_hist{s}_lt_0"] = df[f"ht_dcphase_hist{s}"] < 0
-        df[f"ht_dcphase_hist{s}_abs"] = df[f"ht_dcphase_hist{s}"].abs()
-
-        df[f"ht_dcphase{s}_strength"] = (
-            df["ht_dcphase_slope"].abs() * df[f"ht_dcphase_hist{s}_abs"]
-        )
-
-    return df
+    return pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
 
 def add_ht_phasor(
@@ -2778,99 +2127,50 @@ def add_ht_phasor(
     n: list[int] = None,
     close_col: str = "close",
 ) -> pd.DataFrame:
-    """
-    Add Hilbert Transform - Phasor Components (HT_PHASOR) features.
-
-    HT_PHASOR returns two components:
-        - inphase     (I)
-        - quadrature  (Q)
-
-    These form a complex signal representation:
-        amplitude = sqrt(I^2 + Q^2)
-        phase     = arctan(Q / I)
-
-    Base columns (computed once)
-    ----------------------------
-    ht_phasor_inphase            : in-phase component (I)
-    ht_phasor_quadrature         : quadrature component (Q)
-    ht_phasor_amplitude          : sqrt(I^2 + Q^2)
-    ht_phasor_phase              : arctan2(Q, I) in degrees
-    ht_phasor_phase_wrapped      : phase mapped to [0, 360)
-    ht_phasor_slope              : first difference of amplitude (energy change)
-    ht_phasor_acceleration       : second difference of amplitude
-    ht_phasor_direction          : +1 if amplitude rising, -1 otherwise
-    ht_phasor_valid              : finite values
-
-    Per smoothing window (e.g. n=10 → suffix '_10')
-    ------------------------------------------------
-    ht_phasor_signal_{n}         : EMA of amplitude
-    ht_phasor_signal_{n}_slope   : first difference of signal
-    ht_phasor_hist_{n}           : amplitude - signal
-    ht_phasor_hist_{n}_slope     : first difference of histogram
-    ht_phasor_hist_{n}_acceleration : second difference
-    ht_phasor_hist_{n}_gt_0      : amplitude above signal
-    ht_phasor_hist_{n}_lt_0      : amplitude below signal
-    ht_phasor_hist_{n}_abs       : |histogram|
-    ht_phasor_{n}_strength       : |slope| × hist_abs
-    """
-
     validate_column(df, close_col)
 
     if n is None:
         n = [10]
 
-    df = df.copy()
     close = df[close_col].to_numpy(dtype=float)
+    new_cols = {}
 
-    # --- core phasor components ---
     inphase, quadrature = talib.HT_PHASOR(close)
+    amplitude = pd.Series(np.sqrt(inphase**2 + quadrature**2), index=df.index)
+    amp_slope = amplitude.diff()
 
-    df["ht_phasor_inphase"] = inphase
-    df["ht_phasor_quadrature"] = quadrature
+    new_cols["ht_phasor_inphase"] = pd.Series(inphase, index=df.index)
+    new_cols["ht_phasor_quadrature"] = pd.Series(quadrature, index=df.index)
+    new_cols["ht_phasor_amplitude"] = amplitude
 
-    # --- derived features ---
-    df["ht_phasor_amplitude"] = np.sqrt(inphase**2 + quadrature**2)
+    phase_deg = np.degrees(np.arctan2(quadrature, inphase))
+    new_cols["ht_phasor_phase"] = pd.Series(phase_deg, index=df.index)
+    new_cols["ht_phasor_phase_wrapped"] = np.mod(phase_deg, 360.0)
 
-    phase_rad = np.arctan2(quadrature, inphase)
-    df["ht_phasor_phase"] = np.degrees(phase_rad)
-    df["ht_phasor_phase_wrapped"] = np.mod(df["ht_phasor_phase"], 360.0)
+    new_cols["ht_phasor_slope"] = amp_slope
+    new_cols["ht_phasor_acceleration"] = amp_slope.diff()
+    new_cols["ht_phasor_direction"] = np.where(amp_slope > 0, 1, -1)
+    new_cols["ht_phasor_valid"] = np.isfinite(inphase) & np.isfinite(quadrature)
 
-    # amplitude dynamics
-    df["ht_phasor_slope"] = df["ht_phasor_amplitude"].diff()
-    df["ht_phasor_acceleration"] = df["ht_phasor_slope"].diff()
-    df["ht_phasor_direction"] = df["ht_phasor_slope"].apply(
-        lambda x: 1 if x > 0 else -1
-    )
-
-    # validity
-    df["ht_phasor_valid"] = np.isfinite(df["ht_phasor_inphase"]) & np.isfinite(
-        df["ht_phasor_quadrature"]
-    )
-
-    # --- per smoothing window ---
     for period in n:
         s = f"_{period}"
 
-        df[f"ht_phasor_signal{s}"] = (
-            df["ht_phasor_amplitude"].ewm(span=period, adjust=False).mean()
-        )
-        df[f"ht_phasor_signal{s}_slope"] = df[f"ht_phasor_signal{s}"].diff()
+        signal = amplitude.ewm(span=period, adjust=False).mean()
+        hist = amplitude - signal
+        hist_slope = hist.diff()
+        hist_abs = hist.abs()
 
-        df[f"ht_phasor_hist{s}"] = (
-            df["ht_phasor_amplitude"] - df[f"ht_phasor_signal{s}"]
-        )
-        df[f"ht_phasor_hist{s}_slope"] = df[f"ht_phasor_hist{s}"].diff()
-        df[f"ht_phasor_hist{s}_acceleration"] = df[f"ht_phasor_hist{s}_slope"].diff()
+        new_cols[f"ht_phasor_signal{s}"] = signal
+        new_cols[f"ht_phasor_signal{s}_slope"] = signal.diff()
+        new_cols[f"ht_phasor_hist{s}"] = hist
+        new_cols[f"ht_phasor_hist{s}_slope"] = hist_slope
+        new_cols[f"ht_phasor_hist{s}_acceleration"] = hist_slope.diff()
+        new_cols[f"ht_phasor_hist{s}_gt_0"] = hist > 0
+        new_cols[f"ht_phasor_hist{s}_lt_0"] = hist < 0
+        new_cols[f"ht_phasor_hist{s}_abs"] = hist_abs
+        new_cols[f"ht_phasor{s}_strength"] = amp_slope.abs() * hist_abs
 
-        df[f"ht_phasor_hist{s}_gt_0"] = df[f"ht_phasor_hist{s}"] > 0
-        df[f"ht_phasor_hist{s}_lt_0"] = df[f"ht_phasor_hist{s}"] < 0
-        df[f"ht_phasor_hist{s}_abs"] = df[f"ht_phasor_hist{s}"].abs()
-
-        df[f"ht_phasor{s}_strength"] = (
-            df["ht_phasor_slope"].abs() * df[f"ht_phasor_hist{s}_abs"]
-        )
-
-    return df
+    return pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
 
 def add_ht_sine(
@@ -2878,104 +2178,58 @@ def add_ht_sine(
     n: list[int] = None,
     close_col: str = "close",
 ) -> pd.DataFrame:
-    """
-    Add Hilbert Transform - SineWave (HT_SINE) features.
-
-    HT_SINE returns two series:
-        - sine      : sine of dominant cycle phase
-        - leadsine  : leading sine (phase advanced ~45°)
-
-    These are powerful for cycle turning points:
-        - sine crossing leadsine → potential reversal signals
-
-    Base columns (computed once)
-    ----------------------------
-    ht_sine                      : sine component
-    ht_leadsine                  : leading sine component
-    ht_sine_diff                 : sine - leadsine (core signal)
-    ht_sine_slope                : first difference of sine
-    ht_sine_acceleration         : second difference
-    ht_sine_direction            : +1 if sine rising, -1 otherwise
-    ht_sine_cross_above          : sine crossed above leadsine (bullish)
-    ht_sine_cross_below          : sine crossed below leadsine (bearish)
-    ht_sine_gt_0                 : sine > 0 (cycle upper half)
-    ht_sine_lt_0                 : sine < 0 (cycle lower half)
-    ht_sine_valid                : finite values
-
-    Per smoothing window (e.g. n=10 → suffix '_10')
-    ------------------------------------------------
-    ht_sine_signal_{n}           : EMA of sine
-    ht_sine_signal_{n}_slope     : first difference of signal
-    ht_sine_hist_{n}             : sine - signal
-    ht_sine_hist_{n}_slope       : first difference of histogram
-    ht_sine_hist_{n}_acceleration: second difference
-    ht_sine_hist_{n}_gt_0        : sine above signal
-    ht_sine_hist_{n}_lt_0        : sine below signal
-    ht_sine_hist_{n}_abs         : |histogram|
-    ht_sine_{n}_strength         : |slope| × hist_abs
-    """
-
     validate_column(df, close_col)
 
     if n is None:
         n = [10]
 
-    df = df.copy()
     close = df[close_col].to_numpy(dtype=float)
+    new_cols = {}
 
-    # --- core sinewave ---
     sine, leadsine = talib.HT_SINE(close)
+    sine_series = pd.Series(sine, index=df.index)
+    leadsine_series = pd.Series(leadsine, index=df.index)
+    sine_slope = sine_series.diff()
 
-    df["ht_sine"] = sine
-    df["ht_leadsine"] = leadsine
+    new_cols["ht_sine"] = sine_series
+    new_cols["ht_leadsine"] = leadsine_series
+    new_cols["ht_sine_diff"] = sine_series - leadsine_series
+    new_cols["ht_sine_slope"] = sine_slope
+    new_cols["ht_sine_acceleration"] = sine_slope.diff()
+    new_cols["ht_sine_direction"] = np.where(sine_slope > 0, 1, -1)
+    new_cols["ht_sine_gt_0"] = sine_series > 0
+    new_cols["ht_sine_lt_0"] = sine_series < 0
 
-    # --- core relationships ---
-    df["ht_sine_diff"] = df["ht_sine"] - df["ht_leadsine"]
-
-    # derivatives
-    df["ht_sine_slope"] = df["ht_sine"].diff()
-    df["ht_sine_acceleration"] = df["ht_sine_slope"].diff()
-    df["ht_sine_direction"] = df["ht_sine_slope"].apply(lambda x: 1 if x > 0 else -1)
-
-    # regime / position
-    df["ht_sine_gt_0"] = df["ht_sine"] > 0
-    df["ht_sine_lt_0"] = df["ht_sine"] < 0
-
-    # --- crossover signals ---
-    prev_sine = df["ht_sine"].shift(1)
-    prev_leadsine = df["ht_leadsine"].shift(1)
-
-    df["ht_sine_cross_above"] = (df["ht_sine"] > df["ht_leadsine"]) & (
+    # crossovers
+    prev_sine = sine_series.shift(1)
+    prev_leadsine = leadsine_series.shift(1)
+    new_cols["ht_sine_cross_above"] = (sine_series > leadsine_series) & (
         prev_sine <= prev_leadsine
     )
-
-    df["ht_sine_cross_below"] = (df["ht_sine"] < df["ht_leadsine"]) & (
+    new_cols["ht_sine_cross_below"] = (sine_series < leadsine_series) & (
         prev_sine >= prev_leadsine
     )
+    new_cols["ht_sine_valid"] = np.isfinite(sine) & np.isfinite(leadsine)
 
-    # validity (HT unstable early)
-    df["ht_sine_valid"] = np.isfinite(df["ht_sine"]) & np.isfinite(df["ht_leadsine"])
-
-    # --- per smoothing window ---
     for period in n:
         s = f"_{period}"
 
-        df[f"ht_sine_signal{s}"] = df["ht_sine"].ewm(span=period, adjust=False).mean()
-        df[f"ht_sine_signal{s}_slope"] = df[f"ht_sine_signal{s}"].diff()
+        signal = sine_series.ewm(span=period, adjust=False).mean()
+        hist = sine_series - signal
+        hist_slope = hist.diff()
+        hist_abs = hist.abs()
 
-        df[f"ht_sine_hist{s}"] = df["ht_sine"] - df[f"ht_sine_signal{s}"]
-        df[f"ht_sine_hist{s}_slope"] = df[f"ht_sine_hist{s}"].diff()
-        df[f"ht_sine_hist{s}_acceleration"] = df[f"ht_sine_hist{s}_slope"].diff()
+        new_cols[f"ht_sine_signal{s}"] = signal
+        new_cols[f"ht_sine_signal{s}_slope"] = signal.diff()
+        new_cols[f"ht_sine_hist{s}"] = hist
+        new_cols[f"ht_sine_hist{s}_slope"] = hist_slope
+        new_cols[f"ht_sine_hist{s}_acceleration"] = hist_slope.diff()
+        new_cols[f"ht_sine_hist{s}_gt_0"] = hist > 0
+        new_cols[f"ht_sine_hist{s}_lt_0"] = hist < 0
+        new_cols[f"ht_sine_hist{s}_abs"] = hist_abs
+        new_cols[f"ht_sine{s}_strength"] = sine_slope.abs() * hist_abs
 
-        df[f"ht_sine_hist{s}_gt_0"] = df[f"ht_sine_hist{s}"] > 0
-        df[f"ht_sine_hist{s}_lt_0"] = df[f"ht_sine_hist{s}"] < 0
-        df[f"ht_sine_hist{s}_abs"] = df[f"ht_sine_hist{s}"].abs()
-
-        df[f"ht_sine{s}_strength"] = (
-            df["ht_sine_slope"].abs() * df[f"ht_sine_hist{s}_abs"]
-        )
-
-    return df
+    return pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
 
 def add_ht_trendmode(
@@ -2983,97 +2237,49 @@ def add_ht_trendmode(
     n: list[int] = None,
     close_col: str = "close",
 ) -> pd.DataFrame:
-    """
-    Add Hilbert Transform - Trend vs Cycle Mode (HT_TRENDMODE) features.
-
-    HT_TRENDMODE outputs:
-        1 → Trending mode
-        0 → Cycle (mean-reverting) mode
-
-    This is a regime classifier — extremely useful for switching strategies.
-
-    Base columns (computed once)
-    ----------------------------
-    ht_trendmode                 : 1 (trend) or 0 (cycle)
-    ht_trendmode_slope           : first difference (state change signal)
-    ht_trendmode_acceleration    : second difference
-    ht_trendmode_direction       : +1 if trending, -1 if cycle
-    ht_trendmode_is_trend        : boolean (trend regime)
-    ht_trendmode_is_cycle        : boolean (cycle regime)
-    ht_trendmode_switch_on       : switched into trend this bar
-    ht_trendmode_switch_off      : switched into cycle this bar
-    ht_trendmode_valid           : finite values
-
-    Per smoothing window (e.g. n=10 → suffix '_10')
-    ------------------------------------------------
-    ht_trendmode_signal_{n}      : EMA of trendmode (probability-like smoothing)
-    ht_trendmode_signal_{n}_slope: first difference of signal
-    ht_trendmode_hist_{n}        : raw - signal (regime divergence)
-    ht_trendmode_hist_{n}_slope  : first difference of histogram
-    ht_trendmode_hist_{n}_acceleration : second difference
-    ht_trendmode_hist_{n}_gt_0   : regime strengthening toward trend
-    ht_trendmode_hist_{n}_lt_0   : regime weakening toward cycle
-    ht_trendmode_hist_{n}_abs    : |histogram|
-    ht_trendmode_{n}_strength    : |slope| × hist_abs
-    """
-
     validate_column(df, close_col)
 
     if n is None:
         n = [10]
 
-    df = df.copy()
     close = df[close_col].to_numpy(dtype=float)
+    new_cols = {}
 
-    # --- core trendmode ---
-    trendmode = talib.HT_TRENDMODE(close)
-    df["ht_trendmode"] = trendmode
+    trendmode = pd.Series(talib.HT_TRENDMODE(close), index=df.index)
+    tm_slope = trendmode.diff()
 
-    # --- base features ---
-    df["ht_trendmode_slope"] = df["ht_trendmode"].diff()
-    df["ht_trendmode_acceleration"] = df["ht_trendmode_slope"].diff()
+    new_cols["ht_trendmode"] = trendmode
+    new_cols["ht_trendmode_slope"] = tm_slope
+    new_cols["ht_trendmode_acceleration"] = tm_slope.diff()
+    new_cols["ht_trendmode_direction"] = np.where(trendmode == 1, 1, -1)
+    new_cols["ht_trendmode_is_trend"] = trendmode == 1
+    new_cols["ht_trendmode_is_cycle"] = trendmode == 0
 
-    df["ht_trendmode_direction"] = df["ht_trendmode"].apply(
-        lambda x: 1 if x == 1 else -1
-    )
+    # regime switches
+    prev = trendmode.shift(1)
+    new_cols["ht_trendmode_switch_on"] = (trendmode == 1) & (prev == 0)
+    new_cols["ht_trendmode_switch_off"] = (trendmode == 0) & (prev == 1)
+    new_cols["ht_trendmode_valid"] = np.isfinite(trendmode)
 
-    df["ht_trendmode_is_trend"] = df["ht_trendmode"] == 1
-    df["ht_trendmode_is_cycle"] = df["ht_trendmode"] == 0
-
-    # --- regime switches ---
-    prev = df["ht_trendmode"].shift(1)
-
-    df["ht_trendmode_switch_on"] = (df["ht_trendmode"] == 1) & (prev == 0)
-
-    df["ht_trendmode_switch_off"] = (df["ht_trendmode"] == 0) & (prev == 1)
-
-    # validity (HT unstable early)
-    df["ht_trendmode_valid"] = np.isfinite(df["ht_trendmode"])
-
-    # --- per smoothing window ---
     for period in n:
         s = f"_{period}"
 
-        df[f"ht_trendmode_signal{s}"] = (
-            df["ht_trendmode"].ewm(span=period, adjust=False).mean()
-        )
-        df[f"ht_trendmode_signal{s}_slope"] = df[f"ht_trendmode_signal{s}"].diff()
+        signal = trendmode.ewm(span=period, adjust=False).mean()
+        hist = trendmode - signal
+        hist_slope = hist.diff()
+        hist_abs = hist.abs()
 
-        df[f"ht_trendmode_hist{s}"] = df["ht_trendmode"] - df[f"ht_trendmode_signal{s}"]
-        df[f"ht_trendmode_hist{s}_slope"] = df[f"ht_trendmode_hist{s}"].diff()
-        df[f"ht_trendmode_hist{s}_acceleration"] = df[
-            f"ht_trendmode_hist{s}_slope"
-        ].diff()
+        new_cols[f"ht_trendmode_signal{s}"] = signal
+        new_cols[f"ht_trendmode_signal{s}_slope"] = signal.diff()
+        new_cols[f"ht_trendmode_hist{s}"] = hist
+        new_cols[f"ht_trendmode_hist{s}_slope"] = hist_slope
+        new_cols[f"ht_trendmode_hist{s}_acceleration"] = hist_slope.diff()
+        new_cols[f"ht_trendmode_hist{s}_gt_0"] = hist > 0
+        new_cols[f"ht_trendmode_hist{s}_lt_0"] = hist < 0
+        new_cols[f"ht_trendmode_hist{s}_abs"] = hist_abs
+        new_cols[f"ht_trendmode{s}_strength"] = tm_slope.abs() * hist_abs
 
-        df[f"ht_trendmode_hist{s}_gt_0"] = df[f"ht_trendmode_hist{s}"] > 0
-        df[f"ht_trendmode_hist{s}_lt_0"] = df[f"ht_trendmode_hist{s}"] < 0
-        df[f"ht_trendmode_hist{s}_abs"] = df[f"ht_trendmode_hist{s}"].abs()
-
-        df[f"ht_trendmode{s}_strength"] = (
-            df["ht_trendmode_slope"].abs() * df[f"ht_trendmode_hist{s}_abs"]
-        )
-
-    return df
+    return pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
 
 # endregion CYCLE INDICATORS
@@ -3088,76 +2294,49 @@ def add_avgprice(
     low_col: str = "low",
     close_col: str = "close",
 ) -> pd.DataFrame:
-    """
-    Add Average Price (AVGPRICE) and derived features.
-
-    AVGPRICE = (open + high + low + close) / 4
-
-    Base columns (computed once)
-    ----------------------------
-    avgprice                    : OHLC average price
-    avgprice_slope              : first difference (momentum)
-    avgprice_acceleration       : second difference
-    avgprice_gt_close           : avgprice > close
-    avgprice_lt_close           : avgprice < close
-    avgprice_direction          : +1 if rising, -1 otherwise
-
-    Per smoothing window (e.g. n=10 → suffix '_10')
-    ------------------------------------------------
-    avgprice_signal_{n}         : EMA of avgprice
-    avgprice_signal_{n}_slope   : first difference of signal
-    avgprice_hist_{n}           : avgprice - signal
-    avgprice_hist_{n}_slope     : first difference of histogram
-    avgprice_hist_{n}_acceleration : second difference
-    avgprice_hist_{n}_gt_0      : avgprice above signal
-    avgprice_hist_{n}_lt_0      : avgprice below signal
-    avgprice_hist_{n}_abs       : |histogram|
-    avgprice_{n}_strength       : |slope| × hist_abs
-    """
-
     for col in (open_col, high_col, low_col, close_col):
         validate_column(df, col)
 
-    if n is None:
-        n = [10]
+    n = n or [10]
 
-    df = df.copy()
+    # Prepare numpy arrays for TA-Lib
+    op = df[open_col].to_numpy(dtype=float)
+    hi = df[high_col].to_numpy(dtype=float)
+    lo = df[low_col].to_numpy(dtype=float)
+    cl = df[close_col].to_numpy(dtype=float)
 
-    open_ = df[open_col].to_numpy(dtype=float)
-    high = df[high_col].to_numpy(dtype=float)
-    low = df[low_col].to_numpy(dtype=float)
-    close = df[close_col].to_numpy(dtype=float)
+    new_cols = {}
 
-    # --- core AVGPRICE ---
-    df["avgprice"] = talib.AVGPRICE(open_, high, low, close)
+    # --- core ---
+    avgp = pd.Series(talib.AVGPRICE(op, hi, lo, cl), index=df.index)
+    slope = avgp.diff()
 
-    # --- base derivatives ---
-    df["avgprice_slope"] = df["avgprice"].diff()
-    df["avgprice_acceleration"] = df["avgprice_slope"].diff()
-    df["avgprice_gt_close"] = df["avgprice"] > df["close"]
-    df["avgprice_lt_close"] = df["avgprice"] < df["close"]
-    df["avgprice_direction"] = df["avgprice_slope"].apply(lambda x: 1 if x > 0 else -1)
+    new_cols["avgprice"] = avgp
+    new_cols["avgprice_slope"] = slope
+    new_cols["avgprice_acceleration"] = slope.diff()
+    new_cols["avgprice_gt_close"] = avgp > df[close_col]
+    new_cols["avgprice_lt_close"] = avgp < df[close_col]
+    new_cols["avgprice_direction"] = np.where(slope > 0, 1, -1)
 
-    # --- per smoothing window ---
+    # --- smoothing ---
     for period in n:
         s = f"_{period}"
+        signal = avgp.ewm(span=period, adjust=False).mean()
+        hist = avgp - signal
+        hist_slope = hist.diff()
+        hist_abs = hist.abs()
 
-        df[f"avgprice_signal{s}"] = df["avgprice"].ewm(span=period, adjust=False).mean()
-        df[f"avgprice_signal{s}_slope"] = df[f"avgprice_signal{s}"].diff()
+        new_cols[f"avgprice_signal{s}"] = signal
+        new_cols[f"avgprice_signal{s}_slope"] = signal.diff()
+        new_cols[f"avgprice_hist{s}"] = hist
+        new_cols[f"avgprice_hist{s}_slope"] = hist_slope
+        new_cols[f"avgprice_hist{s}_acceleration"] = hist_slope.diff()
+        new_cols[f"avgprice_hist{s}_gt_0"] = hist > 0
+        new_cols[f"avgprice_hist{s}_lt_0"] = hist < 0
+        new_cols[f"avgprice_hist{s}_abs"] = hist_abs
+        new_cols[f"avgprice{s}_strength"] = slope.abs() * hist_abs
 
-        df[f"avgprice_hist{s}"] = df["avgprice"] - df[f"avgprice_signal{s}"]
-        df[f"avgprice_hist{s}_slope"] = df[f"avgprice_hist{s}"].diff()
-        df[f"avgprice_hist{s}_acceleration"] = df[f"avgprice_hist{s}_slope"].diff()
-
-        df[f"avgprice_hist{s}_gt_0"] = df[f"avgprice_hist{s}"] > 0
-        df[f"avgprice_hist{s}_lt_0"] = df[f"avgprice_hist{s}"] < 0
-        df[f"avgprice_hist{s}_abs"] = df[f"avgprice_hist{s}"].abs()
-
-        df[f"avgprice{s}_strength"] = (
-            df["avgprice_slope"].abs() * df[f"avgprice_hist{s}_abs"]
-        )
-
-    return df
+    return pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
 
 def add_medprice(
@@ -3167,74 +2346,44 @@ def add_medprice(
     low_col: str = "low",
     close_col: str = "close",
 ) -> pd.DataFrame:
-    """
-    Add Median Price (MEDPRICE) and derived features.
-
-    MEDPRICE = (high + low) / 2
-
-    Base columns (computed once)
-    ----------------------------
-    medprice                    : high-low midpoint
-    medprice_slope              : first difference (momentum)
-    medprice_acceleration       : second difference
-    medprice_gt_close           : medprice > close
-    medprice_lt_close           : medprice < close
-    medprice_direction          : +1 if rising, -1 otherwise
-
-    Per smoothing window (e.g. n=10 → suffix '_10')
-    ------------------------------------------------
-    medprice_signal_{n}         : EMA of medprice
-    medprice_signal_{n}_slope   : first difference of signal
-    medprice_hist_{n}           : medprice - signal
-    medprice_hist_{n}_slope     : first difference of histogram
-    medprice_hist_{n}_acceleration : second difference
-    medprice_hist_{n}_gt_0      : medprice above signal
-    medprice_hist_{n}_lt_0      : medprice below signal
-    medprice_hist_{n}_abs       : |histogram|
-    medprice_{n}_strength       : |slope| × hist_abs
-    """
-
     for col in (high_col, low_col, close_col):
         validate_column(df, col)
 
-    if n is None:
-        n = [10]
+    n = n or [10]
+    hi = df[high_col].to_numpy(dtype=float)
+    lo = df[low_col].to_numpy(dtype=float)
 
-    df = df.copy()
+    new_cols = {}
 
-    high = df[high_col].to_numpy(dtype=float)
-    low = df[low_col].to_numpy(dtype=float)
+    medp = pd.Series(talib.MEDPRICE(hi, lo), index=df.index)
+    slope = medp.diff()
 
-    # --- core MEDPRICE ---
-    df["medprice"] = talib.MEDPRICE(high, low)
+    new_cols["medprice"] = medp
+    new_cols["medprice_slope"] = slope
+    new_cols["medprice_acceleration"] = slope.diff()
+    new_cols["medprice_gt_close"] = medp > df[close_col]
+    new_cols["medprice_lt_close"] = medp < df[close_col]
+    new_cols["medprice_direction"] = np.where(slope > 0, 1, -1)
 
-    # --- base derivatives ---
-    df["medprice_slope"] = df["medprice"].diff()
-    df["medprice_acceleration"] = df["medprice_slope"].diff()
-    df["medprice_gt_close"] = df["medprice"] > df["close"]
-    df["medprice_lt_close"] = df["medprice"] < df["close"]
-    df["medprice_direction"] = df["medprice_slope"].apply(lambda x: 1 if x > 0 else -1)
-
-    # --- per smoothing window ---
     for period in n:
         s = f"_{period}"
+        signal = medp.ewm(span=period, adjust=False).mean()
+        hist = medp - signal
+        hist_abs = hist.abs()
 
-        df[f"medprice_signal{s}"] = df["medprice"].ewm(span=period, adjust=False).mean()
-        df[f"medprice_signal{s}_slope"] = df[f"medprice_signal{s}"].diff()
+        new_cols[f"medprice_signal{s}"] = signal
+        new_cols[f"medprice_signal{s}_slope"] = signal.diff()
+        new_cols[f"medprice_hist{s}"] = hist
+        new_cols[f"medprice_hist{s}_slope"] = hist.diff()
+        new_cols[f"medprice_hist{s}_acceleration"] = new_cols[
+            f"medprice_hist{s}_slope"
+        ].diff()
+        new_cols[f"medprice_hist{s}_gt_0"] = hist > 0
+        new_cols[f"medprice_hist{s}_lt_0"] = hist < 0
+        new_cols[f"medprice_hist{s}_abs"] = hist_abs
+        new_cols[f"medprice{s}_strength"] = slope.abs() * hist_abs
 
-        df[f"medprice_hist{s}"] = df["medprice"] - df[f"medprice_signal{s}"]
-        df[f"medprice_hist{s}_slope"] = df[f"medprice_hist{s}"].diff()
-        df[f"medprice_hist{s}_acceleration"] = df[f"medprice_hist{s}_slope"].diff()
-
-        df[f"medprice_hist{s}_gt_0"] = df[f"medprice_hist{s}"] > 0
-        df[f"medprice_hist{s}_lt_0"] = df[f"medprice_hist{s}"] < 0
-        df[f"medprice_hist{s}_abs"] = df[f"medprice_hist{s}"].abs()
-
-        df[f"medprice{s}_strength"] = (
-            df["medprice_slope"].abs() * df[f"medprice_hist{s}_abs"]
-        )
-
-    return df
+    return pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
 
 def add_typprice(
@@ -3244,75 +2393,45 @@ def add_typprice(
     low_col: str = "low",
     close_col: str = "close",
 ) -> pd.DataFrame:
-    """
-    Add Typical Price (TYPPRICE) and derived features.
-
-    TYPPRICE = (high + low + close) / 3
-
-    Base columns (computed once)
-    ----------------------------
-    typprice                    : HLC average price
-    typprice_slope              : first difference (momentum)
-    typprice_acceleration       : second difference
-    typprice_gt_close           : typprice > close
-    typprice_lt_close           : typprice < close
-    typprice_direction          : +1 if rising, -1 otherwise
-
-    Per smoothing window (e.g. n=10 → suffix '_10')
-    ------------------------------------------------
-    typprice_signal_{n}         : EMA of typprice
-    typprice_signal_{n}_slope   : first difference of signal
-    typprice_hist_{n}           : typprice - signal
-    typprice_hist_{n}_slope     : first difference of histogram
-    typprice_hist_{n}_acceleration : second difference
-    typprice_hist_{n}_gt_0      : typprice above signal
-    typprice_hist_{n}_lt_0      : typprice below signal
-    typprice_hist_{n}_abs       : |histogram|
-    typprice_{n}_strength       : |slope| × hist_abs
-    """
-
     for col in (high_col, low_col, close_col):
         validate_column(df, col)
 
-    if n is None:
-        n = [10]
+    n = n or [10]
+    hi = df[high_col].to_numpy(dtype=float)
+    lo = df[low_col].to_numpy(dtype=float)
+    cl = df[close_col].to_numpy(dtype=float)
 
-    df = df.copy()
+    new_cols = {}
 
-    high = df[high_col].to_numpy(dtype=float)
-    low = df[low_col].to_numpy(dtype=float)
-    close = df[close_col].to_numpy(dtype=float)
+    typp = pd.Series(talib.TYPPRICE(hi, lo, cl), index=df.index)
+    slope = typp.diff()
 
-    # --- core TYPPRICE ---
-    df["typprice"] = talib.TYPPRICE(high, low, close)
+    new_cols["typprice"] = typp
+    new_cols["typprice_slope"] = slope
+    new_cols["typprice_acceleration"] = slope.diff()
+    new_cols["typprice_gt_close"] = typp > df[close_col]
+    new_cols["typprice_lt_close"] = typp < df[close_col]
+    new_cols["typprice_direction"] = np.where(slope > 0, 1, -1)
 
-    # --- base derivatives ---
-    df["typprice_slope"] = df["typprice"].diff()
-    df["typprice_acceleration"] = df["typprice_slope"].diff()
-    df["typprice_gt_close"] = df["typprice"] > df["close"]
-    df["typprice_lt_close"] = df["typprice"] < df["close"]
-    df["typprice_direction"] = df["typprice_slope"].apply(lambda x: 1 if x > 0 else -1)
-
-    # --- per smoothing window ---
     for period in n:
         s = f"_{period}"
+        signal = typp.ewm(span=period, adjust=False).mean()
+        hist = typp - signal
+        hist_abs = hist.abs()
 
-        df[f"typprice_signal{s}"] = df["typprice"].ewm(span=period, adjust=False).mean()
-        df[f"typprice_signal{s}_slope"] = df[f"typprice_signal{s}"].diff()
+        new_cols[f"typprice_signal{s}"] = signal
+        new_cols[f"typprice_signal{s}_slope"] = signal.diff()
+        new_cols[f"typprice_hist{s}"] = hist
+        new_cols[f"typprice_hist{s}_slope"] = hist.diff()
+        new_cols[f"typprice_hist{s}_acceleration"] = new_cols[
+            f"typprice_hist{s}_slope"
+        ].diff()
+        new_cols[f"typprice_hist{s}_gt_0"] = hist > 0
+        new_cols[f"typprice_hist{s}_lt_0"] = hist < 0
+        new_cols[f"typprice_hist{s}_abs"] = hist_abs
+        new_cols[f"typprice{s}_strength"] = slope.abs() * hist_abs
 
-        df[f"typprice_hist{s}"] = df["typprice"] - df[f"typprice_signal{s}"]
-        df[f"typprice_hist{s}_slope"] = df[f"typprice_hist{s}"].diff()
-        df[f"typprice_hist{s}_acceleration"] = df[f"typprice_hist{s}_slope"].diff()
-
-        df[f"typprice_hist{s}_gt_0"] = df[f"typprice_hist{s}"] > 0
-        df[f"typprice_hist{s}_lt_0"] = df[f"typprice_hist{s}"] < 0
-        df[f"typprice_hist{s}_abs"] = df[f"typprice_hist{s}"].abs()
-
-        df[f"typprice{s}_strength"] = (
-            df["typprice_slope"].abs() * df[f"typprice_hist{s}_abs"]
-        )
-
-    return df
+    return pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
 
 def add_wclprice(
@@ -3322,75 +2441,45 @@ def add_wclprice(
     low_col: str = "low",
     close_col: str = "close",
 ) -> pd.DataFrame:
-    """
-    Add Weighted Close Price (WCLPRICE) and derived features.
-
-    WCLPRICE = (high + low + 2 * close) / 4
-
-    Base columns (computed once)
-    ----------------------------
-    wclprice                    : weighted close price
-    wclprice_slope              : first difference (momentum)
-    wclprice_acceleration       : second difference
-    wclprice_gt_close           : wclprice > close
-    wclprice_lt_close           : wclprice < close
-    wclprice_direction          : +1 if rising, -1 otherwise
-
-    Per smoothing window (e.g. n=10 → suffix '_10')
-    ------------------------------------------------
-    wclprice_signal_{n}         : EMA of wclprice
-    wclprice_signal_{n}_slope   : first difference of signal
-    wclprice_hist_{n}           : wclprice - signal
-    wclprice_hist_{n}_slope     : first difference of histogram
-    wclprice_hist_{n}_acceleration : second difference
-    wclprice_hist_{n}_gt_0      : wclprice above signal
-    wclprice_hist_{n}_lt_0      : wclprice below signal
-    wclprice_hist_{n}_abs       : |histogram|
-    wclprice_{n}_strength       : |slope| × hist_abs
-    """
-
     for col in (high_col, low_col, close_col):
         validate_column(df, col)
 
-    if n is None:
-        n = [10]
+    n = n or [10]
+    hi = df[high_col].to_numpy(dtype=float)
+    lo = df[low_col].to_numpy(dtype=float)
+    cl = df[close_col].to_numpy(dtype=float)
 
-    df = df.copy()
+    new_cols = {}
 
-    high = df[high_col].to_numpy(dtype=float)
-    low = df[low_col].to_numpy(dtype=float)
-    close = df[close_col].to_numpy(dtype=float)
+    wclp = pd.Series(talib.WCLPRICE(hi, lo, cl), index=df.index)
+    slope = wclp.diff()
 
-    # --- core WCLPRICE ---
-    df["wclprice"] = talib.WCLPRICE(high, low, close)
+    new_cols["wclprice"] = wclp
+    new_cols["wclprice_slope"] = slope
+    new_cols["wclprice_acceleration"] = slope.diff()
+    new_cols["wclprice_gt_close"] = wclp > df[close_col]
+    new_cols["wclprice_lt_close"] = wclp < df[close_col]
+    new_cols["wclprice_direction"] = np.where(slope > 0, 1, -1)
 
-    # --- base derivatives ---
-    df["wclprice_slope"] = df["wclprice"].diff()
-    df["wclprice_acceleration"] = df["wclprice_slope"].diff()
-    df["wclprice_gt_close"] = df["wclprice"] > df["close"]
-    df["wclprice_lt_close"] = df["wclprice"] < df["close"]
-    df["wclprice_direction"] = df["wclprice_slope"].apply(lambda x: 1 if x > 0 else -1)
-
-    # --- per smoothing window ---
     for period in n:
         s = f"_{period}"
+        signal = wclp.ewm(span=period, adjust=False).mean()
+        hist = wclp - signal
+        hist_abs = hist.abs()
 
-        df[f"wclprice_signal{s}"] = df["wclprice"].ewm(span=period, adjust=False).mean()
-        df[f"wclprice_signal{s}_slope"] = df[f"wclprice_signal{s}"].diff()
+        new_cols[f"wclprice_signal{s}"] = signal
+        new_cols[f"wclprice_signal{s}_slope"] = signal.diff()
+        new_cols[f"wclprice_hist{s}"] = hist
+        new_cols[f"wclprice_hist{s}_slope"] = hist.diff()
+        new_cols[f"wclprice_hist{s}_acceleration"] = new_cols[
+            f"wclprice_hist{s}_slope"
+        ].diff()
+        new_cols[f"wclprice_hist{s}_gt_0"] = hist > 0
+        new_cols[f"wclprice_hist{s}_lt_0"] = hist < 0
+        new_cols[f"wclprice_hist{s}_abs"] = hist_abs
+        new_cols[f"wclprice{s}_strength"] = slope.abs() * hist_abs
 
-        df[f"wclprice_hist{s}"] = df["wclprice"] - df[f"wclprice_signal{s}"]
-        df[f"wclprice_hist{s}_slope"] = df[f"wclprice_hist{s}"].diff()
-        df[f"wclprice_hist{s}_acceleration"] = df[f"wclprice_hist{s}_slope"].diff()
-
-        df[f"wclprice_hist{s}_gt_0"] = df[f"wclprice_hist{s}"] > 0
-        df[f"wclprice_hist{s}_lt_0"] = df[f"wclprice_hist{s}"] < 0
-        df[f"wclprice_hist{s}_abs"] = df[f"wclprice_hist{s}"].abs()
-
-        df[f"wclprice{s}_strength"] = (
-            df["wclprice_slope"].abs() * df[f"wclprice_hist{s}_abs"]
-        )
-
-    return df
+    return pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
 
 # endregion PRICE TRANSFORM
@@ -3404,98 +2493,58 @@ def add_atr(
     low_col: str = "low",
     close_col: str = "close",
 ) -> pd.DataFrame:
-    """
-    Add Average True Range (ATR) and derived features.
-
-    ATR measures market volatility (not direction).
-    Based on True Range:
-        TR = max(
-            high - low,
-            abs(high - prev_close),
-            abs(low - prev_close)
-        )
-
-    Base columns (computed once)
-    ----------------------------
-    atr                         : ATR (default 14 if n not specified)
-    atr_slope                   : first difference (volatility change)
-    atr_acceleration            : second difference
-    atr_gt_prev                 : ATR increasing (volatility expanding)
-    atr_lt_prev                 : ATR decreasing (volatility contracting)
-    atr_direction               : +1 if rising, -1 otherwise
-    atr_normalized              : ATR / close (relative volatility)
-
-    Per period (e.g. n=14 → suffix '_14')
-    -------------------------------------
-    atr_{n}                     : ATR with period n
-    atr_{n}_slope               : first difference
-    atr_{n}_acceleration        : second difference
-    atr_{n}_gt_prev             : increasing volatility
-    atr_{n}_lt_prev             : decreasing volatility
-    atr_{n}_normalized          : ATR / close
-    atr_{n}_signal              : EMA of ATR
-    atr_{n}_signal_slope        : first difference of signal
-    atr_{n}_hist                : ATR - signal
-    atr_{n}_hist_slope          : first difference of histogram
-    atr_{n}_hist_acceleration   : second difference
-    atr_{n}_hist_gt_0           : ATR above signal
-    atr_{n}_hist_lt_0           : ATR below signal
-    atr_{n}_hist_abs            : |histogram|
-    atr_{n}_strength            : |slope| × hist_abs
-    """
-
     for col in (high_col, low_col, close_col):
         validate_column(df, col)
 
-    if n is None:
-        n = [14]
+    n = n or [14]
+    hi = df[high_col].to_numpy(dtype=float)
+    lo = df[low_col].to_numpy(dtype=float)
+    cl = df[close_col].to_numpy(dtype=float)
 
-    df = df.copy()
-
-    high = df[high_col].to_numpy(dtype=float)
-    low = df[low_col].to_numpy(dtype=float)
-    close = df[close_col].to_numpy(dtype=float)
+    new_cols = {}
 
     # --- base ATR (use first period as default reference) ---
     base_period = n[0]
-    df["atr"] = talib.ATR(high, low, close, timeperiod=base_period)
+    atr_base = pd.Series(talib.ATR(hi, lo, cl, timeperiod=base_period), index=df.index)
+    slope_base = atr_base.diff()
 
-    # --- base derivatives ---
-    df["atr_slope"] = df["atr"].diff()
-    df["atr_acceleration"] = df["atr_slope"].diff()
-    df["atr_gt_prev"] = df["atr"] > df["atr"].shift(1)
-    df["atr_lt_prev"] = df["atr"] < df["atr"].shift(1)
-    df["atr_direction"] = df["atr_slope"].apply(lambda x: 1 if x > 0 else -1)
-    df["atr_normalized"] = df["atr"] / df["close"]
+    new_cols["atr"] = atr_base
+    new_cols["atr_slope"] = slope_base
+    new_cols["atr_acceleration"] = slope_base.diff()
+    new_cols["atr_gt_prev"] = atr_base > atr_base.shift(1)
+    new_cols["atr_lt_prev"] = atr_base < atr_base.shift(1)
+    new_cols["atr_direction"] = np.where(slope_base > 0, 1, -1)
+    new_cols["atr_normalized"] = atr_base / df[close_col]
 
     # --- per period ---
     for period in n:
         s = f"_{period}"
+        atr_p = pd.Series(talib.ATR(hi, lo, cl, timeperiod=period), index=df.index)
+        slope_p = atr_p.diff()
 
-        atr_series = talib.ATR(high, low, close, timeperiod=period)
-        df[f"atr{s}"] = atr_series
-
-        df[f"atr{s}_slope"] = df[f"atr{s}"].diff()
-        df[f"atr{s}_acceleration"] = df[f"atr{s}_slope"].diff()
-        df[f"atr{s}_gt_prev"] = df[f"atr{s}"] > df[f"atr{s}"].shift(1)
-        df[f"atr{s}_lt_prev"] = df[f"atr{s}"] < df[f"atr{s}"].shift(1)
-        df[f"atr{s}_normalized"] = df[f"atr{s}"] / df["close"]
+        new_cols[f"atr{s}"] = atr_p
+        new_cols[f"atr{s}_slope"] = slope_p
+        new_cols[f"atr{s}_acceleration"] = slope_p.diff()
+        new_cols[f"atr{s}_gt_prev"] = atr_p > atr_p.shift(1)
+        new_cols[f"atr{s}_lt_prev"] = atr_p < atr_p.shift(1)
+        new_cols[f"atr{s}_normalized"] = atr_p / df[close_col]
 
         # signal + histogram
-        df[f"atr{s}_signal"] = df[f"atr{s}"].ewm(span=period, adjust=False).mean()
-        df[f"atr{s}_signal_slope"] = df[f"atr{s}_signal"].diff()
+        signal = atr_p.ewm(span=period, adjust=False).mean()
+        hist = atr_p - signal
+        hist_abs = hist.abs()
 
-        df[f"atr{s}_hist"] = df[f"atr{s}"] - df[f"atr{s}_signal"]
-        df[f"atr{s}_hist_slope"] = df[f"atr{s}_hist"].diff()
-        df[f"atr{s}_hist_acceleration"] = df[f"atr{s}_hist_slope"].diff()
+        new_cols[f"atr{s}_signal"] = signal
+        new_cols[f"atr{s}_signal_slope"] = signal.diff()
+        new_cols[f"atr{s}_hist"] = hist
+        new_cols[f"atr{s}_hist_slope"] = hist.diff()
+        new_cols[f"atr{s}_hist_acceleration"] = new_cols[f"atr{s}_hist_slope"].diff()
+        new_cols[f"atr{s}_hist_gt_0"] = hist > 0
+        new_cols[f"atr{s}_hist_lt_0"] = hist < 0
+        new_cols[f"atr{s}_hist_abs"] = hist_abs
+        new_cols[f"atr{s}_strength"] = slope_p.abs() * hist_abs
 
-        df[f"atr{s}_hist_gt_0"] = df[f"atr{s}_hist"] > 0
-        df[f"atr{s}_hist_lt_0"] = df[f"atr{s}_hist"] < 0
-        df[f"atr{s}_hist_abs"] = df[f"atr{s}_hist"].abs()
-
-        df[f"atr{s}_strength"] = df[f"atr{s}_slope"].abs() * df[f"atr{s}_hist_abs"]
-
-    return df
+    return pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
 
 def add_natr(
@@ -3505,92 +2554,57 @@ def add_natr(
     low_col: str = "low",
     close_col: str = "close",
 ) -> pd.DataFrame:
-    """
-    Add Normalized Average True Range (NATR) and derived features.
-
-    NATR = (ATR / close) * 100
-
-    Unlike ATR:
-        - Scale-independent (percentage)
-        - Comparable across assets
-
-    Base columns (computed once)
-    ----------------------------
-    natr                        : normalized ATR (percentage)
-    natr_slope                  : first difference (volatility change)
-    natr_acceleration           : second difference
-    natr_gt_prev                : volatility increasing
-    natr_lt_prev                : volatility decreasing
-    natr_direction              : +1 if rising, -1 otherwise
-
-    Per period (e.g. n=14 → suffix '_14')
-    -------------------------------------
-    natr_{n}                    : NATR with period n
-    natr_{n}_slope              : first difference
-    natr_{n}_acceleration       : second difference
-    natr_{n}_gt_prev            : increasing volatility
-    natr_{n}_lt_prev            : decreasing volatility
-    natr_{n}_signal             : EMA of NATR
-    natr_{n}_signal_slope       : first difference of signal
-    natr_{n}_hist               : NATR - signal
-    natr_{n}_hist_slope         : first difference of histogram
-    natr_{n}_hist_acceleration  : second difference
-    natr_{n}_hist_gt_0          : NATR above signal
-    natr_{n}_hist_lt_0          : NATR below signal
-    natr_{n}_hist_abs           : |histogram|
-    natr_{n}_strength           : |slope| × hist_abs
-    """
-
     for col in (high_col, low_col, close_col):
         validate_column(df, col)
 
-    if n is None:
-        n = [14]
+    n = n or [14]
+    hi = df[high_col].to_numpy(dtype=float)
+    lo = df[low_col].to_numpy(dtype=float)
+    cl = df[close_col].to_numpy(dtype=float)
 
-    df = df.copy()
+    new_cols = {}
 
-    high = df[high_col].to_numpy(dtype=float)
-    low = df[low_col].to_numpy(dtype=float)
-    close = df[close_col].to_numpy(dtype=float)
-
-    # --- base NATR (use first period as default reference) ---
+    # --- base NATR ---
     base_period = n[0]
-    df["natr"] = talib.NATR(high, low, close, timeperiod=base_period)
+    natr_base = pd.Series(
+        talib.NATR(hi, lo, cl, timeperiod=base_period), index=df.index
+    )
+    slope_base = natr_base.diff()
 
-    # --- base derivatives ---
-    df["natr_slope"] = df["natr"].diff()
-    df["natr_acceleration"] = df["natr_slope"].diff()
-    df["natr_gt_prev"] = df["natr"] > df["natr"].shift(1)
-    df["natr_lt_prev"] = df["natr"] < df["natr"].shift(1)
-    df["natr_direction"] = df["natr_slope"].apply(lambda x: 1 if x > 0 else -1)
+    new_cols["natr"] = natr_base
+    new_cols["natr_slope"] = slope_base
+    new_cols["natr_acceleration"] = slope_base.diff()
+    new_cols["natr_gt_prev"] = natr_base > natr_base.shift(1)
+    new_cols["natr_lt_prev"] = natr_base < natr_base.shift(1)
+    new_cols["natr_direction"] = np.where(slope_base > 0, 1, -1)
 
     # --- per period ---
     for period in n:
         s = f"_{period}"
+        natr_p = pd.Series(talib.NATR(hi, lo, cl, timeperiod=period), index=df.index)
+        slope_p = natr_p.diff()
 
-        natr_series = talib.NATR(high, low, close, timeperiod=period)
-        df[f"natr{s}"] = natr_series
+        new_cols[f"natr{s}"] = natr_p
+        new_cols[f"natr{s}_slope"] = slope_p
+        new_cols[f"natr{s}_acceleration"] = slope_p.diff()
+        new_cols[f"natr{s}_gt_prev"] = natr_p > natr_p.shift(1)
+        new_cols[f"natr{s}_lt_prev"] = natr_p < natr_p.shift(1)
 
-        df[f"natr{s}_slope"] = df[f"natr{s}"].diff()
-        df[f"natr{s}_acceleration"] = df[f"natr{s}_slope"].diff()
-        df[f"natr{s}_gt_prev"] = df[f"natr{s}"] > df[f"natr{s}"].shift(1)
-        df[f"natr{s}_lt_prev"] = df[f"natr{s}"] < df[f"natr{s}"].shift(1)
+        signal = natr_p.ewm(span=period, adjust=False).mean()
+        hist = natr_p - signal
+        hist_abs = hist.abs()
 
-        # signal + histogram
-        df[f"natr{s}_signal"] = df[f"natr{s}"].ewm(span=period, adjust=False).mean()
-        df[f"natr{s}_signal_slope"] = df[f"natr{s}_signal"].diff()
+        new_cols[f"natr{s}_signal"] = signal
+        new_cols[f"natr{s}_signal_slope"] = signal.diff()
+        new_cols[f"natr{s}_hist"] = hist
+        new_cols[f"natr{s}_hist_slope"] = hist.diff()
+        new_cols[f"natr{s}_hist_acceleration"] = new_cols[f"natr{s}_hist_slope"].diff()
+        new_cols[f"natr{s}_hist_gt_0"] = hist > 0
+        new_cols[f"natr{s}_hist_lt_0"] = hist < 0
+        new_cols[f"natr{s}_hist_abs"] = hist_abs
+        new_cols[f"natr{s}_strength"] = slope_p.abs() * hist_abs
 
-        df[f"natr{s}_hist"] = df[f"natr{s}"] - df[f"natr{s}_signal"]
-        df[f"natr{s}_hist_slope"] = df[f"natr{s}_hist"].diff()
-        df[f"natr{s}_hist_acceleration"] = df[f"natr{s}_hist_slope"].diff()
-
-        df[f"natr{s}_hist_gt_0"] = df[f"natr{s}_hist"] > 0
-        df[f"natr{s}_hist_lt_0"] = df[f"natr{s}_hist"] < 0
-        df[f"natr{s}_hist_abs"] = df[f"natr{s}_hist"].abs()
-
-        df[f"natr{s}_strength"] = df[f"natr{s}_slope"].abs() * df[f"natr{s}_hist_abs"]
-
-    return df
+    return pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
 
 def add_trange(
@@ -3600,81 +2614,48 @@ def add_trange(
     low_col: str = "low",
     close_col: str = "close",
 ) -> pd.DataFrame:
-    """
-    Add True Range (TRANGE) and derived features.
-
-    TRANGE = max(
-        high - low,
-        abs(high - prev_close),
-        abs(low - prev_close)
-    )
-
-    This is the raw volatility component used in ATR.
-
-    Base columns (computed once)
-    ----------------------------
-    trange                     : true range
-    trange_slope               : first difference (volatility change)
-    trange_acceleration        : second difference
-    trange_gt_prev             : volatility increasing
-    trange_lt_prev             : volatility decreasing
-    trange_direction           : +1 if rising, -1 otherwise
-    trange_normalized          : trange / close (relative volatility)
-
-    Per smoothing window (e.g. n=14 → suffix '_14')
-    ------------------------------------------------
-    trange_signal_{n}          : EMA of trange
-    trange_signal_{n}_slope    : first difference of signal
-    trange_hist_{n}            : trange - signal
-    trange_hist_{n}_slope      : first difference of histogram
-    trange_hist_{n}_acceleration : second difference
-    trange_hist_{n}_gt_0       : trange above signal
-    trange_hist_{n}_lt_0       : trange below signal
-    trange_hist_{n}_abs        : |histogram|
-    trange_{n}_strength        : |slope| × hist_abs
-    """
-
     for col in (high_col, low_col, close_col):
         validate_column(df, col)
 
-    if n is None:
-        n = [14]
+    n = n or [14]
+    hi = df[high_col].to_numpy(dtype=float)
+    lo = df[low_col].to_numpy(dtype=float)
+    cl = df[close_col].to_numpy(dtype=float)
 
-    df = df.copy()
-
-    high = df[high_col].to_numpy(dtype=float)
-    low = df[low_col].to_numpy(dtype=float)
-    close = df[close_col].to_numpy(dtype=float)
+    new_cols = {}
 
     # --- core TRANGE ---
-    df["trange"] = talib.TRANGE(high, low, close)
+    tr = pd.Series(talib.TRANGE(hi, lo, cl), index=df.index)
+    tr_slope = tr.diff()
 
-    # --- base derivatives ---
-    df["trange_slope"] = df["trange"].diff()
-    df["trange_acceleration"] = df["trange_slope"].diff()
-    df["trange_gt_prev"] = df["trange"] > df["trange"].shift(1)
-    df["trange_lt_prev"] = df["trange"] < df["trange"].shift(1)
-    df["trange_direction"] = df["trange_slope"].apply(lambda x: 1 if x > 0 else -1)
-    df["trange_normalized"] = df["trange"] / df["close"]
+    new_cols["trange"] = tr
+    new_cols["trange_slope"] = tr_slope
+    new_cols["trange_acceleration"] = tr_slope.diff()
+    new_cols["trange_gt_prev"] = tr > tr.shift(1)
+    new_cols["trange_lt_prev"] = tr < tr.shift(1)
+    new_cols["trange_direction"] = np.where(tr_slope > 0, 1, -1)
+    new_cols["trange_normalized"] = tr / df[close_col]
 
     # --- per smoothing window ---
     for period in n:
         s = f"_{period}"
+        signal = tr.ewm(span=period, adjust=False).mean()
+        hist = tr - signal
+        hist_abs = hist.abs()
 
-        df[f"trange_signal{s}"] = df["trange"].ewm(span=period, adjust=False).mean()
-        df[f"trange_signal{s}_slope"] = df[f"trange_signal{s}"].diff()
+        new_cols[f"trange_signal{s}"] = signal
+        new_cols[f"trange_signal{s}_slope"] = signal.diff()
+        new_cols[f"trange_hist{s}"] = hist
+        new_cols[f"trange_hist{s}_slope"] = hist.diff()
+        new_cols[f"trange_hist{s}_acceleration"] = new_cols[
+            f"trange_hist{s}_slope"
+        ].diff()
+        new_cols[f"trange_hist{s}_gt_0"] = hist > 0
+        new_cols[f"trange_hist{s}_lt_0"] = hist < 0
+        new_cols[f"trange_hist{s}_abs"] = hist_abs
+        new_cols[f"trange{s}_strength"] = tr_slope.abs() * hist_abs
 
-        df[f"trange_hist{s}"] = df["trange"] - df[f"trange_signal{s}"]
-        df[f"trange_hist{s}_slope"] = df[f"trange_hist{s}"].diff()
-        df[f"trange_hist{s}_acceleration"] = df[f"trange_hist{s}_slope"].diff()
-
-        df[f"trange_hist{s}_gt_0"] = df[f"trange_hist{s}"] > 0
-        df[f"trange_hist{s}_lt_0"] = df[f"trange_hist{s}"] < 0
-        df[f"trange_hist{s}_abs"] = df[f"trange_hist{s}"].abs()
-
-        df[f"trange{s}_strength"] = df["trange_slope"].abs() * df[f"trange_hist{s}_abs"]
-
-    return df
+    return pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
 
 # endregion VOLATILITY INDICATORS
