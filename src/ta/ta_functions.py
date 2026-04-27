@@ -190,7 +190,7 @@ def add_dema(
         dist = price - dema
         new_cols[f"{base}_dist"] = dist
         new_cols[f"{base}_dist_abs"] = dist.abs()
-        new_cols[f"{base}_dist_pct"] = dist / dema          # removes price-level dominance
+        new_cols[f"{base}_dist_pct"] = dist / dema  # removes price-level dominance
 
         # position flag
         new_cols[f"{column_name}_gt_dema_{window}"] = (price > dema).astype(int)
@@ -206,7 +206,7 @@ def add_dema(
         # basic distance metrics
         new_cols[f"{pair}_dist"] = dist
         new_cols[f"{pair}_dist_abs"] = dist.abs()
-        new_cols[f"{pair}_dist_pct"] = dist / d2           # normalised, removes price dominance
+        new_cols[f"{pair}_dist_pct"] = dist / d2  # normalised, removes price dominance
         new_cols[f"{pair}_dist_slope"] = dist.diff()
         new_cols[f"{pair}_dist_acceleration"] = dist.diff().diff()
 
@@ -222,12 +222,11 @@ def add_dema(
         # bars since last crossover — how "fresh" the signal is
         regime_change = sign.ne(sign.shift(1))
         regime_id = regime_change.cumsum()
-        new_cols[f"{pair}_bars_since_crossover"] = (
-            sign.groupby(regime_id).cumcount()
-        )
+        new_cols[f"{pair}_bars_since_crossover"] = sign.groupby(regime_id).cumcount()
 
     df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
     return df
+
 
 def add_ema(
     df: pd.DataFrame,
