@@ -162,6 +162,7 @@ def add_dema(
     df: pd.DataFrame,
     n: list[int] = None,
     column_name: str = "close",
+    slope_mode: str = "diff",
 ) -> pd.DataFrame:
     validate_column(df, column_name)
 
@@ -173,37 +174,60 @@ def add_dema(
     price = df[column_name]
 
     new_cols = {}
-    dema_series = {}  # store Series for reuse in pairwise section
+    dema_series = {}
 
-    # --- DEMA + per-period derivatives ---
+    # ── per-period features ──────────────────────────────────────────────────
     for window in n:
         base = f"{column_name}_dema_{window}"
         dema = pd.Series(talib.DEMA(source, timeperiod=window), index=df.index)
-        slope = dema.diff()
+        slope = dema.pct_change() if slope_mode == "pct" else dema.diff()
 
         new_cols[base] = dema
         new_cols[f"{base}_slope"] = slope
         new_cols[f"{base}_acceleration"] = slope.diff()
-        new_cols[f"{column_name}_gt_dema_{window}"] = price > dema
-        new_cols[f"{base}_dist"] = price - dema
-        new_cols[f"{base}_dist_abs"] = (price - dema).abs()
 
-        dema_series[window] = dema  # save for pairwise
+        # distance (signed + absolute + normalised)
+        dist = price - dema
+        new_cols[f"{base}_dist"] = dist
+        new_cols[f"{base}_dist_abs"] = dist.abs()
+        new_cols[f"{base}_dist_pct"] = dist / dema          # removes price-level dominance
 
-    # --- pairwise distances ---
+        # position flag
+        new_cols[f"{column_name}_gt_dema_{window}"] = (price > dema).astype(int)
+
+        dema_series[window] = dema
+
+    # ── pairwise features ────────────────────────────────────────────────────
     for w1, w2 in combinations(dema_series.keys(), 2):
         pair = f"{column_name}_dema_{w1}_{w2}"
-        dist = dema_series[w1] - dema_series[w2]
+        d1, d2 = dema_series[w1], dema_series[w2]
+        dist = d1 - d2
 
+        # basic distance metrics
         new_cols[f"{pair}_dist"] = dist
         new_cols[f"{pair}_dist_abs"] = dist.abs()
-        new_cols[f"{pair}_direction"] = np.where(dist > 0, 1, -1)
+        new_cols[f"{pair}_dist_pct"] = dist / d2           # normalised, removes price dominance
         new_cols[f"{pair}_dist_slope"] = dist.diff()
+        new_cols[f"{pair}_dist_acceleration"] = dist.diff().diff()
+
+        # current regime: +1 when short DEMA above long DEMA, -1 otherwise
+        sign = np.sign(dist).replace(0, np.nan).ffill().fillna(1)
+        new_cols[f"{pair}_direction"] = sign.astype(int)
+
+        # ── crossover events ─────────────────────────────────────────────────
+        prev_sign = sign.shift(1)
+        new_cols[f"{pair}_crossover_up"] = ((sign > 0) & (prev_sign <= 0)).astype(int)
+        new_cols[f"{pair}_crossover_dn"] = ((sign < 0) & (prev_sign >= 0)).astype(int)
+
+        # bars since last crossover — how "fresh" the signal is
+        regime_change = sign.ne(sign.shift(1))
+        regime_id = regime_change.cumsum()
+        new_cols[f"{pair}_bars_since_crossover"] = (
+            sign.groupby(regime_id).cumcount()
+        )
 
     df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
-
     return df
-
 
 def add_ema(
     df: pd.DataFrame,
@@ -1881,9 +1905,6 @@ def add_ad(
         new_cols[f"ad{s}_strength"] = ad_slope.abs() * hist_abs
 
     return pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
-
-
-from itertools import product
 
 
 def add_adosc(

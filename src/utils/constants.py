@@ -29,6 +29,52 @@ PDF_OUTPUT_DIR = "../pdfs"
 # ===========================
 TA_LOG_FILE_BASE = f"{LOG_DIR}/ta"
 
+TA_NAME_MAP = {
+    "add_bbands": "Bollinger Bands",
+    "add_dema": "Double Exponential Moving Average",
+    "add_ema": "Exponential Moving Average",
+    "add_kama": "Kaufman's Adaptive Moving Average",
+    "add_midpoint": "Midpoint",
+    "add_midprice": "Mid Price",
+    "add_sar": "Parabolic SAR (Stop and Reverse)",
+    "add_sma": "Simple Moving Average",
+    "add_t3": "T3 Moving Average",
+    "add_tema": "Triple Exponential Moving Average",
+    "add_trima": "Triangular Moving Average",
+    "add_wma": "Weighted Moving Average",
+    "add_adx": "Average Directional Index",
+    "add_aroon": "Aroon Indicator",
+    "add_bop": "Balance of Power",
+    "add_cci": "Commodity Channel Index",
+    "add_cmo": "Chande Momentum Oscillator",
+    "add_macd": "Moving Average Convergence Divergence",
+    "add_mfi": "Money Flow Index",
+    "add_mom": "Momentum",
+    "add_ppo": "Percentage Price Oscillator",
+    "add_roc": "Rate of Change",
+    "add_rsi": "Relative Strength Index",
+    "add_stoch": "Stochastic Oscillator",
+    "add_stoch_rsi": "Stochastic RSI",
+    "add_trix": "Triple Exponential Average",
+    "add_ultosc": "Ultimate Oscillator",
+    "add_willr": "Williams %R",
+    "add_ad": "Accumulation/Distribution Line",
+    "add_adosc": "Accumulation/Distribution Oscillator",
+    "add_obv": "On-Balance Volume",
+    "add_ht_dcperiod": "Hilbert Transform - Dominant Cycle Period",
+    "add_ht_dcphase": "Hilbert Transform - Dominant Cycle Phase",
+    "add_ht_phasor": "Hilbert Transform - Phasor Components",
+    "add_ht_sine": "Hilbert Transform - SineWave",
+    "add_ht_trendmode": "Hilbert Transform - Trend vs Cycle Mode",
+    "add_avgprice": "Average Price",
+    "add_medprice": "Median Price",
+    "add_typprice": "Typical Price",
+    "add_wclprice": "Weighted Close Price",
+    "add_atr": "Average True Range",
+    "add_natr": "Normalized Average True Range",
+    "add_trange": "True Range",
+}
+
 
 # ===========================
 # VISUALIZATION CONFIGURATION
