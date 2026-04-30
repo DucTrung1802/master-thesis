@@ -5,6 +5,8 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait, Select
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
+from selenium.webdriver.common.action_chains import ActionChains
+from selenium.webdriver.common.keys import Keys
 
 from bs4 import BeautifulSoup, Tag
 
@@ -3080,17 +3082,14 @@ class WebScraper:
             )
             file_name = f"{scrape_sub_type}"
 
-            # 2. Initialize start time and current time
-            current_date = datetime.now()
-
-            # 3. Create folder if not exists
+            # 2. Create folder if not exists
             if not os.path.exists(folder_path):
                 os.makedirs(folder_path, exist_ok=True)
 
-            # 4. Get SourceInfo
+            # 3. Get SourceInfo
             source_info = SCRAPE_MAPPING[key]
 
-            # 5. Navigate to URL
+            # 4. Navigate to URL
             web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
 
             date_expect_change_xpath = '//*[@id="render-table-owner"]/tr[1]/td[2]'
@@ -3098,73 +3097,129 @@ class WebScraper:
                 EC.presence_of_element_located((By.XPATH, date_expect_change_xpath))
             )
 
-            # 6. Logic for scraping
+            # 5. Logic for scraping
+            # 5.1. Create list of month
             start_date = first_day_of_month(SCRAPER_START_DATE)
             end_date = SCRAPER_END_DATE
             month_list = month_ranges(start_date, end_date)
 
+            # 5.2. Loop through each month
             for first_day, last_day in month_list:
+                # 5.3. Check if file already exists
+                file_path = f"{folder_path}/{file_name}_{first_day.strftime('%Y-%m-%d')}_{last_day.strftime('%Y-%m-%d')}.csv"
+
+                if os.path.isfile(file_path):
+                    self._logger.log_debug(f"File already exists: {file_path}, skip.")
+                    continue
+
+                self._logger.log_info(
+                    f"Start scraping data for {first_day.strftime('%Y-%m-%d')} to {last_day.strftime('%Y-%m-%d')}."
+                )
+
+                # 5.4. Scrape data
                 from_date_xpath = '//*[@id="date-from"]'
                 self._input_text(
                     web_driver,
                     from_date_xpath,
-                    f"{SCRAPER_START_DATE.strftime('%d/%m/%Y')}",
+                    f"{first_day.strftime('%d/%m/%Y')}",
                 )
+
+                actions = ActionChains(web_driver)
+                actions.send_keys(Keys.ESCAPE).perform()
+
+                to_date_xpath = '//*[@id="date-to"]'
+                self._input_text(
+                    web_driver,
+                    to_date_xpath,
+                    f"{last_day.strftime('%d/%m/%Y')}",
+                )
+
+                actions = ActionChains(web_driver)
+                actions.send_keys(Keys.ESCAPE).perform()
 
                 find_button_xpath = '//*[@id="owner-find"]'
                 self._click_element(web_driver, find_button_xpath)
 
-                total_page_xpath = '//*[@id="wraper-content-paging"]/div[11]/p'
-                WebDriverWait(web_driver, 10).until(
-                    EC.presence_of_element_located((By.XPATH, total_page_xpath))
-                )
-                total_page = int(
-                    self._find_first_valid_element_by_xpath(
-                        web_driver, xpaths=[total_page_xpath]
-                    ).text
+                loading_table_xpath = '//*[@id="loading-table-owner"]'
+                loading_table = self._find_first_valid_element_by_xpath(
+                    web_driver, xpaths=[loading_table_xpath]
                 )
 
-                column_names = [
-                    "code",
-                    "date",
-                    "close",
-                    "adjust",
-                    "change",
-                    "matching_volume",
-                    "matching_value",
-                    "negotiate_volume",
-                    "negotiate_value",
-                    "open",
-                    "high",
-                    "low",
-                ]
+                while "flex" in str.lower(loading_table.get_attribute("style")):
+                    time.sleep(0.05)
+                    loading_table = self._find_first_valid_element_by_xpath(
+                        web_driver, xpaths=[loading_table_xpath]
+                    )
+
+                next_page_xpath = '//*[@id="render-table-owner"]/div[2]/a[2]'
+                no_result_xpath = '//*[@id="render-table-owner"]/tr/td'
+
+                no_result_boolean: bool = (
+                    self._find_first_valid_element_by_xpath(
+                        web_driver, xpaths=[no_result_xpath]
+                    )
+                    and str.lower(
+                        self._find_first_valid_element_by_xpath(
+                            web_driver, xpaths=[no_result_xpath]
+                        ).text
+                    )
+                    == "không có kết quả phù hợp"
+                )
+
+                while "flex" in str.lower(loading_table.get_attribute("style")):
+                    time.sleep(0.05)
+                    loading_table = self._find_first_valid_element_by_xpath(
+                        web_driver, xpaths=[loading_table_xpath]
+                    )
+
+                if no_result_boolean:
+                    continue
 
                 all_data = []
+                get_last_page = False
 
-                next_page_xpath = '//*[@id="divStart"]/div/div[3]/div[3]'
+                while not get_last_page:
 
-                for page in range(1, total_page + 1):
+                    column_names = [
+                        "code",
+                        "date",
+                        "close",
+                        "adjust",
+                        "change",
+                        "matching_volume",
+                        "matching_value",
+                        "negotiate_volume",
+                        "negotiate_value",
+                        "open",
+                        "high",
+                        "low",
+                    ]
 
-                    date_string_to_compare = self._find_first_valid_element_by_xpath(
-                        web_driver, xpaths=[date_expect_change_xpath]
-                    ).text
-
-                    self._click_element(web_driver, next_page_xpath)
-
-                    changed = self._wait_until_text_not_equals(
-                        web_driver,
-                        date_expect_change_xpath,
-                        expected_text=date_string_to_compare,
+                    bs4_parser = self._update_bs4_parser(web_driver)
+                    headers, rows = self._extract_table_by_id(
+                        bs4_parser=bs4_parser,
+                        id="owner-contents-table",
                     )
-                    if not changed:
-                        self._logger.log_error(
-                            f"Failed to navigate to next page. Stop at page {page}."
-                        )
-                        break
 
-                # Create DataFrame once
+                    all_data.extend(rows)
+
+                    next_page_xpath = '//*[@id="divStart"]/div/div[3]/div[3]'
+                    next_page_button = self._find_first_valid_element_by_xpath(
+                        web_driver, xpaths=[next_page_xpath]
+                    )
+
+                    if "disabled" in str.lower(next_page_button.get_attribute("class")):
+                        get_last_page = True
+                    else:
+                        self._click_element(web_driver, next_page_xpath)
+
+                    while "flex" in str.lower(loading_table.get_attribute("style")):
+                        time.sleep(0.05)
+                        loading_table = self._find_first_valid_element_by_xpath(
+                            web_driver, xpaths=[loading_table_xpath]
+                        )
+
                 df = pd.DataFrame(all_data, columns=column_names)
-                file_path = f"{folder_path}/{file_name}_{first_day}_{last_day}.csv"
                 df.to_csv(file_path, index=False)
 
         finally:
@@ -3338,7 +3393,6 @@ class WebScraper:
                     EC.presence_of_element_located((By.XPATH, date_expect_change_xpath))
                 )
                 bs4_parser = self._update_bs4_parser(web_driver)
-
                 headers, rows = self._extract_table_by_id(
                     bs4_parser=bs4_parser,
                     id="owner-contents-table",
