@@ -6,7 +6,15 @@
                 "enable": false
             },
             "stock_market": {
-                "enable": true
+                "enable": true,
+                "children": {
+                    "vn_index_price": {
+                        "enable": true
+                    },
+                    "vn_index_order": {
+                        "enable": true
+                    }
+                }
             },
             "enterprise": {
                 "enable": true

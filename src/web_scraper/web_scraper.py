@@ -20,13 +20,20 @@ from logger.logger import Logger
 from utils.constants import *
 from utils.enums import *
 from utils.utils import *
+from utils.switch_handler import SwitchHandler
 from dtos.thread_manager_dtos.task import *
 from thread_manager.thread_manager import ThreadManager
 
 
 class WebScraper:
-    def __init__(self, logger: Logger, power: int = THREAD_MANAGER_POWER):
+    def __init__(
+        self,
+        logger: Logger,
+        switch_handler: SwitchHandler,
+        power: int = THREAD_MANAGER_POWER,
+    ):
         self._logger: Logger = logger
+        self._switch_handler: SwitchHandler = switch_handler
         self._thread_manager = ThreadManager(logger=self._logger, power=power)
 
         self._chrome_options = Options()
@@ -3235,18 +3242,20 @@ class WebScraper:
             escape_xpath = '//*[@id="summary-table"]/tbody/tr[1]/td[1]'
             self._click_element(web_driver, escape_xpath)
 
-            find_button_xpath = '//*[@id="divStart"]/div/div[1]/div[1]/div/div[3]/div[1]'
+            find_button_xpath = (
+                '//*[@id="divStart"]/div/div[1]/div[1]/div/div[3]/div[1]'
+            )
             self._click_element(web_driver, find_button_xpath)
 
-            xpath = '//*[@id="tabletoExcel"]/img' 
-            self._click_element(web_driver, xpath) 
- 
+            xpath = '//*[@id="tabletoExcel"]/img'
+            self._click_element(web_driver, xpath)
+
             from_date = SCRAPER_START_DATE.strftime("%d_%m_%Y")
             to_date = datetime.now().strftime("%d_%m_%Y")
-            download_file_name = f"ThongKeDatLenh_VNINDEX_{from_date}_{to_date}.xlsx" 
-            download_file_path = os.path.join(DOWNLOAD_FOLDER_PATH, download_file_name) 
- 
-            wait_for_file(download_file_path) 
+            download_file_name = f"ThongKeDatLenh_VNINDEX_{from_date}_{to_date}.xlsx"
+            download_file_path = os.path.join(DOWNLOAD_FOLDER_PATH, download_file_name)
+
+            wait_for_file(download_file_path)
             move_file(path_a=download_file_path, path_b=file_path)
             convert_xlsx_to_csv(file_path)
 
@@ -4540,22 +4549,24 @@ class WebScraper:
         number_of_task_before = self._thread_manager.get_current_number_of_task()
 
         # VN_INDEX_PRICE
-        key = (
-            ScrapeMainType.STOCK_MARKET,
-            StockMarketSubType.VN_INDEX_PRICE,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        if self._switch_handler.is_enabled("web_scraper", "stock_market", "vn_index_price"):
+            key = (
+                ScrapeMainType.STOCK_MARKET,
+                StockMarketSubType.VN_INDEX_PRICE,
+            )
+            self._thread_manager.add_task(
+                Task(format_key_for_name(key), self._scrape_data_from, key)
+            )
 
         # VN_INDEX_ORDER
-        key = (
-            ScrapeMainType.STOCK_MARKET,
-            StockMarketSubType.VN_INDEX_ORDER,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        if self._switch_handler.is_enabled("web_scraper", "stock_market", "vn_index_order"):
+            key = (
+                ScrapeMainType.STOCK_MARKET,
+                StockMarketSubType.VN_INDEX_ORDER,
+            )
+            self._thread_manager.add_task(
+                Task(format_key_for_name(key), self._scrape_data_from, key)
+            )
 
         # # VN30_INDEX
         # key = (
@@ -4705,9 +4716,14 @@ class WebScraper:
         self._logger.log_info("Adding data scraping tasks.")
         number_of_task_before = self._thread_manager.get_current_number_of_task()
 
-        # self.add_macroeconomics_data_scraping_tasks()
-        self.add_stock_market_data_scraping_tasks()
-        # self.add_enterprise_data_scraping_tasks()
+        if self._switch_handler.is_enabled("web_scraper", "macroeconomics"):
+            self.add_macroeconomics_data_scraping_tasks()
+
+        if self._switch_handler.is_enabled("web_scraper", "stock_market"):
+            self.add_stock_market_data_scraping_tasks()
+
+        if self._switch_handler.is_enabled("web_scraper", "enterprise"):
+            self.add_enterprise_data_scraping_tasks()
 
         number_of_task_after = self._thread_manager.get_current_number_of_task()
         self._logger.log_info(
