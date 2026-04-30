@@ -1,0 +1,16 @@
+{
+    "web_scraper": {
+        "enable": true,
+        "children": {
+            "macroeconomics": {
+                "enable": false
+            },
+            "stock_market": {
+                "enable": true
+            },
+            "enterprise": {
+                "enable": true
+            }
+        }
+    }
+}
