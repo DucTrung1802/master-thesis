@@ -723,3 +723,38 @@ def get_weekends(from_date: str, to_date: str):
         current += timedelta(days=1)
 
     return weekends
+
+
+def first_day_of_month(dt: datetime) -> datetime:
+    return dt.replace(day=1)
+
+
+def month_ranges(
+    from_date: datetime, to_date: datetime
+) -> List[Tuple[datetime, datetime]]:
+    if from_date > to_date:
+        raise ValueError("from_date must be <= to_date")
+
+    ranges: List[Tuple[datetime, datetime]] = []
+
+    # start at the first day of the starting month
+    current = from_date.replace(day=1)
+
+    while current <= to_date:
+        # first day of this month
+        first_day = current
+
+        # move to next month
+        if current.month == 12:
+            next_month = current.replace(year=current.year + 1, month=1, day=1)
+        else:
+            next_month = current.replace(month=current.month + 1, day=1)
+
+        # last day is one day before next month
+        last_day = next_month - timedelta(days=1)
+
+        ranges.append((first_day, last_day))
+
+        current = next_month
+
+    return ranges

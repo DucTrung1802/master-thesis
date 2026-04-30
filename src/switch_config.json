@@ -12,12 +12,18 @@
                         "enable": true
                     },
                     "vn_index_order": {
-                        "enable": true
+                        "enable": false
+                    },
+                    "vn_30_index_price": {
+                        "enable": false
+                    },
+                    "vn_30_index_order": {
+                        "enable": false
                     }
                 }
             },
             "enterprise": {
-                "enable": true
+                "enable": false
             }
         }
     }
