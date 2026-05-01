@@ -472,6 +472,12 @@ SCRAPE_MAPPING: Dict[Tuple[ScrapeMainType, ScrapeSubType], SourceInfo] = {
     ),
     (
         ScrapeMainType.STOCK_MARKET,
+        StockMarketSubType.VN_30_INDEX_ORDER,
+    ): SourceInfo(
+        url="https://cafef.vn/du-lieu/lich-su-giao-dich/hose/vn30index-2.chn",
+    ),
+    (
+        ScrapeMainType.STOCK_MARKET,
         StockMarketSubType.VN_100_INDEX,
     ): SourceInfo(
         url="https://cafef.vn/du-lieu/lich-su-giao-dich-vn100-index-1.chn",

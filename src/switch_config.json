@@ -12,10 +12,10 @@
                         "enable": false
                     },
                     "vn_index_order": {
-                        "enable": true
+                        "enable": false
                     },
                     "vn_30_index_price": {
-                        "enable": false
+                        "enable": true
                     },
                     "vn_30_index_order": {
                         "enable": false
