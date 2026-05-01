@@ -224,8 +224,10 @@ def download_file(download_url, file_path, logger):
         return
 
 
-def format_key_for_name(key: Tuple[ScrapeMainType, ScrapeSubType]):
-    return "_".join(k.name.lower() for k in key)
+def format_key_for_name(key):
+    return "_".join(
+        k.name.lower() if isinstance(k, Enum) else str(k).lower() for k in key
+    )
 
 
 def format_key_for_table(key: Tuple[ScrapeMainType, ScrapeSubType]):
@@ -758,3 +760,7 @@ def month_ranges(
         current = next_month
 
     return ranges
+
+
+def get_value(x):
+    return x.value if isinstance(x, Enum) else x
