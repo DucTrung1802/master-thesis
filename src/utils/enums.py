@@ -187,22 +187,35 @@ class MacroeconomicsSubType(Enum):
 class StockMarketSubType(Enum):
     VN_INDEX_PRICE = "vn_index_price"
     VN_INDEX_ORDER = "vn_index_order"
+
     VN_30_INDEX_PRICE = "vn_30_index_price"
     VN_30_INDEX_ORDER = "vn_30_index_order"
+
     VN_100_INDEX_PRICE = "vn_100_index_price"
     VN_100_INDEX_ORDER = "vn_100_index_order"
+
     HNX_INDEX_PRICE = "hnx_index_price"
     HNX_INDEX_ORDER = "hnx_index_order"
+
     HNX_30_INDEX_PRICE = "hnx_30_index_price"
     HNX_30_INDEX_ORDER = "hnx_30_index_order"
+    
     UPCOM_INDEX_PRICE = "upcom_index_price"
     UPCOM_INDEX_ORDER = "upcom_index_order"
 
 
 class EnterpriseSubType(Enum):
-    FINANCE_INFO = "finance_info"
-    DAILY_PRICE = "daily_price"
-    STOCK_INFORMATION = "stock_information"
+    STOCK_LIST_HOSE = "stock_list_hose"
+    STOCK_LIST_HNX = "stock_list_hnx"
+    STOCK_LIST_UPCOM = "stock_list_upcom"
+
+    STOCK_PRICE_HOSE = "stock_price_hose"
+    STOCK_PRICE_HNX = "stock_price_hnx"
+    STOCK_PRICE_UPCOM = "stock_price_upcom"
+
+    STOCK_ORDER_HOSE = "stock_order_hose"
+    STOCK_ORDER_HNX = "stock_order_hnx"
+    STOCK_ORDER_UPCOM = "stock_order_upcom"
 
 
 ScrapeSubType = Union[
@@ -532,18 +545,8 @@ SCRAPE_MAPPING: Dict[Tuple[ScrapeMainType, ScrapeSubType], SourceInfo] = {
     # ENTERPRISE
     (
         ScrapeMainType.ENTERPRISE,
-        EnterpriseSubType.FINANCE_INFO,
-    ): SourceInfo(url="https://cafef.vn/"),
-    (
-        ScrapeMainType.ENTERPRISE,
-        EnterpriseSubType.DAILY_PRICE,
-    ): SourceInfo(url="https://cafef.vn/du-lieu/du-lieu-download.chn"),
-    (
-        ScrapeMainType.ENTERPRISE,
-        EnterpriseSubType.STOCK_INFORMATION,
-    ): SourceInfo(
-        url="https://cafef.vn/du-lieu/hose/vic-tap-doan-vingroup-cong-ty-co-phan.chn"
-    ),
+        EnterpriseSubType.STOCK_LIST,
+    ): SourceInfo(url="https://cafef.vn/du-lieu/lich-su-giao-dich/hose/all-1.chn"),
 }
 
 

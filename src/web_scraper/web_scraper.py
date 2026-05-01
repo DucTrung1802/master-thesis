@@ -3213,6 +3213,105 @@ class WebScraper:
             next_page_xpath='//*[@id="divStart"]/div/div[4]/div[3]',
         )
 
+    def _scrape_data_stock_market_list(
+        self,
+        key,
+        column_names=[
+            "code",
+            "date",
+            "close",
+            "adjust",
+            "change",
+            "matching_volume",
+            "matching_value",
+            "negotiate_volume",
+            "negotiate_value",
+            "open",
+            "high",
+            "low",
+        ],
+        find_button_xpath='//*[@id="owner-find"]',
+        next_page_xpath='//*[@id="divStart"]/div/div[3]/div[3]',
+    ):
+        self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
+
+        web_driver, bs4_parser = self._initialize_web_driver_and_bs4_parser()
+
+        try:
+            scrape_main_type = key[0].value
+            scrape_sub_type = key[1].value
+
+            folder_path = (
+                f"{SCRAPER_BRONZE_DATA_DIR}/{scrape_main_type}/{scrape_sub_type}"
+            )
+            file_name = scrape_sub_type
+
+            os.makedirs(folder_path, exist_ok=True)
+
+            source_info = SCRAPE_MAPPING[key]
+            web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
+
+            end_date = SCRAPER_END_DATE
+            get_data = False
+
+            while not get_data:
+                file_path = f"{folder_path}/{file_name}_{end_date:%Y-%m-%d}.csv"
+
+                if os.path.isfile(file_path):
+                    self._logger.log_debug(f"File exists: {file_path}, skip.")
+                    continue
+
+                self._logger.log_info(f"Scraping stock list on {end_date:%Y-%m-%d}")
+
+                self._input_text(
+                    web_driver, '//*[@id="date-from"]', f"{end_date:%d/%m/%Y}"
+                )
+                ActionChains(web_driver).send_keys(Keys.ESCAPE).perform()
+
+                self._input_text(
+                    web_driver, '//*[@id="date-to"]', f"{end_date:%d/%m/%Y}"
+                )
+                ActionChains(web_driver).send_keys(Keys.ESCAPE).perform()
+
+                self._click_element(web_driver, find_button_xpath)
+
+                self._wait_loading_done(web_driver)
+
+                all_data = []
+
+                if self._is_no_result(web_driver):
+                    end_date -= datetime.timedelta(days=1)
+                    continue
+
+                while True:
+                    bs4_parser = self._update_bs4_parser(web_driver)
+
+                    _, rows = self._extract_table_by_id(
+                        bs4_parser=bs4_parser,
+                        id="owner-contents-table",
+                    )
+                    all_data.extend(rows)
+
+                    next_btn = self._find_first_valid_element_by_xpath(
+                        web_driver, [next_page_xpath]
+                    )
+
+                    if "disabled" in next_btn.get_attribute("class").lower():
+                        break
+
+                    self._click_element(web_driver, next_page_xpath)
+                    self._wait_loading_done(web_driver)
+
+                pd.DataFrame(all_data, columns=column_names).to_csv(
+                    file_path, index=False
+                )
+                get_data = True
+
+        finally:
+            web_driver.close()
+
+        self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
+
     def _scrape_data_enterprise_daily_price_cafef(
         self, key: Tuple[ScrapeMainType, ScrapeSubType]
     ):
@@ -3874,10 +3973,21 @@ class WebScraper:
             # region ENTERPRISE
             case (
                 ScrapeMainType.ENTERPRISE,
-                EnterpriseSubType.DAILY_PRICE,
-                DailyPriceSource.CAFEF,
+                EnterpriseSubType.STOCK_LIST_HOSE,
             ):
-                return self._scrape_data_enterprise_daily_price_cafef(key)
+                return self._scrape_data_stock_market_list(key)
+
+            case (
+                ScrapeMainType.ENTERPRISE,
+                EnterpriseSubType.STOCK_LIST_HNX,
+            ):
+                return self._scrape_data_stock_market_list(key)
+
+            case (
+                ScrapeMainType.ENTERPRISE,
+                EnterpriseSubType.STOCK_LIST_UPCOM,
+            ):
+                return self._scrape_data_stock_market_list(key)
 
             # endregion ENTERPRISE
 
@@ -4334,95 +4444,19 @@ class WebScraper:
         self._logger.log_info("Adding enterprise data scraping tasks.")
         number_of_task_before = self._thread_manager.get_current_number_of_task()
 
-        # DAILY_PRICE
+        # STOCK_LIST
         key = (
             ScrapeMainType.ENTERPRISE,
-            EnterpriseSubType.DAILY_PRICE,
-            DailyPriceSource.CAFEF,
+            EnterpriseSubType.STOCK_LIST,
         )
         self._thread_manager.add_task(
-            Task(
-                format_key_for_name(key),
-                self._scrape_data_from,
-                key,
-                callbacks=self._scrape_data_enterprise_stock_information_cafef,
-            )
+            Task(format_key_for_name(key), self._scrape_data_from, key)
         )
 
         number_of_task_after = self._thread_manager.get_current_number_of_task()
         self._logger.log_info(
             f"Added {number_of_task_after - number_of_task_before} enterprise data scraping tasks."
         )
-
-    def _double_check_stock_information_cafef_result(self):
-        # All stocks
-        daily_price_key = (
-            ScrapeMainType.ENTERPRISE,
-            EnterpriseSubType.DAILY_PRICE,
-            StockInformationSource.CAFEF,
-        )
-        daily_price_folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{daily_price_key[0].value}/{daily_price_key[1].value}/{daily_price_key[2].value}"
-        daily_price_all_files = get_all_file_names_with_extensions(
-            self._logger,
-            folder_path=daily_price_folder_path,
-            extensions=[FileExtension.CSV],
-        )
-
-        all_stock_codes = set()
-        for file in daily_price_all_files:
-            with open(file, mode="r", newline="", encoding="utf-8") as csvfile:
-                reader = csv.reader(csvfile)
-                next(reader)  # Skip header row
-
-                for row in reader:
-                    if row and len(row[0].strip()) == 3:  # Skip all Derivatives
-                        all_stock_codes.add(row[0].strip())
-
-        # Scraped stocks
-        scraped_stock_key = (
-            ScrapeMainType.ENTERPRISE,
-            EnterpriseSubType.STOCK_INFORMATION,
-            StockInformationSource.CAFEF,
-        )
-        scraped_stock_folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{scraped_stock_key[0].value}/{scraped_stock_key[1].value}/{scraped_stock_key[2].value}"
-        scraped_stock_all_files = get_all_file_names_with_extensions(
-            self._logger,
-            folder_path=scraped_stock_folder_path,
-            extensions=[FileExtension.CSV],
-        )
-
-        scraped_stock_code_list = []
-        for file in scraped_stock_all_files:
-            with open(file, newline="") as csvfile:
-                reader = csv.DictReader(csvfile)
-                for row in reader:
-                    scraped_stock_code_list.append(row["Code"])
-
-        not_scraped_codes = all_stock_codes - set(scraped_stock_code_list)
-        self._logger.log_info(
-            f"Double-checking stock information from CafeF. Scraped: {len(scraped_stock_code_list)}/{len(all_stock_codes)}"
-        )
-
-        file_path = f"{scraped_stock_folder_path}/not_scraped_stock_codes.csv"
-
-        if not_scraped_codes:
-            if not os.path.exists(scraped_stock_folder_path):
-                os.makedirs(scraped_stock_folder_path, exist_ok=True)
-
-            with open(file_path, mode="w", newline="", encoding="utf-8") as csvfile:
-                writer = csv.writer(csvfile)
-                writer.writerow(["Not Scraped Stock Codes"])
-                for code in not_scraped_codes:
-                    writer.writerow([code])
-
-            self._logger.log_info(
-                f"Double-checking stock information from CafeF completed. Not scraped codes saved to `{file_path}`."
-            )
-
-        else:
-            self._logger.log_info(
-                "Double-checking stock information from CafeF completed. All stock codes have been scraped."
-            )
 
     def start_scraping(self):
         self._logger.log_info("Start scraping data using ThreadManager.")
@@ -4451,10 +4485,6 @@ class WebScraper:
         self._logger.log_info(
             f"Start executing {self._thread_manager.get_current_number_of_task()} tasks."
         )
-
-        # self._thread_manager.execute(
-        #     final_callback=self._double_check_stock_information_cafef_result
-        # )
 
         self._thread_manager.execute()
 
