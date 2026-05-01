@@ -199,7 +199,7 @@ class StockMarketSubType(Enum):
 
     HNX_30_INDEX_PRICE = "hnx_30_index_price"
     HNX_30_INDEX_ORDER = "hnx_30_index_order"
-    
+
     UPCOM_INDEX_PRICE = "upcom_index_price"
     UPCOM_INDEX_ORDER = "upcom_index_order"
 
@@ -545,7 +545,7 @@ SCRAPE_MAPPING: Dict[Tuple[ScrapeMainType, ScrapeSubType], SourceInfo] = {
     # ENTERPRISE
     (
         ScrapeMainType.ENTERPRISE,
-        EnterpriseSubType.STOCK_LIST,
+        EnterpriseSubType.STOCK_LIST_HOSE,
     ): SourceInfo(url="https://cafef.vn/du-lieu/lich-su-giao-dich/hose/all-1.chn"),
 }
 

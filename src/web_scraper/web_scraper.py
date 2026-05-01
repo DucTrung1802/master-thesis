@@ -1,23 +1,26 @@
+# ===== Standard Library =====
+import csv
+import os
+import re
+import time
+from pathlib import Path
+from typing import List, Optional, Tuple
+from datetime import datetime, timedelta
+
+# ===== Third-Party Libraries =====
 from selenium import webdriver
 from selenium.webdriver.chromium.webdriver import ChromiumDriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support.ui import WebDriverWait, Select
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
-from selenium.webdriver.common.action_chains import ActionChains
-from selenium.webdriver.common.keys import Keys
 
 from bs4 import BeautifulSoup, Tag
 
-import csv
-import os
-import time
-import re
-from pathlib import Path
-from typing import List, Optional, Tuple
-
-
+# ===== Local / Custom Modules =====
 from logger.logger import Logger
 from utils.constants import *
 from utils.enums import *
@@ -3280,7 +3283,8 @@ class WebScraper:
                 all_data = []
 
                 if self._is_no_result(web_driver):
-                    end_date -= datetime.timedelta(days=1)
+                    self._logger.log_info(f"No data found on {end_date:%Y-%m-%d}. Step back a day.")
+                    end_date -= timedelta(days=1)
                     continue
 
                 while True:
@@ -4447,7 +4451,7 @@ class WebScraper:
         # STOCK_LIST
         key = (
             ScrapeMainType.ENTERPRISE,
-            EnterpriseSubType.STOCK_LIST,
+            EnterpriseSubType.STOCK_LIST_HOSE,
         )
         self._thread_manager.add_task(
             Task(format_key_for_name(key), self._scrape_data_from, key)
