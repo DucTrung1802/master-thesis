@@ -189,9 +189,14 @@ class StockMarketSubType(Enum):
     VN_INDEX_ORDER = "vn_index_order"
     VN_30_INDEX_PRICE = "vn_30_index_price"
     VN_30_INDEX_ORDER = "vn_30_index_order"
-    VN_100_INDEX = "vn100_index"
-    HNX_30_INDEX = "hnx30_index"
-    UPCOM_INDEX = "upcom_index"
+    VN_100_INDEX_PRICE = "vn_100_index_price"
+    VN_100_INDEX_ORDER = "vn_100_index_order"
+    HNX_INDEX_PRICE = "hnx_index_price"
+    HNX_INDEX_ORDER = "hnx_index_order"
+    HNX_30_INDEX_PRICE = "hnx_30_index_price"
+    HNX_30_INDEX_ORDER = "hnx_30_index_order"
+    UPCOM_INDEX_PRICE = "upcom_index_price"
+    UPCOM_INDEX_ORDER = "upcom_index_order"
 
 
 class EnterpriseSubType(Enum):
@@ -478,20 +483,52 @@ SCRAPE_MAPPING: Dict[Tuple[ScrapeMainType, ScrapeSubType], SourceInfo] = {
     ),
     (
         ScrapeMainType.STOCK_MARKET,
-        StockMarketSubType.VN_100_INDEX,
+        StockMarketSubType.VN_100_INDEX_PRICE,
     ): SourceInfo(
         url="https://cafef.vn/du-lieu/lich-su-giao-dich-vn100-index-1.chn",
     ),
     (
         ScrapeMainType.STOCK_MARKET,
-        StockMarketSubType.HNX_30_INDEX,
+        StockMarketSubType.VN_100_INDEX_ORDER,
     ): SourceInfo(
-        url="https://cafef.vn/du-lieu/lich-su-giao-dich-hnx30-index-1.chn",
+        url="https://cafef.vn/du-lieu/lich-su-giao-dich/hose/vn100-index-2.chn",
     ),
     (
         ScrapeMainType.STOCK_MARKET,
-        StockMarketSubType.UPCOM_INDEX,
-    ): SourceInfo(url="https://cafef.vn/du-lieu/lich-su-giao-dich-upcom-index-1.chn"),
+        StockMarketSubType.HNX_INDEX_PRICE,
+    ): SourceInfo(
+        url="https://cafef.vn/du-lieu/lich-su-giao-dich/hnx/hnx-index-1.chn",
+    ),
+    (
+        ScrapeMainType.STOCK_MARKET,
+        StockMarketSubType.HNX_INDEX_ORDER,
+    ): SourceInfo(
+        url="https://cafef.vn/du-lieu/lich-su-giao-dich/hnx/hnx-index-2.chn",
+    ),
+    (
+        ScrapeMainType.STOCK_MARKET,
+        StockMarketSubType.HNX_30_INDEX_PRICE,
+    ): SourceInfo(
+        url="https://cafef.vn/du-lieu/lich-su-giao-dich/hnx/hnx30-index-1.chn",
+    ),
+    (
+        ScrapeMainType.STOCK_MARKET,
+        StockMarketSubType.HNX_30_INDEX_ORDER,
+    ): SourceInfo(
+        url="https://cafef.vn/du-lieu/lich-su-giao-dich/hnx/hnx30-index-2.chn",
+    ),
+    (
+        ScrapeMainType.STOCK_MARKET,
+        StockMarketSubType.UPCOM_INDEX_PRICE,
+    ): SourceInfo(
+        url="https://cafef.vn/du-lieu/lich-su-giao-dich/upcom/upcom-index-1.chn"
+    ),
+    (
+        ScrapeMainType.STOCK_MARKET,
+        StockMarketSubType.UPCOM_INDEX_ORDER,
+    ): SourceInfo(
+        url="https://cafef.vn/du-lieu/lich-su-giao-dich/upcom/upcom-index-2.chn"
+    ),
     # ENTERPRISE
     (
         ScrapeMainType.ENTERPRISE,

@@ -5,6 +5,7 @@ from data_preprocessor.data_preprocessor import DataPreprocessor
 from utils.switch_handler import SwitchHandler
 from utils.constants import LOG_FILE_BASE
 from utils.enums import *
+from plyer import notification
 
 
 def main():
@@ -31,6 +32,10 @@ def main():
     # for stock_code in stock_code_list:
     #     my_logger.log_info(f"Exporting unified dataframe for stock code: {stock_code}")
     #     my_data_postprocessor.export_unified_dataframe(stock_code=stock_code)
+
+    notification.notify(
+        title="Complete main.py", message="main.py has completed execution.", timeout=5  # seconds
+    )
 
 
 if __name__ == "__main__":

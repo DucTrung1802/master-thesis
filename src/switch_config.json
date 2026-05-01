@@ -9,16 +9,34 @@
                 "enable": true,
                 "children": {
                     "vn_index_price": {
-                        "enable": false
+                        "enable": true
                     },
                     "vn_index_order": {
-                        "enable": false
+                        "enable": true
                     },
                     "vn_30_index_price": {
                         "enable": true
                     },
                     "vn_30_index_order": {
-                        "enable": false
+                        "enable": true
+                    },
+                    "vn_100_index_price": {
+                        "enable": true
+                    },
+                    "vn_100_index_order": {
+                        "enable": true
+                    },
+                    "hnx_30_index_price": {
+                        "enable": true
+                    },
+                    "hnx_30_index_order": {
+                        "enable": true
+                    },
+                    "upcom_index_price": {
+                        "enable": true
+                    },
+                    "upcom_index_order": {
+                        "enable": true
                     }
                 }
             },

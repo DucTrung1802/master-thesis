@@ -3065,899 +3065,153 @@ class WebScraper:
 
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
-    def _scrape_data_stock_market_vn_index_price(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType]
+    def _wait_loading_done(self, web_driver):
+        loading_xpath = '//*[@id="loading-table-owner"]'
+
+        while True:
+            el = self._find_first_valid_element_by_xpath(web_driver, [loading_xpath])
+            if "flex" not in el.get_attribute("style").lower():
+                break
+            time.sleep(0.05)
+
+    def _is_no_result(self, web_driver) -> bool:
+        no_result_xpath = '//*[@id="render-table-owner"]/tr/td'
+        el = self._find_first_valid_element_by_xpath(web_driver, [no_result_xpath])
+
+        return el and el.text.lower() == "không có kết quả phù hợp"
+
+    def _scrape_stock_data(
+        self,
+        key: Tuple[ScrapeMainType, ScrapeSubType],
+        column_names: list[str],
+        find_button_xpath: str,
+        next_page_xpath: str,
     ):
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
 
-        # Initialize web driver and bs4 parser
         web_driver, bs4_parser = self._initialize_web_driver_and_bs4_parser()
 
         try:
-            # 1. Initialize folder path and file name
             scrape_main_type = key[0].value
             scrape_sub_type = key[1].value
+
             folder_path = (
                 f"{SCRAPER_BRONZE_DATA_DIR}/{scrape_main_type}/{scrape_sub_type}"
             )
-            file_name = f"{scrape_sub_type}"
+            file_name = scrape_sub_type
 
-            # 2. Create folder if not exists
-            if not os.path.exists(folder_path):
-                os.makedirs(folder_path, exist_ok=True)
+            os.makedirs(folder_path, exist_ok=True)
 
-            # 3. Get SourceInfo
             source_info = SCRAPE_MAPPING[key]
-
-            # 4. Navigate to URL
             web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
 
-            date_expect_change_xpath = '//*[@id="render-table-owner"]/tr[1]/td[2]'
-            WebDriverWait(web_driver, 10).until(
-                EC.presence_of_element_located((By.XPATH, date_expect_change_xpath))
-            )
-
-            # 5. Logic for scraping
-            # 5.1. Create list of month
             start_date = first_day_of_month(SCRAPER_START_DATE)
             end_date = SCRAPER_END_DATE
             month_list = month_ranges(start_date, end_date)
 
-            # 5.2. Loop through each month
             for first_day, last_day in month_list:
-                # 5.3. Check if file already exists
-                file_path = f"{folder_path}/{file_name}_{first_day.strftime('%Y-%m-%d')}_{last_day.strftime('%Y-%m-%d')}.csv"
+                file_path = (
+                    f"{folder_path}/{file_name}_"
+                    f"{first_day:%Y-%m-%d}_{last_day:%Y-%m-%d}.csv"
+                )
 
                 if os.path.isfile(file_path):
-                    self._logger.log_debug(f"File already exists: {file_path}, skip.")
+                    self._logger.log_debug(f"File exists: {file_path}, skip.")
                     continue
 
                 self._logger.log_info(
-                    f"Start scraping data for {first_day.strftime('%Y-%m-%d')} to {last_day.strftime('%Y-%m-%d')}."
+                    f"Scraping {first_day:%Y-%m-%d} → {last_day:%Y-%m-%d}"
                 )
 
-                # 5.4. Scrape data
-                from_date_xpath = '//*[@id="date-from"]'
                 self._input_text(
-                    web_driver,
-                    from_date_xpath,
-                    f"{first_day.strftime('%d/%m/%Y')}",
+                    web_driver, '//*[@id="date-from"]', f"{first_day:%d/%m/%Y}"
                 )
+                ActionChains(web_driver).send_keys(Keys.ESCAPE).perform()
 
-                actions = ActionChains(web_driver)
-                actions.send_keys(Keys.ESCAPE).perform()
-
-                to_date_xpath = '//*[@id="date-to"]'
                 self._input_text(
-                    web_driver,
-                    to_date_xpath,
-                    f"{last_day.strftime('%d/%m/%Y')}",
+                    web_driver, '//*[@id="date-to"]', f"{last_day:%d/%m/%Y}"
                 )
+                ActionChains(web_driver).send_keys(Keys.ESCAPE).perform()
 
-                actions = ActionChains(web_driver)
-                actions.send_keys(Keys.ESCAPE).perform()
-
-                find_button_xpath = '//*[@id="owner-find"]'
                 self._click_element(web_driver, find_button_xpath)
 
-                loading_table_xpath = '//*[@id="loading-table-owner"]'
-                loading_table = self._find_first_valid_element_by_xpath(
-                    web_driver, xpaths=[loading_table_xpath]
-                )
-
-                while "flex" in str.lower(loading_table.get_attribute("style")):
-                    time.sleep(0.05)
-                    loading_table = self._find_first_valid_element_by_xpath(
-                        web_driver, xpaths=[loading_table_xpath]
-                    )
-
-                next_page_xpath = '//*[@id="render-table-owner"]/div[2]/a[2]'
-                no_result_xpath = '//*[@id="render-table-owner"]/tr/td'
-
-                no_result_boolean: bool = (
-                    self._find_first_valid_element_by_xpath(
-                        web_driver, xpaths=[no_result_xpath]
-                    )
-                    and str.lower(
-                        self._find_first_valid_element_by_xpath(
-                            web_driver, xpaths=[no_result_xpath]
-                        ).text
-                    )
-                    == "không có kết quả phù hợp"
-                )
-
-                while "flex" in str.lower(loading_table.get_attribute("style")):
-                    time.sleep(0.05)
-                    loading_table = self._find_first_valid_element_by_xpath(
-                        web_driver, xpaths=[loading_table_xpath]
-                    )
-
-                if no_result_boolean:
-                    continue
+                self._wait_loading_done(web_driver)
 
                 all_data = []
-                get_last_page = False
 
-                while not get_last_page:
+                if self._is_no_result(web_driver):
+                    pd.DataFrame(all_data, columns=column_names).to_csv(
+                        file_path, index=False
+                    )
+                    continue
 
-                    column_names = [
-                        "code",
-                        "date",
-                        "close",
-                        "adjust",
-                        "change",
-                        "matching_volume",
-                        "matching_value",
-                        "negotiate_volume",
-                        "negotiate_value",
-                        "open",
-                        "high",
-                        "low",
-                    ]
-
+                while True:
                     bs4_parser = self._update_bs4_parser(web_driver)
-                    headers, rows = self._extract_table_by_id(
+
+                    _, rows = self._extract_table_by_id(
                         bs4_parser=bs4_parser,
                         id="owner-contents-table",
                     )
-
                     all_data.extend(rows)
 
-                    next_page_xpath = '//*[@id="divStart"]/div/div[3]/div[3]'
-                    next_page_button = self._find_first_valid_element_by_xpath(
-                        web_driver, xpaths=[next_page_xpath]
+                    next_btn = self._find_first_valid_element_by_xpath(
+                        web_driver, [next_page_xpath]
                     )
 
-                    if "disabled" in str.lower(next_page_button.get_attribute("class")):
-                        get_last_page = True
-                    else:
-                        self._click_element(web_driver, next_page_xpath)
+                    if "disabled" in next_btn.get_attribute("class").lower():
+                        break
 
-                    while "flex" in str.lower(loading_table.get_attribute("style")):
-                        time.sleep(0.05)
-                        loading_table = self._find_first_valid_element_by_xpath(
-                            web_driver, xpaths=[loading_table_xpath]
-                        )
+                    self._click_element(web_driver, next_page_xpath)
+                    self._wait_loading_done(web_driver)
 
-                df = pd.DataFrame(all_data, columns=column_names)
-                df.to_csv(file_path, index=False)
+                pd.DataFrame(all_data, columns=column_names).to_csv(
+                    file_path, index=False
+                )
 
         finally:
             web_driver.close()
 
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
-    def _scrape_data_stock_market_vn_index_order(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType]
-    ):
-        self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
-
-        # Initialize web driver and bs4 parser
-        web_driver, bs4_parser = self._initialize_web_driver_and_bs4_parser()
-
-        try:
-            # 1. Initialize folder path and file name
-            scrape_main_type = key[0].value
-            scrape_sub_type = key[1].value
-            folder_path = (
-                f"{SCRAPER_BRONZE_DATA_DIR}/{scrape_main_type}/{scrape_sub_type}"
-            )
-            file_name = f"{scrape_sub_type}"
-
-            # 2. Create folder if not exists
-            if not os.path.exists(folder_path):
-                os.makedirs(folder_path, exist_ok=True)
-
-            # 3. Get SourceInfo
-            source_info = SCRAPE_MAPPING[key]
-
-            # 4. Navigate to URL
-            web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
-
-            date_expect_change_xpath = '//*[@id="render-table-owner"]/tr[1]/td[2]'
-            WebDriverWait(web_driver, 10).until(
-                EC.presence_of_element_located((By.XPATH, date_expect_change_xpath))
-            )
-
-            # 5. Logic for scraping
-            # 5.1. Create list of month
-            start_date = first_day_of_month(SCRAPER_START_DATE)
-            end_date = SCRAPER_END_DATE
-            month_list = month_ranges(start_date, end_date)
-
-            # 5.2. Loop through each month
-            for first_day, last_day in month_list:
-                # 5.3. Check if file already exists
-                file_path = f"{folder_path}/{file_name}_{first_day.strftime('%Y-%m-%d')}_{last_day.strftime('%Y-%m-%d')}.csv"
-
-                if os.path.isfile(file_path):
-                    self._logger.log_debug(f"File already exists: {file_path}, skip.")
-                    continue
-
-                self._logger.log_info(
-                    f"Start scraping data for {first_day.strftime('%Y-%m-%d')} to {last_day.strftime('%Y-%m-%d')}."
-                )
-
-                # 5.4. Scrape data
-                from_date_xpath = '//*[@id="date-from"]'
-                self._input_text(
-                    web_driver,
-                    from_date_xpath,
-                    f"{first_day.strftime('%d/%m/%Y')}",
-                )
-
-                actions = ActionChains(web_driver)
-                actions.send_keys(Keys.ESCAPE).perform()
-
-                to_date_xpath = '//*[@id="date-to"]'
-                self._input_text(
-                    web_driver,
-                    to_date_xpath,
-                    f"{last_day.strftime('%d/%m/%Y')}",
-                )
-
-                actions = ActionChains(web_driver)
-                actions.send_keys(Keys.ESCAPE).perform()
-
-                find_button_xpath = (
-                    '//*[@id="divStart"]/div/div[1]/div[1]/div/div[3]/div[1]'
-                )
-                self._click_element(web_driver, find_button_xpath)
-
-                loading_table_xpath = '//*[@id="loading-table-owner"]'
-                loading_table = self._find_first_valid_element_by_xpath(
-                    web_driver, xpaths=[loading_table_xpath]
-                )
-
-                while "flex" in str.lower(loading_table.get_attribute("style")):
-                    time.sleep(0.05)
-                    loading_table = self._find_first_valid_element_by_xpath(
-                        web_driver, xpaths=[loading_table_xpath]
-                    )
-
-                next_page_xpath = '//*[@id="render-table-owner"]/div[2]/a[2]'
-                no_result_xpath = '//*[@id="render-table-owner"]/tr/td'
-
-                no_result_boolean: bool = (
-                    self._find_first_valid_element_by_xpath(
-                        web_driver, xpaths=[no_result_xpath]
-                    )
-                    and str.lower(
-                        self._find_first_valid_element_by_xpath(
-                            web_driver, xpaths=[no_result_xpath]
-                        ).text
-                    )
-                    == "không có kết quả phù hợp"
-                )
-
-                while "flex" in str.lower(loading_table.get_attribute("style")):
-                    time.sleep(0.05)
-                    loading_table = self._find_first_valid_element_by_xpath(
-                        web_driver, xpaths=[loading_table_xpath]
-                    )
-
-                if no_result_boolean:
-                    continue
-
-                all_data = []
-                get_last_page = False
-
-                while not get_last_page:
-
-                    column_names = [
-                        "code",
-                        "date",
-                        "change",
-                        "number_of_buy_orders",
-                        "buy_volume",
-                        "average_volume_per_buy_order",
-                        "number_of_sell_orders",
-                        "sell_volume",
-                        "average_volume_per_sell_order",
-                        "net_volume",
-                    ]
-
-                    bs4_parser = self._update_bs4_parser(web_driver)
-                    headers, rows = self._extract_table_by_id(
-                        bs4_parser=bs4_parser,
-                        id="owner-contents-table",
-                    )
-
-                    all_data.extend(rows)
-
-                    next_page_xpath = '//*[@id="divStart"]/div/div[4]/div[3]'
-                    next_page_button = self._find_first_valid_element_by_xpath(
-                        web_driver, xpaths=[next_page_xpath]
-                    )
-
-                    if "disabled" in str.lower(next_page_button.get_attribute("class")):
-                        get_last_page = True
-                    else:
-                        self._click_element(web_driver, next_page_xpath)
-
-                    while "flex" in str.lower(loading_table.get_attribute("style")):
-                        time.sleep(0.05)
-                        loading_table = self._find_first_valid_element_by_xpath(
-                            web_driver, xpaths=[loading_table_xpath]
-                        )
-
-                df = pd.DataFrame(all_data, columns=column_names)
-                df.to_csv(file_path, index=False)
-
-        finally:
-            web_driver.close()
-
-        self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
-
-    def _scrape_data_stock_market_vn_30_index_price(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType]
-    ):
-        self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
-
-        # Initialize web driver and bs4 parser
-        web_driver, bs4_parser = self._initialize_web_driver_and_bs4_parser()
-
-        try:
-            # 1. Initialize folder path and file name
-            scrape_main_type = key[0].value
-            scrape_sub_type = key[1].value
-            folder_path = (
-                f"{SCRAPER_BRONZE_DATA_DIR}/{scrape_main_type}/{scrape_sub_type}"
-            )
-            file_name = f"{scrape_sub_type}"
-
-            # 2. Create folder if not exists
-            if not os.path.exists(folder_path):
-                os.makedirs(folder_path, exist_ok=True)
-
-            # 3. Get SourceInfo
-            source_info = SCRAPE_MAPPING[key]
-
-            # 4. Navigate to URL
-            web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
-
-            date_expect_change_xpath = '//*[@id="render-table-owner"]/tr[1]/td[2]'
-            WebDriverWait(web_driver, 10).until(
-                EC.presence_of_element_located((By.XPATH, date_expect_change_xpath))
-            )
-
-            # 5. Logic for scraping
-            # 5.1. Create list of month
-            start_date = first_day_of_month(SCRAPER_START_DATE)
-            end_date = SCRAPER_END_DATE
-            month_list = month_ranges(start_date, end_date)
-
-            # 5.2. Loop through each month
-            for first_day, last_day in month_list:
-                # 5.3. Check if file already exists
-                file_path = f"{folder_path}/{file_name}_{first_day.strftime('%Y-%m-%d')}_{last_day.strftime('%Y-%m-%d')}.csv"
-
-                if os.path.isfile(file_path):
-                    self._logger.log_debug(f"File already exists: {file_path}, skip.")
-                    continue
-
-                self._logger.log_info(
-                    f"Start scraping data for {first_day.strftime('%Y-%m-%d')} to {last_day.strftime('%Y-%m-%d')}."
-                )
-
-                # 5.4. Scrape data
-                from_date_xpath = '//*[@id="date-from"]'
-                self._input_text(
-                    web_driver,
-                    from_date_xpath,
-                    f"{first_day.strftime('%d/%m/%Y')}",
-                )
-
-                actions = ActionChains(web_driver)
-                actions.send_keys(Keys.ESCAPE).perform()
-
-                to_date_xpath = '//*[@id="date-to"]'
-                self._input_text(
-                    web_driver,
-                    to_date_xpath,
-                    f"{last_day.strftime('%d/%m/%Y')}",
-                )
-
-                actions = ActionChains(web_driver)
-                actions.send_keys(Keys.ESCAPE).perform()
-
-                find_button_xpath = '//*[@id="owner-find"]'
-                self._click_element(web_driver, find_button_xpath)
-
-                loading_table_xpath = '//*[@id="loading-table-owner"]'
-                loading_table = self._find_first_valid_element_by_xpath(
-                    web_driver, xpaths=[loading_table_xpath]
-                )
-
-                while "flex" in str.lower(loading_table.get_attribute("style")):
-                    time.sleep(0.05)
-                    loading_table = self._find_first_valid_element_by_xpath(
-                        web_driver, xpaths=[loading_table_xpath]
-                    )
-
-                next_page_xpath = '//*[@id="render-table-owner"]/div[2]/a[2]'
-                no_result_xpath = '//*[@id="render-table-owner"]/tr/td'
-
-                no_result_boolean: bool = (
-                    self._find_first_valid_element_by_xpath(
-                        web_driver, xpaths=[no_result_xpath]
-                    )
-                    and str.lower(
-                        self._find_first_valid_element_by_xpath(
-                            web_driver, xpaths=[no_result_xpath]
-                        ).text
-                    )
-                    == "không có kết quả phù hợp"
-                )
-
-                while "flex" in str.lower(loading_table.get_attribute("style")):
-                    time.sleep(0.05)
-                    loading_table = self._find_first_valid_element_by_xpath(
-                        web_driver, xpaths=[loading_table_xpath]
-                    )
-
-                if no_result_boolean:
-                    continue
-
-                all_data = []
-                get_last_page = False
-
-                while not get_last_page:
-
-                    column_names = [
-                        "code",
-                        "date",
-                        "close",
-                        "adjust",
-                        "change",
-                        "matching_volume",
-                        "matching_value",
-                        "negotiate_volume",
-                        "negotiate_value",
-                        "open",
-                        "high",
-                        "low",
-                    ]
-
-                    bs4_parser = self._update_bs4_parser(web_driver)
-                    headers, rows = self._extract_table_by_id(
-                        bs4_parser=bs4_parser,
-                        id="owner-contents-table",
-                    )
-
-                    all_data.extend(rows)
-
-                    next_page_xpath = '//*[@id="divStart"]/div/div[3]/div[3]'
-                    next_page_button = self._find_first_valid_element_by_xpath(
-                        web_driver, xpaths=[next_page_xpath]
-                    )
-
-                    if "disabled" in str.lower(next_page_button.get_attribute("class")):
-                        get_last_page = True
-                    else:
-                        self._click_element(web_driver, next_page_xpath)
-
-                    while "flex" in str.lower(loading_table.get_attribute("style")):
-                        time.sleep(0.05)
-                        loading_table = self._find_first_valid_element_by_xpath(
-                            web_driver, xpaths=[loading_table_xpath]
-                        )
-
-                df = pd.DataFrame(all_data, columns=column_names)
-                df.to_csv(file_path, index=False)
-
-        finally:
-            web_driver.close()
-
-        self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
-
-    def _scrape_data_stock_market_vn_30_index_order(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType]
-    ):
-        self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
-
-        # Initialize web driver and bs4 parser
-        web_driver, bs4_parser = self._initialize_web_driver_and_bs4_parser()
-
-        try:
-            # 1. Initialize folder path and file name
-            scrape_main_type = key[0].value
-            scrape_sub_type = key[1].value
-            folder_path = (
-                f"{SCRAPER_BRONZE_DATA_DIR}/{scrape_main_type}/{scrape_sub_type}"
-            )
-            file_name = f"{scrape_sub_type}"
-
-            # 2. Create folder if not exists
-            if not os.path.exists(folder_path):
-                os.makedirs(folder_path, exist_ok=True)
-
-            # 3. Get SourceInfo
-            source_info = SCRAPE_MAPPING[key]
-
-            # 4. Navigate to URL
-            web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
-
-            date_expect_change_xpath = '//*[@id="render-table-owner"]/tr[1]/td[2]'
-            WebDriverWait(web_driver, 10).until(
-                EC.presence_of_element_located((By.XPATH, date_expect_change_xpath))
-            )
-
-            # 5. Logic for scraping
-            # 5.1. Create list of month
-            start_date = first_day_of_month(SCRAPER_START_DATE)
-            end_date = SCRAPER_END_DATE
-            month_list = month_ranges(start_date, end_date)
-
-            # 5.2. Loop through each month
-            for first_day, last_day in month_list:
-                # 5.3. Check if file already exists
-                file_path = f"{folder_path}/{file_name}_{first_day.strftime('%Y-%m-%d')}_{last_day.strftime('%Y-%m-%d')}.csv"
-
-                if os.path.isfile(file_path):
-                    self._logger.log_debug(f"File already exists: {file_path}, skip.")
-                    continue
-
-                self._logger.log_info(
-                    f"Start scraping data for {first_day.strftime('%Y-%m-%d')} to {last_day.strftime('%Y-%m-%d')}."
-                )
-
-                # 5.4. Scrape data
-                from_date_xpath = '//*[@id="date-from"]'
-                self._input_text(
-                    web_driver,
-                    from_date_xpath,
-                    f"{first_day.strftime('%d/%m/%Y')}",
-                )
-
-                actions = ActionChains(web_driver)
-                actions.send_keys(Keys.ESCAPE).perform()
-
-                to_date_xpath = '//*[@id="date-to"]'
-                self._input_text(
-                    web_driver,
-                    to_date_xpath,
-                    f"{last_day.strftime('%d/%m/%Y')}",
-                )
-
-                actions = ActionChains(web_driver)
-                actions.send_keys(Keys.ESCAPE).perform()
-
-                find_button_xpath = (
-                    '//*[@id="divStart"]/div/div[1]/div[1]/div/div[3]/div[1]'
-                )
-                self._click_element(web_driver, find_button_xpath)
-
-                loading_table_xpath = '//*[@id="loading-table-owner"]'
-                loading_table = self._find_first_valid_element_by_xpath(
-                    web_driver, xpaths=[loading_table_xpath]
-                )
-
-                while "flex" in str.lower(loading_table.get_attribute("style")):
-                    time.sleep(0.05)
-                    loading_table = self._find_first_valid_element_by_xpath(
-                        web_driver, xpaths=[loading_table_xpath]
-                    )
-
-                next_page_xpath = '//*[@id="render-table-owner"]/div[2]/a[2]'
-                no_result_xpath = '//*[@id="render-table-owner"]/tr/td'
-
-                no_result_boolean: bool = (
-                    self._find_first_valid_element_by_xpath(
-                        web_driver, xpaths=[no_result_xpath]
-                    )
-                    and str.lower(
-                        self._find_first_valid_element_by_xpath(
-                            web_driver, xpaths=[no_result_xpath]
-                        ).text
-                    )
-                    == "không có kết quả phù hợp"
-                )
-
-                while "flex" in str.lower(loading_table.get_attribute("style")):
-                    time.sleep(0.05)
-                    loading_table = self._find_first_valid_element_by_xpath(
-                        web_driver, xpaths=[loading_table_xpath]
-                    )
-
-                if no_result_boolean:
-                    continue
-
-                all_data = []
-                get_last_page = False
-
-                while not get_last_page:
-
-                    column_names = [
-                        "code",
-                        "date",
-                        "change",
-                        "number_of_buy_orders",
-                        "buy_volume",
-                        "average_volume_per_buy_order",
-                        "number_of_sell_orders",
-                        "sell_volume",
-                        "average_volume_per_sell_order",
-                        "net_volume",
-                    ]
-
-                    bs4_parser = self._update_bs4_parser(web_driver)
-                    headers, rows = self._extract_table_by_id(
-                        bs4_parser=bs4_parser,
-                        id="owner-contents-table",
-                    )
-
-                    all_data.extend(rows)
-
-                    next_page_xpath = '//*[@id="divStart"]/div/div[4]/div[3]'
-                    next_page_button = self._find_first_valid_element_by_xpath(
-                        web_driver, xpaths=[next_page_xpath]
-                    )
-
-                    if "disabled" in str.lower(next_page_button.get_attribute("class")):
-                        get_last_page = True
-                    else:
-                        self._click_element(web_driver, next_page_xpath)
-
-                    while "flex" in str.lower(loading_table.get_attribute("style")):
-                        time.sleep(0.05)
-                        loading_table = self._find_first_valid_element_by_xpath(
-                            web_driver, xpaths=[loading_table_xpath]
-                        )
-
-                df = pd.DataFrame(all_data, columns=column_names)
-                df.to_csv(file_path, index=False)
-
-        finally:
-            web_driver.close()
-
-        self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
-
-    def _scrape_data_stock_market_vn_100_index_cafef(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType]
-    ):
-        self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
-
-        # Initialize web driver and bs4 parser
-        web_driver, bs4_parser = self._initialize_web_driver_and_bs4_parser()
-
-        try:
-            # 1. Initialize folder path and file name
-            folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            file_name = f"{key[2].value}"
-
-            # 2. Initialize start time and current time
-            current_date = datetime.now()
-
-            file_path = (
-                f"{folder_path}/{file_name}_upto_{current_date.strftime('%Y%m%d')}.csv"
-            )
-
-            # 3. Check if file(s) already exists
-            if os.path.exists(file_path):
-                self._logger.log_info(f"File already exists: {file_path}")
-                return
-
-            # 4. Create folder if not exists
-            if not os.path.exists(folder_path):
-                os.makedirs(folder_path, exist_ok=True)
-
-            # 5. Get SourceInfo
-            source_info = SCRAPE_MAPPING[key]
-
-            # 6. Navigate to URL
-            web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
-
-            # 7. Logic for scraping
-            with open(file_path, "w", newline="", encoding="utf-8") as f:
-                writer = csv.writer(f)
-                writer.writerow(STOCK_MARKET_INDEX_HEADER)
-
-            max_index_xpath = '//*[@id="wraper-content-paging"]/div[11]/p'
-            max_index = int(web_driver.find_element(By.XPATH, max_index_xpath).text)
-            next_page_button_xpath = '//*[@id="divStart"]/div/div[3]/div[3]'
-
-            for page in range(1, max_index + 1):
-                headers, rows = self._extract_table_by_id(
-                    bs4_parser, "owner-contents-table"
-                )
-
-                with open(file_path, "a", newline="", encoding="utf-8") as f:
-                    writer = csv.writer(f)
-                    writer.writerows(rows)
-
-                if page == max_index:
-                    break
-
-                # Click next page
-
-                # Get a reference element inside the table BEFORE clicking "Next"
-                table_xpath = '//*[@id="owner-contents-table"]'
-                old_content = web_driver.find_element(
-                    By.XPATH, table_xpath
-                ).get_attribute("innerHTML")
-
-                # Click the Next button
-                self._click_element(web_driver, next_page_button_xpath)
-
-                # Wait until the content inside the table changes
-                WebDriverWait(web_driver, 10).until(
-                    lambda driver: driver.find_element(
-                        By.XPATH, table_xpath
-                    ).get_attribute("innerHTML")
-                    != old_content
-                )
-                bs4_parser = self._update_bs4_parser(web_driver)
-
-        finally:
-            web_driver.close()
-
-        self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
-
-    def _scrape_data_stock_market_hnx_30_index_cafef(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType]
-    ):
-        self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
-
-        # Initialize web driver and bs4 parser
-        web_driver, bs4_parser = self._initialize_web_driver_and_bs4_parser()
-
-        try:
-            # 1. Initialize folder path and file name
-            folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            file_name = f"{key[2].value}"
-
-            # 2. Initialize start time and current time
-            current_date = datetime.now()
-
-            file_path = (
-                f"{folder_path}/{file_name}_upto_{current_date.strftime('%Y%m%d')}.csv"
-            )
-
-            # 3. Check if file(s) already exists
-            if os.path.exists(file_path):
-                self._logger.log_info(f"File already exists: {file_path}")
-                return
-
-            # 4. Create folder if not exists
-            if not os.path.exists(folder_path):
-                os.makedirs(folder_path, exist_ok=True)
-
-            # 5. Get SourceInfo
-            source_info = SCRAPE_MAPPING[key]
-
-            # 6. Navigate to URL
-            web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
-
-            # 7. Logic for scraping
-            with open(file_path, "w", newline="", encoding="utf-8") as f:
-                writer = csv.writer(f)
-                writer.writerow(STOCK_MARKET_INDEX_HEADER)
-
-            max_index_xpath = '//*[@id="wraper-content-paging"]/div[11]/p'
-            max_index = int(web_driver.find_element(By.XPATH, max_index_xpath).text)
-            next_page_button_xpath = '//*[@id="divStart"]/div/div[3]/div[3]'
-
-            for page in range(1, max_index + 1):
-                headers, rows = self._extract_table_by_id(
-                    bs4_parser, "owner-contents-table"
-                )
-
-                with open(file_path, "a", newline="", encoding="utf-8") as f:
-                    writer = csv.writer(f)
-                    writer.writerows(rows)
-
-                if page == max_index:
-                    break
-
-                # Click next page
-
-                # Get a reference element inside the table BEFORE clicking "Next"
-                table_xpath = '//*[@id="owner-contents-table"]'
-                old_content = web_driver.find_element(
-                    By.XPATH, table_xpath
-                ).get_attribute("innerHTML")
-
-                # Click the Next button
-                self._click_element(web_driver, next_page_button_xpath)
-
-                # Wait until the content inside the table changes
-                WebDriverWait(web_driver, 10).until(
-                    lambda driver: driver.find_element(
-                        By.XPATH, table_xpath
-                    ).get_attribute("innerHTML")
-                    != old_content
-                )
-                bs4_parser = self._update_bs4_parser(web_driver)
-
-        finally:
-            web_driver.close()
-
-        self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
-
-    def _scrape_data_stock_market_upcom_index_cafef(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType]
-    ):
-        self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
-
-        # Initialize web driver and bs4 parser
-        web_driver, bs4_parser = self._initialize_web_driver_and_bs4_parser()
-
-        try:
-            # 1. Initialize folder path and file name
-            folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            file_name = f"{key[2].value}"
-
-            # 2. Initialize start time and current time
-            current_date = datetime.now()
-
-            file_path = (
-                f"{folder_path}/{file_name}_upto_{current_date.strftime('%Y%m%d')}.csv"
-            )
-
-            # 3. Check if file(s) already exists
-            if os.path.exists(file_path):
-                self._logger.log_info(f"File already exists: {file_path}")
-                return
-
-            # 4. Create folder if not exists
-            if not os.path.exists(folder_path):
-                os.makedirs(folder_path, exist_ok=True)
-
-            # 5. Get SourceInfo
-            source_info = SCRAPE_MAPPING[key]
-
-            # 6. Navigate to URL
-            web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
-
-            # 7. Logic for scraping
-            with open(file_path, "w", newline="", encoding="utf-8") as f:
-                writer = csv.writer(f)
-                writer.writerow(STOCK_MARKET_INDEX_HEADER)
-
-            max_index_xpath = '//*[@id="wraper-content-paging"]/div[11]/p'
-            max_index = int(web_driver.find_element(By.XPATH, max_index_xpath).text)
-            next_page_button_xpath = '//*[@id="divStart"]/div/div[3]/div[3]'
-
-            for page in range(1, max_index + 1):
-                headers, rows = self._extract_table_by_id(
-                    bs4_parser, "owner-contents-table"
-                )
-
-                with open(file_path, "a", newline="", encoding="utf-8") as f:
-                    writer = csv.writer(f)
-                    writer.writerows(rows)
-
-                if page == max_index:
-                    break
-
-                # Click next page
-
-                # Get a reference element inside the table BEFORE clicking "Next"
-                table_xpath = '//*[@id="owner-contents-table"]'
-                old_content = web_driver.find_element(
-                    By.XPATH, table_xpath
-                ).get_attribute("innerHTML")
-
-                # Click the Next button
-                self._click_element(web_driver, next_page_button_xpath)
-
-                # Wait until the content inside the table changes
-                WebDriverWait(web_driver, 10).until(
-                    lambda driver: driver.find_element(
-                        By.XPATH, table_xpath
-                    ).get_attribute("innerHTML")
-                    != old_content
-                )
-                bs4_parser = self._update_bs4_parser(web_driver)
-
-        finally:
-            web_driver.close()
-
-        self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
+    def _scrape_data_stock_market_price(self, key):
+        self._scrape_stock_data(
+            key=key,
+            column_names=[
+                "code",
+                "date",
+                "close",
+                "adjust",
+                "change",
+                "matching_volume",
+                "matching_value",
+                "negotiate_volume",
+                "negotiate_value",
+                "open",
+                "high",
+                "low",
+            ],
+            find_button_xpath='//*[@id="owner-find"]',
+            next_page_xpath='//*[@id="divStart"]/div/div[3]/div[3]',
+        )
+
+    def _scrape_data_stock_market_order(self, key):
+        self._scrape_stock_data(
+            key=key,
+            column_names=[
+                "code",
+                "date",
+                "change",
+                "number_of_buy_orders",
+                "buy_volume",
+                "average_volume_per_buy_order",
+                "number_of_sell_orders",
+                "sell_volume",
+                "average_volume_per_sell_order",
+                "net_volume",
+            ],
+            find_button_xpath='//*[@id="divStart"]/div/div[1]/div[1]/div/div[3]/div[1]',
+            next_page_xpath='//*[@id="divStart"]/div/div[4]/div[3]',
+        )
 
     def _scrape_data_enterprise_daily_price_cafef(
         self, key: Tuple[ScrapeMainType, ScrapeSubType]
@@ -4547,43 +3801,73 @@ class WebScraper:
                 ScrapeMainType.STOCK_MARKET,
                 StockMarketSubType.VN_INDEX_PRICE,
             ):
-                return self._scrape_data_stock_market_vn_index_price(key)
+                return self._scrape_data_stock_market_price(key)
 
             case (
                 ScrapeMainType.STOCK_MARKET,
                 StockMarketSubType.VN_INDEX_ORDER,
             ):
-                return self._scrape_data_stock_market_vn_index_order(key)
+                return self._scrape_data_stock_market_order(key)
 
             case (
                 ScrapeMainType.STOCK_MARKET,
                 StockMarketSubType.VN_30_INDEX_PRICE,
             ):
-                return self._scrape_data_stock_market_vn_30_index_price(key)
+                return self._scrape_data_stock_market_price(key)
 
             case (
                 ScrapeMainType.STOCK_MARKET,
                 StockMarketSubType.VN_30_INDEX_ORDER,
             ):
-                return self._scrape_data_stock_market_vn_30_index_order(key)
+                return self._scrape_data_stock_market_order(key)
 
             case (
                 ScrapeMainType.STOCK_MARKET,
-                StockMarketSubType.VN_100_INDEX,
+                StockMarketSubType.VN_100_INDEX_PRICE,
             ):
-                return self._scrape_data_stock_market_vn_100_index_cafef(key)
+                return self._scrape_data_stock_market_price(key)
 
             case (
                 ScrapeMainType.STOCK_MARKET,
-                StockMarketSubType.HNX_30_INDEX,
+                StockMarketSubType.VN_100_INDEX_ORDER,
             ):
-                return self._scrape_data_stock_market_hnx_30_index_cafef(key)
+                return self._scrape_data_stock_market_order(key)
 
             case (
                 ScrapeMainType.STOCK_MARKET,
-                StockMarketSubType.UPCOM_INDEX,
+                StockMarketSubType.HNX_INDEX_PRICE,
             ):
-                return self._scrape_data_stock_market_upcom_index_cafef(key)
+                return self._scrape_data_stock_market_price(key)
+
+            case (
+                ScrapeMainType.STOCK_MARKET,
+                StockMarketSubType.HNX_INDEX_ORDER,
+            ):
+                return self._scrape_data_stock_market_order(key)
+
+            case (
+                ScrapeMainType.STOCK_MARKET,
+                StockMarketSubType.HNX_30_INDEX_PRICE,
+            ):
+                return self._scrape_data_stock_market_price(key)
+
+            case (
+                ScrapeMainType.STOCK_MARKET,
+                StockMarketSubType.HNX_30_INDEX_ORDER,
+            ):
+                return self._scrape_data_stock_market_order(key)
+
+            case (
+                ScrapeMainType.STOCK_MARKET,
+                StockMarketSubType.UPCOM_INDEX_PRICE,
+            ):
+                return self._scrape_data_stock_market_price(key)
+
+            case (
+                ScrapeMainType.STOCK_MARKET,
+                StockMarketSubType.UPCOM_INDEX_ORDER,
+            ):
+                return self._scrape_data_stock_market_order(key)
 
             # endregion STOCK_MARKET
 
@@ -4969,35 +4253,77 @@ class WebScraper:
                 Task(format_key_for_name(key), self._scrape_data_from, key)
             )
 
-        # # VN100_INDEX
-        # key = (
-        #     ScrapeMainType.STOCK_MARKET,
-        #     StockMarketSubType.VN_100_INDEX,
-        #     Vn100IndexSource.CAFEF,
-        # )
-        # self._thread_manager.add_task(
-        #     Task(format_key_for_name(key), self._scrape_data_from, key)
-        # )
+        # VN_100_INDEX_PRICE
+        if self._switch_handler.is_enabled(
+            "web_scraper", "stock_market", "vn_100_index_price"
+        ):
+            key = (
+                ScrapeMainType.STOCK_MARKET,
+                StockMarketSubType.VN_100_INDEX_PRICE,
+            )
+            self._thread_manager.add_task(
+                Task(format_key_for_name(key), self._scrape_data_from, key)
+            )
 
-        # # HNX30_INDEX
-        # key = (
-        #     ScrapeMainType.STOCK_MARKET,
-        #     StockMarketSubType.HNX_30_INDEX,
-        #     Hnx30IndexSource.CAFEF,
-        # )
-        # self._thread_manager.add_task(
-        #     Task(format_key_for_name(key), self._scrape_data_from, key)
-        # )
+        # VN_100_INDEX_ORDER
+        if self._switch_handler.is_enabled(
+            "web_scraper", "stock_market", "vn_100_index_order"
+        ):
+            key = (
+                ScrapeMainType.STOCK_MARKET,
+                StockMarketSubType.VN_100_INDEX_ORDER,
+            )
+            self._thread_manager.add_task(
+                Task(format_key_for_name(key), self._scrape_data_from, key)
+            )
 
-        # # UPCOM_INDEX
-        # key = (
-        #     ScrapeMainType.STOCK_MARKET,
-        #     StockMarketSubType.UPCOM_INDEX,
-        #     UpcomIndexSource.CAFEF,
-        # )
-        # self._thread_manager.add_task(
-        #     Task(format_key_for_name(key), self._scrape_data_from, key)
-        # )
+        # HNX_30_INDEX_PRICE
+        if self._switch_handler.is_enabled(
+            "web_scraper", "stock_market", "hnx_30_index_price"
+        ):
+            key = (
+                ScrapeMainType.STOCK_MARKET,
+                StockMarketSubType.HNX_30_INDEX_PRICE,
+            )
+            self._thread_manager.add_task(
+                Task(format_key_for_name(key), self._scrape_data_from, key)
+            )
+
+        # HNX_30_INDEX_ORDER
+        if self._switch_handler.is_enabled(
+            "web_scraper", "stock_market", "hnx_30_index_order"
+        ):
+            key = (
+                ScrapeMainType.STOCK_MARKET,
+                StockMarketSubType.HNX_30_INDEX_ORDER,
+            )
+            self._thread_manager.add_task(
+                Task(format_key_for_name(key), self._scrape_data_from, key)
+            )
+
+        # UPCOM_INDEX_PRICE
+        if self._switch_handler.is_enabled(
+            "web_scraper", "stock_market", "upcom_index_price"
+        ):
+            key = (
+                ScrapeMainType.STOCK_MARKET,
+                StockMarketSubType.UPCOM_INDEX_PRICE,
+            )
+            self._thread_manager.add_task(
+                Task(format_key_for_name(key), self._scrape_data_from, key)
+            )
+
+        # UPCOM_INDEX_ORDER
+        if self._switch_handler.is_enabled(
+            "web_scraper", "stock_market", "upcom_index_order"
+        ):
+            key = (
+                ScrapeMainType.STOCK_MARKET,
+                StockMarketSubType.UPCOM_INDEX_ORDER,
+            )
+            self._thread_manager.add_task(
+                Task(format_key_for_name(key), self._scrape_data_from, key)
+            )
 
         number_of_task_after = self._thread_manager.get_current_number_of_task()
         self._logger.log_info(
