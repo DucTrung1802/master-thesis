@@ -547,6 +547,14 @@ SCRAPE_MAPPING: Dict[Tuple[ScrapeMainType, ScrapeSubType], SourceInfo] = {
         ScrapeMainType.ENTERPRISE,
         EnterpriseSubType.STOCK_LIST_HOSE,
     ): SourceInfo(url="https://cafef.vn/du-lieu/lich-su-giao-dich/hose/all-1.chn"),
+    (
+        ScrapeMainType.ENTERPRISE,
+        EnterpriseSubType.STOCK_LIST_HNX,
+    ): SourceInfo(url="https://cafef.vn/du-lieu/lich-su-giao-dich/hnx/all-1.chn"),
+    (
+        ScrapeMainType.ENTERPRISE,
+        EnterpriseSubType.STOCK_LIST_UPCOM,
+    ): SourceInfo(url="https://cafef.vn/du-lieu/lich-su-giao-dich/upcom/all-1.chn"),
 }
 
 

@@ -3262,7 +3262,7 @@ class WebScraper:
 
                 if os.path.isfile(file_path):
                     self._logger.log_debug(f"File exists: {file_path}, skip.")
-                    continue
+                    break
 
                 self._logger.log_info(f"Scraping stock list on {end_date:%Y-%m-%d}")
 
@@ -4448,14 +4448,35 @@ class WebScraper:
         self._logger.log_info("Adding enterprise data scraping tasks.")
         number_of_task_before = self._thread_manager.get_current_number_of_task()
 
-        # STOCK_LIST
-        key = (
-            ScrapeMainType.ENTERPRISE,
-            EnterpriseSubType.STOCK_LIST_HOSE,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # STOCK_LIST_HOSE
+        if self._switch_handler.is_enabled("web_scraper", "enterprise", "stock_list_hose"):
+            key = (
+                ScrapeMainType.ENTERPRISE,
+                EnterpriseSubType.STOCK_LIST_HOSE,
+            )
+            self._thread_manager.add_task(
+                Task(format_key_for_name(key), self._scrape_data_from, key)
+            )
+
+        # STOCK_LIST_HNX
+        if self._switch_handler.is_enabled("web_scraper", "enterprise", "stock_list_hnx"):
+            key = (
+                ScrapeMainType.ENTERPRISE,
+                EnterpriseSubType.STOCK_LIST_HNX,
+            )
+            self._thread_manager.add_task(
+                Task(format_key_for_name(key), self._scrape_data_from, key)
+            )
+
+        # STOCK_LIST_UPCOM
+        if self._switch_handler.is_enabled("web_scraper", "enterprise", "stock_list_upcom"):
+            key = (
+                ScrapeMainType.ENTERPRISE,
+                EnterpriseSubType.STOCK_LIST_UPCOM,
+            )
+            self._thread_manager.add_task(
+                Task(format_key_for_name(key), self._scrape_data_from, key)
+            )
 
         number_of_task_after = self._thread_manager.get_current_number_of_task()
         self._logger.log_info(

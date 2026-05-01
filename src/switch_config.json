@@ -53,22 +53,22 @@
                         "enable": true
                     },
                     "stock_price_hose": {
-                        "enable": true
+                        "enable": false
                     },
                     "stock_price_hnx": {
-                        "enable": true
+                        "enable": false
                     },
                     "stock_price_upcom": {
-                        "enable": true
+                        "enable": false
                     },
                     "stock_order_hose": {
-                        "enable": true
+                        "enable": false
                     },
                     "stock_order_hnx": {
-                        "enable": true
+                        "enable": false
                     },
                     "stock_order_upcom": {
-                        "enable": true
+                        "enable": false
                     }
                 }
             }
