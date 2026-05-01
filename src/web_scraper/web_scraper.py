@@ -3086,6 +3086,7 @@ class WebScraper:
     def _scrape_stock_data(
         self,
         key: Tuple[ScrapeMainType, ScrapeSubType],
+        url: str,
         column_names: list[str],
         find_button_xpath: str,
         next_page_xpath: str,
@@ -3105,8 +3106,7 @@ class WebScraper:
 
             os.makedirs(folder_path, exist_ok=True)
 
-            source_info = SCRAPE_MAPPING[key]
-            web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
+            web_driver, bs4_parser = self._navigate_to_url(web_driver, url)
 
             start_date = first_day_of_month(SCRAPER_START_DATE)
             end_date = SCRAPER_END_DATE
@@ -3176,9 +3176,10 @@ class WebScraper:
 
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
-    def _scrape_data_stock_market_price(self, key):
+    def _scrape_data_stock_market_price(self, key, url: str):
         self._scrape_stock_data(
             key=key,
+            url=url,
             column_names=[
                 "code",
                 "date",
@@ -3197,9 +3198,10 @@ class WebScraper:
             next_page_xpath='//*[@id="divStart"]/div/div[3]/div[3]',
         )
 
-    def _scrape_data_stock_market_order(self, key):
+    def _scrape_data_stock_market_order(self, key, url: str):
         self._scrape_stock_data(
             key=key,
+            url=url,
             column_names=[
                 "code",
                 "date",
@@ -3283,7 +3285,9 @@ class WebScraper:
                 all_data = []
 
                 if self._is_no_result(web_driver):
-                    self._logger.log_info(f"No data found on {end_date:%Y-%m-%d}. Step back a day.")
+                    self._logger.log_info(
+                        f"No data found on {end_date:%Y-%m-%d}. Step back a day."
+                    )
                     end_date -= timedelta(days=1)
                     continue
 
@@ -3904,73 +3908,73 @@ class WebScraper:
                 ScrapeMainType.STOCK_MARKET,
                 StockMarketSubType.VN_INDEX_PRICE,
             ):
-                return self._scrape_data_stock_market_price(key)
+                return self._scrape_data_stock_market_price(key, SCRAPE_MAPPING[key].url)
 
             case (
                 ScrapeMainType.STOCK_MARKET,
                 StockMarketSubType.VN_INDEX_ORDER,
             ):
-                return self._scrape_data_stock_market_order(key)
+                return self._scrape_data_stock_market_order(key, SCRAPE_MAPPING[key].url)
 
             case (
                 ScrapeMainType.STOCK_MARKET,
                 StockMarketSubType.VN_30_INDEX_PRICE,
             ):
-                return self._scrape_data_stock_market_price(key)
+                return self._scrape_data_stock_market_price(key, SCRAPE_MAPPING[key].url)
 
             case (
                 ScrapeMainType.STOCK_MARKET,
                 StockMarketSubType.VN_30_INDEX_ORDER,
             ):
-                return self._scrape_data_stock_market_order(key)
+                return self._scrape_data_stock_market_order(key, SCRAPE_MAPPING[key].url)
 
             case (
                 ScrapeMainType.STOCK_MARKET,
                 StockMarketSubType.VN_100_INDEX_PRICE,
             ):
-                return self._scrape_data_stock_market_price(key)
+                return self._scrape_data_stock_market_price(key, SCRAPE_MAPPING[key].url)
 
             case (
                 ScrapeMainType.STOCK_MARKET,
                 StockMarketSubType.VN_100_INDEX_ORDER,
             ):
-                return self._scrape_data_stock_market_order(key)
+                return self._scrape_data_stock_market_order(key, SCRAPE_MAPPING[key].url)
 
             case (
                 ScrapeMainType.STOCK_MARKET,
                 StockMarketSubType.HNX_INDEX_PRICE,
             ):
-                return self._scrape_data_stock_market_price(key)
+                return self._scrape_data_stock_market_price(key, SCRAPE_MAPPING[key].url)
 
             case (
                 ScrapeMainType.STOCK_MARKET,
                 StockMarketSubType.HNX_INDEX_ORDER,
             ):
-                return self._scrape_data_stock_market_order(key)
+                return self._scrape_data_stock_market_order(key, SCRAPE_MAPPING[key].url)
 
             case (
                 ScrapeMainType.STOCK_MARKET,
                 StockMarketSubType.HNX_30_INDEX_PRICE,
             ):
-                return self._scrape_data_stock_market_price(key)
+                return self._scrape_data_stock_market_price(key, SCRAPE_MAPPING[key].url)
 
             case (
                 ScrapeMainType.STOCK_MARKET,
                 StockMarketSubType.HNX_30_INDEX_ORDER,
             ):
-                return self._scrape_data_stock_market_order(key)
+                return self._scrape_data_stock_market_order(key, SCRAPE_MAPPING[key].url)
 
             case (
                 ScrapeMainType.STOCK_MARKET,
                 StockMarketSubType.UPCOM_INDEX_PRICE,
             ):
-                return self._scrape_data_stock_market_price(key)
+                return self._scrape_data_stock_market_price(key, SCRAPE_MAPPING[key].url)
 
             case (
                 ScrapeMainType.STOCK_MARKET,
                 StockMarketSubType.UPCOM_INDEX_ORDER,
             ):
-                return self._scrape_data_stock_market_order(key)
+                return self._scrape_data_stock_market_order(key, SCRAPE_MAPPING[key].url)
 
             # endregion STOCK_MARKET
 
@@ -4449,7 +4453,9 @@ class WebScraper:
         number_of_task_before = self._thread_manager.get_current_number_of_task()
 
         # STOCK_LIST_HOSE
-        if self._switch_handler.is_enabled("web_scraper", "enterprise", "stock_list_hose"):
+        if self._switch_handler.is_enabled(
+            "web_scraper", "enterprise", "stock_list_hose"
+        ):
             key = (
                 ScrapeMainType.ENTERPRISE,
                 EnterpriseSubType.STOCK_LIST_HOSE,
@@ -4459,7 +4465,9 @@ class WebScraper:
             )
 
         # STOCK_LIST_HNX
-        if self._switch_handler.is_enabled("web_scraper", "enterprise", "stock_list_hnx"):
+        if self._switch_handler.is_enabled(
+            "web_scraper", "enterprise", "stock_list_hnx"
+        ):
             key = (
                 ScrapeMainType.ENTERPRISE,
                 EnterpriseSubType.STOCK_LIST_HNX,
@@ -4469,7 +4477,9 @@ class WebScraper:
             )
 
         # STOCK_LIST_UPCOM
-        if self._switch_handler.is_enabled("web_scraper", "enterprise", "stock_list_upcom"):
+        if self._switch_handler.is_enabled(
+            "web_scraper", "enterprise", "stock_list_upcom"
+        ):
             key = (
                 ScrapeMainType.ENTERPRISE,
                 EnterpriseSubType.STOCK_LIST_UPCOM,
