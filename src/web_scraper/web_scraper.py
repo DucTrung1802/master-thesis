@@ -3342,7 +3342,7 @@ class WebScraper:
         # Read stock list file
         df = pd.read_csv(file_path)
         df["code"] = df["code"].str.lower()
-        stock_list = df["code"].tolist()[:1]
+        stock_list = df["code"].tolist()
 
         # Add tasks for each stock
         for stock in stock_list:

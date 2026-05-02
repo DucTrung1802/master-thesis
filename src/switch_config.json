@@ -47,10 +47,10 @@
                         "enable": true
                     },
                     "stock_list_hnx": {
-                        "enable": true
+                        "enable": false
                     },
                     "stock_list_upcom": {
-                        "enable": true
+                        "enable": false
                     },
                     "stock_price_hose": {
                         "enable": false
