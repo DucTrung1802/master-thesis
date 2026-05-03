@@ -4,7 +4,7 @@ import os
 import re
 import time
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Literal
 from datetime import datetime, timedelta
 
 # ===== Third-Party Libraries =====
@@ -3097,7 +3097,7 @@ class WebScraper:
 
         try:
             scrape_main_type = get_value(key[0])
-            scrape_sub_type = get_value(key[1]) 
+            scrape_sub_type = get_value(key[1])
 
             folder_path = (
                 f"{SCRAPER_BRONZE_DATA_DIR}/{scrape_main_type}/{scrape_sub_type}"
@@ -3320,7 +3320,21 @@ class WebScraper:
 
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
-    def _add_tasks_for_stock_market_price(self, _result, stock_market_name: str):
+    def _add_tasks_for_stock_market_price_order(
+        self,
+        _result,
+        stock_market_name: str,
+        scrape_type: Literal["PRICE", "ORDER"],
+    ):
+        # Normalize input
+        scrape_type = scrape_type.upper()
+
+        if scrape_type not in {"PRICE", "ORDER"}:
+            self._logger.log_warning(
+                f"Invalid scrape_type: {scrape_type}. Must be PRICE or ORDER."
+            )
+            return
+
         # Find stock list file
         folder_path = (
             f"{SCRAPER_BRONZE_DATA_DIR}/enterprise/stock_list_{stock_market_name}"
@@ -3346,16 +3360,30 @@ class WebScraper:
 
         # Add tasks for each stock
         for stock in stock_list:
-            url = f"https://cafef.vn/du-lieu/lich-su-giao-dich/{stock_market_name}/{stock}-1.chn"
-            key = (ScrapeMainType.ENTERPRISE, stock)
-            self._thread_manager.add_task(
-                Task(
-                    format_key_for_name(key),
-                    self._scrape_data_stock_market_price,
-                    key=key,
-                    url=url,
+
+            if scrape_type in {"PRICE"}:
+                price_key = (ScrapeMainType.ENTERPRISE, f"{stock}_price")
+                price_url = f"https://cafef.vn/du-lieu/lich-su-giao-dich/{stock_market_name}/{stock}-1.chn"
+                self._thread_manager.add_task(
+                    Task(
+                        format_key_for_name(price_key),
+                        self._scrape_data_stock_market_price,
+                        key=price_key,
+                        url=price_url,
+                    )
                 )
-            )
+
+            if scrape_type in {"ORDER"}:
+                order_key = (ScrapeMainType.ENTERPRISE, f"{stock}_order")
+                order_url = f"https://cafef.vn/du-lieu/lich-su-giao-dich/{stock_market_name}/{stock}-2.chn"
+                self._thread_manager.add_task(
+                    Task(
+                        format_key_for_name(order_key),
+                        self._scrape_data_stock_market_order,
+                        key=order_key,
+                        url=order_url,
+                    )
+                )
 
     def _scrape_data_enterprise_daily_price_cafef(
         self, key: Tuple[ScrapeMainType, ScrapeSubType]
@@ -4521,18 +4549,36 @@ class WebScraper:
                 ScrapeMainType.ENTERPRISE,
                 EnterpriseSubType.STOCK_LIST_HOSE,
             )
+
+            callbacks = []
+            if self._switch_handler.is_enabled(
+                "web_scraper", "enterprise", "stock_list_hose", "stock_price_hose"
+            ):
+                callbacks.append(
+                    (
+                        self._add_tasks_for_stock_market_price_order,
+                        (),
+                        {"stock_market_name": "hose", "scrape_type": "PRICE"},
+                    )
+                )
+
+            if self._switch_handler.is_enabled(
+                "web_scraper", "enterprise", "stock_list_hose", "stock_order_hose"
+            ):
+                callbacks.append(
+                    (
+                        self._add_tasks_for_stock_market_price_order,
+                        (),
+                        {"stock_market_name": "hose", "scrape_type": "ORDER"},
+                    )
+                )
+
             self._thread_manager.add_task(
                 Task(
                     format_key_for_name(key),
                     self._scrape_data_from,
                     key,
-                    callbacks=[
-                        (
-                            self._add_tasks_for_stock_market_price,
-                            (),
-                            {"stock_market_name": "hose"},
-                        )
-                    ],
+                    callbacks=callbacks,
                 )
             )
 

@@ -44,31 +44,37 @@
                 "enable": true,
                 "children": {
                     "stock_list_hose": {
-                        "enable": true
+                        "enable": true,
+                        "children": {
+                            "stock_price_hose": {
+                                "enable": false
+                            },
+                            "stock_order_hose": {
+                                "enable": true
+                            }
+                        }
                     },
                     "stock_list_hnx": {
-                        "enable": false
+                        "enable": false,
+                        "children": {
+                            "stock_price_hnx": {
+                                "enable": false
+                            },
+                            "stock_order_hnx": {
+                                "enable": false
+                            }
+                        }
                     },
                     "stock_list_upcom": {
-                        "enable": false
-                    },
-                    "stock_price_hose": {
-                        "enable": false
-                    },
-                    "stock_price_hnx": {
-                        "enable": false
-                    },
-                    "stock_price_upcom": {
-                        "enable": false
-                    },
-                    "stock_order_hose": {
-                        "enable": false
-                    },
-                    "stock_order_hnx": {
-                        "enable": false
-                    },
-                    "stock_order_upcom": {
-                        "enable": false
+                        "enable": false,
+                        "children": {
+                            "stock_price_upcom": {
+                                "enable": false
+                            },
+                            "stock_order_upcom": {
+                                "enable": false
+                            }
+                        }
                     }
                 }
             }
