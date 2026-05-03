@@ -59,7 +59,7 @@ class WebScraper:
     ) -> Tuple[ChromiumDriver, BeautifulSoup]:
         web_driver: ChromiumDriver = webdriver.Chrome(options=self._chrome_options)
         bs4_parser: BeautifulSoup = BeautifulSoup(web_driver.page_source, "html.parser")
-        web_driver.maximize_window()
+        web_driver.minimize_window()
 
         return (web_driver, bs4_parser)
 
@@ -3123,7 +3123,7 @@ class WebScraper:
                     continue
 
                 self._logger.log_info(
-                    f"Scraping {first_day:%Y-%m-%d} → {last_day:%Y-%m-%d}"
+                    f"Scraping {format_key_for_name(key)}: {first_day:%Y-%m-%d} → {last_day:%Y-%m-%d}"
                 )
 
                 self._input_text(
@@ -3284,7 +3284,7 @@ class WebScraper:
 
                 all_data = []
 
-                if self._is_no_result(web_driver):
+                if is_weekend(end_date) or self._is_no_result(web_driver):
                     self._logger.log_info(
                         f"No data found on {end_date:%Y-%m-%d}. Step back a day."
                     )
@@ -4590,8 +4590,37 @@ class WebScraper:
                 ScrapeMainType.ENTERPRISE,
                 EnterpriseSubType.STOCK_LIST_HNX,
             )
+
+            callbacks = []
+            if self._switch_handler.is_enabled(
+                "web_scraper", "enterprise", "stock_list_hnx", "stock_price_hnx"
+            ):
+                callbacks.append(
+                    (
+                        self._add_tasks_for_stock_market_price_order,
+                        (),
+                        {"stock_market_name": "hnx", "scrape_type": "PRICE"},
+                    )
+                )
+
+            if self._switch_handler.is_enabled(
+                "web_scraper", "enterprise", "stock_list_hnx", "stock_order_hnx"
+            ):
+                callbacks.append(
+                    (
+                        self._add_tasks_for_stock_market_price_order,
+                        (),
+                        {"stock_market_name": "hnx", "scrape_type": "ORDER"},
+                    )
+                )
+
             self._thread_manager.add_task(
-                Task(format_key_for_name(key), self._scrape_data_from, key)
+                Task(
+                    format_key_for_name(key),
+                    self._scrape_data_from,
+                    key,
+                    callbacks=callbacks,
+                )
             )
 
         # STOCK_LIST_UPCOM
@@ -4602,8 +4631,37 @@ class WebScraper:
                 ScrapeMainType.ENTERPRISE,
                 EnterpriseSubType.STOCK_LIST_UPCOM,
             )
+
+            callbacks = []
+            if self._switch_handler.is_enabled(
+                "web_scraper", "enterprise", "stock_list_upcom", "stock_price_upcom"
+            ):
+                callbacks.append(
+                    (
+                        self._add_tasks_for_stock_market_price_order,
+                        (),
+                        {"stock_market_name": "upcom", "scrape_type": "PRICE"},
+                    )
+                )
+
+            if self._switch_handler.is_enabled(
+                "web_scraper", "enterprise", "stock_list_upcom", "stock_order_upcom"
+            ):
+                callbacks.append(
+                    (
+                        self._add_tasks_for_stock_market_price_order,
+                        (),
+                        {"stock_market_name": "upcom", "scrape_type": "ORDER"},
+                    )
+                )
+
             self._thread_manager.add_task(
-                Task(format_key_for_name(key), self._scrape_data_from, key)
+                Task(
+                    format_key_for_name(key),
+                    self._scrape_data_from,
+                    key,
+                    callbacks=callbacks,
+                )
             )
 
         number_of_task_after = self._thread_manager.get_current_number_of_task()
