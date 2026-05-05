@@ -3093,35 +3093,45 @@ class WebScraper:
     ):
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
 
+        scrape_main_type = get_value(key[0])
+        scrape_sub_type = get_value(key[1])
+
+        folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{scrape_main_type}/{scrape_sub_type}"
+        file_name = scrape_sub_type
+
+        os.makedirs(folder_path, exist_ok=True)
+
+        # Prepare date ranges
+        start_date = first_day_of_month(SCRAPER_START_DATE)
+        end_date = SCRAPER_END_DATE
+        month_list = month_ranges(start_date, end_date)
+
+        # 👉 Step 1: collect missing files
+        missing_jobs = []
+
+        for first_day, last_day in month_list:
+            file_path = (
+                f"{folder_path}/{file_name}_"
+                f"{first_day:%Y-%m-%d}_{last_day:%Y-%m-%d}.csv"
+            )
+
+            if not os.path.isfile(file_path):
+                missing_jobs.append((first_day, last_day, file_path))
+            else:
+                self._logger.log_debug(f"File exists: {file_path}, skip.")
+
+        # 👉 Step 2: early exit if nothing to scrape
+        if not missing_jobs:
+            self._logger.log_info("No missing files. Skipping scraping.")
+            return
+
+        # 👉 Step 3: initialize only when needed
         web_driver, bs4_parser = self._initialize_web_driver_and_bs4_parser()
 
         try:
-            scrape_main_type = get_value(key[0])
-            scrape_sub_type = get_value(key[1])
-
-            folder_path = (
-                f"{SCRAPER_BRONZE_DATA_DIR}/{scrape_main_type}/{scrape_sub_type}"
-            )
-            file_name = scrape_sub_type
-
-            os.makedirs(folder_path, exist_ok=True)
-
             web_driver, bs4_parser = self._navigate_to_url(web_driver, url)
 
-            start_date = first_day_of_month(SCRAPER_START_DATE)
-            end_date = SCRAPER_END_DATE
-            month_list = month_ranges(start_date, end_date)
-
-            for first_day, last_day in month_list:
-                file_path = (
-                    f"{folder_path}/{file_name}_"
-                    f"{first_day:%Y-%m-%d}_{last_day:%Y-%m-%d}.csv"
-                )
-
-                if os.path.isfile(file_path):
-                    self._logger.log_debug(f"File exists: {file_path}, skip.")
-                    continue
-
+            for first_day, last_day, file_path in missing_jobs:
                 self._logger.log_info(
                     f"Scraping {format_key_for_name(key)}: {first_day:%Y-%m-%d} → {last_day:%Y-%m-%d}"
                 )
@@ -3137,7 +3147,6 @@ class WebScraper:
                 ActionChains(web_driver).send_keys(Keys.ESCAPE).perform()
 
                 self._click_element(web_driver, find_button_xpath)
-
                 self._wait_loading_done(web_driver)
 
                 all_data = []
