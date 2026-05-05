@@ -4,7 +4,7 @@ import os
 import re
 import time
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Literal
 from datetime import datetime, timedelta
 
 # ===== Third-Party Libraries =====
@@ -59,7 +59,7 @@ class WebScraper:
     ) -> Tuple[ChromiumDriver, BeautifulSoup]:
         web_driver: ChromiumDriver = webdriver.Chrome(options=self._chrome_options)
         bs4_parser: BeautifulSoup = BeautifulSoup(web_driver.page_source, "html.parser")
-        web_driver.maximize_window()
+        web_driver.minimize_window()
 
         return (web_driver, bs4_parser)
 
@@ -3086,44 +3086,54 @@ class WebScraper:
     def _scrape_stock_data(
         self,
         key: Tuple[ScrapeMainType, ScrapeSubType],
+        url: str,
         column_names: list[str],
         find_button_xpath: str,
         next_page_xpath: str,
     ):
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
 
+        scrape_main_type = get_value(key[0])
+        scrape_sub_type = get_value(key[1])
+
+        folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{scrape_main_type}/{scrape_sub_type}"
+        file_name = scrape_sub_type
+
+        os.makedirs(folder_path, exist_ok=True)
+
+        # Prepare date ranges
+        start_date = first_day_of_month(SCRAPER_START_DATE)
+        end_date = SCRAPER_END_DATE
+        month_list = month_ranges(start_date, end_date)
+
+        # 👉 Step 1: collect missing files
+        missing_jobs = []
+
+        for first_day, last_day in month_list:
+            file_path = (
+                f"{folder_path}/{file_name}_"
+                f"{first_day:%Y-%m-%d}_{last_day:%Y-%m-%d}.csv"
+            )
+
+            if not os.path.isfile(file_path):
+                missing_jobs.append((first_day, last_day, file_path))
+            else:
+                self._logger.log_debug(f"File exists: {file_path}, skip.")
+
+        # 👉 Step 2: early exit if nothing to scrape
+        if not missing_jobs:
+            self._logger.log_info("No missing files. Skipping scraping.")
+            return
+
+        # 👉 Step 3: initialize only when needed
         web_driver, bs4_parser = self._initialize_web_driver_and_bs4_parser()
 
         try:
-            scrape_main_type = key[0].value
-            scrape_sub_type = key[1].value
+            web_driver, bs4_parser = self._navigate_to_url(web_driver, url)
 
-            folder_path = (
-                f"{SCRAPER_BRONZE_DATA_DIR}/{scrape_main_type}/{scrape_sub_type}"
-            )
-            file_name = scrape_sub_type
-
-            os.makedirs(folder_path, exist_ok=True)
-
-            source_info = SCRAPE_MAPPING[key]
-            web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
-
-            start_date = first_day_of_month(SCRAPER_START_DATE)
-            end_date = SCRAPER_END_DATE
-            month_list = month_ranges(start_date, end_date)
-
-            for first_day, last_day in month_list:
-                file_path = (
-                    f"{folder_path}/{file_name}_"
-                    f"{first_day:%Y-%m-%d}_{last_day:%Y-%m-%d}.csv"
-                )
-
-                if os.path.isfile(file_path):
-                    self._logger.log_debug(f"File exists: {file_path}, skip.")
-                    continue
-
+            for first_day, last_day, file_path in missing_jobs:
                 self._logger.log_info(
-                    f"Scraping {first_day:%Y-%m-%d} → {last_day:%Y-%m-%d}"
+                    f"Scraping {format_key_for_name(key)}: {first_day:%Y-%m-%d} → {last_day:%Y-%m-%d}"
                 )
 
                 self._input_text(
@@ -3137,7 +3147,6 @@ class WebScraper:
                 ActionChains(web_driver).send_keys(Keys.ESCAPE).perform()
 
                 self._click_element(web_driver, find_button_xpath)
-
                 self._wait_loading_done(web_driver)
 
                 all_data = []
@@ -3176,9 +3185,10 @@ class WebScraper:
 
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
-    def _scrape_data_stock_market_price(self, key):
+    def _scrape_data_stock_market_price(self, key, url: str):
         self._scrape_stock_data(
             key=key,
+            url=url,
             column_names=[
                 "code",
                 "date",
@@ -3197,9 +3207,10 @@ class WebScraper:
             next_page_xpath='//*[@id="divStart"]/div/div[3]/div[3]',
         )
 
-    def _scrape_data_stock_market_order(self, key):
+    def _scrape_data_stock_market_order(self, key, url: str):
         self._scrape_stock_data(
             key=key,
+            url=url,
             column_names=[
                 "code",
                 "date",
@@ -3282,8 +3293,10 @@ class WebScraper:
 
                 all_data = []
 
-                if self._is_no_result(web_driver):
-                    self._logger.log_info(f"No data found on {end_date:%Y-%m-%d}. Step back a day.")
+                if is_weekend(end_date) or self._is_no_result(web_driver):
+                    self._logger.log_info(
+                        f"No data found on {end_date:%Y-%m-%d}. Step back a day."
+                    )
                     end_date -= timedelta(days=1)
                     continue
 
@@ -3315,6 +3328,71 @@ class WebScraper:
             web_driver.close()
 
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
+
+    def _add_tasks_for_stock_market_price_order(
+        self,
+        _result,
+        stock_market_name: str,
+        scrape_type: Literal["PRICE", "ORDER"],
+    ):
+        # Normalize input
+        scrape_type = scrape_type.upper()
+
+        if scrape_type not in {"PRICE", "ORDER"}:
+            self._logger.log_warning(
+                f"Invalid scrape_type: {scrape_type}. Must be PRICE or ORDER."
+            )
+            return
+
+        # Find stock list file
+        folder_path = (
+            f"{SCRAPER_BRONZE_DATA_DIR}/enterprise/stock_list_{stock_market_name}"
+        )
+        if not os.path.exists(folder_path):
+            self._logger.log_warning(
+                f"Folder does not exist: {folder_path}. Skip stock market {stock_market_name}."
+            )
+            return
+
+        file_path = get_newest_file_path(folder_path, extension=FileExtension.CSV)
+
+        if file_path is None:
+            self._logger.log_warning(
+                f"File does not exist: {file_path}. Skip stock market {stock_market_name}."
+            )
+            return
+
+        # Read stock list file
+        df = pd.read_csv(file_path)
+        df["code"] = df["code"].str.lower()
+        stock_list = df["code"].tolist()
+
+        # Add tasks for each stock
+        for stock in stock_list:
+
+            if scrape_type in {"PRICE"}:
+                price_key = (ScrapeMainType.ENTERPRISE, f"{stock}_price")
+                price_url = f"https://cafef.vn/du-lieu/lich-su-giao-dich/{stock_market_name}/{stock}-1.chn"
+                self._thread_manager.add_task(
+                    Task(
+                        format_key_for_name(price_key),
+                        self._scrape_data_stock_market_price,
+                        key=price_key,
+                        url=price_url,
+                    )
+                )
+
+            if scrape_type in {"ORDER"}:
+                order_key = (ScrapeMainType.ENTERPRISE, f"{stock}_order")
+                order_url = f"https://cafef.vn/du-lieu/lich-su-giao-dich/{stock_market_name}/{stock}-2.chn"
+                self._thread_manager.add_task(
+                    Task(
+                        format_key_for_name(order_key),
+                        self._scrape_data_stock_market_order,
+                        key=order_key,
+                        url=order_url,
+                    )
+                )
 
     def _scrape_data_enterprise_daily_price_cafef(
         self, key: Tuple[ScrapeMainType, ScrapeSubType]
@@ -3904,73 +3982,97 @@ class WebScraper:
                 ScrapeMainType.STOCK_MARKET,
                 StockMarketSubType.VN_INDEX_PRICE,
             ):
-                return self._scrape_data_stock_market_price(key)
+                return self._scrape_data_stock_market_price(
+                    key, SCRAPE_MAPPING[key].url
+                )
 
             case (
                 ScrapeMainType.STOCK_MARKET,
                 StockMarketSubType.VN_INDEX_ORDER,
             ):
-                return self._scrape_data_stock_market_order(key)
+                return self._scrape_data_stock_market_order(
+                    key, SCRAPE_MAPPING[key].url
+                )
 
             case (
                 ScrapeMainType.STOCK_MARKET,
                 StockMarketSubType.VN_30_INDEX_PRICE,
             ):
-                return self._scrape_data_stock_market_price(key)
+                return self._scrape_data_stock_market_price(
+                    key, SCRAPE_MAPPING[key].url
+                )
 
             case (
                 ScrapeMainType.STOCK_MARKET,
                 StockMarketSubType.VN_30_INDEX_ORDER,
             ):
-                return self._scrape_data_stock_market_order(key)
+                return self._scrape_data_stock_market_order(
+                    key, SCRAPE_MAPPING[key].url
+                )
 
             case (
                 ScrapeMainType.STOCK_MARKET,
                 StockMarketSubType.VN_100_INDEX_PRICE,
             ):
-                return self._scrape_data_stock_market_price(key)
+                return self._scrape_data_stock_market_price(
+                    key, SCRAPE_MAPPING[key].url
+                )
 
             case (
                 ScrapeMainType.STOCK_MARKET,
                 StockMarketSubType.VN_100_INDEX_ORDER,
             ):
-                return self._scrape_data_stock_market_order(key)
+                return self._scrape_data_stock_market_order(
+                    key, SCRAPE_MAPPING[key].url
+                )
 
             case (
                 ScrapeMainType.STOCK_MARKET,
                 StockMarketSubType.HNX_INDEX_PRICE,
             ):
-                return self._scrape_data_stock_market_price(key)
+                return self._scrape_data_stock_market_price(
+                    key, SCRAPE_MAPPING[key].url
+                )
 
             case (
                 ScrapeMainType.STOCK_MARKET,
                 StockMarketSubType.HNX_INDEX_ORDER,
             ):
-                return self._scrape_data_stock_market_order(key)
+                return self._scrape_data_stock_market_order(
+                    key, SCRAPE_MAPPING[key].url
+                )
 
             case (
                 ScrapeMainType.STOCK_MARKET,
                 StockMarketSubType.HNX_30_INDEX_PRICE,
             ):
-                return self._scrape_data_stock_market_price(key)
+                return self._scrape_data_stock_market_price(
+                    key, SCRAPE_MAPPING[key].url
+                )
 
             case (
                 ScrapeMainType.STOCK_MARKET,
                 StockMarketSubType.HNX_30_INDEX_ORDER,
             ):
-                return self._scrape_data_stock_market_order(key)
+                return self._scrape_data_stock_market_order(
+                    key, SCRAPE_MAPPING[key].url
+                )
 
             case (
                 ScrapeMainType.STOCK_MARKET,
                 StockMarketSubType.UPCOM_INDEX_PRICE,
             ):
-                return self._scrape_data_stock_market_price(key)
+                return self._scrape_data_stock_market_price(
+                    key, SCRAPE_MAPPING[key].url
+                )
 
             case (
                 ScrapeMainType.STOCK_MARKET,
                 StockMarketSubType.UPCOM_INDEX_ORDER,
             ):
-                return self._scrape_data_stock_market_order(key)
+                return self._scrape_data_stock_market_order(
+                    key, SCRAPE_MAPPING[key].url
+                )
 
             # endregion STOCK_MARKET
 
@@ -4449,33 +4551,126 @@ class WebScraper:
         number_of_task_before = self._thread_manager.get_current_number_of_task()
 
         # STOCK_LIST_HOSE
-        if self._switch_handler.is_enabled("web_scraper", "enterprise", "stock_list_hose"):
+        if self._switch_handler.is_enabled(
+            "web_scraper", "enterprise", "stock_list_hose"
+        ):
             key = (
                 ScrapeMainType.ENTERPRISE,
                 EnterpriseSubType.STOCK_LIST_HOSE,
             )
+
+            callbacks = []
+            if self._switch_handler.is_enabled(
+                "web_scraper", "enterprise", "stock_list_hose", "stock_price_hose"
+            ):
+                callbacks.append(
+                    (
+                        self._add_tasks_for_stock_market_price_order,
+                        (),
+                        {"stock_market_name": "hose", "scrape_type": "PRICE"},
+                    )
+                )
+
+            if self._switch_handler.is_enabled(
+                "web_scraper", "enterprise", "stock_list_hose", "stock_order_hose"
+            ):
+                callbacks.append(
+                    (
+                        self._add_tasks_for_stock_market_price_order,
+                        (),
+                        {"stock_market_name": "hose", "scrape_type": "ORDER"},
+                    )
+                )
+
             self._thread_manager.add_task(
-                Task(format_key_for_name(key), self._scrape_data_from, key)
+                Task(
+                    format_key_for_name(key),
+                    self._scrape_data_from,
+                    key,
+                    callbacks=callbacks,
+                )
             )
 
         # STOCK_LIST_HNX
-        if self._switch_handler.is_enabled("web_scraper", "enterprise", "stock_list_hnx"):
+        if self._switch_handler.is_enabled(
+            "web_scraper", "enterprise", "stock_list_hnx"
+        ):
             key = (
                 ScrapeMainType.ENTERPRISE,
                 EnterpriseSubType.STOCK_LIST_HNX,
             )
+
+            callbacks = []
+            if self._switch_handler.is_enabled(
+                "web_scraper", "enterprise", "stock_list_hnx", "stock_price_hnx"
+            ):
+                callbacks.append(
+                    (
+                        self._add_tasks_for_stock_market_price_order,
+                        (),
+                        {"stock_market_name": "hnx", "scrape_type": "PRICE"},
+                    )
+                )
+
+            if self._switch_handler.is_enabled(
+                "web_scraper", "enterprise", "stock_list_hnx", "stock_order_hnx"
+            ):
+                callbacks.append(
+                    (
+                        self._add_tasks_for_stock_market_price_order,
+                        (),
+                        {"stock_market_name": "hnx", "scrape_type": "ORDER"},
+                    )
+                )
+
             self._thread_manager.add_task(
-                Task(format_key_for_name(key), self._scrape_data_from, key)
+                Task(
+                    format_key_for_name(key),
+                    self._scrape_data_from,
+                    key,
+                    callbacks=callbacks,
+                )
             )
 
         # STOCK_LIST_UPCOM
-        if self._switch_handler.is_enabled("web_scraper", "enterprise", "stock_list_upcom"):
+        if self._switch_handler.is_enabled(
+            "web_scraper", "enterprise", "stock_list_upcom"
+        ):
             key = (
                 ScrapeMainType.ENTERPRISE,
                 EnterpriseSubType.STOCK_LIST_UPCOM,
             )
+
+            callbacks = []
+            if self._switch_handler.is_enabled(
+                "web_scraper", "enterprise", "stock_list_upcom", "stock_price_upcom"
+            ):
+                callbacks.append(
+                    (
+                        self._add_tasks_for_stock_market_price_order,
+                        (),
+                        {"stock_market_name": "upcom", "scrape_type": "PRICE"},
+                    )
+                )
+
+            if self._switch_handler.is_enabled(
+                "web_scraper", "enterprise", "stock_list_upcom", "stock_order_upcom"
+            ):
+                callbacks.append(
+                    (
+                        self._add_tasks_for_stock_market_price_order,
+                        (),
+                        {"stock_market_name": "upcom", "scrape_type": "ORDER"},
+                    )
+                )
+
             self._thread_manager.add_task(
-                Task(format_key_for_name(key), self._scrape_data_from, key)
+                Task(
+                    format_key_for_name(key),
+                    self._scrape_data_from,
+                    key,
+                    callbacks=callbacks,
+                )
             )
 
         number_of_task_after = self._thread_manager.get_current_number_of_task()

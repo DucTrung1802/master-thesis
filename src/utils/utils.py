@@ -6,7 +6,7 @@ import shutil
 import zipfile
 import numpy as np
 import requests
-from typing import Tuple, List, Optional
+from typing import Tuple, List, Optional, Union
 import pandas as pd
 from pathlib import Path
 import matplotlib.pyplot as plt
@@ -224,8 +224,10 @@ def download_file(download_url, file_path, logger):
         return
 
 
-def format_key_for_name(key: Tuple[ScrapeMainType, ScrapeSubType]):
-    return "_".join(k.name.lower() for k in key)
+def format_key_for_name(key):
+    return "_".join(
+        k.name.lower() if isinstance(k, Enum) else str(k).lower() for k in key
+    )
 
 
 def format_key_for_table(key: Tuple[ScrapeMainType, ScrapeSubType]):
@@ -758,3 +760,25 @@ def month_ranges(
         current = next_month
 
     return ranges
+
+
+def get_value(x):
+    return x.value if isinstance(x, Enum) else x
+
+
+def is_weekend(date_input: Union[datetime, str]) -> bool:
+    """
+    Check whether a given date is a weekend (Saturday or Sunday).
+
+    Args:
+        date_input: A datetime object or an ISO format string (YYYY-MM-DD).
+
+    Returns:
+        True if the date is Saturday or Sunday, otherwise False.
+    """
+    # Convert string input to datetime if needed
+    if isinstance(date_input, str):
+        date_input = datetime.fromisoformat(date_input)
+
+    # weekday(): Monday=0 ... Sunday=6
+    return date_input.weekday() >= 5
