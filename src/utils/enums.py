@@ -2171,6 +2171,7 @@ class Table:
             OPEN = "open"
             HIGH = "high"
             LOW = "low"
+            PERCENT_CHANGE = "percent_change"
 
         primary_key = [Column.CODE.value, Column.DATE.value]
 
@@ -2186,6 +2187,7 @@ class Table:
             SELL_VOLUME = "sell_volume"
             AVERAGE_VOLUME_PER_SELL_ORDER = "average_volume_per_sell_order"
             NET_VOLUME = "net_volume"
+            PERCENT_CHANGE = "percent_change"
 
         primary_key = [Column.CODE.value, Column.DATE.value]
 

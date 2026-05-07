@@ -3287,6 +3287,7 @@ class DataPreprocessor:
                     Column(name=Table.B_STOCK_MARKET_PRICE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
                     Column(name=Table.B_STOCK_MARKET_PRICE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
                     Column(name=Table.B_STOCK_MARKET_PRICE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                    Column(name=Table.B_STOCK_MARKET_PRICE.Column.PERCENT_CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
                 ]
 
                 for table_name in stock_market_price_table_list:
@@ -3313,6 +3314,7 @@ class DataPreprocessor:
                         Column(name=Table.B_STOCK_MARKET_ORDER.Column.SELL_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
                         Column(name=Table.B_STOCK_MARKET_ORDER.Column.AVERAGE_VOLUME_PER_SELL_ORDER.value, data_type=DataType.DECIMAL(), nullable=True),
                         Column(name=Table.B_STOCK_MARKET_ORDER.Column.NET_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(name=Table.B_STOCK_MARKET_ORDER.Column.PERCENT_CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
                     ]
 
                 for table_name in stock_market_order_table_list:
@@ -9183,151 +9185,195 @@ class DataPreprocessor:
     # endregion STOCK MARKET.MARKET
 
     # region STOCK_MARKET.VN_INDEX
-    def _ingest_stock_market_vn_index_price(self) -> None:
-        key = (
-            ScrapeMainType.STOCK_MARKET,
-            StockMarketSubType.VN_INDEX_PRICE,
-        )
+    def _ingest_stock_market_index_price(self) -> None:
+        stock_market_price_sub_type_list = [item for item in StockMarketSubType if "price" in item.value.lower()]
 
-        folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}"
+        for stock_market_price_sub_type in stock_market_price_sub_type_list:
 
-        file_path = get_newest_file_path(
-            folder_path=folder_path, extension=FileExtension.CSV
-        )
-
-        if not file_path:
-            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
-            return
-
-        self._logger.log_info(f'Start ingesting data in "{file_path}".')
-
-        # Add logic for processing data here
-        df = pd.read_csv(file_path, encoding="utf-8")
-
-        vn_index_df = df.drop(columns=["code"])
-
-        # Extract percentage
-        vn_index_df["percent_change"] = (
-            vn_index_df["change"]
-            .str.extract(r"\(([+-]?\d+\.\d+)%\)", expand=False)
-            .astype(float)
-        )
-
-        vn_index_df["change"] = (
-            vn_index_df["change"]
-            .str.extract(r"([+-]?\d+\.\d+)", expand=False)
-            .astype(float)
-        )
-
-        vn_index_df["date"] = pd.to_datetime(vn_index_df["date"], format="%d/%m/%Y")
-        vn_index_df = vn_index_df.sort_values(by="date").reset_index(drop=True)
-
-        # DATE
-        vn_index_df["date"] = pd.to_datetime(vn_index_df["date"]).dt.date
-
-        # DECIMAL columns
-        decimal_cols = [
-            "adjust",
-            "close",
-            "change",
-            "percent_change",
-            "matching_value",
-            "negotiate_value",
-            "open",
-            "high",
-            "low",
-        ]
-
-        for col in decimal_cols:
-            vn_index_df[col] = (
-                vn_index_df[col]
-                .astype(str)
-                .str.replace(",", "", regex=False)
-                .pipe(pd.to_numeric, errors="raise")
-                .astype("Float64")
+            key = (
+                ScrapeMainType.STOCK_MARKET,
+                stock_market_price_sub_type,
             )
 
-        # BIGINT columns
-        bigint_cols = [
-            "matching_volume",
-            "negotiate_volume",
-        ]
+            folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}"
 
-        for col in bigint_cols:
-            vn_index_df[col] = (
-                vn_index_df[col]
-                .astype(str)
-                .str.replace(",", "", regex=False)
-                .pipe(pd.to_numeric, errors="raise")
-                .astype("Int64")
+            file_paths = get_all_file_names_with_extensions(
+                logger=self._logger,
+                folder_path=folder_path,
+                extensions=[FileExtension.CSV],
             )
 
-        self._save_pandas_table_to_database(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.B_STOCK_MARKET_PRICE.name,
-            primary_keys=Table.B_STOCK_MARKET_PRICE.primary_key,
-            df=vn_index_df,
-        )
+            if not file_paths:
+                self._logger.log_error(f'Data in "{folder_path}" does not exist.')
+                return
 
-        self._logger.log_info(f'Finish ingesting data in "{file_path}".')
+            self._logger.log_info(f'Start ingesting {len(file_paths)} file(s) in "{folder_path}".')
 
-    def _ingest_stock_market_vn_index_order(self) -> None:
-        key = (
-            ScrapeMainType.STOCK_MARKET,
-            StockMarketSubType.VN_INDEX_ORDER,
-        )
+            # Read and concatenate all CSV files
+            df = pd.concat(
+                [pd.read_csv(fp, encoding="utf-8") for fp in file_paths],
+                ignore_index=True,
+            ).drop_duplicates()
 
-        folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}"
-
-        file_path = get_newest_file_path(
-            folder_path=folder_path, extension=FileExtension.CSV
-        )
-
-        if not file_path:
-            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
-            return
-
-        self._logger.log_info(f'Start ingesting data in "{file_path}".')
-
-        # Add logic for processing data here
-        df = pd.read_csv(file_path, encoding="utf-8")
-        rename_map = {
-            "Mã": "code",
-            "Ngày": "date",
-            "Thay đổi": "close_change",
-            "Số lệnh mua": "number_of_buy_orders",
-            "Khối lượng mua": "buy_volume",
-            "KLTB/lệnh mua": "average_volume_per_buy_order",
-            "Số lệnh bán": "number_of_sell_orders",
-            "Khối lượng bán": "sell_volume",
-            "KLTB/lệnh bán": "average_volume_per_sell_order",
-            "Khối lượng ròng": "net_volume",
-        }
-        vn_index_df = df.rename(columns=rename_map)
-        vn_index_df = vn_index_df.drop(columns=["code"])
-        vn_index_df["close"] = (
-            vn_index_df["close_change"].str.extract(r"([\d\.]+)").astype("Float64")
-        )
-
-        for col in [
-            "net_volume",
-        ]:
-            vn_index_df[col] = (
-                vn_index_df[col].str.replace(".", "", regex=False).astype("Int64")
+            # Extract percentage
+            df["percent_change"] = (
+                df["change"]
+                .str.extract(r"\(([+-]?\d+\.\d+)%\)", expand=False)
+                .astype(float)
             )
 
-        vn_index_df.drop(columns=["close_change"], inplace=True)
-        vn_index_df["date"] = pd.to_datetime(vn_index_df["date"], format="%d/%m/%Y")
-        vn_index_df = vn_index_df.sort_values(by="date").reset_index(drop=True)
+            df["change"] = (
+                df["change"].str.extract(r"([+-]?\d+\.\d+)", expand=False).astype(float)
+            )
 
-        self._save_pandas_table_to_database(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.B_VN_INDEX_ORDER.name,
-            primary_keys=Table.B_VN_INDEX_ORDER.primary_key,
-            df=vn_index_df,
-        )
+            df["date"] = pd.to_datetime(df["date"], format="%d/%m/%Y")
+            df = df.sort_values(by="date").reset_index(drop=True)
 
-        self._logger.log_info(f'Finish ingesting data in "{file_path}".')
+            # DATE
+            df["date"] = pd.to_datetime(df["date"]).dt.date
+
+            # DECIMAL columns
+            decimal_cols = [
+                "adjust",
+                "close",
+                "change",
+                "percent_change",
+                "matching_value",
+                "negotiate_value",
+                "open",
+                "high",
+                "low",
+            ]
+
+            for col in decimal_cols:
+                df[col] = (
+                    df[col]
+                    .astype(str)
+                    .str.replace(",", "", regex=False)
+                    .pipe(pd.to_numeric, errors="raise")
+                    .astype("Float64")
+                )
+
+            # BIGINT columns
+            bigint_cols = [
+                "matching_volume",
+                "negotiate_volume",
+            ]
+
+            for col in bigint_cols:
+                df[col] = (
+                    df[col]
+                    .astype(str)
+                    .str.replace(",", "", regex=False)
+                    .pipe(pd.to_numeric, errors="raise")
+                    .astype("Int64")
+                )
+
+            self._save_pandas_table_to_database(
+                schema_name=Schema.STOCK_MARKET.value,
+                table_name=stock_market_price_sub_type.value.lower(),
+                primary_keys=Table.B_STOCK_MARKET_PRICE.primary_key,
+                df=df,
+            )
+
+            self._logger.log_info(f'Finish ingesting {len(file_paths)} file(s) in "{folder_path}".')
+
+    def _ingest_stock_market_index_order(self) -> None:
+        stock_market_order_sub_type_list = [item for item in StockMarketSubType if "order" in item.value.lower()]
+
+        for stock_market_order_sub_type in stock_market_order_sub_type_list:
+
+            key = (
+                ScrapeMainType.STOCK_MARKET,
+                stock_market_order_sub_type,
+            )
+
+            folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}"
+
+            file_paths = get_all_file_names_with_extensions(
+                logger=self._logger,
+                folder_path=folder_path,
+                extensions=[FileExtension.CSV],
+            )
+
+            if not file_paths:
+                self._logger.log_error(f'Data in "{folder_path}" does not exist.')
+                continue
+
+            self._logger.log_info(f'Start ingesting {len(file_paths)} file(s) in "{folder_path}".')
+
+            # Read and concatenate all CSV files
+            df = pd.concat(
+                [pd.read_csv(fp, encoding="utf-8") for fp in file_paths],
+                ignore_index=True,
+            ).drop_duplicates()
+
+            # Mirror price version: extract percent_change identically
+            # "1.829.04 (+0.77%)" → 0.77
+            df["percent_change"] = (
+                df["change"]
+                .str.extract(r"\(([+-]?\d+\.\d+)%\)", expand=False)
+                .astype(float)
+            )
+
+            # Unlike price version, close uses Vietnamese dot-as-thousands format
+            # "1.829.04" → ["1", "829", "04"] → "1829.04" → 1829.04
+            df["change"] = (
+                df["change"]
+                .str.extract(r"^([\d.]+)", expand=False)
+                .apply(lambda x: ".".join(["".join(x.split(".")[:-1]), x.split(".")[-1]]))
+                .astype(float)
+            )
+
+            df["date"] = pd.to_datetime(df["date"], format="%d/%m/%Y")
+            df = df.sort_values(by="date").reset_index(drop=True)
+
+            # DATE
+            df["date"] = pd.to_datetime(df["date"]).dt.date
+
+            # DECIMAL columns
+            decimal_cols = [
+                "change",
+                "percent_change",
+            ]
+
+            for col in decimal_cols:
+                df[col] = (
+                    df[col]
+                    .astype(str)
+                    .str.replace(",", "", regex=False)
+                    .pipe(pd.to_numeric, errors="raise")
+                    .astype("Float64")
+                )
+
+            # BIGINT columns
+            bigint_cols = [
+                "number_of_buy_orders",
+                "buy_volume",
+                "average_volume_per_buy_order",
+                "number_of_sell_orders",
+                "sell_volume",
+                "average_volume_per_sell_order",
+                "net_volume",
+            ]
+
+            for col in bigint_cols:
+                df[col] = (
+                    df[col]
+                    .astype(str)
+                    .str.replace(",", "", regex=False)
+                    .pipe(pd.to_numeric, errors="raise")
+                    .astype("Int64")
+                )
+
+            self._save_pandas_table_to_database(
+                schema_name=Schema.STOCK_MARKET.value,
+                table_name=stock_market_order_sub_type.value.lower(),
+                primary_keys=Table.B_STOCK_MARKET_ORDER.primary_key,
+                df=df,
+            )
+
+            self._logger.log_info(f'Finish ingesting {len(file_paths)} file(s) in "{folder_path}".')
 
     def _clean_stock_market_vn_index(self) -> None:
         key = (
@@ -9422,15 +9468,15 @@ class DataPreprocessor:
             f'Finish transforming data in table "{format_key_for_table(key)}".'
         )
 
-    def _process_stock_market_vn_index(self, data_quality: DataQuality) -> None:
+    def _process_stock_market_index(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing stock market VN_INDEX data for "{data_quality.value}".'
         )
 
         match data_quality:
             case DataQuality.BRONZE:
-                # self._ingest_stock_market_vn_index_price()
-                self._ingest_stock_market_vn_index_order()
+                self._ingest_stock_market_index_price()
+                self._ingest_stock_market_index_order()
 
             case DataQuality.SILVER:
                 self._clean_stock_market_vn_index()
@@ -9446,835 +9492,6 @@ class DataPreprocessor:
         )
 
     # endregion STOCK_MARKET.VN_INDEX
-
-    # region STOCK_MARKET.HNX_INDEX
-    def _process_stock_market_hnx_index_cafef(self) -> None:
-        key = (
-            ScrapeMainType.STOCK_MARKET,
-            StockMarketSubType.VN_HNX_INDEX,
-            VnHnxIndexSource.CAFEF,
-        )
-
-        folder_path = (
-            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
-
-        file_path = get_newest_file_path(
-            folder_path=folder_path, extension=FileExtension.CSV
-        )
-
-        if not file_path:
-            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
-            return
-
-        self._logger.log_info(f'Start ingesting data in "{file_path}".')
-
-        # Add logic for processing data here
-        df = pd.read_csv(file_path, encoding="utf-8")
-        hnx_index_df = df[df["<Ticker>"] == "HNX-INDEX"]
-        rename_map = {
-            "<Ticker>": "ticker",
-            "<DTYYYYMMDD>": "date",
-            "<Open>": "open",
-            "<High>": "high",
-            "<Low>": "low",
-            "<Close>": "close",
-            "<Volume>": "volume",
-        }
-        hnx_index_df = hnx_index_df.rename(columns=rename_map)
-        hnx_index_df.drop(columns=["ticker"], inplace=True)
-        hnx_index_df["date"] = pd.to_datetime(hnx_index_df["date"], format="%Y%m%d")
-        hnx_index_df = hnx_index_df.sort_values(by="date").reset_index(drop=True)
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.HNX_INDEX.name,
-            primary_keys=Table.HNX_INDEX.primary_key,
-            df=hnx_index_df,
-        )
-
-        self._logger.log_info(f'Finish ingesting data in "{file_path}".')
-
-    def _clean_stock_market_hnx_index_cafef(self) -> None:
-        key = (
-            ScrapeMainType.STOCK_MARKET,
-            StockMarketSubType.VN_HNX_INDEX,
-            VnHnxIndexSource.CAFEF,
-        )
-
-        self._logger.log_info(
-            f'Start cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for cleaning data here
-        self._select_database(DataQuality.BRONZE.value)
-
-        bronze_df = self._select(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.HNX_INDEX.name,
-        )
-
-        silver_df = self._clean(
-            df=bronze_df,
-            clean_layer_list=[CleanLayer.ORDER_BY([Table.HNX_INDEX.Column.DATE.value])],
-        )
-
-        self._select_database(DataQuality.SILVER.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.HNX_INDEX.name,
-            primary_keys=Table.HNX_INDEX.primary_key,
-            df=silver_df,
-        )
-
-        self._logger.log_info(
-            f'Finish cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-    def _transform_stock_market_hnx_index_cafef(self) -> None:
-        key = (
-            ScrapeMainType.STOCK_MARKET,
-            StockMarketSubType.VN_HNX_INDEX,
-            VnHnxIndexSource.CAFEF,
-        )
-
-        self._logger.log_info(
-            f'Start transforming data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for transforming data here
-        self._select_database(DataQuality.SILVER.value)
-        silver_df = self._select(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.HNX_INDEX.name,
-        )
-
-        gold_df = make_date_time_index_for_dataframe(df=silver_df)
-        gold_df = standardize_time_frame(df=gold_df)
-
-        cols_to_interpolate = gold_df.columns.difference(["date"])
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
-            pd.to_numeric, errors="coerce"
-        )
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
-            method="linear"
-        )
-
-        self._select_database(DataQuality.GOLD.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.HNX_INDEX.name,
-            primary_keys=Table.HNX_INDEX.primary_key,
-            df=gold_df,
-        )
-
-        self._logger.log_info(
-            f'Finish transforming data in table "{format_key_for_table(key)}".'
-        )
-
-    def _process_stock_market_hnx_index(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(
-            f'Start processing stock market HNX_INDEX data for "{data_quality.value}".'
-        )
-
-        match data_quality:
-            case DataQuality.BRONZE:
-                self._process_stock_market_hnx_index_cafef()
-
-            case DataQuality.SILVER:
-                self._clean_stock_market_hnx_index_cafef()
-
-            case DataQuality.GOLD:
-                self._transform_stock_market_hnx_index_cafef()
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
-
-        self._logger.log_info(
-            f'Finish processing stock market HNX_INDEX data for "{data_quality.value}".'
-        )
-
-    # endregion STOCK_MARKET.HNX_INDEX
-
-    # region STOCK_MARKET.VN_30_INDEX
-    def _process_stock_market_vn_30_index_cafef(self) -> None:
-        key = (
-            ScrapeMainType.STOCK_MARKET,
-            StockMarketSubType.VN_30_INDEX,
-            Vn30IndexSource.CAFEF,
-        )
-
-        folder_path = (
-            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
-
-        file_path = get_newest_file_path(
-            folder_path=folder_path, extension=FileExtension.CSV
-        )
-
-        if not file_path:
-            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
-            return
-
-        self._logger.log_info(f'Start ingesting data in "{file_path}".')
-
-        # Add logic for processing data here
-        df = pd.read_csv(file_path, encoding="utf-8")
-
-        df["date"] = pd.to_datetime(df["date"], format="%d/%m/%Y")
-
-        df["adjusted_close"] = df["adjusted_close"].str.replace(",", "", regex=False)
-        df["adjusted_close"] = pd.to_numeric(df["adjusted_close"], errors="coerce")
-
-        df[["change_value", "change_percentage"]] = df["change"].str.extract(
-            r"([-\d.]+)\s*\(([-\d.]+)\s*%\)"
-        )
-        df["change_value"] = df["change_value"].astype(float)
-        df["change_percentage"] = df["change_percentage"].astype(float)
-
-        df = df.drop(columns=["change"])
-
-        df["matched_volume"] = (
-            df["matched_volume"].str.replace(",", "", regex=False).astype(int)
-        )
-        df["matched_value"] = (
-            df["matched_value"].str.replace(",", "", regex=False).astype(float)
-        )
-        df["negotiated_volume"] = (
-            df["negotiated_volume"].str.replace(",", "", regex=False).astype(int)
-        )
-        df["negotiated_value"] = (
-            df["negotiated_value"].str.replace(",", "", regex=False).astype(float)
-        )
-        df["open"] = df["open"].str.replace(",", "", regex=False).astype(float)
-        df["high"] = df["high"].str.replace(",", "", regex=False).astype(float)
-        df["low"] = df["low"].str.replace(",", "", regex=False).astype(float)
-        df = df.sort_values(by="date", ascending=True, ignore_index=True)
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.VN_30_INDEX.name,
-            primary_keys=Table.VN_30_INDEX.primary_key,
-            df=df,
-        )
-
-        self._logger.log_info(f'Finish ingesting data in "{file_path}".')
-
-    def _clean_stock_market_vn_30_index_cafef(self) -> None:
-        key = (
-            ScrapeMainType.STOCK_MARKET,
-            StockMarketSubType.VN_30_INDEX,
-            Vn30IndexSource.CAFEF,
-        )
-
-        self._logger.log_info(
-            f'Start cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for cleaning data here
-        self._select_database(DataQuality.BRONZE.value)
-
-        bronze_df = self._select(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.VN_30_INDEX.name,
-        )
-
-        silver_df = self._clean(
-            df=bronze_df,
-            clean_layer_list=[
-                CleanLayer.ORDER_BY([Table.VN_30_INDEX.Column.DATE.value])
-            ],
-        )
-
-        self._select_database(DataQuality.SILVER.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.VN_30_INDEX.name,
-            primary_keys=Table.VN_30_INDEX.primary_key,
-            df=silver_df,
-        )
-
-        self._logger.log_info(
-            f'Finish cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-    def _transform_stock_market_vn_30_index_cafef(self) -> None:
-        key = (
-            ScrapeMainType.STOCK_MARKET,
-            StockMarketSubType.VN_30_INDEX,
-            Vn30IndexSource.CAFEF,
-        )
-
-        self._logger.log_info(
-            f'Start transforming data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for transforming data here
-        self._select_database(DataQuality.SILVER.value)
-        silver_df = self._select(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.VN_30_INDEX.name,
-        )
-
-        gold_df = make_date_time_index_for_dataframe(df=silver_df)
-        gold_df = standardize_time_frame(df=gold_df)
-
-        cols_to_interpolate = gold_df.columns.difference(["date"])
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
-            pd.to_numeric, errors="coerce"
-        )
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
-            method="linear"
-        )
-
-        self._select_database(DataQuality.GOLD.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.VN_30_INDEX.name,
-            primary_keys=Table.VN_30_INDEX.primary_key,
-            df=gold_df,
-        )
-
-        self._logger.log_info(
-            f'Finish transforming data in table "{format_key_for_table(key)}".'
-        )
-
-    def _process_stock_market_vn_30_index(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(
-            f'Start processing stock market VN_30_INDEX data for "{data_quality.value}".'
-        )
-
-        match data_quality:
-            case DataQuality.BRONZE:
-                self._process_stock_market_vn_30_index_cafef()
-
-            case DataQuality.SILVER:
-                self._clean_stock_market_vn_30_index_cafef()
-
-            case DataQuality.GOLD:
-                self._transform_stock_market_vn_30_index_cafef()
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
-
-        self._logger.log_info(
-            f'Finish processing stock market VN_30_INDEX data for "{data_quality.value}".'
-        )
-
-    # endregion STOCK_MARKET.VN_30_INDEX
-
-    # region STOCK_MARKET.VN_100_INDEX
-    def _process_stock_market_vn_100_index_cafef(self) -> None:
-        key = (
-            ScrapeMainType.STOCK_MARKET,
-            StockMarketSubType.VN_100_INDEX,
-            Vn100IndexSource.CAFEF,
-        )
-
-        folder_path = (
-            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
-
-        file_path = get_newest_file_path(
-            folder_path=folder_path, extension=FileExtension.CSV
-        )
-
-        if not file_path:
-            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
-            return
-
-        self._logger.log_info(f'Start ingesting data in "{file_path}".')
-
-        # Add logic for processing data here
-        df = pd.read_csv(file_path, encoding="utf-8")
-
-        df["date"] = pd.to_datetime(df["date"], format="%d/%m/%Y")
-
-        df["adjusted_close"] = df["adjusted_close"].str.replace(",", "", regex=False)
-        df["adjusted_close"] = pd.to_numeric(df["adjusted_close"], errors="coerce")
-
-        df[["change_value", "change_percentage"]] = df["change"].str.extract(
-            r"([-\d.]+)\s*\(([-\d.]+)\s*%\)"
-        )
-        df["change_value"] = df["change_value"].astype(float)
-        df["change_percentage"] = df["change_percentage"].astype(float)
-
-        df = df.drop(columns=["change"])
-
-        df["matched_volume"] = (
-            df["matched_volume"].str.replace(",", "", regex=False).astype(int)
-        )
-        df["matched_value"] = (
-            df["matched_value"].str.replace(",", "", regex=False).astype(float)
-        )
-        df["negotiated_volume"] = (
-            df["negotiated_volume"].str.replace(",", "", regex=False).astype(int)
-        )
-        df["negotiated_value"] = (
-            df["negotiated_value"].str.replace(",", "", regex=False).astype(float)
-        )
-        df["open"] = df["open"].str.replace(",", "", regex=False).astype(float)
-        df["high"] = df["high"].str.replace(",", "", regex=False).astype(float)
-        df["low"] = df["low"].str.replace(",", "", regex=False).astype(float)
-        df = df.sort_values(by="date", ascending=True, ignore_index=True)
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.VN_100_INDEX.name,
-            primary_keys=Table.VN_100_INDEX.primary_key,
-            df=df,
-        )
-
-        self._logger.log_info(f'Finish ingesting data in "{file_path}".')
-
-    def _clean_stock_market_vn_100_index_cafef(self) -> None:
-        key = (
-            ScrapeMainType.STOCK_MARKET,
-            StockMarketSubType.VN_100_INDEX,
-            Vn100IndexSource.CAFEF,
-        )
-
-        self._logger.log_info(
-            f'Start cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for cleaning data here
-        self._select_database(DataQuality.BRONZE.value)
-
-        bronze_df = self._select(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.VN_100_INDEX.name,
-        )
-
-        silver_df = self._clean(
-            df=bronze_df,
-            clean_layer_list=[
-                CleanLayer.ORDER_BY([Table.VN_100_INDEX.Column.DATE.value])
-            ],
-        )
-
-        self._select_database(DataQuality.SILVER.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.VN_100_INDEX.name,
-            primary_keys=Table.VN_100_INDEX.primary_key,
-            df=silver_df,
-        )
-
-        self._logger.log_info(
-            f'Finish cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-    def _transform_stock_market_vn_100_index_cafef(self) -> None:
-        key = (
-            ScrapeMainType.STOCK_MARKET,
-            StockMarketSubType.VN_100_INDEX,
-            Vn100IndexSource.CAFEF,
-        )
-
-        self._logger.log_info(
-            f'Start transforming data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for transforming data here
-        self._select_database(DataQuality.SILVER.value)
-        silver_df = self._select(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.VN_100_INDEX.name,
-        )
-
-        gold_df = make_date_time_index_for_dataframe(df=silver_df)
-        gold_df = standardize_time_frame(df=gold_df)
-
-        cols_to_interpolate = gold_df.columns.difference(["date"])
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
-            pd.to_numeric, errors="coerce"
-        )
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
-            method="linear"
-        )
-
-        self._select_database(DataQuality.GOLD.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.VN_100_INDEX.name,
-            primary_keys=Table.VN_100_INDEX.primary_key,
-            df=gold_df,
-        )
-
-        self._logger.log_info(
-            f'Finish transforming data in table "{format_key_for_table(key)}".'
-        )
-
-    def _process_stock_market_vn_100_index(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(
-            f'Start processing stock market VN_100_INDEX data for "{data_quality.value}".'
-        )
-
-        match data_quality:
-            case DataQuality.BRONZE:
-                self._process_stock_market_vn_100_index_cafef()
-
-            case DataQuality.SILVER:
-                self._clean_stock_market_vn_100_index_cafef()
-
-            case DataQuality.GOLD:
-                self._transform_stock_market_vn_100_index_cafef()
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
-
-        self._logger.log_info(
-            f'Finish processing stock market VN_100_INDEX data for "{data_quality.value}".'
-        )
-
-    # endregion STOCK_MARKET.VN_100_INDEX
-
-    # region STOCK_MARKET.HNX_30_INDEX
-    def _process_stock_market_hnx_30_index_cafef(self) -> None:
-        key = (
-            ScrapeMainType.STOCK_MARKET,
-            StockMarketSubType.HNX_30_INDEX,
-            Hnx30IndexSource.CAFEF,
-        )
-
-        folder_path = (
-            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
-
-        file_path = get_newest_file_path(
-            folder_path=folder_path, extension=FileExtension.CSV
-        )
-
-        if not file_path:
-            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
-            return
-
-        self._logger.log_info(f'Start ingesting data in "{file_path}".')
-
-        # Add logic for processing data here
-        df = pd.read_csv(file_path, encoding="utf-8")
-
-        df["date"] = pd.to_datetime(df["date"], format="%d/%m/%Y")
-
-        df["adjusted_close"] = df["adjusted_close"].str.replace(",", "", regex=False)
-        df["adjusted_close"] = pd.to_numeric(df["adjusted_close"], errors="coerce")
-
-        df[["change_value", "change_percentage"]] = df["change"].str.extract(
-            r"([-\d.]+)\s*\(([-\d.]+)\s*%\)"
-        )
-        df["change_value"] = df["change_value"].astype(float)
-        df["change_percentage"] = df["change_percentage"].astype(float)
-
-        df = df.drop(columns=["change"])
-
-        df["matched_volume"] = (
-            df["matched_volume"].str.replace(",", "", regex=False).astype(int)
-        )
-        df["matched_value"] = (
-            df["matched_value"].str.replace(",", "", regex=False).astype(float)
-        )
-        df["negotiated_volume"] = (
-            df["negotiated_volume"].str.replace(",", "", regex=False).astype(int)
-        )
-        df["negotiated_value"] = (
-            df["negotiated_value"].str.replace(",", "", regex=False).astype(float)
-        )
-        df["open"] = (
-            df["open"].astype(str).str.replace(",", "", regex=False).astype(float)
-        )
-        df["high"] = (
-            df["high"].astype(str).str.replace(",", "", regex=False).astype(float)
-        )
-        df["low"] = (
-            df["low"].astype(str).str.replace(",", "", regex=False).astype(float)
-        )
-        df = df.sort_values(by="date", ascending=True, ignore_index=True)
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.HNX_30_INDEX.name,
-            primary_keys=Table.HNX_30_INDEX.primary_key,
-            df=df,
-        )
-
-        self._logger.log_info(f'Finish ingesting data in "{file_path}".')
-
-    def _clean_stock_market_hnx_30_index_cafef(self) -> None:
-        key = (
-            ScrapeMainType.STOCK_MARKET,
-            StockMarketSubType.HNX_30_INDEX,
-            Hnx30IndexSource.CAFEF,
-        )
-
-        self._logger.log_info(
-            f'Start cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for cleaning data here
-        self._select_database(DataQuality.BRONZE.value)
-
-        bronze_df = self._select(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.HNX_30_INDEX.name,
-        )
-
-        silver_df = self._clean(
-            df=bronze_df,
-            clean_layer_list=[
-                CleanLayer.ORDER_BY([Table.HNX_30_INDEX.Column.DATE.value])
-            ],
-        )
-
-        self._select_database(DataQuality.SILVER.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.HNX_30_INDEX.name,
-            primary_keys=Table.HNX_30_INDEX.primary_key,
-            df=silver_df,
-        )
-
-        self._logger.log_info(
-            f'Finish cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-    def _transform_stock_market_hnx_30_index_cafef(self) -> None:
-        key = (
-            ScrapeMainType.STOCK_MARKET,
-            StockMarketSubType.HNX_30_INDEX,
-            Hnx30IndexSource.CAFEF,
-        )
-
-        self._logger.log_info(
-            f'Start transforming data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for transforming data here
-        self._select_database(DataQuality.SILVER.value)
-        silver_df = self._select(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.HNX_30_INDEX.name,
-        )
-
-        gold_df = make_date_time_index_for_dataframe(df=silver_df)
-        gold_df = standardize_time_frame(df=gold_df)
-
-        cols_to_interpolate = gold_df.columns.difference(["date"])
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
-            pd.to_numeric, errors="coerce"
-        )
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
-            method="linear"
-        )
-
-        self._select_database(DataQuality.GOLD.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.HNX_30_INDEX.name,
-            primary_keys=Table.HNX_30_INDEX.primary_key,
-            df=gold_df,
-        )
-
-        self._logger.log_info(
-            f'Finish transforming data in table "{format_key_for_table(key)}".'
-        )
-
-    def _process_stock_market_hnx_30_index(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(
-            f'Start processing stock market HNX_30_INDEX data for "{data_quality.value}".'
-        )
-
-        match data_quality:
-            case DataQuality.BRONZE:
-                self._process_stock_market_hnx_30_index_cafef()
-
-            case DataQuality.SILVER:
-                self._clean_stock_market_hnx_30_index_cafef()
-
-            case DataQuality.GOLD:
-                self._transform_stock_market_hnx_30_index_cafef()
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
-
-        self._logger.log_info(
-            f'Finish processing stock market HNX_30_INDEX data for "{data_quality.value}".'
-        )
-
-    # endregion STOCK_MARKET.HNX_30_INDEX
-
-    # region STOCK_MARKET.UPCOM_INDEX
-    def _process_stock_market_upcom_index_cafef(self) -> None:
-        key = (
-            ScrapeMainType.STOCK_MARKET,
-            StockMarketSubType.UPCOM_INDEX,
-            UpcomIndexSource.CAFEF,
-        )
-
-        folder_path = (
-            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
-
-        file_path = get_newest_file_path(
-            folder_path=folder_path, extension=FileExtension.CSV
-        )
-
-        if not file_path:
-            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
-            return
-
-        self._logger.log_info(f'Start ingesting data in "{file_path}".')
-
-        # Add logic for processing data here
-        df = pd.read_csv(file_path, encoding="utf-8")
-
-        df["date"] = pd.to_datetime(df["date"], format="%d/%m/%Y")
-
-        df["adjusted_close"] = df["adjusted_close"].str.replace(",", "", regex=False)
-        df["adjusted_close"] = pd.to_numeric(df["adjusted_close"], errors="coerce")
-
-        df[["change_value", "change_percentage"]] = df["change"].str.extract(
-            r"([-\d.]+)\s*\(([-\d.]+)\s*%\)"
-        )
-        df["change_value"] = df["change_value"].astype(float)
-        df["change_percentage"] = df["change_percentage"].astype(float)
-
-        df = df.drop(columns=["change"])
-
-        df["matched_volume"] = (
-            df["matched_volume"].str.replace(",", "", regex=False).astype(int)
-        )
-        df["matched_value"] = (
-            df["matched_value"].str.replace(",", "", regex=False).astype(float)
-        )
-        df["negotiated_volume"] = (
-            df["negotiated_volume"].str.replace(",", "", regex=False).astype(int)
-        )
-        df["negotiated_value"] = (
-            df["negotiated_value"].str.replace(",", "", regex=False).astype(float)
-        )
-        df["open"] = (
-            df["open"].astype(str).str.replace(",", "", regex=False).astype(float)
-        )
-        df["high"] = (
-            df["high"].astype(str).str.replace(",", "", regex=False).astype(float)
-        )
-        df["low"] = (
-            df["low"].astype(str).str.replace(",", "", regex=False).astype(float)
-        )
-        df = df.sort_values(by="date", ascending=True, ignore_index=True)
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.UPCOM_INDEX.name,
-            primary_keys=Table.UPCOM_INDEX.primary_key,
-            df=df,
-        )
-
-        self._logger.log_info(f'Finish ingesting data in "{file_path}".')
-
-    def _clean_stock_market_upcom_index_cafef(self) -> None:
-        key = (
-            ScrapeMainType.STOCK_MARKET,
-            StockMarketSubType.UPCOM_INDEX,
-            UpcomIndexSource.CAFEF,
-        )
-
-        self._logger.log_info(
-            f'Start cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for cleaning data here
-        self._select_database(DataQuality.BRONZE.value)
-
-        bronze_df = self._select(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.UPCOM_INDEX.name,
-        )
-
-        silver_df = self._clean(
-            df=bronze_df,
-            clean_layer_list=[
-                CleanLayer.ORDER_BY([Table.UPCOM_INDEX.Column.DATE.value])
-            ],
-        )
-
-        self._select_database(DataQuality.SILVER.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.UPCOM_INDEX.name,
-            primary_keys=Table.UPCOM_INDEX.primary_key,
-            df=silver_df,
-        )
-
-        self._logger.log_info(
-            f'Finish cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-    def _transform_stock_market_upcom_index_cafef(self) -> None:
-        key = (
-            ScrapeMainType.STOCK_MARKET,
-            StockMarketSubType.UPCOM_INDEX,
-            UpcomIndexSource.CAFEF,
-        )
-
-        self._logger.log_info(
-            f'Start transforming data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for transforming data here
-        self._select_database(DataQuality.SILVER.value)
-        silver_df = self._select(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.UPCOM_INDEX.name,
-        )
-
-        gold_df = make_date_time_index_for_dataframe(df=silver_df)
-        gold_df = standardize_time_frame(df=gold_df)
-
-        cols_to_interpolate = gold_df.columns.difference(["date"])
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
-            pd.to_numeric, errors="coerce"
-        )
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
-            method="linear"
-        )
-
-        self._select_database(DataQuality.GOLD.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.UPCOM_INDEX.name,
-            primary_keys=Table.UPCOM_INDEX.primary_key,
-            df=gold_df,
-        )
-
-        self._logger.log_info(
-            f'Finish transforming data in table "{format_key_for_table(key)}".'
-        )
-
-    def _process_stock_market_upcom_index(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(
-            f'Start processing stock market UPCOM_INDEX data for "{data_quality.value}".'
-        )
-
-        match data_quality:
-            case DataQuality.BRONZE:
-                self._process_stock_market_upcom_index_cafef()
-
-            case DataQuality.SILVER:
-                self._clean_stock_market_upcom_index_cafef()
-
-            case DataQuality.GOLD:
-                self._transform_stock_market_upcom_index_cafef()
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
-
-        self._logger.log_info(
-            f'Finish processing stock market UPCOM_INDEX data for "{data_quality.value}".'
-        )
-
-    # endregion STOCK_MARKET.UPCOM_INDEX
 
     # endregion STOCK_MARKET data process
 
@@ -10791,13 +10008,8 @@ class DataPreprocessor:
         # self._process_macroeconomics_nasdaq_100(data_quality)
 
         # # Stock market
-        # self._process_stock_market_market(data_quality)
-        self._process_stock_market_vn_index(data_quality)
-        # self._process_stock_market_hnx_index(data_quality)
-        # self._process_stock_market_vn_30_index(data_quality)
-        # self._process_stock_market_vn_100_index(data_quality)
-        # self._process_stock_market_hnx_30_index(data_quality)
-        # self._process_stock_market_upcom_index(data_quality)
+        self._process_stock_market_market(data_quality)
+        self._process_stock_market_index(data_quality)
 
         # # Enterprise
         # self._process_enterprise_stock(data_quality)
@@ -10812,7 +10024,7 @@ class DataPreprocessor:
                 self._connect_to_database(DataQuality.BRONZE)
                 self._create_schemas(DataQuality.BRONZE)
                 self._create_tables(DataQuality.BRONZE)
-                # self._process_data(DataQuality.BRONZE)
+                self._process_data(DataQuality.BRONZE)
 
             except Exception as e:
                 self._logger.log_error(
