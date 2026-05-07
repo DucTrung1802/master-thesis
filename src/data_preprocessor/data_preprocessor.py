@@ -15,13 +15,15 @@ from tabular_database_driver.postgre_sql_driver import PostgreSQLDriver
 from utils.constants import SCRAPER_BRONZE_DATA_DIR
 from utils.enums import *
 from utils.utils import *
+from utils.switch_handler import SwitchHandler
 
 load_dotenv()
 
 
 class DataPreprocessor:
-    def __init__(self, logger: Logger):
+    def __init__(self, logger: Logger, switch_handler: SwitchHandler):
         self._logger = logger
+        self._switch_handler: SwitchHandler = switch_handler
         self._database_driver = PostgreSQLDriver(logger=logger)
 
         # Data
@@ -393,19 +395,52 @@ class DataPreprocessor:
 
         match data_quality:
             case DataQuality.BRONZE:
-                self._database_driver.create_schema(Schema.MACROECONOMICS.value)
-                self._database_driver.create_schema(Schema.STOCK_MARKET.value)
-                self._database_driver.create_schema(Schema.ENTERPRISE.value)
+                if self._switch_handler.is_enabled(
+                    "data_preprocessor", "data_quality_bronze", "macroeconomics"
+                ):
+                    self._database_driver.create_schema(Schema.MACROECONOMICS.value)
+
+                if self._switch_handler.is_enabled(
+                    "data_preprocessor", "data_quality_bronze", "stock_market"
+                ):
+                    self._database_driver.create_schema(Schema.STOCK_MARKET.value)
+
+                if self._switch_handler.is_enabled(
+                    "data_preprocessor", "data_quality_bronze", "enterprise"
+                ):
+                    self._database_driver.create_schema(Schema.ENTERPRISE.value)
 
             case DataQuality.SILVER:
-                self._database_driver.create_schema(Schema.MACROECONOMICS.value)
-                self._database_driver.create_schema(Schema.STOCK_MARKET.value)
-                self._database_driver.create_schema(Schema.ENTERPRISE.value)
+                if self._switch_handler.is_enabled(
+                    "data_preprocessor", "data_quality_silver", "macroeconomics"
+                ):
+                    self._database_driver.create_schema(Schema.MACROECONOMICS.value)
+
+                if self._switch_handler.is_enabled(
+                    "data_preprocessor", "data_quality_silver", "stock_market"
+                ):
+                    self._database_driver.create_schema(Schema.STOCK_MARKET.value)
+
+                if self._switch_handler.is_enabled(
+                    "data_preprocessor", "data_quality_silver", "enterprise"
+                ):
+                    self._database_driver.create_schema(Schema.ENTERPRISE.value)
 
             case DataQuality.GOLD:
-                self._database_driver.create_schema(Schema.MACROECONOMICS.value)
-                self._database_driver.create_schema(Schema.STOCK_MARKET.value)
-                self._database_driver.create_schema(Schema.ENTERPRISE.value)
+                if self._switch_handler.is_enabled(
+                    "data_preprocessor", "data_quality_gold", "macroeconomics"
+                ):
+                    self._database_driver.create_schema(Schema.MACROECONOMICS.value)
+
+                if self._switch_handler.is_enabled(
+                    "data_preprocessor", "data_quality_gold", "stock_market"
+                ):
+                    self._database_driver.create_schema(Schema.STOCK_MARKET.value)
+
+                if self._switch_handler.is_enabled(
+                    "data_preprocessor", "data_quality_gold", "enterprise"
+                ):
+                    self._database_driver.create_schema(Schema.ENTERPRISE.value)
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -3217,7 +3252,7 @@ class DataPreprocessor:
 
         match data_quality:
             case DataQuality.BRONZE:
-                # MARKET
+                # MARKET_TABLE
                 # fmt: off
                 self._database_driver.create_table(
                     schema_name=Schema.STOCK_MARKET.value,
@@ -3235,156 +3270,58 @@ class DataPreprocessor:
                 )
                 # fmt: on
                 
-                # B_VN_INDEX_PRICE
+                # B_STOCK_MARKET_PRICE
                 # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.STOCK_MARKET.value,
-                    table_name=Table.B_VN_INDEX_PRICE.name,
-                    columns=[
-                        Column(name=Table.B_VN_INDEX_PRICE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.B_VN_INDEX_PRICE.Column.ADJUST.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.B_VN_INDEX_PRICE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.B_VN_INDEX_PRICE.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.B_VN_INDEX_PRICE.Column.PERCENT_CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.B_VN_INDEX_PRICE.Column.MATCHING_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.B_VN_INDEX_PRICE.Column.MATCHING_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.B_VN_INDEX_PRICE.Column.NEGOTIATE_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.B_VN_INDEX_PRICE.Column.NEGOTIATE_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.B_VN_INDEX_PRICE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.B_VN_INDEX_PRICE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.B_VN_INDEX_PRICE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                    ],
-                    primary_keys=Table.B_VN_INDEX_PRICE.primary_key,
-                )
+                stock_market_price_table_list = [item.value.lower() for item in StockMarketSubType if "price" in item.value.lower()]
+
+                stock_market_price_column_list = [
+                    Column(name=Table.B_STOCK_MARKET_PRICE.Column.CODE.value, data_type=DataType.VARCHAR(), nullable=False),
+                    Column(name=Table.B_STOCK_MARKET_PRICE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                    Column(name=Table.B_STOCK_MARKET_PRICE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
+                    Column(name=Table.B_STOCK_MARKET_PRICE.Column.ADJUST.value, data_type=DataType.DECIMAL(), nullable=True),
+                    Column(name=Table.B_STOCK_MARKET_PRICE.Column.CHANGE.value, data_type=DataType.VARCHAR(), nullable=True),
+                    Column(name=Table.B_STOCK_MARKET_PRICE.Column.MATCHING_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                    Column(name=Table.B_STOCK_MARKET_PRICE.Column.MATCHING_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
+                    Column(name=Table.B_STOCK_MARKET_PRICE.Column.NEGOTIATE_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                    Column(name=Table.B_STOCK_MARKET_PRICE.Column.NEGOTIATE_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
+                    Column(name=Table.B_STOCK_MARKET_PRICE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
+                    Column(name=Table.B_STOCK_MARKET_PRICE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
+                    Column(name=Table.B_STOCK_MARKET_PRICE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
+                ]
+
+                for table_name in stock_market_price_table_list:
+                    self._database_driver.create_table(
+                        schema_name=Schema.STOCK_MARKET.value,
+                        table_name=table_name,
+                        columns=stock_market_price_column_list,
+                        primary_keys=Table.B_STOCK_MARKET_PRICE.primary_key,
+                    )
                 # fmt: on
 
-                # B_VN_INDEX_ORDER
+                # B_STOCK_MARKET_ORDER
                 # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.STOCK_MARKET.value,
-                    table_name=Table.B_VN_INDEX_ORDER.name,
-                    columns=[
-                        Column(name=Table.B_VN_INDEX_ORDER.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.B_VN_INDEX_ORDER.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.B_VN_INDEX_ORDER.Column.NUMBER_OF_BUY_ORDERS.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.B_VN_INDEX_ORDER.Column.BUY_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.B_VN_INDEX_ORDER.Column.AVERAGE_VOLUME_PER_BUY_ORDER.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.B_VN_INDEX_ORDER.Column.NUMBER_OF_SELL_ORDERS.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.B_VN_INDEX_ORDER.Column.SELL_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.B_VN_INDEX_ORDER.Column.AVERAGE_VOLUME_PER_SELL_ORDER.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.B_VN_INDEX_ORDER.Column.NET_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                    ],
-                    primary_keys=Table.B_VN_INDEX_ORDER.primary_key,
-                )
-                # fmt: on
-                
-                # HNX_INDEX
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.STOCK_MARKET.value,
-                    table_name=Table.HNX_INDEX.name,
-                    columns = [
-                        Column(name=Table.HNX_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.HNX_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_INDEX.Column.VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                    ],
-                    primary_keys=Table.HNX_INDEX.primary_key,
-                )
-                # fmt: on
-                
-                # VN_30_INDEX
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.STOCK_MARKET.value,
-                    table_name=Table.VN_30_INDEX.name,
-                    columns = [
-                        Column(name=Table.VN_30_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.VN_30_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.ADJUSTED_CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.MATCHED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.MATCHED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.NEGOTIATED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.NEGOTIATED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.CHANGE_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.CHANGE_PERCENTAGE.value, data_type=DataType.DECIMAL(), nullable=True),
-                    ],
-                    primary_keys=Table.VN_30_INDEX.primary_key,
-                )
-                # fmt: on
-                
-                # VN_100_INDEX
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.STOCK_MARKET.value,
-                    table_name=Table.VN_100_INDEX.name,
-                    columns = [
-                        Column(name=Table.VN_100_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.VN_100_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.ADJUSTED_CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.MATCHED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.MATCHED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.NEGOTIATED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.NEGOTIATED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.CHANGE_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.CHANGE_PERCENTAGE.value, data_type=DataType.DECIMAL(), nullable=True),
-                    ],
-                    primary_keys=Table.VN_100_INDEX.primary_key,
-                )
-                # fmt: on
-                
-                # HNX_30_INDEX
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.STOCK_MARKET.value,
-                    table_name=Table.HNX_30_INDEX.name,
-                    columns = [
-                        Column(name=Table.HNX_30_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.HNX_30_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.ADJUSTED_CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.MATCHED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.MATCHED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.NEGOTIATED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.NEGOTIATED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.CHANGE_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.CHANGE_PERCENTAGE.value, data_type=DataType.DECIMAL(), nullable=True),
-                    ],
-                    primary_keys=Table.HNX_30_INDEX.primary_key,
-                )
-                # fmt: on
-                
-                # UPCOM_INDEX
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.STOCK_MARKET.value,
-                    table_name=Table.UPCOM_INDEX.name,
-                    columns = [
-                        Column(name=Table.UPCOM_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.UPCOM_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.ADJUSTED_CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.MATCHED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.MATCHED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.NEGOTIATED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.NEGOTIATED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.CHANGE_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.CHANGE_PERCENTAGE.value, data_type=DataType.DECIMAL(), nullable=True),
-                    ],
-                    primary_keys=Table.UPCOM_INDEX.primary_key,
-                )
+                stock_market_order_table_list = [item.value.lower() for item in StockMarketSubType if "order" in item.value.lower()]
+
+                stock_market_order_column_list = [
+                        Column(name=Table.B_STOCK_MARKET_ORDER.Column.CODE.value, data_type=DataType.VARCHAR(), nullable=False),
+                        Column(name=Table.B_STOCK_MARKET_ORDER.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
+                        Column(name=Table.B_STOCK_MARKET_ORDER.Column.CHANGE.value, data_type=DataType.VARCHAR(), nullable=True),
+                        Column(name=Table.B_STOCK_MARKET_ORDER.Column.NUMBER_OF_BUY_ORDERS.value, data_type=DataType.INT(), nullable=True),
+                        Column(name=Table.B_STOCK_MARKET_ORDER.Column.BUY_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(name=Table.B_STOCK_MARKET_ORDER.Column.AVERAGE_VOLUME_PER_BUY_ORDER.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.B_STOCK_MARKET_ORDER.Column.NUMBER_OF_SELL_ORDERS.value, data_type=DataType.INT(), nullable=True),
+                        Column(name=Table.B_STOCK_MARKET_ORDER.Column.SELL_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(name=Table.B_STOCK_MARKET_ORDER.Column.AVERAGE_VOLUME_PER_SELL_ORDER.value, data_type=DataType.DECIMAL(), nullable=True),
+                        Column(name=Table.B_STOCK_MARKET_ORDER.Column.NET_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                    ]
+
+                for table_name in stock_market_order_table_list:
+                    self._database_driver.create_table(
+                        schema_name=Schema.STOCK_MARKET.value,
+                        table_name=table_name,
+                        columns=stock_market_order_column_list,
+                        primary_keys=Table.B_STOCK_MARKET_ORDER.primary_key,
+                    )
                 # fmt: on
 
             case DataQuality.SILVER:
@@ -3857,19 +3794,52 @@ class DataPreprocessor:
 
         match data_quality:
             case DataQuality.BRONZE:
-                self._create_macroeconomics_tables(data_quality)
-                self._create_stock_market_tables(data_quality)
-                self._create_enterprise_tables(data_quality)
+                if self._switch_handler.is_enabled(
+                    "data_preprocessor", "data_quality_bronze", "macroeconomics"
+                ):
+                    self._create_macroeconomics_tables(data_quality)
+
+                if self._switch_handler.is_enabled(
+                    "data_preprocessor", "data_quality_bronze", "stock_market"
+                ):
+                    self._create_stock_market_tables(data_quality)
+
+                if self._switch_handler.is_enabled(
+                    "data_preprocessor", "data_quality_bronze", "enterprise"
+                ):
+                    self._create_enterprise_tables(data_quality)
 
             case DataQuality.SILVER:
-                self._create_macroeconomics_tables(data_quality)
-                self._create_stock_market_tables(data_quality)
-                self._create_enterprise_tables(data_quality)
+                if self._switch_handler.is_enabled(
+                    "data_preprocessor", "data_quality_silver", "macroeconomics"
+                ):
+                    self._create_macroeconomics_tables(data_quality)
+
+                if self._switch_handler.is_enabled(
+                    "data_preprocessor", "data_quality_silver", "stock_market"
+                ):
+                    self._create_stock_market_tables(data_quality)
+
+                if self._switch_handler.is_enabled(
+                    "data_preprocessor", "data_quality_silver", "enterprise"
+                ):
+                    self._create_enterprise_tables(data_quality)
 
             case DataQuality.GOLD:
-                self._create_macroeconomics_tables(data_quality)
-                self._create_stock_market_tables(data_quality)
-                self._create_enterprise_tables(data_quality)
+                if self._switch_handler.is_enabled(
+                    "data_preprocessor", "data_quality_gold", "macroeconomics"
+                ):
+                    self._create_macroeconomics_tables(data_quality)
+
+                if self._switch_handler.is_enabled(
+                    "data_preprocessor", "data_quality_gold", "stock_market"
+                ):
+                    self._create_stock_market_tables(data_quality)
+
+                if self._switch_handler.is_enabled(
+                    "data_preprocessor", "data_quality_gold", "enterprise"
+                ):
+                    self._create_enterprise_tables(data_quality)
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}".')
@@ -9294,8 +9264,8 @@ class DataPreprocessor:
 
         self._save_pandas_table_to_database(
             schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.B_VN_INDEX_PRICE.name,
-            primary_keys=Table.B_VN_INDEX_PRICE.primary_key,
+            table_name=Table.B_STOCK_MARKET_PRICE.name,
+            primary_keys=Table.B_STOCK_MARKET_PRICE.primary_key,
             df=vn_index_df,
         )
 
@@ -9338,7 +9308,7 @@ class DataPreprocessor:
         vn_index_df["close"] = (
             vn_index_df["close_change"].str.extract(r"([\d\.]+)").astype("Float64")
         )
-        
+
         for col in [
             "net_volume",
         ]:
@@ -9377,7 +9347,7 @@ class DataPreprocessor:
                 join_type=SqlJoinType.INNER_JOIN,
                 schema_left="stock_market",
                 schema_right="stock_market",
-                table_left=Table.B_VN_INDEX_PRICE.name,
+                table_left=Table.B_STOCK_MARKET_PRICE.name,
                 table_right=Table.B_VN_INDEX_ORDER.name,
                 column_left="date",
                 column_right="date",
@@ -9386,14 +9356,18 @@ class DataPreprocessor:
 
         vn_index_bronze_df = self._select(
             schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.B_VN_INDEX_PRICE.name,
+            table_name=Table.B_STOCK_MARKET_PRICE.name,
             join_model_list=join_model_list,
         )
-        vn_index_bronze_df = vn_index_bronze_df.loc[:, ~vn_index_bronze_df.columns.duplicated()]
+        vn_index_bronze_df = vn_index_bronze_df.loc[
+            :, ~vn_index_bronze_df.columns.duplicated()
+        ]
 
         silver_df = self._clean(
             df=vn_index_bronze_df,
-            clean_layer_list=[CleanLayer.ORDER_BY([Table.S_VN_INDEX.Column.DATE.value])],
+            clean_layer_list=[
+                CleanLayer.ORDER_BY([Table.S_VN_INDEX.Column.DATE.value])
+            ],
         )
 
         self._select_database(DataQuality.SILVER.value)
@@ -10832,46 +10806,52 @@ class DataPreprocessor:
         self._logger.log_info(f'Finish processing data for "{data_quality.value}".')
 
     def ingest_bronze_data(self) -> None:
-        try:
-            self._connect_to_database(DataQuality.BRONZE)
-            self._create_schemas(DataQuality.BRONZE)
-            self._create_tables(DataQuality.BRONZE)
-            self._process_data(DataQuality.BRONZE)
 
-        except Exception as e:
-            self._logger.log_error(
-                f"Error preprocessing `{DataQuality.BRONZE.value}` data: {e}"
-            )
+        if self._switch_handler.is_enabled("data_preprocessor", "data_quality_bronze"):
+            try:
+                self._connect_to_database(DataQuality.BRONZE)
+                self._create_schemas(DataQuality.BRONZE)
+                self._create_tables(DataQuality.BRONZE)
+                # self._process_data(DataQuality.BRONZE)
 
-        finally:
-            self._database_driver.disconnect()
+            except Exception as e:
+                self._logger.log_error(
+                    f"Error preprocessing `{DataQuality.BRONZE.value}` data: {e}"
+                )
+
+            finally:
+                self._database_driver.disconnect()
 
     def ingest_silver_data(self) -> None:
-        try:
-            self._connect_to_database(DataQuality.SILVER)
-            self._create_schemas(DataQuality.SILVER)
-            self._create_tables(DataQuality.SILVER)
-            self._process_data(DataQuality.SILVER)
 
-        except Exception as e:
-            self._logger.log_error(
-                f"Error preprocessing `{DataQuality.SILVER.value}` data: {e}"
-            )
+        if self._switch_handler.is_enabled("data_preprocessor", "data_quality_silver"):
+            try:
+                self._connect_to_database(DataQuality.SILVER)
+                self._create_schemas(DataQuality.SILVER)
+                self._create_tables(DataQuality.SILVER)
+                self._process_data(DataQuality.SILVER)
 
-        finally:
-            self._database_driver.disconnect()
+            except Exception as e:
+                self._logger.log_error(
+                    f"Error preprocessing `{DataQuality.SILVER.value}` data: {e}"
+                )
+
+            finally:
+                self._database_driver.disconnect()
 
     def ingest_gold_data(self) -> None:
-        try:
-            self._connect_to_database(DataQuality.GOLD)
-            self._create_schemas(DataQuality.GOLD)
-            self._create_tables(DataQuality.GOLD)
-            self._process_data(DataQuality.GOLD)
 
-        except Exception as e:
-            self._logger.log_error(
-                f"Error preprocessing `{DataQuality.GOLD.value}` data: {e}"
-            )
+        if self._switch_handler.is_enabled("data_preprocessor", "data_quality_gold"):
+            try:
+                self._connect_to_database(DataQuality.GOLD)
+                self._create_schemas(DataQuality.GOLD)
+                self._create_tables(DataQuality.GOLD)
+                self._process_data(DataQuality.GOLD)
 
-        finally:
-            self._database_driver.disconnect()
+            except Exception as e:
+                self._logger.log_error(
+                    f"Error preprocessing `{DataQuality.GOLD.value}` data: {e}"
+                )
+
+            finally:
+                self._database_driver.disconnect()

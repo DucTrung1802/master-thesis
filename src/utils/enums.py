@@ -2157,13 +2157,13 @@ class Table:
         name = "market"
         primary_key = [Column.ID.value]
 
-    class B_VN_INDEX_PRICE:
+    class B_STOCK_MARKET_PRICE:
         class Column(Enum):
+            CODE = "code"
             DATE = "date"
-            ADJUST = "adjust"
             CLOSE = "close"
+            ADJUST = "adjust"
             CHANGE = "change"
-            PERCENT_CHANGE = "percent_change"
             MATCHING_VOLUME = "matching_volume"
             MATCHING_VALUE = "matching_value"
             NEGOTIATE_VOLUME = "negotiate_volume"
@@ -2172,13 +2172,13 @@ class Table:
             HIGH = "high"
             LOW = "low"
 
-        name = "vn_index_price"
-        primary_key = [Column.DATE.value]
+        primary_key = [Column.CODE.value, Column.DATE.value]
 
-    class B_VN_INDEX_ORDER:
+    class B_STOCK_MARKET_ORDER:
         class Column(Enum):
+            CODE = "code"
             DATE = "date"
-            CLOSE = "close"
+            CHANGE = "change"
             NUMBER_OF_BUY_ORDERS = "number_of_buy_orders"
             BUY_VOLUME = "buy_volume"
             AVERAGE_VOLUME_PER_BUY_ORDER = "average_volume_per_buy_order"
@@ -2187,8 +2187,7 @@ class Table:
             AVERAGE_VOLUME_PER_SELL_ORDER = "average_volume_per_sell_order"
             NET_VOLUME = "net_volume"
 
-        name = "vn_index_order"
-        primary_key = [Column.DATE.value]
+        primary_key = [Column.CODE.value, Column.DATE.value]
 
     class S_VN_INDEX:
         class Column(Enum):
@@ -2399,13 +2398,13 @@ class TTC_MacroeconomicTable(Enum):
     XPI = Table.G_XPI.name
 
 
-class TTC_StockMarketTable(Enum):
-    HNX_30_INDEX = Table.HNX_30_INDEX.name
-    HNX_INDEX = Table.HNX_INDEX.name
-    UPCOM_INDEX = Table.UPCOM_INDEX.name
-    VN_30_INDEX = Table.VN_30_INDEX.name
-    VN_100_INDEX = Table.VN_100_INDEX.name
-    VN_INDEX = Table.B_VN_INDEX_PRICE.name
+# class TTC_StockMarketTable(Enum):
+#     HNX_30_INDEX = Table.HNX_30_INDEX.name
+#     HNX_INDEX = Table.HNX_INDEX.name
+#     UPCOM_INDEX = Table.UPCOM_INDEX.name
+#     VN_30_INDEX = Table.VN_30_INDEX.name
+#     VN_100_INDEX = Table.VN_100_INDEX.name
+#     VN_INDEX = Table.B_VN_INDEX_PRICE.name
 
 
 class TTC_EnterpriseTable(Enum):
