@@ -6,42 +6,48 @@
                 "enable": false
             },
             "stock_market": {
-                "enable": false,
+                "enable": true,
                 "children": {
                     "vn_index_price": {
-                        "enable": true
+                        "enable": false
                     },
                     "vn_index_order": {
-                        "enable": true
+                        "enable": false
                     },
                     "vn_30_index_price": {
-                        "enable": true
+                        "enable": false
                     },
                     "vn_30_index_order": {
-                        "enable": true
+                        "enable": false
                     },
                     "vn_100_index_price": {
-                        "enable": true
+                        "enable": false
                     },
                     "vn_100_index_order": {
+                        "enable": false
+                    },
+                    "hnx_index_price": {
+                        "enable": true
+                    },
+                    "hnx_index_order": {
                         "enable": true
                     },
                     "hnx_30_index_price": {
-                        "enable": true
+                        "enable": false
                     },
                     "hnx_30_index_order": {
-                        "enable": true
+                        "enable": false
                     },
                     "upcom_index_price": {
-                        "enable": true
+                        "enable": false
                     },
                     "upcom_index_order": {
-                        "enable": true
+                        "enable": false
                     }
                 }
             },
             "enterprise": {
-                "enable": true,
+                "enable": false,
                 "children": {
                     "stock_list_hose": {
                         "enable": false,
@@ -58,21 +64,21 @@
                         "enable": false,
                         "children": {
                             "stock_price_hnx": {
-                                "enable": true
+                                "enable": false
                             },
                             "stock_order_hnx": {
-                                "enable": true
+                                "enable": false
                             }
                         }
                     },
                     "stock_list_upcom": {
-                        "enable": true,
+                        "enable": false,
                         "children": {
                             "stock_price_upcom": {
-                                "enable": true
+                                "enable": false
                             },
                             "stock_order_upcom": {
-                                "enable": true
+                                "enable": false
                             }
                         }
                     }

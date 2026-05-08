@@ -4493,6 +4493,30 @@ class WebScraper:
                 Task(format_key_for_name(key), self._scrape_data_from, key)
             )
 
+        # HNX_INDEX_PRICE
+        if self._switch_handler.is_enabled(
+            "web_scraper", "stock_market", "hnx_index_price"
+        ):
+            key = (
+                ScrapeMainType.STOCK_MARKET,
+                StockMarketSubType.HNX_INDEX_PRICE,
+            )
+            self._thread_manager.add_task(
+                Task(format_key_for_name(key), self._scrape_data_from, key)
+            )
+
+        # HNX_INDEX_ORDER
+        if self._switch_handler.is_enabled(
+            "web_scraper", "stock_market", "hnx_index_order"
+        ):
+            key = (
+                ScrapeMainType.STOCK_MARKET,
+                StockMarketSubType.HNX_INDEX_ORDER,
+            )
+            self._thread_manager.add_task(
+                Task(format_key_for_name(key), self._scrape_data_from, key)
+            )
+
         # HNX_30_INDEX_PRICE
         if self._switch_handler.is_enabled(
             "web_scraper", "stock_market", "hnx_30_index_price"
