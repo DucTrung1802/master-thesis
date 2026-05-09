@@ -9489,15 +9489,10 @@ class DataPreprocessor:
                 f'Finish ingesting {len(file_paths)} file(s) in "{folder_path}".'
             )
 
-    def _clean_stock_market_vn_index(self) -> None:
-        key = (
-            ScrapeMainType.STOCK_MARKET,
-            StockMarketSubType.VN_INDEX,
-        )
+    def _clean_stock_market_index(self) -> None:
+        table_list = [Table.B_STOCK_MARKET_ORDER.name, Table.B_STOCK_MARKET_ORDER.name]
 
-        self._logger.log_info(
-            f'Start cleaning data in table "{format_key_for_table(key)}".'
-        )
+        self._logger.log_info(f'Start cleaning data in tables {", ".join(table_list)}.')
 
         # Add logic for cleaning data here
         self._select_database(DataQuality.BRONZE.value)
@@ -9505,12 +9500,12 @@ class DataPreprocessor:
         join_model_list = [
             JoinModel(
                 join_type=SqlJoinType.INNER_JOIN,
-                schema_left="stock_market",
-                schema_right="stock_market",
+                schema_left=Schema.STOCK_MARKET.value,
+                schema_right=Schema.STOCK_MARKET.value,
                 table_left=Table.B_STOCK_MARKET_PRICE.name,
-                table_right=Table.B_VN_INDEX_ORDER.name,
-                column_left="date",
-                column_right="date",
+                table_right=Table.B_STOCK_MARKET_ORDER.name,
+                columns_left=Table.B_STOCK_MARKET_PRICE.primary_key,
+                columns_right=Table.B_STOCK_MARKET_ORDER.primary_key,
             )
         ]
 
@@ -9526,7 +9521,7 @@ class DataPreprocessor:
         silver_df = self._clean(
             df=vn_index_bronze_df,
             clean_layer_list=[
-                CleanLayer.ORDER_BY([Table.S_STOCK_MARKET.Column.DATE.value])
+                CleanLayer.ORDER_BY([Table.S_STOCK_MARKET.Column.CODE.value, Table.S_STOCK_MARKET.Column.DATE.value,])
             ],
         )
 
@@ -9539,8 +9534,7 @@ class DataPreprocessor:
         )
 
         self._logger.log_info(
-            f'Finish cleaning data in table "{format_key_for_table(key)}".'
-        )
+            f'Finish cleaning data in tables {", ".join(table_list)}.')
 
     def _transform_stock_market_vn_index(self) -> None:
         key = (
@@ -9593,7 +9587,7 @@ class DataPreprocessor:
                 self._ingest_stock_market_index_order()
 
             case DataQuality.SILVER:
-                self._clean_stock_market_vn_index()
+                self._clean_stock_market_index()
 
             case DataQuality.GOLD:
                 self._transform_stock_market_vn_index()
@@ -10155,7 +10149,7 @@ class DataPreprocessor:
                 self._connect_to_database(DataQuality.SILVER)
                 self._create_schemas(DataQuality.SILVER)
                 self._create_tables(DataQuality.SILVER)
-                # self._process_data(DataQuality.SILVER)
+                self._process_data(DataQuality.SILVER)
 
             except Exception as e:
                 self._logger.log_error(
@@ -10172,7 +10166,7 @@ class DataPreprocessor:
                 self._connect_to_database(DataQuality.GOLD)
                 self._create_schemas(DataQuality.GOLD)
                 self._create_tables(DataQuality.GOLD)
-                # self._process_data(DataQuality.GOLD)
+                self._process_data(DataQuality.GOLD)
 
             except Exception as e:
                 self._logger.log_error(
