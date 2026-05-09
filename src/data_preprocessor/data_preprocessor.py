@@ -4,7 +4,8 @@ import pandas as pd
 import re
 from glob import glob
 import numpy as np
-from datetime import datetime, timedelta
+from datetime import date, datetime, timezone
+from psycopg2.extras import execute_values
 
 from logger.logger import Logger
 from dtos.tabular_database_driver_dtos.postgre_sql_connection_dto import (
@@ -85,8 +86,11 @@ class DataPreprocessor:
     def _clean(
         self, df: pd.DataFrame, clean_layer_list: List[CleanLayer]
     ) -> pd.DataFrame:
+
         if not clean_layer_list:
             return df
+
+        df = df.copy()
 
         for layer in clean_layer_list:
             match layer.action:
@@ -116,52 +120,240 @@ class DataPreprocessor:
 
         return df
 
+    def _transform(
+        self,
+        df: pd.DataFrame,
+        transform_layer_list: List[TransformLayer],
+    ) -> pd.DataFrame:
+
+        if not transform_layer_list:
+            return df
+
+        df = df.copy()
+
+        for layer in transform_layer_list:
+
+            match layer.action:
+
+                case TransformAction.EXTRACT_DATETIME_FEATURE:
+
+                    column_name = layer.params["column_name"]
+
+                    # ensure datetime dtype
+                    df[column_name] = pd.to_datetime(df[column_name])
+
+                    prefix = column_name
+
+                    # basic datetime features
+                    df[f"{prefix}_year"] = df[column_name].dt.year
+                    df[f"{prefix}_month"] = df[column_name].dt.month
+                    df[f"{prefix}_day"] = df[column_name].dt.day
+
+                    # week features
+                    df[f"{prefix}_week"] = df[column_name].dt.isocalendar().week
+
+                    # weekday features
+                    df[f"{prefix}_day_of_week"] = df[
+                        column_name
+                    ].dt.dayofweek  # Monday=0
+
+                    df[f"{prefix}_day_name"] = df[column_name].dt.day_name()
+
+                    # year positioning
+                    df[f"{prefix}_day_of_year"] = df[column_name].dt.dayofyear
+
+                    # quarter
+                    df[f"{prefix}_quarter"] = df[column_name].dt.quarter
+
+                    # boolean flags
+                    df[f"{prefix}_is_weekend"] = df[column_name].dt.dayofweek >= 5
+
+                    df[f"{prefix}_is_month_start"] = df[column_name].dt.is_month_start
+
+                    df[f"{prefix}_is_month_end"] = df[column_name].dt.is_month_end
+
+                    df[f"{prefix}_is_quarter_start"] = df[
+                        column_name
+                    ].dt.is_quarter_start
+
+                    df[f"{prefix}_is_quarter_end"] = df[column_name].dt.is_quarter_end
+
+                    df[f"{prefix}_is_year_start"] = df[column_name].dt.is_year_start
+
+                    df[f"{prefix}_is_year_end"] = df[column_name].dt.is_year_end
+
+                case _:
+                    raise ValueError(f"Unsupported transform: {layer.action}")
+
+        return df
+
+    def _infer_sql_type(self, dtype) -> str:
+        dtype_str = str(dtype)
+        if dtype_str.startswith("int32") or dtype_str == "Int32":
+            return DataType.INT()
+        elif dtype_str.startswith("int") or dtype_str == "Int64":
+            return DataType.BIGINT()
+        elif dtype_str.startswith("float"):
+            return DataType.DECIMAL()
+        elif dtype_str == "bool":
+            return DataType.BOOLEAN()
+        elif dtype_str.startswith("datetime"):
+            return DataType.TIMESTAMP()
+        else:
+            return DataType.VARCHAR()  # covers "object" and unknown
+
+
+    def _ensure_table_exists(
+        self,
+        schema_name: str,
+        table_name: str,
+        primary_keys: List[str],
+        df: pd.DataFrame,
+        dtype_overrides: dict[str, str] | None = None,
+    ) -> None:
+        columns = [
+            Column(
+                name=col,
+                data_type=(
+                    dtype_overrides[col]
+                    if dtype_overrides and col in dtype_overrides
+                    else self._infer_sql_type(df[col].dtype)
+                ),
+                nullable=(col not in primary_keys),
+            )
+            for col in df.columns
+        ]
+        # create_table now uses IF NOT EXISTS internally — safe to call every time
+        self._database_driver.create_table(
+            schema_name=schema_name,
+            table_name=table_name,
+            columns=columns,
+            primary_keys=primary_keys,
+        )
+
+
+    def _build_upsert_sql(
+        self,
+        schema_name: str,
+        table_name: str,
+        columns: List[str],
+        primary_keys: List[str],
+        has_update_date: bool = False,
+    ) -> str:
+        col_str = ", ".join(columns)
+        pk_str  = ", ".join(primary_keys)
+
+        update_parts = [
+            f"{c} = EXCLUDED.{c}"
+            for c in columns
+            if c not in primary_keys
+        ]
+        if has_update_date:
+            update_parts.append("update_date = now()")
+        update_str = ", ".join(update_parts)
+
+        return f"""
+    WITH upserted AS (
+        INSERT INTO {schema_name}.{table_name} ({col_str})
+        VALUES %s
+        ON CONFLICT ({pk_str})
+        DO UPDATE SET {update_str}
+        RETURNING xmax
+    )
+    SELECT
+        COUNT(*) FILTER (WHERE xmax = 0)  AS inserted,
+        COUNT(*) FILTER (WHERE xmax <> 0) AS updated
+    FROM upserted
+    """
+
+
+    def _to_python(self, v):
+        """Convert numpy scalars to native Python types psycopg2 can serialize."""
+        if v is None:
+            return None
+        try:
+            if pd.isna(v):
+                return None
+        except (TypeError, ValueError):
+            pass  # pd.isna raises on some types (e.g. lists) — just pass them through
+        if hasattr(v, "item"):  # catches all numpy scalars: uint32, int64, float32, etc.
+            return v.item()
+        return v
+
+
     def _save_pandas_table_to_database(
         self,
         schema_name: str,
         table_name: str,
         primary_keys: List[str],
         df: pd.DataFrame,
+        dtype_overrides: dict[str, str] | None = None,
+        chunk_size: int = 5_000,
     ) -> None:
         self._logger.log_info(
             f'Saving dataframe to table "{schema_name}.{table_name}".'
         )
 
-        # Drop rows where all values are NaN
         df = df.dropna(how="all")
-
         if df.empty:
             self._logger.log_info("DataFrame is empty after cleaning. Nothing to save.")
             return
 
-        # Convert entire DataFrame into a list of Records (vectorized)
-        column_names = list(df.columns)
-        records = []
-
-        for row in df.itertuples(index=False, name=None):
-            data_dto_list = [
-                DataModel(column_name=col, value=(val if pd.notna(val) else None))
-                for col, val in zip(column_names, row)
-            ]
-            records.append(Record(data_dto_list=data_dto_list))
-
-        # Batch upsert once
-        result = self._database_driver.upsert(
+        self._ensure_table_exists(
             schema_name=schema_name,
             table_name=table_name,
-            records=records,
             primary_keys=primary_keys,
+            df=df,
+            dtype_overrides=dtype_overrides,
         )
 
-        if result[0] == DatabaseExecutionStatus.SUCCESS:
-            inserted_count = result[1]
-            updated_count = result[2]
-        else:
-            inserted_count = updated_count = 0
+        # ── schema introspection via driver cache (no extra DB round-trip) ────
+        available_columns = self._database_driver._get_table_columns(schema_name, table_name)
+        has_create_date   = "create_date" in available_columns
+        has_update_date   = "update_date" in available_columns
+
+        df_columns = list(df.columns)
+
+        # Add create_date to the INSERT column list if the table has it
+        insert_columns = list(df_columns)
+        if has_create_date and "create_date" not in insert_columns:
+            insert_columns.append("create_date")
+
+        sql = self._build_upsert_sql(
+            schema_name=schema_name,
+            table_name=table_name,
+            columns=insert_columns,
+            primary_keys=primary_keys,
+            has_update_date=has_update_date,
+        )
+
+        # ── build tuples once — no DataModel / Record objects ─────────────────
+        now = datetime.now(timezone.utc) if has_create_date else None
+
+        records: list[tuple] = [
+            tuple(self._to_python(v) for v in row)                                      # ← was: tuple(None if pd.isna(v) else v ...)
+            + ((now,) if has_create_date and "create_date" not in df_columns else ())
+            for row in df.itertuples(index=False, name=None)
+        ]
+        # ──────────────────────────────────────────────────────────────────────
+
+        inserted_total = updated_total = 0
+
+        for start in range(0, len(records), chunk_size):
+            chunk = records[start : start + chunk_size]
+
+            # Use driver's cursor directly — execute_values sends 1 round-trip
+            execute_values(self._database_driver._cursor, sql, chunk, page_size=chunk_size)
+
+            row = self._database_driver.fetch_result()
+            if row:
+                inserted_total += row[0][0] or 0
+                updated_total  += row[0][1] or 0
 
         self._logger.log_info(
-            f"Saved {inserted_count + updated_count}/{len(df)} records into table '{schema_name}.{table_name}'."
-            f" (Inserted: {inserted_count}, Updated: {updated_count}) successfully."
+            f"Saved {inserted_total + updated_total}/{len(df)} records into "
+            f"'{schema_name}.{table_name}'. "
+            f"(Inserted: {inserted_total}, Updated: {updated_total})"
         )
 
     # region Helper functions
@@ -9492,7 +9684,7 @@ class DataPreprocessor:
     def _clean_stock_market_index(self) -> None:
         input_table_list = [
             Table.B_STOCK_MARKET_ORDER.name,
-            Table.B_STOCK_MARKET_ORDER.name
+            Table.B_STOCK_MARKET_ORDER.name,
         ]
         output_table_list = [Table.S_STOCK_MARKET.name]
 
@@ -9516,19 +9708,21 @@ class DataPreprocessor:
             )
         ]
 
-        vn_index_bronze_df = self._select(
+        stock_market_index_bronze_df = self._select(
             schema_name=Schema.STOCK_MARKET.value,
             table_name=Table.B_STOCK_MARKET_PRICE.name,
             join_model_list=join_model_list,
         )
-        vn_index_bronze_df = vn_index_bronze_df.loc[
-            :, ~vn_index_bronze_df.columns.duplicated()
-        ]
 
         silver_df = self._clean(
-            df=vn_index_bronze_df,
+            df=stock_market_index_bronze_df,
             clean_layer_list=[
-                CleanLayer.ORDER_BY([Table.S_STOCK_MARKET.Column.CODE.value, Table.S_STOCK_MARKET.Column.DATE.value,])
+                CleanLayer.ORDER_BY(
+                    [
+                        Table.S_STOCK_MARKET.Column.CODE.value,
+                        Table.S_STOCK_MARKET.Column.DATE.value,
+                    ]
+                )
             ],
         )
 
@@ -9545,7 +9739,7 @@ class DataPreprocessor:
             f'to table(s) "{", ".join(output_table_list)}".'
         )
 
-    def _transform_stock_market_vn_index(self) -> None:
+    def _transform_stock_market_index(self) -> None:
         input_table_list = [Table.S_STOCK_MARKET.name]
         output_table_list = [Table.G_STOCK_MARKET.name]
 
@@ -9561,18 +9755,12 @@ class DataPreprocessor:
             table_name=Table.S_STOCK_MARKET.name,
         )
 
-        # gold_df = make_date_time_index_for_dataframe(df=silver_df)
-        # gold_df = standardize_time_frame(df=gold_df)
-
-        # cols_to_interpolate = gold_df.columns.difference(["date"])
-        # gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
-        #     pd.to_numeric, errors="coerce"
-        # )
-        # gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
-        #     method="linear"
-        # )
-
-        gold_df = silver_df
+        gold_df = self._transform(
+            df=silver_df,
+            transform_layer_list=[
+                TransformLayer.EXTRACT_DATETIME_FEATURE(),
+            ],
+        )
 
         self._select_database(DataQuality.GOLD.value)
         self._save_pandas_table_to_database(
@@ -9601,7 +9789,7 @@ class DataPreprocessor:
                 self._clean_stock_market_index()
 
             case DataQuality.GOLD:
-                self._transform_stock_market_vn_index()
+                self._transform_stock_market_index()
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -10176,7 +10364,7 @@ class DataPreprocessor:
             try:
                 self._connect_to_database(DataQuality.GOLD)
                 self._create_schemas(DataQuality.GOLD)
-                self._create_tables(DataQuality.GOLD)
+                # self._create_tables(DataQuality.GOLD)
                 self._process_data(DataQuality.GOLD)
 
             except Exception as e:

@@ -136,6 +136,24 @@ class CleanLayer:
         return cls(CleanAction.REMOVE_COLUMN, column_list=column_list)
 
 
+class TransformAction(Enum):
+    EXTRACT_DATETIME_FEATURE = "extract_datetime_feature"
+
+
+class TransformLayer:
+    """
+    Represents a transformation step. Can have parameters like column_name.
+    """
+
+    def __init__(self, action: TransformAction, **kwargs):
+        self.action = action
+        self.params = kwargs
+
+    @classmethod
+    def EXTRACT_DATETIME_FEATURE(cls, column_name: str = "date"):
+        return cls(TransformAction.EXTRACT_DATETIME_FEATURE, column_name=column_name)
+
+
 # MAIN SCRAPING TYPE ENUMS
 class ScrapeMainType(Enum):
     MACROECONOMICS = "macroeconomics"
@@ -2197,28 +2215,7 @@ class Table:
         class Column(Enum):
             CODE = "code"
             DATE = "date"
-            # --- From price_data ---
-            OPEN = "open"
-            HIGH = "high"
-            LOW = "low"
-            CLOSE = "close"
-            ADJUST = "adjust"
-            CHANGE = "change"  # e.g. +0.05
-            PERCENT_CHANGE = (
-                "percent_change"  # e.g. +0.06%  (extracted from price change)
-            )
-            MATCHING_VOLUME = "matching_volume"
-            MATCHING_VALUE = "matching_value"
-            NEGOTIATE_VOLUME = "negotiate_volume"
-            NEGOTIATE_VALUE = "negotiate_value"
-            # --- From order_data (order's `change` dropped — redundant with CLOSE + PERCENT_CHANGE) ---
-            NUMBER_OF_BUY_ORDERS = "number_of_buy_orders"
-            BUY_VOLUME = "buy_volume"
-            AVERAGE_VOLUME_PER_BUY_ORDER = "average_volume_per_buy_order"
-            NUMBER_OF_SELL_ORDERS = "number_of_sell_orders"
-            SELL_VOLUME = "sell_volume"
-            AVERAGE_VOLUME_PER_SELL_ORDER = "average_volume_per_sell_order"
-            NET_VOLUME = "net_volume"
+            # ...
 
         name = "s_stock_market"
         primary_key = [Column.CODE.value, Column.DATE.value]
