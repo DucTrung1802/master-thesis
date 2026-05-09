@@ -3253,394 +3253,494 @@ class DataPreprocessor:
         match data_quality:
             case DataQuality.BRONZE:
                 # MARKET_TABLE
-                # fmt: off
                 self._database_driver.create_table(
                     schema_name=Schema.STOCK_MARKET.value,
                     table_name=Table.MARKET.name,
-                    columns = [
-                        Column(name=Table.MARKET.Column.ID.value, data_type=DataType.SERIAL(), nullable=False),
-                        Column(name=Table.MARKET.Column.CODE.value, data_type=DataType.VARCHAR(), nullable=True),
-                        Column(name=Table.MARKET.Column.NAME.value, data_type=DataType.VARCHAR(), nullable=True),
-                        Column(name=Table.MARKET.Column.SAVE_PROGRESS_YEAR.value, data_type=DataType.INT(), nullable=True),
-                        Column(name=Table.MARKET.Column.CREATE_DATE.value, data_type=DataType.AUTO_TIMESTAMP(), nullable=True),
-                        Column(name=Table.MARKET.Column.UPDATE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
-                        Column(name=Table.MARKET.Column.DELETE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
+                    columns=[
+                        Column(
+                            name=Table.MARKET.Column.ID.value,
+                            data_type=DataType.SERIAL(),
+                            nullable=False,
+                        ),
+                        Column(
+                            name=Table.MARKET.Column.CODE.value,
+                            data_type=DataType.VARCHAR(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.MARKET.Column.NAME.value,
+                            data_type=DataType.VARCHAR(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.MARKET.Column.SAVE_PROGRESS_YEAR.value,
+                            data_type=DataType.INT(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.MARKET.Column.CREATE_DATE.value,
+                            data_type=DataType.AUTO_TIMESTAMP(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.MARKET.Column.UPDATE_DATE.value,
+                            data_type=DataType.TIMESTAMP(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.MARKET.Column.DELETE_DATE.value,
+                            data_type=DataType.TIMESTAMP(),
+                            nullable=True,
+                        ),
                     ],
                     primary_keys=Table.MARKET.primary_key,
                 )
-                # fmt: on
-                
+
                 # B_STOCK_MARKET_PRICE
-                # fmt: off
-                stock_market_price_table_list = [item.value.lower() for item in StockMarketSubType if "price" in item.value.lower()]
-
-                stock_market_price_column_list = [
-                    Column(name=Table.B_STOCK_MARKET_PRICE.Column.CODE.value, data_type=DataType.VARCHAR(), nullable=False),
-                    Column(name=Table.B_STOCK_MARKET_PRICE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                    Column(name=Table.B_STOCK_MARKET_PRICE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                    Column(name=Table.B_STOCK_MARKET_PRICE.Column.ADJUST.value, data_type=DataType.DECIMAL(), nullable=True),
-                    Column(name=Table.B_STOCK_MARKET_PRICE.Column.CHANGE.value, data_type=DataType.VARCHAR(), nullable=True),
-                    Column(name=Table.B_STOCK_MARKET_PRICE.Column.MATCHING_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                    Column(name=Table.B_STOCK_MARKET_PRICE.Column.MATCHING_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                    Column(name=Table.B_STOCK_MARKET_PRICE.Column.NEGOTIATE_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                    Column(name=Table.B_STOCK_MARKET_PRICE.Column.NEGOTIATE_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                    Column(name=Table.B_STOCK_MARKET_PRICE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                    Column(name=Table.B_STOCK_MARKET_PRICE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                    Column(name=Table.B_STOCK_MARKET_PRICE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                    Column(name=Table.B_STOCK_MARKET_PRICE.Column.PERCENT_CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
-                ]
-
-                for table_name in stock_market_price_table_list:
-                    self._database_driver.create_table(
-                        schema_name=Schema.STOCK_MARKET.value,
-                        table_name=table_name,
-                        columns=stock_market_price_column_list,
-                        primary_keys=Table.B_STOCK_MARKET_PRICE.primary_key,
-                    )
-                # fmt: on
+                self._database_driver.create_table(
+                    schema_name=Schema.STOCK_MARKET.value,
+                    table_name=Table.B_STOCK_MARKET_PRICE.name,
+                    columns=[
+                        Column(
+                            name=Table.B_STOCK_MARKET_PRICE.Column.CODE.value,
+                            data_type=DataType.VARCHAR(),
+                            nullable=False,
+                        ),
+                        Column(
+                            name=Table.B_STOCK_MARKET_PRICE.Column.DATE.value,
+                            data_type=DataType.DATE(),
+                            nullable=False,
+                        ),
+                        Column(
+                            name=Table.B_STOCK_MARKET_PRICE.Column.CLOSE.value,
+                            data_type=DataType.DECIMAL(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.B_STOCK_MARKET_PRICE.Column.ADJUST.value,
+                            data_type=DataType.DECIMAL(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.B_STOCK_MARKET_PRICE.Column.CHANGE.value,
+                            data_type=DataType.VARCHAR(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.B_STOCK_MARKET_PRICE.Column.MATCHING_VOLUME.value,
+                            data_type=DataType.BIGINT(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.B_STOCK_MARKET_PRICE.Column.MATCHING_VALUE.value,
+                            data_type=DataType.DECIMAL(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.B_STOCK_MARKET_PRICE.Column.NEGOTIATE_VOLUME.value,
+                            data_type=DataType.BIGINT(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.B_STOCK_MARKET_PRICE.Column.NEGOTIATE_VALUE.value,
+                            data_type=DataType.DECIMAL(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.B_STOCK_MARKET_PRICE.Column.OPEN.value,
+                            data_type=DataType.DECIMAL(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.B_STOCK_MARKET_PRICE.Column.HIGH.value,
+                            data_type=DataType.DECIMAL(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.B_STOCK_MARKET_PRICE.Column.LOW.value,
+                            data_type=DataType.DECIMAL(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.B_STOCK_MARKET_PRICE.Column.PERCENT_CHANGE.value,
+                            data_type=DataType.DECIMAL(),
+                            nullable=True,
+                        ),
+                    ],
+                    primary_keys=Table.B_STOCK_MARKET_PRICE.primary_key,
+                )
 
                 # B_STOCK_MARKET_ORDER
-                # fmt: off
-                stock_market_order_table_list = [item.value.lower() for item in StockMarketSubType if "order" in item.value.lower()]
-
-                stock_market_order_column_list = [
-                        Column(name=Table.B_STOCK_MARKET_ORDER.Column.CODE.value, data_type=DataType.VARCHAR(), nullable=False),
-                        Column(name=Table.B_STOCK_MARKET_ORDER.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.B_STOCK_MARKET_ORDER.Column.CHANGE.value, data_type=DataType.VARCHAR(), nullable=True),
-                        Column(name=Table.B_STOCK_MARKET_ORDER.Column.NUMBER_OF_BUY_ORDERS.value, data_type=DataType.INT(), nullable=True),
-                        Column(name=Table.B_STOCK_MARKET_ORDER.Column.BUY_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.B_STOCK_MARKET_ORDER.Column.AVERAGE_VOLUME_PER_BUY_ORDER.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.B_STOCK_MARKET_ORDER.Column.NUMBER_OF_SELL_ORDERS.value, data_type=DataType.INT(), nullable=True),
-                        Column(name=Table.B_STOCK_MARKET_ORDER.Column.SELL_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.B_STOCK_MARKET_ORDER.Column.AVERAGE_VOLUME_PER_SELL_ORDER.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.B_STOCK_MARKET_ORDER.Column.NET_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.B_STOCK_MARKET_ORDER.Column.PERCENT_CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
-                    ]
-
-                for table_name in stock_market_order_table_list:
-                    self._database_driver.create_table(
-                        schema_name=Schema.STOCK_MARKET.value,
-                        table_name=table_name,
-                        columns=stock_market_order_column_list,
-                        primary_keys=Table.B_STOCK_MARKET_ORDER.primary_key,
-                    )
-                # fmt: on
+                self._database_driver.create_table(
+                    schema_name=Schema.STOCK_MARKET.value,
+                    table_name=Table.B_STOCK_MARKET_ORDER.name,
+                    columns=[
+                        Column(
+                            name=Table.B_STOCK_MARKET_ORDER.Column.CODE.value,
+                            data_type=DataType.VARCHAR(),
+                            nullable=False,
+                        ),
+                        Column(
+                            name=Table.B_STOCK_MARKET_ORDER.Column.DATE.value,
+                            data_type=DataType.DATE(),
+                            nullable=False,
+                        ),
+                        Column(
+                            name=Table.B_STOCK_MARKET_ORDER.Column.CHANGE.value,
+                            data_type=DataType.VARCHAR(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.B_STOCK_MARKET_ORDER.Column.NUMBER_OF_BUY_ORDERS.value,
+                            data_type=DataType.INT(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.B_STOCK_MARKET_ORDER.Column.BUY_VOLUME.value,
+                            data_type=DataType.BIGINT(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.B_STOCK_MARKET_ORDER.Column.AVERAGE_VOLUME_PER_BUY_ORDER.value,
+                            data_type=DataType.DECIMAL(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.B_STOCK_MARKET_ORDER.Column.NUMBER_OF_SELL_ORDERS.value,
+                            data_type=DataType.INT(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.B_STOCK_MARKET_ORDER.Column.SELL_VOLUME.value,
+                            data_type=DataType.BIGINT(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.B_STOCK_MARKET_ORDER.Column.AVERAGE_VOLUME_PER_SELL_ORDER.value,
+                            data_type=DataType.DECIMAL(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.B_STOCK_MARKET_ORDER.Column.NET_VOLUME.value,
+                            data_type=DataType.BIGINT(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.B_STOCK_MARKET_ORDER.Column.PERCENT_CHANGE.value,
+                            data_type=DataType.DECIMAL(),
+                            nullable=True,
+                        ),
+                    ],
+                    primary_keys=Table.B_STOCK_MARKET_ORDER.primary_key,
+                )
 
             case DataQuality.SILVER:
                 # MARKET
-                # fmt: off
                 self._database_driver.create_table(
                     schema_name=Schema.STOCK_MARKET.value,
                     table_name=Table.MARKET.name,
-                    columns = [
-                        Column(name=Table.MARKET.Column.ID.value, data_type=DataType.SERIAL(), nullable=False),
-                        Column(name=Table.MARKET.Column.CODE.value, data_type=DataType.VARCHAR(), nullable=True),
-                        Column(name=Table.MARKET.Column.NAME.value, data_type=DataType.VARCHAR(), nullable=True),
-                        Column(name=Table.MARKET.Column.SAVE_PROGRESS_YEAR.value, data_type=DataType.INT(), nullable=True),
-                        Column(name=Table.MARKET.Column.CREATE_DATE.value, data_type=DataType.AUTO_TIMESTAMP(), nullable=True),
-                        Column(name=Table.MARKET.Column.UPDATE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
-                        Column(name=Table.MARKET.Column.DELETE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
+                    columns=[
+                        Column(
+                            name=Table.MARKET.Column.ID.value,
+                            data_type=DataType.SERIAL(),
+                            nullable=False,
+                        ),
+                        Column(
+                            name=Table.MARKET.Column.CODE.value,
+                            data_type=DataType.VARCHAR(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.MARKET.Column.NAME.value,
+                            data_type=DataType.VARCHAR(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.MARKET.Column.SAVE_PROGRESS_YEAR.value,
+                            data_type=DataType.INT(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.MARKET.Column.CREATE_DATE.value,
+                            data_type=DataType.AUTO_TIMESTAMP(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.MARKET.Column.UPDATE_DATE.value,
+                            data_type=DataType.TIMESTAMP(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.MARKET.Column.DELETE_DATE.value,
+                            data_type=DataType.TIMESTAMP(),
+                            nullable=True,
+                        ),
                     ],
                     primary_keys=Table.MARKET.primary_key,
                 )
-                # fmt: on
-                
-                # S_VN_INDEX
-                # fmt: off
+
+                # S_STOCK_MARKET
                 self._database_driver.create_table(
                     schema_name=Schema.STOCK_MARKET.value,
-                    table_name=Table.S_VN_INDEX.name,
+                    table_name=Table.S_STOCK_MARKET.name,
                     columns=[
-                        Column(name=Table.S_VN_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.S_VN_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.S_VN_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.S_VN_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.S_VN_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.S_VN_INDEX.Column.ADJUST.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.S_VN_INDEX.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.S_VN_INDEX.Column.PERCENT_CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.S_VN_INDEX.Column.MATCHING_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.S_VN_INDEX.Column.MATCHING_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.S_VN_INDEX.Column.NEGOTIATE_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.S_VN_INDEX.Column.NEGOTIATE_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.S_VN_INDEX.Column.NUMBER_OF_BUY_ORDERS.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.S_VN_INDEX.Column.BUY_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.S_VN_INDEX.Column.AVERAGE_VOLUME_PER_BUY_ORDER.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.S_VN_INDEX.Column.NUMBER_OF_SELL_ORDERS.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.S_VN_INDEX.Column.SELL_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.S_VN_INDEX.Column.AVERAGE_VOLUME_PER_SELL_ORDER.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.S_VN_INDEX.Column.NET_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(
+                            name=Table.S_STOCK_MARKET.Column.CODE.value,
+                            data_type=DataType.VARCHAR(),
+                            nullable=False,
+                        ),
+                        Column(
+                            name=Table.S_STOCK_MARKET.Column.DATE.value,
+                            data_type=DataType.DATE(),
+                            nullable=False,
+                        ),
+                        Column(
+                            name=Table.S_STOCK_MARKET.Column.OPEN.value,
+                            data_type=DataType.DECIMAL(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.S_STOCK_MARKET.Column.HIGH.value,
+                            data_type=DataType.DECIMAL(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.S_STOCK_MARKET.Column.LOW.value,
+                            data_type=DataType.DECIMAL(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.S_STOCK_MARKET.Column.CLOSE.value,
+                            data_type=DataType.DECIMAL(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.S_STOCK_MARKET.Column.ADJUST.value,
+                            data_type=DataType.DECIMAL(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.S_STOCK_MARKET.Column.CHANGE.value,
+                            data_type=DataType.DECIMAL(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.S_STOCK_MARKET.Column.PERCENT_CHANGE.value,
+                            data_type=DataType.DECIMAL(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.S_STOCK_MARKET.Column.MATCHING_VOLUME.value,
+                            data_type=DataType.BIGINT(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.S_STOCK_MARKET.Column.MATCHING_VALUE.value,
+                            data_type=DataType.DECIMAL(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.S_STOCK_MARKET.Column.NEGOTIATE_VOLUME.value,
+                            data_type=DataType.BIGINT(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.S_STOCK_MARKET.Column.NEGOTIATE_VALUE.value,
+                            data_type=DataType.DECIMAL(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.S_STOCK_MARKET.Column.NUMBER_OF_BUY_ORDERS.value,
+                            data_type=DataType.BIGINT(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.S_STOCK_MARKET.Column.BUY_VOLUME.value,
+                            data_type=DataType.BIGINT(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.S_STOCK_MARKET.Column.AVERAGE_VOLUME_PER_BUY_ORDER.value,
+                            data_type=DataType.DECIMAL(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.S_STOCK_MARKET.Column.NUMBER_OF_SELL_ORDERS.value,
+                            data_type=DataType.BIGINT(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.S_STOCK_MARKET.Column.SELL_VOLUME.value,
+                            data_type=DataType.BIGINT(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.S_STOCK_MARKET.Column.AVERAGE_VOLUME_PER_SELL_ORDER.value,
+                            data_type=DataType.DECIMAL(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.S_STOCK_MARKET.Column.NET_VOLUME.value,
+                            data_type=DataType.BIGINT(),
+                            nullable=True,
+                        ),
                     ],
-                    primary_keys=Table.S_VN_INDEX.primary_key,
+                    primary_keys=Table.S_STOCK_MARKET.primary_key,
                 )
-                # fmt: on
-                
-                # HNX_INDEX
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.STOCK_MARKET.value,
-                    table_name=Table.HNX_INDEX.name,
-                    columns = [
-                        Column(name=Table.HNX_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.HNX_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_INDEX.Column.VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                    ],
-                    primary_keys=Table.HNX_INDEX.primary_key,
-                )
-                # fmt: on
-                
-                # VN_30_INDEX
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.STOCK_MARKET.value,
-                    table_name=Table.VN_30_INDEX.name,
-                    columns = [
-                        Column(name=Table.VN_30_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.VN_30_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.ADJUSTED_CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.MATCHED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.MATCHED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.NEGOTIATED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.NEGOTIATED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.CHANGE_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.CHANGE_PERCENTAGE.value, data_type=DataType.DECIMAL(), nullable=True),
-                    ],
-                    primary_keys=Table.VN_30_INDEX.primary_key,
-                )
-                # fmt: on
-                
-                # VN_100_INDEX
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.STOCK_MARKET.value,
-                    table_name=Table.VN_100_INDEX.name,
-                    columns = [
-                        Column(name=Table.VN_100_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.VN_100_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.ADJUSTED_CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.MATCHED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.MATCHED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.NEGOTIATED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.NEGOTIATED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.CHANGE_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.CHANGE_PERCENTAGE.value, data_type=DataType.DECIMAL(), nullable=True),
-                    ],
-                    primary_keys=Table.VN_100_INDEX.primary_key,
-                )
-                # fmt: on
-                
-                # HNX_30_INDEX
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.STOCK_MARKET.value,
-                    table_name=Table.HNX_30_INDEX.name,
-                    columns = [
-                        Column(name=Table.HNX_30_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.HNX_30_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.ADJUSTED_CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.MATCHED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.MATCHED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.NEGOTIATED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.NEGOTIATED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.CHANGE_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.CHANGE_PERCENTAGE.value, data_type=DataType.DECIMAL(), nullable=True),
-                    ],
-                    primary_keys=Table.HNX_30_INDEX.primary_key,
-                )
-                # fmt: on
-                
-                # UPCOM_INDEX
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.STOCK_MARKET.value,
-                    table_name=Table.UPCOM_INDEX.name,
-                    columns = [
-                        Column(name=Table.UPCOM_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.UPCOM_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.ADJUSTED_CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.MATCHED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.MATCHED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.NEGOTIATED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.NEGOTIATED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.CHANGE_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.CHANGE_PERCENTAGE.value, data_type=DataType.DECIMAL(), nullable=True),
-                    ],
-                    primary_keys=Table.UPCOM_INDEX.primary_key,
-                )
-                # fmt: on
 
             case DataQuality.GOLD:
                 # MARKET
-                # fmt: off
                 self._database_driver.create_table(
                     schema_name=Schema.STOCK_MARKET.value,
                     table_name=Table.MARKET.name,
-                    columns = [
-                        Column(name=Table.MARKET.Column.ID.value, data_type=DataType.SERIAL(), nullable=False),
-                        Column(name=Table.MARKET.Column.CODE.value, data_type=DataType.VARCHAR(), nullable=True),
-                        Column(name=Table.MARKET.Column.NAME.value, data_type=DataType.VARCHAR(), nullable=True),
-                        Column(name=Table.MARKET.Column.SAVE_PROGRESS_YEAR.value, data_type=DataType.INT(), nullable=True),
-                        Column(name=Table.MARKET.Column.CREATE_DATE.value, data_type=DataType.AUTO_TIMESTAMP(), nullable=True),
-                        Column(name=Table.MARKET.Column.UPDATE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
-                        Column(name=Table.MARKET.Column.DELETE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
+                    columns=[
+                        Column(
+                            name=Table.MARKET.Column.ID.value,
+                            data_type=DataType.SERIAL(),
+                            nullable=False,
+                        ),
+                        Column(
+                            name=Table.MARKET.Column.CODE.value,
+                            data_type=DataType.VARCHAR(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.MARKET.Column.NAME.value,
+                            data_type=DataType.VARCHAR(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.MARKET.Column.SAVE_PROGRESS_YEAR.value,
+                            data_type=DataType.INT(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.MARKET.Column.CREATE_DATE.value,
+                            data_type=DataType.AUTO_TIMESTAMP(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.MARKET.Column.UPDATE_DATE.value,
+                            data_type=DataType.TIMESTAMP(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.MARKET.Column.DELETE_DATE.value,
+                            data_type=DataType.TIMESTAMP(),
+                            nullable=True,
+                        ),
                     ],
                     primary_keys=Table.MARKET.primary_key,
                 )
-                # fmt: on
 
-                # G_VN_INDEX
-                # fmt: off
+                # G_STOCK_MARKET
                 self._database_driver.create_table(
                     schema_name=Schema.STOCK_MARKET.value,
-                    table_name=Table.G_VN_INDEX.name,
+                    table_name=Table.G_STOCK_MARKET.name,
                     columns=[
-                        Column(name=Table.G_VN_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.G_VN_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_VN_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_VN_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_VN_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_VN_INDEX.Column.ADJUST.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_VN_INDEX.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_VN_INDEX.Column.PERCENT_CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_VN_INDEX.Column.MATCHING_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.G_VN_INDEX.Column.MATCHING_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_VN_INDEX.Column.NEGOTIATE_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.G_VN_INDEX.Column.NEGOTIATE_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_VN_INDEX.Column.NUMBER_OF_BUY_ORDERS.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.G_VN_INDEX.Column.BUY_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.G_VN_INDEX.Column.AVERAGE_VOLUME_PER_BUY_ORDER.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_VN_INDEX.Column.NUMBER_OF_SELL_ORDERS.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.G_VN_INDEX.Column.SELL_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.G_VN_INDEX.Column.AVERAGE_VOLUME_PER_SELL_ORDER.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_VN_INDEX.Column.NET_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                        Column(
+                            name=Table.G_STOCK_MARKET.Column.CODE.value,
+                            data_type=DataType.VARCHAR(),
+                            nullable=False,
+                        ),
+                        Column(
+                            name=Table.G_STOCK_MARKET.Column.DATE.value,
+                            data_type=DataType.DATE(),
+                            nullable=False,
+                        ),
+                        Column(
+                            name=Table.G_STOCK_MARKET.Column.OPEN.value,
+                            data_type=DataType.DECIMAL(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.G_STOCK_MARKET.Column.HIGH.value,
+                            data_type=DataType.DECIMAL(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.G_STOCK_MARKET.Column.LOW.value,
+                            data_type=DataType.DECIMAL(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.G_STOCK_MARKET.Column.CLOSE.value,
+                            data_type=DataType.DECIMAL(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.G_STOCK_MARKET.Column.ADJUST.value,
+                            data_type=DataType.DECIMAL(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.G_STOCK_MARKET.Column.CHANGE.value,
+                            data_type=DataType.DECIMAL(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.G_STOCK_MARKET.Column.PERCENT_CHANGE.value,
+                            data_type=DataType.DECIMAL(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.G_STOCK_MARKET.Column.MATCHING_VOLUME.value,
+                            data_type=DataType.BIGINT(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.G_STOCK_MARKET.Column.MATCHING_VALUE.value,
+                            data_type=DataType.DECIMAL(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.G_STOCK_MARKET.Column.NEGOTIATE_VOLUME.value,
+                            data_type=DataType.BIGINT(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.G_STOCK_MARKET.Column.NEGOTIATE_VALUE.value,
+                            data_type=DataType.DECIMAL(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.G_STOCK_MARKET.Column.NUMBER_OF_BUY_ORDERS.value,
+                            data_type=DataType.BIGINT(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.G_STOCK_MARKET.Column.BUY_VOLUME.value,
+                            data_type=DataType.BIGINT(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.G_STOCK_MARKET.Column.AVERAGE_VOLUME_PER_BUY_ORDER.value,
+                            data_type=DataType.DECIMAL(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.G_STOCK_MARKET.Column.NUMBER_OF_SELL_ORDERS.value,
+                            data_type=DataType.BIGINT(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.G_STOCK_MARKET.Column.SELL_VOLUME.value,
+                            data_type=DataType.BIGINT(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.G_STOCK_MARKET.Column.AVERAGE_VOLUME_PER_SELL_ORDER.value,
+                            data_type=DataType.DECIMAL(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.G_STOCK_MARKET.Column.NET_VOLUME.value,
+                            data_type=DataType.BIGINT(),
+                            nullable=True,
+                        ),
                     ],
-                    primary_keys=Table.G_VN_INDEX.primary_key,
+                    primary_keys=Table.G_STOCK_MARKET.primary_key,
                 )
-                # fmt: on
-                
-                # HNX_INDEX
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.STOCK_MARKET.value,
-                    table_name=Table.HNX_INDEX.name,
-                    columns = [
-                        Column(name=Table.HNX_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.HNX_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_INDEX.Column.VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                    ],
-                    primary_keys=Table.HNX_INDEX.primary_key,
-                )
-                # fmt: on
-                
-                # VN_30_INDEX
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.STOCK_MARKET.value,
-                    table_name=Table.VN_30_INDEX.name,
-                    columns = [
-                        Column(name=Table.VN_30_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.VN_30_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.ADJUSTED_CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.MATCHED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.MATCHED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.NEGOTIATED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.NEGOTIATED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.CHANGE_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.CHANGE_PERCENTAGE.value, data_type=DataType.DECIMAL(), nullable=True),
-                    ],
-                    primary_keys=Table.VN_30_INDEX.primary_key,
-                )
-                # fmt: on
-                
-                # VN_100_INDEX
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.STOCK_MARKET.value,
-                    table_name=Table.VN_100_INDEX.name,
-                    columns = [
-                        Column(name=Table.VN_100_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.VN_100_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.ADJUSTED_CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.MATCHED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.MATCHED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.NEGOTIATED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.NEGOTIATED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.CHANGE_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.CHANGE_PERCENTAGE.value, data_type=DataType.DECIMAL(), nullable=True),
-                    ],
-                    primary_keys=Table.VN_100_INDEX.primary_key,
-                )
-                # fmt: on
-                
-                # HNX_30_INDEX
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.STOCK_MARKET.value,
-                    table_name=Table.HNX_30_INDEX.name,
-                    columns = [
-                        Column(name=Table.HNX_30_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.HNX_30_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.ADJUSTED_CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.MATCHED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.MATCHED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.NEGOTIATED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.NEGOTIATED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.CHANGE_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.CHANGE_PERCENTAGE.value, data_type=DataType.DECIMAL(), nullable=True),
-                    ],
-                    primary_keys=Table.HNX_30_INDEX.primary_key,
-                )
-                # fmt: on
-                
-                # UPCOM_INDEX
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.STOCK_MARKET.value,
-                    table_name=Table.UPCOM_INDEX.name,
-                    columns = [
-                        Column(name=Table.UPCOM_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.UPCOM_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.ADJUSTED_CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.MATCHED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.MATCHED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.NEGOTIATED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.NEGOTIATED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.CHANGE_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.CHANGE_PERCENTAGE.value, data_type=DataType.DECIMAL(), nullable=True),
-                    ],
-                    primary_keys=Table.UPCOM_INDEX.primary_key,
-                )
-                # fmt: on
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -9186,7 +9286,9 @@ class DataPreprocessor:
 
     # region STOCK_MARKET.VN_INDEX
     def _ingest_stock_market_index_price(self) -> None:
-        stock_market_price_sub_type_list = [item for item in StockMarketSubType if "price" in item.value.lower()]
+        stock_market_price_sub_type_list = [
+            item for item in StockMarketSubType if "price" in item.value.lower()
+        ]
 
         for stock_market_price_sub_type in stock_market_price_sub_type_list:
 
@@ -9207,7 +9309,9 @@ class DataPreprocessor:
                 self._logger.log_error(f'Data in "{folder_path}" does not exist.')
                 return
 
-            self._logger.log_info(f'Start ingesting {len(file_paths)} file(s) in "{folder_path}".')
+            self._logger.log_info(
+                f'Start ingesting {len(file_paths)} file(s) in "{folder_path}".'
+            )
 
             # Read and concatenate all CSV files
             df = pd.concat(
@@ -9276,10 +9380,14 @@ class DataPreprocessor:
                 df=df,
             )
 
-            self._logger.log_info(f'Finish ingesting {len(file_paths)} file(s) in "{folder_path}".')
+            self._logger.log_info(
+                f'Finish ingesting {len(file_paths)} file(s) in "{folder_path}".'
+            )
 
     def _ingest_stock_market_index_order(self) -> None:
-        stock_market_order_sub_type_list = [item for item in StockMarketSubType if "order" in item.value.lower()]
+        stock_market_order_sub_type_list = [
+            item for item in StockMarketSubType if "order" in item.value.lower()
+        ]
 
         for stock_market_order_sub_type in stock_market_order_sub_type_list:
 
@@ -9300,7 +9408,9 @@ class DataPreprocessor:
                 self._logger.log_error(f'Data in "{folder_path}" does not exist.')
                 continue
 
-            self._logger.log_info(f'Start ingesting {len(file_paths)} file(s) in "{folder_path}".')
+            self._logger.log_info(
+                f'Start ingesting {len(file_paths)} file(s) in "{folder_path}".'
+            )
 
             # Read and concatenate all CSV files
             df = pd.concat(
@@ -9321,7 +9431,9 @@ class DataPreprocessor:
             df["change"] = (
                 df["change"]
                 .str.extract(r"^([\d.]+)", expand=False)
-                .apply(lambda x: ".".join(["".join(x.split(".")[:-1]), x.split(".")[-1]]))
+                .apply(
+                    lambda x: ".".join(["".join(x.split(".")[:-1]), x.split(".")[-1]])
+                )
                 .astype(float)
             )
 
@@ -9373,7 +9485,9 @@ class DataPreprocessor:
                 df=df,
             )
 
-            self._logger.log_info(f'Finish ingesting {len(file_paths)} file(s) in "{folder_path}".')
+            self._logger.log_info(
+                f'Finish ingesting {len(file_paths)} file(s) in "{folder_path}".'
+            )
 
     def _clean_stock_market_vn_index(self) -> None:
         key = (
@@ -9412,15 +9526,15 @@ class DataPreprocessor:
         silver_df = self._clean(
             df=vn_index_bronze_df,
             clean_layer_list=[
-                CleanLayer.ORDER_BY([Table.S_VN_INDEX.Column.DATE.value])
+                CleanLayer.ORDER_BY([Table.S_STOCK_MARKET.Column.DATE.value])
             ],
         )
 
         self._select_database(DataQuality.SILVER.value)
         self._save_pandas_table_to_database(
             schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.S_VN_INDEX.name,
-            primary_keys=Table.S_VN_INDEX.primary_key,
+            table_name=Table.S_STOCK_MARKET.name,
+            primary_keys=Table.S_STOCK_MARKET.primary_key,
             df=silver_df,
         )
 
@@ -9442,7 +9556,7 @@ class DataPreprocessor:
         self._select_database(DataQuality.SILVER.value)
         silver_df = self._select(
             schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.S_VN_INDEX.name,
+            table_name=Table.S_STOCK_MARKET.name,
         )
 
         gold_df = make_date_time_index_for_dataframe(df=silver_df)
@@ -10024,7 +10138,7 @@ class DataPreprocessor:
                 self._connect_to_database(DataQuality.BRONZE)
                 self._create_schemas(DataQuality.BRONZE)
                 self._create_tables(DataQuality.BRONZE)
-                self._process_data(DataQuality.BRONZE)
+                # self._process_data(DataQuality.BRONZE)
 
             except Exception as e:
                 self._logger.log_error(
@@ -10041,7 +10155,7 @@ class DataPreprocessor:
                 self._connect_to_database(DataQuality.SILVER)
                 self._create_schemas(DataQuality.SILVER)
                 self._create_tables(DataQuality.SILVER)
-                self._process_data(DataQuality.SILVER)
+                # self._process_data(DataQuality.SILVER)
 
             except Exception as e:
                 self._logger.log_error(
@@ -10058,7 +10172,7 @@ class DataPreprocessor:
                 self._connect_to_database(DataQuality.GOLD)
                 self._create_schemas(DataQuality.GOLD)
                 self._create_tables(DataQuality.GOLD)
-                self._process_data(DataQuality.GOLD)
+                # self._process_data(DataQuality.GOLD)
 
             except Exception as e:
                 self._logger.log_error(

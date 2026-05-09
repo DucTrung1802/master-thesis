@@ -104,13 +104,13 @@
                 }
             },
             "data_quality_silver": {
-                "enable": false,
+                "enable": true,
                 "children": {
                     "macroeconomics": {
                         "enable": false
                     },
                     "stock_market": {
-                        "enable": false
+                        "enable": true
                     },
                     "enterprise": {
                         "enable": false
@@ -118,13 +118,13 @@
                 }
             },
             "data_quality_gold": {
-                "enable": false,
+                "enable": true,
                 "children": {
                     "macroeconomics": {
                         "enable": false
                     },
                     "stock_market": {
-                        "enable": false
+                        "enable": true
                     },
                     "enterprise": {
                         "enable": false
