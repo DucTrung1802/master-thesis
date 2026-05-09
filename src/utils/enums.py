@@ -187,16 +187,35 @@ class MacroeconomicsSubType(Enum):
 class StockMarketSubType(Enum):
     VN_INDEX_PRICE = "vn_index_price"
     VN_INDEX_ORDER = "vn_index_order"
-    VN_30_INDEX = "vn30_index"
-    VN_100_INDEX = "vn100_index"
-    HNX_30_INDEX = "hnx30_index"
-    UPCOM_INDEX = "upcom_index"
+
+    VN_30_INDEX_PRICE = "vn_30_index_price"
+    VN_30_INDEX_ORDER = "vn_30_index_order"
+
+    VN_100_INDEX_PRICE = "vn_100_index_price"
+    VN_100_INDEX_ORDER = "vn_100_index_order"
+
+    HNX_INDEX_PRICE = "hnx_index_price"
+    HNX_INDEX_ORDER = "hnx_index_order"
+
+    HNX_30_INDEX_PRICE = "hnx_30_index_price"
+    HNX_30_INDEX_ORDER = "hnx_30_index_order"
+
+    UPCOM_INDEX_PRICE = "upcom_index_price"
+    UPCOM_INDEX_ORDER = "upcom_index_order"
 
 
 class EnterpriseSubType(Enum):
-    FINANCE_INFO = "finance_info"
-    DAILY_PRICE = "daily_price"
-    STOCK_INFORMATION = "stock_information"
+    STOCK_LIST_HOSE = "stock_list_hose"
+    STOCK_LIST_HNX = "stock_list_hnx"
+    STOCK_LIST_UPCOM = "stock_list_upcom"
+
+    STOCK_PRICE_HOSE = "stock_price_hose"
+    STOCK_PRICE_HNX = "stock_price_hnx"
+    STOCK_PRICE_UPCOM = "stock_price_upcom"
+
+    STOCK_ORDER_HOSE = "stock_order_hose"
+    STOCK_ORDER_HNX = "stock_order_hnx"
+    STOCK_ORDER_UPCOM = "stock_order_upcom"
 
 
 ScrapeSubType = Union[
@@ -465,41 +484,77 @@ SCRAPE_MAPPING: Dict[Tuple[ScrapeMainType, ScrapeSubType], SourceInfo] = {
     ): SourceInfo(url="https://cafef.vn/du-lieu/Lich-su-giao-dich-vnindex-2.chn"),
     (
         ScrapeMainType.STOCK_MARKET,
-        StockMarketSubType.VN_30_INDEX,
+        StockMarketSubType.VN_30_INDEX_PRICE,
     ): SourceInfo(
-        url="https://cafef.vn/du-lieu/lich-su-giao-dich-vn30index-1.chn#data",
+        url="https://cafef.vn/du-lieu/lich-su-giao-dich/hose/vn30index-1.chn",
     ),
     (
         ScrapeMainType.STOCK_MARKET,
-        StockMarketSubType.VN_100_INDEX,
+        StockMarketSubType.VN_30_INDEX_ORDER,
+    ): SourceInfo(
+        url="https://cafef.vn/du-lieu/lich-su-giao-dich/hose/vn30index-2.chn",
+    ),
+    (
+        ScrapeMainType.STOCK_MARKET,
+        StockMarketSubType.VN_100_INDEX_PRICE,
     ): SourceInfo(
         url="https://cafef.vn/du-lieu/lich-su-giao-dich-vn100-index-1.chn",
     ),
     (
         ScrapeMainType.STOCK_MARKET,
-        StockMarketSubType.HNX_30_INDEX,
+        StockMarketSubType.VN_100_INDEX_ORDER,
     ): SourceInfo(
-        url="https://cafef.vn/du-lieu/lich-su-giao-dich-hnx30-index-1.chn",
+        url="https://cafef.vn/du-lieu/lich-su-giao-dich/hose/vn100-index-2.chn",
     ),
     (
         ScrapeMainType.STOCK_MARKET,
-        StockMarketSubType.UPCOM_INDEX,
-    ): SourceInfo(url="https://cafef.vn/du-lieu/lich-su-giao-dich-upcom-index-1.chn"),
+        StockMarketSubType.HNX_INDEX_PRICE,
+    ): SourceInfo(
+        url="https://cafef.vn/du-lieu/lich-su-giao-dich/hnx/hnx-index-1.chn",
+    ),
+    (
+        ScrapeMainType.STOCK_MARKET,
+        StockMarketSubType.HNX_INDEX_ORDER,
+    ): SourceInfo(
+        url="https://cafef.vn/du-lieu/lich-su-giao-dich/hnx/hnx-index-2.chn",
+    ),
+    (
+        ScrapeMainType.STOCK_MARKET,
+        StockMarketSubType.HNX_30_INDEX_PRICE,
+    ): SourceInfo(
+        url="https://cafef.vn/du-lieu/lich-su-giao-dich/hnx/hnx30-index-1.chn",
+    ),
+    (
+        ScrapeMainType.STOCK_MARKET,
+        StockMarketSubType.HNX_30_INDEX_ORDER,
+    ): SourceInfo(
+        url="https://cafef.vn/du-lieu/lich-su-giao-dich/hnx/hnx30-index-2.chn",
+    ),
+    (
+        ScrapeMainType.STOCK_MARKET,
+        StockMarketSubType.UPCOM_INDEX_PRICE,
+    ): SourceInfo(
+        url="https://cafef.vn/du-lieu/lich-su-giao-dich/upcom/upcom-index-1.chn"
+    ),
+    (
+        ScrapeMainType.STOCK_MARKET,
+        StockMarketSubType.UPCOM_INDEX_ORDER,
+    ): SourceInfo(
+        url="https://cafef.vn/du-lieu/lich-su-giao-dich/upcom/upcom-index-2.chn"
+    ),
     # ENTERPRISE
     (
         ScrapeMainType.ENTERPRISE,
-        EnterpriseSubType.FINANCE_INFO,
-    ): SourceInfo(url="https://cafef.vn/"),
+        EnterpriseSubType.STOCK_LIST_HOSE,
+    ): SourceInfo(url="https://cafef.vn/du-lieu/lich-su-giao-dich/hose/all-1.chn"),
     (
         ScrapeMainType.ENTERPRISE,
-        EnterpriseSubType.DAILY_PRICE,
-    ): SourceInfo(url="https://cafef.vn/du-lieu/du-lieu-download.chn"),
+        EnterpriseSubType.STOCK_LIST_HNX,
+    ): SourceInfo(url="https://cafef.vn/du-lieu/lich-su-giao-dich/hnx/all-1.chn"),
     (
         ScrapeMainType.ENTERPRISE,
-        EnterpriseSubType.STOCK_INFORMATION,
-    ): SourceInfo(
-        url="https://cafef.vn/du-lieu/hose/vic-tap-doan-vingroup-cong-ty-co-phan.chn"
-    ),
+        EnterpriseSubType.STOCK_LIST_UPCOM,
+    ): SourceInfo(url="https://cafef.vn/du-lieu/lich-su-giao-dich/upcom/all-1.chn"),
 }
 
 
@@ -2135,6 +2190,56 @@ class Table:
         name = "vn_index_order"
         primary_key = [Column.DATE.value]
 
+    class S_VN_INDEX:
+        class Column(Enum):
+            DATE = "date"
+            OPEN = "open"
+            HIGH = "high"
+            LOW = "low"
+            CLOSE = "close"
+            ADJUST = "adjust"
+            CHANGE = "change"
+            PERCENT_CHANGE = "percent_change"
+            MATCHING_VOLUME = "matching_volume"
+            MATCHING_VALUE = "matching_value"
+            NEGOTIATE_VOLUME = "negotiate_volume"
+            NEGOTIATE_VALUE = "negotiate_value"
+            NUMBER_OF_BUY_ORDERS = "number_of_buy_orders"
+            BUY_VOLUME = "buy_volume"
+            AVERAGE_VOLUME_PER_BUY_ORDER = "average_volume_per_buy_order"
+            NUMBER_OF_SELL_ORDERS = "number_of_sell_orders"
+            SELL_VOLUME = "sell_volume"
+            AVERAGE_VOLUME_PER_SELL_ORDER = "average_volume_per_sell_order"
+            NET_VOLUME = "net_volume"
+
+        name = "vn_index"
+        primary_key = [Column.DATE.value]
+
+    class G_VN_INDEX:
+        class Column(Enum):
+            DATE = "date"
+            OPEN = "open"
+            HIGH = "high"
+            LOW = "low"
+            CLOSE = "close"
+            ADJUST = "adjust"
+            CHANGE = "change"
+            PERCENT_CHANGE = "percent_change"
+            MATCHING_VOLUME = "matching_volume"
+            MATCHING_VALUE = "matching_value"
+            NEGOTIATE_VOLUME = "negotiate_volume"
+            NEGOTIATE_VALUE = "negotiate_value"
+            NUMBER_OF_BUY_ORDERS = "number_of_buy_orders"
+            BUY_VOLUME = "buy_volume"
+            AVERAGE_VOLUME_PER_BUY_ORDER = "average_volume_per_buy_order"
+            NUMBER_OF_SELL_ORDERS = "number_of_sell_orders"
+            SELL_VOLUME = "sell_volume"
+            AVERAGE_VOLUME_PER_SELL_ORDER = "average_volume_per_sell_order"
+            NET_VOLUME = "net_volume"
+
+        name = "vn_index"
+        primary_key = [Column.DATE.value]
+
     class HNX_INDEX:
         class Column(Enum):
             DATE = "date"
@@ -2308,7 +2413,7 @@ class TTC_EnterpriseTable(Enum):
 
 
 # MODEL TRAIN ENUMS
-class AchitectureType(Enum):
+class ModelAchitectureType(Enum):
     LSTM = "lstm"
     CNN = "cnn"
 

@@ -14,9 +14,3 @@ logs/
 mt_env/
 
 wandb/
-
-*.json
-
-*.pkl
-
-src/model/lightning_logs/

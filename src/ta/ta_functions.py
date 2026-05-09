@@ -4,6 +4,8 @@ import numpy as np
 import pandas as pd
 import sys, os
 from dotenv import load_dotenv
+from itertools import combinations, product
+import talib
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -19,7 +21,7 @@ from dtos.tabular_database_driver_dtos.tabular_database_driver_dtos import (
 from tabular_database_driver.postgre_sql_driver import PostgreSQLDriver
 from utils.constants import *
 from utils.enums import *
-
+from utils.utils import get_weekends
 
 load_dotenv()
 
@@ -58,149 +60,645 @@ def validate_column(df: pd.DataFrame, column_name: str) -> None:
         )
 
 
-# region TREND INDICATORS
-def add_sma(
-    df: pd.DataFrame, n: list[int] = None, column_name: str = "close"
+# region OVERLAP STUDIES
+def add_bbands(
+    df: pd.DataFrame,
+    n: int | list[int] | None = None,
+    k: float = 2.0,
+    ma_type: int = 0,
+    column_name: str = "close",
+    default_bb_periods: list[int] = None,
+    distance_mode: str = "pct",
+    slope_mode: str = "diff",
 ) -> pd.DataFrame:
-    """
-    Add one or multiple Simple Moving Average (SMA) columns to the DataFrame.
+    validate_column(df, column_name)
+    df = df.copy()
 
-    The SMA is the unweighted mean of the previous `n` values from the specified column.
+    if default_bb_periods is None:
+        default_bb_periods = [20]
+    if n is None:
+        periods = default_bb_periods
+    elif isinstance(n, int):
+        periods = [n]
+    else:
+        periods = list(n)
 
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Input DataFrame that must contain the specified column (default is 'close').
-    n : list[int], optional
-        List of window sizes for the SMAs. Defaults to [50, 100, 200].
-    column_name : str, optional
-        Name of the column to calculate the SMA on. Defaults to 'close'.
+    source = df[column_name].to_numpy(dtype=float)
+    price = df[column_name]
 
-    Returns
-    -------
-    pd.DataFrame
-        Copy of the input DataFrame with added SMA columns for all values in `n`.
-    """
+    # ── collect ALL new columns here, concat once at the end ──────────────
+    new_cols = {}
+
+    for period in periods:
+        upper, middle, lower = talib.BBANDS(
+            source,
+            timeperiod=period,
+            nbdevup=k,
+            nbdevdn=k,
+            matype=ma_type,
+        )
+        upper = pd.Series(upper, index=df.index)
+        middle = pd.Series(middle, index=df.index)
+        lower = pd.Series(lower, index=df.index)
+
+        base = f"{column_name}_bb_{period}"
+
+        # --- bands ---
+        new_cols[f"{base}_upper"] = upper
+        new_cols[f"{base}_middle"] = middle
+        new_cols[f"{base}_lower"] = lower
+
+        # --- distance ---
+        if distance_mode == "abs":
+            new_cols[f"{base}_dist_upper"] = price - upper
+            new_cols[f"{base}_dist_middle"] = price - middle
+            new_cols[f"{base}_dist_lower"] = price - lower
+        else:  # pct
+            new_cols[f"{base}_dist_upper"] = (price - upper) / upper
+            new_cols[f"{base}_dist_middle"] = (price - middle) / middle
+            new_cols[f"{base}_dist_lower"] = (price - lower) / lower
+
+        # --- slope + acceleration ---
+        for band_name, band_series in [
+            ("upper", upper),
+            ("middle", middle),
+            ("lower", lower),
+        ]:
+            slope = (
+                band_series.pct_change() if slope_mode == "pct" else band_series.diff()
+            )
+            new_cols[f"{base}_slope_{band_name}"] = slope
+            new_cols[f"{base}_slope_{band_name}_acceleration"] = slope.diff()
+
+        # --- bandwidth ---
+        bandwidth = (upper - lower) / middle
+        new_cols[f"{base}_bandwidth"] = bandwidth
+        new_cols[f"{base}_bandwidth_slope"] = bandwidth.diff()
+        new_cols[f"{base}_bandwidth_acceleration"] = bandwidth.diff().diff()
+
+        # --- %B ---
+        band_range = (upper - lower).replace(0, float("nan"))
+        pct_b = (price - lower) / band_range
+        new_cols[f"{base}_pct_b"] = pct_b
+        new_cols[f"{base}_pct_b_slope"] = pct_b.diff()
+        new_cols[f"{base}_pct_b_gt_1"] = pct_b > 1
+        new_cols[f"{base}_pct_b_lt_0"] = pct_b < 0
+
+        # --- position flags ---
+        above = price > upper
+        below = price < lower
+        new_cols[f"{base}_above_upper"] = above
+        new_cols[f"{base}_below_lower"] = below
+        new_cols[f"{base}_inside_bands"] = ~above & ~below
+        new_cols[f"{base}_position"] = np.where(above, 1, np.where(below, -1, 0))
+
+    # ── single concat replaces all fragmented df[col] = ... assignments ───
+    df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
+
+    return df
+
+
+def add_dema(
+    df: pd.DataFrame,
+    n: list[int] = None,
+    column_name: str = "close",
+    slope_mode: str = "diff",
+) -> pd.DataFrame:
     validate_column(df, column_name)
 
     if n is None:
         n = [50, 100, 200]
 
     df = df.copy()
+    source = df[column_name].to_numpy(dtype=float)
+    price = df[column_name]
 
+    new_cols = {}
+    dema_series = {}
+
+    # ── per-period features ──────────────────────────────────────────────────
     for window in n:
-        df[f"{column_name}_sma_{window}"] = (
-            df[column_name].rolling(window=window, min_periods=1).mean()
-        )
+        base = f"{column_name}_dema_{window}"
+        dema = pd.Series(talib.DEMA(source, timeperiod=window), index=df.index)
+        slope = dema.pct_change() if slope_mode == "pct" else dema.diff()
 
+        new_cols[base] = dema
+        new_cols[f"{base}_slope"] = slope
+        new_cols[f"{base}_acceleration"] = slope.diff()
+
+        # distance (signed + absolute + normalised)
+        dist = price - dema
+        new_cols[f"{base}_dist"] = dist
+        new_cols[f"{base}_dist_abs"] = dist.abs()
+        new_cols[f"{base}_dist_pct"] = dist / dema  # removes price-level dominance
+
+        # position flag
+        new_cols[f"{column_name}_gt_dema_{window}"] = (price > dema).astype(int)
+
+        dema_series[window] = dema
+
+    # ── pairwise features ────────────────────────────────────────────────────
+    for w1, w2 in combinations(dema_series.keys(), 2):
+        pair = f"{column_name}_dema_{w1}_{w2}"
+        d1, d2 = dema_series[w1], dema_series[w2]
+        dist = d1 - d2
+
+        # basic distance metrics
+        new_cols[f"{pair}_dist"] = dist
+        new_cols[f"{pair}_dist_abs"] = dist.abs()
+        new_cols[f"{pair}_dist_pct"] = dist / d2  # normalised, removes price dominance
+        new_cols[f"{pair}_dist_slope"] = dist.diff()
+        new_cols[f"{pair}_dist_acceleration"] = dist.diff().diff()
+
+        # current regime: +1 when short DEMA above long DEMA, -1 otherwise
+        sign = np.sign(dist).replace(0, np.nan).ffill().fillna(1)
+        new_cols[f"{pair}_direction"] = sign.astype(int)
+
+        # ── crossover events ─────────────────────────────────────────────────
+        prev_sign = sign.shift(1)
+        new_cols[f"{pair}_crossover_up"] = ((sign > 0) & (prev_sign <= 0)).astype(int)
+        new_cols[f"{pair}_crossover_dn"] = ((sign < 0) & (prev_sign >= 0)).astype(int)
+
+        # bars since last crossover — how "fresh" the signal is
+        regime_change = sign.ne(sign.shift(1))
+        regime_id = regime_change.cumsum()
+        new_cols[f"{pair}_bars_since_crossover"] = sign.groupby(regime_id).cumcount()
+
+    df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
     return df
 
 
 def add_ema(
     df: pd.DataFrame,
-    n: int | list[int] | None = None,
+    n: list[int] = None,
     column_name: str = "close",
-    default_ema_periods: list[int] = None,
 ) -> pd.DataFrame:
-    """
-    Add one or multiple Exponential Moving Average (EMA) columns.
-
-    Default EMA values reflect commonly used technical analysis periods:
-    12, 26, 50, 100, 200.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Input DataFrame containing the target column.
-    n : int or list[int], optional
-        EMA span(s). If None, default popular spans will be used.
-    column_name : str, optional
-        Column to compute EMA on. Default is 'close'.
-    default_ema_periods : list[int], optional
-        Override the predefined popular EMA spans if desired.
-
-    Returns
-    -------
-    pd.DataFrame
-        DataFrame including added EMA column(s).
-    """
     validate_column(df, column_name)
-    df = df.copy()
 
-    # Default EMA spans widely used in trading
-    if default_ema_periods is None:
-        default_ema_periods = [12, 26, 50, 100, 200]
-
-    # If user provides nothing → use defaults
     if n is None:
-        periods = default_ema_periods
-    # If user provides a single int
-    elif isinstance(n, int):
-        periods = [n]
-    # If user provides list of ints
-    else:
-        periods = list(n)
+        n = [50, 100, 200]
 
-    # Compute EMAs
-    for period in periods:
-        df[f"{column_name}_ema_{period}"] = (
-            df[column_name].ewm(span=period, adjust=False).mean()
-        )
+    df = df.copy()
+    source = df[column_name].to_numpy(dtype=float)
+    price = df[column_name]
+
+    new_cols = {}
+    ema_series = {}
+
+    # --- EMA + per-period derivatives ---
+    for window in n:
+        base = f"{column_name}_ema_{window}"
+        ema = pd.Series(talib.EMA(source, timeperiod=window), index=df.index)
+        slope = ema.diff()
+
+        new_cols[base] = ema
+        new_cols[f"{base}_slope"] = slope
+        new_cols[f"{base}_acceleration"] = slope.diff()
+        new_cols[f"{column_name}_gt_ema_{window}"] = price > ema
+        new_cols[f"{base}_dist"] = price - ema
+        new_cols[f"{base}_dist_abs"] = (price - ema).abs()
+
+        ema_series[window] = ema
+
+    # --- pairwise distances ---
+    for w1, w2 in combinations(ema_series.keys(), 2):
+        pair = f"{column_name}_ema_{w1}_{w2}"
+        dist = ema_series[w1] - ema_series[w2]
+
+        new_cols[f"{pair}_dist"] = dist
+        new_cols[f"{pair}_dist_abs"] = dist.abs()
+        new_cols[f"{pair}_direction"] = np.where(dist > 0, 1, -1)
+        new_cols[f"{pair}_dist_slope"] = dist.diff()
+
+    df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
     return df
 
 
-def add_lwma(
+def add_kama(
     df: pd.DataFrame,
-    n: int | list[int] | None = None,
+    n: list[int] = None,
     column_name: str = "close",
-    default_lwma_periods: list[int] = None,
 ) -> pd.DataFrame:
-    """
-    Add one or multiple Linear Weighted Moving Average (LWMA) columns.
-
-    Default LWMA values:
-        12, 26, 50, 100, 200
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Input DataFrame containing the target column.
-    n : int or list[int], optional
-        LWMA window size(s). If None, default periods are used.
-    column_name : str, optional
-        Column to compute LWMA on. Default is 'close'.
-    default_lwma_periods : list[int], optional
-        Override the predefined LWMA spans.
-
-    Returns
-    -------
-    pd.DataFrame
-        DataFrame including added LWMA column(s).
-    """
     validate_column(df, column_name)
-    df = df.copy()
 
-    # Default LWMA periods you requested
-    if default_lwma_periods is None:
-        default_lwma_periods = [12, 26, 50, 100, 200]
-
-    # Determine which periods to compute
     if n is None:
-        periods = default_lwma_periods
-    elif isinstance(n, int):
-        periods = [n]
-    else:
-        periods = list(n)
+        n = [50, 100, 200]
 
-    # Compute LWMA for each period
-    for period in periods:
-        weights = np.arange(1, period + 1)
-        df[f"{column_name}_lwma_{period}"] = (
-            df[column_name]
-            .rolling(window=period)
-            .apply(lambda x: np.dot(x, weights) / weights.sum(), raw=True)
+    df = df.copy()
+    source = df[column_name].to_numpy(dtype=float)
+    price = df[column_name]
+
+    new_cols = {}
+    kama_series = {}
+
+    # --- KAMA + per-period derivatives ---
+    for window in n:
+        base = f"{column_name}_kama_{window}"
+        kama = pd.Series(talib.KAMA(source, timeperiod=window), index=df.index)
+        slope = kama.diff()
+
+        new_cols[base] = kama
+        new_cols[f"{base}_slope"] = slope
+        new_cols[f"{base}_acceleration"] = slope.diff()
+        new_cols[f"{column_name}_gt_kama_{window}"] = price > kama
+        new_cols[f"{base}_dist"] = price - kama
+        new_cols[f"{base}_dist_abs"] = (price - kama).abs()
+
+        kama_series[window] = kama
+
+    # --- pairwise distances ---
+    for w1, w2 in combinations(kama_series.keys(), 2):
+        pair = f"{column_name}_kama_{w1}_{w2}"
+        dist = kama_series[w1] - kama_series[w2]
+
+        new_cols[f"{pair}_dist"] = dist
+        new_cols[f"{pair}_dist_abs"] = dist.abs()
+        new_cols[f"{pair}_direction"] = np.where(dist > 0, 1, -1)
+        new_cols[f"{pair}_dist_slope"] = dist.diff()
+
+    df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
+
+    return df
+
+
+def add_midpoint(
+    df: pd.DataFrame,
+    n: list[int] = None,
+    column_name: str = "close",
+) -> pd.DataFrame:
+    validate_column(df, column_name)
+
+    if n is None:
+        n = [14, 50, 100]
+
+    df = df.copy()
+    source = df[column_name].to_numpy(dtype=float)
+    price = df[column_name]
+
+    new_cols = {}
+    midpoint_series = {}
+
+    # --- MIDPOINT + per-period derivatives ---
+    for window in n:
+        base = f"{column_name}_midpoint_{window}"
+        midpoint = pd.Series(talib.MIDPOINT(source, timeperiod=window), index=df.index)
+        slope = midpoint.diff()
+
+        new_cols[base] = midpoint
+        new_cols[f"{base}_slope"] = slope
+        new_cols[f"{base}_acceleration"] = slope.diff()
+        new_cols[f"{column_name}_gt_midpoint_{window}"] = price > midpoint
+        new_cols[f"{base}_dist"] = price - midpoint
+        new_cols[f"{base}_dist_abs"] = (price - midpoint).abs()
+
+        midpoint_series[window] = midpoint
+
+    # --- pairwise distances ---
+    for w1, w2 in combinations(midpoint_series.keys(), 2):
+        pair = f"{column_name}_midpoint_{w1}_{w2}"
+        dist = midpoint_series[w1] - midpoint_series[w2]
+
+        new_cols[f"{pair}_dist"] = dist
+        new_cols[f"{pair}_dist_abs"] = dist.abs()
+        new_cols[f"{pair}_direction"] = np.where(dist > 0, 1, -1)
+        new_cols[f"{pair}_dist_slope"] = dist.diff()
+
+    df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
+
+    return df
+
+
+def add_midprice(
+    df: pd.DataFrame,
+    n: list[int] = None,
+    high_col: str = "high",
+    low_col: str = "low",
+    close_col: str = "close",
+) -> pd.DataFrame:
+    validate_column(df, high_col)
+    validate_column(df, low_col)
+
+    if n is None:
+        n = [14, 50, 100]
+
+    df = df.copy()
+    high = df[high_col].to_numpy(dtype=float)
+    low = df[low_col].to_numpy(dtype=float)
+
+    has_close = close_col and close_col in df.columns
+    close = df[close_col] if has_close else None
+
+    new_cols = {}
+    midprice_series = {}
+
+    # --- MIDPRICE + per-period derivatives ---
+    for window in n:
+        base = f"midprice_{window}"
+        midprice = pd.Series(
+            talib.MIDPRICE(high, low, timeperiod=window), index=df.index
         )
+        slope = midprice.diff()
+
+        new_cols[base] = midprice
+        new_cols[f"{base}_slope"] = slope
+        new_cols[f"{base}_acceleration"] = slope.diff()
+
+        if has_close:
+            new_cols[f"close_gt_midprice_{window}"] = close > midprice
+            new_cols[f"{base}_dist"] = close - midprice
+            new_cols[f"{base}_dist_abs"] = (close - midprice).abs()
+
+        midprice_series[window] = midprice
+
+    # --- pairwise distances ---
+    for w1, w2 in combinations(midprice_series.keys(), 2):
+        pair = f"midprice_{w1}_{w2}"
+        dist = midprice_series[w1] - midprice_series[w2]
+
+        new_cols[f"{pair}_dist"] = dist
+        new_cols[f"{pair}_dist_abs"] = dist.abs()
+        new_cols[f"{pair}_direction"] = np.where(dist > 0, 1, -1)
+        new_cols[f"{pair}_dist_slope"] = dist.diff()
+
+    df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
+
+    return df
+
+
+def add_sar(
+    df: pd.DataFrame,
+    acceleration: list[float] = None,
+    maximum: list[float] = None,
+    high_col: str = "high",
+    low_col: str = "low",
+    close_col: str = "close",
+) -> pd.DataFrame:
+    validate_column(df, high_col)
+    validate_column(df, low_col)
+    validate_column(df, close_col)
+
+    if acceleration is None:
+        acceleration = [0.02, 0.04]
+    if maximum is None:
+        maximum = [0.2]
+
+    df = df.copy()
+    high = df[high_col].to_numpy(dtype=float)
+    low = df[low_col].to_numpy(dtype=float)
+    close = df[close_col]
+
+    new_cols = {}
+    sar_series = {}
+
+    def _suffix(acc, max_val) -> str:
+        return f"{acc}_{max_val}".replace(".", "")
+
+    # pre-compute price trend flags once (shared across all combos)
+    price_diff = close.diff()
+    price_up3 = (price_diff > 0).rolling(3).sum() == 3
+    price_down3 = (price_diff < 0).rolling(3).sum() == 3
+
+    # =========================
+    # 1. SAR + per-combo derivatives
+    # =========================
+    for acc in acceleration:
+        for max_val in maximum:
+            s = _suffix(acc, max_val)
+            base = f"sar_{s}"
+            sar = pd.Series(
+                talib.SAR(high, low, acceleration=acc, maximum=max_val), index=df.index
+            )
+            slope = sar.diff()
+            dist = close - sar
+
+            new_cols[base] = sar
+            new_cols[f"{base}_slope"] = slope
+            new_cols[f"{base}_acceleration"] = slope.diff()
+            new_cols[f"{base}_above"] = sar > close  # bearish
+            new_cols[f"{base}_below"] = sar < close  # bullish
+            new_cols[f"{base}_direction"] = np.where(dist > 0, 1, -1)
+            new_cols[f"{base}_dist"] = dist
+            new_cols[f"{base}_dist_abs"] = dist.abs()
+            new_cols[f"{base}_dist_pct"] = dist / close.replace(0, float("nan"))
+
+            # --- trend agreement ---
+            sar_diff = sar.diff()
+            sar_up3 = (sar_diff > 0).rolling(3).sum() == 3
+            sar_down3 = (sar_diff < 0).rolling(3).sum() == 3
+
+            new_cols[f"{base}_up3"] = price_up3 & sar_up3
+            new_cols[f"{base}_down3"] = price_down3 & sar_down3
+            new_cols[f"{base}_trend3"] = np.where(
+                price_up3 & sar_up3, 1, np.where(price_down3 & sar_down3, -1, 0)
+            )
+
+            sar_series[s] = sar
+
+    # =========================
+    # 2. Pairwise SAR distances
+    # =========================
+    for s1, s2 in combinations(sar_series.keys(), 2):
+        pair = f"sar_{s1}_{s2}"
+        dist = sar_series[s1] - sar_series[s2]
+
+        new_cols[f"{pair}_dist"] = dist
+        new_cols[f"{pair}_dist_abs"] = dist.abs()
+        new_cols[f"{pair}_direction"] = np.where(dist > 0, 1, -1)
+        new_cols[f"{pair}_dist_slope"] = dist.diff()
+
+    df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
+
+    return df
+
+
+def add_sma(
+    df: pd.DataFrame,
+    n: list[int] = None,
+    column_name: str = "close",
+) -> pd.DataFrame:
+    validate_column(df, column_name)
+
+    if n is None:
+        n = [50, 100, 200]
+
+    df = df.copy()
+    source = df[column_name].to_numpy(dtype=float)
+    price = df[column_name]
+
+    new_cols = {}
+    sma_series = {}
+
+    # --- SMA + per-period derivatives ---
+    for window in n:
+        base = f"{column_name}_sma_{window}"
+        sma = pd.Series(talib.SMA(source, timeperiod=window), index=df.index)
+        slope = sma.diff()
+
+        new_cols[base] = sma
+        new_cols[f"{base}_slope"] = slope
+        new_cols[f"{base}_acceleration"] = slope.diff()
+        new_cols[f"{column_name}_gt_sma_{window}"] = price > sma
+        new_cols[f"{base}_dist"] = price - sma
+        new_cols[f"{base}_dist_abs"] = (price - sma).abs()
+
+        sma_series[window] = sma
+
+    # --- pairwise distances ---
+    for w1, w2 in combinations(sma_series.keys(), 2):
+        pair = f"{column_name}_sma_{w1}_{w2}"
+        dist = sma_series[w1] - sma_series[w2]
+
+        new_cols[f"{pair}_dist"] = dist
+        new_cols[f"{pair}_dist_abs"] = dist.abs()
+        new_cols[f"{pair}_direction"] = np.where(dist > 0, 1, -1)
+        new_cols[f"{pair}_dist_slope"] = dist.diff()
+
+    df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
+
+    return df
+
+
+def add_t3(
+    df: pd.DataFrame,
+    n: list[int] = None,
+    column_name: str = "close",
+    vfactor: float = 0.7,
+) -> pd.DataFrame:
+    validate_column(df, column_name)
+
+    if n is None:
+        n = [5]
+
+    df = df.copy()
+    source = df[column_name].to_numpy(dtype=float)
+    price = df[column_name]
+
+    new_cols = {}
+    t3_series = {}
+
+    # --- T3 + per-period derivatives ---
+    for window in n:
+        base = f"{column_name}_t3_{window}"
+        t3 = pd.Series(
+            talib.T3(source, timeperiod=window, vfactor=vfactor), index=df.index
+        )
+        slope = t3.diff()
+
+        new_cols[base] = t3
+        new_cols[f"{base}_slope"] = slope
+        new_cols[f"{base}_acceleration"] = slope.diff()
+        new_cols[f"{column_name}_gt_t3_{window}"] = price > t3
+        new_cols[f"{base}_dist"] = price - t3
+        new_cols[f"{base}_dist_abs"] = (price - t3).abs()
+
+        t3_series[window] = t3
+
+    # --- pairwise distances ---
+    for w1, w2 in combinations(t3_series.keys(), 2):
+        pair = f"{column_name}_t3_{w1}_{w2}"
+        dist = t3_series[w1] - t3_series[w2]
+
+        new_cols[f"{pair}_dist"] = dist
+        new_cols[f"{pair}_dist_abs"] = dist.abs()
+        new_cols[f"{pair}_direction"] = np.where(dist > 0, 1, -1)
+        new_cols[f"{pair}_dist_slope"] = dist.diff()
+
+    df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
+
+    return df
+
+
+def add_tema(
+    df: pd.DataFrame,
+    n: list[int] = None,
+    column_name: str = "close",
+) -> pd.DataFrame:
+    validate_column(df, column_name)
+
+    if n is None:
+        n = [30]
+
+    df = df.copy()
+    source = df[column_name].to_numpy(dtype=float)
+    price = df[column_name]
+
+    new_cols = {}
+    tema_series = {}
+
+    # --- TEMA + per-period derivatives ---
+    for window in n:
+        base = f"{column_name}_tema_{window}"
+        tema = pd.Series(talib.TEMA(source, timeperiod=window), index=df.index)
+        slope = tema.diff()
+
+        new_cols[base] = tema
+        new_cols[f"{base}_slope"] = slope
+        new_cols[f"{base}_acceleration"] = slope.diff()
+        new_cols[f"{column_name}_gt_tema_{window}"] = price > tema
+        new_cols[f"{base}_dist"] = price - tema
+        new_cols[f"{base}_dist_abs"] = (price - tema).abs()
+
+        tema_series[window] = tema
+
+    # --- pairwise distances ---
+    for w1, w2 in combinations(tema_series.keys(), 2):
+        pair = f"{column_name}_tema_{w1}_{w2}"
+        dist = tema_series[w1] - tema_series[w2]
+
+        new_cols[f"{pair}_dist"] = dist
+        new_cols[f"{pair}_dist_abs"] = dist.abs()
+        new_cols[f"{pair}_direction"] = np.where(dist > 0, 1, -1)
+        new_cols[f"{pair}_dist_slope"] = dist.diff()
+
+    df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
+
+    return df
+
+
+def add_trima(
+    df: pd.DataFrame,
+    n: list[int] = None,
+    column_name: str = "close",
+) -> pd.DataFrame:
+    validate_column(df, column_name)
+
+    if n is None:
+        n = [30]
+
+    df = df.copy()
+    source = df[column_name].to_numpy(dtype=float)
+    price = df[column_name]
+
+    new_cols = {}
+    trima_series = {}
+
+    # --- TRIMA + per-period derivatives ---
+    for window in n:
+        base = f"{column_name}_trima_{window}"
+        trima = pd.Series(talib.TRIMA(source, timeperiod=window), index=df.index)
+        slope = trima.diff()
+
+        new_cols[base] = trima
+        new_cols[f"{base}_slope"] = slope
+        new_cols[f"{base}_acceleration"] = slope.diff()
+        new_cols[f"{column_name}_gt_trima_{window}"] = price > trima
+        new_cols[f"{base}_dist"] = price - trima
+        new_cols[f"{base}_dist_abs"] = (price - trima).abs()
+
+        trima_series[window] = trima
+
+    # --- pairwise distances ---
+    for w1, w2 in combinations(trima_series.keys(), 2):
+        pair = f"{column_name}_trima_{w1}_{w2}"
+        dist = trima_series[w1] - trima_series[w2]
+
+        new_cols[f"{pair}_dist"] = dist
+        new_cols[f"{pair}_dist_abs"] = dist.abs()
+        new_cols[f"{pair}_direction"] = np.where(dist > 0, 1, -1)
+        new_cols[f"{pair}_dist_slope"] = dist.diff()
+
+    df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
     return df
 
@@ -209,1703 +707,2154 @@ def add_wma(
     df: pd.DataFrame,
     n: int | list[int] | None = None,
     column_name: str = "close",
-    default_wma_periods: list[int] = None,
 ) -> pd.DataFrame:
-    """
-    Add one or multiple Wilder's Moving Average (WMA) columns.
-
-    Default WMA values:
-        7, 14, 21, 50, 100
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Input DataFrame containing the target column.
-    n : int or list[int], optional
-        WMA period(s). If None, default popular periods are used.
-    column_name : str, optional
-        Column to compute WMA on. Default is 'close'.
-    default_wma_periods : list[int], optional
-        Override the predefined WMA periods.
-
-    Returns
-    -------
-    pd.DataFrame
-        DataFrame including added WMA column(s).
-    """
     validate_column(df, column_name)
-    df = df.copy()
 
-    # Default Wilder MA periods
-    if default_wma_periods is None:
-        default_wma_periods = [7, 14, 21, 50, 100]
-
-    # Determine which periods to compute
     if n is None:
-        periods = default_wma_periods
+        n = [7, 14, 21, 50, 100]
     elif isinstance(n, int):
-        periods = [n]
+        n = [n]
     else:
-        periods = list(n)
+        n = list(n)
 
-    # Compute Wilder MA for each period
-    for period in periods:
-        alpha = 1 / period
-        df[f"{column_name}_wma_{period}"] = (
-            df[column_name].ewm(alpha=alpha, adjust=False).mean()
-        )
+    df = df.copy()
+    source = df[column_name].to_numpy(dtype=float)
+    price = df[column_name]
+
+    new_cols = {}
+    wma_series = {}
+
+    # --- WMA + per-period derivatives ---
+    for period in n:
+        base = f"{column_name}_wma_{period}"
+        wma = pd.Series(talib.WMA(source, timeperiod=period), index=df.index)
+        slope = wma.diff()
+
+        new_cols[base] = wma
+        new_cols[f"{base}_slope"] = slope
+        new_cols[f"{base}_acceleration"] = slope.diff()
+        new_cols[f"{column_name}_gt_wma_{period}"] = price > wma
+        new_cols[f"{base}_dist"] = price - wma
+        new_cols[f"{base}_dist_abs"] = (price - wma).abs()
+
+        wma_series[period] = wma
+
+    # --- pairwise distances ---
+    for w1, w2 in combinations(wma_series.keys(), 2):
+        pair = f"{column_name}_wma_{w1}_{w2}"
+        dist = wma_series[w1] - wma_series[w2]
+
+        new_cols[f"{pair}_dist"] = dist
+        new_cols[f"{pair}_dist_abs"] = dist.abs()
+        new_cols[f"{pair}_direction"] = np.where(dist > 0, 1, -1)
+        new_cols[f"{pair}_dist_slope"] = dist.diff()
+
+    df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
     return df
 
 
+# endregion OVERLAP STUDIES
+
+
+# region MOMENTUM INDICATORS
 def add_adx(
     df: pd.DataFrame,
-    n: int | list[int] | None = None,
+    n: list[int] = None,
     high_col: str = "high",
     low_col: str = "low",
     close_col: str = "close",
-    default_adx_periods: list[int] = None,
 ) -> pd.DataFrame:
-    """
-    Add the Average Directional Movement Index (ADX) and related indicators
-    (+DI, -DI) to the DataFrame.
-
-    Default popular ADX periods:
-        7, 14, 20, 28, 50
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Input DataFrame containing high, low, close columns.
-    n : int or list[int], optional
-        ADX period(s). If None, use popular defaults.
-    high_col : str, optional
-        Column name for high prices. Default 'high'.
-    low_col : str, optional
-        Column name for low prices. Default 'low'.
-    close_col : str, optional
-        Column name for close prices. Default 'close'.
-    default_adx_periods : list[int], optional
-        Optionally override the default period list.
-
-    Returns
-    -------
-    pd.DataFrame
-        DataFrame with +di, -di, and adx_{period} columns added.
-    """
-
-    # Validate required columns
-    for col in [high_col, low_col, close_col]:
+    for col in (high_col, low_col, close_col):
         validate_column(df, col)
 
-    df = df.copy()
-
-    # Numeric enforcement
-    df[high_col] = pd.to_numeric(df[high_col], errors="coerce")
-    df[low_col] = pd.to_numeric(df[low_col], errors="coerce")
-    df[close_col] = pd.to_numeric(df[close_col], errors="coerce")
-
-    # Defaults
-    if default_adx_periods is None:
-        default_adx_periods = [7, 14, 20, 28, 50]
-
     if n is None:
-        periods = default_adx_periods
-    elif isinstance(n, int):
-        periods = [n]
-    else:
-        periods = list(n)
+        n = [14]
 
-    # Compute directional movement values once
-    df["tr"] = np.maximum(
-        df[high_col] - df[low_col],
-        np.maximum(
-            abs(df[high_col] - df[close_col].shift()),
-            abs(df[low_col] - df[close_col].shift()),
-        ),
-    )
+    df = df.copy()
+    high = df[high_col].to_numpy(dtype=float)
+    low = df[low_col].to_numpy(dtype=float)
+    close = df[close_col].to_numpy(dtype=float)
 
-    df["dm_pos"] = (
-        df[high_col]
-        .diff()
-        .where(
-            (df[high_col].diff() > df[low_col].diff() * -1) & (df[high_col].diff() > 0),
-            0.0,
+    new_cols = {}
+
+    for period in n:
+        s = f"_{period}"
+
+        # --- core indicators ---
+        adx = pd.Series(talib.ADX(high, low, close, timeperiod=period), index=df.index)
+        plus_di = pd.Series(
+            talib.PLUS_DI(high, low, close, timeperiod=period), index=df.index
         )
-    )
+        minus_di = pd.Series(
+            talib.MINUS_DI(high, low, close, timeperiod=period), index=df.index
+        )
+        adx_slope = adx.diff()
+        di_dist = plus_di - minus_di
 
-    df["dm_neg"] = (-df[low_col].diff()).where(
-        (-df[low_col].diff() > df[high_col].diff()) & (-df[low_col].diff() > 0), 0.0
-    )
+        # --- ADX ---
+        new_cols[f"adx{s}"] = adx
+        new_cols[f"adx{s}_gt_20"] = adx > 20
+        new_cols[f"adx{s}_gt_25"] = adx > 25
+        new_cols[f"adx{s}_slope"] = adx_slope
+        new_cols[f"adx{s}_acceleration"] = adx_slope.diff()
 
-    # +DI and -DI are same for all ADX periods, so compute once using raw DM/TR
-    # Smoothing is applied separately for each n
-    base_tr = df["tr"]
-    base_plus_dm = df["dm_pos"]
-    base_minus_dm = df["dm_neg"]
+        # --- DI lines + slopes ---
+        new_cols[f"plus_di{s}"] = plus_di
+        new_cols[f"minus_di{s}"] = minus_di
+        new_cols[f"plus_di{s}_slope"] = plus_di.diff()
+        new_cols[f"minus_di{s}_slope"] = minus_di.diff()
 
-    # Compute ADX for each period
-    for period in periods:
-        tr_n = base_tr.rolling(window=period, min_periods=1).sum()
-        plus_dm_n = base_plus_dm.rolling(window=period, min_periods=1).sum()
-        minus_dm_n = base_minus_dm.rolling(window=period, min_periods=1).sum()
+        # --- DI relationship ---
+        new_cols[f"di{s}_distance"] = di_dist
+        new_cols[f"di{s}_distance_abs"] = di_dist.abs()
+        new_cols[f"di{s}_ratio"] = plus_di / minus_di.replace(0, float("nan"))
+        new_cols[f"trend{s}_direction"] = np.where(di_dist > 0, 1, -1)
 
-        df[f"di_pos_{period}"] = 100 * (plus_dm_n / tr_n)
-        df[f"di_neg_{period}"] = 100 * (minus_dm_n / tr_n)
+        # --- combined strength signal ---
+        new_cols[f"adx{s}_di_strength"] = adx * di_dist.abs()
 
-        dx = (
-            100
-            * abs(df[f"di_pos_{period}"] - df[f"di_neg_{period}"])
-            / (df[f"di_pos_{period}"] + df[f"di_neg_{period}"]).replace(0, np.nan)
-        ).fillna(0)
-
-        df[f"adx_{period}"] = dx.rolling(window=period, min_periods=1).mean()
-
-    return df
-
-
-# endregion TREND INDICATORS
-
-
-# region VOLATILITY INDICATORS
-def add_bollinger_bands(
-    df: pd.DataFrame,
-    n: int | list[int] | None = None,
-    k: float = 2.0,
-    column_name: str = "close",
-    default_bb_periods: list[int] = None,
-) -> pd.DataFrame:
-    """
-    Add Bollinger Bands (upper, middle, lower) to the DataFrame.
-
-    Default popular Bollinger Band periods:
-        20 (SMA period), standard deviation multiplier k=2.0
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Input DataFrame containing the target column.
-    n : int or list[int], optional
-        SMA period(s) for Bollinger Bands. If None, default period 20 is used.
-    k : float, optional
-        Number of standard deviations for upper/lower bands (default 2.0)
-    column_name : str, optional
-        Column to calculate Bollinger Bands on. Default is 'close'.
-    default_bb_periods : list[int], optional
-        Override the default SMA period(s).
-
-    Returns
-    -------
-    pd.DataFrame
-        DataFrame with Bollinger Bands added:
-        '{column_name}_bb_middle_{n}', '{column_name}_bb_upper_{n}', '{column_name}_bb_lower_{n}'
-    """
-    validate_column(df, column_name)
-    df = df.copy()
-
-    # Default period
-    if default_bb_periods is None:
-        default_bb_periods = [20]
-
-    # Determine periods to compute
-    if n is None:
-        periods = default_bb_periods
-    elif isinstance(n, int):
-        periods = [n]
-    else:
-        periods = list(n)
-
-    for period in periods:
-        sma = df[column_name].rolling(window=period, min_periods=1).mean()
-        std = df[column_name].rolling(window=period, min_periods=1).std()
-
-        df[f"{column_name}_bb_middle_{period}"] = sma
-        df[f"{column_name}_bb_upper_{period}"] = sma + (k * std)
-        df[f"{column_name}_bb_lower_{period}"] = sma - (k * std)
+    df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
     return df
 
 
-def add_keltner_channel(
+def add_aroon(
     df: pd.DataFrame,
-    n: int = 20,
-    k: float = 2.0,
+    n: list[int] = None,
     high_col: str = "high",
     low_col: str = "low",
-    close_col: str = "close",
 ) -> pd.DataFrame:
-    """
-    Add Keltner Channel (upper, middle, lower) to the DataFrame.
-
-    The Keltner Channel consists of a middle line (EMA of the close) and
-    upper/lower bands calculated as the EMA ± k times the ATR. It is used
-    to measure volatility and identify potential breakouts.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Input DataFrame that must contain the specified high, low, and close columns.
-    n : int, optional
-        Period for EMA and ATR calculation (default is 20).
-    k : float, optional
-        Multiplier for ATR to calculate upper and lower bands (default is 2.0).
-    high_col : str, optional
-        Name of the high price column. Defaults to 'high'.
-    low_col : str, optional
-        Name of the low price column. Defaults to 'low'.
-    close_col : str, optional
-        Name of the close price column. Defaults to 'close'.
-
-    Returns
-    -------
-    pd.DataFrame
-        Copy of the input DataFrame with added columns:
-        'kc_middle_{n}', 'kc_upper_{n}', 'kc_lower_{n}'.
-    """
-    for col in [high_col, low_col, close_col]:
+    for col in (high_col, low_col):
         validate_column(df, col)
-
-    df = df.copy()
-
-    # Middle line (EMA of close)
-    df[f"kc_middle_{n}"] = df[close_col].ewm(span=n, adjust=False).mean()
-
-    # True Range
-    tr = pd.concat(
-        [
-            df[high_col] - df[low_col],
-            (df[high_col] - df[close_col].shift()).abs(),
-            (df[low_col] - df[close_col].shift()).abs(),
-        ],
-        axis=1,
-    ).max(axis=1)
-
-    # ATR (Wilder’s moving average of TR)
-    atr = tr.rolling(window=n, min_periods=1).mean()
-
-    # Upper & Lower bands
-    df[f"kc_upper_{n}"] = df[f"kc_middle_{n}"] + k * atr
-    df[f"kc_lower_{n}"] = df[f"kc_middle_{n}"] - k * atr
-
-    return df
-
-
-def add_starc_band(
-    df: pd.DataFrame,
-    n: int = 20,
-    k: float = 2.0,
-    high_col: str = "high",
-    low_col: str = "low",
-    close_col: str = "close",
-) -> pd.DataFrame:
-    """
-    Add STARC Bands (upper, middle, lower) to the DataFrame.
-
-    STARC Bands consist of a middle band (SMA of the close) and upper/lower
-    bands calculated as the SMA ± k times the ATR. They are used to measure
-    volatility and potential overbought/oversold conditions.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Input DataFrame that must contain the specified high, low, and close columns.
-    n : int, optional
-        Period for SMA and ATR calculation (default is 20).
-    k : float, optional
-        Multiplier for ATR to calculate upper and lower bands (default is 2.0).
-    high_col : str, optional
-        Name of the high price column. Defaults to 'high'.
-    low_col : str, optional
-        Name of the low price column. Defaults to 'low'.
-    close_col : str, optional
-        Name of the close price column. Defaults to 'close'.
-
-    Returns
-    -------
-    pd.DataFrame
-        Copy of the input DataFrame with added columns:
-        'starc_middle_{n}', 'starc_upper_{n}', 'starc_lower_{n}'.
-    """
-    for col in [high_col, low_col, close_col]:
-        validate_column(df, col)
-
-    df = df.copy()
-
-    # Middle Band (SMA of close)
-    df[f"starc_middle_{n}"] = df[close_col].rolling(window=n, min_periods=1).mean()
-
-    # True Range
-    tr = pd.concat(
-        [
-            df[high_col] - df[low_col],
-            (df[high_col] - df[close_col].shift()).abs(),
-            (df[low_col] - df[close_col].shift()).abs(),
-        ],
-        axis=1,
-    ).max(axis=1)
-
-    # ATR (simple rolling mean)
-    atr = tr.rolling(window=n, min_periods=1).mean()
-
-    # Upper & Lower Bands
-    df[f"starc_upper_{n}"] = df[f"starc_middle_{n}"] + k * atr
-    df[f"starc_lower_{n}"] = df[f"starc_middle_{n}"] - k * atr
-
-    return df
-
-
-def add_atr(
-    df: pd.DataFrame,
-    n: int = 14,
-    high_col: str = "high",
-    low_col: str = "low",
-    close_col: str = "close",
-) -> pd.DataFrame:
-    """
-    Add Average True Range (ATR) to the DataFrame.
-
-    ATR measures market volatility by calculating the smoothed average
-    of True Range over a specified period.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Input DataFrame that must contain the specified high, low, and close columns.
-    n : int, optional
-        Period for ATR calculation (default is 14).
-    high_col : str, optional
-        Name of the high price column. Defaults to 'high'.
-    low_col : str, optional
-        Name of the low price column. Defaults to 'low'.
-    close_col : str, optional
-        Name of the close price column. Defaults to 'close'.
-
-    Returns
-    -------
-    pd.DataFrame
-        Copy of the input DataFrame with an added column 'atr_{n}'.
-    """
-    for col in [high_col, low_col, close_col]:
-        validate_column(df, col)
-
-    df = df.copy()
-
-    # True Range
-    tr = pd.concat(
-        [
-            df[high_col] - df[low_col],
-            (df[high_col] - df[close_col].shift()).abs(),
-            (df[low_col] - df[close_col].shift()).abs(),
-        ],
-        axis=1,
-    ).max(axis=1)
-
-    # Wilder’s ATR (RMA)
-    df[f"atr_{n}"] = tr.ewm(alpha=1 / n, adjust=False).mean()
-
-    return df
-
-
-def add_divergence_index(
-    df: pd.DataFrame,
-    n: int = 14,
-    k: float = 1.0,
-    high_col: str = "high",
-    low_col: str = "low",
-    close_col: str = "close",
-) -> pd.DataFrame:
-    """
-    Add Divergence Index (DVI) to the DataFrame.
-
-    The Divergence Index measures the distance of the price from its SMA
-    relative to market volatility (ATR), helping identify overbought or oversold conditions.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Input DataFrame that must contain the specified high, low, and close columns.
-    n : int, optional
-        Period for SMA and ATR calculation (default is 14).
-    k : float, optional
-        Scaling factor for ATR in the calculation (default is 1.0).
-    high_col : str, optional
-        Name of the high price column. Defaults to 'high'.
-    low_col : str, optional
-        Name of the low price column. Defaults to 'low'.
-    close_col : str, optional
-        Name of the close price column. Defaults to 'close'.
-
-    Returns
-    -------
-    pd.DataFrame
-        Copy of the input DataFrame with an added column 'dvi_{n}'.
-    """
-    for col in [high_col, low_col, close_col]:
-        validate_column(df, col)
-
-    df = df.copy()
-
-    # Ensure numeric
-    df[high_col] = pd.to_numeric(df[high_col], errors="coerce")
-    df[low_col] = pd.to_numeric(df[low_col], errors="coerce")
-    df[close_col] = pd.to_numeric(df[close_col], errors="coerce")
-
-    # SMA of close
-    sma = df[close_col].rolling(window=n, min_periods=1).mean()
-
-    # True Range
-    tr = pd.concat(
-        [
-            df[high_col] - df[low_col],
-            (df[high_col] - df[close_col].shift()).abs(),
-            (df[low_col] - df[close_col].shift()).abs(),
-        ],
-        axis=1,
-    ).max(axis=1)
-
-    # Wilder’s ATR
-    atr = tr.ewm(alpha=1 / n, adjust=False).mean()
-
-    # Divergence Index
-    df[f"dvi_{n}"] = (df[close_col] - sma) / (k * atr)
-
-    return df
-
-
-# endregion VOLATILITY INDICATORS
-
-
-# region MOMENTUN INDICATORS
-
-
-def add_rsi(
-    df: pd.DataFrame,
-    n: int | list[int] | None = None,
-    column_name: str = "close",
-    default_rsi_periods: list[int] = None,
-) -> pd.DataFrame:
-    """
-    Add Relative Strength Index (RSI) to the DataFrame.
-
-    Default popular RSI periods: 7, 14, 21, 28
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Input DataFrame containing the target column.
-    n : int or list[int], optional
-        RSI lookback period(s). If None, popular defaults are used.
-    column_name : str, optional
-        Column to calculate RSI on. Default is 'close'.
-    default_rsi_periods : list[int], optional
-        Override the default RSI periods.
-
-    Returns
-    -------
-    pd.DataFrame
-        DataFrame with added 'rsi_{period}' columns.
-    """
-    validate_column(df, column_name)
-    df = df.copy()
-
-    if default_rsi_periods is None:
-        default_rsi_periods = [7, 14, 21, 28]
 
     if n is None:
-        periods = default_rsi_periods
-    elif isinstance(n, int):
-        periods = [n]
-    else:
-        periods = list(n)
+        n = [25]
 
-    close = np.asarray(df[column_name], dtype="float64")
-    delta = np.diff(close, prepend=close[0])
-    gain = np.where(delta > 0, delta, 0.0)
-    loss = np.where(delta < 0, -delta, 0.0)
+    df = df.copy()
+    high = df[high_col].to_numpy(dtype=float)
+    low = df[low_col].to_numpy(dtype=float)
 
-    for period in periods:
-        avg_gain = pd.Series(gain).rolling(period, min_periods=period).mean()
-        avg_loss = pd.Series(loss).rolling(period, min_periods=period).mean()
+    new_cols = {}
 
-        rs = avg_gain / avg_loss.replace(0, np.nan)
-        rsi = 100 - (100 / (1 + rs))
+    for period in n:
+        s = f"_{period}"
 
-        df[f"rsi_{period}"] = rsi
+        # --- core indicators ---
+        aroon_down, aroon_up = talib.AROON(high, low, timeperiod=period)
+        aroon_up = pd.Series(aroon_up, index=df.index)
+        aroon_down = pd.Series(aroon_down, index=df.index)
+        aroon_osc = pd.Series(
+            talib.AROONOSC(high, low, timeperiod=period), index=df.index
+        )
+        dist = aroon_up - aroon_down
+
+        # --- core ---
+        new_cols[f"aroon_up{s}"] = aroon_up
+        new_cols[f"aroon_down{s}"] = aroon_down
+        new_cols[f"aroon_osc{s}"] = aroon_osc
+
+        # --- slopes ---
+        new_cols[f"aroon_up{s}_slope"] = aroon_up.diff()
+        new_cols[f"aroon_down{s}_slope"] = aroon_down.diff()
+        new_cols[f"aroon_osc{s}_slope"] = aroon_osc.diff()
+
+        # --- up/down relationship ---
+        new_cols[f"aroon{s}_distance"] = dist
+        new_cols[f"aroon{s}_distance_abs"] = dist.abs()
+        new_cols[f"aroon{s}_ratio"] = aroon_up / aroon_down.replace(0, float("nan"))
+        new_cols[f"aroon{s}_direction"] = np.where(dist > 0, 1, -1)
+
+        # --- threshold flags ---
+        new_cols[f"aroon_up{s}_gt_70"] = aroon_up > 70
+        new_cols[f"aroon_down{s}_gt_70"] = aroon_down > 70
+        new_cols[f"aroon_up{s}_lt_30"] = aroon_up < 30
+        new_cols[f"aroon_down{s}_lt_30"] = aroon_down < 30
+
+        # --- combined conviction score ---
+        new_cols[f"aroon{s}_strength"] = aroon_osc.abs() * dist.abs()
+
+    df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
     return df
 
 
-def add_roc(
+def add_bop(
     df: pd.DataFrame,
-    n: int | list[int] | None = None,
-    column_name: str = "close",
-    default_roc_periods: list[int] = None,
+    n: list[int] = None,
+    open_col: str = "open",
+    high_col: str = "high",
+    low_col: str = "low",
+    close_col: str = "close",
 ) -> pd.DataFrame:
-    """
-    Add Rate of Change (ROC) indicator to the DataFrame.
-
-    Default popular ROC periods: 9, 12, 14, 20, 25
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Input DataFrame containing the target column.
-    n : int or list[int], optional
-        Lookback period(s) for ROC. If None, popular defaults are used.
-    column_name : str, optional
-        Column to calculate ROC on. Default is 'close'.
-    default_roc_periods : list[int], optional
-        Override the default ROC periods.
-
-    Returns
-    -------
-    pd.DataFrame
-        DataFrame with added 'roc_{period}' columns.
-    """
-    validate_column(df, column_name)
-    df = df.copy()
-
-    if default_roc_periods is None:
-        default_roc_periods = [9, 12, 14, 20, 25]
+    for col in (open_col, high_col, low_col, close_col):
+        validate_column(df, col)
 
     if n is None:
-        periods = default_roc_periods
-    elif isinstance(n, int):
-        periods = [n]
-    else:
-        periods = list(n)
+        n = [14]
 
-    close = pd.Series(df[column_name], dtype="float64")
+    df = df.copy()
+    open_ = df[open_col].to_numpy(dtype=float)
+    high = df[high_col].to_numpy(dtype=float)
+    low = df[low_col].to_numpy(dtype=float)
+    close = df[close_col].to_numpy(dtype=float)
 
-    for period in periods:
-        roc = ((close - close.shift(period)) / close.shift(period)) * 100
-        df[f"roc_{period}"] = roc
+    new_cols = {}
+
+    # --- raw BOP (computed once, no period) ---
+    bop = pd.Series(talib.BOP(open_, high, low, close), index=df.index)
+    bop_slope = bop.diff()
+    bop_abs = bop.abs()
+
+    new_cols["bop"] = bop
+    new_cols["bop_slope"] = bop_slope
+    new_cols["bop_acceleration"] = bop_slope.diff()
+    new_cols["bop_gt_0"] = bop > 0
+    new_cols["bop_lt_0"] = bop < 0
+    new_cols["bop_abs"] = bop_abs
+    new_cols["bop_direction"] = np.where(bop > 0, 1, -1)
+
+    # --- per smoothing window ---
+    for period in n:
+        s = f"_{period}"
+        signal = bop.rolling(window=period).mean()
+        hist = bop - signal
+
+        new_cols[f"bop_signal{s}"] = signal
+        new_cols[f"bop_signal{s}_slope"] = signal.diff()
+        new_cols[f"bop_hist{s}"] = hist
+        new_cols[f"bop_hist{s}_slope"] = hist.diff()
+        new_cols[f"bop_hist{s}_gt_0"] = hist > 0
+        new_cols[f"bop_hist{s}_lt_0"] = hist < 0
+        new_cols[f"bop{s}_strength"] = bop_abs * hist.abs()
+
+    df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
+
+    return df
+
+
+def add_cci(
+    df: pd.DataFrame,
+    n: list[int] = None,
+    high_col: str = "high",
+    low_col: str = "low",
+    close_col: str = "close",
+) -> pd.DataFrame:
+    for col in (high_col, low_col, close_col):
+        validate_column(df, col)
+
+    if n is None:
+        n = [14]
+
+    df = df.copy()
+    high = df[high_col].to_numpy(dtype=float)
+    low = df[low_col].to_numpy(dtype=float)
+    close = df[close_col].to_numpy(dtype=float)
+
+    new_cols = {}
+
+    for period in n:
+        s = f"_{period}"
+
+        # --- core indicator ---
+        cci = pd.Series(talib.CCI(high, low, close, timeperiod=period), index=df.index)
+        cci_slope = cci.diff()
+        cci_abs = cci.abs()
+        signal = cci.rolling(window=period).mean()
+        hist = cci - signal
+
+        # --- core + derivatives ---
+        new_cols[f"cci{s}"] = cci
+        new_cols[f"cci{s}_slope"] = cci_slope
+        new_cols[f"cci{s}_acceleration"] = cci_slope.diff()
+
+        # --- threshold flags ---
+        new_cols[f"cci{s}_gt_100"] = cci > 100
+        new_cols[f"cci{s}_lt_minus100"] = cci < -100
+        new_cols[f"cci{s}_gt_0"] = cci > 0
+        new_cols[f"cci{s}_lt_0"] = cci < 0
+
+        # --- magnitude & direction ---
+        new_cols[f"cci{s}_abs"] = cci_abs
+        new_cols[f"cci{s}_direction"] = np.where(cci > 0, 1, -1)
+        new_cols[f"cci{s}_extreme"] = np.where(
+            cci > 100, 1, np.where(cci < -100, -1, 0)
+        )
+
+        # --- signal line & histogram ---
+        new_cols[f"cci{s}_signal"] = signal
+        new_cols[f"cci{s}_signal_slope"] = signal.diff()
+        new_cols[f"cci{s}_hist"] = hist
+        new_cols[f"cci{s}_hist_slope"] = hist.diff()
+        new_cols[f"cci{s}_hist_gt_0"] = hist > 0
+        new_cols[f"cci{s}_hist_lt_0"] = hist < 0
+
+        # --- combined conviction score ---
+        new_cols[f"cci{s}_strength"] = cci_abs * hist.abs()
+
+    df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
+
+    return df
+
+
+def add_cmo(
+    df: pd.DataFrame,
+    n: list[int] = None,
+    column_name: str = "close",
+) -> pd.DataFrame:
+    validate_column(df, column_name)
+
+    if n is None:
+        n = [14]
+
+    df = df.copy()
+    source = df[column_name].to_numpy(dtype=float)
+
+    new_cols = {}
+
+    for period in n:
+        s = f"_{period}"
+
+        # --- core indicator ---
+        cmo = pd.Series(talib.CMO(source, timeperiod=period), index=df.index)
+        cmo_slope = cmo.diff()
+        cmo_abs = cmo.abs()
+        signal = cmo.rolling(window=period).mean()
+        hist = cmo - signal
+
+        # --- core + derivatives ---
+        new_cols[f"cmo{s}"] = cmo
+        new_cols[f"cmo{s}_slope"] = cmo_slope
+        new_cols[f"cmo{s}_acceleration"] = cmo_slope.diff()
+        new_cols[f"cmo{s}_abs"] = cmo_abs
+        new_cols[f"cmo{s}_direction"] = np.where(cmo > 0, 1, -1)
+
+        # --- threshold flags ---
+        new_cols[f"cmo{s}_gt_50"] = cmo > 50
+        new_cols[f"cmo{s}_lt_minus50"] = cmo < -50
+        new_cols[f"cmo{s}_gt_0"] = cmo > 0
+        new_cols[f"cmo{s}_lt_0"] = cmo < 0
+        new_cols[f"cmo{s}_extreme"] = np.where(cmo > 50, 1, np.where(cmo < -50, -1, 0))
+
+        # --- signal line & histogram ---
+        new_cols[f"cmo{s}_signal"] = signal
+        new_cols[f"cmo{s}_signal_slope"] = signal.diff()
+        new_cols[f"cmo{s}_hist"] = hist
+        new_cols[f"cmo{s}_hist_slope"] = hist.diff()
+        new_cols[f"cmo{s}_hist_gt_0"] = hist > 0
+        new_cols[f"cmo{s}_hist_lt_0"] = hist < 0
+
+        # --- combined conviction score ---
+        new_cols[f"cmo{s}_strength"] = cmo_abs * hist.abs()
+
+    df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
     return df
 
 
 def add_macd(
     df: pd.DataFrame,
-    short_n: int | list[int] = 12,
-    long_n: int | list[int] = 26,
-    signal_n: int | list[int] = 9,
-) -> pd.DataFrame:
-    """
-    Add Moving Average Convergence/Divergence (MACD) to the DataFrame.
-
-    Default popular MACD parameters:
-        short_n = 12, long_n = 26, signal_n = 9
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        DataFrame with at least a 'close' column.
-    short_n : int or list[int], optional
-        Short-term EMA period(s). Default 12.
-    long_n : int or list[int], optional
-        Long-term EMA period(s). Default 26.
-    signal_n : int or list[int], optional
-        Signal line EMA period(s). Default 9.
-
-    Returns
-    -------
-    pd.DataFrame
-        Original DataFrame with added MACD columns:
-        - 'macd_{short}_{long}'
-        - 'macd_signal_{signal}'
-        - 'macd_hist_{short}_{long}_{signal}'
-    """
-    df = df.copy()
-
-    # Ensure lists for iteration
-    short_list = [short_n] if isinstance(short_n, int) else list(short_n)
-    long_list = [long_n] if isinstance(long_n, int) else list(long_n)
-    signal_list = [signal_n] if isinstance(signal_n, int) else list(signal_n)
-
-    for s in short_list:
-        for l in long_list:
-            if l <= s:
-                continue  # long EMA must be greater than short EMA
-            macd_series = (
-                df["close"].ewm(span=s, adjust=False).mean()
-                - df["close"].ewm(span=l, adjust=False).mean()
-            )
-            for sig in signal_list:
-                signal_series = macd_series.ewm(span=sig, adjust=False).mean()
-                hist_series = macd_series - signal_series
-
-                df[f"macd_{s}_{l}"] = macd_series
-                df[f"macd_signal_{sig}"] = signal_series
-                df[f"macd_hist_{s}_{l}_{sig}"] = hist_series
-
-    return df
-
-
-def add_stochastic(
-    df: pd.DataFrame,
-    k_period: int | list[int] | None = None,
-    d_period: int | list[int] | None = None,
-    high_col: str = "high",
-    low_col: str = "low",
-    close_col: str = "close",
-    default_k_periods: list[int] = None,
-    default_d_periods: list[int] = None,
-) -> pd.DataFrame:
-    """
-    Add Stochastic Oscillator (%K and %D) to the DataFrame.
-    Replaces inf values with NULL (NaN).
-    """
-
-    for col in [high_col, low_col, close_col]:
-        validate_column(df, col)
-
-    df = df.copy()
-
-    # Default periods
-    if default_k_periods is None:
-        default_k_periods = [14]
-    if default_d_periods is None:
-        default_d_periods = [3]
-
-    if k_period is None:
-        k_list = default_k_periods
-    elif isinstance(k_period, int):
-        k_list = [k_period]
-    else:
-        k_list = list(k_period)
-
-    if d_period is None:
-        d_list = default_d_periods
-    elif isinstance(d_period, int):
-        d_list = [d_period]
-    else:
-        d_list = list(d_period)
-
-    close = pd.to_numeric(df[close_col], errors="coerce").astype("float64")
-    high = pd.to_numeric(df[high_col], errors="coerce").astype("float64")
-    low = pd.to_numeric(df[low_col], errors="coerce").astype("float64")
-
-    for k in k_list:
-        low_min = low.rolling(window=k, min_periods=1).min()
-        high_max = high.rolling(window=k, min_periods=1).max()
-
-        # Prevent division by zero by producing inf (we will convert to NaN later)
-        stoch_k = 100 * (close - low_min) / (high_max - low_min)
-        df[f"stoch_k_{k}"] = stoch_k
-
-        for d in d_list:
-            stoch_d = stoch_k.rolling(window=d, min_periods=1).mean()
-            df[f"stoch_d_{d}"] = stoch_d
-
-    # 🔍 Replace infinite values with NULL (NaN)
-    df.replace([np.inf, -np.inf], np.nan, inplace=True)
-
-    return df
-
-
-def add_williams_r(
-    df: pd.DataFrame,
-    n: int | list[int] | None = None,
-    high_col: str = "high",
-    low_col: str = "low",
-    close_col: str = "close",
-    default_periods: list[int] = None,
-) -> pd.DataFrame:
-    """
-    Add Williams %R indicator to the DataFrame.
-
-    Default popular periods: 9, 14, 21
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Input DataFrame with high, low, close columns.
-    n : int or list[int], optional
-        Lookback period(s). If None, popular defaults are used.
-    high_col, low_col, close_col : str, optional
-        Column names for high, low, close prices.
-    default_periods : list[int], optional
-        Override the default periods.
-
-    Returns
-    -------
-    pd.DataFrame
-        DataFrame with added 'williams_r_{period}' columns.
-    """
-    for col in [high_col, low_col, close_col]:
-        validate_column(df, col)
-
-    df = df.copy()
-
-    if default_periods is None:
-        default_periods = [9, 14, 21]
-
-    if n is None:
-        periods = default_periods
-    elif isinstance(n, int):
-        periods = [n]
-    else:
-        periods = list(n)
-
-    close = pd.to_numeric(df[close_col], errors="coerce").astype("float64")
-    high = pd.to_numeric(df[high_col], errors="coerce").astype("float64")
-    low = pd.to_numeric(df[low_col], errors="coerce").astype("float64")
-
-    for period in periods:
-        highest_high = high.rolling(window=period, min_periods=1).max()
-        lowest_low = low.rolling(window=period, min_periods=1).min()
-        williams_r = (highest_high - close) / (highest_high - lowest_low) * -100
-        df[f"williams_r_{period}"] = williams_r
-
-    # 🔍 Replace infinite values with NULL (NaN)
-    df.replace([np.inf, -np.inf], np.nan, inplace=True)
-
-    return df
-
-
-def add_ado(
-    df: pd.DataFrame,
-    open_col: str = "open",
-    high_col: str = "high",
-    low_col: str = "low",
-    close_col: str = "close",
-) -> pd.DataFrame:
-    """
-    Add Larry Williams' Accumulation/Distribution (AD) Oscillator to the DataFrame.
-
-    Formula:
-        ADO = ((Close - Open) / (High - Low)) * 100
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Input DataFrame that must contain the specified open, high, low, and close columns.
-    open_col : str, optional
-        Name of the open price column. Defaults to 'open'.
-    high_col : str, optional
-        Name of the high price column. Defaults to 'high'.
-    low_col : str, optional
-        Name of the low price column. Defaults to 'low'.
-    close_col : str, optional
-        Name of the close price column. Defaults to 'close'.
-
-    Returns
-    -------
-    pd.DataFrame
-        Copy of the input DataFrame with an added column 'ad'.
-    """
-    for col in [open_col, high_col, low_col, close_col]:
-        validate_column(df, col)
-
-    df = df.copy()
-
-    close = pd.to_numeric(df[close_col], errors="coerce").astype("float64")
-    open_ = pd.to_numeric(df[open_col], errors="coerce").astype("float64")
-    high = pd.to_numeric(df[high_col], errors="coerce").astype("float64")
-    low = pd.to_numeric(df[low_col], errors="coerce").astype("float64")
-
-    ado = ((close - open_) / (high - low).replace(0, np.nan)) * 100
-    df["ado"] = ado
-
-    return df
-
-
-def add_rvi(
-    df: pd.DataFrame,
-    n: int | list[int] | None = None,
-    signal: int | list[int] | None = None,
-    open_col: str = "open",
-    high_col: str = "high",
-    low_col: str = "low",
-    close_col: str = "close",
-    default_n: list[int] = None,
-    default_signal: list[int] = None,
-) -> pd.DataFrame:
-    """
-    Add Relative Vigor Index (RVI) and its signal line to the DataFrame.
-
-    Default popular parameters:
-        n periods: [10, 14]
-        signal:   [4]
-
-    Formula:
-        RV = (Close - Open) / (High - Low)
-        RVI = SMA(RV, n)
-        Signal = SMA(RVI, signal)
-    """
-
-    # Validate columns
-    for col in [open_col, high_col, low_col, close_col]:
-        validate_column(df, col)
-
-    df = df.copy()
-
-    # Defaults
-    if default_n is None:
-        default_n = [10, 14]  # Popular RVI periods
-    if default_signal is None:
-        default_signal = [4]  # Standard signal length
-
-    # Parse user inputs
-    if n is None:
-        n_list = default_n
-    elif isinstance(n, int):
-        n_list = [n]
-    else:
-        n_list = list(n)
-
-    if signal is None:
-        signal_list = default_signal
-    elif isinstance(signal, int):
-        signal_list = [signal]
-    else:
-        signal_list = list(signal)
-
-    # Numeric columns
-    close = pd.to_numeric(df[close_col], errors="coerce").astype("float64")
-    open_ = pd.to_numeric(df[open_col], errors="coerce").astype("float64")
-    high = pd.to_numeric(df[high_col], errors="coerce").astype("float64")
-    low = pd.to_numeric(df[low_col], errors="coerce").astype("float64")
-
-    # Raw RV value
-    rv = (close - open_) / (high - low).replace(0, np.nan)
-
-    # Calculate RVI + signals
-    for n_period in n_list:
-        rvi = rv.rolling(window=n_period, min_periods=1).mean()
-        df[f"rvi_{n_period}"] = rvi
-
-        for sig in signal_list:
-            df[f"rvi_signal_{n_period}_{sig}"] = rvi.rolling(
-                window=sig, min_periods=1
-            ).mean()
-
-    return df
-
-
-def add_tsi(
-    df: pd.DataFrame,
-    r: int | list[int] | None = None,
-    s: int | list[int] | None = None,
+    fast: list[int] = None,
+    slow: list[int] = None,
+    signal: list[int] = None,
     column_name: str = "close",
-    default_r: list[int] = None,
-    default_s: list[int] = None,
-    add_signal: bool = True,
-    signal_period: int = 7,
 ) -> pd.DataFrame:
-    """
-    Add True Strength Index (TSI) to the DataFrame with support for
-    multiple popular parameter sets.
-
-    Popular defaults:
-        r (long periods): [25, 13, 50]
-        s (short periods): [13, 7, 25]
-        signal: 7 (optional)
-
-    Formula:
-        m_t = Close_t - Close_{t-1}
-        TSI = 100 * (EMA_r(EMA_s(m_t)) / EMA_r(EMA_s(|m_t|)))
-    """
 
     validate_column(df, column_name)
-    df = df.copy()
 
-    # Default parameter lists
-    if default_r is None:
-        default_r = [25, 13, 50]
-    if default_s is None:
-        default_s = [13, 7, 25]
-
-    # Normalize inputs
-    if r is None:
-        r_list = default_r
-    elif isinstance(r, int):
-        r_list = [r]
-    else:
-        r_list = list(r)
-
-    if s is None:
-        s_list = default_s
-    elif isinstance(s, int):
-        s_list = [s]
-    else:
-        s_list = list(s)
-
-    # Price series
-    close = pd.to_numeric(df[column_name], errors="coerce").astype("float64")
-    momentum = close.diff()
-
-    # Loop through combinations
-    for rr in r_list:
-        for ss in s_list:
-            # Short EMAs
-            ema_mom_s = momentum.ewm(span=ss, adjust=False).mean()
-            ema_abs_s = momentum.abs().ewm(span=ss, adjust=False).mean()
-
-            # Long EMAs
-            ema_mom_r = ema_mom_s.ewm(span=rr, adjust=False).mean()
-            ema_abs_r = ema_abs_s.ewm(span=rr, adjust=False).mean()
-
-            tsi = 100 * (ema_mom_r / ema_abs_r)
-            name = f"tsi_{rr}_{ss}"
-            df[name] = tsi
-
-            # Optional TSI Signal line (common period = 7)
-            if add_signal:
-                df[f"{name}_signal_{signal_period}"] = tsi.ewm(
-                    span=signal_period, adjust=False
-                ).mean()
-
-    return df
-
-
-def add_vortex(
-    df: pd.DataFrame,
-    n: int | list[int] | None = None,
-    high_col: str = "high",
-    low_col: str = "low",
-    close_col: str = "close",
-    default_periods: list[int] = None,
-) -> pd.DataFrame:
-    """
-    Add Vortex Indicator (+VI and -VI) for one or multiple popular parameter sets.
-
-    Popular periods: 7, 14, 21, 28 (14 is standard)
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Input DataFrame that must contain high, low, and close columns.
-    n : int | list[int] | None, optional
-        Single period or list of periods to compute. If None, uses default popular periods.
-    high_col, low_col, close_col : str
-        Column names for OHLC values.
-    default_periods : list[int], optional
-        Override list of default popular periods.
-
-    Returns
-    -------
-    pd.DataFrame
-        DataFrame with added vortex indicator columns:
-        vi_plus_{n}, vi_minus_{n}
-    """
-
-    for col in [high_col, low_col, close_col]:
-        validate_column(df, col)
+    if fast is None:
+        fast = [12]
+    if slow is None:
+        slow = [26]
+    if signal is None:
+        signal = [9]
 
     df = df.copy()
+    source = df[column_name].to_numpy(dtype=float)
 
-    # Default popular periods
-    if default_periods is None:
-        default_periods = [7, 14, 21, 28]
+    new_cols = {}
 
-    # Normalize input
-    if n is None:
-        periods = default_periods
-    elif isinstance(n, int):
-        periods = [n]
-    else:
-        periods = list(n)
+    for f, sl, sg in product(fast, slow, signal):
+        if f >= sl:
+            continue
 
-    high = pd.to_numeric(df[high_col], errors="coerce").astype("float64")
-    low = pd.to_numeric(df[low_col], errors="coerce").astype("float64")
-    close = pd.to_numeric(df[close_col], errors="coerce").astype("float64")
+        s = f"_{f}_{sl}_{sg}"
 
-    # True Range (TR)
-    tr1 = high - low
-    tr2 = (high - close.shift(1)).abs()
-    tr3 = (low - close.shift(1)).abs()
-    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+        # --- core indicator ---
+        macd_line, signal_line, hist = talib.MACD(
+            source,
+            fastperiod=f,
+            slowperiod=sl,
+            signalperiod=sg,
+        )
 
-    # Vortex movements
-    vm_plus = (high - low.shift(1)).abs()
-    vm_minus = (low - high.shift(1)).abs()
+        macd = pd.Series(macd_line, index=df.index)
+        signal = pd.Series(signal_line, index=df.index)
+        hist_s = pd.Series(hist, index=df.index)
 
-    # Compute for each period
-    for p in periods:
-        tr_p = tr.rolling(p, min_periods=1).sum()
-        vm_plus_p = vm_plus.rolling(p, min_periods=1).sum()
-        vm_minus_p = vm_minus.rolling(p, min_periods=1).sum()
+        # --- derivatives ---
+        macd_slope = macd.diff()
+        hist_slope = hist_s.diff()
 
-        df[f"vi_plus_{p}"] = vm_plus_p / tr_p
-        df[f"vi_minus_{p}"] = vm_minus_p / tr_p
+        # --- reusable ---
+        macd_abs = macd.abs()
+        hist_abs = hist_s.abs()
+        prev_hist = hist_s.shift(1)
 
-    return df
+        # --- MACD line ---
+        new_cols[f"macd{s}"] = macd
+        new_cols[f"macd{s}_slope"] = macd_slope
+        new_cols[f"macd{s}_acceleration"] = macd_slope.diff()
+        new_cols[f"macd{s}_abs"] = macd_abs
+        new_cols[f"macd{s}_direction"] = np.where(macd > 0, 1, -1)
+        new_cols[f"macd{s}_gt_0"] = macd > 0
+        new_cols[f"macd{s}_lt_0"] = macd < 0
 
+        # --- signal line ---
+        new_cols[f"macd{s}_signal"] = signal
+        new_cols[f"macd{s}_signal_slope"] = signal.diff()
+        new_cols[f"macd{s}_signal_gt_0"] = signal > 0
+        new_cols[f"macd{s}_signal_lt_0"] = signal < 0
 
-# endregion MOMENTUM INDICATORS
+        # --- histogram ---
+        new_cols[f"macd{s}_hist"] = hist_s
+        new_cols[f"macd{s}_hist_slope"] = hist_slope
+        new_cols[f"macd{s}_hist_acceleration"] = hist_slope.diff()
+        new_cols[f"macd{s}_hist_gt_0"] = hist_s > 0
+        new_cols[f"macd{s}_hist_lt_0"] = hist_s < 0
+        new_cols[f"macd{s}_hist_abs"] = hist_abs
 
+        # --- crossover signals ---
+        new_cols[f"macd{s}_cross_above"] = (hist_s > 0) & (prev_hist <= 0)
+        new_cols[f"macd{s}_cross_below"] = (hist_s < 0) & (prev_hist >= 0)
 
-# region VOLUME INDICATORS
-def add_obv(
-    df: pd.DataFrame,
-    close_col: str = "close",
-    volume_col: str = "volume",
-    ema_periods: list[int] = None,
-    sma_periods: list[int] = None,
-) -> pd.DataFrame:
-    """
-    Add On-Balance Volume (OBV) and optional smoothed OBV indicators.
+        # --- combined conviction score ---
+        new_cols[f"macd{s}_strength"] = macd_abs * hist_abs
 
-    Popular OBV smoothing periods:
-        EMA: 20, 50, 100
-        SMA: 10, 20, 50
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Input DataFrame containing close and volume columns.
-    close_col : str, optional
-        Name of the close price column. Defaults to 'close'.
-    volume_col : str, optional
-        Name of the volume column. Defaults to 'volume'.
-    ema_periods : list[int], optional
-        EMA smoothing periods for OBV. Defaults to [20, 50, 100].
-    sma_periods : list[int], optional
-        SMA smoothing periods for OBV. Defaults to [10, 20, 50].
-
-    Returns
-    -------
-    pd.DataFrame
-        DataFrame with columns:
-            obv
-            obv_ema_{p}
-            obv_sma_{p}
-    """
-
-    for col in [close_col, volume_col]:
-        validate_column(df, col)
-
-    df = df.copy()
-
-    # Defaults for popular smoothing periods
-    if ema_periods is None:
-        ema_periods = [20, 50, 100]
-    if sma_periods is None:
-        sma_periods = [10, 20, 50]
-
-    close = pd.to_numeric(df[close_col], errors="coerce").astype("float64")
-    volume = pd.to_numeric(df[volume_col], errors="coerce").astype("float64")
-
-    # Base OBV
-    obv = [0]
-    for i in range(1, len(close)):
-        if close.iloc[i] > close.iloc[i - 1]:
-            obv.append(obv[-1] + volume.iloc[i])
-        elif close.iloc[i] < close.iloc[i - 1]:
-            obv.append(obv[-1] - volume.iloc[i])
-        else:
-            obv.append(obv[-1])
-
-    df["obv"] = obv
-
-    # Add smoothed versions
-    for p in ema_periods:
-        df[f"obv_ema_{p}"] = df["obv"].ewm(span=p, adjust=False).mean()
-
-    for p in sma_periods:
-        df[f"obv_sma_{p}"] = df["obv"].rolling(p, min_periods=1).mean()
+    df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
     return df
 
 
 def add_mfi(
     df: pd.DataFrame,
-    n_list: list[int] = None,
+    n: list[int] = None,
     high_col: str = "high",
     low_col: str = "low",
     close_col: str = "close",
-    volume_col: str = "volume",
+    volume_col: str = "matching_volume",
 ) -> pd.DataFrame:
-    """
-    Add Money Flow Index (MFI) indicators to the DataFrame for multiple popular periods.
 
-    Popular MFI periods:
-        5 (very fast)
-        7 (fast)
-        10 (medium-fast)
-        14 (standard)
-        20 (slow)
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Input DataFrame with high, low, close, and volume columns.
-    n_list : list[int], optional
-        List of MFI periods to compute. Defaults to [5, 7, 10, 14, 20].
-    high_col : str
-    low_col : str
-    close_col : str
-    volume_col : str
-
-    Returns
-    -------
-    pd.DataFrame
-        DataFrame with added columns: mfi_{n} for each n in n_list.
-    """
-    for col in [high_col, low_col, close_col, volume_col]:
+    for col in (high_col, low_col, close_col, volume_col):
         validate_column(df, col)
+
+    if n is None:
+        n = [14]
 
     df = df.copy()
 
-    if n_list is None:
-        n_list = [5, 7, 10, 14, 20]  # popular defaults
+    high = df[high_col].to_numpy(dtype=float)
+    low = df[low_col].to_numpy(dtype=float)
+    close = df[close_col].to_numpy(dtype=float)
+    volume = df[volume_col].to_numpy(dtype=float)
 
-    high = pd.to_numeric(df[high_col], errors="coerce").astype("float64")
-    low = pd.to_numeric(df[low_col], errors="coerce").astype("float64")
-    close = pd.to_numeric(df[close_col], errors="coerce").astype("float64")
-    volume = pd.to_numeric(df[volume_col], errors="coerce").astype("float64")
+    new_cols = {}
 
-    tp = (high + low + close) / 3
-    rmf = tp * volume
+    for period in n:
+        s = f"_{period}"
 
-    pos_mf = np.where(tp > tp.shift(1), rmf, 0.0)
-    neg_mf = np.where(tp < tp.shift(1), rmf, 0.0)
-
-    pos_mf_series = pd.Series(pos_mf)
-    neg_mf_series = pd.Series(neg_mf)
-
-    for n in n_list:
-        pos_sum = pos_mf_series.rolling(n, min_periods=1).sum()
-        neg_sum = neg_mf_series.rolling(n, min_periods=1).sum()
-
-        mfi = 100 * (pos_sum / (pos_sum + neg_sum))
-        df[f"mfi_{n}"] = mfi
-
-    return df
-
-
-def add_adl(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Add Larry Williams’ Accumulation/Distribution Line (ADL) to the DataFrame.
-
-    The ADL measures supply and demand by evaluating where the close lies
-    within the period’s high-low range, then multiplying by volume.
-    It is a cumulative indicator.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        DataFrame with 'high', 'low', 'close', and 'volume' columns.
-
-    Returns
-    -------
-    pd.DataFrame
-        Original DataFrame with added 'adl' column.
-    """
-    high = df["high"].astype("float64")
-    low = df["low"].astype("float64")
-    close = df["close"].astype("float64")
-    volume = df["volume"].astype("float64")
-
-    # Avoid division by zero
-    clv = ((close - low) - (high - close)) / np.where(high != low, (high - low), 1e-10)
-
-    # Money Flow Volume
-    mfv = clv * volume
-
-    # Cumulative ADL
-    df["adl"] = mfv.cumsum()
-
-    return df
-
-
-def add_chaikin_ad(
-    df: pd.DataFrame,
-    high_col: str = "high",
-    low_col: str = "low",
-    close_col: str = "close",
-    volume_col: str = "volume",
-) -> pd.DataFrame:
-    """
-    Add Marc Chaikin’s Accumulation/Distribution (AD) Line to the DataFrame.
-
-    The Chaikin AD Line uses the Close Location Value (CLV) multiplied by
-    volume to track the flow of money into or out of a security.
-    It is a cumulative indicator.
-
-    Formula
-    -------
-    CLV = ((Close - Low) - (High - Close)) / (High - Low)
-    AD  = cumulative sum of (CLV * Volume)
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Input DataFrame that must contain the specified high, low, close, and volume columns.
-    high_col : str, optional
-        Name of the high price column. Defaults to 'high'.
-    low_col : str, optional
-        Name of the low price column. Defaults to 'low'.
-    close_col : str, optional
-        Name of the close price column. Defaults to 'close'.
-    volume_col : str, optional
-        Name of the volume column. Defaults to 'volume'.
-
-    Returns
-    -------
-    pd.DataFrame
-        Copy of the input DataFrame with an added column 'chaikin_ad'.
-    """
-    for col in [high_col, low_col, close_col, volume_col]:
-        validate_column(df, col)
-
-    df = df.copy()
-
-    high = pd.to_numeric(df[high_col], errors="coerce").astype("float64")
-    low = pd.to_numeric(df[low_col], errors="coerce").astype("float64")
-    close = pd.to_numeric(df[close_col], errors="coerce").astype("float64")
-    volume = pd.to_numeric(df[volume_col], errors="coerce").astype("float64")
-
-    # Close Location Value (CLV)
-    clv = ((close - low) - (high - close)) / np.where(high != low, (high - low), 1e-10)
-
-    # Money Flow Volume
-    mfv = clv * volume
-
-    # Chaikin AD Line (cumulative)
-    df["chaikin_ad"] = mfv.cumsum()
-
-    return df
-
-
-def add_cmf(
-    df: pd.DataFrame,
-    periods: list[int] = None,
-    high_col: str = "high",
-    low_col: str = "low",
-    close_col: str = "close",
-    volume_col: str = "volume",
-) -> pd.DataFrame:
-    """
-    Add Chaikin Money Flow (CMF) indicators for multiple popular periods.
-
-    Popular CMF periods:
-        10, 20 (default), 21, 34, 50
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Input DataFrame with high, low, close, and volume columns.
-    periods : list[int], optional
-        List of lookback periods for CMF. Defaults to [10, 20, 21, 34, 50].
-    high_col : str
-    low_col : str
-    close_col : str
-    volume_col : str
-
-    Returns
-    -------
-    pd.DataFrame
-        DataFrame with added columns: cmf_{n} for each period in periods.
-    """
-    for col in [high_col, low_col, close_col, volume_col]:
-        validate_column(df, col)
-
-    df = df.copy()
-
-    if periods is None:
-        periods = [10, 20, 21, 34, 50]
-
-    high = pd.to_numeric(df[high_col], errors="coerce").astype("float64")
-    low = pd.to_numeric(df[low_col], errors="coerce").astype("float64")
-    close = pd.to_numeric(df[close_col], errors="coerce").astype("float64")
-    volume = pd.to_numeric(df[volume_col], errors="coerce").astype("float64")
-
-    clv = ((close - low) - (high - close)) / np.where(high != low, (high - low), 1e-10)
-    mfv = clv * volume
-
-    for n in periods:
-        cmf = (
-            mfv.rolling(window=n, min_periods=1).sum()
-            / volume.rolling(window=n, min_periods=1).sum()
+        # --- core indicator ---
+        mfi = pd.Series(
+            talib.MFI(high, low, close, volume, timeperiod=period),
+            index=df.index,
         )
-        df[f"cmf_{n}"] = cmf
+
+        # --- derivatives ---
+        mfi_slope = mfi.diff()
+
+        # --- reusable ---
+        mfi_abs = (mfi - 50).abs()
+        signal = mfi.rolling(window=period).mean()
+        hist = mfi - signal
+
+        # --- core + derivatives ---
+        new_cols[f"mfi{s}"] = mfi
+        new_cols[f"mfi{s}_slope"] = mfi_slope
+        new_cols[f"mfi{s}_acceleration"] = mfi_slope.diff()
+        new_cols[f"mfi{s}_abs"] = mfi_abs
+        new_cols[f"mfi{s}_direction"] = np.where(mfi > 50, 1, -1)
+
+        # --- threshold flags ---
+        new_cols[f"mfi{s}_gt_80"] = mfi > 80
+        new_cols[f"mfi{s}_lt_20"] = mfi < 20
+        new_cols[f"mfi{s}_gt_50"] = mfi > 50
+        new_cols[f"mfi{s}_lt_50"] = mfi < 50
+        new_cols[f"mfi{s}_extreme"] = np.where(mfi > 80, 1, np.where(mfi < 20, -1, 0))
+
+        # --- signal line & histogram ---
+        new_cols[f"mfi{s}_signal"] = signal
+        new_cols[f"mfi{s}_signal_slope"] = signal.diff()
+        new_cols[f"mfi{s}_hist"] = hist
+        new_cols[f"mfi{s}_hist_slope"] = hist.diff()
+        new_cols[f"mfi{s}_hist_gt_0"] = hist > 0
+        new_cols[f"mfi{s}_hist_lt_0"] = hist < 0
+
+        # --- combined conviction score ---
+        new_cols[f"mfi{s}_strength"] = mfi_abs * hist.abs()
+
+    df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
     return df
 
 
-def add_vroc(
+def add_mom(
     df: pd.DataFrame,
-    periods: list[int] = None,
-    volume_col: str = "volume",
+    n: list[int] = None,
+    column_name: str = "close",
 ) -> pd.DataFrame:
-    """
-    Add Volume Rate of Change (VROC) indicators for multiple popular periods.
 
-    Popular VROC periods:
-        5, 10, 14 (default), 20, 50
+    validate_column(df, column_name)
 
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Input DataFrame with a volume column.
-    periods : list[int], optional
-        List of lookback periods for VROC. Defaults to [5, 10, 14, 20, 50].
-    volume_col : str, optional
-        Name of the volume column. Defaults to 'volume'.
+    if n is None:
+        n = [10]
 
-    Returns
-    -------
-    pd.DataFrame
-        DataFrame with added columns: vroc_{n} for each period in periods.
-    """
-    validate_column(df, volume_col)
     df = df.copy()
 
-    if periods is None:
-        periods = [5, 10, 14, 20, 50]
+    source = df[column_name].to_numpy(dtype=float)
+    price = df[column_name]
 
-    volume = pd.to_numeric(df[volume_col], errors="coerce").astype("float64")
+    new_cols = {}
 
-    for n in periods:
-        df[f"vroc_{n}"] = (volume - volume.shift(n)) / volume.shift(n) * 100
+    for period in n:
+        s = f"_{period}"
+
+        # --- core indicator ---
+        mom = pd.Series(talib.MOM(source, timeperiod=period), index=df.index)
+
+        # --- derivatives ---
+        mom_slope = mom.diff()
+
+        # --- reusable ---
+        mom_abs = mom.abs()
+        lagged = price.shift(period).replace(0, float("nan"))
+        mom_pct = mom / lagged
+
+        signal = mom.rolling(window=period).mean()
+        hist = mom - signal
+        hist_slope = hist.diff()
+        hist_abs = hist.abs()
+
+        # --- core + derivatives ---
+        new_cols[f"mom{s}"] = mom
+        new_cols[f"mom{s}_slope"] = mom_slope
+        new_cols[f"mom{s}_acceleration"] = mom_slope.diff()
+        new_cols[f"mom{s}_abs"] = mom_abs
+        new_cols[f"mom{s}_direction"] = np.where(mom > 0, 1, -1)
+
+        # --- zero-line flags ---
+        new_cols[f"mom{s}_gt_0"] = mom > 0
+        new_cols[f"mom{s}_lt_0"] = mom < 0
+
+        # --- normalised momentum ---
+        new_cols[f"mom{s}_pct"] = mom_pct
+        new_cols[f"mom{s}_pct_slope"] = mom_pct.diff()
+
+        # --- signal line & histogram ---
+        new_cols[f"mom{s}_signal"] = signal
+        new_cols[f"mom{s}_signal_slope"] = signal.diff()
+        new_cols[f"mom{s}_hist"] = hist
+        new_cols[f"mom{s}_hist_slope"] = hist_slope
+        new_cols[f"mom{s}_hist_acceleration"] = hist_slope.diff()
+        new_cols[f"mom{s}_hist_gt_0"] = hist > 0
+        new_cols[f"mom{s}_hist_lt_0"] = hist < 0
+        new_cols[f"mom{s}_hist_abs"] = hist_abs
+
+        # --- combined conviction score ---
+        new_cols[f"mom{s}_strength"] = mom_abs * hist_abs
+
+    df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
     return df
 
 
-def add_eom(
+def add_ppo(
     df: pd.DataFrame,
-    smooth_periods: list[int] = None,
+    fast: list[int] = None,
+    slow: list[int] = None,
+    signal: list[int] = None,
+    ma_type: int = 1,
+    column_name: str = "close",
+) -> pd.DataFrame:
+
+    validate_column(df, column_name)
+
+    if fast is None:
+        fast = [12]
+    if slow is None:
+        slow = [26]
+    if signal is None:
+        signal = [9]
+
+    df = df.copy()
+    source = df[column_name].to_numpy(dtype=float)
+
+    new_cols = {}
+
+    for f, sl, sg in product(fast, slow, signal):
+        if f >= sl:
+            continue
+
+        s = f"_{f}_{sl}_{sg}"
+
+        # --- core indicator ---
+        ppo_line = pd.Series(
+            talib.PPO(source, fastperiod=f, slowperiod=sl, matype=ma_type),
+            index=df.index,
+        )
+
+        signal_line = ppo_line.rolling(window=sg).mean()
+        hist = ppo_line - signal_line
+
+        # --- derivatives ---
+        ppo_slope = ppo_line.diff()
+        hist_slope = hist.diff()
+
+        # --- reusable ---
+        ppo_abs = ppo_line.abs()
+        hist_abs = hist.abs()
+        prev_hist = hist.shift(1)
+
+        # --- PPO line ---
+        new_cols[f"ppo{s}"] = ppo_line
+        new_cols[f"ppo{s}_slope"] = ppo_slope
+        new_cols[f"ppo{s}_acceleration"] = ppo_slope.diff()
+        new_cols[f"ppo{s}_abs"] = ppo_abs
+        new_cols[f"ppo{s}_direction"] = np.where(ppo_line > 0, 1, -1)
+        new_cols[f"ppo{s}_gt_0"] = ppo_line > 0
+        new_cols[f"ppo{s}_lt_0"] = ppo_line < 0
+
+        # --- signal ---
+        new_cols[f"ppo{s}_signal"] = signal_line
+        new_cols[f"ppo{s}_signal_slope"] = signal_line.diff()
+        new_cols[f"ppo{s}_signal_gt_0"] = signal_line > 0
+        new_cols[f"ppo{s}_signal_lt_0"] = signal_line < 0
+
+        # --- histogram ---
+        new_cols[f"ppo{s}_hist"] = hist
+        new_cols[f"ppo{s}_hist_slope"] = hist_slope
+        new_cols[f"ppo{s}_hist_acceleration"] = hist_slope.diff()
+        new_cols[f"ppo{s}_hist_gt_0"] = hist > 0
+        new_cols[f"ppo{s}_hist_lt_0"] = hist < 0
+        new_cols[f"ppo{s}_hist_abs"] = hist_abs
+
+        # --- crossover ---
+        new_cols[f"ppo{s}_cross_above"] = (hist > 0) & (prev_hist <= 0)
+        new_cols[f"ppo{s}_cross_below"] = (hist < 0) & (prev_hist >= 0)
+
+        # --- strength ---
+        new_cols[f"ppo{s}_strength"] = ppo_abs * hist_abs
+
+    return pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
+
+
+def add_roc(
+    df: pd.DataFrame,
+    n: list[int] = None,
+    column_name: str = "close",
+) -> pd.DataFrame:
+
+    validate_column(df, column_name)
+
+    if n is None:
+        n = [10]
+
+    df = df.copy()
+    source = df[column_name].to_numpy(dtype=float)
+
+    new_cols = {}
+
+    for period in n:
+        s = f"_{period}"
+
+        # --- core indicator ---
+        roc = pd.Series(talib.ROC(source, timeperiod=period), index=df.index)
+
+        # --- derivatives ---
+        roc_slope = roc.diff()
+
+        # --- reusable ---
+        roc_abs = roc.abs()
+        signal = roc.rolling(window=period).mean()
+        hist = roc - signal
+        hist_slope = hist.diff()
+        hist_abs = hist.abs()
+
+        # --- core ---
+        new_cols[f"roc{s}"] = roc
+        new_cols[f"roc{s}_slope"] = roc_slope
+        new_cols[f"roc{s}_acceleration"] = roc_slope.diff()
+        new_cols[f"roc{s}_abs"] = roc_abs
+        new_cols[f"roc{s}_direction"] = np.where(roc > 0, 1, -1)
+
+        # --- flags ---
+        new_cols[f"roc{s}_gt_0"] = roc > 0
+        new_cols[f"roc{s}_lt_0"] = roc < 0
+
+        # --- signal & hist ---
+        new_cols[f"roc{s}_signal"] = signal
+        new_cols[f"roc{s}_signal_slope"] = signal.diff()
+        new_cols[f"roc{s}_hist"] = hist
+        new_cols[f"roc{s}_hist_slope"] = hist_slope
+        new_cols[f"roc{s}_hist_acceleration"] = hist_slope.diff()
+        new_cols[f"roc{s}_hist_gt_0"] = hist > 0
+        new_cols[f"roc{s}_hist_lt_0"] = hist < 0
+        new_cols[f"roc{s}_hist_abs"] = hist_abs
+
+        # --- strength ---
+        new_cols[f"roc{s}_strength"] = roc_abs * hist_abs
+
+    return pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
+
+
+def add_rsi(
+    df: pd.DataFrame,
+    n: list[int] = None,
+    column_name: str = "close",
+) -> pd.DataFrame:
+
+    validate_column(df, column_name)
+
+    if n is None:
+        n = [14]
+
+    df = df.copy()
+    source = df[column_name].to_numpy(dtype=float)
+
+    new_cols = {}
+
+    for period in n:
+        s = f"_{period}"
+
+        # --- core indicator ---
+        rsi = pd.Series(talib.RSI(source, timeperiod=period), index=df.index)
+
+        # --- derivatives ---
+        rsi_slope = rsi.diff()
+
+        # --- reusable ---
+        rsi_abs = (rsi - 50).abs()
+        signal = rsi.rolling(window=period).mean()
+        hist = rsi - signal
+        hist_slope = hist.diff()
+        hist_abs = hist.abs()
+
+        # --- core ---
+        new_cols[f"rsi{s}"] = rsi
+        new_cols[f"rsi{s}_slope"] = rsi_slope
+        new_cols[f"rsi{s}_acceleration"] = rsi_slope.diff()
+        new_cols[f"rsi{s}_abs"] = rsi_abs
+        new_cols[f"rsi{s}_direction"] = np.where(rsi > 50, 1, -1)
+
+        # --- flags ---
+        new_cols[f"rsi{s}_gt_70"] = rsi > 70
+        new_cols[f"rsi{s}_lt_30"] = rsi < 30
+        new_cols[f"rsi{s}_gt_50"] = rsi > 50
+        new_cols[f"rsi{s}_lt_50"] = rsi < 50
+        new_cols[f"rsi{s}_extreme"] = np.where(rsi > 70, 1, np.where(rsi < 30, -1, 0))
+
+        # --- signal & hist ---
+        new_cols[f"rsi{s}_signal"] = signal
+        new_cols[f"rsi{s}_signal_slope"] = signal.diff()
+        new_cols[f"rsi{s}_hist"] = hist
+        new_cols[f"rsi{s}_hist_slope"] = hist_slope
+        new_cols[f"rsi{s}_hist_acceleration"] = hist_slope.diff()
+        new_cols[f"rsi{s}_hist_gt_0"] = hist > 0
+        new_cols[f"rsi{s}_hist_lt_0"] = hist < 0
+        new_cols[f"rsi{s}_hist_abs"] = hist_abs
+
+        # --- strength ---
+        new_cols[f"rsi{s}_strength"] = rsi_abs * hist_abs
+
+    return pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
+
+
+def add_stoch(
+    df: pd.DataFrame,
+    fastk: list[int] = None,
+    slowk: list[int] = None,
+    slowd: list[int] = None,
+    slowk_matype: int = 0,
+    slowd_matype: int = 0,
     high_col: str = "high",
     low_col: str = "low",
-    volume_col: str = "volume",
-) -> pd.DataFrame:
-    """
-    Add Ease of Movement (EoM) indicator with smoothed values for multiple popular periods.
-
-    Popular smoothing periods: 5, 10, 14 (default), 20, 50
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Input DataFrame with high, low, and volume columns.
-    smooth_periods : list[int], optional
-        List of SMA periods to smooth EoM. Defaults to [5, 10, 14, 20, 50].
-    high_col : str, optional
-    low_col : str, optional
-    volume_col : str, optional
-
-    Returns
-    -------
-    pd.DataFrame
-        DataFrame with columns:
-            - 'eom' (raw values)
-            - 'eom_{n}' for each period in smooth_periods
-    """
-    for col in [high_col, low_col, volume_col]:
-        validate_column(df, col)
-
-    df = df.copy()
-
-    if smooth_periods is None:
-        smooth_periods = [5, 10, 14, 20, 50]
-
-    high = pd.to_numeric(df[high_col], errors="coerce").astype("float64")
-    low = pd.to_numeric(df[low_col], errors="coerce").astype("float64")
-    volume = pd.to_numeric(df[volume_col], errors="coerce").astype("float64")
-
-    midpoint_move = ((high + low) / 2) - ((high.shift(1) + low.shift(1)) / 2)
-    box_ratio = np.where((high - low) != 0, (volume / 1e6) / (high - low), 0)
-    eom = np.where(box_ratio != 0, midpoint_move / box_ratio, 0)
-
-    df["eom"] = eom
-
-    for n in smooth_periods:
-        df[f"eom_{n}"] = pd.Series(eom).rolling(window=n, min_periods=1).mean()
-
-    return df
-
-
-def add_pvi_nvi(
-    df: pd.DataFrame, close_col: str = "close", volume_col: str = "volume"
-) -> pd.DataFrame:
-    """
-    Add Positive Volume Index (PVI) and Negative Volume Index (NVI) to the DataFrame.
-
-    PVI assumes that when volume increases, the 'crowd' is driving prices.
-    NVI assumes that when volume decreases, the 'smart money' is active.
-
-    Formula
-    -------
-    If Volume[t] > Volume[t-1]:
-        PVI[t] = PVI[t-1] + ((Close[t] - Close[t-1]) / Close[t-1]) * PVI[t-1]
-    else:
-        PVI[t] = PVI[t-1]
-
-    If Volume[t] < Volume[t-1]:
-        NVI[t] = NVI[t-1] + ((Close[t] - Close[t-1]) / Close[t-1]) * NVI[t-1]
-    else:
-        NVI[t] = NVI[t-1]
-
-    Both series usually start from 1000.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Input DataFrame that must contain the specified close and volume columns.
-    close_col : str, optional
-        Name of the close price column. Defaults to 'close'.
-    volume_col : str, optional
-        Name of the volume column. Defaults to 'volume'.
-
-    Returns
-    -------
-    pd.DataFrame
-        Copy of the input DataFrame with added columns 'pvi' and 'nvi'.
-    """
-    for col in [close_col, volume_col]:
-        validate_column(df, col)
-
-    df = df.copy()
-
-    close = pd.to_numeric(df[close_col], errors="coerce").astype("float64").values
-    volume = pd.to_numeric(df[volume_col], errors="coerce").astype("float64").values
-
-    pvi = np.zeros(len(df))
-    nvi = np.zeros(len(df))
-    pvi[0], nvi[0] = 1000, 1000
-
-    for i in range(1, len(df)):
-        if volume[i] > volume[i - 1]:
-            pvi[i] = (
-                pvi[i - 1] + ((close[i] - close[i - 1]) / close[i - 1]) * pvi[i - 1]
-            )
-        else:
-            pvi[i] = pvi[i - 1]
-
-        if volume[i] < volume[i - 1]:
-            nvi[i] = (
-                nvi[i - 1] + ((close[i] - close[i - 1]) / close[i - 1]) * nvi[i - 1]
-            )
-        else:
-            nvi[i] = nvi[i - 1]
-
-    df["pvi"] = pvi
-    df["nvi"] = nvi
-
-    return df
-
-
-def add_vw_macd(
-    df: pd.DataFrame,
-    param_sets: list[tuple[int, int, int]] = None,
     close_col: str = "close",
-    volume_col: str = "volume",
 ) -> pd.DataFrame:
-    """
-    Add Volume-Weighted MACD (VW-MACD) and signal line for multiple popular parameter sets.
 
-    Popular parameter sets:
-        (12, 26, 9) -> standard
-        (5, 13, 6)  -> short-term
-        (8, 21, 5)  -> medium-term
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Input DataFrame with close and volume columns.
-    param_sets : list of tuples, optional
-        List of (fast, slow, signal) parameter sets. Defaults to [(12, 26, 9)].
-    close_col : str
-    volume_col : str
-
-    Returns
-    -------
-    pd.DataFrame
-        DataFrame with VW-MACD columns for each parameter set:
-            - vw_macd_{fast}_{slow}
-            - vw_macd_signal_{signal}
-            - vw_macd_hist_{fast}_{slow}_{signal}
-    """
-    for col in [close_col, volume_col]:
+    for col in (high_col, low_col, close_col):
         validate_column(df, col)
+
+    if fastk is None:
+        fastk = [5]
+    if slowk is None:
+        slowk = [3]
+    if slowd is None:
+        slowd = [3]
 
     df = df.copy()
 
-    if param_sets is None:
-        param_sets = [(12, 26, 9)]
+    high = df[high_col].to_numpy(dtype=float)
+    low = df[low_col].to_numpy(dtype=float)
+    close = df[close_col].to_numpy(dtype=float)
 
-    close = pd.to_numeric(df[close_col], errors="coerce").astype("float64")
-    volume = pd.to_numeric(df[volume_col], errors="coerce").astype("float64")
+    new_cols = {}
 
-    # Volume-weighted price
-    vp = close * volume
-    vw_price = vp.cumsum() / volume.cumsum()
+    for fk, sk, sd in product(fastk, slowk, slowd):
+        s = f"_{fk}_{sk}_{sd}"
 
-    for fast, slow, signal in param_sets:
-        ema_fast = vw_price.ewm(span=fast, adjust=False).mean()
-        ema_slow = vw_price.ewm(span=slow, adjust=False).mean()
+        k, d = talib.STOCH(
+            high,
+            low,
+            close,
+            fastk_period=fk,
+            slowk_period=sk,
+            slowk_matype=slowk_matype,
+            slowd_period=sd,
+            slowd_matype=slowd_matype,
+        )
 
-        vw_macd = ema_fast - ema_slow
-        vw_signal = vw_macd.ewm(span=signal, adjust=False).mean()
-        vw_hist = vw_macd - vw_signal
+        k = pd.Series(k, index=df.index)
+        d = pd.Series(d, index=df.index)
 
-        df[f"vw_macd_{fast}_{slow}"] = vw_macd
-        df[f"vw_macd_signal_{signal}"] = vw_signal
-        df[f"vw_macd_hist_{fast}_{slow}_{signal}"] = vw_hist
+        k_slope = k.diff()
+        d_slope = d.diff()
 
-    return df
+        k_abs = (k - 50).abs()
+        kd_dist = k - d
+        kd_dist_abs = kd_dist.abs()
+        kd_slope = kd_dist.diff()
+        prev_kd = kd_dist.shift(1)
+
+        new_cols.update(
+            {
+                f"stoch{s}_k": k,
+                f"stoch{s}_k_slope": k_slope,
+                f"stoch{s}_k_acceleration": k_slope.diff(),
+                f"stoch{s}_k_abs": k_abs,
+                f"stoch{s}_k_direction": np.where(k > 50, 1, -1),
+                f"stoch{s}_k_gt_80": k > 80,
+                f"stoch{s}_k_lt_20": k < 20,
+                f"stoch{s}_k_gt_50": k > 50,
+                f"stoch{s}_k_lt_50": k < 50,
+                f"stoch{s}_k_extreme": np.where(k > 80, 1, np.where(k < 20, -1, 0)),
+                f"stoch{s}_d": d,
+                f"stoch{s}_d_slope": d_slope,
+                f"stoch{s}_d_acceleration": d_slope.diff(),
+                f"stoch{s}_d_gt_80": d > 80,
+                f"stoch{s}_d_lt_20": d < 20,
+                f"stoch{s}_d_gt_50": d > 50,
+                f"stoch{s}_d_lt_50": d < 50,
+                f"stoch{s}_kd_dist": kd_dist,
+                f"stoch{s}_kd_dist_abs": kd_dist_abs,
+                f"stoch{s}_kd_direction": np.where(k > d, 1, -1),
+                f"stoch{s}_kd_dist_slope": kd_slope,
+                f"stoch{s}_cross_above": (kd_dist > 0) & (prev_kd <= 0),
+                f"stoch{s}_cross_below": (kd_dist < 0) & (prev_kd >= 0),
+                f"stoch{s}_both_gt_80": (k > 80) & (d > 80),
+                f"stoch{s}_both_lt_20": (k < 20) & (d < 20),
+                f"stoch{s}_strength": k_abs * kd_dist_abs,
+            }
+        )
+
+    return pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
 
-def add_kvo(
+def add_stoch_rsi(
     df: pd.DataFrame,
-    param_sets: list[tuple[int, int, int]] = None,
+    n: list[int] = None,
+    fastk: list[int] = None,
+    fastd: list[int] = None,
+    fastd_matype: int = 0,
+    column_name: str = "close",
+) -> pd.DataFrame:
+
+    validate_column(df, column_name)
+
+    if n is None:
+        n = [14]
+    if fastk is None:
+        fastk = [5]
+    if fastd is None:
+        fastd = [3]
+
+    df = df.copy()
+    source = df[column_name].to_numpy(dtype=float)
+
+    new_cols = {}
+
+    for period, fk, fd in product(n, fastk, fastd):
+        s = f"_{period}_{fk}_{fd}"
+
+        k, d = talib.STOCHRSI(
+            source,
+            timeperiod=period,
+            fastk_period=fk,
+            fastd_period=fd,
+            fastd_matype=fastd_matype,
+        )
+
+        k = pd.Series(k, index=df.index)
+        d = pd.Series(d, index=df.index)
+
+        k_slope = k.diff()
+        d_slope = d.diff()
+
+        k_abs = (k - 50).abs()
+        kd_dist = k - d
+        kd_dist_abs = kd_dist.abs()
+        kd_slope = kd_dist.diff()
+        prev_kd = kd_dist.shift(1)
+
+        new_cols.update(
+            {
+                f"stoch_rsi{s}_k": k,
+                f"stoch_rsi{s}_k_slope": k_slope,
+                f"stoch_rsi{s}_k_acceleration": k_slope.diff(),
+                f"stoch_rsi{s}_k_abs": k_abs,
+                f"stoch_rsi{s}_k_direction": np.where(k > 50, 1, -1),
+                f"stoch_rsi{s}_k_gt_80": k > 80,
+                f"stoch_rsi{s}_k_lt_20": k < 20,
+                f"stoch_rsi{s}_k_gt_50": k > 50,
+                f"stoch_rsi{s}_k_lt_50": k < 50,
+                f"stoch_rsi{s}_k_extreme": np.where(k > 80, 1, np.where(k < 20, -1, 0)),
+                f"stoch_rsi{s}_d": d,
+                f"stoch_rsi{s}_d_slope": d_slope,
+                f"stoch_rsi{s}_d_acceleration": d_slope.diff(),
+                f"stoch_rsi{s}_d_gt_80": d > 80,
+                f"stoch_rsi{s}_d_lt_20": d < 20,
+                f"stoch_rsi{s}_d_gt_50": d > 50,
+                f"stoch_rsi{s}_d_lt_50": d < 50,
+                f"stoch_rsi{s}_kd_dist": kd_dist,
+                f"stoch_rsi{s}_kd_dist_abs": kd_dist_abs,
+                f"stoch_rsi{s}_kd_direction": np.where(k > d, 1, -1),
+                f"stoch_rsi{s}_kd_dist_slope": kd_slope,
+                f"stoch_rsi{s}_cross_above": (kd_dist > 0) & (prev_kd <= 0),
+                f"stoch_rsi{s}_cross_below": (kd_dist < 0) & (prev_kd >= 0),
+                f"stoch_rsi{s}_both_gt_80": (k > 80) & (d > 80),
+                f"stoch_rsi{s}_both_lt_20": (k < 20) & (d < 20),
+                f"stoch_rsi{s}_strength": k_abs * kd_dist_abs,
+            }
+        )
+
+    return pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
+
+
+def add_trix(
+    df: pd.DataFrame,
+    n: list[int] = None,
+    column_name: str = "close",
+) -> pd.DataFrame:
+
+    validate_column(df, column_name)
+
+    if n is None:
+        n = [15]
+
+    df = df.copy()
+    source = df[column_name].to_numpy(dtype=float)
+
+    new_cols = {}
+
+    for period in n:
+        s = f"_{period}"
+
+        trix = pd.Series(talib.TRIX(source, timeperiod=period), index=df.index)
+
+        trix_slope = trix.diff()
+        trix_abs = trix.abs()
+
+        signal = trix.rolling(window=period).mean()
+        hist = trix - signal
+        hist_slope = hist.diff()
+        hist_abs = hist.abs()
+
+        new_cols.update(
+            {
+                f"trix{s}": trix,
+                f"trix{s}_slope": trix_slope,
+                f"trix{s}_acceleration": trix_slope.diff(),
+                f"trix{s}_abs": trix_abs,
+                f"trix{s}_direction": np.where(trix > 0, 1, -1),
+                f"trix{s}_gt_0": trix > 0,
+                f"trix{s}_lt_0": trix < 0,
+                f"trix{s}_signal": signal,
+                f"trix{s}_signal_slope": signal.diff(),
+                f"trix{s}_hist": hist,
+                f"trix{s}_hist_slope": hist_slope,
+                f"trix{s}_hist_acceleration": hist_slope.diff(),
+                f"trix{s}_hist_gt_0": hist > 0,
+                f"trix{s}_hist_lt_0": hist < 0,
+                f"trix{s}_hist_abs": hist_abs,
+                f"trix{s}_strength": trix_abs * hist_abs,
+            }
+        )
+
+    return pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
+
+
+def add_ultosc(
+    df: pd.DataFrame,
+    period1: list[int] = None,
+    period2: list[int] = None,
+    period3: list[int] = None,
     high_col: str = "high",
     low_col: str = "low",
     close_col: str = "close",
-    volume_col: str = "volume",
 ) -> pd.DataFrame:
-    """
-    Add Klinger Volume Oscillator (KVO) and signal line for multiple popular parameter sets.
 
-    Popular parameter sets:
-        (34, 55, 13) -> standard
-        (13, 34, 5)  -> short-term
-        (21, 55, 13) -> medium-term
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Input DataFrame with high, low, close, and volume columns.
-    param_sets : list of tuples, optional
-        List of (fast, slow, signal) parameter sets. Defaults to [(34, 55, 13)].
-    high_col : str
-    low_col : str
-    close_col : str
-    volume_col : str
-
-    Returns
-    -------
-    pd.DataFrame
-        DataFrame with KVO columns for each parameter set:
-            - kvo_{fast}_{slow}
-            - kvo_signal_{signal}
-    """
-    for col in [high_col, low_col, close_col, volume_col]:
+    for col in (high_col, low_col, close_col):
         validate_column(df, col)
+
+    if period1 is None:
+        period1 = [7]
+    if period2 is None:
+        period2 = [14]
+    if period3 is None:
+        period3 = [28]
 
     df = df.copy()
 
-    if param_sets is None:
-        param_sets = [(34, 55, 13)]
+    high = df[high_col].to_numpy(dtype=float)
+    low = df[low_col].to_numpy(dtype=float)
+    close = df[close_col].to_numpy(dtype=float)
 
-    high = pd.to_numeric(df[high_col], errors="coerce").astype("float64")
-    low = pd.to_numeric(df[low_col], errors="coerce").astype("float64")
-    close = pd.to_numeric(df[close_col], errors="coerce").astype("float64")
-    volume = pd.to_numeric(df[volume_col], errors="coerce").astype("float64")
+    new_cols = {}
 
-    tp = (high + low + close) / 3
-    trend = np.where(tp > tp.shift(1), 1, -1)
-    vf = trend * 2 * ((high - low) / (high + low + 1e-9)) * volume
+    for p1, p2, p3 in product(period1, period2, period3):
+        if not (p1 < p2 < p3):
+            continue
 
-    for fast, slow, signal in param_sets:
-        ema_fast = pd.Series(vf).ewm(span=fast, adjust=False).mean()
-        ema_slow = pd.Series(vf).ewm(span=slow, adjust=False).mean()
-        kvo = ema_fast - ema_slow
-        kvo_signal = kvo.ewm(span=signal, adjust=False).mean()
+        s = f"_{p1}_{p2}_{p3}"
 
-        df[f"kvo_{fast}_{slow}"] = kvo
-        df[f"kvo_signal_{signal}"] = kvo_signal
+        uo = pd.Series(
+            talib.ULTOSC(high, low, close, p1, p2, p3),
+            index=df.index,
+        )
 
-    return df
+        uo_slope = uo.diff()
+        uo_abs = (uo - 50).abs()
+
+        signal = uo.rolling(window=p1).mean()
+        hist = uo - signal
+        hist_slope = hist.diff()
+        hist_abs = hist.abs()
+
+        new_cols.update(
+            {
+                f"ultosc{s}": uo,
+                f"ultosc{s}_slope": uo_slope,
+                f"ultosc{s}_acceleration": uo_slope.diff(),
+                f"ultosc{s}_abs": uo_abs,
+                f"ultosc{s}_direction": np.where(uo > 50, 1, -1),
+                f"ultosc{s}_gt_70": uo > 70,
+                f"ultosc{s}_lt_30": uo < 30,
+                f"ultosc{s}_gt_50": uo > 50,
+                f"ultosc{s}_lt_50": uo < 50,
+                f"ultosc{s}_extreme": np.where(uo > 70, 1, np.where(uo < 30, -1, 0)),
+                f"ultosc{s}_signal": signal,
+                f"ultosc{s}_signal_slope": signal.diff(),
+                f"ultosc{s}_hist": hist,
+                f"ultosc{s}_hist_slope": hist_slope,
+                f"ultosc{s}_hist_acceleration": hist_slope.diff(),
+                f"ultosc{s}_hist_gt_0": hist > 0,
+                f"ultosc{s}_hist_lt_0": hist < 0,
+                f"ultosc{s}_hist_abs": hist_abs,
+                f"ultosc{s}_strength": uo_abs * hist_abs,
+            }
+        )
+
+    return pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
 
-def add_demand_oscillator(
+def add_willr(
     df: pd.DataFrame,
-    param_sets: list[tuple[int, int]] = None,
-    open_col: str = "open",
+    n: list[int] = None,
     high_col: str = "high",
     low_col: str = "low",
     close_col: str = "close",
-    volume_col: str = "volume",
 ) -> pd.DataFrame:
-    """
-    Add Aspray's Demand Oscillator (ADO) to the DataFrame for multiple parameter sets.
 
-    Popular parameter sets:
-        (5, 10)  -> standard short-term
-        (3, 7)   -> very fast
-        (8, 14)  -> medium-term
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Input DataFrame with open, high, low, close, and volume columns.
-    param_sets : list of tuples, optional
-        List of (fast, slow) EMA periods. Defaults to [(5, 10)].
-    open_col, high_col, low_col, close_col, volume_col : str
-        Column names for OHLCV data.
-
-    Returns
-    -------
-    pd.DataFrame
-        Copy of DataFrame with added ADO columns for each parameter set:
-        - 'demand_osc_{fast}_{slow}'
-    """
-    for col in [open_col, high_col, low_col, close_col, volume_col]:
+    for col in (high_col, low_col, close_col):
         validate_column(df, col)
+
+    if n is None:
+        n = [14]
 
     df = df.copy()
 
-    if param_sets is None:
-        param_sets = [(5, 10)]
+    high = df[high_col].to_numpy(dtype=float)
+    low = df[low_col].to_numpy(dtype=float)
+    close = df[close_col].to_numpy(dtype=float)
 
-    open_ = pd.to_numeric(df[open_col], errors="coerce").astype("float64")
-    high = pd.to_numeric(df[high_col], errors="coerce").astype("float64")
-    low = pd.to_numeric(df[low_col], errors="coerce").astype("float64")
-    close = pd.to_numeric(df[close_col], errors="coerce").astype("float64")
-    volume = pd.to_numeric(df[volume_col], errors="coerce").astype("float64")
+    new_cols = {}
 
-    prev_close = close.shift(1)
-    up_move = high - np.minimum(open_, prev_close)
-    down_move = np.maximum(open_, prev_close) - low
-    demand = ((up_move - down_move) / (up_move + down_move + 1e-9)) * volume
+    for period in n:
+        s = f"_{period}"
 
-    for fast, slow in param_sets:
-        ema_fast = demand.ewm(span=fast, adjust=False).mean()
-        ema_slow = demand.ewm(span=slow, adjust=False).mean()
-        df[f"demand_osc_{fast}_{slow}"] = ema_fast - ema_slow
+        # --- core indicator ---
+        willr = pd.Series(
+            talib.WILLR(high, low, close, timeperiod=period),
+            index=df.index,
+        )
 
-    return df
+        # --- derivatives ---
+        willr_slope = willr.diff()
+
+        # --- reusable ---
+        willr_abs = (willr + 50).abs()
+        signal = willr.rolling(window=period).mean()
+        hist = willr - signal
+        hist_slope = hist.diff()
+        hist_abs = hist.abs()
+
+        # --- core ---
+        new_cols[f"willr{s}"] = willr
+        new_cols[f"willr{s}_slope"] = willr_slope
+        new_cols[f"willr{s}_acceleration"] = willr_slope.diff()
+        new_cols[f"willr{s}_abs"] = willr_abs
+        new_cols[f"willr{s}_direction"] = np.where(willr > -50, 1, -1)
+
+        # --- threshold flags ---
+        new_cols[f"willr{s}_gt_minus20"] = willr > -20
+        new_cols[f"willr{s}_lt_minus80"] = willr < -80
+        new_cols[f"willr{s}_gt_minus50"] = willr > -50
+        new_cols[f"willr{s}_lt_minus50"] = willr < -50
+        new_cols[f"willr{s}_extreme"] = np.where(
+            willr > -20, 1, np.where(willr < -80, -1, 0)
+        )
+
+        # --- signal & histogram ---
+        new_cols[f"willr{s}_signal"] = signal
+        new_cols[f"willr{s}_signal_slope"] = signal.diff()
+        new_cols[f"willr{s}_hist"] = hist
+        new_cols[f"willr{s}_hist_slope"] = hist_slope
+        new_cols[f"willr{s}_hist_acceleration"] = hist_slope.diff()
+        new_cols[f"willr{s}_hist_gt_0"] = hist > 0
+        new_cols[f"willr{s}_hist_lt_0"] = hist < 0
+        new_cols[f"willr{s}_hist_abs"] = hist_abs
+
+        # --- strength ---
+        new_cols[f"willr{s}_strength"] = willr_abs * hist_abs
+
+    return pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
+
+
+# endregion MOMENTUM INDICATORS
+
+
+# region VOLUME INDICATORS
+def add_ad(
+    df: pd.DataFrame,
+    n: list[int] = None,
+    high_col: str = "high",
+    low_col: str = "low",
+    close_col: str = "close",
+    volume_col: str = "matching_volume",
+) -> pd.DataFrame:
+    for col in (high_col, low_col, close_col, volume_col):
+        validate_column(df, col)
+
+    if n is None:
+        n = [10]
+
+    high = df[high_col].to_numpy(dtype=float)
+    low = df[low_col].to_numpy(dtype=float)
+    close = df[close_col].to_numpy(dtype=float)
+    volume = df[volume_col].to_numpy(dtype=float)
+
+    new_cols = {}
+
+    # --- raw AD line (computed once) ---
+    ad_series = pd.Series(talib.AD(high, low, close, volume), index=df.index)
+    ad_slope = ad_series.diff()
+
+    new_cols["ad"] = ad_series
+    new_cols["ad_slope"] = ad_slope
+    new_cols["ad_acceleration"] = ad_slope.diff()
+    new_cols["ad_gt_0"] = ad_series > 0
+    new_cols["ad_lt_0"] = ad_series < 0
+    new_cols["ad_direction"] = np.where(ad_slope > 0, 1, -1)
+
+    # --- per smoothing window ---
+    for period in n:
+        s = f"_{period}"
+
+        signal = ad_series.ewm(span=period, adjust=False).mean()
+        hist = ad_series - signal
+        hist_slope = hist.diff()
+        hist_abs = hist.abs()
+
+        new_cols[f"ad_signal{s}"] = signal
+        new_cols[f"ad_signal{s}_slope"] = signal.diff()
+        new_cols[f"ad_hist{s}"] = hist
+        new_cols[f"ad_hist{s}_slope"] = hist_slope
+        new_cols[f"ad_hist{s}_acceleration"] = hist_slope.diff()
+        new_cols[f"ad_hist{s}_gt_0"] = hist > 0
+        new_cols[f"ad_hist{s}_lt_0"] = hist < 0
+        new_cols[f"ad_hist{s}_abs"] = hist_abs
+        new_cols[f"ad{s}_strength"] = ad_slope.abs() * hist_abs
+
+    return pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
+
+
+def add_adosc(
+    df: pd.DataFrame,
+    fast: list[int] = None,
+    slow: list[int] = None,
+    high_col: str = "high",
+    low_col: str = "low",
+    close_col: str = "close",
+    volume_col: str = "matching_volume",
+) -> pd.DataFrame:
+    for col in (high_col, low_col, close_col, volume_col):
+        validate_column(df, col)
+
+    fast = fast or [3]
+    slow = slow or [10]
+
+    high = df[high_col].to_numpy(dtype=float)
+    low = df[low_col].to_numpy(dtype=float)
+    close = df[close_col].to_numpy(dtype=float)
+    volume = df[volume_col].to_numpy(dtype=float)
+
+    new_cols = {}
+
+    # --- raw AD line (shared) ---
+    if "ad" not in df.columns:
+        new_cols["ad"] = pd.Series(talib.AD(high, low, close, volume), index=df.index)
+
+    for f, sl in product(fast, slow):
+        if f >= sl:
+            continue
+
+        s = f"_{f}_{sl}"
+        adosc = pd.Series(
+            talib.ADOSC(high, low, close, volume, fastperiod=f, slowperiod=sl),
+            index=df.index,
+        )
+
+        adosc_slope = adosc.diff()
+        signal = adosc.rolling(window=f).mean()
+        hist = adosc - signal
+        hist_slope = hist.diff()
+
+        # --- core & derivatives ---
+        new_cols[f"adosc{s}"] = adosc
+        new_cols[f"adosc{s}_slope"] = adosc_slope
+        new_cols[f"adosc{s}_acceleration"] = adosc_slope.diff()
+        new_cols[f"adosc{s}_abs"] = adosc.abs()
+        new_cols[f"adosc{s}_direction"] = np.where(adosc > 0, 1, -1)
+        new_cols[f"adosc{s}_gt_0"] = adosc > 0
+        new_cols[f"adosc{s}_lt_0"] = adosc < 0
+
+        # --- signal line & histogram ---
+        new_cols[f"adosc{s}_signal"] = signal
+        new_cols[f"adosc{s}_signal_slope"] = signal.diff()
+        new_cols[f"adosc{s}_hist"] = hist
+        new_cols[f"adosc{s}_hist_slope"] = hist_slope
+        new_cols[f"adosc{s}_hist_acceleration"] = hist_slope.diff()
+        new_cols[f"adosc{s}_hist_gt_0"] = hist > 0
+        new_cols[f"adosc{s}_hist_lt_0"] = hist < 0
+        new_cols[f"adosc{s}_hist_abs"] = hist.abs()
+
+        # --- crossovers ---
+        prev_adosc = adosc.shift(1)
+        new_cols[f"adosc{s}_cross_above"] = (adosc > 0) & (prev_adosc <= 0)
+        new_cols[f"adosc{s}_cross_below"] = (adosc < 0) & (prev_adosc >= 0)
+
+        # --- strength ---
+        new_cols[f"adosc{s}_strength"] = adosc.abs() * hist.abs()
+
+    return pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
+
+
+def add_obv(
+    df: pd.DataFrame,
+    n: list[int] = None,
+    close_col: str = "close",
+    volume_col: str = "matching_volume",
+) -> pd.DataFrame:
+    for col in (close_col, volume_col):
+        validate_column(df, col)
+
+    if n is None:
+        n = [10]
+
+    close = df[close_col].to_numpy(dtype=float)
+    volume = df[volume_col].to_numpy(dtype=float)
+
+    new_cols = {}
+
+    # --- raw OBV (computed once) ---
+    obv_series = pd.Series(talib.OBV(close, volume), index=df.index)
+    obv_slope = obv_series.diff()
+
+    new_cols["obv"] = obv_series
+    new_cols["obv_slope"] = obv_slope
+    new_cols["obv_acceleration"] = obv_slope.diff()
+    new_cols["obv_gt_0"] = obv_series > 0
+    new_cols["obv_lt_0"] = obv_series < 0
+    new_cols["obv_direction"] = np.where(obv_slope > 0, 1, -1)
+
+    # --- per smoothing window ---
+    for period in n:
+        s = f"_{period}"
+
+        signal = obv_series.ewm(span=period, adjust=False).mean()
+        hist = obv_series - signal
+        hist_slope = hist.diff()
+        hist_abs = hist.abs()
+
+        new_cols[f"obv_signal{s}"] = signal
+        new_cols[f"obv_signal{s}_slope"] = signal.diff()
+        new_cols[f"obv_hist{s}"] = hist
+        new_cols[f"obv_hist{s}_slope"] = hist_slope
+        new_cols[f"obv_hist{s}_acceleration"] = hist_slope.diff()
+        new_cols[f"obv_hist{s}_gt_0"] = hist > 0
+        new_cols[f"obv_hist{s}_lt_0"] = hist < 0
+        new_cols[f"obv_hist{s}_abs"] = hist_abs
+        new_cols[f"obv{s}_strength"] = obv_slope.abs() * hist_abs
+
+        # --- crossovers ---
+        prev_hist = hist.shift(1)
+        new_cols[f"obv{s}_cross_above"] = (hist > 0) & (prev_hist <= 0)
+        new_cols[f"obv{s}_cross_below"] = (hist < 0) & (prev_hist >= 0)
+
+    return pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
 
 # endregion VOLUME INDICATORS
 
 
+# region CYCLE INDICATORS
+def add_ht_dcperiod(
+    df: pd.DataFrame,
+    n: list[int] = None,
+    close_col: str = "close",
+) -> pd.DataFrame:
+    validate_column(df, close_col)
+
+    if n is None:
+        n = [10]
+
+    close = df[close_col].to_numpy(dtype=float)
+    new_cols = {}
+
+    # --- raw dominant cycle period ---
+    dcperiod = pd.Series(talib.HT_DCPERIOD(close), index=df.index)
+    dcperiod_slope = dcperiod.diff()
+
+    # --- base derivatives ---
+    new_cols["ht_dcperiod"] = dcperiod
+    new_cols["ht_dcperiod_slope"] = dcperiod_slope
+    new_cols["ht_dcperiod_acceleration"] = dcperiod_slope.diff()
+    new_cols["ht_dcperiod_gt_prev"] = dcperiod > dcperiod.shift(1)
+    new_cols["ht_dcperiod_lt_prev"] = dcperiod < dcperiod.shift(1)
+    new_cols["ht_dcperiod_direction"] = np.where(dcperiod_slope > 0, 1, -1)
+    new_cols["ht_dcperiod_valid"] = np.isfinite(dcperiod) & (dcperiod > 0)
+
+    # --- per smoothing window ---
+    for period in n:
+        s = f"_{period}"
+
+        signal = dcperiod.ewm(span=period, adjust=False).mean()
+        hist = dcperiod - signal
+        hist_slope = hist.diff()
+        hist_abs = hist.abs()
+
+        new_cols[f"ht_dcperiod_signal{s}"] = signal
+        new_cols[f"ht_dcperiod_signal{s}_slope"] = signal.diff()
+        new_cols[f"ht_dcperiod_hist{s}"] = hist
+        new_cols[f"ht_dcperiod_hist{s}_slope"] = hist_slope
+        new_cols[f"ht_dcperiod_hist{s}_acceleration"] = hist_slope.diff()
+        new_cols[f"ht_dcperiod_hist{s}_gt_0"] = hist > 0
+        new_cols[f"ht_dcperiod_hist{s}_lt_0"] = hist < 0
+        new_cols[f"ht_dcperiod_hist{s}_abs"] = hist_abs
+        new_cols[f"ht_dcperiod{s}_strength"] = dcperiod_slope.abs() * hist_abs
+
+    return pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
+
+
+def add_ht_dcphase(
+    df: pd.DataFrame,
+    n: list[int] = None,
+    close_col: str = "close",
+) -> pd.DataFrame:
+    validate_column(df, close_col)
+
+    if n is None:
+        n = [10]
+
+    close = df[close_col].to_numpy(dtype=float)
+    new_cols = {}
+
+    # --- raw phase ---
+    phase = pd.Series(talib.HT_DCPHASE(close), index=df.index)
+    wrapped = np.mod(phase, 360.0)
+
+    # trig features
+    phase_rad = np.deg2rad(wrapped)
+    slope = wrapped.diff()
+
+    new_cols["ht_dcphase"] = phase
+    new_cols["ht_dcphase_wrapped"] = wrapped
+    new_cols["ht_dcphase_sin"] = np.sin(phase_rad)
+    new_cols["ht_dcphase_cos"] = np.cos(phase_rad)
+    new_cols["ht_dcphase_slope"] = slope
+    new_cols["ht_dcphase_acceleration"] = slope.diff()
+
+    # quadrant (cycle stage)
+    new_cols["ht_dcphase_quadrant"] = pd.cut(
+        wrapped, bins=[0, 90, 180, 270, 360], labels=[1, 2, 3, 4], include_lowest=True
+    )
+
+    new_cols["ht_dcphase_direction"] = np.where(slope > 0, 1, -1)
+    new_cols["ht_dcphase_valid"] = np.isfinite(phase)
+
+    # --- per smoothing window ---
+    for period in n:
+        s = f"_{period}"
+
+        signal = wrapped.ewm(span=period, adjust=False).mean()
+        hist = wrapped - signal
+        hist_slope = hist.diff()
+        hist_abs = hist.abs()
+
+        new_cols[f"ht_dcphase_signal{s}"] = signal
+        new_cols[f"ht_dcphase_signal{s}_slope"] = signal.diff()
+        new_cols[f"ht_dcphase_hist{s}"] = hist
+        new_cols[f"ht_dcphase_hist{s}_slope"] = hist_slope
+        new_cols[f"ht_dcphase_hist{s}_acceleration"] = hist_slope.diff()
+        new_cols[f"ht_dcphase_hist{s}_gt_0"] = hist > 0
+        new_cols[f"ht_dcphase_hist{s}_lt_0"] = hist < 0
+        new_cols[f"ht_dcphase_hist{s}_abs"] = hist_abs
+        new_cols[f"ht_dcphase{s}_strength"] = slope.abs() * hist_abs
+
+    return pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
+
+
+def add_ht_phasor(
+    df: pd.DataFrame,
+    n: list[int] = None,
+    close_col: str = "close",
+) -> pd.DataFrame:
+    validate_column(df, close_col)
+
+    if n is None:
+        n = [10]
+
+    close = df[close_col].to_numpy(dtype=float)
+    new_cols = {}
+
+    inphase, quadrature = talib.HT_PHASOR(close)
+    amplitude = pd.Series(np.sqrt(inphase**2 + quadrature**2), index=df.index)
+    amp_slope = amplitude.diff()
+
+    new_cols["ht_phasor_inphase"] = pd.Series(inphase, index=df.index)
+    new_cols["ht_phasor_quadrature"] = pd.Series(quadrature, index=df.index)
+    new_cols["ht_phasor_amplitude"] = amplitude
+
+    phase_deg = np.degrees(np.arctan2(quadrature, inphase))
+    new_cols["ht_phasor_phase"] = pd.Series(phase_deg, index=df.index)
+    new_cols["ht_phasor_phase_wrapped"] = np.mod(phase_deg, 360.0)
+
+    new_cols["ht_phasor_slope"] = amp_slope
+    new_cols["ht_phasor_acceleration"] = amp_slope.diff()
+    new_cols["ht_phasor_direction"] = np.where(amp_slope > 0, 1, -1)
+    new_cols["ht_phasor_valid"] = np.isfinite(inphase) & np.isfinite(quadrature)
+
+    for period in n:
+        s = f"_{period}"
+
+        signal = amplitude.ewm(span=period, adjust=False).mean()
+        hist = amplitude - signal
+        hist_slope = hist.diff()
+        hist_abs = hist.abs()
+
+        new_cols[f"ht_phasor_signal{s}"] = signal
+        new_cols[f"ht_phasor_signal{s}_slope"] = signal.diff()
+        new_cols[f"ht_phasor_hist{s}"] = hist
+        new_cols[f"ht_phasor_hist{s}_slope"] = hist_slope
+        new_cols[f"ht_phasor_hist{s}_acceleration"] = hist_slope.diff()
+        new_cols[f"ht_phasor_hist{s}_gt_0"] = hist > 0
+        new_cols[f"ht_phasor_hist{s}_lt_0"] = hist < 0
+        new_cols[f"ht_phasor_hist{s}_abs"] = hist_abs
+        new_cols[f"ht_phasor{s}_strength"] = amp_slope.abs() * hist_abs
+
+    return pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
+
+
+def add_ht_sine(
+    df: pd.DataFrame,
+    n: list[int] = None,
+    close_col: str = "close",
+) -> pd.DataFrame:
+    validate_column(df, close_col)
+
+    if n is None:
+        n = [10]
+
+    close = df[close_col].to_numpy(dtype=float)
+    new_cols = {}
+
+    sine, leadsine = talib.HT_SINE(close)
+    sine_series = pd.Series(sine, index=df.index)
+    leadsine_series = pd.Series(leadsine, index=df.index)
+    sine_slope = sine_series.diff()
+
+    new_cols["ht_sine"] = sine_series
+    new_cols["ht_leadsine"] = leadsine_series
+    new_cols["ht_sine_diff"] = sine_series - leadsine_series
+    new_cols["ht_sine_slope"] = sine_slope
+    new_cols["ht_sine_acceleration"] = sine_slope.diff()
+    new_cols["ht_sine_direction"] = np.where(sine_slope > 0, 1, -1)
+    new_cols["ht_sine_gt_0"] = sine_series > 0
+    new_cols["ht_sine_lt_0"] = sine_series < 0
+
+    # crossovers
+    prev_sine = sine_series.shift(1)
+    prev_leadsine = leadsine_series.shift(1)
+    new_cols["ht_sine_cross_above"] = (sine_series > leadsine_series) & (
+        prev_sine <= prev_leadsine
+    )
+    new_cols["ht_sine_cross_below"] = (sine_series < leadsine_series) & (
+        prev_sine >= prev_leadsine
+    )
+    new_cols["ht_sine_valid"] = np.isfinite(sine) & np.isfinite(leadsine)
+
+    for period in n:
+        s = f"_{period}"
+
+        signal = sine_series.ewm(span=period, adjust=False).mean()
+        hist = sine_series - signal
+        hist_slope = hist.diff()
+        hist_abs = hist.abs()
+
+        new_cols[f"ht_sine_signal{s}"] = signal
+        new_cols[f"ht_sine_signal{s}_slope"] = signal.diff()
+        new_cols[f"ht_sine_hist{s}"] = hist
+        new_cols[f"ht_sine_hist{s}_slope"] = hist_slope
+        new_cols[f"ht_sine_hist{s}_acceleration"] = hist_slope.diff()
+        new_cols[f"ht_sine_hist{s}_gt_0"] = hist > 0
+        new_cols[f"ht_sine_hist{s}_lt_0"] = hist < 0
+        new_cols[f"ht_sine_hist{s}_abs"] = hist_abs
+        new_cols[f"ht_sine{s}_strength"] = sine_slope.abs() * hist_abs
+
+    return pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
+
+
+def add_ht_trendmode(
+    df: pd.DataFrame,
+    n: list[int] = None,
+    close_col: str = "close",
+) -> pd.DataFrame:
+    validate_column(df, close_col)
+
+    if n is None:
+        n = [10]
+
+    close = df[close_col].to_numpy(dtype=float)
+    new_cols = {}
+
+    trendmode = pd.Series(talib.HT_TRENDMODE(close), index=df.index)
+    tm_slope = trendmode.diff()
+
+    new_cols["ht_trendmode"] = trendmode
+    new_cols["ht_trendmode_slope"] = tm_slope
+    new_cols["ht_trendmode_acceleration"] = tm_slope.diff()
+    new_cols["ht_trendmode_direction"] = np.where(trendmode == 1, 1, -1)
+    new_cols["ht_trendmode_is_trend"] = trendmode == 1
+    new_cols["ht_trendmode_is_cycle"] = trendmode == 0
+
+    # regime switches
+    prev = trendmode.shift(1)
+    new_cols["ht_trendmode_switch_on"] = (trendmode == 1) & (prev == 0)
+    new_cols["ht_trendmode_switch_off"] = (trendmode == 0) & (prev == 1)
+    new_cols["ht_trendmode_valid"] = np.isfinite(trendmode)
+
+    for period in n:
+        s = f"_{period}"
+
+        signal = trendmode.ewm(span=period, adjust=False).mean()
+        hist = trendmode - signal
+        hist_slope = hist.diff()
+        hist_abs = hist.abs()
+
+        new_cols[f"ht_trendmode_signal{s}"] = signal
+        new_cols[f"ht_trendmode_signal{s}_slope"] = signal.diff()
+        new_cols[f"ht_trendmode_hist{s}"] = hist
+        new_cols[f"ht_trendmode_hist{s}_slope"] = hist_slope
+        new_cols[f"ht_trendmode_hist{s}_acceleration"] = hist_slope.diff()
+        new_cols[f"ht_trendmode_hist{s}_gt_0"] = hist > 0
+        new_cols[f"ht_trendmode_hist{s}_lt_0"] = hist < 0
+        new_cols[f"ht_trendmode_hist{s}_abs"] = hist_abs
+        new_cols[f"ht_trendmode{s}_strength"] = tm_slope.abs() * hist_abs
+
+    return pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
+
+
+# endregion CYCLE INDICATORS
+
+
+# region PRICE TRANSFORM
+def add_avgprice(
+    df: pd.DataFrame,
+    n: list[int] = None,
+    open_col: str = "open",
+    high_col: str = "high",
+    low_col: str = "low",
+    close_col: str = "close",
+) -> pd.DataFrame:
+    for col in (open_col, high_col, low_col, close_col):
+        validate_column(df, col)
+
+    n = n or [10]
+
+    # Prepare numpy arrays for TA-Lib
+    op = df[open_col].to_numpy(dtype=float)
+    hi = df[high_col].to_numpy(dtype=float)
+    lo = df[low_col].to_numpy(dtype=float)
+    cl = df[close_col].to_numpy(dtype=float)
+
+    new_cols = {}
+
+    # --- core ---
+    avgp = pd.Series(talib.AVGPRICE(op, hi, lo, cl), index=df.index)
+    slope = avgp.diff()
+
+    new_cols["avgprice"] = avgp
+    new_cols["avgprice_slope"] = slope
+    new_cols["avgprice_acceleration"] = slope.diff()
+    new_cols["avgprice_gt_close"] = avgp > df[close_col]
+    new_cols["avgprice_lt_close"] = avgp < df[close_col]
+    new_cols["avgprice_direction"] = np.where(slope > 0, 1, -1)
+
+    # --- smoothing ---
+    for period in n:
+        s = f"_{period}"
+        signal = avgp.ewm(span=period, adjust=False).mean()
+        hist = avgp - signal
+        hist_slope = hist.diff()
+        hist_abs = hist.abs()
+
+        new_cols[f"avgprice_signal{s}"] = signal
+        new_cols[f"avgprice_signal{s}_slope"] = signal.diff()
+        new_cols[f"avgprice_hist{s}"] = hist
+        new_cols[f"avgprice_hist{s}_slope"] = hist_slope
+        new_cols[f"avgprice_hist{s}_acceleration"] = hist_slope.diff()
+        new_cols[f"avgprice_hist{s}_gt_0"] = hist > 0
+        new_cols[f"avgprice_hist{s}_lt_0"] = hist < 0
+        new_cols[f"avgprice_hist{s}_abs"] = hist_abs
+        new_cols[f"avgprice{s}_strength"] = slope.abs() * hist_abs
+
+    return pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
+
+
+def add_medprice(
+    df: pd.DataFrame,
+    n: list[int] = None,
+    high_col: str = "high",
+    low_col: str = "low",
+    close_col: str = "close",
+) -> pd.DataFrame:
+    for col in (high_col, low_col, close_col):
+        validate_column(df, col)
+
+    n = n or [10]
+    hi = df[high_col].to_numpy(dtype=float)
+    lo = df[low_col].to_numpy(dtype=float)
+
+    new_cols = {}
+
+    medp = pd.Series(talib.MEDPRICE(hi, lo), index=df.index)
+    slope = medp.diff()
+
+    new_cols["medprice"] = medp
+    new_cols["medprice_slope"] = slope
+    new_cols["medprice_acceleration"] = slope.diff()
+    new_cols["medprice_gt_close"] = medp > df[close_col]
+    new_cols["medprice_lt_close"] = medp < df[close_col]
+    new_cols["medprice_direction"] = np.where(slope > 0, 1, -1)
+
+    for period in n:
+        s = f"_{period}"
+        signal = medp.ewm(span=period, adjust=False).mean()
+        hist = medp - signal
+        hist_abs = hist.abs()
+
+        new_cols[f"medprice_signal{s}"] = signal
+        new_cols[f"medprice_signal{s}_slope"] = signal.diff()
+        new_cols[f"medprice_hist{s}"] = hist
+        new_cols[f"medprice_hist{s}_slope"] = hist.diff()
+        new_cols[f"medprice_hist{s}_acceleration"] = new_cols[
+            f"medprice_hist{s}_slope"
+        ].diff()
+        new_cols[f"medprice_hist{s}_gt_0"] = hist > 0
+        new_cols[f"medprice_hist{s}_lt_0"] = hist < 0
+        new_cols[f"medprice_hist{s}_abs"] = hist_abs
+        new_cols[f"medprice{s}_strength"] = slope.abs() * hist_abs
+
+    return pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
+
+
+def add_typprice(
+    df: pd.DataFrame,
+    n: list[int] = None,
+    high_col: str = "high",
+    low_col: str = "low",
+    close_col: str = "close",
+) -> pd.DataFrame:
+    for col in (high_col, low_col, close_col):
+        validate_column(df, col)
+
+    n = n or [10]
+    hi = df[high_col].to_numpy(dtype=float)
+    lo = df[low_col].to_numpy(dtype=float)
+    cl = df[close_col].to_numpy(dtype=float)
+
+    new_cols = {}
+
+    typp = pd.Series(talib.TYPPRICE(hi, lo, cl), index=df.index)
+    slope = typp.diff()
+
+    new_cols["typprice"] = typp
+    new_cols["typprice_slope"] = slope
+    new_cols["typprice_acceleration"] = slope.diff()
+    new_cols["typprice_gt_close"] = typp > df[close_col]
+    new_cols["typprice_lt_close"] = typp < df[close_col]
+    new_cols["typprice_direction"] = np.where(slope > 0, 1, -1)
+
+    for period in n:
+        s = f"_{period}"
+        signal = typp.ewm(span=period, adjust=False).mean()
+        hist = typp - signal
+        hist_abs = hist.abs()
+
+        new_cols[f"typprice_signal{s}"] = signal
+        new_cols[f"typprice_signal{s}_slope"] = signal.diff()
+        new_cols[f"typprice_hist{s}"] = hist
+        new_cols[f"typprice_hist{s}_slope"] = hist.diff()
+        new_cols[f"typprice_hist{s}_acceleration"] = new_cols[
+            f"typprice_hist{s}_slope"
+        ].diff()
+        new_cols[f"typprice_hist{s}_gt_0"] = hist > 0
+        new_cols[f"typprice_hist{s}_lt_0"] = hist < 0
+        new_cols[f"typprice_hist{s}_abs"] = hist_abs
+        new_cols[f"typprice{s}_strength"] = slope.abs() * hist_abs
+
+    return pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
+
+
+def add_wclprice(
+    df: pd.DataFrame,
+    n: list[int] = None,
+    high_col: str = "high",
+    low_col: str = "low",
+    close_col: str = "close",
+) -> pd.DataFrame:
+    for col in (high_col, low_col, close_col):
+        validate_column(df, col)
+
+    n = n or [10]
+    hi = df[high_col].to_numpy(dtype=float)
+    lo = df[low_col].to_numpy(dtype=float)
+    cl = df[close_col].to_numpy(dtype=float)
+
+    new_cols = {}
+
+    wclp = pd.Series(talib.WCLPRICE(hi, lo, cl), index=df.index)
+    slope = wclp.diff()
+
+    new_cols["wclprice"] = wclp
+    new_cols["wclprice_slope"] = slope
+    new_cols["wclprice_acceleration"] = slope.diff()
+    new_cols["wclprice_gt_close"] = wclp > df[close_col]
+    new_cols["wclprice_lt_close"] = wclp < df[close_col]
+    new_cols["wclprice_direction"] = np.where(slope > 0, 1, -1)
+
+    for period in n:
+        s = f"_{period}"
+        signal = wclp.ewm(span=period, adjust=False).mean()
+        hist = wclp - signal
+        hist_abs = hist.abs()
+
+        new_cols[f"wclprice_signal{s}"] = signal
+        new_cols[f"wclprice_signal{s}_slope"] = signal.diff()
+        new_cols[f"wclprice_hist{s}"] = hist
+        new_cols[f"wclprice_hist{s}_slope"] = hist.diff()
+        new_cols[f"wclprice_hist{s}_acceleration"] = new_cols[
+            f"wclprice_hist{s}_slope"
+        ].diff()
+        new_cols[f"wclprice_hist{s}_gt_0"] = hist > 0
+        new_cols[f"wclprice_hist{s}_lt_0"] = hist < 0
+        new_cols[f"wclprice_hist{s}_abs"] = hist_abs
+        new_cols[f"wclprice{s}_strength"] = slope.abs() * hist_abs
+
+    return pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
+
+
+# endregion PRICE TRANSFORM
+
+
+# region VOLATILITY INDICATORS
+def add_atr(
+    df: pd.DataFrame,
+    n: list[int] = None,
+    high_col: str = "high",
+    low_col: str = "low",
+    close_col: str = "close",
+) -> pd.DataFrame:
+    for col in (high_col, low_col, close_col):
+        validate_column(df, col)
+
+    n = n or [14]
+    hi = df[high_col].to_numpy(dtype=float)
+    lo = df[low_col].to_numpy(dtype=float)
+    cl = df[close_col].to_numpy(dtype=float)
+
+    new_cols = {}
+
+    # --- base ATR (use first period as default reference) ---
+    base_period = n[0]
+    atr_base = pd.Series(talib.ATR(hi, lo, cl, timeperiod=base_period), index=df.index)
+    slope_base = atr_base.diff()
+
+    new_cols["atr"] = atr_base
+    new_cols["atr_slope"] = slope_base
+    new_cols["atr_acceleration"] = slope_base.diff()
+    new_cols["atr_gt_prev"] = atr_base > atr_base.shift(1)
+    new_cols["atr_lt_prev"] = atr_base < atr_base.shift(1)
+    new_cols["atr_direction"] = np.where(slope_base > 0, 1, -1)
+    new_cols["atr_normalized"] = atr_base / df[close_col]
+
+    # --- per period ---
+    for period in n:
+        s = f"_{period}"
+        atr_p = pd.Series(talib.ATR(hi, lo, cl, timeperiod=period), index=df.index)
+        slope_p = atr_p.diff()
+
+        new_cols[f"atr{s}"] = atr_p
+        new_cols[f"atr{s}_slope"] = slope_p
+        new_cols[f"atr{s}_acceleration"] = slope_p.diff()
+        new_cols[f"atr{s}_gt_prev"] = atr_p > atr_p.shift(1)
+        new_cols[f"atr{s}_lt_prev"] = atr_p < atr_p.shift(1)
+        new_cols[f"atr{s}_normalized"] = atr_p / df[close_col]
+
+        # signal + histogram
+        signal = atr_p.ewm(span=period, adjust=False).mean()
+        hist = atr_p - signal
+        hist_abs = hist.abs()
+
+        new_cols[f"atr{s}_signal"] = signal
+        new_cols[f"atr{s}_signal_slope"] = signal.diff()
+        new_cols[f"atr{s}_hist"] = hist
+        new_cols[f"atr{s}_hist_slope"] = hist.diff()
+        new_cols[f"atr{s}_hist_acceleration"] = new_cols[f"atr{s}_hist_slope"].diff()
+        new_cols[f"atr{s}_hist_gt_0"] = hist > 0
+        new_cols[f"atr{s}_hist_lt_0"] = hist < 0
+        new_cols[f"atr{s}_hist_abs"] = hist_abs
+        new_cols[f"atr{s}_strength"] = slope_p.abs() * hist_abs
+
+    return pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
+
+
+def add_natr(
+    df: pd.DataFrame,
+    n: list[int] = None,
+    high_col: str = "high",
+    low_col: str = "low",
+    close_col: str = "close",
+) -> pd.DataFrame:
+    for col in (high_col, low_col, close_col):
+        validate_column(df, col)
+
+    n = n or [14]
+    hi = df[high_col].to_numpy(dtype=float)
+    lo = df[low_col].to_numpy(dtype=float)
+    cl = df[close_col].to_numpy(dtype=float)
+
+    new_cols = {}
+
+    # --- base NATR ---
+    base_period = n[0]
+    natr_base = pd.Series(
+        talib.NATR(hi, lo, cl, timeperiod=base_period), index=df.index
+    )
+    slope_base = natr_base.diff()
+
+    new_cols["natr"] = natr_base
+    new_cols["natr_slope"] = slope_base
+    new_cols["natr_acceleration"] = slope_base.diff()
+    new_cols["natr_gt_prev"] = natr_base > natr_base.shift(1)
+    new_cols["natr_lt_prev"] = natr_base < natr_base.shift(1)
+    new_cols["natr_direction"] = np.where(slope_base > 0, 1, -1)
+
+    # --- per period ---
+    for period in n:
+        s = f"_{period}"
+        natr_p = pd.Series(talib.NATR(hi, lo, cl, timeperiod=period), index=df.index)
+        slope_p = natr_p.diff()
+
+        new_cols[f"natr{s}"] = natr_p
+        new_cols[f"natr{s}_slope"] = slope_p
+        new_cols[f"natr{s}_acceleration"] = slope_p.diff()
+        new_cols[f"natr{s}_gt_prev"] = natr_p > natr_p.shift(1)
+        new_cols[f"natr{s}_lt_prev"] = natr_p < natr_p.shift(1)
+
+        signal = natr_p.ewm(span=period, adjust=False).mean()
+        hist = natr_p - signal
+        hist_abs = hist.abs()
+
+        new_cols[f"natr{s}_signal"] = signal
+        new_cols[f"natr{s}_signal_slope"] = signal.diff()
+        new_cols[f"natr{s}_hist"] = hist
+        new_cols[f"natr{s}_hist_slope"] = hist.diff()
+        new_cols[f"natr{s}_hist_acceleration"] = new_cols[f"natr{s}_hist_slope"].diff()
+        new_cols[f"natr{s}_hist_gt_0"] = hist > 0
+        new_cols[f"natr{s}_hist_lt_0"] = hist < 0
+        new_cols[f"natr{s}_hist_abs"] = hist_abs
+        new_cols[f"natr{s}_strength"] = slope_p.abs() * hist_abs
+
+    return pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
+
+
+def add_trange(
+    df: pd.DataFrame,
+    n: list[int] = None,
+    high_col: str = "high",
+    low_col: str = "low",
+    close_col: str = "close",
+) -> pd.DataFrame:
+    for col in (high_col, low_col, close_col):
+        validate_column(df, col)
+
+    n = n or [14]
+    hi = df[high_col].to_numpy(dtype=float)
+    lo = df[low_col].to_numpy(dtype=float)
+    cl = df[close_col].to_numpy(dtype=float)
+
+    new_cols = {}
+
+    # --- core TRANGE ---
+    tr = pd.Series(talib.TRANGE(hi, lo, cl), index=df.index)
+    tr_slope = tr.diff()
+
+    new_cols["trange"] = tr
+    new_cols["trange_slope"] = tr_slope
+    new_cols["trange_acceleration"] = tr_slope.diff()
+    new_cols["trange_gt_prev"] = tr > tr.shift(1)
+    new_cols["trange_lt_prev"] = tr < tr.shift(1)
+    new_cols["trange_direction"] = np.where(tr_slope > 0, 1, -1)
+    new_cols["trange_normalized"] = tr / df[close_col]
+
+    # --- per smoothing window ---
+    for period in n:
+        s = f"_{period}"
+        signal = tr.ewm(span=period, adjust=False).mean()
+        hist = tr - signal
+        hist_abs = hist.abs()
+
+        new_cols[f"trange_signal{s}"] = signal
+        new_cols[f"trange_signal{s}_slope"] = signal.diff()
+        new_cols[f"trange_hist{s}"] = hist
+        new_cols[f"trange_hist{s}_slope"] = hist.diff()
+        new_cols[f"trange_hist{s}_acceleration"] = new_cols[
+            f"trange_hist{s}_slope"
+        ].diff()
+        new_cols[f"trange_hist{s}_gt_0"] = hist > 0
+        new_cols[f"trange_hist{s}_lt_0"] = hist < 0
+        new_cols[f"trange_hist{s}_abs"] = hist_abs
+        new_cols[f"trange{s}_strength"] = tr_slope.abs() * hist_abs
+
+    return pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
+
+
+# endregion VOLATILITY INDICATORS
+
+
 def add_one_for_all_ta(df: pd.DataFrame) -> pd.DataFrame:
     new_df = df.copy()
-    new_df = add_sma(new_df)
-    new_df = add_ema(new_df)
-    new_df = add_lwma(new_df)
-    new_df = add_wma(new_df)
-    new_df = add_adx(new_df)
-    new_df = add_bollinger_bands(new_df)
-    new_df = add_keltner_channel(new_df)
-    new_df = add_keltner_channel(new_df)
-    new_df = add_starc_band(new_df)
-    new_df = add_atr(new_df)
-    new_df = add_divergence_index(new_df)
-    new_df = add_rsi(new_df)
-    new_df = add_roc(new_df)
+
+    # OVERLAP STUDIES
+    new_df = add_bbands(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_dema(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_ema(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_kama(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_midpoint(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_midprice(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_sar(
+        new_df,
+    )
+    new_df = add_sma(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_t3(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_tema(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_trima(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_wma(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+
+    # MOMENTUM INDICATORS
+    new_df = add_adx(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_aroon(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_bop(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_cci(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_cmo(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
     new_df = add_macd(new_df)
-    new_df = add_stochastic(new_df)
-    new_df = add_williams_r(new_df)
-    new_df = add_ado(new_df)
-    new_df = add_rvi(new_df)
-    new_df = add_tsi(new_df)
-    new_df = add_vortex(new_df)
-    new_df = add_obv(new_df)
-    new_df = add_mfi(new_df)
-    new_df = add_adl(new_df)
-    new_df = add_chaikin_ad(new_df)
-    new_df = add_cmf(new_df)
-    new_df = add_vroc(new_df)
-    new_df = add_eom(new_df)
-    new_df = add_pvi_nvi(new_df)
-    new_df = add_vw_macd(new_df)
-    new_df = add_kvo(new_df)
-    new_df = add_demand_oscillator(new_df)
+    new_df = add_mfi(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_mom(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_ppo(new_df)
+    new_df = add_roc(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_rsi(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_stoch(new_df)
+    new_df = add_stoch_rsi(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_trix(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_ultosc(
+        new_df,
+    )
+    new_df = add_willr(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+
+    # VOLUME INDICATORS
+    new_df = add_ad(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_adosc(
+        new_df,
+    )
+    new_df = add_obv(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+
+    # CYCLE INDICATORS
+    new_df = add_ht_dcperiod(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_ht_dcphase(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_ht_phasor(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_ht_sine(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_ht_trendmode(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+
+    # PRICE TRANSFORM
+    new_df = add_avgprice(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_medprice(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_typprice(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_wclprice(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+
+    # VOLATILITY INDICATORS
+    new_df = add_atr(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_natr(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
+    new_df = add_trange(
+        new_df,
+        n=[5, 10, 15, 20],
+    )
 
     return new_df
 
@@ -1989,31 +2938,64 @@ def main():
     ta_database_driver.connect(connection_model)
 
     # Select df
+    from_date = "2016-06-01"
+    to_date = "2016-12-30"
+
     df = ta_database_driver.select(
         schema_name=Schema.STOCK_MARKET.value,
-        table_name=Table.VN_INDEX.name,
+        table_name=Table.G_VN_INDEX.name,
         conditions=[
             Condition(
-                column=Table.VN_INDEX.Column.DATE.value,
+                column=Table.G_VN_INDEX.Column.DATE.value,
                 operator=SqlOperator.GREATER_THAN_OR_EQUAL_TO,
-                value="2022-01-01",
+                value=from_date,
                 data_type=DataType.DATE,
             ),
             Condition(
-                column=Table.VN_INDEX.Column.DATE.value,
+                column=Table.G_VN_INDEX.Column.DATE.value,
                 operator=SqlOperator.LESS_THAN_OR_EQUAL_TO,
-                value="2024-12-31",
+                value=to_date,
                 data_type=DataType.DATE,
             ),
         ],
-        order_by=[Table.VN_INDEX.Column.DATE.value],
+        order_by=[Table.G_VN_INDEX.Column.DATE.value],
+    )
+
+    WEEKENDS = get_weekends(from_date, to_date)
+    HOLIDAYS = []
+
+    DAYOFFS = []
+    DAYOFFS.extend(WEEKENDS)
+    DAYOFFS.extend(HOLIDAYS)
+
+    df = df[~df["date"].isin(DAYOFFS)]
+
+    df["close"] = df["close"].astype(float)
+
+    FORECAST_HORIZON = 5
+
+    df[f"return_{FORECAST_HORIZON}"] = (
+        df["close"].shift(-FORECAST_HORIZON) - df["close"]
     )
 
     df = add_one_for_all_ta(df)
 
+    print(len(list(df.columns)))
+
+    # df[f"log_return_{FORECAST_HORIZON}"] = np.log(
+    #     df["close"].shift(-FORECAST_HORIZON) / df["close"]
+    # )
+
     # plot_with_indicators(
     #     df,
-    #     indicators=["demand_*"],
+    #     indicators=["*trange*"],
+    #     price_column_name=f"close",
+    # )
+
+    # plot_with_indicators(
+    #     df,
+    #     indicators=["close_t3_5", "close_t3_10", "close_t3_15"],
+    #     price_column_name=f"return_{FORECAST_HORIZON}",
     # )
 
     print(len(df.columns))

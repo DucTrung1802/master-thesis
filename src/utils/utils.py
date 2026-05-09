@@ -1,13 +1,17 @@
+from dataclasses import asdict
+from datetime import datetime, timedelta
+import json
 import os
 import shutil
 import zipfile
 import numpy as np
 import requests
-from typing import Tuple, List, Optional
+from typing import Tuple, List, Optional, Union
 import pandas as pd
 from pathlib import Path
 import matplotlib.pyplot as plt
 import time
+from pathlib import Path
 
 from dtos.model_dtos.model_output_dto import ModelOutputDto
 from logger.logger import Logger
@@ -220,8 +224,10 @@ def download_file(download_url, file_path, logger):
         return
 
 
-def format_key_for_name(key: Tuple[ScrapeMainType, ScrapeSubType]):
-    return "_".join(k.name.lower() for k in key)
+def format_key_for_name(key):
+    return "_".join(
+        k.name.lower() if isinstance(k, Enum) else str(k).lower() for k in key
+    )
 
 
 def format_key_for_table(key: Tuple[ScrapeMainType, ScrapeSubType]):
@@ -680,3 +686,99 @@ def wait_for_file(file_path, timeout=10, poll_interval=0.25):
         time.sleep(poll_interval)
 
     return False
+
+
+def get_current_run_path():
+    log_dir = Path("lightning_logs")
+    versions = [
+        d for d in log_dir.iterdir() if d.is_dir() and d.name.startswith("version_")
+    ]
+    latest = max(versions, key=lambda x: int(x.name.split("_")[1]))
+
+    return latest
+
+
+def save_prediction_figure(y_test, y_predict, save_path, title):
+    """Save prediction vs actual plot."""
+    fig, ax = plt.subplots(figsize=(15, 6))
+
+    ax.set_title(title)
+    y_test.plot(ax=plt.gca(), label="close")
+    y_predict.plot(ax=plt.gca(), label="predict", marker=None)
+
+    ax.legend()
+    fig.tight_layout()
+    fig.savefig(save_path, dpi=300)
+    plt.close(fig)
+
+
+def get_weekends(from_date: str, to_date: str):
+    start = datetime.strptime(from_date, "%Y-%m-%d")
+    end = datetime.strptime(to_date, "%Y-%m-%d")
+
+    weekends = []
+    current = start
+
+    while current <= end:
+        if current.weekday() in (5, 6):  # 5 = Saturday, 6 = Sunday
+            weekends.append(current.strftime("%Y-%m-%d"))
+        current += timedelta(days=1)
+
+    return weekends
+
+
+def first_day_of_month(dt: datetime) -> datetime:
+    return dt.replace(day=1)
+
+
+def month_ranges(
+    from_date: datetime, to_date: datetime
+) -> List[Tuple[datetime, datetime]]:
+    if from_date > to_date:
+        raise ValueError("from_date must be <= to_date")
+
+    ranges: List[Tuple[datetime, datetime]] = []
+
+    # start at the first day of the starting month
+    current = from_date.replace(day=1)
+
+    while current <= to_date:
+        # first day of this month
+        first_day = current
+
+        # move to next month
+        if current.month == 12:
+            next_month = current.replace(year=current.year + 1, month=1, day=1)
+        else:
+            next_month = current.replace(month=current.month + 1, day=1)
+
+        # last day is one day before next month
+        last_day = next_month - timedelta(days=1)
+
+        ranges.append((first_day, last_day))
+
+        current = next_month
+
+    return ranges
+
+
+def get_value(x):
+    return x.value if isinstance(x, Enum) else x
+
+
+def is_weekend(date_input: Union[datetime, str]) -> bool:
+    """
+    Check whether a given date is a weekend (Saturday or Sunday).
+
+    Args:
+        date_input: A datetime object or an ISO format string (YYYY-MM-DD).
+
+    Returns:
+        True if the date is Saturday or Sunday, otherwise False.
+    """
+    # Convert string input to datetime if needed
+    if isinstance(date_input, str):
+        date_input = datetime.fromisoformat(date_input)
+
+    # weekday(): Monday=0 ... Sunday=6
+    return date_input.weekday() >= 5
