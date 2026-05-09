@@ -9310,7 +9310,7 @@ class DataPreprocessor:
                 return
 
             self._logger.log_info(
-                f'Start ingesting {len(file_paths)} file(s) in "{folder_path}".'
+                f'Start ingesting {len(file_paths)} file(s) from "{folder_path}" to "{stock_market_price_sub_type.value.lower()}".'
             )
 
             # Read and concatenate all CSV files
@@ -9409,7 +9409,7 @@ class DataPreprocessor:
                 continue
 
             self._logger.log_info(
-                f'Start ingesting {len(file_paths)} file(s) in "{folder_path}".'
+                f'Start ingesting {len(file_paths)} file(s) from "{folder_path}" to "{stock_market_order_sub_type.value.lower()}".'
             )
 
             # Read and concatenate all CSV files
@@ -9490,9 +9490,16 @@ class DataPreprocessor:
             )
 
     def _clean_stock_market_index(self) -> None:
-        table_list = [Table.B_STOCK_MARKET_ORDER.name, Table.B_STOCK_MARKET_ORDER.name]
+        input_table_list = [
+            Table.B_STOCK_MARKET_ORDER.name,
+            Table.B_STOCK_MARKET_ORDER.name
+        ]
+        output_table_list = [Table.S_STOCK_MARKET.name]
 
-        self._logger.log_info(f'Start cleaning data in tables {", ".join(table_list)}.')
+        self._logger.log_info(
+            f'Start cleaning data from table(s) "{", ".join(input_table_list)}" '
+            f'to table(s) "{", ".join(output_table_list)}".'
+        )
 
         # Add logic for cleaning data here
         self._select_database(DataQuality.BRONZE.value)
@@ -9534,16 +9541,17 @@ class DataPreprocessor:
         )
 
         self._logger.log_info(
-            f'Finish cleaning data in tables {", ".join(table_list)}.')
-
-    def _transform_stock_market_vn_index(self) -> None:
-        key = (
-            ScrapeMainType.STOCK_MARKET,
-            StockMarketSubType.VN_INDEX,
+            f'Finish cleaning data from table(s) "{", ".join(input_table_list)}" '
+            f'to table(s) "{", ".join(output_table_list)}".'
         )
 
+    def _transform_stock_market_vn_index(self) -> None:
+        input_table_list = [Table.S_STOCK_MARKET.name]
+        output_table_list = [Table.G_STOCK_MARKET.name]
+
         self._logger.log_info(
-            f'Start transforming data in table "{format_key_for_table(key)}".'
+            f'Start transforming data from table(s) "{", ".join(input_table_list)}" '
+            f'to table(s) "{", ".join(output_table_list)}".'
         )
 
         # Add logic for transforming data here
@@ -9553,27 +9561,30 @@ class DataPreprocessor:
             table_name=Table.S_STOCK_MARKET.name,
         )
 
-        gold_df = make_date_time_index_for_dataframe(df=silver_df)
-        gold_df = standardize_time_frame(df=gold_df)
+        # gold_df = make_date_time_index_for_dataframe(df=silver_df)
+        # gold_df = standardize_time_frame(df=gold_df)
 
-        cols_to_interpolate = gold_df.columns.difference(["date"])
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
-            pd.to_numeric, errors="coerce"
-        )
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
-            method="linear"
-        )
+        # cols_to_interpolate = gold_df.columns.difference(["date"])
+        # gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
+        #     pd.to_numeric, errors="coerce"
+        # )
+        # gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
+        #     method="linear"
+        # )
+
+        gold_df = silver_df
 
         self._select_database(DataQuality.GOLD.value)
         self._save_pandas_table_to_database(
             schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.G_VN_INDEX.name,
-            primary_keys=Table.G_VN_INDEX.primary_key,
+            table_name=Table.G_STOCK_MARKET.name,
+            primary_keys=Table.G_STOCK_MARKET.primary_key,
             df=gold_df,
         )
 
         self._logger.log_info(
-            f'Finish transforming data in table "{format_key_for_table(key)}".'
+            f'Finish transforming data from table(s) "{", ".join(input_table_list)}" '
+            f'to table(s) "{", ".join(output_table_list)}".'
         )
 
     def _process_stock_market_index(self, data_quality: DataQuality) -> None:

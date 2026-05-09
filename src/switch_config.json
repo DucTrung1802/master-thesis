@@ -104,7 +104,7 @@
                 }
             },
             "data_quality_silver": {
-                "enable": true,
+                "enable": false,
                 "children": {
                     "macroeconomics": {
                         "enable": false
@@ -118,7 +118,7 @@
                 }
             },
             "data_quality_gold": {
-                "enable": false,
+                "enable": true,
                 "children": {
                     "macroeconomics": {
                         "enable": false
