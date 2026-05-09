@@ -25,6 +25,14 @@ class PostgreSQLDriver(TabularDatabaseDriverInterface):
         self._current_db: str = None
         self._connection_models: dict[str, PostgreSQLConnectionDto] = {}
 
+    def _build_join_clause(self, join_model_list: List[JoinModel]) -> str:
+        if not join_model_list:
+            return ""
+        return " ".join(
+            f"{jm.join_type.value} {jm.schema_right}.{jm.table_right} ON {jm.build_on_clause()}"
+            for jm in join_model_list
+        )
+
     def connect(
         self, connection_model: PostgreSQLConnectionDto
     ) -> DatabaseExecutionStatus:
@@ -328,32 +336,19 @@ VALUES
         """Update records in a table."""
         try:
             set_clause = ",\n    ".join(
-                [
-                    f"{col.column_name} = {format_value(col.value, col.data_type)}"
-                    for col in update_record.data_dto_list
-                ]
+                f"{col.column_name} = {format_value(col.value, col.data_type)}"
+                for col in update_record.data_dto_list
             )
             where_clause = (
                 "WHERE\n    "
                 + "\n    AND ".join(
-                    [
-                        f"{cond.column} {cond.operator.value} {format_value(cond.value, cond.data_type)}"
-                        for cond in conditions or []
-                    ]
+                    f"{cond.column} {cond.operator.value} {format_value(cond.value, cond.data_type)}"
+                    for cond in conditions
                 )
                 if conditions
                 else ""
             )
-            join_clause = (
-                " ".join(
-                    [
-                        f"{join_model.join_type.value} {join_model.schema_right}.{join_model.table_right} ON {join_model.table_left}.{join_model.column_left} = {join_model.table_right}.{join_model.column_right}"
-                        for join_model in join_model_list
-                    ]
-                )
-                if join_model_list
-                else ""
-            )
+            join_clause = self._build_join_clause(join_model_list)
 
             query = f"""
 UPDATE {schema_name}.{table_name}
@@ -367,15 +362,15 @@ SET
                 if self._cursor.statusmessage.startswith("UPDATE")
                 else 0
             )
-            # self._logger.log_info(
-            #     f'Updated {number_of_records_updated} records in table "{schema_name}.{table_name}" successfully.'
-            # )
+            self._logger.log_info(
+                f'Updated {number_of_records_updated} records in table "{schema_name}.{table_name}" successfully.'
+            )
             return DatabaseExecutionStatus.SUCCESS
 
         except Exception as e:
             self._connections[self._current_db].rollback()
             self._logger.log_error(
-                f"Error inserting records: {e}. Rolled back transaction."
+                f"Error updating records: {e}. Rolled back transaction."
             )
             return DatabaseExecutionStatus.ERROR
 
@@ -396,14 +391,12 @@ SET
             updated_count = 0
 
             # Fetch column names from database (schema introspection)
-            self.execute_query(
-                f"""
+            self.execute_query(f"""
                 SELECT column_name
                 FROM information_schema.columns
                 WHERE table_schema = '{schema_name}'
                 AND table_name = '{table_name}'
-            """
-            )
+            """)
             available_columns = {row[0] for row in self._cursor.fetchall()}
 
             has_create_date = "create_date" in available_columns
@@ -494,45 +487,34 @@ FROM upserted;
             where_clause = (
                 "WHERE\n    "
                 + "\n    AND ".join(
-                    [
-                        f"{cond.column} {cond.operator.value} {format_value(cond.value, cond.data_type)}"
-                        for cond in conditions or []
-                    ]
+                    f"{cond.column} {cond.operator.value} {format_value(cond.value, cond.data_type)}"
+                    for cond in conditions
                 )
                 if conditions
                 else ""
             )
-            join_clause = (
-                " ".join(
-                    [
-                        f"{join_model.join_type.value} {join_model.schema_right}.{join_model.table_right} ON {join_model.table_left}.{join_model.column_left} = {join_model.table_right}.{join_model.column_right}"
-                        for join_model in join_model_list
-                    ]
-                )
-                if join_model_list
-                else ""
-            )
+            join_clause = self._build_join_clause(join_model_list)
 
             query = f"""
 DELETE FROM {schema_name}.{table_name}
 {f"\n{join_clause}" if join_clause else ""}
 {where_clause}
-            """
+"""
             self.execute_query(query)
-            number_of_records_updated = (
+            number_of_records_deleted = (
                 int(self._cursor.statusmessage.split()[-1])
                 if self._cursor.statusmessage.startswith("DELETE")
                 else 0
             )
-            # self._logger.log_info(
-            #     f'Delete {number_of_records_updated} records in table "{schema_name}.{table_name}" successfully.'
-            # )
+            self._logger.log_info(
+                f'Delete {number_of_records_deleted} records in table "{schema_name}.{table_name}" successfully.'
+            )
             return DatabaseExecutionStatus.SUCCESS
 
         except Exception as e:
             self._connections[self._current_db].rollback()
             self._logger.log_error(
-                f"Error inserting records: {e}. Rolled back transaction."
+                f"Error deleting records: {e}. Rolled back transaction."
             )
             return DatabaseExecutionStatus.ERROR
 
@@ -566,15 +548,13 @@ DELETE FROM {schema_name}.{table_name}
         """
         try:
             # Check if delete_date exists
-            self.execute_query(
-                f"""
+            self.execute_query(f"""
 SELECT 1
 FROM information_schema.columns
 WHERE table_schema = '{schema_name}'
 AND table_name = '{table_name}'
 AND column_name = 'delete_date'
-"""
-            )
+""")
             if not self._cursor.fetchone():
                 self._logger.log_info(
                     f"Table {schema_name}.{table_name} has no delete_date column. Skipping soft delete."
@@ -630,24 +610,13 @@ WHERE {where_clause}
             where_clause = (
                 "WHERE\n    "
                 + "\n    AND ".join(
-                    [
-                        f"{cond.column} {cond.operator.value} {format_value(cond.value, cond.data_type)}"
-                        for cond in conditions or []
-                    ]
+                    f"{cond.column} {cond.operator.value} {format_value(cond.value, cond.data_type)}"
+                    for cond in conditions
                 )
                 if conditions
                 else ""
             )
-            join_clause = (
-                " ".join(
-                    [
-                        f"{join_model.join_type.value} {join_model.schema_right}.{join_model.table_right} ON {join_model.table_left}.{join_model.column_left} = {join_model.table_right}.{join_model.column_right}"
-                        for join_model in join_model_list
-                    ]
-                )
-                if join_model_list
-                else ""
-            )
+            join_clause = self._build_join_clause(join_model_list)
             order_by_clause = (
                 "ORDER BY\n    " + ",\n    ".join(order_by) if order_by else ""
             )
@@ -664,11 +633,12 @@ FROM
             self.execute_query(query)
             results = self.fetch_result()
             column_names = [desc[0] for desc in self._cursor.description]
-            df = pd.DataFrame(results, columns=column_names)
-            # self._logger.log_info(
-            #     f'Selected {len(results)} records from table "{schema_name}.{table_name}" successfully.'
-            # )
-            return df
+
+            self._logger.log_info(
+                f'Selected {len(results)} records from table "{schema_name}.{table_name}" successfully.'
+            )
+            return pd.DataFrame(results, columns=column_names)
+
         except Exception as e:
             self._logger.log_error(f"Error selecting records: {e}")
             return pd.DataFrame()

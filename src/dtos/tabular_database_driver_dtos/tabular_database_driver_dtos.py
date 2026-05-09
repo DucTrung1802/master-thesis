@@ -109,5 +109,19 @@ class JoinModel:
     schema_right: str
     table_left: str
     table_right: str
-    column_left: str
-    column_right: str
+    columns_left: List[str]   # e.g. ["order_id", "user_id"]
+    columns_right: List[str]  # e.g. ["order_id", "user_id"]
+
+    def __post_init__(self):
+        if len(self.columns_left) != len(self.columns_right):
+            raise ValueError(
+                f"columns_left and columns_right must have the same length, "
+                f"got {len(self.columns_left)} and {len(self.columns_right)}"
+            )
+
+    def build_on_clause(self) -> str:
+        conditions = [
+            f"{self.table_left}.{col_left} = {self.table_right}.{col_right}"
+            for col_left, col_right in zip(self.columns_left, self.columns_right)
+        ]
+        return " AND ".join(conditions)
