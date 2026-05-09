@@ -9375,7 +9375,7 @@ class DataPreprocessor:
 
             self._save_pandas_table_to_database(
                 schema_name=Schema.STOCK_MARKET.value,
-                table_name=stock_market_price_sub_type.value.lower(),
+                table_name=Table.B_STOCK_MARKET_PRICE.name,
                 primary_keys=Table.B_STOCK_MARKET_PRICE.primary_key,
                 df=df,
             )
@@ -9480,7 +9480,7 @@ class DataPreprocessor:
 
             self._save_pandas_table_to_database(
                 schema_name=Schema.STOCK_MARKET.value,
-                table_name=stock_market_order_sub_type.value.lower(),
+                table_name=Table.B_STOCK_MARKET_ORDER.name,
                 primary_keys=Table.B_STOCK_MARKET_ORDER.primary_key,
                 df=df,
             )
@@ -10138,7 +10138,7 @@ class DataPreprocessor:
                 self._connect_to_database(DataQuality.BRONZE)
                 self._create_schemas(DataQuality.BRONZE)
                 self._create_tables(DataQuality.BRONZE)
-                # self._process_data(DataQuality.BRONZE)
+                self._process_data(DataQuality.BRONZE)
 
             except Exception as e:
                 self._logger.log_error(
