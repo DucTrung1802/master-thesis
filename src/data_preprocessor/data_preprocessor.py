@@ -4149,7 +4149,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.GDP,
-            GdpSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -4209,7 +4208,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.GDP,
-            GdpSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -4252,7 +4250,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.GDP,
-            GdpSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -4317,7 +4314,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.CPI,
-            CpiSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -4359,7 +4355,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.CPI,
-            CpiSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -4399,7 +4394,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.CPI,
-            CpiSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -4462,7 +4456,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.PPI,
-            PpiSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -4526,7 +4519,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.PPI,
-            PpiSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -4562,7 +4554,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.PPI,
-            PpiSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -4628,7 +4619,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.IPI,
-            IpiSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -4713,7 +4703,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.IPI,
-            IpiSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -4774,7 +4763,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.XPI,
-            XpiSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -4816,7 +4804,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.XPI,
-            XpiSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -4856,7 +4843,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.XPI,
-            XpiSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -4922,7 +4908,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.MPI,
-            MpiSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -4964,7 +4949,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.MPI,
-            MpiSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -5029,7 +5013,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.POPULATION,
-            PopulationSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -5071,7 +5054,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.POPULATION,
-            PopulationSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -5109,7 +5091,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.POPULATION,
-            PopulationSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -5175,7 +5156,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.LABOR,
-            LaborSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -5219,7 +5199,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.LABOR,
-            LaborSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -5255,7 +5234,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.LABOR,
-            LaborSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -5321,7 +5299,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.RETAIL,
-            RetailSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -5363,7 +5340,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.RETAIL,
-            RetailSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -5428,7 +5404,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.PMI,
-            PmiSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -5470,7 +5445,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.PMI,
-            PmiSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -5535,7 +5509,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.IIP,
-            IipSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -5579,7 +5552,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.IIP,
-            IipSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -5644,7 +5616,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.IPV,
-            IpvSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -5686,7 +5657,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.IPV,
-            IpvSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -5726,7 +5696,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.IPV,
-            IpvSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -5792,7 +5761,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.MIP,
-            MipSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -5834,7 +5802,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.MIP,
-            MipSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -5870,7 +5837,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.MIP,
-            MipSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -5936,7 +5902,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.FA_BY_HOUSE_TYPES,
-            FaByHouseTypeSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -5989,7 +5954,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.FA_BY_HOUSE_TYPES,
-            FaByHouseTypeSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -6027,7 +5991,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.FA_BY_HOUSE_TYPES,
-            FaByHouseTypeSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -6095,7 +6058,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.IT_BOP,
-            ItBopSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -6137,7 +6099,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.IT_BOP,
-            ItBopSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -6214,7 +6175,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.TSBR,
-            TsbrSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -6256,7 +6216,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.TSBR,
-            TsbrSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -6331,7 +6290,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.TSBE,
-            TsbeSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -6373,7 +6331,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.TSBE,
-            TsbeSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -6448,7 +6405,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.GD,
-            GdSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -6490,7 +6446,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.GD,
-            GdSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -6551,7 +6506,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.BRD,
-            BrdSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -6593,7 +6547,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.BRD,
-            BrdSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -6658,7 +6611,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.IISD,
-            IisdSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -6700,7 +6652,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.IISD,
-            IisdSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -6765,7 +6716,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.TREG,
-            TregSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -6807,7 +6757,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.TREG,
-            TregSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -6847,7 +6796,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.TREG,
-            TregSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -6913,7 +6861,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.CREDIT,
-            CreditSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -6955,7 +6902,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.CREDIT,
-            CreditSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -7020,7 +6966,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.MOBILIZATION,
-            MobilizationSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -7062,7 +7007,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.MOBILIZATION,
-            MobilizationSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -7130,7 +7074,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.EXCHANGE_RATE,
-            ExchangeRateSource.INVESTING,
         )
 
         folder_path = (
@@ -7197,7 +7140,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.EXCHANGE_RATE,
-            ExchangeRateSource.INVESTING,
         )
 
         self._logger.log_info(
@@ -7235,7 +7177,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.EXCHANGE_RATE,
-            ExchangeRateSource.INVESTING,
         )
 
         self._logger.log_info(
@@ -7302,7 +7243,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.IIR,
-            IirSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -7357,7 +7297,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.IIR,
-            IirSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -7426,7 +7365,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.RRRR,
-            RrrrSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -7468,7 +7406,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.RRRR,
-            RrrrSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -7515,7 +7452,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.RRRR,
-            RrrrSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -7581,7 +7517,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.FDI_SECTOR,
-            FdiSectorSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -7639,7 +7574,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.FDI_SECTOR,
-            FdiSectorSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -7707,7 +7641,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.FDI_RD,
-            FdiRdSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -7749,7 +7682,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.FDI_RD,
-            FdiRdSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -7817,7 +7749,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.EXPORT,
-            ExportSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -7944,7 +7875,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.EXPORT,
-            ExportSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -8012,7 +7942,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.IMPORT,
-            ImportSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -8139,7 +8068,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.IMPORT,
-            ImportSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -8207,7 +8135,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.GOLD_PRICE,
-            GoldPriceSource.INVESTING,
         )
 
         folder_path = (
@@ -8268,7 +8195,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.GOLD_PRICE,
-            GoldPriceSource.INVESTING,
         )
 
         self._logger.log_info(
@@ -8306,7 +8232,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.GOLD_PRICE,
-            GoldPriceSource.INVESTING,
         )
 
         self._logger.log_info(
@@ -8372,7 +8297,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.OIL_PRICE,
-            OilPriceSource.INVESTING,
         )
 
         folder_path = (
@@ -8433,7 +8357,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.OIL_PRICE,
-            OilPriceSource.INVESTING,
         )
 
         self._logger.log_info(
@@ -8469,7 +8392,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.OIL_PRICE,
-            OilPriceSource.INVESTING,
         )
 
         self._logger.log_info(
@@ -8535,7 +8457,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.DOW_JONES,
-            DowJonesSource.INVESTING,
         )
 
         folder_path = (
@@ -8596,7 +8517,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.DOW_JONES,
-            DowJonesSource.INVESTING,
         )
 
         self._logger.log_info(
@@ -8632,7 +8552,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.DOW_JONES,
-            DowJonesSource.INVESTING,
         )
 
         self._logger.log_info(
@@ -8698,7 +8617,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.NYSE_COMPOSITE,
-            NYSECompositeSource.YAHOO_FINANCE,
         )
 
         folder_path = (
@@ -8758,7 +8676,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.NYSE_COMPOSITE,
-            NYSECompositeSource.YAHOO_FINANCE,
         )
 
         self._logger.log_info(
@@ -8796,7 +8713,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.NYSE_COMPOSITE,
-            NYSECompositeSource.YAHOO_FINANCE,
         )
 
         self._logger.log_info(
@@ -8862,7 +8778,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.SNP_500,
-            SNP500Source.YAHOO_FINANCE,
         )
 
         folder_path = (
@@ -8922,7 +8837,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.SNP_500,
-            SNP500Source.YAHOO_FINANCE,
         )
 
         self._logger.log_info(
@@ -8958,7 +8872,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.SNP_500,
-            SNP500Source.YAHOO_FINANCE,
         )
 
         self._logger.log_info(
@@ -9024,7 +8937,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.NASDAQ_COMPOSITE,
-            NASDAQCompositeSource.YAHOO_FINANCE,
         )
 
         folder_path = (
@@ -9084,7 +8996,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.NASDAQ_COMPOSITE,
-            NASDAQCompositeSource.YAHOO_FINANCE,
         )
 
         self._logger.log_info(
@@ -9122,7 +9033,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.NASDAQ_COMPOSITE,
-            NASDAQCompositeSource.YAHOO_FINANCE,
         )
 
         self._logger.log_info(
@@ -9190,7 +9100,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.NASDAQ_100,
-            NASDAQ100Source.YAHOO_FINANCE,
         )
 
         folder_path = (
@@ -9250,7 +9159,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.NASDAQ_100,
-            NASDAQ100Source.YAHOO_FINANCE,
         )
 
         self._logger.log_info(
@@ -9288,7 +9196,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.NASDAQ_100,
-            NASDAQ100Source.YAHOO_FINANCE,
         )
 
         self._logger.log_info(
