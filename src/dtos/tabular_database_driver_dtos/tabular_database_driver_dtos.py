@@ -98,7 +98,7 @@ class Record:
 class Condition:
     column: str
     operator: SqlOperator
-    value: str | int | float  # Need to upgrade to avoid SQL injection
+    value: str | int | float | None  # None triggers IS NULL / IS NOT NULL
     data_type: DataType
 
 
