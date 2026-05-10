@@ -90,16 +90,16 @@
         "enable": true,
         "children": {
             "data_quality_bronze": {
-                "enable": false,
+                "enable": true,
                 "children": {
                     "macroeconomics": {
                         "enable": false
                     },
                     "stock_market": {
-                        "enable": true
+                        "enable": false
                     },
                     "enterprise": {
-                        "enable": false
+                        "enable": true
                     }
                 }
             },
@@ -110,24 +110,24 @@
                         "enable": false
                     },
                     "stock_market": {
-                        "enable": true
+                        "enable": false
                     },
                     "enterprise": {
-                        "enable": false
+                        "enable": true
                     }
                 }
             },
             "data_quality_gold": {
-                "enable": true,
+                "enable": false,
                 "children": {
                     "macroeconomics": {
                         "enable": false
                     },
                     "stock_market": {
-                        "enable": true
+                        "enable": false
                     },
                     "enterprise": {
-                        "enable": false
+                        "enable": true
                     }
                 }
             }

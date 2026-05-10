@@ -2251,20 +2251,15 @@ class Table:
         primary_key = [Column.CODE.value, Column.DATE.value]
 
     # ENTERPRISE
-    class STOCK:
+    class B_STOCK:
         class Column(Enum):
-            ID = "id"
             CODE = "code"
-            LISTED_SHARES = "listed_shares"
-            OUTSTANDING_SHARES = "outstanding_shares"
-            OUTSTANDING_RATE = "outstanding_rate"
-            MARKET_CAP = "market_cap"
             MARKET_ID = "market_id"
             CREATE_DATE = "create_date"
             UPDATE_DATE = "update_date"
             DELETE_DATE = "delete_date"
 
-        name = "stock"
+        name = "b_stock"
         primary_key = [Column.CODE.value]
 
     class DAILY_PRICE:

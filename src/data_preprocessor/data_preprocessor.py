@@ -146,33 +146,35 @@ class DataPreprocessor:
                     col = df[column_name]
 
                     # ── Basic date components ──────────────────────────────────
-                    df[f"{prefix}_year"]        = col.dt.year
-                    df[f"{prefix}_month"]       = col.dt.month
-                    df[f"{prefix}_day"]         = col.dt.day
+                    df[f"{prefix}_year"] = col.dt.year
+                    df[f"{prefix}_month"] = col.dt.month
+                    df[f"{prefix}_day"] = col.dt.day
 
                     # ── Time components ────────────────────────────────────────
-                    df[f"{prefix}_hour"]        = col.dt.hour
-                    df[f"{prefix}_minute"]      = col.dt.minute
-                    df[f"{prefix}_second"]      = col.dt.second
+                    df[f"{prefix}_hour"] = col.dt.hour
+                    df[f"{prefix}_minute"] = col.dt.minute
+                    df[f"{prefix}_second"] = col.dt.second
 
                     # ── Week features ──────────────────────────────────────────
-                    df[f"{prefix}_week"]            = col.dt.isocalendar().week.astype(int)
-                    df[f"{prefix}_day_of_week"]     = col.dt.dayofweek          # Monday=0
-                    df[f"{prefix}_day_name"]        = col.dt.day_name()
+                    df[f"{prefix}_week"] = col.dt.isocalendar().week.astype(int)
+                    df[f"{prefix}_day_of_week"] = col.dt.dayofweek  # Monday=0
+                    df[f"{prefix}_day_name"] = col.dt.day_name()
 
                     # ── Year positioning ───────────────────────────────────────
-                    df[f"{prefix}_day_of_year"]     = col.dt.dayofyear
+                    df[f"{prefix}_day_of_year"] = col.dt.dayofyear
 
                     # ── Quarter features ───────────────────────────────────────
-                    df[f"{prefix}_quarter"]         = col.dt.quarter
+                    df[f"{prefix}_quarter"] = col.dt.quarter
 
                     # Day within the quarter (1-92)
                     quarter_start = col.dt.to_period("Q").dt.start_time
-                    df[f"{prefix}_day_of_quarter"]  = (col - quarter_start).dt.days + 1
+                    df[f"{prefix}_day_of_quarter"] = (col - quarter_start).dt.days + 1
 
                     # How many days remain until quarter end (inclusive = 0 on last day)
                     quarter_end = col.dt.to_period("Q").dt.end_time.dt.normalize()
-                    df[f"{prefix}_days_to_quarter_end"] = (quarter_end - col.dt.normalize()).dt.days
+                    df[f"{prefix}_days_to_quarter_end"] = (
+                        quarter_end - col.dt.normalize()
+                    ).dt.days
 
                     # Progress through the quarter as a fraction [0.0 – 1.0]
                     quarter_length = (quarter_end - quarter_start).dt.days + 1
@@ -181,8 +183,8 @@ class DataPreprocessor:
                     ).round(4)
 
                     # ── Month features ─────────────────────────────────────────
-                    df[f"{prefix}_days_in_month"]       = col.dt.days_in_month
-                    df[f"{prefix}_days_to_month_end"]   = (
+                    df[f"{prefix}_days_in_month"] = col.dt.days_in_month
+                    df[f"{prefix}_days_to_month_end"] = (
                         col.dt.days_in_month - col.dt.day
                     )
 
@@ -191,56 +193,78 @@ class DataPreprocessor:
 
                     # ── Year features ──────────────────────────────────────────
                     year_start = pd.to_datetime(col.dt.year.astype(str) + "-01-01")
-                    year_end   = pd.to_datetime(col.dt.year.astype(str) + "-12-31")
+                    year_end = pd.to_datetime(col.dt.year.astype(str) + "-12-31")
 
-                    df[f"{prefix}_days_in_year"]        = year_end.dt.dayofyear
-                    df[f"{prefix}_days_to_year_end"]    = (
+                    df[f"{prefix}_days_in_year"] = year_end.dt.dayofyear
+                    df[f"{prefix}_days_to_year_end"] = (
                         year_end - col.dt.normalize()
                     ).dt.days
-                    df[f"{prefix}_year_progress"]       = (
+                    df[f"{prefix}_year_progress"] = (
                         col.dt.dayofyear / df[f"{prefix}_days_in_year"]
                     ).round(4)
-                    df[f"{prefix}_is_leap_year"]        = col.dt.is_leap_year
+                    df[f"{prefix}_is_leap_year"] = col.dt.is_leap_year
 
                     # ── Season (Northern Hemisphere) ───────────────────────────
-                    _season_map = {1: "Winter", 2: "Winter", 3: "Spring",
-                                4: "Spring", 5: "Spring", 6: "Summer",
-                                7: "Summer", 8: "Summer", 9: "Autumn",
-                                10: "Autumn", 11: "Autumn", 12: "Winter"}
+                    _season_map = {
+                        1: "Winter",
+                        2: "Winter",
+                        3: "Spring",
+                        4: "Spring",
+                        5: "Spring",
+                        6: "Summer",
+                        7: "Summer",
+                        8: "Summer",
+                        9: "Autumn",
+                        10: "Autumn",
+                        11: "Autumn",
+                        12: "Winter",
+                    }
                     df[f"{prefix}_season"] = col.dt.month.map(_season_map)
 
                     # ── Time-of-day bucket ─────────────────────────────────────
-                    _hour_bins   = [-1, 5, 11, 17, 20, 23]
-                    _hour_labels = ["Night", "Morning", "Afternoon", "Evening", "Night2"]
-                    df[f"{prefix}_time_of_day"] = pd.cut(
-                        col.dt.hour, bins=_hour_bins, labels=_hour_labels
-                    ).astype(str).replace("Night2", "Night")
+                    _hour_bins = [-1, 5, 11, 17, 20, 23]
+                    _hour_labels = [
+                        "Night",
+                        "Morning",
+                        "Afternoon",
+                        "Evening",
+                        "Night2",
+                    ]
+                    df[f"{prefix}_time_of_day"] = (
+                        pd.cut(col.dt.hour, bins=_hour_bins, labels=_hour_labels)
+                        .astype(str)
+                        .replace("Night2", "Night")
+                    )
 
                     # ── Boolean flags ──────────────────────────────────────────
-                    df[f"{prefix}_is_weekend"]        = col.dt.dayofweek >= 5
-                    df[f"{prefix}_is_weekday"]        = col.dt.dayofweek < 5
-                    df[f"{prefix}_is_month_start"]    = col.dt.is_month_start
-                    df[f"{prefix}_is_month_end"]      = col.dt.is_month_end
-                    df[f"{prefix}_is_quarter_start"]  = col.dt.is_quarter_start
-                    df[f"{prefix}_is_quarter_end"]    = col.dt.is_quarter_end
-                    df[f"{prefix}_is_year_start"]     = col.dt.is_year_start
-                    df[f"{prefix}_is_year_end"]       = col.dt.is_year_end
+                    df[f"{prefix}_is_weekend"] = col.dt.dayofweek >= 5
+                    df[f"{prefix}_is_weekday"] = col.dt.dayofweek < 5
+                    df[f"{prefix}_is_month_start"] = col.dt.is_month_start
+                    df[f"{prefix}_is_month_end"] = col.dt.is_month_end
+                    df[f"{prefix}_is_quarter_start"] = col.dt.is_quarter_start
+                    df[f"{prefix}_is_quarter_end"] = col.dt.is_quarter_end
+                    df[f"{prefix}_is_year_start"] = col.dt.is_year_start
+                    df[f"{prefix}_is_year_end"] = col.dt.is_year_end
 
                     # ── Cyclical encodings (preserves circular continuity) ─────
-                    df[f"{prefix}_month_sin"]   = np.sin(2 * np.pi * col.dt.month / 12)
-                    df[f"{prefix}_month_cos"]   = np.cos(2 * np.pi * col.dt.month / 12)
+                    df[f"{prefix}_month_sin"] = np.sin(2 * np.pi * col.dt.month / 12)
+                    df[f"{prefix}_month_cos"] = np.cos(2 * np.pi * col.dt.month / 12)
 
-                    df[f"{prefix}_dow_sin"]     = np.sin(2 * np.pi * col.dt.dayofweek / 7)
-                    df[f"{prefix}_dow_cos"]     = np.cos(2 * np.pi * col.dt.dayofweek / 7)
+                    df[f"{prefix}_dow_sin"] = np.sin(2 * np.pi * col.dt.dayofweek / 7)
+                    df[f"{prefix}_dow_cos"] = np.cos(2 * np.pi * col.dt.dayofweek / 7)
 
-                    df[f"{prefix}_hour_sin"]    = np.sin(2 * np.pi * col.dt.hour / 24)
-                    df[f"{prefix}_hour_cos"]    = np.cos(2 * np.pi * col.dt.hour / 24)
+                    df[f"{prefix}_hour_sin"] = np.sin(2 * np.pi * col.dt.hour / 24)
+                    df[f"{prefix}_hour_cos"] = np.cos(2 * np.pi * col.dt.hour / 24)
 
                     df[f"{prefix}_quarter_sin"] = np.sin(2 * np.pi * col.dt.quarter / 4)
                     df[f"{prefix}_quarter_cos"] = np.cos(2 * np.pi * col.dt.quarter / 4)
 
-                    df[f"{prefix}_doy_sin"]     = np.sin(2 * np.pi * col.dt.dayofyear / df[f"{prefix}_days_in_year"])
-                    df[f"{prefix}_doy_cos"]     = np.cos(2 * np.pi * col.dt.dayofyear / df[f"{prefix}_days_in_year"])
+                    df[f"{prefix}_doy_sin"] = np.sin(
+                        2 * np.pi * col.dt.dayofyear / df[f"{prefix}_days_in_year"]
+                    )
+                    df[f"{prefix}_doy_cos"] = np.cos(
+                        2 * np.pi * col.dt.dayofyear / df[f"{prefix}_days_in_year"]
+                    )
 
                     # ── Unix timestamp (useful for distance-based models) ──────
                     df[f"{prefix}_unix_ts"] = col.astype(np.int64) // 10**9
@@ -264,7 +288,6 @@ class DataPreprocessor:
             return DataType.TIMESTAMP()
         else:
             return DataType.VARCHAR()  # covers "object" and unknown
-
 
     def _ensure_table_exists(
         self,
@@ -294,7 +317,6 @@ class DataPreprocessor:
             primary_keys=primary_keys,
         )
 
-
     def _build_upsert_sql(
         self,
         schema_name: str,
@@ -304,13 +326,9 @@ class DataPreprocessor:
         has_update_date: bool = False,
     ) -> str:
         col_str = ", ".join(columns)
-        pk_str  = ", ".join(primary_keys)
+        pk_str = ", ".join(primary_keys)
 
-        update_parts = [
-            f"{c} = EXCLUDED.{c}"
-            for c in columns
-            if c not in primary_keys
-        ]
+        update_parts = [f"{c} = EXCLUDED.{c}" for c in columns if c not in primary_keys]
         if has_update_date:
             update_parts.append("update_date = now()")
         update_str = ", ".join(update_parts)
@@ -329,7 +347,6 @@ class DataPreprocessor:
     FROM upserted
     """
 
-
     def _to_python(self, v):
         """Convert numpy scalars to native Python types psycopg2 can serialize."""
         if v is None:
@@ -339,10 +356,11 @@ class DataPreprocessor:
                 return None
         except (TypeError, ValueError):
             pass  # pd.isna raises on some types (e.g. lists) — just pass them through
-        if hasattr(v, "item"):  # catches all numpy scalars: uint32, int64, float32, etc.
+        if hasattr(
+            v, "item"
+        ):  # catches all numpy scalars: uint32, int64, float32, etc.
             return v.item()
         return v
-
 
     def _save_pandas_table_to_database(
         self,
@@ -371,9 +389,11 @@ class DataPreprocessor:
         )
 
         # ── schema introspection via driver cache (no extra DB round-trip) ────
-        available_columns = self._database_driver._get_table_columns(schema_name, table_name)
-        has_create_date   = "create_date" in available_columns
-        has_update_date   = "update_date" in available_columns
+        available_columns = self._database_driver._get_table_columns(
+            schema_name, table_name
+        )
+        has_create_date = "create_date" in available_columns
+        has_update_date = "update_date" in available_columns
 
         df_columns = list(df.columns)
 
@@ -394,7 +414,9 @@ class DataPreprocessor:
         now = datetime.now(timezone.utc) if has_create_date else None
 
         records: list[tuple] = [
-            tuple(self._to_python(v) for v in row)                                      # ← was: tuple(None if pd.isna(v) else v ...)
+            tuple(
+                self._to_python(v) for v in row
+            )  # ← was: tuple(None if pd.isna(v) else v ...)
             + ((now,) if has_create_date and "create_date" not in df_columns else ())
             for row in df.itertuples(index=False, name=None)
         ]
@@ -406,12 +428,14 @@ class DataPreprocessor:
             chunk = records[start : start + chunk_size]
 
             # Use driver's cursor directly — execute_values sends 1 round-trip
-            execute_values(self._database_driver._cursor, sql, chunk, page_size=chunk_size)
+            execute_values(
+                self._database_driver._cursor, sql, chunk, page_size=chunk_size
+            )
 
             row = self._database_driver.fetch_result()
             if row:
                 inserted_total += row[0][0] or 0
-                updated_total  += row[0][1] or 0
+                updated_total += row[0][1] or 0
 
         self._logger.log_info(
             f"Saved {inserted_total + updated_total}/{len(df)} records into "
@@ -3888,114 +3912,114 @@ class DataPreprocessor:
                     primary_keys=Table.MARKET.primary_key,
                 )
 
-                # G_STOCK_MARKET
-                self._database_driver.create_table(
-                    schema_name=Schema.STOCK_MARKET.value,
-                    table_name=Table.G_STOCK_MARKET.name,
-                    columns=[
-                        Column(
-                            name=Table.G_STOCK_MARKET.Column.CODE.value,
-                            data_type=DataType.VARCHAR(),
-                            nullable=False,
-                        ),
-                        Column(
-                            name=Table.G_STOCK_MARKET.Column.DATE.value,
-                            data_type=DataType.DATE(),
-                            nullable=False,
-                        ),
-                        Column(
-                            name=Table.G_STOCK_MARKET.Column.OPEN.value,
-                            data_type=DataType.DECIMAL(),
-                            nullable=True,
-                        ),
-                        Column(
-                            name=Table.G_STOCK_MARKET.Column.HIGH.value,
-                            data_type=DataType.DECIMAL(),
-                            nullable=True,
-                        ),
-                        Column(
-                            name=Table.G_STOCK_MARKET.Column.LOW.value,
-                            data_type=DataType.DECIMAL(),
-                            nullable=True,
-                        ),
-                        Column(
-                            name=Table.G_STOCK_MARKET.Column.CLOSE.value,
-                            data_type=DataType.DECIMAL(),
-                            nullable=True,
-                        ),
-                        Column(
-                            name=Table.G_STOCK_MARKET.Column.ADJUST.value,
-                            data_type=DataType.DECIMAL(),
-                            nullable=True,
-                        ),
-                        Column(
-                            name=Table.G_STOCK_MARKET.Column.CHANGE.value,
-                            data_type=DataType.DECIMAL(),
-                            nullable=True,
-                        ),
-                        Column(
-                            name=Table.G_STOCK_MARKET.Column.PERCENT_CHANGE.value,
-                            data_type=DataType.DECIMAL(),
-                            nullable=True,
-                        ),
-                        Column(
-                            name=Table.G_STOCK_MARKET.Column.MATCHING_VOLUME.value,
-                            data_type=DataType.BIGINT(),
-                            nullable=True,
-                        ),
-                        Column(
-                            name=Table.G_STOCK_MARKET.Column.MATCHING_VALUE.value,
-                            data_type=DataType.DECIMAL(),
-                            nullable=True,
-                        ),
-                        Column(
-                            name=Table.G_STOCK_MARKET.Column.NEGOTIATE_VOLUME.value,
-                            data_type=DataType.BIGINT(),
-                            nullable=True,
-                        ),
-                        Column(
-                            name=Table.G_STOCK_MARKET.Column.NEGOTIATE_VALUE.value,
-                            data_type=DataType.DECIMAL(),
-                            nullable=True,
-                        ),
-                        Column(
-                            name=Table.G_STOCK_MARKET.Column.NUMBER_OF_BUY_ORDERS.value,
-                            data_type=DataType.BIGINT(),
-                            nullable=True,
-                        ),
-                        Column(
-                            name=Table.G_STOCK_MARKET.Column.BUY_VOLUME.value,
-                            data_type=DataType.BIGINT(),
-                            nullable=True,
-                        ),
-                        Column(
-                            name=Table.G_STOCK_MARKET.Column.AVERAGE_VOLUME_PER_BUY_ORDER.value,
-                            data_type=DataType.DECIMAL(),
-                            nullable=True,
-                        ),
-                        Column(
-                            name=Table.G_STOCK_MARKET.Column.NUMBER_OF_SELL_ORDERS.value,
-                            data_type=DataType.BIGINT(),
-                            nullable=True,
-                        ),
-                        Column(
-                            name=Table.G_STOCK_MARKET.Column.SELL_VOLUME.value,
-                            data_type=DataType.BIGINT(),
-                            nullable=True,
-                        ),
-                        Column(
-                            name=Table.G_STOCK_MARKET.Column.AVERAGE_VOLUME_PER_SELL_ORDER.value,
-                            data_type=DataType.DECIMAL(),
-                            nullable=True,
-                        ),
-                        Column(
-                            name=Table.G_STOCK_MARKET.Column.NET_VOLUME.value,
-                            data_type=DataType.BIGINT(),
-                            nullable=True,
-                        ),
-                    ],
-                    primary_keys=Table.G_STOCK_MARKET.primary_key,
-                )
+                # # G_STOCK_MARKET
+                # self._database_driver.create_table(
+                #     schema_name=Schema.STOCK_MARKET.value,
+                #     table_name=Table.G_STOCK_MARKET.name,
+                #     columns=[
+                #         Column(
+                #             name=Table.G_STOCK_MARKET.Column.CODE.value,
+                #             data_type=DataType.VARCHAR(),
+                #             nullable=False,
+                #         ),
+                #         Column(
+                #             name=Table.G_STOCK_MARKET.Column.DATE.value,
+                #             data_type=DataType.DATE(),
+                #             nullable=False,
+                #         ),
+                #         Column(
+                #             name=Table.G_STOCK_MARKET.Column.OPEN.value,
+                #             data_type=DataType.DECIMAL(),
+                #             nullable=True,
+                #         ),
+                #         Column(
+                #             name=Table.G_STOCK_MARKET.Column.HIGH.value,
+                #             data_type=DataType.DECIMAL(),
+                #             nullable=True,
+                #         ),
+                #         Column(
+                #             name=Table.G_STOCK_MARKET.Column.LOW.value,
+                #             data_type=DataType.DECIMAL(),
+                #             nullable=True,
+                #         ),
+                #         Column(
+                #             name=Table.G_STOCK_MARKET.Column.CLOSE.value,
+                #             data_type=DataType.DECIMAL(),
+                #             nullable=True,
+                #         ),
+                #         Column(
+                #             name=Table.G_STOCK_MARKET.Column.ADJUST.value,
+                #             data_type=DataType.DECIMAL(),
+                #             nullable=True,
+                #         ),
+                #         Column(
+                #             name=Table.G_STOCK_MARKET.Column.CHANGE.value,
+                #             data_type=DataType.DECIMAL(),
+                #             nullable=True,
+                #         ),
+                #         Column(
+                #             name=Table.G_STOCK_MARKET.Column.PERCENT_CHANGE.value,
+                #             data_type=DataType.DECIMAL(),
+                #             nullable=True,
+                #         ),
+                #         Column(
+                #             name=Table.G_STOCK_MARKET.Column.MATCHING_VOLUME.value,
+                #             data_type=DataType.BIGINT(),
+                #             nullable=True,
+                #         ),
+                #         Column(
+                #             name=Table.G_STOCK_MARKET.Column.MATCHING_VALUE.value,
+                #             data_type=DataType.DECIMAL(),
+                #             nullable=True,
+                #         ),
+                #         Column(
+                #             name=Table.G_STOCK_MARKET.Column.NEGOTIATE_VOLUME.value,
+                #             data_type=DataType.BIGINT(),
+                #             nullable=True,
+                #         ),
+                #         Column(
+                #             name=Table.G_STOCK_MARKET.Column.NEGOTIATE_VALUE.value,
+                #             data_type=DataType.DECIMAL(),
+                #             nullable=True,
+                #         ),
+                #         Column(
+                #             name=Table.G_STOCK_MARKET.Column.NUMBER_OF_BUY_ORDERS.value,
+                #             data_type=DataType.BIGINT(),
+                #             nullable=True,
+                #         ),
+                #         Column(
+                #             name=Table.G_STOCK_MARKET.Column.BUY_VOLUME.value,
+                #             data_type=DataType.BIGINT(),
+                #             nullable=True,
+                #         ),
+                #         Column(
+                #             name=Table.G_STOCK_MARKET.Column.AVERAGE_VOLUME_PER_BUY_ORDER.value,
+                #             data_type=DataType.DECIMAL(),
+                #             nullable=True,
+                #         ),
+                #         Column(
+                #             name=Table.G_STOCK_MARKET.Column.NUMBER_OF_SELL_ORDERS.value,
+                #             data_type=DataType.BIGINT(),
+                #             nullable=True,
+                #         ),
+                #         Column(
+                #             name=Table.G_STOCK_MARKET.Column.SELL_VOLUME.value,
+                #             data_type=DataType.BIGINT(),
+                #             nullable=True,
+                #         ),
+                #         Column(
+                #             name=Table.G_STOCK_MARKET.Column.AVERAGE_VOLUME_PER_SELL_ORDER.value,
+                #             data_type=DataType.DECIMAL(),
+                #             nullable=True,
+                #         ),
+                #         Column(
+                #             name=Table.G_STOCK_MARKET.Column.NET_VOLUME.value,
+                #             data_type=DataType.BIGINT(),
+                #             nullable=True,
+                #         ),
+                #     ],
+                #     primary_keys=Table.G_STOCK_MARKET.primary_key,
+                # )
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -4012,132 +4036,283 @@ class DataPreprocessor:
         match data_quality:
             case DataQuality.BRONZE:
                 # STOCK
-                # fmt: off
                 self._database_driver.create_table(
                     schema_name=Schema.ENTERPRISE.value,
-                    table_name=Table.STOCK.name,
-                    columns = [
-                        Column(name=Table.STOCK.Column.ID.value, data_type=DataType.SERIAL(), nullable=False),
-                        Column(name=Table.STOCK.Column.CODE.value, data_type=DataType.VARCHAR(), nullable=False),
-                        Column(name=Table.STOCK.Column.LISTED_SHARES.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.STOCK.Column.OUTSTANDING_SHARES.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.STOCK.Column.OUTSTANDING_RATE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.STOCK.Column.MARKET_CAP.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.STOCK.Column.MARKET_ID.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.STOCK.Column.CREATE_DATE.value, data_type=DataType.AUTO_TIMESTAMP(), nullable=False),
-                        Column(name=Table.STOCK.Column.UPDATE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
-                        Column(name=Table.STOCK.Column.DELETE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
+                    table_name=Table.B_STOCK.name,
+                    columns=[
+                        Column(
+                            name=Table.B_STOCK.Column.CODE.value,
+                            data_type=DataType.VARCHAR(),
+                            nullable=False,
+                        ),
+                        Column(
+                            name=Table.B_STOCK.Column.MARKET_ID.value,
+                            data_type=DataType.INT(),
+                            nullable=False,
+                        ),
+                        Column(
+                            name=Table.B_STOCK.Column.CREATE_DATE.value,
+                            data_type=DataType.AUTO_TIMESTAMP(),
+                            nullable=False,
+                        ),
+                        Column(
+                            name=Table.B_STOCK.Column.UPDATE_DATE.value,
+                            data_type=DataType.TIMESTAMP(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.B_STOCK.Column.DELETE_DATE.value,
+                            data_type=DataType.TIMESTAMP(),
+                            nullable=True,
+                        ),
                     ],
-                    primary_keys=Table.STOCK.primary_key,
-                    foreign_keys=[ForeignKey(
-                        column_name=Table.STOCK.Column.MARKET_ID.value, 
-                        ref_table=f"{Schema.STOCK_MARKET.value}.{Table.MARKET.name}", 
-                        ref_column=Table.MARKET.Column.ID.value,
-                    )],
+                    primary_keys=Table.B_STOCK.primary_key,
+                    foreign_keys=[
+                        ForeignKey(
+                            column_name=Table.B_STOCK.Column.MARKET_ID.value,
+                            ref_table=f"{Schema.STOCK_MARKET.value}.{Table.MARKET.name}",
+                            ref_column=Table.MARKET.Column.ID.value,
+                        )
+                    ],
                 )
-                # fmt: on
-                
+
                 # DAILY_PRICE
-                # fmt: off
                 self._database_driver.create_table(
                     schema_name=Schema.ENTERPRISE.value,
                     table_name=Table.DAILY_PRICE.name,
-                    columns = [
-                        Column(name=Table.DAILY_PRICE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.DAILY_PRICE.Column.CODE.value, data_type=DataType.VARCHAR(), nullable=False),
-                        Column(name=Table.DAILY_PRICE.Column.MARKET_ID.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.DAILY_PRICE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.DAILY_PRICE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.DAILY_PRICE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.DAILY_PRICE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.DAILY_PRICE.Column.VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
+                    columns=[
+                        Column(
+                            name=Table.DAILY_PRICE.Column.DATE.value,
+                            data_type=DataType.DATE(),
+                            nullable=False,
+                        ),
+                        Column(
+                            name=Table.DAILY_PRICE.Column.CODE.value,
+                            data_type=DataType.VARCHAR(),
+                            nullable=False,
+                        ),
+                        Column(
+                            name=Table.DAILY_PRICE.Column.MARKET_ID.value,
+                            data_type=DataType.INT(),
+                            nullable=False,
+                        ),
+                        Column(
+                            name=Table.DAILY_PRICE.Column.OPEN.value,
+                            data_type=DataType.DECIMAL(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.DAILY_PRICE.Column.HIGH.value,
+                            data_type=DataType.DECIMAL(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.DAILY_PRICE.Column.LOW.value,
+                            data_type=DataType.DECIMAL(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.DAILY_PRICE.Column.CLOSE.value,
+                            data_type=DataType.DECIMAL(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.DAILY_PRICE.Column.VOLUME.value,
+                            data_type=DataType.BIGINT(),
+                            nullable=True,
+                        ),
                     ],
                     primary_keys=Table.DAILY_PRICE.primary_key,
-                    foreign_keys=[ForeignKey(
-                        column_name=Table.DAILY_PRICE.Column.MARKET_ID.value, 
-                        ref_table=f"{Schema.STOCK_MARKET.value}.{Table.MARKET.name}", 
-                        ref_column=Table.MARKET.Column.ID.value,
-                    )],
+                    foreign_keys=[
+                        ForeignKey(
+                            column_name=Table.DAILY_PRICE.Column.MARKET_ID.value,
+                            ref_table=f"{Schema.STOCK_MARKET.value}.{Table.MARKET.name}",
+                            ref_column=Table.MARKET.Column.ID.value,
+                        )
+                    ],
                 )
-                # fmt: on
 
             case DataQuality.SILVER:
                 # STOCK
-                # fmt: off
                 self._database_driver.create_table(
                     schema_name=Schema.ENTERPRISE.value,
                     table_name=Table.STOCK.name,
-                    columns = [
-                        Column(name=Table.STOCK.Column.ID.value, data_type=DataType.SERIAL(), nullable=False),
-                        Column(name=Table.STOCK.Column.CODE.value, data_type=DataType.VARCHAR(), nullable=False),
-                        Column(name=Table.STOCK.Column.LISTED_SHARES.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.STOCK.Column.OUTSTANDING_SHARES.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.STOCK.Column.OUTSTANDING_RATE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.STOCK.Column.MARKET_CAP.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.STOCK.Column.MARKET_ID.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.STOCK.Column.CREATE_DATE.value, data_type=DataType.AUTO_TIMESTAMP(), nullable=False),
-                        Column(name=Table.STOCK.Column.UPDATE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
-                        Column(name=Table.STOCK.Column.DELETE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
+                    columns=[
+                        Column(
+                            name=Table.STOCK.Column.ID.value,
+                            data_type=DataType.SERIAL(),
+                            nullable=False,
+                        ),
+                        Column(
+                            name=Table.STOCK.Column.CODE.value,
+                            data_type=DataType.VARCHAR(),
+                            nullable=False,
+                        ),
+                        Column(
+                            name=Table.STOCK.Column.LISTED_SHARES.value,
+                            data_type=DataType.BIGINT(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.STOCK.Column.OUTSTANDING_SHARES.value,
+                            data_type=DataType.BIGINT(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.STOCK.Column.OUTSTANDING_RATE.value,
+                            data_type=DataType.DECIMAL(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.STOCK.Column.MARKET_CAP.value,
+                            data_type=DataType.BIGINT(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.STOCK.Column.MARKET_ID.value,
+                            data_type=DataType.INT(),
+                            nullable=False,
+                        ),
+                        Column(
+                            name=Table.STOCK.Column.CREATE_DATE.value,
+                            data_type=DataType.AUTO_TIMESTAMP(),
+                            nullable=False,
+                        ),
+                        Column(
+                            name=Table.STOCK.Column.UPDATE_DATE.value,
+                            data_type=DataType.TIMESTAMP(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.STOCK.Column.DELETE_DATE.value,
+                            data_type=DataType.TIMESTAMP(),
+                            nullable=True,
+                        ),
                     ],
                     primary_keys=Table.STOCK.primary_key,
-                    foreign_keys=[ForeignKey(
-                        column_name=Table.STOCK.Column.MARKET_ID.value, 
-                        ref_table=f"{Schema.STOCK_MARKET.value}.{Table.MARKET.name}", 
-                        ref_column=Table.MARKET.Column.ID.value,
-                    )],
+                    foreign_keys=[
+                        ForeignKey(
+                            column_name=Table.STOCK.Column.MARKET_ID.value,
+                            ref_table=f"{Schema.STOCK_MARKET.value}.{Table.MARKET.name}",
+                            ref_column=Table.MARKET.Column.ID.value,
+                        )
+                    ],
                 )
-                # fmt: on
 
             case DataQuality.GOLD:
                 # STOCK
-                # fmt: off
                 self._database_driver.create_table(
                     schema_name=Schema.ENTERPRISE.value,
                     table_name=Table.STOCK.name,
-                    columns = [
-                        Column(name=Table.STOCK.Column.ID.value, data_type=DataType.SERIAL(), nullable=False),
-                        Column(name=Table.STOCK.Column.CODE.value, data_type=DataType.VARCHAR(), nullable=False),
-                        Column(name=Table.STOCK.Column.LISTED_SHARES.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.STOCK.Column.OUTSTANDING_SHARES.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.STOCK.Column.OUTSTANDING_RATE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.STOCK.Column.MARKET_CAP.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.STOCK.Column.MARKET_ID.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.STOCK.Column.CREATE_DATE.value, data_type=DataType.AUTO_TIMESTAMP(), nullable=False),
-                        Column(name=Table.STOCK.Column.UPDATE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
-                        Column(name=Table.STOCK.Column.DELETE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
+                    columns=[
+                        Column(
+                            name=Table.STOCK.Column.ID.value,
+                            data_type=DataType.SERIAL(),
+                            nullable=False,
+                        ),
+                        Column(
+                            name=Table.STOCK.Column.CODE.value,
+                            data_type=DataType.VARCHAR(),
+                            nullable=False,
+                        ),
+                        Column(
+                            name=Table.STOCK.Column.LISTED_SHARES.value,
+                            data_type=DataType.BIGINT(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.STOCK.Column.OUTSTANDING_SHARES.value,
+                            data_type=DataType.BIGINT(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.STOCK.Column.OUTSTANDING_RATE.value,
+                            data_type=DataType.DECIMAL(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.STOCK.Column.MARKET_CAP.value,
+                            data_type=DataType.BIGINT(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.STOCK.Column.MARKET_ID.value,
+                            data_type=DataType.INT(),
+                            nullable=False,
+                        ),
+                        Column(
+                            name=Table.STOCK.Column.CREATE_DATE.value,
+                            data_type=DataType.AUTO_TIMESTAMP(),
+                            nullable=False,
+                        ),
+                        Column(
+                            name=Table.STOCK.Column.UPDATE_DATE.value,
+                            data_type=DataType.TIMESTAMP(),
+                            nullable=True,
+                        ),
+                        Column(
+                            name=Table.STOCK.Column.DELETE_DATE.value,
+                            data_type=DataType.TIMESTAMP(),
+                            nullable=True,
+                        ),
                     ],
                     primary_keys=Table.STOCK.primary_key,
-                    foreign_keys=[ForeignKey(
-                        column_name=Table.STOCK.Column.MARKET_ID.value, 
-                        ref_table=f"{Schema.STOCK_MARKET.value}.{Table.MARKET.name}", 
-                        ref_column=Table.MARKET.Column.ID.value,
-                    )],
+                    foreign_keys=[
+                        ForeignKey(
+                            column_name=Table.STOCK.Column.MARKET_ID.value,
+                            ref_table=f"{Schema.STOCK_MARKET.value}.{Table.MARKET.name}",
+                            ref_column=Table.MARKET.Column.ID.value,
+                        )
+                    ],
                 )
-                # fmt: on
 
                 for stock_code in STOCK_CODES_TO_BE_EXPORTED_TO_GOLD_DB:
-                    # fmt: off
                     self._database_driver.create_table(
                         schema_name=Schema.ENTERPRISE.value,
                         table_name=stock_code,
-                        columns = [
-                            Column(name="date", data_type=DataType.DATE(), nullable=False),
-                            Column(name="code", data_type=DataType.VARCHAR(), nullable=False),
-                            Column(name="market_id", data_type=DataType.INT(), nullable=True),
-                            Column(name="open", data_type=DataType.DECIMAL(), nullable=True),
-                            Column(name="high", data_type=DataType.DECIMAL(), nullable=True),
-                            Column(name="low", data_type=DataType.DECIMAL(), nullable=True),
-                            Column(name="close", data_type=DataType.DECIMAL(), nullable=True),
-                            Column(name="volume", data_type=DataType.DECIMAL(), nullable=True),
+                        columns=[
+                            Column(
+                                name="date", data_type=DataType.DATE(), nullable=False
+                            ),
+                            Column(
+                                name="code",
+                                data_type=DataType.VARCHAR(),
+                                nullable=False,
+                            ),
+                            Column(
+                                name="market_id",
+                                data_type=DataType.INT(),
+                                nullable=True,
+                            ),
+                            Column(
+                                name="open", data_type=DataType.DECIMAL(), nullable=True
+                            ),
+                            Column(
+                                name="high", data_type=DataType.DECIMAL(), nullable=True
+                            ),
+                            Column(
+                                name="low", data_type=DataType.DECIMAL(), nullable=True
+                            ),
+                            Column(
+                                name="close",
+                                data_type=DataType.DECIMAL(),
+                                nullable=True,
+                            ),
+                            Column(
+                                name="volume",
+                                data_type=DataType.DECIMAL(),
+                                nullable=True,
+                            ),
                         ],
                         primary_keys=["date"],
-                        foreign_keys=[ForeignKey(
-                            column_name="market_id", 
-                            ref_table=f"{Schema.STOCK_MARKET.value}.{Table.MARKET.name}", 
-                            ref_column=Table.MARKET.Column.ID.value,
-                        )],
+                        foreign_keys=[
+                            ForeignKey(
+                                column_name="market_id",
+                                ref_table=f"{Schema.STOCK_MARKET.value}.{Table.MARKET.name}",
+                                ref_column=Table.MARKET.Column.ID.value,
+                            )
+                        ],
                     )
-                    # fmt: on
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -9543,7 +9718,7 @@ class DataPreprocessor:
             )
 
             self._logger.log_info(
-                f'Finish ingesting {len(file_paths)} file(s) in "{folder_path}".'
+                f'Finish ingesting {len(file_paths)} file(s) from "{folder_path}" to "{stock_market_price_sub_type.value.lower()}".'
             )
 
     def _ingest_stock_market_index_order(self) -> None:
@@ -9648,7 +9823,7 @@ class DataPreprocessor:
             )
 
             self._logger.log_info(
-                f'Finish ingesting {len(file_paths)} file(s) in "{folder_path}".'
+                f'Finish ingesting {len(file_paths)} file(s) from "{folder_path}" to "{stock_market_order_sub_type.value.lower()}".'
             )
 
     def _clean_stock_market_index(self) -> None:
@@ -9775,128 +9950,84 @@ class DataPreprocessor:
     # region ENTERPRISE data process
 
     # region ENTERPRISE.STOCK_INFORMATION
-    def _ingest_enterprise_stock_cafef(self) -> None:
-        key_1 = (
-            ScrapeMainType.ENTERPRISE,
-            EnterpriseSubType.DAILY_PRICE,
-            DailyPriceSource.CAFEF,
-        )
-
-        key_2 = (
-            ScrapeMainType.ENTERPRISE,
-            EnterpriseSubType.STOCK_INFORMATION,
-            StockInformationSource.CAFEF,
-        )
-
-        folder_path_1 = f"{SCRAPER_BRONZE_DATA_DIR}/{key_1[0].value}/{key_1[1].value}/{key_1[2].value}"
-        folder_path_2 = f"{SCRAPER_BRONZE_DATA_DIR}/{key_2[0].value}/{key_2[1].value}/{key_2[2].value}"
-
-        # 1. Get file lists
-        base_stock_files = get_all_file_names_with_extensions(
-            self._logger,
-            folder_path=folder_path_1,
-            extensions=[FileExtension.CSV],
-        )
-        stock_information_files = get_all_file_names_with_extensions(
-            self._logger,
-            folder_path=folder_path_2,
-            extensions=[FileExtension.CSV],
-        )
-
-        # 2. Find latest stock files per exchange
-        pattern = re.compile(r"(HNX|HSX|UPCOM)_upto_(\d{8})\.csv")
-        latest_files = {}
-
-        for file in base_stock_files:
-            match = pattern.search(os.path.basename(file))
-            if match:
-                exchange, date_str = match.groups()
-                date = datetime.strptime(date_str, "%Y%m%d")
-                if (
-                    exchange not in latest_files
-                    or date > latest_files[exchange]["date"]
-                ):
-                    latest_files[exchange] = {"file": file, "date": date}
-
-        # 3. Validate and collect file paths
-        required_exchanges = ["HSX", "HNX", "UPCOM"]
-        file_paths = {}
-
-        for exchange in required_exchanges:
-            file_path = latest_files.get(exchange, {}).get("file")
-            if not file_path or not os.path.isfile(file_path):
-                self._logger.log_error(
-                    f'{exchange} data file not found in "{folder_path_1}".'
-                )
-                return
-            file_paths[exchange] = file_path
-
-        table_name = Table.STOCK.__qualname__.lower()
-        self._logger.log_info(f'Start ingesting data in "{table_name}".')
-
-        # 4. Load stock information data efficiently
-        stock_info_frames = [
-            pd.read_csv(file, encoding="utf-8")
-            for file in stock_information_files
-            if re.search(r"cafef_upto_\d+_\d+\.csv$", file)
+    def _ingest_enterprise_stock(self) -> None:
+        stock_list_sub_type_list = [
+            item for item in EnterpriseSubType if "list" in item.value.lower()
         ]
-        stock_infomation_df = (
-            pd.concat(stock_info_frames, ignore_index=True)
-            if stock_info_frames
-            else pd.DataFrame()
-        )
-        stock_infomation_df.columns = (
-            stock_infomation_df.columns.str.lower().str.replace(" ", "_")
+
+        # STOCK MARKET DATAFRAME
+        stock_market_df = self._select(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.MARKET.name,
         )
 
-        # 6. Create base DataFrame for stocks
-        base_dfs = []
-        for market_code, stock_market_path in file_paths.items():
-            base_df = pd.read_csv(stock_market_path)
-            base_df["<Ticker>"] = base_df["<Ticker>"].astype("string")
+        market_code_to_id = {
+            row["code"].upper(): row["id"]
+            for row in stock_market_df.to_dict(orient="records")
+        }
 
-            # Skip derivatives
-            base_df = base_df[base_df["<Ticker>"].str.len() == 3]
+        enterprise_subtype_to_market_id_map = {
+            EnterpriseSubType.STOCK_LIST_HOSE.value: market_code_to_id.get("HSX"),
+            EnterpriseSubType.STOCK_LIST_HNX.value: market_code_to_id.get("HNX"),
+            EnterpriseSubType.STOCK_LIST_UPCOM.value: market_code_to_id.get("UPCOM"),
+        }
 
-            base_stock_df = pd.DataFrame(
-                {
-                    Table.STOCK.Column.CODE.value: base_df["<Ticker>"]
-                    .dropna()
-                    .unique(),
-                    Table.STOCK.Column.MARKET_ID.value: self._get_market_id(
-                        market_code
-                    ),
-                }
+        for stock_list_sub_type in stock_list_sub_type_list:
+
+            key = (
+                ScrapeMainType.ENTERPRISE,
+                stock_list_sub_type,
             )
-            base_dfs.append(base_stock_df)
 
-        overall_df = pd.concat(base_dfs, ignore_index=True).sort_values(
-            by=Table.STOCK.primary_key, ignore_index=True
-        )
+            folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}"
 
-        # 7. Merge with stock information
-        overall_df = pd.merge(
-            overall_df, stock_infomation_df, on=Table.STOCK.primary_key, how="left"
-        )
+            file_path = get_newest_file_path(
+                folder_path=folder_path,
+                extension=FileExtension.CSV,
+            )
 
-        # 8. Calculate outstanding_rate safely
-        listed = overall_df["listed_shares"].astype(float)
-        outstanding = overall_df["outstanding_shares"].astype(float)
-        overall_df["outstanding_rate"] = np.where(
-            listed > 0, outstanding / listed, np.nan
-        )
+            if not file_path:
+                self._logger.log_error(f'Data in "{folder_path}" does not exist.')
+                continue
 
-        # 9. Save to database
-        self._save_pandas_table_to_database(
-            schema_name=Schema.ENTERPRISE.value,
-            table_name=Table.STOCK.name,
-            primary_keys=Table.STOCK.primary_key,
-            df=overall_df,
-        )
+            file_paths = [file_path]
 
-        self._logger.log_info(f'Finish ingesting data in "{table_name}".')
+            self._logger.log_info(
+                f'Start ingesting {len(file_paths)} file(s) from "{folder_path}" to "{stock_list_sub_type.value.lower()}".'
+            )
 
-    def _clean_enterprise_stock_cafef(self) -> None:
+            # STOCK LIST DATAFRAME
+            # Current data from DB
+            current_stock_list_df = self._select(
+                schema_name=Schema.ENTERPRISE.value,
+                table_name=Table.B_STOCK.name,
+            )
+
+            df = pd.read_csv(file_path)
+
+            # Primary key columns
+            pk_cols = Table.B_STOCK.primary_key
+
+            df["market_id"] = enterprise_subtype_to_market_id_map.get(
+                stock_list_sub_type.value
+            )
+
+            df = df[
+                [Table.B_STOCK.Column.CODE.value, Table.B_STOCK.Column.MARKET_ID.value]
+            ]
+
+            self._save_pandas_table_to_database(
+                schema_name=Schema.ENTERPRISE.value,
+                table_name=Table.B_STOCK.name,
+                primary_keys=Table.B_STOCK.primary_key,
+                df=df,
+            )
+
+            self._logger.log_info(
+                f'Finish ingesting {len(file_paths)} file(s) from "{folder_path}" to "{stock_list_sub_type.value.lower()}".'
+            )
+
+    def _clean_enterprise_stock(self) -> None:
         key = (
             ScrapeMainType.ENTERPRISE,
             EnterpriseSubType.STOCK_INFORMATION,
@@ -9941,7 +10072,7 @@ class DataPreprocessor:
             f'Finish cleaning data in table "{format_key_for_table(key)}".'
         )
 
-    def _transform_enterprise_stock_cafef(self) -> None:
+    def _transform_enterprise_stock(self) -> None:
         key = (
             ScrapeMainType.ENTERPRISE,
             EnterpriseSubType.STOCK_INFORMATION,
@@ -9987,13 +10118,13 @@ class DataPreprocessor:
 
         match data_quality:
             case DataQuality.BRONZE:
-                self._ingest_enterprise_stock_cafef()
+                self._ingest_enterprise_stock()
 
             case DataQuality.SILVER:
-                self._clean_enterprise_stock_cafef()
+                self._clean_enterprise_stock()
 
             case DataQuality.GOLD:
-                self._transform_enterprise_stock_cafef()
+                self._transform_enterprise_stock()
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -10289,7 +10420,7 @@ class DataPreprocessor:
         self._process_stock_market_index(data_quality)
 
         # # Enterprise
-        # self._process_enterprise_stock(data_quality)
+        self._process_enterprise_stock(data_quality)
         # self._process_enterprise_daily_price(data_quality)
 
         self._logger.log_info(f'Finish processing data for "{data_quality.value}".')
@@ -10334,7 +10465,7 @@ class DataPreprocessor:
             try:
                 self._connect_to_database(DataQuality.GOLD)
                 self._create_schemas(DataQuality.GOLD)
-                # self._create_tables(DataQuality.GOLD)
+                self._create_tables(DataQuality.GOLD)
                 self._process_data(DataQuality.GOLD)
 
             except Exception as e:
