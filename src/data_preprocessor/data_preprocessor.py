@@ -10027,90 +10027,6 @@ class DataPreprocessor:
                 f'Finish ingesting {len(file_paths)} file(s) from "{folder_path}" to "{stock_list_sub_type.value.lower()}".'
             )
 
-    def _clean_enterprise_stock(self) -> None:
-        key = (
-            ScrapeMainType.ENTERPRISE,
-            EnterpriseSubType.STOCK_INFORMATION,
-            StockInformationSource.CAFEF,
-        )
-
-        self._logger.log_info(
-            f'Start cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for cleaning data here
-        self._select_database(DataQuality.BRONZE.value)
-
-        bronze_df = self._select(
-            schema_name=Schema.ENTERPRISE.value,
-            table_name=Table.STOCK.name,
-        )
-
-        silver_df = bronze_df.drop(
-            columns=[
-                Table.STOCK.Column.ID.value,
-                Table.STOCK.Column.CREATE_DATE.value,
-                Table.STOCK.Column.UPDATE_DATE.value,
-                Table.STOCK.Column.DELETE_DATE.value,
-            ]
-        )
-
-        silver_df = self._clean(
-            df=silver_df,
-            clean_layer_list=[CleanLayer.ORDER_BY([Table.STOCK.Column.CODE.value])],
-        )
-
-        self._select_database(DataQuality.SILVER.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.ENTERPRISE.value,
-            table_name=Table.STOCK.name,
-            primary_keys=Table.STOCK.primary_key,
-            df=silver_df,
-        )
-
-        self._logger.log_info(
-            f'Finish cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-    def _transform_enterprise_stock(self) -> None:
-        key = (
-            ScrapeMainType.ENTERPRISE,
-            EnterpriseSubType.STOCK_INFORMATION,
-            StockInformationSource.CAFEF,
-        )
-
-        self._logger.log_info(
-            f'Start transforming data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for transforming data here
-        self._select_database(DataQuality.SILVER.value)
-        silver_df = self._select(
-            schema_name=Schema.ENTERPRISE.value,
-            table_name=Table.STOCK.name,
-        )
-
-        gold_df = silver_df.drop(
-            columns=[
-                Table.STOCK.Column.ID.value,
-                Table.STOCK.Column.CREATE_DATE.value,
-                Table.STOCK.Column.UPDATE_DATE.value,
-                Table.STOCK.Column.DELETE_DATE.value,
-            ]
-        )
-
-        self._select_database(DataQuality.GOLD.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.ENTERPRISE.value,
-            table_name=Table.STOCK.name,
-            primary_keys=Table.STOCK.primary_key,
-            df=gold_df,
-        )
-
-        self._logger.log_info(
-            f'Finish transforming data in table "{format_key_for_table(key)}".'
-        )
-
     def _process_enterprise_stock(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing enterprise STOCK data for "{data_quality.value}".'
@@ -10121,10 +10037,10 @@ class DataPreprocessor:
                 self._ingest_enterprise_stock()
 
             case DataQuality.SILVER:
-                self._clean_enterprise_stock()
+                pass
 
             case DataQuality.GOLD:
-                self._transform_enterprise_stock()
+                pass
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
