@@ -143,44 +143,107 @@ class DataPreprocessor:
                     df[column_name] = pd.to_datetime(df[column_name])
 
                     prefix = column_name
+                    col = df[column_name]
 
-                    # basic datetime features
-                    df[f"{prefix}_year"] = df[column_name].dt.year
-                    df[f"{prefix}_month"] = df[column_name].dt.month
-                    df[f"{prefix}_day"] = df[column_name].dt.day
+                    # ── Basic date components ──────────────────────────────────
+                    df[f"{prefix}_year"]        = col.dt.year
+                    df[f"{prefix}_month"]       = col.dt.month
+                    df[f"{prefix}_day"]         = col.dt.day
 
-                    # week features
-                    df[f"{prefix}_week"] = df[column_name].dt.isocalendar().week
+                    # ── Time components ────────────────────────────────────────
+                    df[f"{prefix}_hour"]        = col.dt.hour
+                    df[f"{prefix}_minute"]      = col.dt.minute
+                    df[f"{prefix}_second"]      = col.dt.second
 
-                    # weekday features
-                    df[f"{prefix}_day_of_week"] = df[
-                        column_name
-                    ].dt.dayofweek  # Monday=0
+                    # ── Week features ──────────────────────────────────────────
+                    df[f"{prefix}_week"]            = col.dt.isocalendar().week.astype(int)
+                    df[f"{prefix}_day_of_week"]     = col.dt.dayofweek          # Monday=0
+                    df[f"{prefix}_day_name"]        = col.dt.day_name()
 
-                    df[f"{prefix}_day_name"] = df[column_name].dt.day_name()
+                    # ── Year positioning ───────────────────────────────────────
+                    df[f"{prefix}_day_of_year"]     = col.dt.dayofyear
 
-                    # year positioning
-                    df[f"{prefix}_day_of_year"] = df[column_name].dt.dayofyear
+                    # ── Quarter features ───────────────────────────────────────
+                    df[f"{prefix}_quarter"]         = col.dt.quarter
 
-                    # quarter
-                    df[f"{prefix}_quarter"] = df[column_name].dt.quarter
+                    # Day within the quarter (1-92)
+                    quarter_start = col.dt.to_period("Q").dt.start_time
+                    df[f"{prefix}_day_of_quarter"]  = (col - quarter_start).dt.days + 1
 
-                    # boolean flags
-                    df[f"{prefix}_is_weekend"] = df[column_name].dt.dayofweek >= 5
+                    # How many days remain until quarter end (inclusive = 0 on last day)
+                    quarter_end = col.dt.to_period("Q").dt.end_time.dt.normalize()
+                    df[f"{prefix}_days_to_quarter_end"] = (quarter_end - col.dt.normalize()).dt.days
 
-                    df[f"{prefix}_is_month_start"] = df[column_name].dt.is_month_start
+                    # Progress through the quarter as a fraction [0.0 – 1.0]
+                    quarter_length = (quarter_end - quarter_start).dt.days + 1
+                    df[f"{prefix}_quarter_progress"] = (
+                        df[f"{prefix}_day_of_quarter"] / quarter_length
+                    ).round(4)
 
-                    df[f"{prefix}_is_month_end"] = df[column_name].dt.is_month_end
+                    # ── Month features ─────────────────────────────────────────
+                    df[f"{prefix}_days_in_month"]       = col.dt.days_in_month
+                    df[f"{prefix}_days_to_month_end"]   = (
+                        col.dt.days_in_month - col.dt.day
+                    )
 
-                    df[f"{prefix}_is_quarter_start"] = df[
-                        column_name
-                    ].dt.is_quarter_start
+                    # Week-of-month  (1 = first 7 days, etc.)
+                    df[f"{prefix}_week_of_month"] = (col.dt.day - 1) // 7 + 1
 
-                    df[f"{prefix}_is_quarter_end"] = df[column_name].dt.is_quarter_end
+                    # ── Year features ──────────────────────────────────────────
+                    year_start = pd.to_datetime(col.dt.year.astype(str) + "-01-01")
+                    year_end   = pd.to_datetime(col.dt.year.astype(str) + "-12-31")
 
-                    df[f"{prefix}_is_year_start"] = df[column_name].dt.is_year_start
+                    df[f"{prefix}_days_in_year"]        = year_end.dt.dayofyear
+                    df[f"{prefix}_days_to_year_end"]    = (
+                        year_end - col.dt.normalize()
+                    ).dt.days
+                    df[f"{prefix}_year_progress"]       = (
+                        col.dt.dayofyear / df[f"{prefix}_days_in_year"]
+                    ).round(4)
+                    df[f"{prefix}_is_leap_year"]        = col.dt.is_leap_year
 
-                    df[f"{prefix}_is_year_end"] = df[column_name].dt.is_year_end
+                    # ── Season (Northern Hemisphere) ───────────────────────────
+                    _season_map = {1: "Winter", 2: "Winter", 3: "Spring",
+                                4: "Spring", 5: "Spring", 6: "Summer",
+                                7: "Summer", 8: "Summer", 9: "Autumn",
+                                10: "Autumn", 11: "Autumn", 12: "Winter"}
+                    df[f"{prefix}_season"] = col.dt.month.map(_season_map)
+
+                    # ── Time-of-day bucket ─────────────────────────────────────
+                    _hour_bins   = [-1, 5, 11, 17, 20, 23]
+                    _hour_labels = ["Night", "Morning", "Afternoon", "Evening", "Night2"]
+                    df[f"{prefix}_time_of_day"] = pd.cut(
+                        col.dt.hour, bins=_hour_bins, labels=_hour_labels
+                    ).astype(str).replace("Night2", "Night")
+
+                    # ── Boolean flags ──────────────────────────────────────────
+                    df[f"{prefix}_is_weekend"]        = col.dt.dayofweek >= 5
+                    df[f"{prefix}_is_weekday"]        = col.dt.dayofweek < 5
+                    df[f"{prefix}_is_month_start"]    = col.dt.is_month_start
+                    df[f"{prefix}_is_month_end"]      = col.dt.is_month_end
+                    df[f"{prefix}_is_quarter_start"]  = col.dt.is_quarter_start
+                    df[f"{prefix}_is_quarter_end"]    = col.dt.is_quarter_end
+                    df[f"{prefix}_is_year_start"]     = col.dt.is_year_start
+                    df[f"{prefix}_is_year_end"]       = col.dt.is_year_end
+
+                    # ── Cyclical encodings (preserves circular continuity) ─────
+                    df[f"{prefix}_month_sin"]   = np.sin(2 * np.pi * col.dt.month / 12)
+                    df[f"{prefix}_month_cos"]   = np.cos(2 * np.pi * col.dt.month / 12)
+
+                    df[f"{prefix}_dow_sin"]     = np.sin(2 * np.pi * col.dt.dayofweek / 7)
+                    df[f"{prefix}_dow_cos"]     = np.cos(2 * np.pi * col.dt.dayofweek / 7)
+
+                    df[f"{prefix}_hour_sin"]    = np.sin(2 * np.pi * col.dt.hour / 24)
+                    df[f"{prefix}_hour_cos"]    = np.cos(2 * np.pi * col.dt.hour / 24)
+
+                    df[f"{prefix}_quarter_sin"] = np.sin(2 * np.pi * col.dt.quarter / 4)
+                    df[f"{prefix}_quarter_cos"] = np.cos(2 * np.pi * col.dt.quarter / 4)
+
+                    df[f"{prefix}_doy_sin"]     = np.sin(2 * np.pi * col.dt.dayofyear / df[f"{prefix}_days_in_year"])
+                    df[f"{prefix}_doy_cos"]     = np.cos(2 * np.pi * col.dt.dayofyear / df[f"{prefix}_days_in_year"])
+
+                    # ── Unix timestamp (useful for distance-based models) ──────
+                    df[f"{prefix}_unix_ts"] = col.astype(np.int64) // 10**9
 
                 case _:
                     raise ValueError(f"Unsupported transform: {layer.action}")
