@@ -43,6 +43,18 @@ class PostgreSQLDriver(TabularDatabaseDriverInterface):
     def _cache_key(self, schema_name: str, table_name: str) -> str:
         return f"{schema_name}.{table_name}"
 
+    def _format_condition(self, cond: Condition) -> str:
+        if cond.value is None:
+            if cond.operator not in (SqlOperator.IS, SqlOperator.IS_NOT):
+                raise ValueError(
+                    f"Operator '{cond.operator.value}' is not valid for NULL values. "
+                    f"Use SqlOperator.IS or SqlOperator.IS_NOT."
+                )
+            null_keyword = "NULL"
+            return f"{cond.column} {cond.operator.value} {null_keyword}"
+
+        return f"{cond.column} {cond.operator.value} {format_value(cond.value, cond.data_type)}"
+
     def _get_table_columns(self, schema_name: str, table_name: str) -> set[str]:
         """
         Return the set of column names for a table.
@@ -360,8 +372,8 @@ CREATE TABLE IF NOT EXISTS {schema_name}.{table_name} (
             where_clause = (
                 "WHERE\n    "
                 + "\n    AND ".join(
-                    f"{cond.column} {cond.operator.value} {format_value(cond.value, cond.data_type)}"
-                    for cond in conditions
+                    self._format_condition(cond)
+                    for cond in conditions  # <-- use helper
                 )
                 if conditions
                 else ""
@@ -486,8 +498,8 @@ FROM upserted
             where_clause = (
                 "WHERE\n    "
                 + "\n    AND ".join(
-                    f"{cond.column} {cond.operator.value} {format_value(cond.value, cond.data_type)}"
-                    for cond in conditions
+                    self._format_condition(cond)
+                    for cond in conditions  # <-- use helper
                 )
                 if conditions
                 else ""
@@ -566,8 +578,8 @@ WHERE {" AND ".join(conditions)}
             where_clause = (
                 "WHERE\n    "
                 + "\n    AND ".join(
-                    f"{cond.column} {cond.operator.value} {format_value(cond.value, cond.data_type)}"
-                    for cond in conditions
+                    self._format_condition(cond)
+                    for cond in conditions  # <-- use helper
                 )
                 if conditions
                 else ""
