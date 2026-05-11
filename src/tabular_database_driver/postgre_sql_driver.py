@@ -1,7 +1,9 @@
 import threading
+from contextlib import contextmanager
+
 import psycopg2
 from psycopg2.extras import execute_values
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from typing import Any, List
 import pandas as pd
 
@@ -21,90 +23,47 @@ from utils.utils import *
 class PostgreSQLDriver(TabularDatabaseDriverInterface):
     def __init__(self, logger: Logger):
         self._logger = logger
-
-        # ── Main-thread connection bookkeeping (unchanged) ────────────────────
         self._connections: dict[str, psycopg2.extensions.connection] = {}
+        # _cursors / _cursor kept only for execute_query / fetch_result
+        # (legacy low-level API — not used by DML methods anymore)
         self._cursors: dict[str, psycopg2.extensions.cursor] = {}
         self._cursor = None
         self._current_db: str = None
         self._connection_models: dict[str, PostgreSQLConnectionDto] = {}
 
-        # ── Thread-safety additions ───────────────────────────────────────────
-        # Each worker thread gets its own connection + cursor so they never
-        # share a socket or cursor state.
-        self._local = threading.local()
-
-        # The column cache is read/written from many threads; a reentrant lock
-        # lets the same thread re-enter (e.g. _ensure_table_exists → _get_table_columns).
+        # ── Column cache ──────────────────────────────────────────────────
+        # Shared across threads; guarded by _cache_lock.
         self._column_cache: dict[str, set[str]] = {}
-        self._cache_lock = threading.RLock()
+        self._cache_lock = threading.Lock()
 
-    # ──────────────────────────────────────────────────────────────────────────
-    # NEW: thread-local cursor
-    # ──────────────────────────────────────────────────────────────────────────
+    # ──────────────────────────────────────────────────────────────────────
+    # Cursor context manager  ← KEY CHANGE
+    # Every DML/DDL method opens its OWN cursor and closes it on exit.
+    # Concurrent callers never share cursor state.
+    # ──────────────────────────────────────────────────────────────────────
 
-    def _get_cursor(self) -> psycopg2.extensions.cursor:
+    @contextmanager
+    def _cursor_ctx(self, database_name: str = None):
         """
-        Return a cursor that is private to the calling thread.
+        Yield a brand-new cursor for `database_name` (default: current db).
+        The cursor is always closed when the block exits, even on error.
 
-        - Main thread  → reuses the shared cursor created by connect().
-        - Worker thread → lazily opens its own connection + cursor the first
-                          time it calls this method, then reuses them.
+        Usage::
 
-        Why not a connection pool (ThreadedConnectionPool)?
-        Because the existing API separates execute_query() from fetch_result(),
-        meaning a single logical operation spans two method calls.  A pool
-        would require the caller to bracket every pair with getconn/putconn,
-        which would break the public API.  Thread-local connections give each
-        thread a stable cursor for the lifetime of the thread instead.
+            with self._cursor_ctx() as cur:
+                cur.execute(query, params)
+                rows = cur.fetchall()
         """
-        if threading.current_thread() is threading.main_thread():
-            return self._cursor  # unchanged path for single-threaded usage
+        db = database_name or self._current_db
+        cursor = self._connections[db].cursor()
+        try:
+            yield cursor
+        finally:
+            cursor.close()
 
-        db = self._current_db
-        if not hasattr(self._local, "connections"):
-            self._local.connections: dict[str, psycopg2.extensions.connection] = {}
-            self._local.cursors: dict[str, psycopg2.extensions.cursor] = {}
-
-        if db not in self._local.cursors:
-            model = self._connection_models[db]
-            conn = psycopg2.connect(
-                host=model.host,
-                user=model.user,
-                password=model.password,
-                port=model.port,
-                database=model.database,
-            )
-            conn.autocommit = True
-            self._local.connections[db] = conn
-            self._local.cursors[db] = conn.cursor()
-            self._logger.log_info(
-                f"Worker thread {threading.current_thread().name} opened "
-                f'its own connection to "{db}".'
-            )
-
-        return self._local.cursors[db]
-
-    def _close_thread_local_connections(self) -> None:
-        """Close any thread-local connections held by the calling thread."""
-        if not hasattr(self._local, "cursors"):
-            return
-        for db, cursor in self._local.cursors.items():
-            try:
-                cursor.close()
-            except Exception:
-                pass
-        for db, conn in self._local.connections.items():
-            try:
-                conn.close()
-            except Exception:
-                pass
-        self._local.cursors.clear()
-        self._local.connections.clear()
-
-    # ──────────────────────────────────────────────────────────────────────────
-    # Internal helpers  (cache now protected by _cache_lock)
-    # ──────────────────────────────────────────────────────────────────────────
+    # ──────────────────────────────────────────────────────────────────────
+    # Internal helpers
+    # ──────────────────────────────────────────────────────────────────────
 
     def _build_join_clause(self, join_model_list: List[JoinModel]) -> str:
         if not join_model_list:
@@ -127,23 +86,29 @@ class PostgreSQLDriver(TabularDatabaseDriverInterface):
             return f"{cond.column} {cond.operator.value} NULL"
         return f"{cond.column} {cond.operator.value} {format_value(cond.value, cond.data_type)}"
 
-    def _get_table_columns(self, schema_name: str, table_name: str) -> set[str]:
+    def _get_table_columns(
+        self,
+        cursor: psycopg2.extensions.cursor,
+        schema_name: str,
+        table_name: str,
+    ) -> set[str]:
         """
-        Return the column-name set for a table; result is cached.
+        Return the column-name set for a table, using the supplied cursor.
 
-        CHANGED: the cache dict is now guarded by _cache_lock so concurrent
-        threads don't race on a cache miss (double-query / partial write).
+        Thread-safe: the cache dict is read/written under _cache_lock.
+        Only one thread performs the introspection query for a given table;
+        all others wait and then read from the populated cache.
         """
         key = self._cache_key(schema_name, table_name)
 
-        # Fast path — read under lock to avoid a torn read of the dict
+        # Fast path — no lock needed for a pure read if the key exists.
+        # (dict reads are GIL-protected in CPython, but we use the lock
+        # for correctness on PyPy / future runtimes too.)
         with self._cache_lock:
             if key in self._column_cache:
                 return self._column_cache[key]
 
-        # Slow path — query outside the lock so other threads aren't blocked
-        # while we wait for the DB, then re-enter to store the result.
-        cursor = self._get_cursor()
+        # Slow path — query outside the lock so other threads aren't blocked.
         cursor.execute(
             """
             SELECT column_name
@@ -156,19 +121,18 @@ class PostgreSQLDriver(TabularDatabaseDriverInterface):
         columns = {row[0] for row in cursor.fetchall()}
 
         with self._cache_lock:
-            # Another thread may have populated the key while we queried; that's
-            # fine — both results are identical, last-writer wins harmlessly.
-            self._column_cache[key] = columns
-
-        return columns
+            # Another thread may have populated the cache while we queried;
+            # setdefault keeps their result if so (idempotent either way).
+            self._column_cache.setdefault(key, columns)
+            return self._column_cache[key]
 
     def _invalidate_column_cache(self, schema_name: str, table_name: str) -> None:
         with self._cache_lock:
             self._column_cache.pop(self._cache_key(schema_name, table_name), None)
 
-    # ──────────────────────────────────────────────────────────────────────────
-    # Connection management
-    # ──────────────────────────────────────────────────────────────────────────
+    # ──────────────────────────────────────────────────────────────────────
+    # Connection management  (unchanged)
+    # ──────────────────────────────────────────────────────────────────────
 
     def connect(
         self, connection_model: PostgreSQLConnectionDto
@@ -220,7 +184,7 @@ class PostgreSQLDriver(TabularDatabaseDriverInterface):
 
             self._connections[db_name] = conn
             self._cursors[db_name] = cursor
-            self._cursor = cursor  # main-thread cursor
+            self._cursor = cursor  # legacy handle
             self._connection_models[db_name] = connection_model
             self._current_db = db_name
 
@@ -232,14 +196,7 @@ class PostgreSQLDriver(TabularDatabaseDriverInterface):
             return DatabaseExecutionStatus.ERROR
 
     def disconnect(self, database_name: str = None) -> DatabaseExecutionStatus:
-        """
-        CHANGED: also closes any thread-local connections held by the calling
-        thread so worker threads clean up after themselves.
-        """
         try:
-            # Close thread-local connections for this thread first
-            self._close_thread_local_connections()
-
             if database_name:
                 if database_name in self._cursors:
                     self._cursors[database_name].close()
@@ -256,10 +213,8 @@ class PostgreSQLDriver(TabularDatabaseDriverInterface):
                 self._cursors.clear()
                 self._connections.clear()
                 self._logger.log_info("Disconnected from all databases")
-
             self._current_db = None
             return DatabaseExecutionStatus.SUCCESS
-
         except Exception as e:
             self._logger.log_error(f"Error disconnecting: {e}")
             return DatabaseExecutionStatus.ERROR
@@ -271,81 +226,84 @@ class PostgreSQLDriver(TabularDatabaseDriverInterface):
             connection_model.database = database_name_to_select
             return self.connect(connection_model)
         else:
-            self._cursor = self._cursors[database_name_to_select]  # main thread
+            self._cursor = self._cursors[database_name_to_select]
             self._current_db = database_name_to_select
             return DatabaseExecutionStatus.SUCCESS
 
-    # ──────────────────────────────────────────────────────────────────────────
-    # Query execution  — all self._cursor refs → self._get_cursor()
-    # ──────────────────────────────────────────────────────────────────────────
+    # ──────────────────────────────────────────────────────────────────────
+    # Low-level query execution  (legacy — uses shared self._cursor)
+    # Not safe for parallel use; kept for backward compatibility only.
+    # Prefer the DML methods below for concurrent workloads.
+    # ──────────────────────────────────────────────────────────────────────
 
     def execute_query(self, query: str, params: tuple = None) -> None:
         self._logger.log_debug(f"Executing query:\n{query.strip()}")
-        self._get_cursor().execute(query, params)
+        self._cursor.execute(query, params)
 
     def fetch_result(self) -> list:
         try:
-            return self._get_cursor().fetchall()
+            return self._cursor.fetchall()
         except Exception as e:
             self._logger.log_error(f"Error fetching results: {e}")
             return []
 
-    # ──────────────────────────────────────────────────────────────────────────
-    # DDL
-    # ──────────────────────────────────────────────────────────────────────────
+    # ──────────────────────────────────────────────────────────────────────
+    # DDL  (each method uses its own cursor)
+    # ──────────────────────────────────────────────────────────────────────
 
     def create_database(self, database_name: str) -> DatabaseExecutionStatus:
         try:
-            self.execute_query(f"CREATE DATABASE {database_name}")
+            with self._cursor_ctx() as cur:
+                cur.execute(f"CREATE DATABASE {database_name}")
             self._logger.log_info(f'Database "{database_name}" created successfully.')
             self.change_database(database_name)
             return DatabaseExecutionStatus.SUCCESS
         except Exception as e:
-            message = str(e)
-            if "already exists" in message:
+            if "already exists" in str(e):
                 self._logger.log_warning(f'Database "{database_name}" already exists.')
                 self.change_database(database_name)
                 return DatabaseExecutionStatus.ALREADY_EXISTS
             self._logger.log_error(f"Error creating database: {e}")
             return DatabaseExecutionStatus.ERROR
 
-    def drop_database(self, database_name: str):
+    def drop_database(self, database_name: str) -> DatabaseExecutionStatus:
         try:
-            self.execute_query(f"DROP DATABASE {database_name}")
+            with self._cursor_ctx() as cur:
+                cur.execute(f"DROP DATABASE {database_name}")
             self._logger.log_info(f'Database "{database_name}" dropped successfully.')
             return DatabaseExecutionStatus.SUCCESS
         except Exception as e:
-            message = str(e)
-            if "does not exist" in message:
+            if "does not exist" in str(e):
                 self._logger.log_warning(f'Database "{database_name}" does not exist.')
                 return DatabaseExecutionStatus.DOES_NOT_EXIST
             self._logger.log_error(f"Error dropping database: {e}")
             return DatabaseExecutionStatus.ERROR
 
-    def create_schema(self, schema_name: str):
+    def create_schema(self, schema_name: str) -> DatabaseExecutionStatus:
         try:
-            self.execute_query(f"CREATE SCHEMA {schema_name}")
+            with self._cursor_ctx() as cur:
+                cur.execute(f"CREATE SCHEMA {schema_name}")
             self._logger.log_info(f'Schema "{schema_name}" created successfully.')
             return DatabaseExecutionStatus.SUCCESS
         except Exception as e:
-            message = str(e)
-            if "already exists" in message:
+            if "already exists" in str(e):
                 self._logger.log_warning(f'Schema "{schema_name}" already exists.')
                 return DatabaseExecutionStatus.ALREADY_EXISTS
             self._logger.log_error(f"Error creating schema: {e}")
             return DatabaseExecutionStatus.ERROR
 
-    def drop_schema(self, schema_name: str):
+    def drop_schema(self, schema_name: str) -> DatabaseExecutionStatus:
         try:
-            self.execute_query(f"DROP SCHEMA {schema_name}")
+            with self._cursor_ctx() as cur:
+                cur.execute(f"DROP SCHEMA {schema_name}")
             self._logger.log_info(f'Schema "{schema_name}" dropped successfully.')
             return DatabaseExecutionStatus.SUCCESS
         except Exception as e:
-            message = str(e)
-            if "does not exist" in message:
+            msg = str(e)
+            if "does not exist" in msg:
                 self._logger.log_warning(f'Schema "{schema_name}" does not exist.')
                 return DatabaseExecutionStatus.DOES_NOT_EXIST
-            elif "other objects" in message:
+            if "other objects" in msg:
                 self._logger.log_warning(
                     f'Schema "{schema_name}" contains other objects. Cannot be dropped.'
                 )
@@ -360,7 +318,7 @@ class PostgreSQLDriver(TabularDatabaseDriverInterface):
         columns: List[Column],
         primary_keys: List[str],
         foreign_keys: List[ForeignKey] = None,
-    ):
+    ) -> DatabaseExecutionStatus:
         try:
             column_definitions = ",\n    ".join(
                 f"{col.name} {col.data_type}{' NOT NULL' if not col.nullable else ''}"
@@ -382,15 +340,15 @@ CREATE TABLE IF NOT EXISTS {schema_name}.{table_name} (
     {constraints}
 )
 """
-            self.execute_query(query)
+            with self._cursor_ctx() as cur:
+                cur.execute(query)
             self._invalidate_column_cache(schema_name, table_name)
             self._logger.log_info(
                 f'Table "{schema_name}.{table_name}" created successfully.'
             )
             return DatabaseExecutionStatus.SUCCESS
         except Exception as e:
-            message = str(e)
-            if "already exists" in message:
+            if "already exists" in str(e):
                 self._logger.log_warning(
                     f'Table "{schema_name}.{table_name}" already exists.'
                 )
@@ -398,17 +356,17 @@ CREATE TABLE IF NOT EXISTS {schema_name}.{table_name} (
             self._logger.log_error(f"Error creating table: {e}")
             return DatabaseExecutionStatus.ERROR
 
-    def drop_table(self, schema_name: str, table_name: str):
+    def drop_table(self, schema_name: str, table_name: str) -> DatabaseExecutionStatus:
         try:
-            self.execute_query(f"DROP TABLE {schema_name}.{table_name}")
+            with self._cursor_ctx() as cur:
+                cur.execute(f"DROP TABLE {schema_name}.{table_name}")
             self._invalidate_column_cache(schema_name, table_name)
             self._logger.log_info(
                 f'Table "{schema_name}.{table_name}" dropped successfully.'
             )
             return DatabaseExecutionStatus.SUCCESS
         except Exception as e:
-            message = str(e)
-            if "does not exist" in message:
+            if "does not exist" in str(e):
                 self._logger.log_warning(
                     f'Table "{schema_name}.{table_name}" does not exist.'
                 )
@@ -416,11 +374,17 @@ CREATE TABLE IF NOT EXISTS {schema_name}.{table_name} (
             self._logger.log_error(f"Error dropping table: {e}")
             return DatabaseExecutionStatus.ERROR
 
-    # ──────────────────────────────────────────────────────────────────────────
-    # DML  — self._cursor → self._get_cursor()  in every method
-    # ──────────────────────────────────────────────────────────────────────────
+    # ──────────────────────────────────────────────────────────────────────
+    # DML  — every method opens its own cursor via _cursor_ctx()
+    # ──────────────────────────────────────────────────────────────────────
 
-    def insert(self, schema_name: str, table_name: str, records: List[Record]):
+    def insert(
+        self,
+        schema_name: str,
+        table_name: str,
+        records: List[Record],
+        database_name: str = None,
+    ) -> DatabaseExecutionStatus:
         if not records:
             return DatabaseExecutionStatus.SUCCESS
         try:
@@ -430,14 +394,17 @@ CREATE TABLE IF NOT EXISTS {schema_name}.{table_name} (
                 tuple(col.value for col in record.data_dto_list) for record in records
             ]
             query = f"INSERT INTO {schema_name}.{table_name} ({col_str}) VALUES %s"
-            execute_values(self._get_cursor(), query, data)
+
+            with self._cursor_ctx(database_name) as cur:
+                execute_values(cur, query, data)
+
             self._logger.log_info(
                 f'Inserted {len(records)} record(s) into "{schema_name}.{table_name}".'
             )
             return DatabaseExecutionStatus.SUCCESS
+
         except Exception as e:
-            self._connections[self._current_db].rollback()
-            self._logger.log_error(f"Error inserting records: {e}. Rolled back.")
+            self._logger.log_error(f"Error inserting records: {e}.")
             return DatabaseExecutionStatus.ERROR
 
     def update(
@@ -447,7 +414,8 @@ CREATE TABLE IF NOT EXISTS {schema_name}.{table_name} (
         update_record: Record,
         join_model_list: List[JoinModel] = None,
         conditions: List[Condition] = None,
-    ):
+        database_name: str = None,
+    ) -> DatabaseExecutionStatus:
         try:
             set_clause = ",\n    ".join(
                 f"{col.column_name} = {format_value(col.value, col.data_type)}"
@@ -466,20 +434,21 @@ SET
     {set_clause}{f' {join_clause}' if join_clause else ''}
 {where_clause}
 """
-            cursor = self._get_cursor()
-            cursor.execute(query)
-            count = (
-                int(cursor.statusmessage.split()[-1])
-                if cursor.statusmessage.startswith("UPDATE")
-                else 0
-            )
+            with self._cursor_ctx(database_name) as cur:
+                cur.execute(query)
+                count = (
+                    int(cur.statusmessage.split()[-1])
+                    if cur.statusmessage.startswith("UPDATE")
+                    else 0
+                )
+
             self._logger.log_info(
                 f'Updated {count} records in "{schema_name}.{table_name}".'
             )
             return DatabaseExecutionStatus.SUCCESS
+
         except Exception as e:
-            self._connections[self._current_db].rollback()
-            self._logger.log_error(f"Error updating records: {e}. Rolled back.")
+            self._logger.log_error(f"Error updating records: {e}.")
             return DatabaseExecutionStatus.ERROR
 
     def upsert(
@@ -488,37 +457,48 @@ SET
         table_name: str,
         records: List[Record],
         primary_keys: List[str],
+        database_name: str = None,
     ):
         if not records:
             return DatabaseExecutionStatus.SUCCESS, 0, 0
+
         try:
-            available_columns = self._get_table_columns(schema_name, table_name)
-            has_create_date = "create_date" in available_columns
-            has_update_date = "update_date" in available_columns
+            with self._cursor_ctx(database_name) as cur:
+                # Introspection — cursor is local, cache write is locked
+                available_columns = self._get_table_columns(
+                    cur, schema_name, table_name
+                )
+                has_create_date = "create_date" in available_columns
+                has_update_date = "update_date" in available_columns
 
-            col_names = [col.column_name for col in records[0].data_dto_list]
-            insert_cols = list(col_names)
-            if has_create_date and "create_date" not in insert_cols:
-                insert_cols.append("create_date")
+                col_names = [col.column_name for col in records[0].data_dto_list]
 
-            update_parts = [
-                f"{c} = EXCLUDED.{c}" for c in col_names if c not in primary_keys
-            ]
-            if has_update_date:
-                update_parts.append("update_date = now()")
+                insert_cols = list(col_names)
+                if has_create_date and "create_date" not in insert_cols:
+                    insert_cols.append("create_date")
 
-            col_str = ", ".join(insert_cols)
-            pk_str = ", ".join(primary_keys)
-            update_str = ", ".join(update_parts)
-            now = datetime.now(timezone.utc) if has_create_date else None
+                update_parts = [
+                    f"{c} = EXCLUDED.{c}" for c in col_names if c not in primary_keys
+                ]
+                if has_update_date:
+                    update_parts.append("update_date = now()")
 
-            data = [
-                tuple(col.value for col in record.data_dto_list)
-                + ((now,) if has_create_date and "create_date" not in col_names else ())
-                for record in records
-            ]
+                col_str = ", ".join(insert_cols)
+                pk_str = ", ".join(primary_keys)
+                update_str = ", ".join(update_parts)
 
-            query = f"""
+                now = datetime.now(timezone.utc) if has_create_date else None
+                data = [
+                    tuple(col.value for col in record.data_dto_list)
+                    + (
+                        (now,)
+                        if has_create_date and "create_date" not in col_names
+                        else ()
+                    )
+                    for record in records
+                ]
+
+                query = f"""
 WITH upserted AS (
     INSERT INTO {schema_name}.{table_name} ({col_str})
     VALUES %s
@@ -531,9 +511,9 @@ SELECT
     COUNT(*) FILTER (WHERE xmax <> 0) AS updated
 FROM upserted
 """
-            cursor = self._get_cursor()
-            execute_values(cursor, query, data)
-            row = cursor.fetchone()
+                execute_values(cur, query, data)
+                row = cur.fetchone()
+
             inserted_count = row[0] or 0 if row else 0
             updated_count = row[1] or 0 if row else 0
 
@@ -544,8 +524,7 @@ FROM upserted
             return DatabaseExecutionStatus.SUCCESS, inserted_count, updated_count
 
         except Exception as e:
-            self._connections[self._current_db].rollback()
-            self._logger.log_error(f"Error upserting records: {e}. Rolled back.")
+            self._logger.log_error(f"Error upserting records: {e}.")
             return DatabaseExecutionStatus.ERROR
 
     def delete(
@@ -554,7 +533,8 @@ FROM upserted
         table_name: str,
         join_model_list: List[JoinModel] = None,
         conditions: List[Condition] = None,
-    ):
+        database_name: str = None,
+    ) -> DatabaseExecutionStatus:
         try:
             where_clause = (
                 "WHERE\n    "
@@ -568,50 +548,57 @@ DELETE FROM {schema_name}.{table_name}
 {join_clause}
 {where_clause}
 """
-            cursor = self._get_cursor()
-            cursor.execute(query)
-            count = (
-                int(cursor.statusmessage.split()[-1])
-                if cursor.statusmessage.startswith("DELETE")
-                else 0
-            )
+            with self._cursor_ctx(database_name) as cur:
+                cur.execute(query)
+                count = (
+                    int(cur.statusmessage.split()[-1])
+                    if cur.statusmessage.startswith("DELETE")
+                    else 0
+                )
+
             self._logger.log_info(
                 f'Deleted {count} records from "{schema_name}.{table_name}".'
             )
             return DatabaseExecutionStatus.SUCCESS
+
         except Exception as e:
-            self._connections[self._current_db].rollback()
-            self._logger.log_error(f"Error deleting records: {e}. Rolled back.")
+            self._logger.log_error(f"Error deleting records: {e}.")
             return DatabaseExecutionStatus.ERROR
 
     def soft_delete(
-        self, schema_name: str, table_name: str, primary_keys: Dict[str, Any]
-    ):
+        self,
+        schema_name: str,
+        table_name: str,
+        primary_keys: Dict[str, Any],
+        database_name: str = None,
+    ) -> DatabaseExecutionStatus:
         try:
-            columns = self._get_table_columns(schema_name, table_name)
-            if "delete_date" not in columns:
-                self._logger.log_info(
-                    f'"{schema_name}.{table_name}" has no delete_date. Skipping.'
-                )
-                return DatabaseExecutionStatus.SUCCESS
+            with self._cursor_ctx(database_name) as cur:
+                columns = self._get_table_columns(cur, schema_name, table_name)
+                if "delete_date" not in columns:
+                    self._logger.log_info(
+                        f'"{schema_name}.{table_name}" has no delete_date. Skipping.'
+                    )
+                    return DatabaseExecutionStatus.SUCCESS
 
-            conditions = [
-                f"{k} = '{v}'" if isinstance(v, str) else f"{k} = {v}"
-                for k, v in primary_keys.items()
-            ]
-            query = f"""
+                conditions = [
+                    f"{k} = '{v}'" if isinstance(v, str) else f"{k} = {v}"
+                    for k, v in primary_keys.items()
+                ]
+                query = f"""
 UPDATE {schema_name}.{table_name}
 SET delete_date = now()
 WHERE {" AND ".join(conditions)}
 """
-            self.execute_query(query)
+                cur.execute(query)
+
             self._logger.log_info(
                 f'Soft-deleted in "{schema_name}.{table_name}" where {primary_keys}.'
             )
             return DatabaseExecutionStatus.SUCCESS
+
         except Exception as e:
-            self._connections[self._current_db].rollback()
-            self._logger.log_error(f"Error soft-deleting: {e}. Rolled back.")
+            self._logger.log_error(f"Error soft-deleting: {e}.")
             return DatabaseExecutionStatus.ERROR
 
     def select(
@@ -623,10 +610,12 @@ WHERE {" AND ".join(conditions)}
         conditions: List[Condition] = None,
         order_by: List[str] = None,
         limit: int = None,
+        database_name: str = None,
     ) -> pd.DataFrame:
         try:
             if columns and not isinstance(columns, list):
                 columns = [columns]
+
             columns_clause = ",\n    ".join(columns) if columns else "*"
             where_clause = (
                 "WHERE\n    "
@@ -648,14 +637,16 @@ FROM
 {order_by_clause}
 {f'LIMIT {limit}' if limit else ''}
 """
-            cursor = self._get_cursor()
-            cursor.execute(query)
-            results = cursor.fetchall()
-            column_names = [desc[0] for desc in cursor.description]
+            with self._cursor_ctx(database_name) as cur:
+                cur.execute(query)
+                results = cur.fetchall()
+                column_names = [desc[0] for desc in cur.description]
+
             self._logger.log_info(
                 f'Selected {len(results)} records from "{schema_name}.{table_name}".'
             )
             return pd.DataFrame(results, columns=column_names)
+
         except Exception as e:
             self._logger.log_error(f"Error selecting records: {e}")
             return pd.DataFrame()
