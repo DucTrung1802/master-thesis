@@ -7,13 +7,17 @@ import numpy as np
 from datetime import date, datetime, timezone
 from psycopg2.extras import execute_values
 from typing import List, Optional, Dict, Any
+from concurrent.futures import ThreadPoolExecutor
+import threading
 
+from dtos.thread_manager_dtos.task import Task
 from logger.logger import Logger
 from dtos.tabular_database_driver_dtos.postgre_sql_connection_dto import (
     PostgreSQLConnectionDto,
 )
 from dtos.tabular_database_driver_dtos.tabular_database_driver_dtos import *
 from tabular_database_driver.postgre_sql_driver import PostgreSQLDriver
+from thread_manager.thread_manager import ThreadManager
 from utils.constants import SCRAPER_BRONZE_DATA_DIR
 from utils.enums import *
 from utils.utils import *
@@ -23,6 +27,17 @@ load_dotenv()
 
 
 class DataPreprocessor:
+
+    @dataclass
+    class _SaveBundle:
+        df: pd.DataFrame
+        file_paths: list
+        folder: str
+        code: str
+        schema_name: str
+        table_name: str
+        primary_keys: list
+
     _PRICE_DECIMAL_COLS = [
         "adjust",
         "close",
@@ -47,10 +62,16 @@ class DataPreprocessor:
         "net_volume",
     ]
 
-    def __init__(self, logger: Logger, switch_handler: SwitchHandler):
+    def __init__(
+        self,
+        logger: Logger,
+        switch_handler: SwitchHandler,
+        power: int = THREAD_MANAGER_POWER,
+    ):
         self._logger = logger
         self._switch_handler: SwitchHandler = switch_handler
         self._database_driver = PostgreSQLDriver(logger=logger)
+        self._thread_manager = ThreadManager(logger=self._logger, power=power)
 
         # Data
         self._market_df = None
@@ -395,6 +416,7 @@ class DataPreprocessor:
         df: pd.DataFrame,
         dtype_overrides: dict[str, str] | None = None,
         chunk_size: int = 5_000,
+        max_workers: int | None = None,  # None → let ThreadPoolExecutor decide
     ) -> None:
         self._logger.log_info(
             f'Saving dataframe to table "{schema_name}.{table_name}".'
@@ -413,16 +435,17 @@ class DataPreprocessor:
             dtype_overrides=dtype_overrides,
         )
 
-        # ── schema introspection via driver cache (no extra DB round-trip) ────
-        available_columns = self._database_driver._get_table_columns(
-            schema_name, table_name
-        )
+        # ── schema introspection (uses driver cache — no extra DB round-trip) ──
+        # We need a real cursor for _get_table_columns; open a short-lived one.
+        with self._database_driver._cursor_ctx() as _probe_cur:
+            available_columns = self._database_driver._get_table_columns(
+                _probe_cur, schema_name, table_name
+            )
         has_create_date = "create_date" in available_columns
         has_update_date = "update_date" in available_columns
 
         df_columns = list(df.columns)
 
-        # Add create_date to the INSERT column list if the table has it
         insert_columns = list(df_columns)
         if has_create_date and "create_date" not in insert_columns:
             insert_columns.append("create_date")
@@ -435,32 +458,44 @@ class DataPreprocessor:
             has_update_date=has_update_date,
         )
 
-        # ── build tuples once — no DataModel / Record objects ─────────────────
+        # ── build all tuples once, before spawning threads ────────────────────
         now = datetime.now(timezone.utc) if has_create_date else None
-
         records: list[tuple] = [
-            tuple(
-                self._to_python(v) for v in row
-            )  # ← was: tuple(None if pd.isna(v) else v ...)
+            tuple(self._to_python(v) for v in row)
             + ((now,) if has_create_date and "create_date" not in df_columns else ())
             for row in df.itertuples(index=False, name=None)
         ]
-        # ──────────────────────────────────────────────────────────────────────
 
-        inserted_total = updated_total = 0
+        chunks: list[list[tuple]] = [
+            records[start : start + chunk_size]
+            for start in range(0, len(records), chunk_size)
+        ]
 
-        for start in range(0, len(records), chunk_size):
-            chunk = records[start : start + chunk_size]
+        # ── shared counters, protected by a lock ─────────────────────────────
+        inserted_total = 0
+        updated_total = 0
+        counter_lock = threading.Lock()
 
-            # Use driver's cursor directly — execute_values sends 1 round-trip
-            execute_values(
-                self._database_driver._cursor, sql, chunk, page_size=chunk_size
-            )
+        def _upsert_chunk(chunk: list[tuple]) -> None:
+            """Run one chunk in its own cursor. Thread-safe — no shared state."""
+            nonlocal inserted_total, updated_total
 
-            row = self._database_driver.fetch_result()
+            with self._database_driver._cursor_ctx() as cur:
+                execute_values(cur, sql, chunk, page_size=len(chunk))
+                row = cur.fetchone()
+
             if row:
-                inserted_total += row[0][0] or 0
-                updated_total += row[0][1] or 0
+                with counter_lock:
+                    inserted_total += row[0] or 0
+                    updated_total += row[1] or 0
+
+        # ── fan out — one thread per chunk ────────────────────────────────────
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            futures = [pool.submit(_upsert_chunk, chunk) for chunk in chunks]
+
+            for future in futures:
+                # Re-raise any exception from the worker thread
+                future.result()
 
         self._logger.log_info(
             f"Saved {inserted_total + updated_total}/{len(df)} records into "
@@ -697,14 +732,26 @@ class DataPreprocessor:
             folder_path=folder_path,
             extensions=[FileExtension.CSV],
         )
+
         if not file_paths:
             self._logger.log_error(f'Data in "{folder_path}" does not exist.')
             return None
 
-        df = pd.concat(
-            [pd.read_csv(fp, encoding="utf-8") for fp in file_paths],
-            ignore_index=True,
-        ).drop_duplicates()
+        dataframes = []
+
+        for fp in file_paths:
+            df = pd.read_csv(fp, encoding="utf-8")
+
+            # Skip completely empty or all-NA DataFrames
+            if not df.empty and not df.dropna(how="all").empty:
+                dataframes.append(df)
+
+        if not dataframes:
+            self._logger.log_error(f'No valid CSV data found in "{folder_path}".')
+            return None
+
+        df = pd.concat(dataframes, ignore_index=True).drop_duplicates()
+
         return df, file_paths
 
     def _cast_columns(
@@ -716,8 +763,7 @@ class DataPreprocessor:
 
         def _clean_numeric(series: pd.Series) -> pd.Series:
             return (
-                series
-                .astype("string")  # preserves missing values as <NA>
+                series.astype("string")  # preserves missing values as <NA>
                 .str.replace(",", "", regex=False)
                 .str.strip()
                 .replace(
@@ -735,18 +781,12 @@ class DataPreprocessor:
         for col in decimal_cols:
             cleaned = _clean_numeric(df[col])
 
-            df[col] = (
-                pd.to_numeric(cleaned, errors="raise")
-                .astype("Float64")
-            )
+            df[col] = pd.to_numeric(cleaned, errors="raise").astype("Float64")
 
         for col in bigint_cols:
             cleaned = _clean_numeric(df[col])
 
-            df[col] = (
-                pd.to_numeric(cleaned, errors="raise")
-                .astype("Int64")
-            )
+            df[col] = pd.to_numeric(cleaned, errors="raise").astype("Int64")
 
         return df
 
@@ -792,12 +832,20 @@ class DataPreprocessor:
         """
         Remove duplicates based on primary keys with optional sorting and filtering.
 
-        Only performs deduplication if duplicates exist.
+        Only applies filtering, sorting, and deduplication
+        if duplicates exist on primary_keys.
         """
 
         result = df.copy()
 
-        # Apply filters
+        # Check duplicates first
+        has_duplicates = result.duplicated(subset=primary_keys).any()
+
+        # If no duplicates, return original dataframe unchanged
+        if not has_duplicates:
+            return result
+
+        # Apply filters only when duplicates exist
         if filters:
             operator_map = {
                 ">": lambda x, y: x > y,
@@ -815,23 +863,18 @@ class DataPreprocessor:
 
                 result = result[operator_map[operator](result[column], value)]
 
-        # Check duplicates first
-        has_duplicates = result.duplicated(subset=primary_keys).any()
-
-        if has_duplicates:
-
-            # Sort before deduplication
-            if sort_by:
-                result = result.sort_values(
-                    by=sort_by,
-                    ascending=ascending if ascending is not None else True,
-                )
-
-            # Remove duplicates
-            result = result.drop_duplicates(
-                subset=primary_keys,
-                keep="first",
+        # Sort before deduplication
+        if sort_by:
+            result = result.sort_values(
+                by=sort_by,
+                ascending=ascending if ascending is not None else True,
             )
+
+        # Remove duplicates
+        result = result.drop_duplicates(
+            subset=primary_keys,
+            keep="first",
+        )
 
         return result
 
@@ -10035,6 +10078,105 @@ class DataPreprocessor:
     # endregion ENTERPRISE.STOCK_INFORMATION
 
     # region ENTERPRISE.DAILY_PRICE
+    def _prepare_code_data(self, code: str) -> list | None:
+        price_folder = (
+            f"{SCRAPER_BRONZE_DATA_DIR}"
+            f"/{get_value(ScrapeMainType.ENTERPRISE)}/{get_value(f'{code}_price')}"
+        )
+        order_folder = (
+            f"{SCRAPER_BRONZE_DATA_DIR}"
+            f"/{get_value(ScrapeMainType.ENTERPRISE)}/{get_value(f'{code}_order')}"
+        )
+
+        price_result = self._build_price_df(price_folder)
+        order_result = self._build_order_df(order_folder)
+
+        if price_result is None or order_result is None:
+            self._logger.log_warning(f'No data found for code "{code}". Skipping.')
+            return None
+
+        price_df, price_file_paths = price_result
+        order_df, order_file_paths = order_result
+
+        price_df = self._remove_duplicates(
+            price_df,
+            Table.B_ENTERPRISE_PRICE.primary_key,
+            filters={Table.B_ENTERPRISE_PRICE.Column.MATCHING_VOLUME.value: (">", 0)},
+        )
+
+        # Return a 2-element list → Task.run() maps [0] → callback[0],
+        #                                              [1] → callback[1]
+        return [
+            DataPreprocessor._SaveBundle(
+                df=price_df,
+                file_paths=price_file_paths,
+                folder=price_folder,
+                code=code,
+                schema_name=Schema.ENTERPRISE.value,
+                table_name=Table.B_ENTERPRISE_PRICE.name,
+                primary_keys=Table.B_ENTERPRISE_PRICE.primary_key,
+            ),
+            DataPreprocessor._SaveBundle(
+                df=order_df,
+                file_paths=order_file_paths,
+                folder=order_folder,
+                code=code,
+                schema_name=Schema.ENTERPRISE.value,
+                table_name=Table.B_ENTERPRISE_ORDER.name,
+                primary_keys=Table.B_ENTERPRISE_ORDER.primary_key,
+            ),
+        ]
+
+    # ──────────────────────────────────────────────────────────────────────
+    # Callbacks: save one bundle to the database
+    # Both follow the same signature required by Task.run():
+    #   cb(value, *extra_args, **extra_kwargs)
+    # ──────────────────────────────────────────────────────────────────────
+
+    def _save_price_bundle(self, bundle) -> None:
+        """Callback that saves the price DataFrame bundle."""
+        if bundle is None:
+            return  # parent returned None — nothing to do
+
+        self._logger.log_info(
+            f"Start ingesting {len(bundle.file_paths)} price file(s) "
+            f'from "{bundle.folder}" to "{bundle.code}".'
+        )
+        self._save_pandas_table_to_database(
+            schema_name=bundle.schema_name,
+            table_name=bundle.table_name,
+            primary_keys=bundle.primary_keys,
+            df=bundle.df,
+        )
+        self._logger.log_info(
+            f"Finish ingesting {len(bundle.file_paths)} price file(s) "
+            f'from "{bundle.folder}" to "{bundle.code}".'
+        )
+
+    def _save_order_bundle(self, bundle) -> None:
+        """Callback that saves the order DataFrame bundle."""
+        if bundle is None:
+            return  # parent returned None — nothing to do
+
+        self._logger.log_info(
+            f"Start ingesting {len(bundle.file_paths)} order file(s) "
+            f'from "{bundle.folder}" to "{bundle.code}".'
+        )
+        self._save_pandas_table_to_database(
+            schema_name=bundle.schema_name,
+            table_name=bundle.table_name,
+            primary_keys=bundle.primary_keys,
+            df=bundle.df,
+        )
+        self._logger.log_info(
+            f"Finish ingesting {len(bundle.file_paths)} order file(s) "
+            f'from "{bundle.folder}" to "{bundle.code}".'
+        )
+
+    # ──────────────────────────────────────────────────────────────────────
+    # Orchestrator: register all per-code tasks, then execute
+    # ──────────────────────────────────────────────────────────────────────
+
     def _ingest_enterprise_daily_price(self) -> None:
         available_stock_df = self._select(
             schema_name=Schema.ENTERPRISE.value,
@@ -10051,58 +10193,39 @@ class DataPreprocessor:
 
         codes = available_stock_df[Table.B_STOCK.Column.CODE.value].str.lower().tolist()
 
+        self._thread_manager.remove_all_tasks()
+
         for code in codes:
-            price_folder = (
-                f"{SCRAPER_BRONZE_DATA_DIR}"
-                f"/{get_value(ScrapeMainType.ENTERPRISE)}/{get_value(f'{code}_price')}"
-            )
-            order_folder = (
-                f"{SCRAPER_BRONZE_DATA_DIR}"
-                f"/{get_value(ScrapeMainType.ENTERPRISE)}/{get_value(f'{code}_order')}"
-            )
-
-            price_result = self._build_price_df(price_folder)
-            order_result = self._build_order_df(order_folder)
-
-            if price_result is None or order_result is None:
-                continue
-
-            price_df, price_file_paths = price_result
-            order_df, order_file_paths = order_result
-
-            price_df = self._remove_duplicates(
-                price_df,
-                Table.B_ENTERPRISE_PRICE.primary_key,
-                filters={
-                    Table.B_ENTERPRISE_PRICE.Column.MATCHING_VOLUME.value: (">", 0)
-                },
+            # _prepare_code_data returns [price_bundle, order_bundle].
+            # Task.run() detects len(result) == len(callbacks) == 2 and
+            # dispatches price_bundle → _save_price_bundle,
+            #             order_bundle → _save_order_bundle,
+            # both running concurrently in Task's internal callback pool.
+            self._thread_manager.add_task(
+                Task(
+                    name=f"ingest_{code}",
+                    func=self._prepare_code_data,
+                    code=code,
+                    callbacks=[
+                        (self._save_price_bundle, (), {}),
+                        (self._save_order_bundle, (), {}),
+                    ],
+                )
             )
 
-            self._logger.log_info(
-                f'Start ingesting {len(price_file_paths)} price file(s) from "{price_folder}" to "{code}".'
-            )
-            self._save_pandas_table_to_database(
-                schema_name=Schema.ENTERPRISE.value,
-                table_name=Table.B_ENTERPRISE_PRICE.name,
-                primary_keys=Table.B_ENTERPRISE_PRICE.primary_key,
-                df=price_df,
-            )
-            self._logger.log_info(
-                f'Finish ingesting {len(price_file_paths)} price file(s) from "{price_folder}" to "{code}".'
-            )
+        self._logger.log_info(
+            f"Registered {len(codes)} ingestion task(s). Starting execution."
+        )
 
-            self._logger.log_info(
-                f'Start ingesting {len(order_file_paths)} order file(s) from "{order_folder}" to "{code}".'
+        successful, failed = self._thread_manager.execute()
+
+        if failed:
+            self._logger.log_warning(
+                f"{len(failed)}/{len(codes)} code(s) failed: "
+                + ", ".join(name for name, _ in failed)
             )
-            self._save_pandas_table_to_database(
-                schema_name=Schema.ENTERPRISE.value,
-                table_name=Table.B_ENTERPRISE_ORDER.name,
-                primary_keys=Table.B_ENTERPRISE_ORDER.primary_key,
-                df=order_df,
-            )
-            self._logger.log_info(
-                f'Finish ingesting {len(order_file_paths)} order file(s) from "{order_folder}" to "{code}".'
-            )
+        else:
+            self._logger.log_info(f"All {len(codes)} code(s) ingested successfully.")
 
     def _transform_enterprise_daily_price(self) -> None:
         key = (
