@@ -2262,19 +2262,41 @@ class Table:
         name = "b_stock"
         primary_key = [Column.CODE.value]
 
-    class DAILY_PRICE:
+    class B_ENTERPRISE_PRICE:
         class Column(Enum):
-            DATE = "date"
             CODE = "code"
-            MARKET_ID = "market_id"
+            DATE = "date"
+            CLOSE = "close"
+            ADJUST = "adjust"
+            CHANGE = "change"
+            MATCHING_VOLUME = "matching_volume"
+            MATCHING_VALUE = "matching_value"
+            NEGOTIATE_VOLUME = "negotiate_volume"
+            NEGOTIATE_VALUE = "negotiate_value"
             OPEN = "open"
             HIGH = "high"
             LOW = "low"
-            CLOSE = "close"
-            VOLUME = "volume"
+            PERCENT_CHANGE = "percent_change"
 
-        name = "daily_price"
-        primary_key = [Column.DATE.value, Column.CODE.value]
+        name = "b_enterprise_price"
+        primary_key = [Column.CODE.value, Column.DATE.value]
+
+    class B_ENTERPRISE_ORDER:
+        class Column(Enum):
+            CODE = "code"
+            DATE = "date"
+            CHANGE = "change"
+            NUMBER_OF_BUY_ORDERS = "number_of_buy_orders"
+            BUY_VOLUME = "buy_volume"
+            AVERAGE_VOLUME_PER_BUY_ORDER = "average_volume_per_buy_order"
+            NUMBER_OF_SELL_ORDERS = "number_of_sell_orders"
+            SELL_VOLUME = "sell_volume"
+            AVERAGE_VOLUME_PER_SELL_ORDER = "average_volume_per_sell_order"
+            NET_VOLUME = "net_volume"
+            PERCENT_CHANGE = "percent_change"
+
+        name = "b_enterprise_order"
+        primary_key = [Column.CODE.value, Column.DATE.value]
 
     # Unified Tables
     class UNIFIED_MACROECONOMIC:

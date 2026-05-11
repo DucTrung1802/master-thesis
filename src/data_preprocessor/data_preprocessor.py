@@ -6,6 +6,7 @@ from glob import glob
 import numpy as np
 from datetime import date, datetime, timezone
 from psycopg2.extras import execute_values
+from typing import List, Optional, Dict, Any
 
 from logger.logger import Logger
 from dtos.tabular_database_driver_dtos.postgre_sql_connection_dto import (
@@ -22,6 +23,30 @@ load_dotenv()
 
 
 class DataPreprocessor:
+    _PRICE_DECIMAL_COLS = [
+        "adjust",
+        "close",
+        "change",
+        "percent_change",
+        "matching_value",
+        "negotiate_value",
+        "open",
+        "high",
+        "low",
+    ]
+    _PRICE_BIGINT_COLS = ["matching_volume", "negotiate_volume"]
+
+    _ORDER_DECIMAL_COLS = ["change", "percent_change"]
+    _ORDER_BIGINT_COLS = [
+        "number_of_buy_orders",
+        "buy_volume",
+        "average_volume_per_buy_order",
+        "number_of_sell_orders",
+        "sell_volume",
+        "average_volume_per_sell_order",
+        "net_volume",
+    ]
+
     def __init__(self, logger: Logger, switch_handler: SwitchHandler):
         self._logger = logger
         self._switch_handler: SwitchHandler = switch_handler
@@ -665,6 +690,173 @@ class DataPreprocessor:
         )
 
         return df
+
+    def _load_csvs(self, folder_path: str) -> tuple[pd.DataFrame, list] | None:
+        file_paths = get_all_file_names_with_extensions(
+            logger=self._logger,
+            folder_path=folder_path,
+            extensions=[FileExtension.CSV],
+        )
+        if not file_paths:
+            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
+            return None
+
+        df = pd.concat(
+            [pd.read_csv(fp, encoding="utf-8") for fp in file_paths],
+            ignore_index=True,
+        ).drop_duplicates()
+        return df, file_paths
+
+    def _cast_columns(
+        self,
+        df: pd.DataFrame,
+        decimal_cols: list[str],
+        bigint_cols: list[str],
+    ) -> pd.DataFrame:
+
+        def _clean_numeric(series: pd.Series) -> pd.Series:
+            return (
+                series
+                .astype("string")  # preserves missing values as <NA>
+                .str.replace(",", "", regex=False)
+                .str.strip()
+                .replace(
+                    {
+                        "": pd.NA,
+                        "nan": pd.NA,
+                        "None": pd.NA,
+                        "NULL": pd.NA,
+                        "null": pd.NA,
+                        "N/A": pd.NA,
+                    }
+                )
+            )
+
+        for col in decimal_cols:
+            cleaned = _clean_numeric(df[col])
+
+            df[col] = (
+                pd.to_numeric(cleaned, errors="raise")
+                .astype("Float64")
+            )
+
+        for col in bigint_cols:
+            cleaned = _clean_numeric(df[col])
+
+            df[col] = (
+                pd.to_numeric(cleaned, errors="raise")
+                .astype("Int64")
+            )
+
+        return df
+
+    def _parse_price_change(self, df: pd.DataFrame) -> pd.DataFrame:
+        df["percent_change"] = (
+            df["change"]
+            .str.extract(r"\(([+-]?\d+\.\d+)%\)", expand=False)
+            .astype(float)
+        )
+        df["change"] = (
+            df["change"].str.extract(r"([+-]?\d+\.\d+)", expand=False).astype(float)
+        )
+        return df
+
+    def _parse_order_change(self, df: pd.DataFrame) -> pd.DataFrame:
+        df["percent_change"] = (
+            df["change"]
+            .str.extract(r"\(([+-]?\d+\.\d+)%\)", expand=False)
+            .astype(float)
+        )
+        df["change"] = (
+            df["change"]
+            .str.extract(r"^([\d.]+)", expand=False)
+            .apply(lambda x: ".".join(["".join(x.split(".")[:-1]), x.split(".")[-1]]))
+            .astype(float)
+        )
+        return df
+
+    def _normalise_dates(self, df: pd.DataFrame) -> pd.DataFrame:
+        df["date"] = pd.to_datetime(df["date"], format="%d/%m/%Y")
+        df = df.sort_values(by="date").reset_index(drop=True)
+        df["date"] = df["date"].dt.date
+        return df
+
+    def _remove_duplicates(
+        self,
+        df: pd.DataFrame,
+        primary_keys: List[str],
+        sort_by: Optional[List[str]] = None,
+        ascending: Optional[List[bool]] = None,
+        filters: Optional[Dict[str, Any]] = None,
+    ) -> pd.DataFrame:
+        """
+        Remove duplicates based on primary keys with optional sorting and filtering.
+
+        Only performs deduplication if duplicates exist.
+        """
+
+        result = df.copy()
+
+        # Apply filters
+        if filters:
+            operator_map = {
+                ">": lambda x, y: x > y,
+                ">=": lambda x, y: x >= y,
+                "<": lambda x, y: x < y,
+                "<=": lambda x, y: x <= y,
+                "==": lambda x, y: x == y,
+                "!=": lambda x, y: x != y,
+            }
+
+            for column, (operator, value) in filters.items():
+
+                if operator not in operator_map:
+                    raise ValueError(f"Unsupported operator: {operator}")
+
+                result = result[operator_map[operator](result[column], value)]
+
+        # Check duplicates first
+        has_duplicates = result.duplicated(subset=primary_keys).any()
+
+        if has_duplicates:
+
+            # Sort before deduplication
+            if sort_by:
+                result = result.sort_values(
+                    by=sort_by,
+                    ascending=ascending if ascending is not None else True,
+                )
+
+            # Remove duplicates
+            result = result.drop_duplicates(
+                subset=primary_keys,
+                keep="first",
+            )
+
+        return result
+
+    def _build_price_df(self, folder_path: str) -> tuple[pd.DataFrame, list] | None:
+        result = self._load_csvs(folder_path)
+
+        if result is None:
+            return None
+
+        df, file_paths = result
+        df = self._parse_price_change(df)
+        df = self._normalise_dates(df)
+        df = self._cast_columns(df, self._PRICE_DECIMAL_COLS, self._PRICE_BIGINT_COLS)
+
+        return df, file_paths
+
+    def _build_order_df(self, folder_path: str) -> tuple[pd.DataFrame, list] | None:
+        result = self._load_csvs(folder_path)
+        if result is None:
+            return None
+        df, file_paths = result
+        df = self._parse_order_change(df)
+        df = self._normalise_dates(df)
+        df = self._cast_columns(df, self._ORDER_DECIMAL_COLS, self._ORDER_BIGINT_COLS)
+        return df, file_paths
 
     # endregion Helper functions
 
@@ -4070,62 +4262,6 @@ class DataPreprocessor:
                     foreign_keys=[
                         ForeignKey(
                             column_name=Table.B_STOCK.Column.MARKET_ID.value,
-                            ref_table=f"{Schema.STOCK_MARKET.value}.{Table.MARKET.name}",
-                            ref_column=Table.MARKET.Column.ID.value,
-                        )
-                    ],
-                )
-
-                # DAILY_PRICE
-                self._database_driver.create_table(
-                    schema_name=Schema.ENTERPRISE.value,
-                    table_name=Table.DAILY_PRICE.name,
-                    columns=[
-                        Column(
-                            name=Table.DAILY_PRICE.Column.DATE.value,
-                            data_type=DataType.DATE(),
-                            nullable=False,
-                        ),
-                        Column(
-                            name=Table.DAILY_PRICE.Column.CODE.value,
-                            data_type=DataType.VARCHAR(),
-                            nullable=False,
-                        ),
-                        Column(
-                            name=Table.DAILY_PRICE.Column.MARKET_ID.value,
-                            data_type=DataType.INT(),
-                            nullable=False,
-                        ),
-                        Column(
-                            name=Table.DAILY_PRICE.Column.OPEN.value,
-                            data_type=DataType.DECIMAL(),
-                            nullable=True,
-                        ),
-                        Column(
-                            name=Table.DAILY_PRICE.Column.HIGH.value,
-                            data_type=DataType.DECIMAL(),
-                            nullable=True,
-                        ),
-                        Column(
-                            name=Table.DAILY_PRICE.Column.LOW.value,
-                            data_type=DataType.DECIMAL(),
-                            nullable=True,
-                        ),
-                        Column(
-                            name=Table.DAILY_PRICE.Column.CLOSE.value,
-                            data_type=DataType.DECIMAL(),
-                            nullable=True,
-                        ),
-                        Column(
-                            name=Table.DAILY_PRICE.Column.VOLUME.value,
-                            data_type=DataType.BIGINT(),
-                            nullable=True,
-                        ),
-                    ],
-                    primary_keys=Table.DAILY_PRICE.primary_key,
-                    foreign_keys=[
-                        ForeignKey(
-                            column_name=Table.DAILY_PRICE.Column.MARKET_ID.value,
                             ref_table=f"{Schema.STOCK_MARKET.value}.{Table.MARKET.name}",
                             ref_column=Table.MARKET.Column.ID.value,
                         )
@@ -9623,207 +9759,57 @@ class DataPreprocessor:
 
     # region STOCK_MARKET.VN_INDEX
     def _ingest_stock_market_index_price(self) -> None:
-        stock_market_price_sub_type_list = [
-            item for item in StockMarketSubType if "price" in item.value.lower()
-        ]
+        sub_types = [s for s in StockMarketSubType if "price" in s.value.lower()]
 
-        for stock_market_price_sub_type in stock_market_price_sub_type_list:
-
-            key = (
-                ScrapeMainType.STOCK_MARKET,
-                stock_market_price_sub_type,
+        for sub_type in sub_types:
+            folder_path = (
+                f"{SCRAPER_BRONZE_DATA_DIR}"
+                f"/{ScrapeMainType.STOCK_MARKET.value}/{sub_type.value}"
             )
 
-            folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}"
-
-            file_paths = get_all_file_names_with_extensions(
-                logger=self._logger,
-                folder_path=folder_path,
-                extensions=[FileExtension.CSV],
-            )
-
-            if not file_paths:
-                self._logger.log_error(f'Data in "{folder_path}" does not exist.')
-                return
+            result = self._build_price_df(folder_path)
+            if result is None:
+                continue
+            df, file_paths = result
 
             self._logger.log_info(
-                f'Start ingesting {len(file_paths)} file(s) from "{folder_path}" to "{stock_market_price_sub_type.value.lower()}".'
+                f'Start ingesting {len(file_paths)} file(s) from "{folder_path}" to "{sub_type.value.lower()}".'
             )
-
-            # Read and concatenate all CSV files
-            df = pd.concat(
-                [pd.read_csv(fp, encoding="utf-8") for fp in file_paths],
-                ignore_index=True,
-            ).drop_duplicates()
-
-            # Extract percentage
-            df["percent_change"] = (
-                df["change"]
-                .str.extract(r"\(([+-]?\d+\.\d+)%\)", expand=False)
-                .astype(float)
-            )
-
-            df["change"] = (
-                df["change"].str.extract(r"([+-]?\d+\.\d+)", expand=False).astype(float)
-            )
-
-            df["date"] = pd.to_datetime(df["date"], format="%d/%m/%Y")
-            df = df.sort_values(by="date").reset_index(drop=True)
-
-            # DATE
-            df["date"] = pd.to_datetime(df["date"]).dt.date
-
-            # DECIMAL columns
-            decimal_cols = [
-                "adjust",
-                "close",
-                "change",
-                "percent_change",
-                "matching_value",
-                "negotiate_value",
-                "open",
-                "high",
-                "low",
-            ]
-
-            for col in decimal_cols:
-                df[col] = (
-                    df[col]
-                    .astype(str)
-                    .str.replace(",", "", regex=False)
-                    .pipe(pd.to_numeric, errors="raise")
-                    .astype("Float64")
-                )
-
-            # BIGINT columns
-            bigint_cols = [
-                "matching_volume",
-                "negotiate_volume",
-            ]
-
-            for col in bigint_cols:
-                df[col] = (
-                    df[col]
-                    .astype(str)
-                    .str.replace(",", "", regex=False)
-                    .pipe(pd.to_numeric, errors="raise")
-                    .astype("Int64")
-                )
-
             self._save_pandas_table_to_database(
                 schema_name=Schema.STOCK_MARKET.value,
                 table_name=Table.B_STOCK_MARKET_PRICE.name,
                 primary_keys=Table.B_STOCK_MARKET_PRICE.primary_key,
                 df=df,
             )
-
             self._logger.log_info(
-                f'Finish ingesting {len(file_paths)} file(s) from "{folder_path}" to "{stock_market_price_sub_type.value.lower()}".'
+                f'Finish ingesting {len(file_paths)} file(s) from "{folder_path}" to "{sub_type.value.lower()}".'
             )
 
     def _ingest_stock_market_index_order(self) -> None:
-        stock_market_order_sub_type_list = [
-            item for item in StockMarketSubType if "order" in item.value.lower()
-        ]
+        sub_types = [s for s in StockMarketSubType if "order" in s.value.lower()]
 
-        for stock_market_order_sub_type in stock_market_order_sub_type_list:
-
-            key = (
-                ScrapeMainType.STOCK_MARKET,
-                stock_market_order_sub_type,
+        for sub_type in sub_types:
+            folder_path = (
+                f"{SCRAPER_BRONZE_DATA_DIR}"
+                f"/{ScrapeMainType.STOCK_MARKET.value}/{sub_type.value}"
             )
 
-            folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}"
-
-            file_paths = get_all_file_names_with_extensions(
-                logger=self._logger,
-                folder_path=folder_path,
-                extensions=[FileExtension.CSV],
-            )
-
-            if not file_paths:
-                self._logger.log_error(f'Data in "{folder_path}" does not exist.')
+            result = self._build_order_df(folder_path)
+            if result is None:
                 continue
+            df, file_paths = result
 
             self._logger.log_info(
-                f'Start ingesting {len(file_paths)} file(s) from "{folder_path}" to "{stock_market_order_sub_type.value.lower()}".'
+                f'Start ingesting {len(file_paths)} file(s) from "{folder_path}" to "{sub_type.value.lower()}".'
             )
-
-            # Read and concatenate all CSV files
-            df = pd.concat(
-                [pd.read_csv(fp, encoding="utf-8") for fp in file_paths],
-                ignore_index=True,
-            ).drop_duplicates()
-
-            # Mirror price version: extract percent_change identically
-            # "1.829.04 (+0.77%)" → 0.77
-            df["percent_change"] = (
-                df["change"]
-                .str.extract(r"\(([+-]?\d+\.\d+)%\)", expand=False)
-                .astype(float)
-            )
-
-            # Unlike price version, close uses Vietnamese dot-as-thousands format
-            # "1.829.04" → ["1", "829", "04"] → "1829.04" → 1829.04
-            df["change"] = (
-                df["change"]
-                .str.extract(r"^([\d.]+)", expand=False)
-                .apply(
-                    lambda x: ".".join(["".join(x.split(".")[:-1]), x.split(".")[-1]])
-                )
-                .astype(float)
-            )
-
-            df["date"] = pd.to_datetime(df["date"], format="%d/%m/%Y")
-            df = df.sort_values(by="date").reset_index(drop=True)
-
-            # DATE
-            df["date"] = pd.to_datetime(df["date"]).dt.date
-
-            # DECIMAL columns
-            decimal_cols = [
-                "change",
-                "percent_change",
-            ]
-
-            for col in decimal_cols:
-                df[col] = (
-                    df[col]
-                    .astype(str)
-                    .str.replace(",", "", regex=False)
-                    .pipe(pd.to_numeric, errors="raise")
-                    .astype("Float64")
-                )
-
-            # BIGINT columns
-            bigint_cols = [
-                "number_of_buy_orders",
-                "buy_volume",
-                "average_volume_per_buy_order",
-                "number_of_sell_orders",
-                "sell_volume",
-                "average_volume_per_sell_order",
-                "net_volume",
-            ]
-
-            for col in bigint_cols:
-                df[col] = (
-                    df[col]
-                    .astype(str)
-                    .str.replace(",", "", regex=False)
-                    .pipe(pd.to_numeric, errors="raise")
-                    .astype("Int64")
-                )
-
             self._save_pandas_table_to_database(
                 schema_name=Schema.STOCK_MARKET.value,
                 table_name=Table.B_STOCK_MARKET_ORDER.name,
                 primary_keys=Table.B_STOCK_MARKET_ORDER.primary_key,
                 df=df,
             )
-
             self._logger.log_info(
-                f'Finish ingesting {len(file_paths)} file(s) from "{folder_path}" to "{stock_market_order_sub_type.value.lower()}".'
+                f'Finish ingesting {len(file_paths)} file(s) from "{folder_path}" to "{sub_type.value.lower()}".'
             )
 
     def _clean_stock_market_index(self) -> None:
@@ -10005,9 +9991,6 @@ class DataPreprocessor:
 
             df = pd.read_csv(file_path)
 
-            # Primary key columns
-            pk_cols = Table.B_STOCK.primary_key
-
             df["market_id"] = enterprise_subtype_to_market_id_map.get(
                 stock_list_sub_type.value
             )
@@ -10052,130 +10035,76 @@ class DataPreprocessor:
     # endregion ENTERPRISE.STOCK_INFORMATION
 
     # region ENTERPRISE.DAILY_PRICE
-    def _ingest_enterprise_daily_price_cafef(self) -> None:
-        key = (
-            ScrapeMainType.ENTERPRISE,
-            EnterpriseSubType.DAILY_PRICE,
-            DailyPriceSource.CAFEF,
+    def _ingest_enterprise_daily_price(self) -> None:
+        available_stock_df = self._select(
+            schema_name=Schema.ENTERPRISE.value,
+            table_name=Table.B_STOCK.name,
+            conditions=[
+                Condition(
+                    column=Table.B_STOCK.Column.DELETE_DATE.value,
+                    operator=SqlOperator.IS,
+                    value=None,
+                    data_type=DataType,
+                )
+            ],
         )
 
-        folder_path = (
-            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
+        codes = available_stock_df[Table.B_STOCK.Column.CODE.value].str.lower().tolist()
 
-        file_paths = get_all_file_names_with_extensions(
-            self._logger,
-            folder_path=folder_path,
-            extensions=[FileExtension.CSV],
-        )
+        for code in codes:
+            price_folder = (
+                f"{SCRAPER_BRONZE_DATA_DIR}"
+                f"/{get_value(ScrapeMainType.ENTERPRISE)}/{get_value(f'{code}_price')}"
+            )
+            order_folder = (
+                f"{SCRAPER_BRONZE_DATA_DIR}"
+                f"/{get_value(ScrapeMainType.ENTERPRISE)}/{get_value(f'{code}_order')}"
+            )
 
-        if len(file_paths) < 3:
+            price_result = self._build_price_df(price_folder)
+            order_result = self._build_order_df(order_folder)
+
+            if price_result is None or order_result is None:
+                continue
+
+            price_df, price_file_paths = price_result
+            order_df, order_file_paths = order_result
+
+            price_df = self._remove_duplicates(
+                price_df,
+                Table.B_ENTERPRISE_PRICE.primary_key,
+                filters={
+                    Table.B_ENTERPRISE_PRICE.Column.MATCHING_VOLUME.value: (">", 0)
+                },
+            )
+
             self._logger.log_info(
-                "Files found: " + ", ".join(f"`{path}`" for path in file_paths.values())
+                f'Start ingesting {len(price_file_paths)} price file(s) from "{price_folder}" to "{code}".'
             )
-            self._logger.log_warning(
-                f'Not enough data files in "{folder_path}". Expected 03 .csv files, found {len(file_paths)}.'
-            )
-            return
-
-        self._logger.log_info(f'Start ingesting data in "{folder_path}".')
-
-        for file_path in file_paths:
-            df = pd.read_csv(file_path, encoding="utf-8")
-            df["<Ticker>"] = df["<Ticker>"].astype("string")
-            df["<DTYYYYMMDD>"] = pd.to_datetime(
-                df["<DTYYYYMMDD>"], format="%Y%m%d", errors="coerce"
-            )
-            df["<Open>"] = pd.to_numeric(df["<Open>"], errors="coerce")
-            df["<High>"] = pd.to_numeric(df["<High>"], errors="coerce")
-            df["<Low>"] = pd.to_numeric(df["<Low>"], errors="coerce")
-            df["<Close>"] = pd.to_numeric(df["<Close>"], errors="coerce")
-            df["<Volume>"] = pd.to_numeric(df["<Volume>"], errors="coerce")
-
-            market_code = os.path.basename(file_path).split("_")[0]
-
-            daily_price_df = pd.DataFrame(
-                {
-                    Table.DAILY_PRICE.Column.DATE.value: df["<DTYYYYMMDD>"],
-                    Table.DAILY_PRICE.Column.CODE.value: df["<Ticker>"],
-                    Table.DAILY_PRICE.Column.MARKET_ID.value: self._get_market_id(
-                        market_code
-                    ),
-                    Table.DAILY_PRICE.Column.OPEN.value: df["<Open>"],
-                    Table.DAILY_PRICE.Column.HIGH.value: df["<High>"],
-                    Table.DAILY_PRICE.Column.LOW.value: df["<Low>"],
-                    Table.DAILY_PRICE.Column.CLOSE.value: df["<Close>"],
-                    Table.DAILY_PRICE.Column.VOLUME.value: df["<Volume>"],
-                }
-            )
-
-            daily_price_df = daily_price_df.dropna(subset=["code"])
-
-            year_list = self._get_year_list_from_start(SCRAPER_START_DATE)
-
-            # Remove current year
-            current_year = year_list[-1]
-            year_list = year_list[:-1]
-
-            # Remove years already ingested
-            market_df = self._get_market_df()
-            process_year = market_df[
-                market_df[Table.MARKET.Column.CODE.value] == market_code
-            ][Table.MARKET.Column.SAVE_PROGRESS_YEAR.value].item()
-
-            if process_year is None:
-                process_year = SCRAPER_START_DATE.year - 1
-
-            year_list = [year for year in year_list if year > process_year]
-
-            for year in year_list:
-                self._logger.log_info(
-                    f'Ingesting data for market "{market_code}" in year "{year}".'
-                )
-                self._save_pandas_table_to_database(
-                    schema_name=Schema.ENTERPRISE.value,
-                    table_name=Table.DAILY_PRICE.name,
-                    primary_keys=Table.DAILY_PRICE.primary_key,
-                    df=daily_price_df[
-                        daily_price_df[Table.DAILY_PRICE.Column.DATE.value].dt.year
-                        == year
-                    ],
-                )
-
-                self._database_driver.update(
-                    schema_name=Schema.STOCK_MARKET.value,
-                    table_name=Table.MARKET.name,
-                    update_record=Record(
-                        data_dto_list=[
-                            DataModel(
-                                column_name=Table.MARKET.Column.SAVE_PROGRESS_YEAR.value,
-                                value=year,
-                                data_type=DataType.INT,
-                            )
-                        ]
-                    ),
-                    conditions=[
-                        Condition(
-                            column=Table.MARKET.Column.CODE.value,
-                            operator=SqlOperator.EQUAL_TO,
-                            value=market_code,
-                            data_type=DataType.VARCHAR,
-                        )
-                    ],
-                )
-
-            # Ingest current year
             self._save_pandas_table_to_database(
                 schema_name=Schema.ENTERPRISE.value,
-                table_name=Table.DAILY_PRICE.name,
-                primary_keys=Table.DAILY_PRICE.primary_key,
-                df=daily_price_df[
-                    daily_price_df[Table.DAILY_PRICE.Column.DATE.value].dt.year
-                    == current_year
-                ],
+                table_name=Table.B_ENTERPRISE_PRICE.name,
+                primary_keys=Table.B_ENTERPRISE_PRICE.primary_key,
+                df=price_df,
+            )
+            self._logger.log_info(
+                f'Finish ingesting {len(price_file_paths)} price file(s) from "{price_folder}" to "{code}".'
             )
 
-    def _transform_enterprise_daily_price_cafef(self) -> None:
+            self._logger.log_info(
+                f'Start ingesting {len(order_file_paths)} order file(s) from "{order_folder}" to "{code}".'
+            )
+            self._save_pandas_table_to_database(
+                schema_name=Schema.ENTERPRISE.value,
+                table_name=Table.B_ENTERPRISE_ORDER.name,
+                primary_keys=Table.B_ENTERPRISE_ORDER.primary_key,
+                df=order_df,
+            )
+            self._logger.log_info(
+                f'Finish ingesting {len(order_file_paths)} order file(s) from "{order_folder}" to "{code}".'
+            )
+
+    def _transform_enterprise_daily_price(self) -> None:
         key = (
             ScrapeMainType.ENTERPRISE,
             EnterpriseSubType.DAILY_PRICE,
@@ -10270,13 +10199,13 @@ class DataPreprocessor:
 
         match data_quality:
             case DataQuality.BRONZE:
-                self._ingest_enterprise_daily_price_cafef()
+                self._ingest_enterprise_daily_price()
 
             case DataQuality.SILVER:
                 pass
 
             case DataQuality.GOLD:
-                self._transform_enterprise_daily_price_cafef()
+                self._transform_enterprise_daily_price()
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -10336,8 +10265,8 @@ class DataPreprocessor:
         self._process_stock_market_index(data_quality)
 
         # # Enterprise
-        self._process_enterprise_stock(data_quality)
-        # self._process_enterprise_daily_price(data_quality)
+        # self._process_enterprise_stock(data_quality)
+        self._process_enterprise_daily_price(data_quality)
 
         self._logger.log_info(f'Finish processing data for "{data_quality.value}".')
 
