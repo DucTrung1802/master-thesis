@@ -160,6 +160,22 @@ class DataPreprocessor:
                     if col_list := layer.params.get("column_list"):
                         df = df.drop(columns=col_list).reset_index(drop=True)
 
+                case CleanAction.REMOVE_DUPLICATE_COLUMNS:
+                    keep = layer.params.get("keep", "first")
+
+                    if keep == "first":
+                        df = df.loc[:, ~df.columns.duplicated(keep="first")]
+
+                    elif keep == "last":
+                        df = df.loc[:, ~df.columns.duplicated(keep="last")]
+
+                    else:
+                        raise ValueError(
+                            "keep must be either 'first' or 'last'"
+                        )
+
+                    df = df.reset_index(drop=True)
+
                 case _:
                     # Optional: handle unknown layer or skip
                     pass
@@ -3993,114 +4009,6 @@ class DataPreprocessor:
                     primary_keys=Table.MARKET.primary_key,
                 )
 
-                # S_STOCK_MARKET
-                self._database_driver.create_table(
-                    schema_name=Schema.STOCK_MARKET.value,
-                    table_name=Table.S_STOCK_MARKET.name,
-                    columns=[
-                        Column(
-                            name=Table.S_STOCK_MARKET.Column.CODE.value,
-                            data_type=DataType.VARCHAR(),
-                            nullable=False,
-                        ),
-                        Column(
-                            name=Table.S_STOCK_MARKET.Column.DATE.value,
-                            data_type=DataType.DATE(),
-                            nullable=False,
-                        ),
-                        Column(
-                            name=Table.S_STOCK_MARKET.Column.OPEN.value,
-                            data_type=DataType.DECIMAL(),
-                            nullable=True,
-                        ),
-                        Column(
-                            name=Table.S_STOCK_MARKET.Column.HIGH.value,
-                            data_type=DataType.DECIMAL(),
-                            nullable=True,
-                        ),
-                        Column(
-                            name=Table.S_STOCK_MARKET.Column.LOW.value,
-                            data_type=DataType.DECIMAL(),
-                            nullable=True,
-                        ),
-                        Column(
-                            name=Table.S_STOCK_MARKET.Column.CLOSE.value,
-                            data_type=DataType.DECIMAL(),
-                            nullable=True,
-                        ),
-                        Column(
-                            name=Table.S_STOCK_MARKET.Column.ADJUST.value,
-                            data_type=DataType.DECIMAL(),
-                            nullable=True,
-                        ),
-                        Column(
-                            name=Table.S_STOCK_MARKET.Column.CHANGE.value,
-                            data_type=DataType.DECIMAL(),
-                            nullable=True,
-                        ),
-                        Column(
-                            name=Table.S_STOCK_MARKET.Column.PERCENT_CHANGE.value,
-                            data_type=DataType.DECIMAL(),
-                            nullable=True,
-                        ),
-                        Column(
-                            name=Table.S_STOCK_MARKET.Column.MATCHING_VOLUME.value,
-                            data_type=DataType.BIGINT(),
-                            nullable=True,
-                        ),
-                        Column(
-                            name=Table.S_STOCK_MARKET.Column.MATCHING_VALUE.value,
-                            data_type=DataType.DECIMAL(),
-                            nullable=True,
-                        ),
-                        Column(
-                            name=Table.S_STOCK_MARKET.Column.NEGOTIATE_VOLUME.value,
-                            data_type=DataType.BIGINT(),
-                            nullable=True,
-                        ),
-                        Column(
-                            name=Table.S_STOCK_MARKET.Column.NEGOTIATE_VALUE.value,
-                            data_type=DataType.DECIMAL(),
-                            nullable=True,
-                        ),
-                        Column(
-                            name=Table.S_STOCK_MARKET.Column.NUMBER_OF_BUY_ORDERS.value,
-                            data_type=DataType.BIGINT(),
-                            nullable=True,
-                        ),
-                        Column(
-                            name=Table.S_STOCK_MARKET.Column.BUY_VOLUME.value,
-                            data_type=DataType.BIGINT(),
-                            nullable=True,
-                        ),
-                        Column(
-                            name=Table.S_STOCK_MARKET.Column.AVERAGE_VOLUME_PER_BUY_ORDER.value,
-                            data_type=DataType.DECIMAL(),
-                            nullable=True,
-                        ),
-                        Column(
-                            name=Table.S_STOCK_MARKET.Column.NUMBER_OF_SELL_ORDERS.value,
-                            data_type=DataType.BIGINT(),
-                            nullable=True,
-                        ),
-                        Column(
-                            name=Table.S_STOCK_MARKET.Column.SELL_VOLUME.value,
-                            data_type=DataType.BIGINT(),
-                            nullable=True,
-                        ),
-                        Column(
-                            name=Table.S_STOCK_MARKET.Column.AVERAGE_VOLUME_PER_SELL_ORDER.value,
-                            data_type=DataType.DECIMAL(),
-                            nullable=True,
-                        ),
-                        Column(
-                            name=Table.S_STOCK_MARKET.Column.NET_VOLUME.value,
-                            data_type=DataType.BIGINT(),
-                            nullable=True,
-                        ),
-                    ],
-                    primary_keys=Table.S_STOCK_MARKET.primary_key,
-                )
 
             case DataQuality.GOLD:
                 # MARKET
@@ -4312,71 +4220,7 @@ class DataPreprocessor:
                 )
 
             case DataQuality.SILVER:
-                # STOCK
-                self._database_driver.create_table(
-                    schema_name=Schema.ENTERPRISE.value,
-                    table_name=Table.STOCK.name,
-                    columns=[
-                        Column(
-                            name=Table.STOCK.Column.ID.value,
-                            data_type=DataType.SERIAL(),
-                            nullable=False,
-                        ),
-                        Column(
-                            name=Table.STOCK.Column.CODE.value,
-                            data_type=DataType.VARCHAR(),
-                            nullable=False,
-                        ),
-                        Column(
-                            name=Table.STOCK.Column.LISTED_SHARES.value,
-                            data_type=DataType.BIGINT(),
-                            nullable=True,
-                        ),
-                        Column(
-                            name=Table.STOCK.Column.OUTSTANDING_SHARES.value,
-                            data_type=DataType.BIGINT(),
-                            nullable=True,
-                        ),
-                        Column(
-                            name=Table.STOCK.Column.OUTSTANDING_RATE.value,
-                            data_type=DataType.DECIMAL(),
-                            nullable=True,
-                        ),
-                        Column(
-                            name=Table.STOCK.Column.MARKET_CAP.value,
-                            data_type=DataType.BIGINT(),
-                            nullable=True,
-                        ),
-                        Column(
-                            name=Table.STOCK.Column.MARKET_ID.value,
-                            data_type=DataType.INT(),
-                            nullable=False,
-                        ),
-                        Column(
-                            name=Table.STOCK.Column.CREATE_DATE.value,
-                            data_type=DataType.AUTO_TIMESTAMP(),
-                            nullable=False,
-                        ),
-                        Column(
-                            name=Table.STOCK.Column.UPDATE_DATE.value,
-                            data_type=DataType.TIMESTAMP(),
-                            nullable=True,
-                        ),
-                        Column(
-                            name=Table.STOCK.Column.DELETE_DATE.value,
-                            data_type=DataType.TIMESTAMP(),
-                            nullable=True,
-                        ),
-                    ],
-                    primary_keys=Table.STOCK.primary_key,
-                    foreign_keys=[
-                        ForeignKey(
-                            column_name=Table.STOCK.Column.MARKET_ID.value,
-                            ref_table=f"{Schema.STOCK_MARKET.value}.{Table.MARKET.name}",
-                            ref_column=Table.MARKET.Column.ID.value,
-                        )
-                    ],
-                )
+                pass
 
             case DataQuality.GOLD:
                 # STOCK
@@ -9857,7 +9701,7 @@ class DataPreprocessor:
 
     def _clean_stock_market_index(self) -> None:
         input_table_list = [
-            Table.B_STOCK_MARKET_ORDER.name,
+            Table.B_STOCK_MARKET_PRICE.name,
             Table.B_STOCK_MARKET_ORDER.name,
         ]
         output_table_list = [Table.S_STOCK_MARKET.name]
@@ -9891,6 +9735,7 @@ class DataPreprocessor:
         silver_df = self._clean(
             df=stock_market_index_bronze_df,
             clean_layer_list=[
+                CleanLayer.REMOVE_DUPLICATE_COLUMNS(),
                 CleanLayer.ORDER_BY(
                     [
                         Table.S_STOCK_MARKET.Column.CODE.value,
