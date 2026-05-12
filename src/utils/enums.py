@@ -108,6 +108,7 @@ class CleanAction(Enum):
     REMOVE_IF_ALL_COLUMNS_ARE_NULL = "remove_if_all_columns_are_null"
     ORDER_BY = "order_by"
     REMOVE_COLUMN = "remove_column"
+    REMOVE_DUPLICATE_COLUMNS = "remove_duplicate_columns"
 
 
 class CleanLayer:
@@ -134,6 +135,31 @@ class CleanLayer:
     @classmethod
     def REMOVE_COLUMN(cls, column_list: List[str]):
         return cls(CleanAction.REMOVE_COLUMN, column_list=column_list)
+
+    @classmethod
+    def REMOVE_DUPLICATE_COLUMNS(cls, keep: str = "first"):
+        return cls(
+            CleanAction.REMOVE_DUPLICATE_COLUMNS,
+            keep=keep,
+        )
+
+
+class TransformAction(Enum):
+    EXTRACT_DATETIME_FEATURE = "extract_datetime_feature"
+
+
+class TransformLayer:
+    """
+    Represents a transformation step. Can have parameters like column_name.
+    """
+
+    def __init__(self, action: TransformAction, **kwargs):
+        self.action = action
+        self.params = kwargs
+
+    @classmethod
+    def EXTRACT_DATETIME_FEATURE(cls, column_name: str = "date"):
+        return cls(TransformAction.EXTRACT_DATETIME_FEATURE, column_name=column_name)
 
 
 # MAIN SCRAPING TYPE ENUMS
@@ -2157,13 +2183,13 @@ class Table:
         name = "market"
         primary_key = [Column.ID.value]
 
-    class B_VN_INDEX_PRICE:
+    class B_STOCK_MARKET_PRICE:
         class Column(Enum):
+            CODE = "code"
             DATE = "date"
-            ADJUST = "adjust"
             CLOSE = "close"
+            ADJUST = "adjust"
             CHANGE = "change"
-            PERCENT_CHANGE = "percent_change"
             MATCHING_VOLUME = "matching_volume"
             MATCHING_VALUE = "matching_value"
             NEGOTIATE_VOLUME = "negotiate_volume"
@@ -2171,14 +2197,56 @@ class Table:
             OPEN = "open"
             HIGH = "high"
             LOW = "low"
+            PERCENT_CHANGE = "percent_change"
 
-        name = "vn_index_price"
-        primary_key = [Column.DATE.value]
+        name = "b_stock_market_price"
+        primary_key = [Column.CODE.value, Column.DATE.value]
 
-    class B_VN_INDEX_ORDER:
+    class B_STOCK_MARKET_ORDER:
         class Column(Enum):
+            CODE = "code"
             DATE = "date"
+            CHANGE = "change"
+            NUMBER_OF_BUY_ORDERS = "number_of_buy_orders"
+            BUY_VOLUME = "buy_volume"
+            AVERAGE_VOLUME_PER_BUY_ORDER = "average_volume_per_buy_order"
+            NUMBER_OF_SELL_ORDERS = "number_of_sell_orders"
+            SELL_VOLUME = "sell_volume"
+            AVERAGE_VOLUME_PER_SELL_ORDER = "average_volume_per_sell_order"
+            NET_VOLUME = "net_volume"
+            PERCENT_CHANGE = "percent_change"
+
+        name = "b_stock_market_order"
+        primary_key = [Column.CODE.value, Column.DATE.value]
+
+    class S_STOCK_MARKET:
+        class Column(Enum):
+            CODE = "code"
+            DATE = "date"
+            # ...
+
+        name = "s_stock_market"
+        primary_key = [Column.CODE.value, Column.DATE.value]
+
+    class G_STOCK_MARKET:
+        class Column(Enum):
+            CODE = "code"
+            DATE = "date"
+            # --- From price_data ---
+            OPEN = "open"
+            HIGH = "high"
+            LOW = "low"
             CLOSE = "close"
+            ADJUST = "adjust"
+            CHANGE = "change"  # e.g. +0.05
+            PERCENT_CHANGE = (
+                "percent_change"  # e.g. +0.06%  (extracted from price change)
+            )
+            MATCHING_VOLUME = "matching_volume"
+            MATCHING_VALUE = "matching_value"
+            NEGOTIATE_VOLUME = "negotiate_volume"
+            NEGOTIATE_VALUE = "negotiate_value"
+            # --- From order_data (order's `change` dropped — redundant with CLOSE + PERCENT_CHANGE) ---
             NUMBER_OF_BUY_ORDERS = "number_of_buy_orders"
             BUY_VOLUME = "buy_volume"
             AVERAGE_VOLUME_PER_BUY_ORDER = "average_volume_per_buy_order"
@@ -2187,173 +2255,95 @@ class Table:
             AVERAGE_VOLUME_PER_SELL_ORDER = "average_volume_per_sell_order"
             NET_VOLUME = "net_volume"
 
-        name = "vn_index_order"
-        primary_key = [Column.DATE.value]
-
-    class S_VN_INDEX:
-        class Column(Enum):
-            DATE = "date"
-            OPEN = "open"
-            HIGH = "high"
-            LOW = "low"
-            CLOSE = "close"
-            ADJUST = "adjust"
-            CHANGE = "change"
-            PERCENT_CHANGE = "percent_change"
-            MATCHING_VOLUME = "matching_volume"
-            MATCHING_VALUE = "matching_value"
-            NEGOTIATE_VOLUME = "negotiate_volume"
-            NEGOTIATE_VALUE = "negotiate_value"
-            NUMBER_OF_BUY_ORDERS = "number_of_buy_orders"
-            BUY_VOLUME = "buy_volume"
-            AVERAGE_VOLUME_PER_BUY_ORDER = "average_volume_per_buy_order"
-            NUMBER_OF_SELL_ORDERS = "number_of_sell_orders"
-            SELL_VOLUME = "sell_volume"
-            AVERAGE_VOLUME_PER_SELL_ORDER = "average_volume_per_sell_order"
-            NET_VOLUME = "net_volume"
-
-        name = "vn_index"
-        primary_key = [Column.DATE.value]
-
-    class G_VN_INDEX:
-        class Column(Enum):
-            DATE = "date"
-            OPEN = "open"
-            HIGH = "high"
-            LOW = "low"
-            CLOSE = "close"
-            ADJUST = "adjust"
-            CHANGE = "change"
-            PERCENT_CHANGE = "percent_change"
-            MATCHING_VOLUME = "matching_volume"
-            MATCHING_VALUE = "matching_value"
-            NEGOTIATE_VOLUME = "negotiate_volume"
-            NEGOTIATE_VALUE = "negotiate_value"
-            NUMBER_OF_BUY_ORDERS = "number_of_buy_orders"
-            BUY_VOLUME = "buy_volume"
-            AVERAGE_VOLUME_PER_BUY_ORDER = "average_volume_per_buy_order"
-            NUMBER_OF_SELL_ORDERS = "number_of_sell_orders"
-            SELL_VOLUME = "sell_volume"
-            AVERAGE_VOLUME_PER_SELL_ORDER = "average_volume_per_sell_order"
-            NET_VOLUME = "net_volume"
-
-        name = "vn_index"
-        primary_key = [Column.DATE.value]
-
-    class HNX_INDEX:
-        class Column(Enum):
-            DATE = "date"
-            OPEN = "open"
-            HIGH = "high"
-            LOW = "low"
-            CLOSE = "close"
-            VOLUME = "volume"
-
-        name = "hnx_index"
-        primary_key = [Column.DATE.value]
-
-    class VN_30_INDEX:
-        class Column(Enum):
-            DATE = "date"
-            CLOSE = "close"
-            ADJUSTED_CLOSE = "adjusted_close"
-            MATCHED_VOLUME = "matched_volume"
-            MATCHED_VALUE = "matched_value"
-            NEGOTIATED_VOLUME = "negotiated_volume"
-            NEGOTIATED_VALUE = "negotiated_value"
-            OPEN = "open"
-            HIGH = "high"
-            LOW = "low"
-            CHANGE_VALUE = "change_value"
-            CHANGE_PERCENTAGE = "change_percentage"
-
-        name = "vn_30_index"
-        primary_key = [Column.DATE.value]
-
-    class VN_100_INDEX:
-        class Column(Enum):
-            DATE = "date"
-            CLOSE = "close"
-            ADJUSTED_CLOSE = "adjusted_close"
-            MATCHED_VOLUME = "matched_volume"
-            MATCHED_VALUE = "matched_value"
-            NEGOTIATED_VOLUME = "negotiated_volume"
-            NEGOTIATED_VALUE = "negotiated_value"
-            OPEN = "open"
-            HIGH = "high"
-            LOW = "low"
-            CHANGE_VALUE = "change_value"
-            CHANGE_PERCENTAGE = "change_percentage"
-
-        name = "vn_100_index"
-        primary_key = [Column.DATE.value]
-
-    class HNX_30_INDEX:
-        class Column(Enum):
-            DATE = "date"
-            CLOSE = "close"
-            ADJUSTED_CLOSE = "adjusted_close"
-            MATCHED_VOLUME = "matched_volume"
-            MATCHED_VALUE = "matched_value"
-            NEGOTIATED_VOLUME = "negotiated_volume"
-            NEGOTIATED_VALUE = "negotiated_value"
-            OPEN = "open"
-            HIGH = "high"
-            LOW = "low"
-            CHANGE_VALUE = "change_value"
-            CHANGE_PERCENTAGE = "change_percentage"
-
-        name = "hnx_30_index"
-        primary_key = [Column.DATE.value]
-
-    class UPCOM_INDEX:
-        class Column(Enum):
-            DATE = "date"
-            CLOSE = "close"
-            ADJUSTED_CLOSE = "adjusted_close"
-            MATCHED_VOLUME = "matched_volume"
-            MATCHED_VALUE = "matched_value"
-            NEGOTIATED_VOLUME = "negotiated_volume"
-            NEGOTIATED_VALUE = "negotiated_value"
-            OPEN = "open"
-            HIGH = "high"
-            LOW = "low"
-            CHANGE_VALUE = "change_value"
-            CHANGE_PERCENTAGE = "change_percentage"
-
-        name = "upcom_index"
-        primary_key = [Column.DATE.value]
+        name = "g_stock_market"
+        primary_key = [Column.CODE.value, Column.DATE.value]
 
     # ENTERPRISE
-    class STOCK:
+    class B_STOCK:
         class Column(Enum):
-            ID = "id"
             CODE = "code"
-            LISTED_SHARES = "listed_shares"
-            OUTSTANDING_SHARES = "outstanding_shares"
-            OUTSTANDING_RATE = "outstanding_rate"
-            MARKET_CAP = "market_cap"
             MARKET_ID = "market_id"
             CREATE_DATE = "create_date"
             UPDATE_DATE = "update_date"
             DELETE_DATE = "delete_date"
 
-        name = "stock"
+        name = "b_stock"
         primary_key = [Column.CODE.value]
 
-    class DAILY_PRICE:
+    class B_ENTERPRISE_PRICE:
         class Column(Enum):
-            DATE = "date"
             CODE = "code"
-            MARKET_ID = "market_id"
+            DATE = "date"
+            CLOSE = "close"
+            ADJUST = "adjust"
+            CHANGE = "change"
+            MATCHING_VOLUME = "matching_volume"
+            MATCHING_VALUE = "matching_value"
+            NEGOTIATE_VOLUME = "negotiate_volume"
+            NEGOTIATE_VALUE = "negotiate_value"
+            OPEN = "open"
+            HIGH = "high"
+            LOW = "low"
+            PERCENT_CHANGE = "percent_change"
+
+        name = "b_enterprise_price"
+        primary_key = [Column.CODE.value, Column.DATE.value]
+
+    class B_ENTERPRISE_ORDER:
+        class Column(Enum):
+            CODE = "code"
+            DATE = "date"
+            CHANGE = "change"
+            NUMBER_OF_BUY_ORDERS = "number_of_buy_orders"
+            BUY_VOLUME = "buy_volume"
+            AVERAGE_VOLUME_PER_BUY_ORDER = "average_volume_per_buy_order"
+            NUMBER_OF_SELL_ORDERS = "number_of_sell_orders"
+            SELL_VOLUME = "sell_volume"
+            AVERAGE_VOLUME_PER_SELL_ORDER = "average_volume_per_sell_order"
+            NET_VOLUME = "net_volume"
+            PERCENT_CHANGE = "percent_change"
+
+        name = "b_enterprise_order"
+        primary_key = [Column.CODE.value, Column.DATE.value]
+
+    class S_ENTERPRISE:
+        class Column(Enum):
+            CODE = "code"
+            DATE = "date"
+            # ...
+
+        name = "s_enterprise"
+        primary_key = [Column.CODE.value, Column.DATE.value]
+
+    class G_ENTERPRISE:
+        class Column(Enum):
+            CODE = "code"
+            DATE = "date"
+            # --- From price_data ---
             OPEN = "open"
             HIGH = "high"
             LOW = "low"
             CLOSE = "close"
-            VOLUME = "volume"
+            ADJUST = "adjust"
+            CHANGE = "change"  # e.g. +0.05
+            PERCENT_CHANGE = (
+                "percent_change"  # e.g. +0.06%  (extracted from price change)
+            )
+            MATCHING_VOLUME = "matching_volume"
+            MATCHING_VALUE = "matching_value"
+            NEGOTIATE_VOLUME = "negotiate_volume"
+            NEGOTIATE_VALUE = "negotiate_value"
+            # --- From order_data (order's `change` dropped — redundant with CLOSE + PERCENT_CHANGE) ---
+            NUMBER_OF_BUY_ORDERS = "number_of_buy_orders"
+            BUY_VOLUME = "buy_volume"
+            AVERAGE_VOLUME_PER_BUY_ORDER = "average_volume_per_buy_order"
+            NUMBER_OF_SELL_ORDERS = "number_of_sell_orders"
+            SELL_VOLUME = "sell_volume"
+            AVERAGE_VOLUME_PER_SELL_ORDER = "average_volume_per_sell_order"
+            NET_VOLUME = "net_volume"
 
-        name = "daily_price"
-        primary_key = [Column.DATE.value, Column.CODE.value]
+        name = "g_enterprise"
+        primary_key = [Column.CODE.value, Column.DATE.value]
 
     # Unified Tables
     class UNIFIED_MACROECONOMIC:
@@ -2399,13 +2389,13 @@ class TTC_MacroeconomicTable(Enum):
     XPI = Table.G_XPI.name
 
 
-class TTC_StockMarketTable(Enum):
-    HNX_30_INDEX = Table.HNX_30_INDEX.name
-    HNX_INDEX = Table.HNX_INDEX.name
-    UPCOM_INDEX = Table.UPCOM_INDEX.name
-    VN_30_INDEX = Table.VN_30_INDEX.name
-    VN_100_INDEX = Table.VN_100_INDEX.name
-    VN_INDEX = Table.B_VN_INDEX_PRICE.name
+# class TTC_StockMarketTable(Enum):
+#     HNX_30_INDEX = Table.HNX_30_INDEX.name
+#     HNX_INDEX = Table.HNX_INDEX.name
+#     UPCOM_INDEX = Table.UPCOM_INDEX.name
+#     VN_30_INDEX = Table.VN_30_INDEX.name
+#     VN_100_INDEX = Table.VN_100_INDEX.name
+#     VN_INDEX = Table.B_VN_INDEX_PRICE.name
 
 
 class TTC_EnterpriseTable(Enum):
