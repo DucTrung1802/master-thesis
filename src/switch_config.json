@@ -90,21 +90,21 @@
         "enable": true,
         "children": {
             "data_quality_bronze": {
-                "enable": true,
+                "enable": false,
                 "children": {
                     "macroeconomics": {
                         "enable": false
                     },
                     "stock_market": {
-                        "enable": false
+                        "enable": true
                     },
                     "enterprise": {
-                        "enable": true
+                        "enable": false
                     }
                 }
             },
             "data_quality_silver": {
-                "enable": false,
+                "enable": true,
                 "children": {
                     "macroeconomics": {
                         "enable": false

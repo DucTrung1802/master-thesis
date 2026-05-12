@@ -10072,6 +10072,65 @@ class DataPreprocessor:
         else:
             self._logger.log_info(f"All {len(codes)} code(s) ingested successfully.")
 
+    def _clean_enterprise_daily_price(self) -> None:
+        input_table_list = [
+            Table.B_ENTERPRISE_PRICE.name,
+            Table.B_ENTERPRISE_ORDER.name,
+        ]
+        output_table_list = [Table.S_ENTERPRISE.name]
+
+        self._logger.log_info(
+            f'Start cleaning data from table(s) "{", ".join(input_table_list)}" '
+            f'to table(s) "{", ".join(output_table_list)}".'
+        )
+
+        # Add logic for cleaning data here
+        self._select_database(DataQuality.BRONZE.value)
+
+        join_model_list = [
+            JoinModel(
+                join_type=SqlJoinType.INNER_JOIN,
+                schema_left=Schema.ENTERPRISE.value,
+                schema_right=Schema.ENTERPRISE.value,
+                table_left=Table.B_ENTERPRISE_PRICE.name,
+                table_right=Table.B_ENTERPRISE_ORDER.name,
+                columns_left=Table.B_ENTERPRISE_PRICE.primary_key,
+                columns_right=Table.B_ENTERPRISE_ORDER.primary_key,
+            )
+        ]
+
+        enterprise_bronze_df = self._select(
+            schema_name=Schema.ENTERPRISE.value,
+            table_name=Table.B_ENTERPRISE_PRICE.name,
+            join_model_list=join_model_list,
+        )
+
+        silver_df = self._clean(
+            df=enterprise_bronze_df,
+            clean_layer_list=[
+                CleanLayer.REMOVE_DUPLICATE_COLUMNS(),
+                CleanLayer.ORDER_BY(
+                    [
+                        Table.S_ENTERPRISE.Column.CODE.value,
+                        Table.S_ENTERPRISE.Column.DATE.value,
+                    ]
+                )
+            ],
+        )
+
+        self._select_database(DataQuality.SILVER.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.ENTERPRISE.value,
+            table_name=Table.S_ENTERPRISE.name,
+            primary_keys=Table.S_ENTERPRISE.primary_key,
+            df=silver_df,
+        )
+
+        self._logger.log_info(
+            f'Finish cleaning data from table(s) "{", ".join(input_table_list)}" '
+            f'to table(s) "{", ".join(output_table_list)}".'
+        )
+
     def _transform_enterprise_daily_price(self) -> None:
         key = (
             ScrapeMainType.ENTERPRISE,
@@ -10170,7 +10229,7 @@ class DataPreprocessor:
                 self._ingest_enterprise_daily_price()
 
             case DataQuality.SILVER:
-                pass
+                self._clean_enterprise_daily_price()
 
             case DataQuality.GOLD:
                 self._transform_enterprise_daily_price()
@@ -10229,8 +10288,8 @@ class DataPreprocessor:
         # self._process_macroeconomics_nasdaq_100(data_quality)
 
         # # Stock market
-        self._process_stock_market_market(data_quality)
-        self._process_stock_market_index(data_quality)
+        # self._process_stock_market_market(data_quality)
+        # self._process_stock_market_index(data_quality)
 
         # # Enterprise
         # self._process_enterprise_stock(data_quality)

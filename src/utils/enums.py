@@ -108,6 +108,7 @@ class CleanAction(Enum):
     REMOVE_IF_ALL_COLUMNS_ARE_NULL = "remove_if_all_columns_are_null"
     ORDER_BY = "order_by"
     REMOVE_COLUMN = "remove_column"
+    REMOVE_DUPLICATE_COLUMNS = "remove_duplicate_columns"
 
 
 class CleanLayer:
@@ -134,6 +135,13 @@ class CleanLayer:
     @classmethod
     def REMOVE_COLUMN(cls, column_list: List[str]):
         return cls(CleanAction.REMOVE_COLUMN, column_list=column_list)
+
+    @classmethod
+    def REMOVE_DUPLICATE_COLUMNS(cls, keep: str = "first"):
+        return cls(
+            CleanAction.REMOVE_DUPLICATE_COLUMNS,
+            keep=keep,
+        )
 
 
 class TransformAction(Enum):
@@ -2296,6 +2304,15 @@ class Table:
             PERCENT_CHANGE = "percent_change"
 
         name = "b_enterprise_order"
+        primary_key = [Column.CODE.value, Column.DATE.value]
+
+    class S_ENTERPRISE:
+        class Column(Enum):
+            CODE = "code"
+            DATE = "date"
+            # ...
+
+        name = "s_enterprise"
         primary_key = [Column.CODE.value, Column.DATE.value]
 
     # Unified Tables
