@@ -4,25 +4,74 @@ import pandas as pd
 import re
 from glob import glob
 import numpy as np
-from datetime import datetime, timedelta
+from datetime import date, datetime, timezone
+from psycopg2.extras import execute_values
+from typing import List, Optional, Dict, Any
+from concurrent.futures import ThreadPoolExecutor
+import threading
 
+from dtos.thread_manager_dtos.task import Task
 from logger.logger import Logger
 from dtos.tabular_database_driver_dtos.postgre_sql_connection_dto import (
     PostgreSQLConnectionDto,
 )
 from dtos.tabular_database_driver_dtos.tabular_database_driver_dtos import *
 from tabular_database_driver.postgre_sql_driver import PostgreSQLDriver
+from thread_manager.thread_manager import ThreadManager
 from utils.constants import SCRAPER_BRONZE_DATA_DIR
 from utils.enums import *
 from utils.utils import *
+from utils.switch_handler import SwitchHandler
 
 load_dotenv()
 
 
 class DataPreprocessor:
-    def __init__(self, logger: Logger):
+
+    @dataclass
+    class _SaveBundle:
+        df: pd.DataFrame
+        file_paths: list
+        folder: str
+        code: str
+        schema_name: str
+        table_name: str
+        primary_keys: list
+
+    _PRICE_DECIMAL_COLS = [
+        "adjust",
+        "close",
+        "change",
+        "percent_change",
+        "matching_value",
+        "negotiate_value",
+        "open",
+        "high",
+        "low",
+    ]
+    _PRICE_BIGINT_COLS = ["matching_volume", "negotiate_volume"]
+
+    _ORDER_DECIMAL_COLS = ["change", "percent_change"]
+    _ORDER_BIGINT_COLS = [
+        "number_of_buy_orders",
+        "buy_volume",
+        "average_volume_per_buy_order",
+        "number_of_sell_orders",
+        "sell_volume",
+        "average_volume_per_sell_order",
+        "net_volume",
+    ]
+
+    def __init__(
+        self,
+        logger: Logger,
+        switch_handler: SwitchHandler,
+        power: int = THREAD_MANAGER_POWER,
+    ):
         self._logger = logger
+        self._switch_handler: SwitchHandler = switch_handler
         self._database_driver = PostgreSQLDriver(logger=logger)
+        self._thread_manager = ThreadManager(logger=self._logger, power=power)
 
         # Data
         self._market_df = None
@@ -83,8 +132,11 @@ class DataPreprocessor:
     def _clean(
         self, df: pd.DataFrame, clean_layer_list: List[CleanLayer]
     ) -> pd.DataFrame:
+
         if not clean_layer_list:
             return df
+
+        df = df.copy()
 
         for layer in clean_layer_list:
             match layer.action:
@@ -108,11 +160,267 @@ class DataPreprocessor:
                     if col_list := layer.params.get("column_list"):
                         df = df.drop(columns=col_list).reset_index(drop=True)
 
+                case CleanAction.REMOVE_DUPLICATE_COLUMNS:
+                    keep = layer.params.get("keep", "first")
+
+                    if keep == "first":
+                        df = df.loc[:, ~df.columns.duplicated(keep="first")]
+
+                    elif keep == "last":
+                        df = df.loc[:, ~df.columns.duplicated(keep="last")]
+
+                    else:
+                        raise ValueError("keep must be either 'first' or 'last'")
+
+                    df = df.reset_index(drop=True)
+
                 case _:
                     # Optional: handle unknown layer or skip
                     pass
 
         return df
+
+    def _transform(
+        self,
+        df: pd.DataFrame,
+        transform_layer_list: List[TransformLayer],
+    ) -> pd.DataFrame:
+
+        if not transform_layer_list:
+            return df
+
+        df = df.copy()
+
+        for layer in transform_layer_list:
+
+            match layer.action:
+
+                case TransformAction.EXTRACT_DATETIME_FEATURE:
+
+                    column_name = layer.params["column_name"]
+
+                    # ensure datetime dtype
+                    df[column_name] = pd.to_datetime(df[column_name])
+
+                    prefix = column_name
+                    col = df[column_name]
+
+                    # ── Basic date components ──────────────────────────────────
+                    df[f"{prefix}_year"] = col.dt.year
+                    df[f"{prefix}_month"] = col.dt.month
+                    df[f"{prefix}_day"] = col.dt.day
+
+                    # ── Time components ────────────────────────────────────────
+                    df[f"{prefix}_hour"] = col.dt.hour
+                    df[f"{prefix}_minute"] = col.dt.minute
+                    df[f"{prefix}_second"] = col.dt.second
+
+                    # ── Week features ──────────────────────────────────────────
+                    df[f"{prefix}_week"] = col.dt.isocalendar().week.astype(int)
+                    df[f"{prefix}_day_of_week"] = col.dt.dayofweek  # Monday=0
+                    df[f"{prefix}_day_name"] = col.dt.day_name()
+
+                    # ── Year positioning ───────────────────────────────────────
+                    df[f"{prefix}_day_of_year"] = col.dt.dayofyear
+
+                    # ── Quarter features ───────────────────────────────────────
+                    df[f"{prefix}_quarter"] = col.dt.quarter
+
+                    # Day within the quarter (1-92)
+                    quarter_start = col.dt.to_period("Q").dt.start_time
+                    df[f"{prefix}_day_of_quarter"] = (col - quarter_start).dt.days + 1
+
+                    # How many days remain until quarter end (inclusive = 0 on last day)
+                    quarter_end = col.dt.to_period("Q").dt.end_time.dt.normalize()
+                    df[f"{prefix}_days_to_quarter_end"] = (
+                        quarter_end - col.dt.normalize()
+                    ).dt.days
+
+                    # Progress through the quarter as a fraction [0.0 – 1.0]
+                    quarter_length = (quarter_end - quarter_start).dt.days + 1
+                    df[f"{prefix}_quarter_progress"] = (
+                        df[f"{prefix}_day_of_quarter"] / quarter_length
+                    ).round(4)
+
+                    # ── Month features ─────────────────────────────────────────
+                    df[f"{prefix}_days_in_month"] = col.dt.days_in_month
+                    df[f"{prefix}_days_to_month_end"] = (
+                        col.dt.days_in_month - col.dt.day
+                    )
+
+                    # Week-of-month  (1 = first 7 days, etc.)
+                    df[f"{prefix}_week_of_month"] = (col.dt.day - 1) // 7 + 1
+
+                    # ── Year features ──────────────────────────────────────────
+                    year_start = pd.to_datetime(col.dt.year.astype(str) + "-01-01")
+                    year_end = pd.to_datetime(col.dt.year.astype(str) + "-12-31")
+
+                    df[f"{prefix}_days_in_year"] = year_end.dt.dayofyear
+                    df[f"{prefix}_days_to_year_end"] = (
+                        year_end - col.dt.normalize()
+                    ).dt.days
+                    df[f"{prefix}_year_progress"] = (
+                        col.dt.dayofyear / df[f"{prefix}_days_in_year"]
+                    ).round(4)
+                    df[f"{prefix}_is_leap_year"] = col.dt.is_leap_year
+
+                    # ── Season (Northern Hemisphere) ───────────────────────────
+                    _season_map = {
+                        1: "Winter",
+                        2: "Winter",
+                        3: "Spring",
+                        4: "Spring",
+                        5: "Spring",
+                        6: "Summer",
+                        7: "Summer",
+                        8: "Summer",
+                        9: "Autumn",
+                        10: "Autumn",
+                        11: "Autumn",
+                        12: "Winter",
+                    }
+                    df[f"{prefix}_season"] = col.dt.month.map(_season_map)
+
+                    # ── Time-of-day bucket ─────────────────────────────────────
+                    _hour_bins = [-1, 5, 11, 17, 20, 23]
+                    _hour_labels = [
+                        "Night",
+                        "Morning",
+                        "Afternoon",
+                        "Evening",
+                        "Night2",
+                    ]
+                    df[f"{prefix}_time_of_day"] = (
+                        pd.cut(col.dt.hour, bins=_hour_bins, labels=_hour_labels)
+                        .astype(str)
+                        .replace("Night2", "Night")
+                    )
+
+                    # ── Boolean flags ──────────────────────────────────────────
+                    df[f"{prefix}_is_weekend"] = col.dt.dayofweek >= 5
+                    df[f"{prefix}_is_weekday"] = col.dt.dayofweek < 5
+                    df[f"{prefix}_is_month_start"] = col.dt.is_month_start
+                    df[f"{prefix}_is_month_end"] = col.dt.is_month_end
+                    df[f"{prefix}_is_quarter_start"] = col.dt.is_quarter_start
+                    df[f"{prefix}_is_quarter_end"] = col.dt.is_quarter_end
+                    df[f"{prefix}_is_year_start"] = col.dt.is_year_start
+                    df[f"{prefix}_is_year_end"] = col.dt.is_year_end
+
+                    # ── Cyclical encodings (preserves circular continuity) ─────
+                    df[f"{prefix}_month_sin"] = np.sin(2 * np.pi * col.dt.month / 12)
+                    df[f"{prefix}_month_cos"] = np.cos(2 * np.pi * col.dt.month / 12)
+
+                    df[f"{prefix}_dow_sin"] = np.sin(2 * np.pi * col.dt.dayofweek / 7)
+                    df[f"{prefix}_dow_cos"] = np.cos(2 * np.pi * col.dt.dayofweek / 7)
+
+                    df[f"{prefix}_hour_sin"] = np.sin(2 * np.pi * col.dt.hour / 24)
+                    df[f"{prefix}_hour_cos"] = np.cos(2 * np.pi * col.dt.hour / 24)
+
+                    df[f"{prefix}_quarter_sin"] = np.sin(2 * np.pi * col.dt.quarter / 4)
+                    df[f"{prefix}_quarter_cos"] = np.cos(2 * np.pi * col.dt.quarter / 4)
+
+                    df[f"{prefix}_doy_sin"] = np.sin(
+                        2 * np.pi * col.dt.dayofyear / df[f"{prefix}_days_in_year"]
+                    )
+                    df[f"{prefix}_doy_cos"] = np.cos(
+                        2 * np.pi * col.dt.dayofyear / df[f"{prefix}_days_in_year"]
+                    )
+
+                    # ── Unix timestamp (useful for distance-based models) ──────
+                    df[f"{prefix}_unix_ts"] = col.astype(np.int64) // 10**9
+
+                case _:
+                    raise ValueError(f"Unsupported transform: {layer.action}")
+
+        return df
+
+    def _infer_sql_type(self, dtype) -> str:
+        dtype_str = str(dtype)
+        if dtype_str.startswith("int32") or dtype_str == "Int32":
+            return DataType.INT()
+        elif dtype_str.startswith("int") or dtype_str == "Int64":
+            return DataType.BIGINT()
+        elif dtype_str.startswith("float"):
+            return DataType.DECIMAL()
+        elif dtype_str == "bool":
+            return DataType.BOOLEAN()
+        elif dtype_str.startswith("datetime"):
+            return DataType.TIMESTAMP()
+        else:
+            return DataType.VARCHAR()  # covers "object" and unknown
+
+    def _ensure_table_exists(
+        self,
+        schema_name: str,
+        table_name: str,
+        primary_keys: List[str],
+        df: pd.DataFrame,
+        dtype_overrides: dict[str, str] | None = None,
+    ) -> None:
+        columns = [
+            Column(
+                name=col,
+                data_type=(
+                    dtype_overrides[col]
+                    if dtype_overrides and col in dtype_overrides
+                    else self._infer_sql_type(df[col].dtype)
+                ),
+                nullable=(col not in primary_keys),
+            )
+            for col in df.columns
+        ]
+        # create_table now uses IF NOT EXISTS internally — safe to call every time
+        self._database_driver.create_table(
+            schema_name=schema_name,
+            table_name=table_name,
+            columns=columns,
+            primary_keys=primary_keys,
+        )
+
+    def _build_upsert_sql(
+        self,
+        schema_name: str,
+        table_name: str,
+        columns: List[str],
+        primary_keys: List[str],
+        has_update_date: bool = False,
+    ) -> str:
+        col_str = ", ".join(columns)
+        pk_str = ", ".join(primary_keys)
+
+        update_parts = [f"{c} = EXCLUDED.{c}" for c in columns if c not in primary_keys]
+        if has_update_date:
+            update_parts.append("update_date = now()")
+        update_str = ", ".join(update_parts)
+
+        return f"""
+    WITH upserted AS (
+        INSERT INTO {schema_name}.{table_name} ({col_str})
+        VALUES %s
+        ON CONFLICT ({pk_str})
+        DO UPDATE SET {update_str}
+        RETURNING xmax
+    )
+    SELECT
+        COUNT(*) FILTER (WHERE xmax = 0)  AS inserted,
+        COUNT(*) FILTER (WHERE xmax <> 0) AS updated
+    FROM upserted
+    """
+
+    def _to_python(self, v):
+        """Convert numpy scalars to native Python types psycopg2 can serialize."""
+        if v is None:
+            return None
+        try:
+            if pd.isna(v):
+                return None
+        except (TypeError, ValueError):
+            pass  # pd.isna raises on some types (e.g. lists) — just pass them through
+        if hasattr(
+            v, "item"
+        ):  # catches all numpy scalars: uint32, int64, float32, etc.
+            return v.item()
+        return v
 
     def _save_pandas_table_to_database(
         self,
@@ -120,46 +428,93 @@ class DataPreprocessor:
         table_name: str,
         primary_keys: List[str],
         df: pd.DataFrame,
+        dtype_overrides: dict[str, str] | None = None,
+        chunk_size: int = 5_000,
+        max_workers: int | None = None,  # None → let ThreadPoolExecutor decide
     ) -> None:
         self._logger.log_info(
             f'Saving dataframe to table "{schema_name}.{table_name}".'
         )
 
-        # Drop rows where all values are NaN
         df = df.dropna(how="all")
-
         if df.empty:
             self._logger.log_info("DataFrame is empty after cleaning. Nothing to save.")
             return
 
-        # Convert entire DataFrame into a list of Records (vectorized)
-        column_names = list(df.columns)
-        records = []
-
-        for row in df.itertuples(index=False, name=None):
-            data_dto_list = [
-                DataModel(column_name=col, value=(val if pd.notna(val) else None))
-                for col, val in zip(column_names, row)
-            ]
-            records.append(Record(data_dto_list=data_dto_list))
-
-        # Batch upsert once
-        result = self._database_driver.upsert(
+        self._ensure_table_exists(
             schema_name=schema_name,
             table_name=table_name,
-            records=records,
             primary_keys=primary_keys,
+            df=df,
+            dtype_overrides=dtype_overrides,
         )
 
-        if result[0] == DatabaseExecutionStatus.SUCCESS:
-            inserted_count = result[1]
-            updated_count = result[2]
-        else:
-            inserted_count = updated_count = 0
+        # ── schema introspection (uses driver cache — no extra DB round-trip) ──
+        # We need a real cursor for _get_table_columns; open a short-lived one.
+        with self._database_driver._cursor_ctx() as _probe_cur:
+            available_columns = self._database_driver._get_table_columns(
+                _probe_cur, schema_name, table_name
+            )
+        has_create_date = "create_date" in available_columns
+        has_update_date = "update_date" in available_columns
+
+        df_columns = list(df.columns)
+
+        insert_columns = list(df_columns)
+        if has_create_date and "create_date" not in insert_columns:
+            insert_columns.append("create_date")
+
+        sql = self._build_upsert_sql(
+            schema_name=schema_name,
+            table_name=table_name,
+            columns=insert_columns,
+            primary_keys=primary_keys,
+            has_update_date=has_update_date,
+        )
+
+        # ── build all tuples once, before spawning threads ────────────────────
+        now = datetime.now(timezone.utc) if has_create_date else None
+        records: list[tuple] = [
+            tuple(self._to_python(v) for v in row)
+            + ((now,) if has_create_date and "create_date" not in df_columns else ())
+            for row in df.itertuples(index=False, name=None)
+        ]
+
+        chunks: list[list[tuple]] = [
+            records[start : start + chunk_size]
+            for start in range(0, len(records), chunk_size)
+        ]
+
+        # ── shared counters, protected by a lock ─────────────────────────────
+        inserted_total = 0
+        updated_total = 0
+        counter_lock = threading.Lock()
+
+        def _upsert_chunk(chunk: list[tuple]) -> None:
+            """Run one chunk in its own cursor. Thread-safe — no shared state."""
+            nonlocal inserted_total, updated_total
+
+            with self._database_driver._cursor_ctx() as cur:
+                execute_values(cur, sql, chunk, page_size=len(chunk))
+                row = cur.fetchone()
+
+            if row:
+                with counter_lock:
+                    inserted_total += row[0] or 0
+                    updated_total += row[1] or 0
+
+        # ── fan out — one thread per chunk ────────────────────────────────────
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            futures = [pool.submit(_upsert_chunk, chunk) for chunk in chunks]
+
+            for future in futures:
+                # Re-raise any exception from the worker thread
+                future.result()
 
         self._logger.log_info(
-            f"Saved {inserted_count + updated_count}/{len(df)} records into table '{schema_name}.{table_name}'."
-            f" (Inserted: {inserted_count}, Updated: {updated_count}) successfully."
+            f"Saved {inserted_total + updated_total}/{len(df)} records into "
+            f"'{schema_name}.{table_name}'. "
+            f"(Inserted: {inserted_total}, Updated: {updated_total})"
         )
 
     # region Helper functions
@@ -385,6 +740,181 @@ class DataPreprocessor:
 
         return df
 
+    def _load_csvs(self, folder_path: str) -> tuple[pd.DataFrame, list] | None:
+        file_paths = get_all_file_names_with_extensions(
+            logger=self._logger,
+            folder_path=folder_path,
+            extensions=[FileExtension.CSV],
+        )
+
+        if not file_paths:
+            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
+            return None
+
+        dataframes = []
+
+        for fp in file_paths:
+            df = pd.read_csv(fp, encoding="utf-8")
+
+            # Skip completely empty or all-NA DataFrames
+            if not df.empty and not df.dropna(how="all").empty:
+                dataframes.append(df)
+
+        if not dataframes:
+            self._logger.log_error(f'No valid CSV data found in "{folder_path}".')
+            return None
+
+        df = pd.concat(dataframes, ignore_index=True).drop_duplicates()
+
+        return df, file_paths
+
+    def _cast_columns(
+        self,
+        df: pd.DataFrame,
+        decimal_cols: list[str],
+        bigint_cols: list[str],
+    ) -> pd.DataFrame:
+
+        def _clean_numeric(series: pd.Series) -> pd.Series:
+            return (
+                series.astype("string")  # preserves missing values as <NA>
+                .str.replace(",", "", regex=False)
+                .str.strip()
+                .replace(
+                    {
+                        "": pd.NA,
+                        "nan": pd.NA,
+                        "None": pd.NA,
+                        "NULL": pd.NA,
+                        "null": pd.NA,
+                        "N/A": pd.NA,
+                    }
+                )
+            )
+
+        for col in decimal_cols:
+            cleaned = _clean_numeric(df[col])
+
+            df[col] = pd.to_numeric(cleaned, errors="raise").astype("Float64")
+
+        for col in bigint_cols:
+            cleaned = _clean_numeric(df[col])
+
+            df[col] = pd.to_numeric(cleaned, errors="raise").astype("Int64")
+
+        return df
+
+    def _parse_price_change(self, df: pd.DataFrame) -> pd.DataFrame:
+        df["percent_change"] = (
+            df["change"]
+            .str.extract(r"\(([+-]?\d+\.\d+)%\)", expand=False)
+            .astype(float)
+        )
+        df["change"] = (
+            df["change"].str.extract(r"([+-]?\d+\.\d+)", expand=False).astype(float)
+        )
+        return df
+
+    def _parse_order_change(self, df: pd.DataFrame) -> pd.DataFrame:
+        df["percent_change"] = (
+            df["change"]
+            .str.extract(r"\(([+-]?\d+\.\d+)%\)", expand=False)
+            .astype(float)
+        )
+        df["change"] = (
+            df["change"]
+            .str.extract(r"^([\d.]+)", expand=False)
+            .apply(lambda x: ".".join(["".join(x.split(".")[:-1]), x.split(".")[-1]]))
+            .astype(float)
+        )
+        return df
+
+    def _normalise_dates(self, df: pd.DataFrame) -> pd.DataFrame:
+        df["date"] = pd.to_datetime(df["date"], format="%d/%m/%Y")
+        df = df.sort_values(by="date").reset_index(drop=True)
+        df["date"] = df["date"].dt.date
+        return df
+
+    def _remove_duplicates(
+        self,
+        df: pd.DataFrame,
+        primary_keys: List[str],
+        sort_by: Optional[List[str]] = None,
+        ascending: Optional[List[bool]] = None,
+        filters: Optional[Dict[str, Any]] = None,
+    ) -> pd.DataFrame:
+        """
+        Remove duplicates based on primary keys with optional sorting and filtering.
+
+        Only applies filtering, sorting, and deduplication
+        if duplicates exist on primary_keys.
+        """
+
+        result = df.copy()
+
+        # Check duplicates first
+        has_duplicates = result.duplicated(subset=primary_keys).any()
+
+        # If no duplicates, return original dataframe unchanged
+        if not has_duplicates:
+            return result
+
+        # Apply filters only when duplicates exist
+        if filters:
+            operator_map = {
+                ">": lambda x, y: x > y,
+                ">=": lambda x, y: x >= y,
+                "<": lambda x, y: x < y,
+                "<=": lambda x, y: x <= y,
+                "==": lambda x, y: x == y,
+                "!=": lambda x, y: x != y,
+            }
+
+            for column, (operator, value) in filters.items():
+
+                if operator not in operator_map:
+                    raise ValueError(f"Unsupported operator: {operator}")
+
+                result = result[operator_map[operator](result[column], value)]
+
+        # Sort before deduplication
+        if sort_by:
+            result = result.sort_values(
+                by=sort_by,
+                ascending=ascending if ascending is not None else True,
+            )
+
+        # Remove duplicates
+        result = result.drop_duplicates(
+            subset=primary_keys,
+            keep="first",
+        )
+
+        return result
+
+    def _build_price_df(self, folder_path: str) -> tuple[pd.DataFrame, list] | None:
+        result = self._load_csvs(folder_path)
+
+        if result is None:
+            return None
+
+        df, file_paths = result
+        df = self._parse_price_change(df)
+        df = self._normalise_dates(df)
+        df = self._cast_columns(df, self._PRICE_DECIMAL_COLS, self._PRICE_BIGINT_COLS)
+
+        return df, file_paths
+
+    def _build_order_df(self, folder_path: str) -> tuple[pd.DataFrame, list] | None:
+        result = self._load_csvs(folder_path)
+        if result is None:
+            return None
+        df, file_paths = result
+        df = self._parse_order_change(df)
+        df = self._normalise_dates(df)
+        df = self._cast_columns(df, self._ORDER_DECIMAL_COLS, self._ORDER_BIGINT_COLS)
+        return df, file_paths
+
     # endregion Helper functions
 
     # region Create Schemas
@@ -393,19 +923,52 @@ class DataPreprocessor:
 
         match data_quality:
             case DataQuality.BRONZE:
-                self._database_driver.create_schema(Schema.MACROECONOMICS.value)
-                self._database_driver.create_schema(Schema.STOCK_MARKET.value)
-                self._database_driver.create_schema(Schema.ENTERPRISE.value)
+                if self._switch_handler.is_enabled(
+                    "data_preprocessor", "data_quality_bronze", "macroeconomics"
+                ):
+                    self._database_driver.create_schema(Schema.MACROECONOMICS.value)
+
+                if self._switch_handler.is_enabled(
+                    "data_preprocessor", "data_quality_bronze", "stock_market"
+                ):
+                    self._database_driver.create_schema(Schema.STOCK_MARKET.value)
+
+                if self._switch_handler.is_enabled(
+                    "data_preprocessor", "data_quality_bronze", "enterprise"
+                ):
+                    self._database_driver.create_schema(Schema.ENTERPRISE.value)
 
             case DataQuality.SILVER:
-                self._database_driver.create_schema(Schema.MACROECONOMICS.value)
-                self._database_driver.create_schema(Schema.STOCK_MARKET.value)
-                self._database_driver.create_schema(Schema.ENTERPRISE.value)
+                if self._switch_handler.is_enabled(
+                    "data_preprocessor", "data_quality_silver", "macroeconomics"
+                ):
+                    self._database_driver.create_schema(Schema.MACROECONOMICS.value)
+
+                if self._switch_handler.is_enabled(
+                    "data_preprocessor", "data_quality_silver", "stock_market"
+                ):
+                    self._database_driver.create_schema(Schema.STOCK_MARKET.value)
+
+                if self._switch_handler.is_enabled(
+                    "data_preprocessor", "data_quality_silver", "enterprise"
+                ):
+                    self._database_driver.create_schema(Schema.ENTERPRISE.value)
 
             case DataQuality.GOLD:
-                self._database_driver.create_schema(Schema.MACROECONOMICS.value)
-                self._database_driver.create_schema(Schema.STOCK_MARKET.value)
-                self._database_driver.create_schema(Schema.ENTERPRISE.value)
+                if self._switch_handler.is_enabled(
+                    "data_preprocessor", "data_quality_gold", "macroeconomics"
+                ):
+                    self._database_driver.create_schema(Schema.MACROECONOMICS.value)
+
+                if self._switch_handler.is_enabled(
+                    "data_preprocessor", "data_quality_gold", "stock_market"
+                ):
+                    self._database_driver.create_schema(Schema.STOCK_MARKET.value)
+
+                if self._switch_handler.is_enabled(
+                    "data_preprocessor", "data_quality_gold", "enterprise"
+                ):
+                    self._database_driver.create_schema(Schema.ENTERPRISE.value)
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -414,3470 +977,6 @@ class DataPreprocessor:
 
     # endregion Create Schemas
 
-    # region Create Tables
-    def _create_macroeconomics_tables(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(
-            f'Start creating macroeconomics tables for "{data_quality.value}".'
-        )
-
-        match data_quality:
-            case DataQuality.BRONZE:
-                # GDP
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.GDP.name,
-                    columns=[
-                        Column(name=Table.GDP.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.GDP.Column.QUARTER.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.GDP.Column.AGRICULTURE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.GDP.Column.INDUSTRY.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.GDP.Column.SERVICES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.GDP.Column.GDP_GROWTH.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.GDP.Column.GDP_REAL.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.GDP.primary_key,
-                )
-                # fmt: on
-
-                # CPI
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.CPI.name,
-                    columns = [
-                        Column(name=Table.CPI.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.CPI.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.CPI.Column.BEVERAGE_AND_CIGARETTE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.CPI.Column.CONSUMER_PRICE_INDEX.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.CPI.Column.CULTURE_ENTERTAINMENT_AND_TOURISM.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.CPI.Column.EATING_OUTSIDE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.CPI.Column.EDUCATION.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.CPI.Column.FOOD.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.CPI.Column.FOOD_AND_FOODSTUFF.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.CPI.Column.FOODSTUFF.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.CPI.Column.GARMENT_FOOTWEAR_HAT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.CPI.Column.HOUSEHOLD_APPLIANCES_AND_GOODS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.CPI.Column.HOUSING_AND_CONSTRUCTION_MATERIALS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.CPI.Column.MEDICINE_AND_HEALTH_CARE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.CPI.Column.OTHER_GOODS_AND_SERVICES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.CPI.Column.POSTAL_SERVICES_AND_TELECOMMUNICATION.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.CPI.Column.TRAFFIC.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.CPI.primary_key,
-                )
-                # fmt: on
-
-                # PPI
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.PPI.name,
-                    columns = [
-                        Column(name=Table.PPI.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.PPI.Column.GENERAL_INDEX.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.PPI.Column.FORESTRY_SERVICES.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.PPI.Column.AGRICULTURAL_SERVICES.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.PPI.Column.FORESTRY_AND_RELATED_SERVICES.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.PPI.Column.EXPLOITED_FOREST_PRODUCTS.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.PPI.Column.COLLECTED_FOREST_PRODUCTS.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.PPI.Column.AGRICULTURE_AND_RELATED_SERVICES.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.PPI.Column.LIVESTOCK_PRODUCTS.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.PPI.Column.ANNUAL_CROP_PRODUCTS.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.PPI.Column.PERENNIAL_CROP_PRODUCTS.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.PPI.Column.EXPLOITED_AQUATIC_PRODUCTS.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.PPI.Column.AQUATIC_PRODUCTS_EXPLOITATION_AND_FARMING.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.PPI.Column.AQUATIC_FARMING_PRODUCTS.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.PPI.Column.FOREST_PLANTING_AND_CARE.value, data_type=DataType.DECIMAL(), nullable=True),
-                    ],
-                    primary_keys=Table.PPI.primary_key,
-                )
-                # fmt: on
-
-                # IPI
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.IPI.name,
-                    columns=[
-                        Column(name=Table.IPI.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.IPI.Column.GENERAL_INDEX.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.PROFESSIONAL_SCIENTIFIC_AND_TECHNICAL_SERVICES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.CONSTRUCTION_SERVICES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.PAPER_AND_PAPER_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.CHEMICALS_AND_CHEMICAL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.MACHINERY_AND_EQUIPMENT_NOT_ELSEWHERE_CLASSIFIED.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.NATURAL_WATER_EXTRACTION.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.NATURAL_WATER_EXTRACTION_AND_WASTE_MANAGEMENT_SERVICES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.OTHER_TRANSPORT_EQUIPMENT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.METAL_ORES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.PROCESSED_FOOD_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.MANUFACTURING_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.TEXTILES_AND_LEATHER_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.MINING_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.OTHER_MINING_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.METAL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.FORESTRY_PRODUCTS_AND_RELATED_SERVICES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.AGRICULTURE_FORESTRY_AND_FISHERY_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.AGRICULTURE_PRODUCTS_AND_RELATED_SERVICES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.FISHING_AND_AQUACULTURE_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.RUBBER_AND_PLASTIC_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.WOOD_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.OTHER_NON_METALLIC_MINERAL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.FABRICATED_METAL_PRODUCTS_EXCEPT_MACHINERY_AND_EQUIPMENT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.ELECTRONIC_COMPUTER_AND_OPTICAL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.USED_FOR_MANUFACTURING_INDUSTRY.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.USED_FOR_AGRICULTURE_FORESTRY_AND_FISHERY.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.USED_FOR_CONSTRUCTION.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.COKE_AND_REFINED_PETROLEUM_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.HARD_COAL_AND_LIGNITE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.ELECTRICAL_EQUIPMENT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.PHARMACEUTICALS_AND_MEDICINAL_CHEMICALS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.MOTOR_VEHICLES_AND_TRAILERS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.ELECTRICITY_GAS_STEAM_AND_AIR_CONDITIONING.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.BEVERAGES_AND_TOBACCO.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.IPI.primary_key,
-                )
-                # fmt: on
-
-                # XPI
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.XPI.name,
-                    columns=[
-                        Column(name=Table.XPI.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.XPI.Column.MONTH.value, data_type=DataType.INT(), nullable=True),
-                        Column(name=Table.XPI.Column.ANIMAL_FEED_AND_RAW_MATERIALS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.AQUATIC_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.CAMERAS_CAMCORDERS_AND_COMPONENTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.CASHEW_NUTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.CASSAVA_AND_CASSAVA_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.CHEMICAL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.CHEMICALS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.CLINKER_AND_CEMENT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.COFFEE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.CONFECTIONERY_AND_CEREAL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.CRUDE_OIL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.DOMESTIC_ECONOMIC_SECTOR.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.ELECTRICAL_WIRES_AND_CABLES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.ELECTRONICS_COMPUTERS_AND_COMPONENTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.FOOTWEAR.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.FOREIGN_INVESTED_SECTOR.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.FOREIGN_CRUDE_OIL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.FURNITURE_PRODUCTS_FROM_MATERIALS_OTHER_THAN_WOOD.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.GLASS_AND_GLASS_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.HANDBAGS_WALLETS_SUITCASES_HATS_UMBRELLAS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.IRON_AND_STEEL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.IRON_AND_STEEL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.MACHINERY_EQUIPMENT_TOOLS_SPARE_PARTS_OTHER.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.MAIN_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.OTHER_BASE_METALS_AND_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.OTHER_GOODS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.PAPER_AND_PAPER_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.PEPPER.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.PETROLEUM.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.PHONES_AND_COMPONENTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.PLASTIC_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.RAW_PLASTICS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.RICE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.RUBBER.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.RUBBER_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.TEA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.TEXTILE_FIBERS_YARNS_OF_ALL_KINDS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.TEXTILE_GARMENT_LEATHER_FOOTWEAR_RAW_MATERIALS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.TEXTILES_GARMENTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.TOTAL_VALUE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.TOYS_SPORTS_EQUIPMENT_AND_PARTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.TRANSPORTATION_VEHICLES_AND_SPARE_PARTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.VEGETABLES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.WOOD_AND_WOOD_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.XPI.primary_key,
-                )
-                # fmt: on
-
-                # MPI
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.MPI.name,
-                    columns=[
-                        Column(name=Table.MPI.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.MPI.Column.MONTH.value, data_type=DataType.INT(), nullable=True),
-                        Column(name=Table.MPI.Column.ANIMAL_FEED_AND_RAW_MATERIALS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.AQUATIC_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.CAMERAS_CAMCORDERS_AND_COMPONENTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.CASHEW_NUTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.CASSAVA_AND_CASSAVA_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.CHEMICAL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.CHEMICALS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.CLINKER_AND_CEMENT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.COFFEE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.CONFECTIONERY_AND_CEREAL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.CRUDE_OIL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.DOMESTIC_ECONOMIC_SECTOR.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.ELECTRICAL_WIRES_AND_CABLES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.ELECTRONICS_COMPUTERS_AND_COMPONENTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.FOOTWEAR.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.FOREIGN_INVESTED_SECTOR.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.FOREIGN_CRUDE_OIL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.FURNITURE_PRODUCTS_FROM_MATERIALS_OTHER_THAN_WOOD.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.GLASS_AND_GLASS_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.HANDBAGS_WALLETS_SUITCASES_HATS_UMBRELLAS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.IRON_AND_STEEL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.IRON_AND_STEEL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.MACHINERY_EQUIPMENT_TOOLS_SPARE_PARTS_OTHER.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.MAIN_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.OTHER_BASE_METALS_AND_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.OTHER_GOODS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.PAPER_AND_PAPER_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.PEPPER.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.PETROLEUM.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.PHONES_AND_COMPONENTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.PLASTIC_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.RAW_PLASTICS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.RICE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.RUBBER.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.RUBBER_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.TEA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.TEXTILE_FIBERS_YARNS_OF_ALL_KINDS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.TEXTILE_GARMENT_LEATHER_FOOTWEAR_RAW_MATERIALS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.TEXTILES_GARMENTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.TOTAL_VALUE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.TOYS_SPORTS_EQUIPMENT_AND_PARTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.TRANSPORTATION_VEHICLES_AND_SPARE_PARTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.VEGETABLES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.WOOD_AND_WOOD_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.MPI.primary_key,
-                )
-                # fmt: on
-
-                # POPULATION
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.POPULATION.name,
-                    columns=[
-                        Column(name=Table.POPULATION.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.POPULATION.Column.POPULATION.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.POPULATION.Column.POPULATION_AREA_URBAN_RATE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.POPULATION.Column.POPULATION_DENSITY.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.POPULATION.Column.POPULATION_GROWTH_RATE.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.POPULATION.primary_key,
-                )
-                # fmt: on
-
-                # LABOR
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.LABOR.name,
-                    columns=[
-                        Column(name=Table.LABOR.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.LABOR.Column.AGRICULTURE_FORESTRY_AND_FISHERY.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.LABOR.Column.EMPLOYED_AMOUNT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.LABOR.Column.FEMALE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.LABOR.Column.INDUSTRY_CONSTRUCTION.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.LABOR.Column.LABOR_FORCE_ANNUAL_CHANGE_PERCENT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.LABOR.Column.LABOR_FORCE_PARTICIPATION_RATE_PERCENT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.LABOR.Column.MALE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.LABOR.Column.SERVICES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.LABOR.Column.UNEMPLOYED.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.LABOR.Column.URBAN_UNEMPLOYMENT_RATE.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.LABOR.primary_key,
-                )
-                # fmt: on
-
-                # RETAIL
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.RETAIL.name,
-                    columns=[
-                        Column(name=Table.RETAIL.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.RETAIL.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.RETAIL.Column.ACCOMMODATION_AND_CATERING_SERVICE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.RETAIL.Column.RETAIL_GROWTH.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.RETAIL.Column.RETAIL_SALE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.RETAIL.Column.SERVICES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.RETAIL.Column.TRAVELING_SERVICE.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.RETAIL.primary_key,
-                )
-                # fmt: on
-
-                # PMI
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.PMI.name,
-                    columns=[
-                        Column(name=Table.PMI.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.PMI.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.PMI.Column.PMI.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.PMI.primary_key,
-                )
-                # fmt: on
-
-                # IIP
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.IIP.name,
-                    columns=[
-                        Column(name=Table.IIP.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.IIP.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.IIP.Column.APPAREL_MANUFACTURING.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.BEVERAGE_PRODUCTION.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.COAL_AND_LIGNITE_MINING.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.CRUDE_OIL_AND_NATURAL_GAS_EXTRACTION.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.ENTIRE_INDUSTRIAL_SECTOR.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.FOOD_PRODUCTION_AND_PROCESSING.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.LEATHER_AND_RELATED_PRODUCT_MANUFACTURING.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.MANUFACTURE_OF_CHEMICALS_AND_CHEMICAL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.MANUFACTURE_OF_COKE_AND_REFINED_PETROLEUM_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.MANUFACTURE_OF_ELECTRICAL_EQUIPMENT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.MANUFACTURE_OF_ELECTRONIC_PRODUCTS_COMPUTERS_AND_OPTICAL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.MANUFACTURE_OF_FABRICATED_METAL_PRODUCTS_EXCLUDING_MACHINERY_AND_EQUIPMENT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.MANUFACTURE_OF_FURNITURE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.MANUFACTURE_OF_MACHINERY_AND_EQUIPMENT_NOT_ELSEWHERE_CLASSIFIED.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.MANUFACTURE_OF_METALS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.MANUFACTURE_OF_MOTOR_VEHICLES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.MANUFACTURE_OF_OTHER_NON_METALLIC_MINERAL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.MANUFACTURE_OF_OTHER_TRANSPORT_EQUIPMENT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.MANUFACTURE_OF_PHARMACEUTICALS_MEDICINAL_CHEMICALS_AND_BOTANICAL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.MANUFACTURE_OF_RUBBER_AND_PLASTIC_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.MANUFACTURING_INDUSTRY.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.METAL_ORE_MINING.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.MINING.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.MINING_SUPPORT_SERVICE_ACTIVITIES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.OTHER_MANUFACTURING_INDUSTRIES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.OTHER_MINING.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.PAPER_AND_PAPER_PRODUCT_MANUFACTURING.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.PRINTING_AND_REPRODUCTION_OF_RECORDED_MEDIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.PRODUCTION_AND_DISTRIBUTION_OF_ELECTRICITY_GAS_HOT_WATER_STEAM_AND_AIR_CONDITIONING.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.REPAIR_MAINTENANCE_AND_INSTALLATION_OF_MACHINERY_AND_EQUIPMENT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.TEXTILE_MANUFACTURING.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.TOBACCO_PRODUCT_MANUFACTURING.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.WASTE_COLLECTION_TREATMENT_AND_DISPOSAL_ACTIVITIES_RECYCLING_OF_WASTE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.WASTEWATER_COLLECTION_AND_TREATMENT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.WATER_COLLECTION_TREATMENT_AND_SUPPLY.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.WATER_SUPPLY_WASTE_MANAGEMENT_AND_TREATMENT_ACTIVITIES.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.IIP.primary_key,
-                )
-                # fmt: on
-
-                # IPV
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.IPV.name,
-                    columns=[
-                        Column(name=Table.IPV.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.IPV.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.IPV.Column.ALUMINIUM.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.ANIMAL_FEED.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.AQUATIC_FEED.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.BEER.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.CARS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.CASUAL_CLOTHES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.CEMENT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.CHEMICAL_PAINTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.CIGARETTES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.COAL_CLEAN_COAL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.COMMERCIAL_TAP_WATER.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.ELECTRICITY_PRODUCED.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.EXTRACTED_CRUDE_OIL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.FRESH_MILK.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.GASOLINE_OIL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.GRANULATED_SUGAR.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.IRON_CRUDE_STEEL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.LEATHER_SHOES_AND_SANDALS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.LIQUIDIZED_GAS_LPG.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.MOBILE_PHONES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.MONONATRI_GLUTAMAT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.MOTORCYCLES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.NPK_MIXED_FERTILIZERS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.NATURAL_FABRICS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.NATURAL_GAS_AIR.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.PHONE_ACCESSORIES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.POWDERED_MILK.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.PROCESSED_SEAFOOD.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.ROLLED_STEEL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.STEEL_BARS_ANGLE_STEEL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.SYNTHETIC_FABRICS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.TELEVISION.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.UREA_FERTILIZER.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.IPV.primary_key,
-                )
-                # fmt: on
-
-                # MIP
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.MIP.name,
-                    columns=[
-                        Column(name=Table.MIP.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.MIP.Column.AIR_CONDITIONERS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.ANIMAL_AND_POULTRY_FEED.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.ANTIMONY_ORE_AND_ANTIMONY_CONCENTRATE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.APATITE_ORE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.AQUACULTURE_FEED.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.ASSEMBLED_CARS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.ASSEMBLED_MOTORCYCLES_AND_MOPEDS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.ASSEMBLED_TVS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.BATH_MILK_AND_FACIAL_CLEANSER.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.BEER.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.CANNED_FRUITS_AND_NUTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.CANNED_MEAT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.CANNED_SEAFOOD.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.CANNED_VEGETABLES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.CAR_AND_TRACTOR_TIRES_INFLATABLE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.CAST_OR_OTHER_ROUGH_IRON_AND_STEEL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.CASUAL_CLOTHING.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.CEMENT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.CHEMICAL_FERTILIZERS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.CLEAN_COAL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.COMMERCIAL_TAP_WATER.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.COPPER_ORE_AND_COPPER_CONCENTRATE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.CRUDE_OIL_EXTRACTION.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.DIGITAL_CAMERAS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.DOMESTIC_CERAMICS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.DOMESTIC_CRUDE_OIL_EXTRACTION.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.EXTRACTED_STONE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.FABRIC.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.FABRIC_SHOES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.FIBER.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.FIBER_CEMENT_ROOFING_SHEETS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.FIRED_BRICKS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.FIRED_TILES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.FISH_SAUCE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.FRESH_MILK.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.FROZEN_SEAFOOD.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.GENERATED_ELECTRICITY.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.GRANULATED_SUGAR.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.GRAVEL_AND_PEBBLES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.GROUND_COFFEE_AND_INSTANT_COFFEE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.HERBICIDES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.HOUSEHOLD_ELECTRIC_FANS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.HOUSEHOLD_REFRIGERATORS_AND_FREEZERS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.HOUSEHOLD_WASHING_MACHINES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.IRON_ORE_AND_IRON_CONCENTRATE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.LANDLINE_PHONES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.LAUNDRY_DETERGENT_AND_CLEANING_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.LEATHER_SHOES_AND_BOOTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.LIGHT_BULBS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.MILLED_RICE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.MINERAL_WATER.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.MOBILE_PHONES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.MOTORCYCLE_AND_BICYCLE_TIRES_INFLATABLE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.MSG_MONOSODIUM_GLUTAMATE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.NATURAL_GAS_IN_GAS_FORM.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.NPK_FERTILIZERS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.PAPER_AND_CARDBOARD.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.PESTICIDES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.PLASTIC_PACKAGING_AND_BAGS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.POWDERED_MILK.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.PRINTED_NEWSPAPERS_AND_OTHER_PRINTING_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.PRINTERS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.PROCESSED_TEA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.PURIFIED_WATER.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.REFINED_VEGETABLE_OIL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.ROLLED_STEEL_AND_SHAPED_STEEL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.SANITARY_WARE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.SAWN_TIMBER.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.SEA_SALT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.SHAMPOO_AND_CONDITIONER.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.SPIRITS_AND_WHITE_WINE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.SPORTS_SHOES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.STANDARD_BATTERIES_1_5V.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.THRESHING_MACHINES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.TITANIUM_ORE_AND_TITANIUM_CONCENTRATE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.TOBACCO.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.TOOTHPASTE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.TUBES_FOR_BICYCLES_AND_MOTORCYCLES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.TUBES_FOR_CARS_AND_AIRCRAFT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.VARIOUS_TYPES_OF_BATTERIES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.VARIOUS_TYPES_OF_BICYCLES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.VARIOUS_TYPES_OF_SAND.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.YELLOW_PHOSPHORUS.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.MIP.primary_key,
-                )
-                # fmt: on
-
-                # FA_BY_HOUSE_TYPES
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.FA_BY_HOUSE_TYPES.name,
-                    columns=[
-                        Column(name=Table.FA_BY_HOUSE_TYPES.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.FA_BY_HOUSE_TYPES.Column._16_20_FLOORS.value, data_type=DataType.INT(), nullable=True),
-                        Column(name=Table.FA_BY_HOUSE_TYPES.Column._21_25_FLOORS.value, data_type=DataType.INT(), nullable=True),
-                        Column(name=Table.FA_BY_HOUSE_TYPES.Column._26_FLOORS_AND_ABOVE.value, data_type=DataType.INT(), nullable=True),
-                        Column(name=Table.FA_BY_HOUSE_TYPES.Column._5_FLOORS_AND_BELOW.value, data_type=DataType.INT(), nullable=True),
-                        Column(name=Table.FA_BY_HOUSE_TYPES.Column._6_8_FLOORS.value, data_type=DataType.INT(), nullable=True),
-                        Column(name=Table.FA_BY_HOUSE_TYPES.Column._9_15_FLOORS.value, data_type=DataType.INT(), nullable=True),
-                        Column(name=Table.FA_BY_HOUSE_TYPES.Column.APARTMENT_BUILDINGS.value, data_type=DataType.INT(), nullable=True),
-                        Column(name=Table.FA_BY_HOUSE_TYPES.Column.SINGLE_FAMILY_HOMES.value, data_type=DataType.INT(), nullable=True),
-                        Column(name=Table.FA_BY_HOUSE_TYPES.Column.SINGLE_FAMILY_HOMES_4_FLOORS_AND_ABOVE.value, data_type=DataType.INT(), nullable=True),
-                        Column(name=Table.FA_BY_HOUSE_TYPES.Column.SINGLE_FAMILY_HOMES_BELOW_4_FLOORS.value, data_type=DataType.INT(), nullable=True),
-                        Column(name=Table.FA_BY_HOUSE_TYPES.Column.TOTAL.value, data_type=DataType.INT(), nullable=True),
-                        Column(name=Table.FA_BY_HOUSE_TYPES.Column.VILLAS.value, data_type=DataType.INT(), nullable=True),
-                    ],
-                    primary_keys=Table.FA_BY_HOUSE_TYPES.primary_key,
-                )
-                # fmt: on
-
-                # IT_BOP
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.IT_BOP.name,
-                    columns=[
-                        Column(name=Table.IT_BOP.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.IT_BOP.Column.QUARTER.value, data_type=DataType.INT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.A_CURRENT_ACCOUNT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.B_CAPITAL_ACCOUNT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.BORROWING_AND_EXTERNAL_DEBT_REPAYMENT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.C_FINANCIAL_ACCOUNT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.CAPITAL_ACCOUNT_PAYMENTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.CAPITAL_ACCOUNT_RECEIPTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.CAPITAL_WITHDRAWAL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.CURRENT_TRANSFERS_SECONDARY_INCOME_NET.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.CURRENT_TRANSFERS_SECONDARY_INCOME_PAYMENTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.CURRENT_TRANSFERS_SECONDARY_INCOME_RECEIPTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.D_ERRORS_AND_OMISSIONS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.DIRECT_INVESTMENT_ABROAD_ASSETS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.DIRECT_INVESTMENT_IN_VIETNAM_LIABILITIES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.DIRECT_INVESTMENT_NET.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.E_OVERALL_BALANCE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.F_RESERVES_AND_RELATED_ITEMS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.FINANCIAL_INSTITUTIONS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.GOODS_EXPORTS_FOB.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.GOODS_IMPORTS_FOB.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.GOODS_NET.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.GOVERNMENT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.IMF_CREDITS_AND_LOANS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.INVESTMENT_INCOME_PRIMARY_INCOME_NET.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.INVESTMENT_INCOME_PRIMARY_INCOME_PAYMENTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.INVESTMENT_INCOME_PRIMARY_INCOME_RECEIPTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.LOANS_AND_EXTERNAL_DEBT_COLLECTION.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.LONG_TERM.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.MONEY_AND_DEPOSITS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.OTHER_INVESTMENT_ASSETS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.OTHER_INVESTMENT_LIABILITIES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.OTHER_INVESTMENT_NET.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.OTHER_RECEIVABLESPAYABLES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.PORTFOLIO_INVESTMENT_ABROAD_ASSETS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.PORTFOLIO_INVESTMENT_IN_VIETNAM_LIABILITIES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.PORTFOLIO_INVESTMENT_NET.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.PRINCIPAL_REPAYMENT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.PRIVATE_SECTOR.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.RESERVE_ASSETS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.RESIDENTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.SERVICES_EXPORTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.SERVICES_IMPORTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.SERVICES_NET.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.SHORT_TERM.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.SPECIAL_FINANCING.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.TOTAL_CURRENT_AND_CAPITAL_ACCOUNT_BALANCE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.TRADE_CREDITS_AND_ADVANCES.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.IT_BOP.primary_key,
-                )
-                # fmt: on
-
-                # TSBR
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.TSBR.name,
-                    columns=[
-                        Column(name=Table.TSBR.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.TSBR.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.TSBR.Column.AGRICULTURAL_LAND_USE_TAX.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.AID_REVENUE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.DOMESTIC_REVENUE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.ENVIRONMENTAL_PROTECTION_TAX.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.ENVIRONMENTAL_PROTECTION_TAX_ON_IMPORTED_GOODS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.EXPORT_TAX.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.FEES_AND_CHARGES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.IMPORT_TAX.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.NON_AGRICULTURAL_LAND_USE_TAX.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.OTHER_BUDGET_REVENUES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.OTHER_REVENUE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.PERSONAL_INCOME_TAX.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.RECOVERY_OF_CAPITAL_DIVIDENDS_POST_TAX_PROFITS_SURPLUS_REVENUE_AND_EXPENDITURE_OF_THE_STATE_BANK.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.REVENUE_BALANCE_FROM_IMPORT_EXPORT_ACTIVITIES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.REVENUE_FROM_CRUDE_OIL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.REVENUE_FROM_FOREIGN_INVESTED_ENTERPRISES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.REVENUE_FROM_HOUSING_AND_LAND.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.REVENUE_FROM_LAND_AND_WATER_SURFACE_LEASING.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.REVENUE_FROM_LAND_USE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.REVENUE_FROM_LEASING_AND_SALE_OF_STATE_OWNED_HOUSING.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.REVENUE_FROM_LOTTERY_ACTIVITIES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.REVENUE_FROM_MINING_RIGHTS_LICENSING.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.REVENUE_FROM_NON_STATE_ECONOMIC_SECTOR.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.REVENUE_FROM_PUBLIC_LAND_FUNDS_AND_OTHER_PUBLIC_ASSET_BENEFITS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.REVENUE_FROM_STATE_OWNED_ENTERPRISES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.SPECIAL_CONSUMPTION_TAX_ON_IMPORTED_GOODS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.TOTAL_REVENUE_FROM_IMPORT_EXPORT_ACTIVITIES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.TOTAL_STATE_BUDGET_REVENUE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.VALUE_ADDED_TAX_ON_IMPORTED_GOODS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.VALUE_ADDED_TAX_REFUND.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.TSBR.primary_key,
-                )
-                # fmt: on
-
-                # TSBE
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.TSBE.name,
-                    columns=[
-                        Column(name=Table.TSBE.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.TSBE.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.TSBE.Column.AID_EXPENDITURE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBE.Column.DEBT_INTEREST_PAYMENT_EXPENDITURE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBE.Column.DEVELOPMENT_INVESTMENT_EXPENDITURE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBE.Column.EXPENDITURE_FOR_EDUCATION_TRAINING_AND_VOCATIONAL_EDUCATION.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBE.Column.EXPENDITURE_FOR_SCIENCE_AND_TECHNOLOGY.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBE.Column.EXPENDITURE_FOR_WAGE_REFORM_AND_STREAMLINING_PERSONNEL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBE.Column.REGULAR_EXPENDITURE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBE.Column.STATE_BUDGET_CONTINGENCY.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBE.Column.SUPPLEMENTARY_EXPENDITURE_FOR_FINANCIAL_RESERVE_FUND.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBE.Column.TOTAL_STATE_BUDGET_EXPENDITURE.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.TSBE.primary_key,
-                )
-                # fmt: on
-
-                # GD
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.GD.name,
-                    columns=[
-                        Column(name=Table.GD.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.GD.Column.DEBT_BALANCE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.GD.Column.DOMESTIC_DEBT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.GD.Column.FOREIGN_DEBT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.GD.Column.TOTAL_DEBT_PAYMENTS_DURING_THE_PERIOD.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.GD.Column.TOTAL_INTEREST_AND_FEES_PAID_DURING_THE_PERIOD.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.GD.Column.TOTAL_PRINCIPAL_REPAYMENT_DURING_THE_PERIOD.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.GD.Column.WITHDRAWALS_DURING_THE_PERIOD.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.GD.primary_key,
-                )
-                # fmt: on
-
-                # BRD
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.BRD.name,
-                    columns=[
-                        Column(name=Table.BRD.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.BRD.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.BRD.Column.ENTERPRISES_COMPLETING_DISSOLUTION.value, data_type=DataType.INT(), nullable=True),
-                        Column(name=Table.BRD.Column.ENTERPRISES_RESUMING_OPERATIONS.value, data_type=DataType.INT(), nullable=True),
-                        Column(name=Table.BRD.Column.ENTERPRISES_TEMPORARILY_SUSPENDED_AWAITING_DISSOLUTION.value, data_type=DataType.INT(), nullable=True),
-                        Column(name=Table.BRD.Column.NEWLY_ESTABLISHED_ENTERPRISES.value, data_type=DataType.INT(), nullable=True),
-                        Column(name=Table.BRD.Column.REGISTERED_CAPITAL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.BRD.Column.REGISTERED_LABOR.value, data_type=DataType.INT(), nullable=True),
-                    ],
-                    primary_keys=Table.BRD.primary_key,
-                )
-                # fmt: on
-
-                # IISD
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.IISD.name,
-                    columns=[
-                        Column(name=Table.IISD.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.IISD.Column.QUARTER.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.IISD.Column.FOREIGN_DIRECT_INVESTMENT_CAPITAL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IISD.Column.GOVERNMENT_BOND_CAPITAL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IISD.Column.INVESTMENT_CAPITAL_FROM_RESIDENTS_AND_PRIVATE_INDIVIDUALS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IISD.Column.INVESTMENT_CAPITAL_FROM_THE_STATE_BUDGET.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IISD.Column.INVESTMENT_CAPITAL_OF_STATE_ENTERPRISES_EQUITY.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IISD.Column.LOANS_FROM_OTHER_SOURCES_OF_THE_STATE_SECTOR.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IISD.Column.OTHER_MOBILIZED_CAPITAL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IISD.Column.PLANNED_STATE_INVESTMENT_CREDIT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IISD.Column.TOTAL.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.IISD.primary_key,
-                )
-                # fmt: on
-
-                # TREG
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.TREG.name,
-                    columns=[
-                        Column(name=Table.TREG.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.TREG.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.TREG.Column.INTERNATIONAL_LIQUIDITY_TOTAL_RESERVES_EXCLUDING_GOLD_FOREIGN_EXCHANGE_US_DOLLARS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TREG.Column.INTERNATIONAL_LIQUIDITY_TOTAL_RESERVES_EXCLUDING_GOLD_US_DOLLARS.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.TREG.primary_key,
-                )
-                # fmt: on
-
-                # CREDIT
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.CREDIT.name,
-                    columns=[
-                        Column(name=Table.CREDIT.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.CREDIT.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.CREDIT.Column.CREDIT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.CREDIT.Column.CREDIT_GROWTH_YTD.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.CREDIT.Column.MONEY_SUPPLY_GROWTH_M2_YTD.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.CREDIT.Column.MONEY_SUPPLY_M2.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.CREDIT.primary_key,
-                )
-                # fmt: on
-
-                # MOBILIZATION
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.MOBILIZATION.name,
-                    columns=[
-                        Column(name=Table.MOBILIZATION.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.MOBILIZATION.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.MOBILIZATION.Column.DEPOSITS_FROM_ECONOMIC_ORGANIZATIONS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MOBILIZATION.Column.DEPOSITS_FROM_RESIDENTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MOBILIZATION.Column.TOTAL_PAYMENT_INSTRUMENTS.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.MOBILIZATION.primary_key,
-                )
-                # fmt: on
-
-                # EXCHANGE_RATE
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.EXCHANGE_RATE.name,
-                    columns = [
-                        Column(name=Table.EXCHANGE_RATE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.EXCHANGE_RATE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
-                        Column(name=Table.EXCHANGE_RATE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.EXCHANGE_RATE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.EXCHANGE_RATE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.EXCHANGE_RATE.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.EXCHANGE_RATE.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
-                    ],
-                    primary_keys=Table.EXCHANGE_RATE.primary_key,
-                )
-                # fmt: on
-
-                # IIR
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.IIR.name,
-                    columns=[
-                        Column(name=Table.IIR.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.IIR.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.IIR.Column.DAY.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.IIR.Column.ONE_MONTH.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIR.Column.ONE_WEEK.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIR.Column.TWO_WEEKS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIR.Column.THREE_MONTHS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIR.Column.SIX_MONTHS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIR.Column.NINE_MONTHS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIR.Column.OVERNIGHT.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.IIR.primary_key,
-                )
-                # fmt: on
-
-                # RRRR
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.RRRR.name,
-                    columns=[
-                        Column(name=Table.RRRR.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.RRRR.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.RRRR.Column.DAY.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.RRRR.Column.DISCOUNT_RATE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.RRRR.Column.REFINANCING_RATE.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.RRRR.primary_key,
-                )
-                # fmt: on
-
-                # FDI_SECTOR
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.FDI_SECTOR.name,
-                    columns=[
-                        Column(name=Table.FDI_SECTOR.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.FDI_SECTOR.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.FDI_SECTOR.Column.ACCOMMODATION_AND_FOOD_SERVICES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.FDI_SECTOR.Column.ADMINISTRATIVE_AND_SUPPORT_SERVICE_ACTIVITIES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.FDI_SECTOR.Column.AGRICULTURE_FORESTRY_AND_FISHERY.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.FDI_SECTOR.Column.ARTS_ENTERTAINMENT_AND_RECREATION.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.FDI_SECTOR.Column.CONSTRUCTION.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.FDI_SECTOR.Column.DOMESTIC_HOUSEHOLD_SERVICE_WORKERS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.FDI_SECTOR.Column.EDUCATION_AND_TRAINING.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.FDI_SECTOR.Column.FINANCIAL_BANKING_AND_INSURANCE_ACTIVITIES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.FDI_SECTOR.Column.HEALTHCARE_AND_SOCIAL_ASSISTANCE_ACTIVITIES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.FDI_SECTOR.Column.INFORMATION_AND_COMMUNICATION.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.FDI_SECTOR.Column.MANUFACTURING_AND_PROCESSING_INDUSTRY.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.FDI_SECTOR.Column.MINING_AND_QUARRYING.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.FDI_SECTOR.Column.OTHER_SERVICE_ACTIVITIES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.FDI_SECTOR.Column.PRODUCTION_AND_DISTRIBUTION_OF_ELECTRICITY_GAS_WATER_AND_AIR_CONDITIONING.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.FDI_SECTOR.Column.PROFESSIONAL_SCIENTIFIC_AND_TECHNOLOGICAL_ACTIVITIES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.FDI_SECTOR.Column.REAL_ESTATE_BUSINESS_ACTIVITIES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.FDI_SECTOR.Column.TRANSPORTATION_AND_WAREHOUSING.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.FDI_SECTOR.Column.WATER_SUPPLY_AND_WASTE_TREATMENT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.FDI_SECTOR.Column.WHOLESALE_AND_RETAIL_REPAIR_OF_MOTOR_VEHICLES_AND_MOTORCYCLES.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.FDI_SECTOR.primary_key,
-                )
-                # fmt: on
-
-                # FDI_RD
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.FDI_RD.name,
-                    columns=[
-                        Column(name=Table.FDI_RD.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.FDI_RD.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.FDI_RD.Column.FDI_DISBURSEMENT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.FDI_RD.Column.REGISTER.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.FDI_RD.primary_key,
-                )
-                # fmt: on
-
-                # EXPORT
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.EXPORT.name,
-                    columns=[
-                        Column(name=Table.EXPORT.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.EXPORT.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.EXPORT.Column.ARGENTINA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.ASEAN.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.POLAND.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.BELARUS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.BRAZIL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.BULGARIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.BELGIUM.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.PORTUGAL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.IVORY_COAST.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.CAMEROON.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.CAMBODIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.CANADA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.CHILE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.CROATIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.UNITED_ARAB_EMIRATES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.ESTONIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.EU.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.HUNGARY.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.GREECE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.NETHERLANDS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.SOUTH_KOREA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.HONG_KONG.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.INDONESIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.IRELAND.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.ISRAEL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.KAZAKHSTAN.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.KUWAIT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.LATVIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.LITHUANIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.LUXEMBOURG.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.LAOS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.MALAYSIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.MALTA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.MEXICO.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.MYANMAR.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.USA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.NORWAY.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.SOUTH_AFRICA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.NEW_ZEALAND.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.RUSSIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.BRUNEI_DARUSSALAM.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.JAPAN.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.OTHER_COUNTRIES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.PAKISTAN.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.PERU.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.PHILIPPINES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.FRANCE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.FINLAND.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.ROMANIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.SENEGAL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.SINGAPORE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.SLOVAKIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.SLOVENIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.CZECHIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.CYPRUS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.THAILAND.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.TURKEY.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.SWITZERLAND.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.SWEDEN.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.CHINA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.SPAIN.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.UKRAINE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.UNITED_KINGDOM.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.AUSTRIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.AUSTRALIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.ITALY.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.DENMARK.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.TAIWAN.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.GERMANY.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.SAUDI_ARABIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.INDIA.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.EXPORT.primary_key,
-                )
-                # fmt: on
-
-                # IMPORT
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.IMPORT.name,
-                    columns=[
-                        Column(name=Table.IMPORT.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.IMPORT.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.IMPORT.Column.ARGENTINA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.ASEAN.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.POLAND.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.BELARUS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.BRAZIL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.BULGARIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.BELGIUM.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.PORTUGAL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.IVORY_COAST.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.CAMEROON.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.CAMBODIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.CANADA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.CHILE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.CROATIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.UNITED_ARAB_EMIRATES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.ESTONIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.EU.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.HUNGARY.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.GREECE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.NETHERLANDS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.SOUTH_KOREA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.HONG_KONG.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.INDONESIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.IRELAND.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.ISRAEL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.KAZAKHSTAN.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.KUWAIT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.LATVIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.LITHUANIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.LUXEMBOURG.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.LAOS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.MALAYSIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.MALTA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.MEXICO.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.MYANMAR.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.USA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.NORWAY.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.SOUTH_AFRICA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.NEW_ZEALAND.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.RUSSIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.BRUNEI_DARUSSALAM.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.JAPAN.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.OTHER_COUNTRIES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.PAKISTAN.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.PERU.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.PHILIPPINES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.FRANCE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.FINLAND.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.ROMANIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.SENEGAL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.SINGAPORE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.SLOVAKIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.SLOVENIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.CZECHIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.CYPRUS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.THAILAND.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.TURKEY.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.SWITZERLAND.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.SWEDEN.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.CHINA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.SPAIN.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.UKRAINE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.UNITED_KINGDOM.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.AUSTRIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.AUSTRALIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.ITALY.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.DENMARK.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.TAIWAN.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.GERMANY.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.SAUDI_ARABIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.INDIA.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.IMPORT.primary_key,
-                )
-                # fmt: on
-
-                # GOLD_PRICE
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.GOLD_PRICE.name,
-                    columns = [
-                        Column(name=Table.GOLD_PRICE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.GOLD_PRICE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
-                        Column(name=Table.GOLD_PRICE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.GOLD_PRICE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.GOLD_PRICE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.GOLD_PRICE.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.GOLD_PRICE.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
-                    ],
-                    primary_keys=Table.GOLD_PRICE.primary_key,
-                )
-                # fmt: on
-                
-                # OIL_PRICE
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.OIL_PRICE.name,
-                    columns = [
-                        Column(name=Table.OIL_PRICE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.OIL_PRICE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
-                        Column(name=Table.OIL_PRICE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.OIL_PRICE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.OIL_PRICE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.OIL_PRICE.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.OIL_PRICE.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
-                    ],
-                    primary_keys=Table.OIL_PRICE.primary_key,
-                )
-                # fmt: on
-
-                # DOW_JONES
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.DOW_JONES.name,
-                    columns = [
-                        Column(name=Table.DOW_JONES.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.DOW_JONES.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
-                        Column(name=Table.DOW_JONES.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.DOW_JONES.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.DOW_JONES.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.DOW_JONES.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.DOW_JONES.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
-                    ],
-                    primary_keys=Table.DOW_JONES.primary_key,
-                )
-                # fmt: on
-                
-                # NYSE_COMPOSITE
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.NYSE_COMPOSITE.name,
-                    columns = [
-                        Column(name=Table.NYSE_COMPOSITE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.NYSE_COMPOSITE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
-                        Column(name=Table.NYSE_COMPOSITE.Column.ADJ_CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
-                        Column(name=Table.NYSE_COMPOSITE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.NYSE_COMPOSITE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.NYSE_COMPOSITE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.NYSE_COMPOSITE.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
-                    ],
-                    primary_keys=Table.NYSE_COMPOSITE.primary_key,
-                )
-                # fmt: on
-
-                # SNP_500
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.SNP_500.name,
-                    columns = [
-                        Column(name=Table.SNP_500.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.SNP_500.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
-                        Column(name=Table.SNP_500.Column.ADJ_CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
-                        Column(name=Table.SNP_500.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.SNP_500.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.SNP_500.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.SNP_500.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
-                    ],
-                    primary_keys=Table.SNP_500.primary_key,
-                )
-                # fmt: on
-                
-                # NASDAQ_COMPOSITE
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.NASDAQ_COMPOSITE.name,
-                    columns = [
-                        Column(name=Table.NASDAQ_COMPOSITE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.NASDAQ_COMPOSITE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
-                        Column(name=Table.NASDAQ_COMPOSITE.Column.ADJ_CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
-                        Column(name=Table.NASDAQ_COMPOSITE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.NASDAQ_COMPOSITE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.NASDAQ_COMPOSITE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.NASDAQ_COMPOSITE.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
-                    ],
-                    primary_keys=Table.NASDAQ_COMPOSITE.primary_key,
-                )
-                # fmt: on
-                
-                # NASDAQ_100
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.NASDAQ_100.name,
-                    columns = [
-                        Column(name=Table.NASDAQ_100.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.NASDAQ_100.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
-                        Column(name=Table.NASDAQ_100.Column.ADJ_CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
-                        Column(name=Table.NASDAQ_100.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.NASDAQ_100.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.NASDAQ_100.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.NASDAQ_100.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
-                    ],
-                    primary_keys=Table.NASDAQ_100.primary_key,
-                )
-                # fmt: on
-
-            case DataQuality.SILVER:
-                # GDP
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.GDP.name,
-                    columns=[
-                        Column(name=Table.GDP.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.GDP.Column.QUARTER.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.GDP.Column.AGRICULTURE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.GDP.Column.INDUSTRY.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.GDP.Column.SERVICES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.GDP.Column.GDP_GROWTH.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.GDP.Column.GDP_REAL.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.GDP.primary_key,
-                )
-                # fmt: on
-
-                # CPI
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.CPI.name,
-                    columns = [
-                        Column(name=Table.CPI.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.CPI.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.CPI.Column.BEVERAGE_AND_CIGARETTE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.CPI.Column.CONSUMER_PRICE_INDEX.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.CPI.Column.CULTURE_ENTERTAINMENT_AND_TOURISM.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.CPI.Column.EATING_OUTSIDE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.CPI.Column.EDUCATION.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.CPI.Column.FOOD.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.CPI.Column.FOOD_AND_FOODSTUFF.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.CPI.Column.FOODSTUFF.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.CPI.Column.GARMENT_FOOTWEAR_HAT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.CPI.Column.HOUSEHOLD_APPLIANCES_AND_GOODS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.CPI.Column.HOUSING_AND_CONSTRUCTION_MATERIALS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.CPI.Column.MEDICINE_AND_HEALTH_CARE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.CPI.Column.OTHER_GOODS_AND_SERVICES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.CPI.Column.POSTAL_SERVICES_AND_TELECOMMUNICATION.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.CPI.Column.TRAFFIC.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.CPI.primary_key,
-                )
-                # fmt: on
-
-                # PPI
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.PPI.name,
-                    columns = [
-                        Column(name=Table.PPI.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.PPI.Column.GENERAL_INDEX.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.PPI.Column.FORESTRY_SERVICES.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.PPI.Column.AGRICULTURAL_SERVICES.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.PPI.Column.FORESTRY_AND_RELATED_SERVICES.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.PPI.Column.EXPLOITED_FOREST_PRODUCTS.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.PPI.Column.COLLECTED_FOREST_PRODUCTS.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.PPI.Column.AGRICULTURE_AND_RELATED_SERVICES.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.PPI.Column.LIVESTOCK_PRODUCTS.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.PPI.Column.ANNUAL_CROP_PRODUCTS.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.PPI.Column.PERENNIAL_CROP_PRODUCTS.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.PPI.Column.EXPLOITED_AQUATIC_PRODUCTS.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.PPI.Column.AQUATIC_PRODUCTS_EXPLOITATION_AND_FARMING.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.PPI.Column.AQUATIC_FARMING_PRODUCTS.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.PPI.Column.FOREST_PLANTING_AND_CARE.value, data_type=DataType.DECIMAL(), nullable=True),
-                    ],
-                    primary_keys=Table.PPI.primary_key,
-                )
-                # fmt: on
-
-                # IPI
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.IPI.name,
-                    columns=[
-                        Column(name=Table.IPI.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.IPI.Column.GENERAL_INDEX.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.PROFESSIONAL_SCIENTIFIC_AND_TECHNICAL_SERVICES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.CONSTRUCTION_SERVICES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.PAPER_AND_PAPER_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.CHEMICALS_AND_CHEMICAL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.MACHINERY_AND_EQUIPMENT_NOT_ELSEWHERE_CLASSIFIED.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.NATURAL_WATER_EXTRACTION.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.NATURAL_WATER_EXTRACTION_AND_WASTE_MANAGEMENT_SERVICES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.OTHER_TRANSPORT_EQUIPMENT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.METAL_ORES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.PROCESSED_FOOD_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.MANUFACTURING_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.TEXTILES_AND_LEATHER_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.MINING_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.OTHER_MINING_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.METAL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.FORESTRY_PRODUCTS_AND_RELATED_SERVICES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.AGRICULTURE_FORESTRY_AND_FISHERY_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.AGRICULTURE_PRODUCTS_AND_RELATED_SERVICES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.FISHING_AND_AQUACULTURE_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.RUBBER_AND_PLASTIC_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.WOOD_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.OTHER_NON_METALLIC_MINERAL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.FABRICATED_METAL_PRODUCTS_EXCEPT_MACHINERY_AND_EQUIPMENT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.ELECTRONIC_COMPUTER_AND_OPTICAL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.USED_FOR_MANUFACTURING_INDUSTRY.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.USED_FOR_AGRICULTURE_FORESTRY_AND_FISHERY.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.USED_FOR_CONSTRUCTION.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.COKE_AND_REFINED_PETROLEUM_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.HARD_COAL_AND_LIGNITE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.ELECTRICAL_EQUIPMENT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.PHARMACEUTICALS_AND_MEDICINAL_CHEMICALS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.MOTOR_VEHICLES_AND_TRAILERS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.ELECTRICITY_GAS_STEAM_AND_AIR_CONDITIONING.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPI.Column.BEVERAGES_AND_TOBACCO.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.IPI.primary_key,
-                )
-                # fmt: on
-
-                # XPI
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.XPI.name,
-                    columns=[
-                        Column(name=Table.XPI.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.XPI.Column.MONTH.value, data_type=DataType.INT(), nullable=True),
-                        Column(name=Table.XPI.Column.ANIMAL_FEED_AND_RAW_MATERIALS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.AQUATIC_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.CAMERAS_CAMCORDERS_AND_COMPONENTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.CASHEW_NUTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.CASSAVA_AND_CASSAVA_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.CHEMICAL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.CHEMICALS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.CLINKER_AND_CEMENT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.COFFEE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.CONFECTIONERY_AND_CEREAL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.CRUDE_OIL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.DOMESTIC_ECONOMIC_SECTOR.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.ELECTRICAL_WIRES_AND_CABLES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.ELECTRONICS_COMPUTERS_AND_COMPONENTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.FOOTWEAR.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.FOREIGN_INVESTED_SECTOR.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.FOREIGN_CRUDE_OIL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.FURNITURE_PRODUCTS_FROM_MATERIALS_OTHER_THAN_WOOD.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.GLASS_AND_GLASS_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.HANDBAGS_WALLETS_SUITCASES_HATS_UMBRELLAS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.IRON_AND_STEEL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.IRON_AND_STEEL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.MACHINERY_EQUIPMENT_TOOLS_SPARE_PARTS_OTHER.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.MAIN_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.OTHER_BASE_METALS_AND_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.OTHER_GOODS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.PAPER_AND_PAPER_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.PEPPER.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.PETROLEUM.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.PHONES_AND_COMPONENTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.PLASTIC_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.RAW_PLASTICS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.RICE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.RUBBER.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.RUBBER_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.TEA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.TEXTILE_FIBERS_YARNS_OF_ALL_KINDS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.TEXTILE_GARMENT_LEATHER_FOOTWEAR_RAW_MATERIALS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.TEXTILES_GARMENTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.TOTAL_VALUE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.TOYS_SPORTS_EQUIPMENT_AND_PARTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.TRANSPORTATION_VEHICLES_AND_SPARE_PARTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.VEGETABLES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.XPI.Column.WOOD_AND_WOOD_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.XPI.primary_key,
-                )
-                # fmt: on
-
-                # MPI
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.MPI.name,
-                    columns=[
-                        Column(name=Table.MPI.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.MPI.Column.MONTH.value, data_type=DataType.INT(), nullable=True),
-                        Column(name=Table.MPI.Column.ANIMAL_FEED_AND_RAW_MATERIALS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.AQUATIC_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.CAMERAS_CAMCORDERS_AND_COMPONENTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.CASHEW_NUTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.CASSAVA_AND_CASSAVA_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.CHEMICAL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.CHEMICALS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.CLINKER_AND_CEMENT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.COFFEE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.CONFECTIONERY_AND_CEREAL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.CRUDE_OIL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.DOMESTIC_ECONOMIC_SECTOR.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.ELECTRICAL_WIRES_AND_CABLES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.ELECTRONICS_COMPUTERS_AND_COMPONENTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.FOOTWEAR.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.FOREIGN_INVESTED_SECTOR.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.FOREIGN_CRUDE_OIL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.FURNITURE_PRODUCTS_FROM_MATERIALS_OTHER_THAN_WOOD.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.GLASS_AND_GLASS_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.HANDBAGS_WALLETS_SUITCASES_HATS_UMBRELLAS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.IRON_AND_STEEL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.IRON_AND_STEEL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.MACHINERY_EQUIPMENT_TOOLS_SPARE_PARTS_OTHER.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.MAIN_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.OTHER_BASE_METALS_AND_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.OTHER_GOODS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.PAPER_AND_PAPER_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.PEPPER.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.PETROLEUM.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.PHONES_AND_COMPONENTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.PLASTIC_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.RAW_PLASTICS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.RICE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.RUBBER.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.RUBBER_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.TEA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.TEXTILE_FIBERS_YARNS_OF_ALL_KINDS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.TEXTILE_GARMENT_LEATHER_FOOTWEAR_RAW_MATERIALS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.TEXTILES_GARMENTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.TOTAL_VALUE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.TOYS_SPORTS_EQUIPMENT_AND_PARTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.TRANSPORTATION_VEHICLES_AND_SPARE_PARTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.VEGETABLES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MPI.Column.WOOD_AND_WOOD_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.MPI.primary_key,
-                )
-                # fmt: on
-
-                # POPULATION
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.POPULATION.name,
-                    columns=[
-                        Column(name=Table.POPULATION.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.POPULATION.Column.POPULATION.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.POPULATION.Column.POPULATION_AREA_URBAN_RATE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.POPULATION.Column.POPULATION_DENSITY.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.POPULATION.Column.POPULATION_GROWTH_RATE.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.POPULATION.primary_key,
-                )
-                # fmt: on
-
-                # LABOR
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.LABOR.name,
-                    columns=[
-                        Column(name=Table.LABOR.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.LABOR.Column.AGRICULTURE_FORESTRY_AND_FISHERY.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.LABOR.Column.EMPLOYED_AMOUNT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.LABOR.Column.FEMALE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.LABOR.Column.INDUSTRY_CONSTRUCTION.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.LABOR.Column.LABOR_FORCE_ANNUAL_CHANGE_PERCENT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.LABOR.Column.LABOR_FORCE_PARTICIPATION_RATE_PERCENT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.LABOR.Column.MALE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.LABOR.Column.SERVICES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.LABOR.Column.UNEMPLOYED.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.LABOR.Column.URBAN_UNEMPLOYMENT_RATE.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.LABOR.primary_key,
-                )
-                # fmt: on
-
-                # RETAIL
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.RETAIL.name,
-                    columns=[
-                        Column(name=Table.RETAIL.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.RETAIL.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.RETAIL.Column.ACCOMMODATION_AND_CATERING_SERVICE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.RETAIL.Column.RETAIL_GROWTH.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.RETAIL.Column.RETAIL_SALE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.RETAIL.Column.SERVICES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.RETAIL.Column.TRAVELING_SERVICE.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.RETAIL.primary_key,
-                )
-                # fmt: on
-
-                # PMI
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.PMI.name,
-                    columns=[
-                        Column(name=Table.PMI.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.PMI.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.PMI.Column.PMI.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.PMI.primary_key,
-                )
-                # fmt: on
-
-                # IIP
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.IIP.name,
-                    columns=[
-                        Column(name=Table.IIP.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.IIP.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.IIP.Column.APPAREL_MANUFACTURING.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.BEVERAGE_PRODUCTION.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.COAL_AND_LIGNITE_MINING.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.CRUDE_OIL_AND_NATURAL_GAS_EXTRACTION.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.ENTIRE_INDUSTRIAL_SECTOR.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.FOOD_PRODUCTION_AND_PROCESSING.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.LEATHER_AND_RELATED_PRODUCT_MANUFACTURING.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.MANUFACTURE_OF_CHEMICALS_AND_CHEMICAL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.MANUFACTURE_OF_COKE_AND_REFINED_PETROLEUM_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.MANUFACTURE_OF_ELECTRICAL_EQUIPMENT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.MANUFACTURE_OF_ELECTRONIC_PRODUCTS_COMPUTERS_AND_OPTICAL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.MANUFACTURE_OF_FABRICATED_METAL_PRODUCTS_EXCLUDING_MACHINERY_AND_EQUIPMENT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.MANUFACTURE_OF_FURNITURE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.MANUFACTURE_OF_MACHINERY_AND_EQUIPMENT_NOT_ELSEWHERE_CLASSIFIED.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.MANUFACTURE_OF_METALS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.MANUFACTURE_OF_MOTOR_VEHICLES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.MANUFACTURE_OF_OTHER_NON_METALLIC_MINERAL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.MANUFACTURE_OF_OTHER_TRANSPORT_EQUIPMENT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.MANUFACTURE_OF_PHARMACEUTICALS_MEDICINAL_CHEMICALS_AND_BOTANICAL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.MANUFACTURE_OF_RUBBER_AND_PLASTIC_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.MANUFACTURING_INDUSTRY.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.METAL_ORE_MINING.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.MINING.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.MINING_SUPPORT_SERVICE_ACTIVITIES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.OTHER_MANUFACTURING_INDUSTRIES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.OTHER_MINING.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.PAPER_AND_PAPER_PRODUCT_MANUFACTURING.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.PRINTING_AND_REPRODUCTION_OF_RECORDED_MEDIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.PRODUCTION_AND_DISTRIBUTION_OF_ELECTRICITY_GAS_HOT_WATER_STEAM_AND_AIR_CONDITIONING.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.REPAIR_MAINTENANCE_AND_INSTALLATION_OF_MACHINERY_AND_EQUIPMENT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.TEXTILE_MANUFACTURING.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.TOBACCO_PRODUCT_MANUFACTURING.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.WASTE_COLLECTION_TREATMENT_AND_DISPOSAL_ACTIVITIES_RECYCLING_OF_WASTE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.WASTEWATER_COLLECTION_AND_TREATMENT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.WATER_COLLECTION_TREATMENT_AND_SUPPLY.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIP.Column.WATER_SUPPLY_WASTE_MANAGEMENT_AND_TREATMENT_ACTIVITIES.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.IIP.primary_key,
-                )
-                # fmt: on
-
-                # IPV
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.IPV.name,
-                    columns=[
-                        Column(name=Table.IPV.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.IPV.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.IPV.Column.ALUMINIUM.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.ANIMAL_FEED.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.AQUATIC_FEED.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.BEER.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.CARS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.CASUAL_CLOTHES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.CEMENT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.CHEMICAL_PAINTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.CIGARETTES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.COAL_CLEAN_COAL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.COMMERCIAL_TAP_WATER.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.ELECTRICITY_PRODUCED.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.EXTRACTED_CRUDE_OIL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.FRESH_MILK.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.GASOLINE_OIL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.GRANULATED_SUGAR.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.IRON_CRUDE_STEEL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.LEATHER_SHOES_AND_SANDALS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.LIQUIDIZED_GAS_LPG.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.MOBILE_PHONES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.MONONATRI_GLUTAMAT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.MOTORCYCLES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.NPK_MIXED_FERTILIZERS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.NATURAL_FABRICS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.NATURAL_GAS_AIR.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.PHONE_ACCESSORIES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.POWDERED_MILK.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.PROCESSED_SEAFOOD.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.ROLLED_STEEL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.STEEL_BARS_ANGLE_STEEL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.SYNTHETIC_FABRICS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.TELEVISION.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IPV.Column.UREA_FERTILIZER.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.IPV.primary_key,
-                )
-                # fmt: on
-
-                # MIP
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.MIP.name,
-                    columns=[
-                        Column(name=Table.MIP.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.MIP.Column.AIR_CONDITIONERS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.ANIMAL_AND_POULTRY_FEED.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.ANTIMONY_ORE_AND_ANTIMONY_CONCENTRATE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.APATITE_ORE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.AQUACULTURE_FEED.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.ASSEMBLED_CARS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.ASSEMBLED_MOTORCYCLES_AND_MOPEDS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.ASSEMBLED_TVS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.BATH_MILK_AND_FACIAL_CLEANSER.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.BEER.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.CANNED_FRUITS_AND_NUTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.CANNED_MEAT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.CANNED_SEAFOOD.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.CANNED_VEGETABLES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.CAR_AND_TRACTOR_TIRES_INFLATABLE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.CAST_OR_OTHER_ROUGH_IRON_AND_STEEL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.CASUAL_CLOTHING.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.CEMENT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.CHEMICAL_FERTILIZERS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.CLEAN_COAL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.COMMERCIAL_TAP_WATER.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.COPPER_ORE_AND_COPPER_CONCENTRATE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.CRUDE_OIL_EXTRACTION.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.DIGITAL_CAMERAS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.DOMESTIC_CERAMICS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.DOMESTIC_CRUDE_OIL_EXTRACTION.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.EXTRACTED_STONE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.FABRIC.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.FABRIC_SHOES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.FIBER.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.FIBER_CEMENT_ROOFING_SHEETS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.FIRED_BRICKS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.FIRED_TILES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.FISH_SAUCE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.FRESH_MILK.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.FROZEN_SEAFOOD.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.GENERATED_ELECTRICITY.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.GRANULATED_SUGAR.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.GRAVEL_AND_PEBBLES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.GROUND_COFFEE_AND_INSTANT_COFFEE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.HERBICIDES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.HOUSEHOLD_ELECTRIC_FANS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.HOUSEHOLD_REFRIGERATORS_AND_FREEZERS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.HOUSEHOLD_WASHING_MACHINES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.IRON_ORE_AND_IRON_CONCENTRATE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.LANDLINE_PHONES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.LAUNDRY_DETERGENT_AND_CLEANING_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.LEATHER_SHOES_AND_BOOTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.LIGHT_BULBS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.MILLED_RICE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.MINERAL_WATER.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.MOBILE_PHONES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.MOTORCYCLE_AND_BICYCLE_TIRES_INFLATABLE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.MSG_MONOSODIUM_GLUTAMATE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.NATURAL_GAS_IN_GAS_FORM.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.NPK_FERTILIZERS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.PAPER_AND_CARDBOARD.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.PESTICIDES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.PLASTIC_PACKAGING_AND_BAGS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.POWDERED_MILK.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.PRINTED_NEWSPAPERS_AND_OTHER_PRINTING_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.PRINTERS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.PROCESSED_TEA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.PURIFIED_WATER.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.REFINED_VEGETABLE_OIL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.ROLLED_STEEL_AND_SHAPED_STEEL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.SANITARY_WARE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.SAWN_TIMBER.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.SEA_SALT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.SHAMPOO_AND_CONDITIONER.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.SPIRITS_AND_WHITE_WINE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.SPORTS_SHOES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.STANDARD_BATTERIES_1_5V.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.THRESHING_MACHINES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.TITANIUM_ORE_AND_TITANIUM_CONCENTRATE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.TOBACCO.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.TOOTHPASTE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.TUBES_FOR_BICYCLES_AND_MOTORCYCLES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.TUBES_FOR_CARS_AND_AIRCRAFT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.VARIOUS_TYPES_OF_BATTERIES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.VARIOUS_TYPES_OF_BICYCLES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.VARIOUS_TYPES_OF_SAND.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MIP.Column.YELLOW_PHOSPHORUS.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.MIP.primary_key,
-                )
-                # fmt: on
-
-                # FA_BY_HOUSE_TYPES
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.FA_BY_HOUSE_TYPES.name,
-                    columns=[
-                        Column(name=Table.FA_BY_HOUSE_TYPES.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.FA_BY_HOUSE_TYPES.Column._16_20_FLOORS.value, data_type=DataType.INT(), nullable=True),
-                        Column(name=Table.FA_BY_HOUSE_TYPES.Column._21_25_FLOORS.value, data_type=DataType.INT(), nullable=True),
-                        Column(name=Table.FA_BY_HOUSE_TYPES.Column._26_FLOORS_AND_ABOVE.value, data_type=DataType.INT(), nullable=True),
-                        Column(name=Table.FA_BY_HOUSE_TYPES.Column._5_FLOORS_AND_BELOW.value, data_type=DataType.INT(), nullable=True),
-                        Column(name=Table.FA_BY_HOUSE_TYPES.Column._6_8_FLOORS.value, data_type=DataType.INT(), nullable=True),
-                        Column(name=Table.FA_BY_HOUSE_TYPES.Column._9_15_FLOORS.value, data_type=DataType.INT(), nullable=True),
-                        Column(name=Table.FA_BY_HOUSE_TYPES.Column.APARTMENT_BUILDINGS.value, data_type=DataType.INT(), nullable=True),
-                        Column(name=Table.FA_BY_HOUSE_TYPES.Column.SINGLE_FAMILY_HOMES.value, data_type=DataType.INT(), nullable=True),
-                        Column(name=Table.FA_BY_HOUSE_TYPES.Column.SINGLE_FAMILY_HOMES_4_FLOORS_AND_ABOVE.value, data_type=DataType.INT(), nullable=True),
-                        Column(name=Table.FA_BY_HOUSE_TYPES.Column.SINGLE_FAMILY_HOMES_BELOW_4_FLOORS.value, data_type=DataType.INT(), nullable=True),
-                        Column(name=Table.FA_BY_HOUSE_TYPES.Column.TOTAL.value, data_type=DataType.INT(), nullable=True),
-                        Column(name=Table.FA_BY_HOUSE_TYPES.Column.VILLAS.value, data_type=DataType.INT(), nullable=True),
-                    ],
-                    primary_keys=Table.FA_BY_HOUSE_TYPES.primary_key,
-                )
-                # fmt: on
-
-                # IT_BOP
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.IT_BOP.name,
-                    columns=[
-                        Column(name=Table.IT_BOP.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.IT_BOP.Column.QUARTER.value, data_type=DataType.INT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.A_CURRENT_ACCOUNT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.BORROWING_AND_EXTERNAL_DEBT_REPAYMENT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.C_FINANCIAL_ACCOUNT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.CAPITAL_WITHDRAWAL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.CURRENT_TRANSFERS_SECONDARY_INCOME_NET.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.CURRENT_TRANSFERS_SECONDARY_INCOME_PAYMENTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.CURRENT_TRANSFERS_SECONDARY_INCOME_RECEIPTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.D_ERRORS_AND_OMISSIONS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.DIRECT_INVESTMENT_ABROAD_ASSETS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.DIRECT_INVESTMENT_IN_VIETNAM_LIABILITIES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.DIRECT_INVESTMENT_NET.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.E_OVERALL_BALANCE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.F_RESERVES_AND_RELATED_ITEMS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.FINANCIAL_INSTITUTIONS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.GOODS_EXPORTS_FOB.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.GOODS_IMPORTS_FOB.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.GOODS_NET.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.GOVERNMENT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.INVESTMENT_INCOME_PRIMARY_INCOME_NET.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.INVESTMENT_INCOME_PRIMARY_INCOME_PAYMENTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.INVESTMENT_INCOME_PRIMARY_INCOME_RECEIPTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.LONG_TERM.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.MONEY_AND_DEPOSITS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.OTHER_INVESTMENT_ASSETS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.OTHER_INVESTMENT_LIABILITIES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.OTHER_INVESTMENT_NET.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.OTHER_RECEIVABLESPAYABLES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.PORTFOLIO_INVESTMENT_ABROAD_ASSETS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.PORTFOLIO_INVESTMENT_IN_VIETNAM_LIABILITIES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.PORTFOLIO_INVESTMENT_NET.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.PRINCIPAL_REPAYMENT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.PRIVATE_SECTOR.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.RESERVE_ASSETS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.RESIDENTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.SERVICES_EXPORTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.SERVICES_IMPORTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.SERVICES_NET.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.SHORT_TERM.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IT_BOP.Column.TOTAL_CURRENT_AND_CAPITAL_ACCOUNT_BALANCE.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.IT_BOP.primary_key,
-                )
-                # fmt: on
-
-                # TSBR
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.TSBR.name,
-                    columns=[
-                        Column(name=Table.TSBR.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.TSBR.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.TSBR.Column.AGRICULTURAL_LAND_USE_TAX.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.AID_REVENUE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.DOMESTIC_REVENUE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.ENVIRONMENTAL_PROTECTION_TAX.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.ENVIRONMENTAL_PROTECTION_TAX_ON_IMPORTED_GOODS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.EXPORT_TAX.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.FEES_AND_CHARGES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.IMPORT_TAX.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.NON_AGRICULTURAL_LAND_USE_TAX.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.OTHER_BUDGET_REVENUES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.OTHER_REVENUE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.PERSONAL_INCOME_TAX.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.RECOVERY_OF_CAPITAL_DIVIDENDS_POST_TAX_PROFITS_SURPLUS_REVENUE_AND_EXPENDITURE_OF_THE_STATE_BANK.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.REVENUE_BALANCE_FROM_IMPORT_EXPORT_ACTIVITIES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.REVENUE_FROM_CRUDE_OIL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.REVENUE_FROM_FOREIGN_INVESTED_ENTERPRISES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.REVENUE_FROM_HOUSING_AND_LAND.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.REVENUE_FROM_LAND_AND_WATER_SURFACE_LEASING.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.REVENUE_FROM_LAND_USE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.REVENUE_FROM_LEASING_AND_SALE_OF_STATE_OWNED_HOUSING.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.REVENUE_FROM_LOTTERY_ACTIVITIES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.REVENUE_FROM_MINING_RIGHTS_LICENSING.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.REVENUE_FROM_NON_STATE_ECONOMIC_SECTOR.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.REVENUE_FROM_PUBLIC_LAND_FUNDS_AND_OTHER_PUBLIC_ASSET_BENEFITS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.REVENUE_FROM_STATE_OWNED_ENTERPRISES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.SPECIAL_CONSUMPTION_TAX_ON_IMPORTED_GOODS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.TOTAL_REVENUE_FROM_IMPORT_EXPORT_ACTIVITIES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.TOTAL_STATE_BUDGET_REVENUE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.VALUE_ADDED_TAX_ON_IMPORTED_GOODS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBR.Column.VALUE_ADDED_TAX_REFUND.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.TSBR.primary_key,
-                )
-                # fmt: on
-
-                # TSBE
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.TSBE.name,
-                    columns=[
-                        Column(name=Table.TSBE.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.TSBE.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.TSBE.Column.AID_EXPENDITURE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBE.Column.DEBT_INTEREST_PAYMENT_EXPENDITURE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBE.Column.DEVELOPMENT_INVESTMENT_EXPENDITURE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBE.Column.EXPENDITURE_FOR_EDUCATION_TRAINING_AND_VOCATIONAL_EDUCATION.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBE.Column.EXPENDITURE_FOR_SCIENCE_AND_TECHNOLOGY.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBE.Column.EXPENDITURE_FOR_WAGE_REFORM_AND_STREAMLINING_PERSONNEL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBE.Column.REGULAR_EXPENDITURE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBE.Column.STATE_BUDGET_CONTINGENCY.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBE.Column.SUPPLEMENTARY_EXPENDITURE_FOR_FINANCIAL_RESERVE_FUND.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TSBE.Column.TOTAL_STATE_BUDGET_EXPENDITURE.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.TSBE.primary_key,
-                )
-                # fmt: on
-
-                # GD
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.GD.name,
-                    columns=[
-                        Column(name=Table.GD.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.GD.Column.DEBT_BALANCE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.GD.Column.DOMESTIC_DEBT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.GD.Column.FOREIGN_DEBT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.GD.Column.TOTAL_DEBT_PAYMENTS_DURING_THE_PERIOD.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.GD.Column.TOTAL_INTEREST_AND_FEES_PAID_DURING_THE_PERIOD.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.GD.Column.TOTAL_PRINCIPAL_REPAYMENT_DURING_THE_PERIOD.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.GD.Column.WITHDRAWALS_DURING_THE_PERIOD.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.GD.primary_key,
-                )
-                # fmt: on
-
-                # BRD
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.BRD.name,
-                    columns=[
-                        Column(name=Table.BRD.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.BRD.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.BRD.Column.ENTERPRISES_COMPLETING_DISSOLUTION.value, data_type=DataType.INT(), nullable=True),
-                        Column(name=Table.BRD.Column.ENTERPRISES_RESUMING_OPERATIONS.value, data_type=DataType.INT(), nullable=True),
-                        Column(name=Table.BRD.Column.ENTERPRISES_TEMPORARILY_SUSPENDED_AWAITING_DISSOLUTION.value, data_type=DataType.INT(), nullable=True),
-                        Column(name=Table.BRD.Column.NEWLY_ESTABLISHED_ENTERPRISES.value, data_type=DataType.INT(), nullable=True),
-                        Column(name=Table.BRD.Column.REGISTERED_CAPITAL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.BRD.Column.REGISTERED_LABOR.value, data_type=DataType.INT(), nullable=True),
-                    ],
-                    primary_keys=Table.BRD.primary_key,
-                )
-                # fmt: on
-
-                # IISD
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.IISD.name,
-                    columns=[
-                        Column(name=Table.IISD.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.IISD.Column.QUARTER.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.IISD.Column.FOREIGN_DIRECT_INVESTMENT_CAPITAL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IISD.Column.GOVERNMENT_BOND_CAPITAL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IISD.Column.INVESTMENT_CAPITAL_FROM_RESIDENTS_AND_PRIVATE_INDIVIDUALS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IISD.Column.INVESTMENT_CAPITAL_FROM_THE_STATE_BUDGET.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IISD.Column.INVESTMENT_CAPITAL_OF_STATE_ENTERPRISES_EQUITY.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IISD.Column.LOANS_FROM_OTHER_SOURCES_OF_THE_STATE_SECTOR.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IISD.Column.OTHER_MOBILIZED_CAPITAL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IISD.Column.PLANNED_STATE_INVESTMENT_CREDIT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IISD.Column.TOTAL.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.IISD.primary_key,
-                )
-                # fmt: on
-
-                # TREG
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.TREG.name,
-                    columns=[
-                        Column(name=Table.TREG.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.TREG.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.TREG.Column.INTERNATIONAL_LIQUIDITY_TOTAL_RESERVES_EXCLUDING_GOLD_FOREIGN_EXCHANGE_US_DOLLARS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.TREG.Column.INTERNATIONAL_LIQUIDITY_TOTAL_RESERVES_EXCLUDING_GOLD_US_DOLLARS.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.TREG.primary_key,
-                )
-                # fmt: on
-
-                # CREDIT
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.CREDIT.name,
-                    columns=[
-                        Column(name=Table.CREDIT.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.CREDIT.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.CREDIT.Column.CREDIT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.CREDIT.Column.CREDIT_GROWTH_YTD.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.CREDIT.Column.MONEY_SUPPLY_GROWTH_M2_YTD.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.CREDIT.Column.MONEY_SUPPLY_M2.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.CREDIT.primary_key,
-                )
-                # fmt: on
-
-                # MOBILIZATION
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.MOBILIZATION.name,
-                    columns=[
-                        Column(name=Table.MOBILIZATION.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.MOBILIZATION.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.MOBILIZATION.Column.DEPOSITS_FROM_ECONOMIC_ORGANIZATIONS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MOBILIZATION.Column.DEPOSITS_FROM_RESIDENTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.MOBILIZATION.Column.TOTAL_PAYMENT_INSTRUMENTS.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.MOBILIZATION.primary_key,
-                )
-                # fmt: on
-
-                # G_EXCHANGE_RATE
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.G_EXCHANGE_RATE.name,
-                    columns = [
-                        Column(name=Table.G_EXCHANGE_RATE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.G_EXCHANGE_RATE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
-                        Column(name=Table.G_EXCHANGE_RATE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_EXCHANGE_RATE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_EXCHANGE_RATE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_EXCHANGE_RATE.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_EXCHANGE_RATE.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
-                    ],
-                    primary_keys=Table.G_EXCHANGE_RATE.primary_key,
-                )
-                # fmt: on
-
-                # IIR
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.IIR.name,
-                    columns=[
-                        Column(name=Table.IIR.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.IIR.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.IIR.Column.DAY.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.IIR.Column.ONE_MONTH.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIR.Column.ONE_WEEK.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIR.Column.TWO_WEEKS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIR.Column.THREE_MONTHS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIR.Column.SIX_MONTHS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIR.Column.NINE_MONTHS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IIR.Column.OVERNIGHT.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.IIR.primary_key,
-                )
-                # fmt: on
-
-                # RRRR
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.RRRR.name,
-                    columns=[
-                        Column(name=Table.RRRR.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.RRRR.Column.DISCOUNT_RATE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.RRRR.Column.REFINANCING_RATE.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=[Table.RRRR.Column.DATE.value],
-                )
-                # fmt: on
-
-                # FDI_SECTOR
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.FDI_SECTOR.name,
-                    columns=[
-                        Column(name=Table.FDI_SECTOR.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.FDI_SECTOR.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.FDI_SECTOR.Column.ACCOMMODATION_AND_FOOD_SERVICES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.FDI_SECTOR.Column.ADMINISTRATIVE_AND_SUPPORT_SERVICE_ACTIVITIES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.FDI_SECTOR.Column.AGRICULTURE_FORESTRY_AND_FISHERY.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.FDI_SECTOR.Column.ARTS_ENTERTAINMENT_AND_RECREATION.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.FDI_SECTOR.Column.CONSTRUCTION.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.FDI_SECTOR.Column.DOMESTIC_HOUSEHOLD_SERVICE_WORKERS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.FDI_SECTOR.Column.EDUCATION_AND_TRAINING.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.FDI_SECTOR.Column.FINANCIAL_BANKING_AND_INSURANCE_ACTIVITIES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.FDI_SECTOR.Column.HEALTHCARE_AND_SOCIAL_ASSISTANCE_ACTIVITIES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.FDI_SECTOR.Column.INFORMATION_AND_COMMUNICATION.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.FDI_SECTOR.Column.MANUFACTURING_AND_PROCESSING_INDUSTRY.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.FDI_SECTOR.Column.MINING_AND_QUARRYING.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.FDI_SECTOR.Column.OTHER_SERVICE_ACTIVITIES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.FDI_SECTOR.Column.PRODUCTION_AND_DISTRIBUTION_OF_ELECTRICITY_GAS_WATER_AND_AIR_CONDITIONING.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.FDI_SECTOR.Column.PROFESSIONAL_SCIENTIFIC_AND_TECHNOLOGICAL_ACTIVITIES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.FDI_SECTOR.Column.REAL_ESTATE_BUSINESS_ACTIVITIES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.FDI_SECTOR.Column.TRANSPORTATION_AND_WAREHOUSING.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.FDI_SECTOR.Column.WATER_SUPPLY_AND_WASTE_TREATMENT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.FDI_SECTOR.Column.WHOLESALE_AND_RETAIL_REPAIR_OF_MOTOR_VEHICLES_AND_MOTORCYCLES.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.FDI_SECTOR.primary_key,
-                )
-                # fmt: on
-
-                # FDI_RD
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.FDI_RD.name,
-                    columns=[
-                        Column(name=Table.FDI_RD.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.FDI_RD.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.FDI_RD.Column.FDI_DISBURSEMENT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.FDI_RD.Column.REGISTER.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.FDI_RD.primary_key,
-                )
-                # fmt: on
-
-                # EXPORT
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.EXPORT.name,
-                    columns=[
-                        Column(name=Table.EXPORT.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.EXPORT.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.EXPORT.Column.ARGENTINA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.ASEAN.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.POLAND.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.BELARUS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.BRAZIL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.BULGARIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.BELGIUM.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.PORTUGAL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.IVORY_COAST.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.CAMEROON.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.CAMBODIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.CANADA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.CHILE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.CROATIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.UNITED_ARAB_EMIRATES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.ESTONIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.EU.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.HUNGARY.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.GREECE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.NETHERLANDS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.SOUTH_KOREA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.HONG_KONG.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.INDONESIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.IRELAND.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.ISRAEL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.KAZAKHSTAN.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.KUWAIT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.LATVIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.LITHUANIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.LUXEMBOURG.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.LAOS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.MALAYSIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.MALTA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.MEXICO.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.MYANMAR.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.USA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.NORWAY.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.SOUTH_AFRICA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.NEW_ZEALAND.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.RUSSIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.BRUNEI_DARUSSALAM.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.JAPAN.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.OTHER_COUNTRIES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.PAKISTAN.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.PERU.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.PHILIPPINES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.FRANCE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.FINLAND.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.ROMANIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.SENEGAL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.SINGAPORE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.SLOVAKIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.SLOVENIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.CZECHIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.CYPRUS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.THAILAND.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.TURKEY.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.SWITZERLAND.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.SWEDEN.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.CHINA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.SPAIN.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.UKRAINE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.UNITED_KINGDOM.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.AUSTRIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.AUSTRALIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.ITALY.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.DENMARK.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.TAIWAN.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.GERMANY.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.SAUDI_ARABIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.EXPORT.Column.INDIA.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.EXPORT.primary_key,
-                )
-                # fmt: on
-
-                # IMPORT
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.IMPORT.name,
-                    columns=[
-                        Column(name=Table.IMPORT.Column.YEAR.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.IMPORT.Column.MONTH.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.IMPORT.Column.ARGENTINA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.ASEAN.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.POLAND.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.BELARUS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.BRAZIL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.BULGARIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.BELGIUM.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.PORTUGAL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.IVORY_COAST.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.CAMEROON.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.CAMBODIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.CANADA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.CHILE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.CROATIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.UNITED_ARAB_EMIRATES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.ESTONIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.EU.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.HUNGARY.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.GREECE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.NETHERLANDS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.SOUTH_KOREA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.HONG_KONG.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.INDONESIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.IRELAND.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.ISRAEL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.KAZAKHSTAN.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.KUWAIT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.LATVIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.LITHUANIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.LUXEMBOURG.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.LAOS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.MALAYSIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.MALTA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.MEXICO.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.MYANMAR.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.USA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.NORWAY.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.SOUTH_AFRICA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.NEW_ZEALAND.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.RUSSIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.BRUNEI_DARUSSALAM.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.JAPAN.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.OTHER_COUNTRIES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.PAKISTAN.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.PERU.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.PHILIPPINES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.FRANCE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.FINLAND.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.ROMANIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.SENEGAL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.SINGAPORE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.SLOVAKIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.SLOVENIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.CZECHIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.CYPRUS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.THAILAND.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.TURKEY.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.SWITZERLAND.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.SWEDEN.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.CHINA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.SPAIN.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.UKRAINE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.UNITED_KINGDOM.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.AUSTRIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.AUSTRALIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.ITALY.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.DENMARK.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.TAIWAN.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.GERMANY.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.SAUDI_ARABIA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.IMPORT.Column.INDIA.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.IMPORT.primary_key,
-                )
-                # fmt: on
-
-                # GOLD_PRICE
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.GOLD_PRICE.name,
-                    columns = [
-                        Column(name=Table.GOLD_PRICE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.GOLD_PRICE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
-                        Column(name=Table.GOLD_PRICE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.GOLD_PRICE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.GOLD_PRICE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.GOLD_PRICE.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.GOLD_PRICE.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
-                    ],
-                    primary_keys=Table.GOLD_PRICE.primary_key,
-                )
-                # fmt: on
-                
-                # OIL_PRICE
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.OIL_PRICE.name,
-                    columns = [
-                        Column(name=Table.OIL_PRICE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.OIL_PRICE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
-                        Column(name=Table.OIL_PRICE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.OIL_PRICE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.OIL_PRICE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.OIL_PRICE.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.OIL_PRICE.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
-                    ],
-                    primary_keys=Table.OIL_PRICE.primary_key,
-                )
-                # fmt: on
-
-                # DOW_JONES
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.DOW_JONES.name,
-                    columns = [
-                        Column(name=Table.DOW_JONES.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.DOW_JONES.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
-                        Column(name=Table.DOW_JONES.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.DOW_JONES.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.DOW_JONES.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.DOW_JONES.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.DOW_JONES.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
-                    ],
-                    primary_keys=Table.DOW_JONES.primary_key,
-                )
-                # fmt: on
-                
-                # NYSE_COMPOSITE
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.NYSE_COMPOSITE.name,
-                    columns = [
-                        Column(name=Table.NYSE_COMPOSITE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.NYSE_COMPOSITE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.NYSE_COMPOSITE.Column.ADJ_CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.NYSE_COMPOSITE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.NYSE_COMPOSITE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.NYSE_COMPOSITE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.NYSE_COMPOSITE.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
-                    ],
-                    primary_keys=Table.NYSE_COMPOSITE.primary_key,
-                )
-                # fmt: on
-
-                # SNP_500
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.SNP_500.name,
-                    columns = [
-                        Column(name=Table.SNP_500.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.SNP_500.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
-                        Column(name=Table.SNP_500.Column.ADJ_CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
-                        Column(name=Table.SNP_500.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.SNP_500.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.SNP_500.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.SNP_500.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
-                    ],
-                    primary_keys=Table.SNP_500.primary_key,
-                )
-                # fmt: on
-                
-                # NASDAQ_COMPOSITE
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.NASDAQ_COMPOSITE.name,
-                    columns = [
-                        Column(name=Table.NASDAQ_COMPOSITE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.NASDAQ_COMPOSITE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
-                        Column(name=Table.NASDAQ_COMPOSITE.Column.ADJ_CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
-                        Column(name=Table.NASDAQ_COMPOSITE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.NASDAQ_COMPOSITE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.NASDAQ_COMPOSITE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.NASDAQ_COMPOSITE.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
-                    ],
-                    primary_keys=Table.NASDAQ_COMPOSITE.primary_key,
-                )
-                # fmt: on
-                
-                # NASDAQ_100
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.NASDAQ_100.name,
-                    columns = [
-                        Column(name=Table.NASDAQ_100.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.NASDAQ_100.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
-                        Column(name=Table.NASDAQ_100.Column.ADJ_CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
-                        Column(name=Table.NASDAQ_100.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.NASDAQ_100.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.NASDAQ_100.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.NASDAQ_100.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
-                    ],
-                    primary_keys=Table.NASDAQ_100.primary_key,
-                )
-                # fmt: on
-
-            case DataQuality.GOLD:
-                # G_GDP
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.G_GDP.name,
-                    columns=[
-                        Column(name=Table.G_GDP.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.G_GDP.Column.GDP_GROWTH.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.G_GDP.primary_key,
-                )
-                # fmt: on
-
-                # G_CPI
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.G_CPI.name,
-                    columns = [
-                        Column(name=Table.G_CPI.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.G_CPI.Column.BEVERAGE_AND_CIGARETTE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_CPI.Column.CONSUMER_PRICE_INDEX.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_CPI.Column.CULTURE_ENTERTAINMENT_AND_TOURISM.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_CPI.Column.EATING_OUTSIDE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_CPI.Column.EDUCATION.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_CPI.Column.FOOD.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_CPI.Column.FOOD_AND_FOODSTUFF.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_CPI.Column.FOODSTUFF.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_CPI.Column.GARMENT_FOOTWEAR_HAT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_CPI.Column.HOUSEHOLD_APPLIANCES_AND_GOODS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_CPI.Column.HOUSING_AND_CONSTRUCTION_MATERIALS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_CPI.Column.MEDICINE_AND_HEALTH_CARE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_CPI.Column.OTHER_GOODS_AND_SERVICES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_CPI.Column.POSTAL_SERVICES_AND_TELECOMMUNICATION.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_CPI.Column.TRAFFIC.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.G_CPI.primary_key,
-                )
-                # fmt: on
-
-                # G_PPI
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.G_PPI.name,
-                    columns = [
-                        Column(name=Table.G_PPI.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.G_PPI.Column.GENERAL_INDEX.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_PPI.Column.FORESTRY_SERVICES.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_PPI.Column.AGRICULTURAL_SERVICES.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_PPI.Column.FORESTRY_AND_RELATED_SERVICES.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_PPI.Column.EXPLOITED_FOREST_PRODUCTS.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_PPI.Column.COLLECTED_FOREST_PRODUCTS.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_PPI.Column.AGRICULTURE_AND_RELATED_SERVICES.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_PPI.Column.LIVESTOCK_PRODUCTS.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_PPI.Column.ANNUAL_CROP_PRODUCTS.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_PPI.Column.PERENNIAL_CROP_PRODUCTS.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_PPI.Column.EXPLOITED_AQUATIC_PRODUCTS.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_PPI.Column.AQUATIC_PRODUCTS_EXPLOITATION_AND_FARMING.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_PPI.Column.AQUATIC_FARMING_PRODUCTS.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_PPI.Column.FOREST_PLANTING_AND_CARE.value, data_type=DataType.DECIMAL(), nullable=True),
-                    ],
-                    primary_keys=Table.G_PPI.primary_key,
-                )
-                # fmt: on
-
-                # G_XPI
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.G_XPI.name,
-                    columns=[
-                        Column(name=Table.G_XPI.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.G_XPI.Column.ANIMAL_FEED_AND_RAW_MATERIALS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_XPI.Column.AQUATIC_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_XPI.Column.CAMERAS_CAMCORDERS_AND_COMPONENTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_XPI.Column.CASHEW_NUTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_XPI.Column.CASSAVA_AND_CASSAVA_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_XPI.Column.CHEMICAL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_XPI.Column.CHEMICALS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_XPI.Column.CLINKER_AND_CEMENT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_XPI.Column.COFFEE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_XPI.Column.CONFECTIONERY_AND_CEREAL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_XPI.Column.CRUDE_OIL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_XPI.Column.DOMESTIC_ECONOMIC_SECTOR.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_XPI.Column.ELECTRICAL_WIRES_AND_CABLES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_XPI.Column.ELECTRONICS_COMPUTERS_AND_COMPONENTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_XPI.Column.FOOTWEAR.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_XPI.Column.FOREIGN_INVESTED_SECTOR.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_XPI.Column.FOREIGN_CRUDE_OIL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_XPI.Column.FURNITURE_PRODUCTS_FROM_MATERIALS_OTHER_THAN_WOOD.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_XPI.Column.GLASS_AND_GLASS_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_XPI.Column.HANDBAGS_WALLETS_SUITCASES_HATS_UMBRELLAS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_XPI.Column.IRON_AND_STEEL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_XPI.Column.IRON_AND_STEEL_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_XPI.Column.MACHINERY_EQUIPMENT_TOOLS_SPARE_PARTS_OTHER.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_XPI.Column.MAIN_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_XPI.Column.OTHER_BASE_METALS_AND_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_XPI.Column.OTHER_GOODS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_XPI.Column.PAPER_AND_PAPER_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_XPI.Column.PEPPER.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_XPI.Column.PETROLEUM.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_XPI.Column.PHONES_AND_COMPONENTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_XPI.Column.PLASTIC_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_XPI.Column.RAW_PLASTICS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_XPI.Column.RICE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_XPI.Column.RUBBER.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_XPI.Column.RUBBER_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_XPI.Column.TEA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_XPI.Column.TEXTILE_FIBERS_YARNS_OF_ALL_KINDS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_XPI.Column.TEXTILE_GARMENT_LEATHER_FOOTWEAR_RAW_MATERIALS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_XPI.Column.TEXTILES_GARMENTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_XPI.Column.TOTAL_VALUE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_XPI.Column.TOYS_SPORTS_EQUIPMENT_AND_PARTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_XPI.Column.TRANSPORTATION_VEHICLES_AND_SPARE_PARTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_XPI.Column.VEGETABLES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_XPI.Column.WOOD_AND_WOOD_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.G_XPI.primary_key,
-                )
-                # fmt: on
-
-                # G_POPULATION
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.G_POPULATION.name,
-                    columns=[
-                        Column(name=Table.G_POPULATION.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.G_POPULATION.Column.POPULATION.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_POPULATION.Column.POPULATION_AREA_URBAN_RATE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_POPULATION.Column.POPULATION_DENSITY.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_POPULATION.Column.POPULATION_GROWTH_RATE.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.G_POPULATION.primary_key,
-                )
-                # fmt: on
-
-                # G_LABOR
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.G_LABOR.name,
-                    columns=[
-                        Column(name=Table.G_LABOR.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.G_LABOR.Column.AGRICULTURE_FORESTRY_AND_FISHERY.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_LABOR.Column.EMPLOYED_AMOUNT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_LABOR.Column.FEMALE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_LABOR.Column.INDUSTRY_CONSTRUCTION.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_LABOR.Column.LABOR_FORCE_ANNUAL_CHANGE_PERCENT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_LABOR.Column.LABOR_FORCE_PARTICIPATION_RATE_PERCENT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_LABOR.Column.MALE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_LABOR.Column.SERVICES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_LABOR.Column.UNEMPLOYED.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_LABOR.Column.URBAN_UNEMPLOYMENT_RATE.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.G_LABOR.primary_key,
-                )
-                # fmt: on
-
-                # G_IPV
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.G_IPV.name,
-                    columns=[
-                        Column(name=Table.G_IPV.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.G_IPV.Column.ALUMINIUM.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_IPV.Column.ANIMAL_FEED.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_IPV.Column.AQUATIC_FEED.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_IPV.Column.BEER.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_IPV.Column.CARS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_IPV.Column.CASUAL_CLOTHES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_IPV.Column.CEMENT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_IPV.Column.CHEMICAL_PAINTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_IPV.Column.CIGARETTES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_IPV.Column.COAL_CLEAN_COAL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_IPV.Column.COMMERCIAL_TAP_WATER.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_IPV.Column.ELECTRICITY_PRODUCED.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_IPV.Column.EXTRACTED_CRUDE_OIL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_IPV.Column.FRESH_MILK.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_IPV.Column.GASOLINE_OIL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_IPV.Column.GRANULATED_SUGAR.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_IPV.Column.IRON_CRUDE_STEEL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_IPV.Column.LEATHER_SHOES_AND_SANDALS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_IPV.Column.LIQUIDIZED_GAS_LPG.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_IPV.Column.MOBILE_PHONES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_IPV.Column.MONONATRI_GLUTAMAT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_IPV.Column.MOTORCYCLES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_IPV.Column.NPK_MIXED_FERTILIZERS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_IPV.Column.NATURAL_FABRICS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_IPV.Column.NATURAL_GAS_AIR.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_IPV.Column.PHONE_ACCESSORIES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_IPV.Column.POWDERED_MILK.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_IPV.Column.PROCESSED_SEAFOOD.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_IPV.Column.ROLLED_STEEL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_IPV.Column.STEEL_BARS_ANGLE_STEEL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_IPV.Column.SYNTHETIC_FABRICS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_IPV.Column.TELEVISION.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_IPV.Column.UREA_FERTILIZER.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.G_IPV.primary_key,
-                )
-                # fmt: on
-
-                # G_MIP
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.G_MIP.name,
-                    columns=[
-                        Column(name=Table.G_MIP.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.G_MIP.Column.AIR_CONDITIONERS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.ANIMAL_AND_POULTRY_FEED.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.ANTIMONY_ORE_AND_ANTIMONY_CONCENTRATE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.APATITE_ORE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.AQUACULTURE_FEED.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.ASSEMBLED_CARS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.ASSEMBLED_MOTORCYCLES_AND_MOPEDS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.ASSEMBLED_TVS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.BATH_MILK_AND_FACIAL_CLEANSER.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.BEER.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.CANNED_FRUITS_AND_NUTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.CANNED_MEAT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.CANNED_SEAFOOD.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.CANNED_VEGETABLES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.CAR_AND_TRACTOR_TIRES_INFLATABLE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.CAST_OR_OTHER_ROUGH_IRON_AND_STEEL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.CASUAL_CLOTHING.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.CEMENT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.CHEMICAL_FERTILIZERS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.CLEAN_COAL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.COMMERCIAL_TAP_WATER.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.COPPER_ORE_AND_COPPER_CONCENTRATE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.CRUDE_OIL_EXTRACTION.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.DIGITAL_CAMERAS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.DOMESTIC_CERAMICS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.DOMESTIC_CRUDE_OIL_EXTRACTION.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.EXTRACTED_STONE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.FABRIC.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.FABRIC_SHOES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.FIBER.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.FIBER_CEMENT_ROOFING_SHEETS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.FIRED_BRICKS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.FIRED_TILES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.FISH_SAUCE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.FRESH_MILK.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.FROZEN_SEAFOOD.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.GENERATED_ELECTRICITY.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.GRANULATED_SUGAR.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.GRAVEL_AND_PEBBLES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.GROUND_COFFEE_AND_INSTANT_COFFEE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.HERBICIDES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.HOUSEHOLD_ELECTRIC_FANS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.HOUSEHOLD_REFRIGERATORS_AND_FREEZERS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.HOUSEHOLD_WASHING_MACHINES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.IRON_ORE_AND_IRON_CONCENTRATE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.LANDLINE_PHONES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.LAUNDRY_DETERGENT_AND_CLEANING_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.LEATHER_SHOES_AND_BOOTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.LIGHT_BULBS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.MILLED_RICE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.MINERAL_WATER.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.MOBILE_PHONES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.MOTORCYCLE_AND_BICYCLE_TIRES_INFLATABLE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.MSG_MONOSODIUM_GLUTAMATE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.NATURAL_GAS_IN_GAS_FORM.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.NPK_FERTILIZERS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.PAPER_AND_CARDBOARD.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.PESTICIDES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.PLASTIC_PACKAGING_AND_BAGS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.POWDERED_MILK.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.PRINTED_NEWSPAPERS_AND_OTHER_PRINTING_PRODUCTS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.PRINTERS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.PROCESSED_TEA.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.PURIFIED_WATER.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.REFINED_VEGETABLE_OIL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.ROLLED_STEEL_AND_SHAPED_STEEL.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.SANITARY_WARE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.SAWN_TIMBER.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.SEA_SALT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.SHAMPOO_AND_CONDITIONER.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.SPIRITS_AND_WHITE_WINE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.SPORTS_SHOES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.STANDARD_BATTERIES_1_5V.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.THRESHING_MACHINES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.TITANIUM_ORE_AND_TITANIUM_CONCENTRATE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.TOBACCO.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.TOOTHPASTE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.TUBES_FOR_BICYCLES_AND_MOTORCYCLES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.TUBES_FOR_CARS_AND_AIRCRAFT.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.VARIOUS_TYPES_OF_BATTERIES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.VARIOUS_TYPES_OF_BICYCLES.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.VARIOUS_TYPES_OF_SAND.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_MIP.Column.YELLOW_PHOSPHORUS.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.G_MIP.primary_key,
-                )
-                # fmt: on
-
-                # G_FA_BY_HOUSE_TYPES
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.G_FA_BY_HOUSE_TYPES.name,
-                    columns=[
-                        Column(name=Table.G_FA_BY_HOUSE_TYPES.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.G_FA_BY_HOUSE_TYPES.Column._16_20_FLOORS.value, data_type=DataType.INT(), nullable=True),
-                        Column(name=Table.G_FA_BY_HOUSE_TYPES.Column._21_25_FLOORS.value, data_type=DataType.INT(), nullable=True),
-                        Column(name=Table.G_FA_BY_HOUSE_TYPES.Column._26_FLOORS_AND_ABOVE.value, data_type=DataType.INT(), nullable=True),
-                        Column(name=Table.G_FA_BY_HOUSE_TYPES.Column._5_FLOORS_AND_BELOW.value, data_type=DataType.INT(), nullable=True),
-                        Column(name=Table.G_FA_BY_HOUSE_TYPES.Column._6_8_FLOORS.value, data_type=DataType.INT(), nullable=True),
-                        Column(name=Table.G_FA_BY_HOUSE_TYPES.Column._9_15_FLOORS.value, data_type=DataType.INT(), nullable=True),
-                        Column(name=Table.G_FA_BY_HOUSE_TYPES.Column.APARTMENT_BUILDINGS.value, data_type=DataType.INT(), nullable=True),
-                        Column(name=Table.G_FA_BY_HOUSE_TYPES.Column.SINGLE_FAMILY_HOMES.value, data_type=DataType.INT(), nullable=True),
-                        Column(name=Table.G_FA_BY_HOUSE_TYPES.Column.SINGLE_FAMILY_HOMES_4_FLOORS_AND_ABOVE.value, data_type=DataType.INT(), nullable=True),
-                        Column(name=Table.G_FA_BY_HOUSE_TYPES.Column.SINGLE_FAMILY_HOMES_BELOW_4_FLOORS.value, data_type=DataType.INT(), nullable=True),
-                        Column(name=Table.G_FA_BY_HOUSE_TYPES.Column.TOTAL.value, data_type=DataType.INT(), nullable=True),
-                        Column(name=Table.G_FA_BY_HOUSE_TYPES.Column.VILLAS.value, data_type=DataType.INT(), nullable=True),
-                    ],
-                    primary_keys=Table.G_FA_BY_HOUSE_TYPES.primary_key,
-                )
-                # fmt: on
-
-                # G_TREG
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.G_TREG.name,
-                    columns=[
-                        Column(name=Table.G_TREG.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.G_TREG.Column.INTERNATIONAL_LIQUIDITY_TOTAL_RESERVES_EXCLUDING_GOLD_FOREIGN_EXCHANGE_US_DOLLARS.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_TREG.Column.INTERNATIONAL_LIQUIDITY_TOTAL_RESERVES_EXCLUDING_GOLD_US_DOLLARS.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=Table.G_TREG.primary_key,
-                )
-                # fmt: on
-
-                # G_EXCHANGE_RATE
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.EXCHANGE_RATE.name,
-                    columns = [
-                        Column(name=Table.EXCHANGE_RATE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.EXCHANGE_RATE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=False),
-                        Column(name=Table.EXCHANGE_RATE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.EXCHANGE_RATE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.EXCHANGE_RATE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.EXCHANGE_RATE.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.EXCHANGE_RATE.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
-                    ],
-                    primary_keys=Table.EXCHANGE_RATE.primary_key,
-                )
-                # fmt: on
-
-                # G_RRRR
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.G_RRRR.name,
-                    columns=[
-                        Column(name=Table.G_RRRR.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.G_RRRR.Column.DISCOUNT_RATE.value, data_type=DataType.FLOAT(), nullable=True),
-                        Column(name=Table.G_RRRR.Column.REFINANCING_RATE.value, data_type=DataType.FLOAT(), nullable=True),
-                    ],
-                    primary_keys=[Table.G_RRRR.Column.DATE.value],
-                )
-                # fmt: on
-
-                # G_GOLD_PRICE
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.G_GOLD_PRICE.name,
-                    columns = [
-                        Column(name=Table.G_GOLD_PRICE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.G_GOLD_PRICE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_GOLD_PRICE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_GOLD_PRICE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_GOLD_PRICE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_GOLD_PRICE.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_GOLD_PRICE.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
-                    ],
-                    primary_keys=Table.G_GOLD_PRICE.primary_key,
-                )
-                # fmt: on
-
-                # G_OIL_PRICE
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.G_OIL_PRICE.name,
-                    columns = [
-                        Column(name=Table.G_OIL_PRICE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.G_OIL_PRICE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_OIL_PRICE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_OIL_PRICE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_OIL_PRICE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_OIL_PRICE.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_OIL_PRICE.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
-                    ],
-                    primary_keys=Table.G_OIL_PRICE.primary_key,
-                )
-                # fmt: on
-
-                # G_DOW_JONES
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.G_DOW_JONES.name,
-                    columns = [
-                        Column(name=Table.G_DOW_JONES.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.G_DOW_JONES.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_DOW_JONES.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_DOW_JONES.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_DOW_JONES.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_DOW_JONES.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_DOW_JONES.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
-                    ],
-                    primary_keys=Table.G_DOW_JONES.primary_key,
-                )
-                # fmt: on
-
-                # G_NYSE_COMPOSITE
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.G_NYSE_COMPOSITE.name,
-                    columns = [
-                        Column(name=Table.G_NYSE_COMPOSITE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.G_NYSE_COMPOSITE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_NYSE_COMPOSITE.Column.ADJ_CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_NYSE_COMPOSITE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_NYSE_COMPOSITE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_NYSE_COMPOSITE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_NYSE_COMPOSITE.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
-                    ],
-                    primary_keys=Table.G_NYSE_COMPOSITE.primary_key,
-                )
-                # fmt: on
-
-                # G_SNP_500
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.G_SNP_500.name,
-                    columns = [
-                        Column(name=Table.G_SNP_500.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.G_SNP_500.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_SNP_500.Column.ADJ_CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_SNP_500.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_SNP_500.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_SNP_500.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_SNP_500.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
-                    ],
-                    primary_keys=Table.G_SNP_500.primary_key,
-                )
-                # fmt: on
-                
-                # G_NASDAQ_COMPOSITE
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.G_NASDAQ_COMPOSITE.name,
-                    columns = [
-                        Column(name=Table.G_NASDAQ_COMPOSITE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.G_NASDAQ_COMPOSITE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_NASDAQ_COMPOSITE.Column.ADJ_CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_NASDAQ_COMPOSITE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_NASDAQ_COMPOSITE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_NASDAQ_COMPOSITE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_NASDAQ_COMPOSITE.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
-                    ],
-                    primary_keys=Table.G_NASDAQ_COMPOSITE.primary_key,
-                )
-                # fmt: on
-                
-                # G_NASDAQ_100
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.MACROECONOMICS.value,
-                    table_name=Table.G_NASDAQ_100.name,
-                    columns = [
-                        Column(name=Table.G_NASDAQ_100.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.G_NASDAQ_100.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_NASDAQ_100.Column.ADJ_CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_NASDAQ_100.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_NASDAQ_100.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_NASDAQ_100.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_NASDAQ_100.Column.VOLUME.value, data_type=DataType.DECIMAL(), nullable=True),
-                    ],
-                    primary_keys=Table.G_NASDAQ_100.primary_key,
-                )
-                # fmt: on
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
-
-        self._logger.log_info(
-            f'Finish creating macroeconomics tables for "{data_quality.value}".'
-        )
-
-    def _create_stock_market_tables(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(
-            f'Start creating stock market tables for "{data_quality.value}".'
-        )
-
-        match data_quality:
-            case DataQuality.BRONZE:
-                # MARKET
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.STOCK_MARKET.value,
-                    table_name=Table.MARKET.name,
-                    columns = [
-                        Column(name=Table.MARKET.Column.ID.value, data_type=DataType.SERIAL(), nullable=False),
-                        Column(name=Table.MARKET.Column.CODE.value, data_type=DataType.VARCHAR(), nullable=True),
-                        Column(name=Table.MARKET.Column.NAME.value, data_type=DataType.VARCHAR(), nullable=True),
-                        Column(name=Table.MARKET.Column.SAVE_PROGRESS_YEAR.value, data_type=DataType.INT(), nullable=True),
-                        Column(name=Table.MARKET.Column.CREATE_DATE.value, data_type=DataType.AUTO_TIMESTAMP(), nullable=True),
-                        Column(name=Table.MARKET.Column.UPDATE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
-                        Column(name=Table.MARKET.Column.DELETE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
-                    ],
-                    primary_keys=Table.MARKET.primary_key,
-                )
-                # fmt: on
-                
-                # B_VN_INDEX_PRICE
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.STOCK_MARKET.value,
-                    table_name=Table.B_VN_INDEX_PRICE.name,
-                    columns=[
-                        Column(name=Table.B_VN_INDEX_PRICE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.B_VN_INDEX_PRICE.Column.ADJUST.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.B_VN_INDEX_PRICE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.B_VN_INDEX_PRICE.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.B_VN_INDEX_PRICE.Column.PERCENT_CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.B_VN_INDEX_PRICE.Column.MATCHING_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.B_VN_INDEX_PRICE.Column.MATCHING_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.B_VN_INDEX_PRICE.Column.NEGOTIATE_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.B_VN_INDEX_PRICE.Column.NEGOTIATE_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.B_VN_INDEX_PRICE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.B_VN_INDEX_PRICE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.B_VN_INDEX_PRICE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                    ],
-                    primary_keys=Table.B_VN_INDEX_PRICE.primary_key,
-                )
-                # fmt: on
-
-                # B_VN_INDEX_ORDER
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.STOCK_MARKET.value,
-                    table_name=Table.B_VN_INDEX_ORDER.name,
-                    columns=[
-                        Column(name=Table.B_VN_INDEX_ORDER.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.B_VN_INDEX_ORDER.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.B_VN_INDEX_ORDER.Column.NUMBER_OF_BUY_ORDERS.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.B_VN_INDEX_ORDER.Column.BUY_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.B_VN_INDEX_ORDER.Column.AVERAGE_VOLUME_PER_BUY_ORDER.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.B_VN_INDEX_ORDER.Column.NUMBER_OF_SELL_ORDERS.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.B_VN_INDEX_ORDER.Column.SELL_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.B_VN_INDEX_ORDER.Column.AVERAGE_VOLUME_PER_SELL_ORDER.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.B_VN_INDEX_ORDER.Column.NET_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                    ],
-                    primary_keys=Table.B_VN_INDEX_ORDER.primary_key,
-                )
-                # fmt: on
-                
-                # HNX_INDEX
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.STOCK_MARKET.value,
-                    table_name=Table.HNX_INDEX.name,
-                    columns = [
-                        Column(name=Table.HNX_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.HNX_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_INDEX.Column.VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                    ],
-                    primary_keys=Table.HNX_INDEX.primary_key,
-                )
-                # fmt: on
-                
-                # VN_30_INDEX
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.STOCK_MARKET.value,
-                    table_name=Table.VN_30_INDEX.name,
-                    columns = [
-                        Column(name=Table.VN_30_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.VN_30_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.ADJUSTED_CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.MATCHED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.MATCHED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.NEGOTIATED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.NEGOTIATED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.CHANGE_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.CHANGE_PERCENTAGE.value, data_type=DataType.DECIMAL(), nullable=True),
-                    ],
-                    primary_keys=Table.VN_30_INDEX.primary_key,
-                )
-                # fmt: on
-                
-                # VN_100_INDEX
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.STOCK_MARKET.value,
-                    table_name=Table.VN_100_INDEX.name,
-                    columns = [
-                        Column(name=Table.VN_100_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.VN_100_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.ADJUSTED_CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.MATCHED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.MATCHED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.NEGOTIATED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.NEGOTIATED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.CHANGE_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.CHANGE_PERCENTAGE.value, data_type=DataType.DECIMAL(), nullable=True),
-                    ],
-                    primary_keys=Table.VN_100_INDEX.primary_key,
-                )
-                # fmt: on
-                
-                # HNX_30_INDEX
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.STOCK_MARKET.value,
-                    table_name=Table.HNX_30_INDEX.name,
-                    columns = [
-                        Column(name=Table.HNX_30_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.HNX_30_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.ADJUSTED_CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.MATCHED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.MATCHED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.NEGOTIATED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.NEGOTIATED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.CHANGE_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.CHANGE_PERCENTAGE.value, data_type=DataType.DECIMAL(), nullable=True),
-                    ],
-                    primary_keys=Table.HNX_30_INDEX.primary_key,
-                )
-                # fmt: on
-                
-                # UPCOM_INDEX
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.STOCK_MARKET.value,
-                    table_name=Table.UPCOM_INDEX.name,
-                    columns = [
-                        Column(name=Table.UPCOM_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.UPCOM_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.ADJUSTED_CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.MATCHED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.MATCHED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.NEGOTIATED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.NEGOTIATED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.CHANGE_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.CHANGE_PERCENTAGE.value, data_type=DataType.DECIMAL(), nullable=True),
-                    ],
-                    primary_keys=Table.UPCOM_INDEX.primary_key,
-                )
-                # fmt: on
-
-            case DataQuality.SILVER:
-                # MARKET
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.STOCK_MARKET.value,
-                    table_name=Table.MARKET.name,
-                    columns = [
-                        Column(name=Table.MARKET.Column.ID.value, data_type=DataType.SERIAL(), nullable=False),
-                        Column(name=Table.MARKET.Column.CODE.value, data_type=DataType.VARCHAR(), nullable=True),
-                        Column(name=Table.MARKET.Column.NAME.value, data_type=DataType.VARCHAR(), nullable=True),
-                        Column(name=Table.MARKET.Column.SAVE_PROGRESS_YEAR.value, data_type=DataType.INT(), nullable=True),
-                        Column(name=Table.MARKET.Column.CREATE_DATE.value, data_type=DataType.AUTO_TIMESTAMP(), nullable=True),
-                        Column(name=Table.MARKET.Column.UPDATE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
-                        Column(name=Table.MARKET.Column.DELETE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
-                    ],
-                    primary_keys=Table.MARKET.primary_key,
-                )
-                # fmt: on
-                
-                # S_VN_INDEX
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.STOCK_MARKET.value,
-                    table_name=Table.S_VN_INDEX.name,
-                    columns=[
-                        Column(name=Table.S_VN_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.S_VN_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.S_VN_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.S_VN_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.S_VN_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.S_VN_INDEX.Column.ADJUST.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.S_VN_INDEX.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.S_VN_INDEX.Column.PERCENT_CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.S_VN_INDEX.Column.MATCHING_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.S_VN_INDEX.Column.MATCHING_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.S_VN_INDEX.Column.NEGOTIATE_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.S_VN_INDEX.Column.NEGOTIATE_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.S_VN_INDEX.Column.NUMBER_OF_BUY_ORDERS.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.S_VN_INDEX.Column.BUY_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.S_VN_INDEX.Column.AVERAGE_VOLUME_PER_BUY_ORDER.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.S_VN_INDEX.Column.NUMBER_OF_SELL_ORDERS.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.S_VN_INDEX.Column.SELL_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.S_VN_INDEX.Column.AVERAGE_VOLUME_PER_SELL_ORDER.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.S_VN_INDEX.Column.NET_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                    ],
-                    primary_keys=Table.S_VN_INDEX.primary_key,
-                )
-                # fmt: on
-                
-                # HNX_INDEX
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.STOCK_MARKET.value,
-                    table_name=Table.HNX_INDEX.name,
-                    columns = [
-                        Column(name=Table.HNX_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.HNX_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_INDEX.Column.VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                    ],
-                    primary_keys=Table.HNX_INDEX.primary_key,
-                )
-                # fmt: on
-                
-                # VN_30_INDEX
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.STOCK_MARKET.value,
-                    table_name=Table.VN_30_INDEX.name,
-                    columns = [
-                        Column(name=Table.VN_30_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.VN_30_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.ADJUSTED_CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.MATCHED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.MATCHED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.NEGOTIATED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.NEGOTIATED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.CHANGE_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.CHANGE_PERCENTAGE.value, data_type=DataType.DECIMAL(), nullable=True),
-                    ],
-                    primary_keys=Table.VN_30_INDEX.primary_key,
-                )
-                # fmt: on
-                
-                # VN_100_INDEX
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.STOCK_MARKET.value,
-                    table_name=Table.VN_100_INDEX.name,
-                    columns = [
-                        Column(name=Table.VN_100_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.VN_100_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.ADJUSTED_CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.MATCHED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.MATCHED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.NEGOTIATED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.NEGOTIATED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.CHANGE_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.CHANGE_PERCENTAGE.value, data_type=DataType.DECIMAL(), nullable=True),
-                    ],
-                    primary_keys=Table.VN_100_INDEX.primary_key,
-                )
-                # fmt: on
-                
-                # HNX_30_INDEX
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.STOCK_MARKET.value,
-                    table_name=Table.HNX_30_INDEX.name,
-                    columns = [
-                        Column(name=Table.HNX_30_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.HNX_30_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.ADJUSTED_CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.MATCHED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.MATCHED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.NEGOTIATED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.NEGOTIATED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.CHANGE_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.CHANGE_PERCENTAGE.value, data_type=DataType.DECIMAL(), nullable=True),
-                    ],
-                    primary_keys=Table.HNX_30_INDEX.primary_key,
-                )
-                # fmt: on
-                
-                # UPCOM_INDEX
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.STOCK_MARKET.value,
-                    table_name=Table.UPCOM_INDEX.name,
-                    columns = [
-                        Column(name=Table.UPCOM_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.UPCOM_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.ADJUSTED_CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.MATCHED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.MATCHED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.NEGOTIATED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.NEGOTIATED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.CHANGE_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.CHANGE_PERCENTAGE.value, data_type=DataType.DECIMAL(), nullable=True),
-                    ],
-                    primary_keys=Table.UPCOM_INDEX.primary_key,
-                )
-                # fmt: on
-
-            case DataQuality.GOLD:
-                # MARKET
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.STOCK_MARKET.value,
-                    table_name=Table.MARKET.name,
-                    columns = [
-                        Column(name=Table.MARKET.Column.ID.value, data_type=DataType.SERIAL(), nullable=False),
-                        Column(name=Table.MARKET.Column.CODE.value, data_type=DataType.VARCHAR(), nullable=True),
-                        Column(name=Table.MARKET.Column.NAME.value, data_type=DataType.VARCHAR(), nullable=True),
-                        Column(name=Table.MARKET.Column.SAVE_PROGRESS_YEAR.value, data_type=DataType.INT(), nullable=True),
-                        Column(name=Table.MARKET.Column.CREATE_DATE.value, data_type=DataType.AUTO_TIMESTAMP(), nullable=True),
-                        Column(name=Table.MARKET.Column.UPDATE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
-                        Column(name=Table.MARKET.Column.DELETE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
-                    ],
-                    primary_keys=Table.MARKET.primary_key,
-                )
-                # fmt: on
-
-                # G_VN_INDEX
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.STOCK_MARKET.value,
-                    table_name=Table.G_VN_INDEX.name,
-                    columns=[
-                        Column(name=Table.G_VN_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.G_VN_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_VN_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_VN_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_VN_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_VN_INDEX.Column.ADJUST.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_VN_INDEX.Column.CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_VN_INDEX.Column.PERCENT_CHANGE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_VN_INDEX.Column.MATCHING_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.G_VN_INDEX.Column.MATCHING_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_VN_INDEX.Column.NEGOTIATE_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.G_VN_INDEX.Column.NEGOTIATE_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_VN_INDEX.Column.NUMBER_OF_BUY_ORDERS.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.G_VN_INDEX.Column.BUY_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.G_VN_INDEX.Column.AVERAGE_VOLUME_PER_BUY_ORDER.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_VN_INDEX.Column.NUMBER_OF_SELL_ORDERS.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.G_VN_INDEX.Column.SELL_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.G_VN_INDEX.Column.AVERAGE_VOLUME_PER_SELL_ORDER.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.G_VN_INDEX.Column.NET_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                    ],
-                    primary_keys=Table.G_VN_INDEX.primary_key,
-                )
-                # fmt: on
-                
-                # HNX_INDEX
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.STOCK_MARKET.value,
-                    table_name=Table.HNX_INDEX.name,
-                    columns = [
-                        Column(name=Table.HNX_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.HNX_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_INDEX.Column.VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                    ],
-                    primary_keys=Table.HNX_INDEX.primary_key,
-                )
-                # fmt: on
-                
-                # VN_30_INDEX
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.STOCK_MARKET.value,
-                    table_name=Table.VN_30_INDEX.name,
-                    columns = [
-                        Column(name=Table.VN_30_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.VN_30_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.ADJUSTED_CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.MATCHED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.MATCHED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.NEGOTIATED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.NEGOTIATED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.CHANGE_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_30_INDEX.Column.CHANGE_PERCENTAGE.value, data_type=DataType.DECIMAL(), nullable=True),
-                    ],
-                    primary_keys=Table.VN_30_INDEX.primary_key,
-                )
-                # fmt: on
-                
-                # VN_100_INDEX
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.STOCK_MARKET.value,
-                    table_name=Table.VN_100_INDEX.name,
-                    columns = [
-                        Column(name=Table.VN_100_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.VN_100_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.ADJUSTED_CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.MATCHED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.MATCHED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.NEGOTIATED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.NEGOTIATED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.CHANGE_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.VN_100_INDEX.Column.CHANGE_PERCENTAGE.value, data_type=DataType.DECIMAL(), nullable=True),
-                    ],
-                    primary_keys=Table.VN_100_INDEX.primary_key,
-                )
-                # fmt: on
-                
-                # HNX_30_INDEX
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.STOCK_MARKET.value,
-                    table_name=Table.HNX_30_INDEX.name,
-                    columns = [
-                        Column(name=Table.HNX_30_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.HNX_30_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.ADJUSTED_CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.MATCHED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.MATCHED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.NEGOTIATED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.NEGOTIATED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.CHANGE_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.HNX_30_INDEX.Column.CHANGE_PERCENTAGE.value, data_type=DataType.DECIMAL(), nullable=True),
-                    ],
-                    primary_keys=Table.HNX_30_INDEX.primary_key,
-                )
-                # fmt: on
-                
-                # UPCOM_INDEX
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.STOCK_MARKET.value,
-                    table_name=Table.UPCOM_INDEX.name,
-                    columns = [
-                        Column(name=Table.UPCOM_INDEX.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.UPCOM_INDEX.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.ADJUSTED_CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.MATCHED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.MATCHED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.NEGOTIATED_VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.NEGOTIATED_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.CHANGE_VALUE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.UPCOM_INDEX.Column.CHANGE_PERCENTAGE.value, data_type=DataType.DECIMAL(), nullable=True),
-                    ],
-                    primary_keys=Table.UPCOM_INDEX.primary_key,
-                )
-                # fmt: on
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
-
-        self._logger.log_info(
-            f'Finish creating stock market tables for "{data_quality.value}".'
-        )
-
-    def _create_enterprise_tables(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(
-            f'Start creating enterprise tables for "{data_quality.value}".'
-        )
-
-        match data_quality:
-            case DataQuality.BRONZE:
-                # STOCK
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.ENTERPRISE.value,
-                    table_name=Table.STOCK.name,
-                    columns = [
-                        Column(name=Table.STOCK.Column.ID.value, data_type=DataType.SERIAL(), nullable=False),
-                        Column(name=Table.STOCK.Column.CODE.value, data_type=DataType.VARCHAR(), nullable=False),
-                        Column(name=Table.STOCK.Column.LISTED_SHARES.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.STOCK.Column.OUTSTANDING_SHARES.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.STOCK.Column.OUTSTANDING_RATE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.STOCK.Column.MARKET_CAP.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.STOCK.Column.MARKET_ID.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.STOCK.Column.CREATE_DATE.value, data_type=DataType.AUTO_TIMESTAMP(), nullable=False),
-                        Column(name=Table.STOCK.Column.UPDATE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
-                        Column(name=Table.STOCK.Column.DELETE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
-                    ],
-                    primary_keys=Table.STOCK.primary_key,
-                    foreign_keys=[ForeignKey(
-                        column_name=Table.STOCK.Column.MARKET_ID.value, 
-                        ref_table=f"{Schema.STOCK_MARKET.value}.{Table.MARKET.name}", 
-                        ref_column=Table.MARKET.Column.ID.value,
-                    )],
-                )
-                # fmt: on
-                
-                # DAILY_PRICE
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.ENTERPRISE.value,
-                    table_name=Table.DAILY_PRICE.name,
-                    columns = [
-                        Column(name=Table.DAILY_PRICE.Column.DATE.value, data_type=DataType.DATE(), nullable=False),
-                        Column(name=Table.DAILY_PRICE.Column.CODE.value, data_type=DataType.VARCHAR(), nullable=False),
-                        Column(name=Table.DAILY_PRICE.Column.MARKET_ID.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.DAILY_PRICE.Column.OPEN.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.DAILY_PRICE.Column.HIGH.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.DAILY_PRICE.Column.LOW.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.DAILY_PRICE.Column.CLOSE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.DAILY_PRICE.Column.VOLUME.value, data_type=DataType.BIGINT(), nullable=True),
-                    ],
-                    primary_keys=Table.DAILY_PRICE.primary_key,
-                    foreign_keys=[ForeignKey(
-                        column_name=Table.DAILY_PRICE.Column.MARKET_ID.value, 
-                        ref_table=f"{Schema.STOCK_MARKET.value}.{Table.MARKET.name}", 
-                        ref_column=Table.MARKET.Column.ID.value,
-                    )],
-                )
-                # fmt: on
-
-            case DataQuality.SILVER:
-                # STOCK
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.ENTERPRISE.value,
-                    table_name=Table.STOCK.name,
-                    columns = [
-                        Column(name=Table.STOCK.Column.ID.value, data_type=DataType.SERIAL(), nullable=False),
-                        Column(name=Table.STOCK.Column.CODE.value, data_type=DataType.VARCHAR(), nullable=False),
-                        Column(name=Table.STOCK.Column.LISTED_SHARES.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.STOCK.Column.OUTSTANDING_SHARES.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.STOCK.Column.OUTSTANDING_RATE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.STOCK.Column.MARKET_CAP.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.STOCK.Column.MARKET_ID.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.STOCK.Column.CREATE_DATE.value, data_type=DataType.AUTO_TIMESTAMP(), nullable=False),
-                        Column(name=Table.STOCK.Column.UPDATE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
-                        Column(name=Table.STOCK.Column.DELETE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
-                    ],
-                    primary_keys=Table.STOCK.primary_key,
-                    foreign_keys=[ForeignKey(
-                        column_name=Table.STOCK.Column.MARKET_ID.value, 
-                        ref_table=f"{Schema.STOCK_MARKET.value}.{Table.MARKET.name}", 
-                        ref_column=Table.MARKET.Column.ID.value,
-                    )],
-                )
-                # fmt: on
-
-            case DataQuality.GOLD:
-                # STOCK
-                # fmt: off
-                self._database_driver.create_table(
-                    schema_name=Schema.ENTERPRISE.value,
-                    table_name=Table.STOCK.name,
-                    columns = [
-                        Column(name=Table.STOCK.Column.ID.value, data_type=DataType.SERIAL(), nullable=False),
-                        Column(name=Table.STOCK.Column.CODE.value, data_type=DataType.VARCHAR(), nullable=False),
-                        Column(name=Table.STOCK.Column.LISTED_SHARES.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.STOCK.Column.OUTSTANDING_SHARES.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.STOCK.Column.OUTSTANDING_RATE.value, data_type=DataType.DECIMAL(), nullable=True),
-                        Column(name=Table.STOCK.Column.MARKET_CAP.value, data_type=DataType.BIGINT(), nullable=True),
-                        Column(name=Table.STOCK.Column.MARKET_ID.value, data_type=DataType.INT(), nullable=False),
-                        Column(name=Table.STOCK.Column.CREATE_DATE.value, data_type=DataType.AUTO_TIMESTAMP(), nullable=False),
-                        Column(name=Table.STOCK.Column.UPDATE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
-                        Column(name=Table.STOCK.Column.DELETE_DATE.value, data_type=DataType.TIMESTAMP(), nullable=True),
-                    ],
-                    primary_keys=Table.STOCK.primary_key,
-                    foreign_keys=[ForeignKey(
-                        column_name=Table.STOCK.Column.MARKET_ID.value, 
-                        ref_table=f"{Schema.STOCK_MARKET.value}.{Table.MARKET.name}", 
-                        ref_column=Table.MARKET.Column.ID.value,
-                    )],
-                )
-                # fmt: on
-
-                for stock_code in STOCK_CODES_TO_BE_EXPORTED_TO_GOLD_DB:
-                    # fmt: off
-                    self._database_driver.create_table(
-                        schema_name=Schema.ENTERPRISE.value,
-                        table_name=stock_code,
-                        columns = [
-                            Column(name="date", data_type=DataType.DATE(), nullable=False),
-                            Column(name="code", data_type=DataType.VARCHAR(), nullable=False),
-                            Column(name="market_id", data_type=DataType.INT(), nullable=True),
-                            Column(name="open", data_type=DataType.DECIMAL(), nullable=True),
-                            Column(name="high", data_type=DataType.DECIMAL(), nullable=True),
-                            Column(name="low", data_type=DataType.DECIMAL(), nullable=True),
-                            Column(name="close", data_type=DataType.DECIMAL(), nullable=True),
-                            Column(name="volume", data_type=DataType.DECIMAL(), nullable=True),
-                        ],
-                        primary_keys=["date"],
-                        foreign_keys=[ForeignKey(
-                            column_name="market_id", 
-                            ref_table=f"{Schema.STOCK_MARKET.value}.{Table.MARKET.name}", 
-                            ref_column=Table.MARKET.Column.ID.value,
-                        )],
-                    )
-                    # fmt: on
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
-
-        self._logger.log_info(
-            f'Finish creating enterprise tables for "{data_quality.value}".'
-        )
-
-    def _create_tables(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(f'Start creating tables for "{data_quality.value}".')
-
-        match data_quality:
-            case DataQuality.BRONZE:
-                self._create_macroeconomics_tables(data_quality)
-                self._create_stock_market_tables(data_quality)
-                self._create_enterprise_tables(data_quality)
-
-            case DataQuality.SILVER:
-                self._create_macroeconomics_tables(data_quality)
-                self._create_stock_market_tables(data_quality)
-                self._create_enterprise_tables(data_quality)
-
-            case DataQuality.GOLD:
-                self._create_macroeconomics_tables(data_quality)
-                self._create_stock_market_tables(data_quality)
-                self._create_enterprise_tables(data_quality)
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}".')
-
-        self._logger.log_info(f'Finish creating tables for "{data_quality.value}".')
-
-    # endregion Create Tables
-
     # region MACROECONOMICS data process
 
     # region MACROECONOMICS.GDP
@@ -3885,7 +984,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.GDP,
-            GdpSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -3945,7 +1043,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.GDP,
-            GdpSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -3988,7 +1085,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.GDP,
-            GdpSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -4053,7 +1149,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.CPI,
-            CpiSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -4095,7 +1190,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.CPI,
-            CpiSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -4135,7 +1229,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.CPI,
-            CpiSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -4198,7 +1291,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.PPI,
-            PpiSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -4262,7 +1354,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.PPI,
-            PpiSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -4298,7 +1389,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.PPI,
-            PpiSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -4364,7 +1454,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.IPI,
-            IpiSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -4449,7 +1538,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.IPI,
-            IpiSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -4510,7 +1598,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.XPI,
-            XpiSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -4552,7 +1639,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.XPI,
-            XpiSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -4592,7 +1678,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.XPI,
-            XpiSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -4658,7 +1743,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.MPI,
-            MpiSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -4700,7 +1784,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.MPI,
-            MpiSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -4765,7 +1848,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.POPULATION,
-            PopulationSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -4807,7 +1889,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.POPULATION,
-            PopulationSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -4845,7 +1926,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.POPULATION,
-            PopulationSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -4911,7 +1991,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.LABOR,
-            LaborSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -4955,7 +2034,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.LABOR,
-            LaborSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -4991,7 +2069,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.LABOR,
-            LaborSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -5057,7 +2134,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.RETAIL,
-            RetailSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -5099,7 +2175,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.RETAIL,
-            RetailSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -5164,7 +2239,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.PMI,
-            PmiSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -5206,7 +2280,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.PMI,
-            PmiSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -5271,7 +2344,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.IIP,
-            IipSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -5315,7 +2387,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.IIP,
-            IipSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -5380,7 +2451,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.IPV,
-            IpvSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -5422,7 +2492,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.IPV,
-            IpvSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -5462,7 +2531,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.IPV,
-            IpvSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -5528,7 +2596,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.MIP,
-            MipSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -5570,7 +2637,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.MIP,
-            MipSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -5606,7 +2672,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.MIP,
-            MipSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -5672,7 +2737,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.FA_BY_HOUSE_TYPES,
-            FaByHouseTypeSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -5725,7 +2789,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.FA_BY_HOUSE_TYPES,
-            FaByHouseTypeSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -5763,7 +2826,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.FA_BY_HOUSE_TYPES,
-            FaByHouseTypeSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -5831,7 +2893,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.IT_BOP,
-            ItBopSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -5873,7 +2934,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.IT_BOP,
-            ItBopSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -5950,7 +3010,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.TSBR,
-            TsbrSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -5992,7 +3051,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.TSBR,
-            TsbrSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -6067,7 +3125,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.TSBE,
-            TsbeSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -6109,7 +3166,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.TSBE,
-            TsbeSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -6184,7 +3240,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.GD,
-            GdSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -6226,7 +3281,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.GD,
-            GdSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -6287,7 +3341,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.BRD,
-            BrdSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -6329,7 +3382,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.BRD,
-            BrdSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -6394,7 +3446,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.IISD,
-            IisdSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -6436,7 +3487,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.IISD,
-            IisdSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -6501,7 +3551,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.TREG,
-            TregSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -6543,7 +3592,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.TREG,
-            TregSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -6583,7 +3631,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.TREG,
-            TregSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -6649,7 +3696,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.CREDIT,
-            CreditSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -6691,7 +3737,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.CREDIT,
-            CreditSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -6756,7 +3801,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.MOBILIZATION,
-            MobilizationSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -6798,7 +3842,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.MOBILIZATION,
-            MobilizationSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -6866,7 +3909,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.EXCHANGE_RATE,
-            ExchangeRateSource.INVESTING,
         )
 
         folder_path = (
@@ -6933,7 +3975,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.EXCHANGE_RATE,
-            ExchangeRateSource.INVESTING,
         )
 
         self._logger.log_info(
@@ -6971,7 +4012,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.EXCHANGE_RATE,
-            ExchangeRateSource.INVESTING,
         )
 
         self._logger.log_info(
@@ -7038,7 +4078,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.IIR,
-            IirSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -7093,7 +4132,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.IIR,
-            IirSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -7162,7 +4200,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.RRRR,
-            RrrrSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -7204,7 +4241,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.RRRR,
-            RrrrSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -7251,7 +4287,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.RRRR,
-            RrrrSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -7317,7 +4352,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.FDI_SECTOR,
-            FdiSectorSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -7375,7 +4409,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.FDI_SECTOR,
-            FdiSectorSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -7443,7 +4476,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.FDI_RD,
-            FdiRdSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -7485,7 +4517,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.FDI_RD,
-            FdiRdSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -7553,7 +4584,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.EXPORT,
-            ExportSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -7680,7 +4710,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.EXPORT,
-            ExportSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -7748,7 +4777,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.IMPORT,
-            ImportSource.VIETSTOCK,
         )
 
         folder_path = (
@@ -7875,7 +4903,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.IMPORT,
-            ImportSource.VIETSTOCK,
         )
 
         self._logger.log_info(
@@ -7943,7 +4970,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.GOLD_PRICE,
-            GoldPriceSource.INVESTING,
         )
 
         folder_path = (
@@ -8004,7 +5030,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.GOLD_PRICE,
-            GoldPriceSource.INVESTING,
         )
 
         self._logger.log_info(
@@ -8042,7 +5067,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.GOLD_PRICE,
-            GoldPriceSource.INVESTING,
         )
 
         self._logger.log_info(
@@ -8108,7 +5132,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.OIL_PRICE,
-            OilPriceSource.INVESTING,
         )
 
         folder_path = (
@@ -8169,7 +5192,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.OIL_PRICE,
-            OilPriceSource.INVESTING,
         )
 
         self._logger.log_info(
@@ -8205,7 +5227,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.OIL_PRICE,
-            OilPriceSource.INVESTING,
         )
 
         self._logger.log_info(
@@ -8271,7 +5292,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.DOW_JONES,
-            DowJonesSource.INVESTING,
         )
 
         folder_path = (
@@ -8332,7 +5352,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.DOW_JONES,
-            DowJonesSource.INVESTING,
         )
 
         self._logger.log_info(
@@ -8368,7 +5387,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.DOW_JONES,
-            DowJonesSource.INVESTING,
         )
 
         self._logger.log_info(
@@ -8434,7 +5452,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.NYSE_COMPOSITE,
-            NYSECompositeSource.YAHOO_FINANCE,
         )
 
         folder_path = (
@@ -8494,7 +5511,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.NYSE_COMPOSITE,
-            NYSECompositeSource.YAHOO_FINANCE,
         )
 
         self._logger.log_info(
@@ -8532,7 +5548,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.NYSE_COMPOSITE,
-            NYSECompositeSource.YAHOO_FINANCE,
         )
 
         self._logger.log_info(
@@ -8598,7 +5613,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.SNP_500,
-            SNP500Source.YAHOO_FINANCE,
         )
 
         folder_path = (
@@ -8658,7 +5672,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.SNP_500,
-            SNP500Source.YAHOO_FINANCE,
         )
 
         self._logger.log_info(
@@ -8694,7 +5707,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.SNP_500,
-            SNP500Source.YAHOO_FINANCE,
         )
 
         self._logger.log_info(
@@ -8760,7 +5772,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.NASDAQ_COMPOSITE,
-            NASDAQCompositeSource.YAHOO_FINANCE,
         )
 
         folder_path = (
@@ -8820,7 +5831,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.NASDAQ_COMPOSITE,
-            NASDAQCompositeSource.YAHOO_FINANCE,
         )
 
         self._logger.log_info(
@@ -8858,7 +5868,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.NASDAQ_COMPOSITE,
-            NASDAQCompositeSource.YAHOO_FINANCE,
         )
 
         self._logger.log_info(
@@ -8926,7 +5935,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.NASDAQ_100,
-            NASDAQ100Source.YAHOO_FINANCE,
         )
 
         folder_path = (
@@ -8986,7 +5994,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.NASDAQ_100,
-            NASDAQ100Source.YAHOO_FINANCE,
         )
 
         self._logger.log_info(
@@ -9024,7 +6031,6 @@ class DataPreprocessor:
         key = (
             ScrapeMainType.MACROECONOMICS,
             MacroeconomicsSubType.NASDAQ_100,
-            NASDAQ100Source.YAHOO_FINANCE,
         )
 
         self._logger.log_info(
@@ -9213,160 +6219,70 @@ class DataPreprocessor:
     # endregion STOCK MARKET.MARKET
 
     # region STOCK_MARKET.VN_INDEX
-    def _ingest_stock_market_vn_index_price(self) -> None:
-        key = (
-            ScrapeMainType.STOCK_MARKET,
-            StockMarketSubType.VN_INDEX_PRICE,
-        )
+    def _ingest_stock_market_index_price(self) -> None:
+        sub_types = [s for s in StockMarketSubType if "price" in s.value.lower()]
 
-        folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}"
+        for sub_type in sub_types:
+            folder_path = (
+                f"{SCRAPER_BRONZE_DATA_DIR}"
+                f"/{ScrapeMainType.STOCK_MARKET.value}/{sub_type.value}"
+            )
 
-        file_path = get_newest_file_path(
-            folder_path=folder_path, extension=FileExtension.CSV
-        )
+            result = self._build_price_df(folder_path)
+            if result is None:
+                continue
+            df, file_paths = result
 
-        if not file_path:
-            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
-            return
+            self._logger.log_info(
+                f'Start ingesting {len(file_paths)} file(s) from "{folder_path}" to "{sub_type.value.lower()}".'
+            )
+            self._save_pandas_table_to_database(
+                schema_name=Schema.STOCK_MARKET.value,
+                table_name=Table.B_STOCK_MARKET_PRICE.name,
+                primary_keys=Table.B_STOCK_MARKET_PRICE.primary_key,
+                df=df,
+            )
+            self._logger.log_info(
+                f'Finish ingesting {len(file_paths)} file(s) from "{folder_path}" to "{sub_type.value.lower()}".'
+            )
 
-        self._logger.log_info(f'Start ingesting data in "{file_path}".')
+    def _ingest_stock_market_index_order(self) -> None:
+        sub_types = [s for s in StockMarketSubType if "order" in s.value.lower()]
 
-        # Add logic for processing data here
-        df = pd.read_csv(file_path, encoding="utf-8")
+        for sub_type in sub_types:
+            folder_path = (
+                f"{SCRAPER_BRONZE_DATA_DIR}"
+                f"/{ScrapeMainType.STOCK_MARKET.value}/{sub_type.value}"
+            )
 
-        vn_index_df = df.drop(columns=["code"])
+            result = self._build_order_df(folder_path)
+            if result is None:
+                continue
+            df, file_paths = result
 
-        # Extract percentage
-        vn_index_df["percent_change"] = (
-            vn_index_df["change"]
-            .str.extract(r"\(([+-]?\d+\.\d+)%\)", expand=False)
-            .astype(float)
-        )
+            self._logger.log_info(
+                f'Start ingesting {len(file_paths)} file(s) from "{folder_path}" to "{sub_type.value.lower()}".'
+            )
+            self._save_pandas_table_to_database(
+                schema_name=Schema.STOCK_MARKET.value,
+                table_name=Table.B_STOCK_MARKET_ORDER.name,
+                primary_keys=Table.B_STOCK_MARKET_ORDER.primary_key,
+                df=df,
+            )
+            self._logger.log_info(
+                f'Finish ingesting {len(file_paths)} file(s) from "{folder_path}" to "{sub_type.value.lower()}".'
+            )
 
-        vn_index_df["change"] = (
-            vn_index_df["change"]
-            .str.extract(r"([+-]?\d+\.\d+)", expand=False)
-            .astype(float)
-        )
-
-        vn_index_df["date"] = pd.to_datetime(vn_index_df["date"], format="%d/%m/%Y")
-        vn_index_df = vn_index_df.sort_values(by="date").reset_index(drop=True)
-
-        # DATE
-        vn_index_df["date"] = pd.to_datetime(vn_index_df["date"]).dt.date
-
-        # DECIMAL columns
-        decimal_cols = [
-            "adjust",
-            "close",
-            "change",
-            "percent_change",
-            "matching_value",
-            "negotiate_value",
-            "open",
-            "high",
-            "low",
+    def _clean_stock_market_index(self) -> None:
+        input_table_list = [
+            Table.B_STOCK_MARKET_PRICE.name,
+            Table.B_STOCK_MARKET_ORDER.name,
         ]
-
-        for col in decimal_cols:
-            vn_index_df[col] = (
-                vn_index_df[col]
-                .astype(str)
-                .str.replace(",", "", regex=False)
-                .pipe(pd.to_numeric, errors="raise")
-                .astype("Float64")
-            )
-
-        # BIGINT columns
-        bigint_cols = [
-            "matching_volume",
-            "negotiate_volume",
-        ]
-
-        for col in bigint_cols:
-            vn_index_df[col] = (
-                vn_index_df[col]
-                .astype(str)
-                .str.replace(",", "", regex=False)
-                .pipe(pd.to_numeric, errors="raise")
-                .astype("Int64")
-            )
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.B_VN_INDEX_PRICE.name,
-            primary_keys=Table.B_VN_INDEX_PRICE.primary_key,
-            df=vn_index_df,
-        )
-
-        self._logger.log_info(f'Finish ingesting data in "{file_path}".')
-
-    def _ingest_stock_market_vn_index_order(self) -> None:
-        key = (
-            ScrapeMainType.STOCK_MARKET,
-            StockMarketSubType.VN_INDEX_ORDER,
-        )
-
-        folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}"
-
-        file_path = get_newest_file_path(
-            folder_path=folder_path, extension=FileExtension.CSV
-        )
-
-        if not file_path:
-            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
-            return
-
-        self._logger.log_info(f'Start ingesting data in "{file_path}".')
-
-        # Add logic for processing data here
-        df = pd.read_csv(file_path, encoding="utf-8")
-        rename_map = {
-            "Mã": "code",
-            "Ngày": "date",
-            "Thay đổi": "close_change",
-            "Số lệnh mua": "number_of_buy_orders",
-            "Khối lượng mua": "buy_volume",
-            "KLTB/lệnh mua": "average_volume_per_buy_order",
-            "Số lệnh bán": "number_of_sell_orders",
-            "Khối lượng bán": "sell_volume",
-            "KLTB/lệnh bán": "average_volume_per_sell_order",
-            "Khối lượng ròng": "net_volume",
-        }
-        vn_index_df = df.rename(columns=rename_map)
-        vn_index_df = vn_index_df.drop(columns=["code"])
-        vn_index_df["close"] = (
-            vn_index_df["close_change"].str.extract(r"([\d\.]+)").astype("Float64")
-        )
-        
-        for col in [
-            "net_volume",
-        ]:
-            vn_index_df[col] = (
-                vn_index_df[col].str.replace(".", "", regex=False).astype("Int64")
-            )
-
-        vn_index_df.drop(columns=["close_change"], inplace=True)
-        vn_index_df["date"] = pd.to_datetime(vn_index_df["date"], format="%d/%m/%Y")
-        vn_index_df = vn_index_df.sort_values(by="date").reset_index(drop=True)
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.B_VN_INDEX_ORDER.name,
-            primary_keys=Table.B_VN_INDEX_ORDER.primary_key,
-            df=vn_index_df,
-        )
-
-        self._logger.log_info(f'Finish ingesting data in "{file_path}".')
-
-    def _clean_stock_market_vn_index(self) -> None:
-        key = (
-            ScrapeMainType.STOCK_MARKET,
-            StockMarketSubType.VN_INDEX,
-        )
+        output_table_list = [Table.S_STOCK_MARKET.name]
 
         self._logger.log_info(
-            f'Start cleaning data in table "{format_key_for_table(key)}".'
+            f'Start cleaning data from table(s) "{", ".join(input_table_list)}" '
+            f'to table(s) "{", ".join(output_table_list)}".'
         )
 
         # Add logic for cleaning data here
@@ -9375,94 +6291,98 @@ class DataPreprocessor:
         join_model_list = [
             JoinModel(
                 join_type=SqlJoinType.INNER_JOIN,
-                schema_left="stock_market",
-                schema_right="stock_market",
-                table_left=Table.B_VN_INDEX_PRICE.name,
-                table_right=Table.B_VN_INDEX_ORDER.name,
-                column_left="date",
-                column_right="date",
+                schema_left=Schema.STOCK_MARKET.value,
+                schema_right=Schema.STOCK_MARKET.value,
+                table_left=Table.B_STOCK_MARKET_PRICE.name,
+                table_right=Table.B_STOCK_MARKET_ORDER.name,
+                columns_left=Table.B_STOCK_MARKET_PRICE.primary_key,
+                columns_right=Table.B_STOCK_MARKET_ORDER.primary_key,
             )
         ]
 
-        vn_index_bronze_df = self._select(
+        stock_market_index_bronze_df = self._select(
             schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.B_VN_INDEX_PRICE.name,
+            table_name=Table.B_STOCK_MARKET_PRICE.name,
             join_model_list=join_model_list,
         )
-        vn_index_bronze_df = vn_index_bronze_df.loc[:, ~vn_index_bronze_df.columns.duplicated()]
 
         silver_df = self._clean(
-            df=vn_index_bronze_df,
-            clean_layer_list=[CleanLayer.ORDER_BY([Table.S_VN_INDEX.Column.DATE.value])],
+            df=stock_market_index_bronze_df,
+            clean_layer_list=[
+                CleanLayer.REMOVE_DUPLICATE_COLUMNS(),
+                CleanLayer.ORDER_BY(
+                    [
+                        Table.S_STOCK_MARKET.Column.CODE.value,
+                        Table.S_STOCK_MARKET.Column.DATE.value,
+                    ]
+                ),
+            ],
         )
 
         self._select_database(DataQuality.SILVER.value)
         self._save_pandas_table_to_database(
             schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.S_VN_INDEX.name,
-            primary_keys=Table.S_VN_INDEX.primary_key,
+            table_name=Table.S_STOCK_MARKET.name,
+            primary_keys=Table.S_STOCK_MARKET.primary_key,
             df=silver_df,
         )
 
         self._logger.log_info(
-            f'Finish cleaning data in table "{format_key_for_table(key)}".'
+            f'Finish cleaning data from table(s) "{", ".join(input_table_list)}" '
+            f'to table(s) "{", ".join(output_table_list)}".'
         )
 
-    def _transform_stock_market_vn_index(self) -> None:
-        key = (
-            ScrapeMainType.STOCK_MARKET,
-            StockMarketSubType.VN_INDEX,
-        )
+    def _transform_stock_market_index(self) -> None:
+        input_table_list = [Table.S_STOCK_MARKET.name]
+        output_table_list = [Table.G_STOCK_MARKET.name]
 
         self._logger.log_info(
-            f'Start transforming data in table "{format_key_for_table(key)}".'
+            f'Start transforming data from table(s) "{", ".join(input_table_list)}" '
+            f'to table(s) "{", ".join(output_table_list)}".'
         )
 
         # Add logic for transforming data here
         self._select_database(DataQuality.SILVER.value)
         silver_df = self._select(
             schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.S_VN_INDEX.name,
+            table_name=Table.S_STOCK_MARKET.name,
         )
 
-        gold_df = make_date_time_index_for_dataframe(df=silver_df)
-        gold_df = standardize_time_frame(df=gold_df)
-
-        cols_to_interpolate = gold_df.columns.difference(["date"])
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
-            pd.to_numeric, errors="coerce"
-        )
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
-            method="linear"
+        gold_df = self._transform(
+            df=silver_df,
+            transform_layer_list=[
+                TransformLayer.EXTRACT_DATETIME_FEATURE(),
+            ],
         )
 
         self._select_database(DataQuality.GOLD.value)
         self._save_pandas_table_to_database(
             schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.G_VN_INDEX.name,
-            primary_keys=Table.G_VN_INDEX.primary_key,
+            table_name=Table.G_STOCK_MARKET.name,
+            primary_keys=Table.G_STOCK_MARKET.primary_key,
             df=gold_df,
         )
 
         self._logger.log_info(
-            f'Finish transforming data in table "{format_key_for_table(key)}".'
+            f'Finish transforming data from table(s) "{", ".join(input_table_list)}" '
+            f'to table(s) "{", ".join(output_table_list)}".'
         )
 
-    def _process_stock_market_vn_index(self, data_quality: DataQuality) -> None:
+    def _process_stock_market_index(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
             f'Start processing stock market VN_INDEX data for "{data_quality.value}".'
         )
 
         match data_quality:
             case DataQuality.BRONZE:
-                # self._ingest_stock_market_vn_index_price()
-                self._ingest_stock_market_vn_index_order()
+                self._ingest_stock_market_index_price()
+                self._ingest_stock_market_index_order()
 
             case DataQuality.SILVER:
-                self._clean_stock_market_vn_index()
+                self._clean_stock_market_index()
 
             case DataQuality.GOLD:
-                self._transform_stock_market_vn_index()
+                self._transform_stock_market_index()
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -9473,1044 +6393,84 @@ class DataPreprocessor:
 
     # endregion STOCK_MARKET.VN_INDEX
 
-    # region STOCK_MARKET.HNX_INDEX
-    def _process_stock_market_hnx_index_cafef(self) -> None:
-        key = (
-            ScrapeMainType.STOCK_MARKET,
-            StockMarketSubType.VN_HNX_INDEX,
-            VnHnxIndexSource.CAFEF,
-        )
-
-        folder_path = (
-            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
-
-        file_path = get_newest_file_path(
-            folder_path=folder_path, extension=FileExtension.CSV
-        )
-
-        if not file_path:
-            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
-            return
-
-        self._logger.log_info(f'Start ingesting data in "{file_path}".')
-
-        # Add logic for processing data here
-        df = pd.read_csv(file_path, encoding="utf-8")
-        hnx_index_df = df[df["<Ticker>"] == "HNX-INDEX"]
-        rename_map = {
-            "<Ticker>": "ticker",
-            "<DTYYYYMMDD>": "date",
-            "<Open>": "open",
-            "<High>": "high",
-            "<Low>": "low",
-            "<Close>": "close",
-            "<Volume>": "volume",
-        }
-        hnx_index_df = hnx_index_df.rename(columns=rename_map)
-        hnx_index_df.drop(columns=["ticker"], inplace=True)
-        hnx_index_df["date"] = pd.to_datetime(hnx_index_df["date"], format="%Y%m%d")
-        hnx_index_df = hnx_index_df.sort_values(by="date").reset_index(drop=True)
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.HNX_INDEX.name,
-            primary_keys=Table.HNX_INDEX.primary_key,
-            df=hnx_index_df,
-        )
-
-        self._logger.log_info(f'Finish ingesting data in "{file_path}".')
-
-    def _clean_stock_market_hnx_index_cafef(self) -> None:
-        key = (
-            ScrapeMainType.STOCK_MARKET,
-            StockMarketSubType.VN_HNX_INDEX,
-            VnHnxIndexSource.CAFEF,
-        )
-
-        self._logger.log_info(
-            f'Start cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for cleaning data here
-        self._select_database(DataQuality.BRONZE.value)
-
-        bronze_df = self._select(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.HNX_INDEX.name,
-        )
-
-        silver_df = self._clean(
-            df=bronze_df,
-            clean_layer_list=[CleanLayer.ORDER_BY([Table.HNX_INDEX.Column.DATE.value])],
-        )
-
-        self._select_database(DataQuality.SILVER.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.HNX_INDEX.name,
-            primary_keys=Table.HNX_INDEX.primary_key,
-            df=silver_df,
-        )
-
-        self._logger.log_info(
-            f'Finish cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-    def _transform_stock_market_hnx_index_cafef(self) -> None:
-        key = (
-            ScrapeMainType.STOCK_MARKET,
-            StockMarketSubType.VN_HNX_INDEX,
-            VnHnxIndexSource.CAFEF,
-        )
-
-        self._logger.log_info(
-            f'Start transforming data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for transforming data here
-        self._select_database(DataQuality.SILVER.value)
-        silver_df = self._select(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.HNX_INDEX.name,
-        )
-
-        gold_df = make_date_time_index_for_dataframe(df=silver_df)
-        gold_df = standardize_time_frame(df=gold_df)
-
-        cols_to_interpolate = gold_df.columns.difference(["date"])
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
-            pd.to_numeric, errors="coerce"
-        )
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
-            method="linear"
-        )
-
-        self._select_database(DataQuality.GOLD.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.HNX_INDEX.name,
-            primary_keys=Table.HNX_INDEX.primary_key,
-            df=gold_df,
-        )
-
-        self._logger.log_info(
-            f'Finish transforming data in table "{format_key_for_table(key)}".'
-        )
-
-    def _process_stock_market_hnx_index(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(
-            f'Start processing stock market HNX_INDEX data for "{data_quality.value}".'
-        )
-
-        match data_quality:
-            case DataQuality.BRONZE:
-                self._process_stock_market_hnx_index_cafef()
-
-            case DataQuality.SILVER:
-                self._clean_stock_market_hnx_index_cafef()
-
-            case DataQuality.GOLD:
-                self._transform_stock_market_hnx_index_cafef()
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
-
-        self._logger.log_info(
-            f'Finish processing stock market HNX_INDEX data for "{data_quality.value}".'
-        )
-
-    # endregion STOCK_MARKET.HNX_INDEX
-
-    # region STOCK_MARKET.VN_30_INDEX
-    def _process_stock_market_vn_30_index_cafef(self) -> None:
-        key = (
-            ScrapeMainType.STOCK_MARKET,
-            StockMarketSubType.VN_30_INDEX,
-            Vn30IndexSource.CAFEF,
-        )
-
-        folder_path = (
-            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
-
-        file_path = get_newest_file_path(
-            folder_path=folder_path, extension=FileExtension.CSV
-        )
-
-        if not file_path:
-            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
-            return
-
-        self._logger.log_info(f'Start ingesting data in "{file_path}".')
-
-        # Add logic for processing data here
-        df = pd.read_csv(file_path, encoding="utf-8")
-
-        df["date"] = pd.to_datetime(df["date"], format="%d/%m/%Y")
-
-        df["adjusted_close"] = df["adjusted_close"].str.replace(",", "", regex=False)
-        df["adjusted_close"] = pd.to_numeric(df["adjusted_close"], errors="coerce")
-
-        df[["change_value", "change_percentage"]] = df["change"].str.extract(
-            r"([-\d.]+)\s*\(([-\d.]+)\s*%\)"
-        )
-        df["change_value"] = df["change_value"].astype(float)
-        df["change_percentage"] = df["change_percentage"].astype(float)
-
-        df = df.drop(columns=["change"])
-
-        df["matched_volume"] = (
-            df["matched_volume"].str.replace(",", "", regex=False).astype(int)
-        )
-        df["matched_value"] = (
-            df["matched_value"].str.replace(",", "", regex=False).astype(float)
-        )
-        df["negotiated_volume"] = (
-            df["negotiated_volume"].str.replace(",", "", regex=False).astype(int)
-        )
-        df["negotiated_value"] = (
-            df["negotiated_value"].str.replace(",", "", regex=False).astype(float)
-        )
-        df["open"] = df["open"].str.replace(",", "", regex=False).astype(float)
-        df["high"] = df["high"].str.replace(",", "", regex=False).astype(float)
-        df["low"] = df["low"].str.replace(",", "", regex=False).astype(float)
-        df = df.sort_values(by="date", ascending=True, ignore_index=True)
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.VN_30_INDEX.name,
-            primary_keys=Table.VN_30_INDEX.primary_key,
-            df=df,
-        )
-
-        self._logger.log_info(f'Finish ingesting data in "{file_path}".')
-
-    def _clean_stock_market_vn_30_index_cafef(self) -> None:
-        key = (
-            ScrapeMainType.STOCK_MARKET,
-            StockMarketSubType.VN_30_INDEX,
-            Vn30IndexSource.CAFEF,
-        )
-
-        self._logger.log_info(
-            f'Start cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for cleaning data here
-        self._select_database(DataQuality.BRONZE.value)
-
-        bronze_df = self._select(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.VN_30_INDEX.name,
-        )
-
-        silver_df = self._clean(
-            df=bronze_df,
-            clean_layer_list=[
-                CleanLayer.ORDER_BY([Table.VN_30_INDEX.Column.DATE.value])
-            ],
-        )
-
-        self._select_database(DataQuality.SILVER.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.VN_30_INDEX.name,
-            primary_keys=Table.VN_30_INDEX.primary_key,
-            df=silver_df,
-        )
-
-        self._logger.log_info(
-            f'Finish cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-    def _transform_stock_market_vn_30_index_cafef(self) -> None:
-        key = (
-            ScrapeMainType.STOCK_MARKET,
-            StockMarketSubType.VN_30_INDEX,
-            Vn30IndexSource.CAFEF,
-        )
-
-        self._logger.log_info(
-            f'Start transforming data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for transforming data here
-        self._select_database(DataQuality.SILVER.value)
-        silver_df = self._select(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.VN_30_INDEX.name,
-        )
-
-        gold_df = make_date_time_index_for_dataframe(df=silver_df)
-        gold_df = standardize_time_frame(df=gold_df)
-
-        cols_to_interpolate = gold_df.columns.difference(["date"])
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
-            pd.to_numeric, errors="coerce"
-        )
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
-            method="linear"
-        )
-
-        self._select_database(DataQuality.GOLD.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.VN_30_INDEX.name,
-            primary_keys=Table.VN_30_INDEX.primary_key,
-            df=gold_df,
-        )
-
-        self._logger.log_info(
-            f'Finish transforming data in table "{format_key_for_table(key)}".'
-        )
-
-    def _process_stock_market_vn_30_index(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(
-            f'Start processing stock market VN_30_INDEX data for "{data_quality.value}".'
-        )
-
-        match data_quality:
-            case DataQuality.BRONZE:
-                self._process_stock_market_vn_30_index_cafef()
-
-            case DataQuality.SILVER:
-                self._clean_stock_market_vn_30_index_cafef()
-
-            case DataQuality.GOLD:
-                self._transform_stock_market_vn_30_index_cafef()
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
-
-        self._logger.log_info(
-            f'Finish processing stock market VN_30_INDEX data for "{data_quality.value}".'
-        )
-
-    # endregion STOCK_MARKET.VN_30_INDEX
-
-    # region STOCK_MARKET.VN_100_INDEX
-    def _process_stock_market_vn_100_index_cafef(self) -> None:
-        key = (
-            ScrapeMainType.STOCK_MARKET,
-            StockMarketSubType.VN_100_INDEX,
-            Vn100IndexSource.CAFEF,
-        )
-
-        folder_path = (
-            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
-
-        file_path = get_newest_file_path(
-            folder_path=folder_path, extension=FileExtension.CSV
-        )
-
-        if not file_path:
-            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
-            return
-
-        self._logger.log_info(f'Start ingesting data in "{file_path}".')
-
-        # Add logic for processing data here
-        df = pd.read_csv(file_path, encoding="utf-8")
-
-        df["date"] = pd.to_datetime(df["date"], format="%d/%m/%Y")
-
-        df["adjusted_close"] = df["adjusted_close"].str.replace(",", "", regex=False)
-        df["adjusted_close"] = pd.to_numeric(df["adjusted_close"], errors="coerce")
-
-        df[["change_value", "change_percentage"]] = df["change"].str.extract(
-            r"([-\d.]+)\s*\(([-\d.]+)\s*%\)"
-        )
-        df["change_value"] = df["change_value"].astype(float)
-        df["change_percentage"] = df["change_percentage"].astype(float)
-
-        df = df.drop(columns=["change"])
-
-        df["matched_volume"] = (
-            df["matched_volume"].str.replace(",", "", regex=False).astype(int)
-        )
-        df["matched_value"] = (
-            df["matched_value"].str.replace(",", "", regex=False).astype(float)
-        )
-        df["negotiated_volume"] = (
-            df["negotiated_volume"].str.replace(",", "", regex=False).astype(int)
-        )
-        df["negotiated_value"] = (
-            df["negotiated_value"].str.replace(",", "", regex=False).astype(float)
-        )
-        df["open"] = df["open"].str.replace(",", "", regex=False).astype(float)
-        df["high"] = df["high"].str.replace(",", "", regex=False).astype(float)
-        df["low"] = df["low"].str.replace(",", "", regex=False).astype(float)
-        df = df.sort_values(by="date", ascending=True, ignore_index=True)
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.VN_100_INDEX.name,
-            primary_keys=Table.VN_100_INDEX.primary_key,
-            df=df,
-        )
-
-        self._logger.log_info(f'Finish ingesting data in "{file_path}".')
-
-    def _clean_stock_market_vn_100_index_cafef(self) -> None:
-        key = (
-            ScrapeMainType.STOCK_MARKET,
-            StockMarketSubType.VN_100_INDEX,
-            Vn100IndexSource.CAFEF,
-        )
-
-        self._logger.log_info(
-            f'Start cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for cleaning data here
-        self._select_database(DataQuality.BRONZE.value)
-
-        bronze_df = self._select(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.VN_100_INDEX.name,
-        )
-
-        silver_df = self._clean(
-            df=bronze_df,
-            clean_layer_list=[
-                CleanLayer.ORDER_BY([Table.VN_100_INDEX.Column.DATE.value])
-            ],
-        )
-
-        self._select_database(DataQuality.SILVER.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.VN_100_INDEX.name,
-            primary_keys=Table.VN_100_INDEX.primary_key,
-            df=silver_df,
-        )
-
-        self._logger.log_info(
-            f'Finish cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-    def _transform_stock_market_vn_100_index_cafef(self) -> None:
-        key = (
-            ScrapeMainType.STOCK_MARKET,
-            StockMarketSubType.VN_100_INDEX,
-            Vn100IndexSource.CAFEF,
-        )
-
-        self._logger.log_info(
-            f'Start transforming data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for transforming data here
-        self._select_database(DataQuality.SILVER.value)
-        silver_df = self._select(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.VN_100_INDEX.name,
-        )
-
-        gold_df = make_date_time_index_for_dataframe(df=silver_df)
-        gold_df = standardize_time_frame(df=gold_df)
-
-        cols_to_interpolate = gold_df.columns.difference(["date"])
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
-            pd.to_numeric, errors="coerce"
-        )
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
-            method="linear"
-        )
-
-        self._select_database(DataQuality.GOLD.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.VN_100_INDEX.name,
-            primary_keys=Table.VN_100_INDEX.primary_key,
-            df=gold_df,
-        )
-
-        self._logger.log_info(
-            f'Finish transforming data in table "{format_key_for_table(key)}".'
-        )
-
-    def _process_stock_market_vn_100_index(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(
-            f'Start processing stock market VN_100_INDEX data for "{data_quality.value}".'
-        )
-
-        match data_quality:
-            case DataQuality.BRONZE:
-                self._process_stock_market_vn_100_index_cafef()
-
-            case DataQuality.SILVER:
-                self._clean_stock_market_vn_100_index_cafef()
-
-            case DataQuality.GOLD:
-                self._transform_stock_market_vn_100_index_cafef()
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
-
-        self._logger.log_info(
-            f'Finish processing stock market VN_100_INDEX data for "{data_quality.value}".'
-        )
-
-    # endregion STOCK_MARKET.VN_100_INDEX
-
-    # region STOCK_MARKET.HNX_30_INDEX
-    def _process_stock_market_hnx_30_index_cafef(self) -> None:
-        key = (
-            ScrapeMainType.STOCK_MARKET,
-            StockMarketSubType.HNX_30_INDEX,
-            Hnx30IndexSource.CAFEF,
-        )
-
-        folder_path = (
-            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
-
-        file_path = get_newest_file_path(
-            folder_path=folder_path, extension=FileExtension.CSV
-        )
-
-        if not file_path:
-            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
-            return
-
-        self._logger.log_info(f'Start ingesting data in "{file_path}".')
-
-        # Add logic for processing data here
-        df = pd.read_csv(file_path, encoding="utf-8")
-
-        df["date"] = pd.to_datetime(df["date"], format="%d/%m/%Y")
-
-        df["adjusted_close"] = df["adjusted_close"].str.replace(",", "", regex=False)
-        df["adjusted_close"] = pd.to_numeric(df["adjusted_close"], errors="coerce")
-
-        df[["change_value", "change_percentage"]] = df["change"].str.extract(
-            r"([-\d.]+)\s*\(([-\d.]+)\s*%\)"
-        )
-        df["change_value"] = df["change_value"].astype(float)
-        df["change_percentage"] = df["change_percentage"].astype(float)
-
-        df = df.drop(columns=["change"])
-
-        df["matched_volume"] = (
-            df["matched_volume"].str.replace(",", "", regex=False).astype(int)
-        )
-        df["matched_value"] = (
-            df["matched_value"].str.replace(",", "", regex=False).astype(float)
-        )
-        df["negotiated_volume"] = (
-            df["negotiated_volume"].str.replace(",", "", regex=False).astype(int)
-        )
-        df["negotiated_value"] = (
-            df["negotiated_value"].str.replace(",", "", regex=False).astype(float)
-        )
-        df["open"] = (
-            df["open"].astype(str).str.replace(",", "", regex=False).astype(float)
-        )
-        df["high"] = (
-            df["high"].astype(str).str.replace(",", "", regex=False).astype(float)
-        )
-        df["low"] = (
-            df["low"].astype(str).str.replace(",", "", regex=False).astype(float)
-        )
-        df = df.sort_values(by="date", ascending=True, ignore_index=True)
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.HNX_30_INDEX.name,
-            primary_keys=Table.HNX_30_INDEX.primary_key,
-            df=df,
-        )
-
-        self._logger.log_info(f'Finish ingesting data in "{file_path}".')
-
-    def _clean_stock_market_hnx_30_index_cafef(self) -> None:
-        key = (
-            ScrapeMainType.STOCK_MARKET,
-            StockMarketSubType.HNX_30_INDEX,
-            Hnx30IndexSource.CAFEF,
-        )
-
-        self._logger.log_info(
-            f'Start cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for cleaning data here
-        self._select_database(DataQuality.BRONZE.value)
-
-        bronze_df = self._select(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.HNX_30_INDEX.name,
-        )
-
-        silver_df = self._clean(
-            df=bronze_df,
-            clean_layer_list=[
-                CleanLayer.ORDER_BY([Table.HNX_30_INDEX.Column.DATE.value])
-            ],
-        )
-
-        self._select_database(DataQuality.SILVER.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.HNX_30_INDEX.name,
-            primary_keys=Table.HNX_30_INDEX.primary_key,
-            df=silver_df,
-        )
-
-        self._logger.log_info(
-            f'Finish cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-    def _transform_stock_market_hnx_30_index_cafef(self) -> None:
-        key = (
-            ScrapeMainType.STOCK_MARKET,
-            StockMarketSubType.HNX_30_INDEX,
-            Hnx30IndexSource.CAFEF,
-        )
-
-        self._logger.log_info(
-            f'Start transforming data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for transforming data here
-        self._select_database(DataQuality.SILVER.value)
-        silver_df = self._select(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.HNX_30_INDEX.name,
-        )
-
-        gold_df = make_date_time_index_for_dataframe(df=silver_df)
-        gold_df = standardize_time_frame(df=gold_df)
-
-        cols_to_interpolate = gold_df.columns.difference(["date"])
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
-            pd.to_numeric, errors="coerce"
-        )
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
-            method="linear"
-        )
-
-        self._select_database(DataQuality.GOLD.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.HNX_30_INDEX.name,
-            primary_keys=Table.HNX_30_INDEX.primary_key,
-            df=gold_df,
-        )
-
-        self._logger.log_info(
-            f'Finish transforming data in table "{format_key_for_table(key)}".'
-        )
-
-    def _process_stock_market_hnx_30_index(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(
-            f'Start processing stock market HNX_30_INDEX data for "{data_quality.value}".'
-        )
-
-        match data_quality:
-            case DataQuality.BRONZE:
-                self._process_stock_market_hnx_30_index_cafef()
-
-            case DataQuality.SILVER:
-                self._clean_stock_market_hnx_30_index_cafef()
-
-            case DataQuality.GOLD:
-                self._transform_stock_market_hnx_30_index_cafef()
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
-
-        self._logger.log_info(
-            f'Finish processing stock market HNX_30_INDEX data for "{data_quality.value}".'
-        )
-
-    # endregion STOCK_MARKET.HNX_30_INDEX
-
-    # region STOCK_MARKET.UPCOM_INDEX
-    def _process_stock_market_upcom_index_cafef(self) -> None:
-        key = (
-            ScrapeMainType.STOCK_MARKET,
-            StockMarketSubType.UPCOM_INDEX,
-            UpcomIndexSource.CAFEF,
-        )
-
-        folder_path = (
-            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
-
-        file_path = get_newest_file_path(
-            folder_path=folder_path, extension=FileExtension.CSV
-        )
-
-        if not file_path:
-            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
-            return
-
-        self._logger.log_info(f'Start ingesting data in "{file_path}".')
-
-        # Add logic for processing data here
-        df = pd.read_csv(file_path, encoding="utf-8")
-
-        df["date"] = pd.to_datetime(df["date"], format="%d/%m/%Y")
-
-        df["adjusted_close"] = df["adjusted_close"].str.replace(",", "", regex=False)
-        df["adjusted_close"] = pd.to_numeric(df["adjusted_close"], errors="coerce")
-
-        df[["change_value", "change_percentage"]] = df["change"].str.extract(
-            r"([-\d.]+)\s*\(([-\d.]+)\s*%\)"
-        )
-        df["change_value"] = df["change_value"].astype(float)
-        df["change_percentage"] = df["change_percentage"].astype(float)
-
-        df = df.drop(columns=["change"])
-
-        df["matched_volume"] = (
-            df["matched_volume"].str.replace(",", "", regex=False).astype(int)
-        )
-        df["matched_value"] = (
-            df["matched_value"].str.replace(",", "", regex=False).astype(float)
-        )
-        df["negotiated_volume"] = (
-            df["negotiated_volume"].str.replace(",", "", regex=False).astype(int)
-        )
-        df["negotiated_value"] = (
-            df["negotiated_value"].str.replace(",", "", regex=False).astype(float)
-        )
-        df["open"] = (
-            df["open"].astype(str).str.replace(",", "", regex=False).astype(float)
-        )
-        df["high"] = (
-            df["high"].astype(str).str.replace(",", "", regex=False).astype(float)
-        )
-        df["low"] = (
-            df["low"].astype(str).str.replace(",", "", regex=False).astype(float)
-        )
-        df = df.sort_values(by="date", ascending=True, ignore_index=True)
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.UPCOM_INDEX.name,
-            primary_keys=Table.UPCOM_INDEX.primary_key,
-            df=df,
-        )
-
-        self._logger.log_info(f'Finish ingesting data in "{file_path}".')
-
-    def _clean_stock_market_upcom_index_cafef(self) -> None:
-        key = (
-            ScrapeMainType.STOCK_MARKET,
-            StockMarketSubType.UPCOM_INDEX,
-            UpcomIndexSource.CAFEF,
-        )
-
-        self._logger.log_info(
-            f'Start cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for cleaning data here
-        self._select_database(DataQuality.BRONZE.value)
-
-        bronze_df = self._select(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.UPCOM_INDEX.name,
-        )
-
-        silver_df = self._clean(
-            df=bronze_df,
-            clean_layer_list=[
-                CleanLayer.ORDER_BY([Table.UPCOM_INDEX.Column.DATE.value])
-            ],
-        )
-
-        self._select_database(DataQuality.SILVER.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.UPCOM_INDEX.name,
-            primary_keys=Table.UPCOM_INDEX.primary_key,
-            df=silver_df,
-        )
-
-        self._logger.log_info(
-            f'Finish cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-    def _transform_stock_market_upcom_index_cafef(self) -> None:
-        key = (
-            ScrapeMainType.STOCK_MARKET,
-            StockMarketSubType.UPCOM_INDEX,
-            UpcomIndexSource.CAFEF,
-        )
-
-        self._logger.log_info(
-            f'Start transforming data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for transforming data here
-        self._select_database(DataQuality.SILVER.value)
-        silver_df = self._select(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.UPCOM_INDEX.name,
-        )
-
-        gold_df = make_date_time_index_for_dataframe(df=silver_df)
-        gold_df = standardize_time_frame(df=gold_df)
-
-        cols_to_interpolate = gold_df.columns.difference(["date"])
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
-            pd.to_numeric, errors="coerce"
-        )
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
-            method="linear"
-        )
-
-        self._select_database(DataQuality.GOLD.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.UPCOM_INDEX.name,
-            primary_keys=Table.UPCOM_INDEX.primary_key,
-            df=gold_df,
-        )
-
-        self._logger.log_info(
-            f'Finish transforming data in table "{format_key_for_table(key)}".'
-        )
-
-    def _process_stock_market_upcom_index(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(
-            f'Start processing stock market UPCOM_INDEX data for "{data_quality.value}".'
-        )
-
-        match data_quality:
-            case DataQuality.BRONZE:
-                self._process_stock_market_upcom_index_cafef()
-
-            case DataQuality.SILVER:
-                self._clean_stock_market_upcom_index_cafef()
-
-            case DataQuality.GOLD:
-                self._transform_stock_market_upcom_index_cafef()
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
-
-        self._logger.log_info(
-            f'Finish processing stock market UPCOM_INDEX data for "{data_quality.value}".'
-        )
-
-    # endregion STOCK_MARKET.UPCOM_INDEX
-
     # endregion STOCK_MARKET data process
 
     # region ENTERPRISE data process
 
     # region ENTERPRISE.STOCK_INFORMATION
-    def _ingest_enterprise_stock_cafef(self) -> None:
-        key_1 = (
-            ScrapeMainType.ENTERPRISE,
-            EnterpriseSubType.DAILY_PRICE,
-            DailyPriceSource.CAFEF,
-        )
-
-        key_2 = (
-            ScrapeMainType.ENTERPRISE,
-            EnterpriseSubType.STOCK_INFORMATION,
-            StockInformationSource.CAFEF,
-        )
-
-        folder_path_1 = f"{SCRAPER_BRONZE_DATA_DIR}/{key_1[0].value}/{key_1[1].value}/{key_1[2].value}"
-        folder_path_2 = f"{SCRAPER_BRONZE_DATA_DIR}/{key_2[0].value}/{key_2[1].value}/{key_2[2].value}"
-
-        # 1. Get file lists
-        base_stock_files = get_all_file_names_with_extensions(
-            self._logger,
-            folder_path=folder_path_1,
-            extensions=[FileExtension.CSV],
-        )
-        stock_information_files = get_all_file_names_with_extensions(
-            self._logger,
-            folder_path=folder_path_2,
-            extensions=[FileExtension.CSV],
-        )
-
-        # 2. Find latest stock files per exchange
-        pattern = re.compile(r"(HNX|HSX|UPCOM)_upto_(\d{8})\.csv")
-        latest_files = {}
-
-        for file in base_stock_files:
-            match = pattern.search(os.path.basename(file))
-            if match:
-                exchange, date_str = match.groups()
-                date = datetime.strptime(date_str, "%Y%m%d")
-                if (
-                    exchange not in latest_files
-                    or date > latest_files[exchange]["date"]
-                ):
-                    latest_files[exchange] = {"file": file, "date": date}
-
-        # 3. Validate and collect file paths
-        required_exchanges = ["HSX", "HNX", "UPCOM"]
-        file_paths = {}
-
-        for exchange in required_exchanges:
-            file_path = latest_files.get(exchange, {}).get("file")
-            if not file_path or not os.path.isfile(file_path):
-                self._logger.log_error(
-                    f'{exchange} data file not found in "{folder_path_1}".'
-                )
-                return
-            file_paths[exchange] = file_path
-
-        table_name = Table.STOCK.__qualname__.lower()
-        self._logger.log_info(f'Start ingesting data in "{table_name}".')
-
-        # 4. Load stock information data efficiently
-        stock_info_frames = [
-            pd.read_csv(file, encoding="utf-8")
-            for file in stock_information_files
-            if re.search(r"cafef_upto_\d+_\d+\.csv$", file)
+    def _ingest_enterprise_stock(self) -> None:
+        stock_list_sub_type_list = [
+            item for item in EnterpriseSubType if "list" in item.value.lower()
         ]
-        stock_infomation_df = (
-            pd.concat(stock_info_frames, ignore_index=True)
-            if stock_info_frames
-            else pd.DataFrame()
-        )
-        stock_infomation_df.columns = (
-            stock_infomation_df.columns.str.lower().str.replace(" ", "_")
+
+        # STOCK MARKET DATAFRAME
+        stock_market_df = self._select(
+            schema_name=Schema.STOCK_MARKET.value,
+            table_name=Table.MARKET.name,
         )
 
-        # 6. Create base DataFrame for stocks
-        base_dfs = []
-        for market_code, stock_market_path in file_paths.items():
-            base_df = pd.read_csv(stock_market_path)
-            base_df["<Ticker>"] = base_df["<Ticker>"].astype("string")
+        market_code_to_id = {
+            row["code"].upper(): row["id"]
+            for row in stock_market_df.to_dict(orient="records")
+        }
 
-            # Skip derivatives
-            base_df = base_df[base_df["<Ticker>"].str.len() == 3]
+        enterprise_subtype_to_market_id_map = {
+            EnterpriseSubType.STOCK_LIST_HOSE.value: market_code_to_id.get("HSX"),
+            EnterpriseSubType.STOCK_LIST_HNX.value: market_code_to_id.get("HNX"),
+            EnterpriseSubType.STOCK_LIST_UPCOM.value: market_code_to_id.get("UPCOM"),
+        }
 
-            base_stock_df = pd.DataFrame(
-                {
-                    Table.STOCK.Column.CODE.value: base_df["<Ticker>"]
-                    .dropna()
-                    .unique(),
-                    Table.STOCK.Column.MARKET_ID.value: self._get_market_id(
-                        market_code
-                    ),
-                }
+        for stock_list_sub_type in stock_list_sub_type_list:
+
+            key = (
+                ScrapeMainType.ENTERPRISE,
+                stock_list_sub_type,
             )
-            base_dfs.append(base_stock_df)
 
-        overall_df = pd.concat(base_dfs, ignore_index=True).sort_values(
-            by=Table.STOCK.primary_key, ignore_index=True
-        )
+            folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}"
 
-        # 7. Merge with stock information
-        overall_df = pd.merge(
-            overall_df, stock_infomation_df, on=Table.STOCK.primary_key, how="left"
-        )
+            file_path = get_newest_file_path(
+                folder_path=folder_path,
+                extension=FileExtension.CSV,
+            )
 
-        # 8. Calculate outstanding_rate safely
-        listed = overall_df["listed_shares"].astype(float)
-        outstanding = overall_df["outstanding_shares"].astype(float)
-        overall_df["outstanding_rate"] = np.where(
-            listed > 0, outstanding / listed, np.nan
-        )
+            if not file_path:
+                self._logger.log_error(f'Data in "{folder_path}" does not exist.')
+                continue
 
-        # 9. Save to database
-        self._save_pandas_table_to_database(
-            schema_name=Schema.ENTERPRISE.value,
-            table_name=Table.STOCK.name,
-            primary_keys=Table.STOCK.primary_key,
-            df=overall_df,
-        )
+            file_paths = [file_path]
 
-        self._logger.log_info(f'Finish ingesting data in "{table_name}".')
+            self._logger.log_info(
+                f'Start ingesting {len(file_paths)} file(s) from "{folder_path}" to "{stock_list_sub_type.value.lower()}".'
+            )
 
-    def _clean_enterprise_stock_cafef(self) -> None:
-        key = (
-            ScrapeMainType.ENTERPRISE,
-            EnterpriseSubType.STOCK_INFORMATION,
-            StockInformationSource.CAFEF,
-        )
+            # STOCK LIST DATAFRAME
+            # Current data from DB
+            current_stock_list_df = self._select(
+                schema_name=Schema.ENTERPRISE.value,
+                table_name=Table.B_STOCK.name,
+            )
 
-        self._logger.log_info(
-            f'Start cleaning data in table "{format_key_for_table(key)}".'
-        )
+            df = pd.read_csv(file_path)
 
-        # Add logic for cleaning data here
-        self._select_database(DataQuality.BRONZE.value)
+            df["market_id"] = enterprise_subtype_to_market_id_map.get(
+                stock_list_sub_type.value
+            )
 
-        bronze_df = self._select(
-            schema_name=Schema.ENTERPRISE.value,
-            table_name=Table.STOCK.name,
-        )
-
-        silver_df = bronze_df.drop(
-            columns=[
-                Table.STOCK.Column.ID.value,
-                Table.STOCK.Column.CREATE_DATE.value,
-                Table.STOCK.Column.UPDATE_DATE.value,
-                Table.STOCK.Column.DELETE_DATE.value,
+            df = df[
+                [Table.B_STOCK.Column.CODE.value, Table.B_STOCK.Column.MARKET_ID.value]
             ]
-        )
 
-        silver_df = self._clean(
-            df=silver_df,
-            clean_layer_list=[CleanLayer.ORDER_BY([Table.STOCK.Column.CODE.value])],
-        )
+            self._save_pandas_table_to_database(
+                schema_name=Schema.ENTERPRISE.value,
+                table_name=Table.B_STOCK.name,
+                primary_keys=Table.B_STOCK.primary_key,
+                df=df,
+            )
 
-        self._select_database(DataQuality.SILVER.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.ENTERPRISE.value,
-            table_name=Table.STOCK.name,
-            primary_keys=Table.STOCK.primary_key,
-            df=silver_df,
-        )
-
-        self._logger.log_info(
-            f'Finish cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-    def _transform_enterprise_stock_cafef(self) -> None:
-        key = (
-            ScrapeMainType.ENTERPRISE,
-            EnterpriseSubType.STOCK_INFORMATION,
-            StockInformationSource.CAFEF,
-        )
-
-        self._logger.log_info(
-            f'Start transforming data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for transforming data here
-        self._select_database(DataQuality.SILVER.value)
-        silver_df = self._select(
-            schema_name=Schema.ENTERPRISE.value,
-            table_name=Table.STOCK.name,
-        )
-
-        gold_df = silver_df.drop(
-            columns=[
-                Table.STOCK.Column.ID.value,
-                Table.STOCK.Column.CREATE_DATE.value,
-                Table.STOCK.Column.UPDATE_DATE.value,
-                Table.STOCK.Column.DELETE_DATE.value,
-            ]
-        )
-
-        self._select_database(DataQuality.GOLD.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.ENTERPRISE.value,
-            table_name=Table.STOCK.name,
-            primary_keys=Table.STOCK.primary_key,
-            df=gold_df,
-        )
-
-        self._logger.log_info(
-            f'Finish transforming data in table "{format_key_for_table(key)}".'
-        )
+            self._logger.log_info(
+                f'Finish ingesting {len(file_paths)} file(s) from "{folder_path}" to "{stock_list_sub_type.value.lower()}".'
+            )
 
     def _process_enterprise_stock(self, data_quality: DataQuality) -> None:
         self._logger.log_info(
@@ -10519,13 +6479,13 @@ class DataPreprocessor:
 
         match data_quality:
             case DataQuality.BRONZE:
-                self._ingest_enterprise_stock_cafef()
+                self._ingest_enterprise_stock()
 
             case DataQuality.SILVER:
-                self._clean_enterprise_stock_cafef()
+                pass
 
             case DataQuality.GOLD:
-                self._transform_enterprise_stock_cafef()
+                pass
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -10537,215 +6497,248 @@ class DataPreprocessor:
     # endregion ENTERPRISE.STOCK_INFORMATION
 
     # region ENTERPRISE.DAILY_PRICE
-    def _ingest_enterprise_daily_price_cafef(self) -> None:
-        key = (
-            ScrapeMainType.ENTERPRISE,
-            EnterpriseSubType.DAILY_PRICE,
-            DailyPriceSource.CAFEF,
+    def _prepare_code_data(self, code: str) -> list | None:
+        price_folder = (
+            f"{SCRAPER_BRONZE_DATA_DIR}"
+            f"/{get_value(ScrapeMainType.ENTERPRISE)}/{get_value(f'{code}_price')}"
+        )
+        order_folder = (
+            f"{SCRAPER_BRONZE_DATA_DIR}"
+            f"/{get_value(ScrapeMainType.ENTERPRISE)}/{get_value(f'{code}_order')}"
         )
 
-        folder_path = (
-            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+        price_result = self._build_price_df(price_folder)
+        order_result = self._build_order_df(order_folder)
+
+        if price_result is None or order_result is None:
+            self._logger.log_warning(f'No data found for code "{code}". Skipping.')
+            return None
+
+        price_df, price_file_paths = price_result
+        order_df, order_file_paths = order_result
+
+        price_df = self._remove_duplicates(
+            price_df,
+            Table.B_ENTERPRISE_PRICE.primary_key,
+            filters={Table.B_ENTERPRISE_PRICE.Column.MATCHING_VOLUME.value: (">", 0)},
         )
 
-        file_paths = get_all_file_names_with_extensions(
-            self._logger,
-            folder_path=folder_path,
-            extensions=[FileExtension.CSV],
-        )
-
-        if len(file_paths) < 3:
-            self._logger.log_info(
-                "Files found: " + ", ".join(f"`{path}`" for path in file_paths.values())
-            )
-            self._logger.log_warning(
-                f'Not enough data files in "{folder_path}". Expected 03 .csv files, found {len(file_paths)}.'
-            )
-            return
-
-        self._logger.log_info(f'Start ingesting data in "{folder_path}".')
-
-        for file_path in file_paths:
-            df = pd.read_csv(file_path, encoding="utf-8")
-            df["<Ticker>"] = df["<Ticker>"].astype("string")
-            df["<DTYYYYMMDD>"] = pd.to_datetime(
-                df["<DTYYYYMMDD>"], format="%Y%m%d", errors="coerce"
-            )
-            df["<Open>"] = pd.to_numeric(df["<Open>"], errors="coerce")
-            df["<High>"] = pd.to_numeric(df["<High>"], errors="coerce")
-            df["<Low>"] = pd.to_numeric(df["<Low>"], errors="coerce")
-            df["<Close>"] = pd.to_numeric(df["<Close>"], errors="coerce")
-            df["<Volume>"] = pd.to_numeric(df["<Volume>"], errors="coerce")
-
-            market_code = os.path.basename(file_path).split("_")[0]
-
-            daily_price_df = pd.DataFrame(
-                {
-                    Table.DAILY_PRICE.Column.DATE.value: df["<DTYYYYMMDD>"],
-                    Table.DAILY_PRICE.Column.CODE.value: df["<Ticker>"],
-                    Table.DAILY_PRICE.Column.MARKET_ID.value: self._get_market_id(
-                        market_code
-                    ),
-                    Table.DAILY_PRICE.Column.OPEN.value: df["<Open>"],
-                    Table.DAILY_PRICE.Column.HIGH.value: df["<High>"],
-                    Table.DAILY_PRICE.Column.LOW.value: df["<Low>"],
-                    Table.DAILY_PRICE.Column.CLOSE.value: df["<Close>"],
-                    Table.DAILY_PRICE.Column.VOLUME.value: df["<Volume>"],
-                }
-            )
-
-            daily_price_df = daily_price_df.dropna(subset=["code"])
-
-            year_list = self._get_year_list_from_start(SCRAPER_START_DATE)
-
-            # Remove current year
-            current_year = year_list[-1]
-            year_list = year_list[:-1]
-
-            # Remove years already ingested
-            market_df = self._get_market_df()
-            process_year = market_df[
-                market_df[Table.MARKET.Column.CODE.value] == market_code
-            ][Table.MARKET.Column.SAVE_PROGRESS_YEAR.value].item()
-
-            if process_year is None:
-                process_year = SCRAPER_START_DATE.year - 1
-
-            year_list = [year for year in year_list if year > process_year]
-
-            for year in year_list:
-                self._logger.log_info(
-                    f'Ingesting data for market "{market_code}" in year "{year}".'
-                )
-                self._save_pandas_table_to_database(
-                    schema_name=Schema.ENTERPRISE.value,
-                    table_name=Table.DAILY_PRICE.name,
-                    primary_keys=Table.DAILY_PRICE.primary_key,
-                    df=daily_price_df[
-                        daily_price_df[Table.DAILY_PRICE.Column.DATE.value].dt.year
-                        == year
-                    ],
-                )
-
-                self._database_driver.update(
-                    schema_name=Schema.STOCK_MARKET.value,
-                    table_name=Table.MARKET.name,
-                    update_record=Record(
-                        data_dto_list=[
-                            DataModel(
-                                column_name=Table.MARKET.Column.SAVE_PROGRESS_YEAR.value,
-                                value=year,
-                                data_type=DataType.INT,
-                            )
-                        ]
-                    ),
-                    conditions=[
-                        Condition(
-                            column=Table.MARKET.Column.CODE.value,
-                            operator=SqlOperator.EQUAL_TO,
-                            value=market_code,
-                            data_type=DataType.VARCHAR,
-                        )
-                    ],
-                )
-
-            # Ingest current year
-            self._save_pandas_table_to_database(
+        # Return a 2-element list → Task.run() maps [0] → callback[0],
+        #                                              [1] → callback[1]
+        return [
+            DataPreprocessor._SaveBundle(
+                df=price_df,
+                file_paths=price_file_paths,
+                folder=price_folder,
+                code=code,
                 schema_name=Schema.ENTERPRISE.value,
-                table_name=Table.DAILY_PRICE.name,
-                primary_keys=Table.DAILY_PRICE.primary_key,
-                df=daily_price_df[
-                    daily_price_df[Table.DAILY_PRICE.Column.DATE.value].dt.year
-                    == current_year
-                ],
+                table_name=Table.B_ENTERPRISE_PRICE.name,
+                primary_keys=Table.B_ENTERPRISE_PRICE.primary_key,
+            ),
+            DataPreprocessor._SaveBundle(
+                df=order_df,
+                file_paths=order_file_paths,
+                folder=order_folder,
+                code=code,
+                schema_name=Schema.ENTERPRISE.value,
+                table_name=Table.B_ENTERPRISE_ORDER.name,
+                primary_keys=Table.B_ENTERPRISE_ORDER.primary_key,
+            ),
+        ]
+
+    # ──────────────────────────────────────────────────────────────────────
+    # Callbacks: save one bundle to the database
+    # Both follow the same signature required by Task.run():
+    #   cb(value, *extra_args, **extra_kwargs)
+    # ──────────────────────────────────────────────────────────────────────
+
+    def _save_price_bundle(self, bundle) -> None:
+        """Callback that saves the price DataFrame bundle."""
+        if bundle is None:
+            return  # parent returned None — nothing to do
+
+        self._logger.log_info(
+            f"Start ingesting {len(bundle.file_paths)} price file(s) "
+            f'from "{bundle.folder}" to "{bundle.code}".'
+        )
+        self._save_pandas_table_to_database(
+            schema_name=bundle.schema_name,
+            table_name=bundle.table_name,
+            primary_keys=bundle.primary_keys,
+            df=bundle.df,
+        )
+        self._logger.log_info(
+            f"Finish ingesting {len(bundle.file_paths)} price file(s) "
+            f'from "{bundle.folder}" to "{bundle.code}".'
+        )
+
+    def _save_order_bundle(self, bundle) -> None:
+        """Callback that saves the order DataFrame bundle."""
+        if bundle is None:
+            return  # parent returned None — nothing to do
+
+        self._logger.log_info(
+            f"Start ingesting {len(bundle.file_paths)} order file(s) "
+            f'from "{bundle.folder}" to "{bundle.code}".'
+        )
+        self._save_pandas_table_to_database(
+            schema_name=bundle.schema_name,
+            table_name=bundle.table_name,
+            primary_keys=bundle.primary_keys,
+            df=bundle.df,
+        )
+        self._logger.log_info(
+            f"Finish ingesting {len(bundle.file_paths)} order file(s) "
+            f'from "{bundle.folder}" to "{bundle.code}".'
+        )
+
+    # ──────────────────────────────────────────────────────────────────────
+    # Orchestrator: register all per-code tasks, then execute
+    # ──────────────────────────────────────────────────────────────────────
+
+    def _ingest_enterprise_daily_price(self) -> None:
+        available_stock_df = self._select(
+            schema_name=Schema.ENTERPRISE.value,
+            table_name=Table.B_STOCK.name,
+            conditions=[
+                Condition(
+                    column=Table.B_STOCK.Column.DELETE_DATE.value,
+                    operator=SqlOperator.IS,
+                    value=None,
+                    data_type=DataType,
+                )
+            ],
+        )
+
+        codes = available_stock_df[Table.B_STOCK.Column.CODE.value].str.lower().tolist()
+
+        self._thread_manager.remove_all_tasks()
+
+        for code in codes:
+            # _prepare_code_data returns [price_bundle, order_bundle].
+            # Task.run() detects len(result) == len(callbacks) == 2 and
+            # dispatches price_bundle → _save_price_bundle,
+            #             order_bundle → _save_order_bundle,
+            # both running concurrently in Task's internal callback pool.
+            self._thread_manager.add_task(
+                Task(
+                    name=f"ingest_{code}",
+                    func=self._prepare_code_data,
+                    code=code,
+                    callbacks=[
+                        (self._save_price_bundle, (), {}),
+                        (self._save_order_bundle, (), {}),
+                    ],
+                )
             )
 
-    def _transform_enterprise_daily_price_cafef(self) -> None:
-        key = (
-            ScrapeMainType.ENTERPRISE,
-            EnterpriseSubType.DAILY_PRICE,
-            DailyPriceSource.CAFEF,
+        self._logger.log_info(
+            f"Registered {len(codes)} ingestion task(s). Starting execution."
+        )
+
+        successful, failed = self._thread_manager.execute()
+
+        if failed:
+            self._logger.log_warning(
+                f"{len(failed)}/{len(codes)} code(s) failed: "
+                + ", ".join(name for name, _ in failed)
+            )
+        else:
+            self._logger.log_info(f"All {len(codes)} code(s) ingested successfully.")
+
+    def _clean_enterprise_daily_price(self) -> None:
+        input_table_list = [
+            Table.B_ENTERPRISE_PRICE.name,
+            Table.B_ENTERPRISE_ORDER.name,
+        ]
+        output_table_list = [Table.S_ENTERPRISE.name]
+
+        self._logger.log_info(
+            f'Start cleaning data from table(s) "{", ".join(input_table_list)}" '
+            f'to table(s) "{", ".join(output_table_list)}".'
+        )
+
+        # Add logic for cleaning data here
+        self._select_database(DataQuality.BRONZE.value)
+
+        join_model_list = [
+            JoinModel(
+                join_type=SqlJoinType.INNER_JOIN,
+                schema_left=Schema.ENTERPRISE.value,
+                schema_right=Schema.ENTERPRISE.value,
+                table_left=Table.B_ENTERPRISE_PRICE.name,
+                table_right=Table.B_ENTERPRISE_ORDER.name,
+                columns_left=Table.B_ENTERPRISE_PRICE.primary_key,
+                columns_right=Table.B_ENTERPRISE_ORDER.primary_key,
+            )
+        ]
+
+        enterprise_bronze_df = self._select(
+            schema_name=Schema.ENTERPRISE.value,
+            table_name=Table.B_ENTERPRISE_PRICE.name,
+            join_model_list=join_model_list,
+        )
+
+        silver_df = self._clean(
+            df=enterprise_bronze_df,
+            clean_layer_list=[
+                CleanLayer.REMOVE_DUPLICATE_COLUMNS(),
+                CleanLayer.ORDER_BY(
+                    [
+                        Table.S_ENTERPRISE.Column.CODE.value,
+                        Table.S_ENTERPRISE.Column.DATE.value,
+                    ]
+                ),
+            ],
+        )
+
+        self._select_database(DataQuality.SILVER.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.ENTERPRISE.value,
+            table_name=Table.S_ENTERPRISE.name,
+            primary_keys=Table.S_ENTERPRISE.primary_key,
+            df=silver_df,
         )
 
         self._logger.log_info(
-            f'Start transforming data in table "{format_key_for_table(key)}".'
+            f'Finish cleaning data from table(s) "{", ".join(input_table_list)}" '
+            f'to table(s) "{", ".join(output_table_list)}".'
+        )
+
+    def _transform_enterprise_daily_price(self) -> None:
+        input_table_list = [Table.S_ENTERPRISE.name]
+        output_table_list = [Table.G_ENTERPRISE.name]
+
+        self._logger.log_info(
+            f'Start transforming data from table(s) "{", ".join(input_table_list)}" '
+            f'to table(s) "{", ".join(output_table_list)}".'
         )
 
         # Add logic for transforming data here
+        self._select_database(DataQuality.SILVER.value)
+        silver_df = self._select(
+            schema_name=Schema.ENTERPRISE.value,
+            table_name=Table.S_ENTERPRISE.name,
+        )
 
-        # Get stock code from DB
-        if len(STOCK_CODES_TO_BE_EXPORTED_TO_GOLD_DB) == 0:
-            self.logger.error(
-                "No stock code to be exported to gold database. Please check the database."
-            )
-            return
+        gold_df = self._transform(
+            df=silver_df,
+            transform_layer_list=[
+                TransformLayer.EXTRACT_DATETIME_FEATURE(),
+            ],
+        )
 
-        available_stock_codes = []
-        for required_stock_code in STOCK_CODES_TO_BE_EXPORTED_TO_GOLD_DB:
-            self._select_database(DataQuality.GOLD.value)
-            stock_gold_df = self._select(
-                schema_name=Schema.ENTERPRISE.value,
-                table_name=Table.STOCK.name,
-                columns=[Table.STOCK.Column.CODE.value],
-                conditions=[
-                    Condition(
-                        column=Table.STOCK.Column.CODE.value,
-                        operator=SqlOperator.EQUAL_TO,
-                        value=str.upper(required_stock_code),
-                        data_type=DataType.VARCHAR,
-                    )
-                ],
-            )
-
-            stock_code = None
-            if stock_gold_df is not None and not stock_gold_df.empty:
-                stock_code = stock_gold_df.squeeze()
-                available_stock_codes.append(stock_code)
-
-            if not stock_code:
-                self.logger.error(
-                    f"Cannot find {stock_code} stock in database. Please check the database."
-                )
-                continue
-
-        if len(available_stock_codes) == 0:
-            self.logger.error(
-                "No stock code to be exported to gold database. Please check the database."
-            )
-            return
-
-        for stock_code in available_stock_codes:
-            self._select_database(DataQuality.BRONZE.value)
-            daily_price_bronze_df = self._select(
-                schema_name=Schema.ENTERPRISE.value,
-                table_name=Table.DAILY_PRICE.name,
-                conditions=[
-                    Condition(
-                        column=Table.STOCK.Column.CODE.value,
-                        operator=SqlOperator.EQUAL_TO,
-                        value=str.upper(stock_code),
-                        data_type=DataType.VARCHAR,
-                    )
-                ],
-            )
-
-            daily_price_gold_df = self._clean(
-                df=daily_price_bronze_df,
-                clean_layer_list=[
-                    CleanLayer.ORDER_BY([Table.DAILY_PRICE.Column.DATE.value])
-                ],
-            )
-
-            self._select_database(DataQuality.GOLD.value)
-            self._save_pandas_table_to_database(
-                schema_name=Schema.ENTERPRISE.value,
-                table_name=stock_code,
-                primary_keys=["date"],
-                df=daily_price_gold_df,
-            )
+        self._select_database(DataQuality.GOLD.value)
+        self._save_pandas_table_to_database(
+            schema_name=Schema.ENTERPRISE.value,
+            table_name=Table.G_ENTERPRISE.name,
+            primary_keys=Table.G_ENTERPRISE.primary_key,
+            df=gold_df,
+        )
 
         self._logger.log_info(
-            f'Finish transforming data in table "{format_key_for_table(key)}".'
+            f'Finish transforming data from table(s) "{", ".join(input_table_list)}" '
+            f'to table(s) "{", ".join(output_table_list)}".'
         )
 
     def _process_enterprise_daily_price(self, data_quality: DataQuality) -> None:
@@ -10755,13 +6748,13 @@ class DataPreprocessor:
 
         match data_quality:
             case DataQuality.BRONZE:
-                self._ingest_enterprise_daily_price_cafef()
+                self._ingest_enterprise_daily_price()
 
             case DataQuality.SILVER:
-                pass
+                self._clean_enterprise_daily_price()
 
             case DataQuality.GOLD:
-                self._transform_enterprise_daily_price_cafef()
+                self._transform_enterprise_daily_price()
 
             case _:
                 raise ValueError(f'Invalid data quality: "{data_quality.value}"')
@@ -10818,60 +6811,58 @@ class DataPreprocessor:
 
         # # Stock market
         # self._process_stock_market_market(data_quality)
-        self._process_stock_market_vn_index(data_quality)
-        # self._process_stock_market_hnx_index(data_quality)
-        # self._process_stock_market_vn_30_index(data_quality)
-        # self._process_stock_market_vn_100_index(data_quality)
-        # self._process_stock_market_hnx_30_index(data_quality)
-        # self._process_stock_market_upcom_index(data_quality)
+        # self._process_stock_market_index(data_quality)
 
         # # Enterprise
         # self._process_enterprise_stock(data_quality)
-        # self._process_enterprise_daily_price(data_quality)
+        self._process_enterprise_daily_price(data_quality)
 
         self._logger.log_info(f'Finish processing data for "{data_quality.value}".')
 
     def ingest_bronze_data(self) -> None:
-        try:
-            self._connect_to_database(DataQuality.BRONZE)
-            self._create_schemas(DataQuality.BRONZE)
-            self._create_tables(DataQuality.BRONZE)
-            self._process_data(DataQuality.BRONZE)
 
-        except Exception as e:
-            self._logger.log_error(
-                f"Error preprocessing `{DataQuality.BRONZE.value}` data: {e}"
-            )
+        if self._switch_handler.is_enabled("data_preprocessor", "data_quality_bronze"):
+            try:
+                self._connect_to_database(DataQuality.BRONZE)
+                self._create_schemas(DataQuality.BRONZE)
+                self._process_data(DataQuality.BRONZE)
 
-        finally:
-            self._database_driver.disconnect()
+            except Exception as e:
+                self._logger.log_error(
+                    f"Error preprocessing `{DataQuality.BRONZE.value}` data: {e}"
+                )
+
+            finally:
+                self._database_driver.disconnect()
 
     def ingest_silver_data(self) -> None:
-        try:
-            self._connect_to_database(DataQuality.SILVER)
-            self._create_schemas(DataQuality.SILVER)
-            self._create_tables(DataQuality.SILVER)
-            self._process_data(DataQuality.SILVER)
 
-        except Exception as e:
-            self._logger.log_error(
-                f"Error preprocessing `{DataQuality.SILVER.value}` data: {e}"
-            )
+        if self._switch_handler.is_enabled("data_preprocessor", "data_quality_silver"):
+            try:
+                self._connect_to_database(DataQuality.SILVER)
+                self._create_schemas(DataQuality.SILVER)
+                self._process_data(DataQuality.SILVER)
 
-        finally:
-            self._database_driver.disconnect()
+            except Exception as e:
+                self._logger.log_error(
+                    f"Error preprocessing `{DataQuality.SILVER.value}` data: {e}"
+                )
+
+            finally:
+                self._database_driver.disconnect()
 
     def ingest_gold_data(self) -> None:
-        try:
-            self._connect_to_database(DataQuality.GOLD)
-            self._create_schemas(DataQuality.GOLD)
-            self._create_tables(DataQuality.GOLD)
-            self._process_data(DataQuality.GOLD)
 
-        except Exception as e:
-            self._logger.log_error(
-                f"Error preprocessing `{DataQuality.GOLD.value}` data: {e}"
-            )
+        if self._switch_handler.is_enabled("data_preprocessor", "data_quality_gold"):
+            try:
+                self._connect_to_database(DataQuality.GOLD)
+                self._create_schemas(DataQuality.GOLD)
+                self._process_data(DataQuality.GOLD)
 
-        finally:
-            self._database_driver.disconnect()
+            except Exception as e:
+                self._logger.log_error(
+                    f"Error preprocessing `{DataQuality.GOLD.value}` data: {e}"
+                )
+
+            finally:
+                self._database_driver.disconnect()
