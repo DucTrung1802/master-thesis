@@ -77,14 +77,34 @@ class PostgreSQLDriver(TabularDatabaseDriverInterface):
         return f"{schema_name}.{table_name}"
 
     def _format_condition(self, cond: Condition) -> str:
+        # Wrap column with optional SQL function, e.g. lower(stock_code)
+        col_expr = (
+            f"{cond.column_func}({cond.column})" if cond.column_func else cond.column
+        )
+
+        # NULL checks
         if cond.value is None:
             if cond.operator not in (SqlOperator.IS, SqlOperator.IS_NOT):
                 raise ValueError(
                     f"Operator '{cond.operator.value}' is not valid for NULL values. "
                     f"Use SqlOperator.IS or SqlOperator.IS_NOT."
                 )
-            return f"{cond.column} {cond.operator.value} NULL"
-        return f"{cond.column} {cond.operator.value} {format_value(cond.value, cond.data_type)}"
+            return f"{col_expr} {cond.operator.value} NULL"
+
+        # IN / NOT IN with a list of values
+        if cond.operator in (SqlOperator.IN, SqlOperator.NOT_IN):
+            if not isinstance(cond.value, (list, tuple, set)):
+                raise ValueError(
+                    f"Operator '{cond.operator.value}' requires a list/tuple/set value, "
+                    f"got {type(cond.value).__name__}."
+                )
+            formatted_items = ", ".join(
+                format_value(v, cond.data_type) for v in cond.value
+            )
+            return f"{col_expr} {cond.operator.value} ({formatted_items})"
+
+        # Default scalar comparison
+        return f"{col_expr} {cond.operator.value} {format_value(cond.value, cond.data_type)}"
 
     def _get_table_columns(
         self,
