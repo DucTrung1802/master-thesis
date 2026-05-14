@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional
 
 from utils.enums import SqlOperator, SqlJoinType
 
@@ -98,8 +98,9 @@ class Record:
 class Condition:
     column: str
     operator: SqlOperator
-    value: str | int | float | None  # None triggers IS NULL / IS NOT NULL
+    value: str | int | float | list | None   # ← list added
     data_type: DataType
+    column_func: Optional[str] = None        # ← e.g. "lower", "upper", "trim"
 
 
 @dataclass
