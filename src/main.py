@@ -1,4 +1,4 @@
-from logger.logger import Logger
+from logger.logger import LogType, Logger
 from web_scraper.web_scraper import WebScraper
 from data_postprocessor.data_postprocessor import DataPostprocessor
 from data_preprocessor.data_preprocessor import DataPreprocessor
@@ -9,7 +9,7 @@ from plyer import notification
 
 
 def main():
-    my_logger = Logger(file_name=LOG_FILE_BASE)
+    my_logger = Logger(file_name=LOG_FILE_BASE, level=LogType.DEBUG)
     my_logger.log_info("START")
 
     my_switch_handler = SwitchHandler(logger=my_logger)
@@ -27,10 +27,13 @@ def main():
     my_data_preprocessor.ingest_silver_data()
     my_data_preprocessor.ingest_gold_data()
 
-    # my_data_postprocessor = DataPostprocessor(logger=my_logger)
-    # my_data_postprocessor.export_common_dataframe_to_db()
+    stock_code_list = STOCK_CODES_TO_BE_EXPORTED_TO_GOLD_DB
 
-    # stock_code_list = STOCK_CODES_TO_BE_EXPORTED_TO_GOLD_DB
+    my_data_postprocessor = DataPostprocessor(
+        logger=my_logger, switch_handler=my_switch_handler, stock_list=stock_code_list
+    )
+    my_data_postprocessor.export_unified_dataframe()
+
 
     # for stock_code in stock_code_list:
     #     my_logger.log_info(f"Exporting unified dataframe for stock code: {stock_code}")
