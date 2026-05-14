@@ -87,7 +87,7 @@
         }
     },
     "data_preprocessor": {
-        "enable": true,
+        "enable": false,
         "children": {
             "data_quality_bronze": {
                 "enable": false,
@@ -130,6 +130,14 @@
                         "enable": true
                     }
                 }
+            }
+        }
+    },
+    "data_postprocessor": {
+        "enable": true,
+        "children": {
+            "export_unified_dataframe": {
+                "enable": true
             }
         }
     }

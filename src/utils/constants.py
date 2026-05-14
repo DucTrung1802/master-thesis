@@ -137,7 +137,7 @@ STOCK_MARKET_INDEX_HEADER = [
     "low",
 ]
 
-STOCK_CODES_TO_BE_EXPORTED_TO_GOLD_DB = ["FPT", "GAS"]
+STOCK_CODES_TO_BE_EXPORTED_TO_GOLD_DB = ["FPT", "GAS", "VIC"]
 
 
 # ===========================
