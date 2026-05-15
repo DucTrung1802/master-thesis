@@ -294,9 +294,10 @@ class DataPostprocessor:
                     table_name=f"unified_{stock_code}",  # Template name in database
                 )
 
-                # Drop lack data columns
+                # Drop columns with too much missing data
                 data_lack_threshold = 0.01
-                columns_to_drop = [
+
+                missing_data_columns = [
                     col
                     for col in stock_code_df.columns
                     if col != "date"
@@ -305,9 +306,32 @@ class DataPostprocessor:
                 ]
 
                 self._logger.log_info(
-                    f"Dropping {len(columns_to_drop)} columns with more than {data_lack_threshold * 100}% missing data: {columns_to_drop}"
+                    f"Dropping {len(missing_data_columns)} columns with more than "
+                    f"{data_lack_threshold * 100}% missing data: {missing_data_columns}"
                 )
-                stock_code_df = stock_code_df.drop(columns=columns_to_drop)
+
+                stock_code_df = stock_code_df.drop(columns=missing_data_columns)
+
+                # Drop columns with only one unique value
+                single_value_columns = [
+                    col
+                    for col in stock_code_df.columns
+                    if col not in ["date", "code"]
+                    and stock_code_df[col].nunique(dropna=False) <= 1
+                ]
+
+                self._logger.log_info(
+                    f"Dropping {len(single_value_columns)} columns with only one unique value: "
+                    f"{single_value_columns}"
+                )
+
+                stock_code_df = stock_code_df.drop(columns=single_value_columns)
+
+                self._logger.log_info(
+                    f"Filtered 'stock_market_df' has {len(stock_code_df)} rows "
+                    f"and {len(stock_code_df.columns)} columns after filter."
+                )
+
                 self._logger.log_info(
                     f"Filtered 'stock_market_df' has {len(stock_code_df)} rows and {len(stock_code_df.columns)} columns after filter."
                 )
