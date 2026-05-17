@@ -14,11 +14,11 @@ from sklearn.metrics import (
 class ResultEvaluator:
 
     def __init__(
-        self, y_predict: ndarray, y_test: ndarray, date_index: List[str] = None
+        self, y_predict: ndarray, y_test: ndarray, time_index: List[str] = None
     ):
         self._y_predict = y_predict
         self._y_test = y_test
-        self._date_index = date_index
+        self._time_index = time_index
         self._validate()
 
     def _validate(self):
@@ -31,10 +31,10 @@ class ResultEvaluator:
                 f"got y_predict={len(self._y_predict)} and y_test={len(self._y_test)}."
             )
 
-        if self._date_index is not None and len(self._date_index) != len(self._y_test):
+        if self._time_index is not None and len(self._time_index) != len(self._y_test):
             raise ValueError(
-                f"date_index must have the same length as y_predict and y_test, "
-                f"got date_index={len(self._date_index)} and y_test={len(self._y_test)}."
+                f"time_index must have the same length as y_predict and y_test, "
+                f"got time_index={len(self._time_index)} and y_test={len(self._y_test)}."
             )
 
     def evaluate(self) -> pd.DataFrame:
@@ -53,6 +53,11 @@ class ResultEvaluator:
 
         np.save(os.path.join(output_folder_path, "y_predict.npy"), self._y_predict)
         np.save(os.path.join(output_folder_path, "y_test.npy"), self._y_test)
+
+        if self._time_index is not None:
+            np.save(
+                os.path.join(output_folder_path, "time_index.npy"), self._time_index
+            )
 
         self.evaluate().to_csv(
             os.path.join(output_folder_path, "metrics.csv"), index=False
