@@ -13,7 +13,7 @@ from utils.enums import (
 class ConfigDto:
     # Data
     notebook_name: str
-    base_features: List[str]
+    feature_groups: List[str]
     stock_code: str
     train_start_date: str
     train_end_date: str
@@ -24,14 +24,13 @@ class ConfigDto:
 
     # Data Hyperparameters
     random_seed: int
-    min_lookback_window_size: int
-    max_lookback_window_size: int
+    lookback_window_size: int
     forecast_window_size: int
     scaler_type: ScalerType
 
     # Model
     model_architecture: ModelAchitectureType
-    model_params: Dict
+    model_additional_params: Dict
 
     # Training Hyperparameters
     epochs: int
