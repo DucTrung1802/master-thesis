@@ -153,6 +153,12 @@ TRAIN_TEST_SET_DIR = f"../../train_test_set"
 
 
 # ===========================
+# DATA EVALUATOR CONFIGURATION
+# ===========================
+DATA_EVALUATOR_INPUT_FOLDER_PATH = f"../../train_test_set"
+
+
+# ===========================
 # MODEL CONFIGURATION
 # ===========================
 PATIENCE = 15  # Continuous epoches that the validation loss does not decrease
