@@ -2,16 +2,32 @@
     "stock_code": "vic",
     "lookback_window": 50,
     "forecast_horizon": 5,
+    "stride": 1,
     "train_range": [
         "2000-01-01",
         "2021-12-31"
+    ],
+    "train_shape": [
+        3459,
+        50,
+        70
     ],
     "val_range": [
         "2022-01-01",
         "2023-12-31"
     ],
+    "val_shape": [
+        439,
+        50,
+        70
+    ],
     "test_range": [
         "2024-01-01",
         "2026-04-30"
+    ],
+    "test_shape": [
+        510,
+        50,
+        70
     ]
 }
