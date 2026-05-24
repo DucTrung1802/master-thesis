@@ -1,0 +1,29 @@
+batch_size: 32
+epochs: 1000
+feature_groups:
+- basic
+- all_ta_function
+forecast_window_size: 5
+learning_rate: 0.0003
+lookback_window_size: 20
+loss_fn: MSE
+model_additional_params:
+  dropout: 0.5
+  hidden_size: 32
+  loss: huber
+  num_layers: 1
+  weight_decay: 0.001
+model_architecture: LSTM
+notebook_name: lstm_vic_1
+optimizer: ADAM
+patience: 30
+random_seed: 18
+scaler_type: STANDARD
+stock_code: VIC
+stride: 5
+test_end_date: '2026-04-29'
+test_start_date: '2024-01-04'
+train_end_date: '2021-12-30'
+train_start_date: '2007-12-19'
+validation_end_date: '2023-12-28'
+validation_start_date: '2022-01-04'

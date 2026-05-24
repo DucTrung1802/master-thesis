@@ -26,6 +26,7 @@ class ConfigDto:
     random_seed: int
     lookback_window_size: int
     forecast_window_size: int
+    stride: int
     scaler_type: ScalerType
 
     # Model
