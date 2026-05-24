@@ -1,0 +1,46 @@
+{
+    "N_FEATURES": 20,
+    "n_original_features": 600,
+    "top_features": [
+        433,
+        15,
+        490,
+        484,
+        550,
+        7,
+        26,
+        46,
+        192,
+        317,
+        21,
+        497,
+        50,
+        80,
+        77,
+        599,
+        24,
+        1,
+        87,
+        83
+    ],
+    "LOOKBACK_WINDOW": 20,
+    "FORECAST_HORIZON": 5,
+    "STRIDE": 5,
+    "has_overlap": false,
+    "STOCK_CODE": "vic",
+    "train_shape": [
+        518,
+        20,
+        20
+    ],
+    "val_shape": [
+        73,
+        20,
+        20
+    ],
+    "test_shape": [
+        73,
+        20,
+        20
+    ]
+}
