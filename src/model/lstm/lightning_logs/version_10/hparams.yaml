@@ -9,7 +9,7 @@ lookback_window_size: 20
 loss_fn: MSE
 model_additional_params:
   dropout: 0.5
-  hidden_size: 32
+  hidden_size: 64
   loss: huber
   num_layers: 1
   weight_decay: 0.001
