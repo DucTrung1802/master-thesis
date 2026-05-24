@@ -14,3 +14,7 @@ logs/
 mt_env/
 
 wandb/
+
+*.npy
+
+*.csv
