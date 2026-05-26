@@ -1,12 +1,12 @@
 import json
 from pathlib import Path
 
-INPUT_PATH = Path(r"src\evaluator\data_evaluator.ipynb")
+INPUT_PATH = Path(r"src\model\lstm\lstm_vcb_1.ipynb")
 
 # Same folder, same name, .txt extension
 OUTPUT_PATH = INPUT_PATH.with_suffix(".txt")
 
-# Read notebook
+# Read notebook00.
 with open(INPUT_PATH, "r", encoding="utf-8") as f:
     notebook = json.load(f)
 
