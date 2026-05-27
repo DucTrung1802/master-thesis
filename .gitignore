@@ -14,3 +14,12 @@ logs/
 mt_env/
 
 wandb/
+
+*.npy
+
+*.csv
+
+*.txt
+
+
+src/model/lstm/checkpoints/

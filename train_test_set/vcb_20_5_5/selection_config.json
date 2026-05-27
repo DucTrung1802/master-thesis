@@ -1,0 +1,46 @@
+{
+    "N_FEATURES": 20,
+    "n_original_features": 600,
+    "top_features": [
+        284,
+        1,
+        445,
+        0,
+        76,
+        16,
+        69,
+        218,
+        326,
+        414,
+        88,
+        140,
+        152,
+        134,
+        4,
+        309,
+        47,
+        128,
+        94,
+        540
+    ],
+    "LOOKBACK_WINDOW": 20,
+    "FORECAST_HORIZON": 5,
+    "STRIDE": 5,
+    "has_overlap": false,
+    "STOCK_CODE": "vcb",
+    "train_shape": [
+        511,
+        20,
+        20
+    ],
+    "val_shape": [
+        32,
+        20,
+        20
+    ],
+    "test_shape": [
+        47,
+        20,
+        20
+    ]
+}
