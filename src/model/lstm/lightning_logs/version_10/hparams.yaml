@@ -22,8 +22,8 @@ scaler_type: STANDARD
 stock_code: VCB
 stride: 5
 test_end_date: '2026-04-29'
-test_start_date: '2024-01-02'
-train_end_date: '2021-12-29'
+test_start_date: '2025-01-02'
+train_end_date: '2023-12-29'
 train_start_date: '2009-09-30'
-validation_end_date: '2023-12-29'
-validation_start_date: '2022-01-05'
+validation_end_date: '2024-12-31'
+validation_start_date: '2024-01-02'

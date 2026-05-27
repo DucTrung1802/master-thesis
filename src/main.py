@@ -34,7 +34,6 @@ def main():
     )
     my_data_postprocessor.export_unified_dataframe()
 
-
     # for stock_code in stock_code_list:
     #     my_logger.log_info(f"Exporting unified dataframe for stock code: {stock_code}")
     #     my_data_postprocessor.export_unified_dataframe(stock_code=stock_code)

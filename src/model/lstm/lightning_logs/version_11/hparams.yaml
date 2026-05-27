@@ -8,11 +8,11 @@ learning_rate: 0.0003
 lookback_window_size: 20
 loss_fn: MSE
 model_additional_params:
-  dropout: 0.5
-  hidden_size: 16
+  dropout: 0.3
+  hidden_size: 32
   loss: huber
   num_layers: 1
-  weight_decay: 0.01
+  weight_decay: 0.002
 model_architecture: LSTM
 notebook_name: lstm_vcb_1
 optimizer: ADAM
@@ -22,8 +22,8 @@ scaler_type: STANDARD
 stock_code: VCB
 stride: 5
 test_end_date: '2026-04-29'
-test_start_date: '2024-01-02'
-train_end_date: '2021-12-29'
+test_start_date: '2025-01-02'
+train_end_date: '2023-12-29'
 train_start_date: '2009-09-30'
-validation_end_date: '2023-12-29'
-validation_start_date: '2022-01-05'
+validation_end_date: '2024-12-31'
+validation_start_date: '2024-01-02'

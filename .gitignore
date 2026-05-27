@@ -21,3 +21,5 @@ wandb/
 
 *.txt
 
+
+src/model/lstm/checkpoints/
