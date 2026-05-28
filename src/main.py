@@ -1,7 +1,7 @@
 from logger.logger import LogType, Logger
 from web_scraper.web_scraper import WebScraper
-from data_postprocessor.data_postprocessor import DataPostprocessor
 from data_preprocessor.data_preprocessor import DataPreprocessor
+from data_postprocessor.data_postprocessor import DataPostprocessor, MarketIndexConfig
 from utils.switch_handler import SwitchHandler
 from utils.constants import LOG_FILE_BASE
 from utils.enums import *
@@ -30,7 +30,15 @@ def main():
     stock_code_list = STOCK_CODES_TO_BE_EXPORTED_TO_GOLD_DB
 
     my_data_postprocessor = DataPostprocessor(
-        logger=my_logger, switch_handler=my_switch_handler, stock_list=stock_code_list
+        logger=my_logger,
+        switch_handler=my_switch_handler,
+        stock_list=stock_code_list,
+        include_macroeconomics=False,  # commented out for now
+        market_index_configs=[
+            MarketIndexConfig(index_code="VNINDEX", prefix="vnindex"),
+            MarketIndexConfig(index_code="HNX-INDEX", prefix="hnx_index"),
+            MarketIndexConfig(index_code="UPCOM-INDEX", prefix="upcom_index"),
+        ],
     )
     my_data_postprocessor.export_unified_dataframe()
 
