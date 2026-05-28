@@ -1,6 +1,6 @@
 {
     "web_scraper": {
-        "enable": true,
+        "enable": false,
         "children": {
             "macroeconomics": {
                 "enable": false
@@ -83,6 +83,61 @@
                         }
                     }
                 }
+            }
+        }
+    },
+    "data_preprocessor": {
+        "enable": false,
+        "children": {
+            "data_quality_bronze": {
+                "enable": false,
+                "children": {
+                    "macroeconomics": {
+                        "enable": false
+                    },
+                    "stock_market": {
+                        "enable": true
+                    },
+                    "enterprise": {
+                        "enable": false
+                    }
+                }
+            },
+            "data_quality_silver": {
+                "enable": false,
+                "children": {
+                    "macroeconomics": {
+                        "enable": false
+                    },
+                    "stock_market": {
+                        "enable": false
+                    },
+                    "enterprise": {
+                        "enable": true
+                    }
+                }
+            },
+            "data_quality_gold": {
+                "enable": true,
+                "children": {
+                    "macroeconomics": {
+                        "enable": false
+                    },
+                    "stock_market": {
+                        "enable": false
+                    },
+                    "enterprise": {
+                        "enable": true
+                    }
+                }
+            }
+        }
+    },
+    "data_postprocessor": {
+        "enable": true,
+        "children": {
+            "export_unified_dataframe": {
+                "enable": true
             }
         }
     }

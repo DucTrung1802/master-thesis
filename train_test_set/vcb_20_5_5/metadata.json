@@ -1,0 +1,33 @@
+{
+    "stock_code": "vcb",
+    "lookback_window": 20,
+    "forecast_horizon": 5,
+    "stride": 5,
+    "train_range": [
+        "2009-09-30",
+        "2022-12-30"
+    ],
+    "train_shape": [
+        646,
+        20,
+        781
+    ],
+    "val_range": [
+        "2023-01-03",
+        "2024-06-28"
+    ],
+    "val_shape": [
+        69,
+        20,
+        781
+    ],
+    "test_range": [
+        "2024-07-01",
+        "2026-04-29"
+    ],
+    "test_shape": [
+        84,
+        20,
+        781
+    ]
+}
