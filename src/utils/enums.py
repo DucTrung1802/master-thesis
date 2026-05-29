@@ -245,7 +245,7 @@ SCRAPE_MAPPING: Dict[Tuple[ScrapeMainType, ScrapeSubType], SourceInfo] = {
         ScrapeMainType.MACROECONOMICS,
         MacroeconomicsSubType.EXCHANGE_RATE_USD_VND,
     ): SourceInfo(
-        url="https://finance.yahoo.com/quote/VND%3DX/history/?guccounter=1&guce_referrer=aHR0cHM6Ly93d3cuZ29vZ2xlLmNvbS8&guce_referrer_sig=AQAAAIII0p_F4cytODHutPd98NUM68Y53wBIao_gSFpu8kecJEA-xGQao1JymREM9sLDRqLjDmtVuAKSyvBznETOv7AdBkEj8vP0JwkkaKccNanU6Hc6Cw1DFRzKsyccPbNpe0mvO5K_DVshB4FWNSe19BPAPffOijULTtq7Pa4IKCqV&period1=1070236800&period2=1779991572",
+        url="https://finance.yahoo.com/quote/VND%3DX/history/?guccounter=1&guce_referrer=aHR0cHM6Ly93d3cuZ29vZ2xlLmNvbS8&guce_referrer_sig=AQAAAIII0p_F4cytODHutPd98NUM68Y53wBIao_gSFpu8kecJEA-xGQao1JymREM9sLDRqLjDmtVuAKSyvBznETOv7AdBkEj8vP0JwkkaKccNanU6Hc6Cw1DFRzKsyccPbNpe0mvO5K_DVshB4FWNSe19BPAPffOijULTtq7Pa4IKCqV",
     ),
     # STOCK_MARKET
     (

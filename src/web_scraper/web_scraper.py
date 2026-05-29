@@ -186,51 +186,55 @@ class WebScraper:
 
     def _scrape_data_macroeconomics_exchange_rate_usd_vnd(
         self, key: Tuple[ScrapeMainType, ScrapeSubType]
-    ):
+    ) -> None:
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
 
+        web_driver, bs4_parser = self._initialize_web_driver_and_bs4_parser()
+
         try:
-            # 1. Initialize folder path and file name
             scrape_main_type = key[0].value
             scrape_sub_type = key[1].value
             folder_path = (
                 f"{SCRAPER_BRONZE_DATA_DIR}/{scrape_main_type}/{scrape_sub_type}"
             )
-            file_name = f"{scrape_sub_type}"
+            file_name = scrape_sub_type
 
-            # 2. Initialize start time and current time
-            start_year = SCRAPER_START_DATE.year
-            current_year = datetime.now().year
+            start_time = SCRAPER_START_DATE
+            current_time = datetime.now()
+            start_time_second_str = str(int(SCRAPER_START_DATE.timestamp()))
+            current_time_second_str = str(int(current_time.timestamp()))
+            file_path = f"{folder_path}/{file_name}_{start_time.strftime('%Y-%m-%d')}_{current_time.strftime('%Y-%m-%d')}.csv"
 
-            file_path = f"{folder_path}/{file_name}_{start_year}_{current_year}.csv"
-
-            # 3. Delete file if exists
             if os.path.exists(file_path):
-                self._logger.log_info(f"File already exists: {file_path}, delete it.")
+                self._logger.log_info(
+                    f"File exists: {file_path}, deleting to re-fetch."
+                )
                 os.remove(file_path)
 
-            # 4. Create folder if not exists
-            if not os.path.exists(folder_path):
-                os.makedirs(folder_path, exist_ok=True)
+            os.makedirs(folder_path, exist_ok=True)
 
-            # 5. Get SourceInfo
-            source_info = SCRAPE_MAPPING[key]
-
-            # 6. Navigate to URL
-
-            # 7. Logic for scraping
             self._logger.log_info(
-                f"Scraping {scrape_sub_type} data from {start_year} to {current_year}."
+                f"Scraping {scrape_sub_type} data from {start_time.strftime('%Y-%m-%d')} to {current_time.strftime('%Y-%m-%d')}."
             )
 
-            url = source_info.url
-            scraped_df = pd.read_csv(url)
+            source_info = SCRAPE_MAPPING[key]
+            full_url = (
+                source_info.url
+                + f"&period1={start_time_second_str}&period2={current_time_second_str}"
+            )
 
-            # Write to CSV
-            scraped_df.to_csv(file_path, index=False)
+            web_driver, bs4_parser = self._navigate_to_url(web_driver, full_url)
+
+            table_class = "table yf-u4m6f0 noDl hideOnPrint"
+            headers, rows = self._extract_table_by_class(bs4_parser, table_class)
+
+            with open(file_path, "w", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(headers)
+                writer.writerows(rows)
 
         finally:
-            pass
+            web_driver.close()
 
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
@@ -1065,14 +1069,17 @@ class WebScraper:
         self._logger.log_info("Adding macroeconomic data scraping tasks.")
         number_of_task_before = self._thread_manager.get_current_number_of_task()
 
-        # MACROECONOMICS_EXCHANGE_RATE_USD_VND
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.EXCHANGE_RATE_USD_VND,
-        )
-        self._thread_manager.add_task(
-            Task(format_key_for_name(key), self._scrape_data_from, key)
-        )
+        # EXCHANGE_RATE_USD_VND
+        if self._switch_handler.is_enabled(
+            "web_scraper", "macroeconomics", "exchange_rate_usd_vnd"
+        ):
+            key = (
+                ScrapeMainType.MACROECONOMICS,
+                MacroeconomicsSubType.EXCHANGE_RATE_USD_VND,
+            )
+            self._thread_manager.add_task(
+                Task(format_key_for_name(key), self._scrape_data_from, key)
+            )
 
         number_of_task_after = self._thread_manager.get_current_number_of_task()
         self._logger.log_info(
