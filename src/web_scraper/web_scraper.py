@@ -364,33 +364,56 @@ class WebScraper:
                 const parts = arguments[0].split('-');
                 const startTs = Date.UTC(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2])) / 1000;
 
-                const records = [];
                 const keys = Object.keys(items).map(Number).sort((a, b) => a - b);
+
+                // Detect isOHLC from first valid item
+                let isOHLC = false;
+                for (const k of keys) {
+                    const item = items[k];
+                    if (!item || !item.value) continue;
+                    isOHLC = item.value[1] !== item.value[2];
+                    break;
+                }
+
+                const records = [];
                 for (const k of keys) {
                     const item = items[k];
                     if (!item || !item.value) continue;
                     const ts = item.value[0];
-                    const price = item.value[1];
                     if (ts >= lastBarCloseTime) continue;
                     if (ts < startTs) continue;
-                    records.push([
-                        new Date(ts * 1000).toISOString().split('T')[0],
-                        price,
-                    ]);
+                    if (isOHLC) {
+                        records.push([
+                            new Date(ts * 1000).toISOString().split('T')[0],
+                            item.value[1],
+                            item.value[2],
+                            item.value[3],
+                            item.value[4],
+                            item.value[5],
+                        ]);
+                    } else {
+                        records.push([
+                            new Date(ts * 1000).toISOString().split('T')[0],
+                            item.value[4],
+                        ]);
+                    }
                 }
-                return JSON.stringify(records);
-            } catch(e) { return '[]'; }
+                return JSON.stringify({ is_ohlc: isOHLC, records: records });
+            } catch(e) { return '{"is_ohlc": false, "records": []}'; }
             """
 
-            records = json.loads(
-                web_driver.execute_script(bulk_js, start_time_date_str)
-            )
-            self._logger.log_info(f"Fetched {len(records)} records.")
+            result = json.loads(web_driver.execute_script(bulk_js, start_time_date_str))
+            is_ohlc = result["is_ohlc"]
+            records = result["records"]
+            self._logger.log_info(f"Fetched {len(records)} records, isOHLC: {is_ohlc}.")
 
             # Step 3: Write to CSV
             with open(file_path, "w", newline="") as f:
                 writer = csv.writer(f)
-                writer.writerow(["date", "value"])
+                if is_ohlc:
+                    writer.writerow(["date", "open", "high", "low", "close", "volume"])
+                else:
+                    writer.writerow(["date", "value"])
                 writer.writerows(records)
 
             self._logger.log_info(f"Saved {len(records)} records to {file_path}.")
