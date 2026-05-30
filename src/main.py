@@ -9,7 +9,7 @@ from plyer import notification
 
 
 def main():
-    my_logger = Logger(file_name=LOG_FILE_BASE, level=LogType.DEBUG)
+    my_logger = Logger(file_name=LOG_FILE_BASE, level=LogType.INFO)
     my_logger.log_info("START")
 
     my_switch_handler = SwitchHandler(logger=my_logger)

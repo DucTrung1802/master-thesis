@@ -1,12 +1,20 @@
 {
     "web_scraper": {
-        "enable": false,
+        "enable": true,
         "children": {
             "macroeconomics": {
-                "enable": false
+                "enable": true,
+                "children": {
+                    "exchange_rate_usd_vnd": {
+                        "enable": false
+                    },
+                    "vietnam_interbank_rate": {
+                        "enable": true
+                    }
+                }
             },
             "stock_market": {
-                "enable": true,
+                "enable": false,
                 "children": {
                     "vn_index_price": {
                         "enable": false
@@ -134,7 +142,7 @@
         }
     },
     "data_postprocessor": {
-        "enable": true,
+        "enable": false,
         "children": {
             "export_unified_dataframe": {
                 "enable": true
