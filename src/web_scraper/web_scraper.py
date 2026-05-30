@@ -323,7 +323,6 @@ class WebScraper:
             input_start_date_xpath = '//*[@id="overlap-manager-root"]/div[2]/div/div[1]/div/div[3]/div/div/div[1]/div[1]/div/div/div/span/span[1]/input'
             input_end_date_xpath = '//*[@id="overlap-manager-root"]/div[2]/div/div[1]/div/div[3]/div/div/div[2]/div[1]/div/div/div/span/span[1]/input'
             apply_range_button_xpath = '//*[@id="overlap-manager-root"]/div[2]/div/div[1]/div/div[4]/div/span/button'
-            value_box_xpath = '//div[contains(@class, "valueItem-l31H9iuA") and not(contains(@class, "blockHidden-e6PF69Df")) and not(contains(@class, "unimportant-l31H9iuA"))][1]//div[contains(@class, "valueValue-l31H9iuA")]'
             canvas_xpath = '//canvas[@data-qa-id="pane-top-canvas"]'
 
             # Step 1: Set date range
@@ -354,7 +353,6 @@ class WebScraper:
             web_driver.find_element(By.TAG_NAME, "body").send_keys(Keys.END)
             time.sleep(0.5)
 
-            # Zoom in: Ctrl + Up arrow multiple times
             for _ in range(10):
                 actions = ActionChains(web_driver)
                 actions.key_down(Keys.CONTROL).send_keys(Keys.ARROW_UP).key_up(
@@ -363,7 +361,6 @@ class WebScraper:
                 time.sleep(0.1)
             time.sleep(0.3)
 
-            # Press END again to re-snap after zoom
             web_driver.find_element(By.TAG_NAME, "body").send_keys(Keys.END)
             time.sleep(0.5)
 
@@ -382,7 +379,7 @@ class WebScraper:
             actions.move_to_element_with_offset(canvas, hover_x, hover_y).perform()
             time.sleep(0.5)
 
-            # Step 3: Get label date from details widget
+            # Step 3: Get last data point date from details widget
             label_date_js = """
             try {
                 const items = document.querySelectorAll('.item-DVns3SZf');
@@ -406,24 +403,23 @@ class WebScraper:
                 label_date_str = current_time_date_str
             self._logger.log_info(f"Label date parsed: {label_date_str}")
 
-            # Step 4: Compute matchKey and initial crosshair index
+            # Step 4: Compute match_key and initial_crosshair_index using baseIndex
             setup_js = """
             try {
                 const collection = window._exposed_chartWidgetCollection;
                 const chartWidget = collection.activeChartWidget._value;
                 const model = chartWidget._modelWV._value.m_model;
-                const crosshair = model._crossHairSource;
                 const timeScale = model._timeScale;
                 const items = timeScale._points._items;
                 const keys = Object.keys(items).map(Number).sort((a, b) => a - b);
-                const crosshairIndex = crosshair.index;
+                const baseIndex = timeScale._baseIndex;
                 const parts = arguments[0].split('-');
-                const targetTs = Date.UTC(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2])) / 1000;
+                const labelTs = Date.UTC(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2])) / 1000;
                 let matchKey = null;
                 for (const k of keys) {
-                    if (items[k] === targetTs) { matchKey = k; break; }
+                    if (items[k] === labelTs) { matchKey = k; break; }
                 }
-                return JSON.stringify({ match_key: matchKey, initial_crosshair_index: crosshairIndex });
+                return JSON.stringify({ match_key: matchKey, initial_crosshair_index: baseIndex });
             } catch(e) { return null; }
             """
             setup_result = json.loads(web_driver.execute_script(setup_js, label_date_str))
@@ -431,7 +427,8 @@ class WebScraper:
             initial_crosshair_index = setup_result["initial_crosshair_index"]
             self._logger.log_info(f"Match key: {match_key}, Initial crosshair: {initial_crosshair_index}")
 
-            date_js = """
+            # Step 5: JS to read date and value together
+            date_value_js = """
             try {
                 const collection = window._exposed_chartWidgetCollection;
                 const chartWidget = collection.activeChartWidget._value;
@@ -444,26 +441,33 @@ class WebScraper:
                 const initialCrosshairIndex = arguments[1];
                 const actualKey = matchKey + (crosshairIndex - initialCrosshairIndex);
                 const timestamp = items[actualKey];
-                return timestamp ? new Date(timestamp * 1000).toISOString().split('T')[0] : '';
-            } catch(e) { return ''; }
+
+                // Skip bars with no real data
+                const lastBarCloseTime = model._mainSeries._lastBarCloseTime;
+                if (!timestamp || timestamp >= lastBarCloseTime) {
+                    return JSON.stringify({ date: '', value: '' });
+                }
+
+                const date = new Date(timestamp * 1000).toISOString().split('T')[0];
+
+                const valueItems = document.querySelectorAll('.valueItem-l31H9iuA');
+                let value = '';
+                for (const item of valueItems) {
+                    if (!item.className.includes('blockHidden') && !item.className.includes('unimportant')) {
+                        const valueEl = item.querySelector('.valueValue-l31H9iuA');
+                        if (valueEl && valueEl.innerText.trim() !== '' && valueEl.innerText.trim() !== '∅') {
+                            value = valueEl.innerText.trim();
+                            break;
+                        }
+                    }
+                }
+
+                return JSON.stringify({ date: date, value: value });
+            } catch(e) { return JSON.stringify({ date: '', value: '' }); }
             """
 
-            # Verify first date
-            first_date = web_driver.execute_script(date_js, match_key, initial_crosshair_index)
-            self._logger.log_info(f"First crosshair date: {first_date}")
-
-            # Step 5: Walk left until date <= today
-            for _ in range(10):
-                test_date = web_driver.execute_script(date_js, match_key, initial_crosshair_index) or ""
-                if test_date and test_date <= current_time_date_str:
-                    break
-                actions = ActionChains(web_driver)
-                actions.move_to_element_with_offset(canvas, hover_x, hover_y).perform()
-                web_driver.find_element(By.TAG_NAME, "body").send_keys(Keys.ARROW_LEFT)
-                time.sleep(0.1)
-
-            first_date = web_driver.execute_script(date_js, match_key, initial_crosshair_index)
-            self._logger.log_info(f"First crosshair date after walk: {first_date}")
+            first = json.loads(web_driver.execute_script(date_value_js, match_key, initial_crosshair_index))
+            self._logger.log_info(f"First date: {first.get('date')}, value: {first.get('value')}")
 
             # Step 6: Scrape by pressing LEFT arrow day by day
             total_days = (current_time.date() - start_time.date()).days
@@ -473,30 +477,24 @@ class WebScraper:
             self._logger.log_info(f"Starting hover scrape for {total_days} days.")
 
             for i in range(total_days + 1):
-                # Read date
                 try:
-                    date_text = web_driver.execute_script(date_js, match_key, initial_crosshair_index) or ""
+                    result = json.loads(
+                        web_driver.execute_script(date_value_js, match_key, initial_crosshair_index)
+                    )
+                    date_text = result.get("date", "")
+                    value_text = result.get("value", "")
                 except Exception:
                     date_text = ""
-
-                # Read value
-                try:
-                    value_element = web_driver.find_element(By.XPATH, value_box_xpath)
-                    value_text = value_element.text.strip()
-                except Exception:
                     value_text = ""
 
-                # Only append unique non-empty dates
                 if date_text and date_text not in seen_dates:
                     seen_dates.add(date_text)
                     self._logger.log_debug(f"{date_text}: {value_text}")
                     records.append((date_text, value_text))
 
-                # Stop if we've reached or passed start date
                 if date_text and date_text <= start_time_date_str:
                     break
 
-                # Move one day left
                 actions = ActionChains(web_driver)
                 actions.move_to_element_with_offset(canvas, hover_x, hover_y).perform()
                 web_driver.find_element(By.TAG_NAME, "body").send_keys(Keys.ARROW_LEFT)

@@ -253,6 +253,7 @@ SCRAPE_MAPPING: Dict[Tuple[ScrapeMainType, ScrapeSubType], SourceInfo] = {
         MacroeconomicsSubType.VIETNAM_INTERBANK_RATE,
     ): SourceInfo(
         url="https://www.tradingview.com/chart/?symbol=ECONOMICS%3AVNINBR",
+        # url="https://www.tradingview.com/chart/?symbol=FRED%3ABAMLH0A0HYM2",
     ),
     # STOCK_MARKET
     (
