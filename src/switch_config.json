@@ -6,6 +6,9 @@
                 "enable": true,
                 "children": {
                     "exchange_rate_usd_vnd": {
+                        "enable": false
+                    },
+                    "vietnam_interbank_rate": {
                         "enable": true
                     }
                 }

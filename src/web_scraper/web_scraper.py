@@ -2,10 +2,12 @@
 import csv
 import os
 import re
+import threading
 import time
 from pathlib import Path
 from typing import List, Optional, Tuple, Literal
 from datetime import datetime, timedelta
+from dateutil.relativedelta import relativedelta
 
 # ===== Third-Party Libraries =====
 from selenium import webdriver
@@ -84,12 +86,37 @@ class WebScraper:
         )
         Select(element).select_by_visible_text(text)
 
-    def _input_text(self, web_driver: ChromiumDriver, xpath: str, value: str) -> None:
+    def _input_text(
+        self,
+        web_driver: ChromiumDriver,
+        xpath: str,
+        value: str,
+        char_by_char: bool = False,
+        char_delay: float = 0.01,
+        confirm: Literal["none", "tab", "enter"] = "none",
+    ) -> None:
         input_element = WebDriverWait(web_driver, 10).until(
             EC.element_to_be_clickable((By.XPATH, xpath))
         )
-        input_element.clear()
-        input_element.send_keys(value)
+        input_element.click()
+        time.sleep(0.1)
+
+        input_element.send_keys(Keys.CONTROL + "a")
+        input_element.send_keys(Keys.DELETE)
+        time.sleep(0.1)
+
+        if char_by_char:
+            for char in value:
+                input_element.send_keys(char)
+                time.sleep(char_delay)
+        else:
+            input_element.send_keys(value)
+
+        match confirm:
+            case "tab":
+                input_element.send_keys(Keys.TAB)
+            case "enter":
+                input_element.send_keys(Keys.ENTER)
 
     def _click_element(self, web_driver: ChromiumDriver, xpath: str) -> None:
         element = WebDriverWait(web_driver, 10).until(
@@ -184,6 +211,14 @@ class WebScraper:
             )
             return False
 
+    def _remove_elements_by_xpath(self, web_driver: ChromiumDriver, xpath: str) -> None:
+        try:
+            elements = web_driver.find_elements(By.XPATH, xpath)
+            for index in range(len(elements)):
+                web_driver.execute_script("arguments[0].remove();", elements[index])
+        except Exception as e:
+            self._logger.log_warning(f"Failed to remove elements by xpath: {xpath}")
+
     def _scrape_data_macroeconomics_exchange_rate_usd_vnd(
         self, key: Tuple[ScrapeMainType, ScrapeSubType]
     ) -> None:
@@ -234,6 +269,252 @@ class WebScraper:
                 writer.writerows(rows)
 
         finally:
+            web_driver.close()
+
+        self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
+
+    def _scrape_data_macroeconomics_vietnam_interbank_rate(
+        self, key: Tuple[ScrapeMainType, ScrapeSubType]
+    ) -> None:
+        self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
+
+        web_driver, bs4_parser = self._initialize_web_driver_and_bs4_parser()
+
+        stop_event = threading.Event()
+
+        def _dialog_remover_loop():
+            dialog_xpath = '//*[@id="overlap-manager-root"]/div[3]/div'
+            while not stop_event.is_set():
+                self._remove_elements_by_xpath(web_driver, dialog_xpath)
+                time.sleep(0.5)
+
+        dialog_thread = threading.Thread(target=_dialog_remover_loop, daemon=True)
+
+        try:
+            scrape_main_type = key[0].value
+            scrape_sub_type = key[1].value
+            folder_path = (
+                f"{SCRAPER_BRONZE_DATA_DIR}/{scrape_main_type}/{scrape_sub_type}"
+            )
+            file_name = scrape_sub_type
+
+            start_time = SCRAPER_START_DATE
+            current_time = datetime.now()
+
+            start_time_date_str = SCRAPER_START_DATE.strftime("%Y-%m-%d")
+            current_time_date_str = current_time.strftime("%Y-%m-%d")
+
+            file_path = f"{folder_path}/{file_name}_{start_time_date_str}_{current_time_date_str}.csv"
+
+            os.makedirs(folder_path, exist_ok=True)
+
+            self._logger.log_info(
+                f"Scraping {scrape_sub_type} data from {start_time.strftime('%Y-%m-%d')} to {current_time.strftime('%Y-%m-%d')}."
+            )
+
+            source_info = SCRAPE_MAPPING[key]
+            web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
+
+            # XPATHS
+            select_date_range_button_xpath = (
+                "/html/body/div[2]/div/div[5]/div[2]/div/div[2]/div/button"
+            )
+            custom_range_button_xpath = '//*[@id="CustomRange"]'
+            input_start_date_xpath = '//*[@id="overlap-manager-root"]/div[2]/div/div[1]/div/div[3]/div/div/div[1]/div[1]/div/div/div/span/span[1]/input'
+            input_end_date_xpath = '//*[@id="overlap-manager-root"]/div[2]/div/div[1]/div/div[3]/div/div/div[2]/div[1]/div/div/div/span/span[1]/input'
+            apply_range_button_xpath = '//*[@id="overlap-manager-root"]/div[2]/div/div[1]/div/div[4]/div/span/button'
+            value_box_xpath = '//div[contains(@class, "valueItem-l31H9iuA") and not(contains(@class, "blockHidden-e6PF69Df")) and not(contains(@class, "unimportant-l31H9iuA"))][1]//div[contains(@class, "valueValue-l31H9iuA")]'
+            canvas_xpath = '//canvas[@data-qa-id="pane-top-canvas"]'
+
+            # Step 1: Set date range
+            self._click_element(web_driver, select_date_range_button_xpath)
+            self._click_element(web_driver, custom_range_button_xpath)
+
+            dialog_thread.start()
+
+            self._input_text(
+                web_driver,
+                input_start_date_xpath,
+                start_time_date_str,
+                char_by_char=True,
+                confirm="tab",
+            )
+            self._input_text(
+                web_driver,
+                input_end_date_xpath,
+                current_time_date_str,
+                char_by_char=True,
+                confirm="tab",
+            )
+
+            self._click_element(web_driver, apply_range_button_xpath)
+            time.sleep(SCRAPER_BASE_WAIT_TIME)
+
+            # Step 2: Snap to last bar, zoom in, hover
+            web_driver.find_element(By.TAG_NAME, "body").send_keys(Keys.END)
+            time.sleep(0.5)
+
+            # Zoom in: Ctrl + Up arrow multiple times
+            for _ in range(10):
+                actions = ActionChains(web_driver)
+                actions.key_down(Keys.CONTROL).send_keys(Keys.ARROW_UP).key_up(
+                    Keys.CONTROL
+                ).perform()
+                time.sleep(0.1)
+            time.sleep(0.3)
+
+            # Press END again to re-snap after zoom
+            web_driver.find_element(By.TAG_NAME, "body").send_keys(Keys.END)
+            time.sleep(0.5)
+
+            canvas = WebDriverWait(web_driver, 10).until(
+                EC.presence_of_element_located((By.XPATH, canvas_xpath))
+            )
+
+            canvas_width = canvas.size["width"]
+            canvas_height = canvas.size["height"]
+            hover_x = (canvas_width // 2) - 5
+            hover_y = canvas_height // 2
+
+            self._logger.log_info(f"Canvas size: {canvas_width} x {canvas_height}")
+
+            actions = ActionChains(web_driver)
+            actions.move_to_element_with_offset(canvas, hover_x, hover_y).perform()
+            time.sleep(0.5)
+
+            # Step 3: Get label date from details widget
+            label_date_js = """
+            try {
+                const items = document.querySelectorAll('.item-DVns3SZf');
+                for (const item of items) {
+                    const title = item.querySelector('.title-DVns3SZf');
+                    const data = item.querySelector('.data-DVns3SZf');
+                    if (title && title.innerText.trim() === 'Observation period') {
+                        return data ? data.innerText.trim() : '';
+                    }
+                }
+                return '';
+            } catch(e) { return ''; }
+            """
+            label_date_raw = web_driver.execute_script(label_date_js)
+            self._logger.log_info(f"Label date raw: {label_date_raw}")
+
+            from datetime import datetime as dt
+            try:
+                label_date_str = dt.strptime(label_date_raw, "%d %b %Y").strftime("%Y-%m-%d")
+            except Exception:
+                label_date_str = current_time_date_str
+            self._logger.log_info(f"Label date parsed: {label_date_str}")
+
+            # Step 4: Compute matchKey and initial crosshair index
+            setup_js = """
+            try {
+                const collection = window._exposed_chartWidgetCollection;
+                const chartWidget = collection.activeChartWidget._value;
+                const model = chartWidget._modelWV._value.m_model;
+                const crosshair = model._crossHairSource;
+                const timeScale = model._timeScale;
+                const items = timeScale._points._items;
+                const keys = Object.keys(items).map(Number).sort((a, b) => a - b);
+                const crosshairIndex = crosshair.index;
+                const parts = arguments[0].split('-');
+                const targetTs = Date.UTC(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2])) / 1000;
+                let matchKey = null;
+                for (const k of keys) {
+                    if (items[k] === targetTs) { matchKey = k; break; }
+                }
+                return JSON.stringify({ match_key: matchKey, initial_crosshair_index: crosshairIndex });
+            } catch(e) { return null; }
+            """
+            setup_result = json.loads(web_driver.execute_script(setup_js, label_date_str))
+            match_key = setup_result["match_key"]
+            initial_crosshair_index = setup_result["initial_crosshair_index"]
+            self._logger.log_info(f"Match key: {match_key}, Initial crosshair: {initial_crosshair_index}")
+
+            date_js = """
+            try {
+                const collection = window._exposed_chartWidgetCollection;
+                const chartWidget = collection.activeChartWidget._value;
+                const model = chartWidget._modelWV._value.m_model;
+                const crosshair = model._crossHairSource;
+                const timeScale = model._timeScale;
+                const items = timeScale._points._items;
+                const crosshairIndex = crosshair.index;
+                const matchKey = arguments[0];
+                const initialCrosshairIndex = arguments[1];
+                const actualKey = matchKey + (crosshairIndex - initialCrosshairIndex);
+                const timestamp = items[actualKey];
+                return timestamp ? new Date(timestamp * 1000).toISOString().split('T')[0] : '';
+            } catch(e) { return ''; }
+            """
+
+            # Verify first date
+            first_date = web_driver.execute_script(date_js, match_key, initial_crosshair_index)
+            self._logger.log_info(f"First crosshair date: {first_date}")
+
+            # Step 5: Walk left until date <= today
+            for _ in range(10):
+                test_date = web_driver.execute_script(date_js, match_key, initial_crosshair_index) or ""
+                if test_date and test_date <= current_time_date_str:
+                    break
+                actions = ActionChains(web_driver)
+                actions.move_to_element_with_offset(canvas, hover_x, hover_y).perform()
+                web_driver.find_element(By.TAG_NAME, "body").send_keys(Keys.ARROW_LEFT)
+                time.sleep(0.1)
+
+            first_date = web_driver.execute_script(date_js, match_key, initial_crosshair_index)
+            self._logger.log_info(f"First crosshair date after walk: {first_date}")
+
+            # Step 6: Scrape by pressing LEFT arrow day by day
+            total_days = (current_time.date() - start_time.date()).days
+            seen_dates = set()
+            records = []
+
+            self._logger.log_info(f"Starting hover scrape for {total_days} days.")
+
+            for i in range(total_days + 1):
+                # Read date
+                try:
+                    date_text = web_driver.execute_script(date_js, match_key, initial_crosshair_index) or ""
+                except Exception:
+                    date_text = ""
+
+                # Read value
+                try:
+                    value_element = web_driver.find_element(By.XPATH, value_box_xpath)
+                    value_text = value_element.text.strip()
+                except Exception:
+                    value_text = ""
+
+                # Only append unique non-empty dates
+                if date_text and date_text not in seen_dates:
+                    seen_dates.add(date_text)
+                    self._logger.log_debug(f"{date_text}: {value_text}")
+                    records.append((date_text, value_text))
+
+                # Stop if we've reached or passed start date
+                if date_text and date_text <= start_time_date_str:
+                    break
+
+                # Move one day left
+                actions = ActionChains(web_driver)
+                actions.move_to_element_with_offset(canvas, hover_x, hover_y).perform()
+                web_driver.find_element(By.TAG_NAME, "body").send_keys(Keys.ARROW_LEFT)
+                time.sleep(0.1)
+
+            # Step 7: Write to CSV
+            records.reverse()  # oldest → newest
+            with open(file_path, "w", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(["date", "value"])
+                writer.writerows(records)
+
+            self._logger.log_info(f"Saved {len(records)} records to {file_path}.")
+
+        finally:
+            stop_event.set()
+            if dialog_thread.is_alive():
+                dialog_thread.join()
             web_driver.close()
 
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
@@ -662,6 +943,12 @@ class WebScraper:
             ):
                 return self._scrape_data_macroeconomics_exchange_rate_usd_vnd(key)
 
+            case (
+                ScrapeMainType.MACROECONOMICS,
+                MacroeconomicsSubType.VIETNAM_INTERBANK_RATE,
+            ):
+                return self._scrape_data_macroeconomics_vietnam_interbank_rate(key)
+
             # endregion MACROECONOMICS
 
             # region STOCK_MARKET
@@ -795,6 +1082,18 @@ class WebScraper:
             key = (
                 ScrapeMainType.MACROECONOMICS,
                 MacroeconomicsSubType.EXCHANGE_RATE_USD_VND,
+            )
+            self._thread_manager.add_task(
+                Task(format_key_for_name(key), self._scrape_data_from, key)
+            )
+
+        # VIETNAM_INTERBANK_RATE
+        if self._switch_handler.is_enabled(
+            "web_scraper", "macroeconomics", "vietnam_interbank_rate"
+        ):
+            key = (
+                ScrapeMainType.MACROECONOMICS,
+                MacroeconomicsSubType.VIETNAM_INTERBANK_RATE,
             )
             self._thread_manager.add_task(
                 Task(format_key_for_name(key), self._scrape_data_from, key)

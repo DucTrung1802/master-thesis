@@ -172,6 +172,7 @@ class ScrapeMainType(Enum):
 # MACROECONOMICS, STOCK MARKET, AND ENTERPRISE SUBTYPE ENUMS
 class MacroeconomicsSubType(Enum):
     EXCHANGE_RATE_USD_VND = "exchange_rate_usd_vnd"
+    VIETNAM_INTERBANK_RATE = "vietnam_interbank_rate"
 
 
 class StockMarketSubType(Enum):
@@ -246,6 +247,12 @@ SCRAPE_MAPPING: Dict[Tuple[ScrapeMainType, ScrapeSubType], SourceInfo] = {
         MacroeconomicsSubType.EXCHANGE_RATE_USD_VND,
     ): SourceInfo(
         url="https://finance.yahoo.com/quote/VND%3DX/history/?guccounter=1&guce_referrer=aHR0cHM6Ly93d3cuZ29vZ2xlLmNvbS8&guce_referrer_sig=AQAAAIII0p_F4cytODHutPd98NUM68Y53wBIao_gSFpu8kecJEA-xGQao1JymREM9sLDRqLjDmtVuAKSyvBznETOv7AdBkEj8vP0JwkkaKccNanU6Hc6Cw1DFRzKsyccPbNpe0mvO5K_DVshB4FWNSe19BPAPffOijULTtq7Pa4IKCqV",
+    ),
+    (
+        ScrapeMainType.MACROECONOMICS,
+        MacroeconomicsSubType.VIETNAM_INTERBANK_RATE,
+    ): SourceInfo(
+        url="https://www.tradingview.com/chart/?symbol=ECONOMICS%3AVNINBR",
     ),
     # STOCK_MARKET
     (
