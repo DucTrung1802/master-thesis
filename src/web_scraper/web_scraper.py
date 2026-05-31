@@ -56,7 +56,7 @@ class WebScraper:
             "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
         )
 
-    def _initialize_web_driver_and_bs4_parser(
+    def _helper_initialize_web_driver_and_bs4_parser(
         self,
     ) -> Tuple[ChromiumDriver, BeautifulSoup]:
         web_driver: ChromiumDriver = webdriver.Chrome(options=self._chrome_options)
@@ -65,20 +65,20 @@ class WebScraper:
 
         return (web_driver, bs4_parser)
 
-    def _update_bs4_parser(self, web_driver: ChromiumDriver) -> BeautifulSoup:
+    def _helper_update_bs4_parser(self, web_driver: ChromiumDriver) -> BeautifulSoup:
         return BeautifulSoup(web_driver.page_source, "html.parser")
 
-    def _navigate_to_url(
+    def _helper_navigate_to_url(
         self, web_driver: ChromiumDriver, url: str
     ) -> Tuple[ChromiumDriver, BeautifulSoup]:
         self._logger.log_info(f'Navigating to URL: "{url}"')
         web_driver.get(url)
         time.sleep(SCRAPER_BASE_WAIT_TIME)
-        bs4_parser = self._update_bs4_parser(web_driver)
+        bs4_parser = self._helper_update_bs4_parser(web_driver)
 
         return (web_driver, bs4_parser)
 
-    def _select_dropdown_by_text(
+    def _helper_select_dropdown_by_text(
         self, web_driver: ChromiumDriver, xpath: str, text: str
     ) -> None:
         element = WebDriverWait(web_driver, 10).until(
@@ -86,7 +86,7 @@ class WebScraper:
         )
         Select(element).select_by_visible_text(text)
 
-    def _input_text(
+    def _helper_input_text(
         self,
         web_driver: ChromiumDriver,
         xpath: str,
@@ -118,13 +118,13 @@ class WebScraper:
             case "enter":
                 input_element.send_keys(Keys.ENTER)
 
-    def _click_element(self, web_driver: ChromiumDriver, xpath: str) -> None:
+    def _helper_click_element(self, web_driver: ChromiumDriver, xpath: str) -> None:
         element = WebDriverWait(web_driver, 10).until(
             EC.element_to_be_clickable((By.XPATH, xpath))
         )
         element.click()
 
-    def _extract_table(self, table: Optional[Tag]):
+    def _helper_extract_table(self, table: Optional[Tag]):
         # Extract headers
         headers = []
         thead = table.find("thead")
@@ -149,20 +149,20 @@ class WebScraper:
 
         return (headers, rows)
 
-    def _extract_table_by_id(
+    def _helper_extract_table_by_id(
         self, bs4_parser: BeautifulSoup, id: str
     ) -> Tuple[List, List]:
         # Extract data from the table
         table = bs4_parser.find("table", id=id)
-        return self._extract_table(table)
+        return self._helper_extract_table(table)
 
-    def _extract_table_by_class(
+    def _helper_extract_table_by_class(
         self, bs4_parser: BeautifulSoup, class_name: str
     ) -> Tuple[List, List]:
         table = bs4_parser.find("table", class_=class_name)
-        return self._extract_table(table)
+        return self._helper_extract_table(table)
 
-    def _find_first_valid_element_by_xpath(
+    def _helper_find_first_valid_element_by_xpath(
         self, web_driver: ChromiumDriver, xpaths: List[str]
     ):
         for xpath in xpaths:
@@ -171,7 +171,7 @@ class WebScraper:
                 return elements[0]
         return False
 
-    def _find_first_valid_element_by_class(
+    def _helper_find_first_valid_element_by_class(
         self, web_driver: ChromiumDriver, class_names: List[str]
     ):
         for class_name in class_names:
@@ -185,14 +185,16 @@ class WebScraper:
                 return elements[0]
         return False
 
-    def _find_first_valid_xpath(self, web_driver: ChromiumDriver, xpaths: List[str]):
+    def _helper_find_first_valid_xpath(
+        self, web_driver: ChromiumDriver, xpaths: List[str]
+    ):
         for xpath in xpaths:
             elements = web_driver.find_elements(By.XPATH, xpath)
             if elements:
                 return xpath
         return False
 
-    def _wait_until_text_not_equals(
+    def _helper_wait_until_text_not_equals(
         self,
         web_driver: ChromiumDriver,
         xpath: str,
@@ -211,7 +213,9 @@ class WebScraper:
             )
             return False
 
-    def _remove_elements_by_xpath(self, web_driver: ChromiumDriver, xpath: str) -> None:
+    def _helper_remove_elements_by_xpath(
+        self, web_driver: ChromiumDriver, xpath: str
+    ) -> None:
         try:
             elements = web_driver.find_elements(By.XPATH, xpath)
             for index in range(len(elements)):
@@ -219,12 +223,15 @@ class WebScraper:
         except Exception as e:
             self._logger.log_warning(f"Failed to remove elements by xpath: {xpath}")
 
+    def add_trading_view_links_scraping_tasks(self):
+        self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
+
     def _scrape_data_macroeconomics_exchange_rate_usd_vnd(
         self, key: Tuple[ScrapeMainType, ScrapeSubType]
     ) -> None:
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
 
-        web_driver, bs4_parser = self._initialize_web_driver_and_bs4_parser()
+        web_driver, bs4_parser = self._helper_initialize_web_driver_and_bs4_parser()
 
         try:
             scrape_main_type = key[0].value
@@ -258,10 +265,10 @@ class WebScraper:
                 + f"&period1={start_time_second_str}&period2={current_time_second_str}"
             )
 
-            web_driver, bs4_parser = self._navigate_to_url(web_driver, full_url)
+            web_driver, bs4_parser = self._helper_navigate_to_url(web_driver, full_url)
 
             table_class = "table yf-u4m6f0 noDl hideOnPrint"
-            headers, rows = self._extract_table_by_class(bs4_parser, table_class)
+            headers, rows = self._helper_extract_table_by_class(bs4_parser, table_class)
 
             with open(file_path, "w", newline="") as f:
                 writer = csv.writer(f)
@@ -278,14 +285,14 @@ class WebScraper:
     ) -> None:
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
 
-        web_driver, bs4_parser = self._initialize_web_driver_and_bs4_parser()
+        web_driver, bs4_parser = self._helper_initialize_web_driver_and_bs4_parser()
 
         stop_event = threading.Event()
 
         def _dialog_remover_loop():
             dialog_xpath = '//*[@id="overlap-manager-root"]/div[3]/div'
             while not stop_event.is_set():
-                self._remove_elements_by_xpath(web_driver, dialog_xpath)
+                self._helper_remove_elements_by_xpath(web_driver, dialog_xpath)
                 time.sleep(0.5)
 
         dialog_thread = threading.Thread(target=_dialog_remover_loop, daemon=True)
@@ -313,7 +320,9 @@ class WebScraper:
             )
 
             source_info = SCRAPE_MAPPING[key]
-            web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
+            web_driver, bs4_parser = self._helper_navigate_to_url(
+                web_driver, source_info.url
+            )
 
             # XPATHS
             select_date_range_button_xpath = (
@@ -325,19 +334,19 @@ class WebScraper:
             apply_range_button_xpath = '//*[@id="overlap-manager-root"]/div[2]/div/div[1]/div/div[4]/div/span/button'
 
             # Step 1: Set date range
-            self._click_element(web_driver, select_date_range_button_xpath)
-            self._click_element(web_driver, custom_range_button_xpath)
+            self._helper_click_element(web_driver, select_date_range_button_xpath)
+            self._helper_click_element(web_driver, custom_range_button_xpath)
 
             dialog_thread.start()
 
-            self._input_text(
+            self._helper_input_text(
                 web_driver,
                 input_start_date_xpath,
                 start_time_date_str,
                 char_by_char=True,
                 confirm="tab",
             )
-            self._input_text(
+            self._helper_input_text(
                 web_driver,
                 input_end_date_xpath,
                 current_time_date_str,
@@ -345,7 +354,7 @@ class WebScraper:
                 confirm="tab",
             )
 
-            self._click_element(web_driver, apply_range_button_xpath)
+            self._helper_click_element(web_driver, apply_range_button_xpath)
             time.sleep(SCRAPER_BASE_WAIT_TIME)
 
             # Step 2: Read all data in one JS call
@@ -426,427 +435,16 @@ class WebScraper:
 
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
-    def _wait_loading_done(self, web_driver):
-        loading_xpath = '//*[@id="loading-table-owner"]'
-
-        while True:
-            el = self._find_first_valid_element_by_xpath(web_driver, [loading_xpath])
-            if "flex" not in el.get_attribute("style").lower():
-                break
-            time.sleep(0.05)
-
-    def _is_no_result(self, web_driver) -> bool:
-        no_result_xpath = '//*[@id="render-table-owner"]/tr/td'
-        el = self._find_first_valid_element_by_xpath(web_driver, [no_result_xpath])
-
-        return el and el.text.lower() == "không có kết quả phù hợp"
-
-    def _scrape_stock_data(
-        self,
-        key: Tuple[ScrapeMainType, ScrapeSubType],
-        url: str,
-        column_names: list[str],
-        find_button_xpath: str,
-        next_page_xpath: str,
-    ):
-        self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
-
-        scrape_main_type = get_value(key[0])
-        scrape_sub_type = get_value(key[1])
-
-        folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{scrape_main_type}/{scrape_sub_type}"
-        file_name = scrape_sub_type
-
-        os.makedirs(folder_path, exist_ok=True)
-
-        # Prepare date ranges
-        start_date = first_day_of_month(SCRAPER_START_DATE)
-        end_date = SCRAPER_END_DATE
-        month_list = month_ranges(start_date, end_date)
-
-        # 👉 Step 1: collect missing files
-        missing_jobs = []
-
-        for first_day, last_day in month_list:
-            file_path = (
-                f"{folder_path}/{file_name}_"
-                f"{first_day:%Y-%m-%d}_{last_day:%Y-%m-%d}.csv"
-            )
-
-            if not os.path.isfile(file_path):
-                missing_jobs.append((first_day, last_day, file_path))
-            else:
-                self._logger.log_debug(f"File exists: {file_path}, skip.")
-
-        # 👉 Step 2: early exit if nothing to scrape
-        if not missing_jobs:
-            self._logger.log_info("No missing files. Skipping scraping.")
-            return
-
-        # 👉 Step 3: initialize only when needed
-        web_driver, bs4_parser = self._initialize_web_driver_and_bs4_parser()
-
-        try:
-            web_driver, bs4_parser = self._navigate_to_url(web_driver, url)
-
-            for first_day, last_day, file_path in missing_jobs:
-                self._logger.log_info(
-                    f"Scraping {format_key_for_name(key)}: {first_day:%Y-%m-%d} → {last_day:%Y-%m-%d}"
-                )
-
-                self._input_text(
-                    web_driver, '//*[@id="date-from"]', f"{first_day:%d/%m/%Y}"
-                )
-                ActionChains(web_driver).send_keys(Keys.ESCAPE).perform()
-
-                self._input_text(
-                    web_driver, '//*[@id="date-to"]', f"{last_day:%d/%m/%Y}"
-                )
-                ActionChains(web_driver).send_keys(Keys.ESCAPE).perform()
-
-                self._click_element(web_driver, find_button_xpath)
-                self._wait_loading_done(web_driver)
-
-                all_data = []
-
-                if self._is_no_result(web_driver):
-                    pd.DataFrame(all_data, columns=column_names).to_csv(
-                        file_path, index=False
-                    )
-                    continue
-
-                while True:
-                    bs4_parser = self._update_bs4_parser(web_driver)
-
-                    _, rows = self._extract_table_by_id(
-                        bs4_parser=bs4_parser,
-                        id="owner-contents-table",
-                    )
-                    all_data.extend(rows)
-
-                    next_btn = self._find_first_valid_element_by_xpath(
-                        web_driver, [next_page_xpath]
-                    )
-
-                    if "disabled" in next_btn.get_attribute("class").lower():
-                        break
-
-                    self._click_element(web_driver, next_page_xpath)
-                    self._wait_loading_done(web_driver)
-
-                pd.DataFrame(all_data, columns=column_names).to_csv(
-                    file_path, index=False
-                )
-
-        finally:
-            web_driver.close()
-
-        self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
-
-    def _scrape_data_stock_market_price(self, key, url: str):
-        self._scrape_stock_data(
-            key=key,
-            url=url,
-            column_names=[
-                "code",
-                "date",
-                "close",
-                "adjust",
-                "change",
-                "matching_volume",
-                "matching_value",
-                "negotiate_volume",
-                "negotiate_value",
-                "open",
-                "high",
-                "low",
-            ],
-            find_button_xpath='//*[@id="owner-find"]',
-            next_page_xpath='//*[@id="divStart"]/div/div[3]/div[3]',
-        )
-
-    def _scrape_data_stock_market_order(self, key, url: str):
-        self._scrape_stock_data(
-            key=key,
-            url=url,
-            column_names=[
-                "code",
-                "date",
-                "change",
-                "number_of_buy_orders",
-                "buy_volume",
-                "average_volume_per_buy_order",
-                "number_of_sell_orders",
-                "sell_volume",
-                "average_volume_per_sell_order",
-                "net_volume",
-            ],
-            find_button_xpath='//*[@id="divStart"]/div/div[1]/div[1]/div/div[3]/div[1]',
-            next_page_xpath='//*[@id="divStart"]/div/div[4]/div[3]',
-        )
-
-    def _scrape_data_stock_market_list(
-        self,
-        key,
-        column_names=[
-            "code",
-            "date",
-            "close",
-            "adjust",
-            "change",
-            "matching_volume",
-            "matching_value",
-            "negotiate_volume",
-            "negotiate_value",
-            "open",
-            "high",
-            "low",
-        ],
-        find_button_xpath='//*[@id="owner-find"]',
-        next_page_xpath='//*[@id="divStart"]/div/div[3]/div[3]',
-    ):
-        self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
-
-        web_driver, bs4_parser = self._initialize_web_driver_and_bs4_parser()
-
-        try:
-            scrape_main_type = key[0].value
-            scrape_sub_type = key[1].value
-
-            folder_path = (
-                f"{SCRAPER_BRONZE_DATA_DIR}/{scrape_main_type}/{scrape_sub_type}"
-            )
-            file_name = scrape_sub_type
-
-            os.makedirs(folder_path, exist_ok=True)
-
-            source_info = SCRAPE_MAPPING[key]
-            web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
-
-            end_date = SCRAPER_END_DATE
-            get_data = False
-
-            while not get_data:
-                file_path = f"{folder_path}/{file_name}_{end_date:%Y-%m-%d}.csv"
-
-                if os.path.isfile(file_path):
-                    self._logger.log_debug(f"File exists: {file_path}, skip.")
-                    break
-
-                self._logger.log_info(f"Scraping stock list on {end_date:%Y-%m-%d}")
-
-                self._input_text(
-                    web_driver, '//*[@id="date-from"]', f"{end_date:%d/%m/%Y}"
-                )
-                ActionChains(web_driver).send_keys(Keys.ESCAPE).perform()
-
-                self._input_text(
-                    web_driver, '//*[@id="date-to"]', f"{end_date:%d/%m/%Y}"
-                )
-                ActionChains(web_driver).send_keys(Keys.ESCAPE).perform()
-
-                self._click_element(web_driver, find_button_xpath)
-
-                self._wait_loading_done(web_driver)
-
-                all_data = []
-
-                if is_weekend(end_date) or self._is_no_result(web_driver):
-                    self._logger.log_info(
-                        f"No data found on {end_date:%Y-%m-%d}. Step back a day."
-                    )
-                    end_date -= timedelta(days=1)
-                    continue
-
-                while True:
-                    bs4_parser = self._update_bs4_parser(web_driver)
-
-                    _, rows = self._extract_table_by_id(
-                        bs4_parser=bs4_parser,
-                        id="owner-contents-table",
-                    )
-                    all_data.extend(rows)
-
-                    next_btn = self._find_first_valid_element_by_xpath(
-                        web_driver, [next_page_xpath]
-                    )
-
-                    if "disabled" in next_btn.get_attribute("class").lower():
-                        break
-
-                    self._click_element(web_driver, next_page_xpath)
-                    self._wait_loading_done(web_driver)
-
-                pd.DataFrame(all_data, columns=column_names).to_csv(
-                    file_path, index=False
-                )
-                get_data = True
-
-        finally:
-            web_driver.close()
-
-        self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
-
-    def _add_tasks_for_stock_market_price_order(
-        self,
-        _result,
-        stock_market_name: str,
-        scrape_type: Literal["PRICE", "ORDER"],
-    ):
-        # Normalize input
-        scrape_type = scrape_type.upper()
-
-        if scrape_type not in {"PRICE", "ORDER"}:
-            self._logger.log_warning(
-                f"Invalid scrape_type: {scrape_type}. Must be PRICE or ORDER."
-            )
-            return
-
-        # Find stock list file
-        folder_path = (
-            f"{SCRAPER_BRONZE_DATA_DIR}/enterprise/stock_list_{stock_market_name}"
-        )
-        if not os.path.exists(folder_path):
-            self._logger.log_warning(
-                f"Folder does not exist: {folder_path}. Skip stock market {stock_market_name}."
-            )
-            return
-
-        file_path = get_newest_file_path(folder_path, extension=FileExtension.CSV)
-
-        if file_path is None:
-            self._logger.log_warning(
-                f"File does not exist: {file_path}. Skip stock market {stock_market_name}."
-            )
-            return
-
-        # Read stock list file
-        df = pd.read_csv(file_path)
-        df["code"] = df["code"].str.lower()
-        stock_list = df["code"].tolist()
-
-        # Add tasks for each stock
-        for stock in stock_list:
-
-            if scrape_type in {"PRICE"}:
-                price_key = (ScrapeMainType.ENTERPRISE, f"{stock}_price")
-                price_url = f"https://cafef.vn/du-lieu/lich-su-giao-dich/{stock_market_name}/{stock}-1.chn"
-                self._thread_manager.add_task(
-                    Task(
-                        format_key_for_name(price_key),
-                        self._scrape_data_stock_market_price,
-                        key=price_key,
-                        url=price_url,
-                    )
-                )
-
-            if scrape_type in {"ORDER"}:
-                order_key = (ScrapeMainType.ENTERPRISE, f"{stock}_order")
-                order_url = f"https://cafef.vn/du-lieu/lich-su-giao-dich/{stock_market_name}/{stock}-2.chn"
-                self._thread_manager.add_task(
-                    Task(
-                        format_key_for_name(order_key),
-                        self._scrape_data_stock_market_order,
-                        key=order_key,
-                        url=order_url,
-                    )
-                )
-
-    def _scrape_data_enterprise_daily_price_cafef(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType]
-    ):
-        self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
-
-        # Initialize web driver and bs4 parser
-        web_driver, bs4_parser = self._initialize_web_driver_and_bs4_parser()
-
-        try:
-            # 1. Initialize folder path and file name
-            folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-            file_name = f"{key[2].value}"
-
-            # 2. Initialize start time and current time
-            current_date = datetime.now()
-
-            file_path = (
-                f"{folder_path}/{file_name}_upto_{current_date.strftime('%Y%m%d')}.csv"
-            )
-
-            # 3. Remove old file if exists
-            remove_all_files_with_extensions(
-                logger=self._logger,
-                folder_path=folder_path,
-                extensions=[FileExtension.CSV],
-            )
-
-            # 4. Create folder if not exists
-            if not os.path.exists(folder_path):
-                os.makedirs(folder_path, exist_ok=True)
-
-            # 5. Get SourceInfo
-            source_info = SCRAPE_MAPPING[key]
-
-            # 6. Navigate to URL
-            web_driver, bs4_parser = self._navigate_to_url(web_driver, source_info.url)
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
-
-            # 7. Logic for scraping
-            xpath = '//*[@id="container"]/div/div[1]/div/div/div/div[2]/div[2]/table/tbody/tr[2]/td[4]/a'
-            download_link_element = web_driver.find_element("xpath", xpath)
-            download_url = download_link_element.get_attribute("href")
-
-            zip_path = file_path.replace(".csv", ".zip")
-            self._logger.log_info(f"Downloading ZIP file from: {download_url}")
-
-            # Download file
-            download_file(download_url, zip_path, self._logger)
-
-            # Extract ZIP file
-            extract_zip_file(self._logger, zip_path, folder_path)
-
-            # Regex to extract stock_market and date from filenames
-            pattern = re.compile(
-                r"CafeF\.(?P<stock_market>\w+)\.Upto(?P<date>\d{2}\.\d{2}\.\d{4})\.csv"
-            )
-
-            for file_name in os.listdir(folder_path):
-                match = pattern.match(file_name)
-                if match:
-                    stock_market = match.group("stock_market")
-                    date_str = match.group("date")  # e.g., 29.04.2025
-                    # Reformat date to YYYYMMDD
-                    date_parts = date_str.split(".")  # ['29', '04', '2025']
-                    reformatted_date = (
-                        f"{date_parts[2]}{date_parts[1]}{date_parts[0]}"  # '20250429'
-                    )
-                    new_file_name = f"{stock_market}_upto_{reformatted_date}.csv"
-                    src = Path(folder_path) / file_name
-                    dst = Path(folder_path) / new_file_name
-                    os.rename(src, dst)
-                    self._logger.log_info(f"Renamed '{file_name}' -> '{dst}'")
-                else:
-                    self._logger.log_info(f"Skipped file (no match): {file_name}")
-
-            os.remove(zip_path)
-            self._logger.log_info(f"Removed temporary ZIP file: {zip_path}")
-
-        finally:
-            web_driver.close()
-
-        self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
-
-        return key
-
-    def _scrape_data_from(self, key: Tuple[ScrapeMainType, ScrapeSubType]):
-        if key not in SCRAPE_MAPPING:
-            raise ValueError(f"No mapping found for {key}")
+    def _scrape_data_from(self, key: Tuple[ScrapeMainType]):
 
         match (key):
 
-            # region MACROECONOMICS
+            # region STOCKS
             case (
-                ScrapeMainType.MACROECONOMICS,
-                MacroeconomicsSubType.EXCHANGE_RATE_USD_VND,
+                ScrapeMainType.STOCKS.value,
+                Country.VIETNAM.value,
+                StockType.COMMON_STOCK.value,
+                StockSector.COMMERCIAL_SERVICES.value,
             ):
                 return self._scrape_data_macroeconomics_exchange_rate_usd_vnd(key)
 
@@ -856,151 +454,26 @@ class WebScraper:
             ):
                 return self._scrape_data_macroeconomics_vietnam_interbank_rate(key)
 
-            # endregion MACROECONOMICS
+            # endregion STOCKS
 
-            # region STOCK_MARKET
-            case (
-                ScrapeMainType.STOCK_MARKET,
-                StockMarketSubType.VN_INDEX_PRICE,
-            ):
-                return self._scrape_data_stock_market_price(
-                    key, SCRAPE_MAPPING[key].url
-                )
-
-            case (
-                ScrapeMainType.STOCK_MARKET,
-                StockMarketSubType.VN_INDEX_ORDER,
-            ):
-                return self._scrape_data_stock_market_order(
-                    key, SCRAPE_MAPPING[key].url
-                )
-
-            case (
-                ScrapeMainType.STOCK_MARKET,
-                StockMarketSubType.VN_30_INDEX_PRICE,
-            ):
-                return self._scrape_data_stock_market_price(
-                    key, SCRAPE_MAPPING[key].url
-                )
-
-            case (
-                ScrapeMainType.STOCK_MARKET,
-                StockMarketSubType.VN_30_INDEX_ORDER,
-            ):
-                return self._scrape_data_stock_market_order(
-                    key, SCRAPE_MAPPING[key].url
-                )
-
-            case (
-                ScrapeMainType.STOCK_MARKET,
-                StockMarketSubType.VN_100_INDEX_PRICE,
-            ):
-                return self._scrape_data_stock_market_price(
-                    key, SCRAPE_MAPPING[key].url
-                )
-
-            case (
-                ScrapeMainType.STOCK_MARKET,
-                StockMarketSubType.VN_100_INDEX_ORDER,
-            ):
-                return self._scrape_data_stock_market_order(
-                    key, SCRAPE_MAPPING[key].url
-                )
-
-            case (
-                ScrapeMainType.STOCK_MARKET,
-                StockMarketSubType.HNX_INDEX_PRICE,
-            ):
-                return self._scrape_data_stock_market_price(
-                    key, SCRAPE_MAPPING[key].url
-                )
-
-            case (
-                ScrapeMainType.STOCK_MARKET,
-                StockMarketSubType.HNX_INDEX_ORDER,
-            ):
-                return self._scrape_data_stock_market_order(
-                    key, SCRAPE_MAPPING[key].url
-                )
-
-            case (
-                ScrapeMainType.STOCK_MARKET,
-                StockMarketSubType.HNX_30_INDEX_PRICE,
-            ):
-                return self._scrape_data_stock_market_price(
-                    key, SCRAPE_MAPPING[key].url
-                )
-
-            case (
-                ScrapeMainType.STOCK_MARKET,
-                StockMarketSubType.HNX_30_INDEX_ORDER,
-            ):
-                return self._scrape_data_stock_market_order(
-                    key, SCRAPE_MAPPING[key].url
-                )
-
-            case (
-                ScrapeMainType.STOCK_MARKET,
-                StockMarketSubType.UPCOM_INDEX_PRICE,
-            ):
-                return self._scrape_data_stock_market_price(
-                    key, SCRAPE_MAPPING[key].url
-                )
-
-            case (
-                ScrapeMainType.STOCK_MARKET,
-                StockMarketSubType.UPCOM_INDEX_ORDER,
-            ):
-                return self._scrape_data_stock_market_order(
-                    key, SCRAPE_MAPPING[key].url
-                )
-
-            # endregion STOCK_MARKET
-
-            # region ENTERPRISE
-            case (
-                ScrapeMainType.ENTERPRISE,
-                EnterpriseSubType.STOCK_LIST_HOSE,
-            ):
-                return self._scrape_data_stock_market_list(key)
-
-            case (
-                ScrapeMainType.ENTERPRISE,
-                EnterpriseSubType.STOCK_LIST_HNX,
-            ):
-                return self._scrape_data_stock_market_list(key)
-
-            case (
-                ScrapeMainType.ENTERPRISE,
-                EnterpriseSubType.STOCK_LIST_UPCOM,
-            ):
-                return self._scrape_data_stock_market_list(key)
-
-            # endregion ENTERPRISE
-
-    def add_macroeconomics_data_scraping_tasks(self):
-        self._logger.log_info("Adding macroeconomic data scraping tasks.")
+    def add_stocks_data_scraping_tasks(self):
+        self._logger.log_info(
+            f"Adding '{ScrapeMainType.STOCKS.value}' data scraping tasks."
+        )
         number_of_task_before = self._thread_manager.get_current_number_of_task()
 
-        # EXCHANGE_RATE_USD_VND
         if self._switch_handler.is_enabled(
-            "web_scraper", "macroeconomics", "exchange_rate_usd_vnd"
+            "web_scraper",
+            f"{ScrapeMainType.STOCKS.value}",
+            f"{Country.VIETNAM.value}",
+            f"{StockType.COMMON_STOCK.value}",
+            f"{StockSector.COMMERCIAL_SERVICES.value}",
         ):
             key = (
-                ScrapeMainType.MACROECONOMICS,
-                MacroeconomicsSubType.EXCHANGE_RATE_USD_VND,
-            )
-            self._thread_manager.add_task(
-                Task(format_key_for_name(key), self._scrape_data_from, key)
-            )
-
-        # VIETNAM_INTERBANK_RATE
-        if self._switch_handler.is_enabled(
-            "web_scraper", "macroeconomics", "vietnam_interbank_rate"
-        ):
-            key = (
-                ScrapeMainType.MACROECONOMICS,
-                MacroeconomicsSubType.VIETNAM_INTERBANK_RATE,
+                ScrapeMainType.STOCKS.value,
+                Country.VIETNAM.value,
+                StockType.COMMON_STOCK.value,
+                StockSector.COMMERCIAL_SERVICES.value,
             )
             self._thread_manager.add_task(
                 Task(format_key_for_name(key), self._scrape_data_from, key)
@@ -1009,291 +482,6 @@ class WebScraper:
         number_of_task_after = self._thread_manager.get_current_number_of_task()
         self._logger.log_info(
             f"Added {number_of_task_after - number_of_task_before} macroeconomic data scraping tasks."
-        )
-
-    def add_stock_market_data_scraping_tasks(self):
-        self._logger.log_info("Adding stock market data scraping tasks.")
-        number_of_task_before = self._thread_manager.get_current_number_of_task()
-
-        # VN_INDEX_PRICE
-        if self._switch_handler.is_enabled(
-            "web_scraper", "stock_market", "vn_index_price"
-        ):
-            key = (
-                ScrapeMainType.STOCK_MARKET,
-                StockMarketSubType.VN_INDEX_PRICE,
-            )
-            self._thread_manager.add_task(
-                Task(format_key_for_name(key), self._scrape_data_from, key)
-            )
-
-        # VN_INDEX_ORDER
-        if self._switch_handler.is_enabled(
-            "web_scraper", "stock_market", "vn_index_order"
-        ):
-            key = (
-                ScrapeMainType.STOCK_MARKET,
-                StockMarketSubType.VN_INDEX_ORDER,
-            )
-            self._thread_manager.add_task(
-                Task(format_key_for_name(key), self._scrape_data_from, key)
-            )
-
-        # VN_30_INDEX_PRICE
-        if self._switch_handler.is_enabled(
-            "web_scraper", "stock_market", "vn_30_index_price"
-        ):
-            key = (
-                ScrapeMainType.STOCK_MARKET,
-                StockMarketSubType.VN_30_INDEX_PRICE,
-            )
-            self._thread_manager.add_task(
-                Task(format_key_for_name(key), self._scrape_data_from, key)
-            )
-
-        # VN_30_INDEX_ORDER
-        if self._switch_handler.is_enabled(
-            "web_scraper", "stock_market", "vn_30_index_order"
-        ):
-            key = (
-                ScrapeMainType.STOCK_MARKET,
-                StockMarketSubType.VN_30_INDEX_ORDER,
-            )
-            self._thread_manager.add_task(
-                Task(format_key_for_name(key), self._scrape_data_from, key)
-            )
-
-        # VN_100_INDEX_PRICE
-        if self._switch_handler.is_enabled(
-            "web_scraper", "stock_market", "vn_100_index_price"
-        ):
-            key = (
-                ScrapeMainType.STOCK_MARKET,
-                StockMarketSubType.VN_100_INDEX_PRICE,
-            )
-            self._thread_manager.add_task(
-                Task(format_key_for_name(key), self._scrape_data_from, key)
-            )
-
-        # VN_100_INDEX_ORDER
-        if self._switch_handler.is_enabled(
-            "web_scraper", "stock_market", "vn_100_index_order"
-        ):
-            key = (
-                ScrapeMainType.STOCK_MARKET,
-                StockMarketSubType.VN_100_INDEX_ORDER,
-            )
-            self._thread_manager.add_task(
-                Task(format_key_for_name(key), self._scrape_data_from, key)
-            )
-
-        # HNX_INDEX_PRICE
-        if self._switch_handler.is_enabled(
-            "web_scraper", "stock_market", "hnx_index_price"
-        ):
-            key = (
-                ScrapeMainType.STOCK_MARKET,
-                StockMarketSubType.HNX_INDEX_PRICE,
-            )
-            self._thread_manager.add_task(
-                Task(format_key_for_name(key), self._scrape_data_from, key)
-            )
-
-        # HNX_INDEX_ORDER
-        if self._switch_handler.is_enabled(
-            "web_scraper", "stock_market", "hnx_index_order"
-        ):
-            key = (
-                ScrapeMainType.STOCK_MARKET,
-                StockMarketSubType.HNX_INDEX_ORDER,
-            )
-            self._thread_manager.add_task(
-                Task(format_key_for_name(key), self._scrape_data_from, key)
-            )
-
-        # HNX_30_INDEX_PRICE
-        if self._switch_handler.is_enabled(
-            "web_scraper", "stock_market", "hnx_30_index_price"
-        ):
-            key = (
-                ScrapeMainType.STOCK_MARKET,
-                StockMarketSubType.HNX_30_INDEX_PRICE,
-            )
-            self._thread_manager.add_task(
-                Task(format_key_for_name(key), self._scrape_data_from, key)
-            )
-
-        # HNX_30_INDEX_ORDER
-        if self._switch_handler.is_enabled(
-            "web_scraper", "stock_market", "hnx_30_index_order"
-        ):
-            key = (
-                ScrapeMainType.STOCK_MARKET,
-                StockMarketSubType.HNX_30_INDEX_ORDER,
-            )
-            self._thread_manager.add_task(
-                Task(format_key_for_name(key), self._scrape_data_from, key)
-            )
-
-        # UPCOM_INDEX_PRICE
-        if self._switch_handler.is_enabled(
-            "web_scraper", "stock_market", "upcom_index_price"
-        ):
-            key = (
-                ScrapeMainType.STOCK_MARKET,
-                StockMarketSubType.UPCOM_INDEX_PRICE,
-            )
-            self._thread_manager.add_task(
-                Task(format_key_for_name(key), self._scrape_data_from, key)
-            )
-
-        # UPCOM_INDEX_ORDER
-        if self._switch_handler.is_enabled(
-            "web_scraper", "stock_market", "upcom_index_order"
-        ):
-            key = (
-                ScrapeMainType.STOCK_MARKET,
-                StockMarketSubType.UPCOM_INDEX_ORDER,
-            )
-            self._thread_manager.add_task(
-                Task(format_key_for_name(key), self._scrape_data_from, key)
-            )
-
-        number_of_task_after = self._thread_manager.get_current_number_of_task()
-        self._logger.log_info(
-            f"Added {number_of_task_after - number_of_task_before} stock market data scraping tasks."
-        )
-
-    def add_enterprise_data_scraping_tasks(self):
-        self._logger.log_info("Adding enterprise data scraping tasks.")
-        number_of_task_before = self._thread_manager.get_current_number_of_task()
-
-        # STOCK_LIST_HOSE
-        if self._switch_handler.is_enabled(
-            "web_scraper", "enterprise", "stock_list_hose"
-        ):
-            key = (
-                ScrapeMainType.ENTERPRISE,
-                EnterpriseSubType.STOCK_LIST_HOSE,
-            )
-
-            callbacks = []
-            if self._switch_handler.is_enabled(
-                "web_scraper", "enterprise", "stock_list_hose", "stock_price_hose"
-            ):
-                callbacks.append(
-                    (
-                        self._add_tasks_for_stock_market_price_order,
-                        (),
-                        {"stock_market_name": "hose", "scrape_type": "PRICE"},
-                    )
-                )
-
-            if self._switch_handler.is_enabled(
-                "web_scraper", "enterprise", "stock_list_hose", "stock_order_hose"
-            ):
-                callbacks.append(
-                    (
-                        self._add_tasks_for_stock_market_price_order,
-                        (),
-                        {"stock_market_name": "hose", "scrape_type": "ORDER"},
-                    )
-                )
-
-            self._thread_manager.add_task(
-                Task(
-                    format_key_for_name(key),
-                    self._scrape_data_from,
-                    key,
-                    callbacks=callbacks,
-                )
-            )
-
-        # STOCK_LIST_HNX
-        if self._switch_handler.is_enabled(
-            "web_scraper", "enterprise", "stock_list_hnx"
-        ):
-            key = (
-                ScrapeMainType.ENTERPRISE,
-                EnterpriseSubType.STOCK_LIST_HNX,
-            )
-
-            callbacks = []
-            if self._switch_handler.is_enabled(
-                "web_scraper", "enterprise", "stock_list_hnx", "stock_price_hnx"
-            ):
-                callbacks.append(
-                    (
-                        self._add_tasks_for_stock_market_price_order,
-                        (),
-                        {"stock_market_name": "hnx", "scrape_type": "PRICE"},
-                    )
-                )
-
-            if self._switch_handler.is_enabled(
-                "web_scraper", "enterprise", "stock_list_hnx", "stock_order_hnx"
-            ):
-                callbacks.append(
-                    (
-                        self._add_tasks_for_stock_market_price_order,
-                        (),
-                        {"stock_market_name": "hnx", "scrape_type": "ORDER"},
-                    )
-                )
-
-            self._thread_manager.add_task(
-                Task(
-                    format_key_for_name(key),
-                    self._scrape_data_from,
-                    key,
-                    callbacks=callbacks,
-                )
-            )
-
-        # STOCK_LIST_UPCOM
-        if self._switch_handler.is_enabled(
-            "web_scraper", "enterprise", "stock_list_upcom"
-        ):
-            key = (
-                ScrapeMainType.ENTERPRISE,
-                EnterpriseSubType.STOCK_LIST_UPCOM,
-            )
-
-            callbacks = []
-            if self._switch_handler.is_enabled(
-                "web_scraper", "enterprise", "stock_list_upcom", "stock_price_upcom"
-            ):
-                callbacks.append(
-                    (
-                        self._add_tasks_for_stock_market_price_order,
-                        (),
-                        {"stock_market_name": "upcom", "scrape_type": "PRICE"},
-                    )
-                )
-
-            if self._switch_handler.is_enabled(
-                "web_scraper", "enterprise", "stock_list_upcom", "stock_order_upcom"
-            ):
-                callbacks.append(
-                    (
-                        self._add_tasks_for_stock_market_price_order,
-                        (),
-                        {"stock_market_name": "upcom", "scrape_type": "ORDER"},
-                    )
-                )
-
-            self._thread_manager.add_task(
-                Task(
-                    format_key_for_name(key),
-                    self._scrape_data_from,
-                    key,
-                    callbacks=callbacks,
-                )
-            )
-
-        number_of_task_after = self._thread_manager.get_current_number_of_task()
-        self._logger.log_info(
-            f"Added {number_of_task_after - number_of_task_before} enterprise data scraping tasks."
         )
 
     def start_scraping(self):
@@ -1305,14 +493,8 @@ class WebScraper:
         self._logger.log_info("Adding data scraping tasks.")
         number_of_task_before = self._thread_manager.get_current_number_of_task()
 
-        if self._switch_handler.is_enabled("web_scraper", "macroeconomics"):
-            self.add_macroeconomics_data_scraping_tasks()
-
-        if self._switch_handler.is_enabled("web_scraper", "stock_market"):
-            self.add_stock_market_data_scraping_tasks()
-
-        if self._switch_handler.is_enabled("web_scraper", "enterprise"):
-            self.add_enterprise_data_scraping_tasks()
+        if self._switch_handler.is_enabled("web_scraper", "trading_view", "links"):
+            self.add_trading_view_links_scraping_tasks()
 
         number_of_task_after = self._thread_manager.get_current_number_of_task()
         self._logger.log_info(

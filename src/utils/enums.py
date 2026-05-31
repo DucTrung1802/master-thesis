@@ -266,9 +266,6 @@ class StockType(Enum):
     PRE_IPO = "pre_ipo"
 
 
-from enum import Enum
-
-
 class StockSector(Enum):
     COMMERCIAL_SERVICES = "commercial_services"
     COMMUNICATIONS = "communications"
@@ -311,9 +308,6 @@ class FutureCategory(Enum):
     WEATHER = "weather"
     BUILDING_MATERIALS = "building_materials"
     CHEMICALS = "chemicals"
-
-
-from enum import Enum
 
 
 class ForexSource(Enum):
@@ -365,9 +359,6 @@ class ForexSource(Enum):
     VANTAGE = "vantage"
     VELOCITY_TRADE = "velocity_trade"
     WH_SELFINVEST = "wh_selfinvest"
-
-
-from enum import Enum
 
 
 class CryptoSource(Enum):
