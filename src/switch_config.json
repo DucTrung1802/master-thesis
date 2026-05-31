@@ -2,93 +2,20 @@
     "web_scraper": {
         "enable": true,
         "children": {
-            "macroeconomics": {
+            "trading_view": {
                 "enable": true,
                 "children": {
-                    "exchange_rate_usd_vnd": {
-                        "enable": false
-                    },
-                    "vietnam_interbank_rate": {
-                        "enable": true
-                    }
-                }
-            },
-            "stock_market": {
-                "enable": false,
-                "children": {
-                    "vn_index_price": {
-                        "enable": false
-                    },
-                    "vn_index_order": {
-                        "enable": false
-                    },
-                    "vn_30_index_price": {
-                        "enable": false
-                    },
-                    "vn_30_index_order": {
-                        "enable": false
-                    },
-                    "vn_100_index_price": {
-                        "enable": false
-                    },
-                    "vn_100_index_order": {
-                        "enable": false
-                    },
-                    "hnx_index_price": {
-                        "enable": true
-                    },
-                    "hnx_index_order": {
-                        "enable": true
-                    },
-                    "hnx_30_index_price": {
-                        "enable": false
-                    },
-                    "hnx_30_index_order": {
-                        "enable": false
-                    },
-                    "upcom_index_price": {
-                        "enable": false
-                    },
-                    "upcom_index_order": {
-                        "enable": false
-                    }
-                }
-            },
-            "enterprise": {
-                "enable": false,
-                "children": {
-                    "stock_list_hose": {
-                        "enable": false,
+                    "links": {
+                        "enable": true,
                         "children": {
-                            "stock_price_hose": {
-                                "enable": false
-                            },
-                            "stock_order_hose": {
-                                "enable": false
+                            "stocks": {
+                                "enable": true
                             }
                         }
                     },
-                    "stock_list_hnx": {
+                    "data": {
                         "enable": false,
-                        "children": {
-                            "stock_price_hnx": {
-                                "enable": false
-                            },
-                            "stock_order_hnx": {
-                                "enable": false
-                            }
-                        }
-                    },
-                    "stock_list_upcom": {
-                        "enable": false,
-                        "children": {
-                            "stock_price_upcom": {
-                                "enable": false
-                            },
-                            "stock_order_upcom": {
-                                "enable": false
-                            }
-                        }
+                        "children": {}
                     }
                 }
             }

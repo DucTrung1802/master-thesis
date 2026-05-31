@@ -223,8 +223,55 @@ class WebScraper:
         except Exception as e:
             self._logger.log_warning(f"Failed to remove elements by xpath: {xpath}")
 
+    def _scrape_links_stocks_vietnam_common_stock_commercial_services(self, key: Tuple):
+        self._logger.log_info(f'Start scraping links for "{format_key_for_name(key)}".')
+
+    def _scrape_link_from(self, key: Tuple):
+
+        match (key):
+
+            # region STOCKS
+            case (
+                "links",
+                ScrapeMainType.STOCKS.value,
+                Country.VIETNAM.value,
+                StockType.COMMON_STOCK.value,
+                StockSector.COMMERCIAL_SERVICES.value,
+            ):
+                return (
+                    self._scrape_links_stocks_vietnam_common_stock_commercial_services(
+                        key
+                    )
+                )
+
+            # endregion STOCKS
+
     def add_trading_view_links_scraping_tasks(self):
-        self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
+        self._logger.log_info(f"Adding Trading View links scraping tasks.")
+        number_of_task_before = self._thread_manager.get_current_number_of_task()
+
+        # STOCKS
+        if self._switch_handler.is_enabled(
+            "web_scraper",
+            "trading_view",
+            "links",
+            f"{ScrapeMainType.STOCKS.value}",
+        ):
+            key = (
+                "links",
+                ScrapeMainType.STOCKS.value,
+                Country.VIETNAM.value,
+                StockType.COMMON_STOCK.value,
+                StockSector.COMMERCIAL_SERVICES.value,
+            )
+            self._thread_manager.add_task(
+                Task(format_key_for_name(key), self._scrape_link_from, key)
+            )
+
+        number_of_task_after = self._thread_manager.get_current_number_of_task()
+        self._logger.log_info(
+            f"Added {number_of_task_after - number_of_task_before} Trading View links scraping tasks."
+        )
 
     def _scrape_data_macroeconomics_exchange_rate_usd_vnd(
         self, key: Tuple[ScrapeMainType, ScrapeSubType]
@@ -236,9 +283,7 @@ class WebScraper:
         try:
             scrape_main_type = key[0].value
             scrape_sub_type = key[1].value
-            folder_path = (
-                f"{SCRAPER_BRONZE_DATA_DIR}/{scrape_main_type}/{scrape_sub_type}"
-            )
+            folder_path = f"{SCRAPER_RAW_DATA_DIR}/{scrape_main_type}/{scrape_sub_type}"
             file_name = scrape_sub_type
 
             start_time = SCRAPER_START_DATE
@@ -300,9 +345,7 @@ class WebScraper:
         try:
             scrape_main_type = key[0].value
             scrape_sub_type = key[1].value
-            folder_path = (
-                f"{SCRAPER_BRONZE_DATA_DIR}/{scrape_main_type}/{scrape_sub_type}"
-            )
+            folder_path = f"{SCRAPER_RAW_DATA_DIR}/{scrape_main_type}/{scrape_sub_type}"
             file_name = scrape_sub_type
 
             start_time = SCRAPER_START_DATE

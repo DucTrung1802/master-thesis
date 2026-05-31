@@ -599,3 +599,85 @@ class EconomyCategory(Enum):
     CONSUMER = "consumer"
     HOUSING = "housing"
     TAXES = "taxes"
+
+
+class ScrapeActionType(Enum):
+    CLICK_BUTTON = "click_button"
+    INPUT_TEXT = "input_text"
+    GO_TO_LINK = "go_to_link"
+
+
+@dataclass(frozen=True)
+class ScrapeAction:
+    scrape_action_type: ScrapeActionType
+    xpath: str
+    value: str
+
+
+@dataclass(frozen=True)
+class SourceInfo:
+    scrape_action_list: List[ScrapeAction]
+
+
+SCRAPING_MAP = {
+    (
+        "links",
+        ScrapeMainType.STOCKS.value,
+        Country.VIETNAM.value,
+        StockType.COMMON_STOCK.value,
+        StockSector.COMMERCIAL_SERVICES.value,
+    ): SourceInfo(
+        [
+            ScrapeAction(
+                scrape_action_type=ScrapeActionType.CLICK_BUTTON,
+                xpath=TRADING_VIEW_SEARCH_BUTTON_XPATH,
+                value="",
+            ),
+            ScrapeAction(
+                scrape_action_type=ScrapeActionType.CLICK_BUTTON,
+                xpath=TRADING_VIEW_SYMBOLS_BUTTON_XPATH,
+                value=None,
+            ),
+            ScrapeAction(
+                scrape_action_type=ScrapeActionType.CLICK_BUTTON,
+                xpath=TRADING_VIEW_STOCKS_BUTTON_XPATH,
+                value=None,
+            ),
+            ScrapeAction(
+                scrape_action_type=ScrapeActionType.CLICK_BUTTON,
+                xpath=TRADING_VIEW_STOCKS_COUNTRIES_BUTTON_XPATH,
+                value=None,
+            ),
+            ScrapeAction(
+                scrape_action_type=ScrapeActionType.INPUT_TEXT,
+                xpath=TRADING_VIEW_STOCKS_COUNTRIES_BUTTON_XPATH,
+                value="vietnam",
+            ),
+            ScrapeAction(
+                scrape_action_type=ScrapeActionType.CLICK_BUTTON,
+                xpath='//*[@id="source-item-5-0-0"]',
+                value=None,
+            ),
+            ScrapeAction(
+                scrape_action_type=ScrapeActionType.CLICK_BUTTON,
+                xpath=TRADING_VIEW_STOCKS_TYPES_BUTTON_XPATH,
+                value=None,
+            ),
+            ScrapeAction(
+                scrape_action_type=ScrapeActionType.CLICK_BUTTON,
+                xpath='//*[@id=":rra:"]/div/div/div[1]/div[2]/div/div[2]',
+                value=None,
+            ),
+            ScrapeAction(
+                scrape_action_type=ScrapeActionType.CLICK_BUTTON,
+                xpath=TRADING_VIEW_STOCKS_SECTORS_BUTTON_XPATH,
+                value=None,
+            ),
+            ScrapeAction(
+                scrape_action_type=ScrapeActionType.CLICK_BUTTON,
+                xpath='//*[@id=":rrf:"]/div/div/div[1]/div[2]/div/div[2]',
+                value=None,
+            ),
+        ]
+    ),
+}
