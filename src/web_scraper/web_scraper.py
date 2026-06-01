@@ -266,69 +266,89 @@ class WebScraper:
                     web_driver.get(action.value)
                     time.sleep(SCRAPER_BASE_WAIT_TIME)
 
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
+            time.sleep(0.1)
 
     def _helper_extract_trading_view_links(
         self, web_driver: ChromiumDriver
     ) -> List[str]:
         """
-        Scroll through the TradingView screener table and collect all stock URLs.
-        TradingView renders rows lazily, so we scroll the table container until no
-        new rows appear, then extract hrefs from every row.
+        Fast TradingView Launch Chart extractor.
+
+        Uses:
+        - data-symbol-name
+        - large scroll jumps
+        - end-of-scroll detection
+        - minimal sleeping
         """
-        # XPath for the scrollable table body used by the TradingView screener
-        table_body_xpath = "//div[contains(@class,'tv-data-table__tbody')]"
-        row_link_xpath = ".//a[contains(@class,'apply-common-tooltip')]"
 
-        collected: dict[str, str] = {}  # symbol -> url, deduped
+        collected_symbols = set()
+        last_scroll_top = -1
+        no_move_count = 0
+        max_no_move = 3
 
-        prev_count = -1
-        stall_retries = 0
-        max_stall_retries = 3
+        while no_move_count < max_no_move:
 
-        while stall_retries < max_stall_retries:
-            # Parse current DOM
-            bs4_parser = self._helper_update_bs4_parser(web_driver)
-            rows = bs4_parser.find_all(
-                "tr", class_=lambda c: c and "tv-data-table__row" in c
-            )
+            result = web_driver.execute_script("""
+                const container =
+                    document.querySelector(
+                        '.scrollContainer-FSX6AatX'
+                    );
 
-            for row in rows:
-                link_tag = row.find("a", href=True)
-                if link_tag:
-                    href = link_tag["href"]
-                    symbol = link_tag.get_text(strip=True)
-                    if href and href not in collected:
-                        full_url = (
-                            href
-                            if href.startswith("http")
-                            else f"https://www.tradingview.com{href}"
-                        )
-                        collected[href] = full_url
-                        self._logger.log_info(f"Found link: {symbol} -> {full_url}")
+                if (!container) {
+                    return {
+                        symbols: [],
+                        scrollTop: -1
+                    };
+                }
 
-            current_count = len(collected)
-            if current_count == prev_count:
-                stall_retries += 1
+                const symbols = Array.from(
+                    document.querySelectorAll(
+                        'div[data-role="list-item"][data-symbol-name]'
+                    )
+                ).map(
+                    el => el.getAttribute('data-symbol-name')
+                );
+
+                const currentTop = container.scrollTop;
+
+                // Bigger jump
+                container.scrollTop += 3000;
+
+                return {
+                    symbols: symbols,
+                    scrollTop: currentTop
+                };
+                """)
+
+            symbols = result["symbols"]
+            current_scroll_top = result["scrollTop"]
+
+            # Collect symbols
+            for symbol in symbols:
+                if symbol:
+                    collected_symbols.add(symbol.strip())
+
+            self._logger.log_info(f"Collected symbols: {len(collected_symbols)}")
+
+            # Detect scroll end
+            if current_scroll_top == last_scroll_top:
+                no_move_count += 1
             else:
-                stall_retries = 0
-                prev_count = current_count
+                no_move_count = 0
+                last_scroll_top = current_scroll_top
 
-            # Scroll the table container down to trigger lazy loading
-            try:
-                table_body = web_driver.find_element(By.XPATH, table_body_xpath)
-                web_driver.execute_script(
-                    "arguments[0].scrollTop += arguments[0].clientHeight;",
-                    table_body,
-                )
-            except Exception:
-                # Fall back to scrolling the whole page if container not found
-                web_driver.execute_script("window.scrollBy(0, 800);")
+            # Smaller wait
+            time.sleep(0.3)
 
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
+        # Build URLs once
+        links = [
+            f"https://www.tradingview.com/chart/?symbol={symbol}"
+            for symbol in sorted(collected_symbols)
+        ]
 
-        self._logger.log_info(f"Extracted {len(collected)} unique links.")
-        return list(collected.values())
+        self._logger.log_info(f"Finished collecting {len(links)} chart links.")
+
+        return links
 
     def _scrape_links_stocks_vietnam_common_stock_commercial_services(self, key: Tuple):
         self._logger.log_info(f'Start scraping links for "{format_key_for_name(key)}".')
@@ -337,10 +357,13 @@ class WebScraper:
 
         try:
             folder_path = f"{SCRAPER_RAW_DATA_DIR}/{format_key_for_path(key)}"
+
             file_name = "trading_view_links"
+
             current_time = datetime.now()
+
             file_path = (
-                f"{folder_path}/{file_name}_{current_time.strftime('%Y-%m-%d')}.csv"
+                f"{folder_path}/" f"{file_name}_{current_time.strftime('%Y-%m-%d')}.csv"
             )
 
             if os.path.exists(file_path):
@@ -351,34 +374,79 @@ class WebScraper:
 
             os.makedirs(folder_path, exist_ok=True)
 
-            # Navigate to TradingView home
+            # Navigate
             web_driver, bs4_parser = self._helper_navigate_to_url(
-                web_driver, TRADING_VIEW_HOME_PAGE_URL
+                web_driver,
+                TRADING_VIEW_HOME_PAGE_URL,
             )
 
-            # Execute all filter actions defined in SCRAPING_MAP
+            # Apply filters
             source_info = SCRAPING_MAP[key]
+
             self._helper_execute_scrape_actions(
-                web_driver, source_info.scrape_action_list
+                web_driver,
+                source_info.scrape_action_list,
             )
 
-            # Wait for the screener table to settle after filters are applied
-            time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
+            time.sleep(10)
 
-            # Scroll through the table and collect all stock links
+            self._logger.log_info(
+                f"Current URL after filters: {web_driver.current_url}"
+            )
+
+            self._logger.log_info(f"Page title: {web_driver.title}")
+
+            anchors = web_driver.execute_script("""
+                return document.querySelectorAll('a').length;
+                """)
+
+            self._logger.log_info(f"Anchor count on page: {anchors}")
+
+            # Extract links
             links = self._helper_extract_trading_view_links(web_driver)
 
-            # Save to CSV
-            with open(file_path, "w", newline="", encoding="utf-8") as f:
-                writer = csv.writer(f)
-                writer.writerow(["url"])
-                for link in links:
-                    writer.writerow([link])
+            self._logger.log_info(f"Total links extracted: {len(links)}")
 
-            self._logger.log_info(f"Saved {len(links)} links to {file_path}.")
+            scrape_main_type = key[1]
+            sub_type_value_1 = key[2]
+            sub_type_value_2 = key[3]
+            sub_type_value_3 = key[4]
+
+            with open(
+                file_path,
+                "w",
+                newline="",
+                encoding="utf-8",
+            ) as f:
+
+                writer = csv.writer(f)
+
+                # header
+                writer.writerow(TRADING_VIEW_TABLE_SCHEMA)
+
+                # rows
+                for url in links:
+                    writer.writerow(
+                        [
+                            scrape_main_type,
+                            f"{scrape_main_type}_country",
+                            sub_type_value_1,
+                            f"{scrape_main_type}_stock_type",
+                            sub_type_value_2,
+                            f"{scrape_main_type}_sector",
+                            sub_type_value_3,
+                            url,
+                        ]
+                    )
+
+            self._logger.log_info(f"Saved {len(links)} links to {file_path}")
+
+        except Exception as e:
+            self._logger.log_error(f"Failed scraping links: {str(e)}")
+            raise
 
         finally:
-            web_driver.close()
+            web_driver.quit()
 
         self._logger.log_info(
             f'Finish scraping links for "{format_key_for_name(key)}".'

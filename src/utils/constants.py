@@ -119,7 +119,6 @@ TRADING_VIEW_TABLE_SCHEMA = [
     "scrape_main_type",
     "sub_type_name_1",
     "sub_type_value_1",
-    "sub_type_value_2",
     "sub_type_name_2",
     "sub_type_value_2",
     "sub_type_name_3",
