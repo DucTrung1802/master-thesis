@@ -607,10 +607,32 @@ class ScrapeActionType(Enum):
     GO_TO_LINK = "go_to_link"
 
 
+class TradingViewXpath(Enum):
+    SEARCH_BUTTON = "/html/body/div[3]/div[3]/div[2]/div[2]/div/div/div/button[1]"
+    SYMBOLS_BUTTON = '//*[@id="Symbols"]'
+
+    STOCKS_BUTTON = '//*[@id="stocks"]'
+    STOCKS_COUNTRIES_BUTTON = '//*[@id="overlap-manager-root"]/div[2]/div/div[2]/div/div/div[1]/div/div[2]/div/div[3]/div[1]/div/div/div/button'
+    STOCKS_COUNTRIES_INPUT = '//*[@id="overlap-manager-root"]/div[2]/div/div[2]/div/div/div[1]/div/div[2]/div/div/div[2]/div/input'
+    STOCKS_COUNTRIES_RESULT_BUTTON = '//*[@id="source-item-5-0-0"]'
+
+    STOCKS_TYPES_BUTTON = (
+        '//*[@data-qa-id="stock-type-select"]//*[@data-qa-id="ss-filter-select-button"]'
+    )
+    STOCKS_TYPES_COMMON_STOCK_BUTTON = (
+        '//*[@role="menuitemcheckbox" and @aria-label="Common stock"]'
+    )
+
+    STOCKS_SECTORS_BUTTON = '//*[@data-qa-id="stock-sector-select"]//*[@data-qa-id="ss-filter-select-button"]'
+    STOCKS_SECTORS_COMMERCIAL_SERVICES_BUTTON = (
+        '//*[@role="menuitemcheckbox" and @aria-label="Commercial Services"]'
+    )
+
+
 @dataclass(frozen=True)
 class ScrapeAction:
     scrape_action_type: ScrapeActionType
-    xpath: str
+    xpath: TradingViewXpath
     value: str
 
 
@@ -627,57 +649,86 @@ SCRAPING_MAP = {
         StockType.COMMON_STOCK.value,
         StockSector.COMMERCIAL_SERVICES.value,
     ): SourceInfo(
-        [
+        scrape_action_list=[
             ScrapeAction(
                 scrape_action_type=ScrapeActionType.CLICK_BUTTON,
-                xpath=TRADING_VIEW_SEARCH_BUTTON_XPATH,
-                value="",
-            ),
-            ScrapeAction(
-                scrape_action_type=ScrapeActionType.CLICK_BUTTON,
-                xpath=TRADING_VIEW_SYMBOLS_BUTTON_XPATH,
+                xpath=TradingViewXpath.SEARCH_BUTTON,
                 value=None,
             ),
             ScrapeAction(
                 scrape_action_type=ScrapeActionType.CLICK_BUTTON,
-                xpath=TRADING_VIEW_STOCKS_BUTTON_XPATH,
+                xpath=TradingViewXpath.SYMBOLS_BUTTON,
                 value=None,
             ),
             ScrapeAction(
                 scrape_action_type=ScrapeActionType.CLICK_BUTTON,
-                xpath=TRADING_VIEW_STOCKS_COUNTRIES_BUTTON_XPATH,
+                xpath=TradingViewXpath.STOCKS_BUTTON,
+                value=None,
+            ),
+            ScrapeAction(
+                scrape_action_type=ScrapeActionType.CLICK_BUTTON,
+                xpath=TradingViewXpath.STOCKS_COUNTRIES_BUTTON,
                 value=None,
             ),
             ScrapeAction(
                 scrape_action_type=ScrapeActionType.INPUT_TEXT,
-                xpath=TRADING_VIEW_STOCKS_COUNTRIES_BUTTON_XPATH,
+                xpath=TradingViewXpath.STOCKS_COUNTRIES_INPUT,
                 value="vietnam",
             ),
             ScrapeAction(
                 scrape_action_type=ScrapeActionType.CLICK_BUTTON,
-                xpath='//*[@id="source-item-5-0-0"]',
+                xpath=TradingViewXpath.STOCKS_COUNTRIES_RESULT_BUTTON,
                 value=None,
             ),
             ScrapeAction(
                 scrape_action_type=ScrapeActionType.CLICK_BUTTON,
-                xpath=TRADING_VIEW_STOCKS_TYPES_BUTTON_XPATH,
+                xpath=TradingViewXpath.STOCKS_TYPES_BUTTON,
                 value=None,
             ),
             ScrapeAction(
                 scrape_action_type=ScrapeActionType.CLICK_BUTTON,
-                xpath='//*[@id=":rra:"]/div/div/div[1]/div[2]/div/div[2]',
+                xpath=TradingViewXpath.STOCKS_TYPES_COMMON_STOCK_BUTTON,
                 value=None,
             ),
             ScrapeAction(
                 scrape_action_type=ScrapeActionType.CLICK_BUTTON,
-                xpath=TRADING_VIEW_STOCKS_SECTORS_BUTTON_XPATH,
+                xpath=TradingViewXpath.STOCKS_SECTORS_BUTTON,
                 value=None,
             ),
             ScrapeAction(
                 scrape_action_type=ScrapeActionType.CLICK_BUTTON,
-                xpath='//*[@id=":rrf:"]/div/div/div[1]/div[2]/div/div[2]',
+                xpath=TradingViewXpath.STOCKS_SECTORS_COMMERCIAL_SERVICES_BUTTON,
                 value=None,
             ),
         ]
     ),
 }
+
+
+# MODEL TRAIN ENUMS
+class ModelAchitectureType(Enum):
+    LSTM = "lstm"
+    CNN = "cnn"
+
+
+class WindowType(Enum):
+    EXPANDING = "expanding"
+    SLIDING = "sliding"
+
+
+class OptimizerType(Enum):
+    ADAM = "adam"
+    SGD = "sgd"
+
+
+class LossFunctionType(Enum):
+    MSE = "mse"
+
+
+class ScalerType(Enum):
+    MINMAX = "minmax"
+    STANDARD = "standard"
+
+
+class MetricType(Enum):
+    MAPE = "mape"

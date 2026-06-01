@@ -126,13 +126,3 @@ TRADING_VIEW_TABLE_SCHEMA = [
     "sub_type_value_3",
     "url",
 ]
-TRADING_VIEW_SEARCH_BUTTON_XPATH = (
-    "/html/body/div[3]/div[3]/div[2]/div[2]/div/div/div/button[1]"
-)
-TRADING_VIEW_SYMBOLS_BUTTON_XPATH = '//*[@id="Symbols"]'
-
-TRADING_VIEW_STOCKS_BUTTON_XPATH = '//*[@id="stocks"]'
-TRADING_VIEW_STOCKS_COUNTRIES_BUTTON_XPATH = '//*[@id="overlap-manager-root"]/div[2]/div/div[2]/div/div/div[1]/div/div[2]/div/div[3]/div[1]/div/div/div/button'
-TRADING_VIEW_STOCKS_COUNTRIES_INPUT_XPATH = '//*[@id="overlap-manager-root"]/div[2]/div/div[2]/div/div/div[1]/div/div[2]/div/div/div[2]/div/input'
-TRADING_VIEW_STOCKS_TYPES_BUTTON_XPATH = '//*[@id=":rpo:"]'
-TRADING_VIEW_STOCKS_SECTORS_BUTTON_XPATH = '//*[@id=":rpt:"]'

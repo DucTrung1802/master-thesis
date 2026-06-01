@@ -119,10 +119,22 @@ class WebScraper:
                 input_element.send_keys(Keys.ENTER)
 
     def _helper_click_element(self, web_driver: ChromiumDriver, xpath: str) -> None:
-        element = WebDriverWait(web_driver, 10).until(
-            EC.element_to_be_clickable((By.XPATH, xpath))
+        def find_visible(driver):
+            candidates = driver.find_elements(By.XPATH, xpath)
+            for el in candidates:
+                if el.is_displayed():
+                    return el
+            return False
+
+        element = WebDriverWait(web_driver, 10).until(find_visible)
+        web_driver.execute_script(
+            "arguments[0].scrollIntoView({block: 'center'});", element
         )
-        element.click()
+        time.sleep(0.3)
+        try:
+            element.click()
+        except Exception:
+            web_driver.execute_script("arguments[0].click();", element)
 
     def _helper_extract_table(self, table: Optional[Tag]):
         # Extract headers
@@ -223,8 +235,154 @@ class WebScraper:
         except Exception as e:
             self._logger.log_warning(f"Failed to remove elements by xpath: {xpath}")
 
+    def _helper_execute_scrape_actions(
+        self,
+        web_driver: ChromiumDriver,
+        scrape_action_list: List[ScrapeAction],
+    ) -> None:
+        """Execute a sequence of ScrapeActions (click / input_text / go_to_link) in order."""
+        for action in scrape_action_list:
+            xpath = action.xpath.value
+
+            match action.scrape_action_type:
+                case ScrapeActionType.CLICK_BUTTON:
+                    self._logger.log_info(f"Clicking element: {action.xpath.name}")
+                    self._helper_click_element(web_driver, xpath)
+
+                case ScrapeActionType.INPUT_TEXT:
+                    self._logger.log_info(
+                        f"Inputting text into {action.xpath.name}: '{action.value}'"
+                    )
+                    self._helper_input_text(
+                        web_driver,
+                        xpath,
+                        action.value,
+                        char_by_char=True,
+                        confirm="none",
+                    )
+
+                case ScrapeActionType.GO_TO_LINK:
+                    self._logger.log_info(f"Navigating to link: {action.value}")
+                    web_driver.get(action.value)
+                    time.sleep(SCRAPER_BASE_WAIT_TIME)
+
+            time.sleep(SCRAPER_BASE_WAIT_TIME)
+
+    def _helper_extract_trading_view_links(
+        self, web_driver: ChromiumDriver
+    ) -> List[str]:
+        """
+        Scroll through the TradingView screener table and collect all stock URLs.
+        TradingView renders rows lazily, so we scroll the table container until no
+        new rows appear, then extract hrefs from every row.
+        """
+        # XPath for the scrollable table body used by the TradingView screener
+        table_body_xpath = "//div[contains(@class,'tv-data-table__tbody')]"
+        row_link_xpath = ".//a[contains(@class,'apply-common-tooltip')]"
+
+        collected: dict[str, str] = {}  # symbol -> url, deduped
+
+        prev_count = -1
+        stall_retries = 0
+        max_stall_retries = 3
+
+        while stall_retries < max_stall_retries:
+            # Parse current DOM
+            bs4_parser = self._helper_update_bs4_parser(web_driver)
+            rows = bs4_parser.find_all(
+                "tr", class_=lambda c: c and "tv-data-table__row" in c
+            )
+
+            for row in rows:
+                link_tag = row.find("a", href=True)
+                if link_tag:
+                    href = link_tag["href"]
+                    symbol = link_tag.get_text(strip=True)
+                    if href and href not in collected:
+                        full_url = (
+                            href
+                            if href.startswith("http")
+                            else f"https://www.tradingview.com{href}"
+                        )
+                        collected[href] = full_url
+                        self._logger.log_info(f"Found link: {symbol} -> {full_url}")
+
+            current_count = len(collected)
+            if current_count == prev_count:
+                stall_retries += 1
+            else:
+                stall_retries = 0
+                prev_count = current_count
+
+            # Scroll the table container down to trigger lazy loading
+            try:
+                table_body = web_driver.find_element(By.XPATH, table_body_xpath)
+                web_driver.execute_script(
+                    "arguments[0].scrollTop += arguments[0].clientHeight;",
+                    table_body,
+                )
+            except Exception:
+                # Fall back to scrolling the whole page if container not found
+                web_driver.execute_script("window.scrollBy(0, 800);")
+
+            time.sleep(SCRAPER_BASE_WAIT_TIME)
+
+        self._logger.log_info(f"Extracted {len(collected)} unique links.")
+        return list(collected.values())
+
     def _scrape_links_stocks_vietnam_common_stock_commercial_services(self, key: Tuple):
         self._logger.log_info(f'Start scraping links for "{format_key_for_name(key)}".')
+
+        web_driver, bs4_parser = self._helper_initialize_web_driver_and_bs4_parser()
+
+        try:
+            folder_path = f"{SCRAPER_RAW_DATA_DIR}/{format_key_for_path(key)}"
+            file_name = "trading_view_links"
+            current_time = datetime.now()
+            file_path = (
+                f"{folder_path}/{file_name}_{current_time.strftime('%Y-%m-%d')}.csv"
+            )
+
+            if os.path.exists(file_path):
+                self._logger.log_info(
+                    f"File exists: {file_path}, deleting to re-fetch."
+                )
+                os.remove(file_path)
+
+            os.makedirs(folder_path, exist_ok=True)
+
+            # Navigate to TradingView home
+            web_driver, bs4_parser = self._helper_navigate_to_url(
+                web_driver, TRADING_VIEW_HOME_PAGE_URL
+            )
+
+            # Execute all filter actions defined in SCRAPING_MAP
+            source_info = SCRAPING_MAP[key]
+            self._helper_execute_scrape_actions(
+                web_driver, source_info.scrape_action_list
+            )
+
+            # Wait for the screener table to settle after filters are applied
+            time.sleep(SCRAPER_BASE_WAIT_TIME * 2)
+
+            # Scroll through the table and collect all stock links
+            links = self._helper_extract_trading_view_links(web_driver)
+
+            # Save to CSV
+            with open(file_path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(["url"])
+                for link in links:
+                    writer.writerow([link])
+
+            self._logger.log_info(f"Saved {len(links)} links to {file_path}.")
+
+        finally:
+            web_driver.close()
+
+        self._logger.log_info(
+            f'Finish scraping links for "{format_key_for_name(key)}".'
+        )
 
     def _scrape_link_from(self, key: Tuple):
 
@@ -273,9 +431,7 @@ class WebScraper:
             f"Added {number_of_task_after - number_of_task_before} Trading View links scraping tasks."
         )
 
-    def _scrape_data_macroeconomics_exchange_rate_usd_vnd(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType]
-    ) -> None:
+    def _scrape_data_macroeconomics_exchange_rate_usd_vnd(self, key: Tuple) -> None:
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
 
         web_driver, bs4_parser = self._helper_initialize_web_driver_and_bs4_parser()
@@ -325,9 +481,7 @@ class WebScraper:
 
         self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
 
-    def _scrape_data_macroeconomics_vietnam_interbank_rate(
-        self, key: Tuple[ScrapeMainType, ScrapeSubType]
-    ) -> None:
+    def _scrape_data_macroeconomics_vietnam_interbank_rate(self, key: Tuple) -> None:
         self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
 
         web_driver, bs4_parser = self._helper_initialize_web_driver_and_bs4_parser()

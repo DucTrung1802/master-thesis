@@ -230,7 +230,13 @@ def format_key_for_name(key):
     )
 
 
-def format_key_for_table(key: Tuple[ScrapeMainType, ScrapeSubType]):
+def format_key_for_path(key):
+    return "/".join(
+        k.name.lower() if isinstance(k, Enum) else str(k).lower() for k in key
+    )
+
+
+def format_key_for_table(key: Tuple):
     return ".".join(k.name.lower() for k in key)
 
 
