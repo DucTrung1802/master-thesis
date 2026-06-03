@@ -27,20 +27,20 @@ def main():
     my_data_preprocessor.ingest_silver_data()
     my_data_preprocessor.ingest_gold_data()
 
-    stock_code_list = STOCK_CODES_TO_BE_EXPORTED_TO_GOLD_DB
+    # stock_code_list = STOCK_CODES_TO_BE_EXPORTED_TO_GOLD_DB
 
-    my_data_postprocessor = DataPostprocessor(
-        logger=my_logger,
-        switch_handler=my_switch_handler,
-        stock_list=stock_code_list,
-        include_macroeconomics=False,  # commented out for now
-        market_index_configs=[
-            MarketIndexConfig(index_code="VNINDEX", prefix="vnindex"),
-            MarketIndexConfig(index_code="HNX-INDEX", prefix="hnx_index"),
-            MarketIndexConfig(index_code="UPCOM-INDEX", prefix="upcom_index"),
-        ],
-    )
-    my_data_postprocessor.export_unified_dataframe()
+    # my_data_postprocessor = DataPostprocessor(
+    #     logger=my_logger,
+    #     switch_handler=my_switch_handler,
+    #     stock_list=stock_code_list,
+    #     include_macroeconomics=False,  # commented out for now
+    #     market_index_configs=[
+    #         MarketIndexConfig(index_code="VNINDEX", prefix="vnindex"),
+    #         MarketIndexConfig(index_code="HNX-INDEX", prefix="hnx_index"),
+    #         MarketIndexConfig(index_code="UPCOM-INDEX", prefix="upcom_index"),
+    #     ],
+    # )
+    # my_data_postprocessor.export_unified_dataframe()
 
     # for stock_code in stock_code_list:
     #     my_logger.log_info(f"Exporting unified dataframe for stock code: {stock_code}")

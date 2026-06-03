@@ -266,9 +266,6 @@ class StockType(Enum):
     PRE_IPO = "pre_ipo"
 
 
-from enum import Enum
-
-
 class StockSector(Enum):
     COMMERCIAL_SERVICES = "commercial_services"
     COMMUNICATIONS = "communications"
@@ -311,9 +308,6 @@ class FutureCategory(Enum):
     WEATHER = "weather"
     BUILDING_MATERIALS = "building_materials"
     CHEMICALS = "chemicals"
-
-
-from enum import Enum
 
 
 class ForexSource(Enum):
@@ -365,9 +359,6 @@ class ForexSource(Enum):
     VANTAGE = "vantage"
     VELOCITY_TRADE = "velocity_trade"
     WH_SELFINVEST = "wh_selfinvest"
-
-
-from enum import Enum
 
 
 class CryptoSource(Enum):
@@ -608,3 +599,227 @@ class EconomyCategory(Enum):
     CONSUMER = "consumer"
     HOUSING = "housing"
     TAXES = "taxes"
+
+
+class ScrapeActionType(Enum):
+    CLICK_BUTTON = "click_button"
+    INPUT_TEXT = "input_text"
+    GO_TO_LINK = "go_to_link"
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# TradingView XPaths  (structural only – no per-sector / per-type entries)
+# ──────────────────────────────────────────────────────────────────────────────
+class TradingViewXpath(Enum):
+    # Search / symbol panel
+    SEARCH_BUTTON = "/html/body/div[3]/div[3]/div[2]/div[2]/div/div/div/button[1]"
+    SYMBOLS_BUTTON = '//*[@id="Symbols"]'
+
+    # Asset class
+    STOCKS_BUTTON = '//*[@id="stocks"]'
+
+    # Country filter
+    STOCKS_COUNTRIES_BUTTON = (
+        '//*[@id="overlap-manager-root"]/div[2]/div/div[2]/div/div/div[1]'
+        "/div/div[2]/div/div[3]/div[1]/div/div/div/button"
+    )
+    STOCKS_COUNTRIES_INPUT = (
+        '//*[@id="overlap-manager-root"]/div[2]/div/div[2]/div/div/div[1]'
+        "/div/div[2]/div/div/div[2]/div/input"
+    )
+    # Country result items follow the pattern //*[@id="source-item-5-{row}-{col}"]
+    # The Vietnam result is always the first hit → row=0, col=0
+    STOCKS_COUNTRIES_FIRST_RESULT = '//*[@id="source-item-5-0-0"]'
+
+    # Stock-type dropdown opener
+    STOCKS_TYPES_BUTTON = (
+        '//*[@data-qa-id="stock-type-select"]'
+        '//*[@data-qa-id="ss-filter-select-button"]'
+    )
+
+    # Stock-sector dropdown opener
+    STOCKS_SECTORS_BUTTON = (
+        '//*[@data-qa-id="stock-sector-select"]'
+        '//*[@data-qa-id="ss-filter-select-button"]'
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Aria-label maps  (how TradingView labels each enum value in its UI)
+# ──────────────────────────────────────────────────────────────────────────────
+
+# TradingView aria-labels for StockType checkboxes
+STOCK_TYPE_ARIA_LABEL: Dict[StockType, str] = {
+    StockType.COMMON_STOCK: "Common stock",
+    StockType.PREFERRED_STOCK: "Preferred stock",
+    StockType.DEPOSITORY_RECEIPT: "Depository receipt",
+    StockType.WARRANT: "Warrant",
+    StockType.PRE_IPO: "Pre-IPO",
+}
+
+# TradingView aria-labels for StockSector checkboxes
+STOCK_SECTOR_ARIA_LABEL: Dict[StockSector, str] = {
+    StockSector.COMMERCIAL_SERVICES: "Commercial Services",
+    StockSector.COMMUNICATIONS: "Communications",
+    StockSector.CONSUMER_DURABLES: "Consumer Durables",
+    StockSector.CONSUMER_NON_DURABLES: "Consumer Non-Durables",
+    StockSector.CONSUMER_SERVICES: "Consumer Services",
+    StockSector.DISTRIBUTION_SERVICES: "Distribution Services",
+    StockSector.ELECTRONIC_TECHNOLOGY: "Electronic Technology",
+    StockSector.ENERGY_MINERALS: "Energy Minerals",
+    StockSector.FINANCE: "Finance",
+    StockSector.GOVERNMENT_SECTOR: "Government",
+    StockSector.HEALTH_SERVICES: "Health Services",
+    StockSector.HEALTH_TECHNOLOGY: "Health Technology",
+    StockSector.INDUSTRIAL_SERVICES: "Industrial Services",
+    StockSector.MISCELLANEOUS: "Miscellaneous",
+    StockSector.NON_ENERGY_MINERALS: "Non-Energy Minerals",
+    StockSector.PROCESS_INDUSTRIES: "Process Industries",
+    StockSector.PRODUCER_MANUFACTURING: "Producer Manufacturing",
+    StockSector.RETAIL_TRADE: "Retail Trade",
+    StockSector.TECHNOLOGY_SERVICES: "Technology Services",
+    StockSector.TRANSPORTATION: "Transportation",
+    StockSector.UTILITIES: "Utilities",
+}
+
+# Country search-term map  (what to type into the country search box)
+COUNTRY_SEARCH_TERM: Dict[Country, str] = {
+    Country.VIETNAM: "vietnam",
+    Country.USA: "united states",
+    Country.UNITED_KINGDOM: "united kingdom",
+    Country.GERMANY: "germany",
+    Country.FRANCE: "france",
+    Country.JAPAN: "japan",
+    Country.INDIA: "india",
+    Country.MAINLAND_CHINA: "mainland china",
+    # … extend as needed
+}
+
+# Countries to scrape in add_trading_view_links_scraping_tasks.
+# Add / remove entries here to control which countries are processed.
+TRADING_VIEW_SCRAPE_COUNTRIES: List[Country] = [
+    Country.VIETNAM,
+    # Country.USA,
+    # Country.UNITED_KINGDOM,
+    # Country.GERMANY,
+    # Country.FRANCE,
+    # Country.JAPAN,
+    # Country.INDIA,
+    # Country.MAINLAND_CHINA,
+]
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# ScrapeAction  (unchanged shape, but xpath field is now Optional[TradingViewXpath]
+# so we can also carry a raw xpath string for dynamic cases)
+# ──────────────────────────────────────────────────────────────────────────────
+@dataclass(frozen=True)
+class ScrapeAction:
+    scrape_action_type: ScrapeActionType
+    # Either a TradingViewXpath enum member OR a raw xpath string
+    xpath: Union[TradingViewXpath, str]
+    value: Optional[str]
+
+    @property
+    def xpath_str(self) -> str:
+        """Always return a plain string regardless of whether xpath is an enum or str."""
+        return (
+            self.xpath.value if isinstance(self.xpath, TradingViewXpath) else self.xpath
+        )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Factory: build the full action list for any country × stock_type × sector
+# ──────────────────────────────────────────────────────────────────────────────
+def build_stock_link_scrape_actions(
+    country: Country,
+    stock_type: StockType,
+    sector: StockSector,
+) -> List[ScrapeAction]:
+    """
+    Dynamically build the TradingView filter action sequence for the given
+    country / stock_type / sector combination.
+
+    No hardcoded per-sector or per-type entries are needed; the XPaths for the
+    checkbox items are derived from the aria-label maps at call time.
+    """
+    type_label = STOCK_TYPE_ARIA_LABEL[stock_type]
+    sector_label = STOCK_SECTOR_ARIA_LABEL[sector]
+    country_term = COUNTRY_SEARCH_TERM.get(country, country.value)
+
+    type_checkbox_xpath = (
+        f'//*[@role="menuitemcheckbox" and @aria-label="{type_label}"]'
+    )
+    sector_checkbox_xpath = (
+        f'//*[@role="menuitemcheckbox" and @aria-label="{sector_label}"]'
+    )
+
+    return [
+        # 1. Open symbol search panel
+        ScrapeAction(
+            ScrapeActionType.CLICK_BUTTON, TradingViewXpath.SEARCH_BUTTON, None
+        ),
+        # 2. Switch to Symbols tab
+        ScrapeAction(
+            ScrapeActionType.CLICK_BUTTON, TradingViewXpath.SYMBOLS_BUTTON, None
+        ),
+        # 3. Select Stocks asset class
+        ScrapeAction(
+            ScrapeActionType.CLICK_BUTTON, TradingViewXpath.STOCKS_BUTTON, None
+        ),
+        # 4. Open country filter and pick the country
+        ScrapeAction(
+            ScrapeActionType.CLICK_BUTTON,
+            TradingViewXpath.STOCKS_COUNTRIES_BUTTON,
+            None,
+        ),
+        ScrapeAction(
+            ScrapeActionType.INPUT_TEXT,
+            TradingViewXpath.STOCKS_COUNTRIES_INPUT,
+            country_term,
+        ),
+        ScrapeAction(
+            ScrapeActionType.CLICK_BUTTON,
+            TradingViewXpath.STOCKS_COUNTRIES_FIRST_RESULT,
+            None,
+        ),
+        # 5. Open stock-type filter and pick the type
+        ScrapeAction(
+            ScrapeActionType.CLICK_BUTTON, TradingViewXpath.STOCKS_TYPES_BUTTON, None
+        ),
+        ScrapeAction(ScrapeActionType.CLICK_BUTTON, type_checkbox_xpath, None),
+        # 6. Open sector filter and pick the sector
+        ScrapeAction(
+            ScrapeActionType.CLICK_BUTTON, TradingViewXpath.STOCKS_SECTORS_BUTTON, None
+        ),
+        ScrapeAction(ScrapeActionType.CLICK_BUTTON, sector_checkbox_xpath, None),
+    ]
+
+
+# MODEL TRAIN ENUMS
+class ModelAchitectureType(Enum):
+    LSTM = "lstm"
+    CNN = "cnn"
+
+
+class WindowType(Enum):
+    EXPANDING = "expanding"
+    SLIDING = "sliding"
+
+
+class OptimizerType(Enum):
+    ADAM = "adam"
+    SGD = "sgd"
+
+
+class LossFunctionType(Enum):
+    MSE = "mse"
+
+
+class ScalerType(Enum):
+    MINMAX = "minmax"
+    STANDARD = "standard"
+
+
+class MetricType(Enum):
+    MAPE = "mape"

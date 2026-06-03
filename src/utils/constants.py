@@ -111,61 +111,20 @@ THREAD_MANAGER_POWER = 50  # unit: %
 # ===========================
 SCRAPER_START_DATE = datetime(2000, 1, 1)
 SCRAPER_END_DATE = datetime(2026, 4, 30)
-SCRAPER_BRONZE_DATA_DIR = "bronze_data"
+SCRAPER_RAW_DATA_DIR = "raw_data"
 SCRAPER_BASE_WAIT_TIME = 1  # seconds
 
+SCRAPER_RETRY_ATTEMPTS = 5  # number of retry attempts on failure
+SCRAPER_RETRY_DELAY = 5  # seconds to wait between retries
 
-# ===========================
-# MACROECONOMICS CONFIGURATION
-# ===========================
-
-
-# ===========================
-# STOCK MARKET CONFIGURATION
-# ===========================
-STOCK_MARKET_INDEX_HEADER = [
-    "date",
-    "close",
-    "adjusted_close",
-    "change",
-    "matched_volume",
-    "matched_value",
-    "negotiated_volume",
-    "negotiated_value",
-    "open",
-    "high",
-    "low",
+TRADING_VIEW_HOME_PAGE_URL = "https://www.tradingview.com/"
+TRADING_VIEW_TABLE_SCHEMA = [
+    "scrape_main_type",
+    "sub_type_name_1",
+    "sub_type_value_1",
+    "sub_type_name_2",
+    "sub_type_value_2",
+    "sub_type_name_3",
+    "sub_type_value_3",
+    "url",
 ]
-
-STOCK_CODES_TO_BE_EXPORTED_TO_GOLD_DB = ["FPT", "GAS", "VIC", "VCB"]
-
-
-# ===========================
-# ENTERPRISE CONFIGURATION
-# ===========================
-PARALLEL_SCRAPE_ENTERPRISE_STOCK_INFORMATION = 8
-
-
-# ===========================
-# TRAIN TEST CREATOR CONFIGURATION
-# ===========================
-TRAIN_TEST_SET_DIR = f"../../train_test_set"
-
-
-# ===========================
-# DATA EVALUATOR CONFIGURATION
-# ===========================
-DATA_EVALUATOR_INPUT_FOLDER_PATH = f"../../train_test_set"
-
-
-# ===========================
-# MODEL CONFIGURATION
-# ===========================
-PATIENCE = 15  # Continuous epoches that the validation loss does not decrease
-
-
-# ===========================
-# WANDB CONFIGURATION
-# ===========================
-WANDB_ENTITY_NAME = "trung-lyduc18"
-WANDB_PROJECT_NAME = "master_thesis"

@@ -18,7 +18,7 @@ from dtos.tabular_database_driver_dtos.postgre_sql_connection_dto import (
 from dtos.tabular_database_driver_dtos.tabular_database_driver_dtos import *
 from tabular_database_driver.postgre_sql_driver import PostgreSQLDriver
 from thread_manager.thread_manager import ThreadManager
-from utils.constants import SCRAPER_BRONZE_DATA_DIR
+from utils.constants import SCRAPER_RAW_DATA_DIR
 from utils.enums import *
 from utils.utils import *
 from utils.switch_handler import SwitchHandler
@@ -987,7 +987,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -1152,7 +1152,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -1294,7 +1294,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -1457,7 +1457,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -1601,7 +1601,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -1746,7 +1746,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -1851,7 +1851,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -1994,7 +1994,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -2137,7 +2137,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -2242,7 +2242,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -2347,7 +2347,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -2454,7 +2454,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -2599,7 +2599,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -2740,7 +2740,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -2896,7 +2896,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -3013,7 +3013,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -3128,7 +3128,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -3243,7 +3243,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -3344,7 +3344,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -3449,7 +3449,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -3554,7 +3554,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -3699,7 +3699,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -3804,7 +3804,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -3912,7 +3912,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -4081,7 +4081,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -4203,7 +4203,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -4355,7 +4355,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -4479,7 +4479,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -4587,7 +4587,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -4780,7 +4780,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         file_path = get_newest_file_path(
@@ -4973,7 +4973,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         table_name = Table.GOLD_PRICE.__qualname__.lower()
@@ -5135,7 +5135,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         table_name = Table.OIL_PRICE.__qualname__.lower()
@@ -5295,7 +5295,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         table_name = Table.DOW_JONES.__qualname__.lower()
@@ -5455,7 +5455,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         table_name = Table.NYSE_COMPOSITE.__qualname__.lower()
@@ -5616,7 +5616,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         table_name = Table.SNP_500.__qualname__.lower()
@@ -5775,7 +5775,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         table_name = Table.NASDAQ_COMPOSITE.__qualname__.lower()
@@ -5938,7 +5938,7 @@ class DataPreprocessor:
         )
 
         folder_path = (
-            f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
+            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
         )
 
         table_name = Table.NASDAQ_100.__qualname__.lower()
@@ -6224,7 +6224,7 @@ class DataPreprocessor:
 
         for sub_type in sub_types:
             folder_path = (
-                f"{SCRAPER_BRONZE_DATA_DIR}"
+                f"{SCRAPER_RAW_DATA_DIR}"
                 f"/{ScrapeMainType.STOCK_MARKET.value}/{sub_type.value}"
             )
 
@@ -6251,7 +6251,7 @@ class DataPreprocessor:
 
         for sub_type in sub_types:
             folder_path = (
-                f"{SCRAPER_BRONZE_DATA_DIR}"
+                f"{SCRAPER_RAW_DATA_DIR}"
                 f"/{ScrapeMainType.STOCK_MARKET.value}/{sub_type.value}"
             )
 
@@ -6427,7 +6427,7 @@ class DataPreprocessor:
                 stock_list_sub_type,
             )
 
-            folder_path = f"{SCRAPER_BRONZE_DATA_DIR}/{key[0].value}/{key[1].value}"
+            folder_path = f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}"
 
             file_path = get_newest_file_path(
                 folder_path=folder_path,
@@ -6499,11 +6499,11 @@ class DataPreprocessor:
     # region ENTERPRISE.DAILY_PRICE
     def _prepare_code_data(self, code: str) -> list | None:
         price_folder = (
-            f"{SCRAPER_BRONZE_DATA_DIR}"
+            f"{SCRAPER_RAW_DATA_DIR}"
             f"/{get_value(ScrapeMainType.ENTERPRISE)}/{get_value(f'{code}_price')}"
         )
         order_folder = (
-            f"{SCRAPER_BRONZE_DATA_DIR}"
+            f"{SCRAPER_RAW_DATA_DIR}"
             f"/{get_value(ScrapeMainType.ENTERPRISE)}/{get_value(f'{code}_order')}"
         )
 
