@@ -1,79 +1,53 @@
 {
-    "web_scraper": {
-        "enable": true,
-        "children": {
-            "trading_view": {
-                "enable": true,
-                "children": {
-                    "links": {
-                        "enable": true,
-                        "children": {
-                            "stocks": {
-                                "enable": true
-                            }
-                        }
-                    },
-                    "data": {
-                        "enable": false,
-                        "children": {}
-                    }
-                }
-            }
-        }
-    },
-    "data_preprocessor": {
-        "enable": false,
-        "children": {
-            "data_quality_bronze": {
-                "enable": false,
-                "children": {
-                    "macroeconomics": {
-                        "enable": false
-                    },
-                    "stock_market": {
-                        "enable": true
-                    },
-                    "enterprise": {
-                        "enable": false
-                    }
-                }
-            },
-            "data_quality_silver": {
-                "enable": false,
-                "children": {
-                    "macroeconomics": {
-                        "enable": false
-                    },
-                    "stock_market": {
-                        "enable": false
-                    },
-                    "enterprise": {
-                        "enable": true
-                    }
-                }
-            },
-            "data_quality_gold": {
-                "enable": true,
-                "children": {
-                    "macroeconomics": {
-                        "enable": false
-                    },
-                    "stock_market": {
-                        "enable": false
-                    },
-                    "enterprise": {
-                        "enable": true
-                    }
-                }
-            }
-        }
-    },
-    "data_postprocessor": {
-        "enable": false,
-        "children": {
-            "export_unified_dataframe": {
-                "enable": true
-            }
-        }
-    }
+    "web_scraper": true,
+    "web_scraper/trading_view": true,
+    "web_scraper/trading_view/links": true,
+    "web_scraper/trading_view/links/data": false,
+    "web_scraper/trading_view/links/stocks": true,
+    "web_scraper/trading_view/links/stocks/vietnam": true,
+    "web_scraper/trading_view/links/stocks/vietnam/common_stock": true,
+    "web_scraper/trading_view/links/stocks/vietnam/common_stock/commercial_services": true,
+    "web_scraper/trading_view/links/stocks/vietnam/common_stock/communications": false,
+    "web_scraper/trading_view/links/stocks/vietnam/common_stock/consumer_durables": false,
+    "web_scraper/trading_view/links/stocks/vietnam/common_stock/consumer_non_durables": false,
+    "web_scraper/trading_view/links/stocks/vietnam/common_stock/consumer_services": false,
+    "web_scraper/trading_view/links/stocks/vietnam/common_stock/distribution_services": false,
+    "web_scraper/trading_view/links/stocks/vietnam/common_stock/electronic_technology": false,
+    "web_scraper/trading_view/links/stocks/vietnam/common_stock/energy_minerals": false,
+    "web_scraper/trading_view/links/stocks/vietnam/common_stock/finance": false,
+    "web_scraper/trading_view/links/stocks/vietnam/common_stock/government_sector": false,
+    "web_scraper/trading_view/links/stocks/vietnam/common_stock/health_services": false,
+    "web_scraper/trading_view/links/stocks/vietnam/common_stock/health_technology": false,
+    "web_scraper/trading_view/links/stocks/vietnam/common_stock/industrial_services": false,
+    "web_scraper/trading_view/links/stocks/vietnam/common_stock/miscellaneous": false,
+    "web_scraper/trading_view/links/stocks/vietnam/common_stock/non_energy_minerals": false,
+    "web_scraper/trading_view/links/stocks/vietnam/common_stock/process_industries": false,
+    "web_scraper/trading_view/links/stocks/vietnam/common_stock/producer_manufacturing": false,
+    "web_scraper/trading_view/links/stocks/vietnam/common_stock/retail_trade": false,
+    "web_scraper/trading_view/links/stocks/vietnam/common_stock/technology_services": false,
+    "web_scraper/trading_view/links/stocks/vietnam/common_stock/transportation": false,
+    "web_scraper/trading_view/links/stocks/vietnam/common_stock/utilities": false,
+    "web_scraper/trading_view/links/stocks/vietnam/preferred_stock": false,
+    "web_scraper/trading_view/links/stocks/vietnam/depository_receipt": false,
+    "web_scraper/trading_view/links/stocks/vietnam/warrant": false,
+    "web_scraper/trading_view/links/stocks/vietnam/pre_ipo": false,
+    "web_scraper/stocks": false,
+    "web_scraper/stocks/vietnam": false,
+    "web_scraper/stocks/vietnam/common_stock": false,
+    "web_scraper/stocks/vietnam/common_stock/commercial_services": false,
+    "web_scraper/data_preprocessor": false,
+    "web_scraper/data_preprocessor/data_quality_bronze": false,
+    "web_scraper/data_preprocessor/data_quality_bronze/macroeconomics": false,
+    "web_scraper/data_preprocessor/data_quality_bronze/stock_market": true,
+    "web_scraper/data_preprocessor/data_quality_bronze/enterprise": false,
+    "web_scraper/data_preprocessor/data_quality_silver": false,
+    "web_scraper/data_preprocessor/data_quality_silver/macroeconomics": false,
+    "web_scraper/data_preprocessor/data_quality_silver/stock_market": false,
+    "web_scraper/data_preprocessor/data_quality_silver/enterprise": true,
+    "web_scraper/data_preprocessor/data_quality_gold": true,
+    "web_scraper/data_preprocessor/data_quality_gold/macroeconomics": false,
+    "web_scraper/data_preprocessor/data_quality_gold/stock_market": false,
+    "web_scraper/data_preprocessor/data_quality_gold/enterprise": true,
+    "web_scraper/data_postprocessor": false,
+    "web_scraper/data_postprocessor/export_unified_dataframe": true
 }
