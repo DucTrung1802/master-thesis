@@ -38,10 +38,14 @@ class WebScraper:
         logger: Logger,
         switch_handler: SwitchHandler,
         power: int = THREAD_MANAGER_POWER,
+        retry_attempts: int = SCRAPER_RETRY_ATTEMPTS,
+        retry_delay: float = SCRAPER_RETRY_DELAY,
     ):
         self._logger: Logger = logger
         self._switch_handler: SwitchHandler = switch_handler
         self._thread_manager = ThreadManager(logger=self._logger, power=power)
+        self._retry_attempts: int = retry_attempts
+        self._retry_delay: float = retry_delay
 
         self._chrome_options = Options()
         self._chrome_options.add_experimental_option(
@@ -242,16 +246,24 @@ class WebScraper:
     ) -> None:
         """Execute a sequence of ScrapeActions (click / input_text / go_to_link) in order."""
         for action in scrape_action_list:
-            xpath = action.xpath.value
+            # Works for both TradingViewXpath enum members and raw xpath strings
+            xpath = action.xpath_str
+
+            # Label for logging: use enum name if available, else truncated xpath
+            label = (
+                action.xpath.name
+                if isinstance(action.xpath, TradingViewXpath)
+                else xpath[:60]
+            )
 
             match action.scrape_action_type:
                 case ScrapeActionType.CLICK_BUTTON:
-                    self._logger.log_info(f"Clicking element: {action.xpath.name}")
+                    self._logger.log_info(f"Clicking element: {label}")
                     self._helper_click_element(web_driver, xpath)
 
                 case ScrapeActionType.INPUT_TEXT:
                     self._logger.log_info(
-                        f"Inputting text into {action.xpath.name}: '{action.value}'"
+                        f"Inputting text into {label}: '{action.value}'"
                     )
                     self._helper_input_text(
                         web_driver,
@@ -266,7 +278,7 @@ class WebScraper:
                     web_driver.get(action.value)
                     time.sleep(SCRAPER_BASE_WAIT_TIME)
 
-            time.sleep(0.1)
+            time.sleep(1)
 
     def _helper_extract_trading_view_links(
         self, web_driver: ChromiumDriver
@@ -350,22 +362,23 @@ class WebScraper:
 
         return links
 
-    def _scrape_links_stocks_vietnam_common_stock_commercial_services(self, key: Tuple):
-        self._logger.log_info(f'Start scraping links for "{format_key_for_name(key)}".')
+    # ──────────────────────────────────────────────────────────────────────
+    # Stock link scraping
+    # ──────────────────────────────────────────────────────────────────────
 
+    def _scrape_stock_links_attempt(
+        self,
+        country: Country,
+        stock_type: StockType,
+        sector: StockSector,
+        key: tuple,
+        file_path: str,
+        folder_path: str,
+    ) -> None:
+        """Single attempt at scraping stock links. Raises on any failure."""
         web_driver, bs4_parser = self._helper_initialize_web_driver_and_bs4_parser()
 
         try:
-            folder_path = f"{SCRAPER_RAW_DATA_DIR}/{format_key_for_path(key)}"
-
-            file_name = "trading_view_links"
-
-            current_time = datetime.now()
-
-            file_path = (
-                f"{folder_path}/" f"{file_name}_{current_time.strftime('%Y-%m-%d')}.csv"
-            )
-
             if os.path.exists(file_path):
                 self._logger.log_info(
                     f"File exists: {file_path}, deleting to re-fetch."
@@ -374,129 +387,165 @@ class WebScraper:
 
             os.makedirs(folder_path, exist_ok=True)
 
-            # Navigate
+            # Navigate to TradingView home
             web_driver, bs4_parser = self._helper_navigate_to_url(
-                web_driver,
-                TRADING_VIEW_HOME_PAGE_URL,
+                web_driver, TRADING_VIEW_HOME_PAGE_URL
             )
 
-            # Apply filters
-            source_info = SCRAPING_MAP[key]
-
-            self._helper_execute_scrape_actions(
-                web_driver,
-                source_info.scrape_action_list,
+            # Build and apply filters dynamically
+            scrape_actions = build_stock_link_scrape_actions(
+                country, stock_type, sector
             )
+            self._helper_execute_scrape_actions(web_driver, scrape_actions)
 
-            time.sleep(10)
+            time.sleep(5)  # allow the filtered list to fully render
 
             self._logger.log_info(
                 f"Current URL after filters: {web_driver.current_url}"
             )
 
-            self._logger.log_info(f"Page title: {web_driver.title}")
-
-            anchors = web_driver.execute_script("""
-                return document.querySelectorAll('a').length;
-                """)
-
-            self._logger.log_info(f"Anchor count on page: {anchors}")
-
-            # Extract links
+            # Extract all symbol links by scrolling the list
             links = self._helper_extract_trading_view_links(web_driver)
-
             self._logger.log_info(f"Total links extracted: {len(links)}")
 
-            scrape_main_type = key[1]
-            sub_type_value_1 = key[2]
-            sub_type_value_2 = key[3]
-            sub_type_value_3 = key[4]
-
-            with open(
-                file_path,
-                "w",
-                newline="",
-                encoding="utf-8",
-            ) as f:
-
+            # Write to CSV
+            scrape_main_type = ScrapeMainType.STOCKS.value
+            with open(file_path, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
-
-                # header
                 writer.writerow(TRADING_VIEW_TABLE_SCHEMA)
-
-                # rows
                 for url in links:
                     writer.writerow(
                         [
                             scrape_main_type,
                             f"{scrape_main_type}_country",
-                            sub_type_value_1,
+                            country.value,
                             f"{scrape_main_type}_stock_type",
-                            sub_type_value_2,
+                            stock_type.value,
                             f"{scrape_main_type}_sector",
-                            sub_type_value_3,
+                            sector.value,
                             url,
                         ]
                     )
 
             self._logger.log_info(f"Saved {len(links)} links to {file_path}")
 
-        except Exception as e:
-            self._logger.log_error(f"Failed scraping links: {str(e)}")
-            raise
-
         finally:
             web_driver.quit()
 
-        self._logger.log_info(
-            f'Finish scraping links for "{format_key_for_name(key)}".'
+    def _scrape_stock_links(
+        self,
+        country: Country,
+        stock_type: StockType,
+        sector: StockSector,
+    ) -> None:
+        """Scrape stock links with retry. Config: self._retry_attempts, self._retry_delay."""
+        key = (
+            "links",
+            ScrapeMainType.STOCKS.value,
+            country.value,
+            stock_type.value,
+            sector.value,
         )
+        folder_path = f"{SCRAPER_RAW_DATA_DIR}/{format_key_for_path(key)}"
+        file_path = f"{folder_path}/trading_view_links_{datetime.now().strftime('%Y-%m-%d')}.csv"
 
-    def _scrape_link_from(self, key: Tuple):
+        self._logger.log_info(f'Start scraping links for "{format_key_for_name(key)}".')
 
-        match (key):
-
-            # region STOCKS
-            case (
-                "links",
-                ScrapeMainType.STOCKS.value,
-                Country.VIETNAM.value,
-                StockType.COMMON_STOCK.value,
-                StockSector.COMMERCIAL_SERVICES.value,
-            ):
-                return (
-                    self._scrape_links_stocks_vietnam_common_stock_commercial_services(
-                        key
+        last_error: Exception = None
+        for attempt in range(1, self._retry_attempts + 1):
+            try:
+                if attempt > 1:
+                    self._logger.log_info(
+                        f"Retry {attempt}/{self._retry_attempts} for "
+                        f'"{format_key_for_name(key)}" '
+                        f"(waiting {self._retry_delay}s)."
                     )
+                    time.sleep(self._retry_delay)
+
+                self._scrape_stock_links_attempt(
+                    country, stock_type, sector, key, file_path, folder_path
                 )
 
-            # endregion STOCKS
+                self._logger.log_info(
+                    f'Finish scraping links for "{format_key_for_name(key)}" '
+                    f"(attempt {attempt}/{self._retry_attempts})."
+                )
+                return  # success — exit immediately
 
-    def add_trading_view_links_scraping_tasks(self):
-        self._logger.log_info(f"Adding Trading View links scraping tasks.")
+            except Exception as e:
+                last_error = e
+                self._logger.log_error(
+                    f"Attempt {attempt}/{self._retry_attempts} failed for "
+                    f'"{format_key_for_name(key)}": {e}'
+                )
+
+        self._logger.log_error(
+            f'All {self._retry_attempts} attempts failed for "{format_key_for_name(key)}". '
+            f"Last error: {last_error}"
+        )
+        raise last_error
+
+    def add_trading_view_links_scraping_tasks(self) -> None:
+        """
+        Register one scraping task per enabled (country × stock_type × sector)
+        combination.
+
+        Switch config hierarchy checked:
+          web_scraper → trading_view → links → stocks → {country} → {stock_type} → {sector}
+
+        Each level can disable an entire sub-tree; individual combinations can
+        also be toggled independently.
+        """
+        self._logger.log_info("Adding Trading View links scraping tasks.")
         number_of_task_before = self._thread_manager.get_current_number_of_task()
 
-        # STOCKS
-        if self._switch_handler.is_enabled(
-            "web_scraper",
-            "trading_view",
-            "links",
-            f"{ScrapeMainType.STOCKS.value}",
+        if not self._switch_handler.is_enabled(
+            "web_scraper", "trading_view", "links", ScrapeMainType.STOCKS.value
         ):
-            key = (
-                "links",
-                ScrapeMainType.STOCKS.value,
-                Country.VIETNAM.value,
-                StockType.COMMON_STOCK.value,
-                StockSector.COMMERCIAL_SERVICES.value,
+            self._logger.log_info(
+                "Trading View stocks links scraping is disabled – skipping."
             )
+            return
+
+        for path in self._switch_handler.get_enabled_paths(
+            "web_scraper", "trading_view", "links", "stocks"
+        ):
+            parts = path.split("/")
+            country, stock_type, sector = (
+                Country(parts[4]),
+                StockType(parts[5]),
+                StockSector(parts[6]),
+            )
+
+            # Capture loop variables so the lambda closes over the
+            # correct values (Python late-binding gotcha)
+            _country = country
+            _stock_type = stock_type
+            _sector = sector
+
+            task_name = format_key_for_name(
+                (
+                    "links",
+                    ScrapeMainType.STOCKS.value,
+                    _country.value,
+                    _stock_type.value,
+                    _sector.value,
+                )
+            )
+
             self._thread_manager.add_task(
-                Task(format_key_for_name(key), self._scrape_link_from, key)
+                Task(
+                    task_name,
+                    lambda c=_country, st=_stock_type, se=_sector: self._scrape_stock_links(
+                        c, st, se
+                    ),
+                )
             )
 
         number_of_task_after = self._thread_manager.get_current_number_of_task()
         self._logger.log_info(
-            f"Added {number_of_task_after - number_of_task_before} Trading View links scraping tasks."
+            f"Added {number_of_task_after - number_of_task_before} "
+            f"Trading View stock links scraping tasks."
         )
 
     def _scrape_data_macroeconomics_exchange_rate_usd_vnd(self, key: Tuple) -> None:
