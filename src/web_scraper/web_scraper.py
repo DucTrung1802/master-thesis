@@ -280,8 +280,24 @@ class WebScraper:
     ) -> List[str]:
         """
         Scroll the TradingView symbol list and collect every data-symbol-name attribute.
-        Stops after 3 consecutive scroll attempts that produce no movement.
+        Waits for items to actually render before starting, then stops after 3
+        consecutive scroll attempts that produce no movement.
         """
+        # Wait until the list has actually populated. Some asset classes (indices,
+        # bonds, economy) load noticeably slower than stocks, and the upstream
+        # time.sleep(5) is not always enough.
+        try:
+            WebDriverWait(web_driver, 20).until(
+                lambda d: d.execute_script(
+                    "return document.querySelectorAll('div[data-role=\"list-item\"][data-symbol-name]').length > 0;"
+                )
+            )
+        except TimeoutException:
+            self._logger.log_warning(
+                "Timed out waiting for symbol list items to render. "
+                "Proceeding with extraction anyway."
+            )
+
         collected_symbols = set()
         last_scroll_top = -1
         no_move_count = 0

@@ -1234,7 +1234,12 @@ def build_crypto_link_scrape_actions(
 def build_indices_link_scrape_actions(
     country: Country,
 ) -> List[ScrapeAction]:
-    """Indices: country only."""
+    """Indices: country only.
+
+    localStorage filter='index' already opens the search panel directly on the
+    Indices tab, so we do NOT click an INDICES_BUTTON afterwards — the active
+    tab button is hidden/replaced and the click would time out.
+    """
     js = _build_ls_inject_js(
         asset_tab=_ASSET_LS_TAB[ScrapeMainType.INDICES.value],
         country_code=COUNTRY_CODE.get(country, ""),
@@ -1243,9 +1248,7 @@ def build_indices_link_scrape_actions(
     return [
         *_inject_and_reload(js),
         *_open_symbols_panel(),
-        ScrapeAction(
-            ScrapeActionType.CLICK_BUTTON, TradingViewXpath.INDICES_BUTTON, None
-        ),
+        # No INDICES_BUTTON click — the Indices tab is already active from localStorage.
     ]
 
 
