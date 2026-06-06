@@ -960,8 +960,8 @@ STOCK_SECTOR_LS_VALUE: Dict[StockSector, str] = {
 
 # Maps BondsType → value stored in {"bond-type-select": <value>}
 BONDS_TYPE_LS_VALUE: Dict[BondsType, str] = {
-    BondsType.GOVERNMENT: "government",
-    BondsType.CORPORATE: "corporate",
+    BondsType.GOVERNMENT: "bond_gov",
+    BondsType.CORPORATE: "bond_corp",
 }
 
 # Maps EconomyCategory → value stored in {"economy-category-select": <value>}
@@ -1256,7 +1256,12 @@ def build_bonds_link_scrape_actions(
     country: Country,
     bonds_type: BondsType,
 ) -> List[ScrapeAction]:
-    """Bonds: country × bonds_type."""
+    """Bonds: country × bonds_type.
+
+    localStorage filter='bond' already opens the search panel directly on the
+    Bonds tab, so we do NOT click a BONDS_BUTTON afterwards — same reason as
+    indices.
+    """
     js = _build_ls_inject_js(
         asset_tab=_ASSET_LS_TAB[ScrapeMainType.BONDS.value],
         country_code=COUNTRY_CODE.get(country, ""),
@@ -1267,9 +1272,7 @@ def build_bonds_link_scrape_actions(
     return [
         *_inject_and_reload(js),
         *_open_symbols_panel(),
-        ScrapeAction(
-            ScrapeActionType.CLICK_BUTTON, TradingViewXpath.BONDS_BUTTON, None
-        ),
+        # No BONDS_BUTTON click — the Bonds tab is already active from localStorage.
     ]
 
 
