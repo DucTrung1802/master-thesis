@@ -967,16 +967,16 @@ BONDS_TYPE_LS_VALUE: Dict[BondsType, str] = {
 # Maps EconomyCategory → value stored in {"economy-category-select": <value>}
 ECONOMY_CATEGORY_LS_VALUE: Dict[EconomyCategory, str] = {
     EconomyCategory.GDP: "gdp",
-    EconomyCategory.LABOR: "labor",
-    EconomyCategory.PRICES: "prices",
-    EconomyCategory.HEALTH: "health",
-    EconomyCategory.MONEY: "money",
-    EconomyCategory.TRADE: "trade",
-    EconomyCategory.GOVERNMENT: "government",
-    EconomyCategory.BUSINESS: "business",
-    EconomyCategory.CONSUMER: "consumer",
-    EconomyCategory.HOUSING: "housing",
-    EconomyCategory.TAXES: "taxes",
+    EconomyCategory.LABOR: "lbr",
+    EconomyCategory.PRICES: "prce",
+    EconomyCategory.HEALTH: "hlth",
+    EconomyCategory.MONEY: "mny",
+    EconomyCategory.TRADE: "trd",
+    EconomyCategory.GOVERNMENT: "gov",
+    EconomyCategory.BUSINESS: "bsnss",
+    EconomyCategory.CONSUMER: "cnsm",
+    EconomyCategory.HOUSING: "hse",
+    EconomyCategory.TAXES: "txs",
 }
 
 
@@ -1280,20 +1280,18 @@ def build_economy_link_scrape_actions(
     country: Country,
     category: EconomyCategory,
 ) -> List[ScrapeAction]:
-    """Economy: country × category."""
+    """Economy: country × category (source left at default = all sources)."""
     js = _build_ls_inject_js(
         asset_tab=_ASSET_LS_TAB[ScrapeMainType.ECONOMY.value],
         country_code=COUNTRY_CODE.get(country, ""),
         filter_values={
-            "economy-category-select": ECONOMY_CATEGORY_LS_VALUE[category],
+            "economic-category-select": ECONOMY_CATEGORY_LS_VALUE[category],
         },
     )
     return [
         *_inject_and_reload(js),
         *_open_symbols_panel(),
-        ScrapeAction(
-            ScrapeActionType.CLICK_BUTTON, TradingViewXpath.ECONOMY_BUTTON, None
-        ),
+        # No ECONOMY_BUTTON click — the Economy tab is already active from localStorage.
     ]
 
 
