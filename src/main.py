@@ -1,3 +1,5 @@
+# src\main.py
+
 from logger.logger import LogType, Logger
 from web_scraper.web_scraper import WebScraper
 from data_preprocessor.data_preprocessor import DataPreprocessor

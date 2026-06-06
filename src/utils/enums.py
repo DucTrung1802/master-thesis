@@ -1,3 +1,5 @@
+# src\utils\enums.py
+
 from enum import Enum
 from dataclasses import dataclass
 from typing import Dict, List, Union, Tuple, Optional
@@ -605,20 +607,96 @@ class ScrapeActionType(Enum):
     CLICK_BUTTON = "click_button"
     INPUT_TEXT = "input_text"
     GO_TO_LINK = "go_to_link"
+    EXECUTE_SCRIPT = "execute_script"
 
 
 # ──────────────────────────────────────────────────────────────────────────────
 # TradingView XPaths  (structural only – no per-sector / per-type entries)
 # ──────────────────────────────────────────────────────────────────────────────
 class TradingViewXpath(Enum):
-    # Search / symbol panel
+    # ── Search / symbol panel ──────────────────────────────────────────────
     SEARCH_BUTTON = "/html/body/div[3]/div[3]/div[2]/div[2]/div/div/div/button[1]"
     SYMBOLS_BUTTON = '//*[@id="Symbols"]'
 
-    # Asset class
+    # ── Asset-class buttons ────────────────────────────────────────────────
     STOCKS_BUTTON = '//*[@id="stocks"]'
+    FUNDS_BUTTON = '//*[@id="funds"]'
+    FUTURES_BUTTON = '//*[@id="futures"]'
+    FOREX_BUTTON = '//*[@id="forex"]'
+    CRYPTO_BUTTON = '//*[@id="crypto"]'
+    INDICES_BUTTON = '//*[@id="indices"]'
+    BONDS_BUTTON = '//*[@id="bonds"]'
+    ECONOMY_BUTTON = '//*[@id="economy"]'
+    OPTIONS_BUTTON = '//*[@id="options"]'
 
-    # Country filter
+    # ── Shared country filter (reused across stocks / funds / bonds /
+    #    indices / economy / options) ────────────────────────────────────────
+    COUNTRIES_BUTTON = (
+        '//*[@id="overlap-manager-root"]/div[2]/div/div[2]/div/div/div[1]'
+        "/div/div[2]/div/div[3]/div[1]/div/div/div/button"
+    )
+    COUNTRIES_INPUT = (
+        '//*[@id="overlap-manager-root"]/div[2]/div/div[2]/div/div/div[1]'
+        "/div/div[2]/div/div/div[2]/div/input"
+    )
+    # First result in the country search dropdown (row=0, col=0)
+    COUNTRIES_FIRST_RESULT = '//*[@id="source-item-5-0-0"]'
+
+    # ── Stocks-specific filter dropdowns ──────────────────────────────────
+    STOCKS_TYPES_BUTTON = (
+        '//*[@data-qa-id="stock-type-select"]'
+        '//*[@data-qa-id="ss-filter-select-button"]'
+    )
+    STOCKS_SECTORS_BUTTON = (
+        '//*[@data-qa-id="stock-sector-select"]'
+        '//*[@data-qa-id="ss-filter-select-button"]'
+    )
+
+    # ── Funds-specific filter dropdowns ───────────────────────────────────
+    FUNDS_TYPES_BUTTON = (
+        '//*[@data-qa-id="fund-type-select"]'
+        '//*[@data-qa-id="ss-filter-select-button"]'
+    )
+
+    # ── Futures-specific filter dropdown ──────────────────────────────────
+    FUTURES_CATEGORIES_BUTTON = (
+        '//*[@data-qa-id="futures-category-select"]'
+        '//*[@data-qa-id="ss-filter-select-button"]'
+    )
+
+    # ── Forex-specific filter dropdown ────────────────────────────────────
+    FOREX_SOURCES_BUTTON = (
+        '//*[@data-qa-id="forex-source-select"]'
+        '//*[@data-qa-id="ss-filter-select-button"]'
+    )
+
+    # ── Crypto-specific filter dropdowns ──────────────────────────────────
+    CRYPTO_SOURCES_BUTTON = (
+        '//*[@data-qa-id="crypto-source-select"]'
+        '//*[@data-qa-id="ss-filter-select-button"]'
+    )
+    CRYPTO_TYPES_BUTTON = (
+        '//*[@data-qa-id="crypto-type-select"]'
+        '//*[@data-qa-id="ss-filter-select-button"]'
+    )
+    CRYPTO_EXCHANGE_TYPES_BUTTON = (
+        '//*[@data-qa-id="crypto-exchange-type-select"]'
+        '//*[@data-qa-id="ss-filter-select-button"]'
+    )
+
+    # ── Bonds-specific filter dropdown ────────────────────────────────────
+    BONDS_TYPES_BUTTON = (
+        '//*[@data-qa-id="bond-type-select"]'
+        '//*[@data-qa-id="ss-filter-select-button"]'
+    )
+
+    # ── Economy-specific filter dropdown ──────────────────────────────────
+    ECONOMY_CATEGORIES_BUTTON = (
+        '//*[@data-qa-id="economy-category-select"]'
+        '//*[@data-qa-id="ss-filter-select-button"]'
+    )
+
+    # Kept for backwards-compatibility (aliased to the shared versions)
     STOCKS_COUNTRIES_BUTTON = (
         '//*[@id="overlap-manager-root"]/div[2]/div/div[2]/div/div/div[1]'
         "/div/div[2]/div/div[3]/div[1]/div/div/div/button"
@@ -627,21 +705,7 @@ class TradingViewXpath(Enum):
         '//*[@id="overlap-manager-root"]/div[2]/div/div[2]/div/div/div[1]'
         "/div/div[2]/div/div/div[2]/div/input"
     )
-    # Country result items follow the pattern //*[@id="source-item-5-{row}-{col}"]
-    # The Vietnam result is always the first hit → row=0, col=0
     STOCKS_COUNTRIES_FIRST_RESULT = '//*[@id="source-item-5-0-0"]'
-
-    # Stock-type dropdown opener
-    STOCKS_TYPES_BUTTON = (
-        '//*[@data-qa-id="stock-type-select"]'
-        '//*[@data-qa-id="ss-filter-select-button"]'
-    )
-
-    # Stock-sector dropdown opener
-    STOCKS_SECTORS_BUTTON = (
-        '//*[@data-qa-id="stock-sector-select"]'
-        '//*[@data-qa-id="ss-filter-select-button"]'
-    )
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -682,6 +746,93 @@ STOCK_SECTOR_ARIA_LABEL: Dict[StockSector, str] = {
     StockSector.UTILITIES: "Utilities",
 }
 
+# TradingView aria-labels for FundType checkboxes
+FUND_TYPE_ARIA_LABEL: Dict[FundType, str] = {
+    FundType.ETF: "ETF",
+    FundType.MUTUAL_FUND: "Mutual fund",
+    FundType.TRUST: "Trust",
+    FundType.REIT: "REIT",
+}
+
+# TradingView aria-labels for FutureCategory checkboxes
+FUTURE_CATEGORY_ARIA_LABEL: Dict[FutureCategory, str] = {
+    FutureCategory.SINGLE_STOCK: "Single Stock",
+    FutureCategory.WORLD_INDICES: "World Indices",
+    FutureCategory.CURRENCIES: "Currencies",
+    FutureCategory.INTEREST_RATES: "Interest Rates",
+    FutureCategory.ENERGY: "Energy",
+    FutureCategory.AGRICULTURE: "Agriculture",
+    FutureCategory.METALS: "Metals",
+    FutureCategory.WEATHER: "Weather",
+    FutureCategory.BUILDING_MATERIALS: "Building Materials",
+    FutureCategory.CHEMICALS: "Chemicals",
+}
+
+# TradingView aria-labels for ForexSource checkboxes
+FOREX_SOURCE_ARIA_LABEL: Dict[ForexSource, str] = {
+    src: src.value.replace("_", " ").title() for src in ForexSource
+}
+
+# TradingView aria-labels for CryptoSource checkboxes
+CRYPTO_SOURCE_ARIA_LABEL: Dict[CryptoSource, str] = {
+    src: src.value.replace("_", " ").title() for src in CryptoSource
+}
+
+# TradingView aria-labels for CryptoType checkboxes
+CRYPTO_TYPE_ARIA_LABEL: Dict[CryptoType, str] = {
+    CryptoType.SPOT: "Spot",
+    CryptoType.SWAP: "Swap",
+    CryptoType.FUTURES: "Futures",
+    CryptoType.INDEX: "Index",
+    CryptoType.FUNDAMENTAL: "Fundamental",
+}
+
+# TradingView aria-labels for CryptoExchangeType checkboxes
+CRYPTO_EXCHANGE_TYPE_ARIA_LABEL: Dict[CryptoExchangeType, str] = {
+    CryptoExchangeType.CEX: "CEX",
+    CryptoExchangeType.DEX: "DEX",
+}
+
+# TradingView aria-labels for BondsType checkboxes
+BONDS_TYPE_ARIA_LABEL: Dict[BondsType, str] = {
+    BondsType.GOVERNMENT: "Government",
+    BondsType.CORPORATE: "Corporate",
+}
+
+# TradingView aria-labels for EconomyCategory checkboxes
+ECONOMY_CATEGORY_ARIA_LABEL: Dict[EconomyCategory, str] = {
+    EconomyCategory.GDP: "GDP",
+    EconomyCategory.LABOR: "Labor",
+    EconomyCategory.PRICES: "Prices",
+    EconomyCategory.HEALTH: "Health",
+    EconomyCategory.MONEY: "Money",
+    EconomyCategory.TRADE: "Trade",
+    EconomyCategory.GOVERNMENT: "Government",
+    EconomyCategory.BUSINESS: "Business",
+    EconomyCategory.CONSUMER: "Consumer",
+    EconomyCategory.HOUSING: "Housing",
+    EconomyCategory.TAXES: "Taxes",
+}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# ScrapeAction  — must be defined before any function that constructs one
+# ──────────────────────────────────────────────────────────────────────────────
+@dataclass(frozen=True)
+class ScrapeAction:
+    scrape_action_type: ScrapeActionType
+    # Either a TradingViewXpath enum member OR a raw xpath string
+    xpath: Union[TradingViewXpath, str]
+    value: Optional[str]
+
+    @property
+    def xpath_str(self) -> str:
+        """Always return a plain string regardless of whether xpath is an enum or str."""
+        return (
+            self.xpath.value if isinstance(self.xpath, TradingViewXpath) else self.xpath
+        )
+
+
 # Country search-term map  (what to type into the country search box)
 COUNTRY_SEARCH_TERM: Dict[Country, str] = {
     Country.VIETNAM: "vietnam",
@@ -710,89 +861,442 @@ TRADING_VIEW_SCRAPE_COUNTRIES: List[Country] = [
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# ScrapeAction  (unchanged shape, but xpath field is now Optional[TradingViewXpath]
-# so we can also carry a raw xpath string for dynamic cases)
+# TradingView localStorage key constants
+# Discovered by inspecting localStorage on a live TradingView session.
 # ──────────────────────────────────────────────────────────────────────────────
-@dataclass(frozen=True)
-class ScrapeAction:
-    scrape_action_type: ScrapeActionType
-    # Either a TradingViewXpath enum member OR a raw xpath string
-    xpath: Union[TradingViewXpath, str]
-    value: Optional[str]
 
-    @property
-    def xpath_str(self) -> str:
-        """Always return a plain string regardless of whether xpath is an enum or str."""
-        return (
-            self.xpath.value if isinstance(self.xpath, TradingViewXpath) else self.xpath
-        )
+# Maps Country enum → TradingView's internal country code stored in localStorage
+COUNTRY_CODE: Dict[Country, str] = {
+    Country.VIETNAM: "vn",
+    Country.USA: "us",
+    Country.UNITED_KINGDOM: "gb",
+    Country.GERMANY: "de",
+    Country.FRANCE: "fr",
+    Country.JAPAN: "jp",
+    Country.INDIA: "in",
+    Country.MAINLAND_CHINA: "cn",
+    # extend as needed
+}
+
+# localStorage key that stores the active asset-class tab
+_LS_FILTER_KEY = "tradingview.symboledit.filter"
+
+# localStorage key that stores per-asset-class country selections
+# shape: {"stocks": "vn", "funds": "vn", "futures": "", ...}
+_LS_SOURCES_KEY = "tradingview.symboledit.selectedSearchSources"
+
+# localStorage key that stores per-asset-class filter dropdown values
+# shape: {"funds": {"funds-type-select": "etf"}, "stocks": {...}, ...}
+_LS_FILTER_VALUES_KEY = "tradingview.selectedSymbolSearchFilterValues"
+
+# Maps ScrapeMainType.value → tab name used in localStorage
+_ASSET_LS_TAB: Dict[str, str] = {
+    ScrapeMainType.STOCKS.value: "stocks",
+    ScrapeMainType.FUNDS.value: "funds",
+    ScrapeMainType.FUTURES.value: "futures",
+    ScrapeMainType.FOREX.value: "forex",
+    ScrapeMainType.CRYPTO.value: "crypto",
+    ScrapeMainType.INDICES.value: "index",
+    ScrapeMainType.BONDS.value: "bond",
+    ScrapeMainType.ECONOMY.value: "economic",
+    ScrapeMainType.OPTIONS.value: "options",
+}
+
+# Maps FundType → value stored in {"funds-type-select": <value>}
+FUND_TYPE_LS_VALUE: Dict[FundType, str] = {
+    FundType.ETF: "etf",
+    FundType.MUTUAL_FUND: "mutual_fund",
+    FundType.TRUST: "trust",
+    FundType.REIT: "reit",
+}
+
+# Maps FutureCategory → value stored in {"futures-category-select": <value>}
+FUTURE_CATEGORY_LS_VALUE: Dict[FutureCategory, str] = {
+    FutureCategory.SINGLE_STOCK: "single_stock",
+    FutureCategory.WORLD_INDICES: "world_indices",
+    FutureCategory.CURRENCIES: "currencies",
+    FutureCategory.INTEREST_RATES: "interest_rates",
+    FutureCategory.ENERGY: "energy",
+    FutureCategory.AGRICULTURE: "agriculture",
+    FutureCategory.METALS: "metals",
+    FutureCategory.WEATHER: "weather",
+    FutureCategory.BUILDING_MATERIALS: "building_materials",
+    FutureCategory.CHEMICALS: "chemicals",
+}
+
+# Maps StockType → value stored in {"stock-type-select": <value>}
+STOCK_TYPE_LS_VALUE: Dict[StockType, str] = {
+    StockType.COMMON_STOCK: "common_stock",
+    StockType.PREFERRED_STOCK: "preferred_stock",
+    StockType.DEPOSITORY_RECEIPT: "depository_receipt",
+    StockType.WARRANT: "warrant",
+    StockType.PRE_IPO: "ipo_stock",
+}
+
+# Maps StockSector → value stored in {"stock-sector-select": <value>}
+STOCK_SECTOR_LS_VALUE: Dict[StockSector, str] = {
+    StockSector.COMMERCIAL_SERVICES: "Commercial Services",
+    StockSector.COMMUNICATIONS: "Communications",
+    StockSector.CONSUMER_DURABLES: "Consumer Durables",
+    StockSector.CONSUMER_NON_DURABLES: "Consumer Non-Durables",
+    StockSector.CONSUMER_SERVICES: "Consumer Services",
+    StockSector.DISTRIBUTION_SERVICES: "Distribution Services",
+    StockSector.ELECTRONIC_TECHNOLOGY: "Electronic Technology",
+    StockSector.ENERGY_MINERALS: "Energy Minerals",
+    StockSector.FINANCE: "Finance",
+    StockSector.GOVERNMENT_SECTOR: "Government",
+    StockSector.HEALTH_SERVICES: "Health Services",
+    StockSector.HEALTH_TECHNOLOGY: "Health Technology",
+    StockSector.INDUSTRIAL_SERVICES: "Industrial Services",
+    StockSector.MISCELLANEOUS: "Miscellaneous",
+    StockSector.NON_ENERGY_MINERALS: "Non-Energy Minerals",
+    StockSector.PROCESS_INDUSTRIES: "Process Industries",
+    StockSector.PRODUCER_MANUFACTURING: "Producer Manufacturing",
+    StockSector.RETAIL_TRADE: "Retail Trade",
+    StockSector.TECHNOLOGY_SERVICES: "Technology Services",
+    StockSector.TRANSPORTATION: "Transportation",
+    StockSector.UTILITIES: "Utilities",
+}
+
+# Maps BondsType → value stored in {"bond-type-select": <value>}
+BONDS_TYPE_LS_VALUE: Dict[BondsType, str] = {
+    BondsType.GOVERNMENT: "government",
+    BondsType.CORPORATE: "corporate",
+}
+
+# Maps EconomyCategory → value stored in {"economy-category-select": <value>}
+ECONOMY_CATEGORY_LS_VALUE: Dict[EconomyCategory, str] = {
+    EconomyCategory.GDP: "gdp",
+    EconomyCategory.LABOR: "labor",
+    EconomyCategory.PRICES: "prices",
+    EconomyCategory.HEALTH: "health",
+    EconomyCategory.MONEY: "money",
+    EconomyCategory.TRADE: "trade",
+    EconomyCategory.GOVERNMENT: "government",
+    EconomyCategory.BUSINESS: "business",
+    EconomyCategory.CONSUMER: "consumer",
+    EconomyCategory.HOUSING: "housing",
+    EconomyCategory.TAXES: "taxes",
+}
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Factory: build the full action list for any country × stock_type × sector
+# localStorage injection helper
 # ──────────────────────────────────────────────────────────────────────────────
+
+
+def _build_ls_inject_js(
+    asset_tab: str,
+    country_code: str,
+    filter_values: Dict[str, Optional[str]],
+) -> str:
+    """
+    Build a JS snippet that sets the three TradingView localStorage keys
+    needed to pre-select an asset class, country, and filter values so the
+    screener panel opens with the correct state without any clicking.
+
+    Parameters
+    ----------
+    asset_tab : str
+        The asset-class tab name as TradingView stores it, e.g. "funds", "stocks".
+    country_code : str
+        Two-letter country code, e.g. "vn", "us".  Empty string for asset
+        classes that have no country filter (futures, forex, crypto).
+    filter_values : dict
+        Mapping of filter-select key → value, e.g.
+        {"funds-type-select": "etf"} or {"stock-type-select": "common_stock"}.
+        Values that are None are stored as JSON null (clears that filter).
+    """
+    import json as _json
+
+    set_tab = f"localStorage.setItem({_json.dumps(_LS_FILTER_KEY)}, {_json.dumps(asset_tab)});"
+
+    set_sources = f"""
+(function() {{
+    var src = JSON.parse(localStorage.getItem({_json.dumps(_LS_SOURCES_KEY)}) || '{{}}');
+    src[{_json.dumps(asset_tab)}] = {_json.dumps(country_code)};
+    localStorage.setItem({_json.dumps(_LS_SOURCES_KEY)}, JSON.stringify(src));
+}})();"""
+
+    filter_patch = _json.dumps(filter_values)
+    set_filters = f"""
+(function() {{
+    var fv = JSON.parse(localStorage.getItem({_json.dumps(_LS_FILTER_VALUES_KEY)}) || '{{}}');
+    fv[{_json.dumps(asset_tab)}] = {filter_patch};
+    localStorage.setItem({_json.dumps(_LS_FILTER_VALUES_KEY)}, JSON.stringify(fv));
+}})();"""
+
+    return set_tab + set_sources + set_filters
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Internal helper – shared opening sequence (open panel → Symbols tab)
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def _open_symbols_panel() -> List[ScrapeAction]:
+    """Open the search panel and click the Symbols tab."""
+    return [
+        ScrapeAction(
+            ScrapeActionType.CLICK_BUTTON, TradingViewXpath.SEARCH_BUTTON, None
+        ),
+        ScrapeAction(
+            ScrapeActionType.CLICK_BUTTON, TradingViewXpath.SYMBOLS_BUTTON, None
+        ),
+    ]
+
+
+def _inject_and_reload(js: str) -> List[ScrapeAction]:
+    """
+    Execute the localStorage injection JS, then reload the page so TradingView
+    picks up the new filter state on startup.
+    """
+    return [
+        ScrapeAction(ScrapeActionType.EXECUTE_SCRIPT, "", js),
+        ScrapeAction(ScrapeActionType.GO_TO_LINK, "", TRADING_VIEW_HOME_PAGE_URL),
+    ]
+
+
+def _select_country(country: Country) -> List[ScrapeAction]:
+    """Legacy click-based country selection — kept for reference only.
+    Replaced by localStorage injection in all factory functions below.
+    """
+    country_term = COUNTRY_SEARCH_TERM.get(country, country.value)
+    return [
+        ScrapeAction(
+            ScrapeActionType.CLICK_BUTTON, TradingViewXpath.COUNTRIES_BUTTON, None
+        ),
+        ScrapeAction(
+            ScrapeActionType.INPUT_TEXT, TradingViewXpath.COUNTRIES_INPUT, country_term
+        ),
+        ScrapeAction(
+            ScrapeActionType.CLICK_BUTTON, TradingViewXpath.COUNTRIES_FIRST_RESULT, None
+        ),
+    ]
+
+
+def _checkbox(label: str) -> ScrapeAction:
+    """Return a CLICK_BUTTON action for a menuitemcheckbox with the given aria-label."""
+    return ScrapeAction(
+        ScrapeActionType.CLICK_BUTTON,
+        f'//*[@role="menuitemcheckbox" and @aria-label="{label}"]',
+        None,
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Factory functions – one per TradingView asset class
+# All use localStorage injection to set country + filter values, then open
+# the screener panel.  No fragile click sequences for filter dropdowns.
+# ──────────────────────────────────────────────────────────────────────────────
+
+
 def build_stock_link_scrape_actions(
     country: Country,
     stock_type: StockType,
     sector: StockSector,
 ) -> List[ScrapeAction]:
-    """
-    Dynamically build the TradingView filter action sequence for the given
-    country / stock_type / sector combination.
-
-    No hardcoded per-sector or per-type entries are needed; the XPaths for the
-    checkbox items are derived from the aria-label maps at call time.
-    """
-    type_label = STOCK_TYPE_ARIA_LABEL[stock_type]
-    sector_label = STOCK_SECTOR_ARIA_LABEL[sector]
-    country_term = COUNTRY_SEARCH_TERM.get(country, country.value)
-
-    type_checkbox_xpath = (
-        f'//*[@role="menuitemcheckbox" and @aria-label="{type_label}"]'
+    """Stocks: country × stock_type × sector  (used for common_stock)."""
+    js = _build_ls_inject_js(
+        asset_tab=_ASSET_LS_TAB[ScrapeMainType.STOCKS.value],
+        country_code=COUNTRY_CODE.get(country, ""),
+        filter_values={
+            "stock-type-select": STOCK_TYPE_LS_VALUE[stock_type],
+            "stock-sector-select": STOCK_SECTOR_LS_VALUE[sector],
+        },
     )
-    sector_checkbox_xpath = (
-        f'//*[@role="menuitemcheckbox" and @aria-label="{sector_label}"]'
-    )
-
     return [
-        # 1. Open symbol search panel
-        ScrapeAction(
-            ScrapeActionType.CLICK_BUTTON, TradingViewXpath.SEARCH_BUTTON, None
-        ),
-        # 2. Switch to Symbols tab
-        ScrapeAction(
-            ScrapeActionType.CLICK_BUTTON, TradingViewXpath.SYMBOLS_BUTTON, None
-        ),
-        # 3. Select Stocks asset class
+        *_inject_and_reload(js),
+        *_open_symbols_panel(),
         ScrapeAction(
             ScrapeActionType.CLICK_BUTTON, TradingViewXpath.STOCKS_BUTTON, None
         ),
-        # 4. Open country filter and pick the country
+    ]
+
+
+def build_stock_no_sector_link_scrape_actions(
+    country: Country,
+    stock_type: StockType,
+) -> List[ScrapeAction]:
+    """Stocks: country × stock_type only, no sector filter."""
+    js = _build_ls_inject_js(
+        asset_tab=_ASSET_LS_TAB[ScrapeMainType.STOCKS.value],
+        country_code=COUNTRY_CODE.get(country, ""),
+        filter_values={
+            "stock-type-select": STOCK_TYPE_LS_VALUE[stock_type],
+            "stock-sector-select": None,
+        },
+    )
+    return [
+        *_inject_and_reload(js),
+        *_open_symbols_panel(),
         ScrapeAction(
-            ScrapeActionType.CLICK_BUTTON,
-            TradingViewXpath.STOCKS_COUNTRIES_BUTTON,
-            None,
+            ScrapeActionType.CLICK_BUTTON, TradingViewXpath.STOCKS_BUTTON, None
         ),
+    ]
+
+
+def build_fund_link_scrape_actions(
+    country: Country,
+    fund_type: FundType,
+) -> List[ScrapeAction]:
+    """Funds: country × fund_type."""
+    js = _build_ls_inject_js(
+        asset_tab=_ASSET_LS_TAB[ScrapeMainType.FUNDS.value],
+        country_code=COUNTRY_CODE.get(country, ""),
+        filter_values={
+            "funds-type-select": FUND_TYPE_LS_VALUE[fund_type],
+        },
+    )
+    return [
+        *_inject_and_reload(js),
+        *_open_symbols_panel(),
         ScrapeAction(
-            ScrapeActionType.INPUT_TEXT,
-            TradingViewXpath.STOCKS_COUNTRIES_INPUT,
-            country_term,
+            ScrapeActionType.CLICK_BUTTON, TradingViewXpath.FUNDS_BUTTON, None
         ),
+    ]
+
+
+def build_futures_link_scrape_actions(
+    country: Country,
+    category: FutureCategory,
+) -> List[ScrapeAction]:
+    """Futures: category only (no country filter on TradingView)."""
+    js = _build_ls_inject_js(
+        asset_tab=_ASSET_LS_TAB[ScrapeMainType.FUTURES.value],
+        country_code=COUNTRY_CODE.get(country, ""),
+        filter_values={
+            "futures-category-select": FUTURE_CATEGORY_LS_VALUE[category],
+        },
+    )
+    return [
+        *_inject_and_reload(js),
+        *_open_symbols_panel(),
         ScrapeAction(
-            ScrapeActionType.CLICK_BUTTON,
-            TradingViewXpath.STOCKS_COUNTRIES_FIRST_RESULT,
-            None,
+            ScrapeActionType.CLICK_BUTTON, TradingViewXpath.FUTURES_BUTTON, None
         ),
-        # 5. Open stock-type filter and pick the type
+    ]
+
+
+def build_forex_link_scrape_actions(
+    source: ForexSource,
+) -> List[ScrapeAction]:
+    """Forex: source / provider only."""
+    js = _build_ls_inject_js(
+        asset_tab=_ASSET_LS_TAB[ScrapeMainType.FOREX.value],
+        country_code="",
+        filter_values={
+            "forex-source-select": source.value,
+        },
+    )
+    return [
+        *_inject_and_reload(js),
+        *_open_symbols_panel(),
         ScrapeAction(
-            ScrapeActionType.CLICK_BUTTON, TradingViewXpath.STOCKS_TYPES_BUTTON, None
+            ScrapeActionType.CLICK_BUTTON, TradingViewXpath.FOREX_BUTTON, None
         ),
-        ScrapeAction(ScrapeActionType.CLICK_BUTTON, type_checkbox_xpath, None),
-        # 6. Open sector filter and pick the sector
+    ]
+
+
+def build_crypto_link_scrape_actions(
+    source: CryptoSource,
+    crypto_type: CryptoType,
+    exchange_type: CryptoExchangeType,
+) -> List[ScrapeAction]:
+    """Crypto: source × crypto_type × exchange_type."""
+    js = _build_ls_inject_js(
+        asset_tab=_ASSET_LS_TAB[ScrapeMainType.CRYPTO.value],
+        country_code="",
+        filter_values={
+            "crypto-source-select": source.value,
+            "crypto-type-select": crypto_type.value,
+            "crypto-exchange-type-select": exchange_type.value,
+        },
+    )
+    return [
+        *_inject_and_reload(js),
+        *_open_symbols_panel(),
         ScrapeAction(
-            ScrapeActionType.CLICK_BUTTON, TradingViewXpath.STOCKS_SECTORS_BUTTON, None
+            ScrapeActionType.CLICK_BUTTON, TradingViewXpath.CRYPTO_BUTTON, None
         ),
-        ScrapeAction(ScrapeActionType.CLICK_BUTTON, sector_checkbox_xpath, None),
+    ]
+
+
+def build_indices_link_scrape_actions(
+    country: Country,
+) -> List[ScrapeAction]:
+    """Indices: country only."""
+    js = _build_ls_inject_js(
+        asset_tab=_ASSET_LS_TAB[ScrapeMainType.INDICES.value],
+        country_code=COUNTRY_CODE.get(country, ""),
+        filter_values={},
+    )
+    return [
+        *_inject_and_reload(js),
+        *_open_symbols_panel(),
+        ScrapeAction(
+            ScrapeActionType.CLICK_BUTTON, TradingViewXpath.INDICES_BUTTON, None
+        ),
+    ]
+
+
+def build_bonds_link_scrape_actions(
+    country: Country,
+    bonds_type: BondsType,
+) -> List[ScrapeAction]:
+    """Bonds: country × bonds_type."""
+    js = _build_ls_inject_js(
+        asset_tab=_ASSET_LS_TAB[ScrapeMainType.BONDS.value],
+        country_code=COUNTRY_CODE.get(country, ""),
+        filter_values={
+            "bond-type-select": BONDS_TYPE_LS_VALUE[bonds_type],
+        },
+    )
+    return [
+        *_inject_and_reload(js),
+        *_open_symbols_panel(),
+        ScrapeAction(
+            ScrapeActionType.CLICK_BUTTON, TradingViewXpath.BONDS_BUTTON, None
+        ),
+    ]
+
+
+def build_economy_link_scrape_actions(
+    country: Country,
+    category: EconomyCategory,
+) -> List[ScrapeAction]:
+    """Economy: country × category."""
+    js = _build_ls_inject_js(
+        asset_tab=_ASSET_LS_TAB[ScrapeMainType.ECONOMY.value],
+        country_code=COUNTRY_CODE.get(country, ""),
+        filter_values={
+            "economy-category-select": ECONOMY_CATEGORY_LS_VALUE[category],
+        },
+    )
+    return [
+        *_inject_and_reload(js),
+        *_open_symbols_panel(),
+        ScrapeAction(
+            ScrapeActionType.CLICK_BUTTON, TradingViewXpath.ECONOMY_BUTTON, None
+        ),
+    ]
+
+
+def build_options_link_scrape_actions(
+    country: Country,
+) -> List[ScrapeAction]:
+    """Options: country only."""
+    js = _build_ls_inject_js(
+        asset_tab=_ASSET_LS_TAB[ScrapeMainType.OPTIONS.value],
+        country_code=COUNTRY_CODE.get(country, ""),
+        filter_values={},
+    )
+    return [
+        *_inject_and_reload(js),
+        *_open_symbols_panel(),
+        ScrapeAction(
+            ScrapeActionType.CLICK_BUTTON, TradingViewXpath.OPTIONS_BUTTON, None
+        ),
     ]
 
 
