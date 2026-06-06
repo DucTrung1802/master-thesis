@@ -534,8 +534,6 @@ class WebScraper:
                 category.value,
                 "",
                 "",
-                "",
-                "",
                 url,
             ],
         )

@@ -1161,7 +1161,12 @@ def build_futures_link_scrape_actions(
     country: Country,
     category: FutureCategory,
 ) -> List[ScrapeAction]:
-    """Futures: category only (no country filter on TradingView)."""
+    """Futures: country × category.
+
+    TradingView stores the futures country in selectedSearchSources["futures"]
+    (confirmed: "futures": "vn") and the category in
+    selectedSymbolSearchFilterValues["futures"]["futures-category-select"].
+    """
     js = _build_ls_inject_js(
         asset_tab=_ASSET_LS_TAB[ScrapeMainType.FUTURES.value],
         country_code=COUNTRY_CODE.get(country, ""),
@@ -1181,13 +1186,17 @@ def build_futures_link_scrape_actions(
 def build_forex_link_scrape_actions(
     source: ForexSource,
 ) -> List[ScrapeAction]:
-    """Forex: source / provider only."""
+    """Forex: source / provider only.
+
+    TradingView stores the forex source in selectedSearchSources["forex"]
+    as an UPPERCASE string (e.g. "OANDA", "PEPPERSTONE"), confirmed by
+    inspecting localStorage on a live session.  It does NOT use
+    selectedSymbolSearchFilterValues for forex source.
+    """
     js = _build_ls_inject_js(
         asset_tab=_ASSET_LS_TAB[ScrapeMainType.FOREX.value],
-        country_code="",
-        filter_values={
-            "forex-source-select": source.value,
-        },
+        country_code=source.value.upper(),  # TradingView uses uppercase: "OANDA" not "oanda"
+        filter_values={},  # forex has no sub-filter
     )
     return [
         *_inject_and_reload(js),
