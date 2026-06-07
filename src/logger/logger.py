@@ -24,6 +24,7 @@ class Logger:
             datefmt="%Y-%m-%d %H:%M:%S",
             encoding="utf-8",
         )
+        logging.getLogger("urllib3.connectionpool").setLevel(logging.ERROR)
         self._logger = logging.getLogger()
 
     def _create_log_file_if_not_exists(self, file_name: str):

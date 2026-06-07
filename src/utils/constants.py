@@ -118,6 +118,8 @@ SCRAPER_BASE_WAIT_TIME = 1  # seconds
 
 SCRAPER_RETRY_ATTEMPTS = 5  # number of retry attempts on failure
 SCRAPER_RETRY_DELAY = 5  # seconds to wait between retries
+SCRAPER_MAX_CONCURRENT_BROWSERS = 8  # cap concurrent Chrome instances
+SCRAPER_NAV_STAGGER = 8.0  # minimum seconds between browser page navigations
 
 TRADING_VIEW_HOME_PAGE_URL = "https://www.tradingview.com/"
 TRADING_VIEW_TABLE_SCHEMA = [
