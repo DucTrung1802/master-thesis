@@ -1103,36 +1103,21 @@ class WebScraper:
     # TradingView link-based data scraping – task adders
     # ──────────────────────────────────────────────────────────────────────
 
-    def _add_stock_data_tasks(self) -> int:
-        return 0
+    def _add_generic_link_data_tasks(self, asset_type: ScrapeMainType) -> int:
+        """Generic task adder for any TradingView link-based asset type.
 
-    def _add_fund_data_tasks(self) -> int:
-        return 0
-
-    def _add_futures_data_tasks(self) -> int:
-        return 0
-
-    def _add_forex_data_tasks(self) -> int:
-        return 0
-
-    def _add_crypto_data_tasks(self) -> int:
-        return 0
-
-    def _add_indices_data_tasks(self) -> int:
-        return 0
-
-    def _add_bonds_data_tasks(self) -> int:
+        Maps each enabled switch path to the corresponding links CSV directory
+        by stripping the 'web_scraper/trading_view/data' prefix and prepending
+        SCRAPER_RAW_DATA_DIR/links, which works regardless of directory depth
+        (forex has 2 sub-parts, bonds 3, stocks 4, etc.).
+        """
         added = 0
         for path in self._switch_handler.get_enabled_paths(
-            "web_scraper", "trading_view", "data", ScrapeMainType.BONDS.value
+            "web_scraper", "trading_view", "data", asset_type.value
         ):
-            parts = path.split("/")
-            country = parts[4]
-            bonds_type = parts[5]
-            links_dir = (
-                f"{SCRAPER_RAW_DATA_DIR}/links"
-                f"/{ScrapeMainType.BONDS.value}/{country}/{bonds_type}"
-            )
+            # parts[3:] = [asset_type, sub1, ..., subN] — mirrors the links dir layout
+            sub_parts = path.split("/")[3:]
+            links_dir = os.path.join(SCRAPER_RAW_DATA_DIR, "links", *sub_parts)
             if not os.path.isdir(links_dir):
                 self._logger.log_warning(f"Links directory not found: {links_dir}")
                 continue
@@ -1150,15 +1135,7 @@ class WebScraper:
                     if not url:
                         continue
                     symbol = url.split("symbol=")[-1] if "symbol=" in url else url
-                    task_name = format_key_for_name(
-                        (
-                            "data",
-                            ScrapeMainType.BONDS.value,
-                            country,
-                            bonds_type,
-                            symbol,
-                        )
-                    )
+                    task_name = format_key_for_name(("data", *sub_parts, symbol))
                     self._thread_manager.add_task(
                         Task(
                             task_name,
@@ -1169,8 +1146,29 @@ class WebScraper:
                     added += 1
         return added
 
+    def _add_stock_data_tasks(self) -> int:
+        return self._add_generic_link_data_tasks(ScrapeMainType.STOCKS)
+
+    def _add_fund_data_tasks(self) -> int:
+        return self._add_generic_link_data_tasks(ScrapeMainType.FUNDS)
+
+    def _add_futures_data_tasks(self) -> int:
+        return self._add_generic_link_data_tasks(ScrapeMainType.FUTURES)
+
+    def _add_forex_data_tasks(self) -> int:
+        return self._add_generic_link_data_tasks(ScrapeMainType.FOREX)
+
+    def _add_crypto_data_tasks(self) -> int:
+        return self._add_generic_link_data_tasks(ScrapeMainType.CRYPTO)
+
+    def _add_indices_data_tasks(self) -> int:
+        return self._add_generic_link_data_tasks(ScrapeMainType.INDICES)
+
+    def _add_bonds_data_tasks(self) -> int:
+        return self._add_generic_link_data_tasks(ScrapeMainType.BONDS)
+
     def _add_economy_data_tasks(self) -> int:
-        return 0
+        return self._add_generic_link_data_tasks(ScrapeMainType.ECONOMY)
 
     def _add_options_data_tasks(self) -> int:
         return 0
