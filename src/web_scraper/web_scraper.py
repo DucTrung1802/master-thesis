@@ -1178,7 +1178,11 @@ class WebScraper:
     # ──────────────────────────────────────────────────────────────────────
 
     def _scrape_data_trading_view_link(self, row: dict) -> None:
-        symbol = row.get("url", "").split("symbol=")[-1] if "symbol=" in row.get("url", "") else row.get("url", "")
+        symbol = (
+            row.get("url", "").split("symbol=")[-1]
+            if "symbol=" in row.get("url", "")
+            else row.get("url", "")
+        )
         last_error: Exception = None
         for attempt in range(1, self._retry_attempts + 1):
             try:
@@ -1289,15 +1293,13 @@ class WebScraper:
                 _custom_range_xpath = '//*[@id="CustomRange"]'
                 _input_start_xpath = (
                     '//*[@id="overlap-manager-root"]/div[2]/div/div[1]/div/div[3]'
-                    '/div/div/div[1]/div[1]/div/div/div/span/span[1]/input'
+                    "/div/div/div[1]/div[1]/div/div/div/span/span[1]/input"
                 )
                 _input_end_xpath = (
                     '//*[@id="overlap-manager-root"]/div[2]/div/div[1]/div/div[3]'
-                    '/div/div/div[2]/div[1]/div/div/div/span/span[1]/input'
+                    "/div/div/div[2]/div[1]/div/div/div/span/span[1]/input"
                 )
-                _apply_btn_xpath = (
-                    '//*[@id="overlap-manager-root"]/div[2]/div/div[1]/div/div[4]/div/span/button'
-                )
+                _apply_btn_xpath = '//*[@id="overlap-manager-root"]/div[2]/div/div[1]/div/div[4]/div/span/button'
 
                 def _presence_js_click(xpath, timeout=90):
                     el = WebDriverWait(web_driver, timeout).until(
@@ -1318,16 +1320,22 @@ class WebScraper:
                 time.sleep(0.5)
 
                 self._helper_input_text(
-                    web_driver, _input_start_xpath, start_time_date_str,
-                    char_by_char=True, confirm="tab",
+                    web_driver,
+                    _input_start_xpath,
+                    start_time_date_str,
+                    char_by_char=True,
+                    confirm="tab",
                 )
                 self._helper_input_text(
-                    web_driver, _input_end_xpath, current_time_date_str,
-                    char_by_char=True, confirm="tab",
+                    web_driver,
+                    _input_end_xpath,
+                    current_time_date_str,
+                    char_by_char=True,
+                    confirm="tab",
                 )
                 _presence_js_click(_apply_btn_xpath)
                 self._logger.log_info(
-                    f'Applied date range [{start_time_date_str} → {current_time_date_str}]'
+                    f"Applied date range [{start_time_date_str} → {current_time_date_str}]"
                     f' for "{symbol}".'
                 )
                 time.sleep(SCRAPER_BASE_WAIT_TIME)
@@ -1365,9 +1373,7 @@ class WebScraper:
                     else:
                         _stable_ticks = 0
                         _prev_count = _cur_count
-                self._logger.log_info(
-                    f'Final bar count for "{symbol}": {_cur_count}.'
-                )
+                self._logger.log_info(f'Final bar count for "{symbol}": {_cur_count}.')
 
                 bulk_js = """
                 try {
@@ -1461,213 +1467,6 @@ class WebScraper:
                     dialog_thread.join()
                 web_driver.close()
 
-    # ──────────────────────────────────────────────────────────────────────
-    # Macroeconomics data scraping (non-TradingView-links)
-    # ──────────────────────────────────────────────────────────────────────
-
-    def _scrape_data_macroeconomics_exchange_rate_usd_vnd(self, key: Tuple) -> None:
-        self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
-        web_driver, bs4_parser = self._helper_initialize_web_driver_and_bs4_parser()
-
-        try:
-            scrape_main_type = key[0].value
-            scrape_sub_type = key[1].value
-            folder_path = f"{SCRAPER_RAW_DATA_DIR}/{scrape_main_type}/{scrape_sub_type}"
-            file_name = scrape_sub_type
-
-            start_time = SCRAPER_START_DATE
-            current_time = datetime.now()
-            start_time_second_str = str(int(SCRAPER_START_DATE.timestamp()))
-            current_time_second_str = str(int(current_time.timestamp()))
-            file_path = (
-                f"{folder_path}/{file_name}"
-                f"_{start_time.strftime('%Y-%m-%d')}"
-                f"_{current_time.strftime('%Y-%m-%d')}.csv"
-            )
-
-            if os.path.exists(file_path):
-                self._logger.log_info(
-                    f"File exists: {file_path}, deleting to re-fetch."
-                )
-                os.remove(file_path)
-
-            os.makedirs(folder_path, exist_ok=True)
-            self._logger.log_info(
-                f"Scraping {scrape_sub_type} data from "
-                f"{start_time.strftime('%Y-%m-%d')} to {current_time.strftime('%Y-%m-%d')}."
-            )
-
-            # TODO: define SCRAPE_MAPPING in utils/constants.py or utils/enums.py
-            #       key is a tuple of enum members, e.g. (ScrapeMainType.X, SubType.Y)
-            source_info = SCRAPE_MAPPING[key]  # noqa: F821
-            full_url = (
-                source_info.url
-                + f"&period1={start_time_second_str}&period2={current_time_second_str}"
-            )
-            web_driver, bs4_parser = self._helper_navigate_to_url(web_driver, full_url)
-
-            table_class = "table yf-u4m6f0 noDl hideOnPrint"
-            headers, rows = self._helper_extract_table_by_class(bs4_parser, table_class)
-
-            with open(file_path, "w", newline="") as f:
-                writer = csv.writer(f)
-                writer.writerow(headers)
-                writer.writerows(rows)
-
-        finally:
-            web_driver.close()
-
-        self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
-
-    def _scrape_data_macroeconomics_vietnam_interbank_rate(self, key: Tuple) -> None:
-        self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
-        web_driver, bs4_parser = self._helper_initialize_web_driver_and_bs4_parser()
-
-        stop_event = threading.Event()
-        dialog_thread = threading.Thread(
-            target=self._dialog_remover_loop,
-            args=(web_driver, stop_event),
-            daemon=True,
-        )
-
-        try:
-            scrape_main_type = key[0].value
-            scrape_sub_type = key[1].value
-            folder_path = f"{SCRAPER_RAW_DATA_DIR}/{scrape_main_type}/{scrape_sub_type}"
-            file_name = scrape_sub_type
-
-            start_time = SCRAPER_START_DATE
-            current_time = datetime.now()
-            start_time_date_str = SCRAPER_START_DATE.strftime("%Y-%m-%d")
-            current_time_date_str = current_time.strftime("%Y-%m-%d")
-            file_path = (
-                f"{folder_path}/{file_name}"
-                f"_{start_time_date_str}_{current_time_date_str}.csv"
-            )
-
-            os.makedirs(folder_path, exist_ok=True)
-            self._logger.log_info(
-                f"Scraping {scrape_sub_type} data from "
-                f"{start_time.strftime('%Y-%m-%d')} to {current_time.strftime('%Y-%m-%d')}."
-            )
-
-            # TODO: define SCRAPE_MAPPING in utils/constants.py or utils/enums.py
-            source_info = SCRAPE_MAPPING[key]  # noqa: F821
-            web_driver, bs4_parser = self._helper_navigate_to_url(
-                web_driver, source_info.url
-            )
-
-            # XPaths
-            select_date_range_button_xpath = (
-                "/html/body/div[2]/div/div[5]/div[2]/div/div[2]/div/button"
-            )
-            custom_range_button_xpath = '//*[@id="CustomRange"]'
-            input_start_date_xpath = (
-                '//*[@id="overlap-manager-root"]/div[2]/div/div[1]/div/div[3]'
-                "/div/div/div[1]/div[1]/div/div/div/span/span[1]/input"
-            )
-            input_end_date_xpath = (
-                '//*[@id="overlap-manager-root"]/div[2]/div/div[1]/div/div[3]'
-                "/div/div/div[2]/div[1]/div/div/div/span/span[1]/input"
-            )
-            apply_range_button_xpath = '//*[@id="overlap-manager-root"]/div[2]/div/div[1]/div/div[4]/div/span/button'
-
-            # Step 1 – set custom date range
-            self._helper_click_element(web_driver, select_date_range_button_xpath)
-            self._helper_click_element(web_driver, custom_range_button_xpath)
-
-            dialog_thread.start()
-
-            self._helper_input_text(
-                web_driver,
-                input_start_date_xpath,
-                start_time_date_str,
-                char_by_char=True,
-                confirm="tab",
-            )
-            self._helper_input_text(
-                web_driver,
-                input_end_date_xpath,
-                current_time_date_str,
-                char_by_char=True,
-                confirm="tab",
-            )
-            self._helper_click_element(web_driver, apply_range_button_xpath)
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
-
-            # Step 2 – extract all chart data in a single JS call
-            bulk_js = """
-            try {
-                const collection = window._exposed_chartWidgetCollection;
-                const chartWidget = collection.activeChartWidget._value;
-                const model = chartWidget._modelWV._value.m_model;
-                const mainSeries = model._mainSeries;
-                const seriesSource = mainSeries._seriesSource;
-                const items = seriesSource._data.m_bars._items;
-                const lastBarCloseTime = mainSeries._lastBarCloseTime;
-
-                const parts = arguments[0].split('-');
-                const startTs = Date.UTC(
-                    parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2])
-                ) / 1000;
-
-                const keys = Object.keys(items).map(Number).sort((a, b) => a - b);
-
-                let isOHLC = false;
-                for (const k of keys) {
-                    const item = items[k];
-                    if (!item || !item.value) continue;
-                    isOHLC = item.value[1] !== item.value[2];
-                    break;
-                }
-
-                const records = [];
-                for (const k of keys) {
-                    const item = items[k];
-                    if (!item || !item.value) continue;
-                    const ts = item.value[0];
-                    if (ts >= lastBarCloseTime || ts < startTs) continue;
-                    if (isOHLC) {
-                        records.push([
-                            new Date(ts * 1000).toISOString().split('T')[0],
-                            item.value[1], item.value[2],
-                            item.value[3], item.value[4], item.value[5],
-                        ]);
-                    } else {
-                        records.push([
-                            new Date(ts * 1000).toISOString().split('T')[0],
-                            item.value[4],
-                        ]);
-                    }
-                }
-                return JSON.stringify({ is_ohlc: isOHLC, records: records });
-            } catch(e) { return '{"is_ohlc": false, "records": []}'; }
-            """
-
-            result = json.loads(web_driver.execute_script(bulk_js, start_time_date_str))
-            is_ohlc = result["is_ohlc"]
-            records = result["records"]
-            self._logger.log_info(f"Fetched {len(records)} records, isOHLC: {is_ohlc}.")
-
-            # Step 3 – write to CSV
-            with open(file_path, "w", newline="") as f:
-                writer = csv.writer(f)
-                if is_ohlc:
-                    writer.writerow(["date", "open", "high", "low", "close", "volume"])
-                else:
-                    writer.writerow(["date", "value"])
-                writer.writerows(records)
-
-            self._logger.log_info(f"Saved {len(records)} records to {file_path}.")
-
-        finally:
-            stop_event.set()
-            if dialog_thread.is_alive():
-                dialog_thread.join()
-            web_driver.close()
-
-        self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
-
     @staticmethod
     def _dialog_remover_loop(
         web_driver: ChromiumDriver, stop_event: threading.Event
@@ -1710,7 +1509,7 @@ class WebScraper:
             "web_scraper", "trading_view", "collected_links"
         ):
             self.aggregate_trading_view_links()
-            
+
         self._logger.log_info("Finished link aggregation phase.")
 
         # ── Phase 3: scrape data from collected links ─────────────────────────
