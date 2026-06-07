@@ -4,6 +4,7 @@
 import csv
 import json
 import os
+import random
 import threading
 import time
 from typing import Callable, List, Optional, Tuple, Literal
@@ -45,6 +46,9 @@ class WebScraper:
         self._thread_manager = ThreadManager(logger=self._logger, power=power)
         self._retry_attempts: int = retry_attempts
         self._retry_delay: float = retry_delay
+        self._browser_semaphore = threading.Semaphore(SCRAPER_MAX_CONCURRENT_BROWSERS)
+        self._nav_last_ts: float = 0.0
+        self._nav_time_lock = threading.Lock()
 
         self._chrome_options = Options()
         self._chrome_options.add_experimental_option(
@@ -124,7 +128,9 @@ class WebScraper:
             case "enter":
                 input_element.send_keys(Keys.ENTER)
 
-    def _helper_click_element(self, web_driver: ChromiumDriver, xpath: str) -> None:
+    def _helper_click_element(
+        self, web_driver: ChromiumDriver, xpath: str, timeout: int = 10
+    ) -> None:
         def find_visible(driver):
             candidates = driver.find_elements(By.XPATH, xpath)
             for el in candidates:
@@ -132,7 +138,7 @@ class WebScraper:
                     return el
             return False
 
-        element = WebDriverWait(web_driver, 10).until(find_visible)
+        element = WebDriverWait(web_driver, timeout).until(find_visible)
         web_driver.execute_script(
             "arguments[0].scrollIntoView({block: 'center'});", element
         )
@@ -1013,212 +1019,453 @@ class WebScraper:
             f"Added total {after - before} Trading View links scraping tasks."
         )
 
-    # ──────────────────────────────────────────────────────────────────────
-    # Macroeconomics data scraping (non-TradingView-links)
-    # ──────────────────────────────────────────────────────────────────────
+    def aggregate_trading_view_links(self) -> None:
+        self._logger.log_info("Aggregating Trading View link CSV files.")
 
-    def _scrape_data_macroeconomics_exchange_rate_usd_vnd(self, key: Tuple) -> None:
-        self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
-        web_driver, bs4_parser = self._helper_initialize_web_driver_and_bs4_parser()
+        links_dir = f"{SCRAPER_RAW_DATA_DIR}/links"
+        output_dir = f"{SCRAPER_RAW_DATA_DIR}/collected_links"
 
-        try:
-            scrape_main_type = key[0].value
-            scrape_sub_type = key[1].value
-            folder_path = f"{SCRAPER_RAW_DATA_DIR}/{scrape_main_type}/{scrape_sub_type}"
-            file_name = scrape_sub_type
+        # Collect all CSV files recursively
+        csv_files = []
+        for root, _, files in os.walk(links_dir):
+            for file in files:
+                if file.endswith(".csv"):
+                    csv_files.append(os.path.join(root, file))
 
-            start_time = SCRAPER_START_DATE
-            current_time = datetime.now()
-            start_time_second_str = str(int(SCRAPER_START_DATE.timestamp()))
-            current_time_second_str = str(int(current_time.timestamp()))
-            file_path = (
-                f"{folder_path}/{file_name}"
-                f"_{start_time.strftime('%Y-%m-%d')}"
-                f"_{current_time.strftime('%Y-%m-%d')}.csv"
-            )
+        if not csv_files:
+            self._logger.log_warning(f'No CSV files found in "{links_dir}".')
+            return
 
-            if os.path.exists(file_path):
-                self._logger.log_info(
-                    f"File exists: {file_path}, deleting to re-fetch."
-                )
-                os.remove(file_path)
+        # Date = latest OS modification timestamp across all source files
+        latest_mtime = max(os.path.getmtime(f) for f in csv_files)
+        latest_date_str = datetime.fromtimestamp(latest_mtime).strftime("%Y-%m-%d")
 
-            os.makedirs(folder_path, exist_ok=True)
-            self._logger.log_info(
-                f"Scraping {scrape_sub_type} data from "
-                f"{start_time.strftime('%Y-%m-%d')} to {current_time.strftime('%Y-%m-%d')}."
-            )
+        os.makedirs(output_dir, exist_ok=True)
+        output_path = f"{output_dir}/all_links_{latest_date_str}.csv"
 
-            # TODO: define SCRAPE_MAPPING in utils/constants.py or utils/enums.py
-            #       key is a tuple of enum members, e.g. (ScrapeMainType.X, SubType.Y)
-            source_info = SCRAPE_MAPPING[key]  # noqa: F821
-            full_url = (
-                source_info.url
-                + f"&period1={start_time_second_str}&period2={current_time_second_str}"
-            )
-            web_driver, bs4_parser = self._helper_navigate_to_url(web_driver, full_url)
+        seen = set()
+        total_written = 0
 
-            table_class = "table yf-u4m6f0 noDl hideOnPrint"
-            headers, rows = self._helper_extract_table_by_class(bs4_parser, table_class)
+        with open(output_path, "w", newline="", encoding="utf-8") as outfile:
+            writer = csv.writer(outfile)
+            writer.writerow(TRADING_VIEW_TABLE_SCHEMA)
 
-            with open(file_path, "w", newline="") as f:
-                writer = csv.writer(f)
-                writer.writerow(headers)
-                writer.writerows(rows)
+            for csv_file in sorted(csv_files):
+                with open(csv_file, "r", encoding="utf-8") as infile:
+                    reader = csv.reader(infile)
+                    next(reader, None)  # skip header row
+                    for row in reader:
+                        row_tuple = tuple(row)
+                        if row_tuple not in seen and any(cell.strip() for cell in row):
+                            seen.add(row_tuple)
+                            writer.writerow(row)
+                            total_written += 1
 
-        finally:
-            web_driver.close()
-
-        self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
-
-    def _scrape_data_macroeconomics_vietnam_interbank_rate(self, key: Tuple) -> None:
-        self._logger.log_info(f'Start scraping data for "{format_key_for_name(key)}".')
-        web_driver, bs4_parser = self._helper_initialize_web_driver_and_bs4_parser()
-
-        stop_event = threading.Event()
-        dialog_thread = threading.Thread(
-            target=self._dialog_remover_loop,
-            args=(web_driver, stop_event),
-            daemon=True,
+        self._logger.log_info(
+            f"Aggregated {total_written} unique links from {len(csv_files)} files → {output_path}"
         )
 
-        try:
-            scrape_main_type = key[0].value
-            scrape_sub_type = key[1].value
-            folder_path = f"{SCRAPER_RAW_DATA_DIR}/{scrape_main_type}/{scrape_sub_type}"
-            file_name = scrape_sub_type
+    def add_trading_view_data_scraping_tasks(self) -> None:
+        self._logger.log_info("Adding Trading View data scraping tasks.")
+        before = self._thread_manager.get_current_number_of_task()
 
-            start_time = SCRAPER_START_DATE
-            current_time = datetime.now()
-            start_time_date_str = SCRAPER_START_DATE.strftime("%Y-%m-%d")
-            current_time_date_str = current_time.strftime("%Y-%m-%d")
-            file_path = (
-                f"{folder_path}/{file_name}"
-                f"_{start_time_date_str}_{current_time_date_str}.csv"
+        asset_adders = [
+            (ScrapeMainType.STOCKS, self._add_stock_data_tasks),
+            (ScrapeMainType.FUNDS, self._add_fund_data_tasks),
+            (ScrapeMainType.FUTURES, self._add_futures_data_tasks),
+            (ScrapeMainType.FOREX, self._add_forex_data_tasks),
+            (ScrapeMainType.CRYPTO, self._add_crypto_data_tasks),
+            (ScrapeMainType.INDICES, self._add_indices_data_tasks),
+            (ScrapeMainType.BONDS, self._add_bonds_data_tasks),
+            (ScrapeMainType.ECONOMY, self._add_economy_data_tasks),
+            (ScrapeMainType.OPTIONS, self._add_options_data_tasks),
+        ]
+
+        for asset_type, adder in asset_adders:
+            if self._switch_handler.is_enabled(
+                "web_scraper", "trading_view", "data", asset_type.value
+            ):
+                count = adder()
+                self._logger.log_info(
+                    f"Added {count} Trading View {asset_type.value} data scraping tasks."
+                )
+            else:
+                self._logger.log_info(
+                    f"Trading View {asset_type.value} data scraping is disabled – skipping."
+                )
+
+        after = self._thread_manager.get_current_number_of_task()
+        self._logger.log_info(
+            f"Added total {after - before} Trading View data scraping tasks."
+        )
+
+    # ──────────────────────────────────────────────────────────────────────
+    # TradingView link-based data scraping – task adders
+    # ──────────────────────────────────────────────────────────────────────
+
+    def _add_generic_link_data_tasks(self, asset_type: ScrapeMainType) -> int:
+        """Generic task adder for any TradingView link-based asset type.
+
+        Maps each enabled switch path to the corresponding links CSV directory
+        by stripping the 'web_scraper/trading_view/data' prefix and prepending
+        SCRAPER_RAW_DATA_DIR/links, which works regardless of directory depth
+        (forex has 2 sub-parts, bonds 3, stocks 4, etc.).
+        """
+        added = 0
+        for path in self._switch_handler.get_enabled_paths(
+            "web_scraper", "trading_view", "data", asset_type.value
+        ):
+            # parts[3:] = [asset_type, sub1, ..., subN] — mirrors the links dir layout
+            sub_parts = path.split("/")[3:]
+            links_dir = os.path.join(SCRAPER_RAW_DATA_DIR, "links", *sub_parts)
+            if not os.path.isdir(links_dir):
+                self._logger.log_warning(f"Links directory not found: {links_dir}")
+                continue
+            csv_files = sorted(
+                [f for f in os.listdir(links_dir) if f.endswith(".csv")], reverse=True
+            )
+            if not csv_files:
+                self._logger.log_warning(f"No links CSV found in: {links_dir}")
+                continue
+            links_path = os.path.join(links_dir, csv_files[0])
+            with open(links_path, "r", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    url = row.get("url", "").strip()
+                    if not url:
+                        continue
+                    symbol = url.split("symbol=")[-1] if "symbol=" in url else url
+                    task_name = format_key_for_name(("data", *sub_parts, symbol))
+                    self._thread_manager.add_task(
+                        Task(
+                            task_name,
+                            self._scrape_data_trading_view_link,
+                            dict(row),
+                        )
+                    )
+                    added += 1
+        return added
+
+    def _add_stock_data_tasks(self) -> int:
+        return self._add_generic_link_data_tasks(ScrapeMainType.STOCKS)
+
+    def _add_fund_data_tasks(self) -> int:
+        return self._add_generic_link_data_tasks(ScrapeMainType.FUNDS)
+
+    def _add_futures_data_tasks(self) -> int:
+        return self._add_generic_link_data_tasks(ScrapeMainType.FUTURES)
+
+    def _add_forex_data_tasks(self) -> int:
+        return self._add_generic_link_data_tasks(ScrapeMainType.FOREX)
+
+    def _add_crypto_data_tasks(self) -> int:
+        return self._add_generic_link_data_tasks(ScrapeMainType.CRYPTO)
+
+    def _add_indices_data_tasks(self) -> int:
+        return self._add_generic_link_data_tasks(ScrapeMainType.INDICES)
+
+    def _add_bonds_data_tasks(self) -> int:
+        return self._add_generic_link_data_tasks(ScrapeMainType.BONDS)
+
+    def _add_economy_data_tasks(self) -> int:
+        return self._add_generic_link_data_tasks(ScrapeMainType.ECONOMY)
+
+    def _add_options_data_tasks(self) -> int:
+        return 0
+
+    # ──────────────────────────────────────────────────────────────────────
+    # TradingView link-based data scraping – core scraper
+    # ──────────────────────────────────────────────────────────────────────
+
+    def _scrape_data_trading_view_link(self, row: dict) -> None:
+        symbol = (
+            row.get("url", "").split("symbol=")[-1]
+            if "symbol=" in row.get("url", "")
+            else row.get("url", "")
+        )
+        last_error: Exception = None
+        for attempt in range(1, self._retry_attempts + 1):
+            try:
+                if attempt > 1:
+                    self._logger.log_info(
+                        f'Retry {attempt}/{self._retry_attempts} for "{symbol}" '
+                        f"(waiting {self._retry_delay}s)."
+                    )
+                    time.sleep(self._retry_delay)
+                self._scrape_data_trading_view_link_attempt(row)
+                self._logger.log_info(
+                    f'Finish scraping data for "{symbol}" '
+                    f"(attempt {attempt}/{self._retry_attempts})."
+                )
+                return
+            except Exception as e:
+                last_error = e
+                self._logger.log_error(
+                    f'Attempt {attempt}/{self._retry_attempts} failed for "{symbol}": {e}'
+                )
+        self._logger.log_error(
+            f'All {self._retry_attempts} attempts failed for "{symbol}". '
+            f"Last error: {last_error}"
+        )
+        raise last_error
+
+    def _scrape_data_trading_view_link_attempt(self, row: dict) -> None:
+        scrape_main_type = row.get("scrape_main_type", "")
+        sub_type_name_1 = row.get("sub_type_name_1", "")
+        sub_type_value_1 = row.get("sub_type_value_1", "")
+        sub_type_name_2 = row.get("sub_type_name_2", "")
+        sub_type_value_2 = row.get("sub_type_value_2", "")
+        url = row.get("url", "")
+
+        symbol = url.split("symbol=")[-1] if "symbol=" in url else url
+        symbol_safe = symbol.replace(":", "_")
+
+        # Stagger before acquiring the semaphore so threads desync their acquisition attempts
+        time.sleep(random.uniform(1, 5))
+
+        # Hard cap on concurrent Chrome instances to avoid resource exhaustion
+        with self._browser_semaphore:
+            web_driver, bs4_parser = self._helper_initialize_web_driver_and_bs4_parser()
+
+            stop_event = threading.Event()
+            dialog_thread = threading.Thread(
+                target=self._dialog_remover_loop,
+                args=(web_driver, stop_event),
+                daemon=True,
             )
 
-            os.makedirs(folder_path, exist_ok=True)
-            self._logger.log_info(
-                f"Scraping {scrape_sub_type} data from "
-                f"{start_time.strftime('%Y-%m-%d')} to {current_time.strftime('%Y-%m-%d')}."
-            )
+            try:
+                # Mirror the links folder structure under raw_data/data/
+                folder_parts = [SCRAPER_RAW_DATA_DIR, "data", scrape_main_type]
+                if sub_type_value_1:
+                    folder_parts.append(sub_type_value_1)
+                if sub_type_name_2 and sub_type_value_2:
+                    folder_parts.append(sub_type_value_2)
+                folder_path = "/".join(folder_parts)
+                os.makedirs(folder_path, exist_ok=True)
 
-            # TODO: define SCRAPE_MAPPING in utils/constants.py or utils/enums.py
-            source_info = SCRAPE_MAPPING[key]  # noqa: F821
-            web_driver, bs4_parser = self._helper_navigate_to_url(
-                web_driver, source_info.url
-            )
+                start_time = SCRAPER_START_DATE
+                current_time = datetime.now()
+                start_time_date_str = start_time.strftime("%Y-%m-%d")
+                current_time_date_str = current_time.strftime("%Y-%m-%d")
+                file_path = (
+                    f"{folder_path}/{symbol_safe}"
+                    f"_{start_time_date_str}_{current_time_date_str}.csv"
+                )
 
-            # XPaths
-            select_date_range_button_xpath = (
-                "/html/body/div[2]/div/div[5]/div[2]/div/div[2]/div/button"
-            )
-            custom_range_button_xpath = '//*[@id="CustomRange"]'
-            input_start_date_xpath = (
-                '//*[@id="overlap-manager-root"]/div[2]/div/div[1]/div/div[3]'
-                "/div/div/div[1]/div[1]/div/div/div/span/span[1]/input"
-            )
-            input_end_date_xpath = (
-                '//*[@id="overlap-manager-root"]/div[2]/div/div[1]/div/div[3]'
-                "/div/div/div[2]/div[1]/div/div/div/span/span[1]/input"
-            )
-            apply_range_button_xpath = '//*[@id="overlap-manager-root"]/div[2]/div/div[1]/div/div[4]/div/span/button'
+                # Rate-limit page navigations so at most one browser is in the
+                # heavy JS page-load phase at any given time. With 8 concurrent
+                # browsers launching simultaneously, CPU/RAM pressure prevents
+                # TradingView's toolbar from rendering within the button timeout.
+                # Staggering navigations by SCRAPER_NAV_STAGGER seconds each gives
+                # every page a window to load before the next one starts.
+                with self._nav_time_lock:
+                    _now = time.time()
+                    _nav_time = max(_now, self._nav_last_ts + SCRAPER_NAV_STAGGER)
+                    self._nav_last_ts = _nav_time
+                    _wait = _nav_time - _now
+                if _wait > 0:
+                    time.sleep(_wait)
 
-            # Step 1 – set custom date range
-            self._helper_click_element(web_driver, select_date_range_button_xpath)
-            self._helper_click_element(web_driver, custom_range_button_xpath)
+                web_driver, bs4_parser = self._helper_navigate_to_url(web_driver, url)
 
-            dialog_thread.start()
+                # Wait until the TradingView chart widget JS object is populated
+                chart_ready_js = (
+                    "try { return !!window._exposed_chartWidgetCollection"
+                    " && !!window._exposed_chartWidgetCollection.activeChartWidget._value; }"
+                    " catch(e) { return false; }"
+                )
+                WebDriverWait(web_driver, 60).until(
+                    lambda d: d.execute_script(chart_ready_js)
+                )
 
-            self._helper_input_text(
-                web_driver,
-                input_start_date_xpath,
-                start_time_date_str,
-                char_by_char=True,
-                confirm="tab",
-            )
-            self._helper_input_text(
-                web_driver,
-                input_end_date_xpath,
-                current_time_date_str,
-                char_by_char=True,
-                confirm="tab",
-            )
-            self._helper_click_element(web_driver, apply_range_button_xpath)
-            time.sleep(SCRAPER_BASE_WAIT_TIME)
+                dialog_thread.start()
 
-            # Step 2 – extract all chart data in a single JS call
-            bulk_js = """
-            try {
-                const collection = window._exposed_chartWidgetCollection;
-                const chartWidget = collection.activeChartWidget._value;
-                const model = chartWidget._modelWV._value.m_model;
-                const mainSeries = model._mainSeries;
-                const seriesSource = mainSeries._seriesSource;
-                const items = seriesSource._data.m_bars._items;
-                const lastBarCloseTime = mainSeries._lastBarCloseTime;
+                # ─── Date range selection via JS-powered UI clicks ────────────────
+                # The chart toolbar button exists in the DOM early but Selenium's
+                # is_displayed() returns False under high concurrency (many browsers
+                # competing for CPU/RAM). EC.presence_of_element_located checks only
+                # that the element is in the DOM; JS .click() then bypasses the
+                # visibility requirement entirely, making this reliable at 8 browsers.
+                _date_range_btn_xpath = (
+                    "/html/body/div[2]/div/div[5]/div[2]/div/div[2]/div/button"
+                )
+                _custom_range_xpath = '//*[@id="CustomRange"]'
+                _input_start_xpath = (
+                    '//*[@id="overlap-manager-root"]/div[2]/div/div[1]/div/div[3]'
+                    "/div/div/div[1]/div[1]/div/div/div/span/span[1]/input"
+                )
+                _input_end_xpath = (
+                    '//*[@id="overlap-manager-root"]/div[2]/div/div[1]/div/div[3]'
+                    "/div/div/div[2]/div[1]/div/div/div/span/span[1]/input"
+                )
+                _apply_btn_xpath = '//*[@id="overlap-manager-root"]/div[2]/div/div[1]/div/div[4]/div/span/button'
 
-                const parts = arguments[0].split('-');
-                const startTs = Date.UTC(
-                    parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2])
-                ) / 1000;
+                def _presence_js_click(xpath, timeout=90):
+                    el = WebDriverWait(web_driver, timeout).until(
+                        EC.presence_of_element_located((By.XPATH, xpath))
+                    )
+                    web_driver.execute_script(
+                        "arguments[0].scrollIntoView({block:'center'});", el
+                    )
+                    web_driver.execute_script("arguments[0].click();", el)
+                    return el
 
-                const keys = Object.keys(items).map(Number).sort((a, b) => a - b);
+                _presence_js_click(_date_range_btn_xpath)
+                self._logger.log_info(f'Clicked date range button for "{symbol}".')
+                time.sleep(1.5)
 
-                let isOHLC = false;
-                for (const k of keys) {
-                    const item = items[k];
-                    if (!item || !item.value) continue;
-                    isOHLC = item.value[1] !== item.value[2];
-                    break;
-                }
+                _presence_js_click(_custom_range_xpath)
+                self._logger.log_info(f'Clicked Custom Range for "{symbol}".')
+                time.sleep(0.5)
 
-                const records = [];
-                for (const k of keys) {
-                    const item = items[k];
-                    if (!item || !item.value) continue;
-                    const ts = item.value[0];
-                    if (ts >= lastBarCloseTime || ts < startTs) continue;
-                    if (isOHLC) {
-                        records.push([
-                            new Date(ts * 1000).toISOString().split('T')[0],
-                            item.value[1], item.value[2],
-                            item.value[3], item.value[4], item.value[5],
-                        ]);
-                    } else {
-                        records.push([
-                            new Date(ts * 1000).toISOString().split('T')[0],
-                            item.value[4],
-                        ]);
+                self._helper_input_text(
+                    web_driver,
+                    _input_start_xpath,
+                    start_time_date_str,
+                    char_by_char=True,
+                    confirm="tab",
+                )
+                self._helper_input_text(
+                    web_driver,
+                    _input_end_xpath,
+                    current_time_date_str,
+                    char_by_char=True,
+                    confirm="tab",
+                )
+                _presence_js_click(_apply_btn_xpath)
+                self._logger.log_info(
+                    f"Applied date range [{start_time_date_str} → {current_time_date_str}]"
+                    f' for "{symbol}".'
+                )
+                time.sleep(SCRAPER_BASE_WAIT_TIME)
+
+                _bar_count_js = (
+                    "try { return Object.keys(window._exposed_chartWidgetCollection"
+                    ".activeChartWidget._value._modelWV._value.m_model._mainSeries"
+                    "._seriesSource._data.m_bars._items).length;"
+                    " } catch(e) { return 0; }"
+                )
+                _pre_apply_count = web_driver.execute_script(_bar_count_js)
+                self._logger.log_info(
+                    f'Bar count immediately after Apply for "{symbol}": {_pre_apply_count}.'
+                )
+
+                # Phase 1 — wait up to 30 s for bar count to change from the
+                # post-Apply baseline (TradingView clears then reloads bars).
+                for _ in range(60):
+                    time.sleep(0.5)
+                    if web_driver.execute_script(_bar_count_js) != _pre_apply_count:
+                        break
+
+                # Phase 2 — wait for count to stabilize for 3 consecutive seconds
+                # (signals that full history has finished loading).
+                _cur_count = _pre_apply_count
+                _prev_count = -1
+                _stable_ticks = 0
+                for _ in range(120):  # max 60 s
+                    time.sleep(0.5)
+                    _cur_count = web_driver.execute_script(_bar_count_js)
+                    if _cur_count == _prev_count:
+                        _stable_ticks += 1
+                        if _stable_ticks >= 6:
+                            break
+                    else:
+                        _stable_ticks = 0
+                        _prev_count = _cur_count
+                self._logger.log_info(f'Final bar count for "{symbol}": {_cur_count}.')
+
+                bulk_js = """
+                try {
+                    const collection = window._exposed_chartWidgetCollection;
+                    const chartWidget = collection.activeChartWidget._value;
+                    const model = chartWidget._modelWV._value.m_model;
+                    const mainSeries = model._mainSeries;
+                    const seriesSource = mainSeries._seriesSource;
+                    const items = seriesSource._data.m_bars._items;
+                    const lastBarCloseTime = mainSeries._lastBarCloseTime;
+
+                    const parts = arguments[0].split('-');
+                    const startTs = Date.UTC(
+                        parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2])
+                    ) / 1000;
+
+                    const keys = Object.keys(items).map(Number).sort((a, b) => a - b);
+
+                    let isOHLC = false;
+                    for (const k of keys) {
+                        const item = items[k];
+                        if (!item || !item.value) continue;
+                        isOHLC = item.value[1] !== item.value[2];
+                        break;
                     }
-                }
-                return JSON.stringify({ is_ohlc: isOHLC, records: records });
-            } catch(e) { return '{"is_ohlc": false, "records": []}'; }
-            """
 
-            result = json.loads(web_driver.execute_script(bulk_js, start_time_date_str))
-            is_ohlc = result["is_ohlc"]
-            records = result["records"]
-            self._logger.log_info(f"Fetched {len(records)} records, isOHLC: {is_ohlc}.")
+                    const records = [];
+                    for (const k of keys) {
+                        const item = items[k];
+                        if (!item || !item.value) continue;
+                        const ts = item.value[0];
+                        if (ts >= lastBarCloseTime || ts < startTs) continue;
+                        if (isOHLC) {
+                            records.push([
+                                new Date(ts * 1000).toISOString().split('T')[0],
+                                item.value[1], item.value[2],
+                                item.value[3], item.value[4], item.value[5],
+                            ]);
+                        } else {
+                            records.push([
+                                new Date(ts * 1000).toISOString().split('T')[0],
+                                item.value[4],
+                            ]);
+                        }
+                    }
+                    return JSON.stringify({ is_ohlc: isOHLC, records: records });
+                } catch(e) { return '{"is_ohlc": false, "records": []}'; }
+                """
 
-            # Step 3 – write to CSV
-            with open(file_path, "w", newline="") as f:
-                writer = csv.writer(f)
+                result = json.loads(
+                    web_driver.execute_script(bulk_js, start_time_date_str)
+                )
+                is_ohlc = result["is_ohlc"]
+                records = result["records"]
+                self._logger.log_info(
+                    f"Fetched {len(records)} records, isOHLC: {is_ohlc}."
+                )
+
+                # Build header: scrape_main_type, [sub_type_name_1], [sub_type_name_2], symbol, date, value cols
+                header = ["scrape_main_type"]
+                if sub_type_name_1:
+                    header.append(sub_type_name_1)
+                if sub_type_name_2:
+                    header.append(sub_type_name_2)
+                header.append("symbol")
+                header.append("date")
                 if is_ohlc:
-                    writer.writerow(["date", "open", "high", "low", "close", "volume"])
+                    header += ["open", "high", "low", "close", "volume"]
                 else:
-                    writer.writerow(["date", "value"])
-                writer.writerows(records)
+                    header.append("value")
 
-            self._logger.log_info(f"Saved {len(records)} records to {file_path}.")
+                # Metadata prefix prepended to every data row
+                meta = [scrape_main_type]
+                if sub_type_name_1:
+                    meta.append(sub_type_value_1)
+                if sub_type_name_2:
+                    meta.append(sub_type_value_2)
+                meta.append(symbol)
 
-        finally:
-            stop_event.set()
-            if dialog_thread.is_alive():
-                dialog_thread.join()
-            web_driver.close()
+                with open(file_path, "w", newline="", encoding="utf-8") as f:
+                    writer = csv.writer(f)
+                    writer.writerow(header)
+                    for rec in records:
+                        writer.writerow(meta + list(rec))
 
-        self._logger.log_info(f'Finish scraping data for "{format_key_for_name(key)}".')
+                self._logger.log_info(f"Saved {len(records)} records to {file_path}.")
+
+            finally:
+                stop_event.set()
+                if dialog_thread.is_alive():
+                    dialog_thread.join()
+                web_driver.close()
 
     @staticmethod
     def _dialog_remover_loop(
@@ -1242,17 +1489,38 @@ class WebScraper:
     def start_scraping(self) -> None:
         self._logger.log_info("Start scraping data using ThreadManager.")
 
+        # ── Phase 1: scrape links ─────────────────────────────────────────────
         self._thread_manager.remove_all_tasks()
-
-        self._logger.log_info("Adding data scraping tasks.")
         before = self._thread_manager.get_current_number_of_task()
 
         if self._switch_handler.is_enabled("web_scraper", "trading_view", "links"):
             self.add_trading_view_links_scraping_tasks()
 
         after = self._thread_manager.get_current_number_of_task()
-        self._logger.log_info(f"Added total {after - before} data scraping tasks.")
+        self._logger.log_info(f"Added total {after - before} links scraping tasks.")
+        self._logger.log_info(
+            f"Start executing {self._thread_manager.get_current_number_of_task()} tasks."
+        )
+        self._thread_manager.execute()
+        self._logger.log_info("Finished links scraping phase.")
 
+        # ── Phase 2: aggregate collected links into one CSV ───────────────────
+        if self._switch_handler.is_enabled(
+            "web_scraper", "trading_view", "collected_links"
+        ):
+            self.aggregate_trading_view_links()
+
+        self._logger.log_info("Finished link aggregation phase.")
+
+        # ── Phase 3: scrape data from collected links ─────────────────────────
+        self._thread_manager.remove_all_tasks()
+        before = self._thread_manager.get_current_number_of_task()
+
+        if self._switch_handler.is_enabled("web_scraper", "trading_view", "data"):
+            self.add_trading_view_data_scraping_tasks()
+
+        after = self._thread_manager.get_current_number_of_task()
+        self._logger.log_info(f"Added total {after - before} data scraping tasks.")
         self._logger.log_info(
             f"Start executing {self._thread_manager.get_current_number_of_task()} tasks."
         )
