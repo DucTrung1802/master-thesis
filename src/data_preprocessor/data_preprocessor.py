@@ -18,7 +18,13 @@ from dtos.tabular_database_driver_dtos.postgre_sql_connection_dto import (
 from dtos.tabular_database_driver_dtos.tabular_database_driver_dtos import *
 from tabular_database_driver.postgre_sql_driver import PostgreSQLDriver
 from thread_manager.thread_manager import ThreadManager
-from utils.constants import SCRAPER_RAW_DATA_DIR
+from utils.constants import (
+    SCRAPER_RAW_DATA_DIR,
+    DATABASE_MAIN_V2,
+    BRONZE_SCHEMA,
+    SILVER_SCHEMA,
+    GOLD_SCHEMA,
+)
 from utils.enums import *
 from utils.utils import *
 from utils.switch_handler import SwitchHandler
@@ -448,13 +454,318 @@ class DataPreprocessor:
 
         return result
 
+    def _ingest_bronze_economy(self) -> None:
+        self._logger.log_info("Ingesting bronze economy data...")
+
+        economy_dir = os.path.join(SCRAPER_RAW_DATA_DIR, "data", "economy")
+        csv_files = glob(os.path.join(economy_dir, "**", "*.csv"), recursive=True)
+
+        if not csv_files:
+            self._logger.log_error(f'No economy CSV files found in "{economy_dir}".')
+            return
+
+        dataframes = []
+        for fp in csv_files:
+            df = pd.read_csv(fp, encoding="utf-8")
+            if not df.empty and not df.dropna(how="all").empty:
+                dataframes.append(df)
+
+        if not dataframes:
+            self._logger.log_error("No valid economy CSV data found.")
+            return
+
+        df = pd.concat(dataframes, ignore_index=True).drop_duplicates()
+
+        df = self._helper_clean(
+            df,
+            [
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("symbol"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("date"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("value"),
+                CleanLayer.REMOVE_IF_ALL_COLUMNS_ARE_NULL(),
+                CleanLayer.ORDER_BY(["symbol", "date"]),
+            ],
+        )
+
+        df = self._helper_cast_columns(df, decimal_cols=["value"], bigint_cols=[])
+
+        df["date"] = pd.to_datetime(df["date"]).dt.date
+
+        df = self._helper_remove_duplicates(df, primary_keys=["symbol", "date"])
+
+        self._helper_save_pandas_table_to_database(
+            schema_name=BRONZE_SCHEMA,
+            table_name="economy",
+            primary_keys=["symbol", "date"],
+            df=df,
+            dtype_overrides={"date": DataType.DATE()},
+        )
+
+    def _ingest_bronze_forex(self) -> None:
+        self._logger.log_info("Ingesting bronze forex data...")
+
+        forex_dir = os.path.join(SCRAPER_RAW_DATA_DIR, "data", "forex")
+        csv_files = glob(os.path.join(forex_dir, "**", "*.csv"), recursive=True)
+
+        if not csv_files:
+            self._logger.log_error(f'No forex CSV files found in "{forex_dir}".')
+            return
+
+        dataframes = []
+        for fp in csv_files:
+            df = pd.read_csv(fp, encoding="utf-8")
+            if not df.empty and not df.dropna(how="all").empty:
+                dataframes.append(df)
+
+        if not dataframes:
+            self._logger.log_error("No valid forex CSV data found.")
+            return
+
+        df = pd.concat(dataframes, ignore_index=True).drop_duplicates()
+
+        df = self._helper_clean(
+            df,
+            [
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("symbol"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("date"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("value"),
+                CleanLayer.REMOVE_IF_ALL_COLUMNS_ARE_NULL(),
+                CleanLayer.ORDER_BY(["symbol", "date"]),
+            ],
+        )
+
+        df = self._helper_cast_columns(df, decimal_cols=["value"], bigint_cols=[])
+
+        df["date"] = pd.to_datetime(df["date"]).dt.date
+
+        df = self._helper_remove_duplicates(df, primary_keys=["symbol", "date"])
+
+        self._helper_save_pandas_table_to_database(
+            schema_name=BRONZE_SCHEMA,
+            table_name="forex",
+            primary_keys=["symbol", "date"],
+            df=df,
+            dtype_overrides={"date": DataType.DATE()},
+        )
+
+    def _ingest_bronze_funds(self) -> None:
+        self._logger.log_info("Ingesting bronze funds data...")
+
+        funds_dir = os.path.join(SCRAPER_RAW_DATA_DIR, "data", "funds")
+        csv_files = glob(os.path.join(funds_dir, "**", "*.csv"), recursive=True)
+
+        if not csv_files:
+            self._logger.log_error(f'No funds CSV files found in "{funds_dir}".')
+            return
+
+        dataframes = []
+        for fp in csv_files:
+            df = pd.read_csv(fp, encoding="utf-8")
+            if not df.empty and not df.dropna(how="all").empty:
+                dataframes.append(df)
+
+        if not dataframes:
+            self._logger.log_error("No valid funds CSV data found.")
+            return
+
+        df = pd.concat(dataframes, ignore_index=True).drop_duplicates()
+
+        df = self._helper_clean(
+            df,
+            [
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("symbol"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("date"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("value"),
+                CleanLayer.REMOVE_IF_ALL_COLUMNS_ARE_NULL(),
+                CleanLayer.ORDER_BY(["symbol", "date"]),
+            ],
+        )
+
+        df = self._helper_cast_columns(df, decimal_cols=["value"], bigint_cols=[])
+
+        df["date"] = pd.to_datetime(df["date"]).dt.date
+
+        df = self._helper_remove_duplicates(df, primary_keys=["symbol", "date"])
+
+        self._helper_save_pandas_table_to_database(
+            schema_name=BRONZE_SCHEMA,
+            table_name="funds",
+            primary_keys=["symbol", "date"],
+            df=df,
+            dtype_overrides={"date": DataType.DATE()},
+        )
+
+    def _ingest_bronze_indices(self) -> None:
+        self._logger.log_info("Ingesting bronze indices data...")
+
+        indices_dir = os.path.join(SCRAPER_RAW_DATA_DIR, "data", "indices")
+        csv_files = glob(os.path.join(indices_dir, "**", "*.csv"), recursive=True)
+
+        if not csv_files:
+            self._logger.log_error(f'No indices CSV files found in "{indices_dir}".')
+            return
+
+        dataframes = []
+        for fp in csv_files:
+            df = pd.read_csv(fp, encoding="utf-8")
+            if not df.empty and not df.dropna(how="all").empty:
+                dataframes.append(df)
+
+        if not dataframes:
+            self._logger.log_error("No valid indices CSV data found.")
+            return
+
+        df = pd.concat(dataframes, ignore_index=True).drop_duplicates()
+
+        df = self._helper_clean(
+            df,
+            [
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("symbol"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("date"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("close"),
+                CleanLayer.REMOVE_IF_ALL_COLUMNS_ARE_NULL(),
+                CleanLayer.ORDER_BY(["symbol", "date"]),
+            ],
+        )
+
+        df = self._helper_cast_columns(
+            df,
+            decimal_cols=["open", "high", "low", "close"],
+            bigint_cols=["volume"],
+        )
+
+        df["date"] = pd.to_datetime(df["date"]).dt.date
+
+        df = self._helper_remove_duplicates(df, primary_keys=["symbol", "date"])
+
+        self._helper_save_pandas_table_to_database(
+            schema_name=BRONZE_SCHEMA,
+            table_name="indices",
+            primary_keys=["symbol", "date"],
+            df=df,
+            dtype_overrides={"date": DataType.DATE()},
+        )
+
+    def _ingest_bronze_stocks(self) -> None:
+        self._logger.log_info("Ingesting bronze stocks data...")
+
+        stocks_dir = os.path.join(SCRAPER_RAW_DATA_DIR, "data", "stocks")
+        csv_files = glob(os.path.join(stocks_dir, "**", "*.csv"), recursive=True)
+
+        if not csv_files:
+            self._logger.log_error(f'No stocks CSV files found in "{stocks_dir}".')
+            return
+
+        dataframes = []
+        for fp in csv_files:
+            df = pd.read_csv(fp, encoding="utf-8")
+            if not df.empty and not df.dropna(how="all").empty:
+                dataframes.append(df)
+
+        if not dataframes:
+            self._logger.log_error("No valid stocks CSV data found.")
+            return
+
+        df = pd.concat(dataframes, ignore_index=True).drop_duplicates()
+
+        df = self._helper_clean(
+            df,
+            [
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("symbol"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("date"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("value"),
+                CleanLayer.REMOVE_IF_ALL_COLUMNS_ARE_NULL(),
+                CleanLayer.ORDER_BY(["symbol", "date"]),
+            ],
+        )
+
+        df = self._helper_cast_columns(df, decimal_cols=["value"], bigint_cols=[])
+
+        df["date"] = pd.to_datetime(df["date"]).dt.date
+
+        df = self._helper_remove_duplicates(df, primary_keys=["symbol", "date"])
+
+        self._helper_save_pandas_table_to_database(
+            schema_name=BRONZE_SCHEMA,
+            table_name="stocks",
+            primary_keys=["symbol", "date"],
+            df=df,
+            dtype_overrides={"date": DataType.DATE()},
+        )
+
+    def _ingest_bronze_bonds(self) -> None:
+        self._logger.log_info("Ingesting bronze bonds data...")
+
+        bonds_dir = os.path.join(SCRAPER_RAW_DATA_DIR, "data", "bonds")
+        csv_files = glob(os.path.join(bonds_dir, "**", "*.csv"), recursive=True)
+
+        if not csv_files:
+            self._logger.log_error(f'No bonds CSV files found in "{bonds_dir}".')
+            return
+
+        dataframes = []
+        for fp in csv_files:
+            df = pd.read_csv(fp, encoding="utf-8")
+            if not df.empty and not df.dropna(how="all").empty:
+                dataframes.append(df)
+
+        if not dataframes:
+            self._logger.log_error("No valid bonds CSV data found.")
+            return
+
+        df = pd.concat(dataframes, ignore_index=True).drop_duplicates()
+
+        df = self._helper_clean(
+            df,
+            [
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("symbol"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("date"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("value"),
+                CleanLayer.REMOVE_IF_ALL_COLUMNS_ARE_NULL(),
+                CleanLayer.ORDER_BY(["symbol", "date"]),
+            ],
+        )
+
+        df = self._helper_cast_columns(df, decimal_cols=["value"], bigint_cols=[])
+
+        df["date"] = pd.to_datetime(df["date"]).dt.date
+
+        df = self._helper_remove_duplicates(df, primary_keys=["symbol", "date"])
+
+        self._helper_save_pandas_table_to_database(
+            schema_name=BRONZE_SCHEMA,
+            table_name="bonds",
+            primary_keys=["symbol", "date"],
+            df=df,
+            dtype_overrides={"date": DataType.DATE()},
+        )
+
     # endregion Helper functions
 
     def ingest_bronze_data(self) -> None:
 
         if self._switch_handler.is_enabled("data_preprocessor", "data_quality_bronze"):
             try:
-                pass
+                connection_model = PostgreSQLConnectionDto(
+                    logger=self._logger,
+                    host=os.getenv("POSTGRES_HOST"),
+                    user=os.getenv("POSTGRES_USER"),
+                    password=os.getenv("POSTGRES_PASSWORD"),
+                    port=os.getenv("POSTGRES_PORT"),
+                    database="postgres",
+                )
+                self._database_driver.connect(connection_model)
+
+                self._database_driver.create_database(DATABASE_MAIN_V2)
+
+                self._database_driver.create_schema(BRONZE_SCHEMA)
+
+                self._ingest_bronze_bonds()
+                self._ingest_bronze_economy()
+                self._ingest_bronze_forex()
+                self._ingest_bronze_funds()
+                self._ingest_bronze_indices()
+                self._ingest_bronze_stocks()
 
             except Exception as e:
                 self._logger.log_error(

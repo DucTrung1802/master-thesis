@@ -1,5 +1,5 @@
 {
-    "web_scraper": true,
+    "web_scraper": false,
     "web_scraper/trading_view": true,
     "web_scraper/trading_view/links": false,
     "web_scraper/trading_view/links/stocks": true,
@@ -224,19 +224,6 @@
     "web_scraper/trading_view/data/economy/vietnam/consumer": true,
     "web_scraper/trading_view/data/economy/vietnam/housing": true,
     "web_scraper/trading_view/data/economy/vietnam/taxes": true,
-    "web_scraper/data_preprocessor": false,
-    "web_scraper/data_preprocessor/data_quality_bronze": false,
-    "web_scraper/data_preprocessor/data_quality_bronze/macroeconomics": false,
-    "web_scraper/data_preprocessor/data_quality_bronze/stock_market": true,
-    "web_scraper/data_preprocessor/data_quality_bronze/enterprise": false,
-    "web_scraper/data_preprocessor/data_quality_silver": false,
-    "web_scraper/data_preprocessor/data_quality_silver/macroeconomics": false,
-    "web_scraper/data_preprocessor/data_quality_silver/stock_market": false,
-    "web_scraper/data_preprocessor/data_quality_silver/enterprise": true,
-    "web_scraper/data_preprocessor/data_quality_gold": true,
-    "web_scraper/data_preprocessor/data_quality_gold/macroeconomics": false,
-    "web_scraper/data_preprocessor/data_quality_gold/stock_market": false,
-    "web_scraper/data_preprocessor/data_quality_gold/enterprise": true,
-    "web_scraper/data_postprocessor": false,
-    "web_scraper/data_postprocessor/export_unified_dataframe": true
+    "data_preprocessor": true,
+    "data_preprocessor/data_quality_bronze": true
 }
