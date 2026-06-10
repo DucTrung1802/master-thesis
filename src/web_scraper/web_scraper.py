@@ -838,6 +838,12 @@ class WebScraper:
             "web_scraper", "trading_view", "links", ScrapeMainType.CRYPTO.value
         ):
             parts = path.split("/")
+            # Expected: web_scraper/trading_view/links/crypto/{source}/{crypto_type}/{exchange_type}
+            if len(parts) < 7:
+                self._logger.log_warning(
+                    f"Skipping incomplete crypto links path (expected 7 parts, got {len(parts)}): {path}"
+                )
+                continue
             source = CryptoSource(parts[4])
             crypto_type = CryptoType(parts[5])
             exchange_type = CryptoExchangeType(parts[6])
@@ -1043,7 +1049,7 @@ class WebScraper:
         os.makedirs(output_dir, exist_ok=True)
         output_path = f"{output_dir}/all_links_{latest_date_str}.csv"
 
-        seen = set()
+        seen_urls: set[str] = set()
         total_written = 0
 
         with open(output_path, "w", newline="", encoding="utf-8") as outfile:
@@ -1055,9 +1061,11 @@ class WebScraper:
                     reader = csv.reader(infile)
                     next(reader, None)  # skip header row
                     for row in reader:
-                        row_tuple = tuple(row)
-                        if row_tuple not in seen and any(cell.strip() for cell in row):
-                            seen.add(row_tuple)
+                        if not any(cell.strip() for cell in row):
+                            continue
+                        url = row[-1].strip()
+                        if url and url not in seen_urls:
+                            seen_urls.add(url)
                             writer.writerow(row)
                             total_written += 1
 
@@ -1392,12 +1400,32 @@ class WebScraper:
 
                     const keys = Object.keys(items).map(Number).sort((a, b) => a - b);
 
+                    // Two-layer OHLC detection sampled across up to 30 bars:
+                    //   Layer 1 (structural)  – every bar in a series shares the same
+                    //     internal layout; if any bar has fewer than 6 slots the whole
+                    //     series is non-OHLC and we bail immediately.
+                    //   Layer 2 (semantic)    – verify true OHLC price invariants:
+                    //     high >= open/close and low <= open/close.
+                    //     This accepts dojis (all four equal) but rejects indicator
+                    //     series that happen to have 6 slots with unrelated values.
                     let isOHLC = false;
-                    for (const k of keys) {
+                    const sampleKeys = keys.slice(0, Math.min(keys.length, 30));
+                    for (const k of sampleKeys) {
                         const item = items[k];
-                        if (!item || !item.value) continue;
-                        isOHLC = item.value[1] !== item.value[2];
-                        break;
+                        if (!item || !item.value || !Array.isArray(item.value)) continue;
+                        const v = item.value;
+
+                        // Layer 1: structural length check
+                        if (v.length < 6) { isOHLC = false; break; }
+
+                        const [, o, h, l, c] = v;
+                        if (typeof o !== 'number' || typeof h !== 'number' ||
+                            typeof l !== 'number' || typeof c !== 'number') continue;
+
+                        // Layer 2: OHLC price invariants
+                        if (h >= o && h >= c && l <= o && l <= c) {
+                            isOHLC = true; break;
+                        }
                     }
 
                     const records = [];
