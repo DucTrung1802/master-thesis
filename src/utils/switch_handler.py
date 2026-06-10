@@ -60,8 +60,12 @@ class SwitchHandler:
                 )
                 return {}
 
-            # Validate: every value must be a boolean
-            bad = {k: v for k, v in data.items() if not isinstance(v, bool)}
+            # Keys starting with "//" are treated as inline comments and ignored.
+            bad = {
+                k: v
+                for k, v in data.items()
+                if not isinstance(v, bool) and not k.startswith("//")
+            }
             if bad:
                 self._logger.log_error(
                     f"Non-boolean values in switch config: {list(bad.keys())}"
