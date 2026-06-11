@@ -113,7 +113,7 @@
     "web_scraper/trading_view/links/economy/vietnam/housing": true,
     "web_scraper/trading_view/links/economy/vietnam/taxes": true,
     "web_scraper/trading_view/collected_links": true,
-    "web_scraper/trading_view/data": true,
+    "web_scraper/trading_view/data": false,
     "web_scraper/trading_view/data/stocks": true,
     "web_scraper/trading_view/data/stocks/vietnam": true,
     "web_scraper/trading_view/data/stocks/vietnam/common_stock": true,
@@ -226,5 +226,6 @@
     "web_scraper/trading_view/data/economy/vietnam/housing": true,
     "web_scraper/trading_view/data/economy/vietnam/taxes": true,
     "data_preprocessor": true,
-    "data_preprocessor/data_quality_bronze": true
+    "data_preprocessor/data_quality_bronze": false,
+    "data_preprocessor/data_quality_silver": true
 }

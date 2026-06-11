@@ -575,13 +575,17 @@ class DataPreprocessor:
             [
                 CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("symbol"),
                 CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("date"),
-                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("value"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("close"),
                 CleanLayer.REMOVE_IF_ALL_COLUMNS_ARE_NULL(),
                 CleanLayer.ORDER_BY(["symbol", "date"]),
             ],
         )
 
-        df = self._helper_cast_columns(df, decimal_cols=["value"], bigint_cols=[])
+        df = self._helper_cast_columns(
+            df,
+            decimal_cols=["open", "high", "low", "close"],
+            bigint_cols=["volume"],
+        )
 
         df["date"] = pd.to_datetime(df["date"]).dt.date
 
@@ -673,13 +677,17 @@ class DataPreprocessor:
             [
                 CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("symbol"),
                 CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("date"),
-                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("value"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("close"),
                 CleanLayer.REMOVE_IF_ALL_COLUMNS_ARE_NULL(),
                 CleanLayer.ORDER_BY(["symbol", "date"]),
             ],
         )
 
-        df = self._helper_cast_columns(df, decimal_cols=["value"], bigint_cols=[])
+        df = self._helper_cast_columns(
+            df,
+            decimal_cols=["open", "high", "low", "close"],
+            bigint_cols=["volume"],
+        )
 
         df["date"] = pd.to_datetime(df["date"]).dt.date
 
@@ -740,6 +748,138 @@ class DataPreprocessor:
             dtype_overrides={"date": DataType.DATE()},
         )
 
+    def _ingest_silver_bonds(self) -> None:
+        self._logger.log_info("Ingesting silver bonds data...")
+
+        df = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="bonds")
+
+        if df.empty:
+            self._logger.log_info("No bronze bonds data found.")
+            return
+
+        df["exchange"] = df["symbol"].str.split(":").str[0]
+        df["ticker"] = df["symbol"].str.split(":").str[1]
+
+        df = df[["exchange", "ticker", "date", "value"]]
+
+        self._helper_save_pandas_table_to_database(
+            schema_name=SILVER_SCHEMA,
+            table_name="bonds",
+            primary_keys=["exchange", "ticker", "date"],
+            df=df,
+            dtype_overrides={"date": DataType.DATE()},
+        )
+
+    def _ingest_silver_economy(self) -> None:
+        self._logger.log_info("Ingesting silver economy data...")
+
+        df = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="economy")
+
+        if df.empty:
+            self._logger.log_info("No bronze economy data found.")
+            return
+
+        df["exchange"] = df["symbol"].str.split(":").str[0]
+        df["ticker"] = df["symbol"].str.split(":").str[1]
+
+        df = df[["exchange", "ticker", "date", "value"]]
+
+        self._helper_save_pandas_table_to_database(
+            schema_name=SILVER_SCHEMA,
+            table_name="economy",
+            primary_keys=["exchange", "ticker", "date"],
+            df=df,
+            dtype_overrides={"date": DataType.DATE()},
+        )
+
+    def _ingest_silver_forex(self) -> None:
+        self._logger.log_info("Ingesting silver forex data...")
+
+        df = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="forex")
+
+        if df.empty:
+            self._logger.log_info("No bronze forex data found.")
+            return
+
+        df["exchange"] = df["symbol"].str.split(":").str[0]
+        df["ticker"] = df["symbol"].str.split(":").str[1]
+
+        df = df[["exchange", "ticker", "date", "open", "high", "low", "close", "volume"]]
+
+        self._helper_save_pandas_table_to_database(
+            schema_name=SILVER_SCHEMA,
+            table_name="forex",
+            primary_keys=["exchange", "ticker", "date"],
+            df=df,
+            dtype_overrides={"date": DataType.DATE()},
+        )
+
+    def _ingest_silver_funds(self) -> None:
+        self._logger.log_info("Ingesting silver funds data...")
+
+        df = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="funds")
+
+        if df.empty:
+            self._logger.log_info("No bronze funds data found.")
+            return
+
+        df["exchange"] = df["symbol"].str.split(":").str[0]
+        df["ticker"] = df["symbol"].str.split(":").str[1]
+
+        df = df[["exchange", "ticker", "date", "open", "high", "low", "close", "volume"]]
+
+        self._helper_save_pandas_table_to_database(
+            schema_name=SILVER_SCHEMA,
+            table_name="funds",
+            primary_keys=["exchange", "ticker", "date"],
+            df=df,
+            dtype_overrides={"date": DataType.DATE()},
+        )
+
+    def _ingest_silver_indices(self) -> None:
+        self._logger.log_info("Ingesting silver indices data...")
+
+        df = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="indices")
+
+        if df.empty:
+            self._logger.log_info("No bronze indices data found.")
+            return
+
+        df["exchange"] = df["symbol"].str.split(":").str[0]
+        df["ticker"] = df["symbol"].str.split(":").str[1]
+
+        df = df[["exchange", "ticker", "date", "open", "high", "low", "close", "volume"]]
+
+        self._helper_save_pandas_table_to_database(
+            schema_name=SILVER_SCHEMA,
+            table_name="indices",
+            primary_keys=["exchange", "ticker", "date"],
+            df=df,
+            dtype_overrides={"date": DataType.DATE()},
+        )
+
+    def _ingest_silver_stocks(self) -> None:
+        self._logger.log_info("Ingesting silver stocks data...")
+
+        df = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="stocks")
+
+        if df.empty:
+            self._logger.log_info("No bronze stocks data found.")
+            return
+
+        df["exchange"] = df["symbol"].str.split(":").str[0]
+        df["ticker"] = df["symbol"].str.split(":").str[1]
+
+        df = df[["exchange", "ticker", "date", "open", "high", "low", "close", "volume"]]
+
+        self._helper_save_pandas_table_to_database(
+            schema_name=SILVER_SCHEMA,
+            table_name="stocks",
+            primary_keys=["exchange", "ticker", "date"],
+            df=df,
+            dtype_overrides={"date": DataType.DATE()},
+        )
+
     # endregion Helper functions
 
     def ingest_bronze_data(self) -> None:
@@ -779,7 +919,26 @@ class DataPreprocessor:
 
         if self._switch_handler.is_enabled("data_preprocessor", "data_quality_silver"):
             try:
-                pass
+                connection_model = PostgreSQLConnectionDto(
+                    logger=self._logger,
+                    host=os.getenv("POSTGRES_HOST"),
+                    user=os.getenv("POSTGRES_USER"),
+                    password=os.getenv("POSTGRES_PASSWORD"),
+                    port=os.getenv("POSTGRES_PORT"),
+                    database="postgres",
+                )
+                self._database_driver.connect(connection_model)
+
+                self._database_driver.create_database(DATABASE_MAIN_V2)
+
+                self._database_driver.create_schema(SILVER_SCHEMA)
+
+                self._ingest_silver_bonds()
+                self._ingest_silver_economy()
+                self._ingest_silver_forex()
+                self._ingest_silver_funds()
+                self._ingest_silver_indices()
+                self._ingest_silver_stocks()
 
             except Exception as e:
                 self._logger.log_error(
