@@ -24,6 +24,7 @@ from utils.constants import (
     BRONZE_SCHEMA,
     SILVER_SCHEMA,
     GOLD_SCHEMA,
+    GOLD_PROTOTYPE_TICKERS,
 )
 from utils.enums import *
 from utils.utils import *
@@ -151,12 +152,12 @@ class DataPreprocessor:
         return df
 
     def _helper_infer_sql_type(self, dtype) -> str:
-        dtype_str = str(dtype)
-        if dtype_str.startswith("int32") or dtype_str == "Int32":
+        dtype_str = str(dtype).lower()
+        if dtype_str in ("int32", "int16", "int8", "uint32", "uint16", "uint8"):
             return DataType.INT()
-        elif dtype_str.startswith("int") or dtype_str == "Int64":
+        elif dtype_str in ("int64", "int", "uint64", "int_"):
             return DataType.BIGINT()
-        elif dtype_str.startswith("float"):
+        elif dtype_str.startswith("float") or dtype_str.startswith("decimal"):
             return DataType.DECIMAL()
         elif dtype_str == "bool":
             return DataType.BOOLEAN()
@@ -805,6 +806,7 @@ class DataPreprocessor:
         df["ticker"] = df["symbol"].str.split(":").str[1]
 
         df = df[["exchange", "ticker", "date", "open", "high", "low", "close", "volume"]]
+        df = self._helper_cast_columns(df, decimal_cols=["open", "high", "low", "close"], bigint_cols=["volume"])
 
         self._helper_save_pandas_table_to_database(
             schema_name=SILVER_SCHEMA,
@@ -827,6 +829,7 @@ class DataPreprocessor:
         df["ticker"] = df["symbol"].str.split(":").str[1]
 
         df = df[["exchange", "ticker", "date", "open", "high", "low", "close", "volume"]]
+        df = self._helper_cast_columns(df, decimal_cols=["open", "high", "low", "close"], bigint_cols=["volume"])
 
         self._helper_save_pandas_table_to_database(
             schema_name=SILVER_SCHEMA,
@@ -849,6 +852,7 @@ class DataPreprocessor:
         df["ticker"] = df["symbol"].str.split(":").str[1]
 
         df = df[["exchange", "ticker", "date", "open", "high", "low", "close", "volume"]]
+        df = self._helper_cast_columns(df, decimal_cols=["open", "high", "low", "close"], bigint_cols=["volume"])
 
         self._helper_save_pandas_table_to_database(
             schema_name=SILVER_SCHEMA,
@@ -871,9 +875,146 @@ class DataPreprocessor:
         df["ticker"] = df["symbol"].str.split(":").str[1]
 
         df = df[["exchange", "ticker", "date", "open", "high", "low", "close", "volume"]]
+        df = self._helper_cast_columns(df, decimal_cols=["open", "high", "low", "close"], bigint_cols=["volume"])
 
         self._helper_save_pandas_table_to_database(
             schema_name=SILVER_SCHEMA,
+            table_name="stocks",
+            primary_keys=["exchange", "ticker", "date"],
+            df=df,
+            dtype_overrides={"date": DataType.DATE()},
+        )
+
+    def _helper_transform(
+        self, df: pd.DataFrame, transform_layer_list: List[TransformLayer]
+    ) -> pd.DataFrame:
+        from ta.ta_functions import (
+            add_bbands, add_dema, add_ema, add_kama, add_midpoint, add_midprice,
+            add_sar, add_sma, add_t3, add_tema, add_trima, add_wma,
+            add_adx, add_aroon, add_bop, add_cci, add_cmo, add_macd,
+            add_mfi, add_mom, add_ppo, add_roc, add_rsi, add_stoch,
+            add_stoch_rsi, add_trix, add_ultosc, add_willr,
+            add_ad, add_adosc, add_obv,
+            add_ht_dcperiod, add_ht_dcphase, add_ht_phasor, add_ht_sine, add_ht_trendmode,
+            add_avgprice, add_medprice, add_typprice, add_wclprice,
+            add_atr, add_natr, add_trange,
+        )
+
+        _TA_FUNC_MAP = {
+            TransformAction.TA_ADD_BBANDS: add_bbands,
+            TransformAction.TA_ADD_DEMA: add_dema,
+            TransformAction.TA_ADD_EMA: add_ema,
+            TransformAction.TA_ADD_KAMA: add_kama,
+            TransformAction.TA_ADD_MIDPOINT: add_midpoint,
+            TransformAction.TA_ADD_MIDPRICE: add_midprice,
+            TransformAction.TA_ADD_SAR: add_sar,
+            TransformAction.TA_ADD_SMA: add_sma,
+            TransformAction.TA_ADD_T3: add_t3,
+            TransformAction.TA_ADD_TEMA: add_tema,
+            TransformAction.TA_ADD_TRIMA: add_trima,
+            TransformAction.TA_ADD_WMA: add_wma,
+            TransformAction.TA_ADD_ADX: add_adx,
+            TransformAction.TA_ADD_AROON: add_aroon,
+            TransformAction.TA_ADD_BOP: add_bop,
+            TransformAction.TA_ADD_CCI: add_cci,
+            TransformAction.TA_ADD_CMO: add_cmo,
+            TransformAction.TA_ADD_MACD: add_macd,
+            TransformAction.TA_ADD_MFI: add_mfi,
+            TransformAction.TA_ADD_MOM: add_mom,
+            TransformAction.TA_ADD_PPO: add_ppo,
+            TransformAction.TA_ADD_ROC: add_roc,
+            TransformAction.TA_ADD_RSI: add_rsi,
+            TransformAction.TA_ADD_STOCH: add_stoch,
+            TransformAction.TA_ADD_STOCH_RSI: add_stoch_rsi,
+            TransformAction.TA_ADD_TRIX: add_trix,
+            TransformAction.TA_ADD_ULTOSC: add_ultosc,
+            TransformAction.TA_ADD_WILLR: add_willr,
+            TransformAction.TA_ADD_AD: add_ad,
+            TransformAction.TA_ADD_ADOSC: add_adosc,
+            TransformAction.TA_ADD_OBV: add_obv,
+            TransformAction.TA_ADD_HT_DCPERIOD: add_ht_dcperiod,
+            TransformAction.TA_ADD_HT_DCPHASE: add_ht_dcphase,
+            TransformAction.TA_ADD_HT_PHASOR: add_ht_phasor,
+            TransformAction.TA_ADD_HT_SINE: add_ht_sine,
+            TransformAction.TA_ADD_HT_TRENDMODE: add_ht_trendmode,
+            TransformAction.TA_ADD_AVGPRICE: add_avgprice,
+            TransformAction.TA_ADD_MEDPRICE: add_medprice,
+            TransformAction.TA_ADD_TYPPRICE: add_typprice,
+            TransformAction.TA_ADD_WCLPRICE: add_wclprice,
+            TransformAction.TA_ADD_ATR: add_atr,
+            TransformAction.TA_ADD_NATR: add_natr,
+            TransformAction.TA_ADD_TRANGE: add_trange,
+        }
+
+        ta_layers = [l for l in transform_layer_list if l.action in _TA_FUNC_MAP]
+        general_layers = [l for l in transform_layer_list if l.action not in _TA_FUNC_MAP]
+
+        # Apply whole-df transforms first
+        df = df.copy()
+        for layer in general_layers:
+            if layer.action == TransformAction.EXTRACT_DATETIME_FEATURE:
+                col = layer.params.get("column_name", "date")
+                dt = pd.to_datetime(df[col])
+                df["year"] = dt.dt.year
+                df["month"] = dt.dt.month
+                df["day"] = dt.dt.day
+
+        # Apply TA transforms per (exchange, ticker) group, sorted by date
+        if ta_layers:
+            groups = []
+            for (_, _), group in df.groupby(["exchange", "ticker"], sort=False):
+                group = group.sort_values("date").reset_index(drop=True)
+                for layer in ta_layers:
+                    func = _TA_FUNC_MAP.get(layer.action)
+                    if func:
+                        group = func(group, **layer.params)
+                groups.append(group)
+            df = pd.concat(groups, ignore_index=True)
+
+        return df
+
+    def _ingest_gold_stocks(self) -> None:
+        self._logger.log_info("Ingesting gold stocks data...")
+
+        df = self._helper_select(
+            schema_name=SILVER_SCHEMA,
+            table_name="stocks",
+            conditions=[
+                Condition(
+                    column="ticker",
+                    operator=SqlOperator.IN,
+                    value=GOLD_PROTOTYPE_TICKERS,
+                    data_type=DataType.VARCHAR(),
+                )
+            ],
+            order_by=["exchange", "ticker", "date"],
+        )
+
+        if df.empty:
+            self._logger.log_info("No silver stocks data found for prototype tickers.")
+            return
+
+        for col in ["open", "high", "low", "close", "volume"]:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
+        df = self._helper_transform(
+            df,
+            [
+                TransformLayer.TA_ADD_SMA(),
+                TransformLayer.TA_ADD_EMA(),
+                TransformLayer.TA_ADD_BBANDS(),
+                TransformLayer.TA_ADD_RSI(),
+                TransformLayer.TA_ADD_MACD(),
+                TransformLayer.TA_ADD_ATR(),
+                TransformLayer.TA_ADD_ADX(),
+                TransformLayer.TA_ADD_STOCH(),
+                TransformLayer.TA_ADD_OBV(volume_col="volume"),
+                TransformLayer.TA_ADD_MFI(volume_col="volume"),
+            ],
+        )
+
+        self._helper_save_pandas_table_to_database(
+            schema_name=GOLD_SCHEMA,
             table_name="stocks",
             primary_keys=["exchange", "ticker", "date"],
             df=df,
@@ -952,7 +1093,21 @@ class DataPreprocessor:
 
         if self._switch_handler.is_enabled("data_preprocessor", "data_quality_gold"):
             try:
-                pass
+                connection_model = PostgreSQLConnectionDto(
+                    logger=self._logger,
+                    host=os.getenv("POSTGRES_HOST"),
+                    user=os.getenv("POSTGRES_USER"),
+                    password=os.getenv("POSTGRES_PASSWORD"),
+                    port=os.getenv("POSTGRES_PORT"),
+                    database="postgres",
+                )
+                self._database_driver.connect(connection_model)
+
+                self._database_driver.create_database(DATABASE_MAIN_V2)
+
+                self._database_driver.create_schema(GOLD_SCHEMA)
+
+                self._ingest_gold_stocks()
 
             except Exception as e:
                 self._logger.log_error(

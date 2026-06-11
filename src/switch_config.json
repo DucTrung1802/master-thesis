@@ -227,5 +227,6 @@
     "web_scraper/trading_view/data/economy/vietnam/taxes": true,
     "data_preprocessor": true,
     "data_preprocessor/data_quality_bronze": false,
-    "data_preprocessor/data_quality_silver": true
+    "data_preprocessor/data_quality_silver": false,
+    "data_preprocessor/data_quality_gold": true
 }
