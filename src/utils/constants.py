@@ -103,6 +103,15 @@ TRAINED_MODELS_LOG_FILE_BASE = f"../../{LOG_DIR}/train_model"
 
 
 # ===========================
+# DATABASE CONFIGURATION
+# ===========================
+DATABASE_MAIN_V2 = "database_main_v2"
+BRONZE_SCHEMA = "bronze_schema"
+SILVER_SCHEMA = "silver_schema"
+GOLD_SCHEMA = "gold_schema"
+
+
+# ===========================
 # THREAD MANAGER CONFIGURATION
 # ===========================
 THREAD_MANAGER_POWER = 50  # unit: %
