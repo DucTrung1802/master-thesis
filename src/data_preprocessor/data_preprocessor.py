@@ -24,7 +24,6 @@ from utils.constants import (
     BRONZE_SCHEMA,
     SILVER_SCHEMA,
     GOLD_SCHEMA,
-    GOLD_PROTOTYPE_TICKERS,
 )
 from utils.enums import *
 from utils.utils import *
@@ -886,8 +885,20 @@ class DataPreprocessor:
         )
 
     def _helper_transform(
-        self, df: pd.DataFrame, transform_layer_list: List[TransformLayer]
+        self,
+        df: pd.DataFrame,
+        transform_layer_list: List[TransformLayer],
+        checkpoint_fn=None,
+        checkpoint_size: int = 10_000,
     ) -> pd.DataFrame:
+        """
+        Apply transform layers to df.
+
+        If checkpoint_fn is provided, instead of returning a single concatenated
+        DataFrame the method flushes accumulated groups to checkpoint_fn(chunk)
+        every checkpoint_size rows and returns an empty DataFrame.
+        This keeps memory bounded and persists progress incrementally.
+        """
         from ta.ta_functions import (
             add_bbands, add_dema, add_ema, add_kama, add_midpoint, add_midprice,
             add_sar, add_sma, add_t3, add_tema, add_trima, add_wma,
@@ -961,15 +972,42 @@ class DataPreprocessor:
 
         # Apply TA transforms per (exchange, ticker) group, sorted by date
         if ta_layers:
-            groups = []
-            for (_, _), group in df.groupby(["exchange", "ticker"], sort=False):
-                group = group.sort_values("date").reset_index(drop=True)
-                for layer in ta_layers:
-                    func = _TA_FUNC_MAP.get(layer.action)
-                    if func:
-                        group = func(group, **layer.params)
-                groups.append(group)
-            df = pd.concat(groups, ignore_index=True)
+            if checkpoint_fn:
+                buffer: list[pd.DataFrame] = []
+                buffer_rows = 0
+                grouped = list(df.groupby(["exchange", "ticker"], sort=False))
+                total = len(grouped)
+                for i, ((_, _), group) in enumerate(grouped):
+                    group = group.sort_values("date").reset_index(drop=True)
+                    for layer in ta_layers:
+                        func = _TA_FUNC_MAP.get(layer.action)
+                        if func:
+                            group = func(group, **layer.params)
+                    buffer.append(group)
+                    buffer_rows += len(group)
+                    if buffer_rows >= checkpoint_size:
+                        checkpoint_fn(pd.concat(buffer, ignore_index=True))
+                        self._logger.log_info(
+                            f"Checkpoint saved: {i + 1}/{total} tickers ({buffer_rows} rows)"
+                        )
+                        buffer = []
+                        buffer_rows = 0
+                if buffer:
+                    checkpoint_fn(pd.concat(buffer, ignore_index=True))
+                    self._logger.log_info(
+                        f"Checkpoint saved: {total}/{total} tickers ({buffer_rows} rows)"
+                    )
+                return pd.DataFrame()
+            else:
+                groups = []
+                for (_, _), group in df.groupby(["exchange", "ticker"], sort=False):
+                    group = group.sort_values("date").reset_index(drop=True)
+                    for layer in ta_layers:
+                        func = _TA_FUNC_MAP.get(layer.action)
+                        if func:
+                            group = func(group, **layer.params)
+                    groups.append(group)
+                df = pd.concat(groups, ignore_index=True)
 
         return df
 
@@ -979,46 +1017,86 @@ class DataPreprocessor:
         df = self._helper_select(
             schema_name=SILVER_SCHEMA,
             table_name="stocks",
-            conditions=[
-                Condition(
-                    column="ticker",
-                    operator=SqlOperator.IN,
-                    value=GOLD_PROTOTYPE_TICKERS,
-                    data_type=DataType.VARCHAR(),
-                )
-            ],
             order_by=["exchange", "ticker", "date"],
         )
 
         if df.empty:
-            self._logger.log_info("No silver stocks data found for prototype tickers.")
+            self._logger.log_info("No silver stocks data found.")
             return
 
         for col in ["open", "high", "low", "close", "volume"]:
             df[col] = pd.to_numeric(df[col], errors="coerce")
 
-        df = self._helper_transform(
+        def _checkpoint(chunk: pd.DataFrame) -> None:
+            # Use REAL (4-byte float) for all float columns to stay within
+            # PostgreSQL's 8160-byte row size limit given the large number of TA columns.
+            overrides: dict[str, str] = {"date": DataType.DATE()}
+            for col in chunk.columns:
+                if str(chunk[col].dtype).lower().startswith("float"):
+                    overrides[col] = "REAL"
+            self._helper_save_pandas_table_to_database(
+                schema_name=GOLD_SCHEMA,
+                table_name="stocks",
+                primary_keys=["exchange", "ticker", "date"],
+                df=chunk,
+                dtype_overrides=overrides,
+            )
+
+        self._helper_transform(
             df,
             [
-                TransformLayer.TA_ADD_SMA(),
-                TransformLayer.TA_ADD_EMA(),
+                # Overlap Studies
                 TransformLayer.TA_ADD_BBANDS(),
-                TransformLayer.TA_ADD_RSI(),
-                TransformLayer.TA_ADD_MACD(),
-                TransformLayer.TA_ADD_ATR(),
+                TransformLayer.TA_ADD_DEMA(),
+                TransformLayer.TA_ADD_EMA(),
+                TransformLayer.TA_ADD_KAMA(),
+                TransformLayer.TA_ADD_MIDPOINT(),
+                TransformLayer.TA_ADD_MIDPRICE(),
+                TransformLayer.TA_ADD_SAR(),
+                TransformLayer.TA_ADD_SMA(),
+                TransformLayer.TA_ADD_T3(),
+                TransformLayer.TA_ADD_TEMA(),
+                TransformLayer.TA_ADD_TRIMA(),
+                TransformLayer.TA_ADD_WMA(),
+                # Momentum Indicators
                 TransformLayer.TA_ADD_ADX(),
-                TransformLayer.TA_ADD_STOCH(),
-                TransformLayer.TA_ADD_OBV(volume_col="volume"),
+                TransformLayer.TA_ADD_AROON(),
+                TransformLayer.TA_ADD_BOP(),
+                TransformLayer.TA_ADD_CCI(),
+                TransformLayer.TA_ADD_CMO(),
+                TransformLayer.TA_ADD_MACD(),
                 TransformLayer.TA_ADD_MFI(volume_col="volume"),
+                TransformLayer.TA_ADD_MOM(),
+                TransformLayer.TA_ADD_PPO(),
+                TransformLayer.TA_ADD_ROC(),
+                TransformLayer.TA_ADD_RSI(),
+                TransformLayer.TA_ADD_STOCH(),
+                TransformLayer.TA_ADD_STOCH_RSI(),
+                TransformLayer.TA_ADD_TRIX(),
+                TransformLayer.TA_ADD_ULTOSC(),
+                TransformLayer.TA_ADD_WILLR(),
+                # Volume Indicators
+                TransformLayer.TA_ADD_AD(volume_col="volume"),
+                TransformLayer.TA_ADD_ADOSC(volume_col="volume"),
+                TransformLayer.TA_ADD_OBV(volume_col="volume"),
+                # Cycle Indicators
+                TransformLayer.TA_ADD_HT_DCPERIOD(),
+                TransformLayer.TA_ADD_HT_DCPHASE(),
+                TransformLayer.TA_ADD_HT_PHASOR(),
+                TransformLayer.TA_ADD_HT_SINE(),
+                TransformLayer.TA_ADD_HT_TRENDMODE(),
+                # Price Transform
+                TransformLayer.TA_ADD_AVGPRICE(),
+                TransformLayer.TA_ADD_MEDPRICE(),
+                TransformLayer.TA_ADD_TYPPRICE(),
+                TransformLayer.TA_ADD_WCLPRICE(),
+                # Volatility Indicators
+                TransformLayer.TA_ADD_ATR(),
+                TransformLayer.TA_ADD_NATR(),
+                TransformLayer.TA_ADD_TRANGE(),
             ],
-        )
-
-        self._helper_save_pandas_table_to_database(
-            schema_name=GOLD_SCHEMA,
-            table_name="stocks",
-            primary_keys=["exchange", "ticker", "date"],
-            df=df,
-            dtype_overrides={"date": DataType.DATE()},
+            checkpoint_fn=_checkpoint,
+            checkpoint_size=10_000,
         )
 
     # endregion Helper functions

@@ -110,7 +110,7 @@ BRONZE_SCHEMA = "bronze_schema"
 SILVER_SCHEMA = "silver_schema"
 GOLD_SCHEMA = "gold_schema"
 
-GOLD_PROTOTYPE_TICKERS: list = ["VNM", "VIC", "FPT", "VCB"]
+# GOLD_PROTOTYPE_TICKERS: list = ["VNM", "VIC", "FPT", "VCB"]
 
 
 # ===========================
