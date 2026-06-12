@@ -1141,12 +1141,18 @@ class DataPreprocessor:
 
                 self._database_driver.create_schema(BRONZE_SCHEMA)
 
-                self._ingest_bronze_bonds()
-                self._ingest_bronze_economy()
-                self._ingest_bronze_forex()
-                self._ingest_bronze_funds()
-                self._ingest_bronze_indices()
-                self._ingest_bronze_stocks()
+                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_bronze", "bonds"):
+                    self._ingest_bronze_bonds()
+                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_bronze", "economy"):
+                    self._ingest_bronze_economy()
+                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_bronze", "forex"):
+                    self._ingest_bronze_forex()
+                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_bronze", "funds"):
+                    self._ingest_bronze_funds()
+                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_bronze", "indices"):
+                    self._ingest_bronze_indices()
+                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_bronze", "stocks"):
+                    self._ingest_bronze_stocks()
 
             except Exception as e:
                 self._logger.log_error(
@@ -1174,12 +1180,18 @@ class DataPreprocessor:
 
                 self._database_driver.create_schema(SILVER_SCHEMA)
 
-                self._ingest_silver_bonds()
-                self._ingest_silver_economy()
-                self._ingest_silver_forex()
-                self._ingest_silver_funds()
-                self._ingest_silver_indices()
-                self._ingest_silver_stocks()
+                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_silver", "bonds"):
+                    self._ingest_silver_bonds()
+                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_silver", "economy"):
+                    self._ingest_silver_economy()
+                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_silver", "forex"):
+                    self._ingest_silver_forex()
+                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_silver", "funds"):
+                    self._ingest_silver_funds()
+                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_silver", "indices"):
+                    self._ingest_silver_indices()
+                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_silver", "stocks"):
+                    self._ingest_silver_stocks()
 
             except Exception as e:
                 self._logger.log_error(
@@ -1207,7 +1219,8 @@ class DataPreprocessor:
 
                 self._database_driver.create_schema(GOLD_SCHEMA)
 
-                self._ingest_gold_stocks()
+                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_gold", "stocks"):
+                    self._ingest_gold_stocks()
 
             except Exception as e:
                 self._logger.log_error(
