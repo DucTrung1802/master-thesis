@@ -966,9 +966,31 @@ class DataPreprocessor:
             if layer.action == TransformAction.EXTRACT_DATETIME_FEATURE:
                 col = layer.params.get("column_name", "date")
                 dt = pd.to_datetime(df[col])
-                df["year"] = dt.dt.year
-                df["month"] = dt.dt.month
-                df["day"] = dt.dt.day
+
+                # Calendar basics
+                df["year"]          = dt.dt.year.astype("int32")
+                df["quarter"]       = dt.dt.quarter.astype("int32")
+                df["month"]         = dt.dt.month.astype("int32")
+                df["week_of_year"]  = dt.dt.isocalendar().week.astype("int32")
+                df["day_of_year"]   = dt.dt.day_of_year.astype("int32")
+                df["day"]           = dt.dt.day.astype("int32")
+                df["day_of_week"]   = dt.dt.day_of_week.astype("int32")  # 0=Mon … 6=Sun
+
+                # Boundary flags (bool → int for DB compatibility)
+                df["is_month_start"]   = dt.dt.is_month_start.astype("int32")
+                df["is_month_end"]     = dt.dt.is_month_end.astype("int32")
+                df["is_quarter_start"] = dt.dt.is_quarter_start.astype("int32")
+                df["is_quarter_end"]   = dt.dt.is_quarter_end.astype("int32")
+                df["is_year_start"]    = dt.dt.is_year_start.astype("int32")
+                df["is_year_end"]      = dt.dt.is_year_end.astype("int32")
+
+                # Cyclical encodings — let the model see that Dec→Jan and Fri→Mon wrap around
+                df["month_sin"]       = np.sin(2 * np.pi * dt.dt.month / 12)
+                df["month_cos"]       = np.cos(2 * np.pi * dt.dt.month / 12)
+                df["day_of_week_sin"] = np.sin(2 * np.pi * dt.dt.day_of_week / 7)
+                df["day_of_week_cos"] = np.cos(2 * np.pi * dt.dt.day_of_week / 7)
+                df["day_of_year_sin"] = np.sin(2 * np.pi * dt.dt.day_of_year / 365)
+                df["day_of_year_cos"] = np.cos(2 * np.pi * dt.dt.day_of_year / 365)
 
         # Apply TA transforms per (exchange, ticker) group, sorted by date
         if ta_layers:
