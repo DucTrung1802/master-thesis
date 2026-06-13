@@ -24,6 +24,9 @@ from utils.constants import (
     BRONZE_SCHEMA,
     SILVER_SCHEMA,
     GOLD_SCHEMA,
+    UNIFIED_SCHEMA,
+    UNIFIED_TICKERS,
+    UNIFIED_MACRO_TABLES,
 )
 from utils.enums import *
 from utils.utils import *
@@ -1279,6 +1282,98 @@ class DataPreprocessor:
     def _ingest_gold_indices(self) -> None:
         self._ingest_gold_table("indices")
 
+    def _helper_macro_wide(self, table_name: str) -> pd.DataFrame:
+        """
+        Load a macro gold table and pivot its raw `value` to wide form, one
+        column per (exchange, ticker) series named `<table>_<exchange>_<ticker>`
+        (lowercased), indexed by date. Used to join macro context onto a stock's
+        date spine in the unified layer.
+        """
+        df = self._helper_select(
+            schema_name=GOLD_SCHEMA,
+            table_name=table_name,
+            columns=["exchange", "ticker", "date", "value"],
+        )
+        if df.empty:
+            self._logger.log_info(f"No gold {table_name} data found for unified join.")
+            return pd.DataFrame()
+
+        df["value"] = pd.to_numeric(df["value"], errors="coerce")
+
+        def _col(exchange: str, ticker: str) -> str:
+            raw = f"{table_name}_{exchange}_{ticker}".lower()
+            return re.sub(r"[^0-9a-z]+", "_", raw).strip("_")
+
+        df["series"] = [
+            _col(e, t) for e, t in zip(df["exchange"], df["ticker"])
+        ]
+        wide = df.pivot_table(
+            index="date", columns="series", values="value", aggfunc="last"
+        )
+        return wide
+
+    def _ingest_unified_stock(self, ticker: str) -> None:
+        """
+        Build a per-stock unified table `unified_schema.unified_<ticker>`:
+        the gold stock rows for `ticker` (the date spine) LEFT-joined with each
+        macro table's wide `value` columns, forward-filled onto the stock's
+        trading days (causal — each day carries the last published macro value).
+        """
+        self._logger.log_info(f"Ingesting unified data for '{ticker}'...")
+
+        spine = self._helper_select(
+            schema_name=GOLD_SCHEMA,
+            table_name="stocks",
+            conditions=[
+                Condition(
+                    column="ticker",
+                    operator=SqlOperator.EQUAL_TO,
+                    value=ticker,
+                    data_type=DataType.VARCHAR(),
+                )
+            ],
+            order_by=["date"],
+        )
+        if spine.empty:
+            self._logger.log_info(f"No gold stocks data found for ticker '{ticker}'.")
+            return
+
+        spine["date"] = pd.to_datetime(spine["date"])
+        spine = spine.sort_values("date").reset_index(drop=True)
+
+        macro_cols: List[str] = []
+        for macro_table in UNIFIED_MACRO_TABLES:
+            wide = self._helper_macro_wide(macro_table)
+            if wide.empty:
+                continue
+            wide.index = pd.to_datetime(wide.index)
+            wide = wide.sort_index()
+            spine = spine.merge(
+                wide, how="left", left_on="date", right_index=True
+            )
+            macro_cols.extend(list(wide.columns))
+
+        # Forward-fill macro context onto every trading day (no look-ahead).
+        if macro_cols:
+            spine[macro_cols] = spine[macro_cols].ffill()
+
+        spine["date"] = spine["date"].dt.date
+
+        table_name = f"unified_{ticker}".lower()
+        overrides: dict[str, str] = {"date": DataType.DATE()}
+        for col in spine.columns:
+            if str(spine[col].dtype).lower().startswith("float"):
+                overrides[col] = "REAL"
+
+        self._helper_save_pandas_table_to_database(
+            schema_name=UNIFIED_SCHEMA,
+            table_name=table_name,
+            primary_keys=["date"],
+            df=spine,
+            dtype_overrides=overrides,
+            use_copy=True,
+        )
+
     # endregion Helper functions
 
     def ingest_bronze_data(self) -> None:
@@ -1394,6 +1489,33 @@ class DataPreprocessor:
                 self._logger.log_error(
                     f"Error preprocessing `{DataQuality.GOLD.value}` data: {e}"
                 )
+
+            finally:
+                self._database_driver.disconnect()
+
+    def ingest_unified_data(self) -> None:
+
+        if self._switch_handler.is_enabled("data_preprocessor", "data_quality_unified"):
+            try:
+                connection_model = PostgreSQLConnectionDto(
+                    logger=self._logger,
+                    host=os.getenv("POSTGRES_HOST"),
+                    user=os.getenv("POSTGRES_USER"),
+                    password=os.getenv("POSTGRES_PASSWORD"),
+                    port=os.getenv("POSTGRES_PORT"),
+                    database="postgres",
+                )
+                self._database_driver.connect(connection_model)
+
+                self._database_driver.create_database(DATABASE_MAIN_V2)
+
+                self._database_driver.create_schema(UNIFIED_SCHEMA)
+
+                for ticker in UNIFIED_TICKERS:
+                    self._ingest_unified_stock(ticker)
+
+            except Exception as e:
+                self._logger.log_error(f"Error preprocessing `unified` data: {e}")
 
             finally:
                 self._database_driver.disconnect()

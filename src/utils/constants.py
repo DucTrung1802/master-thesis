@@ -109,8 +109,16 @@ DATABASE_MAIN_V2 = "database_main_v2"
 BRONZE_SCHEMA = "bronze_schema"
 SILVER_SCHEMA = "silver_schema"
 GOLD_SCHEMA = "gold_schema"
+UNIFIED_SCHEMA = "unified_schema"
 
 # GOLD_PROTOTYPE_TICKERS: list = ["VNM", "VIC", "FPT", "VCB"]
+
+# Stocks (by ticker) to build a per-stock unified table for (unified_<ticker>).
+UNIFIED_TICKERS: list = ["VCB"]
+
+# Macro gold tables joined into each unified table (raw `value`, forward-filled
+# onto the stock's trading-day date spine).
+UNIFIED_MACRO_TABLES: list = ["economy", "bonds"]
 
 
 # ===========================
