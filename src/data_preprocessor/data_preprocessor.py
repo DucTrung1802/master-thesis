@@ -942,8 +942,10 @@ class DataPreprocessor:
         df["exchange"] = df["symbol"].str.split(":").str[0]
         df["ticker"] = df["symbol"].str.split(":").str[1]
 
-        df = df[["exchange", "ticker", "date", "open", "high", "low", "close", "volume"]]
-        df = self._helper_cast_columns(df, decimal_cols=["open", "high", "low", "close"], bigint_cols=["volume"])
+        # Forex is a single-value series (OHLC columns are null in bronze;
+        # the price lives in `value`), so treat it like bonds/economy.
+        df = df[["exchange", "ticker", "date", "value"]]
+        df = self._helper_cast_columns(df, decimal_cols=["value"], bigint_cols=[])
 
         self._helper_save_pandas_table_to_database(
             schema_name=SILVER_SCHEMA,
