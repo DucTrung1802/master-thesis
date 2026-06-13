@@ -149,6 +149,11 @@ class CleanLayer:
 class TransformAction(Enum):
     # General transforms
     EXTRACT_DATETIME_FEATURE = "extract_datetime_feature"
+    # Feature engineering (non-TA)
+    ADD_RETURNS = "add_returns"
+    ADD_INTRADAY_RANGE = "add_intraday_range"
+    ADD_RETURN_VOLATILITY = "add_return_volatility"
+    ADD_ROLLING_STATISTICS = "add_rolling_statistics"
     # TA — Overlap Studies
     TA_ADD_BBANDS = "ta_add_bbands"
     TA_ADD_DEMA = "ta_add_dema"
@@ -211,6 +216,31 @@ class TransformLayer:
     @classmethod
     def EXTRACT_DATETIME_FEATURE(cls, column_name: str = "date"):
         return cls(TransformAction.EXTRACT_DATETIME_FEATURE, column_name=column_name)
+
+    # Feature engineering (non-TA)
+    @classmethod
+    def ADD_RETURNS(cls, column_name: str = "close"):
+        return cls(TransformAction.ADD_RETURNS, column_name=column_name)
+
+    @classmethod
+    def ADD_INTRADAY_RANGE(cls):
+        return cls(TransformAction.ADD_INTRADAY_RANGE)
+
+    @classmethod
+    def ADD_RETURN_VOLATILITY(cls, column_name: str = "close", windows: list = None):
+        return cls(
+            TransformAction.ADD_RETURN_VOLATILITY,
+            column_name=column_name,
+            windows=windows,
+        )
+
+    @classmethod
+    def ADD_ROLLING_STATISTICS(cls, column_name: str = "close", windows: list = None):
+        return cls(
+            TransformAction.ADD_ROLLING_STATISTICS,
+            column_name=column_name,
+            windows=windows,
+        )
 
     # TA — Overlap Studies
     @classmethod

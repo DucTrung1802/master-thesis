@@ -246,5 +246,5 @@
     "data_preprocessor/data_quality_gold/forex": true,
     "data_preprocessor/data_quality_gold/funds": true,
     "data_preprocessor/data_quality_gold/indices": true,
-    "data_preprocessor/data_quality_gold/stocks": false
+    "data_preprocessor/data_quality_gold/stocks": true
 }
