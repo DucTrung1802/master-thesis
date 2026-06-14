@@ -376,6 +376,13 @@ class UnifiedAction(Enum):
 
     EXTRACT_DATETIME_FEATURE = "extract_datetime_feature"
     CREATE_TARGET = "create_target"
+    # Cleaning
+    DROP_HIGH_NULL_COLUMNS = "drop_high_null_columns"
+    DROP_CONSTANT_COLUMNS = "drop_constant_columns"
+
+
+# Columns never dropped by unified cleaning actions (key, identity, label).
+UNIFIED_PROTECTED_COLUMNS = ["date", "exchange", "ticker", "target"]
 
 
 class UnifiedLayer:
@@ -412,6 +419,21 @@ class UnifiedLayer:
             kind=kind,
             target_name=target_name,
         )
+
+    @classmethod
+    def DROP_HIGH_NULL_COLUMNS(cls, threshold: float = 0.5, protect: list = None):
+        """Drop columns whose null fraction is strictly greater than `threshold`
+        (0..1). `protect` columns are never dropped (default:
+        UNIFIED_PROTECTED_COLUMNS)."""
+        return cls(
+            UnifiedAction.DROP_HIGH_NULL_COLUMNS, threshold=threshold, protect=protect
+        )
+
+    @classmethod
+    def DROP_CONSTANT_COLUMNS(cls, protect: list = None):
+        """Drop columns with <= 1 distinct non-null value. `protect` columns are
+        never dropped (default: UNIFIED_PROTECTED_COLUMNS)."""
+        return cls(UnifiedAction.DROP_CONSTANT_COLUMNS, protect=protect)
 
 
 class ScrapeMainType(Enum):
