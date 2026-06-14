@@ -27,6 +27,7 @@ from utils.constants import (
     UNIFIED_SCHEMA,
     UNIFIED_TICKERS,
     UNIFIED_MACRO_TABLES,
+    UNIFIED_TARGET_HORIZON,
 )
 from utils.enums import *
 from utils.utils import *
@@ -1045,39 +1046,8 @@ class DataPreprocessor:
         _TA_FUNC_MAP = _build_transform_func_map()
 
         ta_layers = [l for l in transform_layer_list if l.action in _TA_FUNC_MAP]
-        general_layers = [l for l in transform_layer_list if l.action not in _TA_FUNC_MAP]
 
-        # Apply whole-df transforms first
         df = df.copy()
-        for layer in general_layers:
-            if layer.action == TransformAction.EXTRACT_DATETIME_FEATURE:
-                col = layer.params.get("column_name", "date")
-                dt = pd.to_datetime(df[col])
-
-                # Calendar basics
-                df["year"]          = dt.dt.year.astype("int32")
-                df["quarter"]       = dt.dt.quarter.astype("int32")
-                df["month"]         = dt.dt.month.astype("int32")
-                df["week_of_year"]  = dt.dt.isocalendar().week.astype("int32")
-                df["day_of_year"]   = dt.dt.day_of_year.astype("int32")
-                df["day"]           = dt.dt.day.astype("int32")
-                df["day_of_week"]   = dt.dt.day_of_week.astype("int32")  # 0=Mon … 6=Sun
-
-                # Boundary flags (bool → int for DB compatibility)
-                df["is_month_start"]   = dt.dt.is_month_start.astype("int32")
-                df["is_month_end"]     = dt.dt.is_month_end.astype("int32")
-                df["is_quarter_start"] = dt.dt.is_quarter_start.astype("int32")
-                df["is_quarter_end"]   = dt.dt.is_quarter_end.astype("int32")
-                df["is_year_start"]    = dt.dt.is_year_start.astype("int32")
-                df["is_year_end"]      = dt.dt.is_year_end.astype("int32")
-
-                # Cyclical encodings — let the model see that Dec→Jan and Fri→Mon wrap around
-                df["month_sin"]       = np.sin(2 * np.pi * dt.dt.month / 12)
-                df["month_cos"]       = np.cos(2 * np.pi * dt.dt.month / 12)
-                df["day_of_week_sin"] = np.sin(2 * np.pi * dt.dt.day_of_week / 7)
-                df["day_of_week_cos"] = np.cos(2 * np.pi * dt.dt.day_of_week / 7)
-                df["day_of_year_sin"] = np.sin(2 * np.pi * dt.dt.day_of_year / 365)
-                df["day_of_year_cos"] = np.cos(2 * np.pi * dt.dt.day_of_year / 365)
 
         # Apply TA transforms per (exchange, ticker) group, sorted by date.
         # (Compute is only ~12% of ingest wall-time — the DB insert dominates —
@@ -1282,6 +1252,72 @@ class DataPreprocessor:
     def _ingest_gold_indices(self) -> None:
         self._ingest_gold_table("indices")
 
+    def _helper_unified_transform(
+        self, df: pd.DataFrame, unified_layer_list: List[UnifiedLayer]
+    ) -> pd.DataFrame:
+        """
+        Apply unified-layer transforms to a single-stock (date-sorted) DataFrame.
+
+        Supported actions:
+          • EXTRACT_DATETIME_FEATURE — calendar, boundary-flag and cyclical
+            features derived from the date column.
+          • CREATE_TARGET — the supervised label (future return/direction/price).
+        """
+        df = df.copy()
+        for layer in unified_layer_list:
+            if layer.action == UnifiedAction.EXTRACT_DATETIME_FEATURE:
+                col = layer.params.get("column_name", "date")
+                dt = pd.to_datetime(df[col])
+
+                # Calendar basics
+                df["year"]          = dt.dt.year.astype("int32")
+                df["quarter"]       = dt.dt.quarter.astype("int32")
+                df["month"]         = dt.dt.month.astype("int32")
+                df["week_of_year"]  = dt.dt.isocalendar().week.astype("int32")
+                df["day_of_year"]   = dt.dt.day_of_year.astype("int32")
+                df["day"]           = dt.dt.day.astype("int32")
+                df["day_of_week"]   = dt.dt.day_of_week.astype("int32")  # 0=Mon … 6=Sun
+
+                # Boundary flags (bool → int for DB compatibility)
+                df["is_month_start"]   = dt.dt.is_month_start.astype("int32")
+                df["is_month_end"]     = dt.dt.is_month_end.astype("int32")
+                df["is_quarter_start"] = dt.dt.is_quarter_start.astype("int32")
+                df["is_quarter_end"]   = dt.dt.is_quarter_end.astype("int32")
+                df["is_year_start"]    = dt.dt.is_year_start.astype("int32")
+                df["is_year_end"]      = dt.dt.is_year_end.astype("int32")
+
+                # Cyclical encodings — let the model see that Dec→Jan and Fri→Mon wrap around
+                df["month_sin"]       = np.sin(2 * np.pi * dt.dt.month / 12)
+                df["month_cos"]       = np.cos(2 * np.pi * dt.dt.month / 12)
+                df["day_of_week_sin"] = np.sin(2 * np.pi * dt.dt.day_of_week / 7)
+                df["day_of_week_cos"] = np.cos(2 * np.pi * dt.dt.day_of_week / 7)
+                df["day_of_year_sin"] = np.sin(2 * np.pi * dt.dt.day_of_year / 365)
+                df["day_of_year_cos"] = np.cos(2 * np.pi * dt.dt.day_of_year / 365)
+
+            elif layer.action == UnifiedAction.CREATE_TARGET:
+                col = layer.params.get("column_name", "close")
+                horizon = int(layer.params.get("horizon", 1))
+                kind = layer.params.get("kind", "log_return")
+                name = layer.params.get("target_name", "target")
+
+                price = pd.to_numeric(df[col], errors="coerce")
+                future = price.shift(-horizon)  # look-ahead is the label, by design
+                if kind == "log_return":
+                    df[name] = np.log(future / price)
+                elif kind == "simple_return":
+                    df[name] = future / price - 1.0
+                elif kind == "pct_return":
+                    df[name] = (future / price - 1.0) * 100.0
+                elif kind == "direction":
+                    df[name] = (future > price).astype("float32")
+                    df.loc[future.isna(), name] = np.nan
+                elif kind == "price":
+                    df[name] = future
+                else:
+                    raise ValueError(f"Unknown CREATE_TARGET kind: '{kind}'")
+
+        return df
+
     def _helper_macro_wide(self, table_name: str) -> pd.DataFrame:
         """
         Load a macro gold table and pivot its raw `value` to wide form, one
@@ -1356,6 +1392,20 @@ class DataPreprocessor:
         # Forward-fill macro context onto every trading day (no look-ahead).
         if macro_cols:
             spine[macro_cols] = spine[macro_cols].ffill()
+
+        # Datetime features, then the supervised target (future pct return).
+        spine = self._helper_unified_transform(
+            spine,
+            [
+                UnifiedLayer.EXTRACT_DATETIME_FEATURE(column_name="date"),
+                UnifiedLayer.CREATE_TARGET(
+                    column_name="close",
+                    horizon=UNIFIED_TARGET_HORIZON,
+                    kind="pct_return",
+                    target_name="target",
+                ),
+            ],
+        )
 
         spine["date"] = spine["date"].dt.date
 

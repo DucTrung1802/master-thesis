@@ -147,8 +147,6 @@ class CleanLayer:
 
 
 class TransformAction(Enum):
-    # General transforms
-    EXTRACT_DATETIME_FEATURE = "extract_datetime_feature"
     # Feature engineering (non-TA)
     ADD_RETURNS = "add_returns"
     ADD_INTRADAY_RANGE = "add_intraday_range"
@@ -211,11 +209,6 @@ class TransformLayer:
     def __init__(self, action: TransformAction, **kwargs):
         self.action = action
         self.params = kwargs
-
-    # General transforms
-    @classmethod
-    def EXTRACT_DATETIME_FEATURE(cls, column_name: str = "date"):
-        return cls(TransformAction.EXTRACT_DATETIME_FEATURE, column_name=column_name)
 
     # Feature engineering (non-TA)
     @classmethod
@@ -376,6 +369,49 @@ class TransformLayer:
 
     @classmethod
     def TA_ADD_TRANGE(cls, **kwargs): return cls(TransformAction.TA_ADD_TRANGE, **kwargs)
+
+
+class UnifiedAction(Enum):
+    """Transforms applied in the unified layer (per-stock, model-ready table)."""
+
+    EXTRACT_DATETIME_FEATURE = "extract_datetime_feature"
+    CREATE_TARGET = "create_target"
+
+
+class UnifiedLayer:
+    """A single unified-layer transformation step with optional keyword parameters."""
+
+    def __init__(self, action: UnifiedAction, **kwargs):
+        self.action = action
+        self.params = kwargs
+
+    @classmethod
+    def EXTRACT_DATETIME_FEATURE(cls, column_name: str = "date"):
+        return cls(UnifiedAction.EXTRACT_DATETIME_FEATURE, column_name=column_name)
+
+    @classmethod
+    def CREATE_TARGET(
+        cls,
+        column_name: str = "close",
+        horizon: int = 1,
+        kind: str = "log_return",
+        target_name: str = "target",
+    ):
+        """
+        kind:
+          - "log_return"    : log(price[t+h] / price[t])
+          - "simple_return" : price[t+h] / price[t] - 1
+          - "pct_return"    : (price[t+h] / price[t] - 1) * 100
+          - "direction"     : 1 if price[t+h] > price[t] else 0
+          - "price"         : price[t+h]
+        """
+        return cls(
+            UnifiedAction.CREATE_TARGET,
+            column_name=column_name,
+            horizon=horizon,
+            kind=kind,
+            target_name=target_name,
+        )
 
 
 class ScrapeMainType(Enum):

@@ -120,6 +120,10 @@ UNIFIED_TICKERS: list = ["VCB"]
 # onto the stock's trading-day date spine).
 UNIFIED_MACRO_TABLES: list = ["economy", "bonds"]
 
+# Supervised target: percentage simple return of `close` this many trading days
+# into the future, e.g. close=100 today and 120 in UNIFIED_TARGET_HORIZON days -> target=20.
+UNIFIED_TARGET_HORIZON: int = 5
+
 
 # ===========================
 # THREAD MANAGER CONFIGURATION
