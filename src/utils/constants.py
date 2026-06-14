@@ -114,7 +114,12 @@ UNIFIED_SCHEMA = "unified_schema"
 # GOLD_PROTOTYPE_TICKERS: list = ["VNM", "VIC", "FPT", "VCB"]
 
 # Stocks (by ticker) to build a per-stock unified table for (unified_<ticker>).
-UNIFIED_TICKERS: list = ["VCB"]
+# VN30 index constituents (HOSE).
+UNIFIED_TICKERS: list = [
+    "ACB", "BCM", "BID", "BVH", "CTG", "FPT", "GAS", "GVR", "HDB", "HPG",
+    "MBB", "MSN", "MWG", "PLX", "POW", "SAB", "SHB", "SSB", "SSI", "STB",
+    "TCB", "TPB", "VCB", "VHM", "VIB", "VIC", "VJC", "VNM", "VPB", "VRE",
+]
 
 # Macro gold tables joined into each unified table (raw `value`, forward-filled
 # onto the stock's trading-day date spine).
