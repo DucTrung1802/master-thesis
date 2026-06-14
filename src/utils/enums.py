@@ -147,21 +147,271 @@ class CleanLayer:
 
 
 class TransformAction(Enum):
-    EXTRACT_DATETIME_FEATURE = "extract_datetime_feature"
+    # Feature engineering (non-TA)
+    ADD_RETURNS = "add_returns"
+    ADD_INTRADAY_RANGE = "add_intraday_range"
+    ADD_RETURN_VOLATILITY = "add_return_volatility"
+    ADD_ROLLING_STATISTICS = "add_rolling_statistics"
+    # TA — Overlap Studies
+    TA_ADD_BBANDS = "ta_add_bbands"
+    TA_ADD_DEMA = "ta_add_dema"
+    TA_ADD_EMA = "ta_add_ema"
+    TA_ADD_KAMA = "ta_add_kama"
+    TA_ADD_MIDPOINT = "ta_add_midpoint"
+    TA_ADD_MIDPRICE = "ta_add_midprice"
+    TA_ADD_SAR = "ta_add_sar"
+    TA_ADD_SMA = "ta_add_sma"
+    TA_ADD_T3 = "ta_add_t3"
+    TA_ADD_TEMA = "ta_add_tema"
+    TA_ADD_TRIMA = "ta_add_trima"
+    TA_ADD_WMA = "ta_add_wma"
+    # TA — Momentum Indicators
+    TA_ADD_ADX = "ta_add_adx"
+    TA_ADD_AROON = "ta_add_aroon"
+    TA_ADD_BOP = "ta_add_bop"
+    TA_ADD_CCI = "ta_add_cci"
+    TA_ADD_CMO = "ta_add_cmo"
+    TA_ADD_MACD = "ta_add_macd"
+    TA_ADD_MFI = "ta_add_mfi"
+    TA_ADD_MOM = "ta_add_mom"
+    TA_ADD_PPO = "ta_add_ppo"
+    TA_ADD_ROC = "ta_add_roc"
+    TA_ADD_RSI = "ta_add_rsi"
+    TA_ADD_STOCH = "ta_add_stoch"
+    TA_ADD_STOCH_RSI = "ta_add_stoch_rsi"
+    TA_ADD_TRIX = "ta_add_trix"
+    TA_ADD_ULTOSC = "ta_add_ultosc"
+    TA_ADD_WILLR = "ta_add_willr"
+    # TA — Volume Indicators
+    TA_ADD_AD = "ta_add_ad"
+    TA_ADD_ADOSC = "ta_add_adosc"
+    TA_ADD_OBV = "ta_add_obv"
+    # TA — Cycle Indicators
+    TA_ADD_HT_DCPERIOD = "ta_add_ht_dcperiod"
+    TA_ADD_HT_DCPHASE = "ta_add_ht_dcphase"
+    TA_ADD_HT_PHASOR = "ta_add_ht_phasor"
+    TA_ADD_HT_SINE = "ta_add_ht_sine"
+    TA_ADD_HT_TRENDMODE = "ta_add_ht_trendmode"
+    # TA — Price Transform
+    TA_ADD_AVGPRICE = "ta_add_avgprice"
+    TA_ADD_MEDPRICE = "ta_add_medprice"
+    TA_ADD_TYPPRICE = "ta_add_typprice"
+    TA_ADD_WCLPRICE = "ta_add_wclprice"
+    # TA — Volatility Indicators
+    TA_ADD_ATR = "ta_add_atr"
+    TA_ADD_NATR = "ta_add_natr"
+    TA_ADD_TRANGE = "ta_add_trange"
 
 
 class TransformLayer:
-    """
-    Represents a transformation step. Can have parameters like column_name.
-    """
+    """Represents a single transformation step with optional keyword parameters."""
 
     def __init__(self, action: TransformAction, **kwargs):
         self.action = action
         self.params = kwargs
 
+    # Feature engineering (non-TA)
+    @classmethod
+    def ADD_RETURNS(cls, column_name: str = "close"):
+        return cls(TransformAction.ADD_RETURNS, column_name=column_name)
+
+    @classmethod
+    def ADD_INTRADAY_RANGE(cls):
+        return cls(TransformAction.ADD_INTRADAY_RANGE)
+
+    @classmethod
+    def ADD_RETURN_VOLATILITY(cls, column_name: str = "close", windows: list = None):
+        return cls(
+            TransformAction.ADD_RETURN_VOLATILITY,
+            column_name=column_name,
+            windows=windows,
+        )
+
+    @classmethod
+    def ADD_ROLLING_STATISTICS(cls, column_name: str = "close", windows: list = None):
+        return cls(
+            TransformAction.ADD_ROLLING_STATISTICS,
+            column_name=column_name,
+            windows=windows,
+        )
+
+    # TA — Overlap Studies
+    @classmethod
+    def TA_ADD_BBANDS(cls, **kwargs): return cls(TransformAction.TA_ADD_BBANDS, **kwargs)
+
+    @classmethod
+    def TA_ADD_DEMA(cls, **kwargs): return cls(TransformAction.TA_ADD_DEMA, **kwargs)
+
+    @classmethod
+    def TA_ADD_EMA(cls, **kwargs): return cls(TransformAction.TA_ADD_EMA, **kwargs)
+
+    @classmethod
+    def TA_ADD_KAMA(cls, **kwargs): return cls(TransformAction.TA_ADD_KAMA, **kwargs)
+
+    @classmethod
+    def TA_ADD_MIDPOINT(cls, **kwargs): return cls(TransformAction.TA_ADD_MIDPOINT, **kwargs)
+
+    @classmethod
+    def TA_ADD_MIDPRICE(cls, **kwargs): return cls(TransformAction.TA_ADD_MIDPRICE, **kwargs)
+
+    @classmethod
+    def TA_ADD_SAR(cls, **kwargs): return cls(TransformAction.TA_ADD_SAR, **kwargs)
+
+    @classmethod
+    def TA_ADD_SMA(cls, **kwargs): return cls(TransformAction.TA_ADD_SMA, **kwargs)
+
+    @classmethod
+    def TA_ADD_T3(cls, **kwargs): return cls(TransformAction.TA_ADD_T3, **kwargs)
+
+    @classmethod
+    def TA_ADD_TEMA(cls, **kwargs): return cls(TransformAction.TA_ADD_TEMA, **kwargs)
+
+    @classmethod
+    def TA_ADD_TRIMA(cls, **kwargs): return cls(TransformAction.TA_ADD_TRIMA, **kwargs)
+
+    @classmethod
+    def TA_ADD_WMA(cls, **kwargs): return cls(TransformAction.TA_ADD_WMA, **kwargs)
+
+    # TA — Momentum Indicators
+    @classmethod
+    def TA_ADD_ADX(cls, **kwargs): return cls(TransformAction.TA_ADD_ADX, **kwargs)
+
+    @classmethod
+    def TA_ADD_AROON(cls, **kwargs): return cls(TransformAction.TA_ADD_AROON, **kwargs)
+
+    @classmethod
+    def TA_ADD_BOP(cls, **kwargs): return cls(TransformAction.TA_ADD_BOP, **kwargs)
+
+    @classmethod
+    def TA_ADD_CCI(cls, **kwargs): return cls(TransformAction.TA_ADD_CCI, **kwargs)
+
+    @classmethod
+    def TA_ADD_CMO(cls, **kwargs): return cls(TransformAction.TA_ADD_CMO, **kwargs)
+
+    @classmethod
+    def TA_ADD_MACD(cls, **kwargs): return cls(TransformAction.TA_ADD_MACD, **kwargs)
+
+    @classmethod
+    def TA_ADD_MFI(cls, **kwargs): return cls(TransformAction.TA_ADD_MFI, **kwargs)
+
+    @classmethod
+    def TA_ADD_MOM(cls, **kwargs): return cls(TransformAction.TA_ADD_MOM, **kwargs)
+
+    @classmethod
+    def TA_ADD_PPO(cls, **kwargs): return cls(TransformAction.TA_ADD_PPO, **kwargs)
+
+    @classmethod
+    def TA_ADD_ROC(cls, **kwargs): return cls(TransformAction.TA_ADD_ROC, **kwargs)
+
+    @classmethod
+    def TA_ADD_RSI(cls, **kwargs): return cls(TransformAction.TA_ADD_RSI, **kwargs)
+
+    @classmethod
+    def TA_ADD_STOCH(cls, **kwargs): return cls(TransformAction.TA_ADD_STOCH, **kwargs)
+
+    @classmethod
+    def TA_ADD_STOCH_RSI(cls, **kwargs): return cls(TransformAction.TA_ADD_STOCH_RSI, **kwargs)
+
+    @classmethod
+    def TA_ADD_TRIX(cls, **kwargs): return cls(TransformAction.TA_ADD_TRIX, **kwargs)
+
+    @classmethod
+    def TA_ADD_ULTOSC(cls, **kwargs): return cls(TransformAction.TA_ADD_ULTOSC, **kwargs)
+
+    @classmethod
+    def TA_ADD_WILLR(cls, **kwargs): return cls(TransformAction.TA_ADD_WILLR, **kwargs)
+
+    # TA — Volume Indicators
+    @classmethod
+    def TA_ADD_AD(cls, **kwargs): return cls(TransformAction.TA_ADD_AD, **kwargs)
+
+    @classmethod
+    def TA_ADD_ADOSC(cls, **kwargs): return cls(TransformAction.TA_ADD_ADOSC, **kwargs)
+
+    @classmethod
+    def TA_ADD_OBV(cls, **kwargs): return cls(TransformAction.TA_ADD_OBV, **kwargs)
+
+    # TA — Cycle Indicators
+    @classmethod
+    def TA_ADD_HT_DCPERIOD(cls, **kwargs): return cls(TransformAction.TA_ADD_HT_DCPERIOD, **kwargs)
+
+    @classmethod
+    def TA_ADD_HT_DCPHASE(cls, **kwargs): return cls(TransformAction.TA_ADD_HT_DCPHASE, **kwargs)
+
+    @classmethod
+    def TA_ADD_HT_PHASOR(cls, **kwargs): return cls(TransformAction.TA_ADD_HT_PHASOR, **kwargs)
+
+    @classmethod
+    def TA_ADD_HT_SINE(cls, **kwargs): return cls(TransformAction.TA_ADD_HT_SINE, **kwargs)
+
+    @classmethod
+    def TA_ADD_HT_TRENDMODE(cls, **kwargs): return cls(TransformAction.TA_ADD_HT_TRENDMODE, **kwargs)
+
+    # TA — Price Transform
+    @classmethod
+    def TA_ADD_AVGPRICE(cls, **kwargs): return cls(TransformAction.TA_ADD_AVGPRICE, **kwargs)
+
+    @classmethod
+    def TA_ADD_MEDPRICE(cls, **kwargs): return cls(TransformAction.TA_ADD_MEDPRICE, **kwargs)
+
+    @classmethod
+    def TA_ADD_TYPPRICE(cls, **kwargs): return cls(TransformAction.TA_ADD_TYPPRICE, **kwargs)
+
+    @classmethod
+    def TA_ADD_WCLPRICE(cls, **kwargs): return cls(TransformAction.TA_ADD_WCLPRICE, **kwargs)
+
+    # TA — Volatility Indicators
+    @classmethod
+    def TA_ADD_ATR(cls, **kwargs): return cls(TransformAction.TA_ADD_ATR, **kwargs)
+
+    @classmethod
+    def TA_ADD_NATR(cls, **kwargs): return cls(TransformAction.TA_ADD_NATR, **kwargs)
+
+    @classmethod
+    def TA_ADD_TRANGE(cls, **kwargs): return cls(TransformAction.TA_ADD_TRANGE, **kwargs)
+
+
+class UnifiedAction(Enum):
+    """Transforms applied in the unified layer (per-stock, model-ready table)."""
+
+    EXTRACT_DATETIME_FEATURE = "extract_datetime_feature"
+    CREATE_TARGET = "create_target"
+
+
+class UnifiedLayer:
+    """A single unified-layer transformation step with optional keyword parameters."""
+
+    def __init__(self, action: UnifiedAction, **kwargs):
+        self.action = action
+        self.params = kwargs
+
     @classmethod
     def EXTRACT_DATETIME_FEATURE(cls, column_name: str = "date"):
-        return cls(TransformAction.EXTRACT_DATETIME_FEATURE, column_name=column_name)
+        return cls(UnifiedAction.EXTRACT_DATETIME_FEATURE, column_name=column_name)
+
+    @classmethod
+    def CREATE_TARGET(
+        cls,
+        column_name: str = "close",
+        horizon: int = 1,
+        kind: str = "log_return",
+        target_name: str = "target",
+    ):
+        """
+        kind:
+          - "log_return"    : log(price[t+h] / price[t])
+          - "simple_return" : price[t+h] / price[t] - 1
+          - "pct_return"    : (price[t+h] / price[t] - 1) * 100
+          - "direction"     : 1 if price[t+h] > price[t] else 0
+          - "price"         : price[t+h]
+        """
+        return cls(
+            UnifiedAction.CREATE_TARGET,
+            column_name=column_name,
+            horizon=horizon,
+            kind=kind,
+            target_name=target_name,
+        )
 
 
 class ScrapeMainType(Enum):

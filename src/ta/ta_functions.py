@@ -2681,6 +2681,73 @@ def add_trange(
 # endregion VOLATILITY INDICATORS
 
 
+# region FEATURE ENGINEERING (non-TA, works on OHLC or single-value series)
+def add_returns(df: pd.DataFrame, column_name: str = "close") -> pd.DataFrame:
+    """Add 1-period simple and log returns of `column_name`.
+
+    return_simple = (p_t - p_{t-1}) / p_{t-1}
+    return_log    = log(p_t / p_{t-1})
+    """
+    validate_column(df, column_name)
+    df = df.copy()
+    price = pd.to_numeric(df[column_name], errors="coerce")
+    df["return_simple"] = price.pct_change()
+    df["return_log"] = np.log(price / price.shift(1))
+    return df
+
+
+def add_intraday_range(df: pd.DataFrame) -> pd.DataFrame:
+    """Add normalized high-low range and open-close candle body. Requires OHLC."""
+    for col in ("open", "high", "low", "close"):
+        validate_column(df, col)
+    df = df.copy()
+    open_ = pd.to_numeric(df["open"], errors="coerce")
+    high = pd.to_numeric(df["high"], errors="coerce")
+    low = pd.to_numeric(df["low"], errors="coerce")
+    close = pd.to_numeric(df["close"], errors="coerce")
+    df["range_hl"] = (high - low) / close
+    df["body_oc"] = (close - open_) / open_
+    return df
+
+
+def add_return_volatility(
+    df: pd.DataFrame,
+    column_name: str = "close",
+    windows: list[int] = None,
+) -> pd.DataFrame:
+    """Add rolling realized volatility (std of log returns) over each window."""
+    validate_column(df, column_name)
+    windows = windows or [5, 21]
+    df = df.copy()
+    price = pd.to_numeric(df[column_name], errors="coerce")
+    log_ret = np.log(price / price.shift(1))
+    new_cols = {f"volatility_{w}": log_ret.rolling(w).std() for w in windows}
+    return pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
+
+
+def add_rolling_statistics(
+    df: pd.DataFrame,
+    column_name: str = "close",
+    windows: list[int] = None,
+) -> pd.DataFrame:
+    """Add rolling mean/std/min/max of `column_name` over each window."""
+    validate_column(df, column_name)
+    windows = windows or [5, 21]
+    df = df.copy()
+    series = pd.to_numeric(df[column_name], errors="coerce")
+    new_cols = {}
+    for w in windows:
+        roll = series.rolling(w)
+        new_cols[f"{column_name}_roll_mean_{w}"] = roll.mean()
+        new_cols[f"{column_name}_roll_std_{w}"] = roll.std()
+        new_cols[f"{column_name}_roll_min_{w}"] = roll.min()
+        new_cols[f"{column_name}_roll_max_{w}"] = roll.max()
+    return pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
+
+
+# endregion FEATURE ENGINEERING
+
+
 def add_one_for_all_ta(df: pd.DataFrame) -> pd.DataFrame:
     new_df = df.copy()
 

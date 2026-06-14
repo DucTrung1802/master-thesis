@@ -24,12 +24,87 @@ from utils.constants import (
     BRONZE_SCHEMA,
     SILVER_SCHEMA,
     GOLD_SCHEMA,
+    UNIFIED_SCHEMA,
+    UNIFIED_TICKERS,
+    UNIFIED_MACRO_TABLES,
+    UNIFIED_TARGET_HORIZON,
 )
 from utils.enums import *
 from utils.utils import *
 from utils.switch_handler import SwitchHandler
 
 load_dotenv()
+
+
+def _build_transform_func_map() -> dict:
+    """Map each per-group TransformAction to its implementation.
+
+    Defined at module level so it can be rebuilt inside ProcessPoolExecutor
+    worker processes (which re-import this module under the spawn start method).
+    """
+    from ta.ta_functions import (
+        add_bbands, add_dema, add_ema, add_kama, add_midpoint, add_midprice,
+        add_sar, add_sma, add_t3, add_tema, add_trima, add_wma,
+        add_adx, add_aroon, add_bop, add_cci, add_cmo, add_macd,
+        add_mfi, add_mom, add_ppo, add_roc, add_rsi, add_stoch,
+        add_stoch_rsi, add_trix, add_ultosc, add_willr,
+        add_ad, add_adosc, add_obv,
+        add_ht_dcperiod, add_ht_dcphase, add_ht_phasor, add_ht_sine, add_ht_trendmode,
+        add_avgprice, add_medprice, add_typprice, add_wclprice,
+        add_atr, add_natr, add_trange,
+        add_returns, add_intraday_range, add_return_volatility, add_rolling_statistics,
+    )
+
+    return {
+        TransformAction.TA_ADD_BBANDS: add_bbands,
+        TransformAction.TA_ADD_DEMA: add_dema,
+        TransformAction.TA_ADD_EMA: add_ema,
+        TransformAction.TA_ADD_KAMA: add_kama,
+        TransformAction.TA_ADD_MIDPOINT: add_midpoint,
+        TransformAction.TA_ADD_MIDPRICE: add_midprice,
+        TransformAction.TA_ADD_SAR: add_sar,
+        TransformAction.TA_ADD_SMA: add_sma,
+        TransformAction.TA_ADD_T3: add_t3,
+        TransformAction.TA_ADD_TEMA: add_tema,
+        TransformAction.TA_ADD_TRIMA: add_trima,
+        TransformAction.TA_ADD_WMA: add_wma,
+        TransformAction.TA_ADD_ADX: add_adx,
+        TransformAction.TA_ADD_AROON: add_aroon,
+        TransformAction.TA_ADD_BOP: add_bop,
+        TransformAction.TA_ADD_CCI: add_cci,
+        TransformAction.TA_ADD_CMO: add_cmo,
+        TransformAction.TA_ADD_MACD: add_macd,
+        TransformAction.TA_ADD_MFI: add_mfi,
+        TransformAction.TA_ADD_MOM: add_mom,
+        TransformAction.TA_ADD_PPO: add_ppo,
+        TransformAction.TA_ADD_ROC: add_roc,
+        TransformAction.TA_ADD_RSI: add_rsi,
+        TransformAction.TA_ADD_STOCH: add_stoch,
+        TransformAction.TA_ADD_STOCH_RSI: add_stoch_rsi,
+        TransformAction.TA_ADD_TRIX: add_trix,
+        TransformAction.TA_ADD_ULTOSC: add_ultosc,
+        TransformAction.TA_ADD_WILLR: add_willr,
+        TransformAction.TA_ADD_AD: add_ad,
+        TransformAction.TA_ADD_ADOSC: add_adosc,
+        TransformAction.TA_ADD_OBV: add_obv,
+        TransformAction.TA_ADD_HT_DCPERIOD: add_ht_dcperiod,
+        TransformAction.TA_ADD_HT_DCPHASE: add_ht_dcphase,
+        TransformAction.TA_ADD_HT_PHASOR: add_ht_phasor,
+        TransformAction.TA_ADD_HT_SINE: add_ht_sine,
+        TransformAction.TA_ADD_HT_TRENDMODE: add_ht_trendmode,
+        TransformAction.TA_ADD_AVGPRICE: add_avgprice,
+        TransformAction.TA_ADD_MEDPRICE: add_medprice,
+        TransformAction.TA_ADD_TYPPRICE: add_typprice,
+        TransformAction.TA_ADD_WCLPRICE: add_wclprice,
+        TransformAction.TA_ADD_ATR: add_atr,
+        TransformAction.TA_ADD_NATR: add_natr,
+        TransformAction.TA_ADD_TRANGE: add_trange,
+        # Feature engineering (non-TA) — also applied per (exchange, ticker) group
+        TransformAction.ADD_RETURNS: add_returns,
+        TransformAction.ADD_INTRADAY_RANGE: add_intraday_range,
+        TransformAction.ADD_RETURN_VOLATILITY: add_return_volatility,
+        TransformAction.ADD_ROLLING_STATISTICS: add_rolling_statistics,
+    }
 
 
 class DataPreprocessor:
@@ -151,12 +226,12 @@ class DataPreprocessor:
         return df
 
     def _helper_infer_sql_type(self, dtype) -> str:
-        dtype_str = str(dtype)
-        if dtype_str.startswith("int32") or dtype_str == "Int32":
+        dtype_str = str(dtype).lower()
+        if dtype_str in ("int32", "int16", "int8", "uint32", "uint16", "uint8"):
             return DataType.INT()
-        elif dtype_str.startswith("int") or dtype_str == "Int64":
+        elif dtype_str in ("int64", "int", "uint64", "int_"):
             return DataType.BIGINT()
-        elif dtype_str.startswith("float"):
+        elif dtype_str.startswith("float") or dtype_str.startswith("decimal"):
             return DataType.DECIMAL()
         elif dtype_str == "bool":
             return DataType.BOOLEAN()
@@ -238,6 +313,62 @@ class DataPreprocessor:
             return v.item()
         return v
 
+    def _helper_copy_insert_to_database(
+        self,
+        schema_name: str,
+        table_name: str,
+        df: pd.DataFrame,
+        has_create_date: bool,
+    ) -> None:
+        """
+        Fast bulk insert via PostgreSQL COPY FROM STDIN.
+
+        Much faster than the execute_values upsert (vectorized serialization +
+        server-side bulk load, no per-cell Python conversion). Plain insert with
+        NO conflict handling — only safe when the target rows are known to be new
+        (e.g. a freshly created/empty table, as in the gold ingest).
+
+        CSV serialization uses pyarrow's multi-threaded write_csv when available
+        (~10x faster than pandas to_csv on wide frames); falls back to pandas.
+        """
+        from io import BytesIO, StringIO
+
+        df = df.copy()
+        if has_create_date and "create_date" not in df.columns:
+            df["create_date"] = datetime.now(timezone.utc)
+
+        columns = list(df.columns)
+        col_str = ", ".join(f'"{c}"' for c in columns)
+        copy_sql = (
+            f'COPY {schema_name}."{table_name}" ({col_str}) '
+            f"FROM STDIN WITH (FORMAT csv, NULL '')"
+        )
+
+        try:
+            import pyarrow as pa
+            from pyarrow import csv as pacsv
+
+            table = pa.Table.from_pandas(df, preserve_index=False)
+            sink = pa.BufferOutputStream()
+            pacsv.write_csv(
+                table, sink, write_options=pacsv.WriteOptions(include_header=False)
+            )
+            buf = BytesIO(sink.getvalue().to_pybytes())
+        except Exception as e:
+            self._logger.log_warning(
+                f"pyarrow CSV serialization unavailable ({e}); falling back to pandas."
+            )
+            buf = StringIO()
+            df.to_csv(buf, index=False, header=False, na_rep="")
+            buf.seek(0)
+
+        with self._database_driver._cursor_ctx() as cur:
+            cur.copy_expert(copy_sql, buf)
+
+        self._logger.log_info(
+            f"COPY-inserted {len(df)} records into '{schema_name}.{table_name}'."
+        )
+
     def _helper_save_pandas_table_to_database(
         self,
         schema_name: str,
@@ -247,6 +378,7 @@ class DataPreprocessor:
         dtype_overrides: dict[str, str] | None = None,
         chunk_size: int = 5_000,
         max_workers: int | None = None,  # None → let ThreadPoolExecutor decide
+        use_copy: bool = False,
     ) -> None:
         self._logger.log_info(
             f'Saving dataframe to table "{schema_name}.{table_name}".'
@@ -273,6 +405,16 @@ class DataPreprocessor:
             )
         has_create_date = "create_date" in available_columns
         has_update_date = "update_date" in available_columns
+
+        # ── fast bulk path: COPY (no upsert) for known-new rows ───────────────
+        if use_copy:
+            self._helper_copy_insert_to_database(
+                schema_name=schema_name,
+                table_name=table_name,
+                df=df,
+                has_create_date=has_create_date,
+            )
+            return
 
         df_columns = list(df.columns)
 
@@ -804,7 +946,10 @@ class DataPreprocessor:
         df["exchange"] = df["symbol"].str.split(":").str[0]
         df["ticker"] = df["symbol"].str.split(":").str[1]
 
-        df = df[["exchange", "ticker", "date", "open", "high", "low", "close", "volume"]]
+        # Forex is a single-value series (OHLC columns are null in bronze;
+        # the price lives in `value`), so treat it like bonds/economy.
+        df = df[["exchange", "ticker", "date", "value"]]
+        df = self._helper_cast_columns(df, decimal_cols=["value"], bigint_cols=[])
 
         self._helper_save_pandas_table_to_database(
             schema_name=SILVER_SCHEMA,
@@ -827,6 +972,7 @@ class DataPreprocessor:
         df["ticker"] = df["symbol"].str.split(":").str[1]
 
         df = df[["exchange", "ticker", "date", "open", "high", "low", "close", "volume"]]
+        df = self._helper_cast_columns(df, decimal_cols=["open", "high", "low", "close"], bigint_cols=["volume"])
 
         self._helper_save_pandas_table_to_database(
             schema_name=SILVER_SCHEMA,
@@ -849,6 +995,7 @@ class DataPreprocessor:
         df["ticker"] = df["symbol"].str.split(":").str[1]
 
         df = df[["exchange", "ticker", "date", "open", "high", "low", "close", "volume"]]
+        df = self._helper_cast_columns(df, decimal_cols=["open", "high", "low", "close"], bigint_cols=["volume"])
 
         self._helper_save_pandas_table_to_database(
             schema_name=SILVER_SCHEMA,
@@ -871,6 +1018,7 @@ class DataPreprocessor:
         df["ticker"] = df["symbol"].str.split(":").str[1]
 
         df = df[["exchange", "ticker", "date", "open", "high", "low", "close", "volume"]]
+        df = self._helper_cast_columns(df, decimal_cols=["open", "high", "low", "close"], bigint_cols=["volume"])
 
         self._helper_save_pandas_table_to_database(
             schema_name=SILVER_SCHEMA,
@@ -878,6 +1026,402 @@ class DataPreprocessor:
             primary_keys=["exchange", "ticker", "date"],
             df=df,
             dtype_overrides={"date": DataType.DATE()},
+        )
+
+    def _helper_transform(
+        self,
+        df: pd.DataFrame,
+        transform_layer_list: List[TransformLayer],
+        checkpoint_fn=None,
+        checkpoint_size: int = 10_000,
+    ) -> pd.DataFrame:
+        """
+        Apply transform layers to df.
+
+        If checkpoint_fn is provided, instead of returning a single concatenated
+        DataFrame the method flushes accumulated groups to checkpoint_fn(chunk)
+        every checkpoint_size rows and returns an empty DataFrame.
+        This keeps memory bounded and persists progress incrementally.
+        """
+        _TA_FUNC_MAP = _build_transform_func_map()
+
+        ta_layers = [l for l in transform_layer_list if l.action in _TA_FUNC_MAP]
+
+        df = df.copy()
+
+        # Apply TA transforms per (exchange, ticker) group, sorted by date.
+        # (Compute is only ~12% of ingest wall-time — the DB insert dominates —
+        # so this stays a simple sequential loop; parallelizing it is not worth
+        # the complexity. See _helper_save_pandas_table_to_database use_copy.)
+        if ta_layers:
+            def _process_group(group: pd.DataFrame) -> pd.DataFrame:
+                group = group.sort_values("date").reset_index(drop=True)
+                for layer in ta_layers:
+                    func = _TA_FUNC_MAP.get(layer.action)
+                    if func:
+                        group = func(group, **layer.params)
+                return group
+
+            if checkpoint_fn:
+                buffer: list[pd.DataFrame] = []
+                buffer_rows = 0
+                grouped = list(df.groupby(["exchange", "ticker"], sort=False))
+                total = len(grouped)
+                for i, ((_, _), group) in enumerate(grouped):
+                    buffer.append(_process_group(group))
+                    buffer_rows += len(buffer[-1])
+                    if buffer_rows >= checkpoint_size:
+                        checkpoint_fn(pd.concat(buffer, ignore_index=True))
+                        self._logger.log_info(
+                            f"Checkpoint saved: {i + 1}/{total} tickers ({buffer_rows} rows)"
+                        )
+                        buffer = []
+                        buffer_rows = 0
+                if buffer:
+                    checkpoint_fn(pd.concat(buffer, ignore_index=True))
+                    self._logger.log_info(
+                        f"Checkpoint saved: {total}/{total} tickers ({buffer_rows} rows)"
+                    )
+                return pd.DataFrame()
+            else:
+                groups = [
+                    _process_group(group)
+                    for _, group in df.groupby(["exchange", "ticker"], sort=False)
+                ]
+                df = pd.concat(groups, ignore_index=True)
+
+        return df
+
+    def _helper_build_feature_layers(self, df: pd.DataFrame) -> List[TransformLayer]:
+        """
+        Build the standard gold feature-engineering layers based on the table's
+        price representation:
+
+        • OHLC tables (open/high/low/close) → returns, intraday range,
+          return volatility and rolling statistics on `close`.
+        • Single-value tables (`value`)     → returns, return volatility and
+          rolling statistics on `value` (intraday range is not applicable).
+        """
+        cols = set(df.columns)
+        if {"open", "high", "low", "close"}.issubset(cols):
+            price_col = "close"
+            return [
+                TransformLayer.ADD_RETURNS(column_name=price_col),
+                TransformLayer.ADD_INTRADAY_RANGE(),
+                TransformLayer.ADD_RETURN_VOLATILITY(column_name=price_col),
+                TransformLayer.ADD_ROLLING_STATISTICS(column_name=price_col),
+            ]
+        if "value" in cols:
+            price_col = "value"
+            return [
+                TransformLayer.ADD_RETURNS(column_name=price_col),
+                TransformLayer.ADD_RETURN_VOLATILITY(column_name=price_col),
+                TransformLayer.ADD_ROLLING_STATISTICS(column_name=price_col),
+            ]
+        self._logger.log_error(
+            f"No recognizable price columns (OHLC or 'value') found in "
+            f"columns: {sorted(cols)}"
+        )
+        return []
+
+    def _ingest_gold_table(
+        self,
+        table_name: str,
+        ta_layers: Optional[List[TransformLayer]] = None,
+    ) -> None:
+        """
+        Generic gold ingest: read a silver table, coerce numeric source columns,
+        categorize as OHLC vs single-value, apply the standard feature-engineering
+        layers (plus any table-specific TA layers), and checkpoint-save to gold.
+        """
+        self._logger.log_info(f"Ingesting gold {table_name} data...")
+
+        df = self._helper_select(
+            schema_name=SILVER_SCHEMA,
+            table_name=table_name,
+            order_by=["exchange", "ticker", "date"],
+        )
+
+        if df.empty:
+            self._logger.log_info(f"No silver {table_name} data found.")
+            return
+
+        # psycopg2 returns DECIMAL as Python Decimal — coerce to float before TA.
+        for col in ("open", "high", "low", "close", "volume", "value"):
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce")
+
+        transform_layers = list(ta_layers or []) + self._helper_build_feature_layers(df)
+        if not transform_layers:
+            self._logger.log_error(
+                f"No transform layers resolved for gold {table_name}; skipping."
+            )
+            return
+
+        def _checkpoint(chunk: pd.DataFrame) -> None:
+            # Use REAL (4-byte float) for all float columns to stay within
+            # PostgreSQL's 8160-byte row size limit given the large number of columns.
+            overrides: dict[str, str] = {"date": DataType.DATE()}
+            for col in chunk.columns:
+                if str(chunk[col].dtype).lower().startswith("float"):
+                    overrides[col] = "REAL"
+            self._helper_save_pandas_table_to_database(
+                schema_name=GOLD_SCHEMA,
+                table_name=table_name,
+                primary_keys=["exchange", "ticker", "date"],
+                df=chunk,
+                dtype_overrides=overrides,
+                use_copy=True,
+            )
+
+        self._helper_transform(
+            df,
+            transform_layers,
+            checkpoint_fn=_checkpoint,
+            checkpoint_size=100_000,
+        )
+
+    def _ingest_gold_stocks(self) -> None:
+        self._ingest_gold_table(
+            "stocks",
+            ta_layers=[
+                # Overlap Studies
+                TransformLayer.TA_ADD_BBANDS(),
+                TransformLayer.TA_ADD_DEMA(),
+                TransformLayer.TA_ADD_EMA(),
+                TransformLayer.TA_ADD_KAMA(),
+                TransformLayer.TA_ADD_MIDPOINT(),
+                TransformLayer.TA_ADD_MIDPRICE(),
+                TransformLayer.TA_ADD_SAR(),
+                TransformLayer.TA_ADD_SMA(),
+                TransformLayer.TA_ADD_T3(),
+                TransformLayer.TA_ADD_TEMA(),
+                TransformLayer.TA_ADD_TRIMA(),
+                TransformLayer.TA_ADD_WMA(),
+                # Momentum Indicators
+                TransformLayer.TA_ADD_ADX(),
+                TransformLayer.TA_ADD_AROON(),
+                TransformLayer.TA_ADD_BOP(),
+                TransformLayer.TA_ADD_CCI(),
+                TransformLayer.TA_ADD_CMO(),
+                TransformLayer.TA_ADD_MACD(),
+                TransformLayer.TA_ADD_MFI(volume_col="volume"),
+                TransformLayer.TA_ADD_MOM(),
+                TransformLayer.TA_ADD_PPO(),
+                TransformLayer.TA_ADD_ROC(),
+                TransformLayer.TA_ADD_RSI(),
+                TransformLayer.TA_ADD_STOCH(),
+                TransformLayer.TA_ADD_STOCH_RSI(),
+                TransformLayer.TA_ADD_TRIX(),
+                TransformLayer.TA_ADD_ULTOSC(),
+                TransformLayer.TA_ADD_WILLR(),
+                # Volume Indicators
+                TransformLayer.TA_ADD_AD(volume_col="volume"),
+                TransformLayer.TA_ADD_ADOSC(volume_col="volume"),
+                TransformLayer.TA_ADD_OBV(volume_col="volume"),
+                # Cycle Indicators
+                TransformLayer.TA_ADD_HT_DCPERIOD(),
+                TransformLayer.TA_ADD_HT_DCPHASE(),
+                TransformLayer.TA_ADD_HT_PHASOR(),
+                TransformLayer.TA_ADD_HT_SINE(),
+                TransformLayer.TA_ADD_HT_TRENDMODE(),
+                # Price Transform
+                TransformLayer.TA_ADD_AVGPRICE(),
+                TransformLayer.TA_ADD_MEDPRICE(),
+                TransformLayer.TA_ADD_TYPPRICE(),
+                TransformLayer.TA_ADD_WCLPRICE(),
+                # Volatility Indicators
+                TransformLayer.TA_ADD_ATR(),
+                TransformLayer.TA_ADD_NATR(),
+                TransformLayer.TA_ADD_TRANGE(),
+            ],
+        )
+
+    def _ingest_gold_bonds(self) -> None:
+        self._ingest_gold_table("bonds")
+
+    def _ingest_gold_economy(self) -> None:
+        self._ingest_gold_table("economy")
+
+    def _ingest_gold_forex(self) -> None:
+        self._ingest_gold_table("forex")
+
+    def _ingest_gold_funds(self) -> None:
+        self._ingest_gold_table("funds")
+
+    def _ingest_gold_indices(self) -> None:
+        self._ingest_gold_table("indices")
+
+    def _helper_unified_transform(
+        self, df: pd.DataFrame, unified_layer_list: List[UnifiedLayer]
+    ) -> pd.DataFrame:
+        """
+        Apply unified-layer transforms to a single-stock (date-sorted) DataFrame.
+
+        Supported actions:
+          • EXTRACT_DATETIME_FEATURE — calendar, boundary-flag and cyclical
+            features derived from the date column.
+          • CREATE_TARGET — the supervised label (future return/direction/price).
+        """
+        df = df.copy()
+        for layer in unified_layer_list:
+            if layer.action == UnifiedAction.EXTRACT_DATETIME_FEATURE:
+                col = layer.params.get("column_name", "date")
+                dt = pd.to_datetime(df[col])
+
+                # Calendar basics
+                df["year"]          = dt.dt.year.astype("int32")
+                df["quarter"]       = dt.dt.quarter.astype("int32")
+                df["month"]         = dt.dt.month.astype("int32")
+                df["week_of_year"]  = dt.dt.isocalendar().week.astype("int32")
+                df["day_of_year"]   = dt.dt.day_of_year.astype("int32")
+                df["day"]           = dt.dt.day.astype("int32")
+                df["day_of_week"]   = dt.dt.day_of_week.astype("int32")  # 0=Mon … 6=Sun
+
+                # Boundary flags (bool → int for DB compatibility)
+                df["is_month_start"]   = dt.dt.is_month_start.astype("int32")
+                df["is_month_end"]     = dt.dt.is_month_end.astype("int32")
+                df["is_quarter_start"] = dt.dt.is_quarter_start.astype("int32")
+                df["is_quarter_end"]   = dt.dt.is_quarter_end.astype("int32")
+                df["is_year_start"]    = dt.dt.is_year_start.astype("int32")
+                df["is_year_end"]      = dt.dt.is_year_end.astype("int32")
+
+                # Cyclical encodings — let the model see that Dec→Jan and Fri→Mon wrap around
+                df["month_sin"]       = np.sin(2 * np.pi * dt.dt.month / 12)
+                df["month_cos"]       = np.cos(2 * np.pi * dt.dt.month / 12)
+                df["day_of_week_sin"] = np.sin(2 * np.pi * dt.dt.day_of_week / 7)
+                df["day_of_week_cos"] = np.cos(2 * np.pi * dt.dt.day_of_week / 7)
+                df["day_of_year_sin"] = np.sin(2 * np.pi * dt.dt.day_of_year / 365)
+                df["day_of_year_cos"] = np.cos(2 * np.pi * dt.dt.day_of_year / 365)
+
+            elif layer.action == UnifiedAction.CREATE_TARGET:
+                col = layer.params.get("column_name", "close")
+                horizon = int(layer.params.get("horizon", 1))
+                kind = layer.params.get("kind", "log_return")
+                name = layer.params.get("target_name", "target")
+
+                price = pd.to_numeric(df[col], errors="coerce")
+                future = price.shift(-horizon)  # look-ahead is the label, by design
+                if kind == "log_return":
+                    df[name] = np.log(future / price)
+                elif kind == "simple_return":
+                    df[name] = future / price - 1.0
+                elif kind == "pct_return":
+                    df[name] = (future / price - 1.0) * 100.0
+                elif kind == "direction":
+                    df[name] = (future > price).astype("float32")
+                    df.loc[future.isna(), name] = np.nan
+                elif kind == "price":
+                    df[name] = future
+                else:
+                    raise ValueError(f"Unknown CREATE_TARGET kind: '{kind}'")
+
+        return df
+
+    def _helper_macro_wide(self, table_name: str) -> pd.DataFrame:
+        """
+        Load a macro gold table and pivot its raw `value` to wide form, one
+        column per (exchange, ticker) series named `<table>_<exchange>_<ticker>`
+        (lowercased), indexed by date. Used to join macro context onto a stock's
+        date spine in the unified layer.
+        """
+        df = self._helper_select(
+            schema_name=GOLD_SCHEMA,
+            table_name=table_name,
+            columns=["exchange", "ticker", "date", "value"],
+        )
+        if df.empty:
+            self._logger.log_info(f"No gold {table_name} data found for unified join.")
+            return pd.DataFrame()
+
+        df["value"] = pd.to_numeric(df["value"], errors="coerce")
+
+        def _col(exchange: str, ticker: str) -> str:
+            raw = f"{table_name}_{exchange}_{ticker}".lower()
+            return re.sub(r"[^0-9a-z]+", "_", raw).strip("_")
+
+        df["series"] = [
+            _col(e, t) for e, t in zip(df["exchange"], df["ticker"])
+        ]
+        wide = df.pivot_table(
+            index="date", columns="series", values="value", aggfunc="last"
+        )
+        return wide
+
+    def _ingest_unified_stock(self, ticker: str) -> None:
+        """
+        Build a per-stock unified table `unified_schema.unified_<ticker>`:
+        the gold stock rows for `ticker` (the date spine) LEFT-joined with each
+        macro table's wide `value` columns, forward-filled onto the stock's
+        trading days (causal — each day carries the last published macro value).
+        """
+        self._logger.log_info(f"Ingesting unified data for '{ticker}'...")
+
+        spine = self._helper_select(
+            schema_name=GOLD_SCHEMA,
+            table_name="stocks",
+            conditions=[
+                Condition(
+                    column="ticker",
+                    operator=SqlOperator.EQUAL_TO,
+                    value=ticker,
+                    data_type=DataType.VARCHAR(),
+                )
+            ],
+            order_by=["date"],
+        )
+        if spine.empty:
+            self._logger.log_info(f"No gold stocks data found for ticker '{ticker}'.")
+            return
+
+        spine["date"] = pd.to_datetime(spine["date"])
+        spine = spine.sort_values("date").reset_index(drop=True)
+
+        macro_cols: List[str] = []
+        for macro_table in UNIFIED_MACRO_TABLES:
+            wide = self._helper_macro_wide(macro_table)
+            if wide.empty:
+                continue
+            wide.index = pd.to_datetime(wide.index)
+            wide = wide.sort_index()
+            spine = spine.merge(
+                wide, how="left", left_on="date", right_index=True
+            )
+            macro_cols.extend(list(wide.columns))
+
+        # Forward-fill macro context onto every trading day (no look-ahead).
+        if macro_cols:
+            spine[macro_cols] = spine[macro_cols].ffill()
+
+        # Datetime features, then the supervised target (future pct return).
+        spine = self._helper_unified_transform(
+            spine,
+            [
+                UnifiedLayer.EXTRACT_DATETIME_FEATURE(column_name="date"),
+                UnifiedLayer.CREATE_TARGET(
+                    column_name="close",
+                    horizon=UNIFIED_TARGET_HORIZON,
+                    kind="pct_return",
+                    target_name="target",
+                ),
+            ],
+        )
+
+        spine["date"] = spine["date"].dt.date
+
+        table_name = f"unified_{ticker}".lower()
+        overrides: dict[str, str] = {"date": DataType.DATE()}
+        for col in spine.columns:
+            if str(spine[col].dtype).lower().startswith("float"):
+                overrides[col] = "REAL"
+
+        self._helper_save_pandas_table_to_database(
+            schema_name=UNIFIED_SCHEMA,
+            table_name=table_name,
+            primary_keys=["date"],
+            df=spine,
+            dtype_overrides=overrides,
+            use_copy=True,
         )
 
     # endregion Helper functions
@@ -900,12 +1444,18 @@ class DataPreprocessor:
 
                 self._database_driver.create_schema(BRONZE_SCHEMA)
 
-                self._ingest_bronze_bonds()
-                self._ingest_bronze_economy()
-                self._ingest_bronze_forex()
-                self._ingest_bronze_funds()
-                self._ingest_bronze_indices()
-                self._ingest_bronze_stocks()
+                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_bronze", "bonds"):
+                    self._ingest_bronze_bonds()
+                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_bronze", "economy"):
+                    self._ingest_bronze_economy()
+                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_bronze", "forex"):
+                    self._ingest_bronze_forex()
+                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_bronze", "funds"):
+                    self._ingest_bronze_funds()
+                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_bronze", "indices"):
+                    self._ingest_bronze_indices()
+                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_bronze", "stocks"):
+                    self._ingest_bronze_stocks()
 
             except Exception as e:
                 self._logger.log_error(
@@ -933,12 +1483,18 @@ class DataPreprocessor:
 
                 self._database_driver.create_schema(SILVER_SCHEMA)
 
-                self._ingest_silver_bonds()
-                self._ingest_silver_economy()
-                self._ingest_silver_forex()
-                self._ingest_silver_funds()
-                self._ingest_silver_indices()
-                self._ingest_silver_stocks()
+                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_silver", "bonds"):
+                    self._ingest_silver_bonds()
+                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_silver", "economy"):
+                    self._ingest_silver_economy()
+                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_silver", "forex"):
+                    self._ingest_silver_forex()
+                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_silver", "funds"):
+                    self._ingest_silver_funds()
+                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_silver", "indices"):
+                    self._ingest_silver_indices()
+                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_silver", "stocks"):
+                    self._ingest_silver_stocks()
 
             except Exception as e:
                 self._logger.log_error(
@@ -952,12 +1508,64 @@ class DataPreprocessor:
 
         if self._switch_handler.is_enabled("data_preprocessor", "data_quality_gold"):
             try:
-                pass
+                connection_model = PostgreSQLConnectionDto(
+                    logger=self._logger,
+                    host=os.getenv("POSTGRES_HOST"),
+                    user=os.getenv("POSTGRES_USER"),
+                    password=os.getenv("POSTGRES_PASSWORD"),
+                    port=os.getenv("POSTGRES_PORT"),
+                    database="postgres",
+                )
+                self._database_driver.connect(connection_model)
+
+                self._database_driver.create_database(DATABASE_MAIN_V2)
+
+                self._database_driver.create_schema(GOLD_SCHEMA)
+
+                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_gold", "bonds"):
+                    self._ingest_gold_bonds()
+                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_gold", "economy"):
+                    self._ingest_gold_economy()
+                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_gold", "forex"):
+                    self._ingest_gold_forex()
+                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_gold", "funds"):
+                    self._ingest_gold_funds()
+                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_gold", "indices"):
+                    self._ingest_gold_indices()
+                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_gold", "stocks"):
+                    self._ingest_gold_stocks()
 
             except Exception as e:
                 self._logger.log_error(
                     f"Error preprocessing `{DataQuality.GOLD.value}` data: {e}"
                 )
+
+            finally:
+                self._database_driver.disconnect()
+
+    def ingest_unified_data(self) -> None:
+
+        if self._switch_handler.is_enabled("data_preprocessor", "data_quality_unified"):
+            try:
+                connection_model = PostgreSQLConnectionDto(
+                    logger=self._logger,
+                    host=os.getenv("POSTGRES_HOST"),
+                    user=os.getenv("POSTGRES_USER"),
+                    password=os.getenv("POSTGRES_PASSWORD"),
+                    port=os.getenv("POSTGRES_PORT"),
+                    database="postgres",
+                )
+                self._database_driver.connect(connection_model)
+
+                self._database_driver.create_database(DATABASE_MAIN_V2)
+
+                self._database_driver.create_schema(UNIFIED_SCHEMA)
+
+                for ticker in UNIFIED_TICKERS:
+                    self._ingest_unified_stock(ticker)
+
+            except Exception as e:
+                self._logger.log_error(f"Error preprocessing `unified` data: {e}")
 
             finally:
                 self._database_driver.disconnect()
