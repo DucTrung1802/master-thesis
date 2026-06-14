@@ -1316,6 +1316,34 @@ class DataPreprocessor:
                 else:
                     raise ValueError(f"Unknown CREATE_TARGET kind: '{kind}'")
 
+            elif layer.action == UnifiedAction.DROP_HIGH_NULL_COLUMNS:
+                threshold = float(layer.params.get("threshold", 0.5))
+                protect = set(layer.params.get("protect") or UNIFIED_PROTECTED_COLUMNS)
+                null_frac = df.isna().mean()
+                drop_cols = [
+                    c for c in df.columns
+                    if c not in protect and null_frac[c] > threshold
+                ]
+                if drop_cols:
+                    df = df.drop(columns=drop_cols)
+                self._logger.log_info(
+                    f"DROP_HIGH_NULL_COLUMNS: dropped {len(drop_cols)} columns "
+                    f"(> {threshold:.0%} null)"
+                )
+
+            elif layer.action == UnifiedAction.DROP_CONSTANT_COLUMNS:
+                protect = set(layer.params.get("protect") or UNIFIED_PROTECTED_COLUMNS)
+                drop_cols = [
+                    c for c in df.columns
+                    if c not in protect and df[c].nunique(dropna=True) <= 1
+                ]
+                if drop_cols:
+                    df = df.drop(columns=drop_cols)
+                self._logger.log_info(
+                    f"DROP_CONSTANT_COLUMNS: dropped {len(drop_cols)} columns "
+                    f"(<= 1 distinct value)"
+                )
+
         return df
 
     def _helper_macro_wide(self, table_name: str) -> pd.DataFrame:
@@ -1393,7 +1421,8 @@ class DataPreprocessor:
         if macro_cols:
             spine[macro_cols] = spine[macro_cols].ffill()
 
-        # Datetime features, then the supervised target (future pct return).
+        # Datetime features, the supervised target (future pct return), then
+        # column cleaning (drop sparse and constant columns).
         spine = self._helper_unified_transform(
             spine,
             [
@@ -1404,6 +1433,8 @@ class DataPreprocessor:
                     kind="pct_return",
                     target_name="target",
                 ),
+                UnifiedLayer.DROP_HIGH_NULL_COLUMNS(threshold=0.5),
+                UnifiedLayer.DROP_CONSTANT_COLUMNS(),
             ],
         )
 
