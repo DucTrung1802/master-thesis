@@ -18,6 +18,7 @@ wandb/
 *.npy
 
 *.csv
+!experiment_history.csv
 
 *.txt
 
