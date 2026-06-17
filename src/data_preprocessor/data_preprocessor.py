@@ -43,16 +43,53 @@ def _build_transform_func_map() -> dict:
     worker processes (which re-import this module under the spawn start method).
     """
     from ta.ta_functions import (
-        add_bbands, add_dema, add_ema, add_kama, add_midpoint, add_midprice,
-        add_sar, add_sma, add_t3, add_tema, add_trima, add_wma,
-        add_adx, add_aroon, add_bop, add_cci, add_cmo, add_macd,
-        add_mfi, add_mom, add_ppo, add_roc, add_rsi, add_stoch,
-        add_stoch_rsi, add_trix, add_ultosc, add_willr,
-        add_ad, add_adosc, add_obv,
-        add_ht_dcperiod, add_ht_dcphase, add_ht_phasor, add_ht_sine, add_ht_trendmode,
-        add_avgprice, add_medprice, add_typprice, add_wclprice,
-        add_atr, add_natr, add_trange,
-        add_returns, add_intraday_range, add_return_volatility, add_rolling_statistics,
+        add_bbands,
+        add_dema,
+        add_ema,
+        add_kama,
+        add_midpoint,
+        add_midprice,
+        add_sar,
+        add_sma,
+        add_t3,
+        add_tema,
+        add_trima,
+        add_wma,
+        add_adx,
+        add_aroon,
+        add_bop,
+        add_cci,
+        add_cmo,
+        add_macd,
+        add_mfi,
+        add_mom,
+        add_ppo,
+        add_roc,
+        add_rsi,
+        add_stoch,
+        add_stoch_rsi,
+        add_trix,
+        add_ultosc,
+        add_willr,
+        add_ad,
+        add_adosc,
+        add_obv,
+        add_ht_dcperiod,
+        add_ht_dcphase,
+        add_ht_phasor,
+        add_ht_sine,
+        add_ht_trendmode,
+        add_avgprice,
+        add_medprice,
+        add_typprice,
+        add_wclprice,
+        add_atr,
+        add_natr,
+        add_trange,
+        add_returns,
+        add_intraday_range,
+        add_return_volatility,
+        add_rolling_statistics,
     )
 
     return {
@@ -971,8 +1008,12 @@ class DataPreprocessor:
         df["exchange"] = df["symbol"].str.split(":").str[0]
         df["ticker"] = df["symbol"].str.split(":").str[1]
 
-        df = df[["exchange", "ticker", "date", "open", "high", "low", "close", "volume"]]
-        df = self._helper_cast_columns(df, decimal_cols=["open", "high", "low", "close"], bigint_cols=["volume"])
+        df = df[
+            ["exchange", "ticker", "date", "open", "high", "low", "close", "volume"]
+        ]
+        df = self._helper_cast_columns(
+            df, decimal_cols=["open", "high", "low", "close"], bigint_cols=["volume"]
+        )
 
         self._helper_save_pandas_table_to_database(
             schema_name=SILVER_SCHEMA,
@@ -994,8 +1035,12 @@ class DataPreprocessor:
         df["exchange"] = df["symbol"].str.split(":").str[0]
         df["ticker"] = df["symbol"].str.split(":").str[1]
 
-        df = df[["exchange", "ticker", "date", "open", "high", "low", "close", "volume"]]
-        df = self._helper_cast_columns(df, decimal_cols=["open", "high", "low", "close"], bigint_cols=["volume"])
+        df = df[
+            ["exchange", "ticker", "date", "open", "high", "low", "close", "volume"]
+        ]
+        df = self._helper_cast_columns(
+            df, decimal_cols=["open", "high", "low", "close"], bigint_cols=["volume"]
+        )
 
         self._helper_save_pandas_table_to_database(
             schema_name=SILVER_SCHEMA,
@@ -1017,8 +1062,12 @@ class DataPreprocessor:
         df["exchange"] = df["symbol"].str.split(":").str[0]
         df["ticker"] = df["symbol"].str.split(":").str[1]
 
-        df = df[["exchange", "ticker", "date", "open", "high", "low", "close", "volume"]]
-        df = self._helper_cast_columns(df, decimal_cols=["open", "high", "low", "close"], bigint_cols=["volume"])
+        df = df[
+            ["exchange", "ticker", "date", "open", "high", "low", "close", "volume"]
+        ]
+        df = self._helper_cast_columns(
+            df, decimal_cols=["open", "high", "low", "close"], bigint_cols=["volume"]
+        )
 
         self._helper_save_pandas_table_to_database(
             schema_name=SILVER_SCHEMA,
@@ -1054,6 +1103,7 @@ class DataPreprocessor:
         # so this stays a simple sequential loop; parallelizing it is not worth
         # the complexity. See _helper_save_pandas_table_to_database use_copy.)
         if ta_layers:
+
             def _process_group(group: pd.DataFrame) -> pd.DataFrame:
                 group = group.sort_values("date").reset_index(drop=True)
                 for layer in ta_layers:
@@ -1270,25 +1320,25 @@ class DataPreprocessor:
                 dt = pd.to_datetime(df[col])
 
                 # Calendar basics
-                df["year"]          = dt.dt.year.astype("int32")
-                df["quarter"]       = dt.dt.quarter.astype("int32")
-                df["month"]         = dt.dt.month.astype("int32")
-                df["week_of_year"]  = dt.dt.isocalendar().week.astype("int32")
-                df["day_of_year"]   = dt.dt.day_of_year.astype("int32")
-                df["day"]           = dt.dt.day.astype("int32")
-                df["day_of_week"]   = dt.dt.day_of_week.astype("int32")  # 0=Mon … 6=Sun
+                df["year"] = dt.dt.year.astype("int32")
+                df["quarter"] = dt.dt.quarter.astype("int32")
+                df["month"] = dt.dt.month.astype("int32")
+                df["week_of_year"] = dt.dt.isocalendar().week.astype("int32")
+                df["day_of_year"] = dt.dt.day_of_year.astype("int32")
+                df["day"] = dt.dt.day.astype("int32")
+                df["day_of_week"] = dt.dt.day_of_week.astype("int32")  # 0=Mon … 6=Sun
 
                 # Boundary flags (bool → int for DB compatibility)
-                df["is_month_start"]   = dt.dt.is_month_start.astype("int32")
-                df["is_month_end"]     = dt.dt.is_month_end.astype("int32")
+                df["is_month_start"] = dt.dt.is_month_start.astype("int32")
+                df["is_month_end"] = dt.dt.is_month_end.astype("int32")
                 df["is_quarter_start"] = dt.dt.is_quarter_start.astype("int32")
-                df["is_quarter_end"]   = dt.dt.is_quarter_end.astype("int32")
-                df["is_year_start"]    = dt.dt.is_year_start.astype("int32")
-                df["is_year_end"]      = dt.dt.is_year_end.astype("int32")
+                df["is_quarter_end"] = dt.dt.is_quarter_end.astype("int32")
+                df["is_year_start"] = dt.dt.is_year_start.astype("int32")
+                df["is_year_end"] = dt.dt.is_year_end.astype("int32")
 
                 # Cyclical encodings — let the model see that Dec→Jan and Fri→Mon wrap around
-                df["month_sin"]       = np.sin(2 * np.pi * dt.dt.month / 12)
-                df["month_cos"]       = np.cos(2 * np.pi * dt.dt.month / 12)
+                df["month_sin"] = np.sin(2 * np.pi * dt.dt.month / 12)
+                df["month_cos"] = np.cos(2 * np.pi * dt.dt.month / 12)
                 df["day_of_week_sin"] = np.sin(2 * np.pi * dt.dt.day_of_week / 7)
                 df["day_of_week_cos"] = np.cos(2 * np.pi * dt.dt.day_of_week / 7)
                 df["day_of_year_sin"] = np.sin(2 * np.pi * dt.dt.day_of_year / 365)
@@ -1321,7 +1371,8 @@ class DataPreprocessor:
                 protect = set(layer.params.get("protect") or UNIFIED_PROTECTED_COLUMNS)
                 null_frac = df.isna().mean()
                 drop_cols = [
-                    c for c in df.columns
+                    c
+                    for c in df.columns
                     if c not in protect and null_frac[c] > threshold
                 ]
                 if drop_cols:
@@ -1334,7 +1385,8 @@ class DataPreprocessor:
             elif layer.action == UnifiedAction.DROP_CONSTANT_COLUMNS:
                 protect = set(layer.params.get("protect") or UNIFIED_PROTECTED_COLUMNS)
                 drop_cols = [
-                    c for c in df.columns
+                    c
+                    for c in df.columns
                     if c not in protect and df[c].nunique(dropna=True) <= 1
                 ]
                 if drop_cols:
@@ -1348,31 +1400,49 @@ class DataPreprocessor:
 
     def _helper_macro_wide(self, table_name: str) -> pd.DataFrame:
         """
-        Load a macro gold table and pivot its raw `value` to wide form, one
+        Load a macro gold table and pivot its price column to wide form, one
         column per (exchange, ticker) series named `<table>_<exchange>_<ticker>`
         (lowercased), indexed by date. Used to join macro context onto a stock's
         date spine in the unified layer.
+
+        Handles both gold table conventions:
+        • single-value tables (economy, bonds, forex) — price lives in `value`
+        • OHLC tables (stocks, indices, funds)         — price lives in `close`
         """
+        with self._database_driver._cursor_ctx() as cur:
+            available_columns = self._database_driver._get_table_columns(
+                cur, GOLD_SCHEMA, table_name
+            )
+
+        if "value" in available_columns:
+            price_col = "value"
+        elif "close" in available_columns:
+            price_col = "close"
+        else:
+            self._logger.log_error(
+                f"Gold table '{table_name}' has neither 'value' nor 'close' "
+                f"column; skipping for unified join."
+            )
+            return pd.DataFrame()
+
         df = self._helper_select(
             schema_name=GOLD_SCHEMA,
             table_name=table_name,
-            columns=["exchange", "ticker", "date", "value"],
+            columns=["exchange", "ticker", "date", price_col],
         )
         if df.empty:
             self._logger.log_info(f"No gold {table_name} data found for unified join.")
             return pd.DataFrame()
 
-        df["value"] = pd.to_numeric(df["value"], errors="coerce")
+        df[price_col] = pd.to_numeric(df[price_col], errors="coerce")
 
         def _col(exchange: str, ticker: str) -> str:
             raw = f"{table_name}_{exchange}_{ticker}".lower()
             return re.sub(r"[^0-9a-z]+", "_", raw).strip("_")
 
-        df["series"] = [
-            _col(e, t) for e, t in zip(df["exchange"], df["ticker"])
-        ]
+        df["series"] = [_col(e, t) for e, t in zip(df["exchange"], df["ticker"])]
         wide = df.pivot_table(
-            index="date", columns="series", values="value", aggfunc="last"
+            index="date", columns="series", values=price_col, aggfunc="last"
         )
         return wide
 
@@ -1412,9 +1482,7 @@ class DataPreprocessor:
                 continue
             wide.index = pd.to_datetime(wide.index)
             wide = wide.sort_index()
-            spine = spine.merge(
-                wide, how="left", left_on="date", right_index=True
-            )
+            spine = spine.merge(wide, how="left", left_on="date", right_index=True)
             macro_cols.extend(list(wide.columns))
 
         # Forward-fill macro context onto every trading day (no look-ahead).
@@ -1475,17 +1543,29 @@ class DataPreprocessor:
 
                 self._database_driver.create_schema(BRONZE_SCHEMA)
 
-                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_bronze", "bonds"):
+                if self._switch_handler.is_enabled(
+                    "data_preprocessor", "data_quality_bronze", "bonds"
+                ):
                     self._ingest_bronze_bonds()
-                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_bronze", "economy"):
+                if self._switch_handler.is_enabled(
+                    "data_preprocessor", "data_quality_bronze", "economy"
+                ):
                     self._ingest_bronze_economy()
-                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_bronze", "forex"):
+                if self._switch_handler.is_enabled(
+                    "data_preprocessor", "data_quality_bronze", "forex"
+                ):
                     self._ingest_bronze_forex()
-                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_bronze", "funds"):
+                if self._switch_handler.is_enabled(
+                    "data_preprocessor", "data_quality_bronze", "funds"
+                ):
                     self._ingest_bronze_funds()
-                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_bronze", "indices"):
+                if self._switch_handler.is_enabled(
+                    "data_preprocessor", "data_quality_bronze", "indices"
+                ):
                     self._ingest_bronze_indices()
-                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_bronze", "stocks"):
+                if self._switch_handler.is_enabled(
+                    "data_preprocessor", "data_quality_bronze", "stocks"
+                ):
                     self._ingest_bronze_stocks()
 
             except Exception as e:
@@ -1514,17 +1594,29 @@ class DataPreprocessor:
 
                 self._database_driver.create_schema(SILVER_SCHEMA)
 
-                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_silver", "bonds"):
+                if self._switch_handler.is_enabled(
+                    "data_preprocessor", "data_quality_silver", "bonds"
+                ):
                     self._ingest_silver_bonds()
-                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_silver", "economy"):
+                if self._switch_handler.is_enabled(
+                    "data_preprocessor", "data_quality_silver", "economy"
+                ):
                     self._ingest_silver_economy()
-                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_silver", "forex"):
+                if self._switch_handler.is_enabled(
+                    "data_preprocessor", "data_quality_silver", "forex"
+                ):
                     self._ingest_silver_forex()
-                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_silver", "funds"):
+                if self._switch_handler.is_enabled(
+                    "data_preprocessor", "data_quality_silver", "funds"
+                ):
                     self._ingest_silver_funds()
-                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_silver", "indices"):
+                if self._switch_handler.is_enabled(
+                    "data_preprocessor", "data_quality_silver", "indices"
+                ):
                     self._ingest_silver_indices()
-                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_silver", "stocks"):
+                if self._switch_handler.is_enabled(
+                    "data_preprocessor", "data_quality_silver", "stocks"
+                ):
                     self._ingest_silver_stocks()
 
             except Exception as e:
@@ -1553,17 +1645,29 @@ class DataPreprocessor:
 
                 self._database_driver.create_schema(GOLD_SCHEMA)
 
-                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_gold", "bonds"):
+                if self._switch_handler.is_enabled(
+                    "data_preprocessor", "data_quality_gold", "bonds"
+                ):
                     self._ingest_gold_bonds()
-                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_gold", "economy"):
+                if self._switch_handler.is_enabled(
+                    "data_preprocessor", "data_quality_gold", "economy"
+                ):
                     self._ingest_gold_economy()
-                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_gold", "forex"):
+                if self._switch_handler.is_enabled(
+                    "data_preprocessor", "data_quality_gold", "forex"
+                ):
                     self._ingest_gold_forex()
-                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_gold", "funds"):
+                if self._switch_handler.is_enabled(
+                    "data_preprocessor", "data_quality_gold", "funds"
+                ):
                     self._ingest_gold_funds()
-                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_gold", "indices"):
+                if self._switch_handler.is_enabled(
+                    "data_preprocessor", "data_quality_gold", "indices"
+                ):
                     self._ingest_gold_indices()
-                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_gold", "stocks"):
+                if self._switch_handler.is_enabled(
+                    "data_preprocessor", "data_quality_gold", "stocks"
+                ):
                     self._ingest_gold_stocks()
 
             except Exception as e:
