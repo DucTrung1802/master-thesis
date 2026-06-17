@@ -23,3 +23,5 @@ wandb/
 
 
 src/model/lstm/checkpoints/
+
+src/train_test_set/
