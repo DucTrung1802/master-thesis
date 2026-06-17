@@ -103,6 +103,34 @@ TRAINED_MODELS_LOG_FILE_BASE = f"../../{LOG_DIR}/train_model"
 
 
 # ===========================
+# DATABASE CONFIGURATION
+# ===========================
+DATABASE_MAIN_V2 = "database_main_v2"
+BRONZE_SCHEMA = "bronze_schema"
+SILVER_SCHEMA = "silver_schema"
+GOLD_SCHEMA = "gold_schema"
+UNIFIED_SCHEMA = "unified_schema"
+
+# GOLD_PROTOTYPE_TICKERS: list = ["VNM", "VIC", "FPT", "VCB"]
+
+# Stocks (by ticker) to build a per-stock unified table for (unified_<ticker>).
+# VN30 index constituents (HOSE).
+UNIFIED_TICKERS: list = [
+    "ACB", "BCM", "BID", "BVH", "CTG", "FPT", "GAS", "GVR", "HDB", "HPG",
+    "MBB", "MSN", "MWG", "PLX", "POW", "SAB", "SHB", "SSB", "SSI", "STB",
+    "TCB", "TPB", "VCB", "VHM", "VIB", "VIC", "VJC", "VNM", "VPB", "VRE",
+]
+
+# Macro gold tables joined into each unified table (raw `value`, forward-filled
+# onto the stock's trading-day date spine).
+UNIFIED_MACRO_TABLES: list = ["economy", "bonds"]
+
+# Supervised target: percentage simple return of `close` this many trading days
+# into the future, e.g. close=100 today and 120 in UNIFIED_TARGET_HORIZON days -> target=20.
+UNIFIED_TARGET_HORIZON: int = 5
+
+
+# ===========================
 # THREAD MANAGER CONFIGURATION
 # ===========================
 THREAD_MANAGER_POWER = 50  # unit: %

@@ -25,17 +25,18 @@ from utils.enums import *
 
 def format_value(value, data_type: DataType):
     """Format value based on its data type for SQL query."""
-    match data_type:
-        case DataType.VARCHAR:
-            return f"'{str(value).replace("'", "''") if value else value}'"
-        case DataType.DATE:
-            return f"DATE '{value}'"
-        case DataType.TIME:
-            return f"TIME '{value}'"
-        case DataType.TIMESTAMP:
-            return f"TIMESTAMP '{value}'"
-        case _:
-            return str(value)
+    dt = str(data_type).upper() if data_type is not None else ""
+    if dt.startswith("VARCHAR") or dt == "TEXT":
+        escaped = str(value).replace("'", "''") if value is not None else ""
+        return f"'{escaped}'"
+    elif dt == "DATE":
+        return f"DATE '{value}'"
+    elif dt == "TIME":
+        return f"TIME '{value}'"
+    elif dt.startswith("TIMESTAMP"):
+        return f"TIMESTAMP '{value}'"
+    else:
+        return str(value)
 
 
 def remove_all_files_with_extensions(

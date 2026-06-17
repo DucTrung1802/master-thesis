@@ -28,6 +28,7 @@ def main():
     my_data_preprocessor.ingest_bronze_data()
     my_data_preprocessor.ingest_silver_data()
     my_data_preprocessor.ingest_gold_data()
+    my_data_preprocessor.ingest_unified_data()
 
     # stock_code_list = STOCK_CODES_TO_BE_EXPORTED_TO_GOLD_DB
 

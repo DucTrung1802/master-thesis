@@ -18,7 +18,17 @@ from dtos.tabular_database_driver_dtos.postgre_sql_connection_dto import (
 from dtos.tabular_database_driver_dtos.tabular_database_driver_dtos import *
 from tabular_database_driver.postgre_sql_driver import PostgreSQLDriver
 from thread_manager.thread_manager import ThreadManager
-from utils.constants import SCRAPER_RAW_DATA_DIR
+from utils.constants import (
+    SCRAPER_RAW_DATA_DIR,
+    DATABASE_MAIN_V2,
+    BRONZE_SCHEMA,
+    SILVER_SCHEMA,
+    GOLD_SCHEMA,
+    UNIFIED_SCHEMA,
+    UNIFIED_TICKERS,
+    UNIFIED_MACRO_TABLES,
+    UNIFIED_TARGET_HORIZON,
+)
 from utils.enums import *
 from utils.utils import *
 from utils.switch_handler import SwitchHandler
@@ -26,41 +36,78 @@ from utils.switch_handler import SwitchHandler
 load_dotenv()
 
 
+def _build_transform_func_map() -> dict:
+    """Map each per-group TransformAction to its implementation.
+
+    Defined at module level so it can be rebuilt inside ProcessPoolExecutor
+    worker processes (which re-import this module under the spawn start method).
+    """
+    from ta.ta_functions import (
+        add_bbands, add_dema, add_ema, add_kama, add_midpoint, add_midprice,
+        add_sar, add_sma, add_t3, add_tema, add_trima, add_wma,
+        add_adx, add_aroon, add_bop, add_cci, add_cmo, add_macd,
+        add_mfi, add_mom, add_ppo, add_roc, add_rsi, add_stoch,
+        add_stoch_rsi, add_trix, add_ultosc, add_willr,
+        add_ad, add_adosc, add_obv,
+        add_ht_dcperiod, add_ht_dcphase, add_ht_phasor, add_ht_sine, add_ht_trendmode,
+        add_avgprice, add_medprice, add_typprice, add_wclprice,
+        add_atr, add_natr, add_trange,
+        add_returns, add_intraday_range, add_return_volatility, add_rolling_statistics,
+    )
+
+    return {
+        TransformAction.TA_ADD_BBANDS: add_bbands,
+        TransformAction.TA_ADD_DEMA: add_dema,
+        TransformAction.TA_ADD_EMA: add_ema,
+        TransformAction.TA_ADD_KAMA: add_kama,
+        TransformAction.TA_ADD_MIDPOINT: add_midpoint,
+        TransformAction.TA_ADD_MIDPRICE: add_midprice,
+        TransformAction.TA_ADD_SAR: add_sar,
+        TransformAction.TA_ADD_SMA: add_sma,
+        TransformAction.TA_ADD_T3: add_t3,
+        TransformAction.TA_ADD_TEMA: add_tema,
+        TransformAction.TA_ADD_TRIMA: add_trima,
+        TransformAction.TA_ADD_WMA: add_wma,
+        TransformAction.TA_ADD_ADX: add_adx,
+        TransformAction.TA_ADD_AROON: add_aroon,
+        TransformAction.TA_ADD_BOP: add_bop,
+        TransformAction.TA_ADD_CCI: add_cci,
+        TransformAction.TA_ADD_CMO: add_cmo,
+        TransformAction.TA_ADD_MACD: add_macd,
+        TransformAction.TA_ADD_MFI: add_mfi,
+        TransformAction.TA_ADD_MOM: add_mom,
+        TransformAction.TA_ADD_PPO: add_ppo,
+        TransformAction.TA_ADD_ROC: add_roc,
+        TransformAction.TA_ADD_RSI: add_rsi,
+        TransformAction.TA_ADD_STOCH: add_stoch,
+        TransformAction.TA_ADD_STOCH_RSI: add_stoch_rsi,
+        TransformAction.TA_ADD_TRIX: add_trix,
+        TransformAction.TA_ADD_ULTOSC: add_ultosc,
+        TransformAction.TA_ADD_WILLR: add_willr,
+        TransformAction.TA_ADD_AD: add_ad,
+        TransformAction.TA_ADD_ADOSC: add_adosc,
+        TransformAction.TA_ADD_OBV: add_obv,
+        TransformAction.TA_ADD_HT_DCPERIOD: add_ht_dcperiod,
+        TransformAction.TA_ADD_HT_DCPHASE: add_ht_dcphase,
+        TransformAction.TA_ADD_HT_PHASOR: add_ht_phasor,
+        TransformAction.TA_ADD_HT_SINE: add_ht_sine,
+        TransformAction.TA_ADD_HT_TRENDMODE: add_ht_trendmode,
+        TransformAction.TA_ADD_AVGPRICE: add_avgprice,
+        TransformAction.TA_ADD_MEDPRICE: add_medprice,
+        TransformAction.TA_ADD_TYPPRICE: add_typprice,
+        TransformAction.TA_ADD_WCLPRICE: add_wclprice,
+        TransformAction.TA_ADD_ATR: add_atr,
+        TransformAction.TA_ADD_NATR: add_natr,
+        TransformAction.TA_ADD_TRANGE: add_trange,
+        # Feature engineering (non-TA) — also applied per (exchange, ticker) group
+        TransformAction.ADD_RETURNS: add_returns,
+        TransformAction.ADD_INTRADAY_RANGE: add_intraday_range,
+        TransformAction.ADD_RETURN_VOLATILITY: add_return_volatility,
+        TransformAction.ADD_ROLLING_STATISTICS: add_rolling_statistics,
+    }
+
+
 class DataPreprocessor:
-
-    @dataclass
-    class _SaveBundle:
-        df: pd.DataFrame
-        file_paths: list
-        folder: str
-        code: str
-        schema_name: str
-        table_name: str
-        primary_keys: list
-
-    _PRICE_DECIMAL_COLS = [
-        "adjust",
-        "close",
-        "change",
-        "percent_change",
-        "matching_value",
-        "negotiate_value",
-        "open",
-        "high",
-        "low",
-    ]
-    _PRICE_BIGINT_COLS = ["matching_volume", "negotiate_volume"]
-
-    _ORDER_DECIMAL_COLS = ["change", "percent_change"]
-    _ORDER_BIGINT_COLS = [
-        "number_of_buy_orders",
-        "buy_volume",
-        "average_volume_per_buy_order",
-        "number_of_sell_orders",
-        "sell_volume",
-        "average_volume_per_sell_order",
-        "net_volume",
-    ]
 
     def __init__(
         self,
@@ -73,10 +120,8 @@ class DataPreprocessor:
         self._database_driver = PostgreSQLDriver(logger=logger)
         self._thread_manager = ThreadManager(logger=self._logger, power=power)
 
-        # Data
-        self._market_df = None
-
-    def _connect_to_database(self, data_quality: DataQuality) -> None:
+    # region Helper functions
+    def _helper_connect_to_database(self, data_quality: DataQuality) -> None:
         self._logger.log_info(f'Connecting to "{data_quality.value}" database...')
 
         database = None
@@ -104,12 +149,12 @@ class DataPreprocessor:
 
         self._database_driver.connect(connection_model)
 
-    def _select_database(self, database_name: str) -> None:
+    def _helper_select_database(self, database_name: str) -> None:
         self._logger.log_info(f'Selecting database "{database_name}"...')
 
         self._database_driver.change_database(database_name)
 
-    def _select(
+    def _helper_select(
         self,
         schema_name: str,
         table_name: str,
@@ -129,7 +174,7 @@ class DataPreprocessor:
             limit=limit,
         )
 
-    def _clean(
+    def _helper_clean(
         self, df: pd.DataFrame, clean_layer_list: List[CleanLayer]
     ) -> pd.DataFrame:
 
@@ -180,167 +225,13 @@ class DataPreprocessor:
 
         return df
 
-    def _transform(
-        self,
-        df: pd.DataFrame,
-        transform_layer_list: List[TransformLayer],
-    ) -> pd.DataFrame:
-
-        if not transform_layer_list:
-            return df
-
-        df = df.copy()
-
-        for layer in transform_layer_list:
-
-            match layer.action:
-
-                case TransformAction.EXTRACT_DATETIME_FEATURE:
-
-                    column_name = layer.params["column_name"]
-
-                    # ensure datetime dtype
-                    df[column_name] = pd.to_datetime(df[column_name])
-
-                    prefix = column_name
-                    col = df[column_name]
-
-                    # ── Basic date components ──────────────────────────────────
-                    df[f"{prefix}_year"] = col.dt.year
-                    df[f"{prefix}_month"] = col.dt.month
-                    df[f"{prefix}_day"] = col.dt.day
-
-                    # ── Time components ────────────────────────────────────────
-                    df[f"{prefix}_hour"] = col.dt.hour
-                    df[f"{prefix}_minute"] = col.dt.minute
-                    df[f"{prefix}_second"] = col.dt.second
-
-                    # ── Week features ──────────────────────────────────────────
-                    df[f"{prefix}_week"] = col.dt.isocalendar().week.astype(int)
-                    df[f"{prefix}_day_of_week"] = col.dt.dayofweek  # Monday=0
-                    df[f"{prefix}_day_name"] = col.dt.day_name()
-
-                    # ── Year positioning ───────────────────────────────────────
-                    df[f"{prefix}_day_of_year"] = col.dt.dayofyear
-
-                    # ── Quarter features ───────────────────────────────────────
-                    df[f"{prefix}_quarter"] = col.dt.quarter
-
-                    # Day within the quarter (1-92)
-                    quarter_start = col.dt.to_period("Q").dt.start_time
-                    df[f"{prefix}_day_of_quarter"] = (col - quarter_start).dt.days + 1
-
-                    # How many days remain until quarter end (inclusive = 0 on last day)
-                    quarter_end = col.dt.to_period("Q").dt.end_time.dt.normalize()
-                    df[f"{prefix}_days_to_quarter_end"] = (
-                        quarter_end - col.dt.normalize()
-                    ).dt.days
-
-                    # Progress through the quarter as a fraction [0.0 – 1.0]
-                    quarter_length = (quarter_end - quarter_start).dt.days + 1
-                    df[f"{prefix}_quarter_progress"] = (
-                        df[f"{prefix}_day_of_quarter"] / quarter_length
-                    ).round(4)
-
-                    # ── Month features ─────────────────────────────────────────
-                    df[f"{prefix}_days_in_month"] = col.dt.days_in_month
-                    df[f"{prefix}_days_to_month_end"] = (
-                        col.dt.days_in_month - col.dt.day
-                    )
-
-                    # Week-of-month  (1 = first 7 days, etc.)
-                    df[f"{prefix}_week_of_month"] = (col.dt.day - 1) // 7 + 1
-
-                    # ── Year features ──────────────────────────────────────────
-                    year_start = pd.to_datetime(col.dt.year.astype(str) + "-01-01")
-                    year_end = pd.to_datetime(col.dt.year.astype(str) + "-12-31")
-
-                    df[f"{prefix}_days_in_year"] = year_end.dt.dayofyear
-                    df[f"{prefix}_days_to_year_end"] = (
-                        year_end - col.dt.normalize()
-                    ).dt.days
-                    df[f"{prefix}_year_progress"] = (
-                        col.dt.dayofyear / df[f"{prefix}_days_in_year"]
-                    ).round(4)
-                    df[f"{prefix}_is_leap_year"] = col.dt.is_leap_year
-
-                    # ── Season (Northern Hemisphere) ───────────────────────────
-                    _season_map = {
-                        1: "Winter",
-                        2: "Winter",
-                        3: "Spring",
-                        4: "Spring",
-                        5: "Spring",
-                        6: "Summer",
-                        7: "Summer",
-                        8: "Summer",
-                        9: "Autumn",
-                        10: "Autumn",
-                        11: "Autumn",
-                        12: "Winter",
-                    }
-                    df[f"{prefix}_season"] = col.dt.month.map(_season_map)
-
-                    # ── Time-of-day bucket ─────────────────────────────────────
-                    _hour_bins = [-1, 5, 11, 17, 20, 23]
-                    _hour_labels = [
-                        "Night",
-                        "Morning",
-                        "Afternoon",
-                        "Evening",
-                        "Night2",
-                    ]
-                    df[f"{prefix}_time_of_day"] = (
-                        pd.cut(col.dt.hour, bins=_hour_bins, labels=_hour_labels)
-                        .astype(str)
-                        .replace("Night2", "Night")
-                    )
-
-                    # ── Boolean flags ──────────────────────────────────────────
-                    df[f"{prefix}_is_weekend"] = col.dt.dayofweek >= 5
-                    df[f"{prefix}_is_weekday"] = col.dt.dayofweek < 5
-                    df[f"{prefix}_is_month_start"] = col.dt.is_month_start
-                    df[f"{prefix}_is_month_end"] = col.dt.is_month_end
-                    df[f"{prefix}_is_quarter_start"] = col.dt.is_quarter_start
-                    df[f"{prefix}_is_quarter_end"] = col.dt.is_quarter_end
-                    df[f"{prefix}_is_year_start"] = col.dt.is_year_start
-                    df[f"{prefix}_is_year_end"] = col.dt.is_year_end
-
-                    # ── Cyclical encodings (preserves circular continuity) ─────
-                    df[f"{prefix}_month_sin"] = np.sin(2 * np.pi * col.dt.month / 12)
-                    df[f"{prefix}_month_cos"] = np.cos(2 * np.pi * col.dt.month / 12)
-
-                    df[f"{prefix}_dow_sin"] = np.sin(2 * np.pi * col.dt.dayofweek / 7)
-                    df[f"{prefix}_dow_cos"] = np.cos(2 * np.pi * col.dt.dayofweek / 7)
-
-                    df[f"{prefix}_hour_sin"] = np.sin(2 * np.pi * col.dt.hour / 24)
-                    df[f"{prefix}_hour_cos"] = np.cos(2 * np.pi * col.dt.hour / 24)
-
-                    df[f"{prefix}_quarter_sin"] = np.sin(2 * np.pi * col.dt.quarter / 4)
-                    df[f"{prefix}_quarter_cos"] = np.cos(2 * np.pi * col.dt.quarter / 4)
-
-                    df[f"{prefix}_doy_sin"] = np.sin(
-                        2 * np.pi * col.dt.dayofyear / df[f"{prefix}_days_in_year"]
-                    )
-                    df[f"{prefix}_doy_cos"] = np.cos(
-                        2 * np.pi * col.dt.dayofyear / df[f"{prefix}_days_in_year"]
-                    )
-
-                    # ── Unix timestamp (useful for distance-based models) ──────
-                    df[f"{prefix}_unix_ts"] = col.astype(np.int64) // 10**9
-
-                case _:
-                    raise ValueError(f"Unsupported transform: {layer.action}")
-
-        return df
-
-    def _infer_sql_type(self, dtype) -> str:
-        dtype_str = str(dtype)
-        if dtype_str.startswith("int32") or dtype_str == "Int32":
+    def _helper_infer_sql_type(self, dtype) -> str:
+        dtype_str = str(dtype).lower()
+        if dtype_str in ("int32", "int16", "int8", "uint32", "uint16", "uint8"):
             return DataType.INT()
-        elif dtype_str.startswith("int") or dtype_str == "Int64":
+        elif dtype_str in ("int64", "int", "uint64", "int_"):
             return DataType.BIGINT()
-        elif dtype_str.startswith("float"):
+        elif dtype_str.startswith("float") or dtype_str.startswith("decimal"):
             return DataType.DECIMAL()
         elif dtype_str == "bool":
             return DataType.BOOLEAN()
@@ -349,7 +240,7 @@ class DataPreprocessor:
         else:
             return DataType.VARCHAR()  # covers "object" and unknown
 
-    def _ensure_table_exists(
+    def _helper_ensure_table_exists(
         self,
         schema_name: str,
         table_name: str,
@@ -363,7 +254,7 @@ class DataPreprocessor:
                 data_type=(
                     dtype_overrides[col]
                     if dtype_overrides and col in dtype_overrides
-                    else self._infer_sql_type(df[col].dtype)
+                    else self._helper_infer_sql_type(df[col].dtype)
                 ),
                 nullable=(col not in primary_keys),
             )
@@ -377,7 +268,7 @@ class DataPreprocessor:
             primary_keys=primary_keys,
         )
 
-    def _build_upsert_sql(
+    def _helper_build_upsert_sql(
         self,
         schema_name: str,
         table_name: str,
@@ -407,7 +298,7 @@ class DataPreprocessor:
     FROM upserted
     """
 
-    def _to_python(self, v):
+    def _helper_to_python(self, v):
         """Convert numpy scalars to native Python types psycopg2 can serialize."""
         if v is None:
             return None
@@ -422,7 +313,63 @@ class DataPreprocessor:
             return v.item()
         return v
 
-    def _save_pandas_table_to_database(
+    def _helper_copy_insert_to_database(
+        self,
+        schema_name: str,
+        table_name: str,
+        df: pd.DataFrame,
+        has_create_date: bool,
+    ) -> None:
+        """
+        Fast bulk insert via PostgreSQL COPY FROM STDIN.
+
+        Much faster than the execute_values upsert (vectorized serialization +
+        server-side bulk load, no per-cell Python conversion). Plain insert with
+        NO conflict handling — only safe when the target rows are known to be new
+        (e.g. a freshly created/empty table, as in the gold ingest).
+
+        CSV serialization uses pyarrow's multi-threaded write_csv when available
+        (~10x faster than pandas to_csv on wide frames); falls back to pandas.
+        """
+        from io import BytesIO, StringIO
+
+        df = df.copy()
+        if has_create_date and "create_date" not in df.columns:
+            df["create_date"] = datetime.now(timezone.utc)
+
+        columns = list(df.columns)
+        col_str = ", ".join(f'"{c}"' for c in columns)
+        copy_sql = (
+            f'COPY {schema_name}."{table_name}" ({col_str}) '
+            f"FROM STDIN WITH (FORMAT csv, NULL '')"
+        )
+
+        try:
+            import pyarrow as pa
+            from pyarrow import csv as pacsv
+
+            table = pa.Table.from_pandas(df, preserve_index=False)
+            sink = pa.BufferOutputStream()
+            pacsv.write_csv(
+                table, sink, write_options=pacsv.WriteOptions(include_header=False)
+            )
+            buf = BytesIO(sink.getvalue().to_pybytes())
+        except Exception as e:
+            self._logger.log_warning(
+                f"pyarrow CSV serialization unavailable ({e}); falling back to pandas."
+            )
+            buf = StringIO()
+            df.to_csv(buf, index=False, header=False, na_rep="")
+            buf.seek(0)
+
+        with self._database_driver._cursor_ctx() as cur:
+            cur.copy_expert(copy_sql, buf)
+
+        self._logger.log_info(
+            f"COPY-inserted {len(df)} records into '{schema_name}.{table_name}'."
+        )
+
+    def _helper_save_pandas_table_to_database(
         self,
         schema_name: str,
         table_name: str,
@@ -431,6 +378,7 @@ class DataPreprocessor:
         dtype_overrides: dict[str, str] | None = None,
         chunk_size: int = 5_000,
         max_workers: int | None = None,  # None → let ThreadPoolExecutor decide
+        use_copy: bool = False,
     ) -> None:
         self._logger.log_info(
             f'Saving dataframe to table "{schema_name}.{table_name}".'
@@ -441,7 +389,7 @@ class DataPreprocessor:
             self._logger.log_info("DataFrame is empty after cleaning. Nothing to save.")
             return
 
-        self._ensure_table_exists(
+        self._helper_ensure_table_exists(
             schema_name=schema_name,
             table_name=table_name,
             primary_keys=primary_keys,
@@ -458,13 +406,23 @@ class DataPreprocessor:
         has_create_date = "create_date" in available_columns
         has_update_date = "update_date" in available_columns
 
+        # ── fast bulk path: COPY (no upsert) for known-new rows ───────────────
+        if use_copy:
+            self._helper_copy_insert_to_database(
+                schema_name=schema_name,
+                table_name=table_name,
+                df=df,
+                has_create_date=has_create_date,
+            )
+            return
+
         df_columns = list(df.columns)
 
         insert_columns = list(df_columns)
         if has_create_date and "create_date" not in insert_columns:
             insert_columns.append("create_date")
 
-        sql = self._build_upsert_sql(
+        sql = self._helper_build_upsert_sql(
             schema_name=schema_name,
             table_name=table_name,
             columns=insert_columns,
@@ -475,7 +433,7 @@ class DataPreprocessor:
         # ── build all tuples once, before spawning threads ────────────────────
         now = datetime.now(timezone.utc) if has_create_date else None
         records: list[tuple] = [
-            tuple(self._to_python(v) for v in row)
+            tuple(self._helper_to_python(v) for v in row)
             + ((now,) if has_create_date and "create_date" not in df_columns else ())
             for row in df.itertuples(index=False, name=None)
         ]
@@ -517,230 +475,7 @@ class DataPreprocessor:
             f"(Inserted: {inserted_total}, Updated: {updated_total})"
         )
 
-    # region Helper functions
-    def _get_market_df(self) -> pd.DataFrame:
-        if not isinstance(self._market_df, pd.DataFrame):
-            self._market_df = self._database_driver.select(
-                schema_name=Schema.STOCK_MARKET.value,
-                table_name=Table.MARKET.name,
-            )
-
-        return self._market_df
-
-    def _get_market_id(self, market_code: str) -> int:
-        market_df = self._get_market_df()
-
-        market_id = market_df[market_df[Table.MARKET.Column.CODE.value] == market_code][
-            Table.MARKET.Column.ID.value
-        ].item()
-
-        return market_id
-
-    def _get_year_list_from_start(self, start_date):
-        end_year = datetime.today().year
-        return list(range(start_date.year, end_year + 1))
-
-    def _melt_dataframe_by_time_format(
-        self, df: pd.DataFrame, time_format: TimeFormat, id_vars: list[str]
-    ) -> pd.DataFrame:
-        match time_format:
-            case TimeFormat.YEAR:
-                # Melt from wide to long format
-                df = df.melt(id_vars=id_vars, var_name="year_str", value_name="value")
-
-                # Clean numeric values
-                df["value"] = df["value"].astype(str).str.replace(",", "", regex=False)
-                df["value"] = pd.to_numeric(df["value"], errors="coerce")
-
-                # Extract year
-                df["year"] = pd.to_datetime(df["year_str"], errors="coerce").dt.year
-
-                # Use pivot_table with first() to handle duplicates
-                df = df.pivot_table(
-                    index=["year"], columns=id_vars[0], values="value", aggfunc="first"
-                ).reset_index()
-
-                # Sort by year and month
-                df = df.sort_values(["year"]).reset_index(drop=True)
-
-            case TimeFormat.QUARTER_YEAR:
-                # Melt from wide to long format
-                df = df.melt(
-                    id_vars=id_vars,
-                    var_name="quarter_str",
-                    value_name="value",
-                )
-
-                # Filter out any non-quarter columns
-                df = df[df["quarter_str"].str.match(r"Q\d+/\d{4}")]
-
-                # Clean numeric values
-                df["value"] = df["value"].astype(str).str.replace(",", "", regex=False)
-                df["value"] = pd.to_numeric(df["value"], errors="coerce")
-
-                # Extract year and quarter
-                df["quarter"] = df["quarter_str"].str.extract(r"Q(\d+)/")[0].astype(int)
-                df["year"] = df["quarter_str"].str.extract(r"/(\d{4})")[0].astype(int)
-
-                # Use pivot_table with first() to handle duplicates
-                df = df.pivot_table(
-                    index=["year", "quarter"],
-                    columns=id_vars[0],
-                    values="value",
-                    aggfunc="first",
-                ).reset_index()
-
-                # Sort by year and quarter
-                df = df.sort_values(["year", "quarter"]).reset_index(drop=True)
-
-            case TimeFormat.MONTH_NAME_YEAR:
-                # Melt from wide to long format
-                df = df.melt(
-                    id_vars=id_vars,
-                    var_name="month_str",
-                    value_name="value",
-                )
-
-                # Clean numeric values
-                df["value"] = df["value"].astype(str).str.replace(",", "", regex=False)
-                df["value"] = pd.to_numeric(df["value"], errors="coerce")
-
-                # Extract year and month
-                df["date"] = pd.to_datetime(df["month_str"], errors="coerce")
-
-                # Drop rows where date couldn't be parsed
-                df = df.dropna(subset=["date"])
-
-                # Extract numeric year, month
-                df["month"] = df["date"].dt.month
-                df["year"] = df["date"].dt.year
-
-                # Use pivot_table with first() to handle duplicates
-                df = df.pivot_table(
-                    index=["year", "month"],
-                    columns=id_vars[0],
-                    values="value",
-                    aggfunc="first",
-                ).reset_index()
-
-                # Sort by year and month
-                df = df.sort_values(["year", "month"]).reset_index(drop=True)
-
-            case TimeFormat.MONTH_INDEX_YEAR:
-                # Melt from wide to long format
-                df = df.melt(
-                    id_vars=id_vars,
-                    var_name="month_str",
-                    value_name="value",
-                )
-
-                # Filter out any non-month columns
-                df = df[df["month_str"].str.match(r"M\d+/\d{4}")]
-
-                # Clean numeric values
-                df["value"] = df["value"].astype(str).str.replace(",", "", regex=False)
-                df["value"] = pd.to_numeric(df["value"], errors="coerce")
-
-                # Extract year and month
-                df["month"] = df["month_str"].str.extract(r"M(\d+)/")[0].astype(int)
-                df["year"] = df["month_str"].str.extract(r"/(\d{4})")[0].astype(int)
-
-                # Use pivot_table with first() to handle duplicates
-                df = df.pivot_table(
-                    index=["year", "month"],
-                    columns=id_vars[0],
-                    values="value",
-                    aggfunc="first",
-                ).reset_index()
-
-                # Sort by year and month
-                df = df.sort_values(["year", "month"]).reset_index(drop=True)
-
-            case TimeFormat.THREE_MONTH_INDEX_YEAR:
-                # Melt from wide to long format
-                df = df.melt(
-                    id_vars=id_vars,
-                    var_name="month_str",
-                    value_name="value",
-                )
-
-                # Filter out any non-month columns
-                df = df[df["month_str"].str.match(r"\d+M/\d{4}")]
-
-                # Clean numeric values
-                df["value"] = df["value"].astype(str).str.replace(",", "", regex=False)
-                df["value"] = pd.to_numeric(df["value"], errors="coerce")
-
-                # Extract year and month
-                df["month"] = df["month_str"].str.extract(r"(\d+)M/")[0].astype(int)
-                df["year"] = df["month_str"].str.extract(r"/(\d{4})")[0].astype(int)
-
-                # Use pivot_table with first() to handle duplicates
-                df = df.pivot_table(
-                    index=["year", "month"],
-                    columns=id_vars[0],
-                    values="value",
-                    aggfunc="first",
-                ).reset_index()
-
-                # Sort by year and month
-                df = df.sort_values(["year", "month"]).reset_index(drop=True)
-
-            case TimeFormat.DAY_MONTH_YEAR:
-                # Melt from wide to long format
-                df = df.melt(
-                    id_vars=id_vars,
-                    var_name="date_str",
-                    value_name="value",
-                )
-
-                # Filter only valid dd/mm/yyyy
-                df = df[df["date_str"].str.match(r"\d{2}/\d{2}/\d{4}")]
-
-                # Clean numeric values
-                df["value"] = df["value"].astype(str).str.replace(",", "", regex=False)
-                df["value"] = pd.to_numeric(df["value"], errors="coerce")
-
-                # Convert to datetime
-                df["date"] = pd.to_datetime(
-                    df["date_str"], format="%d/%m/%Y", errors="coerce"
-                )
-
-                # Extract year, month, day
-                df["year"] = df["date"].dt.year
-                df["month"] = df["date"].dt.month
-                df["day"] = df["date"].dt.day
-
-                # Pivot table to wide format
-                df = df.pivot_table(
-                    index=["year", "month", "day"],
-                    columns=id_vars[0],
-                    values="value",
-                    aggfunc="first",
-                ).reset_index()
-
-                # Sort by date
-                df = df.sort_values(["year", "month", "day"]).reset_index(drop=True)
-
-        return df
-
-    def _standardize_column_name_before_melting(
-        self, df: pd.DataFrame, column_name: str = "Chỉ tiêu"
-    ) -> pd.DataFrame:
-        df[column_name] = (
-            df[column_name]
-            .str.lower()
-            .str.replace(
-                r"[^a-z0-9_\s-]", "", regex=True
-            )  # remove everything except letters, numbers, underscore, space
-            .str.replace(
-                r"[\s-]+", "_", regex=True
-            )  # replace any whitespace with underscore
-        )
-
-        return df
-
-    def _load_csvs(self, folder_path: str) -> tuple[pd.DataFrame, list] | None:
+    def _helper_load_csvs(self, folder_path: str) -> tuple[pd.DataFrame, list] | None:
         file_paths = get_all_file_names_with_extensions(
             logger=self._logger,
             folder_path=folder_path,
@@ -768,7 +503,7 @@ class DataPreprocessor:
 
         return df, file_paths
 
-    def _cast_columns(
+    def _helper_cast_columns(
         self,
         df: pd.DataFrame,
         decimal_cols: list[str],
@@ -804,38 +539,7 @@ class DataPreprocessor:
 
         return df
 
-    def _parse_price_change(self, df: pd.DataFrame) -> pd.DataFrame:
-        df["percent_change"] = (
-            df["change"]
-            .str.extract(r"\(([+-]?\d+\.\d+)%\)", expand=False)
-            .astype(float)
-        )
-        df["change"] = (
-            df["change"].str.extract(r"([+-]?\d+\.\d+)", expand=False).astype(float)
-        )
-        return df
-
-    def _parse_order_change(self, df: pd.DataFrame) -> pd.DataFrame:
-        df["percent_change"] = (
-            df["change"]
-            .str.extract(r"\(([+-]?\d+\.\d+)%\)", expand=False)
-            .astype(float)
-        )
-        df["change"] = (
-            df["change"]
-            .str.extract(r"^([\d.]+)", expand=False)
-            .apply(lambda x: ".".join(["".join(x.split(".")[:-1]), x.split(".")[-1]]))
-            .astype(float)
-        )
-        return df
-
-    def _normalise_dates(self, df: pd.DataFrame) -> pd.DataFrame:
-        df["date"] = pd.to_datetime(df["date"], format="%d/%m/%Y")
-        df = df.sort_values(by="date").reset_index(drop=True)
-        df["date"] = df["date"].dt.date
-        return df
-
-    def _remove_duplicates(
+    def _helper_remove_duplicates(
         self,
         df: pd.DataFrame,
         primary_keys: List[str],
@@ -892,5940 +596,897 @@ class DataPreprocessor:
 
         return result
 
-    def _build_price_df(self, folder_path: str) -> tuple[pd.DataFrame, list] | None:
-        result = self._load_csvs(folder_path)
+    def _ingest_bronze_economy(self) -> None:
+        self._logger.log_info("Ingesting bronze economy data...")
 
-        if result is None:
-            return None
+        economy_dir = os.path.join(SCRAPER_RAW_DATA_DIR, "data", "economy")
+        csv_files = glob(os.path.join(economy_dir, "**", "*.csv"), recursive=True)
 
-        df, file_paths = result
-        df = self._parse_price_change(df)
-        df = self._normalise_dates(df)
-        df = self._cast_columns(df, self._PRICE_DECIMAL_COLS, self._PRICE_BIGINT_COLS)
-
-        return df, file_paths
-
-    def _build_order_df(self, folder_path: str) -> tuple[pd.DataFrame, list] | None:
-        result = self._load_csvs(folder_path)
-        if result is None:
-            return None
-        df, file_paths = result
-        df = self._parse_order_change(df)
-        df = self._normalise_dates(df)
-        df = self._cast_columns(df, self._ORDER_DECIMAL_COLS, self._ORDER_BIGINT_COLS)
-        return df, file_paths
-
-    # endregion Helper functions
-
-    # region Create Schemas
-    def _create_schemas(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(f'Start creating schemas for "{data_quality.value}".')
-
-        match data_quality:
-            case DataQuality.BRONZE:
-                if self._switch_handler.is_enabled(
-                    "data_preprocessor", "data_quality_bronze", "macroeconomics"
-                ):
-                    self._database_driver.create_schema(Schema.MACROECONOMICS.value)
-
-                if self._switch_handler.is_enabled(
-                    "data_preprocessor", "data_quality_bronze", "stock_market"
-                ):
-                    self._database_driver.create_schema(Schema.STOCK_MARKET.value)
-
-                if self._switch_handler.is_enabled(
-                    "data_preprocessor", "data_quality_bronze", "enterprise"
-                ):
-                    self._database_driver.create_schema(Schema.ENTERPRISE.value)
-
-            case DataQuality.SILVER:
-                if self._switch_handler.is_enabled(
-                    "data_preprocessor", "data_quality_silver", "macroeconomics"
-                ):
-                    self._database_driver.create_schema(Schema.MACROECONOMICS.value)
-
-                if self._switch_handler.is_enabled(
-                    "data_preprocessor", "data_quality_silver", "stock_market"
-                ):
-                    self._database_driver.create_schema(Schema.STOCK_MARKET.value)
-
-                if self._switch_handler.is_enabled(
-                    "data_preprocessor", "data_quality_silver", "enterprise"
-                ):
-                    self._database_driver.create_schema(Schema.ENTERPRISE.value)
-
-            case DataQuality.GOLD:
-                if self._switch_handler.is_enabled(
-                    "data_preprocessor", "data_quality_gold", "macroeconomics"
-                ):
-                    self._database_driver.create_schema(Schema.MACROECONOMICS.value)
-
-                if self._switch_handler.is_enabled(
-                    "data_preprocessor", "data_quality_gold", "stock_market"
-                ):
-                    self._database_driver.create_schema(Schema.STOCK_MARKET.value)
-
-                if self._switch_handler.is_enabled(
-                    "data_preprocessor", "data_quality_gold", "enterprise"
-                ):
-                    self._database_driver.create_schema(Schema.ENTERPRISE.value)
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
-
-        self._logger.log_info(f'Finish creating schemas for "{data_quality.value}".')
-
-    # endregion Create Schemas
-
-    # region MACROECONOMICS data process
-
-    # region MACROECONOMICS.GDP
-    def _ingest_macroeconomics_gdp_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.GDP,
-        )
-
-        folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
-
-        file_path = get_newest_file_path(
-            folder_path=folder_path, extension=FileExtension.CSV
-        )
-
-        if not file_path:
-            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
+        if not csv_files:
+            self._logger.log_error(f'No economy CSV files found in "{economy_dir}".')
             return
 
-        self._logger.log_info(f'Start ingesting data in "{file_path}".')
+        dataframes = []
+        for fp in csv_files:
+            df = pd.read_csv(fp, encoding="utf-8")
+            if not df.empty and not df.dropna(how="all").empty:
+                dataframes.append(df)
 
-        # Add logic for processing data here
-        df = pd.read_csv(file_path)
+        if not dataframes:
+            self._logger.log_error("No valid economy CSV data found.")
+            return
 
-        df = df.iloc[:5, :]
+        df = pd.concat(dataframes, ignore_index=True).drop_duplicates()
 
-        # Set indicator names as lowercase with underscores
-        self._standardize_column_name_before_melting(df=df)
-
-        df = self._melt_dataframe_by_time_format(
-            df=df,
-            time_format=TimeFormat.QUARTER_YEAR,
-            id_vars=["Chỉ tiêu", "Đơn vị tính"],
-        )
-
-        # Rename columns
-        df.rename(columns={"total_gdp": "gdp_growth"}, inplace=True)
-
-        # Resort columns
-        df = df[
+        df = self._helper_clean(
+            df,
             [
-                "year",
-                "quarter",
-                "agriculture",
-                "industry",
-                "services",
-                "gdp_growth",
-                "gdp_real",
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("symbol"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("date"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("value"),
+                CleanLayer.REMOVE_IF_ALL_COLUMNS_ARE_NULL(),
+                CleanLayer.ORDER_BY(["symbol", "date"]),
+            ],
+        )
+
+        df = self._helper_cast_columns(df, decimal_cols=["value"], bigint_cols=[])
+
+        df["date"] = pd.to_datetime(df["date"]).dt.date
+
+        df = self._helper_remove_duplicates(df, primary_keys=["symbol", "date"])
+
+        self._helper_save_pandas_table_to_database(
+            schema_name=BRONZE_SCHEMA,
+            table_name="economy",
+            primary_keys=["symbol", "date"],
+            df=df,
+            dtype_overrides={"date": DataType.DATE()},
+        )
+
+    def _ingest_bronze_forex(self) -> None:
+        self._logger.log_info("Ingesting bronze forex data...")
+
+        forex_dir = os.path.join(SCRAPER_RAW_DATA_DIR, "data", "forex")
+        csv_files = glob(os.path.join(forex_dir, "**", "*.csv"), recursive=True)
+
+        if not csv_files:
+            self._logger.log_error(f'No forex CSV files found in "{forex_dir}".')
+            return
+
+        dataframes = []
+        for fp in csv_files:
+            df = pd.read_csv(fp, encoding="utf-8")
+            if not df.empty and not df.dropna(how="all").empty:
+                dataframes.append(df)
+
+        if not dataframes:
+            self._logger.log_error("No valid forex CSV data found.")
+            return
+
+        df = pd.concat(dataframes, ignore_index=True).drop_duplicates()
+
+        df = self._helper_clean(
+            df,
+            [
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("symbol"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("date"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("value"),
+                CleanLayer.REMOVE_IF_ALL_COLUMNS_ARE_NULL(),
+                CleanLayer.ORDER_BY(["symbol", "date"]),
+            ],
+        )
+
+        df = self._helper_cast_columns(df, decimal_cols=["value"], bigint_cols=[])
+
+        df["date"] = pd.to_datetime(df["date"]).dt.date
+
+        df = self._helper_remove_duplicates(df, primary_keys=["symbol", "date"])
+
+        self._helper_save_pandas_table_to_database(
+            schema_name=BRONZE_SCHEMA,
+            table_name="forex",
+            primary_keys=["symbol", "date"],
+            df=df,
+            dtype_overrides={"date": DataType.DATE()},
+        )
+
+    def _ingest_bronze_funds(self) -> None:
+        self._logger.log_info("Ingesting bronze funds data...")
+
+        funds_dir = os.path.join(SCRAPER_RAW_DATA_DIR, "data", "funds")
+        csv_files = glob(os.path.join(funds_dir, "**", "*.csv"), recursive=True)
+
+        if not csv_files:
+            self._logger.log_error(f'No funds CSV files found in "{funds_dir}".')
+            return
+
+        dataframes = []
+        for fp in csv_files:
+            df = pd.read_csv(fp, encoding="utf-8")
+            if not df.empty and not df.dropna(how="all").empty:
+                dataframes.append(df)
+
+        if not dataframes:
+            self._logger.log_error("No valid funds CSV data found.")
+            return
+
+        df = pd.concat(dataframes, ignore_index=True).drop_duplicates()
+
+        df = self._helper_clean(
+            df,
+            [
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("symbol"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("date"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("close"),
+                CleanLayer.REMOVE_IF_ALL_COLUMNS_ARE_NULL(),
+                CleanLayer.ORDER_BY(["symbol", "date"]),
+            ],
+        )
+
+        df = self._helper_cast_columns(
+            df,
+            decimal_cols=["open", "high", "low", "close"],
+            bigint_cols=["volume"],
+        )
+
+        df["date"] = pd.to_datetime(df["date"]).dt.date
+
+        df = self._helper_remove_duplicates(df, primary_keys=["symbol", "date"])
+
+        self._helper_save_pandas_table_to_database(
+            schema_name=BRONZE_SCHEMA,
+            table_name="funds",
+            primary_keys=["symbol", "date"],
+            df=df,
+            dtype_overrides={"date": DataType.DATE()},
+        )
+
+    def _ingest_bronze_indices(self) -> None:
+        self._logger.log_info("Ingesting bronze indices data...")
+
+        indices_dir = os.path.join(SCRAPER_RAW_DATA_DIR, "data", "indices")
+        csv_files = glob(os.path.join(indices_dir, "**", "*.csv"), recursive=True)
+
+        if not csv_files:
+            self._logger.log_error(f'No indices CSV files found in "{indices_dir}".')
+            return
+
+        dataframes = []
+        for fp in csv_files:
+            df = pd.read_csv(fp, encoding="utf-8")
+            if not df.empty and not df.dropna(how="all").empty:
+                dataframes.append(df)
+
+        if not dataframes:
+            self._logger.log_error("No valid indices CSV data found.")
+            return
+
+        df = pd.concat(dataframes, ignore_index=True).drop_duplicates()
+
+        df = self._helper_clean(
+            df,
+            [
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("symbol"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("date"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("close"),
+                CleanLayer.REMOVE_IF_ALL_COLUMNS_ARE_NULL(),
+                CleanLayer.ORDER_BY(["symbol", "date"]),
+            ],
+        )
+
+        df = self._helper_cast_columns(
+            df,
+            decimal_cols=["open", "high", "low", "close"],
+            bigint_cols=["volume"],
+        )
+
+        df["date"] = pd.to_datetime(df["date"]).dt.date
+
+        df = self._helper_remove_duplicates(df, primary_keys=["symbol", "date"])
+
+        self._helper_save_pandas_table_to_database(
+            schema_name=BRONZE_SCHEMA,
+            table_name="indices",
+            primary_keys=["symbol", "date"],
+            df=df,
+            dtype_overrides={"date": DataType.DATE()},
+        )
+
+    def _ingest_bronze_stocks(self) -> None:
+        self._logger.log_info("Ingesting bronze stocks data...")
+
+        stocks_dir = os.path.join(SCRAPER_RAW_DATA_DIR, "data", "stocks")
+        csv_files = glob(os.path.join(stocks_dir, "**", "*.csv"), recursive=True)
+
+        if not csv_files:
+            self._logger.log_error(f'No stocks CSV files found in "{stocks_dir}".')
+            return
+
+        dataframes = []
+        for fp in csv_files:
+            df = pd.read_csv(fp, encoding="utf-8")
+            if not df.empty and not df.dropna(how="all").empty:
+                dataframes.append(df)
+
+        if not dataframes:
+            self._logger.log_error("No valid stocks CSV data found.")
+            return
+
+        df = pd.concat(dataframes, ignore_index=True).drop_duplicates()
+
+        df = self._helper_clean(
+            df,
+            [
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("symbol"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("date"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("close"),
+                CleanLayer.REMOVE_IF_ALL_COLUMNS_ARE_NULL(),
+                CleanLayer.ORDER_BY(["symbol", "date"]),
+            ],
+        )
+
+        df = self._helper_cast_columns(
+            df,
+            decimal_cols=["open", "high", "low", "close"],
+            bigint_cols=["volume"],
+        )
+
+        df["date"] = pd.to_datetime(df["date"]).dt.date
+
+        df = self._helper_remove_duplicates(df, primary_keys=["symbol", "date"])
+
+        self._helper_save_pandas_table_to_database(
+            schema_name=BRONZE_SCHEMA,
+            table_name="stocks",
+            primary_keys=["symbol", "date"],
+            df=df,
+            dtype_overrides={"date": DataType.DATE()},
+        )
+
+    def _ingest_bronze_bonds(self) -> None:
+        self._logger.log_info("Ingesting bronze bonds data...")
+
+        bonds_dir = os.path.join(SCRAPER_RAW_DATA_DIR, "data", "bonds")
+        csv_files = glob(os.path.join(bonds_dir, "**", "*.csv"), recursive=True)
+
+        if not csv_files:
+            self._logger.log_error(f'No bonds CSV files found in "{bonds_dir}".')
+            return
+
+        dataframes = []
+        for fp in csv_files:
+            df = pd.read_csv(fp, encoding="utf-8")
+            if not df.empty and not df.dropna(how="all").empty:
+                dataframes.append(df)
+
+        if not dataframes:
+            self._logger.log_error("No valid bonds CSV data found.")
+            return
+
+        df = pd.concat(dataframes, ignore_index=True).drop_duplicates()
+
+        df = self._helper_clean(
+            df,
+            [
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("symbol"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("date"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("value"),
+                CleanLayer.REMOVE_IF_ALL_COLUMNS_ARE_NULL(),
+                CleanLayer.ORDER_BY(["symbol", "date"]),
+            ],
+        )
+
+        df = self._helper_cast_columns(df, decimal_cols=["value"], bigint_cols=[])
+
+        df["date"] = pd.to_datetime(df["date"]).dt.date
+
+        df = self._helper_remove_duplicates(df, primary_keys=["symbol", "date"])
+
+        self._helper_save_pandas_table_to_database(
+            schema_name=BRONZE_SCHEMA,
+            table_name="bonds",
+            primary_keys=["symbol", "date"],
+            df=df,
+            dtype_overrides={"date": DataType.DATE()},
+        )
+
+    def _ingest_silver_bonds(self) -> None:
+        self._logger.log_info("Ingesting silver bonds data...")
+
+        df = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="bonds")
+
+        if df.empty:
+            self._logger.log_info("No bronze bonds data found.")
+            return
+
+        df["exchange"] = df["symbol"].str.split(":").str[0]
+        df["ticker"] = df["symbol"].str.split(":").str[1]
+
+        df = df[["exchange", "ticker", "date", "value"]]
+
+        self._helper_save_pandas_table_to_database(
+            schema_name=SILVER_SCHEMA,
+            table_name="bonds",
+            primary_keys=["exchange", "ticker", "date"],
+            df=df,
+            dtype_overrides={"date": DataType.DATE()},
+        )
+
+    def _ingest_silver_economy(self) -> None:
+        self._logger.log_info("Ingesting silver economy data...")
+
+        df = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="economy")
+
+        if df.empty:
+            self._logger.log_info("No bronze economy data found.")
+            return
+
+        df["exchange"] = df["symbol"].str.split(":").str[0]
+        df["ticker"] = df["symbol"].str.split(":").str[1]
+
+        df = df[["exchange", "ticker", "date", "value"]]
+
+        self._helper_save_pandas_table_to_database(
+            schema_name=SILVER_SCHEMA,
+            table_name="economy",
+            primary_keys=["exchange", "ticker", "date"],
+            df=df,
+            dtype_overrides={"date": DataType.DATE()},
+        )
+
+    def _ingest_silver_forex(self) -> None:
+        self._logger.log_info("Ingesting silver forex data...")
+
+        df = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="forex")
+
+        if df.empty:
+            self._logger.log_info("No bronze forex data found.")
+            return
+
+        df["exchange"] = df["symbol"].str.split(":").str[0]
+        df["ticker"] = df["symbol"].str.split(":").str[1]
+
+        # Forex is a single-value series (OHLC columns are null in bronze;
+        # the price lives in `value`), so treat it like bonds/economy.
+        df = df[["exchange", "ticker", "date", "value"]]
+        df = self._helper_cast_columns(df, decimal_cols=["value"], bigint_cols=[])
+
+        self._helper_save_pandas_table_to_database(
+            schema_name=SILVER_SCHEMA,
+            table_name="forex",
+            primary_keys=["exchange", "ticker", "date"],
+            df=df,
+            dtype_overrides={"date": DataType.DATE()},
+        )
+
+    def _ingest_silver_funds(self) -> None:
+        self._logger.log_info("Ingesting silver funds data...")
+
+        df = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="funds")
+
+        if df.empty:
+            self._logger.log_info("No bronze funds data found.")
+            return
+
+        df["exchange"] = df["symbol"].str.split(":").str[0]
+        df["ticker"] = df["symbol"].str.split(":").str[1]
+
+        df = df[["exchange", "ticker", "date", "open", "high", "low", "close", "volume"]]
+        df = self._helper_cast_columns(df, decimal_cols=["open", "high", "low", "close"], bigint_cols=["volume"])
+
+        self._helper_save_pandas_table_to_database(
+            schema_name=SILVER_SCHEMA,
+            table_name="funds",
+            primary_keys=["exchange", "ticker", "date"],
+            df=df,
+            dtype_overrides={"date": DataType.DATE()},
+        )
+
+    def _ingest_silver_indices(self) -> None:
+        self._logger.log_info("Ingesting silver indices data...")
+
+        df = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="indices")
+
+        if df.empty:
+            self._logger.log_info("No bronze indices data found.")
+            return
+
+        df["exchange"] = df["symbol"].str.split(":").str[0]
+        df["ticker"] = df["symbol"].str.split(":").str[1]
+
+        df = df[["exchange", "ticker", "date", "open", "high", "low", "close", "volume"]]
+        df = self._helper_cast_columns(df, decimal_cols=["open", "high", "low", "close"], bigint_cols=["volume"])
+
+        self._helper_save_pandas_table_to_database(
+            schema_name=SILVER_SCHEMA,
+            table_name="indices",
+            primary_keys=["exchange", "ticker", "date"],
+            df=df,
+            dtype_overrides={"date": DataType.DATE()},
+        )
+
+    def _ingest_silver_stocks(self) -> None:
+        self._logger.log_info("Ingesting silver stocks data...")
+
+        df = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="stocks")
+
+        if df.empty:
+            self._logger.log_info("No bronze stocks data found.")
+            return
+
+        df["exchange"] = df["symbol"].str.split(":").str[0]
+        df["ticker"] = df["symbol"].str.split(":").str[1]
+
+        df = df[["exchange", "ticker", "date", "open", "high", "low", "close", "volume"]]
+        df = self._helper_cast_columns(df, decimal_cols=["open", "high", "low", "close"], bigint_cols=["volume"])
+
+        self._helper_save_pandas_table_to_database(
+            schema_name=SILVER_SCHEMA,
+            table_name="stocks",
+            primary_keys=["exchange", "ticker", "date"],
+            df=df,
+            dtype_overrides={"date": DataType.DATE()},
+        )
+
+    def _helper_transform(
+        self,
+        df: pd.DataFrame,
+        transform_layer_list: List[TransformLayer],
+        checkpoint_fn=None,
+        checkpoint_size: int = 10_000,
+    ) -> pd.DataFrame:
+        """
+        Apply transform layers to df.
+
+        If checkpoint_fn is provided, instead of returning a single concatenated
+        DataFrame the method flushes accumulated groups to checkpoint_fn(chunk)
+        every checkpoint_size rows and returns an empty DataFrame.
+        This keeps memory bounded and persists progress incrementally.
+        """
+        _TA_FUNC_MAP = _build_transform_func_map()
+
+        ta_layers = [l for l in transform_layer_list if l.action in _TA_FUNC_MAP]
+
+        df = df.copy()
+
+        # Apply TA transforms per (exchange, ticker) group, sorted by date.
+        # (Compute is only ~12% of ingest wall-time — the DB insert dominates —
+        # so this stays a simple sequential loop; parallelizing it is not worth
+        # the complexity. See _helper_save_pandas_table_to_database use_copy.)
+        if ta_layers:
+            def _process_group(group: pd.DataFrame) -> pd.DataFrame:
+                group = group.sort_values("date").reset_index(drop=True)
+                for layer in ta_layers:
+                    func = _TA_FUNC_MAP.get(layer.action)
+                    if func:
+                        group = func(group, **layer.params)
+                return group
+
+            if checkpoint_fn:
+                buffer: list[pd.DataFrame] = []
+                buffer_rows = 0
+                grouped = list(df.groupby(["exchange", "ticker"], sort=False))
+                total = len(grouped)
+                for i, ((_, _), group) in enumerate(grouped):
+                    buffer.append(_process_group(group))
+                    buffer_rows += len(buffer[-1])
+                    if buffer_rows >= checkpoint_size:
+                        checkpoint_fn(pd.concat(buffer, ignore_index=True))
+                        self._logger.log_info(
+                            f"Checkpoint saved: {i + 1}/{total} tickers ({buffer_rows} rows)"
+                        )
+                        buffer = []
+                        buffer_rows = 0
+                if buffer:
+                    checkpoint_fn(pd.concat(buffer, ignore_index=True))
+                    self._logger.log_info(
+                        f"Checkpoint saved: {total}/{total} tickers ({buffer_rows} rows)"
+                    )
+                return pd.DataFrame()
+            else:
+                groups = [
+                    _process_group(group)
+                    for _, group in df.groupby(["exchange", "ticker"], sort=False)
+                ]
+                df = pd.concat(groups, ignore_index=True)
+
+        return df
+
+    def _helper_build_feature_layers(self, df: pd.DataFrame) -> List[TransformLayer]:
+        """
+        Build the standard gold feature-engineering layers based on the table's
+        price representation:
+
+        • OHLC tables (open/high/low/close) → returns, intraday range,
+          return volatility and rolling statistics on `close`.
+        • Single-value tables (`value`)     → returns, return volatility and
+          rolling statistics on `value` (intraday range is not applicable).
+        """
+        cols = set(df.columns)
+        if {"open", "high", "low", "close"}.issubset(cols):
+            price_col = "close"
+            return [
+                TransformLayer.ADD_RETURNS(column_name=price_col),
+                TransformLayer.ADD_INTRADAY_RANGE(),
+                TransformLayer.ADD_RETURN_VOLATILITY(column_name=price_col),
+                TransformLayer.ADD_ROLLING_STATISTICS(column_name=price_col),
             ]
-        ]
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.GDP.name,
-            primary_keys=Table.GDP.primary_key,
-            df=df,
-        )
-
-        self._logger.log_info(f'Finish ingesting data in "{file_path}".')
-
-    def _clean_macroeconomics_gdp_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.GDP,
-        )
-
-        self._logger.log_info(
-            f'Start cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for cleaning data here
-        self._select_database(DataQuality.BRONZE.value)
-
-        bronze_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.GDP.name,
-        )
-
-        silver_df = self._clean(
-            df=bronze_df,
-            clean_layer_list=[
-                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL(
-                    Table.GDP.Column.GDP_GROWTH.value
-                ),
-                CleanLayer.ORDER_BY(
-                    [Table.GDP.Column.YEAR.value, Table.GDP.Column.QUARTER.value]
-                ),
-            ],
-        )
-
-        self._select_database(DataQuality.SILVER.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.GDP.name,
-            primary_keys=Table.GDP.primary_key,
-            df=silver_df,
-        )
-
-        self._logger.log_info(
-            f'Finish cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-    def _transform_macroeconomics_gdp_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.GDP,
-        )
-
-        self._logger.log_info(
-            f'Start transforming data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for transforming data here
-        self._select_database(DataQuality.SILVER.value)
-        silver_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.GDP.name,
-            columns=[
-                Table.GDP.Column.YEAR.value,
-                Table.GDP.Column.QUARTER.value,
-                Table.GDP.Column.GDP_GROWTH.value,
-            ],
-        )
-
-        gold_df = make_date_time_index_for_dataframe(df=silver_df)
-        gold_df = standardize_time_frame(df=gold_df)
-
-        gold_df["gdp_growth"] = gold_df["gdp_growth"].interpolate(method="linear")
-
-        self._select_database(DataQuality.GOLD.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.G_GDP.name,
-            primary_keys=Table.G_GDP.primary_key,
-            df=gold_df,
-        )
-
-        self._logger.log_info(
-            f'Finish transforming data in table "{format_key_for_table(key)}".'
-        )
-
-    def _process_macroeconomics_gdp(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(
-            f'Start processing macroeconomics GDP data for "{data_quality.value}".'
-        )
-
-        match data_quality:
-            case DataQuality.BRONZE:
-                self._ingest_macroeconomics_gdp_vietstock()
-
-            case DataQuality.SILVER:
-                self._clean_macroeconomics_gdp_vietstock()
-
-            case DataQuality.GOLD:
-                self._transform_macroeconomics_gdp_vietstock()
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
-
-        self._logger.log_info(
-            f'Finish processing macroeconomics GDP data for "{data_quality.value}".'
-        )
-
-    # endregion GDP
-
-    # region MACROECONOMICS.CPI
-    def _ingest_macroeconomics_cpi_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.CPI,
-        )
-
-        folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
-
-        file_path = get_newest_file_path(
-            folder_path=folder_path, extension=FileExtension.CSV
-        )
-
-        if not file_path:
-            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
-            return
-
-        self._logger.log_info(f'Start ingesting data in "{file_path}".')
-
-        # Add logic for processing data here
-        df = pd.read_csv(file_path)
-
-        # Set indicator names as lowercase with underscores
-        self._standardize_column_name_before_melting(df=df)
-
-        df = self._melt_dataframe_by_time_format(
-            df=df,
-            time_format=TimeFormat.MONTH_NAME_YEAR,
-            id_vars=["Chỉ tiêu", "Đơn vị tính"],
-        )
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.CPI.name,
-            primary_keys=Table.CPI.primary_key,
-            df=df,
-        )
-
-        self._logger.log_info(f'Finish ingesting data in "{file_path}".')
-
-    def _clean_macroeconomics_cpi_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.CPI,
-        )
-
-        self._logger.log_info(
-            f'Start cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for cleaning data here
-        self._select_database(DataQuality.BRONZE.value)
-
-        bronze_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.CPI.name,
-        )
-
-        silver_df = self._clean(
-            df=bronze_df,
-            clean_layer_list=[
-                CleanLayer.ORDER_BY(
-                    [Table.CPI.Column.YEAR.value, Table.CPI.Column.MONTH.value]
-                )
-            ],
-        )
-
-        self._select_database(DataQuality.SILVER.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.CPI.name,
-            primary_keys=Table.CPI.primary_key,
-            df=silver_df,
-        )
-
-        self._logger.log_info(
-            f'Finish cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-    def _transform_macroeconomics_cpi_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.CPI,
-        )
-
-        self._logger.log_info(
-            f'Start transforming data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for transforming data here
-        self._select_database(DataQuality.SILVER.value)
-        silver_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.CPI.name,
-        )
-
-        gold_df = make_date_time_index_for_dataframe(df=silver_df)
-        gold_df = standardize_time_frame(df=gold_df)
-
-        cols_to_interpolate = gold_df.columns.difference(["date"])
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
-            method="linear"
-        )
-
-        self._select_database(DataQuality.GOLD.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.G_CPI.name,
-            primary_keys=Table.G_CPI.primary_key,
-            df=gold_df,
-        )
-
-        self._logger.log_info(
-            f'Finish transforming data in table "{format_key_for_table(key)}".'
-        )
-
-    def _process_macroeconomics_cpi(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(
-            f'Start processing macroeconomics CPI data for "{data_quality.value}".'
-        )
-
-        match data_quality:
-            case DataQuality.BRONZE:
-                self._ingest_macroeconomics_cpi_vietstock()
-
-            case DataQuality.SILVER:
-                self._clean_macroeconomics_cpi_vietstock()
-
-            case DataQuality.GOLD:
-                self._transform_macroeconomics_cpi_vietstock()
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
-
-        self._logger.log_info(
-            f'Finish processing macroeconomics CPI data for "{data_quality.value}".'
-        )
-
-    # endregion MACROECONOMICS.CPI
-
-    # region MACROECONOMICS.PPI
-    def _ingest_macroeconomics_ppi_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.PPI,
-        )
-
-        folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
-
-        file_path = get_newest_file_path(
-            folder_path=folder_path, extension=FileExtension.CSV
-        )
-
-        if not file_path:
-            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
-            return
-
-        self._logger.log_info(f'Start ingesting data in "{file_path}".')
-
-        # Add logic for processing data here
-        df = pd.read_csv(file_path)
-
-        # Set indicator names as lowercase with underscores
-        df["Chỉ tiêu"] = (
-            df["Chỉ tiêu"].str.lower().str.replace(",", "").str.replace(" ", "_")
-        )
-
-        df = self._melt_dataframe_by_time_format(
-            df=df,
-            time_format=TimeFormat.YEAR,
-            id_vars=["Chỉ tiêu", "Đơn vị tính"],
-        )
-
-        col_translation = {
-            "year": "year",
-            "chỉ_số_chung": "general_index",
-            "dịch_vụ_lâm_nghiệp": "forestry_services",
-            "dịch_vụ_nông_nghiệp": "agricultural_services",
-            "lâm_nghiệp_và_dịch_vụ_có_liên_quan": "forestry_and_related_services",
-            "lâm_sản_khai_thác": "exploited_forest_products",
-            "lâm_sản_thu_nhặt": "collected_forest_products",
-            "nông_nghiệp_và_dịch_vụ_có_liên_quan": "agriculture_and_related_services",
-            "sản_phẩm_từ_chăn_nuôi": "livestock_products",
-            "sản_phẩm_từ_cây_hàng_năm": "annual_crop_products",
-            "sản_phẩm_từ_cây_lâu_năm": "perennial_crop_products",
-            "thủy_sản_khai_thác": "exploited_aquatic_products",
-            "thủy_sản_khai_thác_nuôi_trồng": "aquatic_products_exploitation_and_farming",
-            "thủy_sản_nuôi_trồng": "aquatic_farming_products",
-            "trồng_rừng_và_chăm_sóc_rừng": "forest_planting_and_care",
-        }
-
-        df = df.rename(columns=col_translation)
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.PPI.name,
-            primary_keys=Table.PPI.primary_key,
-            df=df,
-        )
-
-        self._logger.log_info(f'Finish ingesting data in "{file_path}".')
-
-    def _clean_macroeconomics_ppi_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.PPI,
-        )
-
-        self._logger.log_info(
-            f'Start cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for cleaning data here
-        self._select_database(DataQuality.BRONZE.value)
-
-        bronze_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.PPI.name,
-        )
-
-        silver_df = self._clean(
-            df=bronze_df,
-            clean_layer_list=[CleanLayer.ORDER_BY([Table.PPI.Column.YEAR.value])],
-        )
-
-        self._select_database(DataQuality.SILVER.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.PPI.name,
-            primary_keys=Table.PPI.primary_key,
-            df=silver_df,
-        )
-
-        self._logger.log_info(
-            f'Finish cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-    def _transform_macroeconomics_ppi_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.PPI,
-        )
-
-        self._logger.log_info(
-            f'Start transforming data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for transforming data here
-        self._select_database(DataQuality.SILVER.value)
-        silver_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.PPI.name,
-        )
-
-        gold_df = make_date_time_index_for_dataframe(df=silver_df)
-        gold_df = standardize_time_frame(df=gold_df)
-
-        cols_to_interpolate = gold_df.columns.difference(["date"])
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
-            pd.to_numeric, errors="coerce"
-        )
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
-            method="linear"
-        )
-
-        self._select_database(DataQuality.GOLD.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.G_PPI.name,
-            primary_keys=Table.G_PPI.primary_key,
-            df=gold_df,
-        )
-
-        self._logger.log_info(
-            f'Finish transforming data in table "{format_key_for_table(key)}".'
-        )
-
-    def _process_macroeconomics_ppi(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(
-            f'Start processing macroeconomics PPI data for "{data_quality.value}".'
-        )
-
-        match data_quality:
-            case DataQuality.BRONZE:
-                self._ingest_macroeconomics_ppi_vietstock()
-
-            case DataQuality.SILVER:
-                self._clean_macroeconomics_ppi_vietstock()
-
-            case DataQuality.GOLD:
-                self._transform_macroeconomics_ppi_vietstock()
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
-
-        self._logger.log_info(
-            f'Finish processing macroeconomics PPI data for "{data_quality.value}".'
-        )
-
-    # endregion MACROECONOMICS.PPI
-
-    # region MACROECONOMICS.IPI
-    def _ingest_macroeconomics_ipi_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.IPI,
-        )
-
-        folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
-
-        file_path = get_newest_file_path(
-            folder_path=folder_path, extension=FileExtension.CSV
-        )
-
-        if not file_path:
-            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
-            return
-
-        self._logger.log_info(f'Start ingesting data in "{file_path}".')
-
-        # Add logic for processing data here
-        df = pd.read_csv(file_path)
-
-        # Set indicator names as lowercase with underscores
-        df["Chỉ tiêu"] = (
-            df["Chỉ tiêu"].str.lower().str.replace(",", "").str.replace(" ", "_")
-        )
-
-        df = self._melt_dataframe_by_time_format(
-            df=df,
-            time_format=TimeFormat.YEAR,
-            id_vars=["Chỉ tiêu", "Đơn vị tính"],
-        )
-
-        col_translation = {
-            "year": "year",
-            "chỉ_số_chung": "general_index",
-            "dịch_vụ_chuyên_môn_khoa_học_công_nghệ": "professional_scientific_and_technical_services",
-            "dịch_vụ_xây_dựng": "construction_services",
-            "giấy_và_các_sản_phẩm_từ_giấy": "paper_and_paper_products",
-            "hóa_chất_và_sản_phẩm_hóa_chất": "chemicals_and_chemical_products",
-            "máy_móc_thiết_bị_chưa_được_phân_vào_đâu": "machinery_and_equipment_not_elsewhere_classified",
-            "nước_tự_nhiên_khai_thác": "natural_water_extraction",
-            "nước_tự_nhiên_khai_thác;_dịch_vụ_quản_lý_và_xử_lý_rác_thải._nước_thải-": "natural_water_extraction_and_waste_management_services",
-            "phương_tiện_vận_tải_khác": "other_transport_equipment",
-            "quặng_kim_loại": "metal_ores",
-            "sản_phẩm_chế_biến_lương_thực_thực_phẩm": "processed_food_products",
-            "sản_phẩm_công_nghiệp_chế_biến_chế_tạo": "manufacturing_products",
-            "sản_phẩm_dệt_da": "textiles_and_leather_products",
-            "sản_phẩm_khai_khoáng": "mining_products",
-            "sản_phẩm_khai_khoáng_khác": "other_mining_products",
-            "sản_phẩm_kim_loại": "metal_products",
-            "sản_phẩm_lâm_nghiệp_và_dịch_vụ_liên_quan": "forestry_products_and_related_services",
-            "sản_phẩm_nông_lâm_nghiệp_và_thủy_sản": "agriculture_forestry_and_fishery_products",
-            "sản_phẩm_nông_nghiệp_và_dịch_vụ_liên_quan": "agriculture_products_and_related_services",
-            "sản_phẩm_thủy_sản_khai_thác_nuôi_trồng": "fishing_and_aquaculture_products",
-            "sản_phẩm_từ_cao_su_và_plastic": "rubber_and_plastic_products",
-            "sản_phẩm_từ_gỗ": "wood_products",
-            "sản_phẩm_từ_khoáng_phi_kim_loại_khác": "other_non_metallic_mineral_products",
-            "sản_phẩm_từ_kim_loại_đúc_sẵn_(trừ_máy_móc_thiết_bị)": "fabricated_metal_products_except_machinery_and_equipment",
-            "sản_phẩm_điện_tử_máy_tính_quang_học": "electronic_computer_and_optical_products",
-            "sử_dụng_cho_sản_xuất_công_nghiệp_chế_biến_chế_tạo": "used_for_manufacturing_industry",
-            "sử_dụng_cho_sản_xuất_nông_lâm_nghiệp_và_thủy_sản": "used_for_agriculture_forestry_and_fishery",
-            "sử_dụng_cho_xây_dựng": "used_for_construction",
-            "than_cốc_sản_phẩm_dầu_mỏ_tinh_chế": "coke_and_refined_petroleum_products",
-            "than_cứng_và_than_non": "hard_coal_and_lignite",
-            "thiết_bị_điện": "electrical_equipment",
-            "thuốc_và_dược_liệu": "pharmaceuticals_and_medicinal_chemicals",
-            "xe_có_động_cơ_rơ_moóc": "motor_vehicles_and_trailers",
-            "điện_khí_đốt_hơi_nước_và_điều_hòa_không_khí": "electricity_gas_steam_and_air_conditioning",
-            "đồ_uống_hút": "beverages_and_tobacco",
-        }
-
-        df = df.rename(columns=col_translation)
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.IPI.name,
-            primary_keys=Table.IPI.primary_key,
-            df=df,
-        )
-
-        self._logger.log_info(f'Finish ingesting data in "{file_path}".')
-
-    def _clean_macroeconomics_ipi_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.IPI,
-        )
-
-        self._logger.log_info(
-            f'Start cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for cleaning data here
-        self._select_database(DataQuality.BRONZE.value)
-
-        bronze_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.IPI.name,
-        )
-
-        silver_df = self._clean(
-            df=bronze_df,
-            clean_layer_list=[CleanLayer.ORDER_BY([Table.IPI.Column.YEAR.value])],
-        )
-
-        self._select_database(DataQuality.SILVER.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.IPI.name,
-            primary_keys=Table.IPI.primary_key,
-            df=silver_df,
-        )
-
-        self._logger.log_info(
-            f'Finish cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-    def _process_macroeconomics_ipi(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(
-            f'Start processing macroeconomics IPI data for "{data_quality.value}".'
-        )
-
-        match data_quality:
-            case DataQuality.BRONZE:
-                self._ingest_macroeconomics_ipi_vietstock()
-
-            case DataQuality.SILVER:
-                self._clean_macroeconomics_ipi_vietstock()
-
-            case DataQuality.GOLD:
-                pass
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
-
-        self._logger.log_info(
-            f'Finish processing macroeconomics IPI data for "{data_quality.value}".'
-        )
-
-    # endregion MACROECONOMICS.IPI
-
-    # region MACROECONOMICS.XPI
-    def _ingest_macroeconomics_xpi_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.XPI,
-        )
-
-        folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
-
-        file_path = get_newest_file_path(
-            folder_path=folder_path, extension=FileExtension.CSV
-        )
-
-        if not file_path:
-            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
-            return
-
-        self._logger.log_info(f'Start ingesting data in "{file_path}".')
-
-        # Add logic for processing data here
-        df = pd.read_csv(file_path)
-
-        # Set indicator names as lowercase with underscores
-        self._standardize_column_name_before_melting(df=df)
-
-        df = self._melt_dataframe_by_time_format(
-            df=df,
-            time_format=TimeFormat.MONTH_NAME_YEAR,
-            id_vars=["Chỉ tiêu", "Đơn vị tính"],
-        )
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.XPI.name,
-            primary_keys=Table.XPI.primary_key,
-            df=df,
-        )
-
-        self._logger.log_info(f'Finish ingesting data in "{file_path}".')
-
-    def _clean_macroeconomics_xpi_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.XPI,
-        )
-
-        self._logger.log_info(
-            f'Start cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for cleaning data here
-        self._select_database(DataQuality.BRONZE.value)
-
-        bronze_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.XPI.name,
-        )
-
-        silver_df = self._clean(
-            df=bronze_df,
-            clean_layer_list=[
-                CleanLayer.ORDER_BY(
-                    [Table.XPI.Column.YEAR.value, Table.XPI.Column.MONTH.value]
-                )
-            ],
-        )
-
-        self._select_database(DataQuality.SILVER.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.XPI.name,
-            primary_keys=Table.XPI.primary_key,
-            df=silver_df,
-        )
-
-        self._logger.log_info(
-            f'Finish cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-    def _transform_macroeconomics_xpi_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.XPI,
-        )
-
-        self._logger.log_info(
-            f'Start transforming data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for transforming data here
-        self._select_database(DataQuality.SILVER.value)
-        silver_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.XPI.name,
-        )
-
-        gold_df = make_date_time_index_for_dataframe(df=silver_df)
-        gold_df = standardize_time_frame(df=gold_df)
-
-        cols_to_interpolate = gold_df.columns.difference(["date"])
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
-            pd.to_numeric, errors="coerce"
-        )
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
-            method="linear"
-        )
-
-        self._select_database(DataQuality.GOLD.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.G_XPI.name,
-            primary_keys=Table.G_XPI.primary_key,
-            df=gold_df,
-        )
-
-        self._logger.log_info(
-            f'Finish transforming data in table "{format_key_for_table(key)}".'
-        )
-
-    def _process_macroeconomics_xpi(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(
-            f'Start processing macroeconomics XPI data for "{data_quality.value}".'
-        )
-
-        match data_quality:
-            case DataQuality.BRONZE:
-                self._ingest_macroeconomics_xpi_vietstock()
-
-            case DataQuality.SILVER:
-                self._clean_macroeconomics_xpi_vietstock()
-
-            case DataQuality.GOLD:
-                self._transform_macroeconomics_xpi_vietstock()
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
-
-        self._logger.log_info(
-            f'Finish processing macroeconomics XPI data for "{data_quality.value}".'
-        )
-
-    # endregion MACROECONOMICS.XPI
-
-    # region MACROECONOMICS.MPI
-    def _ingest_macroeconomics_mpi_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.MPI,
-        )
-
-        folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
-
-        file_path = get_newest_file_path(
-            folder_path=folder_path, extension=FileExtension.CSV
-        )
-
-        if not file_path:
-            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
-            return
-
-        self._logger.log_info(f'Start ingesting data in "{file_path}".')
-
-        # Add logic for processing data here
-        df = pd.read_csv(file_path)
-
-        # Set indicator names as lowercase with underscores
-        self._standardize_column_name_before_melting(df=df)
-
-        df = self._melt_dataframe_by_time_format(
-            df=df,
-            time_format=TimeFormat.MONTH_NAME_YEAR,
-            id_vars=["Chỉ tiêu", "Đơn vị tính"],
-        )
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.MPI.name,
-            primary_keys=Table.MPI.primary_key,
-            df=df,
-        )
-
-        self._logger.log_info(f'Finish ingesting data in "{file_path}".')
-
-    def _clean_macroeconomics_mpi_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.MPI,
-        )
-
-        self._logger.log_info(
-            f'Start cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for cleaning data here
-        self._select_database(DataQuality.BRONZE.value)
-
-        bronze_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.MPI.name,
-        )
-
-        silver_df = self._clean(
-            df=bronze_df,
-            clean_layer_list=[
-                CleanLayer.ORDER_BY(
-                    [Table.MPI.Column.YEAR.value, Table.MPI.Column.MONTH.value]
-                )
-            ],
-        )
-
-        self._select_database(DataQuality.SILVER.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.MPI.name,
-            primary_keys=Table.MPI.primary_key,
-            df=silver_df,
-        )
-
-        self._logger.log_info(
-            f'Finish cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-    def _process_macroeconomics_mpi(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(
-            f'Start processing macroeconomics MPI data for "{data_quality.value}".'
-        )
-
-        match data_quality:
-            case DataQuality.BRONZE:
-                self._ingest_macroeconomics_mpi_vietstock()
-
-            case DataQuality.SILVER:
-                self._clean_macroeconomics_mpi_vietstock()
-
-            case DataQuality.GOLD:
-                pass
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
-
-        self._logger.log_info(
-            f'Finish processing macroeconomics MPI data for "{data_quality.value}".'
-        )
-
-    # endregion MACROECONOMICS.MPI
-
-    # region MACROECONOMICS.POPULATION
-    def _ingest_macroeconomics_population_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.POPULATION,
-        )
-
-        folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
-
-        file_path = get_newest_file_path(
-            folder_path=folder_path, extension=FileExtension.CSV
-        )
-
-        if not file_path:
-            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
-            return
-
-        self._logger.log_info(f'Start ingesting data in "{file_path}".')
-
-        # Add logic for processing data here
-        df = pd.read_csv(file_path)
-
-        # Set indicator names as lowercase with underscores
-        self._standardize_column_name_before_melting(df=df)
-
-        df = self._melt_dataframe_by_time_format(
-            df=df,
-            time_format=TimeFormat.YEAR,
-            id_vars=["Chỉ tiêu", "Đơn vị tính"],
-        )
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.POPULATION.name,
-            primary_keys=Table.POPULATION.primary_key,
-            df=df,
-        )
-
-        self._logger.log_info(f'Finish ingesting data in "{file_path}".')
-
-    def _clean_macroeconomics_population_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.POPULATION,
-        )
-
-        self._logger.log_info(
-            f'Start cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for cleaning data here
-        self._select_database(DataQuality.BRONZE.value)
-
-        bronze_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.POPULATION.name,
-        )
-
-        silver_df = self._clean(
-            df=bronze_df,
-            clean_layer_list=[
-                CleanLayer.ORDER_BY([Table.POPULATION.Column.YEAR.value])
-            ],
-        )
-
-        self._select_database(DataQuality.SILVER.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.POPULATION.name,
-            primary_keys=Table.POPULATION.primary_key,
-            df=silver_df,
-        )
-
-        self._logger.log_info(
-            f'Finish cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-    def _transform_macroeconomics_population_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.POPULATION,
-        )
-
-        self._logger.log_info(
-            f'Start transforming data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for transforming data here
-        self._select_database(DataQuality.SILVER.value)
-        silver_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.POPULATION.name,
-        )
-
-        gold_df = make_date_time_index_for_dataframe(df=silver_df)
-        gold_df = standardize_time_frame(df=gold_df)
-
-        cols_to_interpolate = gold_df.columns.difference(["date"])
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
-            pd.to_numeric, errors="coerce"
-        )
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
-            method="linear"
-        )
-
-        self._select_database(DataQuality.GOLD.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.G_POPULATION.name,
-            primary_keys=Table.G_POPULATION.primary_key,
-            df=gold_df,
-        )
-
-        self._logger.log_info(
-            f'Finish transforming data in table "{format_key_for_table(key)}".'
-        )
-
-    def _process_macroeconomics_population(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(
-            f'Start processing macroeconomics POPULATION data for "{data_quality.value}".'
-        )
-
-        match data_quality:
-            case DataQuality.BRONZE:
-                self._ingest_macroeconomics_population_vietstock()
-
-            case DataQuality.SILVER:
-                self._clean_macroeconomics_population_vietstock()
-
-            case DataQuality.GOLD:
-                self._transform_macroeconomics_population_vietstock()
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
-
-        self._logger.log_info(
-            f'Finish processing macroeconomics POPULATION data for "{data_quality.value}".'
-        )
-
-    # endregion MACROECONOMICS.POPULATION
-
-    # region MACROECONOMICS.LABOR
-    def _ingest_macroeconomics_labor_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.LABOR,
-        )
-
-        folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
-
-        file_path = get_newest_file_path(
-            folder_path=folder_path, extension=FileExtension.CSV
-        )
-
-        if not file_path:
-            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
-            return
-
-        self._logger.log_info(f'Start ingesting data in "{file_path}".')
-
-        # Add logic for processing data here
-        df = pd.read_csv(file_path)
-
-        # Set indicator names as lowercase with underscores
-        self._standardize_column_name_before_melting(df=df)
-
-        df["Chỉ tiêu"] = df["Chỉ tiêu"].str.replace("employed_a", "employed_amount")
-
-        df = self._melt_dataframe_by_time_format(
-            df=df,
-            time_format=TimeFormat.YEAR,
-            id_vars=["Chỉ tiêu", "Đơn vị tính"],
-        )
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.LABOR.name,
-            primary_keys=Table.LABOR.primary_key,
-            df=df,
-        )
-
-        self._logger.log_info(f'Finish ingesting data in "{file_path}".')
-
-    def _clean_macroeconomics_labor_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.LABOR,
-        )
-
-        self._logger.log_info(
-            f'Start cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for cleaning data here
-        self._select_database(DataQuality.BRONZE.value)
-
-        bronze_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.LABOR.name,
-        )
-
-        silver_df = self._clean(
-            df=bronze_df,
-            clean_layer_list=[CleanLayer.ORDER_BY([Table.LABOR.Column.YEAR.value])],
-        )
-
-        self._select_database(DataQuality.SILVER.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.LABOR.name,
-            primary_keys=Table.LABOR.primary_key,
-            df=silver_df,
-        )
-
-        self._logger.log_info(
-            f'Finish cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-    def _transform_macroeconomics_labor_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.LABOR,
-        )
-
-        self._logger.log_info(
-            f'Start transforming data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for transforming data here
-        self._select_database(DataQuality.SILVER.value)
-        silver_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.LABOR.name,
-        )
-
-        gold_df = make_date_time_index_for_dataframe(df=silver_df)
-        gold_df = standardize_time_frame(df=gold_df)
-
-        cols_to_interpolate = gold_df.columns.difference(["date"])
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
-            pd.to_numeric, errors="coerce"
-        )
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
-            method="linear"
-        )
-
-        self._select_database(DataQuality.GOLD.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.G_LABOR.name,
-            primary_keys=Table.G_LABOR.primary_key,
-            df=gold_df,
-        )
-
-        self._logger.log_info(
-            f'Finish transforming data in table "{format_key_for_table(key)}".'
-        )
-
-    def _process_macroeconomics_labor(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(
-            f'Start processing macroeconomics LABOR data for "{data_quality.value}".'
-        )
-
-        match data_quality:
-            case DataQuality.BRONZE:
-                self._ingest_macroeconomics_labor_vietstock()
-
-            case DataQuality.SILVER:
-                self._clean_macroeconomics_labor_vietstock()
-
-            case DataQuality.GOLD:
-                self._transform_macroeconomics_labor_vietstock()
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
-
-        self._logger.log_info(
-            f'Finish processing macroeconomics LABOR data for "{data_quality.value}".'
-        )
-
-    # endregion MACROECONOMICS.LABOR
-
-    # region MACROECONOMICS.RETAIL
-    def _ingest_macroeconomics_retail_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.RETAIL,
-        )
-
-        folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
-
-        file_path = get_newest_file_path(
-            folder_path=folder_path, extension=FileExtension.CSV
-        )
-
-        if not file_path:
-            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
-            return
-
-        self._logger.log_info(f'Start ingesting data in "{file_path}".')
-
-        # Add logic for processing data here
-        df = pd.read_csv(file_path)
-
-        # Set indicator names as lowercase with underscores
-        self._standardize_column_name_before_melting(df=df)
-
-        df = self._melt_dataframe_by_time_format(
-            df=df,
-            time_format=TimeFormat.MONTH_NAME_YEAR,
-            id_vars=["Chỉ tiêu", "Đơn vị tính"],
-        )
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.RETAIL.name,
-            primary_keys=Table.RETAIL.primary_key,
-            df=df,
-        )
-
-        self._logger.log_info(f'Finish ingesting data in "{file_path}".')
-
-    def _clean_macroeconomics_retail_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.RETAIL,
-        )
-
-        self._logger.log_info(
-            f'Start cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for cleaning data here
-        self._select_database(DataQuality.BRONZE.value)
-
-        bronze_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.RETAIL.name,
-        )
-
-        silver_df = self._clean(
-            df=bronze_df,
-            clean_layer_list=[
-                CleanLayer.ORDER_BY(
-                    [Table.RETAIL.Column.YEAR.value, Table.RETAIL.Column.MONTH.value]
-                )
-            ],
-        )
-
-        self._select_database(DataQuality.SILVER.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.RETAIL.name,
-            primary_keys=Table.RETAIL.primary_key,
-            df=silver_df,
-        )
-
-        self._logger.log_info(
-            f'Finish cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-    def _process_macroeconomics_retail(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(
-            f'Start processing macroeconomics RETAIL data for "{data_quality.value}".'
-        )
-
-        match data_quality:
-            case DataQuality.BRONZE:
-                self._ingest_macroeconomics_retail_vietstock()
-
-            case DataQuality.SILVER:
-                self._clean_macroeconomics_retail_vietstock()
-
-            case DataQuality.GOLD:
-                pass
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
-
-        self._logger.log_info(
-            f'Finish processing macroeconomics RETAIL data for "{data_quality.value}".'
-        )
-
-    # endregion MACROECONOMICS.RETAIL
-
-    # region MACROECONOMICS.PMI
-    def _ingest_macroeconomics_pmi_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.PMI,
-        )
-
-        folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
-
-        file_path = get_newest_file_path(
-            folder_path=folder_path, extension=FileExtension.CSV
-        )
-
-        if not file_path:
-            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
-            return
-
-        self._logger.log_info(f'Start ingesting data in "{file_path}".')
-
-        # Add logic for processing data here
-        df = pd.read_csv(file_path)
-
-        # Set indicator names as lowercase with underscores
-        self._standardize_column_name_before_melting(df=df)
-
-        df = self._melt_dataframe_by_time_format(
-            df=df,
-            time_format=TimeFormat.MONTH_NAME_YEAR,
-            id_vars=["Chỉ tiêu", "Đơn vị tính"],
-        )
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.PMI.name,
-            primary_keys=Table.PMI.primary_key,
-            df=df,
-        )
-
-        self._logger.log_info(f'Finish ingesting data in "{file_path}".')
-
-    def _clean_macroeconomics_pmi_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.PMI,
-        )
-
-        self._logger.log_info(
-            f'Start cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for cleaning data here
-        self._select_database(DataQuality.BRONZE.value)
-
-        bronze_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.PMI.name,
-        )
-
-        silver_df = self._clean(
-            df=bronze_df,
-            clean_layer_list=[
-                CleanLayer.ORDER_BY(
-                    [Table.PMI.Column.YEAR.value, Table.PMI.Column.MONTH.value]
-                )
-            ],
-        )
-
-        self._select_database(DataQuality.SILVER.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.PMI.name,
-            primary_keys=Table.PMI.primary_key,
-            df=silver_df,
-        )
-
-        self._logger.log_info(
-            f'Finish cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-    def _process_macroeconomics_pmi(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(
-            f'Start processing macroeconomics PMI data for "{data_quality.value}".'
-        )
-
-        match data_quality:
-            case DataQuality.BRONZE:
-                self._ingest_macroeconomics_pmi_vietstock()
-
-            case DataQuality.SILVER:
-                self._clean_macroeconomics_pmi_vietstock()
-
-            case DataQuality.GOLD:
-                pass
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
-
-        self._logger.log_info(
-            f'Finish processing macroeconomics PMI data for "{data_quality.value}".'
-        )
-
-    # endregion MACROECONOMICS.PMI
-
-    # region MACROECONOMICS.IIP
-    def _ingest_macroeconomics_iip_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.IIP,
-        )
-
-        folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
-
-        file_path = get_newest_file_path(
-            folder_path=folder_path, extension=FileExtension.CSV
-        )
-
-        if not file_path:
-            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
-            return
-
-        self._logger.log_info(f'Start ingesting data in "{file_path}".')
-
-        # Add logic for processing data here
-        df = pd.read_csv(file_path)
-
-        df = df.drop(df.index[14])
-
-        # Set indicator names as lowercase with underscores
-        self._standardize_column_name_before_melting(df=df)
-
-        df = self._melt_dataframe_by_time_format(
-            df=df,
-            time_format=TimeFormat.MONTH_INDEX_YEAR,
-            id_vars=["Chỉ tiêu", "Đơn vị tính"],
-        )
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.IIP.name,
-            primary_keys=Table.IIP.primary_key,
-            df=df,
-        )
-
-        self._logger.log_info(f'Finish ingesting data in "{file_path}".')
-
-    def _clean_macroeconomics_iip_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.IIP,
-        )
-
-        self._logger.log_info(
-            f'Start cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for cleaning data here
-        self._select_database(DataQuality.BRONZE.value)
-
-        bronze_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.IIP.name,
-        )
-
-        silver_df = self._clean(
-            df=bronze_df,
-            clean_layer_list=[
-                CleanLayer.ORDER_BY(
-                    [Table.IIP.Column.YEAR.value, Table.IIP.Column.MONTH.value]
-                )
-            ],
-        )
-
-        self._select_database(DataQuality.SILVER.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.IIP.name,
-            primary_keys=Table.IIP.primary_key,
-            df=silver_df,
-        )
-
-        self._logger.log_info(
-            f'Finish cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-    def _process_macroeconomics_iip(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(
-            f'Start processing macroeconomics IIP data for "{data_quality.value}".'
-        )
-
-        match data_quality:
-            case DataQuality.BRONZE:
-                self._ingest_macroeconomics_iip_vietstock()
-
-            case DataQuality.SILVER:
-                self._clean_macroeconomics_iip_vietstock()
-
-            case DataQuality.GOLD:
-                pass
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
-
-        self._logger.log_info(
-            f'Finish processing macroeconomics IIP data for "{data_quality.value}".'
-        )
-
-    # endregion MACROECONOMICS.IIP
-
-    # region MACROECONOMICS.IPV
-    def _ingest_macroeconomics_ipv_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.IPV,
-        )
-
-        folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
-
-        file_path = get_newest_file_path(
-            folder_path=folder_path, extension=FileExtension.CSV
-        )
-
-        if not file_path:
-            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
-            return
-
-        self._logger.log_info(f'Start ingesting data in "{file_path}".')
-
-        # Add logic for processing data here
-        df = pd.read_csv(file_path)
-
-        # Set indicator names as lowercase with underscores
-        self._standardize_column_name_before_melting(df=df)
-
-        df = self._melt_dataframe_by_time_format(
-            df=df,
-            time_format=TimeFormat.MONTH_NAME_YEAR,
-            id_vars=["Chỉ tiêu", "Đơn vị tính"],
-        )
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.IPV.name,
-            primary_keys=Table.IPV.primary_key,
-            df=df,
-        )
-
-        self._logger.log_info(f'Finish ingesting data in "{file_path}".')
-
-    def _clean_macroeconomics_ipv_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.IPV,
-        )
-
-        self._logger.log_info(
-            f'Start cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for cleaning data here
-        self._select_database(DataQuality.BRONZE.value)
-
-        bronze_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.IPV.name,
-        )
-
-        silver_df = self._clean(
-            df=bronze_df,
-            clean_layer_list=[
-                CleanLayer.ORDER_BY(
-                    [Table.IPV.Column.YEAR.value, Table.IPV.Column.MONTH.value]
-                )
-            ],
-        )
-
-        self._select_database(DataQuality.SILVER.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.IPV.name,
-            primary_keys=Table.IPV.primary_key,
-            df=silver_df,
-        )
-
-        self._logger.log_info(
-            f'Finish cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-    def _transform_macroeconomics_ipv_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.IPV,
-        )
-
-        self._logger.log_info(
-            f'Start transforming data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for transforming data here
-        self._select_database(DataQuality.SILVER.value)
-        silver_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.IPV.name,
-        )
-
-        gold_df = make_date_time_index_for_dataframe(df=silver_df)
-        gold_df = standardize_time_frame(df=gold_df)
-
-        cols_to_interpolate = gold_df.columns.difference(["date"])
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
-            pd.to_numeric, errors="coerce"
-        )
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
-            method="linear"
-        )
-
-        self._select_database(DataQuality.GOLD.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.G_IPV.name,
-            primary_keys=Table.G_IPV.primary_key,
-            df=gold_df,
-        )
-
-        self._logger.log_info(
-            f'Finish transforming data in table "{format_key_for_table(key)}".'
-        )
-
-    def _process_macroeconomics_ipv(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(
-            f'Start processing macroeconomics IPV data for "{data_quality.value}".'
-        )
-
-        match data_quality:
-            case DataQuality.BRONZE:
-                self._ingest_macroeconomics_ipv_vietstock()
-
-            case DataQuality.SILVER:
-                self._clean_macroeconomics_ipv_vietstock()
-
-            case DataQuality.GOLD:
-                self._transform_macroeconomics_ipv_vietstock()
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
-
-        self._logger.log_info(
-            f'Finish processing macroeconomics IPV data for "{data_quality.value}".'
-        )
-
-    # endregion MACROECONOMICS.IPV
-
-    # region MACROECONOMICS.MIP
-    def _ingest_macroeconomics_mip_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.MIP,
-        )
-
-        folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
-
-        file_path = get_newest_file_path(
-            folder_path=folder_path, extension=FileExtension.CSV
-        )
-
-        if not file_path:
-            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
-            return
-
-        self._logger.log_info(f'Start ingesting data in "{file_path}".')
-
-        # Add logic for processing data here
-        df = pd.read_csv(file_path)
-
-        # Set indicator names as lowercase with underscores
-        df = self._standardize_column_name_before_melting(df=df)
-
-        df = self._melt_dataframe_by_time_format(
-            df=df,
-            time_format=TimeFormat.YEAR,
-            id_vars=["Chỉ tiêu", "Đơn vị tính"],
-        )
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.MIP.name,
-            primary_keys=Table.MIP.primary_key,
-            df=df,
-        )
-
-        self._logger.log_info(f'Finish ingesting data in "{file_path}".')
-
-    def _clean_macroeconomics_mip_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.MIP,
-        )
-
-        self._logger.log_info(
-            f'Start cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for cleaning data here
-        self._select_database(DataQuality.BRONZE.value)
-
-        bronze_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.MIP.name,
-        )
-
-        silver_df = self._clean(
-            df=bronze_df,
-            clean_layer_list=[CleanLayer.ORDER_BY([Table.MIP.Column.YEAR.value])],
-        )
-
-        self._select_database(DataQuality.SILVER.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.MIP.name,
-            primary_keys=Table.MIP.primary_key,
-            df=silver_df,
-        )
-
-        self._logger.log_info(
-            f'Finish cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-    def _transform_macroeconomics_mip_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.MIP,
-        )
-
-        self._logger.log_info(
-            f'Start transforming data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for transforming data here
-        self._select_database(DataQuality.SILVER.value)
-        silver_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.MIP.name,
-        )
-
-        gold_df = make_date_time_index_for_dataframe(df=silver_df)
-        gold_df = standardize_time_frame(df=gold_df)
-
-        cols_to_interpolate = gold_df.columns.difference(["date"])
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
-            pd.to_numeric, errors="coerce"
-        )
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
-            method="linear"
-        )
-
-        self._select_database(DataQuality.GOLD.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.G_MIP.name,
-            primary_keys=Table.G_MIP.primary_key,
-            df=gold_df,
-        )
-
-        self._logger.log_info(
-            f'Finish transforming data in table "{format_key_for_table(key)}".'
-        )
-
-    def _process_macroeconomics_mip(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(
-            f'Start processing macroeconomics MIP data for "{data_quality.value}".'
-        )
-
-        match data_quality:
-            case DataQuality.BRONZE:
-                self._ingest_macroeconomics_mip_vietstock()
-
-            case DataQuality.SILVER:
-                self._clean_macroeconomics_mip_vietstock()
-
-            case DataQuality.GOLD:
-                self._transform_macroeconomics_mip_vietstock()
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
-
-        self._logger.log_info(
-            f'Finish processing macroeconomics MIP data for "{data_quality.value}".'
-        )
-
-    # endregion MACROECONOMICS.MIP
-
-    # region MACROECONOMICS.FA_BY_HOUSE_TYPES
-    def _ingest_macroeconomics_fa_by_house_types_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.FA_BY_HOUSE_TYPES,
-        )
-
-        folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
-
-        file_path = get_newest_file_path(
-            folder_path=folder_path, extension=FileExtension.CSV
-        )
-
-        if not file_path:
-            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
-            return
-
-        self._logger.log_info(f'Start ingesting data in "{file_path}".')
-
-        # Add logic for processing data here
-        df = pd.read_csv(file_path)
-
-        # Set indicator names as lowercase with underscores
-        df = self._standardize_column_name_before_melting(df=df)
-
-        df = self._melt_dataframe_by_time_format(
-            df=df,
-            time_format=TimeFormat.YEAR,
-            id_vars=["Chỉ tiêu", "Đơn vị tính"],
-        )
-
-        col_translation = {
-            "16_20_floors": "_16_20_floors",
-            "21_25_floors": "_21_25_floors",
-            "26_floors_and_above": "_26_floors_and_above",
-            "5_floors_and_below": "_5_floors_and_below",
-            "6_8_floors": "_6_8_floors",
-            "9_15_floors": "_9_15_floors",
-        }
-
-        df = df.rename(columns=col_translation)
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.FA_BY_HOUSE_TYPES.name,
-            primary_keys=Table.FA_BY_HOUSE_TYPES.primary_key,
-            df=df,
-        )
-
-        self._logger.log_info(f'Finish ingesting data in "{file_path}".')
-
-    def _clean_macroeconomics_fa_by_house_types_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.FA_BY_HOUSE_TYPES,
-        )
-
-        self._logger.log_info(
-            f'Start cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for cleaning data here
-        self._select_database(DataQuality.BRONZE.value)
-
-        bronze_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.FA_BY_HOUSE_TYPES.name,
-        )
-
-        silver_df = self._clean(
-            df=bronze_df,
-            clean_layer_list=[
-                CleanLayer.ORDER_BY([Table.FA_BY_HOUSE_TYPES.Column.YEAR.value])
-            ],
-        )
-
-        self._select_database(DataQuality.SILVER.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.FA_BY_HOUSE_TYPES.name,
-            primary_keys=Table.FA_BY_HOUSE_TYPES.primary_key,
-            df=silver_df,
-        )
-
-        self._logger.log_info(
-            f'Finish cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-    def _transform_macroeconomics_fa_by_house_types_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.FA_BY_HOUSE_TYPES,
-        )
-
-        self._logger.log_info(
-            f'Start transforming data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for transforming data here
-        self._select_database(DataQuality.SILVER.value)
-        silver_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.FA_BY_HOUSE_TYPES.name,
-        )
-
-        gold_df = make_date_time_index_for_dataframe(df=silver_df)
-        gold_df = standardize_time_frame(df=gold_df)
-
-        cols_to_interpolate = gold_df.columns.difference(["date"])
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
-            pd.to_numeric, errors="coerce"
-        )
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
-            method="linear"
-        )
-
-        self._select_database(DataQuality.GOLD.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.G_FA_BY_HOUSE_TYPES.name,
-            primary_keys=Table.G_FA_BY_HOUSE_TYPES.primary_key,
-            df=gold_df,
-        )
-
-        self._logger.log_info(
-            f'Finish transforming data in table "{format_key_for_table(key)}".'
-        )
-
-    def _process_macroeconomics_fa_by_house_types(
-        self, data_quality: DataQuality
+        if "value" in cols:
+            price_col = "value"
+            return [
+                TransformLayer.ADD_RETURNS(column_name=price_col),
+                TransformLayer.ADD_RETURN_VOLATILITY(column_name=price_col),
+                TransformLayer.ADD_ROLLING_STATISTICS(column_name=price_col),
+            ]
+        self._logger.log_error(
+            f"No recognizable price columns (OHLC or 'value') found in "
+            f"columns: {sorted(cols)}"
+        )
+        return []
+
+    def _ingest_gold_table(
+        self,
+        table_name: str,
+        ta_layers: Optional[List[TransformLayer]] = None,
     ) -> None:
-        self._logger.log_info(
-            f'Start processing macroeconomics FA_BY_HOUSE_TYPES data for "{data_quality.value}".'
+        """
+        Generic gold ingest: read a silver table, coerce numeric source columns,
+        categorize as OHLC vs single-value, apply the standard feature-engineering
+        layers (plus any table-specific TA layers), and checkpoint-save to gold.
+        """
+        self._logger.log_info(f"Ingesting gold {table_name} data...")
+
+        df = self._helper_select(
+            schema_name=SILVER_SCHEMA,
+            table_name=table_name,
+            order_by=["exchange", "ticker", "date"],
         )
 
-        match data_quality:
-            case DataQuality.BRONZE:
-                self._ingest_macroeconomics_fa_by_house_types_vietstock()
-
-            case DataQuality.SILVER:
-                self._clean_macroeconomics_fa_by_house_types_vietstock()
-
-            case DataQuality.GOLD:
-                self._transform_macroeconomics_fa_by_house_types_vietstock()
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
-
-        self._logger.log_info(
-            f'Finish processing macroeconomics FA_BY_HOUSE_TYPES data for "{data_quality.value}".'
-        )
-
-    # endregion MACROECONOMICS.FA_BY_HOUSE_TYPES
-
-    # region MACROECONOMICS.IT_BOP
-    def _ingest_macroeconomics_it_bop_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.IT_BOP,
-        )
-
-        folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
-
-        file_path = get_newest_file_path(
-            folder_path=folder_path, extension=FileExtension.CSV
-        )
-
-        if not file_path:
-            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
+        if df.empty:
+            self._logger.log_info(f"No silver {table_name} data found.")
             return
 
-        self._logger.log_info(f'Start ingesting data in "{file_path}".')
+        # psycopg2 returns DECIMAL as Python Decimal — coerce to float before TA.
+        for col in ("open", "high", "low", "close", "volume", "value"):
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce")
 
-        # Add logic for processing data here
-        df = pd.read_csv(file_path)
-
-        # Set indicator names as lowercase with underscores
-        df = self._standardize_column_name_before_melting(df=df)
-
-        df = self._melt_dataframe_by_time_format(
-            df=df,
-            time_format=TimeFormat.QUARTER_YEAR,
-            id_vars=["Chỉ tiêu", "Đơn vị tính"],
-        )
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.IT_BOP.name,
-            primary_keys=Table.IT_BOP.primary_key,
-            df=df,
-        )
-
-        self._logger.log_info(f'Finish ingesting data in "{file_path}".')
-
-    def _clean_macroeconomics_it_bop_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.IT_BOP,
-        )
-
-        self._logger.log_info(
-            f'Start cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for cleaning data here
-        self._select_database(DataQuality.BRONZE.value)
-
-        bronze_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.IT_BOP.name,
-        )
-
-        silver_df = self._clean(
-            df=bronze_df,
-            clean_layer_list=[
-                CleanLayer.ORDER_BY(
-                    [Table.IT_BOP.Column.YEAR.value, Table.IT_BOP.Column.QUARTER.value]
-                ),
-                CleanLayer.REMOVE_COLUMN(
-                    [
-                        Table.IT_BOP.Column.B_CAPITAL_ACCOUNT.value,
-                        Table.IT_BOP.Column.CAPITAL_ACCOUNT_PAYMENTS.value,
-                        Table.IT_BOP.Column.CAPITAL_ACCOUNT_RECEIPTS.value,
-                        Table.IT_BOP.Column.LOANS_AND_EXTERNAL_DEBT_COLLECTION.value,
-                        Table.IT_BOP.Column.TRADE_CREDITS_AND_ADVANCES.value,
-                        Table.IT_BOP.Column.OTHER_RECEIVABLESPAYABLES.value,
-                        Table.IT_BOP.Column.IMF_CREDITS_AND_LOANS.value,
-                        Table.IT_BOP.Column.SPECIAL_FINANCING.value,
-                    ]
-                ),
-            ],
-        )
-
-        self._select_database(DataQuality.SILVER.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.IT_BOP.name,
-            primary_keys=Table.IT_BOP.primary_key,
-            df=silver_df,
-        )
-
-        self._logger.log_info(
-            f'Finish cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-    def _process_macroeconomics_it_bop(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(
-            f'Start processing macroeconomics IT_BOP data for "{data_quality.value}".'
-        )
-
-        match data_quality:
-            case DataQuality.BRONZE:
-                self._ingest_macroeconomics_it_bop_vietstock()
-
-            case DataQuality.SILVER:
-                self._clean_macroeconomics_it_bop_vietstock()
-
-            case DataQuality.GOLD:
-                pass
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
-
-        self._logger.log_info(
-            f'Finish processing macroeconomics IT_BOP data for "{data_quality.value}".'
-        )
-
-    # endregion MACROECONOMICS.IT_BOP
-
-    # region MACROECONOMICS.TSBR
-    def _ingest_macroeconomics_tsbr_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.TSBR,
-        )
-
-        folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
-
-        file_path = get_newest_file_path(
-            folder_path=folder_path, extension=FileExtension.CSV
-        )
-
-        if not file_path:
-            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
+        transform_layers = list(ta_layers or []) + self._helper_build_feature_layers(df)
+        if not transform_layers:
+            self._logger.log_error(
+                f"No transform layers resolved for gold {table_name}; skipping."
+            )
             return
 
-        self._logger.log_info(f'Start ingesting data in "{file_path}".')
-
-        # Add logic for processing data here
-        df = pd.read_csv(file_path)
-
-        # Set indicator names as lowercase with underscores
-        df = self._standardize_column_name_before_melting(df=df)
-
-        df = self._melt_dataframe_by_time_format(
-            df=df,
-            time_format=TimeFormat.THREE_MONTH_INDEX_YEAR,
-            id_vars=["Chỉ tiêu", "Đơn vị tính"],
-        )
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.TSBR.name,
-            primary_keys=Table.TSBR.primary_key,
-            df=df,
-        )
-
-        self._logger.log_info(f'Finish ingesting data in "{file_path}".')
-
-    def _clean_macroeconomics_tsbr_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.TSBR,
-        )
-
-        self._logger.log_info(
-            f'Start cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for cleaning data here
-        self._select_database(DataQuality.BRONZE.value)
-
-        bronze_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.TSBR.name,
-        )
-
-        silver_df = self._clean(
-            df=bronze_df,
-            clean_layer_list=[
-                CleanLayer.ORDER_BY(
-                    [Table.TSBR.Column.YEAR.value, Table.TSBR.Column.MONTH.value]
-                )
-            ],
-        )
-
-        keep_cols = ["year", "quarter", "month", "day", "date"]
-
-        # Identify the columns to check (exclude date-related columns)
-        check_cols = [col for col in silver_df.columns if col not in keep_cols]
-
-        # Drop rows where *all* of those columns are 0
-        silver_df = silver_df.drop(
-            silver_df[(silver_df[check_cols] == 0).all(axis=1)].index
-        )
-
-        self._select_database(DataQuality.SILVER.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.TSBR.name,
-            primary_keys=Table.TSBR.primary_key,
-            df=silver_df,
-        )
-
-        self._logger.log_info(
-            f'Finish cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-    def _process_macroeconomics_tsbr(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(
-            f'Start processing macroeconomics TSBR data for "{data_quality.value}".'
-        )
-
-        match data_quality:
-            case DataQuality.BRONZE:
-                self._ingest_macroeconomics_tsbr_vietstock()
-
-            case DataQuality.SILVER:
-                self._clean_macroeconomics_tsbr_vietstock()
-
-            case DataQuality.GOLD:
-                pass
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
-
-        self._logger.log_info(
-            f'Finish processing macroeconomics TSBR data for "{data_quality.value}".'
-        )
-
-    # endregion MACROECONOMICS.TSBR
-
-    # region MACROECONOMICS.TSBE
-    def _ingest_macroeconomics_tsbe_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.TSBE,
-        )
-
-        folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
-
-        file_path = get_newest_file_path(
-            folder_path=folder_path, extension=FileExtension.CSV
-        )
-
-        if not file_path:
-            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
-            return
-
-        self._logger.log_info(f'Start ingesting data in "{file_path}".')
-
-        # Add logic for processing data here
-        df = pd.read_csv(file_path)
-
-        # Set indicator names as lowercase with underscores
-        df = self._standardize_column_name_before_melting(df=df)
-
-        df = self._melt_dataframe_by_time_format(
-            df=df,
-            time_format=TimeFormat.THREE_MONTH_INDEX_YEAR,
-            id_vars=["Chỉ tiêu", "Đơn vị tính"],
-        )
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.TSBE.name,
-            primary_keys=Table.TSBE.primary_key,
-            df=df,
-        )
-
-        self._logger.log_info(f'Finish ingesting data in "{file_path}".')
-
-    def _clean_macroeconomics_tsbe_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.TSBE,
-        )
-
-        self._logger.log_info(
-            f'Start cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for cleaning data here
-        self._select_database(DataQuality.BRONZE.value)
-
-        bronze_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.TSBE.name,
-        )
-
-        silver_df = self._clean(
-            df=bronze_df,
-            clean_layer_list=[
-                CleanLayer.ORDER_BY(
-                    [Table.TSBE.Column.YEAR.value, Table.TSBE.Column.MONTH.value]
-                )
-            ],
-        )
-
-        keep_cols = ["year", "quarter", "month", "day", "date"]
-
-        # Identify the columns to check (exclude date-related columns)
-        check_cols = [col for col in silver_df.columns if col not in keep_cols]
-
-        # Drop rows where *all* of those columns are 0
-        silver_df = silver_df.drop(
-            silver_df[(silver_df[check_cols] == 0).all(axis=1)].index
-        )
-
-        self._select_database(DataQuality.SILVER.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.TSBE.name,
-            primary_keys=Table.TSBE.primary_key,
-            df=silver_df,
-        )
-
-        self._logger.log_info(
-            f'Finish cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-    def _process_macroeconomics_tsbe(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(
-            f'Start processing macroeconomics TSBE data for "{data_quality.value}".'
-        )
-
-        match data_quality:
-            case DataQuality.BRONZE:
-                self._ingest_macroeconomics_tsbe_vietstock()
-
-            case DataQuality.SILVER:
-                self._clean_macroeconomics_tsbe_vietstock()
-
-            case DataQuality.GOLD:
-                pass
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
-
-        self._logger.log_info(
-            f'Finish processing macroeconomics TSBE data for "{data_quality.value}".'
-        )
-
-    # endregion MACROECONOMICS.TSBE
-
-    # region MACROECONOMICS.GD
-    def _ingest_macroeconomics_gd_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.GD,
-        )
-
-        folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
-
-        file_path = get_newest_file_path(
-            folder_path=folder_path, extension=FileExtension.CSV
-        )
-
-        if not file_path:
-            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
-            return
-
-        self._logger.log_info(f'Start ingesting data in "{file_path}".')
-
-        # Add logic for processing data here
-        df = pd.read_csv(file_path)
-
-        # Set indicator names as lowercase with underscores
-        df = self._standardize_column_name_before_melting(df=df)
-
-        df = self._melt_dataframe_by_time_format(
-            df=df,
-            time_format=TimeFormat.YEAR,
-            id_vars=["Chỉ tiêu", "Đơn vị tính"],
-        )
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.GD.name,
-            primary_keys=Table.GD.primary_key,
-            df=df,
-        )
-
-        self._logger.log_info(f'Finish ingesting data in "{file_path}".')
-
-    def _clean_macroeconomics_gd_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.GD,
-        )
-
-        self._logger.log_info(
-            f'Start cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for cleaning data here
-        self._select_database(DataQuality.BRONZE.value)
-
-        bronze_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.GD.name,
-        )
-
-        silver_df = self._clean(
-            df=bronze_df,
-            clean_layer_list=[CleanLayer.ORDER_BY([Table.GD.Column.YEAR.value])],
-        )
-
-        self._select_database(DataQuality.SILVER.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.GD.name,
-            primary_keys=Table.GD.primary_key,
-            df=silver_df,
-        )
-
-        self._logger.log_info(
-            f'Finish cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-    def _process_macroeconomics_gd(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(
-            f'Start processing macroeconomics GD data for "{data_quality.value}".'
-        )
-
-        match data_quality:
-            case DataQuality.BRONZE:
-                self._ingest_macroeconomics_gd_vietstock()
-
-            case DataQuality.SILVER:
-                self._clean_macroeconomics_gd_vietstock()
-
-            case DataQuality.GOLD:
-                pass
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
-
-        self._logger.log_info(
-            f'Finish processing macroeconomics GD data for "{data_quality.value}".'
-        )
-
-    # endregion MACROECONOMICS.GD
-
-    # region MACROECONOMICS.BRD
-    def _ingest_macroeconomics_brd_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.BRD,
-        )
-
-        folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
-
-        file_path = get_newest_file_path(
-            folder_path=folder_path, extension=FileExtension.CSV
-        )
-
-        if not file_path:
-            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
-            return
-
-        self._logger.log_info(f'Start ingesting data in "{file_path}".')
-
-        # Add logic for processing data here
-        df = pd.read_csv(file_path)
-
-        # Set indicator names as lowercase with underscores
-        df = self._standardize_column_name_before_melting(df=df)
-
-        df = self._melt_dataframe_by_time_format(
-            df=df,
-            time_format=TimeFormat.MONTH_NAME_YEAR,
-            id_vars=["Chỉ tiêu", "Đơn vị tính"],
-        )
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.BRD.name,
-            primary_keys=Table.BRD.primary_key,
-            df=df,
-        )
-
-        self._logger.log_info(f'Finish ingesting data in "{file_path}".')
-
-    def _clean_macroeconomics_brd_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.BRD,
-        )
-
-        self._logger.log_info(
-            f'Start cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for cleaning data here
-        self._select_database(DataQuality.BRONZE.value)
-
-        bronze_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.BRD.name,
-        )
-
-        silver_df = self._clean(
-            df=bronze_df,
-            clean_layer_list=[
-                CleanLayer.ORDER_BY(
-                    [Table.BRD.Column.YEAR.value, Table.BRD.Column.MONTH.value]
-                )
-            ],
-        )
-
-        self._select_database(DataQuality.SILVER.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.BRD.name,
-            primary_keys=Table.BRD.primary_key,
-            df=silver_df,
-        )
-
-        self._logger.log_info(
-            f'Finish cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-    def _process_macroeconomics_brd(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(
-            f'Start processing macroeconomics BRD data for "{data_quality.value}".'
-        )
-
-        match data_quality:
-            case DataQuality.BRONZE:
-                self._ingest_macroeconomics_brd_vietstock()
-
-            case DataQuality.SILVER:
-                self._clean_macroeconomics_brd_vietstock()
-
-            case DataQuality.GOLD:
-                pass
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
-
-        self._logger.log_info(
-            f'Finish processing macroeconomics BRD data for "{data_quality.value}".'
-        )
-
-    # endregion MACROECONOMICS.BRD
-
-    # region MACROECONOMICS.IISD
-    def _ingest_macroeconomics_iisd_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.IISD,
-        )
-
-        folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
-
-        file_path = get_newest_file_path(
-            folder_path=folder_path, extension=FileExtension.CSV
-        )
-
-        if not file_path:
-            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
-            return
-
-        self._logger.log_info(f'Start ingesting data in "{file_path}".')
-
-        # Add logic for processing data here
-        df = pd.read_csv(file_path)
-
-        # Set indicator names as lowercase with underscores
-        df = self._standardize_column_name_before_melting(df=df)
-
-        df = self._melt_dataframe_by_time_format(
-            df=df,
-            time_format=TimeFormat.QUARTER_YEAR,
-            id_vars=["Chỉ tiêu", "Đơn vị tính"],
-        )
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.IISD.name,
-            primary_keys=Table.IISD.primary_key,
-            df=df,
-        )
-
-        self._logger.log_info(f'Finish ingesting data in "{file_path}".')
-
-    def _clean_macroeconomics_iisd_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.IISD,
-        )
-
-        self._logger.log_info(
-            f'Start cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for cleaning data here
-        self._select_database(DataQuality.BRONZE.value)
-
-        bronze_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.IISD.name,
-        )
-
-        silver_df = self._clean(
-            df=bronze_df,
-            clean_layer_list=[
-                CleanLayer.ORDER_BY(
-                    [Table.IISD.Column.YEAR.value, Table.IISD.Column.QUARTER.value]
-                )
-            ],
-        )
-
-        self._select_database(DataQuality.SILVER.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.IISD.name,
-            primary_keys=Table.IISD.primary_key,
-            df=silver_df,
-        )
-
-        self._logger.log_info(
-            f'Finish cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-    def _process_macroeconomics_iisd(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(
-            f'Start processing macroeconomics IISD data for "{data_quality.value}".'
-        )
-
-        match data_quality:
-            case DataQuality.BRONZE:
-                self._ingest_macroeconomics_iisd_vietstock()
-
-            case DataQuality.SILVER:
-                self._clean_macroeconomics_iisd_vietstock()
-
-            case DataQuality.GOLD:
-                pass
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
-
-        self._logger.log_info(
-            f'Finish processing macroeconomics IISD data for "{data_quality.value}".'
-        )
-
-    # endregion MACROECONOMICS.IISD
-
-    # region MACROECONOMICS.TREG
-    def _ingest_macroeconomics_treg_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.TREG,
-        )
-
-        folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
-
-        file_path = get_newest_file_path(
-            folder_path=folder_path, extension=FileExtension.CSV
-        )
-
-        if not file_path:
-            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
-            return
-
-        self._logger.log_info(f'Start ingesting data in "{file_path}".')
-
-        # Add logic for processing data here
-        df = pd.read_csv(file_path)
-
-        # Set indicator names as lowercase with underscores
-        df = self._standardize_column_name_before_melting(df=df)
-
-        df = self._melt_dataframe_by_time_format(
-            df=df,
-            time_format=TimeFormat.MONTH_NAME_YEAR,
-            id_vars=["Chỉ tiêu", "Đơn vị tính"],
-        )
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.TREG.name,
-            primary_keys=Table.TREG.primary_key,
-            df=df,
-        )
-
-        self._logger.log_info(f'Finish ingesting data in "{file_path}".')
-
-    def _clean_macroeconomics_treg_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.TREG,
-        )
-
-        self._logger.log_info(
-            f'Start cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for cleaning data here
-        self._select_database(DataQuality.BRONZE.value)
-
-        bronze_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.TREG.name,
-        )
-
-        silver_df = self._clean(
-            df=bronze_df,
-            clean_layer_list=[
-                CleanLayer.ORDER_BY(
-                    [Table.TREG.Column.YEAR.value, Table.TREG.Column.MONTH.value]
-                )
-            ],
-        )
-
-        self._select_database(DataQuality.SILVER.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.TREG.name,
-            primary_keys=Table.TREG.primary_key,
-            df=silver_df,
-        )
-
-        self._logger.log_info(
-            f'Finish cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-    def _transform_macroeconomics_treg_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.TREG,
-        )
-
-        self._logger.log_info(
-            f'Start transforming data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for transforming data here
-        self._select_database(DataQuality.SILVER.value)
-        silver_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.TREG.name,
-        )
-
-        gold_df = make_date_time_index_for_dataframe(df=silver_df)
-        gold_df = standardize_time_frame(df=gold_df)
-
-        cols_to_interpolate = gold_df.columns.difference(["date"])
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
-            pd.to_numeric, errors="coerce"
-        )
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
-            method="linear"
-        )
-
-        self._select_database(DataQuality.GOLD.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.G_TREG.name,
-            primary_keys=Table.G_TREG.primary_key,
-            df=gold_df,
-        )
-
-        self._logger.log_info(
-            f'Finish transforming data in table "{format_key_for_table(key)}".'
-        )
-
-    def _process_macroeconomics_treg(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(
-            f'Start processing macroeconomics TREG data for "{data_quality.value}".'
-        )
-
-        match data_quality:
-            case DataQuality.BRONZE:
-                self._ingest_macroeconomics_treg_vietstock()
-
-            case DataQuality.SILVER:
-                self._clean_macroeconomics_treg_vietstock()
-
-            case DataQuality.GOLD:
-                self._transform_macroeconomics_treg_vietstock()
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
-
-        self._logger.log_info(
-            f'Finish processing macroeconomics TREG data for "{data_quality.value}".'
-        )
-
-    # endregion MACROECONOMICS.TREG
-
-    # region MACROECONOMICS.CREDIT
-    def _ingest_macroeconomics_credit_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.CREDIT,
-        )
-
-        folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
-
-        file_path = get_newest_file_path(
-            folder_path=folder_path, extension=FileExtension.CSV
-        )
-
-        if not file_path:
-            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
-            return
-
-        self._logger.log_info(f'Start ingesting data in "{file_path}".')
-
-        # Add logic for processing data here
-        df = pd.read_csv(file_path)
-
-        # Set indicator names as lowercase with underscores
-        df = self._standardize_column_name_before_melting(df=df)
-
-        df = self._melt_dataframe_by_time_format(
-            df=df,
-            time_format=TimeFormat.MONTH_NAME_YEAR,
-            id_vars=["Chỉ tiêu", "Đơn vị tính"],
-        )
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.CREDIT.name,
-            primary_keys=Table.CREDIT.primary_key,
-            df=df,
-        )
-
-        self._logger.log_info(f'Finish ingesting data in "{file_path}".')
-
-    def _clean_macroeconomics_credit_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.CREDIT,
-        )
-
-        self._logger.log_info(
-            f'Start cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for cleaning data here
-        self._select_database(DataQuality.BRONZE.value)
-
-        bronze_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.CREDIT.name,
-        )
-
-        silver_df = self._clean(
-            df=bronze_df,
-            clean_layer_list=[
-                CleanLayer.ORDER_BY(
-                    [Table.CREDIT.Column.YEAR.value, Table.CREDIT.Column.MONTH.value]
-                )
-            ],
-        )
-
-        self._select_database(DataQuality.SILVER.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.CREDIT.name,
-            primary_keys=Table.CREDIT.primary_key,
-            df=silver_df,
-        )
-
-        self._logger.log_info(
-            f'Finish cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-    def _process_macroeconomics_credit(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(
-            f'Start processing macroeconomics CREDIT data for "{data_quality.value}".'
-        )
-
-        match data_quality:
-            case DataQuality.BRONZE:
-                self._ingest_macroeconomics_credit_vietstock()
-
-            case DataQuality.SILVER:
-                self._clean_macroeconomics_credit_vietstock()
-
-            case DataQuality.GOLD:
-                pass
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
-
-        self._logger.log_info(
-            f'Finish processing macroeconomics CREDIT data for "{data_quality.value}".'
-        )
-
-    # endregion MACROECONOMICS.CREDIT
-
-    # region MACROECONOMICS.MOBILIZATION
-    def _ingest_macroeconomics_mobilization_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.MOBILIZATION,
-        )
-
-        folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
-
-        file_path = get_newest_file_path(
-            folder_path=folder_path, extension=FileExtension.CSV
-        )
-
-        if not file_path:
-            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
-            return
-
-        self._logger.log_info(f'Start ingesting data in "{file_path}".')
-
-        # Add logic for processing data here
-        df = pd.read_csv(file_path)
-
-        # Set indicator names as lowercase with underscores
-        df = self._standardize_column_name_before_melting(df=df)
-
-        df = self._melt_dataframe_by_time_format(
-            df=df,
-            time_format=TimeFormat.MONTH_NAME_YEAR,
-            id_vars=["Chỉ tiêu", "Đơn vị tính"],
-        )
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.MOBILIZATION.name,
-            primary_keys=Table.MOBILIZATION.primary_key,
-            df=df,
-        )
-
-        self._logger.log_info(f'Finish ingesting data in "{file_path}".')
-
-    def _clean_macroeconomics_mobilization_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.MOBILIZATION,
-        )
-
-        self._logger.log_info(
-            f'Start cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for cleaning data here
-        self._select_database(DataQuality.BRONZE.value)
-
-        bronze_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.MOBILIZATION.name,
-        )
-
-        silver_df = self._clean(
-            df=bronze_df,
-            clean_layer_list=[
-                CleanLayer.ORDER_BY(
-                    [
-                        Table.MOBILIZATION.Column.YEAR.value,
-                        Table.MOBILIZATION.Column.MONTH.value,
-                    ]
-                )
-            ],
-        )
-
-        self._select_database(DataQuality.SILVER.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.MOBILIZATION.name,
-            primary_keys=Table.MOBILIZATION.primary_key,
-            df=silver_df,
-        )
-
-        self._logger.log_info(
-            f'Finish cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-    def _process_macroeconomics_mobilization(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(
-            f'Start processing macroeconomics MOBILIZATION data for "{data_quality.value}".'
-        )
-
-        match data_quality:
-            case DataQuality.BRONZE:
-                self._ingest_macroeconomics_mobilization_vietstock()
-
-            case DataQuality.SILVER:
-                self._clean_macroeconomics_mobilization_vietstock()
-
-            case DataQuality.GOLD:
-                pass
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
-
-        self._logger.log_info(
-            f'Finish processing macroeconomics MOBILIZATION data for "{data_quality.value}".'
-        )
-
-    # endregion MACROECONOMICS.MOBILIZATION
-
-    # region MACROECONOMICS.EXCHANGE_RATE
-    def _ingest_macroeconomics_exchange_rate_investing(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.EXCHANGE_RATE,
-        )
-
-        folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
-
-        file_path = get_newest_file_path(
-            folder_path=folder_path, extension=FileExtension.CSV
-        )
-
-        if not file_path:
-            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
-            return
-
-        self._logger.log_info(f'Start ingesting data in "{file_path}".')
-
-        # Add logic for processing data here
-        file_paths = glob(os.path.join(folder_path, "*.csv"))
-
-        dfs = []
-        for file in file_paths:
-            df = pd.read_csv(file)
-
-            # Rename columns
-            rename_map = {
-                "Ngày": "date",
-                "Lần cuối": "close",
-                "Mở": "open",
-                "Cao": "high",
-                "Thấp": "low",
-                "KL": "volume",
-                "% Thay đổi": "change",
-            }
-            df = df.rename(columns=rename_map)
-
-            # Convert 'date' to datetime
-            df["date"] = pd.to_datetime(df["date"], format="%d/%m/%Y", errors="coerce")
-
-            # Clean numeric columns: remove commas and symbols, then convert to float
-            for col in ["close", "open", "high", "low"]:
-                df[col] = df[col].astype(str).str.replace(",", "").astype(float)
-
-            df["volume"] = df["volume"].apply(parse_volume)
-
-            # Handle "change" column: remove '%' and convert to float
-            df["change"] = df["change"].astype(str).str.replace("%", "").astype(float)
-
-            dfs.append(df)
-
-        # Combine and sort
-        full_df = pd.concat(dfs, ignore_index=True)
-        full_df = full_df.sort_values("date").reset_index(drop=True)
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.EXCHANGE_RATE.name,
-            primary_keys=Table.EXCHANGE_RATE.primary_key,
-            df=full_df,
-        )
-
-        self._logger.log_info(f'Finish ingesting data in "{table_name}".')
-
-    def _clean_macroeconomics_exchange_rate_investing(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.EXCHANGE_RATE,
-        )
-
-        self._logger.log_info(
-            f'Start cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for cleaning data here
-        self._select_database(DataQuality.BRONZE.value)
-
-        bronze_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.EXCHANGE_RATE.name,
-        )
-
-        silver_df = self._clean(
-            df=bronze_df,
-            clean_layer_list=[
-                CleanLayer.ORDER_BY([Table.EXCHANGE_RATE.Column.DATE.value])
-            ],
-        )
-
-        self._select_database(DataQuality.SILVER.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.EXCHANGE_RATE.name,
-            primary_keys=Table.EXCHANGE_RATE.primary_key,
-            df=silver_df,
-        )
-
-        self._logger.log_info(
-            f'Finish cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-    def _transform_macroeconomics_exchange_rate_investing(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.EXCHANGE_RATE,
-        )
-
-        self._logger.log_info(
-            f'Start transforming data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for transforming data here
-        self._select_database(DataQuality.SILVER.value)
-        silver_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.EXCHANGE_RATE.name,
-        )
-
-        gold_df = make_date_time_index_for_dataframe(df=silver_df)
-        gold_df = standardize_time_frame(df=gold_df)
-
-        cols_to_interpolate = gold_df.columns.difference(["date"])
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
-            pd.to_numeric, errors="coerce"
-        )
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
-            method="linear"
-        )
-        gold_df = gold_df.dropna(subset=["close"])
-
-        self._select_database(DataQuality.GOLD.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.G_EXCHANGE_RATE.name,
-            primary_keys=Table.G_EXCHANGE_RATE.primary_key,
-            df=gold_df,
-        )
-
-        self._logger.log_info(
-            f'Finish transforming data in table "{format_key_for_table(key)}".'
-        )
-
-    def _process_macroeconomics_exchange_rate(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(
-            f'Start processing macroeconomics EXCHANGE_RATE data for "{data_quality.value}".'
-        )
-
-        match data_quality:
-            case DataQuality.BRONZE:
-                self._ingest_macroeconomics_exchange_rate_investing()
-
-            case DataQuality.SILVER:
-                self._clean_macroeconomics_exchange_rate_investing()
-
-            case DataQuality.GOLD:
-                self._transform_macroeconomics_exchange_rate_investing()
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
-
-        self._logger.log_info(
-            f'Finish processing macroeconomics EXCHANGE_RATE data for "{data_quality.value}".'
-        )
-
-    # endregion MACROECONOMICS.EXCHANGE_RATE
-
-    # region MACROECONOMICS.IIR
-    def _ingest_macroeconomics_iir_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.IIR,
-        )
-
-        folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
-
-        file_path = get_newest_file_path(
-            folder_path=folder_path, extension=FileExtension.CSV
-        )
-
-        if not file_path:
-            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
-            return
-
-        self._logger.log_info(f'Start ingesting data in "{file_path}".')
-
-        # Add logic for processing data here
-        df = pd.read_csv(file_path)
-
-        # Set indicator names as lowercase with underscores
-        df = self._standardize_column_name_before_melting(df=df)
-
-        df = self._melt_dataframe_by_time_format(
-            df=df,
-            time_format=TimeFormat.DAY_MONTH_YEAR,
-            id_vars=["Chỉ tiêu", "Đơn vị tính"],
-        )
-
-        # Rename columns
-        df.rename(
-            columns={
-                "1_months": "_1_months",
-                "1_weeks": "_1_weeks",
-                "2_weeks": "_2_weeks",
-                "3_months": "_3_months",
-                "6_months": "_6_months",
-                "9_months": "_9_months",
-            },
-            inplace=True,
-        )
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.IIR.name,
-            primary_keys=Table.IIR.primary_key,
-            df=df,
-        )
-
-        self._logger.log_info(f'Finish ingesting data in "{file_path}".')
-
-    def _clean_macroeconomics_iir_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.IIR,
-        )
-
-        self._logger.log_info(
-            f'Start cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for cleaning data here
-        self._select_database(DataQuality.BRONZE.value)
-
-        bronze_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.IIR.name,
-        )
-
-        silver_df = self._clean(
-            df=bronze_df,
-            clean_layer_list=[
-                CleanLayer.ORDER_BY(
-                    [
-                        Table.IIR.Column.YEAR.value,
-                        Table.IIR.Column.MONTH.value,
-                        Table.IIR.Column.DAY.value,
-                    ]
-                )
-            ],
-        )
-
-        self._select_database(DataQuality.SILVER.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.IIR.name,
-            primary_keys=Table.IIR.primary_key,
-            df=silver_df,
-        )
-
-        self._logger.log_info(
-            f'Finish cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-    def _process_macroeconomics_iir(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(
-            f'Start processing macroeconomics IIR data for "{data_quality.value}".'
-        )
-
-        match data_quality:
-            case DataQuality.BRONZE:
-                self._ingest_macroeconomics_iir_vietstock()
-
-            case DataQuality.SILVER:
-                self._clean_macroeconomics_iir_vietstock()
-
-            case DataQuality.GOLD:
-                pass
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
-
-        self._logger.log_info(
-            f'Finish processing macroeconomics IIR data for "{data_quality.value}".'
-        )
-
-    # endregion MACROECONOMICS.IIR
-
-    # region MACROECONOMICS.RRRR
-    def _ingest_macroeconomics_rrrr_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.RRRR,
-        )
-
-        folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
-
-        file_path = get_newest_file_path(
-            folder_path=folder_path, extension=FileExtension.CSV
-        )
-
-        if not file_path:
-            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
-            return
-
-        self._logger.log_info(f'Start ingesting data in "{file_path}".')
-
-        # Add logic for processing data here
-        df = pd.read_csv(file_path)
-
-        # Set indicator names as lowercase with underscores
-        df = self._standardize_column_name_before_melting(df=df)
-
-        df = self._melt_dataframe_by_time_format(
-            df=df,
-            time_format=TimeFormat.DAY_MONTH_YEAR,
-            id_vars=["Chỉ tiêu", "Đơn vị tính"],
-        )
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.RRRR.name,
-            primary_keys=Table.RRRR.primary_key,
-            df=df,
-        )
-
-        self._logger.log_info(f'Finish ingesting data in "{file_path}".')
-
-    def _clean_macroeconomics_rrrr_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.RRRR,
-        )
-
-        self._logger.log_info(
-            f'Start cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for cleaning data here
-        self._select_database(DataQuality.BRONZE.value)
-
-        bronze_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.RRRR.name,
-        )
-
-        silver_df = self._clean(
-            df=bronze_df,
-            clean_layer_list=[
-                CleanLayer.ORDER_BY(
-                    [
-                        Table.RRRR.Column.YEAR.value,
-                        Table.RRRR.Column.MONTH.value,
-                        Table.RRRR.Column.DAY.value,
-                    ]
-                )
-            ],
-        )
-
-        # Fill timeline
-        silver_df = make_date_time_index_for_dataframe(silver_df)
-
-        self._select_database(DataQuality.SILVER.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.RRRR.name,
-            primary_keys=[Table.RRRR.Column.DATE.value],
-            df=silver_df,
-        )
-
-        self._logger.log_info(
-            f'Finish cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-    def _transform_macroeconomics_rrrr_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.RRRR,
-        )
-
-        self._logger.log_info(
-            f'Start transforming data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for transforming data here
-        self._select_database(DataQuality.SILVER.value)
-        silver_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.RRRR.name,
-        )
-
-        gold_df = make_date_time_index_for_dataframe(df=silver_df)
-        gold_df = standardize_time_frame(df=gold_df)
-
-        cols_to_interpolate = gold_df.columns.difference(["date"])
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
-            pd.to_numeric, errors="coerce"
-        )
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
-            method="linear"
-        )
-
-        self._select_database(DataQuality.GOLD.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.G_RRRR.name,
-            primary_keys=Table.G_RRRR.primary_key,
-            df=gold_df,
-        )
-
-        self._logger.log_info(
-            f'Finish transforming data in table "{format_key_for_table(key)}".'
-        )
-
-    def _process_macroeconomics_rrrr(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(
-            f'Start processing macroeconomics RRRR data for "{data_quality.value}".'
-        )
-
-        match data_quality:
-            case DataQuality.BRONZE:
-                self._ingest_macroeconomics_rrrr_vietstock()
-
-            case DataQuality.SILVER:
-                self._clean_macroeconomics_rrrr_vietstock()
-
-            case DataQuality.GOLD:
-                self._transform_macroeconomics_rrrr_vietstock()
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
-
-        self._logger.log_info(
-            f'Finish processing macroeconomics RRRR data for "{data_quality.value}".'
-        )
-
-    # endregion MACROECONOMICS.RRRR
-
-    # region MACROECONOMICS.FDI_SECTOR
-    def _ingest_macroeconomics_fdi_sector_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.FDI_SECTOR,
-        )
-
-        folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
-
-        file_path = get_newest_file_path(
-            folder_path=folder_path, extension=FileExtension.CSV
-        )
-
-        if not file_path:
-            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
-            return
-
-        self._logger.log_info(f'Start ingesting data in "{file_path}".')
-
-        # Add logic for processing data here
-        df = pd.read_csv(file_path)
-
-        # Step 1: Find the row that matches both conditions
-        mask = (df["Chỉ tiêu"] == "Manufacturing and Processing Industry") & (
-            df["Đơn vị tính"] == "Million US Dollars"
-        )
-
-        # Step 2: Within that subset, find the row with the max value in Aug-2020
-        max_idx = (
-            df.loc[mask, "Aug-2020"]
-            .str.replace(",", "", regex=False)
-            .astype(float)
-            .idxmax()
-        )
-
-        # Step 3: Slice from that row to the end
-        df = df.loc[max_idx:]
-
-        # Set indicator names as lowercase with underscores
-        df = self._standardize_column_name_before_melting(df=df)
-
-        df = self._melt_dataframe_by_time_format(
-            df=df,
-            time_format=TimeFormat.MONTH_NAME_YEAR,
-            id_vars=["Chỉ tiêu", "Đơn vị tính"],
-        )
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.FDI_SECTOR.name,
-            primary_keys=Table.FDI_SECTOR.primary_key,
-            df=df,
-        )
-
-        self._logger.log_info(f'Finish ingesting data in "{file_path}".')
-
-    def _clean_macroeconomics_fdi_sector_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.FDI_SECTOR,
-        )
-
-        self._logger.log_info(
-            f'Start cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for cleaning data here
-        self._select_database(DataQuality.BRONZE.value)
-
-        bronze_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.FDI_SECTOR.name,
-        )
-
-        silver_df = self._clean(
-            df=bronze_df,
-            clean_layer_list=[
-                CleanLayer.ORDER_BY(
-                    [
-                        Table.FDI_SECTOR.Column.YEAR.value,
-                        Table.FDI_SECTOR.Column.MONTH.value,
-                    ]
-                )
-            ],
-        )
-
-        self._select_database(DataQuality.SILVER.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.FDI_SECTOR.name,
-            primary_keys=Table.FDI_SECTOR.primary_key,
-            df=silver_df,
-        )
-
-        self._logger.log_info(
-            f'Finish cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-    def _process_macroeconomics_fdi_sector(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(
-            f'Start processing macroeconomics FDI_SECTOR data for "{data_quality.value}".'
-        )
-
-        match data_quality:
-            case DataQuality.BRONZE:
-                self._ingest_macroeconomics_fdi_sector_vietstock()
-
-            case DataQuality.SILVER:
-                self._clean_macroeconomics_fdi_sector_vietstock()
-
-            case DataQuality.GOLD:
-                pass
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
-
-        self._logger.log_info(
-            f'Finish processing macroeconomics FDI_SECTOR data for "{data_quality.value}".'
-        )
-
-    # endregion MACROECONOMICS.FDI_SECTOR
-
-    # region MACROECONOMICS.FDI_RD
-    def _ingest_macroeconomics_fdi_rd_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.FDI_RD,
-        )
-
-        folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
-
-        file_path = get_newest_file_path(
-            folder_path=folder_path, extension=FileExtension.CSV
-        )
-
-        if not file_path:
-            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
-            return
-
-        self._logger.log_info(f'Start ingesting data in "{file_path}".')
-
-        # Add logic for processing data here
-        df = pd.read_csv(file_path)
-
-        # Set indicator names as lowercase with underscores
-        df = self._standardize_column_name_before_melting(df=df)
-
-        df = self._melt_dataframe_by_time_format(
-            df=df,
-            time_format=TimeFormat.MONTH_NAME_YEAR,
-            id_vars=["Chỉ tiêu", "Đơn vị tính"],
-        )
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.FDI_RD.name,
-            primary_keys=Table.FDI_RD.primary_key,
-            df=df,
-        )
-
-        self._logger.log_info(f'Finish ingesting data in "{file_path}".')
-
-    def _clean_macroeconomics_fdi_rd_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.FDI_RD,
-        )
-
-        self._logger.log_info(
-            f'Start cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for cleaning data here
-        self._select_database(DataQuality.BRONZE.value)
-
-        bronze_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.FDI_RD.name,
-        )
-
-        silver_df = self._clean(
-            df=bronze_df,
-            clean_layer_list=[
-                CleanLayer.ORDER_BY(
-                    [
-                        Table.FDI_RD.Column.YEAR.value,
-                        Table.FDI_RD.Column.MONTH.value,
-                    ]
-                )
-            ],
-        )
-
-        self._select_database(DataQuality.SILVER.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.FDI_RD.name,
-            primary_keys=Table.FDI_RD.primary_key,
-            df=silver_df,
-        )
-
-        self._logger.log_info(
-            f'Finish cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-    def _process_macroeconomics_fdi_rd(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(
-            f'Start processing macroeconomics FDI_RD data for "{data_quality.value}".'
-        )
-
-        match data_quality:
-            case DataQuality.BRONZE:
-                self._ingest_macroeconomics_fdi_rd_vietstock()
-
-            case DataQuality.SILVER:
-                self._clean_macroeconomics_fdi_rd_vietstock()
-
-            case DataQuality.GOLD:
-                pass
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
-
-        self._logger.log_info(
-            f'Finish processing macroeconomics FDI_RD data for "{data_quality.value}".'
-        )
-
-    # endregion MACROECONOMICS.FDI_RD
-
-    # region MACROECONOMICS.EXPORT
-    def _ingest_macroeconomics_export_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.EXPORT,
-        )
-
-        folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
-
-        file_path = get_newest_file_path(
-            folder_path=folder_path, extension=FileExtension.CSV
-        )
-
-        if not file_path:
-            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
-            return
-
-        self._logger.log_info(f'Start ingesting data in "{file_path}".')
-
-        # Add logic for processing data here
-        df = pd.read_csv(file_path)
-
-        column_name = "Chỉ tiêu"
-
-        df[column_name] = (
-            df[column_name]
-            .str.lower()
-            .str.replace(
-                r"[\s-]+", "_", regex=True
-            )  # replace any whitespace with underscore
-        )
-
-        df = self._melt_dataframe_by_time_format(
-            df=df,
-            time_format=TimeFormat.MONTH_NAME_YEAR,
-            id_vars=["Chỉ tiêu", "Đơn vị tính"],
-        )
-
-        rename_map = {
-            "year": "year",
-            "month": "month",
-            "argentina": "argentina",
-            "asean": "asean",
-            "ba_lan": "poland",
-            "belarus": "belarus",
-            "brazil": "brazil",
-            "bulgaria": "bulgaria",
-            "bỉ": "belgium",
-            "bồ_đào_nha": "portugal",
-            "bờ_biển_ngà": "ivory_coast",
-            "cameroon": "cameroon",
-            "campuchia": "cambodia",
-            "canada": "canada",
-            "chile": "chile",
-            "croatia": "croatia",
-            "các_tiểu_vương_quốc_ả_rập_thống_nhất": "united_arab_emirates",
-            "estonia": "estonia",
-            "eu": "eu",
-            "hungary": "hungary",
-            "hy_lạp": "greece",
-            "hà_lan": "netherlands",
-            "hàn_quốc": "south_korea",
-            "hồng_kông": "hong_kong",
-            "indonesia": "indonesia",
-            "ireland": "ireland",
-            "israel": "israel",
-            "kazakhstan": "kazakhstan",
-            "kuwait": "kuwait",
-            "latvia": "latvia",
-            "litva": "lithuania",
-            "luxembourg": "luxembourg",
-            "lào": "laos",
-            "malaysia": "malaysia",
-            "malta": "malta",
-            "mexico": "mexico",
-            "myanmar": "myanmar",
-            "mỹ_(hoa_kỳ)": "usa",
-            "na_uy": "norway",
-            "nam_phi": "south_africa",
-            "new_zealand": "new_zealand",
-            "nga": "russia",
-            "nhà_nước_brunei_darussalam": "brunei_darussalam",
-            "nhật_bản": "japan",
-            "other_countries": "other_countries",
-            "pakistan": "pakistan",
-            "peru": "peru",
-            "philippines": "philippines",
-            "pháp": "france",
-            "phần_lan": "finland",
-            "romania": "romania",
-            "senegal": "senegal",
-            "singapore": "singapore",
-            "slovakia": "slovakia",
-            "slovenia": "slovenia",
-            "séc": "czechia",
-            "síp": "cyprus",
-            "thái_lan": "thailand",
-            "thổ_nhĩ_kỳ": "turkey",
-            "thụy_sĩ": "switzerland",
-            "thụy_điển": "sweden",
-            "trung_quốc": "china",
-            "tây_ban_nha": "spain",
-            "ukraine": "ukraine",
-            "vương_quốc_anh": "united_kingdom",
-            "áo": "austria",
-            "úc": "australia",
-            "ý": "italy",
-            "đan_mạch": "denmark",
-            "đài_loan": "taiwan",
-            "đức": "germany",
-            "ả_rập_xê_út": "saudi_arabia",
-            "ấn_độ": "india",
-        }
-
-        df = df.rename(columns=rename_map)
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.EXPORT.name,
-            primary_keys=Table.EXPORT.primary_key,
-            df=df,
-        )
-
-        self._logger.log_info(f'Finish ingesting data in "{file_path}".')
-
-    def _clean_macroeconomics_export_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.EXPORT,
-        )
-
-        self._logger.log_info(
-            f'Start cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for cleaning data here
-        self._select_database(DataQuality.BRONZE.value)
-
-        bronze_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.EXPORT.name,
-        )
-
-        silver_df = self._clean(
-            df=bronze_df,
-            clean_layer_list=[
-                CleanLayer.ORDER_BY(
-                    [
-                        Table.EXPORT.Column.YEAR.value,
-                        Table.EXPORT.Column.MONTH.value,
-                    ]
-                )
-            ],
-        )
-
-        self._select_database(DataQuality.SILVER.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.EXPORT.name,
-            primary_keys=Table.EXPORT.primary_key,
-            df=silver_df,
-        )
-
-        self._logger.log_info(
-            f'Finish cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-    def _process_macroeconomics_export(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(
-            f'Start processing macroeconomics EXPORT data for "{data_quality.value}".'
-        )
-
-        match data_quality:
-            case DataQuality.BRONZE:
-                self._ingest_macroeconomics_export_vietstock()
-
-            case DataQuality.SILVER:
-                self._clean_macroeconomics_export_vietstock()
-
-            case DataQuality.GOLD:
-                pass
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
-
-        self._logger.log_info(
-            f'Finish processing macroeconomics EXPORT data for "{data_quality.value}".'
-        )
-
-    # endregion MACROECONOMICS.EXPORT
-
-    # region MACROECONOMICS.IMPORT
-    def _ingest_macroeconomics_import_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.IMPORT,
-        )
-
-        folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
-
-        file_path = get_newest_file_path(
-            folder_path=folder_path, extension=FileExtension.CSV
-        )
-
-        if not file_path:
-            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
-            return
-
-        self._logger.log_info(f'Start ingesting data in "{file_path}".')
-
-        # Add logic for processing data here
-        df = pd.read_csv(file_path)
-
-        column_name = "Chỉ tiêu"
-
-        df[column_name] = (
-            df[column_name]
-            .str.lower()
-            .str.replace(
-                r"[\s-]+", "_", regex=True
-            )  # replace any whitespace with underscore
-        )
-
-        df = self._melt_dataframe_by_time_format(
-            df=df,
-            time_format=TimeFormat.MONTH_NAME_YEAR,
-            id_vars=["Chỉ tiêu", "Đơn vị tính"],
-        )
-
-        rename_map = {
-            "year": "year",
-            "month": "month",
-            "argentina": "argentina",
-            "asean": "asean",
-            "ba_lan": "poland",
-            "belarus": "belarus",
-            "brazil": "brazil",
-            "bulgaria": "bulgaria",
-            "bỉ": "belgium",
-            "bồ_đào_nha": "portugal",
-            "bờ_biển_ngà": "ivory_coast",
-            "cameroon": "cameroon",
-            "campuchia": "cambodia",
-            "canada": "canada",
-            "chile": "chile",
-            "croatia": "croatia",
-            "các_tiểu_vương_quốc_ả_rập_thống_nhất": "united_arab_emirates",
-            "estonia": "estonia",
-            "eu": "eu",
-            "hungary": "hungary",
-            "hy_lạp": "greece",
-            "hà_lan": "netherlands",
-            "hàn_quốc": "south_korea",
-            "hồng_kông": "hong_kong",
-            "indonesia": "indonesia",
-            "ireland": "ireland",
-            "israel": "israel",
-            "kazakhstan": "kazakhstan",
-            "kuwait": "kuwait",
-            "latvia": "latvia",
-            "litva": "lithuania",
-            "luxembourg": "luxembourg",
-            "lào": "laos",
-            "malaysia": "malaysia",
-            "malta": "malta",
-            "mexico": "mexico",
-            "myanmar": "myanmar",
-            "mỹ_(hoa_kỳ)": "usa",
-            "na_uy": "norway",
-            "nam_phi": "south_africa",
-            "new_zealand": "new_zealand",
-            "nga": "russia",
-            "nhà_nước_brunei_darussalam": "brunei_darussalam",
-            "nhật_bản": "japan",
-            "other_countries": "other_countries",
-            "pakistan": "pakistan",
-            "peru": "peru",
-            "philippines": "philippines",
-            "pháp": "france",
-            "phần_lan": "finland",
-            "romania": "romania",
-            "senegal": "senegal",
-            "singapore": "singapore",
-            "slovakia": "slovakia",
-            "slovenia": "slovenia",
-            "séc": "czechia",
-            "síp": "cyprus",
-            "thái_lan": "thailand",
-            "thổ_nhĩ_kỳ": "turkey",
-            "thụy_sĩ": "switzerland",
-            "thụy_điển": "sweden",
-            "trung_quốc": "china",
-            "tây_ban_nha": "spain",
-            "ukraine": "ukraine",
-            "vương_quốc_anh": "united_kingdom",
-            "áo": "austria",
-            "úc": "australia",
-            "ý": "italy",
-            "đan_mạch": "denmark",
-            "đài_loan": "taiwan",
-            "đức": "germany",
-            "ả_rập_xê_út": "saudi_arabia",
-            "ấn_độ": "india",
-        }
-
-        df = df.rename(columns=rename_map)
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.IMPORT.name,
-            primary_keys=Table.IMPORT.primary_key,
-            df=df,
-        )
-
-        self._logger.log_info(f'Finish ingesting data in "{file_path}".')
-
-    def _clean_macroeconomics_import_vietstock(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.IMPORT,
-        )
-
-        self._logger.log_info(
-            f'Start cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for cleaning data here
-        self._select_database(DataQuality.BRONZE.value)
-
-        bronze_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.IMPORT.name,
-        )
-
-        silver_df = self._clean(
-            df=bronze_df,
-            clean_layer_list=[
-                CleanLayer.ORDER_BY(
-                    [
-                        Table.IMPORT.Column.YEAR.value,
-                        Table.IMPORT.Column.MONTH.value,
-                    ]
-                )
-            ],
-        )
-
-        self._select_database(DataQuality.SILVER.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.IMPORT.name,
-            primary_keys=Table.IMPORT.primary_key,
-            df=silver_df,
-        )
-
-        self._logger.log_info(
-            f'Finish cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-    def _process_macroeconomics_import(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(
-            f'Start processing macroeconomics IMPORT data for "{data_quality.value}".'
-        )
-
-        match data_quality:
-            case DataQuality.BRONZE:
-                self._ingest_macroeconomics_import_vietstock()
-
-            case DataQuality.SILVER:
-                self._clean_macroeconomics_import_vietstock()
-
-            case DataQuality.GOLD:
-                pass
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
-
-        self._logger.log_info(
-            f'Finish processing macroeconomics IMPORT data for "{data_quality.value}".'
-        )
-
-    # endregion MACROECONOMICS.IMPORT
-
-    # region MACROECONOMICS.GOLD_PRICE
-    def _ingest_macroeconomics_gold_price_investing(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.GOLD_PRICE,
-        )
-
-        folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
-
-        table_name = Table.GOLD_PRICE.__qualname__.lower()
-
-        self._logger.log_info(f'Start ingesting data in "{table_name}".')
-
-        # Add logic for processing data here
-        file_paths = glob(os.path.join(folder_path, "*.csv"))
-
-        dfs = []
-        for file in file_paths:
-            df = pd.read_csv(file)
-
-            # Rename columns
-            rename_map = {
-                "Ngày": "date",
-                "Lần cuối": "close",
-                "Mở": "open",
-                "Cao": "high",
-                "Thấp": "low",
-                "KL": "volume",
-                "% Thay đổi": "change",
-            }
-            df = df.rename(columns=rename_map)
-
-            # Convert 'date' to datetime
-            df["date"] = pd.to_datetime(df["date"], format="%d/%m/%Y", errors="coerce")
-
-            # Clean numeric columns: remove commas and symbols, then convert to float
-            for col in ["close", "open", "high", "low"]:
-                df[col] = df[col].astype(str).str.replace(",", "").astype(float)
-
-            df["volume"] = df["volume"].apply(parse_volume)
-
-            # Handle "change" column: remove '%' and convert to float
-            df["change"] = df["change"].astype(str).str.replace("%", "").astype(float)
-
-            dfs.append(df)
-
-        # Combine and sort
-        full_df = pd.concat(dfs, ignore_index=True)
-        full_df = full_df.sort_values("date").reset_index(drop=True)
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.GOLD_PRICE.name,
-            primary_keys=Table.GOLD_PRICE.primary_key,
-            df=full_df,
-        )
-
-        self._logger.log_info(f'Finish ingesting data in "{table_name}".')
-
-    def _clean_macroeconomics_gold_price_investing(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.GOLD_PRICE,
-        )
-
-        self._logger.log_info(
-            f'Start cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for cleaning data here
-        self._select_database(DataQuality.BRONZE.value)
-
-        bronze_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.GOLD_PRICE.name,
-        )
-
-        silver_df = self._clean(
-            df=bronze_df,
-            clean_layer_list=[
-                CleanLayer.ORDER_BY([Table.GOLD_PRICE.Column.DATE.value])
-            ],
-        )
-
-        self._select_database(DataQuality.SILVER.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.GOLD_PRICE.name,
-            primary_keys=Table.GOLD_PRICE.primary_key,
-            df=silver_df,
-        )
-
-        self._logger.log_info(
-            f'Finish cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-    def _transform_macroeconomics_gold_price_investing(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.GOLD_PRICE,
-        )
-
-        self._logger.log_info(
-            f'Start transforming data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for transforming data here
-        self._select_database(DataQuality.SILVER.value)
-        silver_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.GOLD_PRICE.name,
-        )
-
-        gold_df = make_date_time_index_for_dataframe(df=silver_df)
-        gold_df = standardize_time_frame(df=gold_df)
-
-        cols_to_interpolate = gold_df.columns.difference(["date"])
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
-            pd.to_numeric, errors="coerce"
-        )
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
-            method="linear"
-        )
-
-        self._select_database(DataQuality.GOLD.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.G_GOLD_PRICE.name,
-            primary_keys=Table.G_GOLD_PRICE.primary_key,
-            df=gold_df,
-        )
-
-        self._logger.log_info(
-            f'Finish transforming data in table "{format_key_for_table(key)}".'
-        )
-
-    def _process_macroeconomics_gold_price(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(
-            f'Start processing macroeconomics GOLD_PRICE data for "{data_quality.value}".'
-        )
-
-        match data_quality:
-            case DataQuality.BRONZE:
-                self._ingest_macroeconomics_gold_price_investing()
-
-            case DataQuality.SILVER:
-                self._clean_macroeconomics_gold_price_investing()
-
-            case DataQuality.GOLD:
-                self._transform_macroeconomics_gold_price_investing()
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
-
-        self._logger.log_info(
-            f'Finish processing macroeconomics GOLD_PRICE data for "{data_quality.value}".'
-        )
-
-    # endregion MACROECONOMICS.GOLD_PRICE
-
-    # region MACROECONOMICS.OIL_PRICE
-    def _ingest_macroeconomics_oil_price_investing(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.OIL_PRICE,
-        )
-
-        folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
-
-        table_name = Table.OIL_PRICE.__qualname__.lower()
-
-        self._logger.log_info(f'Start ingesting data in "{table_name}".')
-
-        # Add logic for processing data here
-        file_paths = glob(os.path.join(folder_path, "*.csv"))
-
-        dfs = []
-        for file in file_paths:
-            df = pd.read_csv(file)
-
-            # Rename columns
-            rename_map = {
-                "Ngày": "date",
-                "Lần cuối": "close",
-                "Mở": "open",
-                "Cao": "high",
-                "Thấp": "low",
-                "KL": "volume",
-                "% Thay đổi": "change",
-            }
-            df = df.rename(columns=rename_map)
-
-            # Convert 'date' to datetime
-            df["date"] = pd.to_datetime(df["date"], format="%d/%m/%Y", errors="coerce")
-
-            # Clean numeric columns: remove commas and symbols, then convert to float
-            for col in ["close", "open", "high", "low"]:
-                df[col] = df[col].astype(str).str.replace(",", "").astype(float)
-
-            df["volume"] = df["volume"].apply(parse_volume)
-
-            # Handle "change" column: remove '%' and convert to float
-            df["change"] = df["change"].astype(str).str.replace("%", "").astype(float)
-
-            dfs.append(df)
-
-        # Combine and sort
-        full_df = pd.concat(dfs, ignore_index=True)
-        full_df = full_df.sort_values("date").reset_index(drop=True)
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.OIL_PRICE.name,
-            primary_keys=Table.OIL_PRICE.primary_key,
-            df=full_df,
-        )
-
-        self._logger.log_info(f'Finish ingesting data in "{table_name}".')
-
-    def _clean_macroeconomics_oil_price_investing(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.OIL_PRICE,
-        )
-
-        self._logger.log_info(
-            f'Start cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for cleaning data here
-        self._select_database(DataQuality.BRONZE.value)
-
-        bronze_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.OIL_PRICE.name,
-        )
-
-        silver_df = self._clean(
-            df=bronze_df,
-            clean_layer_list=[CleanLayer.ORDER_BY([Table.OIL_PRICE.Column.DATE.value])],
-        )
-
-        self._select_database(DataQuality.SILVER.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.OIL_PRICE.name,
-            primary_keys=Table.OIL_PRICE.primary_key,
-            df=silver_df,
-        )
-
-        self._logger.log_info(
-            f'Finish cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-    def _transform_macroeconomics_oil_price_investing(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.OIL_PRICE,
-        )
-
-        self._logger.log_info(
-            f'Start transforming data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for transforming data here
-        self._select_database(DataQuality.SILVER.value)
-        silver_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.OIL_PRICE.name,
-        )
-
-        gold_df = make_date_time_index_for_dataframe(df=silver_df)
-        gold_df = standardize_time_frame(df=gold_df)
-
-        cols_to_interpolate = gold_df.columns.difference(["date"])
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
-            pd.to_numeric, errors="coerce"
-        )
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
-            method="linear"
-        )
-
-        self._select_database(DataQuality.GOLD.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.G_OIL_PRICE.name,
-            primary_keys=Table.G_OIL_PRICE.primary_key,
-            df=gold_df,
-        )
-
-        self._logger.log_info(
-            f'Finish transforming data in table "{format_key_for_table(key)}".'
-        )
-
-    def _process_macroeconomics_oil_price(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(
-            f'Start processing macroeconomics OIL_PRICE data for "{data_quality.value}".'
-        )
-
-        match data_quality:
-            case DataQuality.BRONZE:
-                self._ingest_macroeconomics_oil_price_investing()
-
-            case DataQuality.SILVER:
-                self._clean_macroeconomics_oil_price_investing()
-
-            case DataQuality.GOLD:
-                self._transform_macroeconomics_oil_price_investing()
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
-
-        self._logger.log_info(
-            f'Finish processing macroeconomics OIL_PRICE data for "{data_quality.value}".'
-        )
-
-    # endregion MACROECONOMICS.OIL_PRICE
-
-    # region MACROECONOMICS.DOW_JONES
-    def _ingest_macroeconomics_dow_jones_investing(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.DOW_JONES,
-        )
-
-        folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
-
-        table_name = Table.DOW_JONES.__qualname__.lower()
-
-        self._logger.log_info(f'Start ingesting data in "{table_name}".')
-
-        # Add logic for processing data here
-        file_paths = glob(os.path.join(folder_path, "*.csv"))
-
-        dfs = []
-        for file in file_paths:
-            df = pd.read_csv(file)
-
-            # Rename columns
-            rename_map = {
-                "Ngày": "date",
-                "Lần cuối": "close",
-                "Mở": "open",
-                "Cao": "high",
-                "Thấp": "low",
-                "KL": "volume",
-                "% Thay đổi": "change",
-            }
-            df = df.rename(columns=rename_map)
-
-            # Convert 'date' to datetime
-            df["date"] = pd.to_datetime(df["date"], format="%d/%m/%Y", errors="coerce")
-
-            # Clean numeric columns: remove commas and symbols, then convert to float
-            for col in ["close", "open", "high", "low"]:
-                df[col] = df[col].astype(str).str.replace(",", "").astype(float)
-
-            df["volume"] = df["volume"].apply(parse_volume)
-
-            # Handle "change" column: remove '%' and convert to float
-            df["change"] = df["change"].astype(str).str.replace("%", "").astype(float)
-
-            dfs.append(df)
-
-        # Combine and sort
-        full_df = pd.concat(dfs, ignore_index=True)
-        full_df = full_df.sort_values("date").reset_index(drop=True)
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.DOW_JONES.name,
-            primary_keys=Table.DOW_JONES.primary_key,
-            df=full_df,
-        )
-
-        self._logger.log_info(f'Finish ingesting data in "{table_name}".')
-
-    def _clean_macroeconomics_dow_jones_investing(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.DOW_JONES,
-        )
-
-        self._logger.log_info(
-            f'Start cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for cleaning data here
-        self._select_database(DataQuality.BRONZE.value)
-
-        bronze_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.DOW_JONES.name,
-        )
-
-        silver_df = self._clean(
-            df=bronze_df,
-            clean_layer_list=[CleanLayer.ORDER_BY([Table.DOW_JONES.Column.DATE.value])],
-        )
-
-        self._select_database(DataQuality.SILVER.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.DOW_JONES.name,
-            primary_keys=Table.DOW_JONES.primary_key,
-            df=silver_df,
-        )
-
-        self._logger.log_info(
-            f'Finish cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-    def _transform_macroeconomics_dow_jones_investing(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.DOW_JONES,
-        )
-
-        self._logger.log_info(
-            f'Start transforming data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for transforming data here
-        self._select_database(DataQuality.SILVER.value)
-        silver_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.DOW_JONES.name,
-        )
-
-        gold_df = make_date_time_index_for_dataframe(df=silver_df)
-        gold_df = standardize_time_frame(df=gold_df)
-
-        cols_to_interpolate = gold_df.columns.difference(["date"])
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
-            pd.to_numeric, errors="coerce"
-        )
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
-            method="linear"
-        )
-
-        self._select_database(DataQuality.GOLD.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.G_DOW_JONES.name,
-            primary_keys=Table.G_DOW_JONES.primary_key,
-            df=gold_df,
-        )
-
-        self._logger.log_info(
-            f'Finish transforming data in table "{format_key_for_table(key)}".'
-        )
-
-    def _process_macroeconomics_dow_jones(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(
-            f'Start processing macroeconomics DOW_JONES data for "{data_quality.value}".'
-        )
-
-        match data_quality:
-            case DataQuality.BRONZE:
-                self._ingest_macroeconomics_dow_jones_investing()
-
-            case DataQuality.SILVER:
-                self._clean_macroeconomics_dow_jones_investing()
-
-            case DataQuality.GOLD:
-                self._transform_macroeconomics_dow_jones_investing()
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
-
-        self._logger.log_info(
-            f'Finish processing macroeconomics DOW_JONES data for "{data_quality.value}".'
-        )
-
-    # endregion MACROECONOMICS.DOW_JONES
-
-    # region MACROECONOMICS.NYSE_COMPOSITE
-    def _ingest_macroeconomics_nyse_composite_yahoo_finance(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.NYSE_COMPOSITE,
-        )
-
-        folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
-
-        table_name = Table.NYSE_COMPOSITE.__qualname__.lower()
-
-        self._logger.log_info(f'Start ingesting data in "{table_name}".')
-
-        # Add logic for processing data here
-        file_paths = glob(os.path.join(folder_path, "*.csv"))
-
-        dfs = []
-        for file in file_paths:
-            df = pd.read_csv(file)
-
-            # Rename columns
-            rename_map = {
-                "Date": "date",
-                "CloseClose price adjusted for splits.": "close",
-                "Adj CloseAdjusted close price adjusted for splits and dividend and/or capital gain distributions.": "adj_close",
-                "Open": "open",
-                "High": "high",
-                "Low": "low",
-                "Volume": "volume",
-            }
-            df = df.rename(columns=rename_map)
-
-            # Convert 'date' to datetime
-            df["date"] = pd.to_datetime(df["date"], format="%b %d, %Y", errors="coerce")
-
-            # Clean numeric columns: remove commas and symbols, then convert to float
-            for col in ["close", "open", "high", "low", "adj_close"]:
-                df[col] = df[col].astype(str).str.replace(",", "").astype(float)
-
-            df["volume"] = df["volume"].astype(str).replace("-", np.nan)
-
-            df["volume"] = df["volume"].apply(parse_volume)
-
-            dfs.append(df)
-
-        # Combine and sort
-        full_df = pd.concat(dfs, ignore_index=True)
-        full_df = full_df.sort_values("date").reset_index(drop=True)
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.NYSE_COMPOSITE.name,
-            primary_keys=Table.NYSE_COMPOSITE.primary_key,
-            df=full_df,
-        )
-
-        self._logger.log_info(f'Finish ingesting data in "{table_name}".')
-
-    def _clean_macroeconomics_nyse_composite_yahoo_finance(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.NYSE_COMPOSITE,
-        )
-
-        self._logger.log_info(
-            f'Start cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for cleaning data here
-        self._select_database(DataQuality.BRONZE.value)
-
-        bronze_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.NYSE_COMPOSITE.name,
-        )
-
-        silver_df = self._clean(
-            df=bronze_df,
-            clean_layer_list=[
-                CleanLayer.ORDER_BY([Table.NYSE_COMPOSITE.Column.DATE.value])
-            ],
-        )
-
-        self._select_database(DataQuality.SILVER.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.NYSE_COMPOSITE.name,
-            primary_keys=Table.NYSE_COMPOSITE.primary_key,
-            df=silver_df,
-        )
-
-        self._logger.log_info(
-            f'Finish cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-    def _transform_macroeconomics_nyse_composite_yahoo_finance(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.NYSE_COMPOSITE,
-        )
-
-        self._logger.log_info(
-            f'Start transforming data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for transforming data here
-        self._select_database(DataQuality.SILVER.value)
-        silver_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.NYSE_COMPOSITE.name,
-        )
-
-        gold_df = make_date_time_index_for_dataframe(df=silver_df)
-        gold_df = standardize_time_frame(df=gold_df)
-
-        cols_to_interpolate = gold_df.columns.difference(["date"])
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
-            pd.to_numeric, errors="coerce"
-        )
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
-            method="linear"
-        )
-
-        self._select_database(DataQuality.GOLD.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.G_NYSE_COMPOSITE.name,
-            primary_keys=Table.G_NYSE_COMPOSITE.primary_key,
-            df=gold_df,
-        )
-
-        self._logger.log_info(
-            f'Finish transforming data in table "{format_key_for_table(key)}".'
-        )
-
-    def _process_macroeconomics_nyse_composite(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(
-            f'Start processing macroeconomics NYSE_COMPOSITE data for "{data_quality.value}".'
-        )
-
-        match data_quality:
-            case DataQuality.BRONZE:
-                self._ingest_macroeconomics_nyse_composite_yahoo_finance()
-
-            case DataQuality.SILVER:
-                self._clean_macroeconomics_nyse_composite_yahoo_finance()
-
-            case DataQuality.GOLD:
-                self._transform_macroeconomics_nyse_composite_yahoo_finance()
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
-
-        self._logger.log_info(
-            f'Finish processing macroeconomics NYSE_COMPOSITE data for "{data_quality.value}".'
-        )
-
-    # endregion MACROECONOMICS.NYSE_COMPOSITE
-
-    # region MACROECONOMICS.SNP_500
-    def _ingest_macroeconomics_snp_500_investing(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.SNP_500,
-        )
-
-        folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
-
-        table_name = Table.SNP_500.__qualname__.lower()
-
-        self._logger.log_info(f'Start ingesting data in "{table_name}".')
-
-        # Add logic for processing data here
-        file_paths = glob(os.path.join(folder_path, "*.csv"))
-
-        dfs = []
-        for file in file_paths:
-            df = pd.read_csv(file)
-
-            # Rename columns
-            rename_map = {
-                "Date": "date",
-                "CloseClose price adjusted for splits.": "close",
-                "Adj CloseAdjusted close price adjusted for splits and dividend and/or capital gain distributions.": "adj_close",
-                "Open": "open",
-                "High": "high",
-                "Low": "low",
-                "Volume": "volume",
-            }
-            df = df.rename(columns=rename_map)
-
-            # Convert 'date' to datetime
-            df["date"] = pd.to_datetime(df["date"], format="%b %d, %Y", errors="coerce")
-
-            # Clean numeric columns: remove commas and symbols, then convert to float
-            for col in ["close", "open", "high", "low", "adj_close"]:
-                df[col] = df[col].astype(str).str.replace(",", "").astype(float)
-
-            df["volume"] = df["volume"].astype(str).replace("-", np.nan)
-
-            df["volume"] = df["volume"].apply(parse_volume)
-
-            dfs.append(df)
-
-        # Combine and sort
-        full_df = pd.concat(dfs, ignore_index=True)
-        full_df = full_df.sort_values("date").reset_index(drop=True)
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.SNP_500.name,
-            primary_keys=Table.SNP_500.primary_key,
-            df=full_df,
-        )
-
-        self._logger.log_info(f'Finish ingesting data in "{table_name}".')
-
-    def _clean_macroeconomics_snp_500_investing(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.SNP_500,
-        )
-
-        self._logger.log_info(
-            f'Start cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for cleaning data here
-        self._select_database(DataQuality.BRONZE.value)
-
-        bronze_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.SNP_500.name,
-        )
-
-        silver_df = self._clean(
-            df=bronze_df,
-            clean_layer_list=[CleanLayer.ORDER_BY([Table.SNP_500.Column.DATE.value])],
-        )
-
-        self._select_database(DataQuality.SILVER.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.SNP_500.name,
-            primary_keys=Table.SNP_500.primary_key,
-            df=silver_df,
-        )
-
-        self._logger.log_info(
-            f'Finish cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-    def _transform_macroeconomics_snp_500_investing(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.SNP_500,
-        )
-
-        self._logger.log_info(
-            f'Start transforming data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for transforming data here
-        self._select_database(DataQuality.SILVER.value)
-        silver_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.SNP_500.name,
-        )
-
-        gold_df = make_date_time_index_for_dataframe(df=silver_df)
-        gold_df = standardize_time_frame(df=gold_df)
-
-        cols_to_interpolate = gold_df.columns.difference(["date"])
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
-            pd.to_numeric, errors="coerce"
-        )
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
-            method="linear"
-        )
-
-        self._select_database(DataQuality.GOLD.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.G_SNP_500.name,
-            primary_keys=Table.G_SNP_500.primary_key,
-            df=gold_df,
-        )
-
-        self._logger.log_info(
-            f'Finish transforming data in table "{format_key_for_table(key)}".'
-        )
-
-    def _process_macroeconomics_snp_500(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(
-            f'Start processing macroeconomics SNP_500 data for "{data_quality.value}".'
-        )
-
-        match data_quality:
-            case DataQuality.BRONZE:
-                self._ingest_macroeconomics_snp_500_investing()
-
-            case DataQuality.SILVER:
-                self._clean_macroeconomics_snp_500_investing()
-
-            case DataQuality.GOLD:
-                self._transform_macroeconomics_snp_500_investing()
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
-
-        self._logger.log_info(
-            f'Finish processing macroeconomics SNP_500 data for "{data_quality.value}".'
-        )
-
-    # endregion MACROECONOMICS.SNP_500
-
-    # region MACROECONOMICS.NASDAQ_COMPOSITE
-    def _ingest_macroeconomics_nasdaq_composite_yahoo_finance(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.NASDAQ_COMPOSITE,
-        )
-
-        folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
-
-        table_name = Table.NASDAQ_COMPOSITE.__qualname__.lower()
-
-        self._logger.log_info(f'Start ingesting data in "{table_name}".')
-
-        # Add logic for processing data here
-        file_paths = glob(os.path.join(folder_path, "*.csv"))
-
-        dfs = []
-        for file in file_paths:
-            df = pd.read_csv(file)
-
-            # Rename columns
-            rename_map = {
-                "Date": "date",
-                "CloseClose price adjusted for splits.": "close",
-                "Adj CloseAdjusted close price adjusted for splits and dividend and/or capital gain distributions.": "adj_close",
-                "Open": "open",
-                "High": "high",
-                "Low": "low",
-                "Volume": "volume",
-            }
-            df = df.rename(columns=rename_map)
-
-            # Convert 'date' to datetime
-            df["date"] = pd.to_datetime(df["date"], format="%b %d, %Y", errors="coerce")
-
-            # Clean numeric columns: remove commas and symbols, then convert to float
-            for col in ["close", "open", "high", "low", "adj_close"]:
-                df[col] = df[col].astype(str).str.replace(",", "").astype(float)
-
-            df["volume"] = df["volume"].astype(str).replace("-", np.nan)
-
-            df["volume"] = df["volume"].apply(parse_volume)
-
-            dfs.append(df)
-
-        # Combine and sort
-        full_df = pd.concat(dfs, ignore_index=True)
-        full_df = full_df.sort_values("date").reset_index(drop=True)
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.NASDAQ_COMPOSITE.name,
-            primary_keys=Table.NASDAQ_COMPOSITE.primary_key,
-            df=full_df,
-        )
-
-        self._logger.log_info(f'Finish ingesting data in "{table_name}".')
-
-    def _clean_macroeconomics_nasdaq_composite_yahoo_finance(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.NASDAQ_COMPOSITE,
-        )
-
-        self._logger.log_info(
-            f'Start cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for cleaning data here
-        self._select_database(DataQuality.BRONZE.value)
-
-        bronze_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.NASDAQ_COMPOSITE.name,
-        )
-
-        silver_df = self._clean(
-            df=bronze_df,
-            clean_layer_list=[
-                CleanLayer.ORDER_BY([Table.NASDAQ_COMPOSITE.Column.DATE.value])
-            ],
-        )
-
-        self._select_database(DataQuality.SILVER.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.NASDAQ_COMPOSITE.name,
-            primary_keys=Table.NASDAQ_COMPOSITE.primary_key,
-            df=silver_df,
-        )
-
-        self._logger.log_info(
-            f'Finish cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-    def _transform_macroeconomics_nasdaq_composite_yahoo_finance(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.NASDAQ_COMPOSITE,
-        )
-
-        self._logger.log_info(
-            f'Start transforming data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for transforming data here
-        self._select_database(DataQuality.SILVER.value)
-        silver_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.NASDAQ_COMPOSITE.name,
-        )
-
-        gold_df = make_date_time_index_for_dataframe(df=silver_df)
-        gold_df = standardize_time_frame(df=gold_df)
-
-        cols_to_interpolate = gold_df.columns.difference(["date"])
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
-            pd.to_numeric, errors="coerce"
-        )
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
-            method="linear"
-        )
-
-        self._select_database(DataQuality.GOLD.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.G_NASDAQ_COMPOSITE.name,
-            primary_keys=Table.G_NASDAQ_COMPOSITE.primary_key,
-            df=gold_df,
-        )
-
-        self._logger.log_info(
-            f'Finish transforming data in table "{format_key_for_table(key)}".'
-        )
-
-    def _process_macroeconomics_nasdaq_composite(
-        self, data_quality: DataQuality
-    ) -> None:
-        self._logger.log_info(
-            f'Start processing macroeconomics NASDAQ_COMPOSITE data for "{data_quality.value}".'
-        )
-
-        match data_quality:
-            case DataQuality.BRONZE:
-                self._ingest_macroeconomics_nasdaq_composite_yahoo_finance()
-
-            case DataQuality.SILVER:
-                self._clean_macroeconomics_nasdaq_composite_yahoo_finance()
-
-            case DataQuality.GOLD:
-                self._transform_macroeconomics_nasdaq_composite_yahoo_finance()
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
-
-        self._logger.log_info(
-            f'Finish processing macroeconomics NASDAQ_COMPOSITE data for "{data_quality.value}".'
-        )
-
-    # endregion MACROECONOMICS.NASDAQ_COMPOSITE
-
-    # region MACROECONOMICS.NASDAQ_100
-    def _ingest_macroeconomics_nasdaq_100_yahoo_finance(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.NASDAQ_100,
-        )
-
-        folder_path = (
-            f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}/{key[2].value}"
-        )
-
-        table_name = Table.NASDAQ_100.__qualname__.lower()
-
-        self._logger.log_info(f'Start ingesting data in "{table_name}".')
-
-        # Add logic for processing data here
-        file_paths = glob(os.path.join(folder_path, "*.csv"))
-
-        dfs = []
-        for file in file_paths:
-            df = pd.read_csv(file)
-
-            # Rename columns
-            rename_map = {
-                "Date": "date",
-                "CloseClose price adjusted for splits.": "close",
-                "Adj CloseAdjusted close price adjusted for splits and dividend and/or capital gain distributions.": "adj_close",
-                "Open": "open",
-                "High": "high",
-                "Low": "low",
-                "Volume": "volume",
-            }
-            df = df.rename(columns=rename_map)
-
-            # Convert 'date' to datetime
-            df["date"] = pd.to_datetime(df["date"], format="%b %d, %Y", errors="coerce")
-
-            # Clean numeric columns: remove commas and symbols, then convert to float
-            for col in ["close", "open", "high", "low", "adj_close"]:
-                df[col] = df[col].astype(str).str.replace(",", "").astype(float)
-
-            df["volume"] = df["volume"].astype(str).replace("-", np.nan)
-
-            df["volume"] = df["volume"].apply(parse_volume)
-
-            dfs.append(df)
-
-        # Combine and sort
-        full_df = pd.concat(dfs, ignore_index=True)
-        full_df = full_df.sort_values("date").reset_index(drop=True)
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.NASDAQ_100.name,
-            primary_keys=Table.NASDAQ_100.primary_key,
-            df=full_df,
-        )
-
-        self._logger.log_info(f'Finish ingesting data in "{table_name}".')
-
-    def _clean_macroeconomics_nasdaq_100_yahoo_finance(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.NASDAQ_100,
-        )
-
-        self._logger.log_info(
-            f'Start cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for cleaning data here
-        self._select_database(DataQuality.BRONZE.value)
-
-        bronze_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.NASDAQ_100.name,
-        )
-
-        silver_df = self._clean(
-            df=bronze_df,
-            clean_layer_list=[
-                CleanLayer.ORDER_BY([Table.NASDAQ_100.Column.DATE.value])
-            ],
-        )
-
-        self._select_database(DataQuality.SILVER.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.NASDAQ_100.name,
-            primary_keys=Table.NASDAQ_100.primary_key,
-            df=silver_df,
-        )
-
-        self._logger.log_info(
-            f'Finish cleaning data in table "{format_key_for_table(key)}".'
-        )
-
-    def _transform_macroeconomics_nasdaq_100_yahoo_finance(self) -> None:
-        key = (
-            ScrapeMainType.MACROECONOMICS,
-            MacroeconomicsSubType.NASDAQ_100,
-        )
-
-        self._logger.log_info(
-            f'Start transforming data in table "{format_key_for_table(key)}".'
-        )
-
-        # Add logic for transforming data here
-        self._select_database(DataQuality.SILVER.value)
-        silver_df = self._select(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.NASDAQ_100.name,
-        )
-
-        gold_df = make_date_time_index_for_dataframe(df=silver_df)
-        gold_df = standardize_time_frame(df=gold_df)
-
-        cols_to_interpolate = gold_df.columns.difference(["date"])
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].apply(
-            pd.to_numeric, errors="coerce"
-        )
-        gold_df[cols_to_interpolate] = gold_df[cols_to_interpolate].interpolate(
-            method="linear"
-        )
-
-        self._select_database(DataQuality.GOLD.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.MACROECONOMICS.value,
-            table_name=Table.G_NASDAQ_100.name,
-            primary_keys=Table.G_NASDAQ_100.primary_key,
-            df=gold_df,
-        )
-
-        self._logger.log_info(
-            f'Finish transforming data in table "{format_key_for_table(key)}".'
-        )
-
-    def _process_macroeconomics_nasdaq_100(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(
-            f'Start processing macroeconomics NASDAQ_100 data for "{data_quality.value}".'
-        )
-
-        match data_quality:
-            case DataQuality.BRONZE:
-                self._ingest_macroeconomics_nasdaq_100_yahoo_finance()
-
-            case DataQuality.SILVER:
-                self._clean_macroeconomics_nasdaq_100_yahoo_finance()
-
-            case DataQuality.GOLD:
-                self._transform_macroeconomics_nasdaq_100_yahoo_finance()
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
-
-        self._logger.log_info(
-            f'Finish processing macroeconomics NASDAQ_100 data for "{data_quality.value}".'
-        )
-
-    # endregion MACROECONOMICS.NASDAQ_100
-
-    # endregion MACROECONOMICS data process
-
-    # region STOCK_MARKET data process
-
-    # region STOCK_MARKET.MARKET
-    def _process_stock_market_market_add_data(self) -> None:
-        self._logger.log_info(
-            f'Start ingesting data in "{Table.MARKET.__qualname__.lower()}".'
-        )
-
-        market_data = {
-            Table.MARKET.Column.ID.value: [1, 2, 3],
-            Table.MARKET.Column.CODE.value: ["HSX", "HNX", "UPCOM"],
-            Table.MARKET.Column.NAME.value: [
-                "Ho Chi Minh City Stock Exchange",
-                "Hanoi Stock Exchange",
-                "Unlisted Public Company Market",
-            ],
-        }
-
-        df = pd.DataFrame(market_data)
-
-        self._save_pandas_table_to_database(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.MARKET.name,
-            primary_keys=Table.MARKET.primary_key,
-            df=df,
-        )
-
-        self._logger.log_info(
-            f'Finish ingesting data in "{Table.MARKET.__qualname__.lower()}".'
-        )
-
-    def _clean_stock_market_market(self) -> None:
-
-        self._logger.log_info(
-            f'Start cleaning data in table "{Table.MARKET.__qualname__.lower()}".'
-        )
-
-        # Add logic for cleaning data here
-        self._select_database(DataQuality.BRONZE.value)
-
-        bronze_df = self._select(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.MARKET.name,
-        )
-
-        bronze_df.drop(
-            columns=[
-                Table.MARKET.Column.CREATE_DATE.value,
-                Table.MARKET.Column.UPDATE_DATE.value,
-                Table.MARKET.Column.DELETE_DATE.value,
-            ],
-            inplace=True,
-        )
-
-        silver_df = self._clean(
-            df=bronze_df,
-            clean_layer_list=[CleanLayer.ORDER_BY([Table.MARKET.Column.ID.value])],
-        )
-
-        self._select_database(DataQuality.SILVER.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.MARKET.name,
-            primary_keys=Table.MARKET.primary_key,
-            df=silver_df,
-        )
-
-        self._logger.log_info(
-            f'Finish cleaning data in table "{Table.MARKET.__qualname__.lower()}".'
-        )
-
-    def _transform_stock_market_market(self) -> None:
-        self._logger.log_info(
-            f'Start transforming data in "{Table.MARKET.__qualname__.lower()}".'
-        )
-
-        # Add logic for transforming data here
-        self._select_database(DataQuality.SILVER.value)
-        silver_df = self._select(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.MARKET.name,
-        )
-
-        gold_df = silver_df.drop(
-            columns=[
-                Table.MARKET.Column.CREATE_DATE.value,
-                Table.MARKET.Column.UPDATE_DATE.value,
-                Table.MARKET.Column.DELETE_DATE.value,
-            ]
-        )
-
-        self._select_database(DataQuality.GOLD.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.MARKET.name,
-            primary_keys=Table.MARKET.primary_key,
-            df=gold_df,
-        )
-
-        self._logger.log_info(
-            f'Finish transforming data in "{Table.MARKET.__qualname__.lower()}".'
-        )
-
-    def _process_stock_market_market(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(
-            f'Start processing stock market MARKET data for "{data_quality.value}".'
-        )
-
-        match data_quality:
-            case DataQuality.BRONZE:
-                self._process_stock_market_market_add_data()
-
-            case DataQuality.SILVER:
-                self._clean_stock_market_market()
-
-            case DataQuality.GOLD:
-                self._transform_stock_market_market()
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
-
-        self._logger.log_info("Finish processing stock market MARKET data.")
-
-    # endregion STOCK MARKET.MARKET
-
-    # region STOCK_MARKET.VN_INDEX
-    def _ingest_stock_market_index_price(self) -> None:
-        sub_types = [s for s in StockMarketSubType if "price" in s.value.lower()]
-
-        for sub_type in sub_types:
-            folder_path = (
-                f"{SCRAPER_RAW_DATA_DIR}"
-                f"/{ScrapeMainType.STOCK_MARKET.value}/{sub_type.value}"
+        def _checkpoint(chunk: pd.DataFrame) -> None:
+            # Use REAL (4-byte float) for all float columns to stay within
+            # PostgreSQL's 8160-byte row size limit given the large number of columns.
+            overrides: dict[str, str] = {"date": DataType.DATE()}
+            for col in chunk.columns:
+                if str(chunk[col].dtype).lower().startswith("float"):
+                    overrides[col] = "REAL"
+            self._helper_save_pandas_table_to_database(
+                schema_name=GOLD_SCHEMA,
+                table_name=table_name,
+                primary_keys=["exchange", "ticker", "date"],
+                df=chunk,
+                dtype_overrides=overrides,
+                use_copy=True,
             )
 
-            result = self._build_price_df(folder_path)
-            if result is None:
-                continue
-            df, file_paths = result
+        self._helper_transform(
+            df,
+            transform_layers,
+            checkpoint_fn=_checkpoint,
+            checkpoint_size=100_000,
+        )
 
-            self._logger.log_info(
-                f'Start ingesting {len(file_paths)} file(s) from "{folder_path}" to "{sub_type.value.lower()}".'
-            )
-            self._save_pandas_table_to_database(
-                schema_name=Schema.STOCK_MARKET.value,
-                table_name=Table.B_STOCK_MARKET_PRICE.name,
-                primary_keys=Table.B_STOCK_MARKET_PRICE.primary_key,
-                df=df,
-            )
-            self._logger.log_info(
-                f'Finish ingesting {len(file_paths)} file(s) from "{folder_path}" to "{sub_type.value.lower()}".'
-            )
+    def _ingest_gold_stocks(self) -> None:
+        self._ingest_gold_table(
+            "stocks",
+            ta_layers=[
+                # Overlap Studies
+                TransformLayer.TA_ADD_BBANDS(),
+                TransformLayer.TA_ADD_DEMA(),
+                TransformLayer.TA_ADD_EMA(),
+                TransformLayer.TA_ADD_KAMA(),
+                TransformLayer.TA_ADD_MIDPOINT(),
+                TransformLayer.TA_ADD_MIDPRICE(),
+                TransformLayer.TA_ADD_SAR(),
+                TransformLayer.TA_ADD_SMA(),
+                TransformLayer.TA_ADD_T3(),
+                TransformLayer.TA_ADD_TEMA(),
+                TransformLayer.TA_ADD_TRIMA(),
+                TransformLayer.TA_ADD_WMA(),
+                # Momentum Indicators
+                TransformLayer.TA_ADD_ADX(),
+                TransformLayer.TA_ADD_AROON(),
+                TransformLayer.TA_ADD_BOP(),
+                TransformLayer.TA_ADD_CCI(),
+                TransformLayer.TA_ADD_CMO(),
+                TransformLayer.TA_ADD_MACD(),
+                TransformLayer.TA_ADD_MFI(volume_col="volume"),
+                TransformLayer.TA_ADD_MOM(),
+                TransformLayer.TA_ADD_PPO(),
+                TransformLayer.TA_ADD_ROC(),
+                TransformLayer.TA_ADD_RSI(),
+                TransformLayer.TA_ADD_STOCH(),
+                TransformLayer.TA_ADD_STOCH_RSI(),
+                TransformLayer.TA_ADD_TRIX(),
+                TransformLayer.TA_ADD_ULTOSC(),
+                TransformLayer.TA_ADD_WILLR(),
+                # Volume Indicators
+                TransformLayer.TA_ADD_AD(volume_col="volume"),
+                TransformLayer.TA_ADD_ADOSC(volume_col="volume"),
+                TransformLayer.TA_ADD_OBV(volume_col="volume"),
+                # Cycle Indicators
+                TransformLayer.TA_ADD_HT_DCPERIOD(),
+                TransformLayer.TA_ADD_HT_DCPHASE(),
+                TransformLayer.TA_ADD_HT_PHASOR(),
+                TransformLayer.TA_ADD_HT_SINE(),
+                TransformLayer.TA_ADD_HT_TRENDMODE(),
+                # Price Transform
+                TransformLayer.TA_ADD_AVGPRICE(),
+                TransformLayer.TA_ADD_MEDPRICE(),
+                TransformLayer.TA_ADD_TYPPRICE(),
+                TransformLayer.TA_ADD_WCLPRICE(),
+                # Volatility Indicators
+                TransformLayer.TA_ADD_ATR(),
+                TransformLayer.TA_ADD_NATR(),
+                TransformLayer.TA_ADD_TRANGE(),
+            ],
+        )
 
-    def _ingest_stock_market_index_order(self) -> None:
-        sub_types = [s for s in StockMarketSubType if "order" in s.value.lower()]
+    def _ingest_gold_bonds(self) -> None:
+        self._ingest_gold_table("bonds")
 
-        for sub_type in sub_types:
-            folder_path = (
-                f"{SCRAPER_RAW_DATA_DIR}"
-                f"/{ScrapeMainType.STOCK_MARKET.value}/{sub_type.value}"
-            )
+    def _ingest_gold_economy(self) -> None:
+        self._ingest_gold_table("economy")
 
-            result = self._build_order_df(folder_path)
-            if result is None:
-                continue
-            df, file_paths = result
+    def _ingest_gold_forex(self) -> None:
+        self._ingest_gold_table("forex")
 
-            self._logger.log_info(
-                f'Start ingesting {len(file_paths)} file(s) from "{folder_path}" to "{sub_type.value.lower()}".'
-            )
-            self._save_pandas_table_to_database(
-                schema_name=Schema.STOCK_MARKET.value,
-                table_name=Table.B_STOCK_MARKET_ORDER.name,
-                primary_keys=Table.B_STOCK_MARKET_ORDER.primary_key,
-                df=df,
-            )
-            self._logger.log_info(
-                f'Finish ingesting {len(file_paths)} file(s) from "{folder_path}" to "{sub_type.value.lower()}".'
-            )
+    def _ingest_gold_funds(self) -> None:
+        self._ingest_gold_table("funds")
 
-    def _clean_stock_market_index(self) -> None:
-        input_table_list = [
-            Table.B_STOCK_MARKET_PRICE.name,
-            Table.B_STOCK_MARKET_ORDER.name,
+    def _ingest_gold_indices(self) -> None:
+        self._ingest_gold_table("indices")
+
+    def _helper_unified_transform(
+        self, df: pd.DataFrame, unified_layer_list: List[UnifiedLayer]
+    ) -> pd.DataFrame:
+        """
+        Apply unified-layer transforms to a single-stock (date-sorted) DataFrame.
+
+        Supported actions:
+          • EXTRACT_DATETIME_FEATURE — calendar, boundary-flag and cyclical
+            features derived from the date column.
+          • CREATE_TARGET — the supervised label (future return/direction/price).
+        """
+        df = df.copy()
+        for layer in unified_layer_list:
+            if layer.action == UnifiedAction.EXTRACT_DATETIME_FEATURE:
+                col = layer.params.get("column_name", "date")
+                dt = pd.to_datetime(df[col])
+
+                # Calendar basics
+                df["year"]          = dt.dt.year.astype("int32")
+                df["quarter"]       = dt.dt.quarter.astype("int32")
+                df["month"]         = dt.dt.month.astype("int32")
+                df["week_of_year"]  = dt.dt.isocalendar().week.astype("int32")
+                df["day_of_year"]   = dt.dt.day_of_year.astype("int32")
+                df["day"]           = dt.dt.day.astype("int32")
+                df["day_of_week"]   = dt.dt.day_of_week.astype("int32")  # 0=Mon … 6=Sun
+
+                # Boundary flags (bool → int for DB compatibility)
+                df["is_month_start"]   = dt.dt.is_month_start.astype("int32")
+                df["is_month_end"]     = dt.dt.is_month_end.astype("int32")
+                df["is_quarter_start"] = dt.dt.is_quarter_start.astype("int32")
+                df["is_quarter_end"]   = dt.dt.is_quarter_end.astype("int32")
+                df["is_year_start"]    = dt.dt.is_year_start.astype("int32")
+                df["is_year_end"]      = dt.dt.is_year_end.astype("int32")
+
+                # Cyclical encodings — let the model see that Dec→Jan and Fri→Mon wrap around
+                df["month_sin"]       = np.sin(2 * np.pi * dt.dt.month / 12)
+                df["month_cos"]       = np.cos(2 * np.pi * dt.dt.month / 12)
+                df["day_of_week_sin"] = np.sin(2 * np.pi * dt.dt.day_of_week / 7)
+                df["day_of_week_cos"] = np.cos(2 * np.pi * dt.dt.day_of_week / 7)
+                df["day_of_year_sin"] = np.sin(2 * np.pi * dt.dt.day_of_year / 365)
+                df["day_of_year_cos"] = np.cos(2 * np.pi * dt.dt.day_of_year / 365)
+
+            elif layer.action == UnifiedAction.CREATE_TARGET:
+                col = layer.params.get("column_name", "close")
+                horizon = int(layer.params.get("horizon", 1))
+                kind = layer.params.get("kind", "log_return")
+                name = layer.params.get("target_name", "target")
+
+                price = pd.to_numeric(df[col], errors="coerce")
+                future = price.shift(-horizon)  # look-ahead is the label, by design
+                if kind == "log_return":
+                    df[name] = np.log(future / price)
+                elif kind == "simple_return":
+                    df[name] = future / price - 1.0
+                elif kind == "pct_return":
+                    df[name] = (future / price - 1.0) * 100.0
+                elif kind == "direction":
+                    df[name] = (future > price).astype("float32")
+                    df.loc[future.isna(), name] = np.nan
+                elif kind == "price":
+                    df[name] = future
+                else:
+                    raise ValueError(f"Unknown CREATE_TARGET kind: '{kind}'")
+
+            elif layer.action == UnifiedAction.DROP_HIGH_NULL_COLUMNS:
+                threshold = float(layer.params.get("threshold", 0.5))
+                protect = set(layer.params.get("protect") or UNIFIED_PROTECTED_COLUMNS)
+                null_frac = df.isna().mean()
+                drop_cols = [
+                    c for c in df.columns
+                    if c not in protect and null_frac[c] > threshold
+                ]
+                if drop_cols:
+                    df = df.drop(columns=drop_cols)
+                self._logger.log_info(
+                    f"DROP_HIGH_NULL_COLUMNS: dropped {len(drop_cols)} columns "
+                    f"(> {threshold:.0%} null)"
+                )
+
+            elif layer.action == UnifiedAction.DROP_CONSTANT_COLUMNS:
+                protect = set(layer.params.get("protect") or UNIFIED_PROTECTED_COLUMNS)
+                drop_cols = [
+                    c for c in df.columns
+                    if c not in protect and df[c].nunique(dropna=True) <= 1
+                ]
+                if drop_cols:
+                    df = df.drop(columns=drop_cols)
+                self._logger.log_info(
+                    f"DROP_CONSTANT_COLUMNS: dropped {len(drop_cols)} columns "
+                    f"(<= 1 distinct value)"
+                )
+
+        return df
+
+    def _helper_macro_wide(self, table_name: str) -> pd.DataFrame:
+        """
+        Load a macro gold table and pivot its raw `value` to wide form, one
+        column per (exchange, ticker) series named `<table>_<exchange>_<ticker>`
+        (lowercased), indexed by date. Used to join macro context onto a stock's
+        date spine in the unified layer.
+        """
+        df = self._helper_select(
+            schema_name=GOLD_SCHEMA,
+            table_name=table_name,
+            columns=["exchange", "ticker", "date", "value"],
+        )
+        if df.empty:
+            self._logger.log_info(f"No gold {table_name} data found for unified join.")
+            return pd.DataFrame()
+
+        df["value"] = pd.to_numeric(df["value"], errors="coerce")
+
+        def _col(exchange: str, ticker: str) -> str:
+            raw = f"{table_name}_{exchange}_{ticker}".lower()
+            return re.sub(r"[^0-9a-z]+", "_", raw).strip("_")
+
+        df["series"] = [
+            _col(e, t) for e, t in zip(df["exchange"], df["ticker"])
         ]
-        output_table_list = [Table.S_STOCK_MARKET.name]
-
-        self._logger.log_info(
-            f'Start cleaning data from table(s) "{", ".join(input_table_list)}" '
-            f'to table(s) "{", ".join(output_table_list)}".'
+        wide = df.pivot_table(
+            index="date", columns="series", values="value", aggfunc="last"
         )
+        return wide
 
-        # Add logic for cleaning data here
-        self._select_database(DataQuality.BRONZE.value)
+    def _ingest_unified_stock(self, ticker: str) -> None:
+        """
+        Build a per-stock unified table `unified_schema.unified_<ticker>`:
+        the gold stock rows for `ticker` (the date spine) LEFT-joined with each
+        macro table's wide `value` columns, forward-filled onto the stock's
+        trading days (causal — each day carries the last published macro value).
+        """
+        self._logger.log_info(f"Ingesting unified data for '{ticker}'...")
 
-        join_model_list = [
-            JoinModel(
-                join_type=SqlJoinType.INNER_JOIN,
-                schema_left=Schema.STOCK_MARKET.value,
-                schema_right=Schema.STOCK_MARKET.value,
-                table_left=Table.B_STOCK_MARKET_PRICE.name,
-                table_right=Table.B_STOCK_MARKET_ORDER.name,
-                columns_left=Table.B_STOCK_MARKET_PRICE.primary_key,
-                columns_right=Table.B_STOCK_MARKET_ORDER.primary_key,
-            )
-        ]
-
-        stock_market_index_bronze_df = self._select(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.B_STOCK_MARKET_PRICE.name,
-            join_model_list=join_model_list,
-        )
-
-        silver_df = self._clean(
-            df=stock_market_index_bronze_df,
-            clean_layer_list=[
-                CleanLayer.REMOVE_DUPLICATE_COLUMNS(),
-                CleanLayer.ORDER_BY(
-                    [
-                        Table.S_STOCK_MARKET.Column.CODE.value,
-                        Table.S_STOCK_MARKET.Column.DATE.value,
-                    ]
-                ),
-            ],
-        )
-
-        self._select_database(DataQuality.SILVER.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.S_STOCK_MARKET.name,
-            primary_keys=Table.S_STOCK_MARKET.primary_key,
-            df=silver_df,
-        )
-
-        self._logger.log_info(
-            f'Finish cleaning data from table(s) "{", ".join(input_table_list)}" '
-            f'to table(s) "{", ".join(output_table_list)}".'
-        )
-
-    def _transform_stock_market_index(self) -> None:
-        input_table_list = [Table.S_STOCK_MARKET.name]
-        output_table_list = [Table.G_STOCK_MARKET.name]
-
-        self._logger.log_info(
-            f'Start transforming data from table(s) "{", ".join(input_table_list)}" '
-            f'to table(s) "{", ".join(output_table_list)}".'
-        )
-
-        # Add logic for transforming data here
-        self._select_database(DataQuality.SILVER.value)
-        silver_df = self._select(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.S_STOCK_MARKET.name,
-        )
-
-        gold_df = self._transform(
-            df=silver_df,
-            transform_layer_list=[
-                TransformLayer.EXTRACT_DATETIME_FEATURE(),
-            ],
-        )
-
-        self._select_database(DataQuality.GOLD.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.G_STOCK_MARKET.name,
-            primary_keys=Table.G_STOCK_MARKET.primary_key,
-            df=gold_df,
-        )
-
-        self._logger.log_info(
-            f'Finish transforming data from table(s) "{", ".join(input_table_list)}" '
-            f'to table(s) "{", ".join(output_table_list)}".'
-        )
-
-    def _process_stock_market_index(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(
-            f'Start processing stock market VN_INDEX data for "{data_quality.value}".'
-        )
-
-        match data_quality:
-            case DataQuality.BRONZE:
-                self._ingest_stock_market_index_price()
-                self._ingest_stock_market_index_order()
-
-            case DataQuality.SILVER:
-                self._clean_stock_market_index()
-
-            case DataQuality.GOLD:
-                self._transform_stock_market_index()
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
-
-        self._logger.log_info(
-            f'Finish processing stock market VN_INDEX data for "{data_quality.value}".'
-        )
-
-    # endregion STOCK_MARKET.VN_INDEX
-
-    # endregion STOCK_MARKET data process
-
-    # region ENTERPRISE data process
-
-    # region ENTERPRISE.STOCK_INFORMATION
-    def _ingest_enterprise_stock(self) -> None:
-        stock_list_sub_type_list = [
-            item for item in EnterpriseSubType if "list" in item.value.lower()
-        ]
-
-        # STOCK MARKET DATAFRAME
-        stock_market_df = self._select(
-            schema_name=Schema.STOCK_MARKET.value,
-            table_name=Table.MARKET.name,
-        )
-
-        market_code_to_id = {
-            row["code"].upper(): row["id"]
-            for row in stock_market_df.to_dict(orient="records")
-        }
-
-        enterprise_subtype_to_market_id_map = {
-            EnterpriseSubType.STOCK_LIST_HOSE.value: market_code_to_id.get("HSX"),
-            EnterpriseSubType.STOCK_LIST_HNX.value: market_code_to_id.get("HNX"),
-            EnterpriseSubType.STOCK_LIST_UPCOM.value: market_code_to_id.get("UPCOM"),
-        }
-
-        for stock_list_sub_type in stock_list_sub_type_list:
-
-            key = (
-                ScrapeMainType.ENTERPRISE,
-                stock_list_sub_type,
-            )
-
-            folder_path = f"{SCRAPER_RAW_DATA_DIR}/{key[0].value}/{key[1].value}"
-
-            file_path = get_newest_file_path(
-                folder_path=folder_path,
-                extension=FileExtension.CSV,
-            )
-
-            if not file_path:
-                self._logger.log_error(f'Data in "{folder_path}" does not exist.')
-                continue
-
-            file_paths = [file_path]
-
-            self._logger.log_info(
-                f'Start ingesting {len(file_paths)} file(s) from "{folder_path}" to "{stock_list_sub_type.value.lower()}".'
-            )
-
-            # STOCK LIST DATAFRAME
-            # Current data from DB
-            current_stock_list_df = self._select(
-                schema_name=Schema.ENTERPRISE.value,
-                table_name=Table.B_STOCK.name,
-            )
-
-            df = pd.read_csv(file_path)
-
-            df["market_id"] = enterprise_subtype_to_market_id_map.get(
-                stock_list_sub_type.value
-            )
-
-            df = df[
-                [Table.B_STOCK.Column.CODE.value, Table.B_STOCK.Column.MARKET_ID.value]
-            ]
-
-            self._save_pandas_table_to_database(
-                schema_name=Schema.ENTERPRISE.value,
-                table_name=Table.B_STOCK.name,
-                primary_keys=Table.B_STOCK.primary_key,
-                df=df,
-            )
-
-            self._logger.log_info(
-                f'Finish ingesting {len(file_paths)} file(s) from "{folder_path}" to "{stock_list_sub_type.value.lower()}".'
-            )
-
-    def _process_enterprise_stock(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(
-            f'Start processing enterprise STOCK data for "{data_quality.value}".'
-        )
-
-        match data_quality:
-            case DataQuality.BRONZE:
-                self._ingest_enterprise_stock()
-
-            case DataQuality.SILVER:
-                pass
-
-            case DataQuality.GOLD:
-                pass
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
-
-        self._logger.log_info(
-            f'Finish processing enterprise STOCK data for "{data_quality.value}".'
-        )
-
-    # endregion ENTERPRISE.STOCK_INFORMATION
-
-    # region ENTERPRISE.DAILY_PRICE
-    def _prepare_code_data(self, code: str) -> list | None:
-        price_folder = (
-            f"{SCRAPER_RAW_DATA_DIR}"
-            f"/{get_value(ScrapeMainType.ENTERPRISE)}/{get_value(f'{code}_price')}"
-        )
-        order_folder = (
-            f"{SCRAPER_RAW_DATA_DIR}"
-            f"/{get_value(ScrapeMainType.ENTERPRISE)}/{get_value(f'{code}_order')}"
-        )
-
-        price_result = self._build_price_df(price_folder)
-        order_result = self._build_order_df(order_folder)
-
-        if price_result is None or order_result is None:
-            self._logger.log_warning(f'No data found for code "{code}". Skipping.')
-            return None
-
-        price_df, price_file_paths = price_result
-        order_df, order_file_paths = order_result
-
-        price_df = self._remove_duplicates(
-            price_df,
-            Table.B_ENTERPRISE_PRICE.primary_key,
-            filters={Table.B_ENTERPRISE_PRICE.Column.MATCHING_VOLUME.value: (">", 0)},
-        )
-
-        # Return a 2-element list → Task.run() maps [0] → callback[0],
-        #                                              [1] → callback[1]
-        return [
-            DataPreprocessor._SaveBundle(
-                df=price_df,
-                file_paths=price_file_paths,
-                folder=price_folder,
-                code=code,
-                schema_name=Schema.ENTERPRISE.value,
-                table_name=Table.B_ENTERPRISE_PRICE.name,
-                primary_keys=Table.B_ENTERPRISE_PRICE.primary_key,
-            ),
-            DataPreprocessor._SaveBundle(
-                df=order_df,
-                file_paths=order_file_paths,
-                folder=order_folder,
-                code=code,
-                schema_name=Schema.ENTERPRISE.value,
-                table_name=Table.B_ENTERPRISE_ORDER.name,
-                primary_keys=Table.B_ENTERPRISE_ORDER.primary_key,
-            ),
-        ]
-
-    # ──────────────────────────────────────────────────────────────────────
-    # Callbacks: save one bundle to the database
-    # Both follow the same signature required by Task.run():
-    #   cb(value, *extra_args, **extra_kwargs)
-    # ──────────────────────────────────────────────────────────────────────
-
-    def _save_price_bundle(self, bundle) -> None:
-        """Callback that saves the price DataFrame bundle."""
-        if bundle is None:
-            return  # parent returned None — nothing to do
-
-        self._logger.log_info(
-            f"Start ingesting {len(bundle.file_paths)} price file(s) "
-            f'from "{bundle.folder}" to "{bundle.code}".'
-        )
-        self._save_pandas_table_to_database(
-            schema_name=bundle.schema_name,
-            table_name=bundle.table_name,
-            primary_keys=bundle.primary_keys,
-            df=bundle.df,
-        )
-        self._logger.log_info(
-            f"Finish ingesting {len(bundle.file_paths)} price file(s) "
-            f'from "{bundle.folder}" to "{bundle.code}".'
-        )
-
-    def _save_order_bundle(self, bundle) -> None:
-        """Callback that saves the order DataFrame bundle."""
-        if bundle is None:
-            return  # parent returned None — nothing to do
-
-        self._logger.log_info(
-            f"Start ingesting {len(bundle.file_paths)} order file(s) "
-            f'from "{bundle.folder}" to "{bundle.code}".'
-        )
-        self._save_pandas_table_to_database(
-            schema_name=bundle.schema_name,
-            table_name=bundle.table_name,
-            primary_keys=bundle.primary_keys,
-            df=bundle.df,
-        )
-        self._logger.log_info(
-            f"Finish ingesting {len(bundle.file_paths)} order file(s) "
-            f'from "{bundle.folder}" to "{bundle.code}".'
-        )
-
-    # ──────────────────────────────────────────────────────────────────────
-    # Orchestrator: register all per-code tasks, then execute
-    # ──────────────────────────────────────────────────────────────────────
-
-    def _ingest_enterprise_daily_price(self) -> None:
-        available_stock_df = self._select(
-            schema_name=Schema.ENTERPRISE.value,
-            table_name=Table.B_STOCK.name,
+        spine = self._helper_select(
+            schema_name=GOLD_SCHEMA,
+            table_name="stocks",
             conditions=[
                 Condition(
-                    column=Table.B_STOCK.Column.DELETE_DATE.value,
-                    operator=SqlOperator.IS,
-                    value=None,
-                    data_type=DataType,
+                    column="ticker",
+                    operator=SqlOperator.EQUAL_TO,
+                    value=ticker,
+                    data_type=DataType.VARCHAR(),
                 )
             ],
+            order_by=["date"],
         )
+        if spine.empty:
+            self._logger.log_info(f"No gold stocks data found for ticker '{ticker}'.")
+            return
 
-        codes = available_stock_df[Table.B_STOCK.Column.CODE.value].str.lower().tolist()
+        spine["date"] = pd.to_datetime(spine["date"])
+        spine = spine.sort_values("date").reset_index(drop=True)
 
-        self._thread_manager.remove_all_tasks()
-
-        for code in codes:
-            # _prepare_code_data returns [price_bundle, order_bundle].
-            # Task.run() detects len(result) == len(callbacks) == 2 and
-            # dispatches price_bundle → _save_price_bundle,
-            #             order_bundle → _save_order_bundle,
-            # both running concurrently in Task's internal callback pool.
-            self._thread_manager.add_task(
-                Task(
-                    name=f"ingest_{code}",
-                    func=self._prepare_code_data,
-                    code=code,
-                    callbacks=[
-                        (self._save_price_bundle, (), {}),
-                        (self._save_order_bundle, (), {}),
-                    ],
-                )
+        macro_cols: List[str] = []
+        for macro_table in UNIFIED_MACRO_TABLES:
+            wide = self._helper_macro_wide(macro_table)
+            if wide.empty:
+                continue
+            wide.index = pd.to_datetime(wide.index)
+            wide = wide.sort_index()
+            spine = spine.merge(
+                wide, how="left", left_on="date", right_index=True
             )
+            macro_cols.extend(list(wide.columns))
 
-        self._logger.log_info(
-            f"Registered {len(codes)} ingestion task(s). Starting execution."
-        )
+        # Forward-fill macro context onto every trading day (no look-ahead).
+        if macro_cols:
+            spine[macro_cols] = spine[macro_cols].ffill()
 
-        successful, failed = self._thread_manager.execute()
-
-        if failed:
-            self._logger.log_warning(
-                f"{len(failed)}/{len(codes)} code(s) failed: "
-                + ", ".join(name for name, _ in failed)
-            )
-        else:
-            self._logger.log_info(f"All {len(codes)} code(s) ingested successfully.")
-
-    def _clean_enterprise_daily_price(self) -> None:
-        input_table_list = [
-            Table.B_ENTERPRISE_PRICE.name,
-            Table.B_ENTERPRISE_ORDER.name,
-        ]
-        output_table_list = [Table.S_ENTERPRISE.name]
-
-        self._logger.log_info(
-            f'Start cleaning data from table(s) "{", ".join(input_table_list)}" '
-            f'to table(s) "{", ".join(output_table_list)}".'
-        )
-
-        # Add logic for cleaning data here
-        self._select_database(DataQuality.BRONZE.value)
-
-        join_model_list = [
-            JoinModel(
-                join_type=SqlJoinType.INNER_JOIN,
-                schema_left=Schema.ENTERPRISE.value,
-                schema_right=Schema.ENTERPRISE.value,
-                table_left=Table.B_ENTERPRISE_PRICE.name,
-                table_right=Table.B_ENTERPRISE_ORDER.name,
-                columns_left=Table.B_ENTERPRISE_PRICE.primary_key,
-                columns_right=Table.B_ENTERPRISE_ORDER.primary_key,
-            )
-        ]
-
-        enterprise_bronze_df = self._select(
-            schema_name=Schema.ENTERPRISE.value,
-            table_name=Table.B_ENTERPRISE_PRICE.name,
-            join_model_list=join_model_list,
-        )
-
-        silver_df = self._clean(
-            df=enterprise_bronze_df,
-            clean_layer_list=[
-                CleanLayer.REMOVE_DUPLICATE_COLUMNS(),
-                CleanLayer.ORDER_BY(
-                    [
-                        Table.S_ENTERPRISE.Column.CODE.value,
-                        Table.S_ENTERPRISE.Column.DATE.value,
-                    ]
+        # Datetime features, the supervised target (future pct return), then
+        # column cleaning (drop sparse and constant columns).
+        spine = self._helper_unified_transform(
+            spine,
+            [
+                UnifiedLayer.EXTRACT_DATETIME_FEATURE(column_name="date"),
+                UnifiedLayer.CREATE_TARGET(
+                    column_name="close",
+                    horizon=UNIFIED_TARGET_HORIZON,
+                    kind="pct_return",
+                    target_name="target",
                 ),
+                UnifiedLayer.DROP_HIGH_NULL_COLUMNS(threshold=0.5),
+                UnifiedLayer.DROP_CONSTANT_COLUMNS(),
             ],
         )
 
-        self._select_database(DataQuality.SILVER.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.ENTERPRISE.value,
-            table_name=Table.S_ENTERPRISE.name,
-            primary_keys=Table.S_ENTERPRISE.primary_key,
-            df=silver_df,
+        spine["date"] = spine["date"].dt.date
+
+        table_name = f"unified_{ticker}".lower()
+        overrides: dict[str, str] = {"date": DataType.DATE()}
+        for col in spine.columns:
+            if str(spine[col].dtype).lower().startswith("float"):
+                overrides[col] = "REAL"
+
+        self._helper_save_pandas_table_to_database(
+            schema_name=UNIFIED_SCHEMA,
+            table_name=table_name,
+            primary_keys=["date"],
+            df=spine,
+            dtype_overrides=overrides,
+            use_copy=True,
         )
 
-        self._logger.log_info(
-            f'Finish cleaning data from table(s) "{", ".join(input_table_list)}" '
-            f'to table(s) "{", ".join(output_table_list)}".'
-        )
-
-    def _transform_enterprise_daily_price(self) -> None:
-        input_table_list = [Table.S_ENTERPRISE.name]
-        output_table_list = [Table.G_ENTERPRISE.name]
-
-        self._logger.log_info(
-            f'Start transforming data from table(s) "{", ".join(input_table_list)}" '
-            f'to table(s) "{", ".join(output_table_list)}".'
-        )
-
-        # Add logic for transforming data here
-        self._select_database(DataQuality.SILVER.value)
-        silver_df = self._select(
-            schema_name=Schema.ENTERPRISE.value,
-            table_name=Table.S_ENTERPRISE.name,
-        )
-
-        gold_df = self._transform(
-            df=silver_df,
-            transform_layer_list=[
-                TransformLayer.EXTRACT_DATETIME_FEATURE(),
-            ],
-        )
-
-        self._select_database(DataQuality.GOLD.value)
-        self._save_pandas_table_to_database(
-            schema_name=Schema.ENTERPRISE.value,
-            table_name=Table.G_ENTERPRISE.name,
-            primary_keys=Table.G_ENTERPRISE.primary_key,
-            df=gold_df,
-        )
-
-        self._logger.log_info(
-            f'Finish transforming data from table(s) "{", ".join(input_table_list)}" '
-            f'to table(s) "{", ".join(output_table_list)}".'
-        )
-
-    def _process_enterprise_daily_price(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(
-            f'Start processing enterprise DAILY PRICE data for "{data_quality.value}".'
-        )
-
-        match data_quality:
-            case DataQuality.BRONZE:
-                self._ingest_enterprise_daily_price()
-
-            case DataQuality.SILVER:
-                self._clean_enterprise_daily_price()
-
-            case DataQuality.GOLD:
-                self._transform_enterprise_daily_price()
-
-            case _:
-                raise ValueError(f'Invalid data quality: "{data_quality.value}"')
-
-        self._logger.log_info(
-            f'Finish processing enterprise DAILY PRICE data for "{data_quality.value}".'
-        )
-
-    # endregion ENTERPRISE.DAILY_PRICE
-
-    # endregion ENTERPRISE data process
-
-    def _process_data(self, data_quality: DataQuality) -> None:
-        self._logger.log_info(f'Start processing data for "{data_quality.value}".')
-
-        # Macroeconomics
-        # self._process_macroeconomics_gdp(data_quality)
-        # self._process_macroeconomics_cpi(data_quality)
-        # self._process_macroeconomics_ppi(data_quality)
-        # self._process_macroeconomics_ipi(data_quality)
-        # self._process_macroeconomics_xpi(data_quality)
-        # self._process_macroeconomics_mpi(data_quality)
-        # self._process_macroeconomics_population(data_quality)
-        # self._process_macroeconomics_labor(data_quality)
-        # self._process_macroeconomics_retail(data_quality)
-        # self._process_macroeconomics_pmi(data_quality)
-        # self._process_macroeconomics_iip(data_quality)
-        # self._process_macroeconomics_ipv(data_quality)
-        # self._process_macroeconomics_mip(data_quality)
-        # self._process_macroeconomics_fa_by_house_types(data_quality)
-        # self._process_macroeconomics_it_bop(data_quality)
-        # self._process_macroeconomics_tsbr(data_quality)
-        # self._process_macroeconomics_tsbe(data_quality)
-        # self._process_macroeconomics_gd(data_quality)
-        # self._process_macroeconomics_brd(data_quality)
-        # self._process_macroeconomics_iisd(data_quality)
-        # self._process_macroeconomics_treg(data_quality)
-        # self._process_macroeconomics_credit(data_quality)
-        # self._process_macroeconomics_mobilization(data_quality)
-        # self._process_macroeconomics_exchange_rate(data_quality)
-        # self._process_macroeconomics_iir(data_quality)
-        # self._process_macroeconomics_rrrr(data_quality)
-        # self._process_macroeconomics_fdi_sector(data_quality)
-        # self._process_macroeconomics_fdi_rd(data_quality)
-        # self._process_macroeconomics_export(data_quality)
-        # self._process_macroeconomics_import(data_quality)
-        # self._process_macroeconomics_gold_price(data_quality)
-        # self._process_macroeconomics_oil_price(data_quality)
-        # self._process_macroeconomics_dow_jones(data_quality)
-        # self._process_macroeconomics_nyse_composite(data_quality)
-        # self._process_macroeconomics_snp_500(data_quality)
-        # self._process_macroeconomics_nasdaq_composite(data_quality)
-        # self._process_macroeconomics_nasdaq_100(data_quality)
-
-        # # Stock market
-        # self._process_stock_market_market(data_quality)
-        # self._process_stock_market_index(data_quality)
-
-        # # Enterprise
-        # self._process_enterprise_stock(data_quality)
-        self._process_enterprise_daily_price(data_quality)
-
-        self._logger.log_info(f'Finish processing data for "{data_quality.value}".')
+    # endregion Helper functions
 
     def ingest_bronze_data(self) -> None:
 
         if self._switch_handler.is_enabled("data_preprocessor", "data_quality_bronze"):
             try:
-                self._connect_to_database(DataQuality.BRONZE)
-                self._create_schemas(DataQuality.BRONZE)
-                self._process_data(DataQuality.BRONZE)
+                connection_model = PostgreSQLConnectionDto(
+                    logger=self._logger,
+                    host=os.getenv("POSTGRES_HOST"),
+                    user=os.getenv("POSTGRES_USER"),
+                    password=os.getenv("POSTGRES_PASSWORD"),
+                    port=os.getenv("POSTGRES_PORT"),
+                    database="postgres",
+                )
+                self._database_driver.connect(connection_model)
+
+                self._database_driver.create_database(DATABASE_MAIN_V2)
+
+                self._database_driver.create_schema(BRONZE_SCHEMA)
+
+                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_bronze", "bonds"):
+                    self._ingest_bronze_bonds()
+                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_bronze", "economy"):
+                    self._ingest_bronze_economy()
+                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_bronze", "forex"):
+                    self._ingest_bronze_forex()
+                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_bronze", "funds"):
+                    self._ingest_bronze_funds()
+                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_bronze", "indices"):
+                    self._ingest_bronze_indices()
+                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_bronze", "stocks"):
+                    self._ingest_bronze_stocks()
 
             except Exception as e:
                 self._logger.log_error(
@@ -6839,9 +1500,32 @@ class DataPreprocessor:
 
         if self._switch_handler.is_enabled("data_preprocessor", "data_quality_silver"):
             try:
-                self._connect_to_database(DataQuality.SILVER)
-                self._create_schemas(DataQuality.SILVER)
-                self._process_data(DataQuality.SILVER)
+                connection_model = PostgreSQLConnectionDto(
+                    logger=self._logger,
+                    host=os.getenv("POSTGRES_HOST"),
+                    user=os.getenv("POSTGRES_USER"),
+                    password=os.getenv("POSTGRES_PASSWORD"),
+                    port=os.getenv("POSTGRES_PORT"),
+                    database="postgres",
+                )
+                self._database_driver.connect(connection_model)
+
+                self._database_driver.create_database(DATABASE_MAIN_V2)
+
+                self._database_driver.create_schema(SILVER_SCHEMA)
+
+                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_silver", "bonds"):
+                    self._ingest_silver_bonds()
+                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_silver", "economy"):
+                    self._ingest_silver_economy()
+                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_silver", "forex"):
+                    self._ingest_silver_forex()
+                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_silver", "funds"):
+                    self._ingest_silver_funds()
+                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_silver", "indices"):
+                    self._ingest_silver_indices()
+                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_silver", "stocks"):
+                    self._ingest_silver_stocks()
 
             except Exception as e:
                 self._logger.log_error(
@@ -6855,14 +1539,64 @@ class DataPreprocessor:
 
         if self._switch_handler.is_enabled("data_preprocessor", "data_quality_gold"):
             try:
-                self._connect_to_database(DataQuality.GOLD)
-                self._create_schemas(DataQuality.GOLD)
-                self._process_data(DataQuality.GOLD)
+                connection_model = PostgreSQLConnectionDto(
+                    logger=self._logger,
+                    host=os.getenv("POSTGRES_HOST"),
+                    user=os.getenv("POSTGRES_USER"),
+                    password=os.getenv("POSTGRES_PASSWORD"),
+                    port=os.getenv("POSTGRES_PORT"),
+                    database="postgres",
+                )
+                self._database_driver.connect(connection_model)
+
+                self._database_driver.create_database(DATABASE_MAIN_V2)
+
+                self._database_driver.create_schema(GOLD_SCHEMA)
+
+                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_gold", "bonds"):
+                    self._ingest_gold_bonds()
+                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_gold", "economy"):
+                    self._ingest_gold_economy()
+                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_gold", "forex"):
+                    self._ingest_gold_forex()
+                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_gold", "funds"):
+                    self._ingest_gold_funds()
+                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_gold", "indices"):
+                    self._ingest_gold_indices()
+                if self._switch_handler.is_enabled("data_preprocessor", "data_quality_gold", "stocks"):
+                    self._ingest_gold_stocks()
 
             except Exception as e:
                 self._logger.log_error(
                     f"Error preprocessing `{DataQuality.GOLD.value}` data: {e}"
                 )
+
+            finally:
+                self._database_driver.disconnect()
+
+    def ingest_unified_data(self) -> None:
+
+        if self._switch_handler.is_enabled("data_preprocessor", "data_quality_unified"):
+            try:
+                connection_model = PostgreSQLConnectionDto(
+                    logger=self._logger,
+                    host=os.getenv("POSTGRES_HOST"),
+                    user=os.getenv("POSTGRES_USER"),
+                    password=os.getenv("POSTGRES_PASSWORD"),
+                    port=os.getenv("POSTGRES_PORT"),
+                    database="postgres",
+                )
+                self._database_driver.connect(connection_model)
+
+                self._database_driver.create_database(DATABASE_MAIN_V2)
+
+                self._database_driver.create_schema(UNIFIED_SCHEMA)
+
+                for ticker in UNIFIED_TICKERS:
+                    self._ingest_unified_stock(ticker)
+
+            except Exception as e:
+                self._logger.log_error(f"Error preprocessing `unified` data: {e}")
 
             finally:
                 self._database_driver.disconnect()
