@@ -1398,7 +1398,7 @@ class DataPreprocessor:
 
         return df
 
-    def _helper_macro_wide(self, table_name: str) -> pd.DataFrame:
+    def _helper_macro_wide(self, table_name: str, ticker_include: set[str] | None = None) -> pd.DataFrame:
         """
         Load a macro gold table and pivot its price column to wide form, one
         column per (exchange, ticker) series named `<table>_<exchange>_<ticker>`
@@ -1433,6 +1433,11 @@ class DataPreprocessor:
         if df.empty:
             self._logger.log_info(f"No gold {table_name} data found for unified join.")
             return pd.DataFrame()
+
+        if ticker_include is not None:
+            df = df[df["ticker"].isin(ticker_include)]
+            if df.empty:
+                return pd.DataFrame()
 
         df[price_col] = pd.to_numeric(df[price_col], errors="coerce")
 
@@ -1475,9 +1480,43 @@ class DataPreprocessor:
         spine["date"] = pd.to_datetime(spine["date"])
         spine = spine.sort_values("date").reset_index(drop=True)
 
+        # Resolve same-sector peer tickers from bronze (excludes self) so the
+        # stocks macro join is scoped to sector peers rather than all 621 stocks.
+        exchange = spine["exchange"].iloc[0]
+        symbol = f"{exchange}:{ticker}"
+        peer_tickers: set[str] = set()
+        sector_result = self._helper_select(
+            schema_name=BRONZE_SCHEMA,
+            table_name="stocks",
+            columns=["sector"],
+            conditions=[
+                Condition(
+                    column="symbol",
+                    operator=SqlOperator.EQUAL_TO,
+                    value=symbol,
+                    data_type=DataType.VARCHAR(),
+                )
+            ],
+            limit=1,
+        )
+        if not sector_result.empty:
+            ticker_sector = sector_result["sector"].iloc[0]
+            with self._database_driver._cursor_ctx() as cur:
+                cur.execute(
+                    "SELECT DISTINCT symbol FROM bronze_schema.stocks WHERE sector = %s AND symbol != %s",
+                    (ticker_sector, symbol),
+                )
+                peer_tickers = {row[0].split(":")[-1] for row in cur.fetchall()}
+            self._logger.log_info(
+                f"'{ticker}' sector='{ticker_sector}', {len(peer_tickers)} peer tickers for stocks macro join."
+            )
+
         macro_cols: List[str] = []
         for macro_table in UNIFIED_MACRO_TABLES:
-            wide = self._helper_macro_wide(macro_table)
+            wide = self._helper_macro_wide(
+                macro_table,
+                ticker_include=peer_tickers if macro_table == "stocks" else None,
+            )
             if wide.empty:
                 continue
             wide.index = pd.to_datetime(wide.index)
