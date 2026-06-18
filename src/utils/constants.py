@@ -116,14 +116,41 @@ UNIFIED_SCHEMA = "unified_schema"
 # Stocks (by ticker) to build a per-stock unified table for (unified_<ticker>).
 # VN30 index constituents (HOSE).
 UNIFIED_TICKERS: list = [
-    "ACB", "BCM", "BID", "BVH", "CTG", "FPT", "GAS", "GVR", "HDB", "HPG",
-    "MBB", "MSN", "MWG", "PLX", "POW", "SAB", "SHB", "SSB", "SSI", "STB",
-    "TCB", "TPB", "VCB", "VHM", "VIB", "VIC", "VJC", "VNM", "VPB", "VRE",
+    "ACB",
+    "BCM",
+    "BID",
+    "BVH",
+    "CTG",
+    "FPT",
+    "GAS",
+    "GVR",
+    "HDB",
+    "HPG",
+    "MBB",
+    "MSN",
+    "MWG",
+    "PLX",
+    "POW",
+    "SAB",
+    "SHB",
+    "SSB",
+    "SSI",
+    "STB",
+    "TCB",
+    "TPB",
+    "VCB",
+    "VHM",
+    "VIB",
+    "VIC",
+    "VJC",
+    "VNM",
+    "VPB",
+    "VRE",
 ]
 
 # Macro gold tables joined into each unified table (raw `value`, forward-filled
 # onto the stock's trading-day date spine).
-UNIFIED_MACRO_TABLES: list = ["economy", "bonds"]
+UNIFIED_MACRO_TABLES: list = ["economy", "bonds", "indices", "stocks"]
 
 # Supervised target: percentage simple return of `close` this many trading days
 # into the future, e.g. close=100 today and 120 in UNIFIED_TARGET_HORIZON days -> target=20.
