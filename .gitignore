@@ -1,6 +1,10 @@
 
 *.pyc
 
+test.py
+
+raw_data/
+
 bronze_data/
 
 silver_data/
@@ -21,7 +25,6 @@ wandb/
 !experiment_history.csv
 
 *.txt
-
 
 src/model/lstm/checkpoints/
 

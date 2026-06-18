@@ -1219,11 +1219,17 @@ class WebScraper:
 
     def _scrape_data_trading_view_link_attempt(self, row: dict) -> None:
         scrape_main_type = row.get("scrape_main_type", "")
-        sub_type_name_1 = row.get("sub_type_name_1", "")
-        sub_type_value_1 = row.get("sub_type_value_1", "")
-        sub_type_name_2 = row.get("sub_type_name_2", "")
-        sub_type_value_2 = row.get("sub_type_value_2", "")
         url = row.get("url", "")
+
+        # Sub-type (name, value) pairs mirror the links CSV schema, e.g.
+        # (country, vietnam) / (stock_type, common_stock) / (sector, finance).
+        # Every populated pair becomes both a folder level under raw_data/data/
+        # and a metadata column in the output CSV — so the data tree mirrors
+        # the links tree regardless of how many sub-dimensions an asset has.
+        sub_type_pairs = [
+            (row.get(f"sub_type_name_{i}", ""), row.get(f"sub_type_value_{i}", ""))
+            for i in (1, 2, 3)
+        ]
 
         symbol = url.split("symbol=")[-1] if "symbol=" in url else url
         symbol_safe = symbol.replace(":", "_")
@@ -1245,10 +1251,7 @@ class WebScraper:
             try:
                 # Mirror the links folder structure under raw_data/data/
                 folder_parts = [SCRAPER_RAW_DATA_DIR, "data", scrape_main_type]
-                if sub_type_value_1:
-                    folder_parts.append(sub_type_value_1)
-                if sub_type_name_2 and sub_type_value_2:
-                    folder_parts.append(sub_type_value_2)
+                folder_parts += [value for _, value in sub_type_pairs if value]
                 folder_path = "/".join(folder_parts)
                 os.makedirs(folder_path, exist_ok=True)
 
@@ -1460,12 +1463,9 @@ class WebScraper:
                     f"Fetched {len(records)} records, isOHLC: {is_ohlc}."
                 )
 
-                # Build header: scrape_main_type, [sub_type_name_1], [sub_type_name_2], symbol, date, value cols
+                # Build header: scrape_main_type, <named sub-types…>, symbol, date, value cols
                 header = ["scrape_main_type"]
-                if sub_type_name_1:
-                    header.append(sub_type_name_1)
-                if sub_type_name_2:
-                    header.append(sub_type_name_2)
+                header += [name for name, _ in sub_type_pairs if name]
                 header.append("symbol")
                 header.append("date")
                 if is_ohlc:
@@ -1473,12 +1473,9 @@ class WebScraper:
                 else:
                     header.append("value")
 
-                # Metadata prefix prepended to every data row
+                # Metadata prefix prepended to every data row (aligned with header)
                 meta = [scrape_main_type]
-                if sub_type_name_1:
-                    meta.append(sub_type_value_1)
-                if sub_type_name_2:
-                    meta.append(sub_type_value_2)
+                meta += [value for name, value in sub_type_pairs if name]
                 meta.append(symbol)
 
                 with open(file_path, "w", newline="", encoding="utf-8") as f:
