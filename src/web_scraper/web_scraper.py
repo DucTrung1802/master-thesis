@@ -465,7 +465,7 @@ class WebScraper:
         Folder / file paths are derived automatically from *key*.
         Raises the last exception if all attempts are exhausted.
         """
-        folder_path = f"{SCRAPER_RAW_DATA_DIR}/{format_key_for_path(key)}"
+        folder_path = f"{TRADING_VIEW_RAW_DATA_DIR}/{format_key_for_path(key)}"
         file_path = f"{folder_path}/trading_view_links_{datetime.now().strftime('%Y-%m-%d')}.csv"
         key_name = format_key_for_name(key)
 
@@ -1070,8 +1070,8 @@ class WebScraper:
     def aggregate_trading_view_links(self) -> None:
         self._logger.log_info("Aggregating Trading View link CSV files.")
 
-        links_dir = f"{SCRAPER_RAW_DATA_DIR}/links"
-        output_dir = f"{SCRAPER_RAW_DATA_DIR}/collected_links"
+        links_dir = f"{TRADING_VIEW_RAW_DATA_DIR}/links"
+        output_dir = f"{TRADING_VIEW_RAW_DATA_DIR}/collected_links"
 
         # Collect all CSV files recursively
         csv_files = []
@@ -1158,7 +1158,7 @@ class WebScraper:
 
         Maps each enabled switch path to the corresponding links CSV directory
         by stripping the 'web_scraper/trading_view/data' prefix and prepending
-        SCRAPER_RAW_DATA_DIR/links, which works regardless of directory depth
+        TRADING_VIEW_RAW_DATA_DIR/links, which works regardless of directory depth
         (forex has 2 sub-parts, bonds 3, stocks 4, etc.).
         """
         added = 0
@@ -1167,7 +1167,7 @@ class WebScraper:
         ):
             # parts[3:] = [asset_type, sub1, ..., subN] — mirrors the links dir layout
             sub_parts = path.split("/")[3:]
-            links_dir = os.path.join(SCRAPER_RAW_DATA_DIR, "links", *sub_parts)
+            links_dir = os.path.join(TRADING_VIEW_RAW_DATA_DIR, "links", *sub_parts)
             if not os.path.isdir(links_dir):
                 self._logger.log_warning(f"Links directory not found: {links_dir}")
                 continue
@@ -1265,7 +1265,7 @@ class WebScraper:
 
         # Sub-type (name, value) pairs mirror the links CSV schema, e.g.
         # (country, vietnam) / (stock_type, common_stock) / (sector, finance).
-        # Every populated pair becomes both a folder level under raw_data/data/
+        # Every populated pair becomes both a folder level under raw_data/trading_view/data/
         # and a metadata column in the output CSV — so the data tree mirrors
         # the links tree regardless of how many sub-dimensions an asset has.
         sub_type_pairs = [
@@ -1291,8 +1291,8 @@ class WebScraper:
             )
 
             try:
-                # Mirror the links folder structure under raw_data/data/
-                folder_parts = [SCRAPER_RAW_DATA_DIR, "data", scrape_main_type]
+                # Mirror the links folder structure under raw_data/trading_view/data/
+                folder_parts = [TRADING_VIEW_RAW_DATA_DIR, "data", scrape_main_type]
                 folder_parts += [value for _, value in sub_type_pairs if value]
                 folder_path = "/".join(folder_parts)
                 os.makedirs(folder_path, exist_ok=True)
