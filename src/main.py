@@ -1,7 +1,7 @@
 # src\main.py
 
 from logger.logger import LogType, Logger
-from web_scraper.web_scraper import WebScraper
+from web_scraper.trading_view_scraper import TradingViewScraper
 from data_preprocessor.data_preprocessor import DataPreprocessor
 from data_postprocessor.data_postprocessor import DataPostprocessor, MarketIndexConfig
 from utils.switch_handler import SwitchHandler
@@ -16,10 +16,10 @@ def main():
 
     my_switch_handler = SwitchHandler(logger=my_logger)
 
-    my_web_scraper = WebScraper(
+    my_web_scraper = TradingViewScraper(
         logger=my_logger, switch_handler=my_switch_handler, power=100
     )
-    my_web_scraper.start_scraping()
+    my_web_scraper.scrape()
 
     my_data_preprocessor = DataPreprocessor(
         logger=my_logger,

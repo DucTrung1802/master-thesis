@@ -19,7 +19,7 @@ from dtos.tabular_database_driver_dtos.tabular_database_driver_dtos import *
 from tabular_database_driver.postgre_sql_driver import PostgreSQLDriver
 from thread_manager.thread_manager import ThreadManager
 from utils.constants import (
-    SCRAPER_RAW_DATA_DIR,
+    TRADING_VIEW_RAW_DATA_DIR,
     DATABASE_MAIN_V2,
     BRONZE_SCHEMA,
     SILVER_SCHEMA,
@@ -636,7 +636,7 @@ class DataPreprocessor:
     def _ingest_bronze_economy(self) -> None:
         self._logger.log_info("Ingesting bronze economy data...")
 
-        economy_dir = os.path.join(SCRAPER_RAW_DATA_DIR, "data", "economy")
+        economy_dir = os.path.join(TRADING_VIEW_RAW_DATA_DIR, "data", "economy")
         csv_files = glob(os.path.join(economy_dir, "**", "*.csv"), recursive=True)
 
         if not csv_files:
@@ -683,7 +683,7 @@ class DataPreprocessor:
     def _ingest_bronze_forex(self) -> None:
         self._logger.log_info("Ingesting bronze forex data...")
 
-        forex_dir = os.path.join(SCRAPER_RAW_DATA_DIR, "data", "forex")
+        forex_dir = os.path.join(TRADING_VIEW_RAW_DATA_DIR, "data", "forex")
         csv_files = glob(os.path.join(forex_dir, "**", "*.csv"), recursive=True)
 
         if not csv_files:
@@ -730,7 +730,7 @@ class DataPreprocessor:
     def _ingest_bronze_funds(self) -> None:
         self._logger.log_info("Ingesting bronze funds data...")
 
-        funds_dir = os.path.join(SCRAPER_RAW_DATA_DIR, "data", "funds")
+        funds_dir = os.path.join(TRADING_VIEW_RAW_DATA_DIR, "data", "funds")
         csv_files = glob(os.path.join(funds_dir, "**", "*.csv"), recursive=True)
 
         if not csv_files:
@@ -781,7 +781,7 @@ class DataPreprocessor:
     def _ingest_bronze_indices(self) -> None:
         self._logger.log_info("Ingesting bronze indices data...")
 
-        indices_dir = os.path.join(SCRAPER_RAW_DATA_DIR, "data", "indices")
+        indices_dir = os.path.join(TRADING_VIEW_RAW_DATA_DIR, "data", "indices")
         csv_files = glob(os.path.join(indices_dir, "**", "*.csv"), recursive=True)
 
         if not csv_files:
@@ -832,7 +832,7 @@ class DataPreprocessor:
     def _ingest_bronze_stocks(self) -> None:
         self._logger.log_info("Ingesting bronze stocks data...")
 
-        stocks_dir = os.path.join(SCRAPER_RAW_DATA_DIR, "data", "stocks")
+        stocks_dir = os.path.join(TRADING_VIEW_RAW_DATA_DIR, "data", "stocks")
         csv_files = glob(os.path.join(stocks_dir, "**", "*.csv"), recursive=True)
 
         if not csv_files:
@@ -883,7 +883,7 @@ class DataPreprocessor:
     def _ingest_bronze_bonds(self) -> None:
         self._logger.log_info("Ingesting bronze bonds data...")
 
-        bonds_dir = os.path.join(SCRAPER_RAW_DATA_DIR, "data", "bonds")
+        bonds_dir = os.path.join(TRADING_VIEW_RAW_DATA_DIR, "data", "bonds")
         csv_files = glob(os.path.join(bonds_dir, "**", "*.csv"), recursive=True)
 
         if not csv_files:
