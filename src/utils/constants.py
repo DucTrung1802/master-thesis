@@ -168,7 +168,12 @@ THREAD_MANAGER_POWER = 50  # unit: %
 # ===========================
 SCRAPER_START_DATE = datetime(2000, 1, 1)
 SCRAPER_END_DATE = datetime(2026, 4, 30)
-SCRAPER_RAW_DATA_DIR = "raw_data"
+
+# Raw data is organised by source under raw_data/<source>/...
+RAW_DATA_DIR = "raw_data"
+TRADING_VIEW_RAW_DATA_DIR = f"{RAW_DATA_DIR}/trading_view"
+CAFEF_RAW_DATA_DIR = f"{RAW_DATA_DIR}/cafef"
+
 SCRAPER_BASE_WAIT_TIME = 1  # seconds
 
 SCRAPER_RETRY_ATTEMPTS = 5  # number of retry attempts on failure
