@@ -1,4 +1,4 @@
-# src\web_scraper\web_scraper.py
+# src\web_scraper\trading_view_scraper.py
 
 # ===== Standard Library =====
 import csv
@@ -30,9 +30,13 @@ from utils.utils import *
 from utils.switch_handler import SwitchHandler
 from dtos.thread_manager_dtos.task import Task
 from thread_manager.thread_manager import ThreadManager
+from web_scraper.base_scraper import BaseScraper, register_scraper
 
 
-class WebScraper:
+@register_scraper
+class TradingViewScraper(BaseScraper):
+    SOURCE_NAME = "trading_view"
+
     def __init__(
         self,
         logger: Logger,
@@ -41,11 +45,13 @@ class WebScraper:
         retry_attempts: int = SCRAPER_RETRY_ATTEMPTS,
         retry_delay: float = SCRAPER_RETRY_DELAY,
     ):
-        self._logger: Logger = logger
-        self._switch_handler: SwitchHandler = switch_handler
-        self._thread_manager = ThreadManager(logger=self._logger, power=power)
-        self._retry_attempts: int = retry_attempts
-        self._retry_delay: float = retry_delay
+        super().__init__(
+            logger=logger,
+            switch_handler=switch_handler,
+            power=power,
+            retry_attempts=retry_attempts,
+            retry_delay=retry_delay,
+        )
         self._browser_semaphore = threading.Semaphore(SCRAPER_MAX_CONCURRENT_BROWSERS)
         self._nav_last_ts: float = 0.0
         self._nav_time_lock = threading.Lock()
@@ -1561,7 +1567,7 @@ class WebScraper:
     # Entry point
     # ──────────────────────────────────────────────────────────────────────
 
-    def start_scraping(self) -> None:
+    def scrape(self) -> None:
         self._logger.log_info("Start scraping data using ThreadManager.")
 
         # ── Phase 1: scrape links ─────────────────────────────────────────────
