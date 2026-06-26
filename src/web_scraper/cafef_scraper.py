@@ -108,13 +108,18 @@ class CafeFScraper(BaseScraper):
                 time.sleep(self._retry_delay)
         return []
 
-    def _collect(self, ashx: str, symbol: str, start_year: int) -> dict:
-        """Fetch all rows for a symbol across windows, keyed by Ngay (dedup)."""
+    def _collect(self, ashx: str, symbol: str, start_year: int, exchange: str) -> dict:
+        """Fetch all rows for a symbol across windows, keyed by Ngay (dedup).
+
+        ExchangeType (HOSE/HNX/UPCOM, UPPERCASE) is required for HNX/UPCOM — without
+        it CafeF silently defaults to HOSE and returns nothing for those tickers.
+        """
         by_date: dict = {}
         for sd, ed in self._windows(start_year):
             page = 1
             while page <= 6:
-                rec = self._get(ashx, {"Symbol": symbol, "StartDate": sd, "EndDate": ed,
+                rec = self._get(ashx, {"Symbol": symbol, "ExchangeType": exchange.upper(),
+                                       "StartDate": sd, "EndDate": ed,
                                        "PageIndex": page, "PageSize": 20})
                 if not rec:
                     break
@@ -179,11 +184,11 @@ class CafeFScraper(BaseScraper):
             return
 
         self._logger.log_info(f"CafeF: scraping '{exchange}:{symbol}'...")
-        price = self._collect("PriceHistory.ashx", symbol, self.PRICE_START_YEAR)
+        price = self._collect("PriceHistory.ashx", symbol, self.PRICE_START_YEAR, exchange)
         if not price:
             self._logger.log_warning(f"CafeF: no price data for '{symbol}', skipping.")
             return
-        foreign = self._collect("GDKhoiNgoai.ashx", symbol, self.FOREIGN_START_YEAR)
+        foreign = self._collect("GDKhoiNgoai.ashx", symbol, self.FOREIGN_START_YEAR, exchange)
         rows = self._build_rows(exchange, symbol, price, foreign)
 
         # Write to a temp file then atomically rename, so an interrupted run never
