@@ -237,6 +237,48 @@ class WebScraper:
         except Exception:
             self._logger.log_warning(f"Failed to remove elements by xpath: {xpath}")
 
+    def _helper_toggle_adj_dividends(
+        self, web_driver: ChromiumDriver, symbol: str
+    ) -> None:
+        """Enable TradingView's "Adjust data for dividends" (ADJ) toggle so scraped
+        prices are back-adjusted for cash dividends (matching CafeF's "Giá điều
+        chỉnh" and vnstock's fully-adjusted series). The chart defaults to ADJ OFF.
+
+        Best-effort and non-fatal: assets without a dividend-adjust control simply
+        have no such button (no-op). MUST run BEFORE the custom date range is applied,
+        because clicking ADJ resets the chart's visible range.
+        """
+        toggle_js = r"""
+        function at(e){return ((e.getAttribute('aria-label')||'')+' '+(e.getAttribute('title')||''));}
+        function tx(e){return (e.textContent||'').trim();}
+        let el = Array.from(document.querySelectorAll('button,div[role="button"]'))
+            .find(e => /adjust data for dividends/i.test(at(e)));
+        if (!el) { el = Array.from(document.querySelectorAll('button,div'))
+            .find(e => /^adj$/i.test(tx(e)) && e.children.length === 0); }
+        if (!el) return JSON.stringify({found:false});
+        const on = el.getAttribute('aria-pressed') === 'true';
+        if (!on) { el.scrollIntoView({block:'center'}); el.click(); }
+        return JSON.stringify({found:true, clicked:!on,
+            label:(el.getAttribute('aria-label') || tx(el))});
+        """
+        try:
+            result = json.loads(web_driver.execute_script(toggle_js))
+        except Exception as e:
+            self._logger.log_warning(f'ADJ-toggle script failed for "{symbol}": {e}')
+            return
+
+        if not result.get("found"):
+            self._logger.log_info(
+                f'No dividend-adjust (ADJ) control for "{symbol}"; scraping unadjusted.'
+            )
+            return
+
+        if result.get("clicked"):
+            self._logger.log_info(f'Enabled ADJ (dividend adjustment) for "{symbol}".')
+            time.sleep(SCRAPER_BASE_WAIT_TIME)
+        else:
+            self._logger.log_info(f'ADJ already enabled for "{symbol}".')
+
     def _helper_execute_scrape_actions(
         self,
         web_driver: ChromiumDriver,
@@ -1291,6 +1333,14 @@ class WebScraper:
                 )
 
                 dialog_thread.start()
+
+                # Enable dividend adjustment (ADJ) for dividend-bearing assets BEFORE
+                # the date range is selected — clicking ADJ resets the chart's range.
+                if scrape_main_type in (
+                    ScrapeMainType.STOCKS.value,
+                    ScrapeMainType.FUNDS.value,
+                ):
+                    self._helper_toggle_adj_dividends(web_driver, symbol)
 
                 # ─── Date range selection via JS-powered UI clicks ────────────────
                 # The chart toolbar button exists in the DOM early but Selenium's
