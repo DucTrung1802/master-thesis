@@ -1115,6 +1115,7 @@ COUNTRY_SEARCH_TERM: Dict[Country, str] = {
     Country.JAPAN: "japan",
     Country.INDIA: "india",
     Country.MAINLAND_CHINA: "mainland china",
+    Country.SOUTH_KOREA: "south korea",
     # … extend as needed
 }
 
@@ -1147,6 +1148,7 @@ COUNTRY_CODE: Dict[Country, str] = {
     Country.JAPAN: "jp",
     Country.INDIA: "in",
     Country.MAINLAND_CHINA: "cn",
+    Country.SOUTH_KOREA: "kr",
     # extend as needed
 }
 
