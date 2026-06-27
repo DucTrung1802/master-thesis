@@ -173,6 +173,7 @@ SCRAPER_END_DATE = datetime(2026, 4, 30)
 RAW_DATA_DIR = "raw_data"
 TRADING_VIEW_RAW_DATA_DIR = f"{RAW_DATA_DIR}/trading_view"
 CAFEF_RAW_DATA_DIR = f"{RAW_DATA_DIR}/cafef"
+GICS_RAW_DATA_DIR = f"{RAW_DATA_DIR}/gics"
 
 SCRAPER_BASE_WAIT_TIME = 1  # seconds
 
