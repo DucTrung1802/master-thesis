@@ -20,6 +20,7 @@ from tabular_database_driver.postgre_sql_driver import PostgreSQLDriver
 from thread_manager.thread_manager import ThreadManager
 from utils.constants import (
     TRADING_VIEW_RAW_DATA_DIR,
+    CAFEF_RAW_DATA_DIR,
     DATABASE_MAIN_V2,
     BRONZE_SCHEMA,
     SILVER_SCHEMA,
@@ -425,6 +426,22 @@ class DataPreprocessor:
         if df.empty:
             self._logger.log_info("DataFrame is empty after cleaning. Nothing to save.")
             return
+
+        # Sanitize values destined for REAL columns. PostgreSQL REAL rejects floats
+        # outside its range: ±inf and subnormals with |x| below ~1e-38 (a few TA
+        # features can emit e.g. -5.7e-46). Map ±inf → NaN and tiny magnitudes → 0.0.
+        if dtype_overrides:
+            real_cols = [
+                c for c, t in dtype_overrides.items()
+                if str(t).upper().startswith("REAL") and c in df.columns
+            ]
+            if real_cols:
+                df = df.copy()
+                for c in real_cols:
+                    s = pd.to_numeric(df[c], errors="coerce")
+                    s = s.replace([np.inf, -np.inf], np.nan)
+                    s = s.where(s.abs() <= 3.4e38, np.nan)  # above REAL max → NaN
+                    df[c] = s.mask(s.abs() < 1e-37, 0.0)    # subnormal → 0.0
 
         self._helper_ensure_table_exists(
             schema_name=schema_name,
@@ -880,6 +897,81 @@ class DataPreprocessor:
             dtype_overrides={"date": DataType.DATE()},
         )
 
+    def _ingest_bronze_stocks_cafef(self) -> None:
+        """Bronze table for CafeF per-stock data — the fields TradingView lacks:
+        unadjusted close, matched vs negotiated (block) volume/value, and the full
+        foreign buy/sell flow (volume, value, net, remaining room, ownership %).
+
+        Kept as a separate bronze table because its schema differs from the
+        TradingView `stocks` table; the two sources are merged in silver.
+        Key is normalised to `symbol = "<EXCHANGE>:<TICKER>"` to match the
+        TradingView convention so the silver merge can split it the same way.
+        """
+        self._logger.log_info("Ingesting bronze CafeF stocks data...")
+
+        stocks_dir = os.path.join(CAFEF_RAW_DATA_DIR, "stocks")
+        csv_files = glob(os.path.join(stocks_dir, "**", "*.csv"), recursive=True)
+
+        if not csv_files:
+            self._logger.log_error(f'No CafeF stocks CSV files found in "{stocks_dir}".')
+            return
+
+        dataframes = []
+        for fp in csv_files:
+            df = pd.read_csv(fp, encoding="utf-8")
+            if not df.empty and not df.dropna(how="all").empty:
+                dataframes.append(df)
+
+        if not dataframes:
+            self._logger.log_error("No valid CafeF stocks CSV data found.")
+            return
+
+        df = pd.concat(dataframes, ignore_index=True).drop_duplicates()
+
+        # Normalise the key to "<EXCHANGE>:<TICKER>" (CafeF stores them split).
+        df["symbol"] = (
+            df["exchange"].astype("string").str.strip()
+            + ":"
+            + df["symbol"].astype("string").str.strip()
+        )
+        df = df.drop(columns=["exchange"])
+
+        df = self._helper_clean(
+            df,
+            [
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("symbol"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("date"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("close_adj"),
+                CleanLayer.REMOVE_IF_ALL_COLUMNS_ARE_NULL(),
+                CleanLayer.ORDER_BY(["symbol", "date"]),
+            ],
+        )
+
+        df = self._helper_cast_columns(
+            df,
+            decimal_cols=[
+                "open", "high", "low", "close_raw", "close_adj",
+                "val_matched_bn", "val_negotiated_bn",
+                "f_buy_val", "f_sell_val", "f_net_val", "own_pct",
+            ],
+            bigint_cols=[
+                "vol_matched", "vol_negotiated",
+                "f_buy_vol", "f_sell_vol", "f_net_vol", "room_left",
+            ],
+        )
+
+        df["date"] = pd.to_datetime(df["date"]).dt.date
+
+        df = self._helper_remove_duplicates(df, primary_keys=["symbol", "date"])
+
+        self._helper_save_pandas_table_to_database(
+            schema_name=BRONZE_SCHEMA,
+            table_name="stocks_cafef",
+            primary_keys=["symbol", "date"],
+            df=df,
+            dtype_overrides={"date": DataType.DATE()},
+        )
+
     def _ingest_bronze_bonds(self) -> None:
         self._logger.log_info("Ingesting bronze bonds data...")
 
@@ -1051,22 +1143,90 @@ class DataPreprocessor:
         )
 
     def _ingest_silver_stocks(self) -> None:
-        self._logger.log_info("Ingesting silver stocks data...")
+        """Conform and merge the two stock sources into one canonical table.
 
-        df = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="stocks")
+        • TradingView (bronze `stocks`) — split/cash-dividend ADJUSTED OHLCV;
+          this is the canonical price spine.
+        • CafeF (bronze `stocks_cafef`) — the extra fields TradingView lacks:
+          unadjusted close, matched/negotiated volume & value, and foreign flow.
 
-        if df.empty:
+        The two are OUTER-joined on (exchange, ticker, date). Adjusted OHLC and
+        volume come from TradingView; where a stock-day exists only in CafeF
+        (e.g. tickers TradingView does not list), OHLC falls back to CafeF's raw
+        prices and close to its adjusted close so no trading day is lost.
+        """
+        self._logger.log_info("Ingesting silver stocks data (TradingView + CafeF)...")
+
+        tv = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="stocks")
+        cf = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="stocks_cafef")
+
+        if tv.empty and cf.empty:
             self._logger.log_info("No bronze stocks data found.")
             return
 
-        df["exchange"] = df["symbol"].str.split(":").str[0]
-        df["ticker"] = df["symbol"].str.split(":").str[1]
+        # ── TradingView: canonical adjusted OHLCV ──
+        if not tv.empty:
+            tv = tv.copy()
+            tv["exchange"] = tv["symbol"].str.split(":").str[0]
+            tv["ticker"] = tv["symbol"].str.split(":").str[1]
+            tv = tv[
+                ["exchange", "ticker", "date", "open", "high", "low", "close", "volume"]
+            ]
+        else:
+            tv = pd.DataFrame(
+                columns=["exchange", "ticker", "date",
+                         "open", "high", "low", "close", "volume"]
+            )
+
+        # ── CafeF: extra fields (raw OHLC kept under cf_* for fallback only) ──
+        cafef_cols = [
+            "close_raw", "vol_matched", "vol_negotiated",
+            "val_matched_bn", "val_negotiated_bn",
+            "f_buy_vol", "f_buy_val", "f_sell_vol", "f_sell_val",
+            "f_net_vol", "f_net_val", "room_left", "own_pct",
+        ]
+        if not cf.empty:
+            cf = cf.copy()
+            cf["exchange"] = cf["symbol"].str.split(":").str[0]
+            cf["ticker"] = cf["symbol"].str.split(":").str[1]
+            cf = cf.rename(
+                columns={"open": "cf_open", "high": "cf_high",
+                         "low": "cf_low", "close_adj": "cf_close_adj"}
+            )
+            cf = cf[["exchange", "ticker", "date",
+                     "cf_open", "cf_high", "cf_low", "cf_close_adj"] + cafef_cols]
+        else:
+            cf = pd.DataFrame(
+                columns=["exchange", "ticker", "date",
+                         "cf_open", "cf_high", "cf_low", "cf_close_adj"] + cafef_cols
+            )
+
+        # ── Outer merge; coalesce OHLCV (TradingView preferred, CafeF fallback) ──
+        df = tv.merge(cf, on=["exchange", "ticker", "date"], how="outer")
+        df["open"] = df["open"].fillna(df["cf_open"])
+        df["high"] = df["high"].fillna(df["cf_high"])
+        df["low"] = df["low"].fillna(df["cf_low"])
+        df["close"] = df["close"].fillna(df["cf_close_adj"])
+        df["volume"] = df["volume"].fillna(df["vol_matched"])
+        df = df.drop(columns=["cf_open", "cf_high", "cf_low", "cf_close_adj"])
 
         df = df[
-            ["exchange", "ticker", "date", "open", "high", "low", "close", "volume"]
+            ["exchange", "ticker", "date",
+             "open", "high", "low", "close", "volume"] + cafef_cols
         ]
+        df = df.sort_values(["exchange", "ticker", "date"]).reset_index(drop=True)
+
         df = self._helper_cast_columns(
-            df, decimal_cols=["open", "high", "low", "close"], bigint_cols=["volume"]
+            df,
+            decimal_cols=[
+                "open", "high", "low", "close", "close_raw",
+                "val_matched_bn", "val_negotiated_bn",
+                "f_buy_val", "f_sell_val", "f_net_val", "own_pct",
+            ],
+            bigint_cols=[
+                "volume", "vol_matched", "vol_negotiated",
+                "f_buy_vol", "f_sell_vol", "f_net_vol", "room_left",
+            ],
         )
 
         self._helper_save_pandas_table_to_database(
@@ -1196,10 +1356,31 @@ class DataPreprocessor:
             self._logger.log_info(f"No silver {table_name} data found.")
             return
 
-        # psycopg2 returns DECIMAL as Python Decimal — coerce to float before TA.
-        for col in ("open", "high", "low", "close", "volume", "value"):
-            if col in df.columns:
+        # psycopg2 returns DECIMAL as Python Decimal — coerce every non-key column
+        # to float before feature engineering (covers OHLCV/value and the CafeF
+        # fields carried through from silver: foreign flow, volume breakdown, etc.).
+        for col in df.columns:
+            if col not in ("exchange", "ticker", "date"):
                 df[col] = pd.to_numeric(df[col], errors="coerce")
+
+        # CafeF-derived, row-wise features (no look-ahead) — only present for the
+        # stocks table, which carries the foreign-flow / volume-breakdown columns.
+        if {"f_net_val", "val_matched_bn"}.issubset(df.columns):
+            buy = df.get("f_buy_val")
+            sell = df.get("f_sell_val")
+            if buy is not None and sell is not None:
+                denom = buy.abs() + sell.abs()
+                df["foreign_buy_pressure"] = np.where(denom > 0, buy / denom, np.nan)
+            df["foreign_net_val_ratio"] = (
+                df["f_net_val"] / df["val_matched_bn"].replace(0, np.nan)
+            )
+            if {"vol_matched", "vol_negotiated"}.issubset(df.columns):
+                vden = df["vol_matched"].fillna(0) + df["vol_negotiated"].fillna(0)
+                df["negotiated_vol_ratio"] = np.where(
+                    vden > 0, df["vol_negotiated"] / vden, np.nan
+                )
+            if "close_raw" in df.columns:
+                df["adj_factor"] = df["close"] / df["close_raw"].replace(0, np.nan)
 
         transform_layers = list(ta_layers or []) + self._helper_build_feature_layers(df)
         if not transform_layers:
@@ -1398,7 +1579,7 @@ class DataPreprocessor:
 
         return df
 
-    def _helper_macro_wide(self, table_name: str) -> pd.DataFrame:
+    def _helper_macro_wide(self, table_name: str, ticker_include: set[str] | None = None) -> pd.DataFrame:
         """
         Load a macro gold table and pivot its price column to wide form, one
         column per (exchange, ticker) series named `<table>_<exchange>_<ticker>`
@@ -1433,6 +1614,11 @@ class DataPreprocessor:
         if df.empty:
             self._logger.log_info(f"No gold {table_name} data found for unified join.")
             return pd.DataFrame()
+
+        if ticker_include is not None:
+            df = df[df["ticker"].isin(ticker_include)]
+            if df.empty:
+                return pd.DataFrame()
 
         df[price_col] = pd.to_numeric(df[price_col], errors="coerce")
 
@@ -1475,9 +1661,43 @@ class DataPreprocessor:
         spine["date"] = pd.to_datetime(spine["date"])
         spine = spine.sort_values("date").reset_index(drop=True)
 
+        # Resolve same-sector peer tickers from bronze (excludes self) so the
+        # stocks macro join is scoped to sector peers rather than all 621 stocks.
+        exchange = spine["exchange"].iloc[0]
+        symbol = f"{exchange}:{ticker}"
+        peer_tickers: set[str] = set()
+        sector_result = self._helper_select(
+            schema_name=BRONZE_SCHEMA,
+            table_name="stocks",
+            columns=["sector"],
+            conditions=[
+                Condition(
+                    column="symbol",
+                    operator=SqlOperator.EQUAL_TO,
+                    value=symbol,
+                    data_type=DataType.VARCHAR(),
+                )
+            ],
+            limit=1,
+        )
+        if not sector_result.empty:
+            ticker_sector = sector_result["sector"].iloc[0]
+            with self._database_driver._cursor_ctx() as cur:
+                cur.execute(
+                    "SELECT DISTINCT symbol FROM bronze_schema.stocks WHERE sector = %s AND symbol != %s",
+                    (ticker_sector, symbol),
+                )
+                peer_tickers = {row[0].split(":")[-1] for row in cur.fetchall()}
+            self._logger.log_info(
+                f"'{ticker}' sector='{ticker_sector}', {len(peer_tickers)} peer tickers for stocks macro join."
+            )
+
         macro_cols: List[str] = []
         for macro_table in UNIFIED_MACRO_TABLES:
-            wide = self._helper_macro_wide(macro_table)
+            wide = self._helper_macro_wide(
+                macro_table,
+                ticker_include=peer_tickers if macro_table == "stocks" else None,
+            )
             if wide.empty:
                 continue
             wide.index = pd.to_datetime(wide.index)
@@ -1567,6 +1787,7 @@ class DataPreprocessor:
                     "data_preprocessor", "data_quality_bronze", "stocks"
                 ):
                     self._ingest_bronze_stocks()
+                    self._ingest_bronze_stocks_cafef()
 
             except Exception as e:
                 self._logger.log_error(
