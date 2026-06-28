@@ -2,6 +2,9 @@
 
 from logger.logger import LogType, Logger
 from web_scraper.trading_view_scraper import TradingViewScraper
+from web_scraper.cafef_scraper import CafeFScraper
+from web_scraper.simplize_scraper import SimplizeScraper
+from web_scraper.gics_scraper import GicsScraper
 from data_preprocessor.data_preprocessor import DataPreprocessor
 from data_postprocessor.data_postprocessor import DataPostprocessor, MarketIndexConfig
 from utils.switch_handler import SwitchHandler
@@ -16,10 +19,28 @@ def main():
 
     my_switch_handler = SwitchHandler(logger=my_logger)
 
-    my_web_scraper = TradingViewScraper(
+    # ── Web scraping ──────────────────────────────────────────────────────
+    # TradingView first: it produces the stock link CSVs that CafeF derives its
+    # ticker universe from.
+    TradingViewScraper(
         logger=my_logger, switch_handler=my_switch_handler, power=100
-    )
-    my_web_scraper.scrape()
+    ).scrape()
+
+    # CafeF fills the per-stock fields TradingView lacks (raw/adjusted close,
+    # matched/negotiated volume, foreign flow); depends on the links above.
+    CafeFScraper(
+        logger=my_logger, switch_handler=my_switch_handler
+    ).scrape()
+
+    # Simplize: the validated backbone for the daily panel — fully-adjusted OHLC,
+    # true volume, and foreign flow (2009→) — also derives its universe from the
+    # TradingView links above.
+    SimplizeScraper(
+        logger=my_logger, switch_handler=my_switch_handler
+    ).scrape()
+
+    # GICS reference taxonomy from MSCI (independent of the others).
+    GicsScraper(logger=my_logger).scrape()
 
     my_data_preprocessor = DataPreprocessor(
         logger=my_logger,
