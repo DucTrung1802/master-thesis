@@ -21,6 +21,7 @@ from thread_manager.thread_manager import ThreadManager
 from utils.constants import (
     TRADING_VIEW_RAW_DATA_DIR,
     CAFEF_RAW_DATA_DIR,
+    SIMPLIZE_RAW_DATA_DIR,
     DATABASE_MAIN_V2,
     BRONZE_SCHEMA,
     SILVER_SCHEMA,
@@ -691,7 +692,7 @@ class DataPreprocessor:
 
         self._helper_save_pandas_table_to_database(
             schema_name=BRONZE_SCHEMA,
-            table_name="economy",
+            table_name="trading_view_economy",
             primary_keys=["symbol", "date"],
             df=df,
             dtype_overrides={"date": DataType.DATE()},
@@ -738,7 +739,7 @@ class DataPreprocessor:
 
         self._helper_save_pandas_table_to_database(
             schema_name=BRONZE_SCHEMA,
-            table_name="forex",
+            table_name="trading_view_forex",
             primary_keys=["symbol", "date"],
             df=df,
             dtype_overrides={"date": DataType.DATE()},
@@ -789,7 +790,7 @@ class DataPreprocessor:
 
         self._helper_save_pandas_table_to_database(
             schema_name=BRONZE_SCHEMA,
-            table_name="funds",
+            table_name="trading_view_funds",
             primary_keys=["symbol", "date"],
             df=df,
             dtype_overrides={"date": DataType.DATE()},
@@ -840,14 +841,18 @@ class DataPreprocessor:
 
         self._helper_save_pandas_table_to_database(
             schema_name=BRONZE_SCHEMA,
-            table_name="indices",
+            table_name="trading_view_indices",
             primary_keys=["symbol", "date"],
             df=df,
             dtype_overrides={"date": DataType.DATE()},
         )
 
-    def _ingest_bronze_stocks(self) -> None:
-        self._logger.log_info("Ingesting bronze stocks data...")
+    def _ingest_bronze_stocks_trading_view(self) -> None:
+        """Bronze table for TradingView per-stock data — the universe source and
+        the only source carrying `sector`; dividend-adjusted OHLCV (volume is
+        split-adjusted, so superseded by Simplize in silver). Kept as a separate
+        bronze table per source; merged in silver."""
+        self._logger.log_info("Ingesting bronze TradingView stocks data...")
 
         stocks_dir = os.path.join(TRADING_VIEW_RAW_DATA_DIR, "data", "stocks")
         csv_files = glob(os.path.join(stocks_dir, "**", "*.csv"), recursive=True)
@@ -891,7 +896,7 @@ class DataPreprocessor:
 
         self._helper_save_pandas_table_to_database(
             schema_name=BRONZE_SCHEMA,
-            table_name="stocks",
+            table_name="trading_view_stocks",
             primary_keys=["symbol", "date"],
             df=df,
             dtype_overrides={"date": DataType.DATE()},
@@ -966,7 +971,83 @@ class DataPreprocessor:
 
         self._helper_save_pandas_table_to_database(
             schema_name=BRONZE_SCHEMA,
-            table_name="stocks_cafef",
+            table_name="cafef_stocks",
+            primary_keys=["symbol", "date"],
+            df=df,
+            dtype_overrides={"date": DataType.DATE()},
+        )
+
+    def _ingest_bronze_stocks_simplize(self) -> None:
+        """Bronze table for Simplize per-stock daily data — the validated backbone
+        of the daily panel: fully dividend-adjusted OHLC (CafeF only adjusts the
+        close; TradingView's volume is split-inflated), true total traded volume,
+        and foreign buy/sell/net flow (volume + value) plus remaining room.
+
+        Kept as a separate bronze table because its schema differs from the
+        TradingView `stocks` and CafeF `stocks_cafef` tables; the sources are merged
+        in silver. Key is normalised to `symbol = "<EXCHANGE>:<TICKER>"` to match the
+        TradingView convention so the silver merge can split it the same way.
+        """
+        self._logger.log_info("Ingesting bronze Simplize stocks data...")
+
+        stocks_dir = os.path.join(SIMPLIZE_RAW_DATA_DIR, "stocks")
+        csv_files = glob(os.path.join(stocks_dir, "**", "*.csv"), recursive=True)
+
+        if not csv_files:
+            self._logger.log_error(f'No Simplize stocks CSV files found in "{stocks_dir}".')
+            return
+
+        dataframes = []
+        for fp in csv_files:
+            df = pd.read_csv(fp, encoding="utf-8")
+            if not df.empty and not df.dropna(how="all").empty:
+                dataframes.append(df)
+
+        if not dataframes:
+            self._logger.log_error("No valid Simplize stocks CSV data found.")
+            return
+
+        df = pd.concat(dataframes, ignore_index=True).drop_duplicates()
+
+        # Normalise the key to "<EXCHANGE>:<TICKER>" (Simplize stores them split).
+        df["symbol"] = (
+            df["exchange"].astype("string").str.strip()
+            + ":"
+            + df["symbol"].astype("string").str.strip()
+        )
+        df = df.drop(columns=["exchange"])
+
+        df = self._helper_clean(
+            df,
+            [
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("symbol"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("date"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("close"),
+                CleanLayer.REMOVE_IF_ALL_COLUMNS_ARE_NULL(),
+                CleanLayer.ORDER_BY(["symbol", "date"]),
+            ],
+        )
+
+        df = self._helper_cast_columns(
+            df,
+            decimal_cols=[
+                "open", "high", "low", "close",
+                "net_change", "pct_change",
+                "f_buy_val", "f_sell_val", "f_net_val",
+            ],
+            bigint_cols=[
+                "volume", "foreign_room",
+                "f_buy_vol", "f_sell_vol", "f_net_vol",
+            ],
+        )
+
+        df["date"] = pd.to_datetime(df["date"]).dt.date
+
+        df = self._helper_remove_duplicates(df, primary_keys=["symbol", "date"])
+
+        self._helper_save_pandas_table_to_database(
+            schema_name=BRONZE_SCHEMA,
+            table_name="simplize_stocks",
             primary_keys=["symbol", "date"],
             df=df,
             dtype_overrides={"date": DataType.DATE()},
@@ -1013,7 +1094,7 @@ class DataPreprocessor:
 
         self._helper_save_pandas_table_to_database(
             schema_name=BRONZE_SCHEMA,
-            table_name="bonds",
+            table_name="trading_view_bonds",
             primary_keys=["symbol", "date"],
             df=df,
             dtype_overrides={"date": DataType.DATE()},
@@ -1022,7 +1103,7 @@ class DataPreprocessor:
     def _ingest_silver_bonds(self) -> None:
         self._logger.log_info("Ingesting silver bonds data...")
 
-        df = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="bonds")
+        df = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="trading_view_bonds")
 
         if df.empty:
             self._logger.log_info("No bronze bonds data found.")
@@ -1044,7 +1125,7 @@ class DataPreprocessor:
     def _ingest_silver_economy(self) -> None:
         self._logger.log_info("Ingesting silver economy data...")
 
-        df = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="economy")
+        df = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="trading_view_economy")
 
         if df.empty:
             self._logger.log_info("No bronze economy data found.")
@@ -1066,7 +1147,7 @@ class DataPreprocessor:
     def _ingest_silver_forex(self) -> None:
         self._logger.log_info("Ingesting silver forex data...")
 
-        df = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="forex")
+        df = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="trading_view_forex")
 
         if df.empty:
             self._logger.log_info("No bronze forex data found.")
@@ -1091,7 +1172,7 @@ class DataPreprocessor:
     def _ingest_silver_funds(self) -> None:
         self._logger.log_info("Ingesting silver funds data...")
 
-        df = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="funds")
+        df = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="trading_view_funds")
 
         if df.empty:
             self._logger.log_info("No bronze funds data found.")
@@ -1118,7 +1199,7 @@ class DataPreprocessor:
     def _ingest_silver_indices(self) -> None:
         self._logger.log_info("Ingesting silver indices data...")
 
-        df = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="indices")
+        df = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="trading_view_indices")
 
         if df.empty:
             self._logger.log_info("No bronze indices data found.")
@@ -1157,8 +1238,8 @@ class DataPreprocessor:
         """
         self._logger.log_info("Ingesting silver stocks data (TradingView + CafeF)...")
 
-        tv = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="stocks")
-        cf = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="stocks_cafef")
+        tv = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="trading_view_stocks")
+        cf = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="cafef_stocks")
 
         if tv.empty and cf.empty:
             self._logger.log_info("No bronze stocks data found.")
@@ -1668,7 +1749,7 @@ class DataPreprocessor:
         peer_tickers: set[str] = set()
         sector_result = self._helper_select(
             schema_name=BRONZE_SCHEMA,
-            table_name="stocks",
+            table_name="trading_view_stocks",
             columns=["sector"],
             conditions=[
                 Condition(
@@ -1684,7 +1765,7 @@ class DataPreprocessor:
             ticker_sector = sector_result["sector"].iloc[0]
             with self._database_driver._cursor_ctx() as cur:
                 cur.execute(
-                    "SELECT DISTINCT symbol FROM bronze_schema.stocks WHERE sector = %s AND symbol != %s",
+                    "SELECT DISTINCT symbol FROM bronze_schema.trading_view_stocks WHERE sector = %s AND symbol != %s",
                     (ticker_sector, symbol),
                 )
                 peer_tickers = {row[0].split(":")[-1] for row in cur.fetchall()}
@@ -1786,8 +1867,9 @@ class DataPreprocessor:
                 if self._switch_handler.is_enabled(
                     "data_preprocessor", "data_quality_bronze", "stocks"
                 ):
-                    self._ingest_bronze_stocks()
+                    self._ingest_bronze_stocks_trading_view()
                     self._ingest_bronze_stocks_cafef()
+                    self._ingest_bronze_stocks_simplize()
 
             except Exception as e:
                 self._logger.log_error(
