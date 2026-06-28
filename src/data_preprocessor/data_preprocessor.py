@@ -22,6 +22,8 @@ from utils.constants import (
     TRADING_VIEW_RAW_DATA_DIR,
     CAFEF_RAW_DATA_DIR,
     SIMPLIZE_RAW_DATA_DIR,
+    GICS_RAW_DATA_DIR,
+    SIMPLIZE_GROUP_TO_GICS_SUB_INDUSTRY,
     DATABASE_MAIN_V2,
     BRONZE_SCHEMA,
     SILVER_SCHEMA,
@@ -1053,6 +1055,77 @@ class DataPreprocessor:
             dtype_overrides={"date": DataType.DATE()},
         )
 
+    def _ingest_bronze_simplize_industry(self) -> None:
+        """Bronze table for Simplize per-ticker industry (GICS-based VN taxonomy:
+        10 economic sectors / 50 industry groups, accurate per ticker). Loaded
+        as-is from raw_data/simplize/industry.csv; the source for GICS
+        classification (merged with bronze.gics in silver). PK (exchange, ticker)."""
+        self._logger.log_info("Ingesting bronze Simplize industry data...")
+
+        path = os.path.join(SIMPLIZE_RAW_DATA_DIR, "industry.csv")
+        if not os.path.exists(path):
+            self._logger.log_error(f'Simplize industry CSV not found at "{path}".')
+            return
+
+        df = pd.read_csv(path, encoding="utf-8", dtype=str)
+        if df.empty:
+            self._logger.log_error("No Simplize industry data found.")
+            return
+
+        df = self._helper_clean(
+            df,
+            [
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("exchange"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("ticker"),
+                CleanLayer.REMOVE_IF_ALL_COLUMNS_ARE_NULL(),
+                CleanLayer.ORDER_BY(["exchange", "ticker"]),
+            ],
+        )
+        df = self._helper_remove_duplicates(df, primary_keys=["exchange", "ticker"])
+
+        self._helper_save_pandas_table_to_database(
+            schema_name=BRONZE_SCHEMA,
+            table_name="simplize_industry",
+            primary_keys=["exchange", "ticker"],
+            df=df,
+        )
+
+    def _ingest_bronze_gics(self) -> None:
+        """Bronze table for the official MSCI GICS structure (reference taxonomy):
+        11 sectors / 25 industry groups / 74 industries / 163 sub-industries, each
+        with code + name + snake_case, plus the sub-industry definition. Loaded
+        as-is from raw_data/gics; one row per sub-industry (PK sub_industry_code)."""
+        self._logger.log_info("Ingesting bronze GICS structure...")
+
+        path = os.path.join(GICS_RAW_DATA_DIR, "gics_2023_official.csv")
+        if not os.path.exists(path):
+            self._logger.log_error(f'GICS structure CSV not found at "{path}".')
+            return
+
+        df = pd.read_csv(path, encoding="utf-8", dtype=str)
+        if df.empty:
+            self._logger.log_error("No GICS structure data found.")
+            return
+
+        df = self._helper_clean(
+            df,
+            [
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("sub_industry_code"),
+                CleanLayer.REMOVE_IF_ALL_COLUMNS_ARE_NULL(),
+                CleanLayer.ORDER_BY(["sub_industry_code"]),
+            ],
+        )
+        df = self._helper_remove_duplicates(df, primary_keys=["sub_industry_code"])
+
+        self._helper_save_pandas_table_to_database(
+            schema_name=BRONZE_SCHEMA,
+            table_name="gics",
+            primary_keys=["sub_industry_code"],
+            df=df,
+            # Sub-industry definitions are full sentences — exceed VARCHAR(255).
+            dtype_overrides={"sub_industry_definition": DataType.TEXT()},
+        )
+
     def _ingest_bronze_bonds(self) -> None:
         self._logger.log_info("Ingesting bronze bonds data...")
 
@@ -1224,98 +1297,224 @@ class DataPreprocessor:
         )
 
     def _ingest_silver_stocks(self) -> None:
-        """Conform and merge the two stock sources into one canonical table.
+        """Merge the three stock sources into one canonical table, with Simplize
+        as the PRIMARY source (VN30-validated as the only source correct on every
+        daily column).
 
-        • TradingView (bronze `stocks`) — split/cash-dividend ADJUSTED OHLCV;
-          this is the canonical price spine.
-        • CafeF (bronze `stocks_cafef`) — the extra fields TradingView lacks:
-          unadjusted close, matched/negotiated volume & value, and foreign flow.
+        • Simplize (bronze `simplize_stocks`) — PRIMARY: fully dividend-adjusted
+          OHLC, true total volume, net/pct change, and foreign flow (vol + val)
+          and remaining room, from 2009. Drives every price/volume/foreign column.
+        • CafeF (bronze `cafef_stocks`) — its unique fields: the matched vs
+          negotiated (block) volume/value split and foreign ownership % (own_pct);
+          also a fallback for foreign flow where Simplize is missing.
+        • TradingView (bronze `trading_view_stocks`) — an OHLC fallback only
+          (its volume is split-inflated and its sector misclassifies VN stocks).
 
-        The two are OUTER-joined on (exchange, ticker, date). Adjusted OHLC and
-        volume come from TradingView; where a stock-day exists only in CafeF
-        (e.g. tickers TradingView does not list), OHLC falls back to CafeF's raw
-        prices and close to its adjusted close so no trading day is lost.
+        Each row also carries the GICS classification tree (`sector` = official
+        GICS sector, English snake_case), merged per ticker from Simplize's
+        accurate GICS-based industry + the official GICS taxonomy
+        (see _helper_build_gics_classification).
+
+        OUTER-joined on (exchange, ticker, date) so no stock-day is lost. OHLC
+        fallback uses only ADJUSTED sources (TradingView, then CafeF's adjusted
+        close) — never CafeF's raw open/high/low. `close_raw` is not carried.
         """
-        self._logger.log_info("Ingesting silver stocks data (TradingView + CafeF)...")
+        self._logger.log_info(
+            "Ingesting silver stocks data (Simplize primary + CafeF + TradingView)..."
+        )
 
-        tv = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="trading_view_stocks")
+        sz = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="simplize_stocks")
         cf = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="cafef_stocks")
+        tv = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="trading_view_stocks")
 
-        if tv.empty and cf.empty:
+        if sz.empty and cf.empty and tv.empty:
             self._logger.log_info("No bronze stocks data found.")
             return
 
-        # ── TradingView: canonical adjusted OHLCV ──
-        if not tv.empty:
-            tv = tv.copy()
-            tv["exchange"] = tv["symbol"].str.split(":").str[0]
-            tv["ticker"] = tv["symbol"].str.split(":").str[1]
-            tv = tv[
-                ["exchange", "ticker", "date", "open", "high", "low", "close", "volume"]
-            ]
-        else:
-            tv = pd.DataFrame(
-                columns=["exchange", "ticker", "date",
-                         "open", "high", "low", "close", "volume"]
-            )
+        KEYS = ["exchange", "ticker", "date"]
 
-        # ── CafeF: extra fields (raw OHLC kept under cf_* for fallback only) ──
-        cafef_cols = [
-            "close_raw", "vol_matched", "vol_negotiated",
-            "val_matched_bn", "val_negotiated_bn",
-            "f_buy_vol", "f_buy_val", "f_sell_vol", "f_sell_val",
-            "f_net_vol", "f_net_val", "room_left", "own_pct",
+        def _split(df: pd.DataFrame) -> pd.DataFrame:
+            df = df.copy()
+            df["exchange"] = df["symbol"].str.split(":").str[0]
+            df["ticker"] = df["symbol"].str.split(":").str[1]
+            return df
+
+        # ── Simplize: primary price / volume / foreign spine ──
+        sz_cols = [
+            "open", "high", "low", "close", "net_change", "pct_change", "volume",
+            "foreign_room", "f_buy_vol", "f_sell_vol", "f_net_vol",
+            "f_buy_val", "f_sell_val", "f_net_val",
         ]
+        if not sz.empty:
+            sz = _split(sz)[KEYS + sz_cols]
+        else:
+            sz = pd.DataFrame(columns=KEYS + sz_cols)
+
+        # ── CafeF: matched/negotiated split + own_pct (unique); foreign fallback ──
+        cf_keep = [
+            "vol_matched", "vol_negotiated",
+            "val_matched_bn", "val_negotiated_bn", "own_pct",
+        ]
+        cf_fallback = {
+            "close_adj": "cf_close", "room_left": "cf_foreign_room",
+            "f_buy_vol": "cf_f_buy_vol", "f_sell_vol": "cf_f_sell_vol",
+            "f_net_vol": "cf_f_net_vol", "f_buy_val": "cf_f_buy_val",
+            "f_sell_val": "cf_f_sell_val", "f_net_val": "cf_f_net_val",
+        }
         if not cf.empty:
-            cf = cf.copy()
-            cf["exchange"] = cf["symbol"].str.split(":").str[0]
-            cf["ticker"] = cf["symbol"].str.split(":").str[1]
-            cf = cf.rename(
-                columns={"open": "cf_open", "high": "cf_high",
-                         "low": "cf_low", "close_adj": "cf_close_adj"}
-            )
-            cf = cf[["exchange", "ticker", "date",
-                     "cf_open", "cf_high", "cf_low", "cf_close_adj"] + cafef_cols]
+            cf = _split(cf).rename(columns=cf_fallback)
+            cf = cf[KEYS + cf_keep + list(cf_fallback.values())]
         else:
-            cf = pd.DataFrame(
-                columns=["exchange", "ticker", "date",
-                         "cf_open", "cf_high", "cf_low", "cf_close_adj"] + cafef_cols
-            )
+            cf = pd.DataFrame(columns=KEYS + cf_keep + list(cf_fallback.values()))
 
-        # ── Outer merge; coalesce OHLCV (TradingView preferred, CafeF fallback) ──
-        df = tv.merge(cf, on=["exchange", "ticker", "date"], how="outer")
-        df["open"] = df["open"].fillna(df["cf_open"])
-        df["high"] = df["high"].fillna(df["cf_high"])
-        df["low"] = df["low"].fillna(df["cf_low"])
-        df["close"] = df["close"].fillna(df["cf_close_adj"])
-        df["volume"] = df["volume"].fillna(df["vol_matched"])
-        df = df.drop(columns=["cf_open", "cf_high", "cf_low", "cf_close_adj"])
+        # ── TradingView: OHLC fallback only ──
+        tv_fallback = {"open": "tv_open", "high": "tv_high",
+                       "low": "tv_low", "close": "tv_close"}
+        if not tv.empty:
+            tv_px = _split(tv).rename(columns=tv_fallback)[KEYS + list(tv_fallback.values())]
+        else:
+            tv_px = pd.DataFrame(columns=KEYS + list(tv_fallback.values()))
 
-        df = df[
-            ["exchange", "ticker", "date",
-             "open", "high", "low", "close", "volume"] + cafef_cols
+        # ── Outer-merge all three on (exchange, ticker, date) ──
+        df = sz.merge(cf, on=KEYS, how="outer").merge(tv_px, on=KEYS, how="outer")
+
+        # Price: Simplize -> TradingView (adjusted) -> CafeF adjusted close.
+        df["open"] = df["open"].fillna(df["tv_open"])
+        df["high"] = df["high"].fillna(df["tv_high"])
+        df["low"] = df["low"].fillna(df["tv_low"])
+        df["close"] = df["close"].fillna(df["tv_close"]).fillna(df["cf_close"])
+
+        # Volume: Simplize total -> CafeF (matched + negotiated). TradingView
+        # volume is split-inflated, so it is never used as a fallback.
+        cf_total_vol = df["vol_matched"].fillna(0) + df["vol_negotiated"].fillna(0)
+        df["volume"] = df["volume"].fillna(cf_total_vol.where(cf_total_vol > 0))
+
+        # Foreign flow + room: Simplize -> CafeF.
+        for col in ["foreign_room", "f_buy_vol", "f_sell_vol", "f_net_vol",
+                    "f_buy_val", "f_sell_val", "f_net_val"]:
+            df[col] = df[col].fillna(df[f"cf_{col}"])
+
+        df = df.drop(
+            columns=[c for c in list(cf_fallback.values()) + list(tv_fallback.values())
+                     if c in df.columns]
+        )
+
+        # ── Full GICS classification tree, merged per ticker (constant per ticker),
+        #    sourced entirely from bronze.gics (English snake_case names + codes). ──
+        cls = self._helper_build_gics_classification()
+        if not cls.empty:
+            df = df.merge(cls, on=["exchange", "ticker"], how="left")
+        else:
+            for c in self.GICS_CLASS_COLS:
+                df[c] = pd.NA
+
+        out_cols = KEYS + self.GICS_CLASS_COLS + [
+            "open", "high", "low", "close",
+            "net_change", "pct_change", "volume", "foreign_room",
+            "f_buy_vol", "f_sell_vol", "f_net_vol",
+            "f_buy_val", "f_sell_val", "f_net_val",
+            "vol_matched", "vol_negotiated", "val_matched_bn", "val_negotiated_bn",
+            "own_pct",
         ]
-        df = df.sort_values(["exchange", "ticker", "date"]).reset_index(drop=True)
+        df = df[out_cols].sort_values(KEYS).reset_index(drop=True)
 
         df = self._helper_cast_columns(
             df,
             decimal_cols=[
-                "open", "high", "low", "close", "close_raw",
+                "open", "high", "low", "close", "net_change", "pct_change",
                 "val_matched_bn", "val_negotiated_bn",
                 "f_buy_val", "f_sell_val", "f_net_val", "own_pct",
             ],
             bigint_cols=[
-                "volume", "vol_matched", "vol_negotiated",
-                "f_buy_vol", "f_sell_vol", "f_net_vol", "room_left",
+                "volume", "foreign_room",
+                "f_buy_vol", "f_sell_vol", "f_net_vol",
+                "vol_matched", "vol_negotiated",
             ],
         )
 
         self._helper_save_pandas_table_to_database(
             schema_name=SILVER_SCHEMA,
             table_name="stocks",
-            primary_keys=["exchange", "ticker", "date"],
+            primary_keys=KEYS,
             df=df,
             dtype_overrides={"date": DataType.DATE()},
+        )
+
+    # Full GICS hierarchy columns carried on every silver.stocks row (English
+    # snake_case names + codes, sourced entirely from bronze.gics).
+    GICS_CLASS_COLS = [
+        "sector", "sector_code",
+        "industry_group", "industry_group_code",
+        "industry", "industry_code",
+        "sub_industry", "sub_industry_code",
+    ]
+
+    def _helper_build_gics_classification(self) -> pd.DataFrame:
+        """Build the per-ticker FULL GICS classification tree (merged into
+        silver.stocks), sourced entirely from the official GICS taxonomy.
+
+        • Simplize (bronze `simplize_industry`) — per-ticker industry group
+          (accurate for VN, e.g. VHM=real estate, VCB=bank).
+        • GICS (bronze `gics`) — the official taxonomy.
+
+        Each ticker's Simplize industry group is crosswalked to a GICS sub-industry
+        (leaf) via SIMPLIZE_GROUP_TO_GICS_SUB_INDUSTRY; joining bronze.gics on that
+        leaf yields all four levels — sector / industry_group / industry /
+        sub_industry — as English snake_case names + codes. `sector` is the GICS
+        sector. Returns one row per (exchange, ticker); empty if bronze is missing.
+        """
+        out_cols = ["exchange", "ticker"] + self.GICS_CLASS_COLS
+
+        ind = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="simplize_industry")
+        gics = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="gics")
+        if ind.empty or gics.empty:
+            self._logger.log_warning(
+                "GICS classification: missing bronze simplize_industry / gics; "
+                "stocks will have no GICS classification."
+            )
+            return pd.DataFrame(columns=out_cols)
+
+        # GICS taxonomy keyed by sub-industry leaf -> the full snake_case hierarchy.
+        # Select code + *_snake columns only (bronze.gics also has title-case name
+        # columns), then rename the snake columns to the canonical output names.
+        gics = gics.copy()
+        gics["sub_industry_code"] = gics["sub_industry_code"].astype("string").str.strip()
+        snake_map = {
+            "sub_industry_code": "sub_industry_code",
+            "sector_code": "sector_code", "sector_snake": "sector",
+            "industry_group_code": "industry_group_code",
+            "industry_group_snake": "industry_group",
+            "industry_code": "industry_code", "industry_snake": "industry",
+            "sub_industry_snake": "sub_industry",
+        }
+        gics_tree = (
+            gics.drop_duplicates("sub_industry_code")[list(snake_map)]
+            .rename(columns=snake_map)
+        )
+
+        ind = ind.copy()
+        ind["industry_group_code"] = ind["industry_group_code"].astype("string").str.strip()
+        ind["sub_industry_code"] = ind["industry_group_code"].map(
+            SIMPLIZE_GROUP_TO_GICS_SUB_INDUSTRY
+        )
+
+        unmapped = ind[ind["sub_industry_code"].isna()]
+        if not unmapped.empty:
+            self._logger.log_warning(
+                f"GICS classification: {len(unmapped)} tickers unmapped; "
+                f"unknown Simplize industry groups: "
+                f"{sorted(unmapped['industry_group_code'].dropna().unique())}"
+            )
+
+        # Join only on the leaf code; GICS supplies all hierarchy columns (avoids
+        # colliding with Simplize's own industry_group_code on `ind`).
+        merged = ind[["exchange", "ticker", "sub_industry_code"]].merge(
+            gics_tree, on="sub_industry_code", how="left"
+        )
+        return (
+            merged[out_cols]
+            .drop_duplicates(subset=["exchange", "ticker"])
+            .reset_index(drop=True)
         )
 
     def _helper_transform(
@@ -1870,6 +2069,11 @@ class DataPreprocessor:
                     self._ingest_bronze_stocks_trading_view()
                     self._ingest_bronze_stocks_cafef()
                     self._ingest_bronze_stocks_simplize()
+                    self._ingest_bronze_simplize_industry()
+                if self._switch_handler.is_enabled(
+                    "data_preprocessor", "data_quality_bronze", "gics"
+                ):
+                    self._ingest_bronze_gics()
 
             except Exception as e:
                 self._logger.log_error(
