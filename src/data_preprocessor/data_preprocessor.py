@@ -94,6 +94,9 @@ def _build_transform_func_map() -> dict:
         add_intraday_range,
         add_return_volatility,
         add_rolling_statistics,
+        add_foreign_buy_pressure,
+        add_foreign_net_val_ratio,
+        add_negotiated_vol_ratio,
     )
 
     return {
@@ -145,6 +148,9 @@ def _build_transform_func_map() -> dict:
         TransformAction.ADD_INTRADAY_RANGE: add_intraday_range,
         TransformAction.ADD_RETURN_VOLATILITY: add_return_volatility,
         TransformAction.ADD_ROLLING_STATISTICS: add_rolling_statistics,
+        TransformAction.ADD_FOREIGN_BUY_PRESSURE: add_foreign_buy_pressure,
+        TransformAction.ADD_FOREIGN_NET_VAL_RATIO: add_foreign_net_val_ratio,
+        TransformAction.ADD_NEGOTIATED_VOL_RATIO: add_negotiated_vol_ratio,
     }
 
 
@@ -1636,31 +1642,15 @@ class DataPreprocessor:
             self._logger.log_info(f"No silver {table_name} data found.")
             return
 
-        # psycopg2 returns DECIMAL as Python Decimal — coerce every non-key column
+        # psycopg2 returns DECIMAL as Python Decimal — coerce numeric source columns
         # to float before feature engineering (covers OHLCV/value and the CafeF
         # fields carried through from silver: foreign flow, volume breakdown, etc.).
+        # The GICS classification columns are categorical strings and are passed
+        # through untouched (coercing them would wipe them to NaN).
+        _non_numeric = {"exchange", "ticker", "date", *self.GICS_CLASS_COLS}
         for col in df.columns:
-            if col not in ("exchange", "ticker", "date"):
+            if col not in _non_numeric:
                 df[col] = pd.to_numeric(df[col], errors="coerce")
-
-        # CafeF-derived, row-wise features (no look-ahead) — only present for the
-        # stocks table, which carries the foreign-flow / volume-breakdown columns.
-        if {"f_net_val", "val_matched_bn"}.issubset(df.columns):
-            buy = df.get("f_buy_val")
-            sell = df.get("f_sell_val")
-            if buy is not None and sell is not None:
-                denom = buy.abs() + sell.abs()
-                df["foreign_buy_pressure"] = np.where(denom > 0, buy / denom, np.nan)
-            df["foreign_net_val_ratio"] = (
-                df["f_net_val"] / df["val_matched_bn"].replace(0, np.nan)
-            )
-            if {"vol_matched", "vol_negotiated"}.issubset(df.columns):
-                vden = df["vol_matched"].fillna(0) + df["vol_negotiated"].fillna(0)
-                df["negotiated_vol_ratio"] = np.where(
-                    vden > 0, df["vol_negotiated"] / vden, np.nan
-                )
-            if "close_raw" in df.columns:
-                df["adj_factor"] = df["close"] / df["close_raw"].replace(0, np.nan)
 
         transform_layers = list(ta_layers or []) + self._helper_build_feature_layers(df)
         if not transform_layers:
@@ -1745,6 +1735,10 @@ class DataPreprocessor:
                 TransformLayer.TA_ADD_ATR(),
                 TransformLayer.TA_ADD_NATR(),
                 TransformLayer.TA_ADD_TRANGE(),
+                # Stock microstructure (foreign flow / volume breakdown)
+                TransformLayer.ADD_FOREIGN_BUY_PRESSURE(),
+                TransformLayer.ADD_FOREIGN_NET_VAL_RATIO(),
+                TransformLayer.ADD_NEGOTIATED_VOL_RATIO(),
             ],
         )
 
