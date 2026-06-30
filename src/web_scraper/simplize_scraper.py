@@ -5,8 +5,9 @@ import csv
 import glob
 import os
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 # ===== Third-Party Libraries =====
 import requests
@@ -45,6 +46,16 @@ class SimplizeScraper(BaseScraper):
     SOURCE_NAME = "simplize"
     BASE = "https://api.simplize.vn/api/historical/quote/prices"
     PAGE_SIZE = 1000  # server-side cap; larger values are rejected (401)
+
+    # Per-ticker company industry (GICS-based VN taxonomy): 10 economic sectors /
+    # 50 industry groups, accurate per ticker — the source for GICS classification.
+    INDUSTRY_BASE = "https://api.simplize.vn/api/company/summary"
+    INDUSTRY_COLUMNS = [
+        "exchange", "ticker", "industry_activity",
+        "economic_sector_id", "economic_sector_slug", "economic_sector_name",
+        "industry_group_id", "industry_group_code", "industry_group_slug",
+        "industry_group_type",
+    ]
 
     OUTPUT_COLUMNS = [
         "date", "exchange", "symbol",
@@ -205,6 +216,86 @@ class SimplizeScraper(BaseScraper):
             f"Simplize: {len(out)} stock symbols found from TradingView links."
         )
         return sorted(out)
+
+    # ──────────────────────────────────────────────────────────────────────
+    # Per-ticker industry (GICS-based VN taxonomy) — for GICS classification
+    # ──────────────────────────────────────────────────────────────────────
+
+    def _fetch_industry(self, exchange: str, ticker: str) -> Optional[dict]:
+        """Fetch one ticker's company-summary industry fields (retried)."""
+        for attempt in range(1, self._retry_attempts + 1):
+            try:
+                r = self._session.get(f"{self.INDUSTRY_BASE}/{ticker}", timeout=20)
+                if r.status_code == 404:
+                    return None  # genuinely not on Simplize
+                if r.status_code != 200:
+                    # Rate-limit / transient server error — back off and retry.
+                    if attempt == self._retry_attempts:
+                        self._logger.log_warning(
+                            f"Simplize industry {ticker}: status {r.status_code} "
+                            f"after {attempt} tries."
+                        )
+                        return None
+                    time.sleep(self._retry_delay)
+                    continue
+                d = r.json().get("data") or {}
+                if not d.get("bcEconomicSectorSlug"):
+                    return None
+                return {
+                    "exchange": exchange, "ticker": ticker,
+                    "industry_activity": d.get("industryActivity"),
+                    "economic_sector_id": d.get("bcEconomicSectorId"),
+                    "economic_sector_slug": d.get("bcEconomicSectorSlug"),
+                    "economic_sector_name": d.get("bcEconomicSectorName"),
+                    "industry_group_id": d.get("bcIndustryGroupId"),
+                    "industry_group_code": d.get("bcIndustryGroupCode"),
+                    "industry_group_slug": d.get("bcIndustryGroupSlug"),
+                    "industry_group_type": d.get("bcIndustryGroupType"),
+                }
+            except Exception as e:
+                if attempt == self._retry_attempts:
+                    self._logger.log_warning(
+                        f"Simplize industry failed after {attempt} tries ({ticker}): {e}"
+                    )
+                    return None
+                time.sleep(self._retry_delay)
+        return None
+
+    def scrape_all_industries(self, workers: int = 8) -> None:
+        """Scrape per-ticker GICS-based industry for the whole universe into one
+        reference CSV at SIMPLIZE_RAW_DATA_DIR/industry.csv (one row per ticker)."""
+        symbols = self.get_stock_symbols()
+        self._logger.log_info(
+            f"Simplize: scraping industry for {len(symbols)} tickers..."
+        )
+
+        rows: List[dict] = []
+        with ThreadPoolExecutor(max_workers=workers) as ex:
+            futures = {
+                ex.submit(self._fetch_industry, exchange, ticker): ticker
+                for exchange, ticker in symbols
+            }
+            for fut in as_completed(futures):
+                rec = fut.result()
+                if rec is not None:
+                    rows.append(rec)
+
+        if not rows:
+            self._logger.log_warning("Simplize: no industry data scraped.")
+            return
+
+        rows.sort(key=lambda r: (r["exchange"], r["ticker"]))
+        os.makedirs(SIMPLIZE_RAW_DATA_DIR, exist_ok=True)
+        file_path = os.path.join(SIMPLIZE_RAW_DATA_DIR, "industry.csv")
+        tmp_path = file_path + ".tmp"
+        with open(tmp_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=self.INDUSTRY_COLUMNS)
+            writer.writeheader()
+            writer.writerows(rows)
+        os.replace(tmp_path, file_path)
+        self._logger.log_info(
+            f"Simplize: saved industry for {len(rows)} tickers -> {file_path}"
+        )
 
     def scrape(self) -> None:
         """BaseScraper entry point: scrape all stocks from Simplize."""
