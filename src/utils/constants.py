@@ -152,6 +152,12 @@ UNIFIED_TICKERS: list = [
 # onto the stock's trading-day date spine).
 UNIFIED_MACRO_TABLES: list = ["economy", "bonds", "indices", "stocks"]
 
+# The `economy` gold table holds ~1,034 global macro series; joining them all
+# blows past PostgreSQL's 1,600-column-per-table limit. Restrict the economy
+# join to series whose ticker starts with this prefix (Vietnam macro = 88
+# series). Set to None to join every economy series.
+UNIFIED_ECONOMY_TICKER_PREFIX: str | None = "VN"
+
 # Supervised target: percentage simple return of `close` this many trading days
 # into the future, e.g. close=100 today and 120 in UNIFIED_TARGET_HORIZON days -> target=20.
 UNIFIED_TARGET_HORIZON: int = 5

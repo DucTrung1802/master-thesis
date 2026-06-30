@@ -31,6 +31,7 @@ from utils.constants import (
     UNIFIED_SCHEMA,
     UNIFIED_TICKERS,
     UNIFIED_MACRO_TABLES,
+    UNIFIED_ECONOMY_TICKER_PREFIX,
     UNIFIED_TARGET_HORIZON,
 )
 from utils.enums import *
@@ -1853,7 +1854,7 @@ class DataPreprocessor:
 
         return df
 
-    def _helper_macro_wide(self, table_name: str, ticker_include: set[str] | None = None) -> pd.DataFrame:
+    def _helper_macro_wide(self, table_name: str, ticker_include: set[str] | None = None, ticker_prefix: str | None = None) -> pd.DataFrame:
         """
         Load a macro gold table and pivot its price column to wide form, one
         column per (exchange, ticker) series named `<table>_<exchange>_<ticker>`
@@ -1891,6 +1892,11 @@ class DataPreprocessor:
 
         if ticker_include is not None:
             df = df[df["ticker"].isin(ticker_include)]
+            if df.empty:
+                return pd.DataFrame()
+
+        if ticker_prefix is not None:
+            df = df[df["ticker"].str.startswith(ticker_prefix)]
             if df.empty:
                 return pd.DataFrame()
 
@@ -1935,35 +1941,23 @@ class DataPreprocessor:
         spine["date"] = pd.to_datetime(spine["date"])
         spine = spine.sort_values("date").reset_index(drop=True)
 
-        # Resolve same-sector peer tickers from bronze (excludes self) so the
-        # stocks macro join is scoped to sector peers rather than all 621 stocks.
+        # Resolve same-sector peer tickers from gold (excludes self) so the
+        # stocks macro join is scoped to GICS-sector peers rather than all 621
+        # stocks. The GICS `sector` already rides along on the gold spine.
         exchange = spine["exchange"].iloc[0]
-        symbol = f"{exchange}:{ticker}"
         peer_tickers: set[str] = set()
-        sector_result = self._helper_select(
-            schema_name=BRONZE_SCHEMA,
-            table_name="trading_view_stocks",
-            columns=["sector"],
-            conditions=[
-                Condition(
-                    column="symbol",
-                    operator=SqlOperator.EQUAL_TO,
-                    value=symbol,
-                    data_type=DataType.VARCHAR(),
-                )
-            ],
-            limit=1,
-        )
-        if not sector_result.empty:
-            ticker_sector = sector_result["sector"].iloc[0]
+        ticker_sector = spine["sector"].iloc[0] if "sector" in spine.columns else None
+        if ticker_sector is not None and pd.notna(ticker_sector):
             with self._database_driver._cursor_ctx() as cur:
                 cur.execute(
-                    "SELECT DISTINCT symbol FROM bronze_schema.trading_view_stocks WHERE sector = %s AND symbol != %s",
-                    (ticker_sector, symbol),
+                    "SELECT DISTINCT ticker FROM gold_schema.stocks "
+                    "WHERE sector = %s AND ticker != %s",
+                    (ticker_sector, ticker),
                 )
-                peer_tickers = {row[0].split(":")[-1] for row in cur.fetchall()}
+                peer_tickers = {row[0] for row in cur.fetchall()}
             self._logger.log_info(
-                f"'{ticker}' sector='{ticker_sector}', {len(peer_tickers)} peer tickers for stocks macro join."
+                f"'{ticker}' GICS sector='{ticker_sector}', "
+                f"{len(peer_tickers)} peer tickers for stocks macro join."
             )
 
         macro_cols: List[str] = []
@@ -1971,6 +1965,9 @@ class DataPreprocessor:
             wide = self._helper_macro_wide(
                 macro_table,
                 ticker_include=peer_tickers if macro_table == "stocks" else None,
+                ticker_prefix=(
+                    UNIFIED_ECONOMY_TICKER_PREFIX if macro_table == "economy" else None
+                ),
             )
             if wide.empty:
                 continue
