@@ -329,6 +329,7 @@
     "data_preprocessor/data_quality_bronze/funds": true,
     "data_preprocessor/data_quality_bronze/indices": true,
     "data_preprocessor/data_quality_bronze/stocks": true,
+    "data_preprocessor/data_quality_bronze/gics": true,
     "data_preprocessor/data_quality_silver": true,
     "data_preprocessor/data_quality_silver/bonds": true,
     "data_preprocessor/data_quality_silver/economy": true,

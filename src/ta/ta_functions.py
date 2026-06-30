@@ -2745,6 +2745,50 @@ def add_rolling_statistics(
     return pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
 
+def add_foreign_buy_pressure(df: pd.DataFrame) -> pd.DataFrame:
+    """Foreign buying pressure = f_buy_val / (|f_buy_val| + |f_sell_val|).
+
+    Stock-only (foreign-flow columns). Returns df unchanged if they are absent.
+    """
+    if not {"f_buy_val", "f_sell_val"}.issubset(df.columns):
+        return df
+    df = df.copy()
+    buy = pd.to_numeric(df["f_buy_val"], errors="coerce")
+    sell = pd.to_numeric(df["f_sell_val"], errors="coerce")
+    denom = buy.abs() + sell.abs()
+    df["foreign_buy_pressure"] = np.where(denom > 0, buy / denom, np.nan)
+    return df
+
+
+def add_foreign_net_val_ratio(df: pd.DataFrame) -> pd.DataFrame:
+    """Foreign net value relative to matched turnover = f_net_val / val_matched_bn.
+
+    Stock-only. Returns df unchanged if the required columns are absent.
+    """
+    if not {"f_net_val", "val_matched_bn"}.issubset(df.columns):
+        return df
+    df = df.copy()
+    net = pd.to_numeric(df["f_net_val"], errors="coerce")
+    matched = pd.to_numeric(df["val_matched_bn"], errors="coerce")
+    df["foreign_net_val_ratio"] = net / matched.replace(0, np.nan)
+    return df
+
+
+def add_negotiated_vol_ratio(df: pd.DataFrame) -> pd.DataFrame:
+    """Block (negotiated) share of volume = vol_negotiated / (vol_matched + vol_negotiated).
+
+    Stock-only. Returns df unchanged if the required columns are absent.
+    """
+    if not {"vol_matched", "vol_negotiated"}.issubset(df.columns):
+        return df
+    df = df.copy()
+    matched = pd.to_numeric(df["vol_matched"], errors="coerce")
+    nego = pd.to_numeric(df["vol_negotiated"], errors="coerce")
+    vden = matched.fillna(0) + nego.fillna(0)
+    df["negotiated_vol_ratio"] = np.where(vden > 0, nego / vden, np.nan)
+    return df
+
+
 # endregion FEATURE ENGINEERING
 
 
