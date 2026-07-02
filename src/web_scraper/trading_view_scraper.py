@@ -1,4 +1,4 @@
-# src\web_scraper\web_scraper.py
+# src\web_scraper\trading_view_scraper.py
 
 # ===== Standard Library =====
 import csv
@@ -30,9 +30,13 @@ from utils.utils import *
 from utils.switch_handler import SwitchHandler
 from dtos.thread_manager_dtos.task import Task
 from thread_manager.thread_manager import ThreadManager
+from web_scraper.base_scraper import BaseScraper, register_scraper
 
 
-class WebScraper:
+@register_scraper
+class TradingViewScraper(BaseScraper):
+    SOURCE_NAME = "trading_view"
+
     def __init__(
         self,
         logger: Logger,
@@ -41,11 +45,13 @@ class WebScraper:
         retry_attempts: int = SCRAPER_RETRY_ATTEMPTS,
         retry_delay: float = SCRAPER_RETRY_DELAY,
     ):
-        self._logger: Logger = logger
-        self._switch_handler: SwitchHandler = switch_handler
-        self._thread_manager = ThreadManager(logger=self._logger, power=power)
-        self._retry_attempts: int = retry_attempts
-        self._retry_delay: float = retry_delay
+        super().__init__(
+            logger=logger,
+            switch_handler=switch_handler,
+            power=power,
+            retry_attempts=retry_attempts,
+            retry_delay=retry_delay,
+        )
         self._browser_semaphore = threading.Semaphore(SCRAPER_MAX_CONCURRENT_BROWSERS)
         self._nav_last_ts: float = 0.0
         self._nav_time_lock = threading.Lock()
@@ -237,6 +243,48 @@ class WebScraper:
         except Exception:
             self._logger.log_warning(f"Failed to remove elements by xpath: {xpath}")
 
+    def _helper_toggle_adj_dividends(
+        self, web_driver: ChromiumDriver, symbol: str
+    ) -> None:
+        """Enable TradingView's "Adjust data for dividends" (ADJ) toggle so scraped
+        prices are back-adjusted for cash dividends (matching CafeF's "Giá điều
+        chỉnh" and vnstock's fully-adjusted series). The chart defaults to ADJ OFF.
+
+        Best-effort and non-fatal: assets without a dividend-adjust control simply
+        have no such button (no-op). MUST run BEFORE the custom date range is applied,
+        because clicking ADJ resets the chart's visible range.
+        """
+        toggle_js = r"""
+        function at(e){return ((e.getAttribute('aria-label')||'')+' '+(e.getAttribute('title')||''));}
+        function tx(e){return (e.textContent||'').trim();}
+        let el = Array.from(document.querySelectorAll('button,div[role="button"]'))
+            .find(e => /adjust data for dividends/i.test(at(e)));
+        if (!el) { el = Array.from(document.querySelectorAll('button,div'))
+            .find(e => /^adj$/i.test(tx(e)) && e.children.length === 0); }
+        if (!el) return JSON.stringify({found:false});
+        const on = el.getAttribute('aria-pressed') === 'true';
+        if (!on) { el.scrollIntoView({block:'center'}); el.click(); }
+        return JSON.stringify({found:true, clicked:!on,
+            label:(el.getAttribute('aria-label') || tx(el))});
+        """
+        try:
+            result = json.loads(web_driver.execute_script(toggle_js))
+        except Exception as e:
+            self._logger.log_warning(f'ADJ-toggle script failed for "{symbol}": {e}')
+            return
+
+        if not result.get("found"):
+            self._logger.log_info(
+                f'No dividend-adjust (ADJ) control for "{symbol}"; scraping unadjusted.'
+            )
+            return
+
+        if result.get("clicked"):
+            self._logger.log_info(f'Enabled ADJ (dividend adjustment) for "{symbol}".')
+            time.sleep(SCRAPER_BASE_WAIT_TIME)
+        else:
+            self._logger.log_info(f'ADJ already enabled for "{symbol}".')
+
     def _helper_execute_scrape_actions(
         self,
         web_driver: ChromiumDriver,
@@ -423,7 +471,7 @@ class WebScraper:
         Folder / file paths are derived automatically from *key*.
         Raises the last exception if all attempts are exhausted.
         """
-        folder_path = f"{SCRAPER_RAW_DATA_DIR}/{format_key_for_path(key)}"
+        folder_path = f"{TRADING_VIEW_RAW_DATA_DIR}/{format_key_for_path(key)}"
         file_path = f"{folder_path}/trading_view_links_{datetime.now().strftime('%Y-%m-%d')}.csv"
         key_name = format_key_for_name(key)
 
@@ -1028,8 +1076,8 @@ class WebScraper:
     def aggregate_trading_view_links(self) -> None:
         self._logger.log_info("Aggregating Trading View link CSV files.")
 
-        links_dir = f"{SCRAPER_RAW_DATA_DIR}/links"
-        output_dir = f"{SCRAPER_RAW_DATA_DIR}/collected_links"
+        links_dir = f"{TRADING_VIEW_RAW_DATA_DIR}/links"
+        output_dir = f"{TRADING_VIEW_RAW_DATA_DIR}/collected_links"
 
         # Collect all CSV files recursively
         csv_files = []
@@ -1116,7 +1164,7 @@ class WebScraper:
 
         Maps each enabled switch path to the corresponding links CSV directory
         by stripping the 'web_scraper/trading_view/data' prefix and prepending
-        SCRAPER_RAW_DATA_DIR/links, which works regardless of directory depth
+        TRADING_VIEW_RAW_DATA_DIR/links, which works regardless of directory depth
         (forex has 2 sub-parts, bonds 3, stocks 4, etc.).
         """
         added = 0
@@ -1125,7 +1173,7 @@ class WebScraper:
         ):
             # parts[3:] = [asset_type, sub1, ..., subN] — mirrors the links dir layout
             sub_parts = path.split("/")[3:]
-            links_dir = os.path.join(SCRAPER_RAW_DATA_DIR, "links", *sub_parts)
+            links_dir = os.path.join(TRADING_VIEW_RAW_DATA_DIR, "links", *sub_parts)
             if not os.path.isdir(links_dir):
                 self._logger.log_warning(f"Links directory not found: {links_dir}")
                 continue
@@ -1223,7 +1271,7 @@ class WebScraper:
 
         # Sub-type (name, value) pairs mirror the links CSV schema, e.g.
         # (country, vietnam) / (stock_type, common_stock) / (sector, finance).
-        # Every populated pair becomes both a folder level under raw_data/data/
+        # Every populated pair becomes both a folder level under raw_data/trading_view/data/
         # and a metadata column in the output CSV — so the data tree mirrors
         # the links tree regardless of how many sub-dimensions an asset has.
         sub_type_pairs = [
@@ -1249,8 +1297,8 @@ class WebScraper:
             )
 
             try:
-                # Mirror the links folder structure under raw_data/data/
-                folder_parts = [SCRAPER_RAW_DATA_DIR, "data", scrape_main_type]
+                # Mirror the links folder structure under raw_data/trading_view/data/
+                folder_parts = [TRADING_VIEW_RAW_DATA_DIR, "data", scrape_main_type]
                 folder_parts += [value for _, value in sub_type_pairs if value]
                 folder_path = "/".join(folder_parts)
                 os.makedirs(folder_path, exist_ok=True)
@@ -1291,6 +1339,14 @@ class WebScraper:
                 )
 
                 dialog_thread.start()
+
+                # Enable dividend adjustment (ADJ) for dividend-bearing assets BEFORE
+                # the date range is selected — clicking ADJ resets the chart's range.
+                if scrape_main_type in (
+                    ScrapeMainType.STOCKS.value,
+                    ScrapeMainType.FUNDS.value,
+                ):
+                    self._helper_toggle_adj_dividends(web_driver, symbol)
 
                 # ─── Date range selection via JS-powered UI clicks ────────────────
                 # The chart toolbar button exists in the DOM early but Selenium's
@@ -1511,7 +1567,7 @@ class WebScraper:
     # Entry point
     # ──────────────────────────────────────────────────────────────────────
 
-    def start_scraping(self) -> None:
+    def scrape(self) -> None:
         self._logger.log_info("Start scraping data using ThreadManager.")
 
         # ── Phase 1: scrape links ─────────────────────────────────────────────

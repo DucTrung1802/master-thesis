@@ -152,6 +152,10 @@ class TransformAction(Enum):
     ADD_INTRADAY_RANGE = "add_intraday_range"
     ADD_RETURN_VOLATILITY = "add_return_volatility"
     ADD_ROLLING_STATISTICS = "add_rolling_statistics"
+    # Feature engineering — stock microstructure (foreign flow / volume breakdown)
+    ADD_FOREIGN_BUY_PRESSURE = "add_foreign_buy_pressure"
+    ADD_FOREIGN_NET_VAL_RATIO = "add_foreign_net_val_ratio"
+    ADD_NEGOTIATED_VOL_RATIO = "add_negotiated_vol_ratio"
     # TA — Overlap Studies
     TA_ADD_BBANDS = "ta_add_bbands"
     TA_ADD_DEMA = "ta_add_dema"
@@ -234,6 +238,19 @@ class TransformLayer:
             column_name=column_name,
             windows=windows,
         )
+
+    # Feature engineering — stock microstructure (foreign flow / volume breakdown)
+    @classmethod
+    def ADD_FOREIGN_BUY_PRESSURE(cls):
+        return cls(TransformAction.ADD_FOREIGN_BUY_PRESSURE)
+
+    @classmethod
+    def ADD_FOREIGN_NET_VAL_RATIO(cls):
+        return cls(TransformAction.ADD_FOREIGN_NET_VAL_RATIO)
+
+    @classmethod
+    def ADD_NEGOTIATED_VOL_RATIO(cls):
+        return cls(TransformAction.ADD_NEGOTIATED_VOL_RATIO)
 
     # TA — Overlap Studies
     @classmethod
@@ -1115,6 +1132,7 @@ COUNTRY_SEARCH_TERM: Dict[Country, str] = {
     Country.JAPAN: "japan",
     Country.INDIA: "india",
     Country.MAINLAND_CHINA: "mainland china",
+    Country.SOUTH_KOREA: "south korea",
     # … extend as needed
 }
 
@@ -1147,6 +1165,7 @@ COUNTRY_CODE: Dict[Country, str] = {
     Country.JAPAN: "jp",
     Country.INDIA: "in",
     Country.MAINLAND_CHINA: "cn",
+    Country.SOUTH_KOREA: "kr",
     # extend as needed
 }
 
