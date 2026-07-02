@@ -28,17 +28,12 @@ from utils.constants import (
     BRONZE_SCHEMA,
     SILVER_SCHEMA,
     GOLD_SCHEMA,
-    UNIFIED_SCHEMA,
-    UNIFIED_TICKERS,
-    UNIFIED_MACRO_TABLES,
-    UNIFIED_TARGET_HORIZON,
 )
 from utils.enums import *
 from utils.utils import *
 from utils.switch_handler import SwitchHandler
 
 load_dotenv()
-
 
 def _build_transform_func_map() -> dict:
     """Map each per-group TransformAction to its implementation.
@@ -152,7 +147,6 @@ def _build_transform_func_map() -> dict:
         TransformAction.ADD_FOREIGN_NET_VAL_RATIO: add_foreign_net_val_ratio,
         TransformAction.ADD_NEGOTIATED_VOL_RATIO: add_negotiated_vol_ratio,
     }
-
 
 class DataPreprocessor:
 
@@ -1757,266 +1751,6 @@ class DataPreprocessor:
     def _ingest_gold_indices(self) -> None:
         self._ingest_gold_table("indices")
 
-    def _helper_unified_transform(
-        self, df: pd.DataFrame, unified_layer_list: List[UnifiedLayer]
-    ) -> pd.DataFrame:
-        """
-        Apply unified-layer transforms to a single-stock (date-sorted) DataFrame.
-
-        Supported actions:
-          • EXTRACT_DATETIME_FEATURE — calendar, boundary-flag and cyclical
-            features derived from the date column.
-          • CREATE_TARGET — the supervised label (future return/direction/price).
-        """
-        df = df.copy()
-        for layer in unified_layer_list:
-            if layer.action == UnifiedAction.EXTRACT_DATETIME_FEATURE:
-                col = layer.params.get("column_name", "date")
-                dt = pd.to_datetime(df[col])
-
-                # Calendar basics
-                df["year"] = dt.dt.year.astype("int32")
-                df["quarter"] = dt.dt.quarter.astype("int32")
-                df["month"] = dt.dt.month.astype("int32")
-                df["week_of_year"] = dt.dt.isocalendar().week.astype("int32")
-                df["day_of_year"] = dt.dt.day_of_year.astype("int32")
-                df["day"] = dt.dt.day.astype("int32")
-                df["day_of_week"] = dt.dt.day_of_week.astype("int32")  # 0=Mon … 6=Sun
-
-                # Boundary flags (bool → int for DB compatibility)
-                df["is_month_start"] = dt.dt.is_month_start.astype("int32")
-                df["is_month_end"] = dt.dt.is_month_end.astype("int32")
-                df["is_quarter_start"] = dt.dt.is_quarter_start.astype("int32")
-                df["is_quarter_end"] = dt.dt.is_quarter_end.astype("int32")
-                df["is_year_start"] = dt.dt.is_year_start.astype("int32")
-                df["is_year_end"] = dt.dt.is_year_end.astype("int32")
-
-                # Cyclical encodings — let the model see that Dec→Jan and Fri→Mon wrap around
-                df["month_sin"] = np.sin(2 * np.pi * dt.dt.month / 12)
-                df["month_cos"] = np.cos(2 * np.pi * dt.dt.month / 12)
-                df["day_of_week_sin"] = np.sin(2 * np.pi * dt.dt.day_of_week / 7)
-                df["day_of_week_cos"] = np.cos(2 * np.pi * dt.dt.day_of_week / 7)
-                df["day_of_year_sin"] = np.sin(2 * np.pi * dt.dt.day_of_year / 365)
-                df["day_of_year_cos"] = np.cos(2 * np.pi * dt.dt.day_of_year / 365)
-
-            elif layer.action == UnifiedAction.CREATE_TARGET:
-                col = layer.params.get("column_name", "close")
-                horizon = int(layer.params.get("horizon", 1))
-                kind = layer.params.get("kind", "log_return")
-                name = layer.params.get("target_name", "target")
-
-                price = pd.to_numeric(df[col], errors="coerce")
-                future = price.shift(-horizon)  # look-ahead is the label, by design
-                if kind == "log_return":
-                    df[name] = np.log(future / price)
-                elif kind == "simple_return":
-                    df[name] = future / price - 1.0
-                elif kind == "pct_return":
-                    df[name] = (future / price - 1.0) * 100.0
-                elif kind == "direction":
-                    df[name] = (future > price).astype("float32")
-                    df.loc[future.isna(), name] = np.nan
-                elif kind == "price":
-                    df[name] = future
-                else:
-                    raise ValueError(f"Unknown CREATE_TARGET kind: '{kind}'")
-
-            elif layer.action == UnifiedAction.DROP_HIGH_NULL_COLUMNS:
-                threshold = float(layer.params.get("threshold", 0.5))
-                protect = set(layer.params.get("protect") or UNIFIED_PROTECTED_COLUMNS)
-                null_frac = df.isna().mean()
-                drop_cols = [
-                    c
-                    for c in df.columns
-                    if c not in protect and null_frac[c] > threshold
-                ]
-                if drop_cols:
-                    df = df.drop(columns=drop_cols)
-                self._logger.log_info(
-                    f"DROP_HIGH_NULL_COLUMNS: dropped {len(drop_cols)} columns "
-                    f"(> {threshold:.0%} null)"
-                )
-
-            elif layer.action == UnifiedAction.DROP_CONSTANT_COLUMNS:
-                protect = set(layer.params.get("protect") or UNIFIED_PROTECTED_COLUMNS)
-                drop_cols = [
-                    c
-                    for c in df.columns
-                    if c not in protect and df[c].nunique(dropna=True) <= 1
-                ]
-                if drop_cols:
-                    df = df.drop(columns=drop_cols)
-                self._logger.log_info(
-                    f"DROP_CONSTANT_COLUMNS: dropped {len(drop_cols)} columns "
-                    f"(<= 1 distinct value)"
-                )
-
-        return df
-
-    def _helper_macro_wide(self, table_name: str, ticker_include: set[str] | None = None) -> pd.DataFrame:
-        """
-        Load a macro gold table and pivot its price column to wide form, one
-        column per (exchange, ticker) series named `<table>_<exchange>_<ticker>`
-        (lowercased), indexed by date. Used to join macro context onto a stock's
-        date spine in the unified layer.
-
-        Handles both gold table conventions:
-        • single-value tables (economy, bonds, forex) — price lives in `value`
-        • OHLC tables (stocks, indices, funds)         — price lives in `close`
-        """
-        with self._database_driver._cursor_ctx() as cur:
-            available_columns = self._database_driver._get_table_columns(
-                cur, GOLD_SCHEMA, table_name
-            )
-
-        if "value" in available_columns:
-            price_col = "value"
-        elif "close" in available_columns:
-            price_col = "close"
-        else:
-            self._logger.log_error(
-                f"Gold table '{table_name}' has neither 'value' nor 'close' "
-                f"column; skipping for unified join."
-            )
-            return pd.DataFrame()
-
-        df = self._helper_select(
-            schema_name=GOLD_SCHEMA,
-            table_name=table_name,
-            columns=["exchange", "ticker", "date", price_col],
-        )
-        if df.empty:
-            self._logger.log_info(f"No gold {table_name} data found for unified join.")
-            return pd.DataFrame()
-
-        if ticker_include is not None:
-            df = df[df["ticker"].isin(ticker_include)]
-            if df.empty:
-                return pd.DataFrame()
-
-        df[price_col] = pd.to_numeric(df[price_col], errors="coerce")
-
-        def _col(exchange: str, ticker: str) -> str:
-            raw = f"{table_name}_{exchange}_{ticker}".lower()
-            return re.sub(r"[^0-9a-z]+", "_", raw).strip("_")
-
-        df["series"] = [_col(e, t) for e, t in zip(df["exchange"], df["ticker"])]
-        wide = df.pivot_table(
-            index="date", columns="series", values=price_col, aggfunc="last"
-        )
-        return wide
-
-    def _ingest_unified_stock(self, ticker: str) -> None:
-        """
-        Build a per-stock unified table `unified_schema.unified_<ticker>`:
-        the gold stock rows for `ticker` (the date spine) LEFT-joined with each
-        macro table's wide `value` columns, forward-filled onto the stock's
-        trading days (causal — each day carries the last published macro value).
-        """
-        self._logger.log_info(f"Ingesting unified data for '{ticker}'...")
-
-        spine = self._helper_select(
-            schema_name=GOLD_SCHEMA,
-            table_name="stocks",
-            conditions=[
-                Condition(
-                    column="ticker",
-                    operator=SqlOperator.EQUAL_TO,
-                    value=ticker,
-                    data_type=DataType.VARCHAR(),
-                )
-            ],
-            order_by=["date"],
-        )
-        if spine.empty:
-            self._logger.log_info(f"No gold stocks data found for ticker '{ticker}'.")
-            return
-
-        spine["date"] = pd.to_datetime(spine["date"])
-        spine = spine.sort_values("date").reset_index(drop=True)
-
-        # Resolve same-sector peer tickers from bronze (excludes self) so the
-        # stocks macro join is scoped to sector peers rather than all 621 stocks.
-        exchange = spine["exchange"].iloc[0]
-        symbol = f"{exchange}:{ticker}"
-        peer_tickers: set[str] = set()
-        sector_result = self._helper_select(
-            schema_name=BRONZE_SCHEMA,
-            table_name="trading_view_stocks",
-            columns=["sector"],
-            conditions=[
-                Condition(
-                    column="symbol",
-                    operator=SqlOperator.EQUAL_TO,
-                    value=symbol,
-                    data_type=DataType.VARCHAR(),
-                )
-            ],
-            limit=1,
-        )
-        if not sector_result.empty:
-            ticker_sector = sector_result["sector"].iloc[0]
-            with self._database_driver._cursor_ctx() as cur:
-                cur.execute(
-                    "SELECT DISTINCT symbol FROM bronze_schema.trading_view_stocks WHERE sector = %s AND symbol != %s",
-                    (ticker_sector, symbol),
-                )
-                peer_tickers = {row[0].split(":")[-1] for row in cur.fetchall()}
-            self._logger.log_info(
-                f"'{ticker}' sector='{ticker_sector}', {len(peer_tickers)} peer tickers for stocks macro join."
-            )
-
-        macro_cols: List[str] = []
-        for macro_table in UNIFIED_MACRO_TABLES:
-            wide = self._helper_macro_wide(
-                macro_table,
-                ticker_include=peer_tickers if macro_table == "stocks" else None,
-            )
-            if wide.empty:
-                continue
-            wide.index = pd.to_datetime(wide.index)
-            wide = wide.sort_index()
-            spine = spine.merge(wide, how="left", left_on="date", right_index=True)
-            macro_cols.extend(list(wide.columns))
-
-        # Forward-fill macro context onto every trading day (no look-ahead).
-        if macro_cols:
-            spine[macro_cols] = spine[macro_cols].ffill()
-
-        # Datetime features, the supervised target (future pct return), then
-        # column cleaning (drop sparse and constant columns).
-        spine = self._helper_unified_transform(
-            spine,
-            [
-                UnifiedLayer.EXTRACT_DATETIME_FEATURE(column_name="date"),
-                UnifiedLayer.CREATE_TARGET(
-                    column_name="close",
-                    horizon=UNIFIED_TARGET_HORIZON,
-                    kind="pct_return",
-                    target_name="target",
-                ),
-                UnifiedLayer.DROP_HIGH_NULL_COLUMNS(threshold=0.5),
-                UnifiedLayer.DROP_CONSTANT_COLUMNS(),
-            ],
-        )
-
-        spine["date"] = spine["date"].dt.date
-
-        table_name = f"unified_{ticker}".lower()
-        overrides: dict[str, str] = {"date": DataType.DATE()}
-        for col in spine.columns:
-            if str(spine[col].dtype).lower().startswith("float"):
-                overrides[col] = "REAL"
-
-        self._helper_save_pandas_table_to_database(
-            schema_name=UNIFIED_SCHEMA,
-            table_name=table_name,
-            primary_keys=["date"],
-            df=spine,
-            dtype_overrides=overrides,
-            use_copy=True,
-        )
-
     # endregion Helper functions
 
     def ingest_bronze_data(self) -> None:
@@ -2175,33 +1909,6 @@ class DataPreprocessor:
                 self._logger.log_error(
                     f"Error preprocessing `{DataQuality.GOLD.value}` data: {e}"
                 )
-
-            finally:
-                self._database_driver.disconnect()
-
-    def ingest_unified_data(self) -> None:
-
-        if self._switch_handler.is_enabled("data_preprocessor", "data_quality_unified"):
-            try:
-                connection_model = PostgreSQLConnectionDto(
-                    logger=self._logger,
-                    host=os.getenv("POSTGRES_HOST"),
-                    user=os.getenv("POSTGRES_USER"),
-                    password=os.getenv("POSTGRES_PASSWORD"),
-                    port=os.getenv("POSTGRES_PORT"),
-                    database="postgres",
-                )
-                self._database_driver.connect(connection_model)
-
-                self._database_driver.create_database(DATABASE_MAIN_V2)
-
-                self._database_driver.create_schema(UNIFIED_SCHEMA)
-
-                for ticker in UNIFIED_TICKERS:
-                    self._ingest_unified_stock(ticker)
-
-            except Exception as e:
-                self._logger.log_error(f"Error preprocessing `unified` data: {e}")
 
             finally:
                 self._database_driver.disconnect()

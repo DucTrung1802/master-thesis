@@ -1,0 +1,20 @@
+group,feature_group,category,captures,example_columns,column_count,source
+A,Identity & GICS classification,Metadata,keys + 4-level GICS tree,"exchange; ticker; date; sector; sector_code; industry_group; industry_group_code; industry; industry_code; sub_industry; sub_industry_code",11,gold.stocks
+B,Raw market data,Base,"OHLCV, foreign flow, matched/negotiated volume","open; high; low; close; net_change; pct_change; volume; foreign_room; f_buy_vol; f_sell_vol; f_net_vol; f_buy_val; f_sell_val; f_net_val; vol_matched; vol_negotiated; val_matched_bn; val_negotiated_bn; own_pct",19,gold.stocks
+C,Return & rolling stats,Base,"returns, range/body, rolling mean/std/min/max","return_simple; return_log; range_hl; body_oc; volatility_5; volatility_21; close_roll_mean_5; close_roll_std_5; close_roll_min_5; close_roll_max_5; close_roll_mean_21; close_roll_std_21; close_roll_min_21; close_roll_max_21",14,gold.stocks
+D,TA - Overlap - Bollinger Bands,Technical,"bands, bandwidth, %b, position flags","close_bb_20_upper; close_bb_20_middle; close_bb_20_lower; close_bb_20_bandwidth; close_bb_20_pct_b; close_bb_20_position",23,gold.stocks
+E,TA - Overlap - Moving averages,Technical,DEMA/EMA/KAMA/SMA/T3/TEMA/TRIMA/WMA + cross-pairs,"close_ema_50; close_ema_50_slope; close_ema_50_dist_pct; close_gt_sma_200; close_wma_50_100_dist; close_dema_50_100_crossover_up",232,gold.stocks
+F,TA - Overlap - Midpoint/Midprice,Technical,midpoint & midprice levels + cross-pairs,"close_midpoint_14; close_midpoint_50; midprice_14; midprice_50; midprice_14_50_dist",54,gold.stocks
+G,TA - Overlap - Parabolic SAR,Technical,"SAR levels, direction, distance, trend flags","sar_002_02; sar_004_02; sar_002_02_dist_pct; sar_002_02_004_02_direction",28,gold.stocks
+H,TA - Momentum,Technical,"ADX/DI, AROON, BOP, CCI, CMO, MACD, MFI, MOM, PPO, ROC, RSI, STOCH, STOCHRSI, TRIX, ULTOSC, WILLR","adx_14; rsi; macd; aroon_osc_25; willr_14_extreme; cci; mfi; mom; ppo; roc; trix; ultosc_7_14_28",293,gold.stocks
+I,TA - Volume,Technical,"AD, ADOSC, OBV","ad; adosc_3_10; obv; obv_signal_10; ad_10_strength",50,gold.stocks
+J,TA - Cycle (Hilbert Transform),Technical,"DCPERIOD, DCPHASE, PHASOR, SINE, TRENDMODE","ht_dcperiod; ht_dcphase_sin; ht_phasor_amplitude; ht_sine; ht_trendmode_is_trend",90,gold.stocks
+K,TA - Price transform,Technical,"average/median/typical/weighted-close price","avgprice; medprice; typprice; wclprice",60,gold.stocks
+L,TA - Volatility,Technical,"ATR, NATR, TRANGE","atr; atr_14; natr; trange; trange_14_strength",58,gold.stocks
+M,Microstructure ratios,Base,foreign/volume pressure ratios,"foreign_buy_pressure; foreign_net_val_ratio; negotiated_vol_ratio",3,gold.stocks
+N,Macro - Economy,Macro,"macro indicators, forward-filled (VN-scoped)","economy_economics_vncpi; economy_economics_vngdp; economy_fred_...",88,gold.economy (VN* prefix)
+O,Macro - Bonds,Macro,"bond-yield series, forward-filled","bonds_<exchange>_<ticker>",18,gold.bonds
+P,Macro - Indices,Macro,"index closes, forward-filled","indices_<exchange>_<ticker>",6,gold.indices
+Q,Macro - Sector peers,Macro,"same-GICS-sector peers close, forward-filled","stocks_hose_acb; stocks_hose_ctg; stocks_hose_bid",37,gold.stocks (sector peers)
+R,Datetime features,Engineered,"calendar, boundary flags, cyclical sin/cos","year; quarter; month; week_of_year; day_of_year; day; day_of_week; is_month_start; is_month_end; is_quarter_start; is_quarter_end; is_year_start; is_year_end; month_sin; month_cos; day_of_week_sin; day_of_week_cos; day_of_year_sin; day_of_year_cos",19,unified transform
+S,Target,Label,supervised label (5-day forward pct return),"target",1,unified transform
