@@ -1,0 +1,2 @@
+run_id,created_at,dataset_name,dataset_hash,model_type,lookback,n_features,best_epoch,best_val_mse,val_RMSE,val_dir_accuracy,val_spearman_ic,test_RMSE,test_RMSE_zero_baseline,test_dir_accuracy,test_spearman_ic,test_beats_zero_baseline,git_sha,run_dir
+lstm__return_5day__lb20__final__20260703-204219,2026-07-03T20:42:19,vcb_return_5day_lb20_h5_final_tr70_val15_test15_std,d2403719bb0cb62b,LSTM,20,151,2,0.656332,0.036969,0.5126,0.0848,0.042546,0.035748,0.5016,-0.0965,False,561b0e6c9056abc6dee3f23c0052d6b44f42ee79-dirty,runs\lstm__return_5day__lb20__final__20260703-204219
