@@ -1,0 +1,26 @@
+# LSTM run config — one file fully describes a run (edit + re-run the notebook).
+# The dataset is REFERENCED by name under src/train_test_set/ (produced by
+# train_test_creator.ipynb); its tensors are never copied into the run folder.
+
+run_name: lstm__return_5day__lb20__final
+dataset: vcb_return_5day_lb20_h5_final_tr70_val15_test15_std
+
+model:
+  type: LSTM
+  hidden_size: 128
+  num_layers: 2
+  dropout: 0.2
+
+train:
+  batch_size: 64
+  lr: 0.001
+  weight_decay: 0.00001
+  max_epochs: 150
+  patience: 20
+  grad_clip: 1.0
+  lr_factor: 0.5
+  lr_patience: 5
+  log_every: 10
+
+seed: 42
+device: auto

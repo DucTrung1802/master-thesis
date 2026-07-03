@@ -27,6 +27,7 @@ wandb/
 
 *.txt
 
-src/model/lstm/checkpoints/
+# Model run outputs (checkpoints, tensorboard, plots) — reproducible, data referenced
+src/model/runs/
 
 src/train_test_set/
