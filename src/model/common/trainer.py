@@ -71,12 +71,15 @@ class TrainConfig:
 
 class Trainer:
     def __init__(self, model: nn.Module, cfg: TrainConfig, run, device,
-                 arch: dict | None = None):
+                 arch: dict | None = None, criterion: nn.Module | None = None):
         self.model = model.to(device)
         self.cfg = cfg
         self.run = run
         self.device = device
-        self.criterion = nn.MSELoss()
+        # Default = regression (MSE). Pass e.g. nn.BCEWithLogitsLoss() for a binary
+        # classifier — the model then emits a raw logit and the loss applies the
+        # sigmoid internally (see lstm/lstm_direction_5day.ipynb).
+        self.criterion = criterion if criterion is not None else nn.MSELoss()
         self.optimizer = torch.optim.Adam(
             model.parameters(), lr=cfg.lr, weight_decay=cfg.weight_decay
         )
@@ -143,7 +146,7 @@ class Trainer:
 
         if best_state is not None:
             self.model.load_state_dict(best_state)
-        print(f"restored best epoch {self.best_epoch}: val MSE {self.best_val:.4f}")
+        print(f"restored best epoch {self.best_epoch}: val loss {self.best_val:.4f}")
         return self.history
 
     def _save_last(self, epoch: int) -> None:
