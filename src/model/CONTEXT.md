@@ -230,14 +230,24 @@ The `index.csv` header is a superset over both tasks (`task` col disambiguates;
   i.e. noise, not signal. Most runs stop at best epoch 1 (never learn past init; train
   loss falls while val rises = overfitting to noise). Structural at every lookback:
   train up-rate ≈0.498 vs test ≈0.436 (mild label drift), majority baseline acc 0.564.
-- **Takeaway**: both the absolute-return regressor and the direction classifier confirm
-  single-stock *absolute* 5-day direction/return is ~unpredictable here — the tradable
-  signal is the cross-sectional *relative* return.
-- **Next experiments**: `direction_5day` other lookbacks (cheap now the pathway exists);
-  `return_rel_5day` regression sweep; `probability_gain_5pct_5day` classification. Note
-  a single-ticker time-series model is not expected to capture the *relative* edge —
-  that is inherently cross-sectional (rank many names against each other, not one name
-  over time).
+- **`probability_gain_5pct_5day` (classification) sweep done**: lookbacks **1, 2, 3, 5,
+  10, 15, 20, 25, 30** (9 runs). **Strongly imbalanced** target (1 = close gains ≥5%
+  within 5 days): base rate 0.153 overall, and only **0.071 in the test window vs 0.176
+  in train** (heavy label drift) → majority-baseline acc 0.929, so accuracy is
+  uninformative and `beats_majority` is `False` everywhere. Read on AUC/PR-AUC instead:
+  `test_dir_auc` (ROC-AUC) mean 0.545 (range 0.41–0.66), `test_pr_auc` mean 0.106 vs
+  base rate 0.071 (~1.5× lift). A *whisper* more life than `direction_5day`, but **not
+  trustworthy**: val and test ROC-AUC are decorrelated/anti-correlated (e.g. lb15 has the
+  worst val AUC 0.33 but the best test AUC 0.66), so the apparent test edge isn't
+  selected-for and doesn't reproduce across lookbacks = noise, not signal.
+- **Takeaway**: absolute-return regression, direction classification, and the +5%-gain
+  classification all confirm single-stock *absolute* 5-day outcomes are ~unpredictable
+  here — the tradable signal is the cross-sectional *relative* return.
+- **Next experiments**: `return_rel_5day` regression sweep. Note a single-ticker
+  time-series model is not expected to capture the *relative* edge — that is inherently
+  cross-sectional (rank many names against each other, not one name over time). For an
+  imbalanced target like `probability_gain_5pct_5day`, a `pos_weight` on BCE would fix
+  the degenerate 0.5-threshold predictions but would NOT change the AUC skill verdict.
 
 ## 11. Gotchas
 
