@@ -9,8 +9,8 @@ import os
 _COLUMNS = [
     "run_id", "created_at", "dataset_name", "dataset_hash", "model_type",
     "lookback", "n_features", "best_epoch", "best_val_mse",
-    "val_RMSE", "val_dir_accuracy", "val_spearman_ic",
-    "test_RMSE", "test_RMSE_zero_baseline", "test_dir_accuracy",
+    "val_RMSE", "val_dir_accuracy", "val_dir_auc", "val_spearman_ic",
+    "test_RMSE", "test_RMSE_zero_baseline", "test_dir_accuracy", "test_dir_auc",
     "test_spearman_ic", "test_beats_zero_baseline", "git_sha", "run_dir",
 ]
 
