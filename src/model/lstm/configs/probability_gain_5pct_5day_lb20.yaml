@@ -1,0 +1,24 @@
+# LSTM classification config for probability_gain_5pct_5day (lb20). Dataset built with SCALE_TARGET=False.
+run_name: lstm__probability_gain_5pct_5day__lb20__final
+dataset: vcb_probability_gain_5pct_5day_lb20_h5_final_tr70_val15_test15_std
+task: classification
+
+model:
+  type: LSTM
+  hidden_size: 128
+  num_layers: 2
+  dropout: 0.2
+
+train:
+  batch_size: 64
+  lr: 0.001
+  weight_decay: 0.00001
+  max_epochs: 150
+  patience: 20
+  grad_clip: 1.0
+  lr_factor: 0.5
+  lr_patience: 5
+  log_every: 10
+
+seed: 42
+device: auto

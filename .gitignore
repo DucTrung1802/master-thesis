@@ -26,6 +26,9 @@ wandb/
 
 *.txt
 
-src/model/lstm/checkpoints/
+# Model run outputs (checkpoints, tensorboard, plots) — reproducible, data referenced
+src/model/runs/*/
+# but keep the cross-run leaderboard index
+!src/model/runs/index.csv
 
 src/train_test_set/
