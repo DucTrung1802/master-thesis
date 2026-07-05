@@ -22,8 +22,7 @@ wandb/
 *.npy
 
 *.csv
-# Track this specific CSV despite the blanket *.csv ignore above
-!src/train_test_creator/unified_table_feature_groups.csv
+!experiment_history.csv
 
 *.txt
 
