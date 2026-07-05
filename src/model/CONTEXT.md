@@ -243,13 +243,77 @@ The `index.csv` header is a superset over both tasks (`task` col disambiguates;
 - **Takeaway**: absolute-return regression, direction classification, and the +5%-gain
   classification all confirm single-stock *absolute* 5-day outcomes are ~unpredictable
   here — the tradable signal is the cross-sectional *relative* return.
-- **Next experiments**: `return_rel_5day` regression sweep. Note a single-ticker
-  time-series model is not expected to capture the *relative* edge — that is inherently
-  cross-sectional (rank many names against each other, not one name over time). For an
-  imbalanced target like `probability_gain_5pct_5day`, a `pos_weight` on BCE would fix
-  the degenerate 0.5-threshold predictions but would NOT change the AUC skill verdict.
+- **Single-ticker LSTM stage is EXHAUSTED** (return + direction + prob_gain all negative
+  OOS). `return_rel_5day` was deliberately NOT swept: a single-ticker time-series model
+  cannot capture a *relative* edge (it is inherently cross-sectional). The live research
+  thread moved to the cross-sectional strategy — see §11.
 
-## 11. Gotchas
+## 11. Cross-sectional investigation & tried methods (2026-07-05)
+
+The research pivoted from single-ticker LSTM to a **cross-sectional** study on the
+`gold_schema.stocks` panel (777 tickers, 2000-2026; ~150-200 liquid names used). Target
+= **5-day forward return, cross-sectionally demeaned** (universe- or sector-neutral) —
+"which stocks beat the cross-section over 5 days", traded market-neutral. This work lives
+in **session scratch scripts** (not committed) + [[project-cross-sectional-strategy]] in
+memory; recreate from that if needed. Key results:
+
+- **Foreign flow is the one signal that survives.** Price factors (rev/mom/vol) had a real
+  cross-sectional IC in 2016-2020 but **reversed post-2021**; foreign-flow features
+  (`f_net_val` etc., 100% populated historically in `gold_schema.stocks`) stayed positive.
+- **Best OOS classifier**: XGBoost on flow (+ decomposition: gross participation, foreign
+  order-imbalance, foreign-room accumulation, block-trade ratio) + liquidity + short-
+  reversal + within-sector z-scores, **sector-neutral target**, walk-forward + H-day
+  embargo. **AUC ceiling ≈ 0.52 all-names / 0.53 tercile** — sector-neutralisation + flow
+  decomposition added only +0.003; ensembling and recency-weighting did not help.
+- **Tradability**: GROSS L/S Sharpe ~1.3-1.6, but 65-78%/leg weekly turnover kills it.
+  Turnover control (EWMA span-10 + hysteresis enter 0.90/exit 0.75) → ~8%/day, flips
+  net@20bps from Sharpe -1.5 to +0.46. BUT by regime: net@20bps **+1.46 (2017-20) vs
+  −0.51 (2022-26)**; long-only (VN-executable) same story; dead at 40bps.
+- **Rolling-window training does NOT beat the regime wall** (tested expand vs 12mo vs 24mo,
+  6-mo test blocks, val-6mo early-stop): rolling *lowered* AUC (0.513 vs 0.520) and recent
+  net stayed negative — the recent regime simply has little learnable signal, not stale
+  training data.
+- **The edge does NOT concentrate in any single name — including VCB.** Trained the panel
+  model, then pulled out VCB's own OOS predictions: VCB *sector-relative* 5-day AUC = **0.491**
+  (worse than chance; recent 0.450, only 40% of years >0.5), VCB *absolute* direction AUC =
+  0.518 (marginal, matches the LSTM sweeps), VCB relative-value trade net Sharpe 0.20 overall
+  but **−0.12 in 2022-26**. The cross-sectional edge is a weak per-name average (~0.52) that
+  only becomes money spread across 20-40 names; for one ticker it drowns in idiosyncratic
+  noise. **⇒ VCB has no trustworthy single-name 5-day signal; tradability is portfolio-level.**
+- **Verdict**: on current data (price + foreign flow) there is **no robustly-tradable 5-day
+  edge in the current regime** — a quantified alpha-decay story (robust to target, feature,
+  model, split, and turnover choices). The only real lever left is **new information** (below),
+  NOT more modeling.
+- **Tried & shelved**: single-ticker LSTM (all 4 targets); cross-sec targets {universe-
+  demeaned, sector-demeaned, sign vs tercile-extremes}; features {price factors, foreign-
+  flow + decomposition, liquidity/Amihud, within-sector z}; models {Ridge, Logistic, XGB,
+  logit+xgb ensemble, recency-weighting}; splits {expanding & rolling walk-forward, H-day
+  embargo}; turnover control {EWMA smoothing, hysteresis bands, long-only}; costs {0/20/40
+  bps}. AUC plateaus ~0.52-0.53; net edge is pre-2021 only.
+
+**Data availability audit (2026-07-05).** Confirmed at the RAW layer: the only buy/sell data
+anywhere in the DB is **FOREIGN** (`f_buy/f_sell_*`, `foreign_buy_pressure`) — present in
+`bronze_schema.{cafef,simplize}_stocks`, `gold_schema.stocks`, and the VCB `__final` views, and
+already fully exploited. **Active/aggressor buy-sell (all-investor buyer- vs seller-initiated) is
+NOT ingested** (CafeF/Simplize/TradingView never captured it; `vol_matched` is total matched
+volume, not side-split). `mfi_14`/`bop` are price-derived proxies, not order flow. No fundamentals,
+no sentiment, no intraday/tick, no point-in-time index membership in the DB.
+
+**New information needed (ranked by expected impact on a 5-day VCB signal):**
+1. **Active/aggressor buy-sell imbalance** — derivable only from **intraday tick / order-book**
+   data (trade hits ask = aggressive buy, hits bid = aggressive sell). Same underlying feed as (6).
+   Forward-collect only (broker/exchange API); `src/money_flow/daily_flow_collector.py` targets this.
+2. **Fundamentals / earnings** — highest 5-day value = **earnings surprise + estimate revisions**;
+   bank-specific (VCB): P/B, ROE, NIM, credit/deposit growth, NPL/LLR, CAR, CASA. Need point-in-time
+   filing dates (no look-ahead). User to consider collecting.
+3. **News / disclosure / sentiment** — VN news headlines, HOSE/HNX filings (event dates), analyst
+   rating/target changes, forum sentiment. User to consider collecting.
+4. **Point-in-time VN30/VN100 membership** — historical constituent lists w/ effective dates; kills
+   the survivorship bias in all backtests above (universe currently = "survived to 2026").
+5. **Intraday / order-book (Level-2) for VCB** — sub-daily ticks + bid/ask depth → order-book
+   imbalance, spread, and the genuine single-name microstructure edge. Real-time feed, heavy storage.
+
+## 12. Gotchas
 
 - **`src/model/runs/*/` is git-ignored** (checkpoints/TB/plots — reproducible);
   only `runs/index.csv` is tracked (`.gitignore`: `src/model/runs/*/` +
