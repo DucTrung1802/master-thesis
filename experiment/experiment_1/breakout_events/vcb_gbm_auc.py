@@ -3,12 +3,19 @@ Reproduce the VCB test ROC-AUC ~= 0.77 for the "next 5 trading days up >= 5%" si
 
 The recipe (this exact combination is what reaches 0.77):
   * single stock VCB (its own model -- VCB is the most predictable VN30 name)
-  * ALL ~1058 features from unified_schema.unified_vcb (macro + TA + calendar),
-    so the trees can exploit feature interactions
+  * ALL ~1073 features from the macro + TA + calendar feature pools
+    (unified_schema_vcb.pool__macro / pool__ta / pool__calendar),
+    so the trees can exploit feature interactions. The basic price/volume/
+    foreign pool is deliberately NOT used as features -- adding it drops the
+    test AUC to ~0.74; `close` is pulled from it only to build the label.
   * gradient-boosted trees (HistGradientBoostingClassifier) -- NOT deep learning,
     NOT a single indicator
   * chronological split: train on the first 80% of days, test on the most-recent 20%
   * evaluate ROC-AUC on that held-out test tail
+
+Database note: the flat table unified_schema.unified_vcb no longer exists. The
+VCB feature set now lives in the `unified_schema_vcb` schema of database
+`database_main_v2`, split into per-group pools joined on `date`.
 """
 
 import os
@@ -23,7 +30,9 @@ from sklearn.ensemble import HistGradientBoostingClassifier
 warnings.filterwarnings("ignore")
 HORIZON, GAIN = 5, 0.05
 HERE = os.path.dirname(os.path.abspath(__file__))
-ID_COLS = {"exchange", "ticker", "date", "target"}
+SCHEMA = "unified_schema_vcb"
+# `close` is kept only to build the label; the rest are dropped from X below.
+ID_COLS = {"exchange", "ticker", "date", "target", "close"}
 
 
 def main():
@@ -32,8 +41,15 @@ def main():
         host=os.getenv("POSTGRES_HOST"), port=os.getenv("POSTGRES_PORT"),
         user=os.getenv("POSTGRES_USER"), password=os.getenv("POSTGRES_PASSWORD"),
         dbname="database_main_v2")
-    df = pd.read_sql("SELECT * FROM unified_schema.unified_vcb ORDER BY date", conn)
+    # macro + TA + calendar feature pools, joined on date; `close` (for the
+    # label) is pulled from the basic pool but not used as a feature.
+    cal = pd.read_sql(f"SELECT * FROM {SCHEMA}.pool__calendar ORDER BY date", conn)
+    mac = pd.read_sql(f"SELECT * FROM {SCHEMA}.pool__macro ORDER BY date", conn)
+    ta = pd.read_sql(f"SELECT * FROM {SCHEMA}.pool__ta ORDER BY date", conn)
+    basic = pd.read_sql(f"SELECT date, close FROM {SCHEMA}.pool__basic ORDER BY date", conn)
     conn.close()
+    df = (cal.merge(mac, on="date").merge(ta, on="date").merge(basic, on="date")
+          .sort_values("date").reset_index(drop=True))
 
     # label: next-5-day forward return >= 5%
     close = df["close"].astype(float).values
