@@ -2,8 +2,8 @@
 
 > **New-session context file.** Read this to pick up the full thread without the
 > prior chat. It summarises *why* experiment_3 exists, what each script does, the
-> headline results, and the open next steps. Sibling context: `../SUMMARY.md`
-> (all of experiment_1 & _2) and `../experiment_1/README.md`.
+> headline results, and the open next steps. Sibling context: `../CONTEXT.md`
+> (index across all experiments) and `../experiment_1/README.md`.
 
 ## Where this sits in the story
 

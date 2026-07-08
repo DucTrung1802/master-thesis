@@ -23,6 +23,10 @@ wandb/
 
 *.csv
 !experiment_history.csv
+# experiment_4 disclosure-date deliverable + user-editable overrides are tracked
+!experiment/experiment_4/vcb_quarter_publish_dates.csv
+!experiment/experiment_4/vcb_quarter_publish_dates_detail.csv
+!experiment/experiment_4/vcb_manual_overrides.csv
 
 *.txt
 
