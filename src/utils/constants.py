@@ -152,6 +152,12 @@ UNIFIED_TICKERS: list = [
 # onto the stock's trading-day date spine).
 UNIFIED_MACRO_TABLES: list = ["economy", "bonds", "indices", "stocks"]
 
+# The `economy` gold table holds ~1,034 global macro series; joining them all
+# blows past PostgreSQL's 1,600-column-per-table limit. Restrict the economy
+# join to series whose ticker starts with this prefix (Vietnam macro = 88
+# series). Set to None to join every economy series.
+UNIFIED_ECONOMY_TICKER_PREFIX: str | None = "VN"
+
 # Supervised target: percentage simple return of `close` this many trading days
 # into the future, e.g. close=100 today and 120 in UNIFIED_TARGET_HORIZON days -> target=20.
 UNIFIED_TARGET_HORIZON: int = 5
@@ -175,6 +181,81 @@ TRADING_VIEW_RAW_DATA_DIR = f"{RAW_DATA_DIR}/trading_view"
 CAFEF_RAW_DATA_DIR = f"{RAW_DATA_DIR}/cafef"
 GICS_RAW_DATA_DIR = f"{RAW_DATA_DIR}/gics"
 SIMPLIZE_RAW_DATA_DIR = f"{RAW_DATA_DIR}/simplize"
+
+# ── GICS classification crosswalk ──────────────────────────────────────────────
+# Map each Simplize industry group (its GICS-based VN taxonomy, 50 groups) to an
+# OFFICIAL GICS sub-industry code (the 8-digit leaf in bronze.gics). The full GICS
+# hierarchy (sector → industry group → industry → sub-industry, codes + snake
+# names) is then read entirely from bronze.gics by joining on this leaf code, so
+# the classification is sourced fully from the official GICS table.
+#
+# Simplize groups are often broader than a single GICS sub-industry; the target is
+# the most representative leaf within the correct GICS industry, so the upper three
+# levels are exact while the sub-industry is a best-fit (see _helper_build_gics_
+# classification). GICS-correct placement wins over Simplize's sector where they
+# differ (e.g. renewables → Utilities; telecom & publishing → Communication Services).
+SIMPLIZE_GROUP_TO_GICS_SUB_INDUSTRY = {
+    # Energy
+    "501010": "10102050",  # than → coal_and_consumable_fuels
+    "501020": "10102010",  # dau-va-khi-dot → integrated_oil_and_gas
+    "501030": "10101020",  # dich-vu-thiet-bi-dau-khi → oil_and_gas_equipment_and_services
+    "502010": "55105020",  # nang-luong-tai-tao → renewable_electricity (GICS: Utilities)
+    # Materials
+    "511010": "15101010",  # hoa-chat → commodity_chemicals
+    "512010": "15104020",  # kim-loai-va-khai-khoang → diversified_metals_and_mining
+    "512020": "15102010",  # vat-lieu-xay-dung → construction_materials
+    "513010": "15105020",  # giay-va-lam-san → paper_products
+    "513020": "15103010",  # hop-dung-va-bao-bi → metal_glass_and_plastic_containers
+    # Industrials
+    "521010": "20101010",  # hang-khong-vu-tru-quoc-phong → aerospace_and_defense
+    "521020": "20106010",  # may-moc-thiet-bi-nang-dong-tau → construction_machinery_and_heavy_transportation_equipment
+    "522010": "20103010",  # xay-dung → construction_and_engineering
+    "522020": "20107010",  # ban-buon-cong-nghiep → trading_companies_and_distributors
+    "522030": "20201070",  # dich-vu-cong-nghiep-thuong-mai → diversified_support_services
+    "524050": "20301010",  # van-chuyen-hang-hoa-giao-nhan → air_freight_and_logistics
+    "524060": "20304040",  # van-chuyen-hanh-khach → passenger_ground_transportation
+    "524070": "20305030",  # co-so-ha-tang-gtvt → marine_ports_and_services
+    # Consumer Discretionary
+    "531010": "25101010",  # o-to-va-phu-tung → automotive_parts_and_equipment
+    "532020": "25203030",  # det-may → textiles
+    "532030": "25201030",  # xay-dung-vlxd-dan-dung → homebuilding
+    "532040": "25201050",  # hang-gia-dung → housewares_and_specialties
+    "532050": "25202010",  # san-pham-giai-tri → leisure_products
+    "533010": "25301020",  # khach-san-giai-tri → hotels_resorts_and_cruise_lines
+    "533020": "50201040",  # truyen-thong-xuat-ban → publishing (GICS: Communication Services)
+    "534020": "25503030",  # ban-le-tong-hop → broadline_retail
+    "534030": "25504040",  # ban-le-chuyen-dung → other_specialty_retail
+    # Consumer Staples
+    "541010": "30201030",  # do-uong → soft_drinks_and_non_alcoholic_beverages
+    "541020": "30202030",  # thuc-pham-thuoc-la → packaged_foods_and_meats
+    "542010": "30301010",  # san-pham-ca-nhan-gia-dung → household_products
+    "543010": "30101030",  # ban-le-thuc-pham-thuoc → food_retail
+    "544010": "30202030",  # tap-doan-da-nganh-tieu-dung → packaged_foods_and_meats
+    # Financials
+    "551010": "40101010",  # tai-chinh-ngan-hang → diversified_banks
+    "551020": "40203020",  # chung-khoan-nhdt → investment_banking_and_brokerage
+    "553010": "40301030",  # bao-hiem → multi_line_insurance
+    "556010": "40201030",  # cong-ty-dau-tu → multi_sector_holdings
+    # Health Care
+    "561010": "35101010",  # thiet-bi-vat-tu-y-te → health_care_equipment
+    "561020": "35102015",  # dich-vu-cham-soc-suc-khoe → health_care_services
+    "562010": "35202010",  # duoc-pham → pharmaceuticals
+    # Information Technology (+ Communication Services for telecom)
+    "571010": "45301020",  # chat-ban-dan → semiconductors
+    "571020": "45201020",  # truyen-thong-mang → communications_equipment
+    "571040": "45203015",  # thiet-bi-phu-tung-dien-tu → electronic_components
+    "571050": "45202030",  # thiet-bi-van-phong → technology_hardware_storage_and_peripherals
+    "571060": "45202030",  # may-tinh-dien-thoai-dien-tu → technology_hardware_storage_and_peripherals
+    "572010": "45102010",  # phan-mem-dich-vu-cntt → it_consulting_and_other_services
+    "574010": "50101020",  # dich-vu-vien-thong → integrated_telecommunication_services (GICS: Communication Services)
+    # Utilities
+    "591010": "55101010",  # tien-ich-dien → electric_utilities
+    "591020": "55102010",  # tien-ich-khi → gas_utilities
+    "591030": "55104010",  # nuoc-tien-ich → water_utilities
+    "591040": "55103010",  # da-tien-ich → multi_utilities
+    # Real Estate
+    "601010": "60201030",  # quan-ly-phat-trien-bds → real_estate_development
+}
 
 SCRAPER_BASE_WAIT_TIME = 1  # seconds
 

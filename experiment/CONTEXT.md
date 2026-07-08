@@ -1,0 +1,274 @@
+# Experiments Context — Signal discovery → tradability → disclosure-date data (VCB/VN30)
+
+Single-document summary of **all methods and all results** across the four
+experiments:
+
+- **experiment_1** — signal discovery (does a "next-5d ≥ +5%" signal exist?).
+- **experiment_2** — windowed-input model study (does history/sequence help?).
+- **experiment_3** — does the signal actually *trade*? (costed walk-forward
+  backtests) and *which target* is tradable.
+- **experiment_4** — VCB financial-report **publish/disclosure dates** (2009→now),
+  scraped for point-in-time / look-ahead-safe modelling.
+
+Each experiment folder has its own `README.md` with the full detail; this file is
+the index across all of them.
+
+## Common setup
+
+- **Target (everywhere):** `y[t] = 1 if close[t+5]/close[t] - 1 >= 0.05` — i.e. the
+  next 5 trading days rise ≥ 5%. Binary classification.
+- **Evaluation:** chronological (no look-ahead) splits; metric = test **ROC-AUC**
+  (+ PR-AUC, top-decile precision, lift). Train-only standardization / feature
+  selection where applicable.
+- **Data (PostgreSQL `database_main_v2`):**
+  - `unified_schema.unified_<ticker>` — 30 VN30 tables, ~1053 features each (TA + macro + calendar).
+  - `gold_schema.stocks` — 621-ticker panel, 910 TA features (VN100 universe).
+  - `gold_schema.indices`, `economy_*`, `bonds_*` — index state & macro context.
+
+---
+
+# Experiment 1 — Signal discovery
+
+### 1.1 Breakout event catalogue (VCB) — `breakout_events/detect_breakout_events.py`
+Swing-high apex catalogue (apex = highest close within ±5 days), filtered by gain
+threshold → monotonic event sets. Window = `[peak−N−2, peak+2]`; predictable/decision
+day = `peak−N`.
+
+| Filter | Events |
+|---|---|
+| gain10d ≥ 15% | 17 |
+| gain10d ≥ 10% | 41 |
+| gain10d ≥ 5% | 113 |
+| gain5d ≥ 5% | 98 |
+
+VCB's Jan-2026 move is the all-time record: **+33% in 10 days** (57,100 → 76,000).
+
+### 1.2 Univariate signal search (VCB) — `breakout_events/signal_search_5d5pct.py`
+Base rate **11.5%**. Strongest single features (ROC-AUC): `natr_14` / `atr_normalized`
+0.64, `volatility_21` 0.63, `close_bb_20_bandwidth` 0.61, `ppo_12_26_9` 0.60.
+Joint model (GBM, all features, chrono 80/20): **AUC 0.762**, top-decile precision
+16.7% (3.1× lift). → The signal is a **volatility/momentum regime**.
+
+### 1.3 Multi-period TA sweep (VCB) — `breakout_events/ta_period_sweep_vcb.py`
+Tuning the indicator period barely helps; univariate AUC saturates ≈ **0.63–0.65**.
+
+| Family | Best period | AUC |
+|---|---|---|
+| NATR / ATR | 7 (≈14) | 0.646 |
+| realized vol | 20 | 0.631 |
+| Bollinger bandwidth | 40 | 0.629 |
+| ROC / RSI | 7–20 | 0.54 |
+
+### 1.4 Best period per family from `unified_vcb` — `breakout_events/vcb_best_period_per_family.py`
+560 period-bearing features, 80 families. Best stored periods:
+
+| Family | Period | AUC | | Family | Period | AUC |
+|---|---|---|---|---|---|---|
+| ATR / NATR | 14 | **0.643** | | PPO | 12_26_9 | 0.604 |
+| realized vol | 21 | 0.629 | | ROC | 10 | 0.601 |
+| TRIX | 15 | 0.609 | | RSI / CMO | 14 | 0.575 |
+| Bollinger bandwidth | 20 | 0.608 | | ADX | 14 | 0.575 |
+
+Price-level MA families (`close_dema/ema/sma_100`…) score ~0.40 `low→up` — a
+non-stationarity **artifact**, not signal.
+
+### 1.5 VN30 per-ticker + pooled — `vn30_signal/vn30_signal_5d5pct.py`
+Per-ticker GBM (chrono 80/20). Predictability varies widely:
+
+| Tier | Tickers (test AUC) |
+|---|---|
+| Strong | **VCB 0.767**, BCM 0.717, FPT 0.647, VPB 0.643, BVH 0.629, MBB 0.626, ACB 0.620 |
+| Weak | HDB 0.413, TPB 0.409, VRE 0.408 |
+
+**Pooled VN30** (90,861 stock-days): general signal AUC **0.653**, top-decile 21.9%
+(1.9× lift). Top general features again volatility + momentum.
+
+### 1.6 DL shoot-out on VCB alone — `dl_signal/dl_model_comparison_vcb.py`
+| Model | test AUC | | Model | test AUC |
+|---|---|---|---|---|
+| **GBM-full** | **0.770** | | CNN1D | 0.456 |
+| LSTM | 0.558 | | MLP | 0.445 |
+| Transformer | 0.482 | | GRU | 0.430 |
+
+→ On a single stock (~2.9k rows) deep learning loses heavily to gradient boosting.
+
+### 1.7 Pooled VN100 DL — `dl_signal/dl_vn100_pooled.py`
+VN100 (95/100 tickers in `gold.stocks`), **266,848 stock-days**:
+
+| Model | test AUC | | Model | test AUC |
+|---|---|---|---|---|
+| **GBM-full** | **0.625** | | GRU | 0.596 |
+| MLP | 0.615 | | LSTM | 0.594 |
+| CNN1D / Ensemble | 0.609 | | Transformer | 0.581 |
+
+60× more data closed the DL gap (−0.21 → −0.01) but did **not** overtake GBM. Plain
+MLP ≈ GBM > sequence nets → signal is point-in-time, not temporal.
+
+### 1.8 VN100 + macro / cross-sectional / index features — `dl_signal/dl_vn100_xsec_macro.py`
+Added `economy_*`/`bonds_*`, VN100/VNINDEX state, and per-date cross-sectional rank:
+
+| Model | base | + context |
+|---|---|---|
+| GBM-full | 0.625 | 0.619 |
+| GRU | 0.596 | **0.628** |
+
+No robust gain (within seed noise). Useful new features: **index volatility** and
+**cross-sectional volatility rank** — reinforcing the volatility-regime story.
+
+### 1.9 VCB feature importance & trading meaning — `breakout_events/vcb_importance_and_trading.py`
+**Which features:** the 0.77 is *not* reducible — leak-free top-K AUC: top-50 → 0.650,
+top-300 → 0.697, **all 1053 → 0.762**. Skill comes from aggregating hundreds of weak features.
+**Input/output:** X = 2-D matrix `(n_days, 1053)`; output = scalar `P(next-5d ≥ +5%)`.
+**Trading meaning** (test period, actual forward 5d returns):
+
+| Day group | mean fwd-5d | win-rate | ≥+5% rate |
+|---|---|---|---|
+| all days | +0.20% | 45% | 5% |
+| **signal top 10%** | **+2.16%** | 62% | 17% |
+| signal top 20% | +1.76% | 56% | 14% |
+
+Real ranking edge, but not a precise timer (top-decile hits +5% only 17% of the time).
+
+---
+
+# Experiment 2 — Windowed input (1 sample = W-day × ~1053 matrix → scalar)
+
+### 2.1 VCB, 20-day matrix, all models — `experiment_2/vcb_seq20x1053_models.py`
+| Model | input/sample | test AUC |
+|---|---|---|
+| **GBM (last-day, ref)** | (1053,) | **0.770** |
+| GRU | (20, 1053) | 0.695 |
+| Ensemble | (20, 1053) | 0.659 |
+| LSTM | (20, 1053) | 0.653 |
+| CNN1D | (20, 1053) | 0.636 |
+| MLP (flatten) | (21060,) | 0.609 |
+| GBM (flatten) | (21060,) | 0.551 |
+| Transformer | (20, 1053) | 0.540 |
+
+The 20-day matrix does **not** beat the point-in-time GBM; flattening hurts most.
+
+### 2.2 Other stocks (VNM, VIC) — same script, `vnm/vic_seq20x1053_results.csv`
+Best model is **stock-specific**:
+
+| Stock | Best model | Best AUC | Last-day GBM | History helps? |
+|---|---|---|---|---|
+| VCB | GBM (last-day) | 0.770 | 0.770 | No |
+| VNM | GBM (last-day) | 0.581 | 0.581 | No (barely predictable) |
+| **VIC** | **GRU (20-day)** | **0.694** | 0.509 | **Yes** (+0.18 AUC; top-decile prec 47%) |
+
+### 2.3 VCB lookback sweep (1→20 days) — `experiment_2/vcb_lookback_sweep.py`
+Best model & AUC per lookback (`vcb_lookback_auc.csv` has the full grid):
+
+| Lookback | 1 | 2 | 3 | 5 | 8 | 10 | 12 | 15 | 18 | 20 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| **best AUC** | 0.756 | 0.743 | 0.757 | 0.755 | 0.746 | 0.717 | 0.686 | 0.665 | 0.673 | 0.688 |
+| **best model** | GBM | GBM | GBM | GRU | GRU | GBM | LSTM | GRU | GRU | GRU |
+
+Short lookback wins. GBM degrades steadily with W (0.756 → **0.548** at W20); GRU is
+the best DL model, peaking at W = 5–8 (~0.75) but never beating short-window GBM.
+
+---
+
+# Experiment 3 — Does the signal actually trade? (costed walk-forward + target search)
+
+The real test of the AUC-0.77 signal: **does it make money after costs?** Walk-forward,
+purged, no look-ahead; costs charged per side (base 15 bps). VN reality: single-stock
+shorting is effectively unavailable on HOSE → only long-only is real.
+
+### 3.1 Single-stock VCB timing — `experiment_3/vcb_walkforward_backtest.py`
+Expanding walk-forward (retrain/126d, 28 folds, OOS 2012–2026); top-decile signal,
+long/flat 5-day hold, vs Buy&Hold and a 20-day momentum rule.
+
+| Strategy @15bps | Sharpe | CAGR |
+|---|---|---|
+| ML timing | 0.67 | 10.8% |
+| Buy & Hold | 0.66 | 15.9% |
+| 20-day momentum | 0.59 | — |
+
+→ Timing one trending stock **ties just holding it** — no alpha.
+
+### 3.2 Cross-sectional VN30 long-short — `experiment_3/vn30_xsec_longshort.py`
+Pooled walk-forward, rank VN30 by P(5d≥+5%), long top-6 / short bottom-6, net 15bps:
+**−12% CAGR, Sharpe −0.53, −88% DD** vs market +16.4% / 0.85. The signal ranks stocks by
+**volatility**; longing high-vol / shorting calm names **loses** (and shorting isn't
+allowed anyway).
+
+### 3.3 Which TARGET is tradable? — `experiment_3/target_comparison.py`
+Pooled VN30 walk-forward; 6 targets by rank-IC + long-only top-6 vs equal-weight market:
+
+| target | rank-IC | top6 Sharpe | excess vs market |
+|---|---|---|---|
+| **rel5** (market-relative 5d) | **0.052 (best)** | 0.25 | −0.58 |
+| rel10 | 0.050 | 0.18 | −0.65 |
+| bin5 (old 5d≥+5%) | 0.044 | 0.64 | −0.19 (least bad) |
+| ret5 | 0.044 | 0.50 | −0.33 |
+
+→ **`rel5`** (beta-neutral ~1-week relative return) is the most predictable and correct
+target, but **no target's long-only portfolio beats the market net of costs**; IC ≈ 0.05
+is near the noise floor. **The binding constraint is the DATA, not the target or model.**
+
+---
+
+# Experiment 4 — VCB financial-report publish (disclosure) dates
+
+Motivated by experiment_3's conclusion that **orthogonal data is the lever** (esp. an
+earnings/disclosure calendar). Recovers VCB's financial-statement **publish dates,
+2009 → present**, so fundamentals can be joined point-in-time (no look-ahead).
+
+- **Single script** `experiment_4/scrape_vcb_publish_dates.py` (stdlib + PyMuPDF).
+  Output: **6-column** `vcb_quarter_publish_dates.csv` = `year, Q1, Q2, Q3, Q4,
+  final_year` (+ a long detail CSV with assurance/confidence/source/evidence).
+- **Columns = distinct reports** (Unaudited < Reviewed < Audited): Q1/Q3/Q4 unaudited
+  quarterly, **Q2** semi-annual *soát xét* (Reviewed), **final_year** whole-year
+  *kiểm toán* (Audited). Q4 quarterly (~late Jan) and the audited annual (~late Mar)
+  are separate documents/columns.
+- **Sources, in priority order:** manual overrides → in-PDF signing date (read from
+  the report PDF, tolerant of legacy TCVN3 font) → Vietstock news (HOSE disclosure
+  article date) → CafeF filename date → Vietstock upload date. The file/upload APIs
+  only keep bulk re-upload dates for old years, so news + in-PDF recover 2009–2012.
+- **Status:** 79/90 cells high-confidence, 4 approximate (early-2010s earnings-news),
+  3 unavailable (2009 Q3 + 2009/2010 audited annuals are scanned image PDFs → need OCR
+  or manual entry via `vcb_manual_overrides.csv`). Cadence: Q1 ≈ late Apr, Q2 ≈ mid-Aug,
+  Q3 ≈ late Oct, Q4 ≈ late Jan, final_year ≈ late Mar / Apr.
+
+---
+
+# Overall conclusions
+
+1. **One universal signal:** a near-term 5d+5% up-move is preceded by **volatility /
+   range expansion + momentum strength** — confirmed at stock, VN30, and VN100 level,
+   and at three scales (own volatility, peer-relative rank, index volatility).
+2. **Gradient boosting on full point-in-time features is the model to beat.** Deep
+   learning only becomes competitive with the large pooled panel, and never clearly
+   wins; the plain MLP ≈ GBM, so the signal is in current feature *values*, not the
+   temporal trajectory.
+3. **Predictability & best model are stock-specific:** VCB → point-in-time (AUC ~0.77),
+   VIC → sequence models over a 20-day window (~0.69), VNM → essentially unpredictable.
+4. **Lookback:** short is best for VCB; longer windows add noise (and cripple GBM).
+5. **Ceiling:** ≈ **0.76** single-stock (VCB), ≈ **0.62–0.65** pooled — robust to
+   richer features and deeper models. The remaining lever is the **target definition**
+   (continuous / vol-scaled forward return), not the architecture.
+6. **Trading (experiment_3):** the ranking edge is real but **not tradable alpha** — it's
+   a volatility-regime detector. Costed walk-forward: single-stock timing ties Buy&Hold;
+   cross-sectional long-short loses; no long-only target beats the market net of costs.
+7. **The binding constraint is DATA, not model/target.** Best label to pursue = **`rel5`**
+   (market-relative ~1-week return). The lever is **orthogonal data** — foreign flows,
+   earnings/disclosure calendar + surprises, fundamentals/valuation.
+8. **experiment_4 builds that first data piece:** a point-in-time **disclosure calendar**
+   for VCB (2009→now), so fundamentals can be aligned to when they became public.
+
+> AUCs are single chronological-split point estimates (small positive counts →
+> ±0.03–0.05 variance). Most CSV outputs are gitignored and regenerated by the scripts;
+> experiment_4's dated CSVs are tracked.
+
+## File index
+- `experiment_1/README.md` — signal discovery detail
+  - `breakout_events/` — events, signal search, TA sweeps, importance/trading
+  - `vn30_signal/` — VN30 per-ticker + pooled ; `dl_signal/` — DL shoot-outs
+- `experiment_2/vcb_seq20x1053_models.py` — windowed model zoo (VCB/VNM/VIC)
+- `experiment_2/vcb_lookback_sweep.py` — VCB lookback sweep
+- `experiment_3/README.md` — backtests + target search detail
+  - `vcb_walkforward_backtest.py`, `vn30_xsec_longshort.py`, `target_comparison.py`
+- `experiment_4/README.md` — disclosure-date scraper detail
+  - `scrape_vcb_publish_dates.py` (one script) → `vcb_quarter_publish_dates.csv`
+    (+ `_detail.csv`); `vcb_manual_overrides.csv` for hand-entered dates
