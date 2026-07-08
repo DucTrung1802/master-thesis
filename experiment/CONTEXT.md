@@ -1,7 +1,17 @@
-# Experiments Summary — Breakout detection & the "5-day +5%" signal
+# Experiments Context — Signal discovery → tradability → disclosure-date data (VCB/VN30)
 
-Single-document summary of **all methods and all results** across `experiment_1`
-(signal discovery) and `experiment_2` (windowed-input model study).
+Single-document summary of **all methods and all results** across the four
+experiments:
+
+- **experiment_1** — signal discovery (does a "next-5d ≥ +5%" signal exist?).
+- **experiment_2** — windowed-input model study (does history/sequence help?).
+- **experiment_3** — does the signal actually *trade*? (costed walk-forward
+  backtests) and *which target* is tradable.
+- **experiment_4** — VCB financial-report **publish/disclosure dates** (2009→now),
+  scraped for point-in-time / look-ahead-safe modelling.
+
+Each experiment folder has its own `README.md` with the full detail; this file is
+the index across all of them.
 
 ## Common setup
 
@@ -159,6 +169,70 @@ the best DL model, peaking at W = 5–8 (~0.75) but never beating short-window G
 
 ---
 
+# Experiment 3 — Does the signal actually trade? (costed walk-forward + target search)
+
+The real test of the AUC-0.77 signal: **does it make money after costs?** Walk-forward,
+purged, no look-ahead; costs charged per side (base 15 bps). VN reality: single-stock
+shorting is effectively unavailable on HOSE → only long-only is real.
+
+### 3.1 Single-stock VCB timing — `experiment_3/vcb_walkforward_backtest.py`
+Expanding walk-forward (retrain/126d, 28 folds, OOS 2012–2026); top-decile signal,
+long/flat 5-day hold, vs Buy&Hold and a 20-day momentum rule.
+
+| Strategy @15bps | Sharpe | CAGR |
+|---|---|---|
+| ML timing | 0.67 | 10.8% |
+| Buy & Hold | 0.66 | 15.9% |
+| 20-day momentum | 0.59 | — |
+
+→ Timing one trending stock **ties just holding it** — no alpha.
+
+### 3.2 Cross-sectional VN30 long-short — `experiment_3/vn30_xsec_longshort.py`
+Pooled walk-forward, rank VN30 by P(5d≥+5%), long top-6 / short bottom-6, net 15bps:
+**−12% CAGR, Sharpe −0.53, −88% DD** vs market +16.4% / 0.85. The signal ranks stocks by
+**volatility**; longing high-vol / shorting calm names **loses** (and shorting isn't
+allowed anyway).
+
+### 3.3 Which TARGET is tradable? — `experiment_3/target_comparison.py`
+Pooled VN30 walk-forward; 6 targets by rank-IC + long-only top-6 vs equal-weight market:
+
+| target | rank-IC | top6 Sharpe | excess vs market |
+|---|---|---|---|
+| **rel5** (market-relative 5d) | **0.052 (best)** | 0.25 | −0.58 |
+| rel10 | 0.050 | 0.18 | −0.65 |
+| bin5 (old 5d≥+5%) | 0.044 | 0.64 | −0.19 (least bad) |
+| ret5 | 0.044 | 0.50 | −0.33 |
+
+→ **`rel5`** (beta-neutral ~1-week relative return) is the most predictable and correct
+target, but **no target's long-only portfolio beats the market net of costs**; IC ≈ 0.05
+is near the noise floor. **The binding constraint is the DATA, not the target or model.**
+
+---
+
+# Experiment 4 — VCB financial-report publish (disclosure) dates
+
+Motivated by experiment_3's conclusion that **orthogonal data is the lever** (esp. an
+earnings/disclosure calendar). Recovers VCB's financial-statement **publish dates,
+2009 → present**, so fundamentals can be joined point-in-time (no look-ahead).
+
+- **Single script** `experiment_4/scrape_vcb_publish_dates.py` (stdlib + PyMuPDF).
+  Output: **6-column** `vcb_quarter_publish_dates.csv` = `year, Q1, Q2, Q3, Q4,
+  final_year` (+ a long detail CSV with assurance/confidence/source/evidence).
+- **Columns = distinct reports** (Unaudited < Reviewed < Audited): Q1/Q3/Q4 unaudited
+  quarterly, **Q2** semi-annual *soát xét* (Reviewed), **final_year** whole-year
+  *kiểm toán* (Audited). Q4 quarterly (~late Jan) and the audited annual (~late Mar)
+  are separate documents/columns.
+- **Sources, in priority order:** manual overrides → in-PDF signing date (read from
+  the report PDF, tolerant of legacy TCVN3 font) → Vietstock news (HOSE disclosure
+  article date) → CafeF filename date → Vietstock upload date. The file/upload APIs
+  only keep bulk re-upload dates for old years, so news + in-PDF recover 2009–2012.
+- **Status:** 79/90 cells high-confidence, 4 approximate (early-2010s earnings-news),
+  3 unavailable (2009 Q3 + 2009/2010 audited annuals are scanned image PDFs → need OCR
+  or manual entry via `vcb_manual_overrides.csv`). Cadence: Q1 ≈ late Apr, Q2 ≈ mid-Aug,
+  Q3 ≈ late Oct, Q4 ≈ late Jan, final_year ≈ late Mar / Apr.
+
+---
+
 # Overall conclusions
 
 1. **One universal signal:** a near-term 5d+5% up-move is preceded by **volatility /
@@ -174,16 +248,27 @@ the best DL model, peaking at W = 5–8 (~0.75) but never beating short-window G
 5. **Ceiling:** ≈ **0.76** single-stock (VCB), ≈ **0.62–0.65** pooled — robust to
    richer features and deeper models. The remaining lever is the **target definition**
    (continuous / vol-scaled forward return), not the architecture.
-6. **Trading:** a real ranking edge (top-decile days average +2.16% fwd-5d vs +0.20%),
-   usable as a regime/timing/sizing filter — but not yet a costed, walk-forward backtest.
+6. **Trading (experiment_3):** the ranking edge is real but **not tradable alpha** — it's
+   a volatility-regime detector. Costed walk-forward: single-stock timing ties Buy&Hold;
+   cross-sectional long-short loses; no long-only target beats the market net of costs.
+7. **The binding constraint is DATA, not model/target.** Best label to pursue = **`rel5`**
+   (market-relative ~1-week return). The lever is **orthogonal data** — foreign flows,
+   earnings/disclosure calendar + surprises, fundamentals/valuation.
+8. **experiment_4 builds that first data piece:** a point-in-time **disclosure calendar**
+   for VCB (2009→now), so fundamentals can be aligned to when they became public.
 
-> All AUCs are single chronological-split point estimates (small positive counts →
-> ±0.03–0.05 variance). CSV outputs are gitignored and regenerated by the scripts.
+> AUCs are single chronological-split point estimates (small positive counts →
+> ±0.03–0.05 variance). Most CSV outputs are gitignored and regenerated by the scripts;
+> experiment_4's dated CSVs are tracked.
 
 ## File index
-- `experiment_1/README.md` — experiment 1 detail
-- `experiment_1/breakout_events/` — events, signal search, TA sweeps, importance/trading
-- `experiment_1/vn30_signal/` — VN30 per-ticker + pooled
-- `experiment_1/dl_signal/` — DL shoot-outs (VCB, VN100, VN100+context)
+- `experiment_1/README.md` — signal discovery detail
+  - `breakout_events/` — events, signal search, TA sweeps, importance/trading
+  - `vn30_signal/` — VN30 per-ticker + pooled ; `dl_signal/` — DL shoot-outs
 - `experiment_2/vcb_seq20x1053_models.py` — windowed model zoo (VCB/VNM/VIC)
 - `experiment_2/vcb_lookback_sweep.py` — VCB lookback sweep
+- `experiment_3/README.md` — backtests + target search detail
+  - `vcb_walkforward_backtest.py`, `vn30_xsec_longshort.py`, `target_comparison.py`
+- `experiment_4/README.md` — disclosure-date scraper detail
+  - `scrape_vcb_publish_dates.py` (one script) → `vcb_quarter_publish_dates.csv`
+    (+ `_detail.csv`); `vcb_manual_overrides.csv` for hand-entered dates
