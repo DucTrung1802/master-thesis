@@ -916,24 +916,31 @@ class DataPreprocessor:
         """
         self._logger.log_info("Ingesting bronze CafeF stocks data...")
 
-        stocks_dir = os.path.join(CAFEF_RAW_DATA_DIR, "stocks")
-        csv_files = glob(os.path.join(stocks_dir, "**", "*.csv"), recursive=True)
+        # CafeF price (vcb-1) and foreign (vcb-3) now live in separate per-link
+        # folders; merge them back on (exchange, symbol, date) to reproduce the
+        # combined per-stock schema this bronze table expects.
+        def _load_dir(folder: str):
+            files = glob(os.path.join(CAFEF_RAW_DATA_DIR, folder, "**", "*.csv"), recursive=True)
+            frames = [
+                df for fp in files
+                if not (df := pd.read_csv(fp, encoding="utf-8")).empty
+                and not df.dropna(how="all").empty
+            ]
+            return pd.concat(frames, ignore_index=True).drop_duplicates() if frames else None
 
-        if not csv_files:
-            self._logger.log_error(f'No CafeF stocks CSV files found in "{stocks_dir}".')
+        price_df = _load_dir("price")
+        if price_df is None:
+            self._logger.log_error("No valid CafeF price CSV data found.")
             return
 
-        dataframes = []
-        for fp in csv_files:
-            df = pd.read_csv(fp, encoding="utf-8")
-            if not df.empty and not df.dropna(how="all").empty:
-                dataframes.append(df)
-
-        if not dataframes:
-            self._logger.log_error("No valid CafeF stocks CSV data found.")
-            return
-
-        df = pd.concat(dataframes, ignore_index=True).drop_duplicates()
+        foreign_df = _load_dir("foreign")
+        if foreign_df is not None:
+            df = price_df.merge(
+                foreign_df, on=["exchange", "symbol", "date"], how="left"
+            )
+        else:
+            self._logger.log_warning("No CafeF foreign CSV data found; ingesting price only.")
+            df = price_df
 
         # Normalise the key to "<EXCHANGE>:<TICKER>" (CafeF stores them split).
         df["symbol"] = (
