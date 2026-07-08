@@ -1,0 +1,101 @@
+﻿no,ticker,exchange,economic_sector_name,industry_group_slug,industry_group_code,industry_activity
+1,ACB,HOSE,Tài chính,tai-chinh-ngan-hang,551010,Tài chính ngân hàng
+2,ANV,HOSE,Hàng hóa thiết yếu,thuc-pham-va-thuoc-la,541020,Thực phẩm và thuốc lá
+3,BCM,HOSE,Bất động sản,quan-ly-va-phat-trien-bat-dong-san,601010,Quản lý và phát triển bất động sản
+4,BID,HOSE,Tài chính,tai-chinh-ngan-hang,551010,Tài chính ngân hàng
+5,BMP,HOSE,Hàng hóa không thiết yếu,xay-dung-va-vat-lieu-xay-dung-dan-dung,532030,Xây dựng và vật liệu xây dựng dân dụng
+6,BSI,HOSE,Tài chính,chung-khoan-va-ngan-hang-dau-tu,551020,Chứng khoán và Ngân hàng đầu tư
+7,BVH,HOSE,Tài chính,bao-hiem,553010,Bảo hiểm
+8,BWE,HOSE,Tiện ích,nuoc-tien-ich-lien-quan,591030,Nước & Tiện ích liên quan
+9,CII,HOSE,Công nghiệp,co-so-ha-tang-giao-thong-van-tai,524070,Cơ sở hạ tầng giao thông vận tải
+10,CMG,HOSE,Công nghệ,phan-mem-va-dich-vu-cntt,572010,Phần mềm và dịch vụ CNTT
+11,CTD,HOSE,Công nghiệp,xay-dung,522010,Xây dựng
+12,CTG,HOSE,Tài chính,tai-chinh-ngan-hang,551010,Tài chính ngân hàng
+13,CTR,HOSE,Công nghiệp,xay-dung,522010,Xây dựng
+14,CTS,HOSE,Tài chính,chung-khoan-va-ngan-hang-dau-tu,551020,Chứng khoán và Ngân hàng đầu tư
+15,DBC,HOSE,Hàng hóa thiết yếu,thuc-pham-va-thuoc-la,541020,Thực phẩm và thuốc lá
+16,DCM,HOSE,Nguyên vật liệu,hoa-chat,511010,Hóa chất
+17,DGC,HOSE,Nguyên vật liệu,hoa-chat,511010,Hóa chất
+18,DGW,HOSE,Hàng hóa không thiết yếu,ban-le-chuyen-dung,534030,Bán lẻ chuyên dụng
+19,DIG,HOSE,Bất động sản,quan-ly-va-phat-trien-bat-dong-san,601010,Quản lý và phát triển bất động sản
+20,DPM,HOSE,Nguyên vật liệu,hoa-chat,511010,Hóa chất
+21,DSE,,,,,
+22,DXG,HOSE,Bất động sản,quan-ly-va-phat-trien-bat-dong-san,601010,Quản lý và phát triển bất động sản
+23,DXS,HOSE,Bất động sản,quan-ly-va-phat-trien-bat-dong-san,601010,Quản lý và phát triển bất động sản
+24,EIB,HOSE,Tài chính,tai-chinh-ngan-hang,551010,Tài chính ngân hàng
+25,EVF,HOSE,Tài chính,tai-chinh-ngan-hang,551010,Tài chính ngân hàng
+26,FPT,HOSE,Công nghệ,phan-mem-va-dich-vu-cntt,572010,Phần mềm và dịch vụ CNTT
+27,FRT,HOSE,Hàng hóa không thiết yếu,ban-le-chuyen-dung,534030,Bán lẻ chuyên dụng
+28,FTS,HOSE,Tài chính,chung-khoan-va-ngan-hang-dau-tu,551020,Chứng khoán và Ngân hàng đầu tư
+29,GAS,HOSE,Năng lượng,dau-va-khi-dot,501020,Dầu và Khí đốt
+30,GEE,HOSE,Công nghiệp,may-moc-thiet-bi-nang-va-dong-tau,521020,"Máy móc, thiết bị nặng và đóng tàu"
+31,GEX,HOSE,Công nghiệp,may-moc-thiet-bi-nang-va-dong-tau,521020,"Máy móc, thiết bị nặng và đóng tàu"
+32,GMD,HOSE,Công nghiệp,co-so-ha-tang-giao-thong-van-tai,524070,Cơ sở hạ tầng giao thông vận tải
+33,GVR,HOSE,Hàng hóa không thiết yếu,o-to-va-phu-tung-o-to,531010,Ô tô và Phụ tùng ô tô
+34,HAG,HOSE,Hàng hóa thiết yếu,thuc-pham-va-thuoc-la,541020,Thực phẩm và thuốc lá
+35,HCM,HOSE,Tài chính,chung-khoan-va-ngan-hang-dau-tu,551020,Chứng khoán và Ngân hàng đầu tư
+36,HDB,HOSE,Tài chính,tai-chinh-ngan-hang,551010,Tài chính ngân hàng
+37,HDC,HOSE,Bất động sản,quan-ly-va-phat-trien-bat-dong-san,601010,Quản lý và phát triển bất động sản
+38,HDG,HOSE,Bất động sản,quan-ly-va-phat-trien-bat-dong-san,601010,Quản lý và phát triển bất động sản
+39,HHV,HOSE,Công nghiệp,co-so-ha-tang-giao-thong-van-tai,524070,Cơ sở hạ tầng giao thông vận tải
+40,HPG,HOSE,Nguyên vật liệu,kim-loai-va-khai-khoang,512010,Kim loại và Khai khoáng
+41,HSG,HOSE,Nguyên vật liệu,kim-loai-va-khai-khoang,512010,Kim loại và Khai khoáng
+42,HT1,HOSE,Nguyên vật liệu,vat-lieu-xay-dung,512020,Vật liệu xây dựng
+43,IMP,HOSE,Chăm sóc sức khỏe,duoc-pham,562010,Dược phẩm
+44,KBC,HOSE,Bất động sản,quan-ly-va-phat-trien-bat-dong-san,601010,Quản lý và phát triển bất động sản
+45,KDC,HOSE,Hàng hóa thiết yếu,thuc-pham-va-thuoc-la,541020,Thực phẩm và thuốc lá
+46,KDH,HOSE,Bất động sản,quan-ly-va-phat-trien-bat-dong-san,601010,Quản lý và phát triển bất động sản
+47,KOS,,,,,
+48,LPB,HOSE,Tài chính,tai-chinh-ngan-hang,551010,Tài chính ngân hàng
+49,MBB,HOSE,Tài chính,tai-chinh-ngan-hang,551010,Tài chính ngân hàng
+50,MSB,HOSE,Tài chính,tai-chinh-ngan-hang,551010,Tài chính ngân hàng
+51,MSN,HOSE,Hàng hóa thiết yếu,thuc-pham-va-thuoc-la,541020,Thực phẩm và thuốc lá
+52,MWG,HOSE,Hàng hóa không thiết yếu,ban-le-chuyen-dung,534030,Bán lẻ chuyên dụng
+53,NAB,HOSE,Tài chính,tai-chinh-ngan-hang,551010,Tài chính ngân hàng
+54,NKG,HOSE,Nguyên vật liệu,kim-loai-va-khai-khoang,512010,Kim loại và Khai khoáng
+55,NLG,HOSE,Bất động sản,quan-ly-va-phat-trien-bat-dong-san,601010,Quản lý và phát triển bất động sản
+56,NT2,HOSE,Tiện ích,tien-ich-dien-va-san-xuat-dien,591010,Tiện ích điện và sản xuất điện 
+57,OCB,HOSE,Tài chính,tai-chinh-ngan-hang,551010,Tài chính ngân hàng
+58,PAN,HOSE,Hàng hóa thiết yếu,thuc-pham-va-thuoc-la,541020,Thực phẩm và thuốc lá
+59,PC1,HOSE,Công nghiệp,xay-dung,522010,Xây dựng
+60,PDR,HOSE,Bất động sản,quan-ly-va-phat-trien-bat-dong-san,601010,Quản lý và phát triển bất động sản
+61,PHR,HOSE,Hàng hóa không thiết yếu,o-to-va-phu-tung-o-to,531010,Ô tô và Phụ tùng ô tô
+62,PLX,HOSE,Năng lượng,dau-va-khi-dot,501020,Dầu và Khí đốt
+63,PNJ,HOSE,Hàng hóa không thiết yếu,ban-le-chuyen-dung,534030,Bán lẻ chuyên dụng
+64,POW,HOSE,Tiện ích,tien-ich-dien-va-san-xuat-dien,591010,Tiện ích điện và sản xuất điện 
+65,PPC,HOSE,Tiện ích,tien-ich-dien-va-san-xuat-dien,591010,Tiện ích điện và sản xuất điện 
+66,PTB,HOSE,Hàng hóa không thiết yếu,hang-gia-dung,532040,Hàng gia dụng
+67,PVD,HOSE,Năng lượng,dich-vu-va-thiet-bi-dau-khi,501030,Dịch vụ và Thiết bị Dầu khí
+68,PVT,HOSE,Năng lượng,dich-vu-va-thiet-bi-dau-khi,501030,Dịch vụ và Thiết bị Dầu khí
+69,REE,HOSE,Tiện ích,tien-ich-dien-va-san-xuat-dien,591010,Tiện ích điện và sản xuất điện 
+70,SAB,HOSE,Hàng hóa thiết yếu,do-uong,541010,Đồ uống
+71,SBT,HOSE,Hàng hóa thiết yếu,thuc-pham-va-thuoc-la,541020,Thực phẩm và thuốc lá
+72,SCS,HOSE,Công nghiệp,co-so-ha-tang-giao-thong-van-tai,524070,Cơ sở hạ tầng giao thông vận tải
+73,SHB,HOSE,Tài chính,tai-chinh-ngan-hang,551010,Tài chính ngân hàng
+74,SIP,,,,,
+75,SJS,HOSE,Bất động sản,quan-ly-va-phat-trien-bat-dong-san,601010,Quản lý và phát triển bất động sản
+76,SSB,HOSE,Tài chính,tai-chinh-ngan-hang,551010,Tài chính ngân hàng
+77,SSI,HOSE,Tài chính,chung-khoan-va-ngan-hang-dau-tu,551020,Chứng khoán và Ngân hàng đầu tư
+78,STB,HOSE,Tài chính,tai-chinh-ngan-hang,551010,Tài chính ngân hàng
+79,SZC,HOSE,Bất động sản,quan-ly-va-phat-trien-bat-dong-san,601010,Quản lý và phát triển bất động sản
+80,TCB,HOSE,Tài chính,tai-chinh-ngan-hang,551010,Tài chính ngân hàng
+81,TCH,HOSE,Hàng hóa không thiết yếu,o-to-va-phu-tung-o-to,531010,Ô tô và Phụ tùng ô tô
+82,TLG,HOSE,Công nghiệp,dich-vu-cong-nghiep-va-thuong-mai,522030,Dịch vụ công nghiệp và Thương mại
+83,TPB,HOSE,Tài chính,tai-chinh-ngan-hang,551010,Tài chính ngân hàng
+84,VCB,HOSE,Tài chính,tai-chinh-ngan-hang,551010,Tài chính ngân hàng
+85,VCG,HOSE,Công nghiệp,xay-dung,522010,Xây dựng
+86,VCI,HOSE,Tài chính,chung-khoan-va-ngan-hang-dau-tu,551020,Chứng khoán và Ngân hàng đầu tư
+87,VGC,HOSE,Hàng hóa không thiết yếu,xay-dung-va-vat-lieu-xay-dung-dan-dung,532030,Xây dựng và vật liệu xây dựng dân dụng
+88,VHC,HOSE,Hàng hóa thiết yếu,thuc-pham-va-thuoc-la,541020,Thực phẩm và thuốc lá
+89,VHM,HOSE,Bất động sản,quan-ly-va-phat-trien-bat-dong-san,601010,Quản lý và phát triển bất động sản
+90,VIB,HOSE,Tài chính,tai-chinh-ngan-hang,551010,Tài chính ngân hàng
+91,VIC,HOSE,Bất động sản,quan-ly-va-phat-trien-bat-dong-san,601010,Quản lý và phát triển bất động sản
+92,VIX,HOSE,Tài chính,chung-khoan-va-ngan-hang-dau-tu,551020,Chứng khoán và Ngân hàng đầu tư
+93,VJC,HOSE,Công nghiệp,van-chuyen-hanh-khach,524060,Vận chuyển hành khách
+94,VND,HOSE,Tài chính,chung-khoan-va-ngan-hang-dau-tu,551020,Chứng khoán và Ngân hàng đầu tư
+95,VNM,HOSE,Hàng hóa thiết yếu,thuc-pham-va-thuoc-la,541020,Thực phẩm và thuốc lá
+96,VPB,HOSE,Tài chính,tai-chinh-ngan-hang,551010,Tài chính ngân hàng
+97,VPI,,,,,
+98,VRE,HOSE,Bất động sản,quan-ly-va-phat-trien-bat-dong-san,601010,Quản lý và phát triển bất động sản
+99,VSC,HOSE,Công nghiệp,co-so-ha-tang-giao-thong-van-tai,524070,Cơ sở hạ tầng giao thông vận tải
+100,VTP,HOSE,Công nghiệp,van-chuyen-hang-hoa-va-giao-nhan,524050,Vận chuyển hàng hóa và Giao nhận

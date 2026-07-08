@@ -204,4 +204,27 @@ Matches the bronze-source decision (memory `project-bronze-source-per-field`):
 - **`raw_data/` is the handoff to `src/data_preprocessor`** — schema/column names
   here are the contract its bronze ingest expects; changing an `OUTPUT_COLUMNS` list
   ripples downstream.
-```
+
+## 8. Index-membership reference files — `vn30.csv` / `vn100.csv` (repo root)
+
+Two small static lookup CSVs listing the VN30 and VN100 constituents with basic
+info. **Not produced by the scrapers** — assembled by joining a hardcoded
+membership list to `raw_data/simplize/industry.csv` (§3, Simplize industry). All
+constituents are HOSE-listed.
+
+- **Columns:** `no, ticker, exchange, economic_sector_name, industry_group_slug,
+  industry_group_code, industry_activity` (the last four = Simplize's GICS-based VN
+  taxonomy; UTF-8 **with BOM** so the Vietnamese names render in Excel).
+- **Membership sources:**
+  - VN30 = `UNIFIED_TICKERS` in `src/utils/constants.py` (30 tickers).
+  - VN100 = the hardcoded `VN100` list in
+    `experiment/experiment_1/dl_signal/dl_vn100_pooled.py` (100 tickers).
+- **"Basic information" = ticker + exchange + industry only.** No company full-name
+  field exists anywhere in the repo (no scraper captures it), so names are not
+  included.
+- **Coverage caveat:** VN30 is fully populated; in `vn100.csv` **4 tickers
+  (`DSE, KOS, SIP, VPI`)** are absent from `industry.csv` (not in the
+  TradingView-derived universe at last scrape) so their industry columns are blank.
+- **Regenerate:** re-run the join if `industry.csv` or either membership list
+  changes (the generator lived in session scratch, not the repo — recreate from the
+  two sources above).
