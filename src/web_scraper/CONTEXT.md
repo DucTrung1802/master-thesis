@@ -111,15 +111,46 @@ src/web_scraper/
   vol+val).
 
 ### CafeF — `cafef_scraper.py` (fills fields TV lacks; requests)
-- `requests` against CafeF `du-lieu` AJAX endpoints (`PriceHistory.ashx`,
-  `GDKhoiNgoai.ashx`). Provides **raw + adjusted close** (`close_raw`/`close_adj`),
-  **matched & negotiated (block) volume**, and foreign flow.
+- `requests` against CafeF `du-lieu` AJAX endpoints. Each numbered tab of the
+  `lich-su-giao-dich/<exchange>/<sym>-<n>.chn` page maps to one `.ashx` endpoint,
+  and **each link is written to its own folder** (one folder per link):
+
+  | Tab (`<sym>-<n>.chn`) | Endpoint | Content | Output folder | History |
+  |---|---|---|---|---|
+  | -1 | `PriceHistory.ashx` | OHLC, raw+adj close, matched/negotiated vol | `price/` | 2009 |
+  | -2 | `ThongKeDL.ashx` | **order-placement stats** — # + vol of buy vs sell orders | `order_stats/` | 2010 |
+  | -3 | `GDKhoiNgoai.ashx` | foreign buy/sell/net flow, room, own% | `foreign/` | 2012 |
+  | -4 | `GDTuDoanh.ashx` | **proprietary-desk trades** — firms' own-account buy/sell vol+val | `prop_trading/` | 2023 |
+  | -6 | `GDCoDong.ashx` | **insider / major-shareholder transactions** — who, plan vs real buy/sell, holdings | `insider_txn/` | 2008 |
+
+- Tabs -1/-2/-3/-4 are **daily series** (one row per trading day); tab -6 is
+  **event-based** (one row per transaction). Price (`price/`) and foreign (`foreign/`)
+  used to be merged into one `stocks/` folder — they are now split one-per-link, and
+  the downstream CafeF bronze ingest (`data_preprocessor._ingest_bronze_stocks_cafef`)
+  **re-merges `price/` + `foreign/`** on (exchange, symbol, date) to reproduce the
+  same `cafef_stocks` table.
 - **Quirks handled:** `StartDate/EndDate` are **MM/dd/yyyy (US)**; a query is capped
   at ~63 rows and `PageSize` 20, so history is fetched in overlapping ~2-month
   windows and paginated; `ExchangeType` (HOSE/HNX/UPCOM, UPPERCASE) is **required**
-  for HNX/UPCOM or CafeF silently returns nothing; prices are in '000 VND so `_mul`
-  multiplies OHLC + close by 1000. Price history from 2009, foreign flow from 2012.
-- **Output:** `raw_data/cafef/stocks/<EXCHANGE>_<SYMBOL>.csv` (20 cols).
+  for HNX/UPCOM or CafeF silently returns nothing; **prices are '000 VND** so `_mul`
+  ×1000 (applies to the price tab only — order-stats/prop volumes+values are already
+  raw). The row **date key differs by tab** (`Ngay` for price/foreign, `Date` for
+  order-stats/prop) and `GDTuDoanh` **nests its list** under `Data.Data.ListDataTudoanh`
+  — both handled by `_collect(..., list_key=, date_key=)`. The insider tab
+  (`GDCoDong`) is **event-based**: `_collect_paged` paginates the whole history
+  (no date-window/dedup), and its dates arrive as .NET `/Date(ms)/` (parsed to ISO
+  VN-local by `_net_date`).
+- **Output:** `raw_data/cafef/{price,foreign,order_stats,prop_trading,insider_txn}/<EXCHANGE>_<SYMBOL>.csv`
+  (price 12 cols, foreign 11, order_stats 9, prop_trading 7, insider_txn 21). `scrape()`
+  runs all five batch drivers (`scrape_all_price/_foreign/_order_stats/_prop_trading/
+  _insider_txn`) over the universe via the shared `_scrape_all(label, fn, …)`.
+- **Universe = all three VN exchanges** (`VN_EXCHANGES = HOSE, HNX, UPCOM`; ~777 unique
+  tickers). `get_stock_symbols(exchanges=…)` reads the TradingView stock links and
+  filters to those exchanges (default = all three); `scrape()` and every `scrape_all_*`
+  take an `exchanges=` passthrough, so `scrape()` covers the full HOSE+HNX+UPCOM set and
+  `scrape(exchanges=("HOSE",))` scopes to one. `skip_existing=True` means a full run only
+  scrapes what each tab is still missing (price/foreign done; order_stats/prop/insider
+  currently VN100-only → ~681 tickers/tab remaining).
 
 ### GICS — `gics_scraper.py` (reference taxonomy; requests + openpyxl)
 - Downloads MSCI's published **"GICS structure & definitions eff. 17 Mar 2023"**
@@ -149,6 +180,10 @@ Matches the bronze-source decision (memory `project-bronze-source-per-field`):
   unless the ADJ toggle fires (memory `project-vcb-price-adjustment`).
 - Simplize/CafeF are pure `requests` (fast, no browser). TradingView needs Selenium
   because the data only exists in the client-side chart widget.
+- **CafeF is the sole source** of the order-flow tabs that neither Simplize nor TV
+  expose — order-placement stats (`order_stats/`), proprietary-desk trades
+  (`prop_trading/`), and insider/major-shareholder transactions (`insider_txn/`); see
+  §3. These are orthogonal signals worth noting for modelling (cf. `src/model/CONTEXT.md`).
 
 ## 5. How it's driven — SwitchHandler + `src/switch_config.json`
 
@@ -196,14 +231,22 @@ Matches the bronze-source decision (memory `project-bronze-source-per-field`):
   defaults to HOSE and returns empty.
 - **CafeF prices are '000 VND** — `_mul` ×1000 is applied to OHLC + both closes but
   NOT to volumes/values (those come pre-scaled).
-- **`skip_existing=True`** on CafeF/Simplize `scrape_stock` means re-running skips
-  any ticker whose CSV already exists — delete the file (or pass `False`) to refresh.
+- **`skip_existing=True`** on the CafeF/Simplize per-stock scrapes means re-running
+  skips any ticker whose CSV already exists — delete the file (or pass `False`) to
+  refresh. (CafeF now has one scrape per tab: `scrape_price/_foreign/_order_stats/
+  _prop_trading/_insider_txn`, each guarding its own folder.)
 - **GICS URL is version-pinned** to the Mar-2023 xlsx (GUID + `?t=` token required);
   if MSCI revises the structure the `EXPECTED_COUNTS` check logs a warning rather
   than failing.
 - **`raw_data/` is the handoff to `src/data_preprocessor`** — schema/column names
   here are the contract its bronze ingest expects; changing an `OUTPUT_COLUMNS` list
   ripples downstream.
+- **CafeF `price/`+`foreign/` are coupled to the preprocessor:**
+  `data_preprocessor._ingest_bronze_stocks_cafef` re-merges the two folders on
+  (exchange, symbol, date) to rebuild the `cafef_stocks` bronze table, so renaming
+  those folders or their columns requires updating that method. The newer CafeF tabs
+  (`order_stats/`, `prop_trading/`, `insider_txn/`) are scraped but **not yet ingested**
+  into bronze — wiring them in is future preprocessor work.
 
 ## 8. Index-membership reference files — `vn30.csv` / `vn100.csv` (repo root)
 
