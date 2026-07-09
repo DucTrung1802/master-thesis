@@ -1035,12 +1035,16 @@ class DataPreprocessor:
             bigint_cols=["prop_buy_vol", "prop_sell_vol"],
         )
 
-    def _ingest_bronze_cafef_insider_txn(self) -> None:
-        """CafeF insider / major-shareholder transactions — EVENT-based (one row per
-        transaction, not a daily series), so there is no natural (symbol, date) key.
-        Loaded raw-faithful with a deterministic md5 `row_id` surrogate PK (hash of
-        the full raw row) so re-ingests stay idempotent."""
-        self._logger.log_info("Ingesting bronze CafeF insider_txn data...")
+    def _ingest_bronze_cafef_insider_shareholder_transactions(self) -> None:
+        """CafeF insider & major-shareholder transactions — registered (planned) vs
+        actually-executed buy/sell by insiders, related persons and major
+        shareholders. EVENT-based (one row per transaction, not a daily series), so
+        there is no natural (symbol, date) key. Loaded raw-faithful from the
+        `insider_txn/` scraper folder with a deterministic md5 `row_id` surrogate PK
+        (hash of the full raw row) so re-ingests stay idempotent."""
+        self._logger.log_info(
+            "Ingesting bronze CafeF insider/shareholder transactions data..."
+        )
 
         df = self._helper_load_cafef_folder("insider_txn")
         if df is None:
@@ -1084,7 +1088,7 @@ class DataPreprocessor:
 
         self._helper_save_pandas_table_to_database(
             schema_name=BRONZE_SCHEMA,
-            table_name="cafef_insider_txn",
+            table_name="cafef_insider_shareholder_transactions",
             primary_keys=["row_id"],
             df=df,
             dtype_overrides={
@@ -1934,7 +1938,7 @@ class DataPreprocessor:
                     self._ingest_bronze_cafef_foreign()
                     self._ingest_bronze_cafef_order_stats()
                     self._ingest_bronze_cafef_prop_trading()
-                    self._ingest_bronze_cafef_insider_txn()
+                    self._ingest_bronze_cafef_insider_shareholder_transactions()
                     self._ingest_bronze_stocks_simplize()
                     self._ingest_bronze_simplize_industry()
                 if self._switch_handler.is_enabled(

@@ -127,8 +127,9 @@ src/web_scraper/
   **event-based** (one row per transaction). Each folder is ingested **one-to-one**
   into its own bronze table by `data_preprocessor._ingest_bronze_cafef_*`
   (`cafef_price`, `cafef_foreign`, `cafef_order_stats`, `cafef_prop_trading`,
-  `cafef_insider_txn`); `price/` + `foreign/` are re-merged on (symbol, date) later,
-  in **silver** (`_ingest_silver_stocks`), not bronze.
+  `cafef_insider_shareholder_transactions` ← from the `insider_txn/` folder);
+  `price/` + `foreign/` are re-merged on (symbol, date) later, in **silver**
+  (`_ingest_silver_stocks`), not bronze.
 - **Quirks handled:** `StartDate/EndDate` are **MM/dd/yyyy (US)**; a query is capped
   at ~63 rows and `PageSize` 20, so history is fetched in overlapping ~2-month
   windows and paginated; `ExchangeType` (HOSE/HNX/UPCOM, UPPERCASE) is **required**
@@ -242,12 +243,15 @@ Matches the bronze-source decision (memory `project-bronze-source-per-field`):
   here are the contract its bronze ingest expects; changing an `OUTPUT_COLUMNS` list
   ripples downstream.
 - **CafeF folders are coupled to the preprocessor:** each folder now lands as its
-  own bronze table — `data_preprocessor._ingest_bronze_cafef_{price,foreign,order_stats,
-  prop_trading,insider_txn}` (all five tabs are ingested), so renaming a folder or its
-  columns requires updating the matching method. `price/` + `foreign/` are re-merged
-  on (symbol, date) in **silver** (`_ingest_silver_stocks`), not bronze. `order_stats/`
-  / `prop_trading/` / `insider_txn/` reach bronze but are **not yet consumed by
-  silver/gold** — turning them into signals is future preprocessor work.
+  own bronze table — `data_preprocessor._ingest_bronze_cafef_*` (`_price`, `_foreign`,
+  `_order_stats`, `_prop_trading`, and `_insider_shareholder_transactions` from the
+  `insider_txn/` folder — all five tabs are ingested), so renaming a folder or its
+  columns requires updating the matching method. Note the `insider_txn/` folder maps
+  to the `cafef_insider_shareholder_transactions` table (folder name ≠ table name).
+  `price/` + `foreign/` are re-merged on (symbol, date) in **silver**
+  (`_ingest_silver_stocks`), not bronze. `order_stats/` / `prop_trading/` /
+  `insider_txn/` reach bronze but are **not yet consumed by silver/gold** — turning
+  them into signals is future preprocessor work.
 
 ## 8. Index-membership reference files — `vn30.csv` / `vn100.csv` (repo root)
 

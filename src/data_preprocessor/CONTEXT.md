@@ -13,7 +13,8 @@ raw_data/<source>/*.csv,*.xlsx           (produced by src/web_scraper)
         │
         ▼   ingest_bronze_data()   ← load CSVs as-is, one bronze table per source/tab
   bronze_schema:  trading_view_{bonds,economy,forex,funds,indices,stocks},
-                  cafef_{price,foreign,order_stats,prop_trading,insider_txn},
+                  cafef_{price,foreign,order_stats,prop_trading},
+                  cafef_insider_shareholder_transactions,
                   simplize_stocks, simplize_industry, gics
         │
         ▼   ingest_silver_data()   ← split symbol, merge sources, GICS classify
@@ -113,10 +114,11 @@ DTO helpers come from
   - `cafef_foreign` — foreign buy/sell/net flow (vol+val), `room_left`, `own_pct`. PK `(symbol, date)`.
   - `cafef_order_stats` — buy/sell order counts, volume, avg vol/order. PK `(symbol, date)`.
   - `cafef_prop_trading` — proprietary-desk buy/sell vol+val. PK `(symbol, date)`.
-  - `cafef_insider_txn` — insider / major-shareholder transactions. **Event-based**
-    (no natural date key) → deterministic **md5 `row_id` surrogate PK** (hash of the
-    full raw row, so re-ingests are idempotent); five date columns overridden to
-    `DATE`, long text columns to `TEXT`.
+  - `cafef_insider_shareholder_transactions` — registered vs executed buy/sell by
+    insiders, related persons and major shareholders (from the `insider_txn/`
+    folder). **Event-based** (no natural date key) → deterministic **md5 `row_id`
+    surrogate PK** (hash of the full raw row, so re-ingests are idempotent); five
+    date columns overridden to `DATE`, long text columns to `TEXT`.
 - **`simplize_stocks`** — the validated daily backbone: adjusted OHLC, true volume,
   net/pct change, foreign vol+val + room. Key normalised to `"<EXCHANGE>:<TICKER>"`.
 - **`simplize_industry`** — per-ticker VN GICS-based industry, loaded as-is;
@@ -190,14 +192,33 @@ DTO helpers come from
   bronze ingest re-joins them into the TV-style colon key so all three merge
   uniformly in silver.
 - **CafeF is one bronze table per scraper folder** (`cafef_price`, `cafef_foreign`,
-  `cafef_order_stats`, `cafef_prop_trading`, `cafef_insider_txn`) — the folder/column
-  names are the contract, so renaming them upstream breaks the ingest (mirrors the
-  note in `web_scraper/CONTEXT.md §7`). The price+foreign merge that used to build
+  `cafef_order_stats`, `cafef_prop_trading`, `cafef_insider_shareholder_transactions`
+  ← from the `insider_txn/` folder) — the folder/column names are the contract, so
+  renaming them upstream breaks the ingest (mirrors the note in
+  `web_scraper/CONTEXT.md §7`). The price+foreign merge that used to build
   `cafef_stocks` in bronze now happens in `_ingest_silver_stocks`. `order_stats` /
-  `prop_trading` / `insider_txn` are ingested to bronze but **not yet consumed by
-  silver/gold** — wiring them into a signal is future work.
+  `prop_trading` / insider-shareholder txns are ingested to bronze but **not yet
+  consumed by silver/gold** — wiring them into a signal is future work. Prototyped
+  shape (VCB, 2026-07-09): a **Simplize-backbone left-join** of all four daily CafeF
+  tables on `(ticker, date)` — Simplize OHLC/volume/foreign as primary (CafeF fills
+  nulls), plus CafeF's unique columns appended — yields **33 columns**, or **41** with
+  the 8 GICS columns attached (matching `silver.stocks`'s layout). Coverage of the
+  appended CafeF columns tapers with source history (own_pct from 2012, order_stats
+  from 2010, prop_trading from 2023); insider-shareholder txns are event-based and do
+  **not** 1:1-join onto a daily row.
 - **Simplize is PRIMARY in silver.stocks**; TV is an OHLC fallback only and its
   volume/sector are never trusted (memory `project-bronze-source-per-field`).
+  Re-validated across the whole **VN30** (2026-07-09, on this bronze): vs CafeF,
+  Simplize wins on precision (CafeF rounds price to 10-VND ticks, volume to ~100
+  shares), history depth, and adjustment — **CafeF `close_adj` is split/stock-div
+  adjusted but under-accounts for CASH dividends** (adjusted-price levels diverge up
+  to ~38% in deep history for high-payout names like MWG/ACB), while Simplize is
+  fully total-return adjusted. Both anchor to the same recent traded price, and
+  **daily returns agree on 99.8% of days** — so for returns the two are
+  interchangeable; the gap is a price-*level* offset (never splice the two into one
+  series). Foreign volume: Simplize folds in **block/put-through** trades, CafeF's
+  foreign tab is matched-market only. → Simplize backbone is correct; CafeF's real
+  value is its unique columns (`close_raw`, matched/negotiated split, `own_pct`).
 - **Gold uses `REAL`, not `DOUBLE`** — the writer sanitizes out-of-range/subnormal
   floats to avoid PostgreSQL REAL rejections; the 8160-byte row limit is the reason
   the stocks TA panel must stay `REAL`.
@@ -229,7 +250,7 @@ DTO helpers come from
 | `cafef_foreign` | 1,772,666 | daily `(symbol, date)` |
 | `cafef_order_stats` | 320,838 | daily; not yet in silver |
 | `cafef_prop_trading` | 64,139 | daily; not yet in silver |
-| `cafef_insider_txn` | 13,607 | event-based, `row_id` PK; not yet in silver |
+| `cafef_insider_shareholder_transactions` | 13,607 | event-based, `row_id` PK; not yet in silver |
 | `simplize_stocks` | 2,658,773 | PRIMARY daily backbone |
 | `simplize_industry` | 777 | per-ticker GICS industry |
 | `gics` | 163 | official sub-industry taxonomy |
