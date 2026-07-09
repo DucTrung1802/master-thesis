@@ -1,0 +1,31 @@
+﻿no,ticker,exchange,economic_sector_name,industry_group_slug,industry_group_code,industry_activity
+1,ACB,HOSE,Tài chính,tai-chinh-ngan-hang,551010,Tài chính ngân hàng
+2,BCM,HOSE,Bất động sản,quan-ly-va-phat-trien-bat-dong-san,601010,Quản lý và phát triển bất động sản
+3,BID,HOSE,Tài chính,tai-chinh-ngan-hang,551010,Tài chính ngân hàng
+4,BVH,HOSE,Tài chính,bao-hiem,553010,Bảo hiểm
+5,CTG,HOSE,Tài chính,tai-chinh-ngan-hang,551010,Tài chính ngân hàng
+6,FPT,HOSE,Công nghệ,phan-mem-va-dich-vu-cntt,572010,Phần mềm và dịch vụ CNTT
+7,GAS,HOSE,Năng lượng,dau-va-khi-dot,501020,Dầu và Khí đốt
+8,GVR,HOSE,Hàng hóa không thiết yếu,o-to-va-phu-tung-o-to,531010,Ô tô và Phụ tùng ô tô
+9,HDB,HOSE,Tài chính,tai-chinh-ngan-hang,551010,Tài chính ngân hàng
+10,HPG,HOSE,Nguyên vật liệu,kim-loai-va-khai-khoang,512010,Kim loại và Khai khoáng
+11,MBB,HOSE,Tài chính,tai-chinh-ngan-hang,551010,Tài chính ngân hàng
+12,MSN,HOSE,Hàng hóa thiết yếu,thuc-pham-va-thuoc-la,541020,Thực phẩm và thuốc lá
+13,MWG,HOSE,Hàng hóa không thiết yếu,ban-le-chuyen-dung,534030,Bán lẻ chuyên dụng
+14,PLX,HOSE,Năng lượng,dau-va-khi-dot,501020,Dầu và Khí đốt
+15,POW,HOSE,Tiện ích,tien-ich-dien-va-san-xuat-dien,591010,Tiện ích điện và sản xuất điện 
+16,SAB,HOSE,Hàng hóa thiết yếu,do-uong,541010,Đồ uống
+17,SHB,HOSE,Tài chính,tai-chinh-ngan-hang,551010,Tài chính ngân hàng
+18,SSB,HOSE,Tài chính,tai-chinh-ngan-hang,551010,Tài chính ngân hàng
+19,SSI,HOSE,Tài chính,chung-khoan-va-ngan-hang-dau-tu,551020,Chứng khoán và Ngân hàng đầu tư
+20,STB,HOSE,Tài chính,tai-chinh-ngan-hang,551010,Tài chính ngân hàng
+21,TCB,HOSE,Tài chính,tai-chinh-ngan-hang,551010,Tài chính ngân hàng
+22,TPB,HOSE,Tài chính,tai-chinh-ngan-hang,551010,Tài chính ngân hàng
+23,VCB,HOSE,Tài chính,tai-chinh-ngan-hang,551010,Tài chính ngân hàng
+24,VHM,HOSE,Bất động sản,quan-ly-va-phat-trien-bat-dong-san,601010,Quản lý và phát triển bất động sản
+25,VIB,HOSE,Tài chính,tai-chinh-ngan-hang,551010,Tài chính ngân hàng
+26,VIC,HOSE,Bất động sản,quan-ly-va-phat-trien-bat-dong-san,601010,Quản lý và phát triển bất động sản
+27,VJC,HOSE,Công nghiệp,van-chuyen-hanh-khach,524060,Vận chuyển hành khách
+28,VNM,HOSE,Hàng hóa thiết yếu,thuc-pham-va-thuoc-la,541020,Thực phẩm và thuốc lá
+29,VPB,HOSE,Tài chính,tai-chinh-ngan-hang,551010,Tài chính ngân hàng
+30,VRE,HOSE,Bất động sản,quan-ly-va-phat-trien-bat-dong-san,601010,Quản lý và phát triển bất động sản

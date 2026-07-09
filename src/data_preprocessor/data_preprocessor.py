@@ -1,5 +1,6 @@
 from dotenv import load_dotenv
 import os
+import hashlib
 import pandas as pd
 import re
 from glob import glob
@@ -904,79 +905,202 @@ class DataPreprocessor:
             dtype_overrides={"date": DataType.DATE()},
         )
 
-    def _ingest_bronze_stocks_cafef(self) -> None:
-        """Bronze table for CafeF per-stock data — the fields TradingView lacks:
-        unadjusted close, matched vs negotiated (block) volume/value, and the full
-        foreign buy/sell flow (volume, value, net, remaining room, ownership %).
+    # ── CafeF: one bronze table per scraper link-folder ──────────────────────
+    # The CafeF scraper writes five per-link folders under raw_data/cafef/
+    # (price, foreign, order_stats, prop_trading, insider_txn). Each lands as its
+    # OWN raw-faithful bronze table (rather than the former single merged
+    # `cafef_stocks`), mirroring the scraper's one-folder-per-link design; the
+    # price+foreign merge now happens in silver. Key is normalised to
+    # `symbol = "<EXCHANGE>:<TICKER>"` to match the TradingView / Simplize
+    # convention so the silver merge can split it the same way.
 
-        Kept as a separate bronze table because its schema differs from the
-        TradingView `stocks` table; the two sources are merged in silver.
-        Key is normalised to `symbol = "<EXCHANGE>:<TICKER>"` to match the
-        TradingView convention so the silver merge can split it the same way.
-        """
-        self._logger.log_info("Ingesting bronze CafeF stocks data...")
+    def _helper_load_cafef_folder(self, folder: str) -> pd.DataFrame | None:
+        """Concat every CSV under raw_data/cafef/<folder>/ (one per ticker),
+        dropping empty / all-NA frames. Returns None if nothing valid is found."""
+        files = glob(
+            os.path.join(CAFEF_RAW_DATA_DIR, folder, "**", "*.csv"), recursive=True
+        )
+        frames = [
+            df
+            for fp in files
+            if not (df := pd.read_csv(fp, encoding="utf-8")).empty
+            and not df.dropna(how="all").empty
+        ]
+        return (
+            pd.concat(frames, ignore_index=True).drop_duplicates() if frames else None
+        )
 
-        stocks_dir = os.path.join(CAFEF_RAW_DATA_DIR, "stocks")
-        csv_files = glob(os.path.join(stocks_dir, "**", "*.csv"), recursive=True)
-
-        if not csv_files:
-            self._logger.log_error(f'No CafeF stocks CSV files found in "{stocks_dir}".')
-            return
-
-        dataframes = []
-        for fp in csv_files:
-            df = pd.read_csv(fp, encoding="utf-8")
-            if not df.empty and not df.dropna(how="all").empty:
-                dataframes.append(df)
-
-        if not dataframes:
-            self._logger.log_error("No valid CafeF stocks CSV data found.")
-            return
-
-        df = pd.concat(dataframes, ignore_index=True).drop_duplicates()
-
-        # Normalise the key to "<EXCHANGE>:<TICKER>" (CafeF stores them split).
+    def _helper_normalise_cafef_symbol(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Fold CafeF's split (exchange, symbol) into the bronze convention
+        `symbol = "<EXCHANGE>:<TICKER>"` and drop the redundant `exchange` column."""
+        df = df.copy()
         df["symbol"] = (
             df["exchange"].astype("string").str.strip()
             + ":"
             + df["symbol"].astype("string").str.strip()
         )
-        df = df.drop(columns=["exchange"])
+        return df.drop(columns=["exchange"])
 
-        df = self._helper_clean(
-            df,
-            [
-                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("symbol"),
-                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("date"),
-                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("close_adj"),
-                CleanLayer.REMOVE_IF_ALL_COLUMNS_ARE_NULL(),
-                CleanLayer.ORDER_BY(["symbol", "date"]),
-            ],
-        )
+    def _ingest_bronze_cafef_daily(
+        self,
+        folder: str,
+        table_name: str,
+        decimal_cols: List[str],
+        bigint_cols: List[str],
+        required_col: Optional[str] = None,
+    ) -> None:
+        """Ingest one DAILY-series CafeF folder as its own bronze table
+        (raw-faithful, PK (symbol, date)). Drives price / foreign / order_stats /
+        prop_trading."""
+        self._logger.log_info(f"Ingesting bronze CafeF {folder} data...")
+
+        df = self._helper_load_cafef_folder(folder)
+        if df is None:
+            self._logger.log_error(f'No valid CafeF "{folder}" CSV data found.')
+            return
+
+        df = self._helper_normalise_cafef_symbol(df)
+
+        clean_layers = [
+            CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("symbol"),
+            CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("date"),
+        ]
+        if required_col:
+            clean_layers.append(
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL(required_col)
+            )
+        clean_layers += [
+            CleanLayer.REMOVE_IF_ALL_COLUMNS_ARE_NULL(),
+            CleanLayer.ORDER_BY(["symbol", "date"]),
+        ]
+        df = self._helper_clean(df, clean_layers)
 
         df = self._helper_cast_columns(
-            df,
-            decimal_cols=[
-                "open", "high", "low", "close_raw", "close_adj",
-                "val_matched_bn", "val_negotiated_bn",
-                "f_buy_val", "f_sell_val", "f_net_val", "own_pct",
-            ],
-            bigint_cols=[
-                "vol_matched", "vol_negotiated",
-                "f_buy_vol", "f_sell_vol", "f_net_vol", "room_left",
-            ],
+            df, decimal_cols=decimal_cols, bigint_cols=bigint_cols
         )
-
         df["date"] = pd.to_datetime(df["date"]).dt.date
-
         df = self._helper_remove_duplicates(df, primary_keys=["symbol", "date"])
 
         self._helper_save_pandas_table_to_database(
             schema_name=BRONZE_SCHEMA,
-            table_name="cafef_stocks",
+            table_name=table_name,
             primary_keys=["symbol", "date"],
             df=df,
             dtype_overrides={"date": DataType.DATE()},
+        )
+
+    def _ingest_bronze_cafef_price(self) -> None:
+        """CafeF price tab — OHLC (raw + dividend-adjusted close) and the matched
+        vs negotiated (block) volume/value split. PK (symbol, date)."""
+        self._ingest_bronze_cafef_daily(
+            folder="price",
+            table_name="cafef_price",
+            decimal_cols=[
+                "open", "high", "low", "close_raw", "close_adj",
+                "val_matched_bn", "val_negotiated_bn",
+            ],
+            bigint_cols=["vol_matched", "vol_negotiated"],
+            required_col="close_adj",
+        )
+
+    def _ingest_bronze_cafef_foreign(self) -> None:
+        """CafeF foreign tab — foreign buy/sell/net flow (volume + value), remaining
+        room and foreign ownership %. PK (symbol, date)."""
+        self._ingest_bronze_cafef_daily(
+            folder="foreign",
+            table_name="cafef_foreign",
+            decimal_cols=["f_buy_val", "f_sell_val", "f_net_val", "own_pct"],
+            bigint_cols=["f_buy_vol", "f_sell_vol", "f_net_vol", "room_left"],
+        )
+
+    def _ingest_bronze_cafef_order_stats(self) -> None:
+        """CafeF order-placement stats — number + volume of buy vs sell orders and
+        the average volume per order. PK (symbol, date)."""
+        self._ingest_bronze_cafef_daily(
+            folder="order_stats",
+            table_name="cafef_order_stats",
+            decimal_cols=["avg_vol_per_buy_order", "avg_vol_per_sell_order"],
+            bigint_cols=[
+                "n_buy_orders", "buy_order_vol", "n_sell_orders", "sell_order_vol",
+            ],
+        )
+
+    def _ingest_bronze_cafef_prop_trading(self) -> None:
+        """CafeF proprietary-desk trades — brokers' own-account buy/sell volume and
+        value. PK (symbol, date)."""
+        self._ingest_bronze_cafef_daily(
+            folder="prop_trading",
+            table_name="cafef_prop_trading",
+            decimal_cols=["prop_buy_val", "prop_sell_val"],
+            bigint_cols=["prop_buy_vol", "prop_sell_vol"],
+        )
+
+    def _ingest_bronze_cafef_insider_shareholder_transactions(self) -> None:
+        """CafeF insider & major-shareholder transactions — registered (planned) vs
+        actually-executed buy/sell by insiders, related persons and major
+        shareholders. EVENT-based (one row per transaction, not a daily series), so
+        there is no natural (symbol, date) key. Loaded raw-faithful from the
+        `insider_txn/` scraper folder with a deterministic md5 `row_id` surrogate PK
+        (hash of the full raw row) so re-ingests stay idempotent."""
+        self._logger.log_info(
+            "Ingesting bronze CafeF insider/shareholder transactions data..."
+        )
+
+        df = self._helper_load_cafef_folder("insider_txn")
+        if df is None:
+            self._logger.log_error('No valid CafeF "insider_txn" CSV data found.')
+            return
+
+        df = self._helper_normalise_cafef_symbol(df)
+        df = self._helper_clean(
+            df,
+            [
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("symbol"),
+                CleanLayer.REMOVE_IF_ALL_COLUMNS_ARE_NULL(),
+            ],
+        )
+
+        # Deterministic surrogate PK = md5 of the full raw row (computed on the
+        # string form, before casting, so it is stable across re-ingests).
+        hash_src = df.astype("string").fillna("")
+        df["row_id"] = [
+            hashlib.md5("|".join(row).encode("utf-8")).hexdigest()
+            for row in hash_src.itertuples(index=False, name=None)
+        ]
+
+        df = self._helper_cast_columns(
+            df,
+            decimal_cols=["ownership_pct"],
+            bigint_cols=[
+                "vol_before", "plan_buy_vol", "plan_sell_vol",
+                "real_buy_vol", "real_sell_vol", "vol_after",
+            ],
+        )
+
+        date_cols = [
+            "plan_begin_date", "plan_end_date", "real_end_date",
+            "order_date", "published_date",
+        ]
+        for col in date_cols:
+            df[col] = pd.to_datetime(df[col], errors="coerce").dt.date
+
+        df = self._helper_remove_duplicates(df, primary_keys=["row_id"])
+
+        self._helper_save_pandas_table_to_database(
+            schema_name=BRONZE_SCHEMA,
+            table_name="cafef_insider_shareholder_transactions",
+            primary_keys=["row_id"],
+            df=df,
+            dtype_overrides={
+                **{c: DataType.DATE() for c in date_cols},
+                "row_id": DataType.VARCHAR(32),
+                "transaction_man": DataType.TEXT(),
+                "position": DataType.TEXT(),
+                "related_man": DataType.TEXT(),
+                "related_position": DataType.TEXT(),
+                "note": DataType.TEXT(),
+                "profile_url": DataType.TEXT(),
+            },
         )
 
     def _ingest_bronze_stocks_simplize(self) -> None:
@@ -1304,9 +1428,10 @@ class DataPreprocessor:
         • Simplize (bronze `simplize_stocks`) — PRIMARY: fully dividend-adjusted
           OHLC, true total volume, net/pct change, and foreign flow (vol + val)
           and remaining room, from 2009. Drives every price/volume/foreign column.
-        • CafeF (bronze `cafef_stocks`) — its unique fields: the matched vs
-          negotiated (block) volume/value split and foreign ownership % (own_pct);
-          also a fallback for foreign flow where Simplize is missing.
+        • CafeF (bronze `cafef_price` + `cafef_foreign`, merged here on
+          (symbol, date)) — its unique fields: the matched vs negotiated (block)
+          volume/value split and foreign ownership % (own_pct); also a fallback for
+          foreign flow where Simplize is missing.
         • TradingView (bronze `trading_view_stocks`) — an OHLC fallback only
           (its volume is split-inflated and its sector misclassifies VN stocks).
 
@@ -1324,8 +1449,21 @@ class DataPreprocessor:
         )
 
         sz = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="simplize_stocks")
-        cf = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="cafef_stocks")
         tv = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="trading_view_stocks")
+
+        # CafeF price + foreign are now separate bronze tables (one per scraper
+        # link-folder); merge them on (symbol, date) to reconstruct the combined
+        # per-stock CafeF frame the source-merge below expects.
+        cf_price = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="cafef_price")
+        cf_foreign = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="cafef_foreign")
+        if not cf_price.empty and not cf_foreign.empty:
+            cf = cf_price.merge(cf_foreign, on=["symbol", "date"], how="outer")
+        elif not cf_price.empty:
+            cf = cf_price
+        elif not cf_foreign.empty:
+            cf = cf_foreign
+        else:
+            cf = pd.DataFrame()
 
         if sz.empty and cf.empty and tv.empty:
             self._logger.log_info("No bronze stocks data found.")
@@ -1363,7 +1501,8 @@ class DataPreprocessor:
         }
         if not cf.empty:
             cf = _split(cf).rename(columns=cf_fallback)
-            cf = cf[KEYS + cf_keep + list(cf_fallback.values())]
+            # reindex (not strict indexing): tolerant of price- or foreign-only runs
+            cf = cf.reindex(columns=KEYS + cf_keep + list(cf_fallback.values()))
         else:
             cf = pd.DataFrame(columns=KEYS + cf_keep + list(cf_fallback.values()))
 
@@ -1795,7 +1934,11 @@ class DataPreprocessor:
                     "data_preprocessor", "data_quality_bronze", "stocks"
                 ):
                     self._ingest_bronze_stocks_trading_view()
-                    self._ingest_bronze_stocks_cafef()
+                    self._ingest_bronze_cafef_price()
+                    self._ingest_bronze_cafef_foreign()
+                    self._ingest_bronze_cafef_order_stats()
+                    self._ingest_bronze_cafef_prop_trading()
+                    self._ingest_bronze_cafef_insider_shareholder_transactions()
                     self._ingest_bronze_stocks_simplize()
                     self._ingest_bronze_simplize_industry()
                 if self._switch_handler.is_enabled(
