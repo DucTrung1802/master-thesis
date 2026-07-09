@@ -124,11 +124,11 @@ src/web_scraper/
   | -6 | `GDCoDong.ashx` | **insider / major-shareholder transactions** — who, plan vs real buy/sell, holdings | `insider_txn/` | 2008 |
 
 - Tabs -1/-2/-3/-4 are **daily series** (one row per trading day); tab -6 is
-  **event-based** (one row per transaction). Price (`price/`) and foreign (`foreign/`)
-  used to be merged into one `stocks/` folder — they are now split one-per-link, and
-  the downstream CafeF bronze ingest (`data_preprocessor._ingest_bronze_stocks_cafef`)
-  **re-merges `price/` + `foreign/`** on (exchange, symbol, date) to reproduce the
-  same `cafef_stocks` table.
+  **event-based** (one row per transaction). Each folder is ingested **one-to-one**
+  into its own bronze table by `data_preprocessor._ingest_bronze_cafef_*`
+  (`cafef_price`, `cafef_foreign`, `cafef_order_stats`, `cafef_prop_trading`,
+  `cafef_insider_txn`); `price/` + `foreign/` are re-merged on (symbol, date) later,
+  in **silver** (`_ingest_silver_stocks`), not bronze.
 - **Quirks handled:** `StartDate/EndDate` are **MM/dd/yyyy (US)**; a query is capped
   at ~63 rows and `PageSize` 20, so history is fetched in overlapping ~2-month
   windows and paginated; `ExchangeType` (HOSE/HNX/UPCOM, UPPERCASE) is **required**
@@ -241,12 +241,13 @@ Matches the bronze-source decision (memory `project-bronze-source-per-field`):
 - **`raw_data/` is the handoff to `src/data_preprocessor`** — schema/column names
   here are the contract its bronze ingest expects; changing an `OUTPUT_COLUMNS` list
   ripples downstream.
-- **CafeF `price/`+`foreign/` are coupled to the preprocessor:**
-  `data_preprocessor._ingest_bronze_stocks_cafef` re-merges the two folders on
-  (exchange, symbol, date) to rebuild the `cafef_stocks` bronze table, so renaming
-  those folders or their columns requires updating that method. The newer CafeF tabs
-  (`order_stats/`, `prop_trading/`, `insider_txn/`) are scraped but **not yet ingested**
-  into bronze — wiring them in is future preprocessor work.
+- **CafeF folders are coupled to the preprocessor:** each folder now lands as its
+  own bronze table — `data_preprocessor._ingest_bronze_cafef_{price,foreign,order_stats,
+  prop_trading,insider_txn}` (all five tabs are ingested), so renaming a folder or its
+  columns requires updating the matching method. `price/` + `foreign/` are re-merged
+  on (symbol, date) in **silver** (`_ingest_silver_stocks`), not bronze. `order_stats/`
+  / `prop_trading/` / `insider_txn/` reach bronze but are **not yet consumed by
+  silver/gold** — turning them into signals is future preprocessor work.
 
 ## 8. Index-membership reference files — `vn30.csv` / `vn100.csv` (repo root)
 
