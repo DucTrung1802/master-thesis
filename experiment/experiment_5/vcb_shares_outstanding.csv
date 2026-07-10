@@ -1,0 +1,9 @@
+﻿effective_date,shares_outstanding,event_type,event_text,prev_shares,delta_shares,factor
+,1742397291,baseline_pre_first_event,reconstructed base (before earliest CafeF event),,,
+2010-12-13,2317388397,rights_issue,"Bán ưu đãi, tỷ lệ 100:33",1742397291,574991106,1.33
+2014-06-17,2664996657,bonus_issue,"Thưởng bằng Cổ phiếu, tỷ lệ 100:15",2317388397,347608260,1.15
+2016-09-08,3597745487,bonus_issue,"Thưởng bằng Cổ phiếu, tỷ lệ 100:35",2664996657,932748830,1.35
+2019-01-03,3708854360,private_placement,Phát hành riêng lẻ 111.108.873,3597745487,111108873,1.0
+2021-12-21,4732498163,stock_dividend,"Cổ tức bằng Cổ phiếu, tỷ lệ 1000:276",3708854360,1023643803,1.276
+2023-07-24,5589080330,stock_dividend,"Cổ tức bằng Cổ phiếu, tỷ lệ 1000:181",4732498163,856582167,1.181
+2025-03-11,8355675094,stock_dividend,"Cổ tức bằng Cổ phiếu, tỷ lệ 1000:495",5589080330,2766594764,1.495

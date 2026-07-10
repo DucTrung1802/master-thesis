@@ -27,6 +27,8 @@ wandb/
 !experiment/experiment_4/vcb_quarter_publish_dates.csv
 !experiment/experiment_4/vcb_quarter_publish_dates_detail.csv
 !experiment/experiment_4/vcb_manual_overrides.csv
+# experiment_5 shares-outstanding deliverable + inputs are all tracked
+!experiment/experiment_5/*.csv
 
 *.txt
 
