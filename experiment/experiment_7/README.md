@@ -71,15 +71,33 @@ python scrape_financials.py
 - The `source` column in each deliverable says where the row came from:
   `scraped` · `manual` · `missing` (still un-filled).
 
-Currently missing (→ what's in the templates):
+### VCB: what has been filled, and what cannot be
 
-| report | VCB missing quarters |
+Filled from VCB's own consolidated filings (read off the PDF, every statement reconciled
+against its printed subtotals before being written):
+
+| report | filled |
 |---|---|
-| balance_sheet (5) | Q3-2008, Q4-2008, Q2-2011, Q2-2014, **Q2-2024** |
-| income_statement (7) | Q2-2009, Q1/Q3/Q4-2010, Q1/Q2-2011, **Q2-2024** |
-| cash_flow (17) | most of 2008–2011, Q2-2014, **Q2-2024**, Q1/Q2/Q3-2025 |
+| balance_sheet | **Q2-2011** |
+| income_statement | **Q4-2010, Q1-2011, Q2-2011** |
+| cash_flow | **Q2-2011** |
+
+Still missing, and **why** — these are not "not done yet", they are blocked:
+
+| blocker | quarters |
+|---|---|
+| **CafeF has no document at all** | Q3-2008, Q4-2008 |
+| **The PDF is a scanned image** (no text layer → needs OCR) | Q1/Q3-2009, Q1/Q2/Q3-2010, Q2-2014, **Q2-2024**, Q1/Q2/Q3-2025 |
+| **Layout defeats column detection** (silently yields the *cumulative* column instead of the standalone quarter — rejected rather than write a wrong number) | Q2-2009 |
+| cash flow only: statement present but its subtotals would not reconcile | Q4-2009, Q4-2010, Q1-2011 |
 
 (**Q2-2024** is missing for FPT too — that gap is CafeF-wide, not VCB-specific.)
+
+> Two classes of error here are invisible to a reconciliation check, because both still
+> balance internally: reading the **cumulative** column instead of the standalone quarter, and
+> a **units** mistake (most reports are in Triệu VNĐ, but e.g. the 2009 ones are in plain
+> đồng). Both were caught only by comparing magnitudes against neighbouring quarters. Any
+> future hand-fill should be sanity-checked the same way.
 
 ## Report naming (Vietnamese → standard accounting English)
 
