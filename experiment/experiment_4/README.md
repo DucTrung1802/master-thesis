@@ -107,18 +107,18 @@ python scrape_vcb_publish_dates.py   # picks up the overrides (cached scrape, fa
 ## Files & dependency
 - `scrape_vcb_publish_dates.py` — the one scraper. Stdlib only **except PyMuPDF**
   (`pip install pymupdf`) for the in-PDF signing dates; if it is absent the PDF step is
-  skipped and everything else still runs. Uses cached raw JSON by default; `--refresh`
-  re-hits the network.
+  skipped and everything else still runs. It fetches from the network and writes raw JSON
+  caches (`vcb_*.json`, gitignored); a later run reuses those caches unless `--refresh`.
 - `vcb_quarter_publish_dates.csv` — **deliverable** (wide): `year, Q1, Q2, Q3, Q4, final_year`.
 - `vcb_quarter_publish_dates_detail.csv` — long: `year, cell, publish_date, report_used,
   assurance, confidence, source, evidence`.
 - `vcb_manual_overrides.csv` — hand-entered dates (top priority); see above.
-- `vcb_vietstock_news.json`, `vcb_vietstock_docs.json`, `vcb_cafef_bctc.json`,
-  `vcb_pdf_signing.json` — raw caches.
 
 ## Reproduce
 ```bash
 pip install pymupdf
-python scrape_vcb_publish_dates.py            # uses cached raw JSON
+python scrape_vcb_publish_dates.py            # fetches (writes local vcb_*.json caches)
 python scrape_vcb_publish_dates.py --refresh  # re-scrape everything
 ```
+The raw `vcb_*.json` caches are regenerated locally on first run and are not tracked; the
+committed deliverable CSVs already contain the final dates.
