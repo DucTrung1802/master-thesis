@@ -61,13 +61,13 @@ milestones file.
 
 ## Files
 
-- `scrape_vcb_shares_outstanding.py` — one stdlib script. `--refresh` re-hits CafeF;
-  otherwise the cached `vcb_lichsukien.json` is reused.
+- `scrape_vcb_shares_outstanding.py` — one stdlib script. It fetches from CafeF and
+  writes a local `vcb_lichsukien.json` cache (gitignored); a later run reuses it unless
+  `--refresh`.
 - `vcb_shares_outstanding.csv` — the step series (effective_date, shares_outstanding,
   event_type, event_text, prev_shares, delta_shares, factor).
 - `vcb_corporate_actions.csv` — every parsed event, classified (affects_shares flag).
 - `vcb_shares_milestones.csv` — optional exact-count overrides (empty by default).
-- `vcb_lichsukien.json` — raw API cache.
 
 ## Point-in-time lookup
 
