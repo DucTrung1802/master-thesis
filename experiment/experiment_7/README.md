@@ -119,16 +119,16 @@ python scrape_financials.py
 Read off VCB's own consolidated filings, each statement reconciled against its printed
 subtotals **and** magnitude-checked against neighbouring quarters:
 
-| report | filled | still missing |
+| report | filled from the filings | still missing |
 |---|---|---|
-| balance_sheet | Q2-2011, **Q2-2014**, **Q2-2024** | **2** — Q3-2008, Q4-2008 |
-| income_statement | Q2-2011, **Q2-2024** | 5 — Q2-2009, Q1/Q3/Q4-2010, Q1-2011 |
-| cash_flow | Q2-2011, **Q2-2014**, **Q2-2024** | 14 |
+| balance_sheet | Q2-2011, Q2-2014, Q2-2024 | **2** — Q3-2008, Q4-2008 |
+| **income_statement** | Q2-2009, Q1/Q3/Q4-2010, Q1-2011, Q2-2011, Q2-2024 | **0 — COMPLETE** |
+| cash_flow | Q2-2011, Q2-2014, Q2-2024 | 14 |
 
-**The balance sheet is now complete** apart from the only two quarters CafeF has **no document
-for at all** (Q3-2008, Q4-2008) — audited against all 206 documents CafeF lists. Every other
-gap *does* have a consolidated report available; they are simply scanned PDFs awaiting
-transcription.
+**The income statement is complete** — all 71 quarters. **The balance sheet is complete apart
+from the only two quarters CafeF has no document for at all** (Q3-2008, Q4-2008 — audited
+against all 206 documents CafeF lists). Every remaining cash-flow gap *does* have a
+consolidated report available; they are scanned PDFs awaiting transcription.
 
 **The auto-parser is not trusted on the older filings.** Their text layer fragments labels, so
 it extracts only ~40% of the lines and sometimes mis-assigns one — the reconcile gate rejects
