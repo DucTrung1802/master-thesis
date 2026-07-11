@@ -9,8 +9,8 @@ experiments:
   backtests) and *which target* is tradable.
 - **experiment_4** — VCB financial-report **publish/disclosure dates** (2009→now),
   scraped for point-in-time / look-ahead-safe modelling.
-- **experiment_5** — VCB **shares-outstanding (KLCP) history** (2009→now),
-  reconstructed from CafeF's corporate-action log for point-in-time market cap.
+- **experiment_5** — VCB **shares-outstanding (KLCP) history** (2009→now), from **filed
+  charter capital**, for point-in-time market cap.
 - **experiment_6** — VCB **company-news / disclosure headlines** (2008→now),
   categorised, scraped from CafeF's event feed for a point-in-time event stream.
 - **experiment_7** — **financial statements** (balance sheet / income statement /
@@ -241,29 +241,38 @@ earnings/disclosure calendar). Recovers VCB's financial-statement **publish date
 
 # Experiment 5 — VCB shares-outstanding (KLCP) point-in-time history
 
-Second orthogonal-data piece (after experiment_4). Recovers VCB's **listed /
-outstanding share count** ("KLCP đang niêm yết" / "lưu hành") as a point-in-time
-series, 2009 → now, so raw price can be joined to **market cap / turnover / free-float**
-without look-ahead.
+Second orthogonal-data piece: the **listed / outstanding share count**, 2009 → now, so raw
+price can be joined to market cap / turnover / free-float without look-ahead.
 
-- **Problem:** the CafeF data page shows only the *current* count
-  (**8,355,675,094** as of 2026-07); there is **no time-series endpoint**. But the
-  count only moves on a corporate action, and CafeF's action log is queryable:
-  `cafef.vn/du-lieu/Ajax/PageNew/LichSuKien.ashx?Symbol=vcb`.
-- **Method** (`experiment_5/scrape_vcb_shares_outstanding.py`, one stdlib script):
-  anchor on the current count and **walk the events backward**, undoing each
-  share-changing action. Stock dividend `×(1+X/1000)`, bonus `×(1+X/100)`, rights
-  `×(1+X/100)` (full subscription), private placement `+N`; **cash dividends don't move
-  the count**. Of VCB's 17 logged events, **7 change shares**, 10 are cash.
-- **Result:** 1.74 B (pre-2010) → 2.32 B (2010 rights) → 2.66 B (2014 bonus) →
-  3.60 B (2016 bonus) → 3.71 B (2019 GIC/Mizuho placement +111,108,873) →
-  4.73 B (2021 stock div 27.6%) → 5.59 B (2023 stock div 18.1%) → **8.36 B**
-  (2025 stock div 49.5%). Matches known post-2016 filings to **<0.001%** (residuals =
-  fractional-share rounding). Optional `vcb_shares_milestones.csv` pins exact filed
-  counts; the pre-2010 base is the least-certain cell (CafeF log starts 2010-03).
-- **Point-in-time use:** `shares(d)` = last step with `effective_date ≤ d`;
-  `market_cap(d) = raw_close(d) × shares(d)` (**raw** close — the count carries dilution).
-  `LichSuKien.ashx` is generic → extends to any ticker (only the anchor is VCB-specific).
+**⚠️ The original method was wrong.** It anchored on today's count and walked CafeF's
+corporate-action log (`LichSuKien.ashx`) backwards. **That log is incomplete** — it omits
+three of VCB's 2010-2012 capital increases. Cross-checked against VCB's own filed balance
+sheets (experiment_7), the old series overstated mid-2011 by **+31.8%** (2,317,388,397 vs the
+filed 1,758,754,000) and the pre-2010 base by **+44%** (1.74bn vs 1.21bn) — silently inflating
+any pre-2013 market cap. It was right only from mid-2014 on, which is why a spot-check against
+post-2016 filings had passed.
+
+**The method now — filed charter capital.** The authoritative source is the company's own
+"Vốn điều lệ" (balance-sheet code `411`), read from the quarterly statements via the same
+CafeF BCTC API experiment_7 uses: `shares = charter_capital / 10,000` (10,000 VND par).
+Complete and filing-backed for all 65 filed quarters. The action log is still fetched, but
+**only to date and label** the steps: if an action's factor matches the observed jump and its
+ex-date is within ~15 months (charter capital registers only once shares are issued, which
+lags the ex-date), use the exact **ex-date**; otherwise fall back to the **quarter-end** on
+which the new charter capital first appears (conservative — no look-ahead).
+
+**Result** — 11 steps: 1,210,086,026 (Q1-2009 baseline) → 1,322,371,500 (Q3-2010, *unlogged*)
+→ 1,758,754,000 (2010-12-13 rights 100:33) → 1,969,804,500 (Q3-2011, *unlogged*) →
+2,317,417,100 (Q1-2012, *unlogged* — the Mizuho placement) → 2,665,020,300 (2014 bonus) →
+3,597,768,600 (2016 bonus) → 3,708,877,400 (2019 GIC/Mizuho) → 4,732,516,600 (2021 stock div)
+→ 5,589,091,300 (2023 stock div) → **8,355,675,094** (2025 stock div). The three
+`unlogged_capital_increase` rows are exactly what CafeF's action log is missing — real (the
+filings prove them), just undated beyond their quarter.
+`vcb_shares_milestones.csv` pins exact counts (charter capital is filed in millions, so
+`/10,000` is only good to ~±50 shares).
+
+**Point-in-time:** `shares(d)` = last row with `effective_date ≤ d`;
+`market_cap(d) = raw_close(d) × shares(d)` (**raw** close — the count carries the dilution).
 
 ---
 
