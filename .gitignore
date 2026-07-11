@@ -31,6 +31,8 @@ wandb/
 !experiment/experiment_5/*.csv
 # experiment_6 news deliverable tracked
 !experiment/experiment_6/*.csv
+# experiment_7 financial-statement deliverable tracked
+!experiment/experiment_7/*.csv
 # experiment_4/5 raw JSON caches are regenerable (--refresh); don't track them
 experiment/experiment_4/*.json
 experiment/experiment_5/*.json

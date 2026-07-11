@@ -1,6 +1,6 @@
 # Experiments Context — Signal discovery → tradability → point-in-time data (VCB/VN30)
 
-Single-document summary of **all methods and all results** across the six
+Single-document summary of **all methods and all results** across the seven
 experiments:
 
 - **experiment_1** — signal discovery (does a "next-5d ≥ +5%" signal exist?).
@@ -13,6 +13,8 @@ experiments:
   reconstructed from CafeF's corporate-action log for point-in-time market cap.
 - **experiment_6** — VCB **company-news / disclosure headlines** (2008→now),
   categorised, scraped from CafeF's event feed for a point-in-time event stream.
+- **experiment_7** — **financial statements** (balance sheet / income statement /
+  cash flow), full quarterly line-item history 2008→now; works for **any ticker**.
 
 Each experiment folder has its own `README.md` with the full detail; this file is
 the index across all of them.
@@ -292,6 +294,65 @@ stream** from CafeF, tagged by category, 2008 → now — a point-in-time event 
 
 ---
 
+# Experiment 7 — Financial statements (quarterly, any ticker)
+
+Fourth orthogonal-data piece: **the fundamentals themselves** — every line item of all three
+statements, quarterly, 2008 → now, for **any listed code**. Joined to experiment_4's publish
+dates they become point-in-time safe.
+
+### Naming (Vietnamese → standard accounting English)
+`CDKT` Cân đối kế toán → **`balance_sheet`** (sections `assets`/TN, `liabilities_and_equity`/NV);
+`KQKD` Kết quả kinh doanh → **`income_statement`** (P&L); `LCTT` Lưu chuyển tiền tệ →
+**`cash_flow`** (sections `operating`/HDKD, `investing`/HDDT, `financing`/HDTC).
+`HDKD` — the id in the `#table_HDKD` pager xpath — is the cash-flow *operating section*, **not**
+a separate report.
+
+### All history in one call
+The page's tabs load via `Ajax/FinancialAjax.aspx?tab=<candoi|ketqua|luuchuyen>`, which calls a
+JSON API: `apiweb.cafef.vn/api/v2/BCTC/GetReportCDKT` (TN|NV), `…/v1/BCTC/GetReportDetail`
+(KQKD), `…/v1/BCTC/GetReportLCTT` (HDKD|HDDT|HDTC), with `&pageSize=<count>&TypeTime=QUY`.
+`value.count` = quarters available for that ticker (VCB 70, FPT 77) → request exactly that
+many; the period-pager button is just pagination. Two JSON shapes (nested for CDKT/LCTT, flat
+for KQKD) are normalised.
+
+### Result — `experiment_7/scrape_financials.py`, one stdlib script, **6 generic files**
+The ticker is a **column, not a filename**: `balance_sheet.csv`, `income_statement.csv`,
+`cash_flow.csv` + a `<report>_manual.csv` each. One WIDE table per report (each statement has
+its own line items). Columns: `symbol, exchange, period, year, quarter, source`, then one column
+per line item named `<item_code>__<slug>` (e.g. `110__tien_mat_vang_bac_da_quy`).
+VCB: **71 quarter rows**, **Q3-2008 → Q1-2026**, oldest first — a **contiguous grid** (gaps are
+`source=missing` rows, never skipped or zero-filled); 85 / 26 / 47 line items.
+Validated: 2025 identities hold (NII 58,771 = 105,216 − 46,445; PBT 44,020; PAT 35,198 bn VND)
+and the 4 quarterly income statements sum exactly to the annual figure.
+
+**Any ticker, any sector.** `--symbol FPT` **accumulates** — replaces only that symbol's rows,
+leaves others' alone, idempotent — so a multi-ticker panel builds up one run at a time.
+Endpoints/sub-types are identical for banks and non-banks; only line items differ, read from
+each ticker's own template (VCB: bank, 85 BS items, *direct* cash flow, starts with interest
+income; FPT: non-bank, 132 items, *indirect*, starts with revenue, 81 quarters from Q1-2006).
+**Line items are keyed by the full `<code>__<slug>` name, never the bare code** — code `1` is
+interest income for a bank but revenue for a non-bank, so they stay separate columns and each
+row is blank outside its sector (VCB+FPT → 152 rows × 213 items, sparse by design).
+**Exchange** comes from CafeF's master list (`Search/company.json`, 2,556 codes) via `CenterId`:
+1=HOSE, 2=HNX, 8=OTC, 9=UPCOM.
+
+**Manual overrides.** Each `<report>_manual.csv` is pre-seeded with exactly the quarters CafeF
+lacks, keyed by `symbol`+`period` (VCB: BS 5, IS 7, CF 17). Hand-filled cells **beat scraped**,
+cell by cell; gap rows persist across re-runs so entries are never lost; `source` =
+`scraped`/`manual`/`missing`.
+
+### ⚠️ Caveats (verified against the API — read before modelling)
+1. **Quarterly cash flow is cumulative YTD** — it resets each January and Q4 = the full year
+   (2023: 26,870 → 56,751 → 83,233 → 108,116). **Difference consecutive quarters** for
+   standalone values. The income statement **is** already standalone (quarters sum to annual)
+   and the balance sheet is a stock — neither needs this.
+2. **Gaps are real source gaps, not parse bugs.** CafeF omits **Q2-2024** entirely (market-wide
+   — FPT too) and returns literal all-zero rows elsewhere (VCB: BS 5, IS 7, CF 17 — incl.
+   CF Q1–Q3 2025). Both are emitted as blank `source=missing` rows, **never as 0**, and seeded
+   into the manual templates. Dense usable history effectively starts ~**2012**.
+
+---
+
 # Overall conclusions
 
 1. **One universal signal:** a near-term 5d+5% up-move is preceded by **volatility /
@@ -313,11 +374,13 @@ stream** from CafeF, tagged by category, 2008 → now — a point-in-time event 
 7. **The binding constraint is DATA, not model/target.** Best label to pursue = **`rel5`**
    (market-relative ~1-week return). The lever is **orthogonal data** — foreign flows,
    earnings/disclosure calendar + surprises, fundamentals/valuation.
-8. **experiments 4, 5 & 6 build the first orthogonal-data pieces:** a point-in-time
-   **disclosure calendar** (exp_4) so fundamentals align to when they became public, a
-   point-in-time **shares-outstanding series** (exp_5) so raw price → market cap / turnover
-   / free-float are computable without look-ahead, and a categorised **news/event stream**
-   (exp_6) for headline-count / event-flag / sentiment features.
+8. **experiments 4–7 build the orthogonal-data pieces:** a point-in-time **disclosure
+   calendar** (exp_4) so fundamentals align to when they became public, a point-in-time
+   **shares-outstanding series** (exp_5) so raw price → market cap / turnover / free-float
+   are computable without look-ahead, a categorised **news/event stream** (exp_6) for
+   headline-count / event-flag / sentiment features, and the **financial statements**
+   themselves (exp_7) — which, joined to exp_4's publish dates, give look-ahead-safe
+   fundamentals/valuation.
 
 > AUCs are single chronological-split point estimates (small positive counts →
 > ±0.03–0.05 variance). Most CSV outputs are gitignored and regenerated by the scripts;
@@ -340,3 +403,8 @@ stream** from CafeF, tagged by category, 2008 → now — a point-in-time event 
 - `experiment_6/README.md` — categorised company-news / disclosure feed **with content**
   - `scrape_vcb_news.py` (one script: list headlines + fetch article content) →
     `vcb_news.csv` (order, timestamp, type, headline, category, content, url, pdf_url)
+- `experiment_7/README.md` — financial statements (balance sheet / income statement / cash flow)
+  - `scrape_financials.py` (one script, `--symbol <TICKER>`, all history via the BCTC JSON
+    API) → three wide CSVs shared by all tickers: `balance_sheet.csv`, `income_statement.csv`,
+    `cash_flow.csv` (rows = symbol × quarter, columns = line items `<item_code>__<slug>`)
+    + a `<report>_manual.csv` hand-fill template per report (manual beats scraped)
