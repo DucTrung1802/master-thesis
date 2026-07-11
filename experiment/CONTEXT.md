@@ -1,6 +1,6 @@
-# Experiments Context — Signal discovery → tradability → disclosure-date data (VCB/VN30)
+# Experiments Context — Signal discovery → tradability → point-in-time data (VCB/VN30)
 
-Single-document summary of **all methods and all results** across the four
+Single-document summary of **all methods and all results** across the seven
 experiments:
 
 - **experiment_1** — signal discovery (does a "next-5d ≥ +5%" signal exist?).
@@ -9,6 +9,12 @@ experiments:
   backtests) and *which target* is tradable.
 - **experiment_4** — VCB financial-report **publish/disclosure dates** (2009→now),
   scraped for point-in-time / look-ahead-safe modelling.
+- **experiment_5** — VCB **shares-outstanding (KLCP) history** (2009→now), from **filed
+  charter capital**, for point-in-time market cap.
+- **experiment_6** — VCB **company-news / disclosure headlines** (2008→now),
+  categorised, scraped from CafeF's event feed for a point-in-time event stream.
+- **experiment_7** — **financial statements** (balance sheet / income statement /
+  cash flow), full quarterly line-item history 2008→now; works for **any ticker**.
 
 Each experiment folder has its own `README.md` with the full detail; this file is
 the index across all of them.
@@ -233,6 +239,172 @@ earnings/disclosure calendar). Recovers VCB's financial-statement **publish date
 
 ---
 
+# Experiment 5 — VCB shares-outstanding (KLCP) point-in-time history
+
+Second orthogonal-data piece: the **listed / outstanding share count**, 2009 → now, so raw
+price can be joined to market cap / turnover / free-float without look-ahead.
+
+**⚠️ The original method was wrong.** It anchored on today's count and walked CafeF's
+corporate-action log (`LichSuKien.ashx`) backwards. **That log is incomplete** — it omits
+three of VCB's 2010-2012 capital increases. Cross-checked against VCB's own filed balance
+sheets (experiment_7), the old series overstated mid-2011 by **+31.8%** (2,317,388,397 vs the
+filed 1,758,754,000) and the pre-2010 base by **+44%** (1.74bn vs 1.21bn) — silently inflating
+any pre-2013 market cap. It was right only from mid-2014 on, which is why a spot-check against
+post-2016 filings had passed.
+
+**The method now — filed charter capital.** The authoritative source is the company's own
+"Vốn điều lệ" (balance-sheet code `411`), read from the quarterly statements via the same
+CafeF BCTC API experiment_7 uses: `shares = charter_capital / 10,000` (10,000 VND par).
+Complete and filing-backed for all 65 filed quarters. The action log is still fetched, but
+**only to date and label** the steps: if an action's factor matches the observed jump and its
+ex-date is within ~15 months (charter capital registers only once shares are issued, which
+lags the ex-date), use the exact **ex-date**; otherwise fall back to the **quarter-end** on
+which the new charter capital first appears (conservative — no look-ahead).
+
+**Result** — 11 steps: 1,210,086,026 (Q1-2009 baseline) → 1,322,371,500 (Q3-2010, *unlogged*)
+→ 1,758,754,000 (2010-12-13 rights 100:33) → 1,969,804,500 (Q3-2011, *unlogged*) →
+2,317,417,100 (Q1-2012, *unlogged* — the Mizuho placement) → 2,665,020,300 (2014 bonus) →
+3,597,768,600 (2016 bonus) → 3,708,877,400 (2019 GIC/Mizuho) → 4,732,516,600 (2021 stock div)
+→ 5,589,091,300 (2023 stock div) → **8,355,675,094** (2025 stock div). The three
+`unlogged_capital_increase` rows are exactly what CafeF's action log is missing — real (the
+filings prove them), just undated beyond their quarter.
+`vcb_shares_milestones.csv` pins exact counts (charter capital is filed in millions, so
+`/10,000` is only good to ~±50 shares).
+
+**Point-in-time:** `shares(d)` = last row with `effective_date ≤ d`;
+`market_cap(d) = raw_close(d) × shares(d)` (**raw** close — the count carries the dilution).
+
+---
+
+# Experiment 6 — VCB company-news / disclosure headlines (categorised)
+
+Third orthogonal-data piece. Scrapes VCB's full **company-news & disclosure headline
+stream** from CafeF, tagged by category, 2008 → now — a point-in-time event feed
+(headline counts, event flags, sentiment, announcement dates) joinable without look-ahead.
+
+- **Source:** `cafef.vn/du-lieu/tin-doanh-nghiep/vcb/event.chn`. All category tabs
+  (`#a0..#a5`) hit one AJAX endpoint returning an HTML fragment:
+  `Ajax/Events_RelatedNews_New.aspx?symbol=VCB&floorID=0&configID=<0-5>&PageIndex=n&PageSize=30&Type=2`.
+  PageSize caps at 30 → paginate until empty. Title from anchor **inner text** (the
+  `title=""` attr breaks on legacy embedded quotes).
+- **Categories (configID):** 0 all · 1 SXKD & analysis · 2 dividends/record-date ·
+  3 personnel · 4 capital increase/treasury · 5 major & insider shareholder txns.
+  Method: scrape 1..5 (true category), then backfill category 0 (uncategorised), dedup by URL.
+- **Result** (`experiment_6/scrape_vcb_news.py`, one stdlib script, two stages: list
+  headlines → fetch each article's content): **1,629 rows, 2008-01 → 2026-07** — 896
+  editorial, 727 disclosure, 6 dead-link errors; 702 carry a filing `pdf_url`. Categories:
+  business_results_and_analysis 770, general_uncategorized 561, major_and_insider 101,
+  personnel_changes 88, capital_increase_and_treasury 71, dividends_and_record_date 38.
+  Categories 2/4 cross-validate experiment_5's corporate actions and experiment_4's cadence.
+- Output `vcb_news.csv` (order, timestamp, **type**, headline, **category**, **content**,
+  url, pdf_url). `type` (editorial/disclosure/error) = provenance; `category` = topic —
+  orthogonal, both kept. `symbol=VCB` is the only ticker-specific bit → extends to any code.
+  PDFs referenced by URL only (download via PyMuPDF like experiment_4 if filing text needed).
+
+---
+
+# Experiment 7 — Financial statements (quarterly, any ticker)
+
+Fourth orthogonal-data piece: **the fundamentals themselves** — every line item of all three
+statements, quarterly, 2008 → now, for **any listed code**. Joined to experiment_4's publish
+dates they become point-in-time safe.
+
+### Naming (Vietnamese → standard accounting English)
+`CDKT` Cân đối kế toán → **`balance_sheet`** (sections `assets`/TN, `liabilities_and_equity`/NV);
+`KQKD` Kết quả kinh doanh → **`income_statement`** (P&L); `LCTT` Lưu chuyển tiền tệ →
+**`cash_flow`** (sections `operating`/HDKD, `investing`/HDDT, `financing`/HDTC).
+`HDKD` — the id in the `#table_HDKD` pager xpath — is the cash-flow *operating section*, **not**
+a separate report.
+
+### All history in one call
+The page's tabs load via `Ajax/FinancialAjax.aspx?tab=<candoi|ketqua|luuchuyen>`, which calls a
+JSON API: `apiweb.cafef.vn/api/v2/BCTC/GetReportCDKT` (TN|NV), `…/v1/BCTC/GetReportDetail`
+(KQKD), `…/v1/BCTC/GetReportLCTT` (HDKD|HDDT|HDTC), with `&pageSize=<count>&TypeTime=QUY`.
+`value.count` = quarters available for that ticker (VCB 70, FPT 77) → request exactly that
+many; the period-pager button is just pagination. Two JSON shapes (nested for CDKT/LCTT, flat
+for KQKD) are normalised.
+
+### Result — `experiment_7/scrape_financials.py`, one stdlib script, **6 generic files**
+The ticker is a **column, not a filename**: `balance_sheet.csv`, `income_statement.csv`,
+`cash_flow.csv` + a `<report>_manual.csv` each. One WIDE table per report (each statement has
+its own line items). Columns: `symbol, exchange, period, year, quarter, source`, then one column
+per line item named `<item_code>__<slug>` (e.g. `110__tien_mat_vang_bac_da_quy`).
+VCB: **71 quarter rows**, **Q3-2008 → Q1-2026**, oldest first — a **contiguous grid** (gaps are
+`source=missing` rows, never skipped or zero-filled); 85 / 26 / 47 line items.
+Validated: 2025 identities hold (NII 58,771 = 105,216 − 46,445; PBT 44,020; PAT 35,198 bn VND)
+and the 4 quarterly income statements sum exactly to the annual figure.
+
+**Any ticker, any sector.** `--symbol FPT` **accumulates** — replaces only that symbol's rows,
+leaves others' alone, idempotent — so a multi-ticker panel builds up one run at a time.
+Endpoints/sub-types are identical for banks and non-banks; only line items differ, read from
+each ticker's own template (VCB: bank, 85 BS items, *direct* cash flow, starts with interest
+income; FPT: non-bank, 132 items, *indirect*, starts with revenue, 81 quarters from Q1-2006).
+**Line items are keyed by the full `<code>__<slug>` name, never the bare code** — code `1` is
+interest income for a bank but revenue for a non-bank, so they stay separate columns and each
+row is blank outside its sector (VCB+FPT → 152 rows × 213 items, sparse by design).
+**Exchange** comes from CafeF's master list (`Search/company.json`, 2,556 codes) via `CenterId`:
+1=HOSE, 2=HNX, 8=OTC, 9=UPCOM.
+
+### Three layers: manual > pdf > scraped
+Values merge **cell by cell**; the `source` column records which layer won
+(`scraped`/`pdf`/`manual`/`missing`).
+
+| layer | file | what it is |
+|---|---|---|
+| scraped | — (CafeF BCTC API) | the base |
+| **pdf** | `<report>_pdf.csv` | read off the company's **actual filing** by `read_pdf.py` |
+| **manual** | `<report>_manual.csv` | hand-entered; **beats everything** |
+
+**`financials.py`** — one script: `scrape` (API), `pdf --period Q2-2014` (the filing),
+`docs`. The `pdf` command finds the consolidated ("hợp nhất")
+report on CafeF, locates each statement and parses it. Rows are rebuilt from **word
+coordinates**, not the raw text stream — PyMuPDF emits label fragments out of order, and a
+line-based read silently put *"Chi phí hoạt động khác"* into *"Chi phí hoạt động"*; the period
+columns are found by clustering the x-positions of every number. **Nothing is written unless it
+reconciles** against the statement's own printed subtotals. ~2/3 of VCB's older filings are
+**scanned images** with no text layer; `--render` rasterises the pages so the figures can be
+transcribed by eye/OCR into `<report>_pdf.csv`.
+
+**Filled so far** (each reconciled against the filing's own totals *and* magnitude-checked
+against neighbours): balance_sheet **Q2-2011, Q2-2014, Q2-2024**; income_statement **Q2-2009,
+Q1/Q3/Q4-2010, Q1-2011, Q2-2011, Q2-2024**; cash_flow **Q2-2011, Q2-2014, Q2-2024**.
+Q2-2011 cross-validated experiment_5 and exposed its 31.8% share-count error; Q2-2014's and
+Q2-2024's filed charter capital independently confirm exp_5's Q1-2012 and Q3-2023 steps.
+
+**The INCOME STATEMENT is now COMPLETE (all 71 quarters).** The balance sheet is complete apart
+from Q3/Q4-2008. **Document audit** (all 206 docs CafeF lists): 69 of 71 quarters have a
+consolidated report — only **Q3-2008 and Q4-2008 have none at all**, so they are permanently
+unfillable. Remaining: CF 14, all of which do have a report (scanned PDFs).
+
+**The auto-parser is not trusted on the older filings** — their text layer fragments labels, so
+it extracts ~40% of lines and sometimes mis-assigns one (the reconcile gate rejects those).
+Transcribing the rendered pages has been exact every time. Q4-2010/Q1-2011 were auto-filled on an
+earlier pass and had to be **withdrawn**: raw-PDF signs (negative expenses) where CafeF stores
+expenses positive.
+
+### ⚠️ Caveats (verified — read before modelling)
+1. **Quarterly cash flow is cumulative YTD** — it resets each January and Q4 = the full year
+   (2023: 26,870 → 56,751 → 83,233 → 108,116). **Difference consecutive quarters** for
+   standalone values. The income statement **is** already standalone (quarters sum to annual)
+   and the balance sheet is a stock — neither needs this.
+2. **Gaps are real source gaps, not parse bugs.** CafeF omits **Q2-2024** entirely (market-wide
+   — FPT too) and returns literal all-zero rows elsewhere. Both are emitted as blank
+   `source=missing` rows, **never as 0**. Dense usable history effectively starts ~**2012**.
+3. **Two error classes reconciliation CANNOT catch** — both balance internally, so only a
+   **magnitude check against neighbouring quarters** finds them (`read_pdf.py` runs one before
+   writing; sanity-check any hand-fill the same way):
+   **(a) cumulative vs standalone** — a Q2/Q3/Q4 report prints both the quarter and the YTD
+   column; the income statement needs the *standalone quarter*, cash flow the *cumulative* one.
+   Take the wrong one and the number reconciles perfectly and is still wrong — this is why
+   Q2-2009 was **rejected rather than written**.
+   **(b) units** — most reports are Triệu VNĐ (×10⁶), but VCB's 2009 ones are plain đồng.
+   **(c) signs** — CafeF stores income-statement expenses as **positive magnitudes** while the
+   filing prints them in parentheses (balance sheet and cash flow keep the filing's signs).
+   A semi-annual filing prints **only** the 6-month column, so a standalone quarter must be
+   derived as **6M − Q1** (Q2-2024: PBT 10,116 bn, not the printed 20,835 bn).
+
+---
+
 # Overall conclusions
 
 1. **One universal signal:** a near-term 5d+5% up-move is preceded by **volatility /
@@ -254,8 +426,13 @@ earnings/disclosure calendar). Recovers VCB's financial-statement **publish date
 7. **The binding constraint is DATA, not model/target.** Best label to pursue = **`rel5`**
    (market-relative ~1-week return). The lever is **orthogonal data** — foreign flows,
    earnings/disclosure calendar + surprises, fundamentals/valuation.
-8. **experiment_4 builds that first data piece:** a point-in-time **disclosure calendar**
-   for VCB (2009→now), so fundamentals can be aligned to when they became public.
+8. **experiments 4–7 build the orthogonal-data pieces:** a point-in-time **disclosure
+   calendar** (exp_4) so fundamentals align to when they became public, a point-in-time
+   **shares-outstanding series** (exp_5) so raw price → market cap / turnover / free-float
+   are computable without look-ahead, a categorised **news/event stream** (exp_6) for
+   headline-count / event-flag / sentiment features, and the **financial statements**
+   themselves (exp_7) — which, joined to exp_4's publish dates, give look-ahead-safe
+   fundamentals/valuation.
 
 > AUCs are single chronological-split point estimates (small positive counts →
 > ±0.03–0.05 variance). Most CSV outputs are gitignored and regenerated by the scripts;
@@ -272,3 +449,13 @@ earnings/disclosure calendar). Recovers VCB's financial-statement **publish date
 - `experiment_4/README.md` — disclosure-date scraper detail
   - `scrape_vcb_publish_dates.py` (one script) → `vcb_quarter_publish_dates.csv`
     (+ `_detail.csv`); `vcb_manual_overrides.csv` for hand-entered dates
+- `experiment_5/README.md` — shares-outstanding (KLCP) reconstruction detail
+  - `scrape_vcb_shares_outstanding.py` (one script) → `vcb_shares_outstanding.csv`
+    (+ `vcb_corporate_actions.csv`); `vcb_shares_milestones.csv` for exact filed counts
+- `experiment_6/README.md` — categorised company-news / disclosure feed **with content**
+  - `scrape_vcb_news.py` (one script: list headlines + fetch article content) →
+    `vcb_news.csv` (order, timestamp, type, headline, category, content, url, pdf_url)
+- `experiment_7/README.md` — financial statements (balance sheet / income statement / cash flow)
+  - `financials.py` (one script: `scrape` / `pdf` / `docs`; `--symbol <TICKER>`) → three wide CSVs shared by all tickers: `balance_sheet.csv`, `income_statement.csv`,
+    `cash_flow.csv` (rows = symbol × quarter, columns = line items `<item_code>__<slug>`)
+    + a `<report>_manual.csv` hand-fill template per report (manual beats scraped)

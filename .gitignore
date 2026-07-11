@@ -27,6 +27,19 @@ wandb/
 !experiment/experiment_4/vcb_quarter_publish_dates.csv
 !experiment/experiment_4/vcb_quarter_publish_dates_detail.csv
 !experiment/experiment_4/vcb_manual_overrides.csv
+# experiment_5 shares-outstanding deliverable + inputs are all tracked
+!experiment/experiment_5/*.csv
+# experiment_6 news deliverable tracked
+!experiment/experiment_6/*.csv
+# experiment_7 financial-statement deliverable tracked
+!experiment/experiment_7/*.csv
+# experiment_4/5 raw JSON caches are regenerable (--refresh); don't track them
+experiment/experiment_4/*.json
+experiment/experiment_5/*.json
+# experiment_7 PDF working dirs — filings are large and re-downloadable from CafeF
+experiment/experiment_7/pdf_cache/
+experiment/experiment_7/pdf_pages/
+*.pdf
 
 *.txt
 
