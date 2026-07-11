@@ -1,7 +1,2 @@
-effective_date,shares_outstanding,source
-# Optional: pin EXACT listed-share counts from VCB filings / HOSE listing-change
-# notices (Thông báo thay đổi niêm yết).  Any row here overrides the ratio-based
-# estimate for that ex-date and makes the reconstruction to-the-share accurate.
-# Leave empty to use the pure ratio reconstruction (residual < 0.001%).
-# Example (fill with a verified figure, then delete this comment line):
-# 2019-01-03,3708877448,HOSE listing-change notice after GIC/Mizuho placement
+period,shares_outstanding,source
+Q1-2025,8355675094,"CafeF KLCP (exact). Charter capital is filed in millions VND, so charter/10,000 rounds to ~+-50 shares; pin exact counts here and they win."

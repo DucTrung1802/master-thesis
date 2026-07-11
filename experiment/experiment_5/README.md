@@ -1,83 +1,89 @@
 # Experiment 5 — VCB shares-outstanding (KLCP) point-in-time history
 
-**Goal.** Recover VCB's **listed / outstanding share count** ("KLCP đang niêm yết",
-"KLCP lưu hành") as a point-in-time series, 2009 → present, so raw price can be
-joined to **market cap, turnover and free-float** without look-ahead. This is the
-second orthogonal-data piece after experiment_4's disclosure calendar — the lever
-the whole study concluded is binding (see `experiment/CONTEXT.md`, "the binding
-constraint is DATA").
+**Goal.** Recover VCB's **listed / outstanding share count** ("KLCP đang niêm yết") as a
+point-in-time series, 2009 → present, so raw price can be joined to **market cap, turnover
+and free-float** without look-ahead.
 
-## The problem
+## ⚠️ The original method was wrong — and this is why
 
-The CafeF data page
-([hose/vcb…](https://cafef.vn/du-lieu/hose/vcb-ngan-hang-thuong-mai-co-phan-ngoai-thuong-viet-nam.chn))
-shows only the **current** count:
+The obvious approach (what this experiment did first): anchor on today's share count and walk
+CafeF's corporate-action log (`LichSuKien.ashx`) **backwards**, undoing each stock dividend /
+bonus / rights issue / placement.
 
-> KLCP đang niêm yết **8,355,675,094** · KLCP lưu hành **8,355,675,094**
+**That log is incomplete.** For VCB it omits **three 2010–2012 capital increases**. Once
+experiment_7 gave us VCB's own filed balance sheets, the error was obvious:
 
-There is **no endpoint that serves a time-series** of the share count. But the count
-only ever changes on a corporate action, and CafeF exposes the full action log:
+| date | **filed** (truth) | old reconstruction | error |
+|---|---:|---:|---|
+| pre-2010 base | 1,210,086,026 | 1,742,397,291 | **+44%** |
+| mid-2011 | 1,758,754,000 | 2,317,388,397 | **+31.8%** |
+
+The old series silently **inflated any pre-2013 market cap by ~30–45%**. (It happened to be
+right from mid-2014 on, which is why a spot-check against post-2016 filings passed.)
+
+## The method now: filed charter capital
+
+The authoritative source is the company's own **charter capital** ("Vốn điều lệ",
+balance-sheet code `411`), read straight from the quarterly financial statements via the same
+CafeF BCTC API experiment_7 uses:
 
 ```
-GET cafef.vn/du-lieu/Ajax/PageNew/LichSuKien.ashx?Symbol=vcb&PageIndex=1&PageSize=500
+shares_outstanding = charter_capital / 10,000        (10,000 VND par — the VN standard)
 ```
 
-So the history is exactly reconstructable: **anchor on the current count and walk the
-events backward**, undoing each share-changing action.
+Complete and filing-backed, for all **65 filed quarters** (Q1-2009 → Q1-2026).
 
-## Which events move the count
+The corporate-action log is still fetched, but **only to date and label** each step — an
+ex-date is more precise than "sometime in this quarter".
 
-| CafeF text | type | effect on shares |
-|---|---|---|
-| `Cổ tức bằng Cổ phiếu, tỷ lệ 1000:X` | stock dividend | `× (1 + X/1000)` |
-| `Thưởng bằng Cổ phiếu, tỷ lệ 100:X` | bonus issue | `× (1 + X/100)` |
-| `Bán ưu đãi, tỷ lệ 100:X` | rights issue | `× (1 + X/100)` (assumes full subscription) |
-| `Phát hành riêng lẻ N` | private placement | `+ N` |
-| `Cổ tức bằng Tiền, …` | cash dividend | no change |
+**Dating rule (no look-ahead).** If an action's factor matches the observed jump and its
+ex-date falls within ~15 months before the quarter-end, use that exact **ex-date** (charter
+capital registers only once shares are actually issued, which lags the ex-date — the
+2010-12-13 rights issue first appears in the Q1-2011 balance sheet). Otherwise fall back to
+the **quarter-end** on which the new charter capital first appears — conservative, since the
+increase is applied no earlier than the first date it is provably true.
 
-Of VCB's 17 logged sub-events, **7 change the share count**; the 10 cash dividends do not.
+## Result
 
-## Result — VCB listed shares over time
+| effective | period | shares outstanding | change | event | dating |
+|---|---|---:|---:|---|---|
+| 2009-03-31 | Q1-2009 | 1,210,086,026 | — | baseline | quarter-end |
+| 2010-09-30 | Q3-2010 | 1,322,371,500 | +9.3% | **unlogged** capital increase | quarter-end |
+| 2010-12-13 | Q1-2011 | 1,758,754,000 | +33.0% | rights issue 100:33 | ex-date |
+| 2011-09-30 | Q3-2011 | 1,969,804,500 | +12.0% | **unlogged** capital increase | quarter-end |
+| 2012-03-31 | Q1-2012 | 2,317,417,100 | +17.6% | **unlogged** (Mizuho placement) | quarter-end |
+| 2014-06-17 | Q3-2014 | 2,665,020,300 | +15.0% | bonus 100:15 | ex-date |
+| 2016-09-08 | Q3-2016 | 3,597,768,600 | +35.0% | bonus 100:35 | ex-date |
+| 2019-01-03 | Q1-2019 | 3,708,877,400 | +3.1% | private placement (GIC/Mizuho) | ex-date |
+| 2021-12-21 | Q1-2022 | 4,732,516,600 | +27.6% | stock dividend 1000:276 | ex-date |
+| 2023-07-24 | Q3-2023 | 5,589,091,300 | +18.1% | stock dividend 1000:181 | ex-date |
+| 2025-03-11 | Q1-2025 | **8,355,675,094** | +49.5% | stock dividend 1000:495 | ex-date |
 
-| effective from | shares outstanding | event |
-|---|---:|---|
-| ≤ first event | 1,742,397,291 | reconstructed base |
-| 2010-12-13 | 2,317,388,397 | rights issue 100:33 |
-| 2014-06-17 | 2,664,996,657 | bonus 100:15 |
-| 2016-09-08 | 3,597,745,487 | bonus 100:35 |
-| 2019-01-03 | 3,708,854,360 | private placement +111,108,873 (GIC/Mizuho) |
-| 2021-12-21 | 4,732,498,163 | stock dividend 1000:276 |
-| 2023-07-24 | 5,589,080,330 | stock dividend 1000:181 |
-| 2025-03-11 | **8,355,675,094** | stock dividend 1000:495 |
-
-**Accuracy.** The ratio walk matches VCB's known post-2016 filings to **<0.001%**; the
-few-thousand-share residuals are fractional-share rounding on each stock dividend. For a
-to-the-share-exact series, paste verified counts (from HOSE "thay đổi niêm yết" notices)
-into `vcb_shares_milestones.csv` — any row there pins that step and overrides the estimate.
-
-The pre-2010 base (`1.74 B`) is the least certain cell: CafeF's log starts 2010-03, so any
-2009 IPO/listing event isn't captured. If needed, pin the 2009 listed count via the
-milestones file.
+The three **`unlogged_capital_increase`** rows are exactly the events CafeF's action log is
+missing — they are real (the filings prove them), just undated beyond their quarter.
 
 ## Files
 
-- `scrape_vcb_shares_outstanding.py` — one stdlib script. It fetches from CafeF and
-  writes a local `vcb_lichsukien.json` cache (gitignored); a later run reuses it unless
-  `--refresh`.
-- `vcb_shares_outstanding.csv` — the step series (effective_date, shares_outstanding,
-  event_type, event_text, prev_shares, delta_shares, factor).
-- `vcb_corporate_actions.csv` — every parsed event, classified (affects_shares flag).
-- `vcb_shares_milestones.csv` — optional exact-count overrides (empty by default).
+- `scrape_vcb_shares_outstanding.py` — one stdlib script, no login.
+- `vcb_shares_outstanding.csv` — the step series: `effective_date, period,
+  shares_outstanding, charter_capital, prev_shares, delta_shares, pct_change, event_type,
+  event_text, dating`.
+- `vcb_corporate_actions.csv` — CafeF's raw action log (kept for the dating/labelling, and as
+  evidence of what it does *not* contain).
+- `vcb_shares_milestones.csv` — optional exact-count pins, keyed by `period`. Charter capital
+  is filed in **millions** of VND, so `charter / 10,000` is only good to ~±50 shares; the
+  current count is pinned here to CafeF's exact KLCP (8,355,675,094).
 
 ## Point-in-time lookup
 
-`shares_outstanding(d)` = `shares_outstanding` of the most recent row with
-`effective_date ≤ d`. Then `market_cap(d) = raw_close(d) × shares_outstanding(d)`
-(use **raw**, not adjusted, close — the share count already carries the dilution).
+`shares_outstanding(d)` = the last row with `effective_date ≤ d`. Then
 
-## Re-anchoring / extending
+```
+market_cap(d) = raw_close(d) × shares_outstanding(d)
+```
 
-- **Re-anchor** (once a year, after a new action): update `ANCHOR_SHARES` / `ANCHOR_DATE`
-  in the script from the CafeF page and re-run.
-- **Other tickers:** `LichSuKien.ashx` is generic — `main("fpt")` etc. works; only the
-  anchor is VCB-specific. Rights-issue subscription assumptions may need per-ticker care.
+Use the **raw** (unadjusted) close — the share count already carries the dilution.
+
+> For the three quarter-end-dated steps, the true effective date is somewhere inside that
+> quarter, so pre-2013 daily market cap can be off for up to ~90 days around each. Levels are
+> correct from each quarter-end onward.
