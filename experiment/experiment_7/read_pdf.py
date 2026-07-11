@@ -230,18 +230,31 @@ def reconcile(report: str, d: dict) -> str | None:
             return "missing a total"
         if abs(tot - tot2) != 0:
             return "assets != liabilities + equity"
-        p = [g("400__tong_no_phai_tra"), g("500__viii_von_chu_so_huu"),
-             g("700__loi_ich_cua_co_dong_thieu_so")]
-        if None not in p and sum(p) != tot2:
-            return "liabilities + equity + minority != total"
+        liab, eq = g("400__tong_no_phai_tra"), g("500__viii_von_chu_so_huu")
+        minority = g("700__loi_ich_cua_co_dong_thieu_so") or 0
+        # Two conventions are both in use — the older one reports minority interest OUTSIDE
+        # equity (400+500+700 = 800), the TT49/2014 one folds it INSIDE (400+500 = 800).
+        # CafeF itself switched mid-2024, so accept either rather than reject a good filing.
+        if None not in (liab, eq) and tot2 not in (liab + eq, liab + eq + minority):
+            return "liabilities + equity (+/- minority) != total"
     if report == "income_statement":
-        pbt, op, prov = (g("17__tong_loi_nhuan_truoc_thue"),
-                         g("15__loi_nhuan_thuan_tu_hoat_dong_kinh_doanh_truo"),
-                         g("16__chi_phi_du_phong_rui_ro_tin_dung"))
-        if pbt is None:
+        # values are already normalised to CafeF's convention (expenses POSITIVE), so every
+        # identity is a SUBTRACTION
+        for out, a, b in [
+            ("3__thu_nhap_lai_thuan", "1__thu_nhap_lai_va_cac_khoan_thu_nhap_tuong_tu",
+             "2__chi_phi_lai_va_cac_chi_phi_tuong_tu"),
+            ("6__lai_lo_thuan_tu_hoat_dong_dich_vu", "4__thu_nhap_tu_hoat_dong_dich_vu",
+             "5__chi_phi_hoat_dong_dich_vu"),
+            ("12__lai_lo_thuan_tu_hoat_dong_khac", "10__thu_nhap_tu_hoat_dong_khac",
+             "11__chi_phi_hoat_dong_khac"),
+            ("17__tong_loi_nhuan_truoc_thue", "15__loi_nhuan_thuan_tu_hoat_dong_kinh_doanh_truo",
+             "16__chi_phi_du_phong_rui_ro_tin_dung"),
+            ("21__loi_nhuan_sau_thue", "17__tong_loi_nhuan_truoc_thue", "20__chi_phi_thue_tndn"),
+        ]:
+            if None not in (g(out), g(a), g(b)) and abs(g(a) - g(b) - g(out)) > 2:
+                return f"{out.split('__')[0]} != {a.split('__')[0]} - {b.split('__')[0]}"
+        if g("17__tong_loi_nhuan_truoc_thue") is None:
             return "no PBT"
-        if None not in (op, prov) and abs(op + prov - pbt) > 2:
-            return "PBT != operating profit - provisions"
     if report == "cash_flow":
         p = [g("HDKD_27__luu_chuyen_tien_thuan_tu_hoat_dong_kinh_doan"),
              g("HDDT_38__luu_chuyen_tien_thuan_tu_hd_dau_tu"),
@@ -257,6 +270,33 @@ def reconcile(report: str, d: dict) -> str | None:
 PROBE = {"balance_sheet": "300__tong_tai_san",
          "income_statement": "17__tong_loi_nhuan_truoc_thue",
          "cash_flow": "HDTC_50__tien_va_cac_khoan_tuong_duong_tien_tai_thoi"}
+
+# Income-statement lines CafeF stores as a POSITIVE magnitude even though the filing prints
+# them in parentheses (an expense). Get this wrong and the row is sign-inconsistent with every
+# scraped quarter — which is exactly what happened to Q4-2010 / Q1-2011 on the first pass.
+IS_EXPENSES = {"2__chi_phi_lai_va_cac_chi_phi_tuong_tu", "5__chi_phi_hoat_dong_dich_vu",
+               "11__chi_phi_hoat_dong_khac", "14__chi_phi_hoat_dong",
+               "16__chi_phi_du_phong_rui_ro_tin_dung", "18__chi_phi_thue_tndn_hien_hanh",
+               "20__chi_phi_thue_tndn", "22__loi_ich_cua_co_dong_thieu_so",
+               "25__chi_phi_hoat_dong_khac"}
+
+
+def to_cafef_signs(report: str, d: dict[str, int]) -> dict[str, int]:
+    """Normalise a parsed statement to CafeF's sign convention.
+
+    Income statement: expenses are stored POSITIVE (the filing prints them negative). The
+    deferred-tax line is *derived* rather than parsed, because the filing labels it
+    "Thu nhập/(chi phí)" — its printed sign flips depending on whether it is income or an
+    expense, while CafeF always keeps `20 = 18 + 19`.
+    Balance sheet / cash flow keep the filing's signs (provisions and outflows stay negative).
+    """
+    if report != "income_statement":
+        return d
+    out = {k: (abs(v) if k in IS_EXPENSES else v) for k, v in d.items()}
+    cur, tot = out.get("18__chi_phi_thue_tndn_hien_hanh"), out.get("20__chi_phi_thue_tndn")
+    if cur is not None and tot is not None:
+        out["19__chi_phi_thue_tndn_hoan_lai"] = tot - cur
+    return out
 
 
 def sane(report: str, symbol: str, values: dict[str, int]) -> str | None:
@@ -312,6 +352,27 @@ def write_pdf_layer(report: str, symbol: str, period: str, values: dict[str, int
         for r in rows:
             w.writerow({c: r.get(c, "") for c in head})
     print(f"  -> {path.name}: {symbol} {period}, {len(values)} line items")
+
+
+# Some labels wrap across lines in the filing and the text layer only preserves the tail
+# ("…thu nhập lãi và các khoản | thu nhập tương tự" -> "thu nhap tuong tu"). Accept those
+# fragments explicitly rather than loosening the matcher: fuzzy matching once put
+# "Chi phí hoạt động khác" into "Chi phí hoạt động".
+ALIASES: dict[str, list[str]] = {
+    "1__thu_nhap_lai_va_cac_khoan_thu_nhap_tuong_tu": ["thu nhap tuong tu"],
+    "2__chi_phi_lai_va_cac_chi_phi_tuong_tu": ["khoan chi phi tuong tu", "chi phi tuong tu"],
+    "5__chi_phi_hoat_dong_dich_vu": ["chi phi tu hoat dong dich vu"],
+    "6__lai_lo_thuan_tu_hoat_dong_dich_vu": ["lai thuan tu hoat dong dich vu"],
+    "7__lai_lo_thuan_tu_hoat_dong_kinh_doanh_ngoai_h": ["lai lo thuan tu hoat dong kinh doanh ngoai hoi", "lai thuan tu hoat dong kinh doanh ngoai hoi"],
+    "8__lai_lo_thuan_tu_mua_ban_chung_khoan_kinh_doa": ["lai lo thuan tu mua ban chung khoan kinh doanh", "lai thuan tu mua ban chung khoan kinh doanh"],
+    "9__lai_lo_thuan_tu_mua_ban_chung_khoan_dau_tu": ["lai lo thuan tu mua ban chung khoan dau tu", "lai lo thuan tu mua ban chung khoan dau tu"],
+    "12__lai_lo_thuan_tu_hoat_dong_khac": ["lai thuan tu hoat dong khac", "lai lo thuan tu hoat dong khac"],
+    "15__loi_nhuan_thuan_tu_hoat_dong_kinh_doanh_truo": ["loi nhuan thuan tu hoat dong kinh doanh truoc chi phi du phong rui ro tin dung", "phong rui ro tin dung"],
+    "16__chi_phi_du_phong_rui_ro_tin_dung": ["chi phi du phong rui ro tin dung", "tin dung"],
+    "24__tong_thu_nhap_hoat_dong": ["tong thu nhap hoat dong"],
+    "26__loi_nhuan_sau_thue_cua_co_dong_cua_ngan_hang": ["loi nhuan thuan trong ky", "loi nhuan thuan cua co dong ngan hang"],
+    "23__lai_co_ban_tren_co_phieu_dong_1_co_phieu": ["lai co ban tren co phieu", "lai co ban tren co phieu vnd co phieu"],
+}
 
 
 def columns_of(report: str) -> list[str]:
@@ -377,14 +438,16 @@ def main() -> None:
         # once put "chi phi hoat dong khac" into "chi phi hoat dong")
         got: dict[str, int] = {}
         for col in columns_of(report):
-            want = col.split("__", 1)[1].replace("_", " ")
-            if want in idx:
-                got[col] = idx[want]
-            else:
+            for want in [col.split("__", 1)[1].replace("_", " ")] + ALIASES.get(col, []):
+                if want in idx:
+                    got[col] = idx[want]
+                    break
                 hit = [k for k in idx if k.endswith(" " + want)]
                 if len(hit) == 1:
                     got[col] = idx[hit[0]]
+                    break
         got = {k: v * (1 if k.startswith("23__") else scale) for k, v in got.items()}
+        got = to_cafef_signs(report, got)
 
         why = reconcile(report, got) if got else "no rows parsed"
         why = why or sane(report, sym, got)

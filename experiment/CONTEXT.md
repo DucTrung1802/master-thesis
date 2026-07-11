@@ -364,12 +364,22 @@ reconciles** against the statement's own printed subtotals. ~2/3 of VCB's older 
 **scanned images** with no text layer; `--render` rasterises the pages so the figures can be
 transcribed by eye/OCR into `<report>_pdf.csv`.
 
-**Filled so far** (each reconciled against the filing's own totals): balance_sheet **Q2-2011,
-Q2-2014**; income_statement **Q4-2010, Q1-2011, Q2-2011**; cash_flow **Q2-2011, Q2-2014**.
-Q2-2011 cross-validated experiment_5 and exposed its 31.8% share-count error; Q2-2014's filed
-charter capital (23,174,171 mn → 2,317,417,100 shares) independently confirms exp_5's Q1-2012
-step. Remaining VCB gaps: BS 3 (Q3/Q4-2008, **Q2-2024**), IS 4 (Q2-2009, Q1/Q3-2010,
-**Q2-2024**), CF 15 — Q3/Q4-2008 have **no document at all**; the rest are scanned PDFs.
+**Filled so far** (each reconciled against the filing's own totals *and* magnitude-checked
+against neighbours): balance_sheet **Q2-2011, Q2-2014, Q2-2024**; income_statement **Q2-2011,
+Q2-2024**; cash_flow **Q2-2011, Q2-2014, Q2-2024**. Q2-2011 cross-validated experiment_5 and
+exposed its 31.8% share-count error; Q2-2014's and Q2-2024's filed charter capital
+independently confirm exp_5's Q1-2012 and Q3-2023 steps.
+
+**Document audit** (all 206 docs CafeF lists for VCB): 69 of the 71 quarters have a consolidated
+report. Only **Q3-2008 and Q4-2008 have no document at all** — permanently unfillable. Every
+other gap has a report; they are scanned PDFs awaiting transcription. **The balance sheet is now
+complete except those two.** Remaining: IS 5 (Q2-2009, Q1/Q3/Q4-2010, Q1-2011), CF 14.
+
+**The auto-parser is not trusted on the older filings** — their text layer fragments labels, so
+it extracts ~40% of lines and sometimes mis-assigns one (the reconcile gate rejects those).
+Transcribing the rendered pages has been exact every time. Q4-2010/Q1-2011 were auto-filled on an
+earlier pass and had to be **withdrawn**: raw-PDF signs (negative expenses) where CafeF stores
+expenses positive.
 
 ### ⚠️ Caveats (verified — read before modelling)
 1. **Quarterly cash flow is cumulative YTD** — it resets each January and Q4 = the full year
@@ -387,6 +397,10 @@ step. Remaining VCB gaps: BS 3 (Q3/Q4-2008, **Q2-2024**), IS 4 (Q2-2009, Q1/Q3-2
    Take the wrong one and the number reconciles perfectly and is still wrong — this is why
    Q2-2009 was **rejected rather than written**.
    **(b) units** — most reports are Triệu VNĐ (×10⁶), but VCB's 2009 ones are plain đồng.
+   **(c) signs** — CafeF stores income-statement expenses as **positive magnitudes** while the
+   filing prints them in parentheses (balance sheet and cash flow keep the filing's signs).
+   A semi-annual filing prints **only** the 6-month column, so a standalone quarter must be
+   derived as **6M − Q1** (Q2-2024: PBT 10,116 bn, not the printed 20,835 bn).
 
 ---
 

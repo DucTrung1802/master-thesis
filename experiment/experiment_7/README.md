@@ -116,31 +116,38 @@ python scrape_financials.py
 
 ### VCB: what has been filled, and what cannot be
 
-Filled from VCB's own consolidated filings (read off the PDF, every statement reconciled
-against its printed subtotals before being written):
+Read off VCB's own consolidated filings, each statement reconciled against its printed
+subtotals **and** magnitude-checked against neighbouring quarters:
 
-| report | filled |
-|---|---|
-| balance_sheet | **Q2-2011** |
-| income_statement | **Q4-2010, Q1-2011, Q2-2011** |
-| cash_flow | **Q2-2011** |
+| report | filled | still missing |
+|---|---|---|
+| balance_sheet | Q2-2011, **Q2-2014**, **Q2-2024** | **2** — Q3-2008, Q4-2008 |
+| income_statement | Q2-2011, **Q2-2024** | 5 — Q2-2009, Q1/Q3/Q4-2010, Q1-2011 |
+| cash_flow | Q2-2011, **Q2-2014**, **Q2-2024** | 14 |
 
-Still missing, and **why** — these are not "not done yet", they are blocked:
+**The balance sheet is now complete** apart from the only two quarters CafeF has **no document
+for at all** (Q3-2008, Q4-2008) — audited against all 206 documents CafeF lists. Every other
+gap *does* have a consolidated report available; they are simply scanned PDFs awaiting
+transcription.
 
-| blocker | quarters |
-|---|---|
-| **CafeF has no document at all** | Q3-2008, Q4-2008 |
-| **The PDF is a scanned image** (no text layer → needs OCR) | Q1/Q3-2009, Q1/Q2/Q3-2010, Q2-2014, **Q2-2024**, Q1/Q2/Q3-2025 |
-| **Layout defeats column detection** (silently yields the *cumulative* column instead of the standalone quarter — rejected rather than write a wrong number) | Q2-2009 |
-| cash flow only: statement present but its subtotals would not reconcile | Q4-2009, Q4-2010, Q1-2011 |
+**The auto-parser is not trusted on the older filings.** Their text layer fragments labels, so
+it extracts only ~40% of the lines and sometimes mis-assigns one — the reconcile gate rejects
+those. Every quarter above was transcribed from the rendered pages instead, which has been
+exact every time. Q4-2010/Q1-2011 were auto-filled on an earlier pass and had to be **withdrawn**:
+they carried raw-PDF signs (negative expenses) where CafeF stores expenses **positive**.
 
-(**Q2-2024** is missing for FPT too — that gap is CafeF-wide, not VCB-specific.)
-
-> Two classes of error here are invisible to a reconciliation check, because both still
-> balance internally: reading the **cumulative** column instead of the standalone quarter, and
-> a **units** mistake (most reports are in Triệu VNĐ, but e.g. the 2009 ones are in plain
-> đồng). Both were caught only by comparing magnitudes against neighbouring quarters. Any
-> future hand-fill should be sanity-checked the same way.
+> ⚠️ **Three traps, all invisible to a reconciliation check** — every one of them still balances
+> internally:
+> 1. **cumulative vs standalone.** The semi-annual filing prints *only* a 6-month column, with
+>    no standalone quarter. Q2-2024's income statement had to be derived as **6M − Q1**; taking
+>    the printed figure would have doubled the quarter (PBT 20,835 instead of 10,116).
+>    Cash flow is the opposite — CafeF *wants* the cumulative figure.
+> 2. **units.** Most filings are in Triệu VNĐ (×10⁶); VCB's 2009 ones are in plain đồng.
+> 3. **signs.** CafeF stores income-statement expenses as **positive magnitudes**; the filing
+>    prints them in parentheses. (Balance sheet and cash flow keep the filing's signs.)
+>
+> Only a **magnitude check against neighbouring quarters** catches (1) and (2); `read_pdf.py`
+> runs one before writing, and normalises (3).
 
 ## Report naming (Vietnamese → standard accounting English)
 
