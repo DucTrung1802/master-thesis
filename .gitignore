@@ -29,9 +29,8 @@ wandb/
 !experiment/experiment_4/vcb_manual_overrides.csv
 # experiment_5 shares-outstanding deliverable + inputs are all tracked
 !experiment/experiment_5/*.csv
-# experiment_6 news deliverables tracked; raw HTML fragment cache is not
+# experiment_6 news deliverable tracked
 !experiment/experiment_6/*.csv
-experiment/experiment_6/raw_html/
 
 *.txt
 

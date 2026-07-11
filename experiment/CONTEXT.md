@@ -279,13 +279,16 @@ stream** from CafeF, tagged by category, 2008 → now — a point-in-time event 
 - **Categories (configID):** 0 all · 1 SXKD & analysis · 2 dividends/record-date ·
   3 personnel · 4 capital increase/treasury · 5 major & insider shareholder txns.
   Method: scrape 1..5 (true category), then backfill category 0 (uncategorised), dedup by URL.
-- **Result** (`experiment_6/scrape_vcb_news.py`, one stdlib script): **1,629 unique
-  headlines, 2008-01 → 2026-07**. Counts: cat1 770, cat0 561, cat5 101, cat3 88, cat4 71,
-  cat2 38. Categories 2/4 cross-validate experiment_5's corporate actions and
-  experiment_4's disclosure cadence.
-- Output `vcb_news.csv` (datetime, date, category_id, category, news_id, title, url) +
-  `vcb_news_categories.csv`. `LichSuKien`-style: `symbol=VCB` is the only ticker-specific
-  bit → extends to any code. Article-body/NLP scraping is a downstream step, not done here.
+- **Result** (`experiment_6/scrape_vcb_news.py`, one stdlib script, two stages: list
+  headlines → fetch each article's content): **1,629 rows, 2008-01 → 2026-07** — 896
+  editorial, 727 disclosure, 6 dead-link errors; 702 carry a filing `pdf_url`. Categories:
+  business_results_and_analysis 770, general_uncategorized 561, major_and_insider 101,
+  personnel_changes 88, capital_increase_and_treasury 71, dividends_and_record_date 38.
+  Categories 2/4 cross-validate experiment_5's corporate actions and experiment_4's cadence.
+- Output `vcb_news.csv` (order, timestamp, **type**, headline, **category**, **content**,
+  url, pdf_url). `type` (editorial/disclosure/error) = provenance; `category` = topic —
+  orthogonal, both kept. `symbol=VCB` is the only ticker-specific bit → extends to any code.
+  PDFs referenced by URL only (download via PyMuPDF like experiment_4 if filing text needed).
 
 ---
 
@@ -334,6 +337,6 @@ stream** from CafeF, tagged by category, 2008 → now — a point-in-time event 
 - `experiment_5/README.md` — shares-outstanding (KLCP) reconstruction detail
   - `scrape_vcb_shares_outstanding.py` (one script) → `vcb_shares_outstanding.csv`
     (+ `vcb_corporate_actions.csv`); `vcb_shares_milestones.csv` for exact filed counts
-- `experiment_6/README.md` — categorised company-news / disclosure headline scraper
-  - `scrape_vcb_news.py` (one script) → `vcb_news.csv` (+ `vcb_news_categories.csv`);
-    `raw_html/` fragment cache (gitignored)
+- `experiment_6/README.md` — categorised company-news / disclosure feed **with content**
+  - `scrape_vcb_news.py` (one script: list headlines + fetch article content) →
+    `vcb_news.csv` (order, timestamp, type, headline, category, content, url, pdf_url)

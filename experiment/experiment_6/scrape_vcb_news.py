@@ -1,73 +1,71 @@
 """
-Scrape VCB company-news / disclosure headlines from CafeF, categorised, into a
-single CSV.  Self-contained: no login, stdlib only.
+Scrape VCB company news from CafeF into a single table:
 
-Source
-------
-Page:  https://cafef.vn/du-lieu/tin-doanh-nghiep/vcb/event.chn
-The category tabs (#a0..#a5) all call one AJAX endpoint that returns an HTML
-fragment (a <ul> of <li> headlines):
+    order, timestamp, type, headline, category, content, url, pdf_url
 
-    GET cafef.vn/du-lieu/Ajax/Events_RelatedNews_New.aspx
-        ?symbol=VCB&floorID=0&configID=<0-5>&PageIndex=<n>&PageSize=30&Type=2
+Two stages, one script:
+  1. LIST  — the CafeF news tabs (#a0..#a5) all call one AJAX endpoint that returns an
+             HTML fragment of headlines:
+               Events_RelatedNews_New.aspx?symbol=VCB&floorID=0&configID=<0-5>
+                                          &PageIndex=<n>&PageSize=30&Type=2
+             configID is the news category; PageSize caps at 30 → paginate until empty.
+             Scrape categories 1..5 (true category), then backfill 0 (uncategorised);
+             dedup by article URL.
+  2. FETCH — open each headline (both page types are static, both carry a JSON-LD
+             NewsArticle block for metadata):
+               editorial  (/<slug>-<id>.chn)      content = full <p> body text
+               disclosure (/du-lieu/VCB-<id>/…)    content = on-page summary; pdf_url =
+                          the attached HOSE filing PDF (recorded, NOT downloaded).
+             Disclosure URLs 301-redirect uppercase→lowercase; urllib follows it.
 
-`configID` is the tab / news category; `floorID` 0=all,1=HSX,2=HNX; PageSize is
-capped at 30, so we paginate PageIndex until a page comes back empty.
+Columns
+  type      editorial (journalist article) | disclosure (official HOSE filing) | error (404)
+  category  general_uncategorized | business_results_and_analysis | dividends_and_record_date
+            | personnel_changes | capital_increase_and_treasury_shares
+            | major_and_insider_shareholder_transactions
+  timestamp article's own published/modified time, else the listing time (YYYY-MM-DD HH:MM:SS)
 
-Categories (configID -> tab label)
-    0  Tất cả                              (all — union of the rest, + a few uncategorised)
-    1  Tình hình SXKD & Phân tích khác     (business results & analysis)
-    2  Trả cổ tức - Chốt quyền             (dividends / record date)
-    3  Thay đổi nhân sự                    (personnel changes)
-    4  Tăng vốn - Cổ phiếu quỹ            (capital increase / treasury shares)
-    5  GD cổ đông lớn & Cổ đông nội bộ    (major & insider shareholder transactions)
-
-Method: scrape 1..5 first (each item gets its true category), then scrape 0 and add
-any headline not already seen (tagged category 0). Dedup by article URL.
-
-This is the third point-in-time orthogonal-data piece (after experiment_4's
-disclosure calendar and experiment_5's shares-outstanding): a dated, categorised
-event/news stream for VCB, joinable without look-ahead.
-
-Output
-------
-    vcb_news.csv             datetime, date, category_id, category, news_id, title, url
-    vcb_news_categories.csv  category_id, category, n_items
-    raw_html/cfg<c>_p<n>.html   raw fragment cache (reproducibility)
+Self-contained, stdlib only. `--limit N` samples a few rows. Output: vcb_news.csv
 """
 
 from __future__ import annotations
 
 import csv
 import html
+import json
 import re
 import sys
 import time
 import urllib.request
+from datetime import date
 from pathlib import Path
 
 HERE = Path(__file__).parent
-RAW = HERE / "raw_html"
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-REFRESH = "--refresh" in sys.argv
-
 SYMBOL = "VCB"
-ENDPOINT = "https://cafef.vn/du-lieu/Ajax/Events_RelatedNews_New.aspx"
+LIST_ENDPOINT = "https://cafef.vn/du-lieu/Ajax/Events_RelatedNews_New.aspx"
+LIST_REFERER = f"https://cafef.vn/du-lieu/tin-doanh-nghiep/{SYMBOL.lower()}/event.chn"
 PAGE_SIZE = 30
 MAX_PAGES = 300  # safety stop (~9000 items)
 
-CATEGORIES = {
-    0: "Tất cả",
-    1: "Tình hình SXKD & Phân tích khác",
-    2: "Trả cổ tức - Chốt quyền",
-    3: "Thay đổi nhân sự",
-    4: "Tăng vốn - Cổ phiếu quỹ",
-    5: "GD cổ đông lớn & Cổ đông nội bộ",
+LIMIT = int(sys.argv[sys.argv.index("--limit") + 1]) if "--limit" in sys.argv else None
+OUTPUT = "vcb_news.csv"
+
+# configID (CafeF tab) -> english snake_case category
+CATEGORY_EN = {
+    0: "general_uncategorized",
+    1: "business_results_and_analysis",
+    2: "dividends_and_record_date",
+    3: "personnel_changes",
+    4: "capital_increase_and_treasury_shares",
+    5: "major_and_insider_shareholder_transactions",
 }
 
-# one <li>: <span class="timeTitle">DD/MM/YYYY HH:MM</span> ... <a ... href="URL" ...>TITLE</a>
-# Title is read from the anchor's inner text (the title="" attribute is unreliable —
-# some legacy headlines embed unescaped double-quotes that truncate the attribute).
+# ---------------------------------------------------------------------------
+# stage 1 — headline listing
+# ---------------------------------------------------------------------------
+# <li>: <span class="timeTitle">DD/MM/YYYY HH:MM</span> ... <a ...>TITLE</a>
+# Title from the anchor inner text (the title="" attribute breaks on legacy quotes).
 _ITEM_RE = re.compile(
     r'timeTitle">\s*(?P<dt>\d{2}/\d{2}/\d{4}(?:\s+\d{2}:\d{2})?)\s*</span>'
     r'.*?<a\s+class=[\'"]docnhanhTitle[\'"]\s+href="(?P<url>[^"]+)"[^>]*>(?P<title>.*?)</a>',
@@ -76,29 +74,19 @@ _ITEM_RE = re.compile(
 _TAG_RE = re.compile(r"<[^>]+>")
 
 
-def _clean_title(t: str) -> str:
-    return html.unescape(_TAG_RE.sub("", t)).strip()
+def _text(s: str) -> str:
+    s = re.sub(r"<(script|style)\b.*?</\1>", " ", s, flags=re.S | re.I)
+    return re.sub(r"\s+", " ", html.unescape(_TAG_RE.sub(" ", s))).strip()
 
 
-def _fetch(config_id: int, page: int) -> str:
-    RAW.mkdir(exist_ok=True)
-    cache = RAW / f"cfg{config_id}_p{page}.html"
-    if cache.exists() and not REFRESH:
-        return cache.read_text(encoding="utf-8")
-    url = (
-        f"{ENDPOINT}?symbol={SYMBOL}&floorID=0&configID={config_id}"
-        f"&PageIndex={page}&PageSize={PAGE_SIZE}&Type=2"
-    )
-    req = urllib.request.Request(
-        url,
-        headers={"User-Agent": UA,
-                 "Referer": f"https://cafef.vn/du-lieu/tin-doanh-nghiep/{SYMBOL.lower()}/event.chn"},
-    )
+def _fetch_list(config_id: int, page: int) -> str:
+    url = (f"{LIST_ENDPOINT}?symbol={SYMBOL}&floorID=0&configID={config_id}"
+           f"&PageIndex={page}&PageSize={PAGE_SIZE}&Type=2")
+    req = urllib.request.Request(url, headers={"User-Agent": UA, "Referer": LIST_REFERER})
     with urllib.request.urlopen(req, timeout=30) as r:
-        html = r.read().decode("utf-8")
-    cache.write_text(html, encoding="utf-8")
-    time.sleep(0.2)  # be polite
-    return html
+        html_txt = r.read().decode("utf-8")
+    time.sleep(0.2)
+    return html_txt
 
 
 def _clean_url(u: str) -> str:
@@ -106,93 +94,160 @@ def _clean_url(u: str) -> str:
     return "https://cafef.vn" + u if u.startswith("/") else u
 
 
-def _news_id(url: str) -> str:
-    m = re.search(r"-(\d{6,})\.chn", url)
-    return m.group(1) if m else ""
-
-
-def _parse(html: str, config_id: int) -> list[dict]:
+def _parse_list(html_txt: str, config_id: int) -> list[dict]:
     out = []
-    for m in _ITEM_RE.finditer(html):
+    for m in _ITEM_RE.finditer(html_txt):
         dt = re.sub(r"\s+", " ", m.group("dt")).strip()
-        date = dt.split(" ")[0]
-        url = _clean_url(m.group("url"))
-        out.append(
-            {
-                "datetime": dt,
-                "date": date,
-                "category_id": config_id,
-                "category": CATEGORIES[config_id],
-                "news_id": _news_id(url),
-                "title": _clean_title(m.group("title")),
-                "url": url,
-            }
-        )
+        out.append({
+            "datetime": dt,
+            "category_id": config_id,
+            "title": _text(m.group("title")),
+            "url": _clean_url(m.group("url")),
+        })
     return out
 
 
 def _scrape_category(config_id: int) -> list[dict]:
-    """Paginate a category until a page is empty or repeats already-seen items."""
     items, seen = [], set()
     for page in range(1, MAX_PAGES + 1):
-        rows = _parse(_fetch(config_id, page), config_id)
+        rows = _parse_list(_fetch_list(config_id, page), config_id)
         fresh = [r for r in rows if r["url"] not in seen]
-        if not rows or not fresh:  # empty page, or clamped/repeated last page -> stop
+        if not rows or not fresh:
             break
         for r in fresh:
             seen.add(r["url"])
             items.append(r)
-        if len(rows) < PAGE_SIZE:  # last partial page
+        if len(rows) < PAGE_SIZE:
             break
     return items
 
 
-def _sort_key(r: dict):
-    d = r["date"].split("/")
-    t = (r["datetime"].split(" ") + [""])[1]
-    return (d[2], d[1], d[0], t)  # yyyy, mm, dd, hh:mm -> chrono
+def build_headlines() -> list[dict]:
+    by_url: dict[str, dict] = {}
+    for cid in (1, 2, 3, 4, 5):          # specific categories first -> true category
+        for r in _scrape_category(cid):
+            by_url.setdefault(r["url"], r)
+    for r in _scrape_category(0):         # backfill general/uncategorised
+        by_url.setdefault(r["url"], r)
+
+    def key(r):                           # chronological sort: yyyy, mm, dd, hh:mm
+        d = r["datetime"].split(" ")
+        dd, mm, yy = d[0].split("/")
+        return (yy, mm, dd, d[1] if len(d) > 1 else "")
+
+    return sorted(by_url.values(), key=key, reverse=True)
+
+
+# ---------------------------------------------------------------------------
+# stage 2 — article content
+# ---------------------------------------------------------------------------
+def _fetch_article(url: str) -> tuple[str, str]:
+    req = urllib.request.Request(url, headers={"User-Agent": UA, "Referer": LIST_REFERER})
+    with urllib.request.urlopen(req, timeout=30) as r:   # follows the 301 redirect
+        body = r.read().decode("utf-8", "replace")
+        final = r.geturl()
+    time.sleep(0.2)
+    return body, final
+
+
+def _balanced_div(h: str, attr: str, val: str) -> str | None:
+    m = re.search(r'<div[^>]*' + attr + r'="[^"]*' + re.escape(val) + r'[^"]*"[^>]*>', h, re.I)
+    if not m:
+        return None
+    i, depth = m.end(), 1
+    for mm in re.finditer(r"<div\b|</div>", h[i:], re.I):
+        depth += 1 if mm.group().lower() == "<div" else -1
+        if depth == 0:
+            return h[i:i + mm.start()]
+    return h[i:]
+
+
+def _jsonld(h: str) -> dict:
+    for ld in re.findall(r'<script[^>]*type="application/ld\+json"[^>]*>(.*?)</script>', h, re.S):
+        try:
+            d = json.loads(ld)
+        except Exception:
+            continue
+        for it in (d if isinstance(d, list) else [d]):
+            if isinstance(it, dict) and "NewsArticle" in str(it.get("@type", "")):
+                return it
+    return {}
+
+
+def _norm_ts(pub: str, mod: str, listing_dt: str) -> str:
+    for s in (pub, mod):
+        if s:
+            s = s[:19].replace("T", " ")
+            return s if len(s) == 19 else (s + ":00")
+    m = re.match(r"(\d{2})/(\d{2})/(\d{4})(?:\s+(\d{2}):(\d{2}))?", listing_dt or "")
+    if m:
+        d, mo, y, hh, mm = m.groups()
+        return f"{y}-{mo}-{d} {hh or '00'}:{mm or '00'}:00"
+    return listing_dt or ""
+
+
+def extract(row: dict) -> dict:
+    url = row["url"]
+    h, final = _fetch_article(url)
+    meta = _jsonld(h)
+    is_disc = "/du-lieu/vcb-" in final.lower()
+    headline = html.unescape(html.unescape(meta.get("headline", ""))) or row["title"]
+
+    pdf_url = ""
+    if is_disc:
+        content = _text(_balanced_div(h, "id", "divContent") or "")
+        pdfs = sorted(set(re.findall(r'https?://[^"]*mediacdn[^"]*\.pdf', h, re.I)))
+        pdf_url = pdfs[0] if pdfs else ""
+    else:
+        inner = _balanced_div(h, "class", "detail-content") or ""
+        paras = [_text(p) for p in re.findall(r"<p\b[^>]*>(.*?)</p>", inner, re.S)]
+        content = " ".join(p for p in paras if p)
+        if len(content) < 50:  # legacy articles: body is <br>-separated, not in <p>
+            full = _text(inner)
+            m = re.search(r"TIN M[ỚO]I\s+", full)  # cut the leading price-quote widget
+            content = full[m.end():].strip() if m else full
+
+    return {
+        "timestamp": _norm_ts(meta.get("datePublished", ""), meta.get("dateModified", ""),
+                              row.get("datetime", "")),
+        "type": "disclosure" if is_disc else "editorial",
+        "headline": headline,
+        "category": CATEGORY_EN.get(row["category_id"], "general_uncategorized"),
+        "content": content,
+        "url": url,
+        "pdf_url": pdf_url,
+    }
 
 
 def main() -> None:
     sys.stdout.reconfigure(encoding="utf-8")
-    by_url: dict[str, dict] = {}
+    headlines = build_headlines()          # newest first
+    print(f"listed {len(headlines)} unique headlines")
+    if LIMIT:
+        headlines = headlines[:LIMIT]      # sample the most-recent N
+    headlines = headlines[::-1]            # oldest first -> order 1 = oldest news
 
-    # 1..5 first: assign the true category
-    for cid in [1, 2, 3, 4, 5]:
-        rows = _scrape_category(cid)
-        for r in rows:
-            by_url.setdefault(r["url"], r)
-        print(f"configID={cid} {CATEGORIES[cid]:<38} {len(rows):>4} items")
+    cols = ["order", "timestamp", "type", "headline", "category", "content", "url", "pdf_url"]
+    results, n_pdf = [], 0
+    for i, r in enumerate(headlines, 1):
+        try:
+            rec = extract(r)
+            rec["order"] = i
+            n_pdf += bool(rec["pdf_url"])
+        except Exception as e:
+            rec = {"order": i, "timestamp": _norm_ts("", "", r.get("datetime", "")),
+                   "type": "error", "headline": r.get("title", ""),
+                   "category": CATEGORY_EN.get(r["category_id"], "general_uncategorized"),
+                   "content": f"[ERROR: {e}]", "url": r["url"], "pdf_url": ""}
+        results.append(rec)
+        if i % 50 == 0 or i == len(headlines):
+            print(f"[{i}/{len(headlines)}] pdf_urls={n_pdf}  last={rec['type']}: {rec['headline'][:50]}")
 
-    # 0 (all): backfill headlines not present in any specific category
-    all_rows = _scrape_category(0)
-    added = 0
-    for r in all_rows:
-        if r["url"] not in by_url:
-            by_url[r["url"]] = r  # keep category 0 = uncategorised/other
-            added += 1
-    print(f"configID=0 {CATEGORIES[0]:<38} {len(all_rows):>4} items ({added} not in 1..5)")
-
-    rows = sorted(by_url.values(), key=_sort_key, reverse=True)
-
-    with (HERE / "vcb_news.csv").open("w", newline="", encoding="utf-8-sig") as f:
-        w = csv.DictWriter(
-            f,
-            fieldnames=["datetime", "date", "category_id", "category", "news_id", "title", "url"],
-        )
+    with (HERE / OUTPUT).open("w", newline="", encoding="utf-8-sig") as f:
+        w = csv.DictWriter(f, fieldnames=cols)
         w.writeheader()
-        w.writerows(rows)
-
-    counts = {cid: sum(r["category_id"] == cid for r in rows) for cid in CATEGORIES}
-    with (HERE / "vcb_news_categories.csv").open("w", newline="", encoding="utf-8-sig") as f:
-        w = csv.writer(f)
-        w.writerow(["category_id", "category", "n_items"])
-        for cid, name in CATEGORIES.items():
-            w.writerow([cid, name, counts[cid]])
-
-    span = f"{rows[-1]['date']} .. {rows[0]['date']}" if rows else "-"
-    print(f"\nTOTAL {len(rows)} unique headlines, {span}")
-    print("wrote vcb_news.csv, vcb_news_categories.csv")
+        w.writerows(results)
+    print(f"\nwrote {OUTPUT}: {len(results)} rows, {n_pdf} with pdf_url")
 
 
 if __name__ == "__main__":

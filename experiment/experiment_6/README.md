@@ -1,73 +1,75 @@
-# Experiment 6 — VCB company-news / disclosure headlines (categorised)
+# Experiment 6 — VCB company-news / disclosure feed with content
 
-**Goal.** Scrape VCB's full **company-news & disclosure headline stream** from CafeF,
-tagged by category and dated, 2008 → present. Third point-in-time orthogonal-data
+**Goal.** Scrape VCB's full **company-news & disclosure stream** from CafeF — headline,
+category, and **article content** — 2008 → present. Third point-in-time orthogonal-data
 piece after experiment_4 (disclosure *calendar*) and experiment_5 (shares-outstanding):
-a dated, categorised event feed that can be joined to prices without look-ahead
-(headline counts, event flags, sentiment features, earnings/dividend-announcement dates).
+a dated, categorised event feed with text, joinable to prices without look-ahead
+(event flags, headline counts, sentiment / NLP features, announcement dates).
 
-## Source
+One script, one table:
+- `scrape_vcb_news.py` — stdlib only, no login. `--limit N` samples a few rows.
+- `vcb_news.csv` — the deliverable (**1,629 rows**, 2008-01 → 2026-07).
 
-Page:
-[du-lieu/tin-doanh-nghiep/vcb/event.chn](https://cafef.vn/du-lieu/tin-doanh-nghiep/vcb/event.chn).
-The category tabs (`#a0..#a5`) all call one AJAX endpoint returning an HTML fragment
-(a `<ul>` of `<li>` headlines):
+## How it works (two stages, one script)
+
+**1. List** — the CafeF news tabs (`#a0..#a5`) all call one AJAX endpoint returning an
+HTML fragment of headlines:
 
 ```
-GET cafef.vn/du-lieu/Ajax/Events_RelatedNews_New.aspx
-    ?symbol=VCB&floorID=0&configID=<0-5>&PageIndex=<n>&PageSize=30&Type=2
+Events_RelatedNews_New.aspx?symbol=VCB&floorID=0&configID=<0-5>&PageIndex=<n>&PageSize=30&Type=2
 ```
 
-- `configID` = the tab / news category (below); `floorID` 0=all, 1=HSX, 2=HNX.
-- `PageSize` is **capped at 30** → paginate `PageIndex` until a page comes back empty.
-- Each `<li>`: a `timeTitle` span (`DD/MM/YYYY HH:MM`) + a `docnhanhTitle` anchor
-  (headline + article URL). The title is read from the anchor **inner text**, not the
-  `title=""` attribute — some legacy headlines embed unescaped quotes that truncate it.
+`configID` = the news category; `PageSize` caps at 30 → paginate until empty. Scrape
+categories 1..5 first (true category), backfill 0 (uncategorised), dedup by URL.
 
-## Categories (the tabs)
+**2. Fetch** — open each headline. Both page types are static and carry a JSON-LD
+`NewsArticle` block for metadata:
+- **editorial** (`/<slug>-<id>.chn`) — `content` = full `<p>` body text (a `<br>`-body
+  fallback recovers pre-2015 articles).
+- **disclosure** (`/du-lieu/VCB-<id>/…`) — `content` = the on-page summary; `pdf_url` =
+  the attached HOSE filing PDF (recorded, **not** downloaded). These URLs 301-redirect
+  uppercase→lowercase; urllib follows it.
 
-| configID | tab id | label | meaning |
-|---|---|---|---|
-| 0 | a0 | Tất cả | all (union of the rest + uncategorised general news) |
-| 1 | a1 | Tình hình SXKD & Phân tích khác | business results & analysis |
-| 2 | a2 | Trả cổ tức - Chốt quyền | dividends / record date |
-| 3 | a3 | Thay đổi nhân sự | personnel changes |
-| 4 | a4 | Tăng vốn - Cổ phiếu quỹ | capital increase / treasury shares |
-| 5 | a5 | GD cổ đông lớn & Cổ đông nội bộ | major & insider shareholder transactions |
+## Columns
 
-**Method:** scrape 1..5 first so each headline gets its true category, then scrape 0
-and backfill any headline not in a specific category (tagged category 0). Dedup by
-article URL.
+| column | meaning |
+|---|---|
+| `order` | 1-based chronological, **oldest = 1** (rows sorted oldest → newest) |
+| `timestamp` | article's own published/modified time, else the listing time (`YYYY-MM-DD HH:MM:SS`) |
+| `type` | `editorial` (journalist article) · `disclosure` (official HOSE filing) · `error` (dead 404 link) |
+| `headline` | title (JSON-LD, entity-decoded; falls back to the listing title) |
+| `category` | one of the six below |
+| `content` | article body (editorial) or filing summary (disclosure) |
+| `url` | the CafeF article URL |
+| `pdf_url` | attached filing PDF link (disclosures only; empty otherwise) |
 
-## Result (as of 2026-07-10)
+### Categories (`configID` → english snake_case)
 
-**1,629 unique headlines, 2008-01-01 → 2026-07-09.**
+| category | tab | meaning |
+|---|---|---|
+| `general_uncategorized` | Tất cả (residual) | general market/news mentions of VCB not in a specific event type |
+| `business_results_and_analysis` | Tình hình SXKD & Phân tích khác | operating/earnings results + catch-all for many official filings |
+| `dividends_and_record_date` | Trả cổ tức - Chốt quyền | dividend payments + ex-/record-date (GDKHQ) |
+| `personnel_changes` | Thay đổi nhân sự | board / supervisory / senior-management appointments & resignations |
+| `capital_increase_and_treasury_shares` | Tăng vốn - Cổ phiếu quỹ | charter-capital increases, share issuance/listing changes, treasury/buyback |
+| `major_and_insider_shareholder_transactions` | GD cổ đông lớn & Cổ đông nội bộ | trades by major (>5%) and insider/related-party shareholders |
 
-| category | n |
-|---|---:|
-| 1 · Business results & analysis | 770 |
-| 5 · Major & insider shareholder txns | 101 |
-| 3 · Personnel changes | 88 |
-| 4 · Capital increase / treasury | 71 |
-| 2 · Dividends / record date | 38 |
-| 0 · Uncategorised (general news) | 561 |
+`type` and `category` are **orthogonal** (provenance vs topic) — the cross-tab shows
+neither is derivable from the other (e.g. `business_results_and_analysis` splits
+242 editorial / 528 disclosure), so both are kept. Filter `type == disclosure` for the
+clean, look-ahead-safe official-event stream, then bucket by `category`.
 
-Categories 2/4 line up with experiment_5's corporate actions and experiment_4's
-disclosure cadence — the three feeds cross-validate each other.
+## Result (as of 2026-07)
 
-## Files
-
-- `scrape_vcb_news.py` — one stdlib script. `--refresh` re-hits CafeF; otherwise the
-  cached `raw_html/` fragments are reused.
-- `vcb_news.csv` — `datetime, date, category_id, category, news_id, title, url`.
-- `vcb_news_categories.csv` — `category_id, category, n_items`.
-- `raw_html/` — raw fragment cache (gitignored; regenerate with `--refresh`).
+**1,629 rows** — 896 editorial · 727 disclosure · 6 error (dead 404 links). 702 rows carry
+a `pdf_url`. Content populated for all but 3 editorials (video/photo pages with no text).
+Categories: business_results_and_analysis 770 · general_uncategorized 561 ·
+major_and_insider_shareholder_transactions 101 · personnel_changes 88 ·
+capital_increase_and_treasury_shares 71 · dividends_and_record_date 38.
 
 ## Notes / extending
 
-- `symbol=VCB` and the `event.chn` referer are the only ticker-specific bits — set
-  `SYMBOL` to scrape any listed code.
-- Headlines link to full articles (the `.chn` URL); article-body scraping (for NLP /
-  sentiment) is a downstream step, not done here.
-- `news_id` is the numeric id in the article URL where present (some disclosure-filing
-  links use a `VCB-<id>` path instead and have no standalone news_id).
+- `symbol=VCB` + the `event.chn` referer are the only ticker-specific bits → set `SYMBOL`
+  to scrape any listed code.
+- No local cache: a re-run re-fetches all pages (~a few minutes). PDFs are referenced by
+  URL only — download separately (PyMuPDF, as experiment_4 does) if the filing text is needed.
