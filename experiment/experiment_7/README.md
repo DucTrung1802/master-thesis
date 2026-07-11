@@ -5,25 +5,26 @@ CafeF — every line item of all three statements, 2008 → present. Fourth orth
 piece (after exp_4 disclosure calendar, exp_5 shares-outstanding, exp_6 news/events): the
 fundamentals themselves, which — joined to exp_4's publish dates — become point-in-time safe.
 
-## Any ticker, any sector — 6 generic files
+## One script
 
 ```bash
-python scrape_financials.py                 # default: VCB
-python scrape_financials.py --symbol FPT    # any code on HOSE / HNX / UPCOM / OTC
+python financials.py                            # scrape VCB (default)
+python financials.py scrape --symbol FPT        # any code on HOSE / HNX / UPCOM / OTC
+python financials.py pdf --period Q2-2014       # read that quarter's filing into the pdf layer
+python financials.py pdf --period Q2-2014 --render   # rasterise a SCANNED filing's pages
+python financials.py docs --period Q2-2014      # list the filings CafeF has
 ```
 
-Nothing is named after a ticker — **the ticker is a column, not a filename**. There are
-exactly **6 files**, shared by every ticker:
+`financials.py` is the whole thing — scrape, PDF reader, layer merge, manual templates.
 
-| file | purpose |
+Nothing is named after a ticker: **the ticker is a column, not a filename**, so scraping
+another ticker **accumulates** (it replaces only that symbol's rows and is idempotent).
+
+| file | what it is |
 |---|---|
 | `balance_sheet.csv` · `income_statement.csv` · `cash_flow.csv` | **deliverables** |
-| `balance_sheet_manual.csv` · `income_statement_manual.csv` · `cash_flow_manual.csv` | **fill in by hand** (missing quarters) |
-| `scrape_financials.py` | the one scraper (stdlib only, no login) |
-
-**Scraping a ticker accumulates.** It replaces only that symbol's rows and leaves every
-other ticker's alone, so you build a multi-ticker panel one run at a time. Re-running a
-ticker is idempotent (no duplicate rows).
+| `balance_sheet_manual.csv` · `income_statement_manual.csv` · `cash_flow_manual.csv` | **fill these by hand** |
+| `<report>_pdf.csv` | written by `pdf` — read off the actual filing |
 
 **Exchange** is resolved from CafeF's master list (`Search/company.json`, 2,556 codes) via
 its `CenterId`: **1=HOSE, 2=HNX, 8=OTC, 9=UPCOM**.

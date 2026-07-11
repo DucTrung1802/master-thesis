@@ -355,7 +355,8 @@ Values merge **cell by cell**; the `source` column records which layer won
 | **pdf** | `<report>_pdf.csv` | read off the company's **actual filing** by `read_pdf.py` |
 | **manual** | `<report>_manual.csv` | hand-entered; **beats everything** |
 
-**`read_pdf.py`** (`--period Q2-2014 [--render|--list]`) finds the consolidated ("hợp nhất")
+**`financials.py`** — one script: `scrape` (API), `pdf --period Q2-2014` (the filing),
+`docs`. The `pdf` command finds the consolidated ("hợp nhất")
 report on CafeF, locates each statement and parses it. Rows are rebuilt from **word
 coordinates**, not the raw text stream — PyMuPDF emits label fragments out of order, and a
 line-based read silently put *"Chi phí hoạt động khác"* into *"Chi phí hoạt động"*; the period
@@ -455,7 +456,6 @@ expenses positive.
   - `scrape_vcb_news.py` (one script: list headlines + fetch article content) →
     `vcb_news.csv` (order, timestamp, type, headline, category, content, url, pdf_url)
 - `experiment_7/README.md` — financial statements (balance sheet / income statement / cash flow)
-  - `scrape_financials.py` (one script, `--symbol <TICKER>`, all history via the BCTC JSON
-    API) → three wide CSVs shared by all tickers: `balance_sheet.csv`, `income_statement.csv`,
+  - `financials.py` (one script: `scrape` / `pdf` / `docs`; `--symbol <TICKER>`) → three wide CSVs shared by all tickers: `balance_sheet.csv`, `income_statement.csv`,
     `cash_flow.csv` (rows = symbol × quarter, columns = line items `<item_code>__<slug>`)
     + a `<report>_manual.csv` hand-fill template per report (manual beats scraped)
