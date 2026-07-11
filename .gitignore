@@ -36,6 +36,10 @@ wandb/
 # experiment_4/5 raw JSON caches are regenerable (--refresh); don't track them
 experiment/experiment_4/*.json
 experiment/experiment_5/*.json
+# experiment_7 PDF working dirs — filings are large and re-downloadable from CafeF
+experiment/experiment_7/pdf_cache/
+experiment/experiment_7/pdf_pages/
+*.pdf
 
 *.txt
 

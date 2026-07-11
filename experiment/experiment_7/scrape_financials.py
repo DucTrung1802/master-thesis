@@ -244,35 +244,49 @@ def main() -> None:
 
         data_path = HERE / f"{report}.csv"
         tmpl_path = HERE / f"{report}_manual.csv"
+        pdf_path = HERE / f"{report}_pdf.csv"
         old_data_head, old_data = _read_csv(data_path)
         old_tmpl_head, old_tmpl = _read_csv(tmpl_path)
+        _, old_pdf = _read_csv(pdf_path)
 
-        # hand-filled values for THIS ticker, keyed by period (blanks ignored)
-        manual = {r["period"]: {k: v.strip() for k, v in r.items()
-                                if k not in TMPL_COLS and (v or "").strip()}
-                  for r in old_tmpl if r.get("symbol") == SYMBOL}
-        manual = {p: v for p, v in manual.items() if v}
+        def layer(rows: list[dict]) -> dict[str, dict]:
+            """-> {period: {column: value}} for THIS ticker; blank cells are ignored."""
+            out = {r["period"]: {k: v.strip() for k, v in r.items()
+                                 if k not in TMPL_COLS and (v or "").strip()}
+                   for r in rows if r.get("symbol") == SYMBOL}
+            return {p: v for p, v in out.items() if v}
 
-        new_data, new_tmpl, missing, n_manual = [], [], [], 0
+        # PRIORITY: manual > pdf > scraped. `pdf` is read off the actual filing
+        # (read_pdf.py); `manual` is the hand-entered override that beats everything.
+        manual = layer(old_tmpl)
+        from_pdf = layer(old_pdf)
+
+        new_data, new_tmpl, missing = [], [], []
+        n = {"manual": 0, "pdf": 0}
         for period, y, q in grid:
             src = scraped.get(period)
             ok = src is not None and not _is_empty(src, codes)
             row = {colname[c]: v for c, v in (src or {}).items() if c in colname} if ok else {}
-            filled = manual.get(period, {})
-            row.update(filled)                            # MANUAL WINS over scraped
-            n_manual += bool(filled)
 
-            if not ok:
-                # every scrape gap stays in the template — filled or not — so hand-entered
-                # rows are never dropped on a re-run
+            # lowest to highest precedence, cell by cell: scraped -> pdf -> manual
+            from_pdf_p = from_pdf.get(period, {})
+            manual_p = manual.get(period, {})
+            row.update(from_pdf_p)
+            row.update(manual_p)
+            n["pdf"] += bool(from_pdf_p)
+            n["manual"] += bool(manual_p)
+
+            source = ("manual" if manual_p else "pdf" if from_pdf_p
+                      else "scraped" if ok else "missing")
+            if not ok and not from_pdf_p:
+                # a scrape gap with nothing read off the filing yet: keep it in the template
+                # — filled or not — so hand-entered rows are never dropped on a re-run
                 new_tmpl.append({"symbol": SYMBOL, "period": period, "year": y,
-                                 "quarter": q, **filled})
-                if not filled:
+                                 "quarter": q, **manual_p})
+                if not manual_p:
                     missing.append(period)
             new_data.append({"symbol": SYMBOL, "exchange": exchange, "period": period,
-                             "year": y, "quarter": q,
-                             "source": "manual" if filled else ("scraped" if ok else "missing"),
-                             **row})
+                             "year": y, "quarter": q, "source": source, **row})
 
         # accumulate: replace only THIS ticker's rows, keep every other ticker's
         data_rows = [r for r in old_data if r.get("symbol") != SYMBOL] + new_data
@@ -285,7 +299,7 @@ def main() -> None:
 
         others = sorted({r["symbol"] for r in data_rows} - {SYMBOL})
         print(f"  -> {data_path.name}: {SYMBOL} {len(new_data)} quarters x {len(items)} items "
-              f"({n_manual} manual, {len(missing)} missing)"
+              f"({n['manual']} manual, {n['pdf']} pdf, {len(missing)} missing)"
               + (f"; also holds {', '.join(others)}" if others else ""))
         print(f"  -> {tmpl_path.name}: {len(new_tmpl)} gap rows for {SYMBOL}, "
               f"{len(missing)} to fill [{', '.join(missing[:5])}{' …' if len(missing) > 5 else ''}]\n")

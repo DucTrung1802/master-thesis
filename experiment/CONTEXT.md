@@ -345,20 +345,48 @@ row is blank outside its sector (VCB+FPT → 152 rows × 213 items, sparse by de
 **Exchange** comes from CafeF's master list (`Search/company.json`, 2,556 codes) via `CenterId`:
 1=HOSE, 2=HNX, 8=OTC, 9=UPCOM.
 
-**Manual overrides.** Each `<report>_manual.csv` is pre-seeded with exactly the quarters CafeF
-lacks, keyed by `symbol`+`period` (VCB: BS 5, IS 7, CF 17). Hand-filled cells **beat scraped**,
-cell by cell; gap rows persist across re-runs so entries are never lost; `source` =
-`scraped`/`manual`/`missing`.
+### Three layers: manual > pdf > scraped
+Values merge **cell by cell**; the `source` column records which layer won
+(`scraped`/`pdf`/`manual`/`missing`).
 
-### ⚠️ Caveats (verified against the API — read before modelling)
+| layer | file | what it is |
+|---|---|---|
+| scraped | — (CafeF BCTC API) | the base |
+| **pdf** | `<report>_pdf.csv` | read off the company's **actual filing** by `read_pdf.py` |
+| **manual** | `<report>_manual.csv` | hand-entered; **beats everything** |
+
+**`read_pdf.py`** (`--period Q2-2014 [--render|--list]`) finds the consolidated ("hợp nhất")
+report on CafeF, locates each statement and parses it. Rows are rebuilt from **word
+coordinates**, not the raw text stream — PyMuPDF emits label fragments out of order, and a
+line-based read silently put *"Chi phí hoạt động khác"* into *"Chi phí hoạt động"*; the period
+columns are found by clustering the x-positions of every number. **Nothing is written unless it
+reconciles** against the statement's own printed subtotals. ~2/3 of VCB's older filings are
+**scanned images** with no text layer; `--render` rasterises the pages so the figures can be
+transcribed by eye/OCR into `<report>_pdf.csv`.
+
+**Filled so far** (each reconciled against the filing's own totals): balance_sheet **Q2-2011,
+Q2-2014**; income_statement **Q4-2010, Q1-2011, Q2-2011**; cash_flow **Q2-2011, Q2-2014**.
+Q2-2011 cross-validated experiment_5 and exposed its 31.8% share-count error; Q2-2014's filed
+charter capital (23,174,171 mn → 2,317,417,100 shares) independently confirms exp_5's Q1-2012
+step. Remaining VCB gaps: BS 3 (Q3/Q4-2008, **Q2-2024**), IS 4 (Q2-2009, Q1/Q3-2010,
+**Q2-2024**), CF 15 — Q3/Q4-2008 have **no document at all**; the rest are scanned PDFs.
+
+### ⚠️ Caveats (verified — read before modelling)
 1. **Quarterly cash flow is cumulative YTD** — it resets each January and Q4 = the full year
    (2023: 26,870 → 56,751 → 83,233 → 108,116). **Difference consecutive quarters** for
    standalone values. The income statement **is** already standalone (quarters sum to annual)
    and the balance sheet is a stock — neither needs this.
 2. **Gaps are real source gaps, not parse bugs.** CafeF omits **Q2-2024** entirely (market-wide
-   — FPT too) and returns literal all-zero rows elsewhere (VCB: BS 5, IS 7, CF 17 — incl.
-   CF Q1–Q3 2025). Both are emitted as blank `source=missing` rows, **never as 0**, and seeded
-   into the manual templates. Dense usable history effectively starts ~**2012**.
+   — FPT too) and returns literal all-zero rows elsewhere. Both are emitted as blank
+   `source=missing` rows, **never as 0**. Dense usable history effectively starts ~**2012**.
+3. **Two error classes reconciliation CANNOT catch** — both balance internally, so only a
+   **magnitude check against neighbouring quarters** finds them (`read_pdf.py` runs one before
+   writing; sanity-check any hand-fill the same way):
+   **(a) cumulative vs standalone** — a Q2/Q3/Q4 report prints both the quarter and the YTD
+   column; the income statement needs the *standalone quarter*, cash flow the *cumulative* one.
+   Take the wrong one and the number reconciles perfectly and is still wrong — this is why
+   Q2-2009 was **rejected rather than written**.
+   **(b) units** — most reports are Triệu VNĐ (×10⁶), but VCB's 2009 ones are plain đồng.
 
 ---
 

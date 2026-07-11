@@ -52,6 +52,49 @@ yields 152 rows × 213 line items, sparse across sectors — that's by design.
 Every quarter in a ticker's range is present as a row (VCB: **71**, Q3-2008 → Q1-2026) — a
 contiguous grid including the ones CafeF omits, so the index has no holes.
 
+## Three layers: manual > pdf > scraped
+
+| layer | file | what it is |
+|---|---|---|
+| **scraped** | — (CafeF BCTC API) | the base; fast, complete where CafeF has it |
+| **pdf** | `<report>_pdf.csv` | read off the company's **actual filing** by `read_pdf.py` |
+| **manual** | `<report>_manual.csv` | hand-entered; **beats everything** |
+
+Values merge **cell by cell** in that order, and the `source` column records which layer won:
+`scraped` · `pdf` · `manual` · `missing`.
+
+### `read_pdf.py` — reading the filing
+
+```bash
+python read_pdf.py --period Q2-2014            # auto-extract (text-layer PDFs)
+python read_pdf.py --period Q2-2014 --render   # rasterise pages (scanned PDFs)
+python read_pdf.py --period Q2-2014 --list     # list the available documents
+```
+
+It finds the consolidated ("hợp nhất") report on CafeF, locates each statement, and — for a
+**text-layer** PDF — parses it and writes `<report>_pdf.csv`. Rows are rebuilt from **word
+coordinates**, not the raw text stream (PyMuPDF emits label fragments out of order; a
+line-based read once silently put *"Chi phí hoạt động khác"* into *"Chi phí hoạt động"*), and
+the period columns are found by clustering the x-positions of every number.
+
+Roughly **two-thirds of VCB's older filings are scanned images** with no text layer. For
+those, `--render` writes the statement pages to `pdf_pages/` so the figures can be transcribed
+by eye/OCR and pasted into `<report>_pdf.csv`.
+
+**Nothing is written unless it reconciles** against the statement's own printed subtotals
+(assets = liabilities + equity, PBT = operating profit − provisions, op+inv+fin = net change…).
+
+> ⚠️ **Two traps reconciliation cannot catch** — both balance internally:
+> 1. **cumulative vs standalone.** A Q2/Q3/Q4 report prints *both* the quarter and the
+>    year-to-date column. The income statement needs the **standalone quarter**; cash flow
+>    needs the **cumulative** one. Take the wrong one and you get a number that reconciles
+>    perfectly and is still wrong.
+> 2. **units.** Most reports are in *Triệu VNĐ* (×10⁶) — but some (VCB's 2009 ones) are in
+>    plain *đồng*. A 10⁶ error also reconciles perfectly.
+>
+> Only a **magnitude check against the neighbouring quarters** catches these. `read_pdf.py`
+> runs one before writing; do the same for any hand-fill.
+
 ## Manual overrides — hand-filled data always wins
 
 Each report has a `<report>_manual.csv` template, **pre-seeded with exactly the quarters
