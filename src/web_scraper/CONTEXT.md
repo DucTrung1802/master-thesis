@@ -42,6 +42,19 @@ src/main.py  ──►  TradingViewScraper.scrape()   ← universe authority (li
   whole scraper stage is currently OFF by default; individual asset-class subtrees
   are pre-wired to `true` for when it is turned on.
 
+### What is under `raw_data/cafef/` and what writes it
+
+Every folder here has exactly one scraper that produces it — nothing is orphaned. If a
+folder appears that is not on this list, its producer is gone and the data cannot be
+regenerated; delete it or restore the scraper rather than modelling on it.
+
+| folder | written by | scope so far |
+|---|---|---|
+| `price/`, `foreign/` | `cafef_scraper.py` | 781 tickers (HOSE+HNX+UPCOM) |
+| `order_stats/`, `prop_trading/`, `insider_txn/` | `cafef_scraper.py` | VN100 (HOSE) |
+| `news/` | `cafef_news_scraper.py` | VCB, PNJ, FPT |
+| `pdfs/` | `cafef_pdf_scraper.py` | VCB, VIC (~2.4 GB) |
+
 ## 2. Directory layout & the Strategy/registry pattern
 
 ```
