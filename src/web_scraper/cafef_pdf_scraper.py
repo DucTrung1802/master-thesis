@@ -42,8 +42,8 @@ class CafeFPdfScraper(BaseScraper):
     binaries sits apart under `files/`.
 
     This scraper only FETCHES — it never opens, parses or OCRs a PDF, and needs no PDF
-    library at all. Reading the documents is `CafeFFinancialsScraper.scrape_pdf_layer`'s
-    job; this just lands the archive so that work is offline and repeatable.
+    library at all. It just lands the archive, so that reading the documents is a separate,
+    offline, repeatable step.
 
     The PDFs are the primary source: CafeF's JSON API is a transcription of them, and where
     the API has a gap (VCB is missing 20 statement-quarters) the PDF is the only place those
