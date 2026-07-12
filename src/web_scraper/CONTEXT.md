@@ -54,6 +54,7 @@ regenerated; delete it or restore the scraper rather than modelling on it.
 | `order_stats/`, `prop_trading/`, `insider_txn/` | `cafef_scraper.py` | VN100 (HOSE) |
 | `news/` | `cafef_news_scraper.py` | VCB, PNJ, FPT |
 | `pdfs/` | `cafef_pdf_scraper.py` | VCB, VIC (~2.4 GB) |
+| `financials/` | `cafef_financials.py` (§3a) | VCB only, and the schema is **bank-only** |
 
 ## 2. Directory layout & the Strategy/registry pattern
 
@@ -65,14 +66,22 @@ src/web_scraper/
 ├── cafef_scraper.py          SOURCE_NAME="cafef"         (requests → CafeF AJAX; the 5 daily tabs)
 ├── cafef_pdf_scraper.py      SOURCE_NAME="cafef_pdf"     (requests → the filing PDFs themselves)
 ├── cafef_news_scraper.py     SOURCE_NAME="cafef_news"    (requests → company-news / disclosure feed)
+├── cafef_schema.py           ── the PDF-reading pipeline: canonical chart of accounts
+├── cafef_pdf_parser.py       ──   one filing PDF → statements (Tesseract OCR for the scans)
+├── cafef_financials.py       ──   the local PDF archive → raw_data/cafef/financials/
 ├── simplize_scraper.py       SOURCE_NAME="simplize"      (requests → api.simplize.vn JSON)
 └── gics_scraper.py           SOURCE_NAME="gics"          (requests + openpyxl → MSCI xlsx)
 ```
 
-The three CafeF modules are separate sources, not one: `cafef_scraper` pulls the daily
-price/flow tabs, `cafef_pdf_scraper` downloads the filings, `cafef_news_scraper` pulls the
-event stream. Each registers its own `SOURCE_NAME` and writes its own folder under
-`raw_data/cafef/`.
+**Two different kinds of module live here.** The `*_scraper.py` files fetch from the network
+and register a `SOURCE_NAME`; the three bare `cafef_*.py` files are NOT scrapers — they are
+an offline pipeline that reads the PDFs already on disk (§3a). Fetching is cheap and
+one-shot, parsing is expensive and iterative, so they are kept apart: the parser can be
+re-run over the 2.4 GB archive as often as it takes without touching the network.
+
+The CafeF scrapers are separate sources, not one: `cafef_scraper` pulls the daily price/flow
+tabs, `cafef_pdf_scraper` downloads the filings, `cafef_news_scraper` pulls the event stream.
+Each registers its own `SOURCE_NAME` and writes its own folder under `raw_data/cafef/`.
 
 **Pattern = Strategy + registry/factory** (`base_scraper.py`):
 - `BaseScraper(ABC)` holds shared infra: `Logger`, optional `SwitchHandler`, a
@@ -241,6 +250,78 @@ event stream. Each registers its own `SOURCE_NAME` and writes its own folder und
   - Headline text comes from the anchor's **inner text**; the `title=""` attribute breaks on
     the embedded quotes in legacy headlines.
 
+## 3a. Reading the PDFs — `cafef_schema.py` / `cafef_pdf_parser.py` / `cafef_financials.py`
+
+Not scrapers. They read the archive `cafef_pdf_scraper.py` has already downloaded and build
+quarterly financial statements from it:
+
+```
+raw_data/cafef/pdfs/          (in)   the filings
+        └─ cafef_financials.FinancialsBuilder.build("HOSE", "VCB")
+raw_data/cafef/financials/<report>/<EXCHANGE>_<SYMBOL>.csv   (out)
+```
+
+- **`cafef_schema.py` — the canonical chart of accounts.** Fetched from the three tabs of
+  `cafef.vn/du-lieu/<exchange>/<sym>-tai-chinh.chn` (Cân đối kế toán / Kết quả KD / Lưu
+  chuyển tiền tệ), whose JSON `templace` block IS the line-item template. `save()` writes
+  `schema_<template>_<report>.csv`.
+- **⚠️ A SCHEMA IS PER ACCOUNTING TEMPLATE, NOT PER TICKER — and the only one built so far is
+  the BANK one.** Vietnam has two charts of accounts and they share no line items:
+  - **bank (TCTD)** — credit institutions (VCB, CTG, BID). Assets open with *Tiền mặt, vàng
+    bạc, đá quý* and *Cho vay khách hàng*; the income statement starts at interest income.
+    90 / 26 / 47 columns.
+  - **corp (DN)** — everyone else (PNJ, FPT, VIC). Assets are current/non-current; the income
+    statement starts at revenue. **Not built yet.**
+
+  They must never be mixed in one table: both templates have a "code 1", and it is interest
+  income for a bank and revenue for a non-bank. Files are named `schema_bank_*` for exactly
+  this reason — a `schema_corp_*` has to be generated before any non-bank can be parsed.
+- **Column names** are `<index>_<sub>_<subsub>_<account>`, lowercase `a-z0-9_`, taken from the
+  numbering the filing itself prints. The three statements are numbered on *different*
+  principles, so each has its own rule:
+  - **balance sheet — hierarchical.** Roman = section, digit = child, letter = grandchild, all
+    kept verbatim: `vii_hoat_dong_mua_no` → `vii_1_mua_no`. Keeping the letter is what
+    separates the three identically-named *Hao mòn tài sản cố định* lines: `x_1_b`, `x_2_b`,
+    `x_3_b`.
+  - **income statement — flat.** Arabic digits are component lines and Roman numerals are the
+    SUBTOTALS of the lines above them; they are siblings, not parent and child. Both are kept
+    as printed, which also keeps them in separate namespaces so "1." and "I." cannot collide:
+    `1_thu_nhap_lai…`, `2_chi_phi_lai…`, `i_thu_nhap_lai_thuan` (= 1 − 2).
+  - **cash flow — flat, section-prefixed.** The digits RESTART in every section (HDKD 1..22,
+    HDTC 1..6) and HDDT prints none at all, so the section is part of the name:
+    `hdkd_1_…`, `hddt_mua_sam_tai_san_co_dinh`, `hdtc_vii_tien_va_cac_khoan_tuong_duong_tien…`.
+  - Account names are capped at **120 chars**, which is not a round number: CafeF's longest
+    line is 113 chars, and it agrees with the line below it for its first ~100 — a shorter cap
+    would truncate two different cash-flow lines onto one column name.
+- **`cafef_pdf_parser.py` — one filing → statements.** Two front-ends feed one row-builder:
+  the PDF's own text layer, or **Tesseract OCR** (`vie`) for the documents that have none —
+  **90% of VCB's filings are page scans, and not only the old ones** (its Q1-2026 report is 53
+  pages of image). Both return word boxes in the same coordinate system.
+  - Statements are located by their statutory **form code** (`Mẫu B02/TCTD-HN`), never by
+    heading: OCR drops spaces ("cân đối kế toán" → "kếtoán") so a heading regex misses, and
+    the auditor's report at the front NAMES every statement, so heading matching tags pages
+    that are not statements at all.
+  - Rows are rebuilt from **word coordinates**, and the period columns found by clustering the
+    numbers' **right edges** (figures are right-aligned; clustering centres lets a wide number
+    bridge two columns). The left of the page holds the section numbering and the *Thuyết
+    minh* note reference — which are numbers too, and counted as a period column they drag the
+    label boundary left of the labels and every label parses as empty.
+  - **The scans are stored `/Rotate 180`.** PyMuPDF rasterises them upright to OCR — so the
+    text is correct — but hands back word boxes in *unrotated* space, mirrored. Left and right
+    swap and the parser's whole premise inverts. Clearing the rotation is not a fix (OCR then
+    reads an upside-down image); the boxes are mapped through the rotation matrix instead.
+- **`cafef_financials.py` — the archive → CSVs.** Picks the *consolidated* filing per quarter
+  (preferring reviewed/audited), gates it, and writes a contiguous quarter grid — a quarter it
+  could not read is a blank `source=missing` row, never zero-filled.
+  - **Nothing is written unless it reconciles** against the statement's own printed subtotals
+    AND is of a sane magnitude beside its neighbours. A wrong figure is worse than a gap.
+  - **Three ways to be wrong that no single check catches:** *units* (most filings are Triệu
+    VNĐ, VCB's 2009 ones plain đồng — out by 10⁶ and still reconciling); *cumulative* (a
+    semi-annual filing prints ONLY the Jan-Jun column, so its income statement is not the
+    standalone quarter — VCB Q2-2024 prints PBT 20,835bn where the quarter is 10,116bn, and
+    the cumulative figures balance perfectly against each other); *OCR* (a misread digit).
+    The half-year case is handled by de-cumulating, YTD − the quarters already accepted.
+
 ### GICS — `gics_scraper.py` (reference taxonomy; requests + openpyxl)
 - Downloads MSCI's published **"GICS structure & definitions eff. 17 Mar 2023"**
   `.xlsx` and parses it with `openpyxl` into a flat CSV. Independent of the other
@@ -314,9 +395,14 @@ Matches the bronze-source decision (memory `project-bronze-source-per-field`):
   (at least the links phase) first, or they scrape nothing. The two newer CafeF scrapers do
   the same, but both take a `symbols=[(exchange, symbol), …]` override, which is how a run
   is scoped to VN30/VN100 instead of all ~777 codes.
-- **`CafeFPdfScraper` and `CafeFNewsScraper` are NOT called from `main.py` yet** — they are
-  registered and importable, but nothing drives them in the pipeline. Add them alongside
-  `CafeFScraper` when you want them in the main run.
+- **Nothing added since `CafeFScraper` is wired into `main.py` yet.** `CafeFPdfScraper`,
+  `CafeFNewsScraper` and the whole PDF-reading pipeline (§3a) are registered and importable,
+  but nothing drives them — `main.py` still runs only TradingView / CafeF / Simplize / GICS.
+  Note `CafeFPdfScraper` must NOT be pointed at the full 777-ticker universe by default: the
+  archive is ~1.7 GB *per ticker*, so it takes a `symbols=` override.
+- **The financial-statement schema is BANK-ONLY.** `schema_bank_*.csv` is the TCTD chart of
+  accounts, derived from VCB. A non-bank files on the DN template, which shares no line items
+  with it — a `schema_corp_*` must be generated before any non-bank can be parsed (§3a).
 - **CafeF serves two CDN hosts and only one of them has everything.** `cafefnew.mediacdn.vn`
   404s on entire years of some tickers (all of VIC 2020-21); those files exist only on
   `cafef1.mediacdn.vn`. Any code fetching a CafeF-hosted file must try both — and must not

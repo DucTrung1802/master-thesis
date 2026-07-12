@@ -1,0 +1,275 @@
+# src\web_scraper\cafef_schema.py
+
+# ===== Standard Library =====
+import json
+import re
+import unicodedata
+import urllib.request
+from dataclasses import dataclass
+from typing import Dict, List, Optional
+
+UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+REFERER = "https://cafef.vn/du-lieu/"
+API = "https://apiweb.cafef.vn/api/{v}/BCTC/{ep}"
+
+BALANCE_SHEET = "balance_sheet"
+INCOME_STATEMENT = "income_statement"
+CASH_FLOW = "cash_flow"
+REPORTS = (BALANCE_SHEET, INCOME_STATEMENT, CASH_FLOW)
+
+# There is no single Vietnamese chart of accounts — there is one per ACCOUNTING TEMPLATE, and
+# a schema is only valid within its own.
+#
+#   bank (TCTD)  — credit institutions. Assets open with "Tiền mặt, vàng bạc, đá quý" and
+#                  "Cho vay khách hàng"; the income statement starts at interest income.
+#   corp (DN)    — everyone else. Assets are current/non-current; the income statement starts
+#                  at revenue.
+#
+# The two share no line items, so their columns must never be mixed in one table: a bank and
+# a retailer both have a "code 1", and it means interest income for one and revenue for the
+# other. Schema files are therefore named `schema_<template>_<report>.csv`.
+BANK = "bank"          # TCTD  — e.g. VCB, CTG, BID
+CORP = "corp"          # DN    — e.g. PNJ, FPT, VIC
+TEMPLATES = (BANK, CORP)
+
+# The three tabs of cafef.vn/du-lieu/<exchange>/<sym>-tai-chinh.chn. Each is backed by one
+# JSON endpoint whose `templace` block IS the chart of accounts — the line items, in
+# statement order, with their numbering carried inside the names.
+TABS = {
+    #                     url                                    sections           shape
+    BALANCE_SHEET:    (API.format(v="v2", ep="GetReportCDKT"),   ("TN", "NV"),     "nested"),
+    INCOME_STATEMENT: (API.format(v="v1", ep="GetReportDetail"), ("KQKD",),        "flat"),
+    CASH_FLOW:        (API.format(v="v1", ep="GetReportLCTT"),   ("HDKD", "HDDT",
+                                                                  "HDTC"),         "nested"),
+}
+
+ROMAN = {"i": 1, "ii": 2, "iii": 3, "iv": 4, "v": 5, "vi": 6, "vii": 7, "viii": 8,
+         "ix": 9, "x": 10, "xi": 11, "xii": 12, "xiii": 13, "xiv": 14, "xv": 15,
+         "xvi": 16, "xvii": 17, "xviii": 18, "xix": 19, "xx": 20}
+
+# How much of the account name to keep. The index prefix ("hdkd_", "xii_5_") sits in front of
+# it, so a column runs a few characters longer than this.
+#
+# 120 is not arbitrary: the longest line CafeF prints is a cash-flow item of 113 characters
+# ("Tiền thu từ phát hành giấy tờ có giá dài hạn có đủ điều kiện tính vào vốn tự có…"), and
+# nothing may be clipped — that line and the one below it ("Tiền chi thanh toán giấy tờ có
+# giá dài hạn…") agree for their first 100 characters, so a shorter cap would collapse two
+# different lines onto one column name.
+MAX_ACCOUNT = 120
+
+
+@dataclass
+class Item:
+    """One line of the canonical chart of accounts."""
+    column: str          # 7_1_mua_no
+    code: str            # CafeF's own code, kept for provenance ("" for header rows)
+    name: str            # as CafeF prints it, e.g. "1. Mua nợ"
+    account: str         # the name with its numbering stripped, e.g. "Mua nợ"
+    section: str         # TN | NV | KQKD | HDKD | HDDT | HDTC
+    level: int           # 1 = roman, 2 = digit, 3 = letter, 0 = total / header
+    order: int           # position in the statement
+
+
+def _norm(s: str) -> str:
+    s = (s or "").replace("đ", "d").replace("Đ", "D")
+    s = unicodedata.normalize("NFD", s)
+    s = "".join(c for c in s if not unicodedata.combining(c))
+    s = re.sub(r"[^A-Za-z0-9]+", " ", s).strip().lower()
+    return re.sub(r"\s+", " ", s)
+
+
+def slug(s: str, maxlen: int = MAX_ACCOUNT) -> str:
+    return re.sub(r"\s+", "_", _norm(s))[:maxlen].strip("_")
+
+
+# The numbering CafeF prints in front of a name. It is inconsistent — "VIII ." has a space
+# before the dot, "1 Tài sản cố định hữu hình" has no dot at all, "2 Vay các tổ chức" the
+# same — so the separator is optional.
+_ROMAN_RE = re.compile(r"^\s*([ivxlc]+)\s*[.)]?\s+", re.I)
+_DIGIT_RE = re.compile(r"^\s*(\d{1,2})\s*[.)]?\s*")
+_LETTER_RE = re.compile(r"^\s*([a-z])\s*[.)]\s*", re.I)
+
+
+def _is_memo(name: str) -> bool:
+    """A sub-note hanging off the line above ("- Trong đó lợi thế thương mại"), as opposed to
+    a total or a section banner. It is dashed, or opens with "trong đó" / "trong đo"."""
+    return name.lstrip().startswith(("-", "–", "—", "+")) or _norm(name).startswith("trong do")
+
+
+def _split_number(name: str):
+    """-> (level, index, token, rest).
+
+    level 1 = roman, 2 = digit, 3 = letter, 0 = neither. `index` is the numeric value (a
+    roman becomes an int); `token` is the numbering exactly as printed, lowercased.
+    """
+    m = _ROMAN_RE.match(name)
+    if m and m.group(1).lower() in ROMAN:
+        return 1, ROMAN[m.group(1).lower()], m.group(1).lower(), name[m.end():]
+    m = _DIGIT_RE.match(name)
+    if m:
+        return 2, int(m.group(1)), str(int(m.group(1))), name[m.end():]
+    m = _LETTER_RE.match(name)
+    if m and len(m.group(1)) == 1 and m.group(1).islower():
+        return 3, m.group(1).lower(), m.group(1).lower(), name[m.end():]
+    return 0, None, "", name
+
+
+def build_columns(items: List[dict], section: str, start: int,
+                  hierarchical: bool, prefix: str = "") -> List[Item]:
+    """Turn CafeF's template into canonical column names.
+
+    The numbering lives inside the names, so it is recovered by walking the list in order.
+    The three statements are numbered on DIFFERENT principles, and conflating them produces
+    nonsense, so each gets its own rule.
+
+    BALANCE SHEET — hierarchical. Roman is the section, digit its child, letter its
+    grandchild; a column is `<roman>_<digit>_<letter>_<its own account>`, the parents
+    supplying the index and the item supplying the text. Every level is kept exactly as the
+    filing prints it — a roman stays roman, a letter stays a letter:
+
+        180  VII. Hoạt động mua nợ   ->  vii_hoat_dong_mua_no
+        181   1. Mua nợ              ->  vii_1_mua_no
+        189   2. Dự phòng rủi ro …   ->  vii_2_du_phong_rui_ro_hoat_dong_mua_no
+        222    a. Nguyên giá TSCĐ    ->  x_1_a_nguyen_gia_tai_san_co_dinh
+
+    Keeping the letter is what separates the three "Hao mòn tài sản cố định" lines (CafeF
+    codes 223/226/229): x_1_b, x_2_b, x_3_b.
+
+    INCOME STATEMENT and CASH FLOW — flat. Arabic digits are the component lines and Roman
+    numerals are the SUBTOTALS of the lines above them; the two are siblings in one sequence,
+    NOT parent and child. Numbering is therefore kept exactly as printed — a digit stays a
+    digit, a roman stays roman — which also keeps the two series in separate namespaces so
+    "1." and "I." cannot collide:
+
+        1.  Thu nhập lãi …           ->  1_thu_nhap_lai_va_cac_khoan_thu_nhap_tuong_tu
+        I.  Thu nhập lãi thuần       ->  i_thu_nhap_lai_thuan          (= 1 - 2)
+        XI. Tổng lợi nhuận trước thuế ->  xi_tong_loi_nhuan_truoc_thue
+
+    CASH FLOW additionally carries its section (`prefix`), because the digits RESTART in each
+    one — HDKD runs 1..22 and HDTC starts again at 1 — so a bare "1_" would collide:
+
+        HDKD 1. Thu nhập lãi …       ->  hdkd_1_thu_nhap_lai_va_cac_khoan_thu_nhap_tuong_tu
+        HDDT Mua sắm TSCĐ            ->  hddt_mua_sam_tai_san_co_dinh   (HDDT prints no number)
+        HDTC 1. Tăng vốn cổ phần     ->  hdtc_1_tang_von_co_phan_tu_phat_hanh_co_phieu
+
+    An unnumbered line is one of two things, and they must not be confused:
+
+      * a TOTAL or a section banner ("TỔNG TÀI SẢN", "B. NỢ PHẢI TRẢ VÀ VỐN CHỦ SỞ HỮU") —
+        it belongs to nothing, so it takes its bare name and RESETS the counters;
+      * a MEMO line ("- Trong đó lợi thế thương mại") — it hangs off the item above, so it
+        keeps the current parents and must NOT reset them. Treating one as a total orphans
+        what follows: the memo under "XII.4 Tài sản Có khác" reset the hierarchy and the next
+        line, "5. Các khoản dự phòng…", came out `5_…` instead of `12_5_…`.
+    """
+    out: List[Item] = []
+    roman: Optional[str] = None      # the numbering as printed, e.g. "vii"
+    digit: Optional[str] = None
+    seen: Dict[str, int] = {}
+    head = [prefix] if prefix else []
+
+    for i, it in enumerate(items):
+        name = (it.get("name") or "").strip()
+        if not name:
+            continue
+        level, index, token, rest = _split_number(name)
+        account = slug(rest)
+        if not account:
+            continue
+
+        if not hierarchical:
+            # flat: the printed numbering, verbatim
+            parts = [token] if token else []
+        elif level == 1:
+            roman, digit = token, None      # the roman stays roman: "vii", not "7"
+            parts = [token]
+        elif level == 2:
+            digit = token
+            parts = ([roman] if roman else []) + [token]
+        elif level == 3:
+            parts = ([roman] if roman else []) + ([digit] if digit else []) + [token]
+        elif _is_memo(name):
+            parts = ([roman] if roman else []) + ([digit] if digit else [])
+        else:
+            roman = digit = None
+            parts = []
+
+        column = "_".join(head + parts + [account])
+        if column in seen:                    # CafeF repeats a name here and there
+            seen[column] += 1
+            column = f"{column}_{seen[column]}"
+        else:
+            seen[column] = 1
+
+        out.append(Item(column=column, code=str(it.get("code") or ""), name=name,
+                        account=account, section=section, level=level,
+                        order=start + i))
+    return out
+
+
+def _get(url: str) -> dict:
+    req = urllib.request.Request(url, headers={"User-Agent": UA, "Referer": REFERER})
+    with urllib.request.urlopen(req, timeout=60) as r:
+        return json.loads(r.read().decode("utf-8"))
+
+
+def fetch(report: str, symbol: str = "VCB") -> List[Item]:
+    """The canonical chart of accounts for one report, straight from CafeF's own tab.
+
+    The template is the SCHEMA — it is what the tab renders its rows from, and it is the same
+    for every ticker on the same accounting template (bank vs non-bank), which is what makes
+    a column name mean the same thing across the panel.
+    """
+    url, sections, shape = TABS[report]
+    # Only the balance sheet is a true hierarchy (see build_columns). The cash flow needs its
+    # section in the name because its numbering restarts in each one.
+    hierarchical = report == BALANCE_SHEET
+    with_section = report == CASH_FLOW
+
+    out: List[Item] = []
+    for sec in sections:
+        q = (f"{url}?symbol={symbol}&pageIndex=1&pageSize=1"
+             f"&reportType={sec}&TypeTime=QUY")
+        value = _get(q).get("value") or {}
+        if shape == "nested":
+            items = value["templace"][0]["data"] if value.get("templace") else []
+        else:
+            items = value.get("templace") or []
+        out.extend(build_columns(items, sec, start=len(out),
+                                 hierarchical=hierarchical,
+                                 prefix=sec.lower() if with_section else ""))
+    return out
+
+
+def columns(report: str, symbol: str = "VCB") -> List[str]:
+    return [i.column for i in fetch(report, symbol)]
+
+
+def save(template: str, symbol: str, out_dir: str) -> Dict[str, int]:
+    """Write `schema_<template>_<report>.csv` for each statement.
+
+    `symbol` only has to be ANY ticker on that template — the chart of accounts is a property
+    of the template, not of the company, which is the whole point of pinning it down: the same
+    column name then means the same line for every ticker filing on it.
+    """
+    import csv
+    import os
+
+    if template not in TEMPLATES:
+        raise ValueError(f"unknown template {template!r}; expected one of {TEMPLATES}")
+
+    os.makedirs(out_dir, exist_ok=True)
+    counts: Dict[str, int] = {}
+    for report in REPORTS:
+        items = fetch(report, symbol)
+        path = os.path.join(out_dir, f"schema_{template}_{report}.csv")
+        tmp = path + ".tmp"
+        with open(tmp, "w", newline="", encoding="utf-8-sig") as f:
+            w = csv.writer(f)
+            w.writerow(["order", "template", "section", "level", "cafef_code",
+                        "column", "as_printed"])
+            for it in items:
+                w.writerow([it.order, template, it.section, it.level, it.code,
+                            it.column, it.name])
+        os.replace(tmp, path)
+        counts[report] = len(items)
+    return counts
