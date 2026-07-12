@@ -4,7 +4,7 @@
 import csv
 import os
 import re
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 # ===== Local / Custom Modules =====
 from web_scraper.cafef_pdf_parser import (
@@ -13,10 +13,25 @@ from web_scraper.cafef_pdf_parser import (
 from utils.constants import CAFEF_RAW_DATA_DIR
 
 PDFS_DIR = os.path.join(CAFEF_RAW_DATA_DIR, "pdfs")
-OUT_DIR = os.path.join(CAFEF_RAW_DATA_DIR, "financials")
+FIN_DIR = os.path.join(CAFEF_RAW_DATA_DIR, "financials")
 
-DATA_COLS = ["symbol", "exchange", "period", "year", "quarter",
-             "source", "assurance", "unit", "n_columns", "document"]
+# financials/
+# ├── schema/<template>_<report>.csv          the 4 charts of accounts x 3 statements
+# ├── statements/<template>/<report>/<EXCHANGE>_<SYMBOL>.csv
+# └── templates.csv                           ticker -> template + cash-flow method
+#
+# The TEMPLATE is a folder, not a column, because the four charts of accounts share no line
+# items: a directory is then schema-homogeneous — every file under `statements/bank/` has the
+# same 90 columns and they mean the same thing. Mixing them would give a table whose columns
+# depend on which row you are reading.
+SCHEMA_DIR = os.path.join(FIN_DIR, "schema")
+STATEMENTS_DIR = os.path.join(FIN_DIR, "statements")
+TEMPLATES_INDEX = os.path.join(FIN_DIR, "templates.csv")
+
+DATA_COLS = ["symbol", "exchange", "template", "period", "year", "quarter", "source",
+             "assurance", "cash_flow_method", "unit", "n_columns", "document"]
+INDEX_COLS = ["exchange", "symbol", "template", "cash_flow_method", "sector",
+              "industry_group_code", "industry_group_slug"]
 
 
 class FinancialsBuilder:
@@ -80,6 +95,65 @@ class FinancialsBuilder:
     def __init__(self, logger=None):
         self._logger = logger
         self._parser = PdfParser(logger=logger)
+
+    # ──────────────────────────────────────────────────────────────────────
+    # Which template does a ticker file on?
+    # ──────────────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def build_templates_index(symbols: List[Tuple[str, str]],
+                             logger=None) -> List[dict]:
+        """Resolve every ticker to its accounting template -> financials/templates.csv.
+
+        This is the map that says WHERE a ticker's statements live, and it is built by
+        FINGERPRINTING each ticker (`cafef_schema.detect_template`) — reading the chart of
+        accounts CafeF actually renders for it — never by classifying it from GICS. The two
+        disagree: HVA sits in the securities industry group and files on the CORPORATE
+        template. The GICS columns are carried alongside so a disagreement is visible, but the
+        fingerprint is the one the parser obeys.
+        """
+        from web_scraper.cafef_schema import cash_flow_method, detect_template
+
+        gics = {}
+        path = os.path.join(CAFEF_RAW_DATA_DIR, "..", "simplize", "industry.csv")
+        if os.path.exists(path):
+            with open(path, encoding="utf-8-sig") as f:
+                gics = {r["ticker"]: r for r in csv.DictReader(f)}
+
+        rows = []
+        for exchange, symbol in symbols:
+            template = detect_template(symbol)
+            method = cash_flow_method(symbol)
+            g = gics.get(symbol, {})
+            rows.append({
+                "exchange": exchange, "symbol": symbol,
+                "template": template or "", "cash_flow_method": method or "",
+                "sector": g.get("economic_sector_name", ""),
+                "industry_group_code": g.get("industry_group_code", ""),
+                "industry_group_slug": g.get("industry_group_slug", ""),
+            })
+            if logger:
+                logger.log_info(f"cafef financials: {symbol} -> {template} / {method}")
+
+        rows.sort(key=lambda r: (r["template"], r["symbol"]))
+        os.makedirs(FIN_DIR, exist_ok=True)
+        tmp = TEMPLATES_INDEX + ".tmp"
+        with open(tmp, "w", newline="", encoding="utf-8-sig") as f:
+            w = csv.DictWriter(f, fieldnames=INDEX_COLS, extrasaction="ignore")
+            w.writeheader()
+            w.writerows(rows)
+        os.replace(tmp, TEMPLATES_INDEX)
+        return rows
+
+    def template_of(self, symbol: str) -> Optional[str]:
+        """From templates.csv when it is there, else fingerprint the ticker."""
+        if os.path.exists(TEMPLATES_INDEX):
+            with open(TEMPLATES_INDEX, encoding="utf-8-sig") as f:
+                for r in csv.DictReader(f):
+                    if r["symbol"] == symbol and r["template"]:
+                        return r["template"]
+        from web_scraper.cafef_schema import detect_template
+        return detect_template(symbol)
 
     def _log(self, msg: str) -> None:
         if self._logger:
@@ -247,6 +321,8 @@ class FinancialsBuilder:
                 meta[report][period] = {
                     "assurance": d["assurance"], "unit": st.unit,
                     "n_columns": st.n_columns, "document": d["file"],
+                    # read from THIS filing: a company chooses the method and may switch it
+                    "cash_flow_method": st.cash_flow_method or "",
                 }
                 probe = {BALANCE_SHEET: self.TOTAL_ASSETS,
                          INCOME_STATEMENT: self.PBT,
@@ -297,8 +373,12 @@ class FinancialsBuilder:
     def _write(self, exchange: str, symbol: str,
                data: Dict[str, Dict[str, dict]], items: Dict[str, List[str]],
                meta: Dict[str, Dict[str, dict]]) -> Dict[str, int]:
-        """One CSV per report. The quarter grid is CONTIGUOUS — a quarter we could not read
-        is emitted as a blank `source=missing` row, never skipped and never zero-filled."""
+        """One CSV per report, under the ticker's own TEMPLATE — so every file in a directory
+        has the same columns and they mean the same thing.
+
+        The quarter grid is CONTIGUOUS: a quarter we could not read is a blank
+        `source=missing` row, never skipped and never zero-filled."""
+        template = self.template_of(symbol) or "unknown"
         counts = {}
         for report in REPORTS:
             rows = data[report]
@@ -313,17 +393,20 @@ class FinancialsBuilder:
             while (y, q) <= (y1, q1):
                 period = f"Q{q}-{y}"
                 m = meta[report].get(period, {})
-                row = {"symbol": symbol, "exchange": exchange, "period": period,
-                       "year": y, "quarter": q,
+                row = {"symbol": symbol, "exchange": exchange, "template": template,
+                       "period": period, "year": y, "quarter": q,
                        "source": "pdf" if period in rows else "missing",
-                       "assurance": m.get("assurance", ""), "unit": m.get("unit", ""),
+                       "assurance": m.get("assurance", ""),
+                       "cash_flow_method": m.get("cash_flow_method", ""),
+                       "unit": m.get("unit", ""),
                        "n_columns": m.get("n_columns", ""),
                        "document": m.get("document", "")}
                 row.update(rows.get(period, {}))
                 out.append(row)
                 y, q = (y + 1, 1) if q == 4 else (y, q + 1)
 
-            path = os.path.join(OUT_DIR, report, f"{exchange}_{symbol}.csv")
+            path = os.path.join(STATEMENTS_DIR, template, report,
+                                f"{exchange}_{symbol}.csv")
             os.makedirs(os.path.dirname(path), exist_ok=True)
             head = DATA_COLS + items[report]
             tmp = path + ".tmp"

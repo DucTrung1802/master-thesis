@@ -54,7 +54,7 @@ regenerated; delete it or restore the scraper rather than modelling on it.
 | `order_stats/`, `prop_trading/`, `insider_txn/` | `cafef_scraper.py` | VN100 (HOSE) |
 | `news/` | `cafef_news_scraper.py` | VCB, PNJ, FPT |
 | `pdfs/` | `cafef_pdf_scraper.py` | VCB, VIC + 50 tickers × 2025 (~6.7 GB) |
-| `financials/` | `cafef_financials.py` (§3a) | the 12 `schema_*.csv`; statements: VCB only |
+| `financials/` | `cafef_financials.py` (§3a) | the 12 schemas + `templates.csv`; statements per template |
 
 ## 2. Directory layout & the Strategy/registry pattern
 
@@ -256,10 +256,25 @@ Not scrapers. They read the archive `cafef_pdf_scraper.py` has already downloade
 quarterly financial statements from it:
 
 ```
-raw_data/cafef/pdfs/          (in)   the filings
+raw_data/cafef/pdfs/                 (in)   the filings
         └─ cafef_financials.FinancialsBuilder.build("HOSE", "VCB")
-raw_data/cafef/financials/<report>/<EXCHANGE>_<SYMBOL>.csv   (out)
+
+raw_data/cafef/financials/           (out)
+├── schema/<template>_<report>.csv          the 4 charts of accounts x 3 statements
+├── statements/<template>/<report>/<EXCHANGE>_<SYMBOL>.csv
+└── templates.csv                           ticker -> template + cash-flow method
 ```
+
+**The TEMPLATE is a folder, not a column**, because the four charts of accounts share no line
+items. A directory is then schema-homogeneous: every file under `statements/bank/` has the
+same 90 columns and they mean the same thing. As a column in one shared table, the columns
+would depend on which *row* you were reading.
+
+**`templates.csv` is the map that makes the folders navigable** — without it a consumer holding
+a ticker cannot tell which of the four folders to look in. It carries the fingerprinted
+template beside the GICS sector and industry group, so where the two disagree it is visible in
+the data rather than buried: **HVA** is filed under `chung-khoan-va-ngan-hang-dau-tu`
+(securities) and has `template=corp`.
 
 - **`cafef_schema.py` — the canonical chart of accounts.** Fetched from the three tabs of
   `cafef.vn/du-lieu/<exchange>/<sym>-tai-chinh.chn` (Cân đối kế toán / Kết quả KD / Lưu
@@ -276,7 +291,8 @@ raw_data/cafef/financials/<report>/<EXCHANGE>_<SYMBOL>.csv   (out)
   | **securities** (CTCK) | *I. DOANH THU HOẠT ĐỘNG* | 132 / 81 / 72 | 14 — group `551020` |
   | **insurance** (DNBH) | *Doanh thu phí bảo hiểm* | 95 / 54 / 44 | 2 — group `553010` |
 
-  All 12 files exist under `raw_data/cafef/financials/schema_<template>_<report>.csv`.
+  All 12 files exist under `raw_data/cafef/financials/schema/<template>_<report>.csv`, built by
+  `cafef_schema.save()` from a reference ticker per template (VCB / FPT / SSI / BVH).
 
 - **⚠️ FINGERPRINT THE TICKER — DO NOT CLASSIFY IT.** `detect_template(symbol)` reads CafeF's
   own chart of accounts and matches it against `FINGERPRINTS` (the line-item count of each

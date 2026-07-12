@@ -389,7 +389,7 @@ def save(template: str, out_dir: str, symbol: Optional[str] = None,
         if report == CASH_FLOW and direct_symbol:
             items = _union_cash_flow(items, fetch(report, direct_symbol))
 
-        path = os.path.join(out_dir, f"schema_{template}_{report}.csv")
+        path = os.path.join(out_dir, f"{template}_{report}.csv")
         tmp = path + ".tmp"
         with open(tmp, "w", newline="", encoding="utf-8-sig") as f:
             w = csv.writer(f)
