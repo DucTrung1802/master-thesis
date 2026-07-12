@@ -53,8 +53,8 @@ regenerated; delete it or restore the scraper rather than modelling on it.
 | `price/`, `foreign/` | `cafef_scraper.py` | 781 tickers (HOSE+HNX+UPCOM) |
 | `order_stats/`, `prop_trading/`, `insider_txn/` | `cafef_scraper.py` | VN100 (HOSE) |
 | `news/` | `cafef_news_scraper.py` | VCB, PNJ, FPT |
-| `pdfs/` | `cafef_pdf_scraper.py` | VCB, VIC (~2.4 GB) |
-| `financials/` | `cafef_financials.py` (§3a) | VCB only, and the schema is **bank-only** |
+| `pdfs/` | `cafef_pdf_scraper.py` | VCB, VIC + 50 tickers × 2025 (~6.7 GB) |
+| `financials/` | `cafef_financials.py` (§3a) | the 12 `schema_*.csv`; statements: VCB only |
 
 ## 2. Directory layout & the Strategy/registry pattern
 
@@ -265,17 +265,46 @@ raw_data/cafef/financials/<report>/<EXCHANGE>_<SYMBOL>.csv   (out)
   `cafef.vn/du-lieu/<exchange>/<sym>-tai-chinh.chn` (Cân đối kế toán / Kết quả KD / Lưu
   chuyển tiền tệ), whose JSON `templace` block IS the line-item template. `save()` writes
   `schema_<template>_<report>.csv`.
-- **⚠️ A SCHEMA IS PER ACCOUNTING TEMPLATE, NOT PER TICKER — and the only one built so far is
-  the BANK one.** Vietnam has two charts of accounts and they share no line items:
-  - **bank (TCTD)** — credit institutions (VCB, CTG, BID). Assets open with *Tiền mặt, vàng
-    bạc, đá quý* and *Cho vay khách hàng*; the income statement starts at interest income.
-    90 / 26 / 47 columns.
-  - **corp (DN)** — everyone else (PNJ, FPT, VIC). Assets are current/non-current; the income
-    statement starts at revenue. **Not built yet.**
+- **⚠️ A SCHEMA IS PER ACCOUNTING TEMPLATE, NOT PER TICKER.** Vietnam has **four** charts of
+  accounts among listed companies, and they share no line items — every one has a "code 1",
+  and it means a different thing in each, so their columns must never meet in one table:
 
-  They must never be mixed in one table: both templates have a "code 1", and it is interest
-  income for a bank and revenue for a non-bank. Files are named `schema_bank_*` for exactly
-  this reason — a `schema_corp_*` has to be generated before any non-bank can be parsed.
+  | template | opens its P&L with | columns (BS/IS/CF) | who |
+  |---|---|---|---|
+  | **bank** (TCTD) | *Thu nhập lãi…* | 90 / 26 / 47 | 20 tickers — industry group `551010` |
+  | **corp** (DN) | *Doanh thu bán hàng…* | 133 / 24 / 44 | ~735 — the 9 non-financial sectors |
+  | **securities** (CTCK) | *I. DOANH THU HOẠT ĐỘNG* | 132 / 81 / 72 | 14 — group `551020` |
+  | **insurance** (DNBH) | *Doanh thu phí bảo hiểm* | 95 / 54 / 44 | 2 — group `553010` |
+
+  All 12 files exist under `raw_data/cafef/financials/schema_<template>_<report>.csv`.
+
+- **⚠️ FINGERPRINT THE TICKER — DO NOT CLASSIFY IT.** `detect_template(symbol)` reads CafeF's
+  own chart of accounts and matches it against `FINGERPRINTS` (the line-item count of each
+  section). GICS says what the business *is*; the chart of accounts says what the *filing*
+  looks like, and only the second is what a parser needs. **They disagree:** `HVA` sits in the
+  securities industry group and files on the **corporate** template. Sector is worse still —
+  *Tài chính* spans banks, brokers AND insurers, which share nothing. Use the industry group
+  as a sanity check on the fingerprint, never as the source of truth.
+
+- **⚠️ THE CASH-FLOW METHOD IS A COMPANY'S CHOICE, read per filing — never inferred.**
+  Indirect (*"start from profit before tax and adjust"*) vs direct (*"receipts and payments"*).
+  It is not a property of the sector, nor even of the template: ANV and DIG file **direct**
+  while their sector-mates FPT/VNM/VIC file **indirect**; BLI files direct where BVH files
+  indirect; banks and securities file direct and indirect respectively.
+  - The test is one line: the operating section opens with **"Lợi nhuận trước thuế"** ⇒
+    indirect, anything else ⇒ direct. The rule is defined on the indirect side deliberately —
+    direct's opening line is worded differently by every template and half the tickers (VCB
+    *"Thu nhập lãi… nhận được"*, ANV *"Tiền thu **từ** bán hàng"*, BLI *"Tiền thu bán hàng"* —
+    no *từ*), and enumerating those is a losing game.
+  - `cafef_schema.method_of()` applies it to an API template; `Statement.cash_flow_method`
+    applies the same test to a parsed PDF, since both print the same words.
+  - **ONE cash-flow schema holds BOTH methods.** They are near-disjoint — of 19 and 8 operating
+    lines they share exactly one, the subtotal both converge on — and investing/financing are
+    the same lines either way. So the table carries both branches (`hdkd_indirect_*`,
+    `hdkd_direct_*`) plus that one shared, untagged subtotal; a filing fills the branch it used
+    and leaves the other **blank, not zero** (the company did not report those lines). The
+    statement then reconciles the same way whichever method it used — which is why there are
+    12 schemas and not 16.
 - **Column names** are `<index>_<sub>_<subsub>_<account>`, lowercase `a-z0-9_`, taken from the
   numbering the filing itself prints. The three statements are numbered on *different*
   principles, so each has its own rule:
@@ -400,9 +429,17 @@ Matches the bronze-source decision (memory `project-bronze-source-per-field`):
   but nothing drives them — `main.py` still runs only TradingView / CafeF / Simplize / GICS.
   Note `CafeFPdfScraper` must NOT be pointed at the full 777-ticker universe by default: the
   archive is ~1.7 GB *per ticker*, so it takes a `symbols=` override.
-- **The financial-statement schema is BANK-ONLY.** `schema_bank_*.csv` is the TCTD chart of
-  accounts, derived from VCB. A non-bank files on the DN template, which shares no line items
-  with it — a `schema_corp_*` must be generated before any non-bank can be parsed (§3a).
+- **There are FOUR financial-statement schemas, not one** (bank / corp / securities /
+  insurance) and they share no line items. Pick one by **fingerprinting the ticker**
+  (`cafef_schema.detect_template`), never by its GICS sector or industry group — HVA sits in
+  the securities group and files corporate, and *Tài chính* spans all three financial
+  templates (§3a).
+- **The cash-flow method (direct/indirect) is chosen by the COMPANY**, so it must be read from
+  the filing, not inferred from the sector or the template (§3a).
+- **Some companies file NO consolidated report** — a single entity with no subsidiaries only
+  ever produces the parent-company one (NT2, PPC, IMP, AGP among the 50 sampled). Code that
+  filters to `consolidated == True` returns nothing for them and they look like tickers with
+  no data; it needs a fallback to the parent report.
 - **CafeF serves two CDN hosts and only one of them has everything.** `cafefnew.mediacdn.vn`
   404s on entire years of some tickers (all of VIC 2020-21); those files exist only on
   `cafef1.mediacdn.vn`. Any code fetching a CafeF-hosted file must try both — and must not

@@ -39,6 +39,15 @@ class Statement:
     n_columns: int
     rows: List[Row] = field(default_factory=list)
 
+    @property
+    def cash_flow_method(self) -> Optional[str]:
+        """`indirect` | `direct`, read from THIS filing — a company chooses the method and may
+        switch, so it is a property of the document, never of the sector or the template."""
+        if self.report != CASH_FLOW or not self.rows:
+            return None
+        from web_scraper.cafef_schema import method_of
+        return method_of(self.rows[0].label)
+
     def find(self, *needles: str) -> Optional[int]:
         """First column-0 value whose key contains any of `needles` (spaces stripped)."""
         for r in self.rows:

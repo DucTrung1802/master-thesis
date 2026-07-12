@@ -6,7 +6,7 @@ import re
 import unicodedata
 import urllib.request
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
 REFERER = "https://cafef.vn/du-lieu/"
@@ -18,19 +18,54 @@ CASH_FLOW = "cash_flow"
 REPORTS = (BALANCE_SHEET, INCOME_STATEMENT, CASH_FLOW)
 
 # There is no single Vietnamese chart of accounts — there is one per ACCOUNTING TEMPLATE, and
-# a schema is only valid within its own.
+# a schema is only valid within its own. Four exist among listed companies:
 #
-#   bank (TCTD)  — credit institutions. Assets open with "Tiền mặt, vàng bạc, đá quý" and
-#                  "Cho vay khách hàng"; the income statement starts at interest income.
-#   corp (DN)    — everyone else. Assets are current/non-current; the income statement starts
-#                  at revenue.
+#   bank (TCTD)       credit institutions. Income statement opens at interest income.
+#   corp (DN)         everyone else — 9 of the 10 sectors. Opens at revenue.
+#   securities (CTCK) brokers. Opens at "I. DOANH THU HOẠT ĐỘNG"; an 81-line P&L.
+#   insurance (DNBH)  insurers. Opens at "Doanh thu phí bảo hiểm".
 #
-# The two share no line items, so their columns must never be mixed in one table: a bank and
-# a retailer both have a "code 1", and it means interest income for one and revenue for the
-# other. Schema files are therefore named `schema_<template>_<report>.csv`.
-BANK = "bank"          # TCTD  — e.g. VCB, CTG, BID
-CORP = "corp"          # DN    — e.g. PNJ, FPT, VIC
-TEMPLATES = (BANK, CORP)
+# They share no line items, so their columns must never be mixed in one table: a bank and a
+# retailer both have a "code 1", and it means interest income for one and revenue for the
+# other. Schema files are named `schema_<template>_<report>.csv`.
+BANK = "bank"
+CORP = "corp"
+SECURITIES = "securities"
+INSURANCE = "insurance"
+TEMPLATES = (BANK, CORP, SECURITIES, INSURANCE)
+
+# Any ticker on the template will do — the chart of accounts is a property of the template,
+# not of the company. That is the whole point of pinning it down: a column name then means the
+# same line for every ticker filing on it.
+REFERENCE = {BANK: "VCB", CORP: "FPT", SECURITIES: "SSI", INSURANCE: "BVH"}
+
+# A template's FINGERPRINT: the number of line items CafeF renders in each section, in the
+# order (BS-assets, BS-equity, P&L, CF-operating, CF-investing, CF-financing).
+#
+# The cash-flow OPERATING count varies because a company CHOOSES its method — indirect (opens
+# at "Lợi nhuận trước thuế") or direct (opens at "Tiền thu từ bán hàng") — so a template has
+# one fingerprint per method it is seen with. The choice is NOT a property of the sector or of
+# the template: ANV and DIG file direct while their sector-mates FPT/VNM/VIC file indirect,
+# and BLI files direct where BVH files indirect.
+FINGERPRINTS = {
+    (47, 43, 26, 26, 10, 11): BANK,
+    (79, 54, 24, 19, 8, 12): CORP,          # indirect
+    (79, 54, 24, 8, 8, 12): CORP,           # direct
+    (67, 65, 81, 45, 6, 21): SECURITIES,
+    (68, 27, 54, 19, 8, 10): INSURANCE,     # indirect
+    (68, 27, 54, 8, 8, 11): INSURANCE,      # direct
+}
+
+# What the operating section opens with tells you the method — the only test needed.
+#
+# The rule is defined on the INDIRECT side, and must be: indirect IS "start from profit before
+# tax and adjust", so it always opens on that line. Direct is "receipts and payments", and its
+# opening line is worded differently by every template and half the tickers — VCB "Thu nhập lãi
+# … nhận được", ANV "Tiền thu TỪ bán hàng", BLI "Tiền thu bán hàng" (no "từ"). Enumerating
+# those is a losing game; anything that is not indirect is direct.
+INDIRECT_OPENS = "loi nhuan truoc thue"
+INDIRECT = "indirect"
+DIRECT = "direct"
 
 # The three tabs of cafef.vn/du-lieu/<exchange>/<sym>-tai-chinh.chn. Each is backed by one
 # JSON endpoint whose `templace` block IS the chart of accounts — the line items, in
@@ -61,13 +96,14 @@ MAX_ACCOUNT = 120
 @dataclass
 class Item:
     """One line of the canonical chart of accounts."""
-    column: str          # 7_1_mua_no
+    column: str          # vii_1_mua_no
     code: str            # CafeF's own code, kept for provenance ("" for header rows)
     name: str            # as CafeF prints it, e.g. "1. Mua nợ"
     account: str         # the name with its numbering stripped, e.g. "Mua nợ"
     section: str         # TN | NV | KQKD | HDKD | HDDT | HDTC
     level: int           # 1 = roman, 2 = digit, 3 = letter, 0 = total / header
     order: int           # position in the statement
+    method: str = ""     # cash-flow operating lines only: indirect | direct
 
 
 def _norm(s: str) -> str:
@@ -244,32 +280,165 @@ def columns(report: str, symbol: str = "VCB") -> List[str]:
     return [i.column for i in fetch(report, symbol)]
 
 
-def save(template: str, symbol: str, out_dir: str) -> Dict[str, int]:
+# ══════════════════════════════════════════════════ which template does a ticker file on?
+
+def raw_items(symbol: str) -> Dict[Tuple[str, str], List[dict]]:
+    """(report, section) -> CafeF's template rows, exactly as served."""
+    out: Dict[Tuple[str, str], List[dict]] = {}
+    for report, (url, sections, shape) in TABS.items():
+        for sec in sections:
+            q = (f"{url}?symbol={symbol}&pageIndex=1&pageSize=1"
+                 f"&reportType={sec}&TypeTime=QUY")
+            try:
+                value = _get(q).get("value") or {}
+            except Exception:
+                out[(report, sec)] = []
+                continue
+            items = (value["templace"][0]["data"]
+                     if shape == "nested" and value.get("templace")
+                     else value.get("templace") or [])
+            out[(report, sec)] = [i for i in items if (i.get("name") or "").strip()]
+    return out
+
+
+def fingerprint(symbol: str) -> Tuple[int, ...]:
+    """The line-item count of each section — the ticker's accounting template, in six numbers."""
+    items = raw_items(symbol)
+    return tuple(len(items.get((r, s), []))
+                 for r, (_, secs, _) in TABS.items() for s in secs)
+
+
+def cash_flow_method(symbol: str) -> Optional[str]:
+    """`indirect` | `direct`, from what the operating section opens with.
+
+    A COMPANY chooses this, not a sector and not a template, so it must be read per ticker —
+    and per filing, since a company may switch. Everything else in the cash-flow statement is
+    the same either way, which is why one schema holds both (see `save`).
+    """
+    items = raw_items(symbol).get((CASH_FLOW, "HDKD"), [])
+    return method_of(items[0].get("name") or "") if items else None
+
+
+def method_of(first_operating_line: str) -> Optional[str]:
+    """The method, from the first line of the operating section — of an API template or of a
+    parsed PDF, since both print the same words."""
+    n = _norm(first_operating_line)
+    if not n:
+        return None
+    return INDIRECT if INDIRECT_OPENS in n else DIRECT
+
+
+def detect_template(symbol: str) -> Optional[str]:
+    """Which of the four accounting templates this ticker files on.
+
+    FINGERPRINT THE TICKER, DO NOT CLASSIFY IT. GICS says what the business is; the chart of
+    accounts says what the filing looks like, and only the second is what a parser needs. The
+    two disagree: HVA sits in the securities industry group and files on the CORPORATE
+    template. Sector alone is worse still — "Tài chính" spans banks, brokers AND insurers,
+    which share nothing.
+
+    Falls back to the shape of the income statement when the counts are unfamiliar, so a
+    template CafeF revises does not silently become "unknown".
+    """
+    fp = fingerprint(symbol)
+    hit = FINGERPRINTS.get(fp)
+    if hit:
+        return hit
+    items = raw_items(symbol).get((INCOME_STATEMENT, "KQKD"), [])
+    first = _norm(items[0].get("name") or "") if items else ""
+    if "thu nhap lai" in first:
+        return BANK
+    if "doanh thu hoat dong" in first:
+        return SECURITIES
+    if "doanh thu phi bao hiem" in first:
+        return INSURANCE
+    if "doanh thu ban hang" in first:
+        return CORP
+    return None
+
+
+def save(template: str, out_dir: str, symbol: Optional[str] = None,
+         direct_symbol: Optional[str] = None) -> Dict[str, int]:
     """Write `schema_<template>_<report>.csv` for each statement.
 
-    `symbol` only has to be ANY ticker on that template — the chart of accounts is a property
-    of the template, not of the company, which is the whole point of pinning it down: the same
-    column name then means the same line for every ticker filing on it.
+    `symbol` may be ANY ticker on the template (defaults to the reference one) — the chart of
+    accounts belongs to the template, not the company, which is the point of pinning it down.
+
+    THE CASH-FLOW SCHEMA HOLDS BOTH METHODS. Indirect and direct are near-disjoint — of 19 and
+    8 operating lines they share exactly one, the subtotal both converge on — and investing and
+    financing are the same lines either way. So one table carries both branches and a filing
+    fills the one it used, leaving the other blank (blank, not zero: the company did not report
+    those lines). That keeps the statement reconcilable whichever method it used, and is why
+    there are 12 schemas and not 16.
+
+    Pass `direct_symbol` — a ticker on the same template that files DIRECT — to fold its
+    operating lines in. Without it only the method `symbol` uses is captured.
     """
     import csv
     import os
 
     if template not in TEMPLATES:
         raise ValueError(f"unknown template {template!r}; expected one of {TEMPLATES}")
+    symbol = symbol or REFERENCE[template]
 
     os.makedirs(out_dir, exist_ok=True)
     counts: Dict[str, int] = {}
     for report in REPORTS:
         items = fetch(report, symbol)
+
+        if report == CASH_FLOW and direct_symbol:
+            items = _union_cash_flow(items, fetch(report, direct_symbol))
+
         path = os.path.join(out_dir, f"schema_{template}_{report}.csv")
         tmp = path + ".tmp"
         with open(tmp, "w", newline="", encoding="utf-8-sig") as f:
             w = csv.writer(f)
-            w.writerow(["order", "template", "section", "level", "cafef_code",
+            w.writerow(["order", "template", "method", "section", "level", "cafef_code",
                         "column", "as_printed"])
             for it in items:
-                w.writerow([it.order, template, it.section, it.level, it.code,
-                            it.column, it.name])
+                w.writerow([it.order, template, getattr(it, "method", ""), it.section,
+                            it.level, it.code, it.column, it.name])
         os.replace(tmp, path)
         counts[report] = len(items)
     return counts
+
+
+def _union_cash_flow(a: List[Item], b: List[Item]) -> List[Item]:
+    """Merge two cash-flow charts that differ only in method.
+
+    The operating branches are tagged so they cannot be confused, and the ONE line they share
+    — the net-operating subtotal both methods arrive at — stays a single untagged column, so
+    the statement reconciles the same way whichever method the filing used. Investing and
+    financing are common; they are taken from the first chart (the wording differs slightly
+    between tickers, but they are the same lines).
+    """
+    def ops(items):
+        return [i for i in items if i.section == "HDKD"]
+
+    def rest(items):
+        return [i for i in items if i.section != "HDKD"]
+
+    ma, mb = _method_of_items(a), _method_of_items(b)
+    shared = {i.account for i in ops(a)} & {i.account for i in ops(b)}
+
+    out: List[Item] = []
+    for items, method in ((a, ma), (b, mb)):
+        for it in ops(items):
+            if it.account in shared:
+                if any(o.account == it.account and o.section == "HDKD" for o in out):
+                    continue                      # the shared subtotal: keep one
+                out.append(it)
+                continue
+            tag = f"hdkd_{method}_" if method else "hdkd_"
+            out.append(Item(column=it.column.replace("hdkd_", tag, 1), code=it.code,
+                            name=it.name, account=it.account, section=it.section,
+                            level=it.level, order=it.order, method=method))
+    out += rest(a)
+    for n, it in enumerate(out):
+        it.order = n
+    return out
+
+
+def _method_of_items(items: List[Item]) -> Optional[str]:
+    first = next((i.name for i in items if i.section == "HDKD"), "")
+    return method_of(first)

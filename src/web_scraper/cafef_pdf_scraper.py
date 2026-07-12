@@ -235,8 +235,11 @@ class CafeFPdfScraper(BaseScraper):
     # Per-stock scrape
     # ──────────────────────────────────────────────────────────────────────
 
-    def scrape_pdfs(self, exchange: str, symbol: str,
-                    skip_existing: bool = True) -> None:
+    def scrape_pdfs(self, exchange: str, symbol: str, skip_existing: bool = True,
+                    years: Optional[Tuple[int, ...]] = None) -> None:
+        """`years` limits the download to those filing years. A full archive is ~1.7 GB per
+        ticker, so pulling one year across a wide universe is the difference between a few GB
+        and tens of them."""
         base = os.path.join(CAFEF_RAW_DATA_DIR, self.FOLDER)
         pdf_dir = os.path.join(base, self.FILES_DIR, f"{exchange}_{symbol}")
         index_dir = os.path.join(base, self.INDEX_DIR)
@@ -247,8 +250,13 @@ class CafeFPdfScraper(BaseScraper):
         if not docs:
             self._logger.log_warning(f"CafeF pdf: no documents for '{symbol}'.")
             return
+        listed = len(docs)
+        if years:
+            wanted = set(years)
+            docs = [d for d in docs if d.get("Year") in wanted]
         self._logger.log_info(
-            f"CafeF pdf: '{exchange}:{symbol}' — {len(docs)} documents listed.")
+            f"CafeF pdf: '{exchange}:{symbol}' — {listed} documents listed"
+            + (f", {len(docs)} in {sorted(years)}" if years else ""))
 
         # Name every file BEFORE fetching anything, so a collision can be seen. CafeF lists
         # the same document twice under an identical title when a filing is re-uploaded (VCB
@@ -309,9 +317,15 @@ class CafeFPdfScraper(BaseScraper):
         with ThreadPoolExecutor(max_workers=self.DOWNLOAD_WORKERS) as pool:
             rows = [r for r in pool.map(one, docs) if r]
 
+        index_path = os.path.join(index_dir, f"{exchange}_{symbol}.csv")
+        # A year-filtered run must not erase the rest of an index that is already complete —
+        # merge on the filename, keeping whatever this run did not look at.
+        if years and os.path.exists(index_path):
+            with open(index_path, encoding="utf-8-sig") as f:
+                fresh = {r["file"] for r in rows}
+                rows += [r for r in csv.DictReader(f) if r["file"] not in fresh]
         rows.sort(key=lambda r: (int(r["year"] or 0), int(r["quarter"] or 0), r["name"]))
 
-        index_path = os.path.join(index_dir, f"{exchange}_{symbol}.csv")
         tmp = index_path + ".tmp"
         with open(tmp, "w", newline="", encoding="utf-8-sig") as f:
             w = csv.DictWriter(f, fieldnames=self.COLUMNS, extrasaction="ignore")
@@ -357,15 +371,17 @@ class CafeFPdfScraper(BaseScraper):
 
     def scrape_all_pdfs(self, skip_existing: bool = True,
                         exchanges: Tuple[str, ...] = None,
-                        symbols: List[Tuple[str, str]] = None) -> None:
+                        symbols: List[Tuple[str, str]] = None,
+                        years: Optional[Tuple[int, ...]] = None) -> None:
         """`symbols` overrides the universe, so a run can be scoped to VN30/VN100 rather
-        than all ~777 listed codes — the archive is ~1.7 GB per ticker."""
+        than all ~777 listed codes; `years` scopes it in time. The archive is ~1.7 GB per
+        ticker, so both matter."""
         universe = symbols if symbols is not None else self.get_stock_symbols(exchanges)
         self._thread_manager.remove_all_tasks()
         for exchange, symbol in universe:
             self._thread_manager.add_task(
                 Task(f"cafef/pdfs/{exchange}_{symbol}",
-                     self.scrape_pdfs, exchange, symbol, skip_existing)
+                     self.scrape_pdfs, exchange, symbol, skip_existing, years)
             )
         self._logger.log_info(
             f"CafeF: executing {self._thread_manager.get_current_number_of_task()} "
