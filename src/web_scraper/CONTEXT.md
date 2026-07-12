@@ -1,8 +1,8 @@
 # Context — `src/web_scraper` (raw-data acquisition layer)
 
 > Handoff notes for a new session. Describes the web-scraping subsystem: how the
-> four data sources are structured, what each pulls, how they are driven, and where
-> output lands. This is the **bronze-input** stage — it writes CSV/xlsx under
+> data sources are structured, what each pulls, how they are driven, and where
+> output lands. This is the **bronze-input** stage — it writes CSV/xlsx/PDF under
 > `raw_data/<source>/`, which `src/data_preprocessor` then ingests into
 > `bronze_schema`. Verify anything before acting on it — the code and
 > `src/switch_config.json` are the sources of truth.
@@ -16,11 +16,13 @@ src/main.py  ──►  TradingViewScraper.scrape()   ← universe authority (li
                        │                            + OHLCV per symbol (Selenium)
                        ▼
                   CafeFScraper.scrape()         ← per-stock fields TV lacks (requests)
+                  CafeFPdfScraper.scrape()      ← the filing PDFs (requests)
+                  CafeFNewsScraper.scrape()     ← company-news / disclosure feed (requests)
                   SimplizeScraper.scrape()      ← validated daily-panel backbone (requests)
                   GicsScraper.scrape()          ← MSCI GICS taxonomy (independent)
                        │
                        ▼
-                  raw_data/<source>/...  (CSV + the raw GICS .xlsx)
+                  raw_data/<source>/...  (CSV + PDFs + the raw GICS .xlsx)
                        │
                        ▼
              src/data_preprocessor → bronze_schema (see its own ingest code)
@@ -47,10 +49,17 @@ src/web_scraper/
 ├── CONTEXT.md                ← this file
 ├── base_scraper.py           BaseScraper ABC + SCRAPER_REGISTRY + @register_scraper + build_scraper
 ├── trading_view_scraper.py   SOURCE_NAME="trading_view"  (Selenium/Chrome + BS4, ~1600 lines)
-├── cafef_scraper.py          SOURCE_NAME="cafef"         (requests → CafeF AJAX)
+├── cafef_scraper.py          SOURCE_NAME="cafef"         (requests → CafeF AJAX; the 5 daily tabs)
+├── cafef_pdf_scraper.py      SOURCE_NAME="cafef_pdf"     (requests → the filing PDFs themselves)
+├── cafef_news_scraper.py     SOURCE_NAME="cafef_news"    (requests → company-news / disclosure feed)
 ├── simplize_scraper.py       SOURCE_NAME="simplize"      (requests → api.simplize.vn JSON)
 └── gics_scraper.py           SOURCE_NAME="gics"          (requests + openpyxl → MSCI xlsx)
 ```
+
+The three CafeF modules are separate sources, not one: `cafef_scraper` pulls the daily
+price/flow tabs, `cafef_pdf_scraper` downloads the filings, `cafef_news_scraper` pulls the
+event stream. Each registers its own `SOURCE_NAME` and writes its own folder under
+`raw_data/cafef/`.
 
 **Pattern = Strategy + registry/factory** (`base_scraper.py`):
 - `BaseScraper(ABC)` holds shared infra: `Logger`, optional `SwitchHandler`, a
@@ -153,6 +162,72 @@ src/web_scraper/
   scrapes what each tab is still missing (price/foreign done; order_stats/prop/insider
   currently VN100-only → ~681 tickers/tab remaining).
 
+### CafeF PDFs — `cafef_pdf_scraper.py` (the filings themselves; requests, no PDF library)
+- **Why:** the filings are the PRIMARY source — CafeF's JSON financial API is a
+  transcription of them, and where the API has a gap (VCB is missing 20 statement-quarters)
+  the PDF is the only place those figures exist. This scraper only **fetches**; it never
+  opens, parses or OCRs a document, so it needs no PDF library at all.
+- **Source:** one endpoint, the same one the disclosure-date work reads —
+  `cafef.vn/du-lieu/Ajax/PageNew/FileBCTC.ashx?Symbol=<sym>&Type=1&Year=0`. It lists every
+  report for the code (VCB 206, VIC 210, back to 2002) with a link to the PDF.
+- **Output:**
+  - `raw_data/cafef/pdfs/index/<EXCHANGE>_<SYMBOL>.csv` — one row per document
+  - `raw_data/cafef/pdfs/files/<EXCHANGE>_<SYMBOL>/*.pdf` — the documents
+  - Index and binaries are split so the archive stays navigable at VN100 scale (a flat
+    folder would interleave 100 CSVs with 100 directories); `index/` then mirrors every
+    other CafeF folder — one `<EXCHANGE>_<SYMBOL>.csv` per stock.
+- **The index says what each document IS** — a caller must know this before trusting its
+  numbers, and all three of these are traps that have already bitten:
+  - `consolidated` — "hợp nhất". The parent-company ("công ty mẹ") report covers a
+    **different entity** with different figures; CafeF lists both, roughly 50/50.
+  - `assurance` — audited (`kiểm toán`) > reviewed (`soát xét`) > unaudited. A quarter is
+    often filed twice, and the later document restates the earlier.
+  - `half_year` — the semi-annual report prints **only the cumulative Jan-Jun column**, so
+    its income statement is NOT the standalone quarter (VCB Q2-2024 prints PBT 20,835bn
+    where the quarter is 10,116bn). It cannot be read from the title: CafeF calls it
+    "…quý 2 năm 2024 (đã soát xét)". A **reviewed Q2 filing is the semi-annual by
+    definition**, which is how it is detected.
+- **Quirks handled:**
+  - **Two CDN hosts.** The API advertises `cafefnew.mediacdn.vn`, but older files live only
+    on `cafef1.mediacdn.vn` — which 404s **entire years of VIC** (all of 2020-21). Both are
+    tried, and a **4xx is not retried**: re-asking five times with a delay only postpones the
+    host that has the file.
+  - **Truncated downloads.** A short read does not raise — it yields a PDF that still opens
+    and still reports its true `page_count`, with the missing pages failing to load one by
+    one. That silently reduced VCB's Q2-2014 filing to 14 of 58 pages and looked exactly
+    like file corruption. Every download is verified against `Content-Length`.
+  - **Duplicate titles.** CafeF lists a re-uploaded filing under an *identical* name (VCB has
+    two "BCTC hợp nhất quý 4 năm 2023"), which slugged to one filename and silently
+    overwrote a document. Colliding names take a URL-hash suffix; unique names are untouched.
+- **Size:** ~1.7 GB for VCB (90% of its filings are page scans), ~0.65 GB for VIC. Budget
+  accordingly before pointing this at VN100.
+
+### CafeF news — `cafef_news_scraper.py` (company-news / disclosure event stream; requests)
+- A **point-in-time event feed**: headline counts, event flags, announcement dates and
+  article text, joinable to prices without look-ahead.
+- **Source:** every category tab of `cafef.vn/du-lieu/tin-doanh-nghiep/<sym>/event.chn` hits
+  one AJAX endpoint (`Ajax/Events_RelatedNews_New.aspx`) with a different `configID`.
+  `PageSize` caps at **30** → paginate until a page repeats or runs short. Categories **1..5
+  are scraped first** (they give the TRUE category), then **0 backfills** what is left
+  uncategorised; rows dedup by URL. Then each article is fetched for its body.
+- **Two orthogonal labels, both kept:** `type` (editorial | disclosure | error) is
+  *provenance* — a disclosure is a filing CafeF republished, and is where `pdf_url` comes
+  from; `category` is *topic* (business results, dividends, personnel, capital increase,
+  insider transactions, uncategorised).
+- **Output:** `raw_data/cafef/news/<EXCHANGE>_<SYMBOL>.csv`
+  (`order, timestamp, type, headline, category, content, url, pdf_url`).
+  VCB 1,629 rows / PNJ 1,715 / FPT 2,255, spanning 2007 → 2026.
+- **Gotchas:**
+  - **`order` is numbered from the article's own `datePublished`, not from the headline
+    feed's listing date.** The two disagree, and numbering by the listing left `order`
+    claiming a chronology the timestamps did not have — which leaks look-ahead into anything
+    keyed on it.
+  - Article bodies are the expensive stage (~1,600-2,300 per ticker) → fetched in parallel
+    with a polite per-worker delay. ~2 min/ticker, so VN100 is hours, not days.
+  - A dead link keeps its headline as `type=error` rather than dropping the row.
+  - Headline text comes from the anchor's **inner text**; the `title=""` attribute breaks on
+    the embedded quotes in legacy headlines.
+
 ### GICS — `gics_scraper.py` (reference taxonomy; requests + openpyxl)
 - Downloads MSCI's published **"GICS structure & definitions eff. 17 Mar 2023"**
   `.xlsx` and parses it with `openpyxl` into a flat CSV. Independent of the other
@@ -176,6 +251,8 @@ Matches the bronze-source decision (memory `project-bronze-source-per-field`):
 | OHLC / volume / foreign flow | **Simplize** | fully adjusted, true volume, most complete |
 | split-only / negotiated volume, raw vs adj close | **CafeF** | matched/negotiated split, `close_raw`/`close_adj`, '000 VND |
 | universe (which tickers exist) | **TradingView** | the link CSVs everyone else reads |
+| fundamentals as filed (the source of truth) | **CafeF PDFs** | the statements CafeF's own API transcribes; the only place its gaps exist |
+| news / disclosure events | **CafeF** | headline + body + filing PDF link, categorised |
 
 - TradingView prices are **split/stock-div adjusted but NOT cash-div adjusted**
   unless the ADJ toggle fires (memory `project-vcb-price-adjustment`).
@@ -221,7 +298,19 @@ Matches the bronze-source decision (memory `project-bronze-source-per-field`):
 ## 7. Gotchas
 
 - **Order matters:** CafeF/Simplize read TV's link CSVs for their universe — run TV
-  (at least the links phase) first, or they scrape nothing.
+  (at least the links phase) first, or they scrape nothing. The two newer CafeF scrapers do
+  the same, but both take a `symbols=[(exchange, symbol), …]` override, which is how a run
+  is scoped to VN30/VN100 instead of all ~777 codes.
+- **`CafeFPdfScraper` and `CafeFNewsScraper` are NOT called from `main.py` yet** — they are
+  registered and importable, but nothing drives them in the pipeline. Add them alongside
+  `CafeFScraper` when you want them in the main run.
+- **CafeF serves two CDN hosts and only one of them has everything.** `cafefnew.mediacdn.vn`
+  404s on entire years of some tickers (all of VIC 2020-21); those files exist only on
+  `cafef1.mediacdn.vn`. Any code fetching a CafeF-hosted file must try both — and must not
+  retry a 4xx, which only delays reaching the host that works.
+- **A truncated download does not raise.** It yields a PDF that opens and reports its true
+  page count, with the missing pages failing individually — indistinguishable from a corrupt
+  file. Verify `Content-Length`.
 - **`web_scraper` master switch is `false`** in the committed config; TV's
   `scrape()` will no-op every phase until it (and the desired subtree) is enabled.
 - **TV `close()` vs `quit()`:** the data path calls `web_driver.close()` in its
