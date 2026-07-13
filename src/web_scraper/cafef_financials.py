@@ -76,6 +76,18 @@ class FinancialsBuilder:
     CASH_CLOSE = ("tien va cac khoan tuong duong tien tai thoi diem cuoi",
                   "tien va tuong duong tien cuoi ky")
 
+    # The same subtotals, as CANONICAL columns (schema/<template>_<report>.csv). Looked up here
+    # a line cannot be lost to OCR damage — which is what most rejections were.
+    C_ASSETS = ("tong_tai_san", "tong_cong_tai_san")
+    C_RESOURCES = ("tong_no_phai_tra_va_von_chu_so_huu", "tong_cong_nguon_von")
+    C_LIABILITIES = ("tong_no_phai_tra", "no_phai_tra")
+    C_EQUITY = ("viii_von_chu_so_huu", "von_chu_so_huu", "d_von_chu_so_huu")
+    C_PBT = ("xi_tong_loi_nhuan_truoc_thue", "tong_loi_nhuan_truoc_thue",
+             "tong_loi_nhuan_ke_toan_truoc_thue")
+    C_NET_CF = ("hdtc_iv_luu_chuyen_tien_thuan_trong_ky", "luu_chuyen_tien_thuan_trong_ky")
+    C_CASH_CLOSE = ("hdtc_vii_tien_va_cac_khoan_tuong_duong_tien_tai_thoi_diem_cuoi_ky",
+                    "tien_va_tuong_duong_tien_cuoi_ky")
+
     MIN_ROWS = 12          # a statement with fewer parsed rows than this is not a statement
 
     # How alike two labels must be to be the SAME line item across quarters.
@@ -95,6 +107,7 @@ class FinancialsBuilder:
     def __init__(self, logger=None):
         self._logger = logger
         self._parser = PdfParser(logger=logger)
+        self._schema_cache: Dict[Tuple[str, str], List[Tuple[str, str]]] = {}
 
     # ──────────────────────────────────────────────────────────────────────
     # Which template does a ticker file on?
@@ -195,6 +208,97 @@ class FinancialsBuilder:
     # Gates
     # ──────────────────────────────────────────────────────────────────────
 
+    # ──────────────────────────────────────────────────────────────────────
+    # Mapping a parsed statement onto the canonical chart of accounts
+    # ──────────────────────────────────────────────────────────────────────
+
+    # How close an OCR'd line must be to a schema line to BE it.
+    #
+    # 0.80, not lower: a shorter name is a subsequence of a longer one far more often than it
+    # looks. "TỔNG VỐN CHỦ SỞ HỮU" scores 0.75 against "TỔNG NỢ PHẢI TRẢ VÀ VỐN CHỦ SỞ HỮU" —
+    # every character of the first appears, in order, inside the second. At 0.72 total equity
+    # captured the grand total's column, the real grand total then had nowhere to go, and 48 of
+    # 69 balance sheets were rejected for "assets != liabilities + equity".
+    SCHEMA_MATCH = 0.80
+    MIN_CONTAINS = 10        # too short a name is contained in too many others to prove much
+
+    # The cash-flow section prefixes, and the method tags the union adds. Only these may be
+    # stripped from the front of a column — a blanket "drop the first word" also eats the
+    # first word of `tong_tai_san`, leaving `tai_san`, which then fuzzy-matches any asset line
+    # and hands TOTAL ASSETS the value of some line halfway up the statement.
+    COL_PREFIXES = ("hdkd_indirect_", "hdkd_direct_", "hdkd_", "hddt_", "hdtc_")
+    # An index: roman, digit or single letter, e.g. `vii_1_a_`.
+    INDEX_RE = re.compile(r"^(?:[ivxlc]+_|\d+_|[a-z]_)+")
+
+    def schema_of(self, template: str, report: str) -> List[Tuple[str, str]]:
+        """[(canonical column, its account name)] in statement order, from schema/."""
+        key = (template, report)
+        if key in self._schema_cache:
+            return self._schema_cache[key]
+
+        path = os.path.join(SCHEMA_DIR, f"{template}_{report}.csv")
+        items: List[Tuple[str, str]] = []
+        if os.path.exists(path):
+            with open(path, encoding="utf-8-sig") as f:
+                for r in csv.DictReader(f):
+                    col = r["column"]
+                    rest = col
+                    for p in self.COL_PREFIXES:
+                        if rest.startswith(p):
+                            rest = rest[len(p):]
+                            break
+                    account = self.INDEX_RE.sub("", rest)
+                    items.append((col, account or rest))
+        self._schema_cache[key] = items
+        return items
+
+    def map_to_schema(self, st: Statement, template: str) -> Dict[str, int]:
+        """Parsed rows -> canonical columns.
+
+        This is what makes the output a PANEL rather than a pile. Keyed on the OCR text, the
+        same printed line becomes a different column every quarter — VCB's balance sheet threw
+        332 columns against a 90-column chart of accounts, so nothing lined up in time. Keyed
+        on the schema, a line is the same column in every quarter of every ticker on that
+        template.
+
+        Matching walks the schema and the parsed rows together, in statement order, and is
+        fuzzy because OCR damages the names ("TỔNG NỢ PHẢI TRẢ" -> `tong_nuphai_tra`). Order is
+        what keeps a fuzzy match honest: the schema's own sequence stops "chi phí hoạt động"
+        from being answered by "chi phí hoạt động khác" further down.
+        """
+        from difflib import SequenceMatcher
+
+        schema = self.schema_of(template, st.report)
+        if not schema:
+            return {}
+
+        out: Dict[str, int] = {}
+        i = 0                                   # next schema line still open
+        for row in st.rows:
+            if row.values[0] is None:
+                continue
+            key = row.key.replace("_", "")
+            if not key:
+                continue
+            best_j, best = -1, 0.0
+            # a window: a line never moves far from its place in the statement
+            for j in range(i, min(len(schema), i + self.SCHEMA_WINDOW)):
+                col, account = schema[j]
+                if col in out:
+                    continue
+                a = account.replace("_", "")
+                r = SequenceMatcher(None, a, key).ratio()
+                if len(a) >= self.MIN_CONTAINS and (a in key or key in a):
+                    r = max(r, 0.95)            # one is contained in the other
+                if r > best:
+                    best_j, best = j, r
+            if best_j >= 0 and best >= self.SCHEMA_MATCH:
+                out[schema[best_j][0]] = row.values[0]
+                i = best_j + 1                  # never match backwards
+        return out
+
+    SCHEMA_WINDOW = 25       # how far ahead in the chart of accounts a line may be found
+
     def _canonical(self, key: str, known: List[str]) -> str:
         """The column this label belongs to: an existing one if close enough, else itself.
 
@@ -214,44 +318,71 @@ class FinancialsBuilder:
                 best, score = col, r
         return best if score >= self.SIMILARITY else key
 
-    def reconcile(self, st: Statement) -> Optional[str]:
-        """None if the statement balances against its OWN printed subtotals, else why not."""
+    def reconcile(self, st: Statement,
+                  mapped: Optional[Dict[str, int]] = None) -> Optional[str]:
+        """None if the statement balances against its OWN printed subtotals, else why not.
+
+        The subtotals are taken from the CANONICAL columns when the rows have been mapped —
+        `mapped` — and only fall back to searching the OCR text when they have not. Searching
+        the text is what most rejections actually were: the row was parsed, its figure correct,
+        and the lookup simply could not recognise the name OCR had mangled.
+        """
         if len(st.rows) < self.MIN_ROWS:
             return f"only {len(st.rows)} rows parsed"
 
+        def get(canonical: Tuple[str, ...], *text: str) -> Optional[int]:
+            if mapped:
+                for c in canonical:
+                    if c in mapped:
+                        return mapped[c]
+            return st.find(*text)
+
         if st.report == BALANCE_SHEET:
-            assets = st.find(*self.TOTAL_ASSETS)
-            resources = st.find(*self.TOTAL_RESOURCES)
+            assets = get(self.C_ASSETS, *self.TOTAL_ASSETS)
+            resources = get(self.C_RESOURCES, *self.TOTAL_RESOURCES)
             if assets is None:
                 return "no total assets"
             if resources is not None and abs(assets - resources) > 2:
                 return "assets != liabilities + equity"
             if resources is None:
-                liab, eq = st.find(*self.TOTAL_LIABILITIES), st.find(*self.TOTAL_EQUITY)
+                liab = get(self.C_LIABILITIES, *self.TOTAL_LIABILITIES)
+                eq = get(self.C_EQUITY, *self.TOTAL_EQUITY)
                 if liab is None or eq is None:
                     return "no total to balance against"
                 if abs(assets - (liab + eq)) > assets * 0.02:
                     return "assets != liabilities + equity"
 
         if st.report == INCOME_STATEMENT:
-            if st.find(*self.PBT) is None:
+            if get(self.C_PBT, *self.PBT) is None:
                 return "no profit before tax"
 
         if st.report == CASH_FLOW:
-            if st.find(*self.NET_CF) is None and st.find(*self.CASH_CLOSE) is None:
+            if (get(self.C_NET_CF, *self.NET_CF) is None
+                    and get(self.C_CASH_CLOSE, *self.CASH_CLOSE) is None):
                 return "no cash-flow subtotal"
         return None
 
-    def sane(self, st: Statement, history: List[int]) -> Optional[str]:
+    def _probe(self, report: str, mapped: Dict[str, int],
+               st: Statement) -> Optional[int]:
+        """The one figure a statement is size-checked on."""
+        canonical, text = {
+            BALANCE_SHEET: (self.C_ASSETS, self.TOTAL_ASSETS),
+            INCOME_STATEMENT: (self.C_PBT, self.PBT),
+            CASH_FLOW: (self.C_CASH_CLOSE, self.CASH_CLOSE),
+        }[report]
+        for c in canonical:
+            if c in mapped:
+                return mapped[c]
+        return st.find(*text)
+
+    def sane(self, st: Statement, history: List[int],
+             mapped: Optional[Dict[str, int]] = None) -> Optional[str]:
         """Magnitude guard against the quarters already accepted.
 
         Reconciliation is ratio-based: it cannot see a UNITS error or a CUMULATIVE column,
         because both balance perfectly and are still wrong. This is the only thing that does.
         """
-        probe = {BALANCE_SHEET: self.TOTAL_ASSETS,
-                 INCOME_STATEMENT: self.PBT,
-                 CASH_FLOW: self.CASH_CLOSE}[st.report]
-        got = st.find(*probe)
+        got = self._probe(st.report, mapped or {}, st)
         if got is None or not history:
             return None
         ref = sorted(abs(v) for v in history)
@@ -270,7 +401,10 @@ class FinancialsBuilder:
         docs = self.documents(exchange, symbol)
         if periods:
             docs = [d for d in docs if d["period"] in set(periods)]
-        self._log(f"cafef financials: {symbol}: {len(docs)} consolidated quarters to parse")
+        # the chart of accounts the parsed rows are mapped onto — fingerprinted, not guessed
+        template = self.template_of(symbol) or "unknown"
+        self._log(f"cafef financials: {symbol} ({template}): "
+                  f"{len(docs)} consolidated quarters to parse")
 
         # report -> period -> {column: value}; and the column order as first seen
         data: Dict[str, Dict[str, dict]] = {r: {} for r in REPORTS}
@@ -298,22 +432,16 @@ class FinancialsBuilder:
                 if st is None:
                     notes.append(f"{report}=absent")
                     continue
-                why = self.reconcile(st) or self.sane(st, history[report])
+
+                # onto the canonical chart of accounts FIRST — reconciliation then reads its
+                # subtotals from columns rather than from OCR text
+                row = self.map_to_schema(st, template)
+                why = self.reconcile(st, row) or self.sane(st, history[report], row)
                 if why:
                     notes.append(f"{report}=REJECTED({why})")
                     continue
 
-                row: dict = {}
-                for r in st.rows:
-                    if r.values[0] is None:
-                        continue
-                    col = self._canonical(r.key, items[report])
-                    if col in row:            # the same label printed twice in one statement
-                        n = 2
-                        while f"{col}__{n}" in row:
-                            n += 1
-                        col = f"{col}__{n}"
-                    row[col] = r.values[0]
+                for col in row:
                     if col not in items[report]:
                         items[report].append(col)
 
@@ -324,17 +452,17 @@ class FinancialsBuilder:
                     # read from THIS filing: a company chooses the method and may switch it
                     "cash_flow_method": st.cash_flow_method or "",
                 }
-                probe = {BALANCE_SHEET: self.TOTAL_ASSETS,
-                         INCOME_STATEMENT: self.PBT,
-                         CASH_FLOW: self.CASH_CLOSE}[report]
-                v = st.find(*probe)
+                v = self._probe(report, row, st)
                 if v is not None:
                     history[report].append(v)
                 notes.append(f"{report}={len(row)} items")
             self._log(f"  {period:<8} {'; '.join(notes)}")
 
         self._decumulate(data, half_year)
-        return self._write(exchange, symbol, data, items, meta)
+        # every quarter we ATTEMPTED, so one we failed to read is reported as missing rather
+        # than vanishing from the grid
+        attempted = [(int(d["year"]), int(d["quarter"])) for d in docs]
+        return self._write(exchange, symbol, data, items, meta, attempted, template)
 
     def _decumulate(self, data: Dict[str, Dict[str, dict]],
                     half_year: Dict[str, bool]) -> None:
@@ -372,20 +500,26 @@ class FinancialsBuilder:
 
     def _write(self, exchange: str, symbol: str,
                data: Dict[str, Dict[str, dict]], items: Dict[str, List[str]],
-               meta: Dict[str, Dict[str, dict]]) -> Dict[str, int]:
+               meta: Dict[str, Dict[str, dict]],
+               attempted: List[Tuple[int, int]], template: str) -> Dict[str, int]:
         """One CSV per report, under the ticker's own TEMPLATE — so every file in a directory
         has the same columns and they mean the same thing.
 
-        The quarter grid is CONTIGUOUS: a quarter we could not read is a blank
-        `source=missing` row, never skipped and never zero-filled."""
-        template = self.template_of(symbol) or "unknown"
+        The quarter grid spans every quarter ATTEMPTED, not merely the ones that parsed. A
+        grid built from the parsed periods hides its own failures: VIC's balance sheet read 6
+        quarters out of 71 and reported "6/10", because the 61 it could not read fell outside
+        the min..max of the 6 it could. A quarter we failed on is a blank `source=missing` row
+        — never skipped, never zero-filled.
+
+        Columns are the CANONICAL ones, in the chart of accounts' own order, so the same column
+        means the same line in every quarter and across every ticker on this template."""
         counts = {}
         for report in REPORTS:
             rows = data[report]
-            if not rows:
+            if not rows and not attempted:
                 counts[report] = 0
                 continue
-            ys = sorted((int(p.split("-")[1]), int(p[1])) for p in rows)
+            ys = sorted(set(attempted) | {(int(p.split("-")[1]), int(p[1])) for p in rows})
             (y0, q0), (y1, q1) = ys[0], ys[-1]
 
             out = []
@@ -408,7 +542,12 @@ class FinancialsBuilder:
             path = os.path.join(STATEMENTS_DIR, template, report,
                                 f"{exchange}_{symbol}.csv")
             os.makedirs(os.path.dirname(path), exist_ok=True)
-            head = DATA_COLS + items[report]
+            # every column the chart of accounts defines, in ITS order — a line the filings
+            # never reported is an empty column, not an absent one, so the shape of the table
+            # is the same for every ticker on this template
+            schema_cols = [c for c, _ in self.schema_of(template, report)]
+            extra = [c for c in items[report] if c not in schema_cols]
+            head = DATA_COLS + schema_cols + extra
             tmp = path + ".tmp"
             with open(tmp, "w", newline="", encoding="utf-8-sig") as f:
                 w = csv.DictWriter(f, fieldnames=head, extrasaction="ignore")

@@ -56,6 +56,22 @@ regenerated; delete it or restore the scraper rather than modelling on it.
 | `pdfs/` | `cafef_pdf_scraper.py` | VCB, VIC + 50 tickers × 2025 (~6.7 GB) |
 | `financials/` | `cafef_financials.py` (§3a) | the 12 schemas + `templates.csv`; statements per template |
 
+**Where the statement parser actually stands (VCB, 69 consolidated quarters):**
+
+| report | parsed | columns |
+|---|---|---|
+| balance_sheet | **57 / 69** (83%) | 64 (of the schema's 90) |
+| income_statement | **49 / 69** (71%) | 26 |
+| cash_flow | **61 / 69** (88%) | 43 (of 47) |
+
+167 of 207 statement-quarters, **81%**. The failures cluster in **2009-2012**, where the scans
+are worst, and are three distinct faults, none of them a single lever to 100%:
+- the **note-reference column read as the values** (Q3-2009: every figure is a note number
+  9/15/17 scaled by 10⁶) — right-edge clustering picking the wrong column on a bad scan;
+- **OCR fusing adjacent rows** (Q1-2010: `chiphiduphongruiro…_xi_tonglginhuantruoc_thue` is two
+  lines merged), producing a nonsense subtotal;
+- **only part of the statement found** (Q1-2009: one page, 5 rows).
+
 ## 2. Directory layout & the Strategy/registry pattern
 
 ```
@@ -342,10 +358,23 @@ the data rather than buried: **HVA** is filed under `chung-khoan-va-ngan-hang-da
   the PDF's own text layer, or **Tesseract OCR** (`vie`) for the documents that have none —
   **90% of VCB's filings are page scans, and not only the old ones** (its Q1-2026 report is 53
   pages of image). Both return word boxes in the same coordinate system.
-  - Statements are located by their statutory **form code** (`Mẫu B02/TCTD-HN`), never by
-    heading: OCR drops spaces ("cân đối kế toán" → "kếtoán") so a heading regex misses, and
-    the auditor's report at the front NAMES every statement, so heading matching tags pages
-    that are not statements at all.
+  - **Finding a statement's pages takes FOUR signals, because any one of them fails.** OCR
+    mangles the form code's DIGITS — VCB's Q4-2021 balance sheet prints `Mẫu BU2/TCTD-HN`,
+    `Mẫu Bữ2/TCTD-HN` and `Mẫu BUT/TCTD-HN` across its three pages (`0`→`U`/`ữ`, `5`→`S`,
+    `B`→`H`), so all three failed a `B\d{2}` match and the balance sheet vanished outright:
+    1. the **form code** (`Mẫu B02/TCTD-HN`), when its digits survive;
+    2. else the **statement title** in the same header — it OCRs far better, but must be
+       matched *fuzzily* ("Bảng cân đối kế toán" on one page, "Hãng cần đải kếtoán" on the
+       next) and *only within the header block*, since the auditor's report NAMES every
+       statement in its prose;
+    3. **contiguity** — a table page whose header OCR destroyed entirely belongs to the
+       statement running through it;
+    4. **order** — a filing prints balance sheet, then income statement, then cash flow, so a
+       "cash flow" appearing before the balance sheet is not one. That, plus discarding
+       title-only pages *detached* from the form-coded run, is what keeps the auditor's report
+       out. Those audit pages carry no "Triệu VNĐ" header, so sweeping them in also made the
+       unit come out **×1 instead of ×10⁶** — a uniform 10⁶ error that reconciles perfectly.
+       `unit_of()` therefore consults every page of the statement, never just the first.
   - Rows are rebuilt from **word coordinates**, and the period columns found by clustering the
     numbers' **right edges** (figures are right-aligned; clustering centres lets a wide number
     bridge two columns). The left of the page holds the section numbering and the *Thuyết
@@ -356,8 +385,29 @@ the data rather than buried: **HVA** is filed under `chung-khoan-va-ngan-hang-da
     swap and the parser's whole premise inverts. Clearing the rotation is not a fix (OCR then
     reads an upside-down image); the boxes are mapped through the rotation matrix instead.
 - **`cafef_financials.py` — the archive → CSVs.** Picks the *consolidated* filing per quarter
-  (preferring reviewed/audited), gates it, and writes a contiguous quarter grid — a quarter it
-  could not read is a blank `source=missing` row, never zero-filled.
+  (preferring reviewed/audited), maps its rows onto the canonical schema, gates it, and writes
+  a contiguous quarter grid — a quarter it could not read is a blank `source=missing` row,
+  never zero-filled.
+- **⚠️ ROWS ARE MAPPED ONTO THE SCHEMA, NOT KEYED ON OCR TEXT** (`map_to_schema`). Keyed on
+  what OCR read, the same printed line becomes a *different column every quarter*: VCB's
+  balance sheet produced **332 columns against a 90-column chart of accounts**, so nothing
+  lined up in time and the panel was unusable. Mapped, a line is the same column in every
+  quarter and across every ticker on the template.
+  - Matching walks the schema and the parsed rows together **in statement order**, and is
+    fuzzy because OCR damages the names ("TỔNG NỢ PHẢI TRẢ" → `tong_nuphai_tra`). Order is
+    what keeps a fuzzy match honest.
+  - **The threshold is 0.80 and must not be lowered.** A shorter accounting name is a
+    subsequence of a longer one far more often than it looks: *TỔNG VỐN CHỦ SỞ HỮU* scores
+    **0.75** against *TỔNG NỢ PHẢI TRẢ VÀ VỐN CHỦ SỞ HỮU* — every character of the first
+    appears, in order, inside the second. At 0.72 total equity captured the grand total's
+    column, the real grand total had nowhere to go, and **48 of 69 balance sheets** were
+    rejected for "assets != liabilities + equity".
+  - **Reconciliation reads its subtotals from the CANONICAL columns**, not by searching OCR
+    text. Searching the text is what most rejections actually were — the row was parsed, its
+    figure correct, and the lookup simply could not recognise the name OCR had mangled.
+  - The output carries **every column the schema defines, in its order** — a line the filings
+    never reported is an empty column, not an absent one, so every ticker on a template
+    produces a table of the same shape.
   - **Nothing is written unless it reconciles** against the statement's own printed subtotals
     AND is of a sane magnitude beside its neighbours. A wrong figure is worse than a gap.
   - **Three ways to be wrong that no single check catches:** *units* (most filings are Triệu

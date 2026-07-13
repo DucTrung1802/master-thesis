@@ -48,13 +48,36 @@ class Statement:
         from web_scraper.cafef_schema import method_of
         return method_of(self.rows[0].label)
 
+    # How close an OCR'd line name must be to count as the line we are looking for.
+    NAME_MATCH = 0.85
+
     def find(self, *needles: str) -> Optional[int]:
-        """First column-0 value whose key contains any of `needles` (spaces stripped)."""
+        """First column-0 value on a row whose name is (or is close to) one of `needles`.
+
+        The match must tolerate OCR damage. The lines reconciliation depends on are exactly
+        the ones it mangles — VCB's Q4-2021 balance sheet reads "TỔNG NỢ PHẢI TRẢ" as
+        `tong_nuphai_tra` (ợ -> u) and the grand total as `toong_nophai_thava_von_chusohuu`.
+        On an exact match both are invisible, and a statement that is complete and balanced
+        (total assets == total resources, to the dong) gets rejected for "no total".
+
+        Rows are scanned in statement order and the first hit wins, which is what keeps
+        "tổng nợ phải trả" from being answered by the grand total that contains it as a
+        substring — the liabilities line always precedes it.
+        """
+        from difflib import SequenceMatcher
+
+        flat = [n.replace(" ", "").replace("_", "") for n in needles]
         for r in self.rows:
+            if not r.values or r.values[0] is None:
+                continue
             k = r.key.replace("_", "")
-            if any(n.replace(" ", "").replace("_", "") in k for n in needles):
-                if r.values and r.values[0] is not None:
+            for n in flat:
+                if n in k:
                     return r.values[0]
+                w = len(n)
+                for i in range(0, max(1, len(k) - w + 1)):
+                    if SequenceMatcher(None, n, k[i:i + w]).ratio() >= self.NAME_MATCH:
+                        return r.values[0]
         return None
 
 
@@ -88,8 +111,13 @@ class PdfParser:
     # ("Mâu số: B03TCTD") and OCR eats punctuation.
     # NOTE B02 is the BALANCE SHEET for a bank but the INCOME STATEMENT for a non-bank, so
     # the suffix must be honoured.
+    # The suffix is matched as a PREFIX, with no word boundary after it: OCR adds junk letters
+    # to it, and one of them is enough to lose a whole statement. VCB's Q2-2023 assets page
+    # reads "Mẫu B02a/TCTDP-HN" — the stray P defeated a `(TCTD|DN)\b` match, and the entire
+    # asset half of the balance sheet was dropped, taking TỔNG TÀI SẢN with it and failing
+    # reconciliation on a filing that was perfectly readable.
     FORM_RE = re.compile(
-        r"(?:M[ẫâa]u\s*(?:s[ốô]\s*)?[:.]?\s*)?\b(B\s*\d{2})\s*[a-z]?\s*[-/]?\s*(TCTD|DN)\b",
+        r"(?:M[ẫâa]u\s*(?:s[ốô]\s*)?[:.]?\s*)?\b(B\s*\d{2})\s*[a-z]?\s*[-/]?\s*(TCTD|DN)",
         re.I)
     FORMS = {
         "TCTD": {"B02": BALANCE_SHEET, "B03": INCOME_STATEMENT,
@@ -97,14 +125,38 @@ class PdfParser:
         "DN": {"B01": BALANCE_SHEET, "B02": INCOME_STATEMENT,
                "B03": CASH_FLOW, "B09": NOTES},
     }
-    # Fallback only, for a filing that prints no form code. Matched against text with accents
-    # stripped AND spaces removed, so OCR's missing spaces cannot defeat it.
+    # The statement TITLE, which every page of a statement repeats in its header next to the
+    # form code. Matched with accents stripped and spaces removed, so OCR's lost spaces cannot
+    # defeat it.
+    #
+    # This is not merely a fallback: it is what saves a filing whose form-code DIGITS are
+    # mangled, which is common — VCB's Q4-2021 balance sheet prints "Mẫu BU2/TCTD-HN",
+    # "Mẫu Bữ2/TCTD-HN" and "Mẫu BUT/TCTD-HN" across its three pages (0 -> U / ữ, 5 -> S,
+    # B -> H), so all three failed `B\d{2}` and the balance sheet was lost outright. The title
+    # — "Bảng cân đối kế toán" — came through on every one of them.
+    #
+    # It is matched ONLY within the page's header block (HEADER_LINES). The auditor's report at
+    # the front NAMES every statement in its prose, so matching the whole page tags those pages
+    # as statements and drags audit text into the table; a statement announces itself at the
+    # top of the page, an auditor merely mentions it further down.
     HEADING = {
         BALANCE_SHEET: ["bangcandoiketoan", "baocaotinhhinhtaichinh"],
         INCOME_STATEMENT: ["ketquahoatdongkinhdoanh", "baocaoketquakinhdoanh"],
         CASH_FLOW: ["luuchuyentiente"],
     }
     NOTES_NS = "thuyetminhbaocao"
+
+    # The auditor's report at the front of every filing. It is NOT a statement, but its header
+    # says "Báo cáo tài chính hợp nhất…", which is close enough to the balance sheet's own
+    # title ("Báo cáo TÌNH HÌNH tài chính") to fool a fuzzy match — and once it does, the
+    # contiguity fill drags the whole audit section into the table. A page that announces
+    # itself as a review or an audit opinion is never a statement.
+    AUDIT_NS = ("baocaosoatxet", "soatxetthongtintaichinh", "baocaokiemtoandoclap",
+                "baocaocuakiemtoanvien", "ykienkiemtoan")
+
+    HEADER_LINES = 12       # the page header: company, form code, statement title, period
+    TITLE_MATCH = 0.80      # how close an OCR'd title must be to count as that statement
+    MIN_TABLE_WORDS = 15    # a page with fewer figures than this is not a statement page
 
     NUM_RE = re.compile(r"^\(?-?[\d][\d.,]*\)?$|^[-–—]$")
     # The filing's own row numbering, in the left margin.
@@ -169,20 +221,49 @@ class PdfParser:
     # ──────────────────────────────────────────────────────────────────────
 
     def _page_kind(self, text: str):
-        """-> (which statement this page is, whether a FORM CODE said so)."""
+        """-> (which statement this page is, whether a FORM CODE said so).
+
+        The form code is definitive when it survives OCR. When its digits do not, the
+        statement title in the same header block answers the same question — so both are read,
+        and the title is confined to the header so an auditor's report merely NAMING a
+        statement cannot masquerade as one.
+        """
         m = self.FORM_RE.search(text)
         if m:
             code = re.sub(r"\s+", "", m.group(1)).upper()
             kind = self.FORMS[m.group(2).upper()].get(code)
             if kind:
                 return kind, True
-        ns = self.norm(text).replace(" ", "")
-        if self.NOTES_NS in ns:
+
+        header = "\n".join(
+            [l for l in text.splitlines() if l.strip()][:self.HEADER_LINES])
+        ns = self.norm(header).replace(" ", "")
+        if any(a in ns for a in self.AUDIT_NS):
+            return None, False              # the auditor's report is not a statement
+        if self._titled(ns, [self.NOTES_NS]):
             return NOTES, False
         for report, needles in self.HEADING.items():
-            if any(n in ns for n in needles):
+            if self._titled(ns, needles):
                 return report, False
         return None, False
+
+    def _titled(self, header_ns: str, needles: List[str]) -> bool:
+        """Does the header carry this statement's title, allowing for OCR damage?
+
+        Exact containment is not enough: the same title comes back as "Bảng cân đối kế toán"
+        on one page and "Hãng cần đải kếtoán" on the next (B->H, ô->a). So each needle is slid
+        along the header and accepted on a close-enough match.
+        """
+        from difflib import SequenceMatcher
+
+        for n in needles:
+            if n in header_ns:
+                return True
+            w = len(n)
+            for i in range(0, max(1, len(header_ns) - w + 1)):
+                if SequenceMatcher(None, n, header_ns[i:i + w]).ratio() >= self.TITLE_MATCH:
+                    return True
+        return False
 
     @staticmethod
     def _to_visual(page, words: list) -> list:
@@ -237,14 +318,92 @@ class PdfParser:
             elif kind == NOTES and from_form and len(seen) == len(REPORTS):
                 break            # the statements are behind us; the rest is notes
 
-        # A form code is definitive; a heading match is a guess. The auditor's report at the
-        # front names every statement, so heading matching tags those pages as statements and
-        # drags audit prose into the table. Once any form code is seen, trust only form codes.
-        if any(p["kind"] and p["from_form"] for p in pages.values()):
-            for p in pages.values():
-                if not p["from_form"]:
-                    p["kind"] = None
+        self._drop_islands(pages)
+        self._enforce_order(pages)
+        self._fill_continuations(pages)
         return pages
+
+    @staticmethod
+    def _drop_islands(pages: Dict[int, dict]) -> None:
+        """Discard title-only pages that sit apart from the statement's real run.
+
+        When a report HAS a form-coded page, that page is where the statement actually is. A
+        page identified only by a fuzzy title, and separated from it by a gap, is something
+        else wearing the same words — the auditor's report or a contents page. VCB's Q2-2023
+        matched its balance-sheet title on pages 6-7, two pages clear of the real statement on
+        9-11, and pulled them in; they carry no "Triệu VNĐ" header, so the unit came out ×1
+        instead of ×10⁶ — a uniform 10^6 error that still reconciles perfectly.
+        """
+        for report in REPORTS:
+            owned = sorted(i for i in pages if pages[i]["kind"] == report)
+            anchors = [i for i in owned if pages[i]["from_form"]]
+            if not anchors or not owned:
+                continue
+            lo, hi = min(anchors), max(anchors)
+            for i in owned:
+                if i < lo - 1 or i > hi + 1:      # not touching the form-coded run
+                    pages[i]["kind"] = None
+
+    @staticmethod
+    def _enforce_order(pages: Dict[int, dict]) -> None:
+        """A filing prints its statements in one order: balance sheet, income statement, cash
+        flow. Anything claiming to be a statement out of that order is not one.
+
+        This is the guard a fuzzy title match needs. The auditor's report and the contents page
+        NAME the statements, and OCR damage makes those mentions close enough to score a match
+        — VCB's Q2-2023 tagged pages 6-8 as the cash-flow statement, six pages before the
+        balance sheet even began. A form-code page is definitive and always kept; a page
+        identified only by its title must respect the order.
+        """
+        first: Dict[str, int] = {}
+        for i in sorted(pages):
+            k = pages[i]["kind"]
+            if k in REPORTS and (k not in first or pages[i]["from_form"]):
+                first.setdefault(k, i)
+
+        floor = -1
+        for report in REPORTS:                # BALANCE_SHEET, INCOME_STATEMENT, CASH_FLOW
+            start = first.get(report)
+            if start is None:
+                continue
+            if start < floor:                 # out of order -> not this statement
+                for i in list(pages):
+                    if pages[i]["kind"] == report and i < floor and not pages[i]["from_form"]:
+                        pages[i]["kind"] = None
+                start = min((i for i in pages
+                             if pages[i]["kind"] == report), default=None)
+                if start is None:
+                    continue
+            floor = start
+
+    def _fill_continuations(self, pages: Dict[int, dict]) -> None:
+        """Give an unidentifiable page to the statement it sits inside.
+
+        A statement's pages are CONTIGUOUS, so a page that carries a table but whose header OCR
+        destroyed belongs to the statement running through it. VCB's Q4-2021 balance sheet is
+        three pages and the middle one lost its title line entirely — leaving the statement
+        truncated at one page, and TỔNG TÀI SẢN with it.
+
+        Only pages with a real table are absorbed (`MIN_TABLE_WORDS`), so a signature or
+        narrative page between two statements is not swept in.
+        """
+        run: Optional[str] = None
+        for i in sorted(pages):
+            kind = pages[i]["kind"]
+            if kind in REPORTS:
+                run = kind
+                continue
+            if kind == NOTES:
+                run = None                      # the statements are over
+                continue
+            if run and self._is_table(pages[i]):
+                pages[i]["kind"] = run
+                pages[i]["from_form"] = False
+            else:
+                run = None                      # a gap ends the run
+
+    def _is_table(self, page: dict) -> bool:
+        return len(self._numbers(page["words"])) >= self.MIN_TABLE_WORDS
 
     # ──────────────────────────────────────────────────────────────────────
     # The table
@@ -334,10 +493,16 @@ class PdfParser:
         """×1e6 when the statement is printed in "Triệu VNĐ", else ×1 (plain đồng).
 
         VCB's 2009 filings are in plain đồng while most are in millions — read the wrong one
-        and every figure is out by 10^6 while still reconciling perfectly against itself.
+        and every figure is out by 10^6 while still reconciling perfectly against itself, since
+        the error is uniform. Nothing downstream can catch that, so it must not be decided by
+        ONE page: every page of the statement is consulted, because the unit is printed in the
+        column header and a continuation page may not repeat it.
         """
-        ns = self.norm(pages[on[0]]["text"]).replace(" ", "")
-        return 1_000_000 if ("trieuvnd" in ns or "trieudong" in ns) else 1
+        for i in on:
+            ns = self.norm(pages[i]["text"]).replace(" ", "")
+            if "trieuvnd" in ns or "trieudong" in ns:
+                return 1_000_000
+        return 1
 
     # ──────────────────────────────────────────────────────────────────────
     # Entry point
