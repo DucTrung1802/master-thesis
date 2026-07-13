@@ -185,7 +185,17 @@ class FinancialsBuilder:
     # ──────────────────────────────────────────────────────────────────────
 
     def documents(self, exchange: str, symbol: str) -> List[dict]:
-        """The one consolidated filing to read per quarter, oldest first."""
+        """The one consolidated filing to read per quarter, oldest first.
+
+        Q4 is taken from the AUDITED ANNUAL report (CafeF files it under quarter 5) whenever
+        one exists. It is the same period — the balance sheet at 31 December IS the Q4 balance
+        sheet, and the cash flow is cumulative to year end either way — but audited rather than
+        unaudited, and it is the better-produced document.
+
+        The income statement is the exception and must be de-cumulated: an annual report's P&L
+        is the whole year, so the Q4 quarter is FY − (Q1+Q2+Q3). The row is tagged `annual` so
+        `_decumulate` knows to do that.
+        """
         index = os.path.join(PDFS_DIR, "index", f"{exchange}_{symbol}.csv")
         if not os.path.exists(index):
             raise FileNotFoundError(
@@ -194,13 +204,27 @@ class FinancialsBuilder:
             rows = [r for r in csv.DictReader(f) if r["consolidated"] == "True"]
 
         best: Dict[str, dict] = {}
+        annual: Dict[str, dict] = {}
         for r in rows:
-            if not str(r["quarter"]).isdigit() or int(r["quarter"]) not in (1, 2, 3, 4):
-                continue                      # quarter 5 is the audited annual — skip
+            q = str(r["quarter"])
+            if not q.isdigit():
+                continue
+            q = int(q)
+            if q == 5:                        # the audited annual -> stands in for Q4
+                p = f"Q4-{r['year']}"
+                rank = self.ASSURANCE_RANK.get(r["assurance"], 9)
+                if p not in annual or rank < self.ASSURANCE_RANK.get(
+                        annual[p]["assurance"], 9):
+                    annual[p] = {**r, "period": p, "quarter": "4", "annual": "True"}
+                continue
+            if q not in (1, 2, 3, 4):
+                continue
             p = r["period"]
             rank = self.ASSURANCE_RANK.get(r["assurance"], 9)
             if p not in best or rank < self.ASSURANCE_RANK.get(best[p]["assurance"], 9):
-                best[p] = r
+                best[p] = {**r, "annual": "False"}
+
+        best.update(annual)                   # the annual report wins Q4
         return sorted(best.values(),
                       key=lambda r: (int(r["year"]), int(r["quarter"])))
 
@@ -295,7 +319,45 @@ class FinancialsBuilder:
             if best_j >= 0 and best >= self.SCHEMA_MATCH:
                 out[schema[best_j][0]] = row.values[0]
                 i = best_j + 1                  # never match backwards
+
+        self._anchor(out, schema, st)
         return out
+
+    # The lines reconciliation stands on. They are unambiguous — no other line in a statement
+    # is called "TỔNG TÀI SẢN" — so they are re-matched GLOBALLY, ignoring position.
+    ANCHORS = ("tong_tai_san", "tong_cong_tai_san", "tong_no_phai_tra",
+               "tong_no_phai_tra_va_von_chu_so_huu", "tong_cong_nguon_von",
+               "viii_von_chu_so_huu", "xi_tong_loi_nhuan_truoc_thue",
+               "hdtc_iv_luu_chuyen_tien_thuan_trong_ky",
+               "hdtc_vii_tien_va_cac_khoan_tuong_duong_tien_tai_thoi_diem_cuoi_ky")
+    ANCHOR_MATCH = 0.86      # stricter than the ordered pass: this one has no order to lean on
+
+    def _anchor(self, out: Dict[str, int], schema: List[Tuple[str, str]],
+                st: Statement) -> None:
+        """Re-match the subtotals without regard to position.
+
+        The ordered walk drifts. Once it has advanced past a column, a row that belongs there
+        lands on the next-best thing instead — VCB's Q2-2014 and Q2-2023 gave the GRAND TOTAL
+        column the value of TỔNG NỢ PHẢI TRẢ, and `assets - resources` came out exactly equal to
+        equity. These few lines are unambiguous (nothing else in a statement is called "TỔNG
+        TÀI SẢN"), so they are searched for over the whole statement and the best match wins.
+        """
+        from difflib import SequenceMatcher
+
+        accounts = {c: a.replace("_", "") for c, a in schema if c in self.ANCHORS}
+        for col, a in accounts.items():
+            best_v, best = None, 0.0
+            for row in st.rows:
+                if row.values[0] is None:
+                    continue
+                k = row.key.replace("_", "")
+                r = SequenceMatcher(None, a, k).ratio()
+                if len(a) >= self.MIN_CONTAINS and (a in k or k in a):
+                    r = max(r, 0.95)
+                if r > best:
+                    best_v, best = row.values[0], r
+            if best_v is not None and best >= self.ANCHOR_MATCH:
+                out[col] = best_v
 
     SCHEMA_WINDOW = 25       # how far ahead in the chart of accounts a line may be found
 
@@ -342,7 +404,7 @@ class FinancialsBuilder:
             resources = get(self.C_RESOURCES, *self.TOTAL_RESOURCES)
             if assets is None:
                 return "no total assets"
-            if resources is not None and abs(assets - resources) > 2:
+            if resources is not None and not self._equal(assets, resources):
                 return "assets != liabilities + equity"
             if resources is None:
                 liab = get(self.C_LIABILITIES, *self.TOTAL_LIABILITIES)
@@ -361,6 +423,20 @@ class FinancialsBuilder:
                     and get(self.C_CASH_CLOSE, *self.CASH_CLOSE) is None):
                 return "no cash-flow subtotal"
         return None
+
+    # Two figures that should be identical, allowing for OCR. VCB's Q1-2020 balance sheet reads
+    # total assets 1,144,270,267 and total resources 1,144,270,262 (in millions) — the same
+    # figure with ONE digit misread, 4.4e-6 apart. An absolute tolerance of 2 rejected it.
+    #
+    # 1e-5 is a millionth of a percent, and still nowhere near a real discrepancy: the errors
+    # that matter are whole wrong rows (Q2-2014 was out by exactly the equity figure, ~9%) or a
+    # digit inserted into the total (Q2-2018 reads 10x). Those are 3-6 orders of magnitude
+    # larger and are still caught.
+    EQUAL_REL = 1e-5
+
+    @classmethod
+    def _equal(cls, a: int, b: int) -> bool:
+        return abs(a - b) <= max(2, abs(a) * cls.EQUAL_REL)
 
     def _probe(self, report: str, mapped: Dict[str, int],
                st: Statement) -> Optional[int]:
@@ -397,7 +473,8 @@ class FinancialsBuilder:
     # ──────────────────────────────────────────────────────────────────────
 
     def build(self, exchange: str, symbol: str,
-              periods: Optional[List[str]] = None) -> Dict[str, int]:
+              periods: Optional[List[str]] = None,
+              use_api: bool = True) -> Dict[str, int]:
         docs = self.documents(exchange, symbol)
         if periods:
             docs = [d for d in docs if d["period"] in set(periods)]
@@ -415,7 +492,9 @@ class FinancialsBuilder:
 
         for d in docs:
             period = d["period"]
-            half_year[period] = d["half_year"] == "True"
+            # both a semi-annual and an annual report print a CUMULATIVE income statement
+            half_year[period] = (d["half_year"] == "True"
+                                 or d.get("annual") == "True")
             path = os.path.join(PDFS_DIR, d["path"].replace("/", os.sep))
             if not os.path.exists(path):
                 self._warn(f"  {period}: file missing on disk — {d['path']}")
@@ -459,10 +538,100 @@ class FinancialsBuilder:
             self._log(f"  {period:<8} {'; '.join(notes)}")
 
         self._decumulate(data, half_year)
+
+        # Whatever the filings could not give us, take from CafeF's own tabs. Keyed by item
+        # CODE, so it lands on the canonical column exactly — for a quarter whose scan is too
+        # degraded to read, this is the better source, not the lesser one.
+        if use_api:
+            api = self.from_api(symbol, template)
+            for report in REPORTS:
+                filled = 0
+                for period, row in api[report].items():
+                    if period in data[report] or not row:
+                        continue
+                    data[report][period] = row
+                    meta[report][period] = {"source": "cafef"}
+                    for col in row:
+                        if col not in items[report]:
+                            items[report].append(col)
+                    filled += 1
+                if filled:
+                    self._log(f"cafef financials: {symbol} {report}: "
+                              f"{filled} quarters filled from the CafeF tabs")
+
         # every quarter we ATTEMPTED, so one we failed to read is reported as missing rather
         # than vanishing from the grid
         attempted = [(int(d["year"]), int(d["quarter"])) for d in docs]
+        attempted += [(int(p.split("-")[1]), int(p[1]))
+                      for r in REPORTS for p in data[r]]
         return self._write(exchange, symbol, data, items, meta, attempted, template)
+
+    # ──────────────────────────────────────────────────────────────────────
+    # The fallback: CafeF's own tabs
+    # ──────────────────────────────────────────────────────────────────────
+
+    # CafeF's "not reported" sentinel is -1, not 0 and not null. Written through it becomes a
+    # literal -1 dong in a column of billions, and no reconciliation catches it because an
+    # unreported line takes part in no subtotal.
+    NOT_REPORTED = "-1"
+
+    def from_api(self, symbol: str, template: str) -> Dict[str, Dict[str, dict]]:
+        """{report: {period: {canonical column: value}}} from the three tabs of
+        cafef.vn/du-lieu/<exchange>/<sym>-tai-chinh.chn.
+
+        This is not a lesser source — for the quarters OCR cannot read it is a BETTER one. The
+        tabs are keyed by the same item CODES the schema was built from, so a value lands on
+        its canonical column exactly: no OCR, no fuzzy matching, no chance of a line being
+        mistaken for its neighbour. What it is not is the filing itself — CafeF transcribes,
+        and it has gaps (it omits Q2-2024 market-wide) and it rounds — so the PDF is still
+        read first and this fills only what the PDF could not.
+        """
+        from web_scraper.cafef_schema import TABS, _get
+
+        # canonical column for each of CafeF's codes, from the schema we already built
+        by_code: Dict[str, Dict[str, str]] = {}
+        for report in REPORTS:
+            path = os.path.join(SCHEMA_DIR, f"{template}_{report}.csv")
+            if not os.path.exists(path):
+                continue
+            with open(path, encoding="utf-8-sig") as f:
+                by_code[report] = {r["cafef_code"]: r["column"]
+                                   for r in csv.DictReader(f) if r["cafef_code"]}
+
+        out: Dict[str, Dict[str, dict]] = {r: {} for r in REPORTS}
+        for report, (url, sections, shape) in TABS.items():
+            codes = by_code.get(report, {})
+            if not codes:
+                continue
+            for sec in sections:
+                try:
+                    head = _get(f"{url}?symbol={symbol}&pageIndex=1&pageSize=1"
+                                f"&reportType={sec}&TypeTime=QUY").get("value") or {}
+                    n = head.get("count") or 0
+                    if not n:
+                        continue
+                    v = _get(f"{url}?symbol={symbol}&pageIndex=1&pageSize={n}"
+                             f"&reportType={sec}&TypeTime=QUY").get("value") or {}
+                except Exception as e:
+                    self._warn(f"cafef financials: {symbol} {report}/{sec} tab failed: {e}")
+                    continue
+                blocks = (v["data"][0]["data"] if shape == "nested" and v.get("data")
+                          else v.get("data") or [])
+                for blk in blocks:
+                    period = blk.get("time")
+                    if not period:
+                        continue
+                    row = out[report].setdefault(period, {})
+                    for cell in blk.get("data", []):
+                        col = codes.get(str(cell.get("code")))
+                        val = cell.get("value")
+                        if not col or val in (None, "") or str(val) == self.NOT_REPORTED:
+                            continue
+                        try:
+                            row[col] = int(val)
+                        except (TypeError, ValueError):
+                            continue
+        return out
 
     def _decumulate(self, data: Dict[str, Dict[str, dict]],
                     half_year: Dict[str, bool]) -> None:
@@ -479,6 +648,8 @@ class FinancialsBuilder:
         rows = data[INCOME_STATEMENT]
         for period in sorted(rows):
             q, year = int(period[1]), int(period.split("-")[1])
+            # a half-year filing prints Jan-Jun; an ANNUAL one prints the whole year. Both are
+            # cumulative, and the quarter is what is left when the earlier quarters come off.
             if q == 1 or not half_year.get(period):
                 continue
             prior = [rows.get(f"Q{i}-{year}") for i in range(1, q)]
@@ -529,7 +700,9 @@ class FinancialsBuilder:
                 m = meta[report].get(period, {})
                 row = {"symbol": symbol, "exchange": exchange, "template": template,
                        "period": period, "year": y, "quarter": q,
-                       "source": "pdf" if period in rows else "missing",
+                       # `pdf` = read off the filing; `cafef` = taken from CafeF's tabs
+                       # because the filing could not be read
+                       "source": (m.get("source", "pdf") if period in rows else "missing"),
                        "assurance": m.get("assurance", ""),
                        "cash_flow_method": m.get("cash_flow_method", ""),
                        "unit": m.get("unit", ""),

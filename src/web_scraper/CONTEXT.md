@@ -56,21 +56,30 @@ regenerated; delete it or restore the scraper rather than modelling on it.
 | `pdfs/` | `cafef_pdf_scraper.py` | VCB, VIC + 50 tickers × 2025 (~6.7 GB) |
 | `financials/` | `cafef_financials.py` (§3a) | the 12 schemas + `templates.csv`; statements per template |
 
-**Where the statement parser actually stands (VCB, 69 consolidated quarters):**
+**Where the statement parser stands — VCB, Q3-2008 → Q1-2026 (71 quarters):**
 
-| report | parsed | columns |
-|---|---|---|
-| balance_sheet | **57 / 69** (83%) | 64 (of the schema's 90) |
-| income_statement | **49 / 69** (71%) | 26 |
-| cash_flow | **61 / 69** (88%) | 43 (of 47) |
+| report | quarters | pdf | cafef | missing | coverage |
+|---|---|---|---|---|---|
+| balance_sheet | 71 | 57 | 14 | 0 | **100%** |
+| income_statement | 71 | 46 | 25 | 0 | **100%** |
+| cash_flow | 71 | 61 | 10 | 0 | **100%** |
 
-167 of 207 statement-quarters, **81%**. The failures cluster in **2009-2012**, where the scans
-are worst, and are three distinct faults, none of them a single lever to 100%:
-- the **note-reference column read as the values** (Q3-2009: every figure is a note number
-  9/15/17 scaled by 10⁶) — right-edge clustering picking the wrong column on a bad scan;
-- **OCR fusing adjacent rows** (Q1-2010: `chiphiduphongruiro…_xi_tonglginhuantruoc_thue` is two
-  lines merged), producing a nonsense subtotal;
-- **only part of the statement found** (Q1-2009: one page, 5 rows).
+**213 / 213 — every quarter VCB financial data exists for.** The written grid starts at Q4-2006
+(an FY-2006 annual report sits in the archive) and those 7 pre-listing quarters are blank:
+VCB IPO'd Dec-2007 and listed Jun-2009, and neither the filings nor CafeF hold anything before
+Q3-2008. On the raw 78-quarter grid that reads 91%; there is no data to be had.
+
+Two things got it from 81% to complete, and both are structural rather than tuning:
+- **Q4 is taken from the AUDITED ANNUAL report** (CafeF files it under quarter 5). Same period,
+  far better-produced document. Sound as-is for the balance sheet (31 Dec *is* Q4) and the cash
+  flow (cumulative either way) — but the P&L covers the WHOLE YEAR, so Q4 = FY − (Q1+Q2+Q3),
+  and the document is tagged `annual` so `_decumulate` does that. Without it every Q4 income
+  statement would be a full-year figure in a quarterly row.
+- **CafeF's tabs are the fallback** (`from_api`). For a quarter whose scan is unreadable this is
+  the BETTER source, not the lesser one: the tabs are keyed by the same item CODES the schema
+  was built from, so a value lands on its canonical column *exactly* — no OCR, no fuzzy match.
+  The PDF is still read first (CafeF transcribes, has gaps, rounds), and every row records which
+  it was in `source`: `pdf` (164 quarters, 77%) or `cafef` (49, 23%).
 
 ## 2. Directory layout & the Strategy/registry pattern
 
