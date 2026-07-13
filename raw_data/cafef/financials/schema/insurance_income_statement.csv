@@ -1,0 +1,55 @@
+﻿order,template,method,section,level,cafef_code,column,as_printed
+0,insurance,,KQKD,2,1,1_doanh_thu_phi_bao_hiem,1. Doanh thu phí bảo hiểm
+1,insurance,,KQKD,0,2,phi_bao_hiem_goc,- Phí bảo hiểm gốc
+2,insurance,,KQKD,0,3,phi_nhan_tai_bao_hiem,- Phí nhận tái bảo hiểm
+3,insurance,,KQKD,0,4,tang_giam_du_phong_phi_chua_duoc_huong_cua_bao_hiem_goc_va_nhan_tai_bao_hiem,- Tăng (giảm) dự phòng phí chưa được hưởng của bảo hiểm gốc và nhận tái bảo hiểm
+4,insurance,,KQKD,2,5,2_phi_nhuong_tai_bao_hiem,2. Phí nhượng tái bảo hiểm
+5,insurance,,KQKD,0,6,phi_nhuong_tai_bao_hiem,- Phí nhượng tái bảo hiểm
+6,insurance,,KQKD,0,7,tang_giam_du_phong_phi_nhuong_tai_bao_hiem,- Tăng (giảm) dự phòng phí nhượng tái bảo hiểm
+7,insurance,,KQKD,2,8,3_doanh_thu_phi_bao_hiem_thuan,3. Doanh thu phí bảo hiểm thuần
+8,insurance,,KQKD,2,9,4_hoa_hong_nhuong_tai_bao_hiem_va_doanh_thu_khac_hdkdbh,4. Hoa hồng nhượng tái bảo hiểm và doanh thu khác HĐKDBH
+9,insurance,,KQKD,0,10,hoa_hong_nhuong_tai_bao_hiem,- Hoa hồng nhượng tái Bảo hiểm
+10,insurance,,KQKD,0,11,doanh_thu_khac,- Doanh thu khác
+11,insurance,,KQKD,2,15,5_doanh_thu_thuan_tu_hdkd_bh,5. Doanh thu thuần từ HĐKD BH
+12,insurance,,KQKD,2,16,6_chi_boi_thuong,6. Chi bồi thường
+13,insurance,,KQKD,2,17,6_1_chi_boi_thuong_nhan_tai_bao_hiem,6.1 Chi bồi thường nhận tái bảo hiểm
+14,insurance,,KQKD,2,18,6_2_cac_khoan_giam_tru_chi_phi,6.2 Các khoản giảm trừ chi phí
+15,insurance,,KQKD,0,19,thu_doi_nguoi_thu_ba,- Thu đòi người thứ ba
+16,insurance,,KQKD,0,20,thu_xu_ly_hang_boi_thuong_100,- Thu xử lý hàng bồi thường 100%
+17,insurance,,KQKD,2,21,7_thu_boi_thuong_nhuong_tai_bao_hiem,7.Thu bồi thường nhượng tái bảo hiểm
+18,insurance,,KQKD,2,22,7_1_tang_du_phong_nghiep_vu_bao_hiem_goc,7.1 Tăng dự phòng nghiệp vụ bảo hiểm gốc
+19,insurance,,KQKD,2,23,7_2_tang_du_phong_toan_hoc,7.2 Tăng dự phòng toán học
+20,insurance,,KQKD,2,24,7_3_tang_giam_du_phong_lai_cam_ket_dau_tu_toi_thieu,7.3 Tăng (Giảm) dự phòng lãi cam kết đầu tư tối thiểu
+21,insurance,,KQKD,2,25,7_4_tang_du_phong_chia_lai,7.4 Tăng dự phòng chia lãi
+22,insurance,,KQKD,2,26,7_5_tang_du_phong_dam_bao_can_doi,7.5 Tăng dự phòng đảm bảo cân đối
+23,insurance,,KQKD,2,27,8_tang_giam_du_phong_boi_thuong_bao_hiem_goc_va_nhan_tai_bao_hiem,8. Tăng (giảm) dự phòng bồi thường bảo hiểm gốc và nhận tái bảo hiểm
+24,insurance,,KQKD,2,28,9_tang_giam_du_phong_boi_thuong_nhuong_tai_bao_hiem,9. Tăng (giảm) dự phòng bồi thường nhượng tái bảo hiểm
+25,insurance,,KQKD,2,29,10_tong_chi_boi_thuong_bao_hiem_va_tra_tien_bao_hiem,10. Tổng chi bồi thường bảo hiểm và trả tiền bảo hiểm
+26,insurance,,KQKD,2,30,11_tang_giam_du_phong_dao_dong_lon,11. Tăng (giảm) dự phòng dao động lớn
+27,insurance,,KQKD,2,31,12_chi_khac_hoat_dong_kinh_doanh_bao_hiem,12. Chi khác hoạt động kinh doanh bảo hiểm
+28,insurance,,KQKD,2,32,12_1_chi_hoa_hong_bao_hiem,12.1 Chi hoa hồng bảo hiểm
+29,insurance,,KQKD,2,33,12_2_chi_phi_truc_tiep_hoat_dong_kinh_doanh_bao_hiem_va_chi_phi_khac,12.2 Chi phí trực tiếp hoạt động kinh doanh bảo hiểm và chi phí khác
+30,insurance,,KQKD,2,41,13_tong_chi_truc_tiep_hoat_dong_kinh_doanh_bao_hiem,13. Tổng chi trực tiếp hoạt động kinh doanh bảo hiểm
+31,insurance,,KQKD,2,42,14_loi_nhuan_lo_gop_hoat_dong_kinh_doanh_bao_hiem,14. Lợi nhuận/(Lỗ) gộp hoạt động kinh doanh bảo hiểm
+32,insurance,,KQKD,2,,15_doanh_thu_kinh_doanh_bat_dong_san_dau_tu,15. Doanh thu kinh doanh bất động sản đầu tư
+33,insurance,,KQKD,2,,16_gia_von_bat_dong_san_dau_tu,16. Giá vốn bất động sản đầu tư
+34,insurance,,KQKD,2,,17_loi_nhuan_tu_hoat_dong_dau_tu_bat_dong_san,17. Lợi nhuận từ hoạt động đầu tư bất động sản
+35,insurance,,KQKD,0,43.1,doanh_thu_hoat_dong_khac,Doanh thu hoạt động khác
+36,insurance,,KQKD,0,43.2,chi_phi_hoat_dong_khac,Chi phí hoạt động khác
+37,insurance,,KQKD,0,43,lo_thu_nhap_thuan_tu_cac_hoat_dong_khac,(Lỗ)/Thu nhập thuần từ các hoạt động khác
+38,insurance,,KQKD,2,44.1,18_doanh_thu_hoat_dong_tai_chinh,18.Doanh thu hoạt động tài chính
+39,insurance,,KQKD,2,44.2,19_chi_phi_hoat_dong_tai_chinh,19. Chi phí hoạt động tài chính
+40,insurance,,KQKD,2,44,20_loi_nhuan_gop_hoat_dong_tai_chinh,20. Lợi nhuận gộp hoạt động tài chính
+41,insurance,,KQKD,2,45,20_1_phan_loi_nhuan_trong_cong_ty_lien_ket_don_vi_kinh_doanh_dong_kiem_soat,"20.1 Phần lợi nhuận trong công ty liên kết, đơn vị kinh doanh đồng kiểm soát"
+42,insurance,,KQKD,2,46,20_2_chi_phi_ban_hang,20.2 Chi phí bán hàng
+43,insurance,,KQKD,2,47,21_chi_phi_quan_ly_doanh_nghiep,21. Chi phí quản lý doanh nghiệp
+44,insurance,,KQKD,2,48.1,22_thu_nhap_khac,22. Thu nhập khác
+45,insurance,,KQKD,2,48.2,23_chi_phi_khac,23. Chi phí khác
+46,insurance,,KQKD,2,48,24_loi_nhuan_khac,24. Lợi nhuận khác
+47,insurance,,KQKD,2,50,25_tong_loi_nhuan_ke_toan_truoc_thue,25. Tổng lợi nhuận kế toán trước thuế
+48,insurance,,KQKD,2,51,26_chi_phi_thue_thu_nhap_hien_hanh,26. Chi phí thuế thu nhập hiện hành
+49,insurance,,KQKD,2,52,27_chi_phi_thue_thu_nhap_hoan_lai,27. Chi phí thuế thu nhập hoãn lại
+50,insurance,,KQKD,2,60,28_loi_nhuan_sau_thue_thu_nhap_doanh_nghiep,28. Lợi nhuận sau thuế thu nhập doanh nghiệp
+51,insurance,,KQKD,2,61,29_loi_nhuan_sau_thue_cua_co_dong_cong_ty_me,29. Lợi nhuận sau thuế của cổ đông Công ty mẹ
+52,insurance,,KQKD,2,62,30_loi_nhuan_sau_thue_cua_co_dong_khong_kiem_soat,30. Lợi nhuận sau thuế của cố đông không kiểm soát
+53,insurance,,KQKD,2,70,31_lai_co_ban_tren_co_phieu_dong_1_co_phieu,31. Lãi cơ bản trên cổ phiếu (Đồng/1 cổ phiếu)

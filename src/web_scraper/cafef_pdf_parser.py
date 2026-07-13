@@ -5,6 +5,7 @@ import os
 import re
 import unicodedata
 from dataclasses import dataclass, field
+from datetime import date, timedelta
 from typing import Dict, List, Optional
 
 # Tesseract ships no Vietnamese data and Program Files is not writable without admin, so the
@@ -38,6 +39,7 @@ class Statement:
     unit: int                       # 1 (đồng) or 1_000_000 (Triệu VNĐ)
     n_columns: int
     rows: List[Row] = field(default_factory=list)
+    publish_date: str = ""          # ISO; the day the filing was signed off
 
     @property
     def cash_flow_method(self) -> Optional[str]:
@@ -161,6 +163,15 @@ class PdfParser:
     NUM_RE = re.compile(r"^\(?-?[\d][\d.,]*\)?$|^[-–—]$")
     # The filing's own row numbering, in the left margin.
     NUMBER_RE = re.compile(r"^[IVXLC]+$|^\d{1,2}$|^[a-z]$|^[A-Z]$", re.I)
+
+    # The Vietnamese date a document is signed off on: "…ngày DD tháng MM năm YYYY". Tolerant of
+    # OCR and of the legacy TCVN3 font that garbles the letters ("ngµy 20 th¸ng 07 n¨m 2009") —
+    # the digits stay ASCII, which is all that is needed.
+    SIGN_RE = re.compile(
+        r"ng[^\s]{0,3}y\s*(\d{1,2})\s*th[^\s]{0,3}ng\s*(\d{1,2})\s*n[^\s]{0,3}m\s*(\d{4})",
+        re.I)
+    # The approval line the statements are signed under.
+    APPROVED_NS = ("phe duyet", "duoc ban dieu hanh phe duyet", "lap ngay", "ngay lap")
 
     OCR_DPI = 200          # numbers need the resolution; below this, digits are lost
     MIN_PAGE_TEXT = 200    # a page with less native text than this is an image -> OCR it
@@ -508,13 +519,71 @@ class PdfParser:
     # Entry point
     # ──────────────────────────────────────────────────────────────────────
 
-    def parse(self, pdf_path: str) -> Dict[str, Statement]:
-        """-> {report: Statement} for whichever of the three statements the filing contains."""
+    def publish_date(self, pages: Dict[int, dict],
+                     period_end: Optional[date] = None) -> str:
+        """The date the filing was signed off — ISO, or "" if it prints none.
+
+        A report is signed AFTER every date it reports on, so the signing date is the LATEST
+        date printed in it that falls after the period end. Taking the first date instead would
+        pick up the period itself ("tại ngày 31 tháng 12 năm 2024"), and taking the maximum
+        without a floor would pick up a comparative period from years earlier.
+
+        This is what makes the fundamentals point-in-time safe: a figure is not knowable until
+        the document carrying it was published, and joining on the period end instead leaks
+        months of look-ahead.
+        """
+        hits: List[date] = []
+        for i in sorted(pages):
+            for m in self.SIGN_RE.finditer(pages[i]["text"]):
+                try:
+                    d = date(int(m.group(3)), int(m.group(2)), int(m.group(1)))
+                except ValueError:
+                    continue
+                if period_end is None or period_end < d <= period_end + timedelta(days=400):
+                    hits.append(d)
+        return max(hits).isoformat() if hits else ""
+
+    TAIL_PAGES = 4          # how far into the end of a filing to hunt for its signing date
+
+    def _tail_date(self, doc, period_end: Optional[date]) -> str:
+        """Look for the signing date at the END of the filing.
+
+        Older reports do not sign under the statements at all — they approve the whole thing in
+        the last note ("28. Phê duyệt báo cáo tài chính giữa niên độ … được Ban Điều hành phê
+        duyệt vào ngày 20 tháng 10 năm 2009"). The page scan stops at the notes, for speed, so
+        that page is never read and the quarter ends up with no date at all.
+        """
+        pages: Dict[int, dict] = {}
+        for i in range(max(0, doc.page_count - self.TAIL_PAGES), doc.page_count):
+            try:
+                page = doc.load_page(i)
+            except Exception:
+                continue
+            native = page.get_text()
+            if self.ocr_ready and len(native.strip()) < self.MIN_PAGE_TEXT:
+                try:
+                    tp = page.get_textpage_ocr(language=OCR_LANG, dpi=self.OCR_DPI,
+                                               full=True, tessdata=TESSDATA_DIR)
+                    native = page.get_text(textpage=tp)
+                except Exception:
+                    continue
+            pages[i] = {"text": native}
+        return self.publish_date(pages, period_end)
+
+    def parse(self, pdf_path: str,
+              period_end: Optional[date] = None) -> Dict[str, Statement]:
+        """-> {report: Statement} for whichever of the three statements the filing contains.
+
+        Every statement carries the filing's `publish_date` — the same document produced them
+        all, so they share it.
+        """
         import fitz
 
         doc = fitz.open(pdf_path)
         try:
             pages = self.scan(doc)
+            published = (self.publish_date(pages, period_end)
+                         or self._tail_date(doc, period_end))
             out: Dict[str, Statement] = {}
             for report in REPORTS:
                 on = sorted(i for i, p in pages.items() if p["kind"] == report)
@@ -531,7 +600,8 @@ class PdfParser:
                 for r in rows:
                     r.values = [None if v is None else v * unit for v in r.values]
                 out[report] = Statement(report=report, pages=[i + 1 for i in on],
-                                        unit=unit, n_columns=len(columns), rows=rows)
+                                        unit=unit, n_columns=len(columns), rows=rows,
+                                        publish_date=published)
             return out
         finally:
             doc.close()

@@ -54,15 +54,15 @@ regenerated; delete it or restore the scraper rather than modelling on it.
 | `order_stats/`, `prop_trading/`, `insider_txn/` | `cafef_scraper.py` | VN100 (HOSE) |
 | `news/` | `cafef_news_scraper.py` | VCB, PNJ, FPT |
 | `pdfs/` | `cafef_pdf_scraper.py` | VCB, VIC + 50 tickers × 2025 (~6.7 GB) |
-| `financials/` | `cafef_financials.py` (§3a) | the 12 schemas + `templates.csv`; statements per template |
+| `financials/` | `cafef_financials.py` (§3a) | the 12 schemas + `templates.csv`; statements per template — **the only part of `raw_data/` that is TRACKED in git** (it is 0.3 MB and costs hours of OCR to rebuild) |
 
 **Where the statement parser stands — VCB, Q3-2008 → Q1-2026 (71 quarters):**
 
-| report | quarters | pdf | cafef | missing | coverage |
-|---|---|---|---|---|---|
-| balance_sheet | 71 | 57 | 14 | 0 | **100%** |
-| income_statement | 71 | 46 | 25 | 0 | **100%** |
-| cash_flow | 71 | 61 | 10 | 0 | **100%** |
+| report | quarters | pdf | cafef | missing | coverage | dated |
+|---|---|---|---|---|---|---|
+| balance_sheet | 71 | 57 | 14 | 0 | **100%** | 70/71 |
+| income_statement | 71 | 46 | 25 | 0 | **100%** | 70/71 |
+| cash_flow | 71 | 61 | 10 | 0 | **100%** | 70/71 |
 
 **213 / 213 — every quarter VCB financial data exists for.** The written grid starts at Q4-2006
 (an FY-2006 annual report sits in the archive) and those 7 pre-listing quarters are blank:
@@ -80,6 +80,28 @@ Two things got it from 81% to complete, and both are structural rather than tuni
   was built from, so a value lands on its canonical column *exactly* — no OCR, no fuzzy match.
   The PDF is still read first (CafeF transcribes, has gaps, rounds), and every row records which
   it was in `source`: `pdf` (164 quarters, 77%) or `cafef` (49, 23%).
+
+- **⚠️ `publish_date` — the day the figures became PUBLIC. Join on this, never on the period
+  end.** VCB's Q4-2025 covers the quarter ending 31 Dec 2025 and was not published until
+  **27 Mar 2026**. Joining fundamentals to prices on the period end hands a model twelve weeks
+  of look-ahead, every year, on the audited annuals — which are the worst offenders precisely
+  because they are the best documents. 210 of 213 rows are dated (99%).
+  - It is read from INSIDE the filing (the signing line *"ngày DD tháng MM năm YYYY"*), taking
+    the **latest** date that falls after the period end. The first date in a filing is the
+    period itself ("tại ngày 31 tháng 12 năm 2024"), and an unbounded maximum picks up a
+    comparative period from years earlier; a report is signed after every date it reports on.
+  - The date CafeF embeds in the filename is only a fallback — those exist from 2022 only.
+    Where both exist they agree exactly, which is a useful independent check.
+  - **It belongs to the QUARTER'S DOCUMENT, not to a statement.** One filing produced all
+    three, so they share it — including a row that had to come from CafeF's tabs because its
+    own statement would not parse. Keeping it per statement is what left VCB's Q1-2009 undated
+    even though the very document it failed to parse prints "Hà Nội, ngày 27 tháng 04 năm 2009"
+    on page 4.
+  - **The older filings do not sign under the statements at all** — they approve the accounts
+    in the last note ("28. Phê duyệt báo cáo tài chính giữa niên độ … ngày 20 tháng 10 năm
+    2009"). The page scan stops at the notes for speed, so `_tail_date()` reads the end of the
+    document when the statement pages yield nothing.
+  - Only **Q3-2008** is undated: it exists in CafeF's tabs alone, with no filing to read.
 
 ## 2. Directory layout & the Strategy/registry pattern
 

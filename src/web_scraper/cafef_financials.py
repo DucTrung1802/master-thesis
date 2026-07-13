@@ -29,7 +29,8 @@ STATEMENTS_DIR = os.path.join(FIN_DIR, "statements")
 TEMPLATES_INDEX = os.path.join(FIN_DIR, "templates.csv")
 
 DATA_COLS = ["symbol", "exchange", "template", "period", "year", "quarter", "source",
-             "assurance", "cash_flow_method", "unit", "n_columns", "document"]
+             "publish_date", "assurance", "cash_flow_method", "unit", "n_columns",
+             "document"]
 INDEX_COLS = ["exchange", "symbol", "template", "cash_flow_method", "sector",
               "industry_group_code", "industry_group_slug"]
 
@@ -438,6 +439,15 @@ class FinancialsBuilder:
     def _equal(cls, a: int, b: int) -> bool:
         return abs(a - b) <= max(2, abs(a) * cls.EQUAL_REL)
 
+    @staticmethod
+    def _period_end(period: str):
+        """The last day of the quarter — the floor a signing date must clear."""
+        from datetime import date
+
+        q, y = int(period[1]), int(period.split("-")[1])
+        return {1: date(y, 3, 31), 2: date(y, 6, 30),
+                3: date(y, 9, 30), 4: date(y, 12, 31)}[q]
+
     def _probe(self, report: str, mapped: Dict[str, int],
                st: Statement) -> Optional[int]:
         """The one figure a statement is size-checked on."""
@@ -489,6 +499,13 @@ class FinancialsBuilder:
         meta: Dict[str, Dict[str, dict]] = {r: {} for r in REPORTS}
         history: Dict[str, List[int]] = {r: [] for r in REPORTS}
         half_year: Dict[str, bool] = {}
+        # The publish date belongs to the QUARTER'S DOCUMENT, not to one statement: one filing
+        # produced all three, so they were all published on the same day. Keeping it per
+        # statement lost it whenever a statement was rejected and its row came from CafeF's
+        # tabs instead — VCB's Q1-2009 balance sheet had no date even though the very document
+        # it failed to parse prints "Hà Nội, ngày 27 tháng 04 năm 2009" on page 4.
+        published: Dict[str, str] = {}
+        assurance: Dict[str, str] = {}
 
         for d in docs:
             period = d["period"]
@@ -500,10 +517,16 @@ class FinancialsBuilder:
                 self._warn(f"  {period}: file missing on disk — {d['path']}")
                 continue
             try:
-                statements = self._parser.parse(path)
+                statements = self._parser.parse(path, self._period_end(period))
             except Exception as e:
                 self._warn(f"  {period}: parse failed — {type(e).__name__}: {e}")
                 continue
+
+            # the document's own date, kept whether or not any of its statements reconcile
+            assurance[period] = d["assurance"]
+            published[period] = next(
+                (s.publish_date for s in statements.values() if s.publish_date),
+                d.get("file_date", ""))
 
             notes = []
             for report in REPORTS:
@@ -564,7 +587,8 @@ class FinancialsBuilder:
         attempted = [(int(d["year"]), int(d["quarter"])) for d in docs]
         attempted += [(int(p.split("-")[1]), int(p[1]))
                       for r in REPORTS for p in data[r]]
-        return self._write(exchange, symbol, data, items, meta, attempted, template)
+        return self._write(exchange, symbol, data, items, meta, attempted, template,
+                           published, assurance)
 
     # ──────────────────────────────────────────────────────────────────────
     # The fallback: CafeF's own tabs
@@ -672,7 +696,8 @@ class FinancialsBuilder:
     def _write(self, exchange: str, symbol: str,
                data: Dict[str, Dict[str, dict]], items: Dict[str, List[str]],
                meta: Dict[str, Dict[str, dict]],
-               attempted: List[Tuple[int, int]], template: str) -> Dict[str, int]:
+               attempted: List[Tuple[int, int]], template: str,
+               published: Dict[str, str], assurance: Dict[str, str]) -> Dict[str, int]:
         """One CSV per report, under the ticker's own TEMPLATE — so every file in a directory
         has the same columns and they mean the same thing.
 
@@ -703,7 +728,13 @@ class FinancialsBuilder:
                        # `pdf` = read off the filing; `cafef` = taken from CafeF's tabs
                        # because the filing could not be read
                        "source": (m.get("source", "pdf") if period in rows else "missing"),
-                       "assurance": m.get("assurance", ""),
+                       # From the QUARTER, not the statement: one filing produced all three, so
+                       # they share a publish date — even a row that had to come from CafeF's
+                       # tabs because its statement would not parse. Join on THIS, not the
+                       # period end, or the fundamentals leak months of look-ahead: VCB's
+                       # Q4-2024 figures were not public until 2025-03-28.
+                       "publish_date": published.get(period, ""),
+                       "assurance": m.get("assurance") or assurance.get(period, ""),
                        "cash_flow_method": m.get("cash_flow_method", ""),
                        "unit": m.get("unit", ""),
                        "n_columns": m.get("n_columns", ""),

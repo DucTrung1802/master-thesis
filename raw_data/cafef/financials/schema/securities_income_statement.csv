@@ -1,0 +1,83 @@
+﻿order,template,method,section,level,cafef_code,column,as_printed
+0,securities,,KQKD,1,0,i_doanh_thu_hoat_dong,I. DOANH THU HOẠT ĐỘNG
+1,securities,,KQKD,2,1,1_1_lai_tu_cac_tai_san_tai_chinh_ghi_nhan_thong_qua_lai_lo_fvtpl,1.1. Lãi từ các tài sản tài chính ghi nhận thông qua lãi/lỗ (FVTPL)
+2,securities,,KQKD,3,1.1,a_lai_ban_cac_tai_san_tai_chinh,a. Lãi bán các tài sản tài chính
+3,securities,,KQKD,3,1.2,b_chenh_lech_tang_danh_gia_lai_cac_tstc_fvtpl,b. Chênh lệch tăng đánh giá lại các TSTC FVTPL
+4,securities,,KQKD,3,1.3,c_co_tuc_tien_lai_phat_sinh_tu_tai_san_tai_chinh_pvtpl,"c. Cổ tức, tiền lãi phát sinh từ tài sản tài chính PVTPL"
+5,securities,,KQKD,3,1.4,d_chenh_lech_giam_do_danh_gia_lai_phai_tra_chung_quyen_dang_luu_hanh,d. Chênh lệch giảm do đánh giá lại phải trả chứng quyền đang lưu hành
+6,securities,,KQKD,2,2,1_2_lai_tu_cac_khoan_dau_tu_nam_giu_den_ngay_dao_han_htm,1.2. Lãi từ các khoản đầu tư nắm giữ đến ngày đáo hạn (HTM)
+7,securities,,KQKD,2,3,1_3_lai_tu_cac_khoan_cho_vay_va_phai_thu,1.3. Lãi từ các khoản cho vay và phải thu
+8,securities,,KQKD,2,4,1_4_lai_tu_cac_tai_san_tai_chinh_san_sang_de_ban_afs,1.4. Lãi từ các tài sản tài chính sẵn sàng để bán (AFS)
+9,securities,,KQKD,2,5,1_5_lai_tu_cac_cong_cu_phai_sinh_phong_ngua_rui_ro,1.5. Lãi từ các công cụ phái sinh phòng ngừa rủi ro
+10,securities,,KQKD,2,6,1_6_doanh_thu_moi_gioi_chung_khoan,1.6. Doanh thu môi giới chứng khoán
+11,securities,,KQKD,2,7,1_7_doanh_thu_bao_lanh_phat_hanh_dai_ly_phat_hanh_chung_khoan,"1.7. Doanh thu bảo lãnh phát hành, đại lý phát hành chứng khoán"
+12,securities,,KQKD,2,8,1_8_doanh_thu_hoat_dong_tu_van_dau_tu_chung_khoa,1.8. Doanh thu hoạt động tư vấn đầu tư chứng khóa
+13,securities,,KQKD,2,9,1_9_doanh_thu_nghiep_vu_luu_ky_chung_khoan,1.9. Doanh thu nghiệp vụ lưu ký chứng khoán
+14,securities,,KQKD,2,10,1_10_doanh_thu_nghiep_vu_tu_van_tai_chinh,1.10. Doanh thu nghiệp vụ tư vấn tài chính
+15,securities,,KQKD,2,11,1_11_thu_nhap_hoat_dong_khac,1.11. Thu nhập hoạt động khác
+16,securities,,KQKD,0,20,cong_doanh_thu_hoat_dong,Cộng doanh thu hoạt động
+17,securities,,KQKD,1,508,ii_chi_phi_hoat_dong,II. CHI PHÍ HOẠT ĐỘNG
+18,securities,,KQKD,2,21,2_1_lo_cac_tai_san_tai_chinh_ghi_nhan_thong_qua_lo_fvtpl,2.1. Lỗ các tài sản tài chính ghi nhận thông qua lỗ (FVTPL)
+19,securities,,KQKD,3,21.1,a_lo_ban_cac_tai_san_tai_chinh_fvtpl,a. Lỗ bán các tài sản tài chính FVTPL
+20,securities,,KQKD,3,21.2,b_chenh_lech_giam_danh_gia_lai_cac_tstc_fvtpl,b. Chênh lệch giảm đánh giá lại các TSTC FVTPL
+21,securities,,KQKD,3,21.3,c_chi_phi_giao_dich_mua_cac_tai_san_tai_chinh_fvtpl,c. Chi phí giao dịch mua các tài sản tài chính (FVTPL)
+22,securities,,KQKD,3,21.4,d_chenh_lech_tang_do_danh_gia_lai_phai_tra_chung_quyen_dang_luu_hanh,d. Chênh lệch tăng do đánh giá lại phải trả chứng quyền đang lưu hành
+23,securities,,KQKD,2,22,2_2_lo_cac_khoan_dau_tu_nam_giu_den_ngay_dao_han_htm,2.2. Lỗ các khoản đầu tư năm giữ đến ngày đáo hạn (HTM)
+24,securities,,KQKD,2,23,2_3_lo_ve_ghi_nhan_cl_danh_gia_theo_gt_hop_ly_tstc_afs_khi_phan_loai_lai,"2.3. Lỗ về ghi nhận CL đánh giá theo GT hợp lý 
+TSTC AFS khi phân loại lại"
+25,securities,,KQKD,2,24,2_4_chi_phi_du_phong_tstc_xu_ly_ton_that_cac_khoan_phai_thu_kho_doi_va_lo_suy_giam_tstc_va_chi_phi_di_vay_cua_cac_khoan_ch,"2.4 Chi phí dự phòng TSTC, xử lý tổn thất các khoản phải thu khó đòi và lỗ suy giảm TSTC và chi phí đi vay của các khoản cho vay"
+26,securities,,KQKD,2,25,2_5_lo_tu_cac_tai_san_tai_chinh_phai_sinh_phong_ngua_rui_ro,2.5. Lỗ từ các tài sản tài chính phái sinh phòng ngừa rủi ro
+27,securities,,KQKD,2,26,2_6_chi_phi_hoat_dong_tu_doanh,2.6. Chi phí hoạt động tự doanh
+28,securities,,KQKD,2,27,2_7_chi_phi_moi_gioi_chung_khoan,2.7. Chi phí môi giới chứng khoán
+29,securities,,KQKD,2,28,2_8_chi_phi_hoat_dong_bao_lanh_dai_ly_phat_hanh_chung_khoan,"2.8. Chi phí hoạt động bảo lãnh, đại lý phát hành chứng khoán"
+30,securities,,KQKD,2,29,2_9_chi_phi_nghiep_vu_tu_van_dau_tu_chung_khoan,2.9. Chi phí nghiệp vụ tư vấn đầu tư chứng khoán
+31,securities,,KQKD,2,30,2_10_chi_phi_nghiep_vu_luu_ky_chung_khoan,2.10. Chí phí nghiệp vụ lưu ký chứng khoán
+32,securities,,KQKD,2,31,2_11_chi_phi_nghiep_vu_tu_van_tai_chinh,2.11. Chi phí nghiệp vụ tư vấn tài chính
+33,securities,,KQKD,2,32,2_12_chi_phi_cac_dich_vu_khac,2.12.Chi phí các dịch vụ khác
+34,securities,,KQKD,0,506,trong_do_chi_phi_sua_loi_giao_dich_chung_khoan_loi_khac,"Trong đó: Chi phí sửa lỗi giao dịch chứng khoán, lỗi khác"
+35,securities,,KQKD,0,40,cong_chi_phi_hoat_dong,Cộng chi phí hoạt động
+36,securities,,KQKD,1,505,iii_doanh_thu_hoat_dong_tai_chinh,III. DOANH THU HOẠT ĐỘNG TÀI CHÍNH
+37,securities,,KQKD,2,41,3_1_chenh_lech_lai_ty_gia_hoi_doai_da_va_chua_thuc_hien,3.1. Chênh lệch lãi tỷ giá hối đoái đã và chưa thực hiện
+38,securities,,KQKD,2,42,3_2_doanh_thu_du_thu_co_tuc_lai_tien_gui_khong_co_dinh_phat_sinh_trong_ky,"3.2. Doanh thu, dự thu cổ tức, lãi tiền gửi không cố định phát sinh trong kỳ"
+39,securities,,KQKD,2,43,3_3_lai_ban_thanh_ly_cac_khoan_dau_tu_vao_cong_ty_con_lien_ket_lien_doanh,"3.3. Lãi bán, thanh lý các khoản đầu tư vào công ty con, liên kết, liên doanh"
+40,securities,,KQKD,2,44,3_4_doanh_thu_khac_ve_dau_tu,3.4. Doanh thu khác về đầu tư
+41,securities,,KQKD,0,50,cong_doanh_thu_hoat_dong_tai_chinh,Cộng doanh thu hoạt động tài chính
+42,securities,,KQKD,1,504,iv_chi_phi_tai_chinh,IV. CHÍ PHÍ TÀI CHÍNH
+43,securities,,KQKD,2,51,4_1_chenh_lech_lo_ty_gia_hoi_doai_da_va_chua_thuc_hien,4.1. Chênh lệch lỗ tỷ giá hối đoái đã và chưa thưc hiện
+44,securities,,KQKD,2,52,4_2_chi_phi_lai_vay,4.2. Chi phí lãi vay
+45,securities,,KQKD,2,53,4_3_lo_ban_thanh_ly_cac_khoan_dau_tu_vao_cong_ty_con_lien_ket_lien_doanh,"4.3. Lỗ bán, thanh lý các khoản đầu tư vào công ty con, liên kết, liên doanh"
+46,securities,,KQKD,0,54,chi_phi_du_phong_suy_giam_gia_tri_cac_khoan_dau_tu_tai_chinh_dai_han,Chi phí dự phòng suy giảm giá trị các khoản đầu tư tài chính dài hạn
+47,securities,,KQKD,2,55,4_4_chi_phi_dau_tu_khac,4.4. Chi phí đầu tư khác
+48,securities,,KQKD,0,60,cong_chi_phi_tai_chinh,Cộng chi phí tài chính
+49,securities,,KQKD,1,61,v_chi_phi_ban_hang,V. CHI PHÍ BÁN HÀNG
+50,securities,,KQKD,1,62,vi_chi_phi_quan_ly_cong_ty_chung_khoan,VI. CHI PHÍ QUẢN LÝ CÔNG TY CHỨNG KHOÁN
+51,securities,,KQKD,1,70,vii_ket_qua_hoat_dong_70_20_50_40_60_61_62,VII. KẾT QUẢ HOẠT ĐỘNG (70=20+50-40 - 60-61-62)
+52,securities,,KQKD,1,503,viii_thu_nhap_khac_va_chi_phi_khac,VIII. THU NHẬP KHÁC VÀ CHI PHÍ KHÁC
+53,securities,,KQKD,2,71,8_1_thu_nhap_khac,8.1. Thu nhập khác
+54,securities,,KQKD,2,72,8_2_chi_phi_khac,8.2. Chi phí khác
+55,securities,,KQKD,0,80,cong_ket_qua_hoat_dong_khac,Cộng kết quả hoạt động khác
+56,securities,,KQKD,1,90,ix_tong_loi_nhuan_ke_toan_truoc_thue,IX. TỔNG LỢI NHUẬN KẾ TOÁN TRƯỚC THUẾ
+57,securities,,KQKD,2,91,9_1_loi_nhuan_da_thuc_hien,9.1. Lợi nhuận đã thực hiện
+58,securities,,KQKD,2,92,9_2_loi_nhuan_chua_thuc_hien,9.2. Lợi nhuận chưa thực hiện
+59,securities,,KQKD,1,100,x_chi_phi_thue_thu_nhap_doanh_nghiep,X. CHI PHÍ THUẾ THU NHẬP DOANH NGHIỆP
+60,securities,,KQKD,2,100.1,10_1_chi_phi_thue_tndn_hien_hanh,10.1. Chi phí thuế TNDN hiện hành
+61,securities,,KQKD,2,100.2,10_2_chi_phi_thue_tndn_hoan_lai,10.2. Chi phí thuế TNDN hoãn lại
+62,securities,,KQKD,1,200,xi_loi_nhuan_ke_toan_sau_thue_tndn,XI. LỢI NHUẬN KẾ TOÁN SAU THUẾ TNDN
+63,securities,,KQKD,2,201,11_1_loi_nhuan_sau_thue_phan_bo_cho_chu_so_huu,11.1. Lợi nhuận sau thuế phân bổ cho chủ sở hữu
+64,securities,,KQKD,2,202,11_2_loi_nhuan_sau_thue_trich_cac_quy,11.2. Lợi nhuận sau thuế trích các Quỹ
+65,securities,,KQKD,2,203,11_3_loi_nhuan_thuan_phan_bo_cho_loi_ich_co_dong_khong_kiem_soat,11.3. Lợi nhuận thuần phân bổ cho lợi ích cổ đông không kiểm soát
+66,securities,,KQKD,1,300,xii_thu_nhap_lo_toan_dien_khac_sau_thue_tndn,XII. THU NHẬP (LỖ) TOÀN DIỆN KHÁC SAU THUẾ TNDN
+67,securities,,KQKD,2,301,12_1_lai_lo_tu_danh_gia_lai_cac_cac_khoan_dau_tu_giu_den_ngay_dao_han,12.1. Lãi/(Lỗ) từ đánh giá lại các các khoản đầu tư giữ đến ngày đáo hạn
+68,securities,,KQKD,2,302,12_2_lai_lo_tu_danh_gia_lai_cac_tai_san_tai_chinh_san_sang_de_ban,12.2.Lãi/(Lỗ) từ đánh giá lại các tài sản tài chính sẵn sàng để bán
+69,securities,,KQKD,2,303,12_3_lai_lo_toan_dien_khac_duoc_chia_tu_hoat_dong_dau_tu_vao_cong_ty_con_cong_ty_lien_ket_lien_doanh,"12.3. Lãi (lỗ) toàn diện khác được chia từ hoạt động đầu tư vào công ty con, công ty liên kết, liên doanh"
+70,securities,,KQKD,2,304,12_4_lai_lo_tu_danh_gia_lai_cac_cong_cu_tai_chinh_phai_sinh,12.4. Lãi/(Lỗ) từ đánh giá lại các công cụ tài chính phái sinh
+71,securities,,KQKD,2,305,12_5_lai_lo_chenh_lech_ty_gia_cua_hoat_dong_tai_nuoc_ngoai,12.5. Lãi/(lỗ) chênh lệch tỷ giá của hoạt động tại nước ngoài
+72,securities,,KQKD,2,306,12_6_lai_lo_tu_cac_khoan_dau_tu_vao_cong_ty_con_cong_ty_lien_ket_lien_doanh_chua_chia,"12.6. Lãi, lỗ từ các khoản đầu tư vào công ty con, công ty liên kết, liên doanh chưa chia"
+73,securities,,KQKD,2,307,12_7_lai_lo_danh_gia_cong_cu_phai_sinh,"12.7. Lãi, lỗ đánh giá công cụ phái sinh"
+74,securities,,KQKD,2,308,12_8_lai_lo_danh_gia_lai_tai_san_co_dinh_theo_mo_hinh_gia_tri_hop_ly,"12.8. Lãi, lỗ đánh giá lại tài sản cố định theo mô hình giá trị hợp lý"
+75,securities,,KQKD,0,400,tong_thu_nhap_toan_dien_400_301_304,Tổng thu nhập toàn diện (400=301->304)
+76,securities,,KQKD,0,401,thu_nhap_toan_dien_phan_bo_cho_chu_so_huu,Thu nhập toàn diện phân bổ cho chủ sở hữu
+77,securities,,KQKD,0,402,thu_nhap_toan_dien_phan_bo_cho_co_dong_khong_nam_quyen_kiem_soat,Thu nhập toàn diện phân bổ cho cổ đông không nắm quyền kiểm soát
+78,securities,,KQKD,1,500,xiii_thu_nhap_thuan_tren_co_phieu_pho_thong,XIII. THU NHẬP THUẦN TRÊN CỔ PHIẾU PHỔ THÔNG
+79,securities,,KQKD,2,501,13_1_lai_co_ban_tren_co_phieu_dong_1_co_phieu,13.1.Lãi cơ bản trên cổ phiếu (Đồng/1 cổ phiếu)
+80,securities,,KQKD,2,502,13_2_thu_nhap_pha_loang_tren_co_phieu_dong_1_co_phieu,13.2.Thu nhập pha loãng trên cổ phiếu (Đồng/1 cổ phiếu)

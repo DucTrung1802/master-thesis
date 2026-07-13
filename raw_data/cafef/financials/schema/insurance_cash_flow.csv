@@ -1,0 +1,45 @@
+﻿order,template,method,section,level,cafef_code,column,as_printed
+0,insurance,indirect,HDKD,2,HDKD_2,hdkd_indirect_1_loi_nhuan_truoc_thue,1.Lợi nhuận trước thuế
+1,insurance,indirect,HDKD,2,HDKD_3,hdkd_indirect_2_dieu_chinh_cho_cac_khoan,2. Điều chỉnh cho các khoản:
+2,insurance,indirect,HDKD,0,HDKD_4,hdkd_indirect_khau_hao_tai_san_co_dinh,Khấu hao tài sản cố định
+3,insurance,indirect,HDKD,0,HDKD_5,hdkd_indirect_cac_khoan_du_phong,Các khoản dự phòng
+4,insurance,indirect,HDKD,0,HDKD_6,hdkd_indirect_lai_chenh_lech_ty_gia_hoi_doai_do_danh_gia_lai_cac_khoan_muc_tien_te_co_goc_ngoai_te,Lãi chênh lệch tỷ giá hối đoái do đánh giá lại các khoản mục tiền tệ có gốc ngoại tệ
+5,insurance,indirect,HDKD,0,HDKD_7,hdkd_indirect_lai_tu_hoat_dong_dau_tu,Lãi từ hoạt động đầu tư
+6,insurance,indirect,HDKD,0,HDKD_8,hdkd_indirect_chi_phi_lai_vay,Chi phí lãi vay
+7,insurance,indirect,HDKD,0,HDKD_9,hdkd_indirect_cac_khoan_dieu_chinh_khac,Các khoản điều chỉnh khác
+8,insurance,indirect,HDKD,2,HDKD_10,hdkd_indirect_3_loi_nhuan_tu_hoat_dong_kinh_doanh_truoc_thay_doi_von_luu_dong,3.Lợi nhuận từ hoạt động kinh doanh trước thay đổi vốn lưu động
+9,insurance,indirect,HDKD,0,HDKD_11,hdkd_indirect_tang_cac_khoan_phai_thu,Tăng các khoản phải thu
+10,insurance,indirect,HDKD,0,HDKD_12,hdkd_indirect_giam_tang_hang_ton_kho,Giảm/(tăng) hàng tồn kho
+11,insurance,indirect,HDKD,0,HDKD_13,hdkd_indirect_tang_cac_khoan_phai_tra,Tăng các khoản phải trả
+12,insurance,indirect,HDKD,0,HDKD_14,hdkd_indirect_tang_chi_phi_tra_truoc,Tăng chi phí trả trước
+13,insurance,indirect,HDKD,0,HDKD_15,hdkd_indirect_tang_giam_chung_khoan_kinh_doanh,(Tăng)/giảm chứng khoán kinh doanh
+14,insurance,indirect,HDKD,0,HDKD_16,hdkd_indirect_tien_lai_vay_da_tra,Tiền lãi vay đã trả
+15,insurance,indirect,HDKD,0,HDKD_17,hdkd_indirect_thue_thu_nhap_doanh_nghiep_da_nop,Thuế thu nhập doanh nghiệp đã nộp
+16,insurance,,HDKD,0,HDKD_18,hdkd_tien_thu_khac_tu_hoat_dong_kinh_doanh,Tiền thu khác từ hoạt động kinh doanh
+17,insurance,indirect,HDKD,0,HDKD_19,hdkd_indirect_tien_chi_khac_cho_hoat_dong_kinh_doanh,Tiền chi khác cho hoạt động kinh doanh
+18,insurance,indirect,HDKD,0,HDKD_20,hdkd_indirect_luu_chuyen_tien_thuan_tu_hoat_dong_kinh_doanh,Lưu chuyển tiền thuần từ hoạt động kinh doanh
+19,insurance,direct,HDKD,2,HDKD_2,hdkd_direct_1_tien_thu_ban_hang_cung_cap_dich_vu_va_doanh_thu_khac,"1. Tiền thu bán hàng, cung cấp dịch vụ và doanh thu khác"
+20,insurance,direct,HDKD,2,HDKD_3,hdkd_direct_2_tien_chi_tra_cho_nguoi_cung_cap_hang_hoa_va_dich_vu,2. Tiền chi trả cho người cung cấp hàng hóa và dịch vụ
+21,insurance,direct,HDKD,2,HDKD_4,hdkd_direct_3_tien_chi_tra_cho_nguoi_lao_dong,3. Tiền chi trả cho người lao động
+22,insurance,direct,HDKD,2,HDKD_5,hdkd_direct_4_tien_chi_tra_lai_vay,4. Tiền chi trả lãi vay
+23,insurance,direct,HDKD,2,HDKD_6,hdkd_direct_5_tien_nop_thue_thu_nhap_doanh_nghiep,5. Tiền nộp thuế thu nhập doanh nghiệp
+24,insurance,direct,HDKD,2,HDKD_8,hdkd_direct_7_tien_chi_khac_tu_hoat_dong_kinh_doanh,7. Tiền chi khác từ hoạt động kinh doanh
+25,insurance,direct,HDKD,0,HDKD_9,hdkd_direct_luu_chuyen_tien_thuan_tu_hdkd,Lưu chuyển tiền thuần từ HĐKD
+26,insurance,,HDDT,0,HDDT_22,hddt_tien_chi_de_mua_sam_xay_dung_tai_san_co_dinh_va_cac_tai_san_dai_han_khac,"Tiền chi để mua sắm, xây dựng tài sản cố định và các tài sản dài hạn khác"
+27,insurance,,HDDT,0,HDDT_23,hddt_tien_thu_thanh_ly_nhuong_ban_tscd_va_cac_tai_san_dai_han_khac,"Tiền thu thanh lý, nhượng bán TSCĐ và các tài sản dài hạn khác"
+28,insurance,,HDDT,0,HDDT_24,hddt_tien_chi_cho_vay_mua_cac_cong_cu_no_cua_don_vi_khac_tien_chi_dau_tu_von_vao_don_vi_khac,"Tiền chi cho vay, mua các công cụ nợ của đơn vị khác/Tiền chi đầu tư vốn vào đơn vị khác"
+29,insurance,,HDDT,0,HDDT_25,hddt_tien_thu_hoi_cho_vay_ban_lai_cac_cong_cu_no_cua_don_vi_khac,"Tiền thu hổi cho vay, bán lại các công cụ nợ của đơn vị khác"
+30,insurance,,HDDT,0,HDDT_26,hddt_tien_chi_dau_tu_gop_von_vao_don_vi_khac,"Tiền chi đầu tư, góp vốn vào đơn vị khác"
+31,insurance,,HDDT,0,HDDT_27,hddt_tien_thu_hoi_dau_tu_gop_von_vao_don_vi_khac,"Tiền thu hồi đầu tư, góp vốn vào đơn vị khác"
+32,insurance,,HDDT,0,HDDT_28,hddt_tien_lai_cho_vay_co_tuc_va_loi_nhuan_duoc_chia,"Tiền lãi cho vay, cổ tức và lợi nhuận được chia"
+33,insurance,,HDDT,0,HDDT_29,hddt_luu_chuyen_tien_thuan_su_dung_vao_hoat_dong_dau_tu,Lưu chuyển tiền thuần sử dụng vào hoạt động đầu tư
+34,insurance,,HDTC,0,HDTC_31,hdtc_tien_thu_tu_phat_hanh_co_phieu_nhan_von_gop_cua_chu_so_huu,"Tiển thu từ phát hành cổ phiếu, nhận vốn góp của chủ sở hữu"
+35,insurance,,HDTC,0,HDTC_32,hdtc_tien_tra_lai_von_gop_cho_cac_chu_so_huu_mua_lai_co_phieu_cua_doanh_nghiep_da_phat_hanh,"Tiền trả lại vốn góp cho các chủ sở hữu, mua lại cổ phiếu của doanh  nghiệp đã phát hành"
+36,insurance,,HDTC,0,HDTC_33,hdtc_tien_thu_tu_di_vay,Tiền thu từ đi vay
+37,insurance,,HDTC,0,HDTC_34,hdtc_tien_chi_tra_no_goc_vay,Tiền chi trả nợ gốc vay
+38,insurance,,HDTC,0,HDTC_35,hdtc_tien_chi_tra_no_thue_tai_chinh,Tiền chi trả nợ thuê tài chính
+39,insurance,,HDTC,0,HDTC_36,hdtc_co_tuc_loi_nhuan_da_tra_cho_chu_so_huu,"Cổ tức, lợi nhuận đã trả cho chủ sở hữu"
+40,insurance,,HDTC,0,HDTC_37,hdtc_luu_chuyen_tien_thuan_tu_hoat_dong_tai_chinh,Lưu chuyển tiền thuần từ hoạt động tài chính
+41,insurance,,HDTC,0,HDTC_38,hdtc_luu_chuyen_tien_thuan_trong_ky_50_20_30_40,Lưu chuyển tiền thuần trong kỳ (50= 20 + 30 + 40)
+42,insurance,,HDTC,0,HDTC_39,hdtc_tien_va_tuong_duong_tien_dau_ky,Tiền và tương đương tiền đầu kỳ
+43,insurance,,HDTC,0,HDTC_40,hdtc_anh_huong_cua_thay_doi_ty_gia_hoi_doai_quy_doi_ngoai_te,Ảnh hưởng của thay đổi tỷ giá hối đoái quy đổi ngoại tệ

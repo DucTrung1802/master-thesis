@@ -1,0 +1,141 @@
+﻿order,template,method,section,level,cafef_code,column,as_printed
+0,corp,,TN,0,100,a_tai_san_ngan_han,A. TÀI SẢN NGẮN HẠN
+1,corp,,TN,1,110,i_tien_va_cac_khoan_tuong_duong_tien,I. Tiền và các khoản tương đương tiền
+2,corp,,TN,2,111,i_1_tien,1. Tiền
+3,corp,,TN,2,112,i_2_cac_khoan_tuong_duong_tien,2. Các khoản tương đương tiền
+4,corp,,TN,1,120,ii_dau_tu_tai_chinh_ngan_han,II. Đầu tư tài chính ngắn hạn
+5,corp,,TN,2,121,ii_1_chung_khoan_kinh_doanh,1. Chứng khoán kinh doanh
+6,corp,,TN,2,122,ii_2_du_phong_giam_gia_chung_khoan_kinh_doanh,2. Dự phòng giảm giá chứng khoán kinh doanh (*)
+7,corp,,TN,2,123,ii_3_dau_tu_nam_giu_den_ngay_dao_han,3. Đầu tư nắm giữ đến ngày đáo hạn
+8,corp,,TN,2,124,ii_4_du_phong_dau_tu_nam_giu_den_ngay_dao_han_ngan_han,4. Dự phòng đầu tư nắm giữ đến ngày đáo hạn ngắn hạn
+9,corp,,TN,2,125,ii_5_dau_tu_ngan_han_khac,5. Đầu tư ngắn hạn khác
+10,corp,,TN,2,126,ii_6_du_phong_ton_that_cac_khoan_dau_tu_ngan_han_khac,"6. Dự phòng tổn thất các khoản đầu tư
+ngăn hạn khác (*)"
+11,corp,,TN,1,130,iii_cac_khoan_phai_thu_ngan_han,III. Các khoản phải thu ngắn hạn
+12,corp,,TN,2,131,iii_1_phai_thu_ngan_han_cua_khach_hang,1. Phải thu ngắn hạn của khách hàng
+13,corp,,TN,2,132,iii_2_tra_truoc_cho_nguoi_ban_ngan_han,2. Trả trước cho người bán ngắn hạn
+14,corp,,TN,2,133,iii_3_phai_thu_noi_bo_ngan_han,3. Phải thu nội bộ ngắn hạn
+15,corp,,TN,2,134,iii_4_phai_thu_theo_tien_do_ke_hoach_hop_dong_xay_dung,4. Phải thu theo tiến độ kế hoạch hợp đồng xây dựng
+16,corp,,TN,2,135,iii_6_phai_thu_ngan_han_khac,6. Phải thu ngắn hạn khác
+17,corp,,TN,2,136,iii_7_du_phong_phai_thu_ngan_han_kho_doi,7. Dự phòng phải thu ngắn hạn khó đòi (*)
+18,corp,,TN,2,137,iii_8_tai_san_thieu_cho_xu_ly,8. Tài sản thiếu chờ xử lý
+19,corp,,TN,1,140,iv_hang_ton_kho,IV. Hàng tồn kho
+20,corp,,TN,2,141,iv_1_hang_ton_kho,1. Hàng tồn kho
+21,corp,,TN,2,149,iv_2_du_phong_giam_gia_hang_ton_kho,2. Dự phòng giảm giá hàng tồn kho (*)
+22,corp,,TN,1,	450,v_tai_san_sinh_hoc_ngan_han,V. Tài sản sinh học ngắn hạn
+23,corp,,TN,2,451,v_1_suc_vat_nuoi_lay_san_pham_mot_lan_ngan_han,"1. Súc vật nuôi lấy sản phẩm một lần
+ngắn hạn"
+24,corp,,TN,2,452,v_2_cay_trong_theo_mua_vu_hoac_lay_san_pham_mot_lan_ngan_han,"2. Cây trồng theo mùa vụ hoặc lấy sản
+phẩm một lần ngắn hạn"
+25,corp,,TN,2,453,v_3_du_phong_ton_that_tai_san_sinh_hoc_ngan_han,"3. Dự phòng tổn thất tài sản sinh học
+ngắn hạn (*)"
+26,corp,,TN,1,150,vi_tai_san_ngan_han_khac,VI. Tài sản ngắn hạn khác
+27,corp,,TN,2,151,vi_1_chi_phi_cho_phan_bo_ngan_han,1. Chi phí chờ phân bổ ngắn hạn
+28,corp,,TN,2,152,vi_2_thue_gtgt_duoc_khau_tru,2. Thuế GTGT được khấu trừ
+29,corp,,TN,2,153,vi_3_thue_va_cac_khoan_khac_phai_thu_cua_nha_nuoc,3. Thuế và các khoản khác phải thu của nhà nước
+30,corp,,TN,2,154,vi_4_giao_dich_mua_ban_lai_trai_phieu_chinh_phu,4. Giao dịch mua bán lại trái phiếu chính phủ
+31,corp,,TN,2,155,vi_5_tai_san_ngan_han_khac,5. Tài sản ngắn hạn khác
+32,corp,,TN,0,200,b_tai_san_dai_han,B. TÀI SẢN DÀI HẠN
+33,corp,,TN,1,210,i_cac_khoan_phai_thu_dai_han,I. Các khoản phải thu dài hạn
+34,corp,,TN,2,211,i_1_phai_thu_dai_han_cua_khach_hang,1. Phải thu dài hạn của khách hàng
+35,corp,,TN,2,212,i_2_tra_truoc_cho_nguoi_ban_dai_han,2. Trả trước cho người bán dài hạn
+36,corp,,TN,2,213,i_3_von_kinh_doanh_o_cac_don_vi_truc_thuoc,3. Vốn kinh doanh ở các đơn vị trực thuộc
+37,corp,,TN,2,214,i_4_phai_thu_noi_bo_dai_han,4. Phải thu nội bộ dài hạn
+38,corp,,TN,2,215,i_5_phai_thu_dai_han_khac,5. Phải thu dài hạn khác
+39,corp,,TN,2,216,i_6_du_phong_phai_thu_dai_han_kho_doi,6. Dự phòng phải thu dài hạn khó đòi (*)
+40,corp,,TN,1,220,ii_tai_san_co_dinh,II. Tài sản cố định
+41,corp,,TN,2,221,ii_1_tai_san_co_dinh_huu_hinh,1. Tài sản cố định hữu hình
+42,corp,,TN,0,222,ii_1_nguyen_gia,- Nguyên giá
+43,corp,,TN,0,223,ii_1_gia_tri_hao_mon_luy_ke,- Giá trị hao mòn lũy kế (*)
+44,corp,,TN,2,224,ii_2_tai_san_co_dinh_thue_tai_chinh,2. Tài sản cố định thuê tài chính
+45,corp,,TN,0,225,ii_2_nguyen_gia,- Nguyên giá
+46,corp,,TN,0,226,ii_2_gia_tri_hao_mon_luy_ke,- Giá trị hao mòn lũy kế (*)
+47,corp,,TN,2,227,ii_3_tai_san_co_dinh_vo_hinh,3. Tài sản cố định vô hình
+48,corp,,TN,0,228,ii_3_nguyen_gia,- Nguyên giá
+49,corp,,TN,0,229,ii_3_gia_tri_hao_mon_luy_ke,- Giá trị hao mòn lũy kế (*)
+50,corp,,TN,1,441,iii_tai_san_sinh_hoc_dai_han,III. Tài sản sinh học dài hạn
+51,corp,,TN,2,442,iii_1_suc_vat_nuoi_cho_san_pham_dinh_ky,1. Súc vật nuôi cho sản phẩm định kỳ
+52,corp,,TN,3,443,iii_1_a_suc_vat_nuoi_cho_san_pham_dinh_ky_chua_den_giai_doan_truong_thanh,a) Súc vật nuôi cho sản phẩm định kỳ chưa đến giai đoạn trưởng thành
+53,corp,,TN,3,444,iii_1_b_suc_vat_nuoi_cho_san_pham_dinh_ky_den_giai_doan_truong_thanh,b) Súc vật nuôi cho sản phẩm định kỳ  đến giai đoạn trưởng thành
+54,corp,,TN,0,445,iii_1_nguyen_gia,- Nguyên giá
+55,corp,,TN,0,446,iii_1_gia_tri_khau_hao_luy_ke,- Giá trị khấu hao lũy kế (*)
+56,corp,,TN,2,447,iii_2_suc_vat_nuoi_lay_san_pham_mot_lan_dai_han,2. Súc vật nuôi lấy sản phẩm một lần dài hạn
+57,corp,,TN,2,448,iii_3_cay_trong_theo_mua_vu_hoac_lay_san_pham_mot_lan_dai_han,3. Cây trồng theo mùa vụ hoặc lấy sản phẩm một lần dài hạn
+58,corp,,TN,2,449,iii_4_du_phong_ton_that_tai_san_sinh_hoc_dai_han,4. Dự phòng tổn thất tài sản sinh học dài hạn (*)
+59,corp,,TN,1,230,iv_bat_dong_san_dau_tu,IV. Bất động sản đầu tư
+60,corp,,TN,0,231,iv_nguyen_gia,- Nguyên giá
+61,corp,,TN,0,232,iv_gia_tri_hao_mon_luy_ke,- Giá trị hao mòn lũy kế (*)
+62,corp,,TN,1,240,v_tai_san_do_dang_dai_han,V. Tài sản dở dang dài hạn
+63,corp,,TN,2,241,v_1_chi_phi_san_xuat_kinh_doanh_do_dang_dai_han,"1. Chi phí sản xuất, kinh doanh dở dang dài hạn"
+64,corp,,TN,2,242,v_2_chi_phi_xay_dung_co_ban_do_dang,2. Chi phí xây dựng cơ bản dở dang
+65,corp,,TN,1,250,vi_dau_tu_tai_chinh_dai_han,VI. Đầu tư tài chính dài hạn
+66,corp,,TN,2,251,vi_1_dau_tu_vao_cong_ty_con,1. Đầu tư vào công ty con
+67,corp,,TN,2,252,vi_2_dau_tu_vao_cong_ty_lien_ket_lien_doanh,"2. Đầu tư vào công ty liên kết, liên doanh"
+68,corp,,TN,2,253,vi_3_dau_tu_gop_von_vao_don_vi_khac,3. Đầu tư góp vốn vào đơn vị khác
+69,corp,,TN,2,254,vi_4_du_phong_ton_that_dau_tu_vao_don_vi,4. Dự phòng tổn thất đầu tư vào đơn vị (*)
+70,corp,,TN,2,255,vi_5_dau_tu_nam_giu_den_ngay_dao_han_dai_han,5. Đầu tư nắm giữ đến ngày đáo hạn dài hạn
+71,corp,,TN,2,454,vi_6_du_phong_dau_tu_nam_giu_den_ngay_dao_han_dai_han,"6. Dự phòng đầu tư nắm giữ đến ngày
+đáo hạn dài hạn (*)"
+72,corp,,TN,1,260,vii_tai_san_dai_han_khac,VII. Tài sản dài hạn khác
+73,corp,,TN,2,261,vii_1_chi_phi_cho_phan_bo_dai_han,1. Chi phí chờ phân bổ dài hạn
+74,corp,,TN,2,262,vii_2_tai_san_thue_thu_nhap_hoan_lai,2. Tài sản thuế thu nhập hoãn lại
+75,corp,,TN,2,263,vii_3_thiet_bi_vat_tu_phu_tung_thay_the_dai_han,"3. Thiết bị, vật tư, phụ tùng thay thế dài hạn"
+76,corp,,TN,2,268,vii_4_tai_san_dai_han_khac,4. Tài sản dài hạn khác
+77,corp,,TN,2,269,vii_5_loi_the_thuong_mai,5. Lợi thế thương mại
+78,corp,,TN,0,270,tong_cong_tai_san,TỔNG CỘNG TÀI SẢN
+79,corp,,NV,0,,nguon_von,NGUỒN VỐN
+80,corp,,NV,0,300,c_no_phai_tra,C. NỢ PHẢI TRẢ
+81,corp,,NV,1,310,i_no_ngan_han,I. Nợ ngắn hạn
+82,corp,,NV,2,311,i_1_phai_tra_nguoi_ban_ngan_han,1. Phải trả người bán ngắn hạn
+83,corp,,NV,2,312,i_2_nguoi_mua_tra_tien_truoc_ngan_han,2. Người mua trả tiền trước ngắn hạn
+84,corp,,NV,2,455,i_3_phai_tra_co_tuc_loi_nhuan,"3. Phải trả cổ tức, lợi nhuận"
+85,corp,,NV,2,313,i_4_thue_va_cac_khoan_phai_nop_nha_nuoc_ngan_han,"4. Thuế và các khoản phải nộp Nhà
+nước ngăn hạn"
+86,corp,,NV,2,314,i_5_phai_tra_nguoi_lao_dong,5. Phải trả người lao động
+87,corp,,NV,2,315,i_6_chi_phi_phai_tra_ngan_han,6. Chi phí phải trả ngắn hạn
+88,corp,,NV,2,316,i_7_phai_tra_noi_bo_ngan_han,7. Phải trả nội bộ ngắn hạn
+89,corp,,NV,2,317,i_8_phai_tra_theo_tien_do_ke_hoach_hop_dong_xay_dung,8. Phải trả theo tiến độ kế hoạch hợp đồng xây dựng
+90,corp,,NV,2,318,i_9_doanh_thu_cho_phan_bo_ngan_han,9. Doanh thu chờ phân bổ ngắn hạn
+91,corp,,NV,2,319,i_10_phai_tra_ngan_han_khac,10. Phải trả ngắn hạn khác
+92,corp,,NV,2,320,i_11_vay_va_no_thue_tai_chinh_ngan_han,11. Vay và nợ thuê tài chính ngăn hạn
+93,corp,,NV,2,321,i_12_du_phong_phai_tra_ngan_han,12. Dự phòng phải trả ngăn hạn
+94,corp,,NV,2,322,i_13_quy_khen_thuong_phuc_loi,"13. Quỹ khen thưởng, phúc lợi"
+95,corp,,NV,2,323,i_14_quy_binh_on_gia,14. Quỹ bình ốn giá
+96,corp,,NV,2,324,i_15_giao_dich_mua_ban_lai_trai_phieu_chinh_phu,15. Giao dịch mua bán lại trái phiếu Chính phủ
+97,corp,,NV,1,330,ii_no_dai_han,II. Nợ dài hạn
+98,corp,,NV,2,331,ii_1_phai_tra_nguoi_ban_dai_han,1. Phải trả người bán dài hạn
+99,corp,,NV,2,332,ii_2_nguoi_mua_tra_tien_truoc_dai_han,2. Người mua trả tiền trước dài hạn
+100,corp,,NV,2,456,ii_3_thue_va_cac_khoan_phai_nop_nha_nuoc_dai_han,3. Thuế và các khoản phải nộp Nhà  nước dài hạn
+101,corp,,NV,2,333,ii_4_chi_phi_phai_tra_dai_han,4. Chi phí phải trả dài hạn
+102,corp,,NV,2,334,ii_5_phai_tra_noi_bo_ve_von_kinh_doanh,5. Phải trả nội bộ về vốn kinh doanh
+103,corp,,NV,2,335,ii_6_phai_tra_noi_bo_dai_han,6. Phải trả nội bộ dài hạn
+104,corp,,NV,2,336,ii_7_doanh_thu_cho_phan_bo_dai_han,7. Doanh thu chờ phân bổ dài hạn
+105,corp,,NV,2,337,ii_8_phai_tra_dai_han_khac,8.Phải trả dài hạn khác
+106,corp,,NV,2,338,ii_9_vay_va_no_thue_tai_chinh_dai_han,9. Vay và nợ thuê tài chính dài hạn
+107,corp,,NV,2,339,ii_10_trai_phieu_chuyen_doi,10. Trái phiếu chuyển đổi
+108,corp,,NV,2,340,ii_11_co_phieu_uu_dai,11. Cổ phiếu ưu đãi
+109,corp,,NV,2,341,ii_12_thue_thu_nhap_hoan_lai_phai_tra,12. Thuế thu nhập hoãn lại phải trả
+110,corp,,NV,2,342,ii_13_du_phong_phai_tra_dai_han,13. Dự phòng phải trả dài hạn
+111,corp,,NV,2,343,ii_14_quy_phat_trien_khoa_hoc_va_cong_nghe,"14. Quỹ phát triển khoa học và công
+nghệ"
+112,corp,,NV,0,400,d_von_chu_so_huu,D VỐN CHỦ SỞ HỮU
+113,corp,,NV,1,410,i_von_chu_so_huu,I. Vốn chủ sở hữu
+114,corp,,NV,2,411,i_1_von_gop_cua_chu_so_huu,1. Vốn góp của chủ sở hữu
+115,corp,,NV,0,411a,i_1_co_phieu_pho_thong_co_quyen_bieu_quyet,- Cổ phiếu phổ thông có quyền biểu quyết
+116,corp,,NV,0,411b,i_1_co_phieu_uu_dai,- Cổ phiếu ưu đãi
+117,corp,,NV,2,412,i_2_thang_du_von_co_phan,2. Thặng dư vốn cổ phần
+118,corp,,NV,2,413,i_3_quyen_chon_chuyen_doi_trai_phieu,3. Quyền chọn chuyển đổi trái phiếu
+119,corp,,NV,2,414,i_4_von_khac_cua_chu_so_huu,4. Vốn khác của chủ sở hữu
+120,corp,,NV,2,415,i_5_co_phieu_mua_lai_cua_chinh_minh,5. Cổ phiếu mua lại của chính mình
+121,corp,,NV,2,416,i_6_chenh_lech_danh_gia_lai_tai_san,6. Chênh lệch đánh giá lại tài sản
+122,corp,,NV,2,417,i_7_chenh_lech_ty_gia_hoi_doai,7. Chênh lệch tỷ giá hối đoái
+123,corp,,NV,2,418,i_8_quy_dau_tu_phat_trien,8. Quỹ đầu tư phát triển
+124,corp,,NV,2,420,i_9_quy_khac_thuoc_von_chu_so_huu,9. Quỹ khác thuộc vốn chủ sở hữu
+125,corp,,NV,2,421,i_10_loi_nhuan_sau_thue_chua_phan_phoi,10. Lợi nhuận sau thuế chưa phân phối
+126,corp,,NV,0,421a,i_10_lnst_chua_phan_phoi_luy_ke_den_cuoi_ky_truoc,- LNST chưa phân phối lũy kế đến cuối kỳ trước
+127,corp,,NV,0,421b,i_10_lnst_chua_phan_phoi_ky_nay,- LNST chưa phân phối kỳ này
+128,corp,,NV,2,429,i_11_loi_ich_co_dong_khong_kiem_soat,11. Lợi ích cổ đông không kiểm soát
+129,corp,,NV,1,430,ii_nguon_kinh_phi_va_quy_khac_430,II. Nguồn kinh phí và quỹ khác (430)
+130,corp,,NV,2,431,ii_1_nguon_kinh_phi_431,1. Nguồn kinh phí (431)
+131,corp,,NV,2,432,ii_2_nguon_kinh_phi_da_hinh_thanh_tscd_432,2. Nguồn kinh phí đã hình thành TSCĐ (432)
+132,corp,,NV,0,440,tong_cong_nguon_von,TỔNG CỘNG NGUỒN VỐN

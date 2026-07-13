@@ -1,0 +1,25 @@
+﻿order,template,method,section,level,cafef_code,column,as_printed
+0,corp,,KQKD,2,1,1_doanh_thu_ban_hang_va_cung_cap_dich_vu,1. Doanh thu bán hàng và cung cấp dịch vụ
+1,corp,,KQKD,2,2,2_cac_khoan_giam_tru_doanh_thu,2. Các khoản giảm trừ doanh thu
+2,corp,,KQKD,2,10,3_doanh_thu_thuan_ve_ban_hang_va_cung_cap_dich_vu,3. Doanh thu thuần về bán hàng và cung cấp dịch vụ
+3,corp,,KQKD,2,11,4_gia_von_hang_ban,4. Giá vốn hàng bán
+4,corp,,KQKD,2,20,5_loi_nhuan_gop_ve_ban_hang_va_cung_cap_dich_vu,5. Lợi nhuận gộp về bán hàng và cung cấp dịch vụ
+5,corp,,KQKD,2,21,6_lai_lo_cua_hoat_dong_ban_thanh_ly_bat_dong_san_dau_tu,"6. Lãi/Lỗ của hoạt động bán, thanh lý bất động sản đầu tư"
+6,corp,,KQKD,2,22,7_doanh_thu_hoat_dong_tai_chinh,7. Doanh thu hoạt động tài chính
+7,corp,,KQKD,2,23,8_chi_phi_tai_chinh,8. Chi phí tài chính
+8,corp,,KQKD,0,24,trong_do_chi_phi_lai_vay,- Trong đó :Chi phí lãi vay
+9,corp,,KQKD,0,27,phan_lai_lo_trong_cong_ty_lien_doanh_lien_ket,"- Phần lãi/lỗ trong công ty liên doanh, liên kết"
+10,corp,,KQKD,2,25,9_chi_phi_ban_hang,9. Chi phí bán hàng
+11,corp,,KQKD,2,26,10_chi_phi_quan_ly_doanh_nghiep,10. Chi phí quản lý doanh nghiệp
+12,corp,,KQKD,2,30,11_loi_nhuan_thuan_tu_hoat_dong_kinh_doanh,11. Lợi nhuận thuần từ hoạt động kinh doanh
+13,corp,,KQKD,2,31,12_thu_nhap_khac,12. Thu nhập khác
+14,corp,,KQKD,2,32,13_chi_phi_khac,13. Chi phí khác
+15,corp,,KQKD,2,40,14_loi_nhuan_khac,14. Lợi nhuận khác
+16,corp,,KQKD,2,50,15_tong_loi_nhuan_ke_toan_truoc_thue,15. Tổng lợi nhuận kế toán trước thuế
+17,corp,,KQKD,2,51,16_chi_phi_thue_tndn_hien_hanh,16. Chi phí thuế TNDN hiện hành
+18,corp,,KQKD,2,52,17_chi_phi_thue_tndn_hoan_lai,17. Chi phí thuế TNDN hoãn lại
+19,corp,,KQKD,2,60,18_loi_nhuan_sau_thue_thu_nhap_doanh_nghiep,18. Lợi nhuận sau thuế thu nhập doanh nghiệp
+20,corp,,KQKD,0,61,loi_nhuan_sau_thue_cua_co_dong_cua_cong_ty_me,- Lợi nhuận sau thuế của cổ đông của Công ty mẹ
+21,corp,,KQKD,0,62,loi_ich_cua_co_dong_thieu_so,- Lợi ích của cổ đông thiểu số
+22,corp,,KQKD,2,70,19_lai_co_ban_tren_co_phieu_dong_1_co_phieu,19. Lãi cơ bản trên cổ phiếu (Đồng/1 cổ phiếu)
+23,corp,,KQKD,2,71,20_lai_suy_giam_tren_co_phieu_dong_1_co_phieu,20. Lãi suy giảm trên cổ phiếu (Đồng/1 cổ phiếu)
