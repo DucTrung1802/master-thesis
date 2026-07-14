@@ -14,7 +14,7 @@ raw_data/<source>/*.csv,*.xlsx           (produced by src/web_scraper)
         ▼   ingest_bronze_data()   ← load CSVs as-is, one bronze table per source/tab
   bronze_schema:  trading_view_{bonds,economy,forex,funds,indices,stocks},
                   cafef_{price,foreign,order_stats,prop_trading},
-                  cafef_insider_shareholder_transactions,
+                  cafef_insider_shareholder_transactions, cafef_news,
                   simplize_stocks, simplize_industry, gics
         │
         ▼   ingest_silver_data()   ← split symbol, merge sources, GICS classify
@@ -119,6 +119,24 @@ DTO helpers come from
     folder). **Event-based** (no natural date key) → deterministic **md5 `row_id`
     surrogate PK** (hash of the full raw row, so re-ingests are idempotent); five
     date columns overridden to `DATE`, long text columns to `TEXT`.
+  - `cafef_news` — the company-news / disclosure feed (from the `news/` folder):
+    headline, body, `type` (editorial|disclosure|error), `category` (topic), and the
+    filing `pdf_url` for disclosures. **Event-based**, and it breaks the shared CafeF
+    helpers three ways, so it has its own ingest (`_ingest_bronze_cafef_news`) rather
+    than going through `_helper_load_cafef_folder` / `_ingest_bronze_cafef_daily`:
+    - **the CSV has no exchange/ticker column** — they exist only in the filename
+      (`<EXCHANGE>_<SYMBOL>.csv`), so the key is rebuilt from the path;
+    - the key is stored **split as `(exchange, ticker)`**, not folded into the
+      `"<EXCHANGE>:<TICKER>"` colon key. That convention exists so the three price
+      sources merge uniformly in silver; news has nothing to merge with, and
+      `simplize_industry` keys the same way;
+    - **`order` is a reserved SQL word** → stored as `news_order`.
+
+    PK = md5 `row_id` of `(exchange, ticker, url)` — **not** of the whole row as the
+    insider table does. The URL is the article's identity (the scraper already dedups
+    on it), so a re-scrape that fills in a body which was previously a `type=error`
+    stub UPDATES the row instead of writing a second copy of the same article.
+    `content` reaches ~19 KB → `TEXT` is required, not `VARCHAR`.
 - **`simplize_stocks`** — the validated daily backbone: adjusted OHLC, true volume,
   net/pct change, foreign vol+val + room. Key normalised to `"<EXCHANGE>:<TICKER>"`.
 - **`simplize_industry`** — per-ticker VN GICS-based industry, loaded as-is;
@@ -191,14 +209,24 @@ DTO helpers come from
   `exchange` + `ticker`. CafeF/Simplize store the two split in the raw CSV and the
   bronze ingest re-joins them into the TV-style colon key so all three merge
   uniformly in silver.
+- **Not every `raw_data/` folder reaches bronze.** As of 2026-07-14 the gaps are
+  `cafef/financials/` (the parsed statements + the 12 schema CSVs + `templates.csv`)
+  and `cafef/pdfs/` (the 6.7 GB filing archive + its per-ticker `index/` CSVs) —
+  neither has an ingest yet. `trading_view/links/` + `collected_links/` are *by
+  design* not ingested: they are the ticker universe the scrapers read, not data.
+- **`cafef_news` ordering:** its `timestamp` is often **date-only** (midnight), so
+  same-day articles cannot be separated by it — order by
+  `(exchange, ticker, timestamp, news_order)` for a deterministic chronology. And
+  note `news_order` is numbered from the article's own `datePublished`, not from
+  CafeF's listing order (see `web_scraper/CONTEXT.md §3`).
 - **CafeF is one bronze table per scraper folder** (`cafef_price`, `cafef_foreign`,
   `cafef_order_stats`, `cafef_prop_trading`, `cafef_insider_shareholder_transactions`
-  ← from the `insider_txn/` folder) — the folder/column names are the contract, so
+  ← from the `insider_txn/` folder, `cafef_news`) — the folder/column names are the contract, so
   renaming them upstream breaks the ingest (mirrors the note in
   `web_scraper/CONTEXT.md §7`). The price+foreign merge that used to build
   `cafef_stocks` in bronze now happens in `_ingest_silver_stocks`. `order_stats` /
-  `prop_trading` / insider-shareholder txns are ingested to bronze but **not yet
-  consumed by silver/gold** — wiring them into a signal is future work. Prototyped
+  `prop_trading` / insider-shareholder txns / news are ingested to bronze but **not
+  yet consumed by silver/gold** — wiring them into a signal is future work. Prototyped
   shape (VCB, 2026-07-09): a **Simplize-backbone left-join** of all four daily CafeF
   tables on `(ticker, date)` — Simplize OHLC/volume/foreign as primary (CafeF fills
   nulls), plus CafeF's unique columns appended — yields **33 columns**, or **41** with
@@ -234,9 +262,9 @@ DTO helpers come from
   `_helper_transform` stays a simple sequential per-ticker loop — don't parallelize
   it without cause. FeatureSelector cost note: memory `project-feature-selection-ta-cost`.
 
-## 8. Current materialized state (snapshot — 2026-07-09)
+## 8. Current materialized state (snapshot — 2026-07-14)
 
-`bronze_schema` in `database_main_v2` after a full drop + re-ingest — **14 tables**:
+`bronze_schema` in `database_main_v2` after a full drop + re-ingest — **15 tables**:
 
 | Table | Rows | Notes |
 |---|---:|---|
@@ -251,6 +279,7 @@ DTO helpers come from
 | `cafef_order_stats` | 320,838 | daily; not yet in silver |
 | `cafef_prop_trading` | 64,139 | daily; not yet in silver |
 | `cafef_insider_shareholder_transactions` | 13,607 | event-based, `row_id` PK; not yet in silver |
+| `cafef_news` | 5,599 | event-based, `row_id` PK, `(exchange, ticker)` key; **VCB/PNJ/FPT only** (1,629 / 1,715 / 2,255) — the scraper has run on 3 tickers; not yet in silver |
 | `simplize_stocks` | 2,658,773 | PRIMARY daily backbone |
 | `simplize_industry` | 777 | per-ticker GICS industry |
 | `gics` | 163 | official sub-industry taxonomy |

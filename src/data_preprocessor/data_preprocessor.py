@@ -1103,6 +1103,107 @@ class DataPreprocessor:
             },
         )
 
+    def _ingest_bronze_cafef_news(self) -> None:
+        """CafeF company-news / disclosure feed — one row per article, from the
+        `news/` scraper folder. A point-in-time EVENT stream (headline, body, event
+        type and topic category, plus the filing PDF link for disclosures), not a
+        daily series, so there is no (symbol, date) key.
+
+        Three shape differences from the other CafeF folders:
+        - the CSV carries NO exchange/ticker column — they exist only in the filename
+          (`<EXCHANGE>_<SYMBOL>.csv`), so the key is rebuilt from the path;
+        - the key is stored SPLIT as (exchange, ticker) rather than folded into the
+          `symbol = "<EXCHANGE>:<TICKER>"` convention the daily CafeF tables use — the
+          colon key exists so the three price sources merge uniformly in silver, and
+          news has nothing to merge with; `simplize_industry` keys the same way;
+        - `order` is a reserved SQL word → stored as `news_order`.
+
+        PK = md5 of (exchange, ticker, url). The URL is the article's identity and is
+        already unique per ticker (the scraper dedups on it), so hashing it — rather
+        than the whole row, as the insider-transaction table does — keeps a re-scrape
+        whose body text changed (a corrected article, a filled-in `type=error` row) an
+        UPDATE of the same row instead of a second copy of the same article."""
+        self._logger.log_info("Ingesting bronze CafeF news data...")
+
+        files = glob(
+            os.path.join(CAFEF_RAW_DATA_DIR, "news", "**", "*.csv"), recursive=True
+        )
+
+        frames = []
+        for file_path in files:
+            df = pd.read_csv(file_path, encoding="utf-8")
+            if df.empty or df.dropna(how="all").empty:
+                continue
+            # The ticker lives ONLY in the filename: `<EXCHANGE>_<SYMBOL>.csv`.
+            exchange, _, ticker = os.path.splitext(os.path.basename(file_path))[
+                0
+            ].partition("_")
+            df["exchange"] = exchange
+            df["ticker"] = ticker
+            frames.append(df)
+
+        if not frames:
+            self._logger.log_error('No valid CafeF "news" CSV data found.')
+            return
+
+        df = pd.concat(frames, ignore_index=True).drop_duplicates()
+
+        df = df.rename(columns={"order": "news_order"})
+
+        df = self._helper_clean(
+            df,
+            [
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("exchange"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("ticker"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("url"),
+                CleanLayer.REMOVE_IF_ALL_COLUMNS_ARE_NULL(),
+                CleanLayer.ORDER_BY(["exchange", "ticker", "timestamp"]),
+            ],
+        )
+
+        df["row_id"] = [
+            hashlib.md5(f"{exchange}|{ticker}|{url}".encode("utf-8")).hexdigest()
+            for exchange, ticker, url in zip(df["exchange"], df["ticker"], df["url"])
+        ]
+
+        df = self._helper_cast_columns(
+            df, decimal_cols=[], bigint_cols=["news_order"]
+        )
+        df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
+
+        df = self._helper_remove_duplicates(df, primary_keys=["row_id"])
+
+        df = df[
+            [
+                "row_id",
+                "exchange",
+                "ticker",
+                "news_order",
+                "timestamp",
+                "type",
+                "category",
+                "headline",
+                "content",
+                "url",
+                "pdf_url",
+            ]
+        ]
+
+        self._helper_save_pandas_table_to_database(
+            schema_name=BRONZE_SCHEMA,
+            table_name="cafef_news",
+            primary_keys=["row_id"],
+            df=df,
+            dtype_overrides={
+                "row_id": DataType.VARCHAR(32),
+                "timestamp": DataType.TIMESTAMP(),
+                "headline": DataType.TEXT(),
+                "content": DataType.TEXT(),
+                "url": DataType.TEXT(),
+                "pdf_url": DataType.TEXT(),
+            },
+        )
+
     def _ingest_bronze_stocks_simplize(self) -> None:
         """Bronze table for Simplize per-stock daily data — the validated backbone
         of the daily panel: fully dividend-adjusted OHLC (CafeF only adjusts the
@@ -1939,6 +2040,7 @@ class DataPreprocessor:
                     self._ingest_bronze_cafef_order_stats()
                     self._ingest_bronze_cafef_prop_trading()
                     self._ingest_bronze_cafef_insider_shareholder_transactions()
+                    self._ingest_bronze_cafef_news()
                     self._ingest_bronze_stocks_simplize()
                     self._ingest_bronze_simplize_industry()
                 if self._switch_handler.is_enabled(
