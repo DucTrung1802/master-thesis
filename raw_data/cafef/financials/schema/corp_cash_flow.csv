@@ -1,0 +1,45 @@
+﻿order,template,method,section,level,cafef_code,column,as_printed
+0,corp,indirect,HDKD,2,HDKD_2,hdkd_indirect_1_loi_nhuan_truoc_thue,1. Lợi nhuận trước thuế
+1,corp,indirect,HDKD,2,HDKD_3,hdkd_indirect_2_dieu_chinh_cho_cac_khoan,2. Điều chỉnh cho các khoản
+2,corp,indirect,HDKD,0,HDKD_4,hdkd_indirect_khau_hao_tscd_va_bdsdt,- Khấu hao TSCĐ và BĐSĐT
+3,corp,indirect,HDKD,0,HDKD_5,hdkd_indirect_cac_khoan_du_phong,- Các khoản dự phòng
+4,corp,indirect,HDKD,0,HDKD_6,hdkd_indirect_lai_lo_chenh_lech_ty_gia_hoi_doai_do_danh_gia_lai_cac_khoan_muc_tien_te_co_goc_ngoai_te,"- Lãi, lỗ chênh lệch tỷ giá hối đoái do đánh giá lại các khoản mục tiền tệ có gốc ngoại tệ"
+5,corp,indirect,HDKD,0,HDKD_7,hdkd_indirect_lai_lo_tu_hoat_dong_dau_tu,"- Lãi, lỗ từ hoạt động đầu tư"
+6,corp,indirect,HDKD,0,HDKD_8,hdkd_indirect_chi_phi_lai_vay,- Chi phí lãi vay
+7,corp,indirect,HDKD,0,HDKD_9,hdkd_indirect_cac_khoan_dieu_chinh_khac,- Các khoản điều chỉnh khác
+8,corp,indirect,HDKD,2,HDKD_10,hdkd_indirect_3_loi_nhuan_tu_hoat_dong_kinh_doanh_truoc_thay_doi_von_luu_dong,3. Lợi nhuận từ hoạt động kinh doanh trước thay đổi vốn lưu động
+9,corp,indirect,HDKD,0,HDKD_11,hdkd_indirect_tang_giam_cac_khoan_phai_thu,"- Tăng, giảm các khoản phải thu"
+10,corp,indirect,HDKD,0,HDKD_12,hdkd_indirect_tang_giam_hang_ton_kho,"- Tăng, giảm hàng tồn kho"
+11,corp,indirect,HDKD,0,HDKD_13,hdkd_indirect_tang_giam_cac_khoan_phai_tra_khong_ke_lai_vay_phai_tra_thue_thu_nhap_doanh_nghiep_phai_nop,"- Tăng, giảm các khoản phải trả (Không kể lãi vay phải trả, thuế thu nhập doanh nghiệp phải nộp)"
+12,corp,indirect,HDKD,0,HDKD_14,hdkd_indirect_tang_giam_chi_phi_tra_truoc,"- Tăng, giảm chi phí trả trước"
+13,corp,indirect,HDKD,0,HDKD_15,hdkd_indirect_tang_giam_chung_khoan_kinh_doanh,"- Tăng, giảm chứng khoán kinh doanh"
+14,corp,indirect,HDKD,0,HDKD_16,hdkd_indirect_tien_lai_vay_da_tra,- Tiền lãi vay đã trả
+15,corp,indirect,HDKD,0,HDKD_17,hdkd_indirect_thue_thu_nhap_doanh_nghiep_da_nop,- Thuế thu nhập doanh nghiệp đã nộp
+16,corp,,HDKD,0,HDKD_18,hdkd_tien_thu_khac_tu_hoat_dong_kinh_doanh,- Tiền thu khác từ hoạt động kinh doanh
+17,corp,,HDKD,0,HDKD_19,hdkd_tien_chi_khac_cho_hoat_dong_kinh_doanh,- Tiền chi khác cho hoạt động kinh doanh
+18,corp,,HDKD,0,HDKD_20,hdkd_luu_chuyen_tien_thuan_tu_hoat_dong_kinh_doanh,Lưu chuyển tiền thuần từ hoạt động kinh doanh
+19,corp,direct,HDKD,2,HDKD_2,hdkd_direct_1_tien_thu_tu_ban_hang_cung_cap_dich_vu_va_doanh_thu_khac,"1. Tiền thu từ bán hàng, cung cấp dịch vụ và doanh thu khác"
+20,corp,direct,HDKD,2,HDKD_3,hdkd_direct_2_tien_chi_tra_cho_nguoi_cung_cap_hang_hoa_va_dich_vu,2. Tiền chỉ trả cho người cung cấp hàng hóa và dịch vụ
+21,corp,direct,HDKD,2,HDKD_4,hdkd_direct_3_tien_chi_tra_cho_nguoi_lao_dong,3. Tiền chỉ trả cho người lao động
+22,corp,direct,HDKD,2,HDKD_5,hdkd_direct_4_tien_chi_tra_lai_vay,4. Tiền chi trả lãi vay
+23,corp,direct,HDKD,2,HDKD_6,hdkd_direct_5_tien_chi_nop_thue_thu_nhap_doanh_nghiep,5. Tiến chỉ nộp thuê thu nhập doanh nghiệp
+24,corp,,HDDT,2,HDDT_22,hddt_1_tien_chi_de_mua_sam_xay_dung_tscd_va_cac_tai_san_dai_han_khac,"1.Tiền chi để mua sắm, xây dựng TSCĐ và các tài sản dài hạn khác"
+25,corp,,HDDT,2,HDDT_23,hddt_2_tien_thu_tu_thanh_ly_nhuong_ban_tscd_va_cac_tai_san_dai_han_khac,"2.Tiền thu từ thanh lý, nhượng bán TSCĐ và các tài sản dài hạn khác"
+26,corp,,HDDT,2,HDDT_24,hddt_3_tien_chi_cho_vay_mua_cac_cong_cu_no_cua_don_vi_khac,"3.Tiền chi cho vay, mua các công cụ nợ của đơn vị khác"
+27,corp,,HDDT,2,HDDT_25,hddt_4_tien_thu_hoi_cho_vay_ban_lai_cac_cong_cu_no_cua_don_vi_khac,"4.Tiền thu hồi cho vay, bán lại các công cụ nợ của đơn vị khác"
+28,corp,,HDDT,2,HDDT_26,hddt_5_tien_chi_dau_tu_gop_von_vao_don_vi_khac,5.Tiền chi đầu tư góp vốn vào đơn vị khác
+29,corp,,HDDT,2,HDDT_27,hddt_6_tien_thu_hoi_dau_tu_gop_von_vao_don_vi_khac,6.Tiền thu hồi đầu tư góp vốn vào đơn vị khác
+30,corp,,HDDT,2,HDDT_28,hddt_7_tien_thu_lai_cho_vay_co_tuc_va_loi_nhuan_duoc_chia,"7.Tiền thu lãi cho vay, cổ tức và lợi nhuận được chia"
+31,corp,,HDDT,0,HDDT_29,hddt_luu_chuyen_tien_thuan_tu_hoat_dong_dau_tu,Lưu chuyển tiền thuần từ hoạt động đầu tư
+32,corp,,HDTC,2,HDTC_31,hdtc_1_tien_thu_tu_phat_hanh_co_phieu_nhan_von_gop_cua_chu_so_huu,"1.Tiền thu từ phát hành cổ phiếu, nhận vốn góp của chủ sở hữu"
+33,corp,,HDTC,2,HDTC_32,hdtc_2_tien_tra_lai_von_gop_cho_cac_chu_so_huu_mua_lai_co_phieu_cua_doanh_nghiep_da_phat_hanh,"2.Tiền trả lại vón góp cho các chủ sở hữu, mua lại cổ phiếu của doanh nghiệp đã phát hành"
+34,corp,,HDTC,2,HDTC_33,hdtc_3_tien_thu_tu_di_vay,3.Tiền thu từ đi vay
+35,corp,,HDTC,2,HDTC_34,hdtc_4_tien_chi_tra_no_goc_vay,4.Tiền chi trả nợ gốc vay
+36,corp,,HDTC,2,HDTC_35,hdtc_5_tien_chi_tra_no_goc_thue_tai_chinh,5.Tiền chi trả nợ gốc thuê tài chính
+37,corp,,HDTC,2,HDTC_36,hdtc_6_co_tuc_loi_nhuan_da_tra_cho_chu_so_huu,"6. Cổ tức, lợi nhuận đã trả cho chủ sở hữu"
+38,corp,,HDTC,2,HDTC_37,hdtc_7_tien_thu_tu_von_gop_cua_co_dong_khong_kiem_soat,7. Tiền thu từ vốn góp của cổ đông không kiểm soát
+39,corp,,HDTC,0,HDTC_38,hdtc_luu_chuyen_tien_thuan_tu_hoat_dong_tai_chinh,Lưu chuyển tiền thuần từ hoạt động tài chính
+40,corp,,HDTC,0,HDTC_39,hdtc_luu_chuyen_tien_thuan_trong_ky_50_20_30_40,Lưu chuyển tiền thuần trong kỳ (50 = 20+30+40)
+41,corp,,HDTC,0,HDTC_40,hdtc_tien_va_tuong_duong_tien_dau_ky_60,Tiền và tương đương tiền đầu kỳ (60)
+42,corp,,HDTC,0,HDTC_41,hdtc_anh_huong_cua_thay_doi_ty_gia_hoi_doai_quy_doi_ngoai_te,Ảnh hưởng của thay đổi tỷ giá hối đoái quy đổi ngoại tệ
+43,corp,,HDTC,0,HDTC_42,hdtc_tien_va_tuong_duong_tien_cuoi_ky_70_50_60_61,Tiền và tương đương tiền cuối kỳ (70 = 50+60+61)

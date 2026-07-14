@@ -1,0 +1,27 @@
+﻿order,template,method,section,level,cafef_code,column,as_printed
+0,bank,,KQKD,2,1,1_thu_nhap_lai_va_cac_khoan_thu_nhap_tuong_tu,1. Thu nhập lãi và các khoản thu nhập tương tự
+1,bank,,KQKD,2,2,2_chi_phi_lai_va_cac_chi_phi_tuong_tu,2. Chi phí lãi và các chi phí tương tự
+2,bank,,KQKD,1,3,i_thu_nhap_lai_thuan,I. Thu nhập lãi thuần
+3,bank,,KQKD,2,4,3_thu_nhap_tu_hoat_dong_dich_vu,3. Thu nhập từ hoạt động dịch vụ
+4,bank,,KQKD,2,5,4_chi_phi_hoat_dong_dich_vu,4. Chi phí hoạt động dịch vụ
+5,bank,,KQKD,1,6,ii_lai_lo_thuan_tu_hoat_dong_dich_vu,II. Lãi/lỗ thuần từ hoạt động dịch vụ
+6,bank,,KQKD,1,7,iii_lai_lo_thuan_tu_hoat_dong_kinh_doanh_ngoai_hoi_va_vang,III. Lãi/lỗ thuần từ hoạt động kinh doanh ngoại hối và vàng
+7,bank,,KQKD,1,8,iv_lai_lo_thuan_tu_mua_ban_chung_khoan_kinh_doanh,IV. Lãi /lỗ thuần từ mua bán chứng khoán kinh doanh
+8,bank,,KQKD,1,9,v_lai_lo_thuan_tu_mua_ban_chung_khoan_dau_tu,V. Lãi/lỗ thuần từ mua bán chứng khoán đầu tư
+9,bank,,KQKD,2,10,5_thu_nhap_tu_hoat_dong_khac,5. Thu nhập từ hoạt động khác
+10,bank,,KQKD,2,11,6_chi_phi_hoat_dong_khac,6. Chi phí hoạt động khác
+11,bank,,KQKD,1,12,vi_lai_lo_thuan_tu_hoat_dong_khac,VI. Lãi/lỗ thuần từ hoạt động khác
+12,bank,,KQKD,1,13,vii_thu_nhap_tu_gop_von_mua_co_phan,"VII. Thu nhập từ góp vốn, mua cổ phần"
+13,bank,,KQKD,0,24,tong_thu_nhap_hoat_dong,Tổng thu nhập hoạt động
+14,bank,,KQKD,1,14,viii_chi_phi_hoat_dong,VIII. Chi phí hoạt động
+15,bank,,KQKD,0,25,chi_phi_hoat_dong_khac,Chi phí hoạt động khác
+16,bank,,KQKD,1,15,ix_loi_nhuan_thuan_tu_hoat_dong_kinh_doanh_truoc_chi_phi_du_phong_rui_ro_tin_dung,IX. Lợi nhuận thuần từ hoạt động kinh doanh trước chi phí dự phòng rủi ro tín dụng
+17,bank,,KQKD,1,16,x_chi_phi_du_phong_rui_ro_tin_dung,X. Chi phí dự phòng rủi ro tín dụng
+18,bank,,KQKD,1,17,xi_tong_loi_nhuan_truoc_thue,XI. Tổng lợi nhuận trước thuế
+19,bank,,KQKD,2,18,7_chi_phi_thue_tndn_hien_hanh,7. Chi phí thuế TNDN hiện hành
+20,bank,,KQKD,2,19,8_chi_phi_thue_tndn_hoan_lai,8. Chi phí thuế TNDN hoãn lại
+21,bank,,KQKD,1,20,xii_chi_phi_thue_tndn,XII. Chi phí thuế TNDN
+22,bank,,KQKD,1,21,xiii_loi_nhuan_sau_thue,XIII. Lợi nhuận sau thuế
+23,bank,,KQKD,1,22,xiv_loi_ich_cua_co_dong_thieu_so,XIV. Lợi ích của cổ đông thiểu số
+24,bank,,KQKD,1,26,xv_loi_nhuan_sau_thue_cua_co_dong_cua_ngan_hang_me,XV. Lợi nhuận sau thuế của cổ đông của Ngân hàng mẹ
+25,bank,,KQKD,0,23,lai_co_ban_tren_co_phieu_dong_1_co_phieu,Lãi cơ bản trên cổ phiếu (Đồng/1 cổ phiếu)

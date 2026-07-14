@@ -1,0 +1,12 @@
+﻿effective_date,period,shares_outstanding,charter_capital,prev_shares,delta_shares,pct_change,event_type,event_text,dating
+2009-03-31,Q1-2009,1210086026,12100860260000,,,,baseline,earliest filed charter capital,first_filing
+2010-09-30,Q3-2010,1322371500,13223715000000,1210086000,112285500,9.3%,unlogged_capital_increase,not in CafeF's action log — dated to the quarter-end it first appears,quarter_end
+2010-12-13,Q1-2011,1758754000,17587540000000,1322371500,436382500,33.0%,rights_issue,"Bán ưu đãi, tỷ lệ 100:33",ex_date
+2011-09-30,Q3-2011,1969804500,19698045000000,1758754000,211050500,12.0%,unlogged_capital_increase,not in CafeF's action log — dated to the quarter-end it first appears,quarter_end
+2012-03-31,Q1-2012,2317417100,23174171000000,1969804500,347612600,17.6%,unlogged_capital_increase,not in CafeF's action log — dated to the quarter-end it first appears,quarter_end
+2014-06-17,Q3-2014,2665020300,26650203000000,2317417100,347603200,15.0%,bonus_issue,"Thưởng bằng Cổ phiếu, tỷ lệ 100:15",ex_date
+2016-09-08,Q3-2016,3597768600,35977686000000,2665020300,932748300,35.0%,bonus_issue,"Thưởng bằng Cổ phiếu, tỷ lệ 100:35",ex_date
+2019-01-03,Q1-2019,3708877400,37088774000000,3597768600,111108800,3.1%,private_placement,Phát hành riêng lẻ 111.108.873,ex_date
+2021-12-21,Q1-2022,4732516600,47325166000000,3708877400,1023639200,27.6%,stock_dividend,"Cổ tức bằng Cổ phiếu, tỷ lệ 1000:276",ex_date
+2023-07-24,Q3-2023,5589091300,55890913000000,4732516600,856574700,18.1%,stock_dividend,"Cổ tức bằng Cổ phiếu, tỷ lệ 1000:181",ex_date
+2025-03-11,Q1-2025,8355675094,83556751000000,5589091300,2766583800,49.5%,stock_dividend,"Cổ tức bằng Cổ phiếu, tỷ lệ 1000:495",ex_date+pinned

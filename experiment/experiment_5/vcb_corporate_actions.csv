@@ -1,0 +1,18 @@
+﻿ex_date,event_type,factor,raw_text
+2010-03-09,cash_dividend,1.0,"Cổ tức bằng Tiền, tỷ lệ 12%"
+2010-12-13,rights_issue,1.33,"Bán ưu đãi, tỷ lệ 100:33"
+2013-02-25,cash_dividend,1.0,"Cổ tức bằng Tiền, tỷ lệ 12%"
+2014-06-17,bonus_issue,1.15,"Thưởng bằng Cổ phiếu, tỷ lệ 100:15"
+2014-06-17,cash_dividend,1.0,"Cổ tức bằng Tiền, tỷ lệ 12%"
+2015-06-25,cash_dividend,1.0,"Cổ tức bằng Tiền, tỷ lệ 10%"
+2016-09-08,bonus_issue,1.35,"Thưởng bằng Cổ phiếu, tỷ lệ 100:35"
+2016-09-08,cash_dividend,1.0,"Cổ tức bằng Tiền, tỷ lệ 10%"
+2017-09-27,cash_dividend,1.0,"Cổ tức bằng Tiền, tỷ lệ 8%"
+2019-01-03,private_placement,0.0,Phát hành riêng lẻ 111.108.873
+2019-12-29,cash_dividend,1.0,"Cổ tức bằng Tiền, tỷ lệ 8%"
+2020-12-20,cash_dividend,1.0,"Cổ tức bằng Tiền, tỷ lệ 8%"
+2021-12-21,stock_dividend,1.276,"Cổ tức bằng Cổ phiếu, tỷ lệ 1000:276"
+2021-12-21,cash_dividend,1.0,"Cổ tức bằng Tiền, tỷ lệ 12%"
+2023-07-24,stock_dividend,1.181,"Cổ tức bằng Cổ phiếu, tỷ lệ 1000:181"
+2025-03-11,stock_dividend,1.495,"Cổ tức bằng Cổ phiếu, tỷ lệ 1000:495"
+2025-10-02,cash_dividend,1.0,"Cổ tức bằng Tiền, tỷ lệ 4.5%"

@@ -3,7 +3,14 @@
 
 test.py
 
-raw_data/
+# raw_data is regenerable by the scrapers and far too large to track (the CafeF PDF archive
+# alone is ~1.7 GB per ticker) — with ONE exception, opened up at the bottom of this file:
+# raw_data/cafef/financials/. Git cannot re-include a file whose parent directory is excluded,
+# so the path is opened one level at a time rather than with a bare `raw_data/`.
+raw_data/*
+!raw_data/cafef/
+raw_data/cafef/*
+!raw_data/cafef/financials/
 
 bronze_data/
 
@@ -27,6 +34,19 @@ wandb/
 !experiment/experiment_4/vcb_quarter_publish_dates.csv
 !experiment/experiment_4/vcb_quarter_publish_dates_detail.csv
 !experiment/experiment_4/vcb_manual_overrides.csv
+# experiment_5 shares-outstanding deliverable + inputs are all tracked
+!experiment/experiment_5/*.csv
+# experiment_6 news deliverable tracked
+!experiment/experiment_6/*.csv
+# experiment_7 financial-statement deliverable tracked
+!experiment/experiment_7/*.csv
+# experiment_4/5 raw JSON caches are regenerable (--refresh); don't track them
+experiment/experiment_4/*.json
+experiment/experiment_5/*.json
+# experiment_7 PDF working dirs — filings are large and re-downloadable from CafeF
+experiment/experiment_7/pdf_cache/
+experiment/experiment_7/pdf_pages/
+*.pdf
 
 *.txt
 
@@ -36,3 +56,10 @@ src/model/runs/*/
 !src/model/runs/index.csv
 
 src/train_test_set/
+
+# The financial statements ARE the deliverable, and they are small (~0.3 MB): the four charts
+# of accounts, the ticker -> template map, and the parsed statements themselves. They cost
+# hours of OCR to produce, so they are tracked rather than regenerated. This negation must come
+# after the blanket `*.csv` above — the last matching rule wins.
+!raw_data/cafef/financials/**/*.csv
+!raw_data/cafef/financials/*.csv

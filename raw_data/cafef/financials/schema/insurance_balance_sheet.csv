@@ -1,0 +1,96 @@
+﻿order,template,method,section,level,cafef_code,column,as_printed
+0,insurance,,TN,0,100,a_tai_san_ngan_han,A. TÀI SẢN NGẮN HẠN
+1,insurance,,TN,1,110,i_tien_va_cac_khoan_tuong_duong_tien,I. Tiền và các khoản tương đương tiền
+2,insurance,,TN,2,111,i_1_tien,1. Tiền
+3,insurance,,TN,2,112,i_2_cac_khoan_tuong_duong_tien,2. Các khoản tương đương tiền
+4,insurance,,TN,1,120,ii_dau_tu_tai_chinh_ngan_han,II. Đầu tư tài chính ngắn hạn
+5,insurance,,TN,2,121,ii_1_chung_khoan_kinh_doanh,1. Chứng khoán kinh doanh
+6,insurance,,TN,2,122,ii_2_du_phong_giam_gia_chung_khoan_kinh_doanh,2. Dự phòng giảm giá chứng khoán kinh doanh (*)
+7,insurance,,TN,2,123,ii_3_dau_tu_nam_giu_den_ngay_dao_han,3. Đầu tư nắm giữ đến ngày đáo hạn
+8,insurance,,TN,2,129,ii_4_du_phong_phai_thu_ngan_han_kho_doi,4. Dự phòng phải thu ngắn hạn khó đòi
+9,insurance,,TN,1,130,iii_cac_khoan_phai_thu_ngan_han,III. Các khoản phải thu ngắn hạn
+10,insurance,,TN,2,131,iii_1_phai_thu_ngan_han_cua_khach_hang,1. Phải thu ngắn hạn của khách hàng
+11,insurance,,TN,2,131.1,iii_1_1_phai_thu_ve_hoat_dong_bao_hiem,1.1 Phải thu về hoạt động bảo hiểm
+12,insurance,,TN,2,131.2,iii_1_2_phai_thu_ve_hoat_dong_dau_tu_tai_chinh,1.2 Phải thu về hoạt động đầu tư tài chính
+13,insurance,,TN,2,132,iii_2_tra_truoc_cho_nguoi_ban_ngan_han,2. Trả trước cho người bán ngắn hạn
+14,insurance,,TN,2,133,iii_3_phai_thu_noi_bo_ngan_han,3. Phải thu nội bộ ngắn hạn
+15,insurance,,TN,2,134,iii_4_phai_thu_theo_tien_do_ke_hoach_hop_dong_xay_dung,4. Phải thu theo tiến độ kế hoạch hợp đồng xây dựng
+16,insurance,,TN,2,135,iii_5_phai_thu_ve_cho_vay_ngan_han,5. Phải thu về cho vay ngắn hạn
+17,insurance,,TN,2,136,iii_6_phai_thu_ngan_han_khac,6. Phải thu ngắn hạn khác
+18,insurance,,TN,2,137,iii_7_du_phong_phai_thu_ngan_han_kho_doi,7. Dự phòng phải thu ngắn hạn khó đòi (*)
+19,insurance,,TN,2,139,iii_8_tai_san_thieu_cho_xu_ly,8. Tài sản thiếu chờ xử lý
+20,insurance,,TN,1,140,iv_hang_ton_kho,IV. Hàng tồn kho
+21,insurance,,TN,2,141,iv_1_hang_ton_kho,1. Hàng tồn kho
+22,insurance,,TN,2,149,iv_2_du_phong_giam_gia_hang_ton_kho,2. Dự phòng giảm giá hàng tồn kho (*)
+23,insurance,,TN,1,150,v_tai_san_ngan_han_khac,V. Tài sản ngắn hạn khác
+24,insurance,,TN,2,151,v_1_chi_phi_tra_truoc_ngan_han,1. Chi phí trả trước ngắn hạn
+25,insurance,,TN,2,151.1,v_1_1_chi_phi_hoa_hong_chua_phan_bo,1.1 Chi phí hoa hồng chưa phân bổ
+26,insurance,,TN,2,151.2,v_1_2_chi_phi_tra_truoc_ngan_han_khac,1.2 Chi phí trả trước ngắn hạn khác
+27,insurance,,TN,2,152,v_2_thue_gtgt_duoc_khau_tru,2. Thuế GTGT được khấu trừ
+28,insurance,,TN,2,153,v_3_thue_va_cac_khoan_khac_phai_thu_cua_nha_nuoc,3. Thuế và các khoản khác phải thu của nhà nước
+29,insurance,,TN,2,155,v_4_tai_san_ngan_han_khac,4. Tài sản ngắn hạn khác
+30,insurance,,TN,1,190,vi_tai_san_tai_bao_hiem,VI. Tài sản tái bảo hiểm
+31,insurance,,TN,2,191,vi_1_du_phong_phi_nhuong_tai_bao_hiem,1. Dự phòng phí nhượng tái bảo hiểm
+32,insurance,,TN,2,192,vi_2_du_phong_boi_thuong_nhuong_tai_bao_hiem,2. Dự phòng bồi thường nhượng tái bảo hiểm
+33,insurance,,TN,0,200,b_tai_san_dai_han,B. TÀI SẢN DÀI HẠN
+34,insurance,,TN,1,210,i_cac_khoan_phai_thu_dai_han,I. Các khoản phải thu dài hạn
+35,insurance,,TN,2,211,i_1_phai_thu_dai_han_cua_khach_hang,1. Phải thu dài hạn của khách hàng
+36,insurance,,TN,2,212,i_2_tra_truoc_cho_nguoi_ban_dai_han,2. Trả trước cho người bán dài hạn
+37,insurance,,TN,2,213,i_3_von_kinh_doanh_o_cac_don_vi_truc_thuoc,3. Vốn kinh doanh ở các đơn vị trực thuộc
+38,insurance,,TN,2,214,i_4_phai_thu_noi_bo_dai_han,4. Phải thu nội bộ dài hạn
+39,insurance,,TN,2,215,i_5_phai_thu_ve_cho_vay_dai_han,5. Phải thu về cho vay dài hạn
+40,insurance,,TN,2,216,i_6_phai_thu_dai_han_khac,6. Phải thu dài hạn khác
+41,insurance,,TN,2,219,i_7_du_phong_phai_thu_dai_han_kho_doi,7. Dự phòng phải thu dài hạn khó đòi (*)
+42,insurance,,TN,1,220,ii_tai_san_co_dinh,II. Tài sản cố định
+43,insurance,,TN,2,221,ii_1_tai_san_co_dinh_huu_hinh,1. Tài sản cố định hữu hình
+44,insurance,,TN,0,222,ii_1_nguyen_gia,- Nguyên giá
+45,insurance,,TN,0,223,ii_1_gia_tri_khau_hao_luy_ke,- Giá trị khấu hao luỹ kế
+46,insurance,,TN,2,227,ii_2_tai_san_co_dinh_vo_hinh,2. Tài sản cố định vô hình
+47,insurance,,TN,0,228,ii_2_nguyen_gia,- Nguyên giá
+48,insurance,,TN,0,229,ii_2_gia_tri_hao_mon_luy_ke,- Giá trị hao mòn lũy kế
+49,insurance,,TN,1,230,iii_bat_dong_san_dau_tu,III. Bất động sản đầu tư
+50,insurance,,TN,0,231,iii_nguyen_gia,- Nguyên giá
+51,insurance,,TN,0,232,iii_gia_tri_hao_mon_luy_ke,- Giá trị hao mòn lũy kế
+52,insurance,,TN,1,240,iv_tai_san_do_dang_dai_han,IV. Tài sản dở dang dài hạn
+53,insurance,,TN,2,241,iv_1_chi_phi_san_xuat_kinh_doanh_do_dang_dai_han,"1. Chi phí sản xuất, kinh doanh dở dang dài hạn"
+54,insurance,,TN,2,242,iv_2_chi_phi_xay_dung_co_ban_do_dang,2. Chi phí xây dựng cơ bản dở dang
+55,insurance,,TN,1,250,v_dau_tu_tai_chinh_dai_han,V. Đầu tư tài chính dài hạn
+56,insurance,,TN,2,251,v_1_dau_tu_vao_cong_ty_con,1. Đầu tư vào công ty con
+57,insurance,,TN,2,252,v_2_dau_tu_vao_cong_ty_lien_doanh_lien_ket,"2. Đầu tư vào công ty liên doanh, liên kết"
+58,insurance,,TN,2,253,v_3_dau_tu_gop_von_vao_don_vi_khac,3. Đầu tư góp vốn vào đơn vị khác
+59,insurance,,TN,2,254,v_4_du_phong_dau_tu_tai_chinh_dai_han,4. Dự phòng đầu tư tài chính dài hạn
+60,insurance,,TN,2,255,v_5_dau_tu_nam_giu_den_ngay_dao_han,5. Đầu tư nắm giữ đến ngày đáo hạn
+61,insurance,,TN,1,260,vi_tai_san_dai_han_khac,VI. Tài sản dài hạn khác
+62,insurance,,TN,2,261,vi_1_chi_phi_tra_truoc_dai_han,1. Chi phí trả trước dài hạn
+63,insurance,,TN,2,262,vi_2_tai_san_thue_thu_nhap_hoan_lai,2. Tài sản thuế thu nhập hoãn lại
+64,insurance,,TN,2,263,vi_3_thiet_bi_vat_tu_phu_tung_thay_the_dai_han,"3. Thiết bị, vật tư, phụ tùng thay thế dài hạn"
+65,insurance,,TN,2,268,vi_4_tai_san_dai_han_khac,4. Tài sản dài hạn khác
+66,insurance,,TN,2,269,vi_5_loi_the_thuong_mai,5. Lợi thế thương mại
+67,insurance,,TN,0,270,tong_cong_tai_san,TỔNG CỘNG TÀI SẢN
+68,insurance,,NV,0,300,c_no_phai_tra,C. NỢ PHẢI TRẢ
+69,insurance,,NV,1,310,i_no_ngan_han,I. Nợ ngắn hạn
+70,insurance,,NV,1,330,ii_no_dai_han,II. Nợ dài hạn
+71,insurance,,NV,0,400,d_von_chu_so_huu,D VỐN CHỦ SỞ HỮU
+72,insurance,,NV,1,410,i_von_chu_so_huu,I. Vốn chủ sở hữu
+73,insurance,,NV,2,411,i_1_von_gop_cua_chu_so_huu,1. Vốn góp của chủ sở hữu
+74,insurance,,NV,0,411a,i_1_co_phieu_pho_thong_co_quyen_bieu_quyet,- Cổ phiếu phổ thông có quyền biểu quyết
+75,insurance,,NV,0,411b,i_1_co_phieu_uu_dai,- Cổ phiếu ưu đãi
+76,insurance,,NV,2,412,i_2_thang_du_von_co_phan,2. Thặng dư vốn cổ phần
+77,insurance,,NV,2,413,i_3_quyen_chon_chuyen_doi_trai_phieu,3. Quyền chọn chuyển đổi trái phiếu
+78,insurance,,NV,2,414,i_4_von_khac_cua_chu_so_huu,4. Vốn khác của chủ sở hữu
+79,insurance,,NV,2,415,i_5_co_phieu_quy,5. Cổ phiếu quỹ (*)
+80,insurance,,NV,2,416,i_6_chenh_lech_danh_gia_lai_tai_san,6. Chênh lệch đánh giá lại tài sản
+81,insurance,,NV,2,417,i_7_chenh_lech_ty_gia_hoi_doai,7. Chênh lệch tỷ giá hối đoái
+82,insurance,,NV,2,418,i_8_quy_dau_tu_phat_trien,8. Quỹ đầu tư phát triển
+83,insurance,,NV,2,419,i_9_quy_du_tru_bat_buoc,9. Quỹ dự trữ bắt buộc
+84,insurance,,NV,2,420,i_10_quy_khac_thuoc_von_chu_so_huu,10. Quỹ khác thuộc vốn chủ sở hữu
+85,insurance,,NV,2,421,i_11_loi_nhuan_sau_thue_chua_phan_phoi,11. Lợi nhuận sau thuế chưa phân phối
+86,insurance,,NV,0,421a,i_11_lnst_chua_phan_phoi_luy_ke_den_cuoi_ky_truoc,- LNST chưa phân phối lũy kế đến cuối kỳ trước
+87,insurance,,NV,0,421b,i_11_lnst_chua_phan_phoi_ky_nay,- LNST chưa phân phối kỳ này
+88,insurance,,NV,2,422,i_12_nguon_von_dau_tu_xdcb,12. Nguồn vốn đầu tư XDCB
+89,insurance,,NV,2,429,i_13_loi_ich_co_dong_khong_kiem_soat,13. Lợi ích cổ đông không kiểm soát
+90,insurance,,NV,1,430,ii_nguon_kinh_phi_va_quy_khac,II. Nguồn kinh phí và quỹ khác
+91,insurance,,NV,2,431,ii_1_nguon_kinh_phi,1. Nguồn kinh phí
+92,insurance,,NV,2,432,ii_2_nguon_kinh_phi_da_hinh_thanh_tscd,2. Nguồn kinh phí đã hình thành TSCĐ
+93,insurance,,NV,0,,c_loi_ich_co_dong_thieu_so,C. LỢI ÍCH CỔ ĐÔNG THIỂU SỐ
+94,insurance,,NV,0,440,tong_cong_nguon_von,TỔNG CỘNG NGUỒN VỐN

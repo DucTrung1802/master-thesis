@@ -1,0 +1,133 @@
+﻿order,template,method,section,level,cafef_code,column,as_printed
+0,securities,,TN,0,100,a_tai_san_ngan_han,A. TÀI SẢN NGẮN HẠN
+1,securities,,TN,1,110,i_tai_san_tai_chinh,i. Tài sản tài chính
+2,securities,,TN,2,111,i_1_tien_va_cac_khoan_tuong_duong_tien,1. Tiền và các khoản tương đương tiền
+3,securities,,TN,2,111.1,i_1_1_tien,1.1 Tiền
+4,securities,,TN,2,111.2,i_1_2_cac_khoan_tuong_duong_tien,1.2 Các khoản tương đương tiền
+5,securities,,TN,2,112,i_2_cac_tai_san_tai_chinh_ghi_nhan_thong_qua_lai_lo_fvtpl,"2. Các tài sản tài chính ghi nhận thông qua lãi/lỗ (""FVTPL"")"
+6,securities,,TN,2,113,i_3_cac_khoan_dau_tu_nam_giu_den_ngay_dao_han_htm,"3. Các khoản đầu tư nắm giữ đến ngày đáo hạn (""HTM"")"
+7,securities,,TN,2,114,i_4_cac_khoan_cho_vay,4. Các khoản cho vay
+8,securities,,TN,2,115,i_5_tai_san_tai_chinh_san_sang_de_ban_afs,"5. Tài sản tài chính sẵn sàng đề bán (""AFS"")"
+9,securities,,TN,2,116,i_6_du_phong_suy_giam_gia_tri_cac_tai_san_tai_chinh_va_tai_san_the_chap,6.Dự phòng suy giảm giá trị các tài sản tài chính và tài sản thế chấp
+10,securities,,TN,2,117,i_7_cac_khoan_phai_thu,7. Các khoản phải thu
+11,securities,,TN,2,117.1,i_7_1_phai_thu_ban_cac_tai_san_tai_chinh,7.1. Phải thu bán các tài sản tài chính
+12,securities,,TN,2,117.2,i_7_2_phai_thu_va_du_thu_co_tuc_tien_lai_cac_tai_san_tai_chinh,"7.2. Phải thu và dự thu cổ tức, tiền lãi các tải sản tài chính"
+13,securities,,TN,2,117.3,i_7_2_1_phai_thu_va_du_thu_co_tuc_tien_lai_den_ngay_nhan,7.2.1 Phải thu và dư thu cổ tức tiền lãi đến ngày nhận
+14,securities,,TN,2,117.4,i_7_2_2_du_thu_co_tuc_tien_lai_chua_den_ngay_nhan,"7.2.2 Dự thu cổ tức, tiền lãi chưa đến ngày nhận"
+15,securities,,TN,2,118,i_8_tra_truoc_cho_nguoi_ban,8. Trả trước cho người bán
+16,securities,,TN,2,119,i_9_phai_thu_cac_dich_vu_cong_ty_chung_khoan_cung_cap,9. Phải thu các dịch vụ công ty chứng khoán cung cấp
+17,securities,,TN,2,120,i_10_phai_thu_noi_bo,10. Phải thu nội bộ
+18,securities,,TN,2,121,i_11_phai_thu_ve_loi_giao_dich_chung_khoan,11. Phải thu về lỗi giao dịch chứng khoán
+19,securities,,TN,2,122,i_12_cac_khoan_phai_thu_khac,12. Các khoản phải thu khác
+20,securities,,TN,2,129,i_13_du_phong_suy_giam_gia_tri_cac_khoan_phai_thu,13. Dự phòng suy giảm giá trị các khoản phải thu
+21,securities,,TN,1,130,ii_tai_san_ngan_han_khac,II. Tài sản ngắn hạn khác
+22,securities,,TN,2,131,ii_1_tam_ung,1. Tạm ứng
+23,securities,,TN,2,132,ii_2_vat_tu_van_phong_cong_cu_dung_cu,"2. Vật tư văn phòng, công cụ, dụng cụ"
+24,securities,,TN,2,133,ii_3_chi_phi_tra_truoc_ngan_han,3. Chi phí trả trước ngắn hạn
+25,securities,,TN,2,134,ii_4_cam_co_the_chap_ky_quy_ky_cuoc_ngan_han,"4. Cầm cố, thể chấp, ký quỹ, ký cược ngắn hạn"
+26,securities,,TN,2,135,ii_5_thue_gia_tri_gia_tang_duoc_khau_tru,5. Thuế giá trị gia tăng được khấu trừ
+27,securities,,TN,2,136,ii_6_thue_va_cac_khoan_khac_phai_thu_nha_nuoc,6. Thuế và các khoản khác phải thu Nhà nước
+28,securities,,TN,2,137,ii_7_tai_san_ngan_han_khac,7. Tài sản ngắn hạn khác
+29,securities,,TN,2,138,ii_8_giao_dich_mua_ban_lai_trai_phieu_chinh_phu,8. Giao dịch mua bán lại trái phiếu Chính Phủ
+30,securities,,TN,2,139,ii_9_du_phong_suy_giam_gia_tri_tai_san_ngan_han_khac,9. Dự phòng suy giảm giá trị tài sản ngắn hạn khác
+31,securities,,TN,0,200,b_tai_san_dai_han,B. TÀI SẢN DÀI HẠN
+32,securities,,TN,1,210,i_cac_khoan_dau_tu_dai_han,I. Các khoản đầu tư dài hạn
+33,securities,,TN,2,211,i_1_cac_khoan_phai_thu_dai_han,1. Các khoản phải thu dài hạn
+34,securities,,TN,2,212,i_2_cac_khoan_dau_tu_dai_han,2. Các khoản đầu tư dài hạn
+35,securities,,TN,2,212.1,i_2_1_cac_khoan_dau_tu_nam_giu_den_ngay_dao_han,2.1. Các khoản đầu tư nắm giữ đến ngày đáo hạn
+36,securities,,TN,2,212.2,i_2_2_dau_tu_vao_cong_ty_con,2.2 Đầu tư vào công ty con
+37,securities,,TN,2,212.3,i_2_3_dau_tu_vao_cong_ty_lien_doanh_lien_ket,"2.3 Đầu tư vào công ty liên doanh, liên kết"
+38,securities,,TN,2,212.4,i_2_4_dau_tu_dai_han_khac,2.4 Đầu tư dài hạn khác
+39,securities,,TN,2,213,i_3_du_phong_suy_giam_tai_san_tai_chinh_dai_han,3. Dự phòng suy giảm tài sản tài chính dài hạn
+40,securities,,TN,1,220,ii_tai_san_co_dinh,II. Tài sản cố định
+41,securities,,TN,2,221,ii_1_tai_san_co_dinh_huu_hinh,1. Tài sản cổ định hữu hình
+42,securities,,TN,0,222,ii_1_nguyen_gia,- Nguyên giá
+43,securities,,TN,0,223a,ii_1_gia_tri_khau_hao_luy_ke,- Giá trị khẩu hao lũy kế
+44,securities,,TN,0,223b,ii_1_danh_gia_tscdhh_theo_gia_tri_hop_ly,- Đánh giá TSCĐHH theo giá trị hợp lý
+45,securities,,TN,2,224,ii_2_tai_san_co_dinh_thue_tai_chinh,2. Tài sản cố định thuê tài chính
+46,securities,,TN,0,225,ii_2_nguyen_gia,- Nguyên giá
+47,securities,,TN,0,226a,ii_2_gia_tri_hao_mon_luy_ke,- Giá trị hao mòn lũy kế
+48,securities,,TN,0,226b,ii_2_danh_gia_tscdhh_theo_gia_tri_hop_ly,- Đánh giá TSCĐHH theo giá trị hợp lý
+49,securities,,TN,2,227,ii_3_tai_san_co_dinh_vo_hinh,3. Tài sản cố đinh vô hình
+50,securities,,TN,0,228,ii_3_nguyen_gia,- Nguyên giá
+51,securities,,TN,0,229a,ii_3_gia_tri_hao_mon_luy_ke,- Giá trị hao mòn lũy kế
+52,securities,,TN,0,229b,ii_3_danh_gia_tscdvh_theo_gia_tri_hop_ly,- Đánh giá TSCĐVH theo giá trị hợp lý
+53,securities,,TN,1,230,iii_bat_dong_san_dau_tu,III. Bất động sản đầu tư
+54,securities,,TN,0,231,iii_nguyen_gia,- Nguyên giá
+55,securities,,TN,0,232a,iii_gia_tri_hao_mon_luy_ke,- Giá trị hao mòn lũy kế
+56,securities,,TN,0,232b,iii_danh_gia_tscdvh_theo_gia_tri_hop_ly,- Đánh giá TSCĐVH theo giá trị hợp lý
+57,securities,,TN,1,240,iv_chi_phi_xay_dung_co_ban_do_dang,IV. Chi phí xây dựng cơ bản dở dang
+58,securities,,TN,1,250,v_tai_san_dai_han_khac,V. Tài sản dài hạn khác
+59,securities,,TN,2,251,v_1_cam_co_the_chap_ky_quy_ky_cuoc_dai_han,"1. Cầm cố, thế chấp, ký quỹ, ký cược dài hạn"
+60,securities,,TN,2,252,v_2_chi_phi_tra_truoc_dai_han,2. Chi phí trả trước dài hạn
+61,securities,,TN,2,253,v_3_tai_san_thue_thu_nhap_hoan_lai,3. Tài sản thuế thu nhập hoãn lại
+62,securities,,TN,2,254,v_4_tien_nop_quy_ho_tro_thanh_toan,4. Tiền nộp Quỹ Hỗ trợ thanh toán
+63,securities,,TN,2,255,v_5_tai_san_dai_han_khac,5. Tài sản dài hạn khác
+64,securities,,TN,2,256,v_6_loi_the_thuong_mai,6. Lợi thế thương mại
+65,securities,,TN,1,260,vi_du_phong_suy_giam_gia_tri_tai_san_dai_han,VI. Dự phòng suy giảm giá trị tài sản dài hạn
+66,securities,,TN,0,270,tong_cong_tai_san,TỔNG CỘNG TÀI SẢN
+67,securities,,NV,0,300,c_no_phai_tra,C. NỢ PHẢI TRẢ
+68,securities,,NV,1,310,i_no_phai_tra_ngan_han,I. Nợ phải trả ngắn hạn
+69,securities,,NV,2,311,i_1_vay_va_no_thue_tai_chinh_ngan_han,1. Vay và nợ thuê tài chính ngắn hạn
+70,securities,,NV,2,312,i_1_1_vay_ngan_han,1.1. Vay ngăn hạn
+71,securities,,NV,2,313,i_1_2_no_thue_tai_chinh_ngan_han,1.2. Nợ thuê tài chính ngắn hạn
+72,securities,,NV,2,314,i_2_vay_tai_san_tai_chinh_ngan_han,2. Vay tài sản tài chính ngắn hạn
+73,securities,,NV,2,315,i_3_trai_phieu_chuyen_doi_ngan_han,3. Trái phiếu chuyển đổi ngắn hạn
+74,securities,,NV,2,316,i_4_trai_phieu_phat_hanh_ngan_han,4. Trái phiếu phát hành ngắn hạn
+75,securities,,NV,2,317,i_5_vay_quy_ho_tro_thanh_toan,5. Vay Quỹ Hỗ trợ thanh toán
+76,securities,,NV,2,318,i_6_phai_tra_hoat_dong_giao_dich_chung_khoan,6. Phải trả hoạt động giao dịch chứng khoán
+77,securities,,NV,2,319,i_7_phai_tra_ve_loi_giao_dich_cac_tai_san_tai_chinh,7. Phải trả về lỗi giao dịch các tài sản tài chính
+78,securities,,NV,2,320,i_8_phai_tra_nguoi_ban_ngan_han,8. Phải trả người bản ngắn hạn
+79,securities,,NV,2,321,i_9_nguoi_mua_tra_tien_truoc_ngan_han,9. Người mua trả tiền trước ngắn hạn
+80,securities,,NV,2,322,i_10_thue_va_cac_khoan_phai_nop_nha_nuoc,10. Thuế và các khoản phải nộp Nhà nước
+81,securities,,NV,2,323,i_11_phai_tra_nguoi_lao_dong,11. Phải trả người lao động
+82,securities,,NV,2,324,i_12_cac_khoan_trich_nop_phuc_loi_nhan_vien,12. Các khoản trích nộp phúc lợi nhân viên
+83,securities,,NV,2,325,i_13_chi_phi_phai_tra_ngan_han,13. Chi phí phải trả ngắn hạn
+84,securities,,NV,2,326,i_14_phai_tra_noi_bo_ngan_han,14. Phải trả nội bộ ngắn hạn
+85,securities,,NV,2,327,i_15_doanh_thu_chua_thuc_hien_ngan_han,15. Doanh thu chưa thực hiện ngắn hạn
+86,securities,,NV,2,328,i_16_nhan_ky_quy_ky_cuoc_ngan_han,"16. Nhận ký quỹ, ký cược ngắn hạn"
+87,securities,,NV,2,329,i_17_cac_khoan_phai_tra_phai_nop_ngan_han_khac,"17. Các khoản phải trả, phải nộp ngắn hạn khác"
+88,securities,,NV,2,330,i_18_du_phong_phai_tra_ngan_han,18. Dự phòng phải trả ngắn hạn
+89,securities,,NV,0,332,i_18_giao_dich_mua_ban_lai_trai_phieu_chinh_phu,- Giao dịch mua bán lại trái phiếu Chính phủ
+90,securities,,NV,2,331,i_19_quy_khen_thuong_phuc_loi,"19. Quỹ khen thưởng, phúc lợi"
+91,securities,,NV,1,340,ii_no_phai_tra_dai_han,II. Nợ phải trả dài hạn
+92,securities,,NV,2,341,ii_1_vay_va_no_thue_tai_san_tai_chinh_dai_han,1. Vay và nợ thuê tài sản tài chính dài hạn
+93,securities,,NV,0,342,ii_1_vay_dai_han,- Vay dài hạn
+94,securities,,NV,0,343,ii_1_no_thue_tai_san_tai_chinh_dai_han,- Nợ thuê tài sản tài chính dài hạn
+95,securities,,NV,2,344,ii_2_vay_tai_san_tai_chinh_dai_han,2. Vay tài sản tài chính dài hạn
+96,securities,,NV,2,345,ii_3_trai_phieu_chuyen_doi_dai_han,3. Trái phiếu chuyển đổi dài hạn
+97,securities,,NV,2,346,ii_4_trai_phieu_phat_hanh_dai_han,4. Trái phiếu phát hành dài hạn
+98,securities,,NV,2,347,ii_5_phai_tra_nguoi_ban_dai_han,5. Phải trả người bán dài hạn
+99,securities,,NV,2,348,ii_6_nguoi_mua_tra_tien_truoc_dai_han,6. Người mua trả tiền trước dài hạn
+100,securities,,NV,2,349,ii_7_chi_phi_phai_tra_dai_han,7. Chi phí phải trả dài hạn
+101,securities,,NV,2,350,ii_8_phai_tra_noi_bo_dai_han,8. Phải trả nội bộ dài hạn
+102,securities,,NV,2,351,ii_9_doanh_thu_chua_thuc_hien_dai_han,9. Doanh thu chưa thực hiện dài hạn
+103,securities,,NV,2,352,ii_10_nhan_ky_quy_ky_cuoc_dai_han,"10. Nhận ký quỹ, ký cược dài hạn"
+104,securities,,NV,2,353,ii_11_cac_khoan_phai_tra_phai_nop_khac_dai_han,"11. Các khoản phải trả, phải nộp khác dài hạn"
+105,securities,,NV,2,354,ii_12_du_phong_phai_tra_dai_han,12. Dự phòng phải trả dài hạn
+106,securities,,NV,2,355,ii_13_du_phong_boi_thuong_thiet_hai_cho_nha_dau_tu,13. Dự phòng bồi thường thiệt hại cho nhà đầu tư
+107,securities,,NV,2,356,ii_14_thue_thu_nhap_hoan_lai_phai_tra,14. Thuế thu nhập hoãn lại phải trả
+108,securities,,NV,2,357,ii_15_quy_phat_trien_khoa_hoc_va_cong_nghe,15. Quỹ phát triển khoa học và công nghệ
+109,securities,,NV,0,400,d_von_chu_so_huu,D. VỐN CHỦ SỞ HỮU
+110,securities,,NV,1,410,i_von_chu_so_huu,I. Vốn chủ sở hữu
+111,securities,,NV,2,411,i_1_von_dau_tu_cua_chu_so_huu,1. Vốn đầu tư của chủ sở hữu
+112,securities,,NV,2,411.1,i_1_1_von_gop_cua_chu_so_huu,1.1 Vốn góp của chủ sở hữu
+113,securities,,NV,3,411.1a,i_1_a_co_phieu_pho_thong_co_quyen_bieu_quyet,a. Cổ phiếu phổ thông có quyền biểu quyết
+114,securities,,NV,3,411.1b,i_1_b_co_phieu_uu_dai,b. Cổ phiếu ưu đãi
+115,securities,,NV,2,411.2,i_1_2_thang_du_von_co_phan,1.2 Thặng dư vốn cổ phần
+116,securities,,NV,2,411.3,i_1_3_quyen_chon_chuyen_doi_trai_phieu,1.3 Quyền chọn chuyển đổi trái phiếu
+117,securities,,NV,2,411.4,i_1_4_von_khac_cua_chu_so_huu,1.4 Vốn khác của chủ sở hữu
+118,securities,,NV,2,411.5,i_1_5_co_phieu_quy,1.5 Cổ phiếu quỹ
+119,securities,,NV,2,412,i_2_chenh_lech_danh_gia_tai_san_theo_gia_tri_hop_ly,2. Chênh lệch đánh giá tài sản theo giá trị hợp lý
+120,securities,,NV,2,413,i_3_chenh_lech_ty_gia_hoi_doai,3. Chênh lệch tỷ giá hối đoái
+121,securities,,NV,2,414,i_4_quy_du_tru_bo_sung_von_dieu_le,4. Quỹ dự trữ bổ sung vốn điều lệ
+122,securities,,NV,2,415,i_5_quy_du_phong_tai_chinh_va_rui_ro_nghe_nghiep,5. Quỹ dự phòng tài chính và rủi ro nghề nghiệp
+123,securities,,NV,2,416,i_6_cac_quy_khac_thuoc_von_chu_so_huu,6. Các quỹ khác thuộc vốn chủ sở hữu
+124,securities,,NV,2,417,i_7_loi_nhuan_chua_phan_phoi,7. Lợi nhuận chưa phân phối
+125,securities,,NV,2,417.1,i_7_1_loi_nhuan_sau_thue_da_thuc_hien,7.1 Lợi nhuận sau thuế đã thực hiện
+126,securities,,NV,2,417.2,i_7_2_loi_nhuan_chua_thuc_hien,7.2 Lợi nhuận chưa thực hiện
+127,securities,,NV,2,418,i_8_loi_ich_cua_co_dong_khong_nam_quyen_kiem_soat,8. Lợi ích của cổ đông không nắm quyền kiểm soát
+128,securities,,NV,1,420,ii_nguon_kinh_phi_va_quy_khac,II. Nguồn kinh phí và quỹ khác
+129,securities,,NV,0,440,tong_cong_no_phai_tra_va_von_chu_so_huu,TỔNG CỘNG NỢ PHẢI TRẢ VÀ VỐN CHỦ SỜ HỮU
+130,securities,,NV,0,441,loi_nhuan_da_phan_phoi_cho_nha_dau_tu,LỢI NHUẬN ĐÃ PHÂN PHỐI CHO NHÀ ĐẦU TƯ
+131,securities,,NV,0,442,loi_nhuan_da_phan_phoi_cho_nha_dau_tu_trong_nam,Lợi nhuận đã phân phối cho Nhà đâu tư trong năm
