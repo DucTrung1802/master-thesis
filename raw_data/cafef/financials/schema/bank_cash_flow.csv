@@ -1,0 +1,50 @@
+﻿order,template,method,section,level,cafef_code,column,as_printed
+0,bank,,HDKD,2,HDKD_2,hdkd_1_thu_nhap_lai_va_cac_khoan_thu_nhap_tuong_tu_nhan_duoc,1.Thu nhập lãi và các khoản thu nhập tương tự nhận được
+1,bank,,HDKD,2,HDKD_3,hdkd_2_chi_phi_lai_va_cac_chi_phi_tuong_tu_da_tra,2. Chi phí lãi và các chi phí tương tự đã trả
+2,bank,,HDKD,2,HDKD_4,hdkd_3_thu_nhap_tu_hoat_dong_dich_vu,3. Thu nhập từ hoạt động dịch vụ
+3,bank,,HDKD,2,HDKD_5,hdkd_4_chenh_lech_so_tien_thuc_thu_thuc_chi_tu_hoat_dong_kinh_doanh_chung_khoan_vang_bac_ngoai_te,"4. Chênh lêch số tiền thực thu/thực chi từ hoạt động kinh doanh chứng khoán, vàng bạc, ngoại tệ"
+4,bank,,HDKD,2,HDKD_6,hdkd_5_lai_lo_tu_hoat_dong_khac,5. Lãi/(lỗ) từ hoạt động khác
+5,bank,,HDKD,2,HDKD_7,hdkd_6_tien_thu_cac_khoan_no_da_duoc_xu_ly_xoa_bu_dap_bang_nguon_du_phong_rui_ro,"6.Tiền thu các khoản nợ đã được xử lý xoá, bù đắp bằng nguồn dự phòng rủi ro"
+6,bank,,HDKD,2,HDKD_8,hdkd_7_tien_chi_tra_cho_nhan_vien_va_hoat_dong_quan_ly_cong_vu,"7. Tiền chi trả cho nhân viên và hoạt động quản lý, công vụ"
+7,bank,,HDKD,2,HDKD_9,hdkd_8_tien_thue_thu_nhap_thuc_nop_trong_ky,8. Tiền thuế thu nhập thực nộp trong kỳ
+8,bank,,HDKD,0,HDKD_10,hdkd_luu_chuyen_tien_thuan_tu_hoat_dong_kinh_doanh_truoc_nhung_thay_doi_ve_tai_san_va_von_luu_dong,Lưu chuyển tiền thuần từ hoạt động kinh doanh trước những thay đổi về tài sản và vốn lưu động
+9,bank,,HDKD,0,HDKD_11,hdkd_nhung_thay_doi_ve_tai_san_hoat_dong,Những thay đổi về tài sản hoạt động
+10,bank,,HDKD,2,HDKD_12,hdkd_9_tang_giam_cac_khoan_tien_gui_va_cho_vay_cac_tctd_khac,09. (Tăng)/giảm các khoản tiền gửi và cho vay các TCTD khác
+11,bank,,HDKD,2,HDKD_13,hdkd_10_tang_giam_cac_khoan_ve_kinh_doanh_chung_khoan,10.(Tăng)/giảm các khoản về kinh doanh chứng khoán
+12,bank,,HDKD,2,HDKD_14,hdkd_11_tang_giam_cac_cong_cu_tc_phai_sinh_va_cac_tai_san_tc_khac,11. (Tăng)/giảm các công cụ TC phái sinh và các tài sản TC khác
+13,bank,,HDKD,2,HDKD_15,hdkd_12_tang_giam_cac_khoan_cho_vay_khach_hang,12. (Tăng)/giảm các khoản cho vay khách hàng
+14,bank,,HDKD,2,HDKD_16,hdkd_13_tang_giam_nguon_du_phong_de_xu_ly_rui_ro_xu_ly_bu_dap_ton_that_cac_khoan_tin_dung_chung_khoan_dau_tu_dai_han,"13. Tăng/(giảm) nguồn dự phòng để xử lý rủi ro, xử lý, bù đắp
+tổn thất các khoản (tín dụng, chứng khoán, đầu tư dài
+hạn)"
+15,bank,,HDKD,2,HDKD_17,hdkd_14_tang_giam_khac_ve_tai_san_hoat_dong,14. (Tăng)/giảm khác về tài sản hoạt động
+16,bank,,HDKD,0,HDKD_18,hdkd_nhung_thay_doi_ve_cong_no_hoat_dong,Những thay đổi về công nợ hoạt động
+17,bank,,HDKD,2,HDKD_19,hdkd_15_tang_giam_cac_khoan_no_chinh_phu_va_nhnn,15. Tăng/(giảm) các khoản nợ Chính phủ và NHNN
+18,bank,,HDKD,2,HDKD_20,hdkd_16_tang_giam_cac_khoan_tien_gui_tien_vay_cac_tctd,"16. Tăng/(giảm) các khoản tiền gửi, tiền vay các TCTD"
+19,bank,,HDKD,2,HDKD_21,hdkd_17_tang_giam_tien_gui_cua_khach_hang,17. Tăng/(giảm) tiền gửi của khách hàng
+20,bank,,HDKD,2,HDKD_22,hdkd_18_tang_giam_phat_hanh_giay_to_co_gia,18. Tăng/(giảm) phát hành giấy tờ có giá
+21,bank,,HDKD,2,HDKD_23,hdkd_19_tang_giam_von_tai_tro_uy_thac_dau_tu_cho_vay_ma_tctd_chiu_rui_ro,"19. Tăng/(giảm) vốn tài trợ, ủy thác đầu tư, cho vay mà TCTD chịu rủi ro"
+22,bank,,HDKD,2,HDKD_24,hdkd_20_tang_giam_cac_cong_cu_tc_phai_sinh_va_cac_khoan_no_tc_khac,20.Tăng/(giảm) các công cụ TC phái sinh và các khoản nợ TC khác
+23,bank,,HDKD,2,HDKD_25,hdkd_21_tang_giam_khac_ve_cong_no_hoat_dong,21. Tăng/(giảm) khác về công nợ hoạt động
+24,bank,,HDKD,2,HDKD_26,hdkd_22_chi_tu_cac_quy_cua_tctd,22.Chi từ các quỹ của TCTD
+25,bank,,HDKD,1,HDKD_27,hdkd_i_luu_chuyen_tien_thuan_tu_hoat_dong_kinh_doanh,I. Lưu chuyền tiền thuần từ hoạt động kinh doanh
+26,bank,,HDDT,0,HDDT_29,hddt_mua_sam_tai_san_co_dinh,Mua sắm tài sản cố định
+27,bank,,HDDT,0,HDDT_30,hddt_tien_thu_tu_thanh_ly_nhuong_ban_tscd,"Tiền thu từ thanh lý, nhượng bán TSCĐ"
+28,bank,,HDDT,0,HDDT_31,hddt_tien_chi_ve_thanh_ly_nhuong_ban_tscd,"Tiền chi về thanh lý, nhượng bán TSCĐ"
+29,bank,,HDDT,0,HDDT_32,hddt_mua_sam_bat_dong_san_dau_tu,Mua sắm bất động sản đầu tư
+30,bank,,HDDT,0,HDDT_33,hddt_tien_thu_tu_ban_thanh_ly_bat_dong_san_dau_tu,"Tiền thu từ bán, thanh lý bất động sản đầu tư"
+31,bank,,HDDT,0,HDDT_34,hddt_tien_chi_ra_do_ban_thanh_ly_bat_dong_san_dau_tu,"Tiền chi ra do bán, thanh lý bất động sản đầu tư"
+32,bank,,HDDT,0,HDDT_35,hddt_tien_chi_dau_tu_gop_von_vao_cac_don_vi_khac,"Tiền chi đầu tư, góp vốn vào các đơn vị khác"
+33,bank,,HDDT,0,HDDT_36,hddt_tien_thu_dau_tu_gop_von_vao_cac_don_vi_khac,"Tiền thu đầu tư, góp vốn vào các đơn vị khác"
+34,bank,,HDDT,0,HDDT_37,hddt_tien_thu_co_tuc_va_loi_nhuan_duoc_chia_tu_cac_khoan_dau_tu_gop_von_dai_han,"Tiền thu cổ tức và lợi nhuận được chia từ các khoản đầu tư, góp vốn dài hạn"
+35,bank,,HDDT,1,HDDT_38,hddt_ii_luu_chuyen_tien_thuan_tu_hd_dau_tu,II. Lưu chuyển tiền thuần từ HĐ đầu tư
+36,bank,,HDTC,2,HDTC_40,hdtc_1_tang_von_co_phan_tu_phat_hanh_co_phieu,1. Tăng vốn cỗ phần từ phát hành cỗ phiếu
+37,bank,,HDTC,2,HDTC_41,hdtc_2_tien_thu_tu_phat_hanh_giay_to_co_gia_dai_han_co_du_dieu_kien_tinh_vao_von_tu_co_va_cac_khoan_von_vay_dai_han_khac,2. Tiền thu từ phát hành giấy tờ có giá dài hạn có đủ điều kiện tính vào vốn tự có và các khoản vốn vay dài hạn khác
+38,bank,,HDTC,2,HDTC_42,hdtc_3_tien_chi_thanh_toan_giay_to_co_gia_dai_han_co_du_dieu_kien_tinh_vao_von_tu_co_va_cac_khoan_von_vay_dai_han_khac,3. Tiền chi thanh toán giấy tờ có giá dài hạn có đủ điều kiện tính vào vỗn tự có và các khoản vốn vay dài hạn khác
+39,bank,,HDTC,2,HDTC_43,hdtc_4_co_tuc_tra_cho_co_dong_loi_nhuan_da_chia,"4. Cổ tức trả cho cổ đông, lợi nhuận đã chia"
+40,bank,,HDTC,2,HDTC_44,hdtc_5_tien_chi_ra_mua_co_phieu_quy,5 Tiền chi ra mua cổ phiếu quỹ
+41,bank,,HDTC,2,HDTC_45,hdtc_6_tien_thu_duoc_do_ban_co_phieu_quy,6. Tiền thu được do bán cổ phiếu quỹ
+42,bank,,HDTC,1,HDTC_46,hdtc_iii_luu_chuyen_tien_thuan_tu_hd_tai_chinh,III. Lưu chuyển tiền thuần từ HĐ tài chính
+43,bank,,HDTC,1,HDTC_47,hdtc_iv_luu_chuyen_tien_thuan_trong_ky,IV. Lưu chuyển tiền thuần trong kỳ
+44,bank,,HDTC,1,HDTC_48,hdtc_v_tien_va_cac_khoan_tuong_duong_tien_tai_thoi_diem_dau_ky,V. Tiền và các khoản tương đương tiền tại thời điểm đầu kỳ
+45,bank,,HDTC,1,HDTC_49,hdtc_vi_dieu_chinh_anh_huong_cua_thay_doi_ty_gia,VI. Điều chỉnh ảnh hưởng của thay đổi tỷ giá
+46,bank,,HDTC,1,HDTC_50,hdtc_vii_tien_va_cac_khoan_tuong_duong_tien_tai_thoi_diem_cuoi_ky,VII. Tiền và các khoản tương đương tiền tại thời điềm cuối kỳ

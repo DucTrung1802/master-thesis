@@ -1,0 +1,91 @@
+﻿order,template,method,section,level,cafef_code,column,as_printed
+0,bank,,TN,1,110,i_tien_mat_vang_bac_da_quy,"I. Tiền mặt, vàng bạc, đá quý"
+1,bank,,TN,1,120,ii_tien_gui_tai_nhnn,II. Tiền gửi tại NHNN
+2,bank,,TN,1,130,iii_tien_vang_gui_tai_cac_tctd_khac_va_cho_vay_cac_tctd_khac,"III. Tiền ,vàng gửi tại các TCTD khác và cho vay các TCTD khác"
+3,bank,,TN,2,132,iii_1_tien_gui_tai_cac_tctd_khac,1.Tiền gửi tại các TCTD khác
+4,bank,,TN,2,133,iii_2_cho_vay_cac_tctd_khac,2. Cho vay các TCTD khác
+5,bank,,TN,2,139,iii_3_du_phong_rui_ro_cho_vay_cac_tctd_khac,3. Dự phòng rủi ro cho vay các TCTD khác
+6,bank,,TN,1,140,iv_chung_khoan_kinh_doanh,IV. Chứng khoán kinh doanh
+7,bank,,TN,2,141,iv_1_chung_khoan_kinh_doanh,1. Chứng khoán kinh doanh
+8,bank,,TN,2,149,iv_2_du_phong_rui_ro_chung_khoan_kinh_doanh,2. Dự phòng rủi ro chứng khoán kinh doanh
+9,bank,,TN,1,150,v_cac_cong_cu_tai_chinh_phai_sinh_va_cac_tai_san_tai_chinh_khac,V. Các công cụ tài chính phái sinh và các tài sản tài chính khác
+10,bank,,TN,1,160,vi_cho_vay_khach_hang,VI. Cho vay khách hàng
+11,bank,,TN,2,161,vi_1_cho_vay_va_cho_thue_tai_chinh_khach_hang,1. Cho vay và cho thuê tài chính khách hàng
+12,bank,,TN,2,169,vi_2_du_phong_rui_ro_cho_vay_va_cho_thue_tai_chinh_khach_hang,2. Dự phòng rủi ro cho vay và cho thuê tài chính khách hàng
+13,bank,,TN,1,180,vii_hoat_dong_mua_no,VII. Hoạt động mua nợ
+14,bank,,TN,2,181,vii_1_mua_no,1. Mua nợ
+15,bank,,TN,2,189,vii_2_du_phong_rui_ro_hoat_dong_mua_no,2. Dự phòng rủi ro hoạt động mua nợ
+16,bank,,TN,1,170,viii_chung_khoan_dau_tu,VIII . Chứng khoán đầu tư
+17,bank,,TN,2,171,viii_1_chung_khoan_dau_tu_san_sang_de_ban,1. Chứng khoán đầu tư sẵn sàng để bán
+18,bank,,TN,2,172,viii_2_chung_khoan_dau_tu_giu_den_ngay_dao_han,2. Chứng khoán đầu tư giữ đền ngày đáo hạn
+19,bank,,TN,2,179,viii_3_du_phong_rui_ro_chung_khoan_dau_tu,3. Dự phòng rủi ro chứng khoán đâu tư
+20,bank,,TN,1,210,ix_gop_von_dau_tu_dai_han,"IX. Góp vốn, đâu tư dài hạn"
+21,bank,,TN,2,211,ix_1_dau_tu_vao_cong_ty_con,1. Đầu tư vào công ty con
+22,bank,,TN,2,212,ix_2_von_gop_lien_doanh,2. Vốn góp liên doanh
+23,bank,,TN,2,213,ix_3_dau_tu_vao_cong_ty_lien_ket,3. Đầu tư vào công ty liên kết
+24,bank,,TN,2,214,ix_4_dau_tu_dai_han_khac,4. Đầu tư dài hạn khác
+25,bank,,TN,2,219,ix_5_du_phong_giam_gia_dau_tu_dai_han,5. Dự phòng giảm giá đầu tư dài hạn
+26,bank,,TN,1,220,x_tai_san_co_dinh,X. Tài sản cố định
+27,bank,,TN,2,221,x_1_tai_san_co_dinh_huu_hinh,1 Tài sản cố định hữu hình
+28,bank,,TN,3,222,x_1_a_nguyen_gia_tai_san_co_dinh,a . Nguyên giá tài sản cố định
+29,bank,,TN,3,223,x_1_b_hao_mon_tai_san_co_dinh,b. Hao mòn tài sản cố định
+30,bank,,TN,2,224,x_2_tai_san_co_dinh_thue_tai_chinh,2.Tài sản cố định thuê tài chính
+31,bank,,TN,3,225,x_2_a_nguyen_gia_tai_san_co_dinh,a. Nguyên giá tài sản cố định
+32,bank,,TN,3,226,x_2_b_hao_mon_tai_san_co_dinh,b. Hao mòn tài sản cố định
+33,bank,,TN,2,227,x_3_tai_san_co_dinh_vo_hinh,3. Tài sản cố định vô hình
+34,bank,,TN,3,228,x_3_a_nguyen_gia_tai_san_co_dinh,a. Nguyên giá tài sản cố định
+35,bank,,TN,3,229,x_3_b_hao_mon_tai_san_co_dinh,b. Hao mòn tài sản cố định
+36,bank,,TN,1,240,xi_bat_dong_san_dau_tu,XI. Bất động sản đầu tư
+37,bank,,TN,3,241,xi_a_nguyen_gia_bdsdt,a. Nguyên giá BĐSĐT
+38,bank,,TN,3,242,xi_b_hao_mon_bdsdt,b. Hao mòn BĐSĐT
+39,bank,,TN,1,250,xii_tai_san_co_khac,"XII. Tài sản ""Có"" khác"
+40,bank,,TN,2,251,xii_1_cac_khoan_phai_thu,1. Các khoản phải thu
+41,bank,,TN,2,252,xii_2_cac_khoan_lai_phi_phai_thu,"2 Các khoản lãi, phí phải thu"
+42,bank,,TN,2,253,xii_3_tai_san_thue_thu_nhap_doanh_nghiep_hoan_lai,3. Tài sản thuế thu nhập doanh nghiệp hoãn lại
+43,bank,,TN,2,254,xii_4_tai_san_co_khac,4. Tài sản Có khác
+44,bank,,TN,0,255,xii_4_trong_do_loi_the_thuong_mai,- Trong đó lợi thế thương mại
+45,bank,,TN,2,259,xii_5_cac_khoan_du_phong_rui_ro_cho_cac_tai_san_co_noi_bang_khac,5. Các khoản dự phòng rủi ro cho các tài sản Có nội bảng khác
+46,bank,,TN,0,300,tong_tai_san,TỔNG TÀI SẢN
+47,bank,,NV,0,,b_no_phai_tra_va_von_chu_so_huu,B. NỢ PHẢI TRẢ VÀ VỐN CHỦ SỞ HỮU
+48,bank,,NV,1,310,i_cac_khoan_no_chinh_phu_va_nhnn,I. Các khoản nợ Chính phủ và NHNN
+49,bank,,NV,2,,i_1_tien_gui_va_vay_chinh_phu_ngan_hang_nha_nuoc,"1.Tiền gửi và vay Chính phủ, Ngân hàng Nhà nước"
+50,bank,,NV,2,,i_2_giao_dich_ban_va_mua_lai_trai_phieu_chinh_phu_voi_kho_bac_nha_nuoc,2 Giao dịch bán và mua lại trái phiếu Chính phủ với Kho bạc Nhà nước
+51,bank,,NV,1,320,ii_tien_gui_va_vay_cac_tctd_khac,II. Tiền gửi và vay các TCTD khác
+52,bank,,NV,2,321,ii_1_tien_gui_cua_cac_to_chuc_tin_dung_khac,1. Tiền gửi của các tổ chức tín dụng khác
+53,bank,,NV,2,322,ii_2_vay_cac_to_chuc_tin_dung_khac,2 Vay các tổ chức tín dụng khác
+54,bank,,NV,1,330,iii_tien_gui_cua_khach_hang,III. Tiền gửi của khách hàng
+55,bank,,NV,1,340,iv_cac_cong_cu_tai_chinh_phai_sinh_va_cac_khoan_no_tai_chinh_khac,IV. Các công cụ tài chính phái sinh và các khoản nợ tài chính khác
+56,bank,,NV,1,350,v_von_tai_tro_uy_thac_dau_tu_cho_vay_to_chuc_tin_dung_chiu_rui_ro,"V. Vốn tài trợ, ủy thác đầu tư, cho vay tổ chức tín dụng chịu rủi ro"
+57,bank,,NV,1,360,vi_phat_hanh_giay_to_co_gia,VI. Phát hành giấy tờ có giá
+58,bank,,NV,1,370,vii_cac_khoan_no_khac,VII Các khoản nợ khác
+59,bank,,NV,2,371,vii_1_cac_khoan_lai_phi_phai_tra,"1. Các khoản lãi, phí phải trả"
+60,bank,,NV,2,373,vii_2_cac_khoan_phai_tra_va_cong_no_khac,2. Các khoản phải trả và công nợ khác
+61,bank,,NV,2,374,vii_3_du_phong_rui_ro_khac,3. Dự phòng rủi ro khác
+62,bank,,NV,0,400,tong_no_phai_tra,TỔNG NỢ PHẢI TRẢ
+63,bank,,NV,1,500,viii_von_chu_so_huu,VIII VỐN CHỦ SỞ HỮU
+64,bank,,NV,2,410,viii_1_von_cua_tctd,1. Vốn của TCTD
+65,bank,,NV,3,411,viii_1_a_von_dieu_le,a. Vốn điều lệ
+66,bank,,NV,3,412,viii_1_b_thang_du_von_co_phan,b. Thặng dư vốn cố phần
+67,bank,,NV,3,413,viii_1_c_von_dau_tu_xay_dung_co_ban_mua_sam_tai_san_co_dinh,"c.Vốn đầu tư xây dựng cơ bản, mua sắm tài sản cổ định"
+68,bank,,NV,3,414,viii_1_d_co_phieu_quy,d. Cổ phiếu Quỹ
+69,bank,,NV,2,420,viii_2_quy_cua_tctd,2. Quỹ của TCTD
+70,bank,,NV,2,430,viii_3_chenh_lech_ty_gia_hoi_doai,3. Chênh lệch tỷ giá hối đoái
+71,bank,,NV,2,440,viii_4_chenh_lech_danh_gia_lai_tai_san,4.Chênh lệch đánh giá lại tài sản
+72,bank,,NV,2,450,viii_5_loi_nhuan_chua_phan_phoi,5. Lợi nhuận chưa phân phối
+73,bank,,NV,3,,viii_5_a_loi_nhuan_nam_nay,a. Lợi nhuận năm nay
+74,bank,,NV,3,,viii_5_b_loi_nhuan_luy_ke_nam_truoc,b. Lợi nhuận lũy kế năm trước
+75,bank,,NV,0,700,ix_loi_ich_cua_co_dong_thieu_so,IX.Lợi ích của cổ đông thiểu số
+76,bank,,NV,0,800,tong_no_phai_tra_va_von_chu_so_huu,TỔNG NỢ PHẢI TRẢ VÀ VỐN CHỦ SỞ HỮU
+77,bank,,NV,2,801,1_bao_lanh_vay_von,1. Bảo lãnh vay vốn
+78,bank,,NV,2,802,2_cam_ket_giao_dich_hoi_doai,2. Cam kết giao dịch hối đoái
+79,bank,,NV,0,803,2_cam_ket_mua_ngoai_te,- Cam kết mua ngoại tệ
+80,bank,,NV,0,804,2_cam_ket_ban_ngoai_te,- Cam kết bán ngoại tệ
+81,bank,,NV,0,805,2_cam_ket_giao_dich_hoan_doi,- Cam kết giao dịch hoán đổi
+82,bank,,NV,0,806,2_cam_ket_giao_dich_tuong_lai,- Cam kết giao dịch tương lai
+83,bank,,NV,2,807,3_cam_ket_cho_vay_khong_huy_ngang,3.Cam kết cho vay không hủy ngang
+84,bank,,NV,2,808,4_cam_ket_trong_nghiep_vu_l_c,4. Cam kết trong nghiệp vụ L/C
+85,bank,,NV,2,809,5_bao_lanh_khac,5. Bảo Lãnh khác
+86,bank,,NV,2,810,6_cac_cam_ket_khac,6. Các cam kết khác
+87,bank,,NV,2,811,7_lai_cho_vay_va_phi_phai_thu_chua_thu_duoc,7. Lãi cho vay và phí phải thu chưa thu được
+88,bank,,NV,2,812,8_no_kho_doi_da_xu_ly,8. Nợ khó đòi đã xử lý
+89,bank,,NV,2,813,9_tai_san_va_chung_tu_khac,9. Tài sản và chứng từ khác
