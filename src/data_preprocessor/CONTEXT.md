@@ -15,6 +15,8 @@ raw_data/<source>/*.csv,*.xlsx           (produced by src/web_scraper)
   bronze_schema:  trading_view_{bonds,economy,forex,funds,indices,stocks},
                   cafef_{price,foreign,order_stats,prop_trading},
                   cafef_insider_shareholder_transactions, cafef_news,
+                  cafef_financial_{templates,schema,reports},
+                  cafef_financials_<template>_<report>   (4 templates x 3 reports),
                   simplize_stocks, simplize_industry, gics
         │
         ▼   ingest_silver_data()   ← split symbol, merge sources, GICS classify
@@ -100,25 +102,39 @@ DTO helpers come from
 ## 4. Layer-by-layer — what each ingest does
 
 ### Bronze (`_ingest_bronze_*`) — raw-faithful, one table per source
+- **⚠️ THE KEY IS `(exchange, ticker)`, SPLIT — the `"<EXCHANGE>:<TICKER>"` colon key
+  is GONE from bronze.** As of 2026-07-16 no bronze table has a `symbol` column; every
+  price/daily table is PK'd on `(exchange, ticker, date)` and the event tables carry
+  `exchange`/`ticker` beside their surrogate keys. Two split paths, by raw shape:
+  - **TradingView** stores only the colon `symbol` → `_helper_split_symbol_column`
+    splits it on the FIRST `:` (applied just before save, so dedup still runs on the
+    intact key). Note this splits a **data-provider prefix**, not always a bourse:
+    `ECONOMICS:CN14RRR`, `B2PRIME:AUDCAD`, `TVC:VN01` → `exchange` is the vendor
+    namespace for the non-stock assets.
+  - **CafeF & Simplize** keep `exchange` and the ticker apart in the raw CSV already,
+    so they just `rename(symbol → ticker)` — they no longer fold-then-split.
+  - `_helper_normalise_cafef_symbol` (the old fold-to-colon helper) is now UNUSED by
+    any live ingest; kept only for reference.
 - **Simple TradingView asset classes** (`bonds/economy/forex/funds/indices` +
   `trading_view_stocks`): glob `raw_data/trading_view/data/<asset>/**/*.csv`, concat,
   clean (drop rows null on `symbol`/`date`/`value|close`), cast, `date → date`, dedup
-  on `(symbol, date)`, save. Key stays TradingView's `"<EXCHANGE>:<TICKER>"`.
+  on `(symbol, date)`, **split symbol → `(exchange, ticker)`**, save. PK
+  `(exchange, ticker, date)`.
 - **CafeF — one bronze table per scraper link-folder** (mirrors the scraper's
   one-folder-per-link design; the former single merged `cafef_stocks` is gone —
-  the price+foreign merge moved to silver). All share the
-  `_helper_load_cafef_folder` + `_helper_normalise_cafef_symbol` (key →
-  `"<EXCHANGE>:<TICKER>"`) helpers; the four daily ones go through the generic
-  `_ingest_bronze_cafef_daily`:
-  - `cafef_price` — OHLC (`close_raw`/`close_adj`) + matched/negotiated vol/val. PK `(symbol, date)`.
-  - `cafef_foreign` — foreign buy/sell/net flow (vol+val), `room_left`, `own_pct`. PK `(symbol, date)`.
-  - `cafef_order_stats` — buy/sell order counts, volume, avg vol/order. PK `(symbol, date)`.
-  - `cafef_prop_trading` — proprietary-desk buy/sell vol+val. PK `(symbol, date)`.
+  the price+foreign merge moved to silver). All share the `_helper_load_cafef_folder`
+  helper; the four daily ones go through the generic `_ingest_bronze_cafef_daily`
+  (with `split_key=True` → PK `(exchange, ticker, date)`):
+  - `cafef_price` — OHLC (`close_raw`/`close_adj`) + matched/negotiated vol/val. PK `(exchange, ticker, date)`.
+  - `cafef_foreign` — foreign buy/sell/net flow (vol+val), `room_left`, `own_pct`. PK `(exchange, ticker, date)`.
+  - `cafef_order_stats` — buy/sell order counts, volume, avg vol/order. PK `(exchange, ticker, date)`.
+  - `cafef_prop_trading` — proprietary-desk buy/sell vol+val. PK `(exchange, ticker, date)`.
   - `cafef_insider_shareholder_transactions` — registered vs executed buy/sell by
     insiders, related persons and major shareholders (from the `insider_txn/`
     folder). **Event-based** (no natural date key) → deterministic **md5 `row_id`
     surrogate PK** (hash of the full raw row, so re-ingests are idempotent); five
-    date columns overridden to `DATE`, long text columns to `TEXT`.
+    date columns overridden to `DATE`, long text columns to `TEXT`. Carries
+    `exchange`/`ticker` (split), not a colon `symbol`.
   - `cafef_news` — the company-news / disclosure feed (from the `news/` folder):
     headline, body, `type` (editorial|disclosure|error), `category` (topic), and the
     filing `pdf_url` for disclosures. **Event-based**, and it breaks the shared CafeF
@@ -137,8 +153,38 @@ DTO helpers come from
     on it), so a re-scrape that fills in a body which was previously a `type=error`
     stub UPDATES the row instead of writing a second copy of the same article.
     `content` reaches ~19 KB → `TEXT` is required, not `VARCHAR`.
+- **CafeF financials — 15 tables at full coverage** (`_ingest_bronze_cafef_financials`),
+  from `raw_data/cafef/financials/`, which is built OFFLINE by the PDF-reading
+  pipeline in `src/web_scraper` (not by a network scraper). **The template is a
+  FOLDER, not a column**: Vietnam has four charts of accounts among listed companies
+  (bank / corp / securities / insurance) and they share no line items — each has a
+  "code 1" and it means something different in each — so their columns must never
+  meet in one table. Hence **12 statement tables (4 templates × 3 reports)** + **3
+  reference tables**. Only parsed templates get a table; today that is `bank` (VCB),
+  so 3 of the 12 exist.
+  - `cafef_financials_<template>_<report>` — the figures. PK
+    `(exchange, ticker, year, quarter)`; a contiguous quarter grid where an unreadable
+    quarter is a **blank `source='missing'` row, never zero-filled** (so the null-drop
+    layers gate on the KEY columns only, never the line items). Figures are already
+    **absolute VND** — the parser applied the filing's unit — so `unit` is provenance,
+    not a scale factor to re-apply.
+  - `cafef_financial_reports` — the 13 per-DOCUMENT metadata columns, split off
+    because they describe the filing, not the accounts. PK
+    `(exchange, ticker, report, year, quarter)` — **per report, not per quarter**: the
+    three statements of one quarter often come from different documents (36 of VCB's
+    78 quarters). Home of **`publish_date`**, ⚠️ the column downstream MUST join on:
+    it is the day the figures became public, not the period end (VCB's Q4-2025 covers
+    the quarter ending 31 Dec 2025 but was published 27 Mar 2026 — joining on the
+    period end hands a model twelve weeks of look-ahead every year).
+  - `cafef_financial_schema` — the 12 charts of accounts concatenated into ONE
+    dictionary. This is the only place the four templates may meet, because here a
+    line item is a **row** (a fact about the template), not a column. PK
+    `(template, report, line_id)`; maps a column back to the Vietnamese line the
+    filing printed (`as_printed`) and to CafeF's item code.
+  - `cafef_financial_templates` — `templates.csv`: ticker → **which of the 12 tables
+    holds it** + the cash-flow method. Load-bearing, not a convenience.
 - **`simplize_stocks`** — the validated daily backbone: adjusted OHLC, true volume,
-  net/pct change, foreign vol+val + room. Key normalised to `"<EXCHANGE>:<TICKER>"`.
+  net/pct change, foreign vol+val + room. Key kept split; PK `(exchange, ticker, date)`.
 - **`simplize_industry`** — per-ticker VN GICS-based industry, loaded as-is;
   PK `(exchange, ticker)`.
 - **`gics`** — official MSCI GICS taxonomy CSV, one row per sub-industry;
@@ -152,6 +198,10 @@ DTO helpers come from
   frame** by merging bronze `cafef_price` + `cafef_foreign` on `(symbol, date)`
   (they are separate bronze tables now), then **OUTER-joins Simplize (PRIMARY)
   + CafeF + TradingView** on `(exchange, ticker, date)`:
+  - **⚠️ STALE vs the 2026-07-16 bronze split.** This merge still expects a colon
+    `symbol` on the bronze price sources, but bronze no longer has one (all keyed
+    `(exchange, ticker)` now). Silver has NOT been re-run since; this join must be
+    updated to `(exchange, ticker, date)` before the next silver rebuild.
   - Price: Simplize → TradingView (adjusted) → CafeF adjusted close. **Never** uses
     CafeF raw OHL; `close_raw` is dropped.
   - Volume: Simplize total → CafeF (matched + negotiated). TV volume is
@@ -205,15 +255,31 @@ DTO helpers come from
 
 ## 7. Gotchas
 
-- **Bronze keys are `"<EXCHANGE>:<TICKER>"`; silver splits them** back into
-  `exchange` + `ticker`. CafeF/Simplize store the two split in the raw CSV and the
-  bronze ingest re-joins them into the TV-style colon key so all three merge
-  uniformly in silver.
-- **Not every `raw_data/` folder reaches bronze.** As of 2026-07-14 the gaps are
-  `cafef/financials/` (the parsed statements + the 12 schema CSVs + `templates.csv`)
-  and `cafef/pdfs/` (the 6.7 GB filing archive + its per-ticker `index/` CSVs) —
-  neither has an ingest yet. `trading_view/links/` + `collected_links/` are *by
-  design* not ingested: they are the ticker universe the scrapers read, not data.
+- **Bronze keys are SPLIT `(exchange, ticker)` — the colon `symbol` is gone** (as of
+  2026-07-16; see §4 Bronze). Every daily/price table is PK `(exchange, ticker, date)`;
+  event tables carry `exchange`/`ticker` beside their surrogate key. TradingView is
+  split from its colon `symbol` via `_helper_split_symbol_column`; CafeF/Simplize keep
+  the raw CSV's already-split columns. (Historically bronze used the colon key and
+  silver split it — that is now done one stage earlier, in bronze.)
+- **Not every `raw_data/` folder reaches bronze.** As of 2026-07-14 the only gap left
+  is `cafef/pdfs/` (the 6.7 GB filing archive + its per-ticker `index/` CSVs) — the
+  binaries the financials pipeline reads; nothing ingests them. `trading_view/links/`
+  + `collected_links/` are *by design* not ingested: they are the ticker universe the
+  scrapers read, not data.
+- **⚠️ THE DRIVER DOES NOT QUOTE IDENTIFIERS**, and 133 of the 753 financial line
+  items are named with the flat ARABIC numbering the filing prints
+  (`1_thu_nhap_lai…`) — which PostgreSQL accepts only as a *quoted* identifier. So
+  those columns take an **`n` prefix** on ingest (`n1_thu_nhap_lai…`) and only those;
+  every other name is left exactly as the parser produced it. The mapping is injective
+  and recorded in `cafef_financial_schema` as `sql_column` beside the untouched
+  `line_id`, so the printed line is always recoverable — join on `sql_column`, not
+  `line_id`, when going from a statement column to its meaning. The alternative (make
+  `postgre_sql_driver` quote every identifier) is the *correct* fix but touches
+  `create_table` / `upsert` / `COPY` / `select` for every table in all three schemas.
+- **The financial statements do not perfectly reconcile, and that is the SOURCE**, not
+  the ingest: VCB's Q1-2020 balance sheet is out by 5,000,000 VND on 1,144 *trillion*
+  (5 units in the filing's "triệu VNĐ" denomination — 0.0000004%). The same gap is in
+  the raw CSV. Bronze is faithful to disk; don't "fix" it here.
 - **`cafef_news` ordering:** its `timestamp` is often **date-only** (midnight), so
   same-day articles cannot be separated by it — order by
   `(exchange, ticker, timestamp, news_order)` for a deterministic chronology. And
@@ -262,9 +328,14 @@ DTO helpers come from
   `_helper_transform` stays a simple sequential per-ticker loop — don't parallelize
   it without cause. FeatureSelector cost note: memory `project-feature-selection-ta-cost`.
 
-## 8. Current materialized state (snapshot — 2026-07-14)
+## 8. Current materialized state (snapshot — 2026-07-16)
 
-`bronze_schema` in `database_main_v2` after a full drop + re-ingest — **15 tables**:
+> Row counts below are unchanged by the 2026-07-16 key split — that reshape moved the
+> `symbol` colon key to split `(exchange, ticker)` columns without adding or dropping
+> a single row (verified: every table re-ingested to the same count).
+
+`bronze_schema` in `database_main_v2` — **21 tables** (15 + the 6 financials tables
+that exist so far; 30 once all four templates are parsed):
 
 | Table | Rows | Notes |
 |---|---:|---|
@@ -280,6 +351,12 @@ DTO helpers come from
 | `cafef_prop_trading` | 64,139 | daily; not yet in silver |
 | `cafef_insider_shareholder_transactions` | 13,607 | event-based, `row_id` PK; not yet in silver |
 | `cafef_news` | 5,599 | event-based, `row_id` PK, `(exchange, ticker)` key; **VCB/PNJ/FPT only** (1,629 / 1,715 / 2,255) — the scraper has run on 3 tickers; not yet in silver |
+| `cafef_financials_bank_balance_sheet` | 78 | 97 cols; VCB only, Q4-2006 → Q1-2026 |
+| `cafef_financials_bank_income_statement` | 78 | 33 cols; VCB only |
+| `cafef_financials_bank_cash_flow` | 78 | 54 cols; VCB only |
+| `cafef_financial_reports` | 234 | 78 quarters × 3 reports; 71/78 readable per report, `publish_date` on 210/213 |
+| `cafef_financial_schema` | 842 | all 12 charts of accounts (753 distinct line ids) |
+| `cafef_financial_templates` | 1 | VCB → `bank` / direct; grows with the parse |
 | `simplize_stocks` | 2,658,773 | PRIMARY daily backbone |
 | `simplize_industry` | 777 | per-ticker GICS industry |
 | `gics` | 163 | official sub-industry taxonomy |

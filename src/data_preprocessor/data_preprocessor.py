@@ -692,11 +692,12 @@ class DataPreprocessor:
         df["date"] = pd.to_datetime(df["date"]).dt.date
 
         df = self._helper_remove_duplicates(df, primary_keys=["symbol", "date"])
+        df = self._helper_split_symbol_column(df)
 
         self._helper_save_pandas_table_to_database(
             schema_name=BRONZE_SCHEMA,
             table_name="trading_view_economy",
-            primary_keys=["symbol", "date"],
+            primary_keys=["exchange", "ticker", "date"],
             df=df,
             dtype_overrides={"date": DataType.DATE()},
         )
@@ -739,11 +740,12 @@ class DataPreprocessor:
         df["date"] = pd.to_datetime(df["date"]).dt.date
 
         df = self._helper_remove_duplicates(df, primary_keys=["symbol", "date"])
+        df = self._helper_split_symbol_column(df)
 
         self._helper_save_pandas_table_to_database(
             schema_name=BRONZE_SCHEMA,
             table_name="trading_view_forex",
-            primary_keys=["symbol", "date"],
+            primary_keys=["exchange", "ticker", "date"],
             df=df,
             dtype_overrides={"date": DataType.DATE()},
         )
@@ -790,11 +792,12 @@ class DataPreprocessor:
         df["date"] = pd.to_datetime(df["date"]).dt.date
 
         df = self._helper_remove_duplicates(df, primary_keys=["symbol", "date"])
+        df = self._helper_split_symbol_column(df)
 
         self._helper_save_pandas_table_to_database(
             schema_name=BRONZE_SCHEMA,
             table_name="trading_view_funds",
-            primary_keys=["symbol", "date"],
+            primary_keys=["exchange", "ticker", "date"],
             df=df,
             dtype_overrides={"date": DataType.DATE()},
         )
@@ -841,11 +844,12 @@ class DataPreprocessor:
         df["date"] = pd.to_datetime(df["date"]).dt.date
 
         df = self._helper_remove_duplicates(df, primary_keys=["symbol", "date"])
+        df = self._helper_split_symbol_column(df)
 
         self._helper_save_pandas_table_to_database(
             schema_name=BRONZE_SCHEMA,
             table_name="trading_view_indices",
-            primary_keys=["symbol", "date"],
+            primary_keys=["exchange", "ticker", "date"],
             df=df,
             dtype_overrides={"date": DataType.DATE()},
         )
@@ -896,11 +900,12 @@ class DataPreprocessor:
         df["date"] = pd.to_datetime(df["date"]).dt.date
 
         df = self._helper_remove_duplicates(df, primary_keys=["symbol", "date"])
+        df = self._helper_split_symbol_column(df)
 
         self._helper_save_pandas_table_to_database(
             schema_name=BRONZE_SCHEMA,
             table_name="trading_view_stocks",
-            primary_keys=["symbol", "date"],
+            primary_keys=["exchange", "ticker", "date"],
             df=df,
             dtype_overrides={"date": DataType.DATE()},
         )
@@ -930,6 +935,24 @@ class DataPreprocessor:
             pd.concat(frames, ignore_index=True).drop_duplicates() if frames else None
         )
 
+    def _helper_split_symbol_column(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Split the `"<EXCHANGE>:<TICKER>"` colon key into separate `exchange` and
+        `ticker` columns (dropping `symbol`). The inverse of the colon convention —
+        used by the sources that keep a single colon `symbol` (TradingView).
+
+        Splits on the FIRST `:` only, because TradingView's provider-prefixed symbols
+        are still `PREFIX:REST` (`ECONOMICS:CN14RRR`, `B2PRIME:AUDCAD`) and REST may
+        itself contain no further colon. A value with no colon at all keeps the whole
+        string as `exchange` and leaves `ticker` null (then dropped by the key
+        null-check), which never happens for the current universe but must not crash."""
+        df = df.copy()
+        parts = df["symbol"].astype("string").str.split(":", n=1, expand=True)
+        if parts.shape[1] == 1:
+            parts[1] = pd.NA
+        df["exchange"] = parts[0].str.strip()
+        df["ticker"] = parts[1].str.strip()
+        return df.drop(columns=["symbol"])
+
     def _helper_normalise_cafef_symbol(self, df: pd.DataFrame) -> pd.DataFrame:
         """Fold CafeF's split (exchange, symbol) into the bronze convention
         `symbol = "<EXCHANGE>:<TICKER>"` and drop the redundant `exchange` column."""
@@ -948,10 +971,18 @@ class DataPreprocessor:
         decimal_cols: List[str],
         bigint_cols: List[str],
         required_col: Optional[str] = None,
+        split_key: bool = False,
     ) -> None:
         """Ingest one DAILY-series CafeF folder as its own bronze table
-        (raw-faithful, PK (symbol, date)). Drives price / foreign / order_stats /
-        prop_trading."""
+        (raw-faithful). Drives price / foreign / order_stats / prop_trading.
+
+        `split_key` selects the key convention:
+        - `False` (default) — fold CafeF's raw (exchange, symbol) columns into the
+          `symbol = "<EXCHANGE>:<TICKER>"` colon key so the source merges uniformly
+          with Simplize/TradingView in silver. PK (symbol, date).
+        - `True` — keep the key SPLIT as separate `exchange` + `ticker` columns
+          (raw-faithful to the CSV, which already stores the two apart). PK
+          (exchange, ticker, date)."""
         self._logger.log_info(f"Ingesting bronze CafeF {folder} data...")
 
         df = self._helper_load_cafef_folder(folder)
@@ -959,19 +990,24 @@ class DataPreprocessor:
             self._logger.log_error(f'No valid CafeF "{folder}" CSV data found.')
             return
 
-        df = self._helper_normalise_cafef_symbol(df)
+        if split_key:
+            df = df.rename(columns={"symbol": "ticker"})
+            key_cols = ["exchange", "ticker"]
+        else:
+            df = self._helper_normalise_cafef_symbol(df)
+            key_cols = ["symbol"]
 
         clean_layers = [
-            CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("symbol"),
-            CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("date"),
+            CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL(col) for col in key_cols
         ]
+        clean_layers.append(CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("date"))
         if required_col:
             clean_layers.append(
                 CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL(required_col)
             )
         clean_layers += [
             CleanLayer.REMOVE_IF_ALL_COLUMNS_ARE_NULL(),
-            CleanLayer.ORDER_BY(["symbol", "date"]),
+            CleanLayer.ORDER_BY([*key_cols, "date"]),
         ]
         df = self._helper_clean(df, clean_layers)
 
@@ -979,19 +1015,20 @@ class DataPreprocessor:
             df, decimal_cols=decimal_cols, bigint_cols=bigint_cols
         )
         df["date"] = pd.to_datetime(df["date"]).dt.date
-        df = self._helper_remove_duplicates(df, primary_keys=["symbol", "date"])
+        df = self._helper_remove_duplicates(df, primary_keys=[*key_cols, "date"])
 
         self._helper_save_pandas_table_to_database(
             schema_name=BRONZE_SCHEMA,
             table_name=table_name,
-            primary_keys=["symbol", "date"],
+            primary_keys=[*key_cols, "date"],
             df=df,
             dtype_overrides={"date": DataType.DATE()},
         )
 
     def _ingest_bronze_cafef_price(self) -> None:
         """CafeF price tab — OHLC (raw + dividend-adjusted close) and the matched
-        vs negotiated (block) volume/value split. PK (symbol, date)."""
+        vs negotiated (block) volume/value split. Key kept SPLIT as
+        (exchange, ticker); PK (exchange, ticker, date)."""
         self._ingest_bronze_cafef_daily(
             folder="price",
             table_name="cafef_price",
@@ -1001,21 +1038,23 @@ class DataPreprocessor:
             ],
             bigint_cols=["vol_matched", "vol_negotiated"],
             required_col="close_adj",
+            split_key=True,
         )
 
     def _ingest_bronze_cafef_foreign(self) -> None:
         """CafeF foreign tab — foreign buy/sell/net flow (volume + value), remaining
-        room and foreign ownership %. PK (symbol, date)."""
+        room and foreign ownership %. Key kept SPLIT; PK (exchange, ticker, date)."""
         self._ingest_bronze_cafef_daily(
             folder="foreign",
             table_name="cafef_foreign",
             decimal_cols=["f_buy_val", "f_sell_val", "f_net_val", "own_pct"],
             bigint_cols=["f_buy_vol", "f_sell_vol", "f_net_vol", "room_left"],
+            split_key=True,
         )
 
     def _ingest_bronze_cafef_order_stats(self) -> None:
         """CafeF order-placement stats — number + volume of buy vs sell orders and
-        the average volume per order. PK (symbol, date)."""
+        the average volume per order. Key kept SPLIT; PK (exchange, ticker, date)."""
         self._ingest_bronze_cafef_daily(
             folder="order_stats",
             table_name="cafef_order_stats",
@@ -1023,16 +1062,18 @@ class DataPreprocessor:
             bigint_cols=[
                 "n_buy_orders", "buy_order_vol", "n_sell_orders", "sell_order_vol",
             ],
+            split_key=True,
         )
 
     def _ingest_bronze_cafef_prop_trading(self) -> None:
         """CafeF proprietary-desk trades — brokers' own-account buy/sell volume and
-        value. PK (symbol, date)."""
+        value. Key kept SPLIT; PK (exchange, ticker, date)."""
         self._ingest_bronze_cafef_daily(
             folder="prop_trading",
             table_name="cafef_prop_trading",
             decimal_cols=["prop_buy_val", "prop_sell_val"],
             bigint_cols=["prop_buy_vol", "prop_sell_vol"],
+            split_key=True,
         )
 
     def _ingest_bronze_cafef_insider_shareholder_transactions(self) -> None:
@@ -1051,11 +1092,13 @@ class DataPreprocessor:
             self._logger.log_error('No valid CafeF "insider_txn" CSV data found.')
             return
 
-        df = self._helper_normalise_cafef_symbol(df)
+        # Keep the key split (exchange + ticker); the raw CSV stores them apart.
+        df = df.rename(columns={"symbol": "ticker"})
         df = self._helper_clean(
             df,
             [
-                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("symbol"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("exchange"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("ticker"),
                 CleanLayer.REMOVE_IF_ALL_COLUMNS_ARE_NULL(),
             ],
         )
@@ -1204,6 +1247,296 @@ class DataPreprocessor:
             },
         )
 
+    # ── CafeF financials: the parsed quarterly statements ────────────────────
+    # raw_data/cafef/financials/ is built OFFLINE (src/web_scraper/cafef_*.py reads
+    # the local PDF archive), and its folder layout is the schema:
+    #
+    #   schema/<template>_<report>.csv                  the 4 charts of accounts x 3
+    #   statements/<template>/<report>/<EXCH>_<SYM>.csv  the quarterly panels
+    #   templates.csv                                    ticker -> template + cf method
+    #
+    # THE TEMPLATE IS A FOLDER, NOT A COLUMN. Vietnam has four charts of accounts
+    # among listed companies (bank / corp / securities / insurance) and they share no
+    # line items — every one has a "code 1" and it means a different thing in each —
+    # so their columns must never meet in one table. That gives 12 statement tables
+    # (4 templates x 3 reports), each schema-homogeneous, + 3 reference tables:
+    #
+    #   cafef_financial_templates   ticker -> which of the 12 tables to look in
+    #   cafef_financial_schema      the line-item dictionary (column -> printed name)
+    #   cafef_financial_reports     per-DOCUMENT metadata, incl. publish_date
+    #   cafef_financials_<template>_<report>   the figures
+    #
+    # Only the templates that have actually been parsed get a table; today that is
+    # `bank` (VCB), so 3 of the 12 exist.
+
+    CAFEF_FINANCIAL_TEMPLATES = ("bank", "corp", "securities", "insurance")
+    CAFEF_FINANCIAL_REPORTS = ("balance_sheet", "income_statement", "cash_flow")
+
+    # The 13 non-line-item columns every statement CSV carries. They describe the
+    # DOCUMENT a quarter was read from, not the accounts, and are split off into
+    # `cafef_financial_reports`; `source` is kept on the statement table too so a
+    # `missing` quarter is identifiable without a join.
+    CAFEF_FINANCIAL_META_COLS = (
+        "exchange", "ticker", "template", "period", "year", "quarter", "source",
+        "publish_date", "assurance", "cash_flow_method", "unit", "n_columns",
+        "document",
+    )
+    CAFEF_FINANCIAL_KEY_COLS = (
+        "exchange", "ticker", "template", "period", "year", "quarter", "source",
+    )
+
+    @staticmethod
+    def _helper_sql_safe_line_id(line_id: str) -> str:
+        """133 of the 753 line items are named with the flat ARABIC numbering the
+        filing prints (`1_thu_nhap_lai…`, `10_chi_phi_quan_ly_doanh_nghiep`), and
+        PostgreSQL only accepts an identifier starting with a digit if it is QUOTED —
+        which this driver never does (it interpolates bare names into its DDL/DML).
+
+        So a leading digit takes an `n` prefix, and ONLY that: everything else is left
+        exactly as the parser named it. The mapping is injective (no `n<digit>…` name
+        exists) and is recorded in `cafef_financial_schema` as `sql_column` beside the
+        untouched `line_id`, so the printed line is always recoverable."""
+        return f"n{line_id}" if re.match(r"^\d", str(line_id)) else line_id
+
+    def _ingest_bronze_cafef_financials(self) -> None:
+        """Ingest the whole `raw_data/cafef/financials/` tree — the 3 reference
+        tables + one wide table per (template, report) that has been parsed."""
+        self._ingest_bronze_cafef_financial_templates()
+        self._ingest_bronze_cafef_financial_schema()
+        self._ingest_bronze_cafef_financial_statements()
+
+    def _ingest_bronze_cafef_financial_templates(self) -> None:
+        """`templates.csv` — the map from a ticker to WHICH of the statement tables
+        holds it, plus the cash-flow method its filings use.
+
+        Load-bearing, not a convenience: a consumer holding a ticker cannot otherwise
+        tell which of the four schema-homogeneous tables to read. It also carries the
+        GICS sector/industry group beside the fingerprinted template so the two can be
+        seen to disagree — HVA sits in the securities industry group and files on the
+        CORPORATE template. The template is fingerprinted from the filing's own chart
+        of accounts, never classified from the sector (see web_scraper/CONTEXT.md)."""
+        self._logger.log_info("Ingesting bronze CafeF financial templates...")
+
+        file_path = os.path.join(CAFEF_RAW_DATA_DIR, "financials", "templates.csv")
+        if not os.path.exists(file_path):
+            self._logger.log_error(f'No CafeF financials "templates.csv" at {file_path}.')
+            return
+
+        df = pd.read_csv(file_path, encoding="utf-8")
+        df = df.rename(columns={"symbol": "ticker"})
+
+        df = self._helper_clean(
+            df,
+            [
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("exchange"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("ticker"),
+                CleanLayer.REMOVE_IF_ALL_COLUMNS_ARE_NULL(),
+                CleanLayer.ORDER_BY(["exchange", "ticker"]),
+            ],
+        )
+        df = self._helper_remove_duplicates(df, primary_keys=["exchange", "ticker"])
+
+        self._helper_save_pandas_table_to_database(
+            schema_name=BRONZE_SCHEMA,
+            table_name="cafef_financial_templates",
+            primary_keys=["exchange", "ticker"],
+            df=df,
+            dtype_overrides={"sector": DataType.TEXT()},
+        )
+
+    def _ingest_bronze_cafef_financial_schema(self) -> None:
+        """The 12 `schema/<template>_<report>.csv` charts of accounts, concatenated
+        into ONE dictionary table — this is the only place the four templates may
+        meet, because here a line item is a ROW (a fact about the template), not a
+        column. PK (template, report, line_id).
+
+        It is what lets a consumer go from a column name in a statement table back to
+        the Vietnamese line the filing actually printed (`as_printed`), and to CafeF's
+        own item code. Two columns are renamed off reserved SQL words:
+        `order` → `line_order`, `column` → `line_id`."""
+        self._logger.log_info("Ingesting bronze CafeF financial schema...")
+
+        files = sorted(
+            glob(os.path.join(CAFEF_RAW_DATA_DIR, "financials", "schema", "*.csv"))
+        )
+
+        frames = []
+        for file_path in files:
+            df = pd.read_csv(file_path, encoding="utf-8")
+            if df.empty:
+                continue
+            # `<template>_<report>.csv` — the report is the part after the template,
+            # and both the template and the report names contain underscores
+            # (`income_statement`), so split on the KNOWN template prefix.
+            stem = os.path.splitext(os.path.basename(file_path))[0]
+            template = next(
+                (t for t in self.CAFEF_FINANCIAL_TEMPLATES if stem.startswith(f"{t}_")),
+                None,
+            )
+            if template is None:
+                self._logger.log_error(f"Unknown financial schema template: {stem}")
+                continue
+            df["report"] = stem[len(template) + 1 :]
+            frames.append(df)
+
+        if not frames:
+            self._logger.log_error("No CafeF financial schema CSVs found.")
+            return
+
+        df = pd.concat(frames, ignore_index=True)
+        df = df.rename(columns={"order": "line_order", "column": "line_id"})
+        df["sql_column"] = df["line_id"].map(self._helper_sql_safe_line_id)
+
+        df = self._helper_clean(
+            df,
+            [
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("template"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("line_id"),
+                CleanLayer.REMOVE_IF_ALL_COLUMNS_ARE_NULL(),
+                CleanLayer.ORDER_BY(["template", "report", "line_order"]),
+            ],
+        )
+        df = self._helper_cast_columns(
+            df, decimal_cols=[], bigint_cols=["line_order", "level"]
+        )
+        df = self._helper_remove_duplicates(
+            df, primary_keys=["template", "report", "line_id"]
+        )
+
+        self._helper_save_pandas_table_to_database(
+            schema_name=BRONZE_SCHEMA,
+            table_name="cafef_financial_schema",
+            primary_keys=["template", "report", "line_id"],
+            df=df,
+            dtype_overrides={
+                "line_id": DataType.TEXT(),
+                "sql_column": DataType.TEXT(),
+                "as_printed": DataType.TEXT(),
+                "cafef_code": DataType.TEXT(),
+            },
+        )
+
+    def _ingest_bronze_cafef_financial_statements(self) -> None:
+        """The quarterly panels — one wide table per (template, report) that exists on
+        disk, plus the `cafef_financial_reports` metadata table built from the same
+        pass.
+
+        ⚠️ `publish_date` is THE column downstream must join on — it is the day the
+        figures became public, read from inside the filing, and it is not the period
+        end: VCB's Q4-2025 covers the quarter ending 31 Dec 2025 but was not published
+        until 27 Mar 2026. Joining fundamentals to prices on the period end hands a
+        model twelve weeks of look-ahead every year.
+
+        A quarter that could not be read is written as a blank `source='missing'` row,
+        never zero-filled, and the panel is a contiguous quarter grid — so the
+        null-drop layers deliberately gate on the KEY columns only, never on the line
+        items. Figures are already absolute VND (the parser applied the filing's unit),
+        so `unit` is provenance, not a scale factor to re-apply."""
+        report_rows = []
+
+        for template in self.CAFEF_FINANCIAL_TEMPLATES:
+            for report in self.CAFEF_FINANCIAL_REPORTS:
+                folder = os.path.join(
+                    CAFEF_RAW_DATA_DIR, "financials", "statements", template, report
+                )
+                files = sorted(glob(os.path.join(folder, "*.csv")))
+                if not files:
+                    continue
+
+                self._logger.log_info(
+                    f"Ingesting bronze CafeF financials: {template}/{report}..."
+                )
+
+                frames = [
+                    df
+                    for fp in files
+                    if not (df := pd.read_csv(fp, encoding="utf-8")).empty
+                ]
+                if not frames:
+                    self._logger.log_error(
+                        f"No valid CafeF financial statement CSVs in {folder}."
+                    )
+                    continue
+
+                df = pd.concat(frames, ignore_index=True)
+                df = df.rename(columns={"symbol": "ticker"})
+                df["report"] = report
+
+                df = self._helper_clean(
+                    df,
+                    [
+                        CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("exchange"),
+                        CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("ticker"),
+                        CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("period"),
+                        CleanLayer.ORDER_BY(["exchange", "ticker", "year", "quarter"]),
+                    ],
+                )
+
+                df["publish_date"] = pd.to_datetime(
+                    df["publish_date"], errors="coerce"
+                ).dt.date
+
+                # Split the document metadata off into the shared reports table…
+                report_rows.append(
+                    df[["report", *self.CAFEF_FINANCIAL_META_COLS]].copy()
+                )
+
+                # …and keep the figures, keyed, on the per-template table. The line
+                # items are renamed only where PostgreSQL forces it (leading digit).
+                line_cols = [
+                    c
+                    for c in df.columns
+                    if c not in self.CAFEF_FINANCIAL_META_COLS and c != "report"
+                ]
+                df = df[[*self.CAFEF_FINANCIAL_KEY_COLS, *line_cols]]
+                df = df.rename(
+                    columns={c: self._helper_sql_safe_line_id(c) for c in line_cols}
+                )
+                line_cols = [self._helper_sql_safe_line_id(c) for c in line_cols]
+                df = self._helper_cast_columns(
+                    df, decimal_cols=line_cols, bigint_cols=[]
+                )
+                df = self._helper_cast_columns(
+                    df, decimal_cols=[], bigint_cols=["year", "quarter"]
+                )
+                df = self._helper_remove_duplicates(
+                    df, primary_keys=["exchange", "ticker", "year", "quarter"]
+                )
+
+                self._helper_save_pandas_table_to_database(
+                    schema_name=BRONZE_SCHEMA,
+                    table_name=f"cafef_financials_{template}_{report}",
+                    primary_keys=["exchange", "ticker", "year", "quarter"],
+                    df=df,
+                )
+
+        if not report_rows:
+            self._logger.log_error("No CafeF financial statement CSVs found.")
+            return
+
+        self._logger.log_info("Ingesting bronze CafeF financial reports...")
+
+        reports = pd.concat(report_rows, ignore_index=True)
+        reports = self._helper_cast_columns(
+            reports,
+            decimal_cols=["unit"],
+            bigint_cols=["year", "quarter", "n_columns"],
+        )
+        reports = self._helper_remove_duplicates(
+            reports, primary_keys=["exchange", "ticker", "report", "year", "quarter"]
+        )
+
+        self._helper_save_pandas_table_to_database(
+            schema_name=BRONZE_SCHEMA,
+            table_name="cafef_financial_reports",
+            primary_keys=["exchange", "ticker", "report", "year", "quarter"],
+            df=reports,
+            dtype_overrides={
+                "publish_date": DataType.DATE(),
+                "document": DataType.TEXT(),
+            },
+        )
+
     def _ingest_bronze_stocks_simplize(self) -> None:
         """Bronze table for Simplize per-stock daily data — the validated backbone
         of the daily panel: fully dividend-adjusted OHLC (CafeF only adjusts the
@@ -1236,22 +1569,18 @@ class DataPreprocessor:
 
         df = pd.concat(dataframes, ignore_index=True).drop_duplicates()
 
-        # Normalise the key to "<EXCHANGE>:<TICKER>" (Simplize stores them split).
-        df["symbol"] = (
-            df["exchange"].astype("string").str.strip()
-            + ":"
-            + df["symbol"].astype("string").str.strip()
-        )
-        df = df.drop(columns=["exchange"])
+        # Simplize stores the key split already; keep it that way (exchange + ticker).
+        df = df.rename(columns={"symbol": "ticker"})
 
         df = self._helper_clean(
             df,
             [
-                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("symbol"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("exchange"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("ticker"),
                 CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("date"),
                 CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("close"),
                 CleanLayer.REMOVE_IF_ALL_COLUMNS_ARE_NULL(),
-                CleanLayer.ORDER_BY(["symbol", "date"]),
+                CleanLayer.ORDER_BY(["exchange", "ticker", "date"]),
             ],
         )
 
@@ -1270,12 +1599,14 @@ class DataPreprocessor:
 
         df["date"] = pd.to_datetime(df["date"]).dt.date
 
-        df = self._helper_remove_duplicates(df, primary_keys=["symbol", "date"])
+        df = self._helper_remove_duplicates(
+            df, primary_keys=["exchange", "ticker", "date"]
+        )
 
         self._helper_save_pandas_table_to_database(
             schema_name=BRONZE_SCHEMA,
             table_name="simplize_stocks",
-            primary_keys=["symbol", "date"],
+            primary_keys=["exchange", "ticker", "date"],
             df=df,
             dtype_overrides={"date": DataType.DATE()},
         )
@@ -1389,11 +1720,12 @@ class DataPreprocessor:
         df["date"] = pd.to_datetime(df["date"]).dt.date
 
         df = self._helper_remove_duplicates(df, primary_keys=["symbol", "date"])
+        df = self._helper_split_symbol_column(df)
 
         self._helper_save_pandas_table_to_database(
             schema_name=BRONZE_SCHEMA,
             table_name="trading_view_bonds",
-            primary_keys=["symbol", "date"],
+            primary_keys=["exchange", "ticker", "date"],
             df=df,
             dtype_overrides={"date": DataType.DATE()},
         )
@@ -2041,6 +2373,7 @@ class DataPreprocessor:
                     self._ingest_bronze_cafef_prop_trading()
                     self._ingest_bronze_cafef_insider_shareholder_transactions()
                     self._ingest_bronze_cafef_news()
+                    self._ingest_bronze_cafef_financials()
                     self._ingest_bronze_stocks_simplize()
                     self._ingest_bronze_simplize_industry()
                 if self._switch_handler.is_enabled(
