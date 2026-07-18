@@ -1918,6 +1918,137 @@ class DataPreprocessor:
             dtype_overrides={"date": DataType.DATE()},
         )
 
+    def _ingest_silver_cafef_price(self) -> None:
+        """Silver `cafef_price` — the bronze CafeF price table carried up with a
+        basic clean pass (drop rows null on the key or all columns, order by key).
+        Bronze is already keyed `(exchange, ticker)`, so there is no symbol to split.
+        The existing silver table is dropped first so a schema change re-materialises
+        cleanly rather than colliding with the `IF NOT EXISTS` create. PK
+        `(exchange, ticker, date)`."""
+        self._logger.log_info("Ingesting silver CafeF price data...")
+
+        df = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="cafef_price")
+
+        if df.empty:
+            self._logger.log_info("No bronze cafef_price data found.")
+            return
+
+        df = self._helper_clean(
+            df,
+            [
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("exchange"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("ticker"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("date"),
+                CleanLayer.REMOVE_IF_ALL_COLUMNS_ARE_NULL(),
+                CleanLayer.ORDER_BY(["exchange", "ticker", "date"]),
+            ],
+        )
+
+        # Drop the old silver table first (the user's explicit request, and it lets a
+        # changed schema re-materialise cleanly past the driver's IF NOT EXISTS create).
+        self._database_driver.drop_table(SILVER_SCHEMA, "cafef_price")
+
+        self._helper_save_pandas_table_to_database(
+            schema_name=SILVER_SCHEMA,
+            table_name="cafef_price",
+            primary_keys=["exchange", "ticker", "date"],
+            df=df,
+            dtype_overrides={"date": DataType.DATE()},
+        )
+
+    def _ingest_silver_cafef_daily(self, table_name: str) -> None:
+        """Carry a DAILY CafeF bronze table (order_stats / foreign / prop_trading)
+        up to silver with the same basic clean pass as `cafef_price`: drop rows null
+        on the key or all columns, order by key, drop the old silver table first.
+        Same name and shape as bronze; PK `(exchange, ticker, date)`."""
+        self._logger.log_info(f"Ingesting silver CafeF {table_name} data...")
+
+        df = self._helper_select(schema_name=BRONZE_SCHEMA, table_name=table_name)
+
+        if df.empty:
+            self._logger.log_info(f"No bronze {table_name} data found.")
+            return
+
+        df = self._helper_clean(
+            df,
+            [
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("exchange"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("ticker"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("date"),
+                CleanLayer.REMOVE_IF_ALL_COLUMNS_ARE_NULL(),
+                CleanLayer.ORDER_BY(["exchange", "ticker", "date"]),
+            ],
+        )
+
+        self._database_driver.drop_table(SILVER_SCHEMA, table_name)
+
+        self._helper_save_pandas_table_to_database(
+            schema_name=SILVER_SCHEMA,
+            table_name=table_name,
+            primary_keys=["exchange", "ticker", "date"],
+            df=df,
+            dtype_overrides={"date": DataType.DATE()},
+        )
+
+    def _ingest_silver_cafef_order_stats(self) -> None:
+        self._ingest_silver_cafef_daily("cafef_order_stats")
+
+    def _ingest_silver_cafef_foreign(self) -> None:
+        self._ingest_silver_cafef_daily("cafef_foreign")
+
+    def _ingest_silver_cafef_prop_trading(self) -> None:
+        self._ingest_silver_cafef_daily("cafef_prop_trading")
+
+    def _ingest_silver_cafef_insider_shareholder_transactions(self) -> None:
+        """Carry the CafeF insider / major-shareholder transactions up to silver.
+        EVENT-based (one row per transaction), so it keeps bronze's md5 `row_id`
+        surrogate PK — there is no `(exchange, ticker, date)` key. Basic clean only;
+        the five date columns and the long free-text columns keep their bronze type
+        overrides (a default VARCHAR(255) would truncate `note` / `profile_url`)."""
+        table_name = "cafef_insider_shareholder_transactions"
+        self._logger.log_info(f"Ingesting silver CafeF {table_name} data...")
+
+        df = self._helper_select(schema_name=BRONZE_SCHEMA, table_name=table_name)
+
+        if df.empty:
+            self._logger.log_info(f"No bronze {table_name} data found.")
+            return
+
+        df = self._helper_clean(
+            df,
+            [
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("exchange"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("ticker"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("row_id"),
+                CleanLayer.REMOVE_IF_ALL_COLUMNS_ARE_NULL(),
+                CleanLayer.ORDER_BY(["exchange", "ticker"]),
+            ],
+        )
+
+        date_cols = [
+            "plan_begin_date", "plan_end_date", "real_end_date",
+            "order_date", "published_date",
+        ]
+
+        self._database_driver.drop_table(SILVER_SCHEMA, table_name)
+
+        self._helper_save_pandas_table_to_database(
+            schema_name=SILVER_SCHEMA,
+            table_name=table_name,
+            primary_keys=["row_id"],
+            df=df,
+            dtype_overrides={
+                **{c: DataType.DATE() for c in date_cols},
+                "row_id": DataType.VARCHAR(32),
+                "transaction_man": DataType.TEXT(),
+                "position": DataType.TEXT(),
+                "related_man": DataType.TEXT(),
+                "related_position": DataType.TEXT(),
+                "note": DataType.TEXT(),
+                "profile_url": DataType.TEXT(),
+            },
+        )
+
     def _ingest_silver_stocks(self) -> None:
         """Merge the three stock sources into one canonical table, with Simplize
         as the PRIMARY source (VN30-validated as the only source correct on every
@@ -2567,22 +2698,36 @@ class DataPreprocessor:
                     "data_preprocessor", "data_quality_silver", "bonds"
                 ):
                     self._ingest_silver_bonds()
+
                 if self._switch_handler.is_enabled(
                     "data_preprocessor", "data_quality_silver", "economy"
                 ):
                     self._ingest_silver_economy()
+
                 if self._switch_handler.is_enabled(
                     "data_preprocessor", "data_quality_silver", "forex"
                 ):
                     self._ingest_silver_forex()
+
                 if self._switch_handler.is_enabled(
                     "data_preprocessor", "data_quality_silver", "funds"
                 ):
                     self._ingest_silver_funds()
+
                 if self._switch_handler.is_enabled(
                     "data_preprocessor", "data_quality_silver", "indices"
                 ):
                     self._ingest_silver_indices()
+                    
+                if self._switch_handler.is_enabled(
+                    "data_preprocessor", "data_quality_silver", "stocks"
+                ):
+                    self._ingest_silver_cafef_price()
+                    self._ingest_silver_cafef_order_stats()
+                    self._ingest_silver_cafef_foreign()
+                    self._ingest_silver_cafef_prop_trading()
+                    self._ingest_silver_cafef_insider_shareholder_transactions()
+
                 if self._switch_handler.is_enabled(
                     "data_preprocessor", "data_quality_silver", "stocks"
                 ):

@@ -1,9 +1,7 @@
 feature_group,bronze_table
 "Price & traded volume (OHLC, matched/negotiated split, raw vs adj close)",cafef_price
-"Price & volume — adjusted backbone (fully total-return adjusted OHLC, true volume)",simplize_stocks
-"Price & volume — universe / sector fallback OHLCV",trading_view_stocks
-"Foreign-investor flow (buy/sell/net vol+val, room, ownership %)",cafef_foreign
 "Order-placement statistics (buy vs sell order counts, volume, avg/order)",cafef_order_stats
+"Foreign-investor flow (buy/sell/net vol+val, room, ownership %)",cafef_foreign
 "Proprietary-desk trades (brokers' own-account buy/sell vol+val)",cafef_prop_trading
 "Insider & major-shareholder transactions (registered vs executed)",cafef_insider_shareholder_transactions
 "News & disclosure events (headline, body, type, category, filing link)",cafef_news
