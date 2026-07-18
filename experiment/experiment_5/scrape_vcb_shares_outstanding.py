@@ -135,7 +135,7 @@ def build(series: list[dict], actions: list[dict]) -> list[dict]:
         sh, qe = row["shares"], quarter_end(row["year"], row["quarter"])
         if prev is None:
             steps.append({**row, "effective_date": qe, "prev_shares": "", "delta_shares": "",
-                          "pct_change": "", "event_type": "baseline", "dating": "first_filing",
+                          "percentage_change": "", "event_type": "baseline", "dating": "first_filing",
                           "event_text": "earliest filed charter capital"})
             prev = row
             continue
@@ -165,7 +165,7 @@ def build(series: list[dict], actions: list[dict]) -> list[dict]:
             "effective_date": match["ex_date"] if match else qe,
             "prev_shares": prev["shares"],
             "delta_shares": sh - prev["shares"],
-            "pct_change": f"{(ratio - 1) * 100:.1f}%",
+            "percentage_change": f"{(ratio - 1) * 100:.1f}%",
             "event_type": match["event_type"] if match else "unlogged_capital_increase",
             "event_text": match["raw_text"] if match else
                           "not in CafeF's action log — dated to the quarter-end it first appears",
@@ -214,13 +214,13 @@ def main() -> None:
         w.writerows(actions)
 
     cols = ["effective_date", "period", "shares_outstanding", "charter_capital", "prev_shares",
-            "delta_shares", "pct_change", "event_type", "event_text", "dating"]
+            "delta_shares", "percentage_change", "event_type", "event_text", "dating"]
     with (HERE / "vcb_shares_outstanding.csv").open("w", newline="", encoding="utf-8-sig") as f:
         w = csv.writer(f)
         w.writerow(cols)
         for s in steps:
             w.writerow([s["effective_date"], s["period"], s["shares"], s["charter"],
-                        s["prev_shares"], s["delta_shares"], s["pct_change"],
+                        s["prev_shares"], s["delta_shares"], s["percentage_change"],
                         s["event_type"], s["event_text"], s["dating"]])
 
     print(f"{SYMBOL} shares outstanding — from FILED charter capital "

@@ -36,6 +36,7 @@ from utils.switch_handler import SwitchHandler
 
 load_dotenv()
 
+
 def _build_transform_func_map() -> dict:
     """Map each per-group TransformAction to its implementation.
 
@@ -148,6 +149,7 @@ def _build_transform_func_map() -> dict:
         TransformAction.ADD_FOREIGN_NET_VAL_RATIO: add_foreign_net_val_ratio,
         TransformAction.ADD_NEGOTIATED_VOL_RATIO: add_negotiated_vol_ratio,
     }
+
 
 class DataPreprocessor:
 
@@ -436,7 +438,8 @@ class DataPreprocessor:
         # features can emit e.g. -5.7e-46). Map ±inf → NaN and tiny magnitudes → 0.0.
         if dtype_overrides:
             real_cols = [
-                c for c, t in dtype_overrides.items()
+                c
+                for c, t in dtype_overrides.items()
                 if str(t).upper().startswith("REAL") and c in df.columns
             ]
             if real_cols:
@@ -445,7 +448,7 @@ class DataPreprocessor:
                     s = pd.to_numeric(df[c], errors="coerce")
                     s = s.replace([np.inf, -np.inf], np.nan)
                     s = s.where(s.abs() <= 3.4e38, np.nan)  # above REAL max → NaN
-                    df[c] = s.mask(s.abs() < 1e-37, 0.0)    # subnormal → 0.0
+                    df[c] = s.mask(s.abs() < 1e-37, 0.0)  # subnormal → 0.0
 
         self._helper_ensure_table_exists(
             schema_name=schema_name,
@@ -1033,11 +1036,16 @@ class DataPreprocessor:
             folder="price",
             table_name="cafef_price",
             decimal_cols=[
-                "open", "high", "low", "close_raw", "close_adj",
-                "val_matched_bn", "val_negotiated_bn",
+                "open",
+                "high",
+                "low",
+                "close_raw",
+                "close_adjust",
+                "value_matched",
+                "value_negotiated",
             ],
-            bigint_cols=["vol_matched", "vol_negotiated"],
-            required_col="close_adj",
+            bigint_cols=["volume_matched", "volume_negotiated"],
+            required_col="close_adjust",
             split_key=True,
         )
 
@@ -1047,8 +1055,18 @@ class DataPreprocessor:
         self._ingest_bronze_cafef_daily(
             folder="foreign",
             table_name="cafef_foreign",
-            decimal_cols=["f_buy_val", "f_sell_val", "f_net_val", "own_pct"],
-            bigint_cols=["f_buy_vol", "f_sell_vol", "f_net_vol", "room_left"],
+            decimal_cols=[
+                "foreign_buy_value",
+                "foreign_sell_value",
+                "foreign_net_value",
+                "foreign_own",
+            ],
+            bigint_cols=[
+                "foreign_buy_volume",
+                "foreign_sell_volume",
+                "foreign_net_volume",
+                "foreign_room_left",
+            ],
             split_key=True,
         )
 
@@ -1060,7 +1078,10 @@ class DataPreprocessor:
             table_name="cafef_order_stats",
             decimal_cols=["avg_vol_per_buy_order", "avg_vol_per_sell_order"],
             bigint_cols=[
-                "n_buy_orders", "buy_order_vol", "n_sell_orders", "sell_order_vol",
+                "n_buy_orders",
+                "buy_order_vol",
+                "n_sell_orders",
+                "sell_order_vol",
             ],
             split_key=True,
         )
@@ -1115,14 +1136,21 @@ class DataPreprocessor:
             df,
             decimal_cols=["ownership_pct"],
             bigint_cols=[
-                "vol_before", "plan_buy_vol", "plan_sell_vol",
-                "real_buy_vol", "real_sell_vol", "vol_after",
+                "vol_before",
+                "plan_buy_vol",
+                "plan_sell_vol",
+                "real_buy_vol",
+                "real_sell_vol",
+                "vol_after",
             ],
         )
 
         date_cols = [
-            "plan_begin_date", "plan_end_date", "real_end_date",
-            "order_date", "published_date",
+            "plan_begin_date",
+            "plan_end_date",
+            "real_end_date",
+            "order_date",
+            "published_date",
         ]
         for col in date_cols:
             df[col] = pd.to_datetime(df[col], errors="coerce").dt.date
@@ -1209,9 +1237,7 @@ class DataPreprocessor:
             for exchange, ticker, url in zip(df["exchange"], df["ticker"], df["url"])
         ]
 
-        df = self._helper_cast_columns(
-            df, decimal_cols=[], bigint_cols=["news_order"]
-        )
+        df = self._helper_cast_columns(df, decimal_cols=[], bigint_cols=["news_order"])
         df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
 
         df = self._helper_remove_duplicates(df, primary_keys=["row_id"])
@@ -1277,12 +1303,28 @@ class DataPreprocessor:
     # `cafef_financial_reports`; `source` is kept on the statement table too so a
     # `missing` quarter is identifiable without a join.
     CAFEF_FINANCIAL_META_COLS = (
-        "exchange", "ticker", "template", "period", "year", "quarter", "source",
-        "publish_date", "assurance", "cash_flow_method", "unit", "n_columns",
+        "exchange",
+        "ticker",
+        "template",
+        "period",
+        "year",
+        "quarter",
+        "source",
+        "publish_date",
+        "assurance",
+        "cash_flow_method",
+        "unit",
+        "n_columns",
         "document",
     )
     CAFEF_FINANCIAL_KEY_COLS = (
-        "exchange", "ticker", "template", "period", "year", "quarter", "source",
+        "exchange",
+        "ticker",
+        "template",
+        "period",
+        "year",
+        "quarter",
+        "source",
     )
 
     @staticmethod
@@ -1319,7 +1361,9 @@ class DataPreprocessor:
 
         file_path = os.path.join(CAFEF_RAW_DATA_DIR, "financials", "templates.csv")
         if not os.path.exists(file_path):
-            self._logger.log_error(f'No CafeF financials "templates.csv" at {file_path}.')
+            self._logger.log_error(
+                f'No CafeF financials "templates.csv" at {file_path}.'
+            )
             return
 
         df = pd.read_csv(file_path, encoding="utf-8")
@@ -1554,7 +1598,9 @@ class DataPreprocessor:
         csv_files = glob(os.path.join(stocks_dir, "**", "*.csv"), recursive=True)
 
         if not csv_files:
-            self._logger.log_error(f'No Simplize stocks CSV files found in "{stocks_dir}".')
+            self._logger.log_error(
+                f'No Simplize stocks CSV files found in "{stocks_dir}".'
+            )
             return
 
         dataframes = []
@@ -1587,13 +1633,22 @@ class DataPreprocessor:
         df = self._helper_cast_columns(
             df,
             decimal_cols=[
-                "open", "high", "low", "close",
-                "net_change", "pct_change",
-                "f_buy_val", "f_sell_val", "f_net_val",
+                "open",
+                "high",
+                "low",
+                "close",
+                "net_change",
+                "percentage_change",
+                "foreign_buy_value",
+                "foreign_sell_value",
+                "foreign_net_value",
             ],
             bigint_cols=[
-                "volume", "foreign_room",
-                "f_buy_vol", "f_sell_vol", "f_net_vol",
+                "volume",
+                "foreign_room",
+                "foreign_buy_volume",
+                "foreign_sell_volume",
+                "foreign_net_volume",
             ],
         )
 
@@ -1733,7 +1788,9 @@ class DataPreprocessor:
     def _ingest_silver_bonds(self) -> None:
         self._logger.log_info("Ingesting silver bonds data...")
 
-        df = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="trading_view_bonds")
+        df = self._helper_select(
+            schema_name=BRONZE_SCHEMA, table_name="trading_view_bonds"
+        )
 
         if df.empty:
             self._logger.log_info("No bronze bonds data found.")
@@ -1755,7 +1812,9 @@ class DataPreprocessor:
     def _ingest_silver_economy(self) -> None:
         self._logger.log_info("Ingesting silver economy data...")
 
-        df = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="trading_view_economy")
+        df = self._helper_select(
+            schema_name=BRONZE_SCHEMA, table_name="trading_view_economy"
+        )
 
         if df.empty:
             self._logger.log_info("No bronze economy data found.")
@@ -1777,7 +1836,9 @@ class DataPreprocessor:
     def _ingest_silver_forex(self) -> None:
         self._logger.log_info("Ingesting silver forex data...")
 
-        df = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="trading_view_forex")
+        df = self._helper_select(
+            schema_name=BRONZE_SCHEMA, table_name="trading_view_forex"
+        )
 
         if df.empty:
             self._logger.log_info("No bronze forex data found.")
@@ -1802,7 +1863,9 @@ class DataPreprocessor:
     def _ingest_silver_funds(self) -> None:
         self._logger.log_info("Ingesting silver funds data...")
 
-        df = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="trading_view_funds")
+        df = self._helper_select(
+            schema_name=BRONZE_SCHEMA, table_name="trading_view_funds"
+        )
 
         if df.empty:
             self._logger.log_info("No bronze funds data found.")
@@ -1829,7 +1892,9 @@ class DataPreprocessor:
     def _ingest_silver_indices(self) -> None:
         self._logger.log_info("Ingesting silver indices data...")
 
-        df = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="trading_view_indices")
+        df = self._helper_select(
+            schema_name=BRONZE_SCHEMA, table_name="trading_view_indices"
+        )
 
         if df.empty:
             self._logger.log_info("No bronze indices data found.")
@@ -1863,7 +1928,7 @@ class DataPreprocessor:
           and remaining room, from 2009. Drives every price/volume/foreign column.
         • CafeF (bronze `cafef_price` + `cafef_foreign`, merged here on
           (symbol, date)) — its unique fields: the matched vs negotiated (block)
-          volume/value split and foreign ownership % (own_pct); also a fallback for
+          volume/value split and foreign ownership % (foreign_own); also a fallback for
           foreign flow where Simplize is missing.
         • TradingView (bronze `trading_view_stocks`) — an OHLC fallback only
           (its volume is split-inflated and its sector misclassifies VN stocks).
@@ -1881,14 +1946,22 @@ class DataPreprocessor:
             "Ingesting silver stocks data (Simplize primary + CafeF + TradingView)..."
         )
 
-        sz = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="simplize_stocks")
-        tv = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="trading_view_stocks")
+        sz = self._helper_select(
+            schema_name=BRONZE_SCHEMA, table_name="simplize_stocks"
+        )
+        tv = self._helper_select(
+            schema_name=BRONZE_SCHEMA, table_name="trading_view_stocks"
+        )
 
         # CafeF price + foreign are now separate bronze tables (one per scraper
         # link-folder); merge them on (symbol, date) to reconstruct the combined
         # per-stock CafeF frame the source-merge below expects.
-        cf_price = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="cafef_price")
-        cf_foreign = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="cafef_foreign")
+        cf_price = self._helper_select(
+            schema_name=BRONZE_SCHEMA, table_name="cafef_price"
+        )
+        cf_foreign = self._helper_select(
+            schema_name=BRONZE_SCHEMA, table_name="cafef_foreign"
+        )
         if not cf_price.empty and not cf_foreign.empty:
             cf = cf_price.merge(cf_foreign, on=["symbol", "date"], how="outer")
         elif not cf_price.empty:
@@ -1912,25 +1985,43 @@ class DataPreprocessor:
 
         # ── Simplize: primary price / volume / foreign spine ──
         sz_cols = [
-            "open", "high", "low", "close", "net_change", "pct_change", "volume",
-            "foreign_room", "f_buy_vol", "f_sell_vol", "f_net_vol",
-            "f_buy_val", "f_sell_val", "f_net_val",
+            "open",
+            "high",
+            "low",
+            "close",
+            "net_change",
+            "percentage_change",
+            "volume",
+            "foreign_room",
+            "foreign_buy_volume",
+            "foreign_sell_volume",
+            "foreign_net_volume",
+            "foreign_buy_value",
+            "foreign_sell_value",
+            "foreign_net_value",
         ]
         if not sz.empty:
             sz = _split(sz)[KEYS + sz_cols]
         else:
             sz = pd.DataFrame(columns=KEYS + sz_cols)
 
-        # ── CafeF: matched/negotiated split + own_pct (unique); foreign fallback ──
+        # ── CafeF: matched/negotiated split + foreign_own (unique); foreign fallback ──
         cf_keep = [
-            "vol_matched", "vol_negotiated",
-            "val_matched_bn", "val_negotiated_bn", "own_pct",
+            "volume_matched",
+            "volume_negotiated",
+            "value_matched",
+            "value_negotiated",
+            "foreign_own",
         ]
         cf_fallback = {
-            "close_adj": "cf_close", "room_left": "cf_foreign_room",
-            "f_buy_vol": "cf_f_buy_vol", "f_sell_vol": "cf_f_sell_vol",
-            "f_net_vol": "cf_f_net_vol", "f_buy_val": "cf_f_buy_val",
-            "f_sell_val": "cf_f_sell_val", "f_net_val": "cf_f_net_val",
+            "close_adjust": "cf_close",
+            "foreign_room_left": "cf_foreign_room",
+            "foreign_buy_volume": "cf_foreign_buy_volume",
+            "foreign_sell_volume": "cf_foreign_sell_volume",
+            "foreign_net_volume": "cf_foreign_net_volume",
+            "foreign_buy_value": "cf_foreign_buy_value",
+            "foreign_sell_value": "cf_foreign_sell_value",
+            "foreign_net_value": "cf_foreign_net_value",
         }
         if not cf.empty:
             cf = _split(cf).rename(columns=cf_fallback)
@@ -1940,10 +2031,16 @@ class DataPreprocessor:
             cf = pd.DataFrame(columns=KEYS + cf_keep + list(cf_fallback.values()))
 
         # ── TradingView: OHLC fallback only ──
-        tv_fallback = {"open": "tv_open", "high": "tv_high",
-                       "low": "tv_low", "close": "tv_close"}
+        tv_fallback = {
+            "open": "tv_open",
+            "high": "tv_high",
+            "low": "tv_low",
+            "close": "tv_close",
+        }
         if not tv.empty:
-            tv_px = _split(tv).rename(columns=tv_fallback)[KEYS + list(tv_fallback.values())]
+            tv_px = _split(tv).rename(columns=tv_fallback)[
+                KEYS + list(tv_fallback.values())
+            ]
         else:
             tv_px = pd.DataFrame(columns=KEYS + list(tv_fallback.values()))
 
@@ -1958,17 +2055,29 @@ class DataPreprocessor:
 
         # Volume: Simplize total -> CafeF (matched + negotiated). TradingView
         # volume is split-inflated, so it is never used as a fallback.
-        cf_total_vol = df["vol_matched"].fillna(0) + df["vol_negotiated"].fillna(0)
+        cf_total_vol = df["volume_matched"].fillna(0) + df["volume_negotiated"].fillna(
+            0
+        )
         df["volume"] = df["volume"].fillna(cf_total_vol.where(cf_total_vol > 0))
 
         # Foreign flow + room: Simplize -> CafeF.
-        for col in ["foreign_room", "f_buy_vol", "f_sell_vol", "f_net_vol",
-                    "f_buy_val", "f_sell_val", "f_net_val"]:
+        for col in [
+            "foreign_room",
+            "foreign_buy_volume",
+            "foreign_sell_volume",
+            "foreign_net_volume",
+            "foreign_buy_value",
+            "foreign_sell_value",
+            "foreign_net_value",
+        ]:
             df[col] = df[col].fillna(df[f"cf_{col}"])
 
         df = df.drop(
-            columns=[c for c in list(cf_fallback.values()) + list(tv_fallback.values())
-                     if c in df.columns]
+            columns=[
+                c
+                for c in list(cf_fallback.values()) + list(tv_fallback.values())
+                if c in df.columns
+            ]
         )
 
         # ── Full GICS classification tree, merged per ticker (constant per ticker),
@@ -1980,27 +2089,57 @@ class DataPreprocessor:
             for c in self.GICS_CLASS_COLS:
                 df[c] = pd.NA
 
-        out_cols = KEYS + self.GICS_CLASS_COLS + [
-            "open", "high", "low", "close",
-            "net_change", "pct_change", "volume", "foreign_room",
-            "f_buy_vol", "f_sell_vol", "f_net_vol",
-            "f_buy_val", "f_sell_val", "f_net_val",
-            "vol_matched", "vol_negotiated", "val_matched_bn", "val_negotiated_bn",
-            "own_pct",
-        ]
+        out_cols = (
+            KEYS
+            + self.GICS_CLASS_COLS
+            + [
+                "open",
+                "high",
+                "low",
+                "close",
+                "net_change",
+                "percentage_change",
+                "volume",
+                "foreign_room",
+                "foreign_buy_volume",
+                "foreign_sell_volume",
+                "foreign_net_volume",
+                "foreign_buy_value",
+                "foreign_sell_value",
+                "foreign_net_value",
+                "volume_matched",
+                "volume_negotiated",
+                "value_matched",
+                "value_negotiated",
+                "foreign_own",
+            ]
+        )
         df = df[out_cols].sort_values(KEYS).reset_index(drop=True)
 
         df = self._helper_cast_columns(
             df,
             decimal_cols=[
-                "open", "high", "low", "close", "net_change", "pct_change",
-                "val_matched_bn", "val_negotiated_bn",
-                "f_buy_val", "f_sell_val", "f_net_val", "own_pct",
+                "open",
+                "high",
+                "low",
+                "close",
+                "net_change",
+                "percentage_change",
+                "value_matched",
+                "value_negotiated",
+                "foreign_buy_value",
+                "foreign_sell_value",
+                "foreign_net_value",
+                "foreign_own",
             ],
             bigint_cols=[
-                "volume", "foreign_room",
-                "f_buy_vol", "f_sell_vol", "f_net_vol",
-                "vol_matched", "vol_negotiated",
+                "volume",
+                "foreign_room",
+                "foreign_buy_volume",
+                "foreign_sell_volume",
+                "foreign_net_volume",
+                "volume_matched",
+                "volume_negotiated",
             ],
         )
 
@@ -2015,10 +2154,14 @@ class DataPreprocessor:
     # Full GICS hierarchy columns carried on every silver.stocks row (English
     # snake_case names + codes, sourced entirely from bronze.gics).
     GICS_CLASS_COLS = [
-        "sector", "sector_code",
-        "industry_group", "industry_group_code",
-        "industry", "industry_code",
-        "sub_industry", "sub_industry_code",
+        "sector",
+        "sector_code",
+        "industry_group",
+        "industry_group_code",
+        "industry",
+        "industry_code",
+        "sub_industry",
+        "sub_industry_code",
     ]
 
     def _helper_build_gics_classification(self) -> pd.DataFrame:
@@ -2037,7 +2180,9 @@ class DataPreprocessor:
         """
         out_cols = ["exchange", "ticker"] + self.GICS_CLASS_COLS
 
-        ind = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="simplize_industry")
+        ind = self._helper_select(
+            schema_name=BRONZE_SCHEMA, table_name="simplize_industry"
+        )
         gics = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="gics")
         if ind.empty or gics.empty:
             self._logger.log_warning(
@@ -2050,22 +2195,27 @@ class DataPreprocessor:
         # Select code + *_snake columns only (bronze.gics also has title-case name
         # columns), then rename the snake columns to the canonical output names.
         gics = gics.copy()
-        gics["sub_industry_code"] = gics["sub_industry_code"].astype("string").str.strip()
+        gics["sub_industry_code"] = (
+            gics["sub_industry_code"].astype("string").str.strip()
+        )
         snake_map = {
             "sub_industry_code": "sub_industry_code",
-            "sector_code": "sector_code", "sector_snake": "sector",
+            "sector_code": "sector_code",
+            "sector_snake": "sector",
             "industry_group_code": "industry_group_code",
             "industry_group_snake": "industry_group",
-            "industry_code": "industry_code", "industry_snake": "industry",
+            "industry_code": "industry_code",
+            "industry_snake": "industry",
             "sub_industry_snake": "sub_industry",
         }
-        gics_tree = (
-            gics.drop_duplicates("sub_industry_code")[list(snake_map)]
-            .rename(columns=snake_map)
+        gics_tree = gics.drop_duplicates("sub_industry_code")[list(snake_map)].rename(
+            columns=snake_map
         )
 
         ind = ind.copy()
-        ind["industry_group_code"] = ind["industry_group_code"].astype("string").str.strip()
+        ind["industry_group_code"] = (
+            ind["industry_group_code"].astype("string").str.strip()
+        )
         ind["sub_industry_code"] = ind["industry_group_code"].map(
             SIMPLIZE_GROUP_TO_GICS_SUB_INDUSTRY
         )
@@ -2347,22 +2497,27 @@ class DataPreprocessor:
                     "data_preprocessor", "data_quality_bronze", "bonds"
                 ):
                     self._ingest_bronze_bonds()
+
                 if self._switch_handler.is_enabled(
                     "data_preprocessor", "data_quality_bronze", "economy"
                 ):
                     self._ingest_bronze_economy()
+
                 if self._switch_handler.is_enabled(
                     "data_preprocessor", "data_quality_bronze", "forex"
                 ):
                     self._ingest_bronze_forex()
+
                 if self._switch_handler.is_enabled(
                     "data_preprocessor", "data_quality_bronze", "funds"
                 ):
                     self._ingest_bronze_funds()
+
                 if self._switch_handler.is_enabled(
                     "data_preprocessor", "data_quality_bronze", "indices"
                 ):
                     self._ingest_bronze_indices()
+
                 if self._switch_handler.is_enabled(
                     "data_preprocessor", "data_quality_bronze", "stocks"
                 ):
@@ -2376,6 +2531,7 @@ class DataPreprocessor:
                     self._ingest_bronze_cafef_financials()
                     self._ingest_bronze_stocks_simplize()
                     self._ingest_bronze_simplize_industry()
+
                 if self._switch_handler.is_enabled(
                     "data_preprocessor", "data_quality_bronze", "gics"
                 ):

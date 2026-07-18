@@ -259,7 +259,7 @@ memory; recreate from that if needed. Key results:
 
 - **Foreign flow is the one signal that survives.** Price factors (rev/mom/vol) had a real
   cross-sectional IC in 2016-2020 but **reversed post-2021**; foreign-flow features
-  (`f_net_val` etc., 100% populated historically in `gold_schema.stocks`) stayed positive.
+  (`foreign_net_value` etc., 100% populated historically in `gold_schema.stocks`) stayed positive.
 - **Best OOS classifier**: XGBoost on flow (+ decomposition: gross participation, foreign
   order-imbalance, foreign-room accumulation, block-trade ratio) + liquidity + short-
   reversal + within-sector z-scores, **sector-neutral target**, walk-forward + H-day
@@ -295,7 +295,7 @@ memory; recreate from that if needed. Key results:
 anywhere in the DB is **FOREIGN** (`f_buy/f_sell_*`, `foreign_buy_pressure`) — present in
 `bronze_schema.{cafef,simplize}_stocks`, `gold_schema.stocks`, and the VCB `__final` views, and
 already fully exploited. **Active/aggressor buy-sell (all-investor buyer- vs seller-initiated) is
-NOT ingested** (CafeF/Simplize/TradingView never captured it; `vol_matched` is total matched
+NOT ingested** (CafeF/Simplize/TradingView never captured it; `volume_matched` is total matched
 volume, not side-split). `mfi_14`/`bop` are price-derived proxies, not order flow. No fundamentals,
 no sentiment, no intraday/tick, no point-in-time index membership in the DB.
 

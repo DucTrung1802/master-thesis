@@ -125,8 +125,8 @@ DTO helpers come from
   the price+foreign merge moved to silver). All share the `_helper_load_cafef_folder`
   helper; the four daily ones go through the generic `_ingest_bronze_cafef_daily`
   (with `split_key=True` → PK `(exchange, ticker, date)`):
-  - `cafef_price` — OHLC (`close_raw`/`close_adj`) + matched/negotiated vol/val. PK `(exchange, ticker, date)`.
-  - `cafef_foreign` — foreign buy/sell/net flow (vol+val), `room_left`, `own_pct`. PK `(exchange, ticker, date)`.
+  - `cafef_price` — OHLC (`close_raw`/`close_adjust`) + matched/negotiated vol/val. PK `(exchange, ticker, date)`.
+  - `cafef_foreign` — foreign buy/sell/net flow (vol+val), `foreign_room_left`, `foreign_own`. PK `(exchange, ticker, date)`.
   - `cafef_order_stats` — buy/sell order counts, volume, avg vol/order. PK `(exchange, ticker, date)`.
   - `cafef_prop_trading` — proprietary-desk buy/sell vol+val. PK `(exchange, ticker, date)`.
   - `cafef_insider_shareholder_transactions` — registered vs executed buy/sell by
@@ -207,7 +207,7 @@ DTO helpers come from
   - Volume: Simplize total → CafeF (matched + negotiated). TV volume is
     split-inflated → never a fallback.
   - Foreign flow/room: Simplize → CafeF. CafeF also uniquely supplies
-    matched/negotiated split + `own_pct`.
+    matched/negotiated split + `foreign_own`.
   - Attaches the **full GICS tree** (`_helper_build_gics_classification`): each
     ticker's Simplize industry group → a GICS sub-industry leaf via
     `SIMPLIZE_GROUP_TO_GICS_SUB_INDUSTRY`, joined to `bronze.gics` to yield
@@ -297,14 +297,14 @@ DTO helpers come from
   tables on `(ticker, date)` — Simplize OHLC/volume/foreign as primary (CafeF fills
   nulls), plus CafeF's unique columns appended — yields **33 columns**, or **41** with
   the 8 GICS columns attached (matching `silver.stocks`'s layout). Coverage of the
-  appended CafeF columns tapers with source history (own_pct from 2012, order_stats
+  appended CafeF columns tapers with source history (foreign_own from 2012, order_stats
   from 2010, prop_trading from 2023); insider-shareholder txns are event-based and do
   **not** 1:1-join onto a daily row.
 - **Simplize is PRIMARY in silver.stocks**; TV is an OHLC fallback only and its
   volume/sector are never trusted (memory `project-bronze-source-per-field`).
   Re-validated across the whole **VN30** (2026-07-09, on this bronze): vs CafeF,
   Simplize wins on precision (CafeF rounds price to 10-VND ticks, volume to ~100
-  shares), history depth, and adjustment — **CafeF `close_adj` is split/stock-div
+  shares), history depth, and adjustment — **CafeF `close_adjust` is split/stock-div
   adjusted but under-accounts for CASH dividends** (adjusted-price levels diverge up
   to ~38% in deep history for high-payout names like MWG/ACB), while Simplize is
   fully total-return adjusted. Both anchor to the same recent traded price, and
@@ -312,7 +312,7 @@ DTO helpers come from
   interchangeable; the gap is a price-*level* offset (never splice the two into one
   series). Foreign volume: Simplize folds in **block/put-through** trades, CafeF's
   foreign tab is matched-market only. → Simplize backbone is correct; CafeF's real
-  value is its unique columns (`close_raw`, matched/negotiated split, `own_pct`).
+  value is its unique columns (`close_raw`, matched/negotiated split, `foreign_own`).
 - **Gold uses `REAL`, not `DOUBLE`** — the writer sanitizes out-of-range/subnormal
   floats to avoid PostgreSQL REAL rejections; the 8160-byte row limit is the reason
   the stocks TA panel must stay `REAL`.

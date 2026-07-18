@@ -57,15 +57,15 @@ class CafeFScraper(BaseScraper):
     # Price-history tab (cafef .../vcb-1.chn → PriceHistory.ashx).
     PRICE_COLUMNS = [
         "date", "exchange", "symbol",
-        "open", "high", "low", "close_raw", "close_adj",
-        "vol_matched", "val_matched_bn", "vol_negotiated", "val_negotiated_bn",
+        "open", "high", "low", "close_raw", "close_adjust",
+        "volume_matched", "value_matched", "volume_negotiated", "value_negotiated",
     ]
 
     # Foreign-trading tab (cafef .../vcb-3.chn → GDKhoiNgoai.ashx).
     FOREIGN_COLUMNS = [
         "date", "exchange", "symbol",
-        "f_buy_vol", "f_buy_val", "f_sell_vol", "f_sell_val",
-        "f_net_vol", "f_net_val", "room_left", "own_pct",
+        "foreign_buy_volume", "foreign_buy_value", "foreign_sell_volume", "foreign_sell_value",
+        "foreign_net_volume", "foreign_net_value", "foreign_room_left", "foreign_own",
     ]
 
     # Order-placement statistics tab (cafef .../vcb-2.chn → ThongKeDL.ashx): the
@@ -252,11 +252,11 @@ class CafeFScraper(BaseScraper):
                 "open": self._mul(p.get("GiaMoCua")), "high": self._mul(p.get("GiaCaoNhat")),
                 "low": self._mul(p.get("GiaThapNhat")),
                 "close_raw": self._mul(p.get("GiaDongCua")),
-                "close_adj": self._mul(p.get("GiaDieuChinh")),
-                "vol_matched": self._num(p.get("KhoiLuongKhopLenh")),
-                "val_matched_bn": self._num(p.get("GiaTriKhopLenh")),
-                "vol_negotiated": self._num(p.get("KLThoaThuan")),
-                "val_negotiated_bn": self._num(p.get("GtThoaThuan")),
+                "close_adjust": self._mul(p.get("GiaDieuChinh")),
+                "volume_matched": self._num(p.get("KhoiLuongKhopLenh")),
+                "value_matched": self._num(p.get("GiaTriKhopLenh")),
+                "volume_negotiated": self._num(p.get("KLThoaThuan")),
+                "value_negotiated": self._num(p.get("GtThoaThuan")),
             })
         rows.sort(key=lambda r: r["date"])
         return rows
@@ -268,10 +268,10 @@ class CafeFScraper(BaseScraper):
             d = datetime.strptime(ngay, "%d/%m/%Y").date()
             rows.append({
                 "date": d.isoformat(), "exchange": exchange, "symbol": symbol,
-                "f_buy_vol": self._num(f.get("KLMua")), "f_buy_val": self._num(f.get("GtMua")),
-                "f_sell_vol": self._num(f.get("KLBan")), "f_sell_val": self._num(f.get("GtBan")),
-                "f_net_vol": self._num(f.get("KLGDRong")), "f_net_val": self._num(f.get("GTDGRong")),
-                "room_left": self._num(f.get("RoomConLai")), "own_pct": self._num(f.get("DangSoHuu")),
+                "foreign_buy_volume": self._num(f.get("KLMua")), "foreign_buy_value": self._num(f.get("GtMua")),
+                "foreign_sell_volume": self._num(f.get("KLBan")), "foreign_sell_value": self._num(f.get("GtBan")),
+                "foreign_net_volume": self._num(f.get("KLGDRong")), "foreign_net_value": self._num(f.get("GTDGRong")),
+                "foreign_room_left": self._num(f.get("RoomConLai")), "foreign_own": self._num(f.get("DangSoHuu")),
             })
         rows.sort(key=lambda r: r["date"])
         return rows
@@ -488,11 +488,20 @@ class CafeFScraper(BaseScraper):
         folder — price (vcb-1), order-placement stats (vcb-2), foreign flow (vcb-3),
         proprietary-desk trades (vcb-4), and insider transactions (vcb-6) — for every
         ticker across the given exchanges (default: all of HOSE, HNX, UPCOM)."""
-        self.scrape_all_price(exchanges=exchanges)
-        self.scrape_all_order_stats(exchanges=exchanges)
-        self.scrape_all_foreign(exchanges=exchanges)
-        self.scrape_all_prop_trading(exchanges=exchanges)
-        self.scrape_all_insider_txn(exchanges=exchanges)
+        if self._switch_handler.is_enabled("web_scraper", "cafef", "price"):
+            self.scrape_all_price(exchanges=exchanges)
+
+        if self._switch_handler.is_enabled("web_scraper", "cafef", "order_stats"):
+            self.scrape_all_order_stats(exchanges=exchanges)
+
+        if self._switch_handler.is_enabled("web_scraper", "cafef", "foreign"):
+            self.scrape_all_foreign(exchanges=exchanges)
+
+        if self._switch_handler.is_enabled("web_scraper", "cafef", "prop_trading"):
+            self.scrape_all_prop_trading(exchanges=exchanges)
+
+        if self._switch_handler.is_enabled("web_scraper", "cafef", "insider_txn"):
+            self.scrape_all_insider_txn(exchanges=exchanges)
 
     def _scrape_all(self, label: str, scrape_fn, skip_existing: bool,
                     exchanges: Tuple[str, ...] = None) -> None:

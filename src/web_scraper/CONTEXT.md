@@ -469,7 +469,7 @@ Matches the bronze-source decision (memory `project-bronze-source-per-field`):
 | Field | Primary | Notes |
 |---|---|---|
 | OHLC / volume / foreign flow | **Simplize** | fully adjusted, true volume, most complete |
-| split-only / negotiated volume, raw vs adj close | **CafeF** | matched/negotiated split, `close_raw`/`close_adj`, '000 VND |
+| split-only / negotiated volume, raw vs adj close | **CafeF** | matched/negotiated split, `close_raw`/`close_adjust`, '000 VND |
 | universe (which tickers exist) | **TradingView** | the link CSVs everyone else reads |
 | fundamentals as filed (the source of truth) | **CafeF PDFs** | the statements CafeF's own API transcribes; the only place its gaps exist |
 | news / disclosure events | **CafeF** | headline + body + filing PDF link, categorised |

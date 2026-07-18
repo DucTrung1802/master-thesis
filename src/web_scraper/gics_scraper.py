@@ -64,16 +64,30 @@ class GicsScraper(BaseScraper):
     EXPECTED_COUNTS = (11, 25, 74, 163)  # sectors, groups, industries, sub-industries
 
     OUTPUT_COLUMNS = [
-        "sector_code", "sector", "sector_snake",
-        "industry_group_code", "industry_group", "industry_group_snake",
-        "industry_code", "industry", "industry_snake",
-        "sub_industry_code", "sub_industry", "sub_industry_snake",
+        "sector_code",
+        "sector",
+        "sector_snake",
+        "industry_group_code",
+        "industry_group",
+        "industry_group_snake",
+        "industry_code",
+        "industry",
+        "industry_snake",
+        "sub_industry_code",
+        "sub_industry",
+        "sub_industry_snake",
         "sub_industry_definition",
     ]
 
     # A parenthetical in a name is dropped if it contains any of these words
     # (it marks a 2023 change); all other parentheticals are kept as semantic.
-    _CHANGE_WORDS = ("new", "discontinued", "definition update", "sector change", "code")
+    _CHANGE_WORDS = (
+        "new",
+        "discontinued",
+        "definition update",
+        "sector change",
+        "code",
+    )
 
     def __init__(
         self,
@@ -91,11 +105,15 @@ class GicsScraper(BaseScraper):
             retry_delay=retry_delay,
         )
         self._session = requests.Session()
-        self._session.headers.update({
-            "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                           "AppleWebKit/537.36 (KHTML, like Gecko) "
-                           "Chrome/123.0.0.0 Safari/537.36"),
-        })
+        self._session.headers.update(
+            {
+                "User-Agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/123.0.0.0 Safari/537.36"
+                ),
+            }
+        )
 
     # ──────────────────────────────────────────────────────────────────────
     # Download
@@ -151,9 +169,12 @@ class GicsScraper(BaseScraper):
     def _clean_name(self, name: str) -> str:
         """Strip change-annotation parentheticals (e.g. '(New Code)') while keeping
         semantic ones (e.g. '(HMOs)', '(except bauxite)')."""
+
         def repl(match: "re.Match") -> str:
             inside = match.group(0).lower()
-            return "" if any(w in inside for w in self._CHANGE_WORDS) else match.group(0)
+            return (
+                "" if any(w in inside for w in self._CHANGE_WORDS) else match.group(0)
+            )
 
         name = re.sub(r"\([^)]*\)", repl, name)
         return re.sub(r"\s{2,}", " ", name).strip(" ,/")
@@ -178,10 +199,18 @@ class GicsScraper(BaseScraper):
         # Data starts at row 6 (rows 1-5 are the title, colour key, and header).
         # Columns: A/B sector, C/D industry group, E/F industry, G/H sub-industry.
         for r in range(6, ws.max_row + 1):
-            sec_c, sec_n = self._code(ws.cell(r, 1).value), self._txt(ws.cell(r, 2).value)
-            grp_c, grp_n = self._code(ws.cell(r, 3).value), self._txt(ws.cell(r, 4).value)
-            ind_c, ind_n = self._code(ws.cell(r, 5).value), self._txt(ws.cell(r, 6).value)
-            sub_c, sub_n = self._code(ws.cell(r, 7).value), self._txt(ws.cell(r, 8).value)
+            sec_c, sec_n = self._code(ws.cell(r, 1).value), self._txt(
+                ws.cell(r, 2).value
+            )
+            grp_c, grp_n = self._code(ws.cell(r, 3).value), self._txt(
+                ws.cell(r, 4).value
+            )
+            ind_c, ind_n = self._code(ws.cell(r, 5).value), self._txt(
+                ws.cell(r, 6).value
+            )
+            sub_c, sub_n = self._code(ws.cell(r, 7).value), self._txt(
+                ws.cell(r, 8).value
+            )
 
             # Forward-fill the higher levels; ignore discontinued ones so they
             # never get attached to a kept sub-industry.
@@ -197,9 +226,12 @@ class GicsScraper(BaseScraper):
                     last = None  # drop it, and skip its definition line(s)
                     continue
                 last = {
-                    "sector_code": cur["sc"], "sector": cur["sn"],
-                    "industry_group_code": cur["gc"], "industry_group": cur["gn"],
-                    "industry_code": cur["ic"], "industry": cur["in"],
+                    "sector_code": cur["sc"],
+                    "sector": cur["sn"],
+                    "industry_group_code": cur["gc"],
+                    "industry_group": cur["gn"],
+                    "industry_code": cur["ic"],
+                    "industry": cur["in"],
                     "sub_industry_code": sub_c,
                     "sub_industry": self._clean_name(sub_n),
                     "sub_industry_definition": "",
@@ -257,17 +289,18 @@ class GicsScraper(BaseScraper):
     def scrape(self) -> None:
         """BaseScraper entry point: download the MSCI GICS structure and write the
         cleaned taxonomy CSV to GICS_RAW_DATA_DIR/gics_2023_official.csv."""
-        os.makedirs(GICS_RAW_DATA_DIR, exist_ok=True)
-        xlsx_path = os.path.join(GICS_RAW_DATA_DIR, self.XLSX_FILENAME)
-        out_path = os.path.join(GICS_RAW_DATA_DIR, self.OUTPUT_FILENAME)
+        if self._switch_handler.is_enabled("web_scraper", "gics", "structure"):
+            os.makedirs(GICS_RAW_DATA_DIR, exist_ok=True)
+            xlsx_path = os.path.join(GICS_RAW_DATA_DIR, self.XLSX_FILENAME)
+            out_path = os.path.join(GICS_RAW_DATA_DIR, self.OUTPUT_FILENAME)
 
-        self._logger.log_info("GICS: scraping official GICS structure from MSCI.")
-        if not self._download_structure(xlsx_path):
-            self._logger.log_error("GICS: aborting — could not download structure.")
-            return
+            self._logger.log_info("GICS: scraping official GICS structure from MSCI.")
+            if not self._download_structure(xlsx_path):
+                self._logger.log_error("GICS: aborting — could not download structure.")
+                return
 
-        rows = self._parse_structure(xlsx_path)
-        self._write_csv(rows, out_path)
-        self._logger.log_info(
-            f"GICS: saved {len(rows)} sub-industries -> {out_path}"
-        )
+            rows = self._parse_structure(xlsx_path)
+            self._write_csv(rows, out_path)
+            self._logger.log_info(
+                f"GICS: saved {len(rows)} sub-industries -> {out_path}"
+            )
