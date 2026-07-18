@@ -30,6 +30,8 @@ wandb/
 
 *.csv
 !experiment_history.csv
+# per-ticker feature-group -> bronze-table map
+!src/data_preprocessor/feature_groups.csv
 # experiment_4 disclosure-date deliverable + user-editable overrides are tracked
 !experiment/experiment_4/vcb_quarter_publish_dates.csv
 !experiment/experiment_4/vcb_quarter_publish_dates_detail.csv
