@@ -215,6 +215,17 @@ DTO helpers come from
   - Wired into `ingest_silver_data` under the silver `stocks` switch, ahead of the
     (stale) `_ingest_silver_stocks`. Verified: each silver table row count == its
     current bronze count.
+- **`_ingest_silver_gics`** (added 2026-07-19) — the same basic-clean carry-up
+  pattern applied to the bronze `gics` reference table (not a CafeF source, so it
+  has its own method, not `_helper_load_cafef_folder`/`_ingest_silver_cafef_daily`).
+  Select bronze `gics` → drop rows null on `sub_industry_code` → drop-all-null →
+  order by key → drop the old silver table → save. PK stays `sub_industry_code`
+  (not `(exchange, ticker, date)` — this table is one row per GICS sub-industry,
+  not per ticker); `sub_industry_definition` keeps its bronze `TEXT` override.
+  Wired into `ingest_silver_data` under its own new switch leaf,
+  `data_preprocessor/data_quality_silver/gics` (sits alongside `bonds`/`economy`/
+  `forex`/`funds`/`indices`/`stocks`, independent of the `stocks` switch that gates
+  the CafeF carry-ups above).
 - **`_ingest_silver_stocks`** — the important one. First **reconstructs the CafeF
   frame** by merging bronze `cafef_price` + `cafef_foreign` on `(symbol, date)`
   (they are separate bronze tables now), then **OUTER-joins Simplize (PRIMARY)
@@ -255,7 +266,9 @@ DTO helpers come from
   when **every ancestor is explicitly true**. The three entry points each gate on
   `data_preprocessor/data_quality_{bronze|silver|gold}` and then on a per-asset leaf
   (`.../bronze/stocks`, `.../silver/bonds`, `.../gold/economy`, …). `gics` is a
-  bronze-only leaf; there is no `gics` silver/gold table (it feeds silver.stocks).
+  **bronze + silver** leaf (`.../bronze/gics`, `.../silver/gics`) — the silver copy
+  is a straight reference-table carry-up; there is still no `gics` gold table, and
+  `gics` also feeds silver.stocks' GICS tree regardless of the silver `gics` leaf.
 - **Order matters:** silver reads bronze tables; gold reads silver tables. Run the
   layers in bronze → silver → gold order (main.py does).
 

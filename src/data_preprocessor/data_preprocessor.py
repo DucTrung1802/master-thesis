@@ -1918,6 +1918,39 @@ class DataPreprocessor:
             dtype_overrides={"date": DataType.DATE()},
         )
 
+    def _ingest_silver_gics(self) -> None:
+        """Silver `gics` — the bronze MSCI GICS taxonomy carried up with a basic
+        clean pass (drop rows null on the key or all columns, order by key). It is
+        a reference table, not per-source, so there is nothing to merge; PK stays
+        `sub_industry_code`. The old silver table is dropped first so a schema
+        change re-materialises cleanly past the driver's IF NOT EXISTS create."""
+        self._logger.log_info("Ingesting silver GICS structure...")
+
+        df = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="gics")
+
+        if df.empty:
+            self._logger.log_info("No bronze gics data found.")
+            return
+
+        df = self._helper_clean(
+            df,
+            [
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("sub_industry_code"),
+                CleanLayer.REMOVE_IF_ALL_COLUMNS_ARE_NULL(),
+                CleanLayer.ORDER_BY(["sub_industry_code"]),
+            ],
+        )
+
+        self._database_driver.drop_table(SILVER_SCHEMA, "gics")
+
+        self._helper_save_pandas_table_to_database(
+            schema_name=SILVER_SCHEMA,
+            table_name="gics",
+            primary_keys=["sub_industry_code"],
+            df=df,
+            dtype_overrides={"sub_industry_definition": DataType.TEXT()},
+        )
+
     def _ingest_silver_cafef_price(self) -> None:
         """Silver `cafef_price` — the bronze CafeF price table carried up with a
         basic clean pass (drop rows null on the key or all columns, order by key).
@@ -2718,7 +2751,12 @@ class DataPreprocessor:
                     "data_preprocessor", "data_quality_silver", "indices"
                 ):
                     self._ingest_silver_indices()
-                    
+
+                if self._switch_handler.is_enabled(
+                    "data_preprocessor", "data_quality_silver", "gics"
+                ):
+                    self._ingest_silver_gics()
+
                 if self._switch_handler.is_enabled(
                     "data_preprocessor", "data_quality_silver", "stocks"
                 ):
