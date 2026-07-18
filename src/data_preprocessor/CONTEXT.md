@@ -194,6 +194,27 @@ DTO helpers come from
 - **Simple assets** (`bonds/economy/forex/funds/indices`): split `symbol` →
   `(exchange, ticker)`, select the canonical columns, cast, save. PK
   `(exchange, ticker, date)`.
+- **Per-source CafeF carry-ups** (`_ingest_silver_cafef_*`, added 2026-07-18) — a
+  source-named lift of the bronze CafeF tables into silver, one-to-one, NOT the
+  canonical asset merge. Each **selects the bronze table, applies a basic clean pass
+  only** (drop rows null on the key or all columns, order by key), **drops its old
+  silver table first** (so a schema change re-materialises past the driver's
+  `IF NOT EXISTS`), and saves under the SAME name:
+  - `silver.cafef_price` / `cafef_order_stats` / `cafef_foreign` / `cafef_prop_trading`
+    — daily, PK `(exchange, ticker, date)`. The three latter share the
+    `_ingest_silver_cafef_daily(table_name)` helper; `cafef_price` predates it.
+  - `silver.cafef_insider_shareholder_transactions` — EVENT-based, keeps bronze's md5
+    `row_id` PK (no date key); the five date columns + long free-text columns keep
+    their bronze type overrides (a default `VARCHAR(255)` would truncate
+    `note`/`profile_url`).
+  - ⚠️ **These are basic-clean-ONLY — no cast.** `_helper_select` reads bronze's
+    `numeric` columns back as `Decimal` → pandas `object`, and the save path then
+    infers **`VARCHAR`** for them (only `bigint` columns stay numeric). So the decimal
+    price/value columns land as TEXT in silver — values correct and aligned, type
+    degraded. Add a `_helper_cast_columns` call before save (as bronze does) to fix.
+  - Wired into `ingest_silver_data` under the silver `stocks` switch, ahead of the
+    (stale) `_ingest_silver_stocks`. Verified: each silver table row count == its
+    current bronze count.
 - **`_ingest_silver_stocks`** — the important one. First **reconstructs the CafeF
   frame** by merging bronze `cafef_price` + `cafef_foreign` on `(symbol, date)`
   (they are separate bronze tables now), then **OUTER-joins Simplize (PRIMARY)
