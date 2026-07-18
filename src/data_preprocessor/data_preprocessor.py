@@ -2083,229 +2083,114 @@ class DataPreprocessor:
         )
 
     def _ingest_silver_stocks(self) -> None:
-        """Merge the three stock sources into one canonical table, with Simplize
-        as the PRIMARY source (VN30-validated as the only source correct on every
-        daily column).
+        """Silver `stocks` — the four daily CafeF bronze tables joined into one wide
+        per-stock-day panel, `cafef_price` as the base (spine):
 
-        • Simplize (bronze `simplize_stocks`) — PRIMARY: fully dividend-adjusted
-          OHLC, true total volume, net/pct change, and foreign flow (vol + val)
-          and remaining room, from 2009. Drives every price/volume/foreign column.
-        • CafeF (bronze `cafef_price` + `cafef_foreign`, merged here on
-          (symbol, date)) — its unique fields: the matched vs negotiated (block)
-          volume/value split and foreign ownership % (foreign_own); also a fallback for
-          foreign flow where Simplize is missing.
-        • TradingView (bronze `trading_view_stocks`) — an OHLC fallback only
-          (its volume is split-inflated and its sector misclassifies VN stocks).
+            cafef_price
+              LEFT JOIN cafef_order_stats  ON (exchange, ticker, date)
+              LEFT JOIN cafef_foreign      ON (exchange, ticker, date)
+              LEFT JOIN cafef_prop_trading ON (exchange, ticker, date)
 
-        Each row also carries the GICS classification tree (`sector` = official
-        GICS sector, English snake_case), merged per ticker from Simplize's
-        accurate GICS-based industry + the official GICS taxonomy
-        (see _helper_build_gics_classification).
+        All four are already keyed `(exchange, ticker, date)` in bronze and share no
+        non-key column names, so this is a clean left-merge with no suffixes: every
+        row is a `cafef_price` day, with order-stats / foreign / prop-trading columns
+        filled where that source has the day and NULL where it does not (their history
+        is shorter — foreign_own from 2012, order_stats from 2010, prop_trading from
+        2023). Join on the FULL `(exchange, ticker, date)` key, not `(ticker, date)`:
+        a ticker can list on more than one exchange, and dropping `exchange` from the
+        join would fan the base rows out. PK `(exchange, ticker, date)`.
 
-        OUTER-joined on (exchange, ticker, date) so no stock-day is lost. OHLC
-        fallback uses only ADJUSTED sources (TradingView, then CafeF's adjusted
-        close) — never CafeF's raw open/high/low. `close_raw` is not carried.
+        Basic clean + cast only (matching the per-source CafeF carry-ups) — this is a
+        CafeF-faithful merge, NOT the old Simplize-primary canonical spine; no source
+        fallback, no GICS tree. The old silver table is dropped first so a schema
+        change re-materialises cleanly past the driver's IF NOT EXISTS create.
         """
         self._logger.log_info(
-            "Ingesting silver stocks data (Simplize primary + CafeF + TradingView)..."
+            "Ingesting silver stocks data (CafeF price + order_stats + foreign + prop_trading)..."
         )
-
-        sz = self._helper_select(
-            schema_name=BRONZE_SCHEMA, table_name="simplize_stocks"
-        )
-        tv = self._helper_select(
-            schema_name=BRONZE_SCHEMA, table_name="trading_view_stocks"
-        )
-
-        # CafeF price + foreign are now separate bronze tables (one per scraper
-        # link-folder); merge them on (symbol, date) to reconstruct the combined
-        # per-stock CafeF frame the source-merge below expects.
-        cf_price = self._helper_select(
-            schema_name=BRONZE_SCHEMA, table_name="cafef_price"
-        )
-        cf_foreign = self._helper_select(
-            schema_name=BRONZE_SCHEMA, table_name="cafef_foreign"
-        )
-        if not cf_price.empty and not cf_foreign.empty:
-            cf = cf_price.merge(cf_foreign, on=["symbol", "date"], how="outer")
-        elif not cf_price.empty:
-            cf = cf_price
-        elif not cf_foreign.empty:
-            cf = cf_foreign
-        else:
-            cf = pd.DataFrame()
-
-        if sz.empty and cf.empty and tv.empty:
-            self._logger.log_info("No bronze stocks data found.")
-            return
 
         KEYS = ["exchange", "ticker", "date"]
 
-        def _split(df: pd.DataFrame) -> pd.DataFrame:
-            df = df.copy()
-            df["exchange"] = df["symbol"].str.split(":").str[0]
-            df["ticker"] = df["symbol"].str.split(":").str[1]
-            return df
+        base = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="cafef_price")
+        if base.empty:
+            self._logger.log_info("No bronze cafef_price data found.")
+            return
 
-        # ── Simplize: primary price / volume / foreign spine ──
-        sz_cols = [
+        df = base
+        for table_name in ["cafef_order_stats", "cafef_foreign", "cafef_prop_trading"]:
+            right = self._helper_select(
+                schema_name=BRONZE_SCHEMA, table_name=table_name
+            )
+            if right.empty:
+                self._logger.log_info(
+                    f"No bronze {table_name} data found; skipping its columns."
+                )
+                continue
+            df = df.merge(right, on=KEYS, how="left")
+
+        df = self._helper_clean(
+            df,
+            [
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("exchange"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("ticker"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("date"),
+                CleanLayer.REMOVE_IF_ALL_COLUMNS_ARE_NULL(),
+                CleanLayer.ORDER_BY(KEYS),
+            ],
+        )
+
+        # Cast the joined columns back to numeric (the driver reads bronze `numeric`
+        # columns as Decimal -> pandas object; without this they would land as VARCHAR
+        # in silver, as the earlier per-source carry-ups already do). Filter to columns
+        # actually present so a missing optional source (skipped above) can't KeyError.
+        decimal_cols = [
+            # cafef_price
             "open",
             "high",
             "low",
-            "close",
-            "net_change",
-            "percentage_change",
-            "volume",
-            "foreign_room",
-            "foreign_buy_volume",
-            "foreign_sell_volume",
-            "foreign_net_volume",
-            "foreign_buy_value",
-            "foreign_sell_value",
-            "foreign_net_value",
-        ]
-        if not sz.empty:
-            sz = _split(sz)[KEYS + sz_cols]
-        else:
-            sz = pd.DataFrame(columns=KEYS + sz_cols)
-
-        # ── CafeF: matched/negotiated split + foreign_own (unique); foreign fallback ──
-        cf_keep = [
-            "volume_matched",
-            "volume_negotiated",
+            "close_raw",
+            "close_adjust",
             "value_matched",
             "value_negotiated",
-            "foreign_own",
-        ]
-        cf_fallback = {
-            "close_adjust": "cf_close",
-            "foreign_room_left": "cf_foreign_room",
-            "foreign_buy_volume": "cf_foreign_buy_volume",
-            "foreign_sell_volume": "cf_foreign_sell_volume",
-            "foreign_net_volume": "cf_foreign_net_volume",
-            "foreign_buy_value": "cf_foreign_buy_value",
-            "foreign_sell_value": "cf_foreign_sell_value",
-            "foreign_net_value": "cf_foreign_net_value",
-        }
-        if not cf.empty:
-            cf = _split(cf).rename(columns=cf_fallback)
-            # reindex (not strict indexing): tolerant of price- or foreign-only runs
-            cf = cf.reindex(columns=KEYS + cf_keep + list(cf_fallback.values()))
-        else:
-            cf = pd.DataFrame(columns=KEYS + cf_keep + list(cf_fallback.values()))
-
-        # ── TradingView: OHLC fallback only ──
-        tv_fallback = {
-            "open": "tv_open",
-            "high": "tv_high",
-            "low": "tv_low",
-            "close": "tv_close",
-        }
-        if not tv.empty:
-            tv_px = _split(tv).rename(columns=tv_fallback)[
-                KEYS + list(tv_fallback.values())
-            ]
-        else:
-            tv_px = pd.DataFrame(columns=KEYS + list(tv_fallback.values()))
-
-        # ── Outer-merge all three on (exchange, ticker, date) ──
-        df = sz.merge(cf, on=KEYS, how="outer").merge(tv_px, on=KEYS, how="outer")
-
-        # Price: Simplize -> TradingView (adjusted) -> CafeF adjusted close.
-        df["open"] = df["open"].fillna(df["tv_open"])
-        df["high"] = df["high"].fillna(df["tv_high"])
-        df["low"] = df["low"].fillna(df["tv_low"])
-        df["close"] = df["close"].fillna(df["tv_close"]).fillna(df["cf_close"])
-
-        # Volume: Simplize total -> CafeF (matched + negotiated). TradingView
-        # volume is split-inflated, so it is never used as a fallback.
-        cf_total_vol = df["volume_matched"].fillna(0) + df["volume_negotiated"].fillna(
-            0
-        )
-        df["volume"] = df["volume"].fillna(cf_total_vol.where(cf_total_vol > 0))
-
-        # Foreign flow + room: Simplize -> CafeF.
-        for col in [
-            "foreign_room",
-            "foreign_buy_volume",
-            "foreign_sell_volume",
-            "foreign_net_volume",
+            # cafef_order_stats
+            "avg_vol_per_buy_order",
+            "avg_vol_per_sell_order",
+            # cafef_foreign
             "foreign_buy_value",
             "foreign_sell_value",
             "foreign_net_value",
-        ]:
-            df[col] = df[col].fillna(df[f"cf_{col}"])
-
-        df = df.drop(
-            columns=[
-                c
-                for c in list(cf_fallback.values()) + list(tv_fallback.values())
-                if c in df.columns
-            ]
-        )
-
-        # ── Full GICS classification tree, merged per ticker (constant per ticker),
-        #    sourced entirely from bronze.gics (English snake_case names + codes). ──
-        cls = self._helper_build_gics_classification()
-        if not cls.empty:
-            df = df.merge(cls, on=["exchange", "ticker"], how="left")
-        else:
-            for c in self.GICS_CLASS_COLS:
-                df[c] = pd.NA
-
-        out_cols = (
-            KEYS
-            + self.GICS_CLASS_COLS
-            + [
-                "open",
-                "high",
-                "low",
-                "close",
-                "net_change",
-                "percentage_change",
-                "volume",
-                "foreign_room",
-                "foreign_buy_volume",
-                "foreign_sell_volume",
-                "foreign_net_volume",
-                "foreign_buy_value",
-                "foreign_sell_value",
-                "foreign_net_value",
-                "volume_matched",
-                "volume_negotiated",
-                "value_matched",
-                "value_negotiated",
-                "foreign_own",
-            ]
-        )
-        df = df[out_cols].sort_values(KEYS).reset_index(drop=True)
-
+            "foreign_own",
+            # cafef_prop_trading
+            "prop_buy_val",
+            "prop_sell_val",
+        ]
+        bigint_cols = [
+            # cafef_price
+            "volume_matched",
+            "volume_negotiated",
+            # cafef_order_stats
+            "n_buy_orders",
+            "buy_order_vol",
+            "n_sell_orders",
+            "sell_order_vol",
+            # cafef_foreign
+            "foreign_buy_volume",
+            "foreign_sell_volume",
+            "foreign_net_volume",
+            "foreign_room_left",
+            # cafef_prop_trading
+            "prop_buy_vol",
+            "prop_sell_vol",
+        ]
         df = self._helper_cast_columns(
             df,
-            decimal_cols=[
-                "open",
-                "high",
-                "low",
-                "close",
-                "net_change",
-                "percentage_change",
-                "value_matched",
-                "value_negotiated",
-                "foreign_buy_value",
-                "foreign_sell_value",
-                "foreign_net_value",
-                "foreign_own",
-            ],
-            bigint_cols=[
-                "volume",
-                "foreign_room",
-                "foreign_buy_volume",
-                "foreign_sell_volume",
-                "foreign_net_volume",
-                "volume_matched",
-                "volume_negotiated",
-            ],
+            decimal_cols=[c for c in decimal_cols if c in df.columns],
+            bigint_cols=[c for c in bigint_cols if c in df.columns],
         )
+
+        # Drop the old silver table first so a changed schema re-materialises cleanly
+        # rather than colliding with the driver's IF NOT EXISTS create.
+        self._database_driver.drop_table(SILVER_SCHEMA, "stocks")
 
         self._helper_save_pandas_table_to_database(
             schema_name=SILVER_SCHEMA,

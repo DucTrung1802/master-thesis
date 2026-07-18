@@ -212,9 +212,9 @@ DTO helpers come from
     infers **`VARCHAR`** for them (only `bigint` columns stay numeric). So the decimal
     price/value columns land as TEXT in silver — values correct and aligned, type
     degraded. Add a `_helper_cast_columns` call before save (as bronze does) to fix.
-  - Wired into `ingest_silver_data` under the silver `stocks` switch, ahead of the
-    (stale) `_ingest_silver_stocks`. Verified: each silver table row count == its
-    current bronze count.
+  - Wired into `ingest_silver_data` under the silver `stocks` switch, ahead of
+    `_ingest_silver_stocks`. Verified: each silver table row count == its current
+    bronze count.
 - **`_ingest_silver_gics`** (added 2026-07-19) — the same basic-clean carry-up
   pattern applied to the bronze `gics` reference table (not a CafeF source, so it
   has its own method, not `_helper_load_cafef_folder`/`_ingest_silver_cafef_daily`).
@@ -226,25 +226,37 @@ DTO helpers come from
   `data_preprocessor/data_quality_silver/gics` (sits alongside `bonds`/`economy`/
   `forex`/`funds`/`indices`/`stocks`, independent of the `stocks` switch that gates
   the CafeF carry-ups above).
-- **`_ingest_silver_stocks`** — the important one. First **reconstructs the CafeF
-  frame** by merging bronze `cafef_price` + `cafef_foreign` on `(symbol, date)`
-  (they are separate bronze tables now), then **OUTER-joins Simplize (PRIMARY)
-  + CafeF + TradingView** on `(exchange, ticker, date)`:
-  - **⚠️ STALE vs the 2026-07-16 bronze split.** This merge still expects a colon
-    `symbol` on the bronze price sources, but bronze no longer has one (all keyed
-    `(exchange, ticker)` now). Silver has NOT been re-run since; this join must be
-    updated to `(exchange, ticker, date)` before the next silver rebuild.
-  - Price: Simplize → TradingView (adjusted) → CafeF adjusted close. **Never** uses
-    CafeF raw OHL; `close_raw` is dropped.
-  - Volume: Simplize total → CafeF (matched + negotiated). TV volume is
-    split-inflated → never a fallback.
-  - Foreign flow/room: Simplize → CafeF. CafeF also uniquely supplies
-    matched/negotiated split + `foreign_own`.
-  - Attaches the **full GICS tree** (`_helper_build_gics_classification`): each
-    ticker's Simplize industry group → a GICS sub-industry leaf via
-    `SIMPLIZE_GROUP_TO_GICS_SUB_INDUSTRY`, joined to `bronze.gics` to yield
-    sector/industry_group/industry/sub_industry (+ codes), English snake_case.
-    Columns listed in `GICS_CLASS_COLS`.
+- **`_ingest_silver_stocks`** — **REWRITTEN 2026-07-19: now a CafeF-only four-way
+  join, no longer the Simplize-primary canonical spine.** `bronze.cafef_price` is the
+  base (spine), LEFT-joined to the other three daily CafeF tables on the FULL
+  `(exchange, ticker, date)` key:
+
+  ```
+  cafef_price
+    LEFT JOIN cafef_order_stats  ON (exchange, ticker, date)
+    LEFT JOIN cafef_foreign      ON (exchange, ticker, date)
+    LEFT JOIN cafef_prop_trading ON (exchange, ticker, date)
+  ```
+  - All four are already keyed `(exchange, ticker, date)` in bronze and **share no
+    non-key column name**, so it is a clean left-merge with **no suffixes**: every
+    output row is a `cafef_price` day, with the other sources' columns filled where
+    they have that day and NULL where they don't (their history is shorter —
+    `foreign_own` from 2012, order_stats from 2010, **prop_trading from 2023**, so old
+    days carry NULL prop columns).
+  - **Join on the FULL key, not `(ticker, date)`** — a ticker can list on more than
+    one exchange, and dropping `exchange` would fan the base rows out. Verified: output
+    row count == base `cafef_price` count exactly (2,388,368), no fan-out.
+  - **Basic clean + cast only** (drop rows null on the key or all columns, order by
+    key), then `_helper_cast_columns` on every joined column, then **drop the old
+    silver table first** (so a schema change re-materialises past the driver's
+    `IF NOT EXISTS`), then save. **Unlike the per-source carry-ups above it DOES cast**,
+    so its columns land correctly typed (`numeric` for prices/values,
+    `bigint` for volumes/counts) — not the degraded VARCHAR those skip-the-cast ones get.
+  - **30 columns** = 3 keys + all 27 non-key columns of the four tables. **No source
+    fallback, no GICS tree, no Simplize/TradingView** — the old canonical merge (and
+    its `_helper_build_gics_classification` attach) was discarded. To re-add the GICS
+    tree, join `_helper_build_gics_classification()` on `(exchange, ticker)` as the old
+    version did.
 
 ### Gold (`_ingest_gold_*`) — feature engineering
 - All routed through **`_ingest_gold_table`**: read the silver table, coerce numeric
@@ -267,8 +279,10 @@ DTO helpers come from
   `data_preprocessor/data_quality_{bronze|silver|gold}` and then on a per-asset leaf
   (`.../bronze/stocks`, `.../silver/bonds`, `.../gold/economy`, …). `gics` is a
   **bronze + silver** leaf (`.../bronze/gics`, `.../silver/gics`) — the silver copy
-  is a straight reference-table carry-up; there is still no `gics` gold table, and
-  `gics` also feeds silver.stocks' GICS tree regardless of the silver `gics` leaf.
+  is a straight reference-table carry-up; there is still no `gics` gold table.
+  (Since the 2026-07-19 rewrite `silver.stocks` no longer attaches a GICS tree, so
+  `bronze.gics` currently feeds nothing downstream — the taxonomy lives on as its own
+  bronze + silver reference table.)
 - **Order matters:** silver reads bronze tables; gold reads silver tables. Run the
   layers in bronze → silver → gold order (main.py does).
 
@@ -323,20 +337,24 @@ DTO helpers come from
   `cafef_order_stats`, `cafef_prop_trading`, `cafef_insider_shareholder_transactions`
   ← from the `insider_txn/` folder, `cafef_news`) — the folder/column names are the contract, so
   renaming them upstream breaks the ingest (mirrors the note in
-  `web_scraper/CONTEXT.md §7`). The price+foreign merge that used to build
-  `cafef_stocks` in bronze now happens in `_ingest_silver_stocks`. `order_stats` /
-  `prop_trading` / insider-shareholder txns / news are ingested to bronze but **not
-  yet consumed by silver/gold** — wiring them into a signal is future work. Prototyped
-  shape (VCB, 2026-07-09): a **Simplize-backbone left-join** of all four daily CafeF
-  tables on `(ticker, date)` — Simplize OHLC/volume/foreign as primary (CafeF fills
-  nulls), plus CafeF's unique columns appended — yields **33 columns**, or **41** with
-  the 8 GICS columns attached (matching `silver.stocks`'s layout). Coverage of the
-  appended CafeF columns tapers with source history (foreign_own from 2012, order_stats
-  from 2010, prop_trading from 2023); insider-shareholder txns are event-based and do
-  **not** 1:1-join onto a daily row.
-- **Simplize is PRIMARY in silver.stocks**; TV is an OHLC fallback only and its
-  volume/sector are never trusted (memory `project-bronze-source-per-field`).
-  Re-validated across the whole **VN30** (2026-07-09, on this bronze): vs CafeF,
+  `web_scraper/CONTEXT.md §7`). **As of the 2026-07-19 rewrite, `silver.stocks` IS the
+  four-way join of the daily CafeF tables** (`cafef_price` base LEFT JOIN
+  order_stats/foreign/prop_trading on `(exchange, ticker, date)` — 30 cols, base row
+  count preserved; see §4 Silver). So `order_stats` / `prop_trading` are now consumed
+  by silver; only **insider-shareholder txns / news** remain bronze-only (event-based,
+  do **not** 1:1-join onto a daily row — wiring them into a signal is future work).
+  Coverage of the appended CafeF columns tapers with source history (foreign_own from
+  2012, order_stats from 2010, prop_trading from 2023→ so old days carry NULLs there).
+  (The current join is CafeF-only; the earlier prototype that put **Simplize** as the
+  backbone and appended CafeF's unique columns — 33 cols, or 41 with the GICS tree —
+  is NOT what shipped. `silver.stocks` no longer carries Simplize, TradingView, or the
+  GICS tree.)
+- **Source-quality ranking (research finding — Simplize > CafeF for the daily panel).**
+  ⚠️ Note the *current* `silver.stocks` is CafeF-only and does NOT use Simplize (see the
+  2026-07-19 rewrite above); this bullet is the validation behind treating Simplize as
+  the backbone whenever the canonical merge is rebuilt, plus memory
+  `project-bronze-source-per-field`. TV is only ever an OHLC fallback; its volume/sector
+  are never trusted. Re-validated across the whole **VN30** (2026-07-09, on this bronze): vs CafeF,
   Simplize wins on precision (CafeF rounds price to 10-VND ticks, volume to ~100
   shares), history depth, and adjustment — **CafeF `close_adjust` is split/stock-div
   adjusted but under-accounts for CASH dividends** (adjusted-price levels diverge up
@@ -381,9 +399,9 @@ that exist so far; 30 once all four templates are parsed):
 | `trading_view_stocks` | 1,312,523 | universe + sector fallback |
 | `cafef_price` | 2,388,368 | daily `(symbol, date)` |
 | `cafef_foreign` | 1,772,666 | daily `(symbol, date)` |
-| `cafef_order_stats` | 320,838 | daily; not yet in silver |
-| `cafef_prop_trading` | 64,139 | daily; not yet in silver |
-| `cafef_insider_shareholder_transactions` | 13,607 | event-based, `row_id` PK; not yet in silver |
+| `cafef_order_stats` | 320,838 | daily; now joined into silver.stocks |
+| `cafef_prop_trading` | 64,139 | daily; now joined into silver.stocks |
+| `cafef_insider_shareholder_transactions` | 13,607 | event-based, `row_id` PK; carried 1:1 to silver (own method) |
 | `cafef_news` | 5,599 | event-based, `row_id` PK, `(exchange, ticker)` key; **VCB/PNJ/FPT only** (1,629 / 1,715 / 2,255) — the scraper has run on 3 tickers; not yet in silver |
 | `cafef_financials_bank_balance_sheet` | 78 | 97 cols; VCB only, Q4-2006 → Q1-2026 |
 | `cafef_financials_bank_income_statement` | 78 | 33 cols; VCB only |
@@ -395,9 +413,14 @@ that exist so far; 30 once all four templates are parsed):
 | `simplize_industry` | 777 | per-ticker GICS industry |
 | `gics` | 163 | official sub-industry taxonomy |
 
-- **silver / gold are NOT yet rebuilt** against this bronze — `silver.stocks` /
-  `gold.stocks` still reflect the pre-rework schema (the old `cafef_stocks`). Re-run
-  `ingest_silver_data()` → `ingest_gold_data()` to refresh them off the new CafeF
-  tables.
+- **silver is (re)built off this bronze; GOLD is NOT.** As of 2026-07-19 the silver
+  CafeF carry-ups, `silver.gics`, and the rewritten `silver.stocks` (CafeF four-way
+  join, 2,388,368 rows) have all been materialised against the current bronze.
+  **`gold.stocks` is still stale** — it reflects the old canonical `silver.stocks`
+  schema (Simplize-primary + GICS tree), which the rewrite has now replaced, so gold
+  will not even find several columns it expects. Re-run `ingest_gold_data()` (drop the
+  gold tables first — the gold `COPY` path assumes empty) and expect
+  `_ingest_gold_stocks` / `_helper_build_feature_layers` to need updating for the new
+  CafeF-only column set (no `close`/Simplize OHLC spine, no GICS class columns).
 - Regenerate this whole layer with a bronze drop + re-ingest (schema is fully
   derivable from `raw_data/`); counts will grow as the scrapers add history/tickers.
