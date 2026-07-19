@@ -2178,9 +2178,9 @@ class DataPreprocessor:
                 df=df,
             )
 
-    def _ingest_silver_stocks(self) -> None:
-        """Silver `stocks` — the four daily CafeF bronze tables joined into one wide
-        per-stock-day panel, `cafef_price` as the base (spine):
+    def _ingest_silver_stocks_basic(self) -> None:
+        """Silver `stocks_basic` — the four daily CafeF bronze tables joined into one
+        wide per-stock-day panel, `cafef_price` as the base (spine):
 
             cafef_price
               LEFT JOIN cafef_order_stats  ON (exchange, ticker, date)
@@ -2305,17 +2305,17 @@ class DataPreprocessor:
 
         # Drop the old silver table first so a changed schema re-materialises cleanly
         # rather than colliding with the driver's IF NOT EXISTS create.
-        self._database_driver.drop_table(SILVER_SCHEMA, "stocks")
+        self._database_driver.drop_table(SILVER_SCHEMA, "stocks_basic")
 
         self._helper_save_pandas_table_to_database(
             schema_name=SILVER_SCHEMA,
-            table_name="stocks",
+            table_name="stocks_basic",
             primary_keys=KEYS,
             df=df,
             dtype_overrides={"date": DataType.DATE()},
         )
 
-    # Full GICS hierarchy columns carried on every silver.stocks row (English
+    # Full GICS hierarchy columns carried on every silver.stocks_basic row (English
     # snake_case names + codes, sourced entirely from bronze.gics).
     GICS_CLASS_COLS = [
         "sector",
@@ -2330,7 +2330,7 @@ class DataPreprocessor:
 
     def _helper_build_gics_classification(self) -> pd.DataFrame:
         """Build the per-ticker FULL GICS classification tree (merged into
-        silver.stocks), sourced entirely from the official GICS taxonomy.
+        silver.stocks_basic), sourced entirely from the official GICS taxonomy.
 
         • Simplize (bronze `simplize_industry`) — per-ticker industry group
           (accurate for VN, e.g. VHM=real estate, VCB=bank).
@@ -2504,22 +2504,31 @@ class DataPreprocessor:
         self,
         table_name: str,
         ta_layers: Optional[List[TransformLayer]] = None,
+        silver_table_name: Optional[str] = None,
     ) -> None:
         """
         Generic gold ingest: read a silver table, coerce numeric source columns,
         categorize as OHLC vs single-value, apply the standard feature-engineering
         layers (plus any table-specific TA layers), and checkpoint-save to gold.
+
+        `silver_table_name` is the source table to READ from silver; it defaults to
+        `table_name` (the gold table WRITTEN). They differ only where the silver and
+        gold table names diverge — e.g. gold `stocks` is built from silver
+        `stocks_basic`.
         """
-        self._logger.log_info(f"Ingesting gold {table_name} data...")
+        source_table = silver_table_name or table_name
+        self._logger.log_info(
+            f"Ingesting gold {table_name} data (from silver {source_table})..."
+        )
 
         df = self._helper_select(
             schema_name=SILVER_SCHEMA,
-            table_name=table_name,
+            table_name=source_table,
             order_by=["exchange", "ticker", "date"],
         )
 
         if df.empty:
-            self._logger.log_info(f"No silver {table_name} data found.")
+            self._logger.log_info(f"No silver {source_table} data found.")
             return
 
         # psycopg2 returns DECIMAL as Python Decimal — coerce numeric source columns
@@ -2563,8 +2572,10 @@ class DataPreprocessor:
         )
 
     def _ingest_gold_stocks(self) -> None:
+        # Reads silver `stocks_basic` (the CafeF panel + GICS tree), writes gold `stocks`.
         self._ingest_gold_table(
             "stocks",
+            silver_table_name="stocks_basic",
             ta_layers=[
                 # Overlap Studies
                 TransformLayer.TA_ADD_BBANDS(),
@@ -2774,7 +2785,7 @@ class DataPreprocessor:
                 if self._switch_handler.is_enabled(
                     "data_preprocessor", "data_quality_silver", "stocks"
                 ):
-                    self._ingest_silver_stocks()
+                    self._ingest_silver_stocks_basic()
 
             except Exception as e:
                 self._logger.log_error(
