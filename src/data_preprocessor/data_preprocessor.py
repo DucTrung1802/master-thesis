@@ -2082,6 +2082,102 @@ class DataPreprocessor:
             },
         )
 
+    # Non-line-item columns on every bronze `cafef_financials_<template>_<report>`
+    # table (the surviving subset of the key cols; the document-metadata columns were
+    # split off into `cafef_financial_reports` at bronze time). Everything on the
+    # statement table that is NOT one of these is a numeric line item.
+    CAFEF_FINANCIAL_STATEMENT_TEXT_COLS = ("exchange", "ticker", "template", "period", "source")
+    CAFEF_FINANCIAL_STATEMENT_KEY = ["exchange", "ticker", "year", "quarter"]
+
+    def _list_bronze_financial_statement_tables(self) -> list[str]:
+        """Return the bronze `cafef_financials_<template>_<report>` statement tables
+        that actually exist (only parsed templates get a table — today just `bank`,
+        so 3 of the 12). Discovered from `information_schema.tables` so this grows
+        automatically as more templates are parsed. The `cafef_financials_` prefix
+        (note the trailing `s`) uniquely selects the statement tables and EXCLUDES the
+        three metadata tables `cafef_financial_reports` / `_schema` / `_templates`
+        (which start with `cafef_financial_`, no `s`)."""
+        tables = self._helper_select(
+            schema_name="information_schema",
+            table_name="tables",
+            columns=["table_name"],
+            conditions=[
+                Condition(
+                    column="table_schema",
+                    operator=SqlOperator.EQUAL_TO,
+                    value=BRONZE_SCHEMA,
+                    data_type=DataType.VARCHAR(),
+                )
+            ],
+        )
+        if tables.empty:
+            return []
+        names = tables["table_name"].astype("string")
+        return sorted(names[names.str.startswith("cafef_financials_")].tolist())
+
+    def _ingest_silver_cafef_financials(self) -> None:
+        """Carry every bronze `cafef_financials_<template>_<report>` STATEMENT table
+        up to silver, one-to-one, same name and PK `(exchange, ticker, year, quarter)`.
+        The three metadata tables (`cafef_financial_reports` / `_schema` / `_templates`)
+        are deliberately NOT carried — they describe the filings / chart of accounts,
+        not the figures.
+
+        Same basic-clean-then-cast pattern as the other per-source CafeF carry-ups,
+        with one financials-specific rule (see `_ingest_bronze_cafef_financial_statements`):
+        a quarter that could not be read is a blank `source='missing'` row on a
+        contiguous quarter grid, never zero-filled — so the null-drop gates on the KEY
+        columns ONLY, never on the line items, and `REMOVE_IF_ALL_COLUMNS_ARE_NULL` is
+        omitted (a missing-quarter row is legitimately empty apart from its keys).
+        Line items are cast back to decimal, `year`/`quarter` to bigint; the old silver
+        table is dropped first so a schema change re-materialises cleanly."""
+        statement_tables = self._list_bronze_financial_statement_tables()
+        if not statement_tables:
+            self._logger.log_info(
+                "No bronze cafef_financials_<template>_<report> tables found."
+            )
+            return
+
+        for table_name in statement_tables:
+            self._logger.log_info(f"Ingesting silver CafeF {table_name} data...")
+
+            df = self._helper_select(schema_name=BRONZE_SCHEMA, table_name=table_name)
+            if df.empty:
+                self._logger.log_info(f"No bronze {table_name} data found.")
+                continue
+
+            # Null-drop on the KEY columns only — never the line items (a `missing`
+            # quarter is a legitimate blank row and must survive).
+            df = self._helper_clean(
+                df,
+                [
+                    CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("exchange"),
+                    CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("ticker"),
+                    CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("year"),
+                    CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("quarter"),
+                    CleanLayer.ORDER_BY(self.CAFEF_FINANCIAL_STATEMENT_KEY),
+                ],
+            )
+
+            # Everything that is not a text/key column is a numeric line item.
+            line_cols = [
+                c
+                for c in df.columns
+                if c not in self.CAFEF_FINANCIAL_STATEMENT_TEXT_COLS
+                and c not in ("year", "quarter")
+            ]
+            df = self._helper_cast_columns(
+                df, decimal_cols=line_cols, bigint_cols=["year", "quarter"]
+            )
+
+            self._database_driver.drop_table(SILVER_SCHEMA, table_name)
+
+            self._helper_save_pandas_table_to_database(
+                schema_name=SILVER_SCHEMA,
+                table_name=table_name,
+                primary_keys=self.CAFEF_FINANCIAL_STATEMENT_KEY,
+                df=df,
+            )
+
     def _ingest_silver_stocks(self) -> None:
         """Silver `stocks` — the four daily CafeF bronze tables joined into one wide
         per-stock-day panel, `cafef_price` as the base (spine):
@@ -2660,6 +2756,11 @@ class DataPreprocessor:
                     "data_preprocessor", "data_quality_silver", "gics"
                 ):
                     self._ingest_silver_gics()
+
+                if self._switch_handler.is_enabled(
+                    "data_preprocessor", "data_quality_silver", "financials"
+                ):
+                    self._ingest_silver_cafef_financials()
 
                 if self._switch_handler.is_enabled(
                     "data_preprocessor", "data_quality_silver", "stocks"
