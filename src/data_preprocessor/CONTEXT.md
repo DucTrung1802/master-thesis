@@ -262,6 +262,17 @@ DTO helpers come from
     78 rows, publish_date on 72/78. The join is 1:1 in practice (all 3 share the same
     contiguous quarter grid). Generic by `template`, so `corp`/`securities`/`insurance`
     combine the same way once parsed.
+- **PLANNED: `silver.stocks_fundamental`** (not built yet) — the fundamental-analysis
+  indicators (P/E, P/B, ROE, ROA, EPS, market cap, leverage, growth, + bank NIM/CIR/LDR)
+  computed on a **daily** panel = `stocks_basic` joined to `cafef_financials_<template>`.
+  ⚠️ The join is an **as-of merge on `publish_date`** (`merge_asof` backward, by
+  `(exchange, ticker)`): each price day gets the most-recently-*published* quarter, so
+  a ratio steps on its `publish_date` and holds flat — zero look-ahead, never joined on
+  the period end. **Shares outstanding is not stored** but is derived as
+  `viii_1_a_von_dieu_le / 10_000` (₫10k par; cross-checked = VCB's ~8.36 bn shares), so
+  P/E and P/B are computable. Full indicator catalog, formulas (mapped to our line ids),
+  coverage, the as-of build sketch, and open decisions live in
+  [FUNDAMENTAL_INDICATORS.md](FUNDAMENTAL_INDICATORS.md).
 - **`_ingest_silver_stocks_basic`** → writes **`silver.stocks_basic`** (renamed from
   `silver.stocks` on 2026-07-19). **REWRITTEN 2026-07-19: a CafeF-only four-way join,
   no longer the Simplize-primary canonical spine.** `bronze.cafef_price` is the base
