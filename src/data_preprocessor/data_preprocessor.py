@@ -2178,6 +2178,123 @@ class DataPreprocessor:
                 df=df,
             )
 
+    def _ingest_silver_cafef_financials_template(self, template: str) -> None:
+        """Combine one template's three per-report silver statement tables
+        (`cafef_financials_<template>_{balance_sheet,income_statement,cash_flow}`)
+        into ONE wide table `cafef_financials_<template>`, OUTER-joined on
+        `(exchange, ticker, year, quarter)`.
+
+        Every NON-KEY column is prefixed with its report — `balance_sheet_…`,
+        `income_statement_…`, `cash_flow_…` — so line items from the three statements
+        never collide and provenance is explicit. The shared metadata columns
+        (`template`/`period`/`source`) are prefixed too, so each report keeps its own
+        (a quarter can be `source='missing'` in one statement but present in another,
+        and the three statements of one quarter often come from different documents).
+
+        A single, unprefixed **`publish_date`** column is joined on from
+        `bronze.cafef_financial_reports` (which is per-report): the day the figures
+        became public — ⚠️ NOT the period end (VCB's Q4 covers the quarter ending 31 Dec
+        but is published the following March, so joining fundamentals to prices on the
+        period end hands a model ~12 weeks of look-ahead). It is unprefixed because all
+        three reports of a quarter publish on the same day (verified: 0 of the quarters
+        with a non-null date disagree across reports), so one column suffices.
+
+        OUTER join so a quarter present in any statement survives even if another
+        statement lacks it; on the contiguous `missing`-row grid the three tables cover
+        the same quarter set, so in practice the join is 1:1. PK
+        `(exchange, ticker, year, quarter)`; the old combined table is dropped first."""
+        reports = ("balance_sheet", "income_statement", "cash_flow")
+        key = self.CAFEF_FINANCIAL_STATEMENT_KEY
+        out_table = f"cafef_financials_{template}"
+
+        merged: pd.DataFrame | None = None
+        decimal_cols: list[str] = []
+        for report in reports:
+            src_table = f"cafef_financials_{template}_{report}"
+            df = self._helper_select(schema_name=SILVER_SCHEMA, table_name=src_table)
+            if df.empty:
+                self._logger.log_info(
+                    f"No silver {src_table} data found; skipping it in {out_table}."
+                )
+                continue
+
+            # Prefix every non-key column with the report; keys stay bare for the join.
+            non_key = [c for c in df.columns if c not in key]
+            df = df.rename(columns={c: f"{report}_{c}" for c in non_key})
+
+            # Track which prefixed columns are numeric line items (everything except
+            # the prefixed metadata) so the combined frame can be cast in one pass.
+            meta = set(self.CAFEF_FINANCIAL_STATEMENT_TEXT_COLS)  # exchange/ticker excl. below
+            for c in non_key:
+                if c not in meta:
+                    decimal_cols.append(f"{report}_{c}")
+
+            merged = df if merged is None else merged.merge(df, on=key, how="outer")
+
+        if merged is None:
+            self._logger.log_info(
+                f"No silver statement tables found for template '{template}'; "
+                f"{out_table} not built."
+            )
+            return
+
+        self._logger.log_info(f"Ingesting silver {out_table} (3 statements combined)...")
+
+        # ── One publish_date per quarter, joined on from bronze.cafef_financial_reports
+        #    (per-report). The 3 reports agree on it, so collapse to one value per key
+        #    with max() (== the shared value; NULLs from a missing report drop out). ──
+        reports_meta = self._helper_select(
+            schema_name=BRONZE_SCHEMA, table_name="cafef_financial_reports"
+        )
+        if not reports_meta.empty and "publish_date" in reports_meta.columns:
+            pub = reports_meta[reports_meta["template"] == template].copy()
+            # Normalise to datetime so groupby().max() skips missing values cleanly
+            # (the driver may hand publish_date back as object/date with None mixed in).
+            pub["publish_date"] = pd.to_datetime(pub["publish_date"], errors="coerce")
+            pub = pub.groupby(key, as_index=False)["publish_date"].max()
+            # Back to plain dates for the DATE column.
+            pub["publish_date"] = pub["publish_date"].dt.date
+            merged = merged.merge(pub, on=key, how="left")
+        else:
+            self._logger.log_warning(
+                "cafef_financial_reports has no publish_date; "
+                f"{out_table}.publish_date will be null."
+            )
+            merged["publish_date"] = pd.NaT
+
+        # Place publish_date right after the keys.
+        lead = key + ["publish_date"]
+        merged = merged[lead + [c for c in merged.columns if c not in lead]]
+
+        merged = self._helper_clean(
+            merged,
+            [
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("exchange"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("ticker"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("year"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("quarter"),
+                CleanLayer.ORDER_BY(key),
+            ],
+        )
+        merged = self._helper_cast_columns(
+            merged,
+            decimal_cols=[c for c in decimal_cols if c in merged.columns],
+            bigint_cols=["year", "quarter"],
+        )
+
+        self._database_driver.drop_table(SILVER_SCHEMA, out_table)
+        self._helper_save_pandas_table_to_database(
+            schema_name=SILVER_SCHEMA,
+            table_name=out_table,
+            primary_keys=key,
+            df=merged,
+            dtype_overrides={"publish_date": DataType.DATE()},
+        )
+
+    def _ingest_silver_cafef_financials_bank(self) -> None:
+        """Combine the three `bank` statements into silver `cafef_financials_bank`."""
+        self._ingest_silver_cafef_financials_template("bank")
+
     def _ingest_silver_stocks_basic(self) -> None:
         """Silver `stocks_basic` — the four daily CafeF bronze tables joined into one
         wide per-stock-day panel, `cafef_price` as the base (spine):
@@ -2772,6 +2889,7 @@ class DataPreprocessor:
                     "data_preprocessor", "data_quality_silver", "financials"
                 ):
                     self._ingest_silver_cafef_financials()
+                    self._ingest_silver_cafef_financials_bank()
 
                 if self._switch_handler.is_enabled(
                     "data_preprocessor", "data_quality_silver", "stocks"

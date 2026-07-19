@@ -230,6 +230,38 @@ DTO helpers come from
   `data_preprocessor/data_quality_silver/gics` (sits alongside `bonds`/`economy`/
   `forex`/`funds`/`indices`/`stocks`, independent of the `stocks` switch that gates
   the CafeF carry-ups above).
+- **CafeF financials → silver** (added 2026-07-19), gated by a new
+  `data_preprocessor/data_quality_silver/financials` switch leaf. Two steps:
+  - **`_ingest_silver_cafef_financials`** — carry every bronze
+    `cafef_financials_<template>_<report>` STATEMENT table up to silver one-to-one
+    (same name, PK `(exchange, ticker, year, quarter)`). Discovered from
+    `information_schema` by the `cafef_financials_` prefix (trailing `s`), which
+    **excludes** the 3 metadata tables (`cafef_financial_reports`/`_schema`/`_templates`
+    — they describe the filings / chart of accounts, not the figures, so they are NOT
+    carried). Basic clean + cast, with the financials rule: **null-drop gates on the
+    KEY columns only, never the line items**, and `REMOVE_IF_ALL_COLUMNS_ARE_NULL` is
+    omitted — a `source='missing'` quarter is a legitimate blank-but-keyed row that
+    must survive. Today: `bank` × {balance_sheet, income_statement, cash_flow} = 3
+    tables (97 / 33 / 54 cols, 78 rows each).
+  - **`_ingest_silver_cafef_financials_template(template)`** (+ thin
+    `_ingest_silver_cafef_financials_bank` wrapper) — combine ONE template's three
+    per-report silver tables into one wide **`cafef_financials_<template>`**,
+    **OUTER-joined on `(exchange, ticker, year, quarter)`**. Every NON-KEY column is
+    **prefixed by its report** (`balance_sheet_…` / `income_statement_…` /
+    `cash_flow_…`) so line items never collide and provenance is explicit — including
+    the shared meta (`*_template` / `*_period` / `*_source`), since a quarter can be
+    `source='missing'` in one statement but present in another. Plus a single
+    **unprefixed `publish_date`** column joined from `bronze.cafef_financial_reports`:
+    the 3 reports of a quarter publish on the same day (verified: 0 of the 72 dated
+    quarters disagree), so one column suffices — collapsed per key via `max()`
+    (== the shared value; NULLs from a missing report drop out), placed right after the
+    keys, `DATE`-typed. ⚠️ `publish_date` is the day the figures became **public**, NOT
+    the period end — join fundamentals→prices on it, never on the quarter end (avoids
+    ~12 weeks of look-ahead/year). `silver.cafef_financials_bank`: **177 cols** (4 keys
+    + publish_date + 93 `balance_sheet_*` + 29 `income_statement_*` + 50 `cash_flow_*`),
+    78 rows, publish_date on 72/78. The join is 1:1 in practice (all 3 share the same
+    contiguous quarter grid). Generic by `template`, so `corp`/`securities`/`insurance`
+    combine the same way once parsed.
 - **`_ingest_silver_stocks_basic`** → writes **`silver.stocks_basic`** (renamed from
   `silver.stocks` on 2026-07-19). **REWRITTEN 2026-07-19: a CafeF-only four-way join,
   no longer the Simplize-primary canonical spine.** `bronze.cafef_price` is the base
@@ -423,9 +455,11 @@ that exist so far; 30 once all four templates are parsed):
 | `gics` | 163 | official sub-industry taxonomy |
 
 - **silver is (re)built off this bronze; GOLD is NOT.** As of 2026-07-19 the silver
-  CafeF carry-ups, `silver.gics`, the per-template `silver.cafef_financials_*`, and the
-  rewritten **`silver.stocks_basic`** (CafeF four-way join + GICS tree, 2,388,368 rows)
-  have all been materialised against the current bronze. **`gold.stocks` is still
+  CafeF carry-ups, `silver.gics`, the per-report `silver.cafef_financials_<template>_<report>`
+  tables + the combined **`silver.cafef_financials_bank`** (177 cols: report-prefixed
+  line items + one `publish_date`; 78 rows), and the rewritten **`silver.stocks_basic`**
+  (CafeF four-way join + GICS tree, 2,388,368 rows) have all been materialised against
+  the current bronze. **`gold.stocks` is still
   stale** — it reflects the old canonical silver stocks schema (Simplize-primary OHLC
   spine), which the rewrite has now replaced, so gold will not find several columns it
   expects. `_ingest_gold_stocks` now reads **`silver.stocks_basic`** (writes
