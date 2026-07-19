@@ -2100,10 +2100,14 @@ class DataPreprocessor:
         a ticker can list on more than one exchange, and dropping `exchange` from the
         join would fan the base rows out. PK `(exchange, ticker, date)`.
 
-        Basic clean + cast only (matching the per-source CafeF carry-ups) — this is a
-        CafeF-faithful merge, NOT the old Simplize-primary canonical spine; no source
-        fallback, no GICS tree. The old silver table is dropped first so a schema
-        change re-materialises cleanly past the driver's IF NOT EXISTS create.
+        Basic clean + cast (matching the per-source CafeF carry-ups) — this is a
+        CafeF-faithful merge, NOT the old Simplize-primary canonical spine; no price /
+        volume / foreign source fallback. It DOES, however, carry the full per-ticker
+        GICS classification tree (the 8 GICS_CLASS_COLS), merged on (exchange, ticker)
+        via `_helper_build_gics_classification` (bronze `simplize_industry` × `gics`,
+        constant per ticker) and placed right after the keys. The old silver table is
+        dropped first so a schema change re-materialises cleanly past the driver's
+        IF NOT EXISTS create.
         """
         self._logger.log_info(
             "Ingesting silver stocks data (CafeF price + order_stats + foreign + prop_trading)..."
@@ -2187,6 +2191,21 @@ class DataPreprocessor:
             decimal_cols=[c for c in decimal_cols if c in df.columns],
             bigint_cols=[c for c in bigint_cols if c in df.columns],
         )
+
+        # Attach the full GICS classification tree, merged per ticker (constant per
+        # (exchange, ticker)) from bronze `simplize_industry` × `gics`. Placed right
+        # after the keys; left-join so a ticker with no GICS crosswalk keeps its rows
+        # (class columns NULL). Done after the cast so the categorical string columns
+        # are never coerced to numeric.
+        cls = self._helper_build_gics_classification()
+        if not cls.empty:
+            df = df.merge(cls, on=["exchange", "ticker"], how="left")
+        else:
+            for c in self.GICS_CLASS_COLS:
+                df[c] = pd.NA
+
+        lead = KEYS + self.GICS_CLASS_COLS
+        df = df[lead + [c for c in df.columns if c not in lead]]
 
         # Drop the old silver table first so a changed schema re-materialises cleanly
         # rather than colliding with the driver's IF NOT EXISTS create.
