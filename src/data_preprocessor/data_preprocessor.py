@@ -1326,6 +1326,16 @@ class DataPreprocessor:
         "quarter",
         "source",
     )
+    # Share counts read from the filing's "Vốn cổ phần" note. A per-DOCUMENT fact like
+    # publish_date, but — unlike the other meta — kept on EACH statement table (not split into
+    # `cafef_financial_reports`), so a consumer of one statement has the share count without a
+    # join. They ride through as line columns; listed here only so they are cast as whole-share
+    # BIGINT rather than decimal (a share count is an integer, never a fraction).
+    CAFEF_FINANCIAL_SHARE_COLS = (
+        "shares_authorized",
+        "shares_issued",
+        "shares_outstanding",
+    )
 
     @staticmethod
     def _helper_sql_safe_line_id(line_id: str) -> str:
@@ -1537,11 +1547,15 @@ class DataPreprocessor:
                     columns={c: self._helper_sql_safe_line_id(c) for c in line_cols}
                 )
                 line_cols = [self._helper_sql_safe_line_id(c) for c in line_cols]
+                # The share counts ride through as line columns but are whole shares, so they are
+                # cast BIGINT, not decimal like the đồng figures.
+                share_cols = [c for c in self.CAFEF_FINANCIAL_SHARE_COLS if c in line_cols]
+                decimal_line_cols = [c for c in line_cols if c not in share_cols]
                 df = self._helper_cast_columns(
-                    df, decimal_cols=line_cols, bigint_cols=[]
+                    df, decimal_cols=decimal_line_cols, bigint_cols=[]
                 )
                 df = self._helper_cast_columns(
-                    df, decimal_cols=[], bigint_cols=["year", "quarter"]
+                    df, decimal_cols=[], bigint_cols=["year", "quarter", *share_cols]
                 )
                 df = self._helper_remove_duplicates(
                     df, primary_keys=["exchange", "ticker", "year", "quarter"]
@@ -2158,15 +2172,20 @@ class DataPreprocessor:
                 ],
             )
 
-            # Everything that is not a text/key column is a numeric line item.
+            # Everything that is not a text/key column is a numeric line item — except the
+            # share counts, which are whole shares and stay BIGINT (as in bronze).
             line_cols = [
                 c
                 for c in df.columns
                 if c not in self.CAFEF_FINANCIAL_STATEMENT_TEXT_COLS
                 and c not in ("year", "quarter")
             ]
+            share_cols = [c for c in self.CAFEF_FINANCIAL_SHARE_COLS if c in line_cols]
+            decimal_line_cols = [c for c in line_cols if c not in share_cols]
             df = self._helper_cast_columns(
-                df, decimal_cols=line_cols, bigint_cols=["year", "quarter"]
+                df,
+                decimal_cols=decimal_line_cols,
+                bigint_cols=["year", "quarter", *share_cols],
             )
 
             self._database_driver.drop_table(SILVER_SCHEMA, table_name)
@@ -2209,6 +2228,7 @@ class DataPreprocessor:
 
         merged: pd.DataFrame | None = None
         decimal_cols: list[str] = []
+        shares_df: pd.DataFrame | None = None
         for report in reports:
             src_table = f"cafef_financials_{template}_{report}"
             df = self._helper_select(schema_name=SILVER_SCHEMA, table_name=src_table)
@@ -2217,6 +2237,16 @@ class DataPreprocessor:
                     f"No silver {src_table} data found; skipping it in {out_table}."
                 )
                 continue
+
+            # The share counts are a per-DOCUMENT fact, identical across the three statements
+            # of a quarter (one filing, one capital note), so they are NOT report-prefixed —
+            # that would mint 9 duplicate columns. They are dropped here and re-attached once,
+            # unprefixed, after the join (like publish_date). Kept from the balance_sheet
+            # statement so a single source wins deterministically.
+            present_shares = [c for c in self.CAFEF_FINANCIAL_SHARE_COLS if c in df.columns]
+            if report == "balance_sheet" and present_shares:
+                shares_df = df[key + present_shares].copy()
+            df = df.drop(columns=present_shares)
 
             # Prefix every non-key column with the report; keys stay bare for the join.
             non_key = [c for c in df.columns if c not in key]
@@ -2262,8 +2292,15 @@ class DataPreprocessor:
             )
             merged["publish_date"] = pd.NaT
 
-        # Place publish_date right after the keys.
-        lead = key + ["publish_date"]
+        # Re-attach the share counts once, unprefixed — a per-document fact shared by the three
+        # statements, exactly like publish_date. Kept from the balance_sheet statement.
+        share_cols: list[str] = []
+        if shares_df is not None:
+            share_cols = [c for c in self.CAFEF_FINANCIAL_SHARE_COLS if c in shares_df.columns]
+            merged = merged.merge(shares_df, on=key, how="left")
+
+        # Place publish_date, then the share counts, right after the keys.
+        lead = key + ["publish_date"] + share_cols
         merged = merged[lead + [c for c in merged.columns if c not in lead]]
 
         merged = self._helper_clean(
@@ -2279,7 +2316,7 @@ class DataPreprocessor:
         merged = self._helper_cast_columns(
             merged,
             decimal_cols=[c for c in decimal_cols if c in merged.columns],
-            bigint_cols=["year", "quarter"],
+            bigint_cols=["year", "quarter", *share_cols],
         )
 
         self._database_driver.drop_table(SILVER_SCHEMA, out_table)

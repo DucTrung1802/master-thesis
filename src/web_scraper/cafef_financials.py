@@ -30,9 +30,19 @@ TEMPLATES_INDEX = os.path.join(FIN_DIR, "templates.csv")
 
 DATA_COLS = ["symbol", "exchange", "template", "period", "year", "quarter", "source",
              "publish_date", "assurance", "cash_flow_method", "unit", "n_columns",
-             "document"]
+             "document",
+             # Share capital read from the filing's "Vốn cổ phần" note — a per-DOCUMENT fact
+             # (one filing, one note), so all three statements of a quarter carry the same
+             # numbers, like publish_date. Blank when the quarter came from CafeF's tabs (they
+             # have no share field) or the note could not be read.
+             "shares_authorized", "shares_issued", "shares_outstanding"]
 INDEX_COLS = ["exchange", "symbol", "template", "cash_flow_method", "sector",
               "industry_group_code", "industry_group_slug"]
+
+
+def _blank(v):
+    """A missing share count is an empty cell, never 0 — 0 shares is a real, wrong figure."""
+    return "" if v is None else v
 
 
 class FinancialsBuilder:
@@ -506,6 +516,10 @@ class FinancialsBuilder:
         # it failed to parse prints "Hà Nội, ngày 27 tháng 04 năm 2009" on page 4.
         published: Dict[str, str] = {}
         assurance: Dict[str, str] = {}
+        # Share capital is also a per-DOCUMENT fact — read from the filing's capital note, not
+        # from any statement — so it is kept per quarter, not per statement, exactly like the
+        # publish date. {period: {shares_authorized, shares_issued, shares_outstanding}}.
+        shares: Dict[str, Dict[str, Optional[int]]] = {}
 
         for d in docs:
             period = d["period"]
@@ -527,6 +541,13 @@ class FinancialsBuilder:
             published[period] = next(
                 (s.publish_date for s in statements.values() if s.publish_date),
                 d.get("file_date", ""))
+            # the share counts too — one note per filing, so any statement of it carries them
+            st_any = next(iter(statements.values()), None)
+            shares[period] = {
+                "shares_authorized": getattr(st_any, "shares_authorized", None),
+                "shares_issued": getattr(st_any, "shares_issued", None),
+                "shares_outstanding": getattr(st_any, "shares_outstanding", None),
+            } if st_any else {}
 
             notes = []
             for report in REPORTS:
@@ -588,7 +609,7 @@ class FinancialsBuilder:
         attempted += [(int(p.split("-")[1]), int(p[1]))
                       for r in REPORTS for p in data[r]]
         return self._write(exchange, symbol, data, items, meta, attempted, template,
-                           published, assurance)
+                           published, assurance, shares)
 
     # ──────────────────────────────────────────────────────────────────────
     # The fallback: CafeF's own tabs
@@ -697,7 +718,8 @@ class FinancialsBuilder:
                data: Dict[str, Dict[str, dict]], items: Dict[str, List[str]],
                meta: Dict[str, Dict[str, dict]],
                attempted: List[Tuple[int, int]], template: str,
-               published: Dict[str, str], assurance: Dict[str, str]) -> Dict[str, int]:
+               published: Dict[str, str], assurance: Dict[str, str],
+               shares: Dict[str, Dict[str, Optional[int]]]) -> Dict[str, int]:
         """One CSV per report, under the ticker's own TEMPLATE — so every file in a directory
         has the same columns and they mean the same thing.
 
@@ -738,7 +760,14 @@ class FinancialsBuilder:
                        "cash_flow_method": m.get("cash_flow_method", ""),
                        "unit": m.get("unit", ""),
                        "n_columns": m.get("n_columns", ""),
-                       "document": m.get("document", "")}
+                       "document": m.get("document", ""),
+                       # from the QUARTER's filing, shared across its three statements — blank
+                       # for a cafef/missing quarter (the tabs have no share field)
+                       "shares_authorized": _blank(shares.get(period, {}).get(
+                           "shares_authorized")),
+                       "shares_issued": _blank(shares.get(period, {}).get("shares_issued")),
+                       "shares_outstanding": _blank(shares.get(period, {}).get(
+                           "shares_outstanding"))}
                 row.update(rows.get(period, {}))
                 out.append(row)
                 y, q = (y + 1, 1) if q == 4 else (y, q + 1)

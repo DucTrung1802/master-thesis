@@ -40,6 +40,11 @@ class Statement:
     n_columns: int
     rows: List[Row] = field(default_factory=list)
     publish_date: str = ""          # ISO; the day the filing was signed off
+    # Share capital, read from the "Vốn cổ phần" note, not from any statement — a per-document
+    # fact like publish_date, so all three statements of a filing carry the same numbers.
+    shares_authorized: Optional[int] = None    # "Vốn cổ phần theo giấy phép"
+    shares_issued: Optional[int] = None        # "Cổ phiếu đã phát hành" (published)
+    shares_outstanding: Optional[int] = None   # "Cổ phiếu đang lưu hành"
 
     @property
     def cash_flow_method(self) -> Optional[str]:
@@ -516,6 +521,115 @@ class PdfParser:
         return 1
 
     # ──────────────────────────────────────────────────────────────────────
+    # Share capital (from the notes, not a statement)
+    # ──────────────────────────────────────────────────────────────────────
+
+    # The three lines of the "Vốn cổ phần đã được duyệt và đã phát hành" note, ascii-normalised
+    # (norm() strips accents and collapses spaces). Matched fuzzily because the note is deep in
+    # the scanned notes section, where the TCVN3-font text layer garbles worst: "đang lưu hành"
+    # comes through as "llfll hanh". "đã phát hành" survives cleanly and is the anchor for the
+    # published count; par-value ("mệnh giá") pins the note so a stray big number elsewhere on
+    # the page is not mistaken for a share count.
+    SHARE_LABELS = {
+        "shares_authorized": "von co phan theo giay phep",
+        "shares_issued": "co phieu da phat hanh",
+        "shares_outstanding": "co phieu dang luu hanh",
+    }
+    SHARE_NOTE_ANCHOR = "phat hanh cua ngan hang"    # the note's own header tail, survives OCR
+    SHARE_LABEL_MATCH = 0.80        # fuzzy floor for a garbled row label
+    MIN_SHARE_COUNT = 1_000_000     # a share count is a big integer; smaller values are the
+    #                                 million-đồng capital column beside it, not the count
+    MAX_SHARE_COUNT = 100_000_000_000   # …and an upper bound: no Vietnamese listing has 100bn
+    #   shares. A value above this is two RIGHT-aligned columns OCR merged into one token
+    #   ("2665020334826650203" = the share count and the đồng column with no space between), so
+    #   it is rejected rather than written as a nonsense count.
+
+    def share_capital(self, doc, after: int = 0) -> Dict[str, Optional[int]]:
+        """Read {authorized, issued, outstanding} share counts from the capital note.
+
+        The note lives in the NOTES section, past the three statements, so scan() never reaches
+        it. It is scanned here directly, starting just after the last statement page (`after`)
+        and stopping at the first page that carries it — one OCR'd page, not the whole tail.
+
+        The share count is the leftmost (current-period) big integer on each labelled row;
+        the columns to its right are the prior period and the đồng-value columns.
+        """
+        from difflib import SequenceMatcher
+
+        out: Dict[str, Optional[int]] = {k: None for k in self.SHARE_LABELS}
+        anchor = self.SHARE_NOTE_ANCHOR.replace(" ", "")
+        for i in range(after, doc.page_count):
+            try:
+                page = doc.load_page(i)
+            except Exception:
+                continue
+            native = page.get_text()
+            need_ocr = self.ocr_ready and len(native.strip()) < self.MIN_PAGE_TEXT
+            tp = (page.get_textpage_ocr(language=OCR_LANG, dpi=self.OCR_DPI, full=True,
+                                        tessdata=TESSDATA_DIR) if need_ocr else None)
+            text = page.get_text(textpage=tp) if tp else native
+            ns = self.norm(text).replace(" ", "")
+            # a coarse gate first: the note names the bank's own issued shares
+            if anchor not in ns and "cophieudaphathanh" not in ns:
+                continue
+
+            words = page.get_text("words", textpage=tp) if tp else page.get_text("words")
+            if tp:
+                words = self._to_visual(page, words)
+            lines: Dict[float, list] = {}
+            for w in words:
+                k = next((k for k in lines if abs(k - w[1]) <= self.Y_TOL), w[1])
+                lines.setdefault(k, []).append(w)
+            ys = sorted(lines)
+
+            def first_count(ws: list) -> Optional[int]:
+                for w in sorted(ws, key=lambda w: w[0]):
+                    v = self.parse_num(w[4]) if self.NUM_RE.match(w[4]) else None
+                    if v is not None and self.MIN_SHARE_COUNT <= abs(v) <= self.MAX_SHARE_COUNT:
+                        return v
+                return None
+
+            for field_name, label in self.SHARE_LABELS.items():
+                flat = label.replace(" ", "")
+                for idx, y in enumerate(ys):
+                    lab = self.norm(
+                        " ".join(w[4] for w in sorted(lines[y], key=lambda w: w[0]))
+                    ).replace(" ", "")
+                    if not lab:
+                        continue
+                    # slide the label along the line so leading numbering/noise doesn't defeat it
+                    hit = flat in lab
+                    if not hit:
+                        w_ = len(flat)
+                        for j in range(0, max(1, len(lab) - w_ + 1)):
+                            if SequenceMatcher(None, flat, lab[j:j + w_]).ratio() >= \
+                                    self.SHARE_LABEL_MATCH:
+                                hit = True
+                                break
+                    if not hit:
+                        continue
+                    # the count is on this line, or the next value-bearing line (the "issued"
+                    # heading sits above a "Cổ phiếu phổ thông" line that carries the figures)
+                    v = first_count(lines[y])
+                    if v is None:
+                        for yy in ys[idx + 1:idx + 3]:
+                            v = first_count(lines[yy])
+                            if v is not None:
+                                break
+                    if v is not None:
+                        out[field_name] = v
+                    break
+
+            # outstanding often garbles below the fuzzy floor ("llfll hanh"); when the note was
+            # found and issued read but outstanding did not, they are equal for a company with no
+            # treasury shares — which VCB is — so fall back to the issued count.
+            if out["shares_issued"] is not None and out["shares_outstanding"] is None:
+                out["shares_outstanding"] = out["shares_issued"]
+            if any(v is not None for v in out.values()):
+                return out
+        return out
+
+    # ──────────────────────────────────────────────────────────────────────
     # Entry point
     # ──────────────────────────────────────────────────────────────────────
 
@@ -584,6 +698,11 @@ class PdfParser:
             pages = self.scan(doc)
             published = (self.publish_date(pages, period_end)
                          or self._tail_date(doc, period_end))
+            # The share-capital note sits in the notes, past the last statement page. Scan from
+            # there so we OCR one note page, not the whole tail. A per-document fact, shared by
+            # all three statements — like publish_date.
+            last_stmt = max((i for i, p in pages.items() if p["kind"] in REPORTS), default=-1)
+            shares = self.share_capital(doc, after=last_stmt + 1)
             out: Dict[str, Statement] = {}
             for report in REPORTS:
                 on = sorted(i for i, p in pages.items() if p["kind"] == report)
@@ -601,7 +720,10 @@ class PdfParser:
                     r.values = [None if v is None else v * unit for v in r.values]
                 out[report] = Statement(report=report, pages=[i + 1 for i in on],
                                         unit=unit, n_columns=len(columns), rows=rows,
-                                        publish_date=published)
+                                        publish_date=published,
+                                        shares_authorized=shares["shares_authorized"],
+                                        shares_issued=shares["shares_issued"],
+                                        shares_outstanding=shares["shares_outstanding"])
             return out
         finally:
             doc.close()

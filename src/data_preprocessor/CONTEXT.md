@@ -172,11 +172,27 @@ DTO helpers come from
     layers gate on the KEY columns only, never the line items). Figures are already
     **absolute VND** — the parser applied the filing's unit — so `unit` is provenance,
     not a scale factor to re-apply.
+    - ⚠️ **Share counts** (added 2026-07-20): `shares_authorized` / `shares_issued`
+      (published) / `shares_outstanding` are appended to EACH of the 3 statement tables
+      as **BIGINT** columns. They are a per-DOCUMENT fact read from the filing's
+      **"Vốn cổ phần" note** (`PdfParser.share_capital()`), NOT from any statement — the
+      statement parser stops before the notes — so all three statements of a quarter
+      carry the SAME value, like `publish_date`. They ride through the ingest as "line
+      columns" but are listed in `CAFEF_FINANCIAL_SHARE_COLS` so they cast bigint (whole
+      shares), not decimal. VCB Q4-2019 = **3,708,877,448** (all three), coverage 62/78
+      quarters. This is the true share count for P/E, P/B — replaces the
+      `viii_1_von_dieu_le / 10_000` par-value estimate. ⚠️ Reading them costs OCR of the
+      notes pages (the scan runs from the last statement to EOF until it finds the note),
+      which roughly DOUBLED the VCB rebuild to ~2.4h; not yet bounded. OCR misreads in a
+      handful of quarters were repaired offline (see `web_scraper/CONTEXT.md`), so the
+      panel is monotone.
   - `cafef_financial_reports` — the 13 per-DOCUMENT metadata columns, split off
     because they describe the filing, not the accounts. PK
     `(exchange, ticker, report, year, quarter)` — **per report, not per quarter**: the
     three statements of one quarter often come from different documents (36 of VCB's
-    78 quarters). Home of **`publish_date`**, ⚠️ the column downstream MUST join on:
+    78 quarters). (The share counts are ALSO a per-document fact but are kept on the
+    statement tables, not here, so a consumer of one statement has them without a join.)
+    Home of **`publish_date`**, ⚠️ the column downstream MUST join on:
     it is the day the figures became public, not the period end (VCB's Q4-2025 covers
     the quarter ending 31 Dec 2025 but was published 27 Mar 2026 — joining on the
     period end hands a model twelve weeks of look-ahead every year).
@@ -242,7 +258,7 @@ DTO helpers come from
     KEY columns only, never the line items**, and `REMOVE_IF_ALL_COLUMNS_ARE_NULL` is
     omitted — a `source='missing'` quarter is a legitimate blank-but-keyed row that
     must survive. Today: `bank` × {balance_sheet, income_statement, cash_flow} = 3
-    tables (97 / 33 / 54 cols, 78 rows each).
+    tables (100 / 36 / 57 cols — incl. the 3 share columns — 78 rows each).
   - **`_ingest_silver_cafef_financials_template(template)`** (+ thin
     `_ingest_silver_cafef_financials_bank` wrapper) — combine ONE template's three
     per-report silver tables into one wide **`cafef_financials_<template>`**,
@@ -257,21 +273,31 @@ DTO helpers come from
     (== the shared value; NULLs from a missing report drop out), placed right after the
     keys, `DATE`-typed. ⚠️ `publish_date` is the day the figures became **public**, NOT
     the period end — join fundamentals→prices on it, never on the quarter end (avoids
-    ~12 weeks of look-ahead/year). `silver.cafef_financials_bank`: **177 cols** (4 keys
-    + publish_date + 93 `balance_sheet_*` + 29 `income_statement_*` + 50 `cash_flow_*`),
-    78 rows, publish_date on 72/78. The join is 1:1 in practice (all 3 share the same
-    contiguous quarter grid). Generic by `template`, so `corp`/`securities`/`insurance`
-    combine the same way once parsed.
+    ~12 weeks of look-ahead/year). The **share counts** (`shares_authorized` /
+    `shares_issued` / `shares_outstanding`) get the same treatment as `publish_date`: a
+    per-document fact identical across the 3 statements, so they are NOT report-prefixed
+    (that would mint 9 duplicate columns) — they are dropped from each report's prefixing,
+    re-attached ONCE unprefixed (from the balance_sheet statement) right after
+    `publish_date`, and cast BIGINT. `silver.cafef_financials_bank`: **180 cols** (4 keys
+    + publish_date + 3 share cols + 93 `balance_sheet_*` + 29 `income_statement_*`
+    + 50 `cash_flow_*`), 78 rows, publish_date on 72/78, shares on 62/78. The join is 1:1
+    in practice (all 3 share the same contiguous quarter grid). Generic by `template`, so
+    `corp`/`securities`/`insurance` combine the same way once parsed.
 - **PLANNED: `silver.stocks_fundamental`** (not built yet) — the fundamental-analysis
   indicators (P/E, P/B, ROE, ROA, EPS, market cap, leverage, growth, + bank NIM/CIR/LDR)
   computed on a **daily** panel = `stocks_basic` joined to `cafef_financials_<template>`.
   ⚠️ The join is an **as-of merge on `publish_date`** (`merge_asof` backward, by
   `(exchange, ticker)`): each price day gets the most-recently-*published* quarter, so
   a ratio steps on its `publish_date` and holds flat — zero look-ahead, never joined on
-  the period end. **Shares outstanding is not stored** but is derived as
-  `viii_1_a_von_dieu_le / 10_000` (₫10k par; cross-checked = VCB's ~8.36 bn shares), so
-  P/E and P/B are computable. Full indicator catalog, formulas (mapped to our line ids),
-  coverage, the as-of build sketch, and open decisions live in
+  the period end. **Shares outstanding is now stored** (added 2026-07-20): the
+  `shares_issued`/`shares_outstanding` columns on the financials tables are the TRUE
+  count read from the "Vốn cổ phần" note (see the bronze/silver financials sections
+  above), so P/E and P/B use the real figure — no longer the
+  `viii_1_a_von_dieu_le / 10_000` par-value estimate (which the earlier plan used;
+  cross-checked = VCB's ~8.36 bn shares, consistent with the scanned count). Coverage is
+  62/78 VCB quarters, so keep the par-value derivation as a fallback where the scanned
+  count is null. Full indicator catalog, formulas (mapped to our line ids), coverage, the
+  as-of build sketch, and open decisions live in
   [FUNDAMENTAL_INDICATORS.md](FUNDAMENTAL_INDICATORS.md).
 - **`_ingest_silver_stocks_basic`** → writes **`silver.stocks_basic`** (renamed from
   `silver.stocks` on 2026-07-19). **REWRITTEN 2026-07-19: a CafeF-only four-way join,
@@ -455,9 +481,9 @@ that exist so far; 30 once all four templates are parsed):
 | `cafef_prop_trading` | 64,139 | daily; now joined into silver.stocks_basic |
 | `cafef_insider_shareholder_transactions` | 13,607 | event-based, `row_id` PK; carried 1:1 to silver (own method) |
 | `cafef_news` | 5,599 | event-based, `row_id` PK, `(exchange, ticker)` key; **VCB/PNJ/FPT only** (1,629 / 1,715 / 2,255) — the scraper has run on 3 tickers; not yet in silver |
-| `cafef_financials_bank_balance_sheet` | 78 | 97 cols; VCB only, Q4-2006 → Q1-2026 |
-| `cafef_financials_bank_income_statement` | 78 | 33 cols; VCB only |
-| `cafef_financials_bank_cash_flow` | 78 | 54 cols; VCB only |
+| `cafef_financials_bank_balance_sheet` | 78 | 100 cols (incl. 3 share cols); VCB only, Q4-2006 → Q1-2026 |
+| `cafef_financials_bank_income_statement` | 78 | 36 cols (incl. 3 share cols); VCB only |
+| `cafef_financials_bank_cash_flow` | 78 | 57 cols (incl. 3 share cols); VCB only |
 | `cafef_financial_reports` | 234 | 78 quarters × 3 reports; 71/78 readable per report, `publish_date` on 210/213 |
 | `cafef_financial_schema` | 842 | all 12 charts of accounts (753 distinct line ids) |
 | `cafef_financial_templates` | 1 | VCB → `bank` / direct; grows with the parse |
@@ -467,8 +493,9 @@ that exist so far; 30 once all four templates are parsed):
 
 - **silver is (re)built off this bronze; GOLD is NOT.** As of 2026-07-19 the silver
   CafeF carry-ups, `silver.gics`, the per-report `silver.cafef_financials_<template>_<report>`
-  tables + the combined **`silver.cafef_financials_bank`** (177 cols: report-prefixed
-  line items + one `publish_date`; 78 rows), and the rewritten **`silver.stocks_basic`**
+  tables + the combined **`silver.cafef_financials_bank`** (180 cols: report-prefixed
+  line items + one `publish_date` + 3 unprefixed share cols; 78 rows), and the rewritten
+  **`silver.stocks_basic`**
   (CafeF four-way join + GICS tree, 2,388,368 rows) have all been materialised against
   the current bronze. **`gold.stocks` is still
   stale** — it reflects the old canonical silver stocks schema (Simplize-primary OHLC
