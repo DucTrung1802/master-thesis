@@ -296,9 +296,12 @@ DTO helpers come from
   `viii_1_a_von_dieu_le / 10_000` par-value estimate (which the earlier plan used;
   cross-checked = VCB's ~8.36 bn shares, consistent with the scanned count). Coverage is
   62/78 VCB quarters, so keep the par-value derivation as a fallback where the scanned
-  count is null. Full indicator catalog, formulas (mapped to our line ids), coverage, the
-  as-of build sketch, and open decisions live in
-  [FUNDAMENTAL_INDICATORS.md](FUNDAMENTAL_INDICATORS.md).
+  count is null. Full indicator catalog — every ratio computable TODAY with its formula
+  (mapped to our report-prefixed line ids), per-quarter coverage, the reliable
+  high-coverage subset vs the op-income-limited ones (`tong_thu_nhap_hoat_dong` is only
+  25/78, so P/S, CIR and the bank margins are thin), the as-of build sketch, and the open
+  decisions live in [FUNDAMENTAL_INDICATORS.md](FUNDAMENTAL_INDICATORS.md) (refreshed
+  2026-07-20 for the stored share count).
 - **`_ingest_silver_stocks_basic`** → writes **`silver.stocks_basic`** (renamed from
   `silver.stocks` on 2026-07-19). **REWRITTEN 2026-07-19: a CafeF-only four-way join,
   no longer the Simplize-primary canonical spine.** `bronze.cafef_price` is the base

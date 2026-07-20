@@ -9,55 +9,69 @@
 > *universal* ratios below apply to every template once `corp` / `securities` /
 > `insurance` are parsed.
 
-## 0. What raw material we have (and the one gap)
+## 0. What raw material we have
 
-| Input | Where it lives | Coverage (VCB, of 72 non-missing quarters) |
+Coverage below is out of **78** quarters (the full VCB grid Q4-2006…Q1-2026; 72 carry
+a `publish_date`, the 6 earliest do not).
+
+| Input | Where it lives | Coverage (VCB, /78) |
 |---|---|---|
 | Adjusted close, OHLC, volume | `silver.stocks_basic` (`close_adjust` …) | daily, full |
-| Net income after tax | `silver.cafef_financials_bank_income_statement.xiii_loi_nhuan_sau_thue` | 67/72 |
-| Pre-tax profit | `…income_statement.xi_tong_loi_nhuan_truoc_thue` | 71/72 |
-| Total operating income (bank "revenue") | `…income_statement.tong_thu_nhap_hoat_dong` | 25/72 |
-| Basic EPS (as filed) | `…income_statement.lai_co_ban_tren_co_phieu_dong_1_co_phieu` | 25/72 |
-| Total equity | `…balance_sheet.viii_von_chu_so_huu` | 71/72 |
-| **Charter capital** (paid-in) | `…balance_sheet.viii_1_a_von_dieu_le` | 67/72 |
-| Total assets | `…balance_sheet.tong_tai_san` | 71/72 |
-| Customer loans / deposits | `…balance_sheet.vi_cho_vay_khach_hang` / `iii_tien_gui_cua_khach_hang` | 65 / 69 |
+| **Shares outstanding** (scanned) | `silver.cafef_financials_bank.shares_outstanding` | 63/78 |
+| **Shares issued** (published) | `…cafef_financials_bank.shares_issued` | 62/78 |
+| Net income after tax | `silver.cafef_financials_bank.income_statement_xiii_loi_nhuan_sau_thue` | 67/78 |
+| Pre-tax profit | `…income_statement_xi_tong_loi_nhuan_truoc_thue` | 71/78 |
+| Net interest income | `…income_statement_i_thu_nhap_lai_thuan` | 71/78 |
+| Total operating income (bank "revenue") | `…income_statement_tong_thu_nhap_hoat_dong` | 25/78 ⚠️ sparse |
+| Operating expense | `…income_statement_viii_chi_phi_hoat_dong` | 68/78 |
+| Basic EPS (as filed) | `…income_statement_lai_co_ban_tren_co_phieu_dong_1_co_phieu` | 25/78 ⚠️ sparse |
+| Total equity | `…balance_sheet_viii_von_chu_so_huu` | 71/78 |
+| Charter capital (paid-in) | `…balance_sheet_viii_1_a_von_dieu_le` | 67/78 |
+| Total assets | `…balance_sheet_tong_tai_san` | 71/78 |
+| Customer loans / deposits | `…balance_sheet_vi_cho_vay_khach_hang` / `iii_tien_gui_cua_khach_hang` | 65 / 69 |
 | `publish_date` (when the quarter went public) | `silver.cafef_financials_bank.publish_date` | 72/78 |
 
-**The gap: shares outstanding / market cap is not stored anywhere** (only a text
-`shareholder_code` exists). But it is **derivable**: VN listed shares have a fixed
-**par value of ₫10,000**, so
+> ⚠️ In the **combined** `silver.cafef_financials_bank` the line items are
+> **report-prefixed** (`income_statement_…`, `balance_sheet_…`, `cash_flow_…`); the
+> per-report tables (`cafef_financials_bank_<report>`) carry the bare name. The share
+> counts and `publish_date` are the exception — unprefixed, right after the keys.
 
-```
-shares_outstanding ≈ charter_capital (viii_1_a_von_dieu_le) / 10_000
-```
+**Shares outstanding is now a STORED column** (added 2026-07-20). It is scanned straight
+off the filing's "Vốn cổ phần" note — `shares_outstanding` (đang lưu hành) and
+`shares_issued` (đã phát hành) — so **P/E, P/B, market cap and every per-share ratio use
+the real count**, not a proxy. VCB Q4-2019 = 3,708,877,448; the series is monotone
+1.21bn→8.36bn across its known capital events. See [CONTEXT.md](CONTEXT.md) (bronze/silver
+financials) for how the scan works.
 
-Cross-checked on VCB Q4-2025: `83,556,751,000,000 / 10,000 = 8,355,675,100 shares`
-— matches VCB's actual ~8.36 bn share count. So **P/E, P/B, market cap and every
-per-share ratio are computable** even though shares isn't a stored column. ⚠️ Caveat:
-this counts *charter* shares and ignores treasury stock (`viii_1_d_co_phieu_quy`),
-and steps only when charter capital changes (rights issues / stock dividends), which
-is exactly when it should — so it is the correct point-in-time share count.
+> **Fallback where the scan is null** (16/78 quarters — a cafef/missing quarter, or a note
+> that would not read): VN listed shares have a fixed **par value of ₫10,000**, so
+> `shares_outstanding ≈ charter_capital (viii_1_a_von_dieu_le) / 10_000`. Cross-checked on
+> VCB Q4-2025: `83,556,751,000,000 / 10,000 = 8,355,675,100` — matches the scanned
+> ~8.36 bn. So the estimate agrees with the scan and is a safe backfill; it counts
+> *charter* shares (ignores treasury `viii_1_d_co_phieu_quy`) and steps only on a capital
+> change, which is exactly when it should. **Prefer the scanned column; use the estimate
+> only to fill its gaps.**
 
 ## 1. The indicator catalog
 
 Legend for **Basis**: **U** = universal (works for any template from equity / net
-income / assets), **B** = bank-specific, **D** = needs the derived share count,
-**F** = as-filed value exists but is sparsely populated (prefer the derived form).
+income / assets), **B** = bank-specific, **D** = needs the share count (the stored
+`shares_outstanding`, scanned from the filing; par-value estimate only backfills its
+gaps), **F** = as-filed value exists but is sparsely populated (prefer the computed form).
 
 ### 1a. Valuation (price ÷ fundamental) — the headline ratios
 
-| Indicator | Formula (our columns) | Basis |
-|---|---|---|
-| **Market cap** | `close_adjust × shares_outstanding` | U, D |
-| **EPS (TTM)** | Σ last 4 quarters `xiii_loi_nhuan_sau_thue` ÷ `shares_outstanding` | U, D |
-| **P/E (TTM)** | `close_adjust ÷ EPS_ttm` | U, D |
-| **P/E (as-filed)** | `close_adjust ÷ (4 × lai_co_ban_tren_co_phieu…)` | F |
-| **BVPS** (book value/share) | `viii_von_chu_so_huu ÷ shares_outstanding` | U, D |
-| **P/B** | `close_adjust ÷ BVPS` | U, D |
-| **P/S** (price/sales) | `market_cap ÷ (TTM tong_thu_nhap_hoat_dong)` | B, D |
-| **Earnings yield** | `1 ÷ P/E` = `EPS_ttm ÷ close_adjust` | U, D |
-| **Dividend yield** | `dividend_per_share ÷ close_adjust` | — ⚠️ *needs a dividend feed we don't ingest yet (see §4)* |
+| Indicator | Formula (our columns) | Basis | Coverage |
+|---|---|---|---|
+| **Market cap** | `close_adjust × shares_outstanding` | U, D | 63/78 |
+| **EPS (TTM)** | Σ last 4 quarters `xiii_loi_nhuan_sau_thue` ÷ `shares_outstanding` | U, D | ~62/78 |
+| **P/E (TTM)** | `close_adjust ÷ EPS_ttm` | U, D | ~62/78 |
+| **P/E (as-filed)** | `close_adjust ÷ (4 × lai_co_ban_tren_co_phieu…)` | F | 25/78 ⚠️ |
+| **BVPS** (book value/share) | `viii_von_chu_so_huu ÷ shares_outstanding` | U, D | 63/78 |
+| **P/B** | `close_adjust ÷ BVPS` | U, D | 63/78 |
+| **P/S** (price/sales) | `market_cap ÷ (TTM tong_thu_nhap_hoat_dong)` | B, D | 25/78 ⚠️ |
+| **Earnings yield** | `1 ÷ P/E` = `EPS_ttm ÷ close_adjust` | U, D | ~62/78 |
+| **Dividend yield** | `dividend_per_share ÷ close_adjust` | — | ⚠️ *needs a dividend feed we don't ingest yet (see §4)* |
 
 > Bank note: **P/S is unusual for banks** (they have no "sales"); `tong_thu_nhap_hoat_dong`
 > (total operating income = net interest + fee + trading income) is the closest analog.
@@ -138,8 +152,9 @@ for each (exchange, ticker) price series ordered by date:
 
 ```
 price = silver.stocks_basic                       # daily, (exchange,ticker,date)
-fin   = silver.cafef_financials_bank              # quarterly, + publish_date
-        → compute shares_outstanding = viii_1_a_von_dieu_le / 10000
+fin   = silver.cafef_financials_bank              # quarterly, + publish_date + shares_*
+        → shares = shares_outstanding (scanned); where null, fall back to
+                   balance_sheet_viii_1_a_von_dieu_le / 10000 (par-value estimate)
         → compute TTM sums (net income, op income) over trailing 4 quarters
         → compute the §1 indicators that DON'T need price (EPS_ttm, BVPS, ROE, ROA,
           margins, leverage, growth) at the quarterly grain
