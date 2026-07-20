@@ -2518,6 +2518,272 @@ class DataPreprocessor:
             },
         )
 
+    # ── Canonical bank line-item columns on `stocks_basic_financials_bank` (they carry
+    #    the same report-prefixed names as `cafef_financials_bank`), keyed to the
+    #    fundamental catalog in FUNDAMENTAL_INDICATORS.md §1. A future `corp` /
+    #    `securities` / `insurance` FA table would supply its own map against these
+    #    roles. ──
+    BANK_FA_NET_INCOME = "income_statement_xiii_loi_nhuan_sau_thue"
+    BANK_FA_PRETAX = "income_statement_xi_tong_loi_nhuan_truoc_thue"
+    BANK_FA_NII = "income_statement_i_thu_nhap_lai_thuan"
+    BANK_FA_OP_INCOME = "income_statement_tong_thu_nhap_hoat_dong"
+    BANK_FA_OP_EXPENSE = "income_statement_viii_chi_phi_hoat_dong"
+    BANK_FA_EQUITY = "balance_sheet_viii_von_chu_so_huu"
+    BANK_FA_CHARTER = "balance_sheet_viii_1_a_von_dieu_le"
+    BANK_FA_ASSETS = "balance_sheet_tong_tai_san"
+    BANK_FA_LOANS = "balance_sheet_vi_cho_vay_khach_hang"
+    BANK_FA_DEPOSITS = "balance_sheet_iii_tien_gui_cua_khach_hang"
+
+    # VN listed shares have a fixed par value of ₫10,000, so charter capital / par is a
+    # safe backfill for the share count where the scanned column is null (see
+    # FUNDAMENTAL_INDICATORS.md §0). Prefer the scanned count; this only fills gaps.
+    VN_PAR_VALUE = 10_000.0
+
+    # Indicators the FA table adds, split by what they need:
+    #  - *_QUARTERLY: computed on the quarterly grain (no price) and mapped back to every
+    #    day of the publish window — they hold flat across the window.
+    #  - *_VALUATION: price ÷ fundamental, computed row-wise on the daily panel from
+    #    `close_adjust` × the (already as-of) fundamentals.
+    BANK_FA_QUARTERLY_COLS = [
+        "shares_used",
+        "ttm_net_income",
+        "ttm_op_income",
+        "eps_ttm",
+        "bvps",
+        "roe",
+        "roa",
+        "nim",
+        "net_profit_margin",
+        "pretax_margin",
+        "effective_tax_rate",
+        "cost_to_income",
+        "equity_multiplier",
+        "equity_to_assets",
+        "ldr",
+        "loans_to_assets",
+        "deposits_to_assets",
+        "earnings_growth_yoy",
+        "opincome_growth_yoy",
+        "equity_growth_yoy",
+        "asset_growth_yoy",
+    ]
+    BANK_FA_VALUATION_COLS = [
+        "market_cap",
+        "pe_ttm",
+        "pb",
+        "ps_ttm",
+        "earnings_yield",
+    ]
+
+    def _helper_build_bank_fundamental_indicators(
+        self, q: pd.DataFrame
+    ) -> pd.DataFrame:
+        """Compute the price-independent bank fundamental indicators on the **quarterly**
+        grain and return them keyed by `(exchange, ticker, year, quarter)`.
+
+        Input `q` is one row per `(exchange, ticker, year, quarter)` carrying the bank
+        line items (report-prefixed) + `shares_*` — i.e. the distinct quarters of
+        `stocks_basic_financials_bank`. TTM flows are trailing-4-quarter sums (NaN unless
+        all 4 quarters are present, so a gap makes the window NULL rather than wrong);
+        ROE/ROA/NIM average the balance-sheet stock over the flow's span (this quarter
+        and the year-ago quarter). Per `(exchange, ticker)`, ordered by `(year, quarter)`.
+        Formulas map 1:1 to FUNDAMENTAL_INDICATORS.md §1.
+
+        Shares: prefer the scanned `shares_outstanding`, fall back to the published
+        `shares_issued`, then to the par-value estimate `charter_capital / 10_000`."""
+        key = ["exchange", "ticker"]
+        num_cols = [
+            self.BANK_FA_NET_INCOME,
+            self.BANK_FA_PRETAX,
+            self.BANK_FA_NII,
+            self.BANK_FA_OP_INCOME,
+            self.BANK_FA_OP_EXPENSE,
+            self.BANK_FA_EQUITY,
+            self.BANK_FA_CHARTER,
+            self.BANK_FA_ASSETS,
+            self.BANK_FA_LOANS,
+            self.BANK_FA_DEPOSITS,
+            "shares_outstanding",
+            "shares_issued",
+        ]
+        q = q.copy()
+        for c in num_cols:
+            q[c] = pd.to_numeric(q.get(c), errors="coerce")
+
+        q = q.sort_values(key + ["year", "quarter"]).reset_index(drop=True)
+        g = q.groupby(key, sort=False)
+
+        # Share count: scanned outstanding → published issued → par-value estimate.
+        shares = q["shares_outstanding"]
+        shares = shares.where(shares.notna(), q["shares_issued"])
+        shares = shares.where(
+            shares.notna(), q[self.BANK_FA_CHARTER] / self.VN_PAR_VALUE
+        )
+        q["shares_used"] = shares
+
+        # Trailing-twelve-month flows (all 4 quarters required).
+        def _ttm(col: str) -> pd.Series:
+            return g[col].transform(lambda s: s.rolling(4, min_periods=4).sum())
+
+        q["ttm_net_income"] = _ttm(self.BANK_FA_NET_INCOME)
+        q["ttm_op_income"] = _ttm(self.BANK_FA_OP_INCOME)
+        ttm_nii = _ttm(self.BANK_FA_NII)
+
+        # Period-average balances (this quarter + year-ago quarter) for ratios that put a
+        # TTM flow over a balance-sheet stock.
+        def _avg_yoy(col: str) -> pd.Series:
+            return g[col].transform(lambda s: (s + s.shift(4)) / 2)
+
+        avg_equity = _avg_yoy(self.BANK_FA_EQUITY)
+        avg_assets = _avg_yoy(self.BANK_FA_ASSETS)
+
+        # Profitability / returns.
+        q["roe"] = q["ttm_net_income"] / avg_equity
+        q["roa"] = q["ttm_net_income"] / avg_assets
+        q["nim"] = ttm_nii / avg_assets
+        q["net_profit_margin"] = q[self.BANK_FA_NET_INCOME] / q[self.BANK_FA_OP_INCOME]
+        q["pretax_margin"] = q[self.BANK_FA_PRETAX] / q[self.BANK_FA_OP_INCOME]
+        q["effective_tax_rate"] = 1 - (
+            q[self.BANK_FA_NET_INCOME] / q[self.BANK_FA_PRETAX]
+        )
+        # Op-expense is filed negative → negate so CIR is a positive cost fraction.
+        q["cost_to_income"] = -q[self.BANK_FA_OP_EXPENSE] / q[self.BANK_FA_OP_INCOME]
+
+        # Balance-sheet structure / bank health.
+        q["equity_multiplier"] = q[self.BANK_FA_ASSETS] / q[self.BANK_FA_EQUITY]
+        q["equity_to_assets"] = q[self.BANK_FA_EQUITY] / q[self.BANK_FA_ASSETS]
+        q["ldr"] = q[self.BANK_FA_LOANS] / q[self.BANK_FA_DEPOSITS]
+        q["loans_to_assets"] = q[self.BANK_FA_LOANS] / q[self.BANK_FA_ASSETS]
+        q["deposits_to_assets"] = q[self.BANK_FA_DEPOSITS] / q[self.BANK_FA_ASSETS]
+
+        # Per-share bases (feed the valuation ratios after mapping back to days).
+        q["eps_ttm"] = q["ttm_net_income"] / q["shares_used"]
+        q["bvps"] = q[self.BANK_FA_EQUITY] / q["shares_used"]
+
+        # Growth (YoY, t vs t-4q).
+        def _yoy(col: str) -> pd.Series:
+            return g[col].transform(lambda s: s / s.shift(4) - 1)
+
+        q["earnings_growth_yoy"] = _yoy(self.BANK_FA_NET_INCOME)
+        q["opincome_growth_yoy"] = _yoy(self.BANK_FA_OP_INCOME)
+        q["equity_growth_yoy"] = _yoy(self.BANK_FA_EQUITY)
+        q["asset_growth_yoy"] = _yoy(self.BANK_FA_ASSETS)
+
+        # ±inf from a zero denominator (early sparse quarters) is not a real ratio → NaN.
+        out_cols = key + ["year", "quarter"] + self.BANK_FA_QUARTERLY_COLS
+        result = q[out_cols].copy()
+        result[self.BANK_FA_QUARTERLY_COLS] = result[
+            self.BANK_FA_QUARTERLY_COLS
+        ].replace([np.inf, -np.inf], np.nan)
+        return result
+
+    def _ingest_silver_stocks_basic_financials_bank_fa(self) -> None:
+        """Silver `stocks_basic_financials_bank_fa` — `stocks_basic_financials_bank`
+        (the daily price × as-of bank financials panel) with the **full fundamental
+        indicator catalog** (FUNDAMENTAL_INDICATORS.md §1) appended: it carries **all
+        source columns plus** the profitability / return / leverage / growth ratios, the
+        per-share bases (EPS_ttm, BVPS) and the price-dependent valuation ratios (market
+        cap, P/E, P/B, P/S, earnings yield).
+
+        The source already has the as-of merge baked in (every price day carries its
+        most-recently-published quarter, `publish_date` ≤ `date`), so no re-join is
+        needed. The price-independent indicators are computed once on the **quarterly
+        grain** — the distinct `(exchange, ticker, year, quarter)` rows of the source,
+        where trailing-4-quarter TTM sums and year-ago-balance averages are well defined —
+        then mapped back onto every day of the publish window (so they step on
+        `publish_date` and hold flat, preserving the source's zero-look-ahead property).
+        The valuation ratios are then computed row-wise from `close_adjust` × those
+        as-of fundamentals. PK `(exchange, ticker, date)`; the old table is dropped first
+        so a schema change re-materialises cleanly past the driver's IF NOT EXISTS.
+
+        Bank-template only (reads `…_bank`). `corp`/`securities`/`insurance` would each
+        get an analogous `…_<template>_fa` once their financials are parsed."""
+        self._logger.log_info(
+            "Ingesting silver stocks_basic_financials_bank_fa "
+            "(fundamental indicators on the price × financials panel)..."
+        )
+        src_table = "stocks_basic_financials_bank"
+        out_table = "stocks_basic_financials_bank_fa"
+        keys_out = ["exchange", "ticker", "date"]
+        qkey = ["exchange", "ticker", "year", "quarter"]
+
+        df = self._helper_select(schema_name=SILVER_SCHEMA, table_name=src_table)
+        if df.empty:
+            self._logger.log_info(
+                f"No silver {src_table} data found; {out_table} not built."
+            )
+            return
+
+        # Column types of the source, to re-cast its numeric columns (the driver reads
+        # `numeric` back as Decimal→object; without this they'd degrade to VARCHAR again).
+        src_types = self._helper_column_types(SILVER_SCHEMA, src_table)
+
+        # ── 1. Quarterly grain: one row per (exchange, ticker, year, quarter). Every
+        #       financials column is constant within a quarter (it was as-of joined), so
+        #       taking the first row per quarter loses nothing. ──
+        quarterly = (
+            df.sort_values(keys_out)
+            .drop_duplicates(subset=qkey, keep="first")
+            .reset_index(drop=True)
+        )
+        ind = self._helper_build_bank_fundamental_indicators(quarterly)
+
+        # ── 2. Map the quarterly indicators back onto every day by (…, year, quarter). ──
+        merged = df.merge(ind, on=qkey, how="left")
+
+        # ── 3. Price-dependent valuation ratios, row-wise from the as-of fundamentals. ──
+        close = pd.to_numeric(merged["close_adjust"], errors="coerce")
+        merged["market_cap"] = close * merged["shares_used"]
+        merged["pe_ttm"] = close / merged["eps_ttm"]
+        merged["pb"] = close / merged["bvps"]
+        merged["ps_ttm"] = merged["market_cap"] / merged["ttm_op_income"]
+        merged["earnings_yield"] = merged["eps_ttm"] / close
+        merged[self.BANK_FA_VALUATION_COLS] = merged[
+            self.BANK_FA_VALUATION_COLS
+        ].replace([np.inf, -np.inf], np.nan)
+
+        merged = self._helper_clean(
+            merged,
+            [
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("exchange"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("ticker"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("date"),
+                CleanLayer.ORDER_BY(keys_out),
+            ],
+        )
+
+        # ── 4. Cast: the source's numeric columns re-typed from its live schema, plus
+        #       every computed indicator (all clean floats) → Float64 so NaN → SQL NULL. ──
+        indicator_cols = self.BANK_FA_QUARTERLY_COLS + self.BANK_FA_VALUATION_COLS
+        skip = set(keys_out) | {"publish_date"}
+        src_decimal = [
+            c
+            for c in df.columns
+            if c not in skip and src_types.get(c) == "numeric"
+        ]
+        src_bigint = [
+            c
+            for c in df.columns
+            if c not in skip and src_types.get(c) == "bigint"
+        ]
+        merged = self._helper_cast_columns(
+            merged,
+            decimal_cols=src_decimal + indicator_cols,
+            bigint_cols=src_bigint,
+        )
+
+        self._database_driver.drop_table(SILVER_SCHEMA, out_table)
+        self._helper_save_pandas_table_to_database(
+            schema_name=SILVER_SCHEMA,
+            table_name=out_table,
+            primary_keys=keys_out,
+            df=merged,
+            dtype_overrides={
+                "date": DataType.DATE(),
+                "publish_date": DataType.DATE(),
+            },
+        )
+
     def _ingest_silver_stocks_basic(self) -> None:
         """Silver `stocks_basic` — the four daily CafeF bronze tables joined into one
         wide per-stock-day panel, `cafef_price` as the base (spine):
@@ -3129,11 +3395,13 @@ class DataPreprocessor:
                     self._ingest_silver_stocks_basic()
 
                 # Depends on BOTH silver.stocks_basic and silver.cafef_financials_bank,
-                # so it runs after both are (re)built.
+                # so it runs after both are (re)built. The _fa step then reads the
+                # plain-join table just built and appends the fundamental indicators.
                 if self._switch_handler.is_enabled(
                     "data_preprocessor", "data_quality_silver", "stocks_financials"
                 ):
                     self._ingest_silver_stocks_basic_financials_bank()
+                    self._ingest_silver_stocks_basic_financials_bank_fa()
 
             except Exception as e:
                 self._logger.log_error(

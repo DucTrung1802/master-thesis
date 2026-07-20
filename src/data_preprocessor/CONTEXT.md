@@ -317,11 +317,54 @@ DTO helpers come from
     STORAGE is correct (178 numeric / 17 bigint / 19 varchar / 2 date), only the round-trip
     dtype looks like object. Old table is dropped first (schema change re-materialises past
     the driver's IF NOT EXISTS).
-  - **This is the plain-join sibling of the PLANNED `stocks_fundamental` below** (same as-of
-    mechanic, but this one attaches the raw columns; that one computes the P/E-P/B-ROE… ratio
-    catalog). They can coexist: compute indicators off this table, or build `stocks_fundamental`
-    separately.
-- **PLANNED: `silver.stocks_fundamental`** (not built yet) — the fundamental-analysis
+  - **This is the raw-columns base**; the computed **fundamental indicators** live one
+    step downstream in `silver.stocks_basic_financials_bank_fa` (next bullet), which reads
+    THIS table and appends the ratio catalog. (Both realise the as-of mechanic the PLANNED
+    `stocks_fundamental` describes — this one the raw join, the `_fa` one the ratios.)
+- **`silver.stocks_basic_financials_bank_fa`** (added 2026-07-21,
+  `_ingest_silver_stocks_basic_financials_bank_fa`) — `stocks_basic_financials_bank` (the
+  bullet above) with the **full fundamental indicator catalog** (FUNDAMENTAL_INDICATORS.md
+  §1) appended: it keeps **ALL 216 source columns PLUS 26 indicators = 242 cols**, same
+  4,235 VCB rows, PK `(exchange, ticker, date)`. Wired into `ingest_silver_data` under the
+  SAME `stocks_financials` leaf, run immediately AFTER the plain-join step (it reads the
+  table that step just wrote). Old table dropped first.
+  - **The as-of merge is already baked into the source** (every day carries its
+    most-recently-published quarter, `publish_date ≤ date`), so the `_fa` step does **no
+    re-join** — it just computes ratios and preserves the source's **zero look-ahead**
+    (verified: 0 rows `publish_date > date`; indicators are constant within a publish
+    window — 0 of 55 windows show >1 distinct `eps_ttm`).
+  - **Two-grain compute** (`_helper_build_bank_fundamental_indicators`): the
+    price-INDEPENDENT indicators are computed once on the **quarterly grain** — the distinct
+    `(exchange, ticker, year, quarter)` rows of the source (69 for VCB; `(year,quarter)` ↔
+    `publish_date` is 1:1), the only grain where **trailing-4-quarter TTM sums** and
+    **year-ago-balance averages** are well defined — then mapped back onto every day of the
+    window by `(exchange, ticker, year, quarter)`. The price-DEPENDENT valuation ratios are
+    then computed **row-wise** from `close_adjust` × those as-of fundamentals.
+  - **The 26 indicators** (constants `BANK_FA_QUARTERLY_COLS` + `BANK_FA_VALUATION_COLS`):
+    21 quarterly — `shares_used`, `ttm_net_income`, `ttm_op_income`, `eps_ttm`, `bvps`,
+    `roe`, `roa`, `nim`, `net_profit_margin`, `pretax_margin`, `effective_tax_rate`,
+    `cost_to_income`, `equity_multiplier`, `equity_to_assets`, `ldr`, `loans_to_assets`,
+    `deposits_to_assets`, + `{earnings,opincome,equity,asset}_growth_yoy` — and 5 valuation:
+    `market_cap`, `pe_ttm`, `pb`, `ps_ttm`, `earnings_yield`. Formulas map 1:1 to
+    FUNDAMENTAL_INDICATORS.md §1.
+  - **Shares**: prefer scanned `shares_outstanding` → published `shares_issued` →
+    par-value estimate `balance_sheet_viii_1_a_von_dieu_le / 10_000` (`VN_PAR_VALUE`).
+    **TTM requires all 4 quarters** (a gap makes the window NULL, never wrong);
+    ROE/ROA/NIM average this-quarter and year-ago balances; ±inf from a zero denominator
+    (early sparse quarters) → NaN. **Coverage** (VCB, /4,235 days): `pb`/`bvps`/`market_cap`
+    full (need only current equity+shares); `pe_ttm`/`eps_ttm` 3,383, `roe` 3,362 (need the
+    4-quarter TTM / year-ago balance); `nim` 4,025, `ldr` 3,910. P/S, CIR and the margins
+    stay thin — `tong_thu_nhap_hoat_dong` is only 25/78 quarters. **Verified latest VCB
+    (2026-06-25): P/E 14.13, P/B 2.56, ROE 22.2%, NIM 2.69%, mkt cap 508 T₫, 8.36 bn shares.**
+  - **Types**: source numeric cols re-cast from the source's live `information_schema` (via
+    `_helper_column_types`), every computed indicator → nullable `Float64` (NaN → SQL NULL).
+    Bank-template only; `corp`/`securities`/`insurance` would each get an analogous
+    `…_<template>_fa` once parsed.
+- **PLANNED: `silver.stocks_fundamental`** — ⚠️ **the `bank` slice of this is now BUILT as
+  `silver.stocks_basic_financials_bank_fa`** (two bullets up); this remaining PLANNED entry
+  is the *cross-template / universal* generalization (one table spanning all templates, or
+  the per-template `…_<template>_fa` set once `corp`/`securities`/`insurance` parse). The
+  fundamental-analysis
   indicators (P/E, P/B, ROE, ROA, EPS, market cap, leverage, growth, + bank NIM/CIR/LDR)
   computed on a **daily** panel = `stocks_basic` joined to `cafef_financials_<template>`.
   ⚠️ The join is an **as-of merge on `publish_date`** (`merge_asof` backward, by
@@ -402,8 +445,11 @@ DTO helpers come from
   is a straight reference-table carry-up; there is still no `gics` gold table.
   `bronze.gics` also feeds `silver.stocks_basic`'s GICS tree (via
   `_helper_build_gics_classification`) regardless of the silver `gics` leaf.
-  `silver.stocks_basic_financials_bank` has its own silver-only leaf
-  `.../silver/stocks_financials` (added 2026-07-21); it reads `silver.stocks_basic` +
+  The silver-only leaf `.../silver/stocks_financials` (added 2026-07-21) gates **two
+  chained ingests in order**: `_ingest_silver_stocks_basic_financials_bank` (the raw
+  price×financials as-of join → `stocks_basic_financials_bank`) then
+  `_ingest_silver_stocks_basic_financials_bank_fa` (that table + the indicator catalog →
+  `stocks_basic_financials_bank_fa`). It reads `silver.stocks_basic` +
   `silver.cafef_financials_bank`, so it runs after both — but note `stocks_basic` is
   itself under the separate `.../silver/stocks` leaf, so if you flip `stocks_financials`
   on while `stocks` is off it reuses whatever `stocks_basic` is already materialised.
@@ -545,7 +591,9 @@ that exist so far; 30 once all four templates are parsed):
   (CafeF four-way join + GICS tree, 2,388,368 rows) have all been materialised against
   the current bronze. Added 2026-07-21: **`silver.stocks_basic_financials_bank`** — the
   plain as-of join of `stocks_basic` × `cafef_financials_bank` on `publish_date`, all 216
-  cols of both, no indicators; **HOSE:VCB only, 4,235 rows** (2009-06-30…2026-06-25).
+  cols of both, no indicators; **HOSE:VCB only, 4,235 rows** (2009-06-30…2026-06-25) — and
+  **`silver.stocks_basic_financials_bank_fa`** — that table + the 26-indicator fundamental
+  catalog (242 cols, same 4,235 rows).
   **`gold.stocks` is still
   stale** — it reflects the old canonical silver stocks schema (Simplize-primary OHLC
   spine), which the rewrite has now replaced, so gold will not find several columns it
