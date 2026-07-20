@@ -2332,6 +2332,192 @@ class DataPreprocessor:
         """Combine the three `bank` statements into silver `cafef_financials_bank`."""
         self._ingest_silver_cafef_financials_template("bank")
 
+    def _helper_column_types(
+        self, schema_name: str, table_name: str
+    ) -> dict[str, str]:
+        """Return `{column_name: data_type}` for a table, straight from
+        `information_schema.columns`. Used to derive numeric/bigint cast lists from the
+        live schema rather than hand-listing columns (the financials tables have ~180
+        columns, and grow as more templates are parsed)."""
+        info = self._helper_select(
+            schema_name="information_schema",
+            table_name="columns",
+            columns=["column_name", "data_type"],
+            conditions=[
+                Condition(
+                    column="table_schema",
+                    operator=SqlOperator.EQUAL_TO,
+                    value=schema_name,
+                    data_type=DataType.VARCHAR(),
+                ),
+                Condition(
+                    column="table_name",
+                    operator=SqlOperator.EQUAL_TO,
+                    value=table_name,
+                    data_type=DataType.VARCHAR(),
+                ),
+            ],
+        )
+        if info.empty:
+            return {}
+        return dict(zip(info["column_name"], info["data_type"]))
+
+    def _ingest_silver_stocks_basic_financials_bank(self) -> None:
+        """Silver `stocks_basic_financials_bank` — the **daily** `silver.stocks_basic`
+        panel joined to the **quarterly** `silver.cafef_financials_bank`, keeping **all
+        columns of both** (no computed indicators — this is a straight join).
+
+            silver.stocks_basic            (daily,  (exchange, ticker, date))
+              INNER JOIN (as-of, backward on publish_date)
+            silver.cafef_financials_bank   (quarterly, + publish_date + shares + lines)
+
+        ⚠️ **The join is an as-of merge on `publish_date`, NOT the period end.** Each
+        price day carries the financials of the most-recently-*published* quarter (the
+        greatest `publish_date <= date`), so every financials column **steps** on its
+        publish date and holds flat until the next filing drops — zero look-ahead. A
+        quarter whose `publish_date` is NULL (the 6 earliest un-dated ones) is excluded
+        from the as-of key: a fact with no public date can't be pinned to a day. Days
+        before a ticker's first publish would get NULL financials, but this is scoped as
+        an **INNER** join (only tickers with financials, only days on/after the first
+        publish survive), so those pre-publish days drop out — the table is dense and
+        grows as more bank tickers are parsed. Today: HOSE:VCB only.
+
+        The two tables share no non-key column name, so the merge needs no suffixes:
+        every output row is a `stocks_basic` day with the 38 price/GICS/flow columns,
+        plus the as-of quarter's 177 financials columns (its `exchange`/`ticker` fold
+        into the join keys). Numeric columns are re-cast from the driver's Decimal→object
+        read so they don't degrade to VARCHAR (bigint stays bigint, numeric→Float64), the
+        cast lists derived from each source table's live `information_schema` types. PK
+        `(exchange, ticker, date)`; the old table is dropped first so a schema change
+        re-materialises cleanly past the driver's IF NOT EXISTS."""
+        self._logger.log_info(
+            "Ingesting silver stocks_basic_financials_bank "
+            "(stocks_basic × cafef_financials_bank, as-of on publish_date)..."
+        )
+        key = ["exchange", "ticker"]
+        keys_out = ["exchange", "ticker", "date"]
+
+        price = self._helper_select(
+            schema_name=SILVER_SCHEMA, table_name="stocks_basic"
+        )
+        if price.empty:
+            self._logger.log_info(
+                "No silver stocks_basic data found; "
+                "stocks_basic_financials_bank not built."
+            )
+            return
+
+        fin = self._helper_select(
+            schema_name=SILVER_SCHEMA, table_name="cafef_financials_bank"
+        )
+        if fin.empty:
+            self._logger.log_info(
+                "No silver cafef_financials_bank data found; "
+                "stocks_basic_financials_bank not built."
+            )
+            return
+
+        # Column types of both sources, to rebuild the numeric/bigint cast lists from the
+        # live schema (union across the two tables; the join keys are excluded — they are
+        # text and don't need casting).
+        price_types = self._helper_column_types(SILVER_SCHEMA, "stocks_basic")
+        fin_types = self._helper_column_types(SILVER_SCHEMA, "cafef_financials_bank")
+
+        # Only keep the financials row with a public date — the as-of key can't use a
+        # NULL publish_date. Sort both sides globally on the "on" key (merge_asof needs it).
+        fin["publish_date"] = pd.to_datetime(fin["publish_date"], errors="coerce")
+        fin = fin[fin["publish_date"].notna()].copy()
+        if fin.empty:
+            self._logger.log_warning(
+                "cafef_financials_bank has no dated quarters; "
+                "stocks_basic_financials_bank not built."
+            )
+            return
+
+        # Restrict the price side to tickers that have financials (INNER scope) so the
+        # as-of merge doesn't carry along 620 tickers of NULL financials.
+        fin_keys = fin[key].drop_duplicates()
+        price = price.merge(fin_keys, on=key, how="inner")
+        if price.empty:
+            self._logger.log_info(
+                "No stocks_basic rows for the financials tickers; "
+                "stocks_basic_financials_bank not built."
+            )
+            return
+
+        price["date"] = pd.to_datetime(price["date"], errors="coerce")
+        price = price.sort_values("date").reset_index(drop=True)
+        fin = fin.sort_values("publish_date").reset_index(drop=True)
+
+        merged = pd.merge_asof(
+            price,
+            fin,
+            left_on="date",
+            right_on="publish_date",
+            by=key,
+            direction="backward",
+        )
+
+        # Drop pre-first-publish days (no quarter was public yet → INNER scope drops them).
+        merged = merged[merged["publish_date"].notna()].copy()
+        if merged.empty:
+            self._logger.log_info(
+                "No price days on/after a publish_date; "
+                "stocks_basic_financials_bank not built."
+            )
+            return
+
+        # publish_date back to a plain date for the DATE column.
+        merged["publish_date"] = merged["publish_date"].dt.date
+
+        # Lay out columns: keys, date, publish_date, then the rest (stocks_basic block
+        # followed by the financials block, both in their source order).
+        lead = keys_out + ["publish_date"]
+        merged = merged[lead + [c for c in merged.columns if c not in lead]]
+
+        merged = self._helper_clean(
+            merged,
+            [
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("exchange"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("ticker"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("date"),
+                CleanLayer.ORDER_BY(keys_out),
+            ],
+        )
+
+        # Rebuild the numeric types the driver's Decimal→object read dropped. Derive the
+        # cast lists from the two source schemas (a column is bigint iff it is bigint in
+        # its source, else numeric→Float64); keys/date/publish_date/text pass through.
+        col_types = {**price_types, **fin_types}
+        skip = set(keys_out) | {"publish_date"}
+        decimal_cols = [
+            c
+            for c in merged.columns
+            if c not in skip and col_types.get(c) == "numeric"
+        ]
+        bigint_cols = [
+            c
+            for c in merged.columns
+            if c not in skip and col_types.get(c) == "bigint"
+        ]
+        merged = self._helper_cast_columns(
+            merged, decimal_cols=decimal_cols, bigint_cols=bigint_cols
+        )
+
+        self._database_driver.drop_table(
+            SILVER_SCHEMA, "stocks_basic_financials_bank"
+        )
+        self._helper_save_pandas_table_to_database(
+            schema_name=SILVER_SCHEMA,
+            table_name="stocks_basic_financials_bank",
+            primary_keys=keys_out,
+            df=merged,
+            dtype_overrides={
+                "date": DataType.DATE(),
+                "publish_date": DataType.DATE(),
+            },
+        )
+
     def _ingest_silver_stocks_basic(self) -> None:
         """Silver `stocks_basic` — the four daily CafeF bronze tables joined into one
         wide per-stock-day panel, `cafef_price` as the base (spine):
@@ -2941,6 +3127,13 @@ class DataPreprocessor:
                     "data_preprocessor", "data_quality_silver", "stocks"
                 ):
                     self._ingest_silver_stocks_basic()
+
+                # Depends on BOTH silver.stocks_basic and silver.cafef_financials_bank,
+                # so it runs after both are (re)built.
+                if self._switch_handler.is_enabled(
+                    "data_preprocessor", "data_quality_silver", "stocks_financials"
+                ):
+                    self._ingest_silver_stocks_basic_financials_bank()
 
             except Exception as e:
                 self._logger.log_error(

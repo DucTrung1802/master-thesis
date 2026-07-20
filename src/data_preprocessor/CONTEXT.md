@@ -283,6 +283,44 @@ DTO helpers come from
     + 50 `cash_flow_*`), 78 rows, publish_date on 72/78, shares on 62/78. The join is 1:1
     in practice (all 3 share the same contiguous quarter grid). Generic by `template`, so
     `corp`/`securities`/`insurance` combine the same way once parsed.
+- **`silver.stocks_basic_financials_bank`** (added 2026-07-21,
+  `_ingest_silver_stocks_basic_financials_bank`) — the **daily** `silver.stocks_basic`
+  panel joined to the **quarterly** `silver.cafef_financials_bank`, keeping **ALL columns
+  of both** (a straight join — **no computed indicators**). Gated by its own new switch
+  leaf `data_preprocessor/data_quality_silver/stocks_financials`, wired into
+  `ingest_silver_data` AFTER `_ingest_silver_stocks_basic` (it reads both silver tables).
+  - ⚠️ **The join is an as-of merge on `publish_date`, NOT the period end**
+    (`pandas.merge_asof`, `direction="backward"`, `by=(exchange, ticker)`,
+    `left_on=date` ↔ `right_on=publish_date`): each price day carries the
+    most-recently-*published* quarter's figures, so every financials column **steps** on
+    its `publish_date` and holds flat until the next filing drops — **zero look-ahead**
+    (verified: 0 rows where `publish_date > date`). Financials rows with a NULL
+    `publish_date` (the 6 earliest un-dated quarters) are **excluded from the as-of key** —
+    a fact with no public date can't be pinned to a day.
+  - **INNER-scoped**, two ways: (1) the price side is inner-joined to the set of tickers
+    that have financials, so it does NOT carry 620 tickers of NULL fundamentals; (2)
+    price days *before* a ticker's first `publish_date` are dropped (no quarter was public
+    yet). → the table is **dense**, and grows automatically as more bank tickers are parsed.
+    Today: **HOSE:VCB only → 4,235 rows** (2009-06-30 … 2026-06-25).
+  - The two tables **share no non-key column name**, so the merge needs **no suffixes**:
+    every row is a `stocks_basic` day (38 price/GICS/flow cols) + the as-of quarter's 177
+    financials cols (`cafef_financials_bank`'s own `exchange`/`ticker` fold into the join
+    keys). **216 cols** total = 38 + 180 − 2 shared keys; layout = `(exchange, ticker,
+    date, publish_date)` then the stocks_basic block then the financials block.
+    PK `(exchange, ticker, date)` (unique, verified).
+  - **Numeric types are rebuilt from each source's live `information_schema`** via the new
+    `_helper_column_types(schema, table)` helper (a column is BIGINT iff bigint in its
+    source, else `numeric`→Float64; keys/date/publish_date/text pass through). This avoids
+    the degraded-VARCHAR trap the skip-the-cast carry-ups fall into (the driver reads
+    `numeric` back as `Decimal`→pandas `object`). ⚠️ Note `driver.select` still returns the
+    stored `numeric` columns as Python `Decimal` (pandas `object` dtype) on read-back — the
+    STORAGE is correct (178 numeric / 17 bigint / 19 varchar / 2 date), only the round-trip
+    dtype looks like object. Old table is dropped first (schema change re-materialises past
+    the driver's IF NOT EXISTS).
+  - **This is the plain-join sibling of the PLANNED `stocks_fundamental` below** (same as-of
+    mechanic, but this one attaches the raw columns; that one computes the P/E-P/B-ROE… ratio
+    catalog). They can coexist: compute indicators off this table, or build `stocks_fundamental`
+    separately.
 - **PLANNED: `silver.stocks_fundamental`** (not built yet) — the fundamental-analysis
   indicators (P/E, P/B, ROE, ROA, EPS, market cap, leverage, growth, + bank NIM/CIR/LDR)
   computed on a **daily** panel = `stocks_basic` joined to `cafef_financials_<template>`.
@@ -364,6 +402,11 @@ DTO helpers come from
   is a straight reference-table carry-up; there is still no `gics` gold table.
   `bronze.gics` also feeds `silver.stocks_basic`'s GICS tree (via
   `_helper_build_gics_classification`) regardless of the silver `gics` leaf.
+  `silver.stocks_basic_financials_bank` has its own silver-only leaf
+  `.../silver/stocks_financials` (added 2026-07-21); it reads `silver.stocks_basic` +
+  `silver.cafef_financials_bank`, so it runs after both — but note `stocks_basic` is
+  itself under the separate `.../silver/stocks` leaf, so if you flip `stocks_financials`
+  on while `stocks` is off it reuses whatever `stocks_basic` is already materialised.
 - **Order matters:** silver reads bronze tables; gold reads silver tables. Run the
   layers in bronze → silver → gold order (main.py does).
 
@@ -500,7 +543,10 @@ that exist so far; 30 once all four templates are parsed):
   line items + one `publish_date` + 3 unprefixed share cols; 78 rows), and the rewritten
   **`silver.stocks_basic`**
   (CafeF four-way join + GICS tree, 2,388,368 rows) have all been materialised against
-  the current bronze. **`gold.stocks` is still
+  the current bronze. Added 2026-07-21: **`silver.stocks_basic_financials_bank`** — the
+  plain as-of join of `stocks_basic` × `cafef_financials_bank` on `publish_date`, all 216
+  cols of both, no indicators; **HOSE:VCB only, 4,235 rows** (2009-06-30…2026-06-25).
+  **`gold.stocks` is still
   stale** — it reflects the old canonical silver stocks schema (Simplize-primary OHLC
   spine), which the rewrite has now replaced, so gold will not find several columns it
   expects. `_ingest_gold_stocks` now reads **`silver.stocks_basic`** (writes
