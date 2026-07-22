@@ -350,6 +350,7 @@
     "data_preprocessor/data_quality_silver/gics": true,
     "data_preprocessor/data_quality_silver/financials": true,
     "data_preprocessor/data_quality_silver/stocks_financials": true,
+    "data_preprocessor/data_quality_silver/news_sentiment": true,
     "data_preprocessor/data_quality_gold": false,
     "data_preprocessor/data_quality_gold/bonds": true,
     "data_preprocessor/data_quality_gold/economy": true,

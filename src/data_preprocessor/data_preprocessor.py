@@ -2784,6 +2784,89 @@ class DataPreprocessor:
             },
         )
 
+    def _ingest_silver_cafef_news_sentiment(self) -> None:
+        """Silver `cafef_news_sentiment` — Vietnamese sentiment scored over
+        `bronze.cafef_news`, one row per news `row_id`.
+
+        The actual scoring is the `src/sentiment` module (a PhoBERT-based VN
+        sentiment model), imported here so `data_preprocessor` owns only the ETL:
+        read bronze → `score_news_frame` → save. The text handed to the model is the
+        headline (always) plus, for `editorial` rows, a lead slice of the body
+        (`build_scored_text`) — disclosures are short filing stubs whose headline is
+        the whole story. ⚠️ The news text is **Vietnamese**; an English sentiment
+        model would be wrong (see `sentiment/CONTEXT.md`).
+
+        Output carries the bronze event keys and provenance — `row_id` (md5 PK,
+        inherited so a re-score UPDATEs in place), `exchange`/`ticker`, `timestamp`,
+        `type`/`category` — plus `sentiment_label`
+        (negative/neutral/positive), a signed `sentiment_score` in [-1, 1]
+        (`p(pos) − p(neg)`), the three class probabilities, and `model_version`.
+        This is the EVENT grain (like the bronze table); a later step can aggregate
+        it to a daily per-ticker signal that as-of-joins onto `stocks_basic`. PK
+        `row_id`; the old table is dropped first so a schema change re-materialises
+        past the driver's IF NOT EXISTS."""
+        # Lazy import so a switch-gated-off run never pulls torch/transformers.
+        from sentiment.sentiment_functions import score_news_frame
+
+        self._logger.log_info(
+            "Ingesting silver cafef_news_sentiment (Vietnamese sentiment scoring)..."
+        )
+        out_table = "cafef_news_sentiment"
+        pk = ["row_id"]
+        meta_cols = [
+            "row_id",
+            "exchange",
+            "ticker",
+            "timestamp",
+            "type",
+            "category",
+        ]
+
+        news = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="cafef_news")
+        if news.empty:
+            self._logger.log_info(
+                f"No bronze cafef_news data found; {out_table} not built."
+            )
+            return
+
+        # Score (pure text → sentiment columns, aligned by index), then attach the keys.
+        scored = score_news_frame(news)
+        keep = [c for c in meta_cols if c in news.columns]
+        result = pd.concat([news[keep].reset_index(drop=True), scored.reset_index(drop=True)], axis=1)
+
+        result = self._helper_clean(
+            result,
+            [
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("row_id"),
+                CleanLayer.ORDER_BY(["exchange", "ticker", "timestamp"]),
+            ],
+        )
+        result = self._helper_cast_columns(
+            result,
+            decimal_cols=[
+                "sentiment_score",
+                "prob_negative",
+                "prob_neutral",
+                "prob_positive",
+            ],
+            bigint_cols=[],
+        )
+
+        self._database_driver.drop_table(SILVER_SCHEMA, out_table)
+        self._helper_save_pandas_table_to_database(
+            schema_name=SILVER_SCHEMA,
+            table_name=out_table,
+            primary_keys=pk,
+            df=result,
+            dtype_overrides={
+                "timestamp": DataType.TIMESTAMP(),
+                "type": DataType.VARCHAR(),
+                "category": DataType.VARCHAR(),
+                "sentiment_label": DataType.VARCHAR(),
+                "model_version": DataType.VARCHAR(),
+            },
+        )
+
     def _ingest_silver_stocks_basic(self) -> None:
         """Silver `stocks_basic` — the four daily CafeF bronze tables joined into one
         wide per-stock-day panel, `cafef_price` as the base (spine):
@@ -3388,6 +3471,13 @@ class DataPreprocessor:
                     self._ingest_silver_cafef_foreign()
                     self._ingest_silver_cafef_prop_trading()
                     self._ingest_silver_cafef_insider_shareholder_transactions()
+
+                # News sentiment reads bronze.cafef_news only (independent of the
+                # stocks/financials tables), so it gets its own leaf.
+                if self._switch_handler.is_enabled(
+                    "data_preprocessor", "data_quality_silver", "news_sentiment"
+                ):
+                    self._ingest_silver_cafef_news_sentiment()
 
                 if self._switch_handler.is_enabled(
                     "data_preprocessor", "data_quality_silver", "stocks"
