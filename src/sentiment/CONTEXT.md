@@ -166,10 +166,41 @@ the text** (1-bis). The moment the target is *price* — level, direction, jump,
 price-defined sentiment label — the signal vanishes. The news headlines/content we have do
 not forecast 5-day price for VCB/FPT/PNJ.
 
+### 6a. Incremental ablation — does sentiment add anything ON TOP of price/TA?
+
+The sharpest test (scratchpad probe, same 7-fold purged walk-forward, HistGB): hold the
+target fixed and compare **sentiment/text-only vs price/TA-only vs both**. If sentiment
+carried *any* independent signal, `price+sentiment` should beat `price-only`.
+
+| Target | features | metric | value | vs baseline |
+|---|---|---|---:|---|
+| direction (5d) | sentiment-only | ROC-AUC | 0.482 | below 0.5 |
+| direction (5d) | **price/TA-only** | ROC-AUC | **0.543** | slight signal |
+| direction (5d) | price + sentiment | ROC-AUC | 0.534 | **worse than price alone** |
+| 5-level reaction | text-emb-only | QWK | −0.012 | ≈ 0 |
+| 5-level reaction | **price/TA-only** | QWK | **0.175** | real, weak signal |
+| 5-level reaction | text + price | QWK | 0.045 | **collapses vs price alone** |
+
+**Two conclusions, both important:**
+
+1. **Adding sentiment makes the model WORSE, not better** — direction 0.543 → 0.534, and
+   5-level QWK **0.175 → 0.045** (the 768-dim text embedding swamps the 14 price features:
+   textbook noise-feature degradation). So sentiment is not merely useless on its own — it
+   **actively dilutes** the signal price/TA already has. It carries **zero incremental
+   information** for 5-day price.
+2. **The only (faint) predictability in this data is TECHNICAL, not sentiment** — price/TA
+   -only is consistently above baseline across the 7 folds (direction AUC 0.543, 5-level QWK
+   0.175). Weak, but real and repeatable. This points back at the thesis's price/technical
+   and cross-sectional threads, not news.
+
+So the full verdict is stronger than §6 alone: news sentiment does not predict 5-day price
+for VCB/FPT/PNJ **on its own or as an add-on**, and what little signal exists comes from
+price technicals.
+
 ## 7. If continuing — the honest next moves
 
-1. **Text + price/TA together** (does sentiment add anything *on top of* price? probe 3a's
-   "all" set already hints no, but a like-for-like jump/direction ablation is cleaner).
+1. ~~Text + price/TA together (does sentiment add on top of price?)~~ **DONE — see §6a:**
+   it does not; adding sentiment makes it worse, and the only faint signal is price/TA.
 2. **Cross-sectional relative return**, not absolute price — the thesis's documented tradeable
    target (`project-cross-sectional-strategy`); needs many more tickers than 3.
 3. **More tickers** — the news scraper covers only 3; breadth is the biggest lever.
