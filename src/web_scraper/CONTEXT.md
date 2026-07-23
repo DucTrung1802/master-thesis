@@ -52,7 +52,8 @@ regenerated; delete it or restore the scraper rather than modelling on it.
 |---|---|---|
 | `price/`, `foreign/` | `cafef_scraper.py` | 781 tickers (HOSE+HNX+UPCOM) |
 | `order_stats/` | `cafef_scraper.py` | 777 tickers (HOSE+HNX+UPCOM) — full universe |
-| `prop_trading/`, `insider_txn/` | `cafef_scraper.py` | VN100 (HOSE) |
+| `prop_trading/` | `cafef_scraper.py` | 777 tickers queried (full universe); 431 have data, 350 have no prop-desk trades (history from ~2023) |
+| `insider_txn/` | `cafef_scraper.py` | VN100 (HOSE) |
 | `news/` | `cafef_news_scraper.py` | VCB, PNJ, FPT |
 | `pdfs/` | `cafef_pdf_scraper.py` | VCB, VIC + 50 tickers × 2025 (~6.7 GB) |
 | `financials/` | `cafef_financials.py` (§3a) | the 12 schemas + `templates.csv`; statements per template — **the only part of `raw_data/` that is TRACKED in git** (it is 0.3 MB and costs hours of OCR to rebuild) |
@@ -229,9 +230,10 @@ Each registers its own `SOURCE_NAME` and writes its own folder under `raw_data/c
   filters to those exchanges (default = all three); `scrape()` and every `scrape_all_*`
   take an `exchanges=` passthrough, so `scrape()` covers the full HOSE+HNX+UPCOM set and
   `scrape(exchanges=("HOSE",))` scopes to one. `skip_existing=True` means a full run only
-  scrapes what each tab is still missing (price/foreign/order_stats done across the full
-  777-ticker universe; prop_trading/insider_txn still VN100-only → ~681 tickers/tab
-  remaining for those two).
+  scrapes what each tab is still missing (price/foreign/order_stats/prop_trading done
+  across the full 777-ticker universe; insider_txn still VN100-only → ~681 tickers
+  remaining for that one). Note prop_trading only queried the full universe: 431 tickers
+  have data and 350 have no prop-desk trades (nothing written for those — history ~2023).
 
 ### CafeF PDFs — `cafef_pdf_scraper.py` (the filings themselves; requests, no PDF library)
 - **Why:** the filings are the PRIMARY source — CafeF's JSON financial API is a
