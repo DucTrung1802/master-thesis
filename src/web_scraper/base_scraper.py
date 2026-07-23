@@ -9,6 +9,7 @@ from utils.constants import (
     THREAD_MANAGER_POWER,
     SCRAPER_RETRY_ATTEMPTS,
     SCRAPER_RETRY_DELAY,
+    SCRAPER_MAX_WORKERS,
 )
 from thread_manager.thread_manager import ThreadManager
 
@@ -35,10 +36,13 @@ class BaseScraper(ABC):
         power: int = THREAD_MANAGER_POWER,
         retry_attempts: int = SCRAPER_RETRY_ATTEMPTS,
         retry_delay: float = SCRAPER_RETRY_DELAY,
+        max_workers: int = SCRAPER_MAX_WORKERS,
     ):
         self._logger = logger
         self._switch_handler = switch_handler
-        self._thread_manager = ThreadManager(logger=logger, power=power)
+        self._thread_manager = ThreadManager(
+            logger=logger, power=power, max_workers=max_workers
+        )
         self._retry_attempts = retry_attempts
         self._retry_delay = retry_delay
 

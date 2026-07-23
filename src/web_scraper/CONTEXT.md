@@ -51,7 +51,8 @@ regenerated; delete it or restore the scraper rather than modelling on it.
 | folder | written by | scope so far |
 |---|---|---|
 | `price/`, `foreign/` | `cafef_scraper.py` | 781 tickers (HOSE+HNX+UPCOM) |
-| `order_stats/`, `prop_trading/`, `insider_txn/` | `cafef_scraper.py` | VN100 (HOSE) |
+| `order_stats/` | `cafef_scraper.py` | 777 tickers (HOSE+HNX+UPCOM) — full universe |
+| `prop_trading/`, `insider_txn/` | `cafef_scraper.py` | VN100 (HOSE) |
 | `news/` | `cafef_news_scraper.py` | VCB, PNJ, FPT |
 | `pdfs/` | `cafef_pdf_scraper.py` | VCB, VIC + 50 tickers × 2025 (~6.7 GB) |
 | `financials/` | `cafef_financials.py` (§3a) | the 12 schemas + `templates.csv`; statements per template — **the only part of `raw_data/` that is TRACKED in git** (it is 0.3 MB and costs hours of OCR to rebuild) |
@@ -228,8 +229,9 @@ Each registers its own `SOURCE_NAME` and writes its own folder under `raw_data/c
   filters to those exchanges (default = all three); `scrape()` and every `scrape_all_*`
   take an `exchanges=` passthrough, so `scrape()` covers the full HOSE+HNX+UPCOM set and
   `scrape(exchanges=("HOSE",))` scopes to one. `skip_existing=True` means a full run only
-  scrapes what each tab is still missing (price/foreign done; order_stats/prop/insider
-  currently VN100-only → ~681 tickers/tab remaining).
+  scrapes what each tab is still missing (price/foreign/order_stats done across the full
+  777-ticker universe; prop_trading/insider_txn still VN100-only → ~681 tickers/tab
+  remaining for those two).
 
 ### CafeF PDFs — `cafef_pdf_scraper.py` (the filings themselves; requests, no PDF library)
 - **Why:** the filings are the PRIMARY source — CafeF's JSON financial API is a
@@ -503,12 +505,24 @@ Matches the bronze-source decision (memory `project-bronze-source-per-field`):
 ## 6. Shared infra it depends on (outside this dir)
 
 - `src/utils/constants.py` — all `SCRAPER_*` knobs (`SCRAPER_START_DATE` 2000-01-01,
-  `SCRAPER_END_DATE` 2026-04-30, retries 5×5s, 8 browsers, 8s nav stagger),
-  `*_RAW_DATA_DIR` paths, `TRADING_VIEW_TABLE_SCHEMA`, and
+  `SCRAPER_END_DATE` 2026-04-30, retries 5×5s, 8 browsers, 8s nav stagger,
+  `SCRAPER_MAX_WORKERS` 16), `*_RAW_DATA_DIR` paths, `TRADING_VIEW_TABLE_SCHEMA`, and
   `SIMPLIZE_GROUP_TO_GICS_SUB_INDUSTRY`.
 - `src/thread_manager/thread_manager.py` + `dtos/thread_manager_dtos/task.py` —
-  `Task(name, func, *args)` queued and run by `ThreadManager(power=%)`;
+  `Task(name, func, *args)` queued and run by `ThreadManager`;
   `task.run()` calls `func(*args)` directly (no lambda wrapper).
+  - **Thread-pool sizing.** `ThreadManager` takes an explicit `max_workers` that
+    pins the pool to exactly that many threads, falling back to the CPU-proportional
+    `power` formula only when `max_workers is None`. Every `BaseScraper` subclass
+    defaults `max_workers=SCRAPER_MAX_WORKERS` (16) — the right knob for these
+    I/O-bound (`requests`) scrapers, where the count is not tied to CPU cores. Pass
+    `CafeFScraper(logger, max_workers=N)` (or any scraper) to override per run.
+    NB the `power` path alone previously yielded a *fractional* worker count
+    (`cpu*power/100*0.4` → e.g. 2.4), so the pool ran ~2 threads regardless of the
+    machine; the explicit `max_workers` is what makes the thread count real and
+    predictable. TradingView is still separately capped at
+    `SCRAPER_MAX_CONCURRENT_BROWSERS` (8) browsers by its own semaphore, so a wider
+    pool there only deepens the task queue, it does not open more Chrome instances.
 - `src/utils/enums.py`, `src/utils/utils.py` — the `Country`/`StockType`/`Sector`/…
   enums and the `build_*_link_scrape_actions` / `format_key_for_{path,name}` helpers
   that TV imports via `from utils.* import *`.
