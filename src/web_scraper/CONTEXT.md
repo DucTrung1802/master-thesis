@@ -55,7 +55,7 @@ regenerated; delete it or restore the scraper rather than modelling on it.
 | `prop_trading/` | `cafef_scraper.py` | 777 tickers queried (full universe); 431 have data, 350 have no prop-desk trades (history from ~2023) |
 | `insider_txn/` | `cafef_scraper.py` | VN100 (HOSE) |
 | `news/` | `cafef_news_scraper.py` | VCB, PNJ, FPT |
-| `pdfs/` | `cafef_pdf_scraper.py` | VCB, VIC + 50 tickers × 2025 (~6.7 GB) |
+| `pdfs/` | `cafef_pdf_scraper.py` | all VN100 (100 tickers, all years) + 8 non-VN100 leftovers = 108 folders, ~97 GB |
 | `financials/` | `cafef_financials.py` (§3a) | the 12 schemas + `templates.csv`; statements per template — **the only part of `raw_data/` that is TRACKED in git** (it is 0.3 MB and costs hours of OCR to rebuild) |
 
 **Where the statement parser stands — VCB, Q3-2008 → Q1-2026 (71 quarters):**
@@ -272,8 +272,12 @@ Each registers its own `SOURCE_NAME` and writes its own folder under `raw_data/c
   - **Duplicate titles.** CafeF lists a re-uploaded filing under an *identical* name (VCB has
     two "BCTC hợp nhất quý 4 năm 2023"), which slugged to one filename and silently
     overwrote a document. Colliding names take a URL-hash suffix; unique names are untouched.
-- **Size:** ~1.7 GB for VCB (90% of its filings are page scans), ~0.65 GB for VIC. Budget
-  accordingly before pointing this at VN100.
+- **Size:** highly ticker-dependent — VCB is ~1.7 GB (90% of its filings are page scans),
+  VIC ~0.65 GB, but across the full VN100 the average is closer to ~1.0 GB/ticker. The whole
+  VN100 archive (all 100 tickers, all years) is **~97 GB** on disk. **Estimate before you
+  download:** the document-list API carries no size field, so sum each PDF's `Content-Length`
+  via a HEAD (or 1-byte ranged GET) — that predicted the VN100 pull to within 0.2% (47.6 GB
+  actual vs 47.7 GB estimated) without fetching a single file.
 
 ### CafeF news — `cafef_news_scraper.py` (company-news / disclosure event stream; requests)
 - A **point-in-time event feed**: headline counts, event flags, announcement dates and
@@ -541,7 +545,8 @@ Matches the bronze-source decision (memory `project-bronze-source-per-field`):
   `CafeFNewsScraper` and the whole PDF-reading pipeline (§3a) are registered and importable,
   but nothing drives them — `main.py` still runs only TradingView / CafeF / Simplize / GICS.
   Note `CafeFPdfScraper` must NOT be pointed at the full 777-ticker universe by default: the
-  archive is ~1.7 GB *per ticker*, so it takes a `symbols=` override.
+  archive averages ~1.0 GB *per ticker* (VN100 alone is ~97 GB), so it takes a `symbols=`
+  override — it is currently run for VN100 (all 100 tickers on disk).
 - **There are FOUR financial-statement schemas, not one** (bank / corp / securities /
   insurance) and they share no line items. Pick one by **fingerprinting the ticker**
   (`cafef_schema.detect_template`), never by its GICS sector or industry group — HVA sits in
