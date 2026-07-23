@@ -54,7 +54,7 @@ regenerated; delete it or restore the scraper rather than modelling on it.
 | `order_stats/` | `cafef_scraper.py` | 777 tickers (HOSE+HNX+UPCOM) — full universe |
 | `prop_trading/` | `cafef_scraper.py` | 777 tickers queried (full universe); 431 have data, 350 have no prop-desk trades (history from ~2023) |
 | `insider_txn/` | `cafef_scraper.py` | VN100 (HOSE) |
-| `news/` | `cafef_news_scraper.py` | VCB, PNJ, FPT |
+| `news/` | `cafef_news_scraper.py` | 777 tickers (full universe); ~405k rows, ~495 MB |
 | `pdfs/` | `cafef_pdf_scraper.py` | all VN100 (100 tickers, all years) + 8 non-VN100 leftovers = 108 folders, ~97 GB |
 | `financials/` | `cafef_financials.py` (§3a) | the 12 schemas + `templates.csv`; statements per template — **the only part of `raw_data/` that is TRACKED in git** (it is 0.3 MB and costs hours of OCR to rebuild) |
 
@@ -293,14 +293,18 @@ Each registers its own `SOURCE_NAME` and writes its own folder under `raw_data/c
   insider transactions, uncategorised).
 - **Output:** `raw_data/cafef/news/<EXCHANGE>_<SYMBOL>.csv`
   (`order, timestamp, type, headline, category, content, url, pdf_url`).
-  VCB 1,629 rows / PNJ 1,715 / FPT 2,255, spanning 2007 → 2026.
+  Now scraped for the **full 777-ticker universe** — ~405k rows, ~495 MB, spanning 2007 →
+  2026. Row count is very ticker-dependent: blue-chips run ~1,500-2,300 (VCB 1,629 / PNJ
+  1,715 / FPT 2,255), the small-cap tail ~100-800 (mean ~490).
 - **Gotchas:**
   - **`order` is numbered from the article's own `datePublished`, not from the headline
     feed's listing date.** The two disagree, and numbering by the listing left `order`
     claiming a chronology the timestamps did not have — which leaks look-ahead into anything
     keyed on it.
-  - Article bodies are the expensive stage (~1,600-2,300 per ticker) → fetched in parallel
-    with a polite per-worker delay. ~2 min/ticker, so VN100 is hours, not days.
+  - Article bodies are the expensive stage (blue-chips ~1,600-2,300 per ticker) → fetched in
+    parallel with a polite per-worker delay. The cost is TIME, not disk: the whole 777-ticker
+    universe ran in ~2 hours at **8 ticker-threads × 8 article-workers** (`max_workers=8`,
+    `ARTICLE_WORKERS=8`). Storage is tiny beside the PDFs — ~495 MB of text vs ~97 GB.
   - A dead link keeps its headline as `type=error` rather than dropping the row.
   - Headline text comes from the anchor's **inner text**; the `title=""` attribute breaks on
     the embedded quotes in legacy headlines.
@@ -529,6 +533,14 @@ Matches the bronze-source decision (memory `project-bronze-source-per-field`):
     predictable. TradingView is still separately capped at
     `SCRAPER_MAX_CONCURRENT_BROWSERS` (8) browsers by its own semaphore, so a wider
     pool there only deepens the task queue, it does not open more Chrome instances.
+    - Every scraper that overrides `__init__` (`CafeFScraper`, `CafeFPdfScraper`,
+      `CafeFNewsScraper`) now takes `max_workers` and forwards it to `super().__init__`
+      — omitting it there raised `TypeError: unexpected keyword argument 'max_workers'`
+      the moment a caller passed one (it bit the news run).
+    - **`CafeFNewsScraper` is TWO nested pools:** `max_workers` sets how many *tickers*
+      run at once, and a separate per-ticker `ThreadPoolExecutor(ARTICLE_WORKERS=8)`
+      fetches article bodies. Peak concurrent HTTP ≈ `max_workers × ARTICLE_WORKERS`
+      (e.g. 8×8 = 64), so raise the ticker pool cautiously — it multiplies.
 - `src/utils/enums.py`, `src/utils/utils.py` — the `Country`/`StockType`/`Sector`/…
   enums and the `build_*_link_scrape_actions` / `format_key_for_{path,name}` helpers
   that TV imports via `from utils.* import *`.
