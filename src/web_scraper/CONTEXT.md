@@ -398,9 +398,32 @@ the data rather than buried: **HVA** is filed under `chung-khoan-va-ngan-hang-da
     line is 113 chars, and it agrees with the line below it for its first ~100 — a shorter cap
     would truncate two different cash-flow lines onto one column name.
 - **`cafef_pdf_parser.py` — one filing → statements.** Two front-ends feed one row-builder:
-  the PDF's own text layer, or **Tesseract OCR** (`vie`) for the documents that have none —
+  the PDF's own text layer, or **OCR** (`vie`) for the documents that have none —
   **90% of VCB's filings are page scans, and not only the old ones** (its Q1-2026 report is 53
-  pages of image). Both return word boxes in the same coordinate system.
+  pages of image). Both return word boxes in the same coordinate system, via the single
+  `_ocr_page(page, native)` seam.
+  - **OCR engine is pluggable** (`OCR_ENGINE` / `CAFEF_OCR_ENGINE` env): `tesseract` (default,
+    CPU, the engine every reconciliation threshold was tuned against) or `easyocr` (CUDA/GPU,
+    `Reader(['vi'])`, a lazy process-wide singleton). **EasyOCR is built but NOT adopted:** it
+    reads the digits correctly (VCB balance-sheet totals came out digit-exact) but its
+    detection-box tokens fragment and vertically scatter differently from Tesseract's
+    layout-aware word boxes, so the tuned row-clustering (Y_TOL/EDGE_TOL) mis-groups dense
+    statements — cash flow collapsed to ~10 rows. Making it parity would need a fragment-
+    merging pre-pass + re-tuned tolerances + re-validation; until then Tesseract stays default.
+    Note the RTX 3050 gave ~5.3 s/page — GPU is not much faster here, so its only payoff would
+    be accuracy, not speed.
+  - **A page is OCR'd when its native text is too SHORT *or* GARBLED.** The old gate was
+    length-only ("< MIN_PAGE_TEXT chars ⇒ image ⇒ OCR"). But ACB's 2013-2015 filings embed a
+    **legacy-font text layer with a broken CMap**: `get_text()` returns 1700+ readable-length
+    chars that are pure mojibake — "LƯU CHUYỂN TIỀN" comes back as "LLFU CHUYttN T:亡N" — so the
+    length gate skipped OCR and the page classifier then matched nothing; the **cash-flow
+    statement vanished entirely** and the balance sheet parsed 5 rows of noise. `_native_garbled`
+    catches it: a broken CMap keeps the ascii letters but shreds every diacritic word into 1-2
+    char fragments, so the ≤2-char-token fraction spikes (real Vietnamese ~0.23, this mojibake
+    ~0.45; threshold 0.40). Recovered +6 ACB cash-flow quarters; generalises to any legacy-font
+    filing. It does NOT fix everything — some of those pages, once OCR'd, still fail on genuine
+    OCR-value corruption (a digit misread, or the PBT line not captured), which is correctly
+    left to the CafeF-tab fallback.
   - **Finding a statement's pages takes FOUR signals, because any one of them fails.** OCR
     mangles the form code's DIGITS — VCB's Q4-2021 balance sheet prints `Mẫu BU2/TCTD-HN`,
     `Mẫu Bữ2/TCTD-HN` and `Mẫu BUT/TCTD-HN` across its three pages (`0`→`U`/`ữ`, `5`→`S`,
@@ -431,6 +454,10 @@ the data rather than buried: **HVA** is filed under `chung-khoan-va-ngan-hang-da
   (preferring reviewed/audited), maps its rows onto the canonical schema, gates it, and writes
   a contiguous quarter grid — a quarter it could not read is a blank `source=missing` row,
   never zero-filled.
+  - **Snapshots to disk after EACH quarter** (atomic temp+rename), so a long OCR run's progress
+    is visible on disk and survives an interrupt. The mid-run snapshots are *progress views
+    only*: income statements are still cumulative (de-cumulated at the end) and CafeF-tab
+    fallback quarters are still absent, so **only the completed run's output is authoritative**.
 - **⚠️ ROWS ARE MAPPED ONTO THE SCHEMA, NOT KEYED ON OCR TEXT** (`map_to_schema`). Keyed on
   what OCR read, the same printed line becomes a *different column every quarter*: VCB's
   balance sheet produced **332 columns against a 90-column chart of accounts**, so nothing
@@ -445,6 +472,24 @@ the data rather than buried: **HVA** is filed under `chung-khoan-va-ngan-hang-da
     appears, in order, inside the second. At 0.72 total equity captured the grand total's
     column, the real grand total had nowhere to go, and **48 of 69 balance sheets** were
     rejected for "assets != liabilities + equity".
+  - **The current-period figure is the first POPULATED column, not literally `values[0]`**
+    (`Statement._first_value`, used by `find` / `map_to_schema` / `_anchor`). OCR sometimes
+    **over-segments the columns** — a left-hand note-reference number clusters as its own
+    spurious column — pushing the real value into index 1. ACB's Q2-2010 grand total parsed as
+    `[None, 176999825…, None, 167881047…, None]` (5 columns where there are 2); a strict
+    `values[0]` read it as empty and rejected the balance sheet for "no total assets" even
+    though the figure was correct. Taking the first non-None value is purely additive — when
+    column 0 is populated (the normal case) it returns exactly what `values[0]` did — and
+    recovered **+18 ACB balance sheets**.
+  - **The anchor re-match tolerates a heavily damaged label ONLY when it is near full length**
+    (`ANCHOR_MATCH_LONG` 0.80 gated on `ANCHOR_LEN_RATIO` 0.85, below the strict `ANCHOR_MATCH`
+    0.86). ACB's Q4-2014 grand total reads `tong_ng_pha_tra_va_von_chu_sd_hoij` (nợ→ng, phải→pha,
+    sở→sd, hữu→hoij), scoring 0.808 against the target — right, but under 0.86. The length gate
+    is what keeps this safe from the 0.80-threshold trap above: the false match (*TỔNG VỐN CHỦ
+    SỞ HỮU*) is **short** (58% of the target length, 0.73 ratio) and stays rejected, while the
+    real damaged total is **full length** (26/26 chars) and is accepted. Validated with zero
+    regression across VCB/ACB, but net effect on the full run is small — the balance sheets it
+    recovers in isolation often hit the magnitude guard (`sane`) instead.
   - **Reconciliation reads its subtotals from the CANONICAL columns**, not by searching OCR
     text. Searching the text is what most rejections actually were — the row was parsed, its
     figure correct, and the lookup simply could not recognise the name OCR had mangled.

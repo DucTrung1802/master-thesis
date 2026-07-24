@@ -16,6 +16,13 @@ TESSDATA_DIR = os.environ.get(
     "TESSDATA_PREFIX", os.path.join(os.environ.get("LOCALAPPDATA", ""), "tessdata"))
 OCR_LANG = "vie"
 
+# Which OCR engine backs the image-only pages. "tesseract" (default) is the CPU engine the
+# reconciliation thresholds were tuned against — unchanged, byte-identical behaviour. "easyocr"
+# is a CUDA/GPU alternative (see _ocr_page): it damages text differently, so it must be
+# re-validated against the known-good VCB output before it is trusted. Override via the
+# CAFEF_OCR_ENGINE env var.
+OCR_ENGINE = os.environ.get("CAFEF_OCR_ENGINE", "tesseract").lower()
+
 BALANCE_SHEET = "balance_sheet"
 INCOME_STATEMENT = "income_statement"
 CASH_FLOW = "cash_flow"
@@ -58,8 +65,22 @@ class Statement:
     # How close an OCR'd line name must be to count as the line we are looking for.
     NAME_MATCH = 0.85
 
+    @staticmethod
+    def _first_value(values: List[Optional[int]]) -> Optional[int]:
+        """The current-period figure = the FIRST populated column, not literally column 0.
+
+        Columns are left-to-right (current period first), so the leftmost non-None value is
+        the current period. It is NOT always index 0: OCR sometimes over-segments the columns
+        — the note-reference number on the left of the row can cluster as its own spurious
+        column, pushing the real value into index 1. ACB's Q2-2010 balance sheet parsed its
+        grand total as [None, 176999825…, None, 167881047…, None] — 5 columns where there are
+        2 — so a strict `values[0]` read it as empty and the statement was rejected for "no
+        total assets" even though the figure was parsed correctly.
+        """
+        return next((v for v in values if v is not None), None) if values else None
+
     def find(self, *needles: str) -> Optional[int]:
-        """First column-0 value on a row whose name is (or is close to) one of `needles`.
+        """The current-period value on a row whose name is (or is close to) one of `needles`.
 
         The match must tolerate OCR damage. The lines reconciliation depends on are exactly
         the ones it mangles — VCB's Q4-2021 balance sheet reads "TỔNG NỢ PHẢI TRẢ" as
@@ -75,16 +96,17 @@ class Statement:
 
         flat = [n.replace(" ", "").replace("_", "") for n in needles]
         for r in self.rows:
-            if not r.values or r.values[0] is None:
+            v0 = self._first_value(r.values)
+            if v0 is None:
                 continue
             k = r.key.replace("_", "")
             for n in flat:
                 if n in k:
-                    return r.values[0]
+                    return v0
                 w = len(n)
                 for i in range(0, max(1, len(k) - w + 1)):
                     if SequenceMatcher(None, n, k[i:i + w]).ratio() >= self.NAME_MATCH:
-                        return r.values[0]
+                        return v0
         return None
 
 
@@ -193,12 +215,32 @@ class PdfParser:
         if self._logger:
             self._logger.log_info(msg)
 
+    # EasyOCR's Reader is expensive to build (loads the detection+recognition models onto the
+    # GPU) and holds VRAM, so it is a process-wide singleton — built once, reused by every
+    # PdfParser and every page.
+    _easyocr_reader = None
+
     def _init_ocr(self) -> bool:
+        if OCR_ENGINE == "easyocr":
+            try:
+                import easyocr  # noqa: F401  (import-time check only)
+                return True
+            except Exception as e:
+                self._log(f"easyocr unavailable ({e}); OCR disabled")
+                return False
         if os.path.isdir(TESSERACT_DIR) and TESSERACT_DIR not in os.environ.get("PATH", ""):
             os.environ["PATH"] = TESSERACT_DIR + os.pathsep + os.environ.get("PATH", "")
         if TESSDATA_DIR:
             os.environ.setdefault("TESSDATA_PREFIX", TESSDATA_DIR)
         return os.path.isfile(os.path.join(TESSDATA_DIR, f"{OCR_LANG}.traineddata"))
+
+    @classmethod
+    def _easyocr(cls):
+        """Lazily build (once) and return the shared GPU EasyOCR reader."""
+        if cls._easyocr_reader is None:
+            import easyocr
+            cls._easyocr_reader = easyocr.Reader(["vi"], gpu=True, verbose=False)
+        return cls._easyocr_reader
 
     # ──────────────────────────────────────────────────────────────────────
     # Text helpers
@@ -302,6 +344,90 @@ class PdfParser:
             out.append((r.x0, r.y0, r.x1, r.y1) + tuple(w[4:]))
         return out
 
+    # Above this fraction of ≤2-char alphabetic tokens, a native text layer is legacy-font
+    # MOJIBAKE, not Vietnamese. A broken CMap leaves the ascii letters but shreds every
+    # diacritic word into fragments — "LƯU CHUYỂN TIỀN" → "llfu chuyttn t n" — so the token
+    # stream fills with 1-2 char junk ("th ng m ci a ni n t n tu"). Real Vietnamese runs ~0.23
+    # short-token fraction (co, a, te, do, i…); ACB's mojibake pages run ~0.51. 0.40 splits them.
+    GARBLED_SHORT_FRAC = 0.40
+
+    def _native_garbled(self, native: str) -> bool:
+        """True when a non-trivial native text layer is legacy-font mojibake and must be OCR'd.
+
+        ACB's 2013-2015 filings embed a broken-encoding text layer: get_text() returns 1770+
+        readable-length chars that are pure junk ("BAo cAo LLFU CHUYttN T:亡N TE"), so the
+        length gate skips OCR and the page classifier then matches nothing — the cash-flow
+        statement vanished entirely and the balance sheet parsed 5 rows of noise. The tell is
+        the flood of shredded-diacritic fragments, measured as the ≤2-char-token fraction.
+        """
+        ns = self.norm(native).replace(" ", "")
+        if len(ns) < self.MIN_PAGE_TEXT:
+            return False            # too little text to judge; the length gate handles it
+        toks = [t for t in self.norm(native).split() if not t.isdigit()]
+        if len(toks) < 20:
+            return False            # too few words to trust the ratio
+        short = sum(1 for t in toks if len(t) <= 2)
+        return short / len(toks) >= self.GARBLED_SHORT_FRAC
+
+    def _ocr_page(self, page, native: str):
+        """(text, words) for one page, words in VISUAL pdf-point space.
+
+        Single seam for both OCR engines. When the page has a usable native text layer it is
+        used as-is (no OCR). A page is OCR'd when its native text is too SHORT (an image page)
+        OR present-but-GARBLED (a legacy-font mojibake text layer — see _native_garbled).
+        Otherwise the configured engine reads the rasterised page:
+
+          * tesseract — PyMuPDF's get_textpage_ocr, then _to_visual to undo the /Rotate 180
+            box mirroring (the engine reads an upright raster but returns unrotated boxes).
+          * easyocr    — rasterise the page in its VISUAL (already-rotated) space and OCR the
+            pixels; boxes come back in pixel space of the upright image, so scaling them by
+            72/DPI yields visual pdf-points directly — no _to_visual needed.
+
+        Returns word tuples shaped like PyMuPDF's "words": (x0,y0,x1,y1, word, b, l, n).
+        """
+        need_ocr = self.ocr_ready and (
+            len(native.strip()) < self.MIN_PAGE_TEXT or self._native_garbled(native))
+        if not need_ocr:
+            return native, page.get_text("words")
+
+        if OCR_ENGINE == "easyocr":
+            return self._ocr_page_easyocr(page)
+
+        tp = page.get_textpage_ocr(language=OCR_LANG, dpi=self.OCR_DPI, full=True,
+                                   tessdata=TESSDATA_DIR)
+        text = page.get_text(textpage=tp)
+        words = self._to_visual(page, page.get_text("words", textpage=tp))
+        return text, words
+
+    def _ocr_page_easyocr(self, page):
+        """Rasterise the visual page and OCR it with EasyOCR → (text, words) in pdf-points."""
+        import fitz
+        import numpy as np
+
+        scale = self.OCR_DPI / 72.0
+        # matrix carries the page rotation, so the raster is UPRIGHT (visual) — boxes then
+        # need no un-mirroring.
+        pix = page.get_pixmap(matrix=fitz.Matrix(scale, scale).prerotate(page.rotation),
+                              colorspace=fitz.csGRAY)
+        img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width)
+
+        # detail=1 → (box, text, conf); paragraph=False keeps one entry per word-ish token so
+        # the downstream right-edge column clustering still has individual boxes to work with.
+        results = self._easyocr().readtext(img, detail=1, paragraph=False)
+
+        words, lines = [], []
+        for i, (box, txt, conf) in enumerate(results):
+            if not txt or not txt.strip():
+                continue
+            xs = [p[0] for p in box]
+            ys = [p[1] for p in box]
+            # pixel → pdf-point (divide by the raster scale)
+            x0, y0 = min(xs) / scale, min(ys) / scale
+            x1, y1 = max(xs) / scale, max(ys) / scale
+            words.append((x0, y0, x1, y1, txt.strip(), 0, 0, i))
+            lines.append(txt.strip())
+        return " ".join(lines), words
+
     def scan(self, doc) -> Dict[int, dict]:
         """Read each page ONCE — OCR only the pages that need it — and cache text + words."""
         pages: Dict[int, dict] = {}
@@ -317,13 +443,7 @@ class PdfParser:
             # Decide PER PAGE, not per document: some filings are mixed, with a text layer in
             # the notes and image-only statement pages.
             native = page.get_text()
-            need_ocr = self.ocr_ready and len(native.strip()) < self.MIN_PAGE_TEXT
-            tp = (page.get_textpage_ocr(language=OCR_LANG, dpi=self.OCR_DPI, full=True,
-                                        tessdata=TESSDATA_DIR) if need_ocr else None)
-            text = page.get_text(textpage=tp) if tp else native
-            words = page.get_text("words", textpage=tp) if tp else page.get_text("words")
-            if tp:
-                words = self._to_visual(page, words)
+            text, words = self._ocr_page(page, native)
 
             kind, from_form = self._page_kind(text)
             pages[i] = {"text": text, "words": words, "kind": kind,
@@ -564,18 +684,12 @@ class PdfParser:
             except Exception:
                 continue
             native = page.get_text()
-            need_ocr = self.ocr_ready and len(native.strip()) < self.MIN_PAGE_TEXT
-            tp = (page.get_textpage_ocr(language=OCR_LANG, dpi=self.OCR_DPI, full=True,
-                                        tessdata=TESSDATA_DIR) if need_ocr else None)
-            text = page.get_text(textpage=tp) if tp else native
+            text, words = self._ocr_page(page, native)
             ns = self.norm(text).replace(" ", "")
             # a coarse gate first: the note names the bank's own issued shares
             if anchor not in ns and "cophieudaphathanh" not in ns:
                 continue
 
-            words = page.get_text("words", textpage=tp) if tp else page.get_text("words")
-            if tp:
-                words = self._to_visual(page, words)
             lines: Dict[float, list] = {}
             for w in words:
                 k = next((k for k in lines if abs(k - w[1]) <= self.Y_TOL), w[1])
@@ -674,13 +788,10 @@ class PdfParser:
             except Exception:
                 continue
             native = page.get_text()
-            if self.ocr_ready and len(native.strip()) < self.MIN_PAGE_TEXT:
-                try:
-                    tp = page.get_textpage_ocr(language=OCR_LANG, dpi=self.OCR_DPI,
-                                               full=True, tessdata=TESSDATA_DIR)
-                    native = page.get_text(textpage=tp)
-                except Exception:
-                    continue
+            try:
+                native, _ = self._ocr_page(page, native)
+            except Exception:
+                continue
             pages[i] = {"text": native}
         return self.publish_date(pages, period_end)
 

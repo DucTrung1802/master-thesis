@@ -310,7 +310,13 @@ class FinancialsBuilder:
         out: Dict[str, int] = {}
         i = 0                                   # next schema line still open
         for row in st.rows:
-            if row.values[0] is None:
+            # The current-period figure is the first POPULATED column, not literally index 0:
+            # OCR can over-segment the columns (a left-hand note-reference number clustering as
+            # its own spurious column) and push the real value into index 1 — ACB's Q2-2010
+            # grand total parsed as [None, 176999825…, None, …]. A strict values[0] read it as
+            # empty, dropped it, and the balance sheet was rejected for "no total assets".
+            val = st._first_value(row.values)
+            if val is None:
                 continue
             key = row.key.replace("_", "")
             if not key:
@@ -328,7 +334,7 @@ class FinancialsBuilder:
                 if r > best:
                     best_j, best = j, r
             if best_j >= 0 and best >= self.SCHEMA_MATCH:
-                out[schema[best_j][0]] = row.values[0]
+                out[schema[best_j][0]] = val
                 i = best_j + 1                  # never match backwards
 
         self._anchor(out, schema, st)
@@ -342,6 +348,15 @@ class FinancialsBuilder:
                "hdtc_iv_luu_chuyen_tien_thuan_trong_ky",
                "hdtc_vii_tien_va_cac_khoan_tuong_duong_tien_tai_thoi_diem_cuoi_ky")
     ANCHOR_MATCH = 0.86      # stricter than the ordered pass: this one has no order to lean on
+    # A heavily OCR-damaged anchor label can fall just under ANCHOR_MATCH while still being the
+    # right line — ACB's Q4-2014 grand total reads "tong_ng_pha_tra_va_von_chu_sd_hoij" (nợ->ng,
+    # phải->pha, sở->sd, hữu->hoij), scoring 0.808 against "tong no phai tra va von chu so huu".
+    # It is accepted ONLY when the damaged label is nearly the FULL LENGTH of the target — which
+    # is exactly what separates it from the documented false match: "tong von chu so huu" (total
+    # EQUITY) scores 0.73 at 58% of the length, and plain equity 0.60 at 42%. A short label
+    # scoring high against a long one is a coincidence; a full-length one is the line itself.
+    ANCHOR_MATCH_LONG = 0.80      # relaxed floor, gated on the length ratio below
+    ANCHOR_LEN_RATIO = 0.85       # damaged label must be >= this fraction of the target length
 
     def _anchor(self, out: Dict[str, int], schema: List[Tuple[str, str]],
                 st: Statement) -> None:
@@ -357,17 +372,25 @@ class FinancialsBuilder:
 
         accounts = {c: a.replace("_", "") for c, a in schema if c in self.ANCHORS}
         for col, a in accounts.items():
-            best_v, best = None, 0.0
+            best_v, best, best_len = None, 0.0, 0.0
             for row in st.rows:
-                if row.values[0] is None:
+                # first populated column = current period (see map_to_schema / _first_value):
+                # an over-segmented grand-total row has its figure in index 1, not 0.
+                val = st._first_value(row.values)
+                if val is None:
                     continue
                 k = row.key.replace("_", "")
                 r = SequenceMatcher(None, a, k).ratio()
                 if len(a) >= self.MIN_CONTAINS and (a in k or k in a):
                     r = max(r, 0.95)
                 if r > best:
-                    best_v, best = row.values[0], r
-            if best_v is not None and best >= self.ANCHOR_MATCH:
+                    # length ratio guards the relaxed floor: how much of the target the OCR'd
+                    # label actually spans (min/max so a too-long label is penalised too).
+                    best_v, best = val, r
+                    best_len = min(len(a), len(k)) / max(len(a), len(k))
+            accept = best >= self.ANCHOR_MATCH or (
+                best >= self.ANCHOR_MATCH_LONG and best_len >= self.ANCHOR_LEN_RATIO)
+            if best_v is not None and accept:
                 out[col] = best_v
 
     SCHEMA_WINDOW = 25       # how far ahead in the chart of accounts a line may be found
@@ -521,7 +544,7 @@ class FinancialsBuilder:
         # publish date. {period: {shares_authorized, shares_issued, shares_outstanding}}.
         shares: Dict[str, Dict[str, Optional[int]]] = {}
 
-        for d in docs:
+        for di, d in enumerate(docs):
             period = d["period"]
             # both a semi-annual and an annual report print a CUMULATIVE income statement
             half_year[period] = (d["half_year"] == "True"
@@ -580,6 +603,19 @@ class FinancialsBuilder:
                     history[report].append(v)
                 notes.append(f"{report}={len(row)} items")
             self._log(f"  {period:<8} {'; '.join(notes)}")
+
+            # Snapshot to disk after each quarter so progress is visible and survives an
+            # interrupted run — the atomic temp+rename write makes each snapshot safe to read.
+            # This is a PROGRESS snapshot only: income statements are still cumulative here
+            # (they are de-cumulated below), and the CafeF-tab fallback has not run yet, so
+            # quarters no PDF could produce are absent until the final write. `attempted` counts
+            # every document seen so far so a failed quarter shows as `missing`, not vanished.
+            attempted_so_far = [(int(dd["year"]), int(dd["quarter"]))
+                                for dd in docs[:di + 1]]
+            attempted_so_far += [(int(p.split("-")[1]), int(p[1]))
+                                 for r in REPORTS for p in data[r]]
+            self._write(exchange, symbol, data, items, meta, attempted_so_far, template,
+                        published, assurance, shares)
 
         self._decumulate(data, half_year)
 
