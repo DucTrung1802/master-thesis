@@ -16,6 +16,13 @@ TESSDATA_DIR = os.environ.get(
     "TESSDATA_PREFIX", os.path.join(os.environ.get("LOCALAPPDATA", ""), "tessdata"))
 OCR_LANG = "vie"
 
+# Which OCR engine backs the image-only pages. "tesseract" (default) is the CPU engine the
+# reconciliation thresholds were tuned against — unchanged, byte-identical behaviour. "easyocr"
+# is a CUDA/GPU alternative (see _ocr_page): it damages text differently, so it must be
+# re-validated against the known-good VCB output before it is trusted. Override via the
+# CAFEF_OCR_ENGINE env var.
+OCR_ENGINE = os.environ.get("CAFEF_OCR_ENGINE", "tesseract").lower()
+
 BALANCE_SHEET = "balance_sheet"
 INCOME_STATEMENT = "income_statement"
 CASH_FLOW = "cash_flow"
@@ -40,6 +47,11 @@ class Statement:
     n_columns: int
     rows: List[Row] = field(default_factory=list)
     publish_date: str = ""          # ISO; the day the filing was signed off
+    # Share capital, read from the "Vốn cổ phần" note, not from any statement — a per-document
+    # fact like publish_date, so all three statements of a filing carry the same numbers.
+    shares_authorized: Optional[int] = None    # "Vốn cổ phần theo giấy phép"
+    shares_issued: Optional[int] = None        # "Cổ phiếu đã phát hành" (published)
+    shares_outstanding: Optional[int] = None   # "Cổ phiếu đang lưu hành"
 
     @property
     def cash_flow_method(self) -> Optional[str]:
@@ -53,8 +65,22 @@ class Statement:
     # How close an OCR'd line name must be to count as the line we are looking for.
     NAME_MATCH = 0.85
 
+    @staticmethod
+    def _first_value(values: List[Optional[int]]) -> Optional[int]:
+        """The current-period figure = the FIRST populated column, not literally column 0.
+
+        Columns are left-to-right (current period first), so the leftmost non-None value is
+        the current period. It is NOT always index 0: OCR sometimes over-segments the columns
+        — the note-reference number on the left of the row can cluster as its own spurious
+        column, pushing the real value into index 1. ACB's Q2-2010 balance sheet parsed its
+        grand total as [None, 176999825…, None, 167881047…, None] — 5 columns where there are
+        2 — so a strict `values[0]` read it as empty and the statement was rejected for "no
+        total assets" even though the figure was parsed correctly.
+        """
+        return next((v for v in values if v is not None), None) if values else None
+
     def find(self, *needles: str) -> Optional[int]:
-        """First column-0 value on a row whose name is (or is close to) one of `needles`.
+        """The current-period value on a row whose name is (or is close to) one of `needles`.
 
         The match must tolerate OCR damage. The lines reconciliation depends on are exactly
         the ones it mangles — VCB's Q4-2021 balance sheet reads "TỔNG NỢ PHẢI TRẢ" as
@@ -70,16 +96,17 @@ class Statement:
 
         flat = [n.replace(" ", "").replace("_", "") for n in needles]
         for r in self.rows:
-            if not r.values or r.values[0] is None:
+            v0 = self._first_value(r.values)
+            if v0 is None:
                 continue
             k = r.key.replace("_", "")
             for n in flat:
                 if n in k:
-                    return r.values[0]
+                    return v0
                 w = len(n)
                 for i in range(0, max(1, len(k) - w + 1)):
                     if SequenceMatcher(None, n, k[i:i + w]).ratio() >= self.NAME_MATCH:
-                        return r.values[0]
+                        return v0
         return None
 
 
@@ -188,12 +215,32 @@ class PdfParser:
         if self._logger:
             self._logger.log_info(msg)
 
+    # EasyOCR's Reader is expensive to build (loads the detection+recognition models onto the
+    # GPU) and holds VRAM, so it is a process-wide singleton — built once, reused by every
+    # PdfParser and every page.
+    _easyocr_reader = None
+
     def _init_ocr(self) -> bool:
+        if OCR_ENGINE == "easyocr":
+            try:
+                import easyocr  # noqa: F401  (import-time check only)
+                return True
+            except Exception as e:
+                self._log(f"easyocr unavailable ({e}); OCR disabled")
+                return False
         if os.path.isdir(TESSERACT_DIR) and TESSERACT_DIR not in os.environ.get("PATH", ""):
             os.environ["PATH"] = TESSERACT_DIR + os.pathsep + os.environ.get("PATH", "")
         if TESSDATA_DIR:
             os.environ.setdefault("TESSDATA_PREFIX", TESSDATA_DIR)
         return os.path.isfile(os.path.join(TESSDATA_DIR, f"{OCR_LANG}.traineddata"))
+
+    @classmethod
+    def _easyocr(cls):
+        """Lazily build (once) and return the shared GPU EasyOCR reader."""
+        if cls._easyocr_reader is None:
+            import easyocr
+            cls._easyocr_reader = easyocr.Reader(["vi"], gpu=True, verbose=False)
+        return cls._easyocr_reader
 
     # ──────────────────────────────────────────────────────────────────────
     # Text helpers
@@ -297,6 +344,90 @@ class PdfParser:
             out.append((r.x0, r.y0, r.x1, r.y1) + tuple(w[4:]))
         return out
 
+    # Above this fraction of ≤2-char alphabetic tokens, a native text layer is legacy-font
+    # MOJIBAKE, not Vietnamese. A broken CMap leaves the ascii letters but shreds every
+    # diacritic word into fragments — "LƯU CHUYỂN TIỀN" → "llfu chuyttn t n" — so the token
+    # stream fills with 1-2 char junk ("th ng m ci a ni n t n tu"). Real Vietnamese runs ~0.23
+    # short-token fraction (co, a, te, do, i…); ACB's mojibake pages run ~0.51. 0.40 splits them.
+    GARBLED_SHORT_FRAC = 0.40
+
+    def _native_garbled(self, native: str) -> bool:
+        """True when a non-trivial native text layer is legacy-font mojibake and must be OCR'd.
+
+        ACB's 2013-2015 filings embed a broken-encoding text layer: get_text() returns 1770+
+        readable-length chars that are pure junk ("BAo cAo LLFU CHUYttN T:亡N TE"), so the
+        length gate skips OCR and the page classifier then matches nothing — the cash-flow
+        statement vanished entirely and the balance sheet parsed 5 rows of noise. The tell is
+        the flood of shredded-diacritic fragments, measured as the ≤2-char-token fraction.
+        """
+        ns = self.norm(native).replace(" ", "")
+        if len(ns) < self.MIN_PAGE_TEXT:
+            return False            # too little text to judge; the length gate handles it
+        toks = [t for t in self.norm(native).split() if not t.isdigit()]
+        if len(toks) < 20:
+            return False            # too few words to trust the ratio
+        short = sum(1 for t in toks if len(t) <= 2)
+        return short / len(toks) >= self.GARBLED_SHORT_FRAC
+
+    def _ocr_page(self, page, native: str):
+        """(text, words) for one page, words in VISUAL pdf-point space.
+
+        Single seam for both OCR engines. When the page has a usable native text layer it is
+        used as-is (no OCR). A page is OCR'd when its native text is too SHORT (an image page)
+        OR present-but-GARBLED (a legacy-font mojibake text layer — see _native_garbled).
+        Otherwise the configured engine reads the rasterised page:
+
+          * tesseract — PyMuPDF's get_textpage_ocr, then _to_visual to undo the /Rotate 180
+            box mirroring (the engine reads an upright raster but returns unrotated boxes).
+          * easyocr    — rasterise the page in its VISUAL (already-rotated) space and OCR the
+            pixels; boxes come back in pixel space of the upright image, so scaling them by
+            72/DPI yields visual pdf-points directly — no _to_visual needed.
+
+        Returns word tuples shaped like PyMuPDF's "words": (x0,y0,x1,y1, word, b, l, n).
+        """
+        need_ocr = self.ocr_ready and (
+            len(native.strip()) < self.MIN_PAGE_TEXT or self._native_garbled(native))
+        if not need_ocr:
+            return native, page.get_text("words")
+
+        if OCR_ENGINE == "easyocr":
+            return self._ocr_page_easyocr(page)
+
+        tp = page.get_textpage_ocr(language=OCR_LANG, dpi=self.OCR_DPI, full=True,
+                                   tessdata=TESSDATA_DIR)
+        text = page.get_text(textpage=tp)
+        words = self._to_visual(page, page.get_text("words", textpage=tp))
+        return text, words
+
+    def _ocr_page_easyocr(self, page):
+        """Rasterise the visual page and OCR it with EasyOCR → (text, words) in pdf-points."""
+        import fitz
+        import numpy as np
+
+        scale = self.OCR_DPI / 72.0
+        # matrix carries the page rotation, so the raster is UPRIGHT (visual) — boxes then
+        # need no un-mirroring.
+        pix = page.get_pixmap(matrix=fitz.Matrix(scale, scale).prerotate(page.rotation),
+                              colorspace=fitz.csGRAY)
+        img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width)
+
+        # detail=1 → (box, text, conf); paragraph=False keeps one entry per word-ish token so
+        # the downstream right-edge column clustering still has individual boxes to work with.
+        results = self._easyocr().readtext(img, detail=1, paragraph=False)
+
+        words, lines = [], []
+        for i, (box, txt, conf) in enumerate(results):
+            if not txt or not txt.strip():
+                continue
+            xs = [p[0] for p in box]
+            ys = [p[1] for p in box]
+            # pixel → pdf-point (divide by the raster scale)
+            x0, y0 = min(xs) / scale, min(ys) / scale
+            x1, y1 = max(xs) / scale, max(ys) / scale
+            words.append((x0, y0, x1, y1, txt.strip(), 0, 0, i))
+            lines.append(txt.strip())
+        return " ".join(lines), words
+
     def scan(self, doc) -> Dict[int, dict]:
         """Read each page ONCE — OCR only the pages that need it — and cache text + words."""
         pages: Dict[int, dict] = {}
@@ -312,13 +443,7 @@ class PdfParser:
             # Decide PER PAGE, not per document: some filings are mixed, with a text layer in
             # the notes and image-only statement pages.
             native = page.get_text()
-            need_ocr = self.ocr_ready and len(native.strip()) < self.MIN_PAGE_TEXT
-            tp = (page.get_textpage_ocr(language=OCR_LANG, dpi=self.OCR_DPI, full=True,
-                                        tessdata=TESSDATA_DIR) if need_ocr else None)
-            text = page.get_text(textpage=tp) if tp else native
-            words = page.get_text("words", textpage=tp) if tp else page.get_text("words")
-            if tp:
-                words = self._to_visual(page, words)
+            text, words = self._ocr_page(page, native)
 
             kind, from_form = self._page_kind(text)
             pages[i] = {"text": text, "words": words, "kind": kind,
@@ -516,6 +641,109 @@ class PdfParser:
         return 1
 
     # ──────────────────────────────────────────────────────────────────────
+    # Share capital (from the notes, not a statement)
+    # ──────────────────────────────────────────────────────────────────────
+
+    # The three lines of the "Vốn cổ phần đã được duyệt và đã phát hành" note, ascii-normalised
+    # (norm() strips accents and collapses spaces). Matched fuzzily because the note is deep in
+    # the scanned notes section, where the TCVN3-font text layer garbles worst: "đang lưu hành"
+    # comes through as "llfll hanh". "đã phát hành" survives cleanly and is the anchor for the
+    # published count; par-value ("mệnh giá") pins the note so a stray big number elsewhere on
+    # the page is not mistaken for a share count.
+    SHARE_LABELS = {
+        "shares_authorized": "von co phan theo giay phep",
+        "shares_issued": "co phieu da phat hanh",
+        "shares_outstanding": "co phieu dang luu hanh",
+    }
+    SHARE_NOTE_ANCHOR = "phat hanh cua ngan hang"    # the note's own header tail, survives OCR
+    SHARE_LABEL_MATCH = 0.80        # fuzzy floor for a garbled row label
+    MIN_SHARE_COUNT = 1_000_000     # a share count is a big integer; smaller values are the
+    #                                 million-đồng capital column beside it, not the count
+    MAX_SHARE_COUNT = 100_000_000_000   # …and an upper bound: no Vietnamese listing has 100bn
+    #   shares. A value above this is two RIGHT-aligned columns OCR merged into one token
+    #   ("2665020334826650203" = the share count and the đồng column with no space between), so
+    #   it is rejected rather than written as a nonsense count.
+
+    def share_capital(self, doc, after: int = 0) -> Dict[str, Optional[int]]:
+        """Read {authorized, issued, outstanding} share counts from the capital note.
+
+        The note lives in the NOTES section, past the three statements, so scan() never reaches
+        it. It is scanned here directly, starting just after the last statement page (`after`)
+        and stopping at the first page that carries it — one OCR'd page, not the whole tail.
+
+        The share count is the leftmost (current-period) big integer on each labelled row;
+        the columns to its right are the prior period and the đồng-value columns.
+        """
+        from difflib import SequenceMatcher
+
+        out: Dict[str, Optional[int]] = {k: None for k in self.SHARE_LABELS}
+        anchor = self.SHARE_NOTE_ANCHOR.replace(" ", "")
+        for i in range(after, doc.page_count):
+            try:
+                page = doc.load_page(i)
+            except Exception:
+                continue
+            native = page.get_text()
+            text, words = self._ocr_page(page, native)
+            ns = self.norm(text).replace(" ", "")
+            # a coarse gate first: the note names the bank's own issued shares
+            if anchor not in ns and "cophieudaphathanh" not in ns:
+                continue
+
+            lines: Dict[float, list] = {}
+            for w in words:
+                k = next((k for k in lines if abs(k - w[1]) <= self.Y_TOL), w[1])
+                lines.setdefault(k, []).append(w)
+            ys = sorted(lines)
+
+            def first_count(ws: list) -> Optional[int]:
+                for w in sorted(ws, key=lambda w: w[0]):
+                    v = self.parse_num(w[4]) if self.NUM_RE.match(w[4]) else None
+                    if v is not None and self.MIN_SHARE_COUNT <= abs(v) <= self.MAX_SHARE_COUNT:
+                        return v
+                return None
+
+            for field_name, label in self.SHARE_LABELS.items():
+                flat = label.replace(" ", "")
+                for idx, y in enumerate(ys):
+                    lab = self.norm(
+                        " ".join(w[4] for w in sorted(lines[y], key=lambda w: w[0]))
+                    ).replace(" ", "")
+                    if not lab:
+                        continue
+                    # slide the label along the line so leading numbering/noise doesn't defeat it
+                    hit = flat in lab
+                    if not hit:
+                        w_ = len(flat)
+                        for j in range(0, max(1, len(lab) - w_ + 1)):
+                            if SequenceMatcher(None, flat, lab[j:j + w_]).ratio() >= \
+                                    self.SHARE_LABEL_MATCH:
+                                hit = True
+                                break
+                    if not hit:
+                        continue
+                    # the count is on this line, or the next value-bearing line (the "issued"
+                    # heading sits above a "Cổ phiếu phổ thông" line that carries the figures)
+                    v = first_count(lines[y])
+                    if v is None:
+                        for yy in ys[idx + 1:idx + 3]:
+                            v = first_count(lines[yy])
+                            if v is not None:
+                                break
+                    if v is not None:
+                        out[field_name] = v
+                    break
+
+            # outstanding often garbles below the fuzzy floor ("llfll hanh"); when the note was
+            # found and issued read but outstanding did not, they are equal for a company with no
+            # treasury shares — which VCB is — so fall back to the issued count.
+            if out["shares_issued"] is not None and out["shares_outstanding"] is None:
+                out["shares_outstanding"] = out["shares_issued"]
+            if any(v is not None for v in out.values()):
+                return out
+        return out
+
+    # ──────────────────────────────────────────────────────────────────────
     # Entry point
     # ──────────────────────────────────────────────────────────────────────
 
@@ -560,13 +788,10 @@ class PdfParser:
             except Exception:
                 continue
             native = page.get_text()
-            if self.ocr_ready and len(native.strip()) < self.MIN_PAGE_TEXT:
-                try:
-                    tp = page.get_textpage_ocr(language=OCR_LANG, dpi=self.OCR_DPI,
-                                               full=True, tessdata=TESSDATA_DIR)
-                    native = page.get_text(textpage=tp)
-                except Exception:
-                    continue
+            try:
+                native, _ = self._ocr_page(page, native)
+            except Exception:
+                continue
             pages[i] = {"text": native}
         return self.publish_date(pages, period_end)
 
@@ -584,6 +809,11 @@ class PdfParser:
             pages = self.scan(doc)
             published = (self.publish_date(pages, period_end)
                          or self._tail_date(doc, period_end))
+            # The share-capital note sits in the notes, past the last statement page. Scan from
+            # there so we OCR one note page, not the whole tail. A per-document fact, shared by
+            # all three statements — like publish_date.
+            last_stmt = max((i for i, p in pages.items() if p["kind"] in REPORTS), default=-1)
+            shares = self.share_capital(doc, after=last_stmt + 1)
             out: Dict[str, Statement] = {}
             for report in REPORTS:
                 on = sorted(i for i, p in pages.items() if p["kind"] == report)
@@ -601,7 +831,10 @@ class PdfParser:
                     r.values = [None if v is None else v * unit for v in r.values]
                 out[report] = Statement(report=report, pages=[i + 1 for i in on],
                                         unit=unit, n_columns=len(columns), rows=rows,
-                                        publish_date=published)
+                                        publish_date=published,
+                                        shares_authorized=shares["shares_authorized"],
+                                        shares_issued=shares["shares_issued"],
+                                        shares_outstanding=shares["shares_outstanding"])
             return out
         finally:
             doc.close()

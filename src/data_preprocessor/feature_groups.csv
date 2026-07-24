@@ -1,0 +1,12 @@
+feature_group,bronze_table
+"Price & traded volume (OHLC, matched/negotiated split, raw vs adj close)",cafef_price
+"Order-placement statistics (buy vs sell order counts, volume, avg/order)",cafef_order_stats
+"Foreign-investor flow (buy/sell/net vol+val, room, ownership %)",cafef_foreign
+"Proprietary-desk trades (brokers' own-account buy/sell vol+val)",cafef_prop_trading
+"Insider & major-shareholder transactions (registered vs executed)",cafef_insider_shareholder_transactions
+"News & disclosure events (headline, body, type, category, filing link)",cafef_news
+"Fundamentals — balance sheet",cafef_financials_<template>_balance_sheet
+"Fundamentals — income statement",cafef_financials_<template>_income_statement
+"Fundamentals — cash flow",cafef_financials_<template>_cash_flow
+"Fundamentals — filing metadata (publish_date, source, assurance)",cafef_financial_reports
+"Industry / GICS classification",simplize_industry (x gics)

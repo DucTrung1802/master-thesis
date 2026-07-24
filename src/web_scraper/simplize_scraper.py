@@ -51,19 +51,36 @@ class SimplizeScraper(BaseScraper):
     # 50 industry groups, accurate per ticker — the source for GICS classification.
     INDUSTRY_BASE = "https://api.simplize.vn/api/company/summary"
     INDUSTRY_COLUMNS = [
-        "exchange", "ticker", "industry_activity",
-        "economic_sector_id", "economic_sector_slug", "economic_sector_name",
-        "industry_group_id", "industry_group_code", "industry_group_slug",
+        "exchange",
+        "ticker",
+        "industry_activity",
+        "economic_sector_id",
+        "economic_sector_slug",
+        "economic_sector_name",
+        "industry_group_id",
+        "industry_group_code",
+        "industry_group_slug",
         "industry_group_type",
     ]
 
     OUTPUT_COLUMNS = [
-        "date", "exchange", "symbol",
-        "open", "high", "low", "close",
-        "net_change", "pct_change", "volume",
+        "date",
+        "exchange",
+        "symbol",
+        "open",
+        "high",
+        "low",
+        "close",
+        "net_change",
+        "percentage_change",
+        "volume",
         "foreign_room",
-        "f_buy_vol", "f_sell_vol", "f_net_vol",
-        "f_buy_val", "f_sell_val", "f_net_val",
+        "foreign_buy_volume",
+        "foreign_sell_volume",
+        "foreign_net_volume",
+        "foreign_buy_value",
+        "foreign_sell_value",
+        "foreign_net_value",
     ]
 
     def __init__(
@@ -82,12 +99,16 @@ class SimplizeScraper(BaseScraper):
             retry_delay=retry_delay,
         )
         self._session = requests.Session()
-        self._session.headers.update({
-            "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                           "AppleWebKit/537.36 (KHTML, like Gecko) "
-                           "Chrome/123.0.0.0 Safari/537.36"),
-            "Referer": "https://simplize.vn/",
-        })
+        self._session.headers.update(
+            {
+                "User-Agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/123.0.0.0 Safari/537.36"
+                ),
+                "Referer": "https://simplize.vn/",
+            }
+        )
 
     # ──────────────────────────────────────────────────────────────────────
     # HTTP helpers
@@ -144,19 +165,27 @@ class SimplizeScraper(BaseScraper):
         rows = []
         for d in raw:
             date = datetime.fromtimestamp(d["date"], timezone.utc).date().isoformat()
-            rows.append({
-                "date": date, "exchange": exchange, "symbol": symbol,
-                "open": self._num(d.get("priceOpen")), "high": self._num(d.get("priceHigh")),
-                "low": self._num(d.get("priceLow")), "close": self._num(d.get("priceClose")),
-                "net_change": self._num(d.get("netChange")),
-                "pct_change": self._num(d.get("pctChange")),
-                "volume": self._num(d.get("volume")),
-                "foreign_room": self._num(d.get("cfr")),
-                "f_buy_vol": self._num(d.get("bfq")), "f_sell_vol": self._num(d.get("sfq")),
-                "f_net_vol": self._num(d.get("fnbsq")),
-                "f_buy_val": self._num(d.get("bfv")), "f_sell_val": self._num(d.get("sfv")),
-                "f_net_val": self._num(d.get("fnbsv")),
-            })
+            rows.append(
+                {
+                    "date": date,
+                    "exchange": exchange,
+                    "symbol": symbol,
+                    "open": self._num(d.get("priceOpen")),
+                    "high": self._num(d.get("priceHigh")),
+                    "low": self._num(d.get("priceLow")),
+                    "close": self._num(d.get("priceClose")),
+                    "net_change": self._num(d.get("netChange")),
+                    "percentage_change": self._num(d.get("pctChange")),
+                    "volume": self._num(d.get("volume")),
+                    "foreign_room": self._num(d.get("cfr")),
+                    "foreign_buy_volume": self._num(d.get("bfq")),
+                    "foreign_sell_volume": self._num(d.get("sfq")),
+                    "foreign_net_volume": self._num(d.get("fnbsq")),
+                    "foreign_buy_value": self._num(d.get("bfv")),
+                    "foreign_sell_value": self._num(d.get("sfv")),
+                    "foreign_net_value": self._num(d.get("fnbsv")),
+                }
+            )
         rows.sort(key=lambda r: r["date"])
         return rows
 
@@ -164,7 +193,9 @@ class SimplizeScraper(BaseScraper):
     # Per-stock scrape
     # ──────────────────────────────────────────────────────────────────────
 
-    def scrape_stock(self, exchange: str, symbol: str, skip_existing: bool = True) -> None:
+    def scrape_stock(
+        self, exchange: str, symbol: str, skip_existing: bool = True
+    ) -> None:
         folder = os.path.join(SIMPLIZE_RAW_DATA_DIR, "stocks")
         os.makedirs(folder, exist_ok=True)
         file_path = os.path.join(folder, f"{exchange}_{symbol}.csv")
@@ -242,7 +273,8 @@ class SimplizeScraper(BaseScraper):
                 if not d.get("bcEconomicSectorSlug"):
                     return None
                 return {
-                    "exchange": exchange, "ticker": ticker,
+                    "exchange": exchange,
+                    "ticker": ticker,
                     "industry_activity": d.get("industryActivity"),
                     "economic_sector_id": d.get("bcEconomicSectorId"),
                     "economic_sector_slug": d.get("bcEconomicSectorSlug"),
@@ -299,15 +331,22 @@ class SimplizeScraper(BaseScraper):
 
     def scrape(self) -> None:
         """BaseScraper entry point: scrape all stocks from Simplize."""
-        self.scrape_all_stocks()
+
+        if self._switch_handler.is_enabled("web_scraper", "simplize", "stocks"):
+            self.scrape_all_stocks()
 
     def scrape_all_stocks(self, skip_existing: bool = True) -> None:
         symbols = self.get_stock_symbols()
         self._thread_manager.remove_all_tasks()
         for exchange, symbol in symbols:
             self._thread_manager.add_task(
-                Task(f"simplize/stocks/{exchange}_{symbol}",
-                     self.scrape_stock, exchange, symbol, skip_existing)
+                Task(
+                    f"simplize/stocks/{exchange}_{symbol}",
+                    self.scrape_stock,
+                    exchange,
+                    symbol,
+                    skip_existing,
+                )
             )
         self._logger.log_info(
             f"Simplize: executing {self._thread_manager.get_current_number_of_task()} "

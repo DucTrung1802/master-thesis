@@ -10,8 +10,14 @@ from dtos.thread_manager_dtos.task import *
 
 
 class ThreadManager:
-    def __init__(self, logger: Logger, power: int = THREAD_MANAGER_POWER):
+    def __init__(
+        self,
+        logger: Logger,
+        power: int = THREAD_MANAGER_POWER,
+        max_workers: int = None,
+    ):
         self._logger = logger
+        self._power = 50  # default if power validation below falls through
 
         try:
             power = int(power)
@@ -29,7 +35,13 @@ class ThreadManager:
                 f'Power of ThreadManager is invalid: "{power}". Power is set as default: 50%.'
             )
 
-        self._max_workers = int(os.cpu_count() * self._power / 100) * 0.4
+        # An explicit max_workers pins the pool to exactly that many threads
+        # (used for I/O-bound work like web scraping, where the count is not tied
+        # to CPU cores). Otherwise fall back to the CPU-proportional power formula.
+        if max_workers is not None:
+            self._max_workers = max(1, int(max_workers))
+        else:
+            self._max_workers = max(1, int(os.cpu_count() * self._power / 100 * 0.4))
         self._logger.log_info(f"Total logical processors: {os.cpu_count()}.")
         self._logger.log_info(f"The number of max workers is {self._max_workers}.")
 

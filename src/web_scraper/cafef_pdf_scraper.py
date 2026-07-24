@@ -23,6 +23,7 @@ from utils.constants import (
     TRADING_VIEW_RAW_DATA_DIR,
     SCRAPER_RETRY_ATTEMPTS,
     SCRAPER_RETRY_DELAY,
+    SCRAPER_MAX_WORKERS,
 )
 from dtos.thread_manager_dtos.task import Task
 from web_scraper.base_scraper import BaseScraper, register_scraper
@@ -96,6 +97,7 @@ class CafeFPdfScraper(BaseScraper):
         power: int = 30,
         retry_attempts: int = SCRAPER_RETRY_ATTEMPTS,
         retry_delay: float = SCRAPER_RETRY_DELAY,
+        max_workers: int = SCRAPER_MAX_WORKERS,
     ):
         super().__init__(
             logger=logger,
@@ -103,6 +105,7 @@ class CafeFPdfScraper(BaseScraper):
             power=power,
             retry_attempts=retry_attempts,
             retry_delay=retry_delay,
+            max_workers=max_workers,
         )
         self._session = requests.Session()
         self._session.headers.update({

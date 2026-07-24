@@ -51,9 +51,11 @@ regenerated; delete it or restore the scraper rather than modelling on it.
 | folder | written by | scope so far |
 |---|---|---|
 | `price/`, `foreign/` | `cafef_scraper.py` | 781 tickers (HOSE+HNX+UPCOM) |
-| `order_stats/`, `prop_trading/`, `insider_txn/` | `cafef_scraper.py` | VN100 (HOSE) |
-| `news/` | `cafef_news_scraper.py` | VCB, PNJ, FPT |
-| `pdfs/` | `cafef_pdf_scraper.py` | VCB, VIC + 50 tickers × 2025 (~6.7 GB) |
+| `order_stats/` | `cafef_scraper.py` | 777 tickers (HOSE+HNX+UPCOM) — full universe |
+| `prop_trading/` | `cafef_scraper.py` | 777 tickers queried (full universe); 431 have data, 350 have no prop-desk trades (history from ~2023) |
+| `insider_txn/` | `cafef_scraper.py` | VN100 (HOSE) |
+| `news/` | `cafef_news_scraper.py` | 777 tickers (full universe); ~405k rows, ~495 MB |
+| `pdfs/` | `cafef_pdf_scraper.py` | all VN100 (100 tickers, all years) + 8 non-VN100 leftovers = 108 folders, ~97 GB |
 | `financials/` | `cafef_financials.py` (§3a) | the 12 schemas + `templates.csv`; statements per template — **the only part of `raw_data/` that is TRACKED in git** (it is 0.3 MB and costs hours of OCR to rebuild) |
 
 **Where the statement parser stands — VCB, Q3-2008 → Q1-2026 (71 quarters):**
@@ -228,8 +230,10 @@ Each registers its own `SOURCE_NAME` and writes its own folder under `raw_data/c
   filters to those exchanges (default = all three); `scrape()` and every `scrape_all_*`
   take an `exchanges=` passthrough, so `scrape()` covers the full HOSE+HNX+UPCOM set and
   `scrape(exchanges=("HOSE",))` scopes to one. `skip_existing=True` means a full run only
-  scrapes what each tab is still missing (price/foreign done; order_stats/prop/insider
-  currently VN100-only → ~681 tickers/tab remaining).
+  scrapes what each tab is still missing (price/foreign/order_stats/prop_trading done
+  across the full 777-ticker universe; insider_txn still VN100-only → ~681 tickers
+  remaining for that one). Note prop_trading only queried the full universe: 431 tickers
+  have data and 350 have no prop-desk trades (nothing written for those — history ~2023).
 
 ### CafeF PDFs — `cafef_pdf_scraper.py` (the filings themselves; requests, no PDF library)
 - **Why:** the filings are the PRIMARY source — CafeF's JSON financial API is a
@@ -268,8 +272,12 @@ Each registers its own `SOURCE_NAME` and writes its own folder under `raw_data/c
   - **Duplicate titles.** CafeF lists a re-uploaded filing under an *identical* name (VCB has
     two "BCTC hợp nhất quý 4 năm 2023"), which slugged to one filename and silently
     overwrote a document. Colliding names take a URL-hash suffix; unique names are untouched.
-- **Size:** ~1.7 GB for VCB (90% of its filings are page scans), ~0.65 GB for VIC. Budget
-  accordingly before pointing this at VN100.
+- **Size:** highly ticker-dependent — VCB is ~1.7 GB (90% of its filings are page scans),
+  VIC ~0.65 GB, but across the full VN100 the average is closer to ~1.0 GB/ticker. The whole
+  VN100 archive (all 100 tickers, all years) is **~97 GB** on disk. **Estimate before you
+  download:** the document-list API carries no size field, so sum each PDF's `Content-Length`
+  via a HEAD (or 1-byte ranged GET) — that predicted the VN100 pull to within 0.2% (47.6 GB
+  actual vs 47.7 GB estimated) without fetching a single file.
 
 ### CafeF news — `cafef_news_scraper.py` (company-news / disclosure event stream; requests)
 - A **point-in-time event feed**: headline counts, event flags, announcement dates and
@@ -285,14 +293,18 @@ Each registers its own `SOURCE_NAME` and writes its own folder under `raw_data/c
   insider transactions, uncategorised).
 - **Output:** `raw_data/cafef/news/<EXCHANGE>_<SYMBOL>.csv`
   (`order, timestamp, type, headline, category, content, url, pdf_url`).
-  VCB 1,629 rows / PNJ 1,715 / FPT 2,255, spanning 2007 → 2026.
+  Now scraped for the **full 777-ticker universe** — ~405k rows, ~495 MB, spanning 2007 →
+  2026. Row count is very ticker-dependent: blue-chips run ~1,500-2,300 (VCB 1,629 / PNJ
+  1,715 / FPT 2,255), the small-cap tail ~100-800 (mean ~490).
 - **Gotchas:**
   - **`order` is numbered from the article's own `datePublished`, not from the headline
     feed's listing date.** The two disagree, and numbering by the listing left `order`
     claiming a chronology the timestamps did not have — which leaks look-ahead into anything
     keyed on it.
-  - Article bodies are the expensive stage (~1,600-2,300 per ticker) → fetched in parallel
-    with a polite per-worker delay. ~2 min/ticker, so VN100 is hours, not days.
+  - Article bodies are the expensive stage (blue-chips ~1,600-2,300 per ticker) → fetched in
+    parallel with a polite per-worker delay. The cost is TIME, not disk: the whole 777-ticker
+    universe ran in ~2 hours at **8 ticker-threads × 8 article-workers** (`max_workers=8`,
+    `ARTICLE_WORKERS=8`). Storage is tiny beside the PDFs — ~495 MB of text vs ~97 GB.
   - A dead link keeps its headline as `type=error` rather than dropping the row.
   - Headline text comes from the anchor's **inner text**; the `title=""` attribute breaks on
     the embedded quotes in legacy headlines.
@@ -386,9 +398,32 @@ the data rather than buried: **HVA** is filed under `chung-khoan-va-ngan-hang-da
     line is 113 chars, and it agrees with the line below it for its first ~100 — a shorter cap
     would truncate two different cash-flow lines onto one column name.
 - **`cafef_pdf_parser.py` — one filing → statements.** Two front-ends feed one row-builder:
-  the PDF's own text layer, or **Tesseract OCR** (`vie`) for the documents that have none —
+  the PDF's own text layer, or **OCR** (`vie`) for the documents that have none —
   **90% of VCB's filings are page scans, and not only the old ones** (its Q1-2026 report is 53
-  pages of image). Both return word boxes in the same coordinate system.
+  pages of image). Both return word boxes in the same coordinate system, via the single
+  `_ocr_page(page, native)` seam.
+  - **OCR engine is pluggable** (`OCR_ENGINE` / `CAFEF_OCR_ENGINE` env): `tesseract` (default,
+    CPU, the engine every reconciliation threshold was tuned against) or `easyocr` (CUDA/GPU,
+    `Reader(['vi'])`, a lazy process-wide singleton). **EasyOCR is built but NOT adopted:** it
+    reads the digits correctly (VCB balance-sheet totals came out digit-exact) but its
+    detection-box tokens fragment and vertically scatter differently from Tesseract's
+    layout-aware word boxes, so the tuned row-clustering (Y_TOL/EDGE_TOL) mis-groups dense
+    statements — cash flow collapsed to ~10 rows. Making it parity would need a fragment-
+    merging pre-pass + re-tuned tolerances + re-validation; until then Tesseract stays default.
+    Note the RTX 3050 gave ~5.3 s/page — GPU is not much faster here, so its only payoff would
+    be accuracy, not speed.
+  - **A page is OCR'd when its native text is too SHORT *or* GARBLED.** The old gate was
+    length-only ("< MIN_PAGE_TEXT chars ⇒ image ⇒ OCR"). But ACB's 2013-2015 filings embed a
+    **legacy-font text layer with a broken CMap**: `get_text()` returns 1700+ readable-length
+    chars that are pure mojibake — "LƯU CHUYỂN TIỀN" comes back as "LLFU CHUYttN T:亡N" — so the
+    length gate skipped OCR and the page classifier then matched nothing; the **cash-flow
+    statement vanished entirely** and the balance sheet parsed 5 rows of noise. `_native_garbled`
+    catches it: a broken CMap keeps the ascii letters but shreds every diacritic word into 1-2
+    char fragments, so the ≤2-char-token fraction spikes (real Vietnamese ~0.23, this mojibake
+    ~0.45; threshold 0.40). Recovered +6 ACB cash-flow quarters; generalises to any legacy-font
+    filing. It does NOT fix everything — some of those pages, once OCR'd, still fail on genuine
+    OCR-value corruption (a digit misread, or the PBT line not captured), which is correctly
+    left to the CafeF-tab fallback.
   - **Finding a statement's pages takes FOUR signals, because any one of them fails.** OCR
     mangles the form code's DIGITS — VCB's Q4-2021 balance sheet prints `Mẫu BU2/TCTD-HN`,
     `Mẫu Bữ2/TCTD-HN` and `Mẫu BUT/TCTD-HN` across its three pages (`0`→`U`/`ữ`, `5`→`S`,
@@ -419,6 +454,10 @@ the data rather than buried: **HVA** is filed under `chung-khoan-va-ngan-hang-da
   (preferring reviewed/audited), maps its rows onto the canonical schema, gates it, and writes
   a contiguous quarter grid — a quarter it could not read is a blank `source=missing` row,
   never zero-filled.
+  - **Snapshots to disk after EACH quarter** (atomic temp+rename), so a long OCR run's progress
+    is visible on disk and survives an interrupt. The mid-run snapshots are *progress views
+    only*: income statements are still cumulative (de-cumulated at the end) and CafeF-tab
+    fallback quarters are still absent, so **only the completed run's output is authoritative**.
 - **⚠️ ROWS ARE MAPPED ONTO THE SCHEMA, NOT KEYED ON OCR TEXT** (`map_to_schema`). Keyed on
   what OCR read, the same printed line becomes a *different column every quarter*: VCB's
   balance sheet produced **332 columns against a 90-column chart of accounts**, so nothing
@@ -433,6 +472,24 @@ the data rather than buried: **HVA** is filed under `chung-khoan-va-ngan-hang-da
     appears, in order, inside the second. At 0.72 total equity captured the grand total's
     column, the real grand total had nowhere to go, and **48 of 69 balance sheets** were
     rejected for "assets != liabilities + equity".
+  - **The current-period figure is the first POPULATED column, not literally `values[0]`**
+    (`Statement._first_value`, used by `find` / `map_to_schema` / `_anchor`). OCR sometimes
+    **over-segments the columns** — a left-hand note-reference number clusters as its own
+    spurious column — pushing the real value into index 1. ACB's Q2-2010 grand total parsed as
+    `[None, 176999825…, None, 167881047…, None]` (5 columns where there are 2); a strict
+    `values[0]` read it as empty and rejected the balance sheet for "no total assets" even
+    though the figure was correct. Taking the first non-None value is purely additive — when
+    column 0 is populated (the normal case) it returns exactly what `values[0]` did — and
+    recovered **+18 ACB balance sheets**.
+  - **The anchor re-match tolerates a heavily damaged label ONLY when it is near full length**
+    (`ANCHOR_MATCH_LONG` 0.80 gated on `ANCHOR_LEN_RATIO` 0.85, below the strict `ANCHOR_MATCH`
+    0.86). ACB's Q4-2014 grand total reads `tong_ng_pha_tra_va_von_chu_sd_hoij` (nợ→ng, phải→pha,
+    sở→sd, hữu→hoij), scoring 0.808 against the target — right, but under 0.86. The length gate
+    is what keeps this safe from the 0.80-threshold trap above: the false match (*TỔNG VỐN CHỦ
+    SỞ HỮU*) is **short** (58% of the target length, 0.73 ratio) and stays rejected, while the
+    real damaged total is **full length** (26/26 chars) and is accepted. Validated with zero
+    regression across VCB/ACB, but net effect on the full run is small — the balance sheets it
+    recovers in isolation often hit the magnitude guard (`sane`) instead.
   - **Reconciliation reads its subtotals from the CANONICAL columns**, not by searching OCR
     text. Searching the text is what most rejections actually were — the row was parsed, its
     figure correct, and the lookup simply could not recognise the name OCR had mangled.
@@ -469,7 +526,7 @@ Matches the bronze-source decision (memory `project-bronze-source-per-field`):
 | Field | Primary | Notes |
 |---|---|---|
 | OHLC / volume / foreign flow | **Simplize** | fully adjusted, true volume, most complete |
-| split-only / negotiated volume, raw vs adj close | **CafeF** | matched/negotiated split, `close_raw`/`close_adj`, '000 VND |
+| split-only / negotiated volume, raw vs adj close | **CafeF** | matched/negotiated split, `close_raw`/`close_adjust`, '000 VND |
 | universe (which tickers exist) | **TradingView** | the link CSVs everyone else reads |
 | fundamentals as filed (the source of truth) | **CafeF PDFs** | the statements CafeF's own API transcribes; the only place its gaps exist |
 | news / disclosure events | **CafeF** | headline + body + filing PDF link, categorised |
@@ -503,12 +560,32 @@ Matches the bronze-source decision (memory `project-bronze-source-per-field`):
 ## 6. Shared infra it depends on (outside this dir)
 
 - `src/utils/constants.py` — all `SCRAPER_*` knobs (`SCRAPER_START_DATE` 2000-01-01,
-  `SCRAPER_END_DATE` 2026-04-30, retries 5×5s, 8 browsers, 8s nav stagger),
-  `*_RAW_DATA_DIR` paths, `TRADING_VIEW_TABLE_SCHEMA`, and
+  `SCRAPER_END_DATE` 2026-04-30, retries 5×5s, 8 browsers, 8s nav stagger,
+  `SCRAPER_MAX_WORKERS` 16), `*_RAW_DATA_DIR` paths, `TRADING_VIEW_TABLE_SCHEMA`, and
   `SIMPLIZE_GROUP_TO_GICS_SUB_INDUSTRY`.
 - `src/thread_manager/thread_manager.py` + `dtos/thread_manager_dtos/task.py` —
-  `Task(name, func, *args)` queued and run by `ThreadManager(power=%)`;
+  `Task(name, func, *args)` queued and run by `ThreadManager`;
   `task.run()` calls `func(*args)` directly (no lambda wrapper).
+  - **Thread-pool sizing.** `ThreadManager` takes an explicit `max_workers` that
+    pins the pool to exactly that many threads, falling back to the CPU-proportional
+    `power` formula only when `max_workers is None`. Every `BaseScraper` subclass
+    defaults `max_workers=SCRAPER_MAX_WORKERS` (16) — the right knob for these
+    I/O-bound (`requests`) scrapers, where the count is not tied to CPU cores. Pass
+    `CafeFScraper(logger, max_workers=N)` (or any scraper) to override per run.
+    NB the `power` path alone previously yielded a *fractional* worker count
+    (`cpu*power/100*0.4` → e.g. 2.4), so the pool ran ~2 threads regardless of the
+    machine; the explicit `max_workers` is what makes the thread count real and
+    predictable. TradingView is still separately capped at
+    `SCRAPER_MAX_CONCURRENT_BROWSERS` (8) browsers by its own semaphore, so a wider
+    pool there only deepens the task queue, it does not open more Chrome instances.
+    - Every scraper that overrides `__init__` (`CafeFScraper`, `CafeFPdfScraper`,
+      `CafeFNewsScraper`) now takes `max_workers` and forwards it to `super().__init__`
+      — omitting it there raised `TypeError: unexpected keyword argument 'max_workers'`
+      the moment a caller passed one (it bit the news run).
+    - **`CafeFNewsScraper` is TWO nested pools:** `max_workers` sets how many *tickers*
+      run at once, and a separate per-ticker `ThreadPoolExecutor(ARTICLE_WORKERS=8)`
+      fetches article bodies. Peak concurrent HTTP ≈ `max_workers × ARTICLE_WORKERS`
+      (e.g. 8×8 = 64), so raise the ticker pool cautiously — it multiplies.
 - `src/utils/enums.py`, `src/utils/utils.py` — the `Country`/`StockType`/`Sector`/…
   enums and the `build_*_link_scrape_actions` / `format_key_for_{path,name}` helpers
   that TV imports via `from utils.* import *`.
@@ -525,7 +602,8 @@ Matches the bronze-source decision (memory `project-bronze-source-per-field`):
   `CafeFNewsScraper` and the whole PDF-reading pipeline (§3a) are registered and importable,
   but nothing drives them — `main.py` still runs only TradingView / CafeF / Simplize / GICS.
   Note `CafeFPdfScraper` must NOT be pointed at the full 777-ticker universe by default: the
-  archive is ~1.7 GB *per ticker*, so it takes a `symbols=` override.
+  archive averages ~1.0 GB *per ticker* (VN100 alone is ~97 GB), so it takes a `symbols=`
+  override — it is currently run for VN100 (all 100 tickers on disk).
 - **There are FOUR financial-statement schemas, not one** (bank / corp / securities /
   insurance) and they share no line items. Pick one by **fingerprinting the ticker**
   (`cafef_schema.detect_template`), never by its GICS sector or industry group — HVA sits in

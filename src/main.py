@@ -28,19 +28,15 @@ def main():
 
     # CafeF fills the per-stock fields TradingView lacks (raw/adjusted close,
     # matched/negotiated volume, foreign flow); depends on the links above.
-    CafeFScraper(
-        logger=my_logger, switch_handler=my_switch_handler
-    ).scrape()
+    CafeFScraper(logger=my_logger, switch_handler=my_switch_handler).scrape()
 
     # Simplize: the validated backbone for the daily panel — fully-adjusted OHLC,
     # true volume, and foreign flow (2009→) — also derives its universe from the
     # TradingView links above.
-    SimplizeScraper(
-        logger=my_logger, switch_handler=my_switch_handler
-    ).scrape()
+    SimplizeScraper(logger=my_logger, switch_handler=my_switch_handler).scrape()
 
     # GICS reference taxonomy from MSCI (independent of the others).
-    GicsScraper(logger=my_logger).scrape()
+    GicsScraper(logger=my_logger, switch_handler=my_switch_handler).scrape()
 
     my_data_preprocessor = DataPreprocessor(
         logger=my_logger,
