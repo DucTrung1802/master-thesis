@@ -14,6 +14,11 @@ Two stages, the same split every modern OCR uses:
   * DETECTION — DeepDoc's `det.onnx` (a DB text detector) finds every text region. The
     pre-processing operators and the DB post-processing are vendored verbatim in `_deepdoc/`
     (Apache-2.0, from RAGFlow), so detection is byte-identical to what the experiments validated.
+    Runs on the **GPU** when `onnxruntime-gpu` is installed (CUDAExecutionProvider, ~7× faster
+    than the CPU wheel: ~0.25 vs ~1.8 s/page) and falls back to CPU otherwise — a dependency
+    swap, no code change. onnxruntime-gpu must match the CUDA the machine has (the 1.20.x line for
+    CUDA 12.x / cuDNN 9.x here); `_DbTextDetector._enable_cuda_dlls` points it at torch's bundled
+    CUDA/cuDNN so no separate system CUDA install is needed.
   * RECOGNITION — VietOCR (`vgg_seq2seq`), a Vietnamese-specific CNN+Transformer, reads each
     detected crop. PaddleOCR's own recogniser is not trained on Vietnamese diacritics, which is
     the whole reason the DeepDoc fork swapped it out; we do the same, and batch the crops so the
@@ -94,7 +99,27 @@ class _DbTextDetector:
     cached `load_model`.
     """
 
+    @staticmethod
+    def _enable_cuda_dlls() -> None:
+        """Make torch's bundled CUDA 12 + cuDNN 9 DLLs discoverable to onnxruntime-gpu on Windows.
+
+        `onnxruntime-gpu` does not ship the CUDA runtime; it looks for cudart/cublas/cudnn on the
+        DLL search path. torch (cu121) carries a matching set in `torch/lib` (cudart64_12,
+        cublas64_12, cudnn64_9…), so adding that directory lets the CUDAExecutionProvider load
+        without a separate system CUDA install. Without this the provider silently falls back to
+        CPU. Importing torch first also pre-loads the DLLs into the process.
+        """
+        try:
+            import torch
+
+            tlib = os.path.join(os.path.dirname(torch.__file__), "lib")
+            if os.path.isdir(tlib):
+                os.add_dll_directory(tlib)
+        except Exception:
+            pass
+
     def __init__(self, model_path: str, side_len: int = DET_SIDE_LEN):
+        self._enable_cuda_dlls()
         import onnxruntime as ort
 
         from ._deepdoc.postprocess import build_post_process

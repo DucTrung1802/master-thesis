@@ -83,16 +83,28 @@ Two things got it from 81% to complete, and both are structural rather than tuni
   The PDF is still read first (CafeF transcribes, has gaps, rounds), and every row records which
   it was in `source`: `pdf` (164 quarters, 77%) or `cafef` (49, 23%).
 
-**ACB re-parsed with the `onnx` engine (Q1-2010 → Q1-2026, 74 quarters, ~103 min).** ACB is the
-stress case: ~2/3 of its filings are scans, many carrying the SUBSTITUTION-mojibake text layer
-that defeated the length gate. With the onnx engine + the diacritic gate + the three page-class
-hardenings, **every one of the 65 consolidated quarters now yields at least one statement from the
-filing**, and `pdf`-sourced statements rose from **98 → 161** (of 222): balance_sheet 32→44,
-income_statement 21→61, cash_flow 45→56; `cafef` fallback 124→61, **0 missing**. The reconcile +
-magnitude gates are unchanged, so nothing wrong is written — the 61 remaining `cafef` rows are
-quarters whose scan still would not reconcile (schema-mapping collisions on the bank sub-item
-lines), correctly left to the tabs. Regenerate with `CAFEF_OCR_ENGINE=onnx` and
-`FinancialsBuilder.build("HOSE","ACB")`.
+**ACB re-parsed with the OCR CASCADE on GPU (Q1-2010 → Q1-2026).** ACB is the stress case:
+~2/3 of its filings are scans, many carrying the SUBSTITUTION-mojibake text layer. `build`
+escalates OCR config per statement until it reconciles — `FinancialsBuilder.CASCADE` =
+onnx@200 → onnx@300 → onnx@400 → tesseract@200 — before the CafeF-tab fallback (see
+`_parse_cascaded`). A statement that fails one config (over-included pages, a misread digit) is
+retried at higher resolution and then on a different engine; the `ocr_config` that won is recorded
+per row. **Result: `pdf`-sourced statements 98 → 186 of 222** (balance_sheet 32→61,
+income_statement 21→**65 — every quarter that has a filing**, cash_flow 45→60); `cafef` fallback
+124→36, **0 missing**. Of the 186 accepted from PDF, 163 came from onnx@200, 13 from onnx@300,
+2 from onnx@400, 8 from tesseract@200 — the retries earn their keep. The 36 `cafef` rows are 27
+quarters with NO filing in the archive (pre-listing 2008-2009 + the not-yet-filed Q2-2026) plus 9
+scans that still would not reconcile (4 balance sheets, 5 cash flows — schema-mapping collisions
+on the bank sub-item lines). The reconcile + magnitude gates are unchanged, so nothing wrong is
+written. Whole run ~3.7 h on an RTX 3050.
+
+- **Detection runs on the GPU** (`onnxruntime-gpu`, CUDAExecutionProvider): ~0.25 vs ~1.8 s/page
+  for the CPU wheel. **⚠️ onnxruntime-gpu's version must match the machine's CUDA** — the current
+  1.28 wheel needs CUDA 13 and silently falls back to CPU here (CUDA 12.1); the **1.20.x** line is
+  the CUDA-12 / cuDNN-9 match. `onnx_ocr._enable_cuda_dlls` adds torch's bundled CUDA/cuDNN to the
+  DLL path so no separate system CUDA is needed. If the provider cannot load it degrades to CPU,
+  correct but slow.
+- Regenerate with `CAFEF_OCR_ENGINE=onnx` and `FinancialsBuilder.build("HOSE","ACB")`.
 
 - **⚠️ `publish_date` — the day the figures became PUBLIC. Join on this, never on the period
   end.** VCB's Q4-2025 covers the quarter ending 31 Dec 2025 and was not published until

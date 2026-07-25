@@ -115,10 +115,78 @@ class FinancialsBuilder:
     # more than this.
     SIMILARITY = 0.92
 
+    # The OCR configurations tried per filing, in order, until each statement reconciles. A
+    # statement that fails one config (over-included pages, a misread digit, a note column pulled
+    # into the value zone) is retried at higher resolution and then on a different engine before
+    # the CafeF-tab fallback is used. Ordered cheapest-first: onnx@200 is the fast default that
+    # handles most quarters and skips OCR entirely on clean-text filings; the rest run ONLY for a
+    # filing that still has an unreconciled statement. ACB Q2-2010's balance sheet, for instance,
+    # fails onnx@200 (it classifies 4 pages instead of 2 and mis-maps a liability) but reconciles
+    # at onnx@300 and on tesseract.
+    CASCADE = [("onnx", 200), ("onnx", 300), ("onnx", 400), ("tesseract", 200)]
+
     def __init__(self, logger=None):
         self._logger = logger
-        self._parser = PdfParser(logger=logger)
+        self._parser = PdfParser(logger=logger)          # env-default engine (kept for callers)
+        self._parsers: Dict[str, PdfParser] = {self._parser.engine: self._parser}
         self._schema_cache: Dict[Tuple[str, str], List[Tuple[str, str]]] = {}
+
+    def _parser_for(self, engine: str) -> PdfParser:
+        """A reusable parser per engine — built once, its DPI re-pointed per config, so the onnx
+        models and Tesseract setup are not reloaded on every retry."""
+        if engine not in self._parsers:
+            self._parsers[engine] = PdfParser(logger=self._logger, engine=engine)
+        return self._parsers[engine]
+
+    def _parse_cascaded(self, path: str, period_end,
+                        template: str, history: Dict[str, List[int]]):
+        """Parse every statement of one filing, escalating OCR config until each reconciles.
+
+        -> (accepted, doc_facts) where `accepted[report] = (row, statement, "engine@dpi")` holds
+        only statements that passed BOTH the reconcile gate and the magnitude (`sane`) gate, and
+        `doc_facts` carries the per-document publish_date + share counts (read from the first
+        config that produced any statement). A report absent from `accepted` is left to the
+        CafeF-tab fallback in `build`.
+        """
+        accepted: Dict[str, tuple] = {}
+        facts = {"publish_date": "", "shares": {"shares_authorized": None,
+                                                "shares_issued": None,
+                                                "shares_outstanding": None}}
+        for engine, dpi in self.CASCADE:
+            if len(accepted) == len(REPORTS):
+                break
+            parser = self._parser_for(engine)
+            if not parser.ocr_ready and engine != "onnx":
+                continue                                  # engine unavailable on this machine
+            parser.set_dpi(dpi)
+            try:
+                statements = parser.parse(path, period_end)
+            except Exception as e:
+                self._warn(f"    {engine}@{dpi}: parse failed — {type(e).__name__}: {e}")
+                continue
+
+            if not facts["publish_date"]:
+                facts["publish_date"] = next(
+                    (s.publish_date for s in statements.values() if s.publish_date), "")
+                st_any = next(iter(statements.values()), None)
+                if st_any:
+                    facts["shares"] = {
+                        "shares_authorized": st_any.shares_authorized,
+                        "shares_issued": st_any.shares_issued,
+                        "shares_outstanding": st_any.shares_outstanding,
+                    }
+
+            for report in REPORTS:
+                if report in accepted:
+                    continue
+                st = statements.get(report)
+                if st is None:
+                    continue
+                row = self.map_to_schema(st, template)
+                if (self.reconcile(st, row) is None
+                        and self.sane(st, history[report], row) is None):
+                    accepted[report] = (row, st, f"{engine}@{dpi}")
+        return accepted, facts
 
     # ──────────────────────────────────────────────────────────────────────
     # Which template does a ticker file on?
@@ -553,39 +621,21 @@ class FinancialsBuilder:
             if not os.path.exists(path):
                 self._warn(f"  {period}: file missing on disk — {d['path']}")
                 continue
-            try:
-                statements = self._parser.parse(path, self._period_end(period))
-            except Exception as e:
-                self._warn(f"  {period}: parse failed — {type(e).__name__}: {e}")
-                continue
+            # Escalate OCR config per statement until each reconciles (see _parse_cascaded).
+            accepted, facts = self._parse_cascaded(
+                path, self._period_end(period), template, history)
 
             # the document's own date, kept whether or not any of its statements reconcile
             assurance[period] = d["assurance"]
-            published[period] = next(
-                (s.publish_date for s in statements.values() if s.publish_date),
-                d.get("file_date", ""))
-            # the share counts too — one note per filing, so any statement of it carries them
-            st_any = next(iter(statements.values()), None)
-            shares[period] = {
-                "shares_authorized": getattr(st_any, "shares_authorized", None),
-                "shares_issued": getattr(st_any, "shares_issued", None),
-                "shares_outstanding": getattr(st_any, "shares_outstanding", None),
-            } if st_any else {}
+            published[period] = facts["publish_date"] or d.get("file_date", "")
+            shares[period] = facts["shares"]
 
             notes = []
             for report in REPORTS:
-                st = statements.get(report)
-                if st is None:
-                    notes.append(f"{report}=absent")
+                if report not in accepted:
+                    notes.append(f"{report}=absent")          # -> CafeF-tab fallback below
                     continue
-
-                # onto the canonical chart of accounts FIRST — reconciliation then reads its
-                # subtotals from columns rather than from OCR text
-                row = self.map_to_schema(st, template)
-                why = self.reconcile(st, row) or self.sane(st, history[report], row)
-                if why:
-                    notes.append(f"{report}=REJECTED({why})")
-                    continue
+                row, st, cfg = accepted[report]
 
                 for col in row:
                     if col not in items[report]:
@@ -597,11 +647,12 @@ class FinancialsBuilder:
                     "n_columns": st.n_columns, "document": d["file"],
                     # read from THIS filing: a company chooses the method and may switch it
                     "cash_flow_method": st.cash_flow_method or "",
+                    "ocr_config": cfg,          # which cascade config produced this statement
                 }
                 v = self._probe(report, row, st)
                 if v is not None:
                     history[report].append(v)
-                notes.append(f"{report}={len(row)} items")
+                notes.append(f"{report}={len(row)} items [{cfg}]")
             self._log(f"  {period:<8} {'; '.join(notes)}")
 
             # Snapshot to disk after each quarter so progress is visible and survives an

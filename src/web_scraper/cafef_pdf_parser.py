@@ -210,9 +210,23 @@ class PdfParser:
     EDGE_TOL = 9.0         # right edges within this many points are the same column
     LABEL_GAP = 30.0       # a word ending this far left of column 1 belongs to the label
 
-    def __init__(self, logger=None):
+    def __init__(self, logger=None, engine=None, dpi=None):
         self._logger = logger
+        # Engine and render DPI are per-instance so a caller can sweep configurations — the
+        # cascade in cafef_financials retries a statement at a higher DPI or a different engine
+        # until it reconciles (see FinancialsBuilder.CASCADE). They default to the module/class
+        # values, so an unparametrised parser behaves exactly as before.
+        self.engine = (engine or OCR_ENGINE)
+        self.dpi = dpi or self.OCR_DPI
+        self._onnx = None
         self.ocr_ready = self._init_ocr()
+
+    def set_dpi(self, dpi: int) -> None:
+        """Re-point this parser at a new render DPI, reusing the loaded OCR models. The onnx
+        engine renders at this DPI; the Tesseract path passes it to `get_textpage_ocr`."""
+        self.dpi = dpi
+        if self._onnx is not None:
+            self._onnx.dpi = dpi
 
     def _log(self, msg: str) -> None:
         if self._logger:
@@ -223,19 +237,16 @@ class PdfParser:
     # PdfParser and every page.
     _easyocr_reader = None
 
-    # The onnx engine, built once and reused across pages (models are loaded lazily inside it).
-    _onnx = None
-
     def _init_ocr(self) -> bool:
-        if OCR_ENGINE == "onnx":
+        if self.engine == "onnx":
             try:
                 from web_scraper.onnx_ocr import OnnxOcr
-                self._onnx = OnnxOcr(self._logger)
+                self._onnx = OnnxOcr(self._logger, dpi=self.dpi)
                 return True
             except Exception as e:
                 self._log(f"onnx OCR unavailable ({e}); OCR disabled")
                 return False
-        if OCR_ENGINE == "easyocr":
+        if self.engine == "easyocr":
             try:
                 import easyocr  # noqa: F401  (import-time check only)
                 return True
@@ -467,12 +478,12 @@ class PdfParser:
         if not need_ocr:
             return native, page.get_text("words")
 
-        if OCR_ENGINE == "onnx":
+        if self.engine == "onnx":
             return self._onnx.read_page(page)
-        if OCR_ENGINE == "easyocr":
+        if self.engine == "easyocr":
             return self._ocr_page_easyocr(page)
 
-        tp = page.get_textpage_ocr(language=OCR_LANG, dpi=self.OCR_DPI, full=True,
+        tp = page.get_textpage_ocr(language=OCR_LANG, dpi=self.dpi, full=True,
                                    tessdata=TESSDATA_DIR)
         text = page.get_text(textpage=tp)
         words = self._to_visual(page, page.get_text("words", textpage=tp))
@@ -483,11 +494,10 @@ class PdfParser:
         import fitz
         import numpy as np
 
-        scale = self.OCR_DPI / 72.0
-        # matrix carries the page rotation, so the raster is UPRIGHT (visual) — boxes then
-        # need no un-mirroring.
-        pix = page.get_pixmap(matrix=fitz.Matrix(scale, scale).prerotate(page.rotation),
-                              colorspace=fitz.csGRAY)
+        scale = self.dpi / 72.0
+        # get_pixmap already applies /Rotate, so a plain scale matrix yields an upright (visual)
+        # raster whose boxes need no un-mirroring (do NOT prerotate — see onnx_ocr.read_page).
+        pix = page.get_pixmap(matrix=fitz.Matrix(scale, scale), colorspace=fitz.csGRAY)
         img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width)
 
         # detail=1 → (box, text, conf); paragraph=False keeps one entry per word-ish token so
