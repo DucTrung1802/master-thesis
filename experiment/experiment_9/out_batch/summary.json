@@ -1,0 +1,48 @@
+{
+  "engine": "onnx",
+  "symbol": "ACB",
+  "statements": 36,
+  "found": 36,
+  "reconciled": 34,
+  "comparable": 868,
+  "agree": 721,
+  "differ": 147,
+  "strict_agree": 661,
+  "sign_only": 60,
+  "accuracy": 0.8306,
+  "ocr_pages": 168,
+  "ocr_seconds": 237.4,
+  "sec_per_page": 1.41,
+  "per_report": {
+    "balance_sheet": {
+      "found": 12,
+      "quarters": 12,
+      "reconciled": 10,
+      "agree": 430,
+      "strict_agree": 430,
+      "sign_only": 0,
+      "differ": 100,
+      "missed": 333
+    },
+    "income_statement": {
+      "found": 12,
+      "quarters": 12,
+      "reconciled": 12,
+      "agree": 200,
+      "strict_agree": 140,
+      "sign_only": 60,
+      "differ": 20,
+      "missed": 60
+    },
+    "cash_flow": {
+      "found": 12,
+      "quarters": 12,
+      "reconciled": 12,
+      "agree": 91,
+      "strict_agree": 91,
+      "sign_only": 0,
+      "differ": 27,
+      "missed": 149
+    }
+  }
+}

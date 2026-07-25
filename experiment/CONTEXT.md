@@ -1,6 +1,6 @@
 # Experiments Context — Signal discovery → tradability → point-in-time data (VCB/VN30)
 
-Single-document summary of **all methods and all results** across the seven
+Single-document summary of **all methods and all results** across the nine
 experiments:
 
 - **experiment_1** — signal discovery (does a "next-5d ≥ +5%" signal exist?).
@@ -15,6 +15,10 @@ experiments:
   categorised, scraped from CafeF's event feed for a point-in-time event stream.
 - **experiment_7** — **financial statements** (balance sheet / income statement /
   cash flow), full quarterly line-item history 2008→now; works for **any ticker**.
+- **experiment_8** — **Vietnamese OCR** (PaddleOCR-DB + VietOCR) on a scanned filing the
+  production parser cannot read at all.
+- **experiment_9** — the same document through **DeepDoc** (ONNX detection + layout and
+  table-structure models) + VietOCR; 8.6× faster, same statements.
 
 Each experiment folder has its own `README.md` with the full detail; this file is
 the index across all of them.
@@ -405,6 +409,121 @@ expenses positive.
 
 ---
 
+# Experiments 8 & 9 — Vietnamese OCR for the filings that will not parse
+
+Fifth orthogonal-data piece, and a **capability** rather than a dataset: the statements exist only
+as page scans for most of the archive, and where the scan defeats the parser the figures fall back
+to CafeF's transcription (`source=cafef`, 23% of quarters). Both experiments read the **same
+document** — `raw_data/cafef/pdfs/files/HOSE_ACB/FY-2013_…hop_nhat…da_kiem_toan.pdf`, ACB's
+FY-2013 audited consolidated report — whose three statements are ALL `source=cafef`, i.e. the
+production parser failed on every one.
+
+> **→ The chosen engine is `onnx` (experiment_9): DeepDoc-ONNX detection + VietOCR.** It ties
+> `paddle` on accuracy and reads a page ~10× faster (1.4 vs 13.9 s/page), which is the only figure
+> that decides a full-archive re-parse. `paddle` (experiment_8) stays as the baseline it was
+> measured against; everything below is written from the onnx result unless it says otherwise.
+
+**Why it fails:** 105 pages of page scan carrying a **legacy-font text layer** that is mojibake
+("Bảng cân đối kế toán" → `Bine can ddi k6loAn`, "851.161" → `t5l.l6l`) but not obviously so — the
+`_native_garbled` gate fires at a ≤2-char-token fraction ≥ 0.40 and these pages sit at 0.16-0.24,
+so they were never OCR'd at all.
+
+**Design — the two experiments differ in ONE component.** `experiment_8/ocr_pipeline.py` holds
+everything downstream of the OCR and experiment_9 imports it; both feed their engine into
+`src/web_scraper/cafef_pdf_parser.PdfParser` as a drop-in replacement for its Tesseract seam. The
+question is therefore "what would the EXISTING pipeline produce with better OCR?", and the answer
+is attributable to the engine.
+
+| | experiment_8 | experiment_9 |
+|---|---|---|
+| repo | bmd1905/vietnamese-ocr | hoaivannguyen/deepdoc_vietocr |
+| detection | PaddleOCR 3.x **PP-OCRv5 server DB** | DeepDoc **det.onnx** (4.7 MB, onnxruntime CPU) |
+| recognition | VietOCR **vgg_transformer** | VietOCR **vgg_seq2seq** |
+| also has | — | layout (YOLOv10, 10 classes) + table-structure ONNX |
+| **speed** | 15.6 s/page (15 pages in 234 s) | **1.8 s/page** (15 pages in 27 s) |
+| balance sheet | 63 rows, 43 mapped, 22 agree | 62 rows, 44 mapped, 21 agree |
+| income statement | 25 rows, 19 mapped, 7 agree | 25 rows, 19 mapped, 7 agree |
+| cash flow | 38 rows, 11 mapped, 6 agree | 38 rows, **16 mapped, 11 agree** |
+| reconciles | **all three** | **all three** |
+
+`agree`/`differ` = canonical columns both the parse and CafeF populated; the balance sheet is
+compared at 31 Dec, the income statement against the SUM of CafeF's four quarters (the annual
+report prints the year), the cash flow against Q4 alone (already cumulative YTD).
+
+### What it establishes
+1. **The scans are readable, and all three statements now reconcile** against their own printed
+   subtotals — the gate the production pipeline uses. It currently accepts none of them.
+2. **The OCR is not the bottleneck; the schema mapping is.** Digits come out exact
+   (TỔNG NỢ PHẢI TRẢ 154,094,787 / equity 12,504,202 / grand total 166,598,989, all confirmed
+   against the broken text layer as an independent read) and the income statement's own arithmetic
+   closes on parsed values (15,205,073 − 10,818,660 = NII 4,386,413; 1,890,190 − 854,630 = PBT
+   1,035,560). The losses are lines `map_to_schema` cannot match, because the chart of accounts is
+   built from CafeF's tabs, which ABBREVIATE (`tien_gui_tai_cac_tctd_khac`) where the filing spells
+   out (*Tiền gửi tại các tổ chức tín dụng khác*).
+3. **⚠️ CafeF's tabs are not ground truth.** CafeF's Q4-2013 total assets is 166,737,706; the
+   audited filing prints **166,598,989**. Both balance internally and the gap is one line (*Các
+   khoản nợ khác*) propagating — two vintages of the same statement. CafeF's interest-expense
+   quarters even carry inconsistent signs. Several `differ` rows are CafeF, not the OCR.
+4. **Speed decides adoption → onnx.** Detection is the entire difference — DeepDoc's 4.7 MB ONNX
+   DB model on CPU vs PaddleOCR's PP-OCRv5 *server* detector — and over the 12-filing batch it is
+   **~10×** (1.4 vs 13.9 s/page). Recognition (VietOCR, batched, GPU) is the same in both and is
+   not the cost. `paddle`'s `vgg_transformer` is marginally better on digits than onnx's
+   `vgg_seq2seq` (accuracy 0.835 vs 0.831, a handful of lines), which does not come close to
+   outweighing the 10× — so **onnx is the engine to build the re-parse on**.
+5. **Layout/TSR is promising but not yet usable** (`experiment_9/table_structure.py`). Over three
+   balance-sheet pages it finds **68 table rows and 15 columns** — 5 per page: numbering, label,
+   *Thuyết minh* note, and the two periods — which is exactly the grid the parser has to infer
+   geometrically. Its own `construct_table` markdown is clean on plain rows and collapses
+   sub-item groups and the page header, so the regions are the deliverable, not the markdown.
+
+### Three parser findings, only visible once the OCR is good
+Implemented as overrides in `experiment_8/ocr_pipeline.OcrPdfParser`; candidates for `src/`:
+- **A table of contents is not a statement.** The "NỘI DUNG" page lists every statement WITH its
+  form code, and a form code is trusted absolutely — so it was classified as the balance sheet,
+  anchored the run six pages early, and fed its page numbers into the period-column clustering.
+  One form code per page; two or more means the page is talking *about* the statements.
+- **The best title must win, not the first.** The cash-flow page prints `Mẫu BO4/TCTD-HN` (letter
+  O for zero), so `B\d{2}` misses and it falls through to the title; `_titled` takes the first of
+  the three to clear 0.80 in dict order, and page boilerplate scored 0.80+ for *"kết quả hoạt động
+  kinh doanh"*. The page became the income statement and **the entire cash-flow statement was
+  lost**, though *"lưu chuyển tiền tệ"* is in its header verbatim.
+- **Drop the "Thuyết minh" column by MAGNITUDE, not position.** The right-60% rule works for
+  word-level OCR; a line-level detector emits one tight note column inside the value zone, which
+  becomes column 1 and makes `_first_value` return every line's NOTE NUMBER. A period column's
+  numbers are 4-9 digits, a note reference 1-2.
+
+### Batch — the whole range ACB Q1-2014 … Q4-2016 (12 filings)
+Both engines run over the range and every statement is scored against the production reference
+(`raw_data/cafef/financials/`). The scorer is period-aware — balance sheet a stock, cash flow
+cumulative YTD, income statement standalone for Q1/Q3 but cumulative for the Q2 review and Q4
+annual — and it separates a pure income-statement **sign flip** (CafeF stores expenses positive,
+the filing prints parentheses) from a real mismatch, so the sign convention is not blamed on OCR.
+"paddle" = experiment_8, "onnx" = experiment_9; runners `run_batch_acb.py`, shared driver
+`batch.py`, head-to-head `experiment/compare_models.py`.
+
+| | paddle | onnx |
+|---|---|---|
+| statements found | 36/36 | 36/36 |
+| statements reconciled | **34/36** | **34/36** |
+| figures match (magnitude) | 734/879 | 721/868 |
+| accuracy | **0.835** | **0.831** |
+| OCR speed | 13.9 s/page | **1.4 s/page** |
+
+**The two engines TIE on accuracy and onnx is ~10× faster** — the same verdict as the single doc,
+now across a dozen filings of three shapes. Each rejects exactly 2 balance sheets, on different
+quarters (paddle Q1-2015 + Q3-2016; onnx Q1-2016 + Q3-2016), always a schema-mapping collision on
+the bank sub-item lines, never an OCR failure. All 24 income statements and all 24 cash flows
+reconcile. The residual `differ` is again schema mapping (a value on an adjacent sub-line) and
+CafeF vintage (the tabs store 0 where the filing reports a figure), not misread digits.
+
+Environments are separate venvs (`ocr_env8` = paddlepaddle/paddleocr, `ocr_env9` =
+onnxruntime; both `--system-site-packages`, both gitignored) — the two stacks cannot share one.
+The OCR read is cached per engine+file+DPI (`out/ocr_cache.json`, `out_batch/cache/`), so the
+scoring re-runs in a second instead of re-reading the pages; the OCR time is cached with it, so
+the speed number survives a re-score.
+
+---
+
 # Overall conclusions
 
 1. **One universal signal:** a near-term 5d+5% up-move is preceded by **volatility /
@@ -433,6 +552,14 @@ expenses positive.
    headline-count / event-flag / sentiment features, and the **financial statements**
    themselves (exp_7) — which, joined to exp_4's publish dates, give look-ahead-safe
    fundamentals/valuation.
+9. **experiments 8–9 unlock the filings themselves.** A Vietnamese OCR stack (DB detection +
+   VietOCR) reads the page scans the production parser cannot. Across ACB Q1-2014…Q4-2016 both
+   engines reconcile **34/36 statements** and match ~**83%** of figures against the production
+   reference; they TIE on accuracy and DeepDoc's ONNX detector is **~10× faster** (1.4 vs 13.9
+   s/page) than PaddleOCR's server model, which is what makes a full-archive re-parse feasible.
+   The bottleneck is now **schema mapping** (the chart of accounts abbreviates where the filing
+   spells out), not OCR, and **CafeF's tabs turn out not to be ground truth** — the audited filing
+   and CafeF disagree on ACB's FY-2013 total assets by one propagating line.
 
 > AUCs are single chronological-split point estimates (small positive counts →
 > ±0.03–0.05 variance). Most CSV outputs are gitignored and regenerated by the scripts;
@@ -459,3 +586,12 @@ expenses positive.
   - `financials.py` (one script: `scrape` / `pdf` / `docs`; `--symbol <TICKER>`) → three wide CSVs shared by all tickers: `balance_sheet.csv`, `income_statement.csv`,
     `cash_flow.csv` (rows = symbol × quarter, columns = line items `<item_code>__<slug>`)
     + a `<report>_manual.csv` hand-fill template per report (manual beats scraped)
+- `experiment_8/README.md` — PaddleOCR-DB + VietOCR ("paddle")
+  - `vietnamese_ocr.py` (the engine), `ocr_pipeline.py` (single-doc downstream) + `batch.py`
+    (multi-quarter driver + period-aware scoring) — **both shared with experiment_9**;
+    `run_acb_2013.py` → `out/…`, `run_batch_acb.py` → `out_batch/{cells,detail}.csv`, `report.md`
+- `experiment_9/README.md` — DeepDoc ONNX + VietOCR ("onnx"), same downstream
+  - `setup_vendor.py` (clone + HuggingFace models), `deepdoc_vietocr_engine.py`,
+    `run_acb_2013.py`, `run_batch_acb.py` (same outputs as experiment_8), `table_structure.py`
+    (layout + TSR → `layout_tsr_regions.csv`, `tsr_page*.md`)
+- `experiment/compare_models.py` → `model_comparison.md` / `.csv` — the paddle-vs-onnx head-to-head
