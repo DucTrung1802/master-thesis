@@ -4,6 +4,7 @@
 import csv
 import os
 import re
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 # ===== Local / Custom Modules =====
@@ -11,6 +12,31 @@ from web_scraper.cafef_pdf_parser import (
     BALANCE_SHEET, CASH_FLOW, INCOME_STATEMENT, REPORTS, PdfParser, Statement,
 )
 from utils.constants import CAFEF_RAW_DATA_DIR
+
+
+@dataclass(frozen=True)
+class ParseLayer:
+    """One way to read a filing: an OCR method + its settings, plus optional matching relaxations.
+
+    A statement is attempted layer by layer (see `FinancialsBuilder.LAYERS`) until one reconciles;
+    a filing that defeats the fast default is retried at higher resolution, on a different engine,
+    and finally with relaxed total-label recovery, before the CafeF-tab fallback. Adding a new way
+    to parse a stubborn filing is adding a `ParseLayer` to the list — nothing else changes.
+
+    Fields:
+      * `engine` / `dpi` — the OCR configuration handed to `PdfParser` (onnx or tesseract, and the
+        render resolution). Higher DPI separates lines a low-res scan merges.
+      * `relax_totals` — recover the balance sheet's grand-total columns from label VARIANTS the
+        strict fuzzy match rejects: a filing that prints "TỔNG CỘNG TÀI SẢN" where the schema
+        expects "TỔNG TÀI SẢN", or that merges the grand-total label into the line above it (ACB
+        Q1-2019). Off for the strict layers so every other quarter is untouched; the relaxed
+        layers run ONLY after the strict ones fail, and the reconcile + magnitude gates still
+        guard whatever they recover.
+    """
+    name: str
+    engine: str
+    dpi: int
+    relax_totals: bool = False
 
 PDFS_DIR = os.path.join(CAFEF_RAW_DATA_DIR, "pdfs")
 FIN_DIR = os.path.join(CAFEF_RAW_DATA_DIR, "financials")
@@ -115,15 +141,24 @@ class FinancialsBuilder:
     # more than this.
     SIMILARITY = 0.92
 
-    # The OCR configurations tried per filing, in order, until each statement reconciles. A
-    # statement that fails one config (over-included pages, a misread digit, a note column pulled
-    # into the value zone) is retried at higher resolution and then on a different engine before
-    # the CafeF-tab fallback is used. Ordered cheapest-first: onnx@200 is the fast default that
-    # handles most quarters and skips OCR entirely on clean-text filings; the rest run ONLY for a
-    # filing that still has an unreconciled statement. ACB Q2-2010's balance sheet, for instance,
-    # fails onnx@200 (it classifies 4 pages instead of 2 and mis-maps a liability) but reconciles
-    # at onnx@300 and on tesseract.
-    CASCADE = [("onnx", 200), ("onnx", 300), ("onnx", 400), ("tesseract", 200)]
+    # The PARSE LAYERS tried per filing, in order, until each statement reconciles. A statement
+    # that fails one layer (over-included pages, a misread digit, a note column pulled into the
+    # value zone, a total-label variant) is retried by the next before the CafeF-tab fallback.
+    # Ordered cheapest-first and strict-first: onnx@200 is the fast default that handles most
+    # quarters and skips OCR entirely on clean-text filings; higher DPI and Tesseract run ONLY for
+    # a filing that still has an unreconciled statement (ACB Q2-2010's balance sheet fails onnx@200
+    # but reconciles at onnx@300); the two RELAXED layers run last of all, recovering grand-total
+    # columns from label variants the strict fuzzy match rejects (ACB Q1-2019 prints "TỔNG CỘNG
+    # TÀI SẢN" and merges the grand-total label into the line above), so no other quarter is
+    # touched. Extend the pipeline by adding a ParseLayer here.
+    LAYERS = [
+        ParseLayer("onnx@200", "onnx", 200),
+        ParseLayer("onnx@300", "onnx", 300),
+        ParseLayer("onnx@400", "onnx", 400),
+        ParseLayer("tesseract@200", "tesseract", 200),
+        ParseLayer("onnx@200+relax", "onnx", 200, relax_totals=True),
+        ParseLayer("onnx@300+relax", "onnx", 300, relax_totals=True),
+    ]
 
     def __init__(self, logger=None):
         self._logger = logger
@@ -152,18 +187,25 @@ class FinancialsBuilder:
         facts = {"publish_date": "", "shares": {"shares_authorized": None,
                                                 "shares_issued": None,
                                                 "shares_outstanding": None}}
-        for engine, dpi in self.CASCADE:
+        # OCR is the expensive step, so the parse of each (engine, dpi) is cached within this
+        # filing — the relaxed layers reuse a strict layer's already-OCR'd statements and only
+        # re-map them, no second OCR pass.
+        parsed: Dict[Tuple[str, int], Dict[str, Statement]] = {}
+        for layer in self.LAYERS:
             if len(accepted) == len(REPORTS):
                 break
-            parser = self._parser_for(engine)
-            if not parser.ocr_ready and engine != "onnx":
+            parser = self._parser_for(layer.engine)
+            if not parser.ocr_ready and layer.engine != "onnx":
                 continue                                  # engine unavailable on this machine
-            parser.set_dpi(dpi)
-            try:
-                statements = parser.parse(path, period_end)
-            except Exception as e:
-                self._warn(f"    {engine}@{dpi}: parse failed — {type(e).__name__}: {e}")
-                continue
+            key = (layer.engine, layer.dpi)
+            if key not in parsed:
+                parser.set_dpi(layer.dpi)
+                try:
+                    parsed[key] = parser.parse(path, period_end)
+                except Exception as e:
+                    self._warn(f"    {layer.name}: parse failed — {type(e).__name__}: {e}")
+                    parsed[key] = {}
+            statements = parsed[key]
 
             if not facts["publish_date"]:
                 facts["publish_date"] = next(
@@ -182,10 +224,10 @@ class FinancialsBuilder:
                 st = statements.get(report)
                 if st is None:
                     continue
-                row = self.map_to_schema(st, template)
+                row = self.map_to_schema(st, template, relax_totals=layer.relax_totals)
                 if (self.reconcile(st, row) is None
                         and self.sane(st, history[report], row) is None):
-                    accepted[report] = (row, st, f"{engine}@{dpi}")
+                    accepted[report] = (row, st, layer.name)
         return accepted, facts
 
     # ──────────────────────────────────────────────────────────────────────
@@ -355,7 +397,8 @@ class FinancialsBuilder:
         self._schema_cache[key] = items
         return items
 
-    def map_to_schema(self, st: Statement, template: str) -> Dict[str, int]:
+    def map_to_schema(self, st: Statement, template: str,
+                     relax_totals: bool = False) -> Dict[str, int]:
         """Parsed rows -> canonical columns.
 
         This is what makes the output a PANEL rather than a pile. Keyed on the OCR text, the
@@ -368,6 +411,10 @@ class FinancialsBuilder:
         fuzzy because OCR damages the names ("TỔNG NỢ PHẢI TRẢ" -> `tong_nuphai_tra`). Order is
         what keeps a fuzzy match honest: the schema's own sequence stops "chi phí hoạt động"
         from being answered by "chi phí hoạt động khác" further down.
+
+        `relax_totals` (set only by the relaxed ParseLayers, after the strict ones fail) recovers
+        the balance-sheet grand-total columns from label variants the fuzzy match rejects — see
+        `_recover_totals`.
         """
         from difflib import SequenceMatcher
 
@@ -406,7 +453,42 @@ class FinancialsBuilder:
                 i = best_j + 1                  # never match backwards
 
         self._anchor(out, schema, st)
+        if relax_totals:
+            self._recover_totals(out, st)
         return out
+
+    # The grand-total lines, and the printed-label variants that identify each even when the
+    # strict fuzzy match rejects them. A row's key (separators stripped) that CONTAINS one of
+    # these substrings IS that total — "tong cong tai san" for total assets (the schema expects
+    # "tong tai san"; the extra "cong"/"cộng" = "sum" drops the fuzzy ratio below threshold), and
+    # "tong no phai tra va" for the grand total of resources (the "…va…" = "and equity" is what
+    # distinguishes it from total LIABILITIES alone, and survives even when OCR merges the label
+    # into the retained-earnings line above it, as in ACB Q1-2019).
+    TOTAL_ALIASES = {
+        "tong_tai_san": ("tongtaisan", "tongcongtaisan"),
+        "tong_no_phai_tra_va_von_chu_so_huu": ("tongnophaitrava", "tongcongnguonvon"),
+    }
+
+    def _recover_totals(self, out: Dict[str, int], st: Statement) -> None:
+        """Fill the balance-sheet grand-total columns from label variants (relaxed layers only).
+
+        Runs after the ordered walk and `_anchor` have done their best and the statement STILL
+        did not reconcile — so it can only add the two total columns, and whatever it adds is
+        re-checked by `reconcile` + `sane` before the row is accepted. A filing whose grand totals
+        are genuinely unreadable is unaffected (nothing matches) and still falls through to the
+        CafeF tabs. The LAST matching row wins: the grand total is printed at the foot of its
+        section, below any partial subtotal that shares the substring.
+        """
+        if st.report != BALANCE_SHEET:
+            return
+        for col, aliases in self.TOTAL_ALIASES.items():
+            for row in st.rows:
+                k = row.key.replace("_", "")
+                if any(a in k for a in aliases):
+                    v = st._first_value(row.values)
+                    if v is not None:
+                        out[col] = v
+        return
 
     # The lines reconciliation stands on. They are unambiguous — no other line in a statement
     # is called "TỔNG TÀI SẢN" — so they are re-matched GLOBALLY, ignoring position.
