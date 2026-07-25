@@ -67,18 +67,19 @@ cafef_financials.PDFS_DIR = os.path.join(REPO_ROOT, "raw_data", "cafef", "pdfs")
 def page_raster(page, dpi: int = 200):
     """(RGB ndarray, scale) of the page as a HUMAN sees it.
 
-    `prerotate(page.rotation)` is the whole point. These scans are stored `/Rotate 180`: without
-    it the raster is upside-down and OCR returns gibberish, and clearing the rotation instead
-    hands back word boxes mirrored in unrotated space, which inverts the parser's premise that
-    labels are left and figures are right (see `PdfParser._to_visual`). Rasterising in visual
-    space means the pixel coordinates ARE visual coordinates — dividing by `scale` is the only
-    conversion needed.
+    `get_pixmap` ALREADY renders the page as displayed — it applies the page's `/Rotate`, so a
+    plain scale matrix yields an UPRIGHT raster whose pixel coordinates ARE visual coordinates
+    (divide by `scale` for pdf points). Do NOT `prerotate(page.rotation)` on top: on a `/Rotate
+    180` scan that rotates it a second time, back upside-down, and OCR returns pure garbage. This
+    bug was invisible in experiments 8-9 because ACB's FY-2013 test filing and the Q1-2014…Q4-2016
+    batch are all `/Rotate 0`; it only surfaced on the production run when a reviewed/annual scan
+    (all `/Rotate 180`) came out unreadable.
     """
     import fitz
     import numpy as np
 
     scale = dpi / 72.0
-    pix = page.get_pixmap(matrix=fitz.Matrix(scale, scale).prerotate(page.rotation))
+    pix = page.get_pixmap(matrix=fitz.Matrix(scale, scale))
     img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, pix.n)
     return img[:, :, :3].copy(), scale
 

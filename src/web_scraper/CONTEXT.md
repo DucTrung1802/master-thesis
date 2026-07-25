@@ -83,6 +83,17 @@ Two things got it from 81% to complete, and both are structural rather than tuni
   The PDF is still read first (CafeF transcribes, has gaps, rounds), and every row records which
   it was in `source`: `pdf` (164 quarters, 77%) or `cafef` (49, 23%).
 
+**ACB re-parsed with the `onnx` engine (Q1-2010 → Q1-2026, 74 quarters, ~103 min).** ACB is the
+stress case: ~2/3 of its filings are scans, many carrying the SUBSTITUTION-mojibake text layer
+that defeated the length gate. With the onnx engine + the diacritic gate + the three page-class
+hardenings, **every one of the 65 consolidated quarters now yields at least one statement from the
+filing**, and `pdf`-sourced statements rose from **98 → 161** (of 222): balance_sheet 32→44,
+income_statement 21→61, cash_flow 45→56; `cafef` fallback 124→61, **0 missing**. The reconcile +
+magnitude gates are unchanged, so nothing wrong is written — the 61 remaining `cafef` rows are
+quarters whose scan still would not reconcile (schema-mapping collisions on the bank sub-item
+lines), correctly left to the tabs. Regenerate with `CAFEF_OCR_ENGINE=onnx` and
+`FinancialsBuilder.build("HOSE","ACB")`.
+
 - **⚠️ `publish_date` — the day the figures became PUBLIC. Join on this, never on the period
   end.** VCB's Q4-2025 covers the quarter ending 31 Dec 2025 and was not published until
   **27 Mar 2026**. Joining fundamentals to prices on the period end hands a model twelve weeks
@@ -403,27 +414,36 @@ the data rather than buried: **HVA** is filed under `chung-khoan-va-ngan-hang-da
   pages of image). Both return word boxes in the same coordinate system, via the single
   `_ocr_page(page, native)` seam.
   - **OCR engine is pluggable** (`OCR_ENGINE` / `CAFEF_OCR_ENGINE` env): `tesseract` (default,
-    CPU, the engine every reconciliation threshold was tuned against) or `easyocr` (CUDA/GPU,
-    `Reader(['vi'])`, a lazy process-wide singleton). **EasyOCR is built but NOT adopted:** it
-    reads the digits correctly (VCB balance-sheet totals came out digit-exact) but its
-    detection-box tokens fragment and vertically scatter differently from Tesseract's
-    layout-aware word boxes, so the tuned row-clustering (Y_TOL/EDGE_TOL) mis-groups dense
-    statements — cash flow collapsed to ~10 rows. Making it parity would need a fragment-
-    merging pre-pass + re-tuned tolerances + re-validation; until then Tesseract stays default.
-    Note the RTX 3050 gave ~5.3 s/page — GPU is not much faster here, so its only payoff would
-    be accuracy, not speed.
-  - **A page is OCR'd when its native text is too SHORT *or* GARBLED.** The old gate was
-    length-only ("< MIN_PAGE_TEXT chars ⇒ image ⇒ OCR"). But ACB's 2013-2015 filings embed a
-    **legacy-font text layer with a broken CMap**: `get_text()` returns 1700+ readable-length
-    chars that are pure mojibake — "LƯU CHUYỂN TIỀN" comes back as "LLFU CHUYttN T:亡N" — so the
-    length gate skipped OCR and the page classifier then matched nothing; the **cash-flow
-    statement vanished entirely** and the balance sheet parsed 5 rows of noise. `_native_garbled`
-    catches it: a broken CMap keeps the ascii letters but shreds every diacritic word into 1-2
-    char fragments, so the ≤2-char-token fraction spikes (real Vietnamese ~0.23, this mojibake
-    ~0.45; threshold 0.40). Recovered +6 ACB cash-flow quarters; generalises to any legacy-font
-    filing. It does NOT fix everything — some of those pages, once OCR'd, still fail on genuine
-    OCR-value corruption (a digit misread, or the PBT line not captured), which is correctly
-    left to the CafeF-tab fallback.
+    CPU, the engine every reconciliation threshold was tuned against), **`onnx`** (DeepDoc DB
+    detection + VietOCR — see below), or `easyocr` (CUDA/GPU, `Reader(['vi'])`, a lazy singleton;
+    built but NOT adopted — its detection-box tokens fragment differently from Tesseract's
+    layout-aware word boxes, so the tuned row-clustering mis-groups dense statements).
+  - **`onnx` — the engine to re-OCR the archive with (`onnx_ocr.py`).** DeepDoc's 4.7 MB DB text
+    detector under onnxruntime + VietOCR (`vgg_seq2seq`) recognition, validated in experiments
+    8-9: accuracy-tied with a PaddleOCR-server stack and **~10× faster** (1.4 vs 13.9 s/page),
+    which is what makes a whole-ticker re-parse practical. The detection operators + DB
+    post-processing are vendored verbatim (Apache-2.0) in `_deepdoc/`; the model auto-downloads
+    from HuggingFace (`InfiniFlow/deepdoc`) if the bundled `models/deepdoc_det.onnx` is absent.
+    Recognition is batched on the GPU. It returns the same visual-space word boxes as the other
+    engines, so the row-builder is engine-blind.
+    - **⚠️ Do NOT `prerotate(page.rotation)` when rasterising.** `page.get_pixmap()` ALREADY
+      applies the page's `/Rotate`, so a plain scale matrix gives an upright raster. Rotating
+      again turns a `/Rotate 180` scan (every reviewed/annual filing) upside-down and OCR returns
+      pure garbage ("Các thuyết minh…" → "NYHI Y NYHD…"). This bit the first ACB run — the
+      rotation-180 quarters came out blank — and was invisible in experiments 8-9 because their
+      test filings are all `/Rotate 0`.
+  - **A page is OCR'd when its native text is too SHORT *or* GARBLED.** The length-only gate
+    ("< MIN_PAGE_TEXT chars ⇒ image ⇒ OCR") misses two mojibake classes ACB's 2013-2015 filings
+    embed, so `_native_garbled` catches both:
+    - **SUBSTITUTION** — a TCVN3/VNI legacy font maps every accented letter to an ASCII one
+      ("Bảng cân đối kế toán" → "Bine can ddi k6loAn"). Words stay medium-length, so the token
+      test cannot see it, but the **diacritic-per-letter ratio collapses to ~0.00** where genuine
+      Vietnamese runs ~0.10-0.13 (threshold 0.02). This is the tell that recovered ACB's balance
+      sheets, whose short-token fraction (0.24-0.38) sat *below* the 0.40 gate.
+    - **SHREDDING** — a broken CMap that fragments every diacritic word ("LƯU CHUYỂN TIỀN" →
+      "llfu chuyttn t n"), spiking the ≤2-char-token fraction (real ~0.23, mojibake ~0.45+;
+      threshold 0.40).
+    Genuine Vietnamese text trips neither, so VCB's clean-text pages are unaffected.
   - **Finding a statement's pages takes FOUR signals, because any one of them fails.** OCR
     mangles the form code's DIGITS — VCB's Q4-2021 balance sheet prints `Mẫu BU2/TCTD-HN`,
     `Mẫu Bữ2/TCTD-HN` and `Mẫu BUT/TCTD-HN` across its three pages (`0`→`U`/`ữ`, `5`→`S`,
@@ -446,6 +466,21 @@ the data rather than buried: **HVA** is filed under `chung-khoan-va-ngan-hang-da
     bridge two columns). The left of the page holds the section numbering and the *Thuyết
     minh* note reference — which are numbers too, and counted as a period column they drag the
     label boundary left of the labels and every label parses as empty.
+  - **Three page-classification hardenings, found by the onnx re-parse of ACB** (line-level
+    detection surfaces failures word-level OCR hid). All engine-agnostic:
+    - **A table of CONTENTS is not a statement.** A filing's "NỘI DUNG" page lists every
+      statement WITH its form code; a real statement page carries exactly ONE. `_page_kind`
+      rejects a page bearing two or more distinct form codes (else it was classified as the first
+      statement it named, anchoring the run pages early and feeding its page numbers into the
+      column clustering).
+    - **The BEST-matching title wins, not the first to clear the threshold.** A form code with an
+      OCR-mangled digit ("Mẫu BO4/TCTD-HN", letter O for 0) falls through to title matching, and
+      page boilerplate can score above threshold for the wrong statement in dict order — ACB's
+      cash flow was lost that way though "lưu chuyển tiền tệ" is in its header verbatim.
+    - **Drop the note column by MAGNITUDE, not position.** A line-level detector emits one tight
+      "Thuyết minh" column inside the value zone; it becomes column 1 and `_first_value` reads
+      every line's note number as its figure. A period column's numbers are 4-9 digits, a note
+      reference 1-2, so `value_columns` drops any surviving column whose median is ≤ 2 digits.
   - **The scans are stored `/Rotate 180`.** PyMuPDF rasterises them upright to OCR — so the
     text is correct — but hands back word boxes in *unrotated* space, mirrored. Left and right
     swap and the parser's whole premise inverts. Clearing the rotation is not a fix (OCR then

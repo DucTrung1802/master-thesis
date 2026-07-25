@@ -12,6 +12,11 @@ raw_data/*
 raw_data/cafef/*
 !raw_data/cafef/financials/
 
+# the DeepDoc DB detector weights for the onnx OCR engine (~4.7 MB). Fetched on first use from
+# HuggingFace (InfiniFlow/deepdoc) by onnx_ocr.ensure_det_model; the vendored *.py detection code
+# in src/web_scraper/_deepdoc/ IS tracked, only the model binary is not.
+src/web_scraper/models/*.onnx
+
 bronze_data/
 
 silver_data/

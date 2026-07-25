@@ -16,11 +16,14 @@ TESSDATA_DIR = os.environ.get(
     "TESSDATA_PREFIX", os.path.join(os.environ.get("LOCALAPPDATA", ""), "tessdata"))
 OCR_LANG = "vie"
 
-# Which OCR engine backs the image-only pages. "tesseract" (default) is the CPU engine the
-# reconciliation thresholds were tuned against — unchanged, byte-identical behaviour. "easyocr"
-# is a CUDA/GPU alternative (see _ocr_page): it damages text differently, so it must be
-# re-validated against the known-good VCB output before it is trusted. Override via the
-# CAFEF_OCR_ENGINE env var.
+# Which OCR engine backs the image-only pages. Override via the CAFEF_OCR_ENGINE env var.
+#   "tesseract" (default) — the CPU engine the reconciliation thresholds were tuned against;
+#                unchanged, byte-identical behaviour.
+#   "onnx"     — DeepDoc DB detection + VietOCR (see onnx_ocr.py). Experiments 8-9 measured it as
+#                accuracy-tied with the PaddleOCR-server stack and ~10× faster than it; the engine
+#                to re-OCR the archive with. Reads the same word boxes the parser expects.
+#   "easyocr"  — a CUDA/GPU alternative (see _ocr_page): it fragments boxes differently and is NOT
+#                adopted; kept for comparison.
 OCR_ENGINE = os.environ.get("CAFEF_OCR_ENGINE", "tesseract").lower()
 
 BALANCE_SHEET = "balance_sheet"
@@ -220,7 +223,18 @@ class PdfParser:
     # PdfParser and every page.
     _easyocr_reader = None
 
+    # The onnx engine, built once and reused across pages (models are loaded lazily inside it).
+    _onnx = None
+
     def _init_ocr(self) -> bool:
+        if OCR_ENGINE == "onnx":
+            try:
+                from web_scraper.onnx_ocr import OnnxOcr
+                self._onnx = OnnxOcr(self._logger)
+                return True
+            except Exception as e:
+                self._log(f"onnx OCR unavailable ({e}); OCR disabled")
+                return False
         if OCR_ENGINE == "easyocr":
             try:
                 import easyocr  # noqa: F401  (import-time check only)
@@ -286,6 +300,18 @@ class PdfParser:
         and the title is confined to the header so an auditor's report merely NAMING a
         statement cannot masquerade as one.
         """
+        # A TABLE OF CONTENTS is not a statement. A filing opens with a "NỘI DUNG" page that
+        # lists every statement WITH its form code ("Bảng cân đối kế toán hợp nhất (Mẫu
+        # B02/TCTD-HN)", B03, B04 below it). A form code is otherwise trusted absolutely, so that
+        # page was classified as the first statement it named, anchored the run pages early, and
+        # fed its own page numbers into the period-column clustering. A real statement page
+        # carries exactly ONE form code, its own; two or more distinct ones mean the page is
+        # talking ABOUT the statements. (Found via experiment_8 on ACB's FY-2013 filing.)
+        codes = {re.sub(r"\s+", "", m.group(1)).upper()
+                 for m in self.FORM_RE.finditer(text)}
+        if len(codes) > 1:
+            return None, False
+
         m = self.FORM_RE.search(text)
         if m:
             code = re.sub(r"\s+", "", m.group(1)).upper()
@@ -300,10 +326,36 @@ class PdfParser:
             return None, False              # the auditor's report is not a statement
         if self._titled(ns, [self.NOTES_NS]):
             return NOTES, False
+        # The BEST-matching title wins, not the first to clear the threshold. A form code with an
+        # OCR-mangled digit falls through to here — ACB's cash-flow page prints "Mẫu BO4/TCTD-HN"
+        # (letter O for the zero), so `B\d{2}` misses — and page boilerplate can score above the
+        # threshold for the WRONG statement before the right title is even tried, in dict order.
+        # ACB's cash flow was lost that way (declared the income statement) though "lưu chuyển
+        # tiền tệ" is in its header verbatim. Scoring all three and taking the best cannot do
+        # worse: an exact title always beats a coincidence. (experiment_8.)
+        best, score = None, 0.0
         for report, needles in self.HEADING.items():
-            if self._titled(ns, needles):
-                return report, False
+            s = self._title_score(ns, needles)
+            if s > score:
+                best, score = report, s
+        if best is not None and score >= self.TITLE_MATCH:
+            return best, False
         return None, False
+
+    def _title_score(self, header_ns: str, needles: List[str]) -> float:
+        """How well the header matches a statement's title: 1.0 for a verbatim hit, else the best
+        sliding-window ratio — the same measure `_titled` thresholds, but returned not thresholded
+        so `_page_kind` can compare the three statements against one another."""
+        from difflib import SequenceMatcher
+
+        best = 0.0
+        for n in needles:
+            if n in header_ns:
+                return 1.0
+            w = len(n)
+            for i in range(0, max(1, len(header_ns) - w + 1)):
+                best = max(best, SequenceMatcher(None, n, header_ns[i:i + w]).ratio())
+        return best
 
     def _titled(self, header_ns: str, needles: List[str]) -> bool:
         """Does the header carry this statement's title, allowing for OCR damage?
@@ -351,18 +403,43 @@ class PdfParser:
     # short-token fraction (co, a, te, do, i…); ACB's mojibake pages run ~0.51. 0.40 splits them.
     GARBLED_SHORT_FRAC = 0.40
 
+    # Every precomposed Vietnamese accented letter. Genuine Vietnamese text is dense with these
+    # (~0.10-0.13 of its letters); a TCVN3/VNI legacy font substitutes an ASCII letter for each,
+    # so a mojibake page carries essentially NONE. That gap is the surest tell of the substitution
+    # mojibake the token-length test cannot see (its words stay medium-length, just wrong).
+    VN_DIACRITICS = set(
+        "àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ"
+        "ÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐ")
+    # Below this diacritic-per-letter ratio, a page with real text is mojibake. 0.02 sits far
+    # under genuine Vietnamese (~0.10) and far over the mojibake floor (0.00).
+    MIN_DIACRITIC_RATIO = 0.02
+
     def _native_garbled(self, native: str) -> bool:
         """True when a non-trivial native text layer is legacy-font mojibake and must be OCR'd.
 
-        ACB's 2013-2015 filings embed a broken-encoding text layer: get_text() returns 1770+
-        readable-length chars that are pure junk ("BAo cAo LLFU CHUYttN T:亡N TE"), so the
-        length gate skips OCR and the page classifier then matches nothing — the cash-flow
-        statement vanished entirely and the balance sheet parsed 5 rows of noise. The tell is
-        the flood of shredded-diacritic fragments, measured as the ≤2-char-token fraction.
+        ACB's 2013-2015 filings embed a broken-encoding text layer: get_text() returns 1700+
+        readable-length chars that are pure junk. Two distinct flavours, one gate for each:
+          * SUBSTITUTION — every accented letter mapped to an ASCII one ("Bảng cân đối kế toán"
+            → "Bine can ddi k6loAn"). Words stay medium-length, so the token test misses it, but
+            the diacritics are gone: the diacritic-per-letter ratio collapses to ~0.00.
+          * SHREDDING — a broken CMap that fragments every diacritic word ("LƯU CHUYỂN TIỀN" →
+            "llfu chuyttn t n"), spiking the ≤2-char-token fraction.
+        Either one means the page classifier would match nothing and the statement would be lost,
+        so the page must be OCR'd. Genuine Vietnamese text trips neither.
         """
         ns = self.norm(native).replace(" ", "")
         if len(ns) < self.MIN_PAGE_TEXT:
             return False            # too little text to judge; the length gate handles it
+
+        # Substitution mojibake: substantial text, essentially no Vietnamese diacritics. Measured
+        # on NFC-normalised raw text (decomposed accents would otherwise read as plain letters).
+        nfc = unicodedata.normalize("NFC", native)
+        alpha = [c for c in nfc if c.isalpha()]
+        if alpha and (sum(1 for c in alpha if c in self.VN_DIACRITICS) / len(alpha)
+                      < self.MIN_DIACRITIC_RATIO):
+            return True
+
+        # Shredding mojibake: a flood of 1-2 char fragments.
         toks = [t for t in self.norm(native).split() if not t.isdigit()]
         if len(toks) < 20:
             return False            # too few words to trust the ratio
@@ -390,6 +467,8 @@ class PdfParser:
         if not need_ocr:
             return native, page.get_text("words")
 
+        if OCR_ENGINE == "onnx":
+            return self._onnx.read_page(page)
         if OCR_ENGINE == "easyocr":
             return self._ocr_page_easyocr(page)
 
@@ -578,7 +657,29 @@ class PdfParser:
         clusters = self._clusters(edges, self.EDGE_TOL)
         biggest = max(len(c) for c in clusters)
         keep = [c for c in clusters if len(c) >= 0.35 * biggest]
-        return [sum(c) / len(c) for c in keep][:5]
+        cols = [sum(c) / len(c) for c in keep][:5]
+
+        # Drop a "Thuyết minh" note-reference column that survived into the value zone. The
+        # right-60% rule already excludes the note column for WORD-level OCR, which scatters the
+        # label's words across the left of the page. A LINE-level detector (the onnx engine)
+        # instead emits ONE tight box per note number, and they cluster as a well-populated
+        # right-edge column INSIDE the value zone — it becomes column 1, and `_first_value` then
+        # reads every line's NOTE NUMBER as its figure, so nothing maps or reconciles. Separate it
+        # by magnitude, which needs no threshold: a period column's figures are 4-9 digits (Triệu
+        # VND), a note reference 1-2. (experiment_8.)
+        if len(cols) <= 1:
+            return cols
+        kept = []
+        for c in cols:
+            digits = sorted(len(re.sub(r"\D", "", w[4])) for w in nums
+                            if abs(w[2] - c) <= self.EDGE_TOL)
+            if digits and digits[len(digits) // 2] > self.NOTE_MAX_DIGITS:
+                kept.append(c)
+        return kept or cols          # never leave the caller with nothing to parse
+
+    # A note reference is 1-2 digits ("Thuyết minh 4", "…21"); a Triệu-VND figure is 4-9. The
+    # median digit-count of a column's numbers separates them with room to spare.
+    NOTE_MAX_DIGITS = 2
 
     def table_rows(self, words_by_page: Dict[int, list], columns: List[float]) -> List[Row]:
         """Rows rebuilt from word coordinates.
