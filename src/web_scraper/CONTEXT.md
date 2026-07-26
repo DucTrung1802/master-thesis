@@ -83,21 +83,36 @@ Two things got it from 81% to complete, and both are structural rather than tuni
   The PDF is still read first (CafeF transcribes, has gaps, rounds), and every row records which
   it was in `source`: `pdf` (164 quarters, 77%) or `cafef` (49, 23%).
 
-**ACB re-parsed with the OCR CASCADE on GPU (Q1-2010 → Q1-2026).** ACB is the stress case:
-~2/3 of its filings are scans, many carrying the SUBSTITUTION-mojibake text layer. `build`
-escalates OCR config per statement until it reconciles — `FinancialsBuilder.CASCADE` =
-onnx@200 → onnx@300 → onnx@400 → tesseract@200 — before the CafeF-tab fallback (see
-`_parse_cascaded`). A statement that fails one config (over-included pages, a misread digit) is
-retried at higher resolution and then on a different engine; the `ocr_config` that won is recorded
-per row. **Result: `pdf`-sourced statements 98 → 186 of 222** (balance_sheet 32→61,
-income_statement 21→**65 — every quarter that has a filing**, cash_flow 45→60); `cafef` fallback
-124→36, **0 missing**. Of the 186 accepted from PDF, 163 came from onnx@200, 13 from onnx@300,
-2 from onnx@400, 8 from tesseract@200 — the retries earn their keep. The 36 `cafef` rows are 27
-quarters with NO filing in the archive (pre-listing 2008-2009 + the not-yet-filed Q2-2026) plus 9
-scans that still would not reconcile (4 balance sheets, 5 cash flows — schema-mapping collisions
-on the bank sub-item lines). The reconcile + magnitude gates are unchanged, so nothing wrong is
-written. Whole run ~3.7 h on an RTX 3050.
+**ACB re-parsed through a PARSE-LAYER pipeline on GPU (Q1-2010 → Q1-2026).** ACB is the stress
+case: ~2/3 of its filings are scans, many carrying the SUBSTITUTION-mojibake text layer. Each way
+of reading a filing — an OCR engine + its settings + optional matching relaxations — is a
+`ParseLayer`, and `build` tries them per statement, in order, until each reconciles, then the
+CafeF-tab fallback (see `_parse_cascaded`). `FinancialsBuilder.LAYERS`:
 
+  onnx@200 → onnx@300 → onnx@400 → tesseract@200 → onnx@200+relax → onnx@300+relax
+
+The first four are STRICT (higher resolution, then a different engine, for a filing whose scan
+merges lines or misreads a digit). The last two set `relax_totals`: they recover the balance
+sheet's grand-total columns from label variants the strict fuzzy match rejects — a filing that
+prints "TỔNG CỘNG TÀI SẢN" where the schema expects "TỔNG TÀI SẢN", or that OCR-merges the
+grand-total label into the line above (ACB Q1-2019, a `/Rotate 270` scan whose total assets
+otherwise mapped to a garbage −1.8T row). They run ONLY after the strict layers fail and only add
+the two total columns, still gated by reconcile + `sane`, so no other quarter is touched. The OCR
+of each `(engine, dpi)` is cached within a filing, so the relaxed layers re-map without a second
+OCR pass. The winning layer name is recorded per statement (`ocr_config`).
+
+**Result: `pdf`-sourced statements 98 → 189 of 222** (balance_sheet 32→**64**, income_statement
+21→**65 — every quarter that has a filing**, cash_flow 45→60); `cafef` fallback 124→**33**,
+**0 missing**. Which layer won, across the 189: ~163 onnx@200, ~15 onnx@300, 2 onnx@400,
+8 tesseract@200, **3 onnx+relax** (Q1-2019 / Q1-2020 / Q3-2021 balance sheets). The 33 `cafef`
+rows are 27 quarters with NO filing in the archive (pre-listing 2008-2009 + the not-yet-filed
+Q2-2026) plus 6 scans that still would not reconcile — **1 balance sheet (Q1-2023)** and 5 cash
+flows (which `relax_totals` does not target). The reconcile + magnitude gates are unchanged, so
+nothing wrong is written. Whole run ~2.6 h on an RTX 3050.
+
+- **Adding a way to parse a stubborn filing is adding a `ParseLayer` to `LAYERS`** — a new engine,
+  a new DPI, or a new matching relaxation. The strict-first / relaxed-last ordering is what keeps
+  a relaxation from ever loosening a quarter the strict layers already read correctly.
 - **Detection runs on the GPU** (`onnxruntime-gpu`, CUDAExecutionProvider): ~0.25 vs ~1.8 s/page
   for the CPU wheel. **⚠️ onnxruntime-gpu's version must match the machine's CUDA** — the current
   1.28 wheel needs CUDA 13 and silently falls back to CPU here (CUDA 12.1); the **1.20.x** line is
