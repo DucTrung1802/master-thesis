@@ -26,12 +26,19 @@ class ParseLayer:
     Fields:
       * `engine` / `dpi` — the OCR configuration handed to `PdfParser` (onnx or tesseract, and the
         render resolution). Higher DPI separates lines a low-res scan merges.
-      * `relax_totals` — recover the balance sheet's grand-total columns from label VARIANTS the
-        strict fuzzy match rejects: a filing that prints "TỔNG CỘNG TÀI SẢN" where the schema
-        expects "TỔNG TÀI SẢN", or that merges the grand-total label into the line above it (ACB
-        Q1-2019). Off for the strict layers so every other quarter is untouched; the relaxed
-        layers run ONLY after the strict ones fail, and the reconcile + magnitude gates still
-        guard whatever they recover.
+      * `relax_totals` — recover a statement's SUBTOTAL lines from label VARIANTS the strict
+        fuzzy match rejects. Two of them:
+          - the balance sheet's grand totals, for a filing that prints "TỔNG CỘNG TÀI SẢN" where
+            the schema expects "TỔNG TÀI SẢN", or that merges the grand-total label into the line
+            above it (ACB Q1-2019);
+          - the cash flow's opening and closing balances, which the filing DATES ("TẠI NGÀY 31
+            THÁNG 3") where the schema names the period ("tại thời điểm cuối kỳ") — see
+            CASH_TAIL. Because a mis-taken closing balance would be caught by nothing else, a
+            cash flow recovered this way must additionally agree with the components printed
+            beneath it (`_closing_breakdown`).
+        Off for the strict layers so every other quarter is untouched; the relaxed layers run
+        ONLY after the strict ones fail, and the reconcile + magnitude gates still guard whatever
+        they recover.
     """
     name: str
     engine: str
@@ -126,6 +133,31 @@ class FinancialsBuilder:
                     "tien_va_tuong_duong_tien_cuoi_ky")
 
     MIN_ROWS = 12          # a statement with fewer parsed rows than this is not a statement
+
+    # The cash flow's two balance lines are printed with the ACTUAL DATE where the chart of
+    # accounts says "đầu kỳ" / "cuối kỳ": ACB prints "TIỀN VÀ CÁC KHOẢN TƯƠNG ĐƯƠNG TIỀN TẠI
+    # NGÀY 1 THÁNG 1" for the opening balance and "… TẠI NGÀY 31 THÁNG 3" for the closing one.
+    # That is a wording difference in the FILING, not OCR damage, so it does not improve with
+    # resolution: both score ~0.72 against their account and neither reaches SCHEMA_MATCH, which
+    # loses the closing balance — the only subtotal a cash flow can be reconciled on.
+    #
+    # The two share this whole prefix and differ only in the date, so the prefix alone cannot
+    # say which is which. It does not have to: the schema lists đầu kỳ before cuối kỳ and the
+    # filing prints them in that order, so the ordered walk in `map_to_schema` assigns the first
+    # to the opening and the second to the closing on its own. `_anchor`, which has no order to
+    # lean on, separates them by length instead — "…taingay31thang3" spans 0.95 of the closing
+    # account against "…taingay"'s 0.77.
+    CASH_TAIL = "tienvacackhoantuongduongtientai"
+
+    # The closing balance is followed by its own components ("Tiền và các khoản tương đương tiền
+    # gồm có: — Tiền mặt…, — Tiền gửi thanh toán tại NHNN, — Tiền gửi tại các TCTD"), which is a
+    # SECOND statement of the same figure and the only independent check a cash flow carries.
+    # "gomco" is the "gồm có:" header itself, which carries no figure of its own but which OCR
+    # merges with the FIRST component below it — ACB's Q1-2024 reads the whole block as
+    # "tháng 3 tiền và các khoản tương đương tiền gồm có" while holding the tiền-mặt value
+    # 6,470,319. Without it that first component is skipped and the sum falls short by exactly
+    # that amount.
+    CASH_COMPONENT = ("tienmat", "tiengui", "chungkhoan", "vangbac", "gomco")
 
     # How alike two labels must be to be the SAME line item across quarters.
     #
@@ -225,7 +257,7 @@ class FinancialsBuilder:
                 if st is None:
                     continue
                 row = self.map_to_schema(st, template, relax_totals=layer.relax_totals)
-                if (self.reconcile(st, row) is None
+                if (self.reconcile(st, row, verify_cash=layer.relax_totals) is None
                         and self.sane(st, history[report], row) is None):
                     accepted[report] = (row, st, layer.name)
         return accepted, facts
@@ -366,6 +398,22 @@ class FinancialsBuilder:
     # 69 balance sheets were rejected for "assets != liabilities + equity".
     SCHEMA_MATCH = 0.80
     MIN_CONTAINS = 10        # too short a name is contained in too many others to prove much
+    # Containment ("one name sits inside the other") runs in BOTH directions, and MIN_CONTAINS
+    # guards only the schema account — which is the wrong string to check for `key in account`.
+    # There the contained side is the parsed row, and OCR produces two very different kinds of
+    # short row:
+    #   * a WORD FRAGMENT, when OCR splits a label across two lines and the tail becomes a row of
+    #     its own. ACB's Q1-2023 income statement breaks "Chi phí thuế thu nhập doanh nghiệp /
+    #     hoãn lại" exactly there, and the fragment "hoanlai" — carrying the 87,884 — identifies
+    #     line 8 among its neighbours as surely as the full label would.
+    #   * the statement's own NUMBERING (a, b, c, i, ii … viii), when the letter is split off its
+    #     text. "a" is contained in almost every account name there is, and it handed ACB's
+    #     Q1-2023 balance sheet the 1,709,488 sitting beside a stray "a" row as TỔNG NỢ PHẢI TRẢ.
+    # Length separates them cleanly: every roman numeral and section letter is at most 4 chars
+    # ("viii"), while a fragment that is a real word runs longer. So the contained side must be a
+    # word, not a numeral — that is what this floor asserts, and it is deliberately NOT
+    # MIN_CONTAINS, which answers a different question about the account side.
+    MIN_CONTAINS_FRAGMENT = 5
 
     # The cash-flow section prefixes, and the method tags the union adds. Only these may be
     # stripped from the front of a column — a blanket "drop the first word" also eats the
@@ -396,6 +444,37 @@ class FinancialsBuilder:
                     items.append((col, account or rest))
         self._schema_cache[key] = items
         return items
+
+    def _label_score(self, account: str, key: str, relax: bool = False) -> float:
+        """How alike a schema account and a parsed row label are, both separator-stripped.
+
+        One measure shared by the ordered walk and `_anchor`, so a line is scored the same way
+        whichever finds it. Above the raw ratio sit two shortcuts:
+
+          * CONTAINMENT — one name sits inside the other. Evidence only when BOTH are
+            substantial: see MIN_CONTAINS (the account) and MIN_CONTAINS_FRAGMENT (the row,
+            which OCR may have cut down to a word).
+          * The CASH-FLOW TAIL, under `relax` only — the filing dates these lines where the
+            schema names the period (see CASH_TAIL). The prefix identifies the pair; order and
+            length tell them apart.
+
+        The cash-tail shortcut is gated because it is not additive. It makes two rows that
+        previously matched nothing match strongly, and where a quarter ALREADY had a closing
+        balance that changes which row wins: on a sample of 16 accepted quarters it moved
+        Q4-2021's closing from 82,601,567 to the 46,022,071 in the comparative column. Confined
+        to the relaxed layers it can only be reached by a statement the strict ones could not
+        read at all, so no quarter that already parses is touched.
+        """
+        from difflib import SequenceMatcher
+
+        r = SequenceMatcher(None, account, key).ratio()
+        if (len(account) >= self.MIN_CONTAINS
+                and min(len(account), len(key)) >= self.MIN_CONTAINS_FRAGMENT
+                and (account in key or key in account)):
+            r = max(r, 0.95)
+        if relax and account.startswith(self.CASH_TAIL) and key.startswith(self.CASH_TAIL):
+            r = max(r, 0.95)
+        return r
 
     def map_to_schema(self, st: Statement, template: str,
                      relax_totals: bool = False) -> Dict[str, int]:
@@ -443,16 +522,14 @@ class FinancialsBuilder:
                 if col in out:
                     continue
                 a = account.replace("_", "")
-                r = SequenceMatcher(None, a, key).ratio()
-                if len(a) >= self.MIN_CONTAINS and (a in key or key in a):
-                    r = max(r, 0.95)            # one is contained in the other
+                r = self._label_score(a, key, relax_totals)
                 if r > best:
                     best_j, best = j, r
             if best_j >= 0 and best >= self.SCHEMA_MATCH:
                 out[schema[best_j][0]] = val
                 i = best_j + 1                  # never match backwards
 
-        self._anchor(out, schema, st)
+        self._anchor(out, schema, st, relax_totals)
         if relax_totals:
             self._recover_totals(out, st)
         return out
@@ -469,16 +546,35 @@ class FinancialsBuilder:
         "tong_no_phai_tra_va_von_chu_so_huu": ("tongnophaitrava", "tongcongnguonvon"),
     }
 
+    # The cash flow's two dated balance lines, in the order the filing prints them.
+    CASH_BALANCES = ("hdtc_v_tien_va_cac_khoan_tuong_duong_tien_tai_thoi_diem_dau_ky",
+                     "hdtc_vii_tien_va_cac_khoan_tuong_duong_tien_tai_thoi_diem_cuoi_ky")
+
     def _recover_totals(self, out: Dict[str, int], st: Statement) -> None:
-        """Fill the balance-sheet grand-total columns from label variants (relaxed layers only).
+        """Fill a statement's subtotal columns from label variants (relaxed layers only).
 
         Runs after the ordered walk and `_anchor` have done their best and the statement STILL
-        did not reconcile — so it can only add the two total columns, and whatever it adds is
-        re-checked by `reconcile` + `sane` before the row is accepted. A filing whose grand totals
+        did not reconcile — so it can only add these few columns, and whatever it adds is
+        re-checked by `reconcile` + `sane` before the row is accepted. A filing whose subtotals
         are genuinely unreadable is unaffected (nothing matches) and still falls through to the
         CafeF tabs. The LAST matching row wins: the grand total is printed at the foot of its
         section, below any partial subtotal that shares the substring.
+
+        For the CASH FLOW the same "last one wins" settles its opening and closing balances,
+        which are the same words with a different date (see CASH_TAIL). Position is the only
+        sound discriminator: they tie on score, and length is actively misleading because OCR
+        decides it — ACB's Q1-2026 opening reads 44 characters against a 44-character account,
+        a perfect 1.00 ratio, while the real closing line scores 0.955 and lost to it. The
+        filing prints opening first and closing last, so first and last is what they are.
         """
+        if st.report == CASH_FLOW:
+            dated = [r for r in st.rows
+                     if r.key.replace("_", "").startswith(self.CASH_TAIL)
+                     and st._first_value(r.values) is not None]
+            if len(dated) >= 2:
+                for col, row in zip(self.CASH_BALANCES, (dated[0], dated[-1])):
+                    out[col] = st._first_value(row.values)
+            return
         if st.report != BALANCE_SHEET:
             return
         for col, aliases in self.TOTAL_ALIASES.items():
@@ -509,39 +605,63 @@ class FinancialsBuilder:
     ANCHOR_LEN_RATIO = 0.85       # damaged label must be >= this fraction of the target length
 
     def _anchor(self, out: Dict[str, int], schema: List[Tuple[str, str]],
-                st: Statement) -> None:
+                st: Statement, relax: bool = False) -> None:
         """Re-match the subtotals without regard to position.
 
         The ordered walk drifts. Once it has advanced past a column, a row that belongs there
         lands on the next-best thing instead — VCB's Q2-2014 and Q2-2023 gave the GRAND TOTAL
         column the value of TỔNG NỢ PHẢI TRẢ, and `assets - resources` came out exactly equal to
         equity. These few lines are unambiguous (nothing else in a statement is called "TỔNG
-        TÀI SẢN"), so they are searched for over the whole statement and the best match wins.
+        TÀI SẢN"), so they are searched for over the whole statement.
+
+        The anchors COMPETE for rows rather than each taking its own best independently. One
+        printed line is one line item, so it can answer only one anchor — and resolved
+        separately they collide, because the anchor names NEST: "TỔNG NỢ PHẢI TRẢ" is a literal
+        prefix of "TỔNG NỢ PHẢI TRẢ VÀ VỐN CHỦ SỞ HỮU", and "VỐN CHỦ SỞ HỮU" sits inside both.
+        Each therefore scores the full containment 0.95 against the other's row, and ACB's
+        Q1-2023 gave total liabilities the GRAND TOTAL's 611,223,523 — a figure that then looks
+        entirely plausible and balances, while the real 548,693,358 sat one row above it.
+        Scoring every (anchor, row) pair and assigning best-first, each row spent once, settles
+        them against each other: the grand-total row matches its own anchor exactly (1.00) and is
+        taken there, so total liabilities falls to the row that genuinely carries it.
         """
         from difflib import SequenceMatcher
 
         accounts = {c: a.replace("_", "") for c, a in schema if c in self.ANCHORS}
+        cands = []
         for col, a in accounts.items():
-            best_v, best, best_len = None, 0.0, 0.0
-            for row in st.rows:
+            for ri, row in enumerate(st.rows):
                 # first populated column = current period (see map_to_schema / _first_value):
                 # an over-segmented grand-total row has its figure in index 1, not 0.
                 val = st._first_value(row.values)
                 if val is None:
                     continue
                 k = row.key.replace("_", "")
-                r = SequenceMatcher(None, a, k).ratio()
-                if len(a) >= self.MIN_CONTAINS and (a in k or k in a):
-                    r = max(r, 0.95)
-                if r > best:
-                    # length ratio guards the relaxed floor: how much of the target the OCR'd
-                    # label actually spans (min/max so a too-long label is penalised too).
-                    best_v, best = val, r
-                    best_len = min(len(a), len(k)) / max(len(a), len(k))
-            accept = best >= self.ANCHOR_MATCH or (
-                best >= self.ANCHOR_MATCH_LONG and best_len >= self.ANCHOR_LEN_RATIO)
-            if best_v is not None and accept:
-                out[col] = best_v
+                r = self._label_score(a, k, relax)
+                # Length ratio: how much of the target the OCR'd label actually spans (min/max
+                # so a too-long label is penalised too). It also ranks the ties containment
+                # creates, since 0.95 is awarded flat to the line itself AND to anything that
+                # merely MENTIONS it — a short label scoring high against a long one is a
+                # coincidence, a full-length one is the line itself.
+                ln = min(len(a), len(k)) / max(len(a), len(k))
+                if r >= self.ANCHOR_MATCH or (r >= self.ANCHOR_MATCH_LONG
+                                              and ln >= self.ANCHOR_LEN_RATIO):
+                    cands.append((r, ln, col, ri, val))
+
+        # Ranked by score, then by how much of the account the label spans, then by POSITION —
+        # later wins. The last is what separates the cash flow's two dated balance lines, which
+        # are the same words with a different date and therefore tie exactly on both other keys
+        # (0.95, 42/44): the closing balance is the one printed BELOW the opening, the same
+        # reasoning `_recover_totals` uses for a grand total sitting at the foot of its section.
+        # Without it ACB's Q1-2025 closing balance took the opening's 139,824,608.
+        cands.sort(key=lambda c: (c[0], c[1], c[3]), reverse=True)
+        taken_col, taken_row = set(), set()
+        for r, ln, col, ri, val in cands:
+            if col in taken_col or ri in taken_row:
+                continue
+            out[col] = val
+            taken_col.add(col)
+            taken_row.add(ri)
 
     SCHEMA_WINDOW = 25       # how far ahead in the chart of accounts a line may be found
 
@@ -565,7 +685,8 @@ class FinancialsBuilder:
         return best if score >= self.SIMILARITY else key
 
     def reconcile(self, st: Statement,
-                  mapped: Optional[Dict[str, int]] = None) -> Optional[str]:
+                  mapped: Optional[Dict[str, int]] = None,
+                  verify_cash: bool = False) -> Optional[str]:
         """None if the statement balances against its OWN printed subtotals, else why not.
 
         The subtotals are taken from the CANONICAL columns when the rows have been mapped —
@@ -603,9 +724,117 @@ class FinancialsBuilder:
                 return "no profit before tax"
 
         if st.report == CASH_FLOW:
-            if (get(self.C_NET_CF, *self.NET_CF) is None
-                    and get(self.C_CASH_CLOSE, *self.CASH_CLOSE) is None):
+            close = get(self.C_CASH_CLOSE, *self.CASH_CLOSE)
+            if get(self.C_NET_CF, *self.NET_CF) is None and close is None:
                 return "no cash-flow subtotal"
+            if verify_cash and close is not None:
+                bad = self._closing_breakdown(st, close)
+                if bad:
+                    return bad
+                bad = self._cash_flow_identity(mapped or {})
+                if bad:
+                    return bad
+        return None
+
+    # The statement's own arithmetic: closing = opening + what moved + the FX adjustment. The
+    # movement is IV when it was mapped, else the section subtotals it is the sum of.
+    C_CASH_OPEN = ("hdtc_v_tien_va_cac_khoan_tuong_duong_tien_tai_thoi_diem_dau_ky",)
+    C_CASH_FX = ("hdtc_vi_dieu_chinh_anh_huong_cua_thay_doi_ty_gia",)
+    C_FLOW_SECTIONS = ("hdkd_i_luu_chuyen_tien_thuan_tu_hoat_dong_kinh_doanh",
+                       "hddt_ii_luu_chuyen_tien_thuan_tu_hd_dau_tu",
+                       "hdtc_iii_luu_chuyen_tien_thuan_tu_hd_tai_chinh")
+
+    def _cash_flow_identity(self, mapped: Dict[str, int]) -> Optional[str]:
+        """Closing must equal opening + movement + FX — the statement's own arithmetic.
+
+        `_closing_breakdown` proves ONE figure, and that turned out not to be enough: ACB's
+        Q1-2024 recovered a closing balance of 126,501,216 that agrees with its components to the
+        đồng while the eleven other figures around it were read from the COMPARATIVE column
+        (its FX line came out as Q1-2023's -43,527 against the -70,648 the filing prints). The
+        row reconciled and was written, and was wrong.
+
+        This ties the closing balance back to the opening one through the flows, so the interior
+        of the statement has to hold together too, and it is what separates that from the sound
+        recoveries: Q1-2026 gives 163,213,792 - 21,438,814 - 336,492 - 89,055 = 141,349,431
+        exactly.
+
+        Applied only when the opening, the FX line and at least one flow subtotal all mapped —
+        a statement that did not yield them cannot answer this and is judged as before, and this
+        runs on the relaxed layers alone, so a quarter the strict layers already read is never
+        subjected to it.
+        """
+        close = next((mapped[c] for c in self.C_CASH_CLOSE if c in mapped), None)
+        open_ = next((mapped[c] for c in self.C_CASH_OPEN if c in mapped), None)
+        fx = next((mapped[c] for c in self.C_CASH_FX if c in mapped), None)
+        if close is None or open_ is None or fx is None:
+            return None
+
+        net = next((mapped[c] for c in self.C_NET_CF if c in mapped), None)
+        if net is None:
+            sections = [mapped[c] for c in self.C_FLOW_SECTIONS if c in mapped]
+            if not sections:
+                return None
+            net = sum(sections)
+        if not self._equal(open_ + net + fx, close):
+            return (f"cash flow does not close: opening {open_:.6g} + movement {net:.6g} "
+                    f"+ fx {fx:.6g} != closing {close:.6g}")
+        return None
+
+    def _closing_breakdown(self, st: Statement, close: int) -> Optional[str]:
+        """Check the closing cash balance against the components printed beneath it.
+
+        Alone among the three statements the cash flow has no internal identity to test — the
+        old check only asked whether a subtotal was PRESENT, which is not reconciliation at all,
+        and a closing balance mis-read by a whole digit passed it. ACB's Q1-2023 reads
+        196,922,247 where the filing prints 96,922,247 (the leading 1 is a recognition error at
+        every DPI; Q1-2024's comparative column prints the true figure). It is 6.7x the running
+        median, so the magnitude band waves it through too.
+
+        But the statement states the figure TWICE: right under the closing balance it prints
+        "Tiền và các khoản tương đương tiền gồm có" and lists the components, which must add up
+        to it. That is a genuine reconciliation, and it is what tells a misread digit from a
+        sound read: Q1-2023's components come to 106,922,247 against a claimed 196,922,247,
+        while Q3-2022's come to 72,894,066 against exactly that.
+
+        Only ever applied when the breakdown was actually parsed (two or more components), so a
+        filing that does not print one, or whose components OCR lost, is judged as before rather
+        than rejected for a check it cannot answer.
+        """
+        # the closing balance is the LAST of the dated cash-tail lines (the opening one precedes
+        # it); its components are the rows that follow, until the list ends
+        last = None
+        for i, row in enumerate(st.rows):
+            if row.key.replace("_", "").startswith(self.CASH_TAIL):
+                last = i
+        if last is None:
+            return None
+
+        # A component is recognised by CONTAINING its marker, not by starting with it: the
+        # "gồm có" header is printed on its own line and OCR merges it into the first component,
+        # so that row reads "tiền và các khoản tương đương tiền gồm có tiền mặt vàng bạc đá quý"
+        # — the marker is there, just not at the front. Matching on the prefix found nothing at
+        # all and the check silently never ran. The breakdown is the last block on the page, so
+        # the scan runs to the end and simply skips anything that is not a component.
+        parts = []
+        for row in st.rows[last + 1:]:
+            k = row.key.replace("_", "")
+            if not any(m in k for m in self.CASH_COMPONENT):
+                continue
+            # STRICTLY the current period here, not `_first_value`. A component the bank did not
+            # hold this quarter is printed "-", and falling through to the next populated column
+            # adds the PRIOR year's figure to a current-year sum: ACB's Q1-2025 holds no
+            # "Chứng khoán đầu tư" but reported 1,003,259 of it in Q1-2024, which turned a
+            # breakdown that agrees exactly into one that overshoots by that amount.
+            v = row.values[0] if row.values else None
+            if v is not None:
+                parts.append(v)
+        if len(parts) < 2:
+            return None                     # no breakdown to check against
+
+        total = sum(parts)
+        if not self._equal(total, close):
+            return (f"closing cash {abs(close):.6g} != its own components "
+                    f"{abs(total):.6g} (misread digit?)")
         return None
 
     # Two figures that should be identical, allowing for OCR. VCB's Q1-2020 balance sheet reads
@@ -654,6 +883,26 @@ class FinancialsBuilder:
         got = self._probe(st.report, mapped or {}, st)
         if got is None or not history:
             return None
+
+        # THE COMPARATIVE COLUMN READ AS THE CURRENT ONE. Every statement prints the prior
+        # period beside the current one, and when the column clustering slips by one the whole
+        # statement is taken from the comparative — internally consistent, correctly signed, of
+        # exactly the right magnitude. Reconciliation cannot see it (the prior period balances
+        # just as well as this one) and neither can the band below.
+        #
+        # The tell is that the figure is one we have ALREADY ACCEPTED: ACB's Q4-2022 annual
+        # filing read total assets 527,769,944 — to the đồng, the Q4-2021 figure printed in the
+        # column beside it. Two quarters agreeing on a 9-to-12-digit total to the last unit is
+        # not something a going concern does; it means the wrong column was read.
+        #
+        # This was latent until the anchors were made to compete: before that, a mis-clustered
+        # ACB Q4-2022 also produced a garbage grand total, so reconcile rejected it for the
+        # wrong reason and the cascade escalated to a layer that read it correctly. Now that the
+        # totals agree with each other, the statement is coherent and only this catches it.
+        if got and got in set(history):
+            return (f"probe {abs(got):.3g} exactly equals an already-accepted quarter "
+                    f"(comparative column read as the current one?)")
+
         ref = sorted(abs(v) for v in history)
         median = ref[len(ref) // 2]
         if median and abs(got) and not (median / 20 <= abs(got) <= median * 20):

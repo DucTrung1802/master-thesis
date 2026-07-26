@@ -101,18 +101,81 @@ the two total columns, still gated by reconcile + `sane`, so no other quarter is
 of each `(engine, dpi)` is cached within a filing, so the relaxed layers re-map without a second
 OCR pass. The winning layer name is recorded per statement (`ocr_config`).
 
-**Result: `pdf`-sourced statements 98 → 189 of 222** (balance_sheet 32→**64**, income_statement
-21→**65 — every quarter that has a filing**, cash_flow 45→60); `cafef` fallback 124→**33**,
-**0 missing**. Which layer won, across the 189: ~163 onnx@200, ~15 onnx@300, 2 onnx@400,
-8 tesseract@200, **3 onnx+relax** (Q1-2019 / Q1-2020 / Q3-2021 balance sheets). The 33 `cafef`
-rows are 27 quarters with NO filing in the archive (pre-listing 2008-2009 + the not-yet-filed
-Q2-2026) plus 6 scans that still would not reconcile — **1 balance sheet (Q1-2023)** and 5 cash
-flows (which `relax_totals` does not target). The reconcile + magnitude gates are unchanged, so
-nothing wrong is written. Whole run ~2.6 h on an RTX 3050.
+**Result: `pdf`-sourced statements 98 → 193 of 222** (balance_sheet 32→**65**, income_statement
+21→**65**, cash_flow 45→**63**) — for Q1-2010 → Q1-2026, the whole span ACB has filings for, that
+is **193 of 195, or 99%**. `cafef` fallback 124→**29**, **0 missing**. Of those 29, **27 are
+structural**: 9 quarters with NO filing in the archive (pre-listing 2008-2009 + the not-yet-filed
+Q2-2026) × 3 statements. Only **2 are real parse failures**, both cash flows — Q1-2023 and
+Q1-2024 (see below). The reconcile + magnitude gates are unchanged, so nothing wrong is written.
+Whole run ~2.6 h on an RTX 3050; a single quarter re-parsed on its own costs ~4 min when it fails
+(it runs every layer, including the CPU-only tesseract one) and less when it succeeds early.
+
+**⚠️ THE TWO THAT REMAIN ARE NOT THE SAME KIND OF PROBLEM**, and the difference decides whether
+more work would pay:
+- **Q1-2023 cash flow — a recognition failure, and a hard limit.** VietOCR prepends a phantom
+  digit to the closing balance (`96.922.247` → `196.922.247`) and to its tiền-mặt component
+  (`6.654.779` → `16.654.779`), *identically at 200, 300, 400, 500 and 600 dpi*. The box widths
+  prove it is the recogniser and not the detector: the 11-character output occupies exactly the
+  52.5pt box a 10-character number occupies elsewhere on the same page. Adding a higher-DPI
+  `ParseLayer` was tested and buys nothing. The true figure is legible only from Q1-2024's
+  comparative column.
+- **Q1-2024 cash flow — the OCR is perfect; the row builder misplaces it.** Every figure is read
+  correctly at every DPI. Line V's label wraps ("TẠI NGÀY / 1 THÁNG 1"), which pushes VI's value
+  onto the `thang_1` row and leaves VI's own label row empty, so `_first_value` falls through to
+  the comparative column and the statement fills with prior-year figures. Fixing it means
+  changing `table_rows`, which every one of the 193 working cells depends on — a 1-in-65 gain
+  against that surface. With IV and VI mapped correctly the identity closes exactly:
+  136,071,738 − 9,499,874 − 70,648 = 126,501,216.
 
 - **Adding a way to parse a stubborn filing is adding a `ParseLayer` to `LAYERS`** — a new engine,
   a new DPI, or a new matching relaxation. The strict-first / relaxed-last ordering is what keeps
   a relaxation from ever loosening a quarter the strict layers already read correctly.
+
+**Seven hardenings took ACB from 189 to 193, and every one is scoped so it CANNOT reach a quarter
+that already parses** — that is the design rule here, not a nicety: a change that improves five
+quarters and quietly breaks a sixtieth is a net loss, and the only way to know which you have is
+to re-run the ones that already work. Each was traced to a specific cause in the pixels.
+
+| # | fix | reaches only |
+|---|---|---|
+| 1 | `_page_content_text` — a page whose whole text layer is a SIGNATURE STAMP has none | pages previously classified `None` |
+| 2 | `MIN_CONTAINS_FRAGMENT` — containment must guard the SHORTER string | tightens a false match |
+| 3 | `_anchor` assigns competitively — one row answers one anchor | needs #4 |
+| 4 | `sane` rejects a probe EXACTLY equal to an accepted quarter | comparative-column reads |
+| 5 | `_split_number_runs` — one detection box holding TWO period figures | tokens that parse to nothing today |
+| 6 | orphan label — a label whose box starts BELOW its figures | rows discarded for an empty key |
+| 7 | `_cash_flow_identity` — closing = opening + movement + FX | relaxed layers only |
+
+- **#1 the signature stamp.** A scanned page that was e-signed carries a text layer holding only
+  the signature appearance (~350 chars of real Vietnamese and English), which clears MIN_PAGE_TEXT
+  and trips neither mojibake test — so the page is never OCR'd and the parser reads the stamp. It
+  usually lands on a cover page and costs nothing; on ACB's Q1-2023 it landed on the BALANCE
+  SHEET'S SECOND PAGE and the statement stopped at TỔNG TÀI SẢN, unreconcilable at any DPI or
+  engine. Across all 137 ACB+VCB filings this changes **27 pages, every one previously `None`**,
+  26 of them covers or trailers; exactly one sits inside a statement. **No VCB page changes.**
+- **#5 the merged number box.** The onnx engine detects text LINES, so on some rows it boxes both
+  period columns together (`'135.272.610 126.501.216'`). That parses as no number at all, so the
+  row loses every value and is dropped — which is how Q1-2025 and Q1-2026 lost IV, V *and* VII,
+  the entire basis for reconciling a cash flow, while the rows either side read perfectly.
+  Apportioning the box by character offset lands each right edge within a point of where the
+  neighbouring rows report it.
+- **#7 is the one that earns its keep.** `_closing_breakdown` proves ONE figure, and that turned
+  out not to be enough: Q1-2024 recovered a closing balance agreeing with its components to the
+  đồng while eleven figures around it came from the comparative column. It reconciled, and it was
+  written, and it was wrong — it had to be reverted off disk. Tying closing back to opening
+  through the flows makes the interior hold together too.
+- **Validated by re-running what already worked**, not by inspecting the diff: 16 accepted cash
+  flows re-parsed at two DPIs — **16 reconcile, 0 fail** — plus VCB Q1-2023 / Q3-2024 and ACB
+  Q4-2021 / Q4-2022 / Q2-2023 on the balance sheet. An earlier, unscoped version of #3 was caught
+  this way (it moved Q4-2021's closing to the comparative column and failed 5 of 16), which is why
+  the cash-flow relaxations are gated behind `relax_totals`.
+- **Corrections these produced in passing:** VCB Q1-2023 total liabilities 1,846,431→**1,701,773**
+  and equity 62,168→**144,658** (they now sum to total assets exactly); VCB Q3-2024 equity
+  36,293→**190,297**; ACB Q4-2022 closing cash −10,817,313→**103,510,228**.
+- **⚠️ Pre-existing corruption these gates now CATCH but have not yet fixed** (only a full re-parse
+  will): ACB's committed **Q1-2024 income statement** carries Q1-2023's PBT 5,156,497 — it read the
+  comparative column; the true figure is ~4,892bn. **Q1-2015** repeats Q1-2014's 318,253. Gate #4
+  is what detects this class, so re-running is worth it for more than the two open cells.
 - **Detection runs on the GPU** (`onnxruntime-gpu`, CUDAExecutionProvider): ~0.25 vs ~1.8 s/page
   for the CPU wheel. **⚠️ onnxruntime-gpu's version must match the machine's CUDA** — the current
   1.28 wheel needs CUDA 13 and silently falls back to CPU here (CUDA 12.1); the **1.20.x** line is

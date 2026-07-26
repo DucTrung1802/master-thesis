@@ -457,12 +457,115 @@ class PdfParser:
         short = sum(1 for t in toks if len(t) <= 2)
         return short / len(toks) >= self.GARBLED_SHORT_FRAC
 
+    # How much of a word's area must fall inside a signature widget for the widget to own it.
+    # The stamp's appearance can overhang its own rect by a fraction of a point (ACB Q1-2023's
+    # words run x 24.7-99.1 against a rect of 25.05-98.26), so containment must be by area, not
+    # by strict inclusion.
+    SIG_INSIDE = 0.6
+
+    @staticmethod
+    def _signature_rects(page) -> List:
+        """Rects of the page's digital-signature widgets (empty for an unsigned page)."""
+        try:
+            return [w.rect for w in page.widgets()
+                    if w.field_type_string == "Signature"]
+        except Exception:
+            return []                       # no AcroForm, or a damaged one
+
+    def _page_content_text(self, page, native: str) -> str:
+        """The page's OWN text — a page whose whole text layer is a SIGNATURE STAMP has none.
+
+        A scanned page that was e-signed carries a text layer holding only the signature
+        appearance ("Digitally signed by NGÂN HÀNG…, Reason: I am the author of this document,
+        Foxit Reader Version: 10.0.0" — ~350 chars of perfectly good Vietnamese and English).
+        That is the document's *provenance*, not its content: the table is in the pixels
+        underneath. But it is long enough to clear MIN_PAGE_TEXT and trips neither mojibake
+        test, so the page was accepted as a text page and never OCR'd — and the parser read the
+        stamp instead of the statement.
+
+        The stamp usually lands on a cover page, where it costs nothing. On ACB's Q1-2023 filing
+        it lands on the BALANCE SHEET'S SECOND PAGE: page 3 carries the whole liabilities-and-
+        equity side (TỔNG NỢ PHẢI TRẢ VÀ VỐN CHỦ SỞ HỮU = 611,223,523, matching total assets
+        exactly), and reading the stamp left it with no form code and 2 numbers, so
+        `_fill_continuations` saw a gap, ended the run, and the balance sheet stopped at TỔNG
+        TÀI SẢN. With no liabilities and no grand total it could never reconcile, at any DPI or
+        engine — which is why all six ParseLayers failed it identically.
+
+        The test is EXACT rather than a coverage heuristic: text inside a signature widget is by
+        definition not page content. Only a page whose text is ENTIRELY the stamp is emptied, so
+        a real text page that merely carries a signature keeps every character it had.
+        """
+        if not native.strip():
+            return native                   # already empty; the length gate has it
+        rects = self._signature_rects(page)
+        if not rects:
+            return native                   # unsigned page — the overwhelming majority
+        import fitz
+
+        words = page.get_text("words")
+        if not words:
+            return native
+        for w in words:
+            box = fitz.Rect(w[:4])
+            area = abs(box.get_area())
+            if not area:
+                continue
+            covered = max((abs((box & r).get_area()) for r in rects), default=0.0)
+            if covered / area < self.SIG_INSIDE:
+                return native               # real content here — leave the page alone
+        return ""                           # nothing but the stamp: treat as an image page
+
+    # A token that is nothing but numbers, separators and whitespace — two or more figures that
+    # a LINE-level detector has boxed together. Letters anywhere disqualify it, so a label is
+    # never touched, and it must carry at least one digit so a row of "-" placeholders is left
+    # alone.
+    NUM_RUN_RE = re.compile(r"^[\s\d.,()\-–—]+$")
+
+    @classmethod
+    def _split_number_runs(cls, words: list) -> list:
+        """Split a box holding SEVERAL period figures into one box per figure.
+
+        The onnx engine detects text LINES, not words, and on some rows it boxes both period
+        columns together: ACB's Q1-2025 cash flow returns '135.272.610 126.501.216' as a single
+        token spanning x 428-559, where the component lines below it come back as two boxes.
+        Such a token parses as no number at all, so the row loses every value and is dropped —
+        which is how that filing lost IV, V and VII, the whole basis for reconciling a cash flow,
+        while the rows either side of them read perfectly.
+
+        The figures are laid out in a fixed-width column of digits, so apportioning the box by
+        CHARACTER OFFSET puts each part where it was printed. Only the right edge has to be
+        right, since that is what the column clustering uses, and it lands within a point:
+        Q1-2025's split predicts right edges of 490.7 and 558.7 against the 491.3 and 559.2 its
+        neighbouring rows report.
+        """
+        out = []
+        for w in words:
+            txt = w[4]
+            parts = txt.split()
+            if (len(parts) < 2 or not cls.NUM_RUN_RE.match(txt)
+                    or not any(c.isdigit() for c in txt)):
+                out.append(w)
+                continue
+            x0, y0, x1, y1 = w[0], w[1], w[2], w[3]
+            width, n = x1 - x0, len(txt)
+            if width <= 0 or n == 0:
+                out.append(w)
+                continue
+            pos = 0
+            for part in parts:
+                i = txt.index(part, pos)
+                pos = i + len(part)
+                out.append((x0 + width * i / n, y0, x0 + width * pos / n, y1, part) +
+                           tuple(w[5:]))
+        return out
+
     def _ocr_page(self, page, native: str):
         """(text, words) for one page, words in VISUAL pdf-point space.
 
         Single seam for both OCR engines. When the page has a usable native text layer it is
-        used as-is (no OCR). A page is OCR'd when its native text is too SHORT (an image page)
-        OR present-but-GARBLED (a legacy-font mojibake text layer — see _native_garbled).
+        used as-is (no OCR). A page is OCR'd when its native text is too SHORT (an image page —
+        including one whose only text is a signature stamp, see _page_content_text) OR
+        present-but-GARBLED (a legacy-font mojibake text layer — see _native_garbled).
         Otherwise the configured engine reads the rasterised page:
 
           * tesseract — PyMuPDF's get_textpage_ocr, then _to_visual to undo the /Rotate 180
@@ -473,15 +576,18 @@ class PdfParser:
 
         Returns word tuples shaped like PyMuPDF's "words": (x0,y0,x1,y1, word, b, l, n).
         """
+        native = self._page_content_text(page, native)
         need_ocr = self.ocr_ready and (
             len(native.strip()) < self.MIN_PAGE_TEXT or self._native_garbled(native))
         if not need_ocr:
             return native, page.get_text("words")
 
         if self.engine == "onnx":
-            return self._onnx.read_page(page)
+            text, words = self._onnx.read_page(page)
+            return text, self._split_number_runs(words)
         if self.engine == "easyocr":
-            return self._ocr_page_easyocr(page)
+            text, words = self._ocr_page_easyocr(page)
+            return text, self._split_number_runs(words)
 
         tp = page.get_textpage_ocr(language=OCR_LANG, dpi=self.dpi, full=True,
                                    tessdata=TESSDATA_DIR)
@@ -709,7 +815,7 @@ class PdfParser:
                 k = next((k for k in lines if abs(k - w[1]) <= self.Y_TOL), w[1])
                 lines.setdefault(k, []).append(w)
 
-            carry: List[str] = []               # a label that wrapped onto its own line
+            parsed: List[tuple] = []
             for y in sorted(lines):
                 label: List[str] = []
                 vals: List[Optional[int]] = [None] * len(columns)
@@ -721,9 +827,27 @@ class PdfParser:
                             vals[j] = v
                     elif w[2] < lo and not self.NUM_RE.match(w[4]):
                         label.append(w[4])
+                parsed.append((y, label, vals))
 
+            carry: List[str] = []               # a label that wrapped onto its own line
+            for i, (y, label, vals) in enumerate(parsed):
                 if any(v is not None for v in vals):
                     words_ = carry + label
+                    if not words_ and i + 1 < len(parsed):
+                        # A label sits BELOW its own figures when its box is the taller of the
+                        # two — diacritics and descenders push its top down past Y_TOL, leaving
+                        # one line with values and no label and the next with the label alone.
+                        # The row was then dropped for having an empty key, taking a real figure
+                        # with it: ACB's Q1-2024 lost "- Chứng khoán đầu tư 1.003.259" that way
+                        # (label 3.3pt below its value against a 3.0pt tolerance), which is
+                        # exactly the amount by which its cash breakdown then failed to add up.
+                        # Only ever reached when the row would otherwise be discarded, so no row
+                        # that already parses can change.
+                        ny, nlabel, nvals = parsed[i + 1]
+                        if (nlabel and not any(v is not None for v in nvals)
+                                and ny - y <= self.Y_TOL * 2):
+                            words_ = nlabel
+                            parsed[i + 1] = (ny, [], nvals)     # consumed, not a carry
                     number = words_[0] if words_ and self.NUMBER_RE.match(words_[0]) else ""
                     text = " ".join(words_)
                     key = self.slug(text)
