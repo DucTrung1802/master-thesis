@@ -58,7 +58,15 @@ regenerated; delete it or restore the scraper rather than modelling on it.
 | `pdfs/` | `cafef_pdf_scraper.py` | all VN100 (100 tickers, all years) + 8 non-VN100 leftovers = 108 folders, ~97 GB |
 | `financials/` | `cafef_financials.py` (§3a) | the 12 schemas + `templates.csv`; statements per template — **the only part of `raw_data/` that is TRACKED in git** (it is 0.3 MB and costs hours of OCR to rebuild) |
 
-**Where the statement parser stands — VCB, Q3-2008 → Q1-2026 (71 quarters):**
+**⚠️ EVERY TICKER HAS A "PDF ERA", AND COVERAGE MUST BE READ AGAINST IT, NOT AGAINST THE GRID.**
+The written grid spans every quarter ATTEMPTED, which reaches back further than CafeF's document
+list does — **ACB's earliest filing is Q1-2010, VCB's is Q3-2008.** Quarters before a ticker's
+first filing can never be `pdf` no matter how good the parser gets; they exist only in CafeF's
+tabs. Scored on the raw grid ACB reads 88% and VCB 91% and both look broken; scored on the span
+where filings actually exist, **both are 100%**. Use `source == 'missing'` to find real gaps —
+`cafef` on a pre-archive quarter is the system working as designed.
+
+**Where the statement parser stands — VCB, Q3-2008 → Q1-2026 (71 quarters, its whole PDF era):**
 
 | report | quarters | pdf | cafef | missing | coverage | dated |
 |---|---|---|---|---|---|---|
@@ -83,8 +91,9 @@ Two things got it from 81% to complete, and both are structural rather than tuni
   The PDF is still read first (CafeF transcribes, has gaps, rounds), and every row records which
   it was in `source`: `pdf` (164 quarters, 77%) or `cafef` (49, 23%).
 
-**ACB re-parsed through a PARSE-LAYER pipeline on GPU (Q1-2010 → Q1-2026).** ACB is the stress
-case: ~2/3 of its filings are scans, many carrying the SUBSTITUTION-mojibake text layer. Each way
+**ACB re-parsed through a PARSE-LAYER pipeline on GPU — all 65 filings, Q1-2010 → Q1-2026, which
+is every ACB filing CafeF has.** ACB is the stress case: ~2/3 of its filings are scans, many
+carrying the SUBSTITUTION-mojibake text layer. Each way
 of reading a filing — an OCR engine + its settings + optional matching relaxations — is a
 `ParseLayer`, and `build` tries them per statement, in order, until each reconciles, then the
 CafeF-tab fallback (see `_parse_cascaded`). `FinancialsBuilder.LAYERS`:
@@ -101,14 +110,28 @@ the two total columns, still gated by reconcile + `sane`, so no other quarter is
 of each `(engine, dpi)` is cached within a filing, so the relaxed layers re-map without a second
 OCR pass. The winning layer name is recorded per statement (`ocr_config`).
 
-**Result: `pdf`-sourced statements 98 → 195 of 222** (balance_sheet 32→**65**, income_statement
-21→**65**, cash_flow 45→**65**) — for Q1-2010 → Q1-2026, the whole span ACB has filings for, that
-is **195 of 195: every statement of every quarter that has a filing**. `cafef` fallback 124→**27**,
-**0 missing**, and all 27 are STRUCTURAL — 9 quarters with no filing in the archive (pre-listing
-2008-2009 + the not-yet-filed Q2-2026) × 3 statements. **There is no longer a single quarter that
-has a filing and could not be read from it.** Whole run ~2.6 h on an RTX 3050; a single quarter
-re-parsed alone costs ~4 min when it fails (it runs every layer, including the CPU-only tesseract
-one) and ~6-7 min when a relaxed layer carries it.
+### ⚠️ THE PDF ARCHIVE BEGINS AT Q1-2010 — that boundary, not the parser, sets the coverage
+
+**CafeF holds 65 consolidated ACB filings and the earliest is Q1-2010.** Nothing exists for
+2008-2009, so those quarters can only ever come from CafeF's tabs however good the parser gets.
+Judge the parser on Q1-2010 → Q1-2026 and nothing else; measured against the raw 74-quarter grid
+it will always read ~88% and look broken when it is not.
+
+**Result over the PDF era, Q1-2010 → Q1-2026 (65 quarters, 195 cells): 195 of 195.**
+balance_sheet 65/65, income_statement 65/65, cash_flow 65/65 — **every statement of every quarter
+that has a filing, read from the filing.** Nothing in this span falls back to CafeF.
+
+On the full written grid (Q1-2008 → Q2-2026, 74 quarters, 222 cells) that is **`pdf` 98 → 195**,
+`cafef` 124 → **27**, **0 missing**. All 27 are structural and none is a parse failure:
+
+| | quarters | why |
+|---|---|---|
+| Q1-2008 … Q4-2009 | 8 × 3 = 24 | **no filing in the archive** — ACB listed on HNX in Nov-2006 but CafeF's document list starts 2010 |
+| Q2-2026 | 1 × 3 = 3 | not filed yet at the time of the run |
+
+Whole run ~2.6 h on an RTX 3050; a single quarter re-parsed alone costs ~4 min when it fails (it
+runs every layer, including the CPU-only tesseract one) and ~6-7 min when a relaxed layer carries
+it.
 
 **⚠️ WHAT THIS DOES AND DOES NOT GUARANTEE.** The gates prove a statement's SUBTOTALS, not every
 line on it. Every accepted cash flow now closes `V + IV + VI = VII` to the đồng and its closing
