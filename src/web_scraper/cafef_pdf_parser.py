@@ -205,7 +205,17 @@ class PdfParser:
 
     OCR_DPI = 200          # numbers need the resolution; below this, digits are lost
     MIN_PAGE_TEXT = 200    # a page with less native text than this is an image -> OCR it
-    Y_TOL = 3.0            # words within this many points share a row
+    # Words whose boxes START within this many points share a row. Raised 3.0 -> 4.0: a label is
+    # typeset taller than the digits beside it (diacritics above, descenders below), so its box
+    # begins slightly higher up, and at 3.0 the two fell either side of the line. ACB's Q1-2024
+    # cash flow puts VI's label 3.36pt below its own figures, which paired the figures with the
+    # STALE wrapped label above them ("11 THÁNG 1") and left VI empty, so `_first_value` took the
+    # comparative column and the statement filled with prior-year numbers.
+    #
+    # 4.0 is not a round number — it is where that page's gaps actually separate. Same-line pairs
+    # measure 0.72, 1.20 and 3.36pt; the nearest DIFFERENT-line gap is 4.80pt, and rows are set
+    # 13-18pt apart, so the cut has room on both sides.
+    Y_TOL = 4.0            # words within this many points share a row
     VALUE_ZONE = 0.40      # period columns live in the right 60% of the page
     EDGE_TOL = 9.0         # right edges within this many points are the same column
     LABEL_GAP = 30.0       # a word ending this far left of column 1 belongs to the label

@@ -53,6 +53,19 @@ RENDER_DPI = 200
 MIN_SCORE = 0.25            # drop recognitions below this confidence (scan speckle detects as text)
 REC_BATCH = 24
 
+# Margin added around each detected box BEFORE recognition, in pdf points (scaled to pixels at
+# the render DPI). The detector returns a box hugging the glyphs, and VietOCR misreads a crop
+# that tight: on ACB's Q1-2023 cash flow it read 96.922.247 as **196**.922.247 and 6.654.779 as
+# **16**.654.779, inventing a leading digit at the clipped edge. That is not a Vietnamese-
+# language problem and not a resolution one — it survived 200, 300, 400, 500 and 600 dpi, and
+# vgg_transformer, EasyOCR and Tesseract all read the SAME cell correctly from a looser crop.
+# One point is enough to fix both cells and the reading stays stable out to 6; 2 leaves margin
+# without pulling in the neighbouring column (the nearest column edge is ~27pt away).
+#
+# The padding feeds the RECOGNISER only. The box reported downstream is the detector's own, so
+# the right-edge column clustering is unchanged.
+CROP_PAD_PT = 2.0
+
 
 def _transform(data, ops):
     """Run the pre-processing operator chain (DeepDoc's `transform`)."""
@@ -261,13 +274,20 @@ class OnnxOcr:
             pix.height, pix.width, pix.n)[:, :, :3].copy()
 
         boxes = self.detector(img[:, :, ::-1])            # detector expects BGR
+        h_img, w_img = img.shape[:2]
+        pad = max(1, int(round(CROP_PAD_PT * scale)))
         crops, rects = [], []
         for quad in boxes:
             xs, ys = quad[:, 0], quad[:, 1]
             x0, y0, x1, y1 = int(xs.min()), int(ys.min()), int(xs.max()), int(ys.max())
             if x1 - x0 < 4 or y1 - y0 < 4:
                 continue
-            crops.append(Image.fromarray(img[y0:y1, x0:x1]))
+            # Recognise a PADDED crop but report the box the detector actually found: the extra
+            # pixels are there for the recogniser's benefit, and widening the reported box would
+            # corrupt the right-edge column clustering downstream.
+            px0, py0 = max(0, x0 - pad), max(0, y0 - pad)
+            px1, py1 = min(w_img, x1 + pad), min(h_img, y1 + pad)
+            crops.append(Image.fromarray(img[py0:py1, px0:px1]))
             rects.append((x0, y0, x1, y1))
 
         read = self.recognizer(crops)

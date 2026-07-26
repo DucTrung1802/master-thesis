@@ -190,6 +190,16 @@ class FinancialsBuilder:
         ParseLayer("tesseract@200", "tesseract", 200),
         ParseLayer("onnx@200+relax", "onnx", 200, relax_totals=True),
         ParseLayer("onnx@300+relax", "onnx", 300, relax_totals=True),
+        # LAST RESORT — A DIFFERENT RECOGNISER, not more pixels. onnx's VietOCR prepends a
+        # phantom digit to some figures on some scans and does it at EVERY resolution: ACB's
+        # Q1-2023 cash flow reads its closing balance as 196.922.247 where the filing prints
+        # 96.922.247, identically at 200, 300, 400, 500 and 600 dpi, so raising the DPI is not a
+        # remedy (the 11-character output occupies exactly the 52.5pt box a 10-character number
+        # occupies elsewhere on the page — the recogniser, not the detector). Tesseract reads the
+        # same crop correctly. It is terminal and relaxed, so only a statement that defeated every
+        # onnx layer reaches it, and what it recovers still faces reconcile + `sane` + the cash
+        # breakdown and identity gates.
+        ParseLayer("tesseract@400+relax", "tesseract", 400, relax_totals=True),
     ]
 
     def __init__(self, logger=None):
@@ -550,6 +560,22 @@ class FinancialsBuilder:
     CASH_BALANCES = ("hdtc_v_tien_va_cac_khoan_tuong_duong_tien_tai_thoi_diem_dau_ky",
                      "hdtc_vii_tien_va_cac_khoan_tuong_duong_tien_tai_thoi_diem_cuoi_ky")
 
+    def _is_cash_tail(self, key: str) -> bool:
+        """Is this row one of the cash flow's two DATED balance lines?
+
+        Matched by CONTAINMENT, not by prefix. The section numeral is printed hard against the
+        label and OCR keeps a fragment of it: ACB's Q1-2023 opening balance comes back as
+        `t_tien_va_cac_khoan_tuong_duong_tien_tai_ngay_1_thang_1`, and that one stray leading
+        character was enough for a `startswith` test to miss the line entirely — leaving the
+        statement with no opening balance, unverifiable, and refused, although every figure on
+        the page had been read correctly.
+
+        Containment stays exact where it matters: the components printed underneath begin
+        "Tiền và các khoản tương đương tiền GỒM CÓ", which does not contain "…tiền TẠI…", so
+        the header of the breakdown is still not mistaken for a balance line.
+        """
+        return self.CASH_TAIL in key.replace("_", "")
+
     def _recover_totals(self, out: Dict[str, int], st: Statement) -> None:
         """Fill a statement's subtotal columns from label variants (relaxed layers only).
 
@@ -568,12 +594,25 @@ class FinancialsBuilder:
         filing prints opening first and closing last, so first and last is what they are.
         """
         if st.report == CASH_FLOW:
-            dated = [r for r in st.rows
-                     if r.key.replace("_", "").startswith(self.CASH_TAIL)
+            dated = [(i, r) for i, r in enumerate(st.rows)
+                     if self._is_cash_tail(r.key)
                      and st._first_value(r.values) is not None]
             if len(dated) >= 2:
-                for col, row in zip(self.CASH_BALANCES, (dated[0], dated[-1])):
+                for col, (_, row) in zip(self.CASH_BALANCES, (dated[0], dated[-1])):
                     out[col] = st._first_value(row.values)
+                # IV, the net movement, is printed immediately above the opening balance. OCR
+                # merges its label into the financing-section header above it ("LƯU CHUYỂN TIỀN
+                # TỪ HOẠT ĐỘNG TÀI CHÍNH 02 Tiền thu từ phát hành…"), so it never matches its
+                # account by name even though its FIGURE is read correctly — ACB's Q1-2024 has
+                # -9,499,874 sitting right there. Taking the row above the opening balance is a
+                # guess, but a self-checking one: `_cash_flow_identity` immediately tests
+                # opening + IV + fx == closing, so a wrong guess is rejected, not written.
+                first_i = dated[0][0]
+                iv = self.C_NET_CF[0]
+                if first_i > 0 and iv not in out:
+                    v = st._first_value(st.rows[first_i - 1].values)
+                    if v is not None:
+                        out[iv] = v
             return
         if st.report != BALANCE_SHEET:
             return
@@ -766,15 +805,22 @@ class FinancialsBuilder:
         close = next((mapped[c] for c in self.C_CASH_CLOSE if c in mapped), None)
         open_ = next((mapped[c] for c in self.C_CASH_OPEN if c in mapped), None)
         fx = next((mapped[c] for c in self.C_CASH_FX if c in mapped), None)
-        if close is None or open_ is None or fx is None:
-            return None
-
         net = next((mapped[c] for c in self.C_NET_CF if c in mapped), None)
         if net is None:
             sections = [mapped[c] for c in self.C_FLOW_SECTIONS if c in mapped]
-            if not sections:
-                return None
-            net = sum(sections)
+            net = sum(sections) if sections else None
+
+        # A relaxed recovery must be VERIFIABLE, not merely un-contradicted. Letting a statement
+        # through because it failed to yield the lines that would test it is how ACB's Q1-2023
+        # was written: its closing balance is right and agrees with its components, while
+        # `hdkd_13` reads 96 for a printed (438.096), `hdkd_20` holds the line below it, and one
+        # investing line took the comparative column. The breakdown proves one figure; only this
+        # ties the whole statement together, so if it cannot run, the CafeF tabs are the better
+        # source — they are keyed by item code and cannot mis-assign a line at all.
+        if close is None or open_ is None or fx is None or net is None:
+            missing = [n for n, v in (("opening", open_), ("movement", net), ("fx", fx),
+                                      ("closing", close)) if v is None]
+            return f"cash flow unverifiable — {', '.join(missing)} not mapped"
         if not self._equal(open_ + net + fx, close):
             return (f"cash flow does not close: opening {open_:.6g} + movement {net:.6g} "
                     f"+ fx {fx:.6g} != closing {close:.6g}")
@@ -804,7 +850,7 @@ class FinancialsBuilder:
         # it); its components are the rows that follow, until the list ends
         last = None
         for i, row in enumerate(st.rows):
-            if row.key.replace("_", "").startswith(self.CASH_TAIL):
+            if self._is_cash_tail(row.key):
                 last = i
         if last is None:
             return None

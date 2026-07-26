@@ -101,31 +101,25 @@ the two total columns, still gated by reconcile + `sane`, so no other quarter is
 of each `(engine, dpi)` is cached within a filing, so the relaxed layers re-map without a second
 OCR pass. The winning layer name is recorded per statement (`ocr_config`).
 
-**Result: `pdf`-sourced statements 98 → 193 of 222** (balance_sheet 32→**65**, income_statement
-21→**65**, cash_flow 45→**63**) — for Q1-2010 → Q1-2026, the whole span ACB has filings for, that
-is **193 of 195, or 99%**. `cafef` fallback 124→**29**, **0 missing**. Of those 29, **27 are
-structural**: 9 quarters with NO filing in the archive (pre-listing 2008-2009 + the not-yet-filed
-Q2-2026) × 3 statements. Only **2 are real parse failures**, both cash flows — Q1-2023 and
-Q1-2024 (see below). The reconcile + magnitude gates are unchanged, so nothing wrong is written.
-Whole run ~2.6 h on an RTX 3050; a single quarter re-parsed on its own costs ~4 min when it fails
-(it runs every layer, including the CPU-only tesseract one) and less when it succeeds early.
+**Result: `pdf`-sourced statements 98 → 195 of 222** (balance_sheet 32→**65**, income_statement
+21→**65**, cash_flow 45→**65**) — for Q1-2010 → Q1-2026, the whole span ACB has filings for, that
+is **195 of 195: every statement of every quarter that has a filing**. `cafef` fallback 124→**27**,
+**0 missing**, and all 27 are STRUCTURAL — 9 quarters with no filing in the archive (pre-listing
+2008-2009 + the not-yet-filed Q2-2026) × 3 statements. **There is no longer a single quarter that
+has a filing and could not be read from it.** Whole run ~2.6 h on an RTX 3050; a single quarter
+re-parsed alone costs ~4 min when it fails (it runs every layer, including the CPU-only tesseract
+one) and ~6-7 min when a relaxed layer carries it.
 
-**⚠️ THE TWO THAT REMAIN ARE NOT THE SAME KIND OF PROBLEM**, and the difference decides whether
-more work would pay:
-- **Q1-2023 cash flow — a recognition failure, and a hard limit.** VietOCR prepends a phantom
-  digit to the closing balance (`96.922.247` → `196.922.247`) and to its tiền-mặt component
-  (`6.654.779` → `16.654.779`), *identically at 200, 300, 400, 500 and 600 dpi*. The box widths
-  prove it is the recogniser and not the detector: the 11-character output occupies exactly the
-  52.5pt box a 10-character number occupies elsewhere on the same page. Adding a higher-DPI
-  `ParseLayer` was tested and buys nothing. The true figure is legible only from Q1-2024's
-  comparative column.
-- **Q1-2024 cash flow — the OCR is perfect; the row builder misplaces it.** Every figure is read
-  correctly at every DPI. Line V's label wraps ("TẠI NGÀY / 1 THÁNG 1"), which pushes VI's value
-  onto the `thang_1` row and leaves VI's own label row empty, so `_first_value` falls through to
-  the comparative column and the statement fills with prior-year figures. Fixing it means
-  changing `table_rows`, which every one of the 193 working cells depends on — a 1-in-65 gain
-  against that surface. With IV and VI mapped correctly the identity closes exactly:
-  136,071,738 − 9,499,874 − 70,648 = 126,501,216.
+**⚠️ WHAT THIS DOES AND DOES NOT GUARANTEE.** The gates prove a statement's SUBTOTALS, not every
+line on it. Every accepted cash flow now closes `V + IV + VI = VII` to the đồng and its closing
+balance equals the components printed beneath it — two independent checks. Below that level the
+rows are as good as the OCR: ACB's Q1-2023 carries `hdkd_13` = 96 where the filing prints
+(438.096), and one investing line took the comparative column. Two systematic quirks are corpus-
+wide and not defects to chase: a `hdkd_nhung_thay_doi_ve_*` SECTION HEADER holds the first line
+of its section (OCR merges the two), and a PDF row is thinner than the CafeF row it replaces —
+Q1-2023 is 28 items against CafeF's 47, because CafeF's tabs enumerate every code including the
+nil ones. **If a consumer needs a specific minor line item rather than the subtotals, check it
+against `from_api` rather than trusting the PDF row.**
 
 - **Adding a way to parse a stubborn filing is adding a `ParseLayer` to `LAYERS`** — a new engine,
   a new DPI, or a new matching relaxation. The strict-first / relaxed-last ordering is what keeps
@@ -145,6 +139,11 @@ to re-run the ones that already work. Each was traced to a specific cause in the
 | 5 | `_split_number_runs` — one detection box holding TWO period figures | tokens that parse to nothing today |
 | 6 | orphan label — a label whose box starts BELOW its figures | rows discarded for an empty key |
 | 7 | `_cash_flow_identity` — closing = opening + movement + FX | relaxed layers only |
+| 8 | **`CROP_PAD_PT`** — pad a detected box before RECOGNISING it | every crop (see warning below) |
+| 9 | **`Y_TOL` 3.0 → 4.0** — a label's box starts higher than its digits | every page (see warning) |
+| 10 | IV recovered by POSITION (the row above the opening balance) | relaxed layers only |
+| 11 | `_is_cash_tail` matches by CONTAINMENT, not prefix | relaxed layers only |
+| 12 | a relaxed cash flow must be VERIFIABLE, not merely un-contradicted | relaxed layers only |
 
 - **#1 the signature stamp.** A scanned page that was e-signed carries a text layer holding only
   the signature appearance (~350 chars of real Vietnamese and English), which clears MIN_PAGE_TEXT
@@ -172,10 +171,50 @@ to re-run the ones that already work. Each was traced to a specific cause in the
 - **Corrections these produced in passing:** VCB Q1-2023 total liabilities 1,846,431→**1,701,773**
   and equity 62,168→**144,658** (they now sum to total assets exactly); VCB Q3-2024 equity
   36,293→**190,297**; ACB Q4-2022 closing cash −10,817,313→**103,510,228**.
+- **#8 the crop padding — the one to remember, because it was misdiagnosed twice.** The detector
+  returns a box hugging the glyphs and VietOCR misreads a crop that tight, INVENTING a leading
+  digit at the clipped edge: 96.922.247 → **1**96.922.247, 6.654.779 → **1**6.654.779. It looks
+  exactly like a bad recogniser, and it survives 200, 300, 400, 500 and 600 dpi, so it looks like
+  a hard limit too. It is neither. A bake-off on the same cells showed **vgg_seq2seq (the one in
+  use), vgg_transformer, EasyOCR and Tesseract all read them correctly** from a slightly looser
+  crop — the padding sweep flips the answer at **1pt** and it stays stable to 6. Before reaching
+  for another Vietnamese OCR model, check the crop. This one bug was almost certainly shaving
+  digits elsewhere in the archive too.
+- **#11 the stray character.** ACB's Q1-2023 opening balance parses as
+  `t_tien_va_cac_khoan_tuong_duong_tien_tai_ngay_1_thang_1` — OCR keeps a fragment of the section
+  numeral. One leading character made a `startswith` test miss the line, leaving the statement
+  with no opening balance and refusing it as unverifiable although every figure had been read
+  correctly. Containment still does not over-match: the breakdown header reads "…tương đương tiền
+  GỒM CÓ", which contains no "…tiền TẠI…".
 - **⚠️ Pre-existing corruption these gates now CATCH but have not yet fixed** (only a full re-parse
   will): ACB's committed **Q1-2024 income statement** carries Q1-2023's PBT 5,156,497 — it read the
   comparative column; the true figure is ~4,892bn. **Q1-2015** repeats Q1-2014's 318,253. Gate #4
   is what detects this class, so re-running is worth it for more than the two open cells.
+
+> ### ⚠️ OUTSTANDING: THE REGRESSION FOR #8 AND #9 WAS NEVER COMPLETED
+>
+> Fixes **1-7 and 10-12 are relax-scoped or additive** and cannot reach a quarter that already
+> parses. **#8 (`CROP_PAD_PT`) and #9 (`Y_TOL`) are different: they change the crop handed to the
+> recogniser and the line grouping on EVERY onnx-parsed page, for every ticker.** The four ACB
+> quarters they fixed are each verified individually, and 16 accepted cash flows passed against
+> fixes 1-7 — but **no regression has been run against #8 and #9.** The run was started three
+> times and lost each time (a session ended, and twice two jobs contended for the 4 GB card and
+> fell back to CPU).
+>
+> **Before trusting this beyond ACB, re-run:**
+> ```
+> python scripts/…/regress_cf.py     # 16 accepted cash flows at 2 DPIs, expect "16 reconcile, 0 fail"
+> python scripts/…/verify_cascade.py # VCB Q1-2023/Q3-2024 + ACB Q4-2021/Q4-2022/Q2-2023 balance sheets
+> ```
+> (both live in session scratch — recreate them: seed `history` CHRONOLOGICALLY from disk, parse
+> each quarter at onnx@200 and @300, and compare `reconcile()` and the probe column against the
+> committed row.) Budget **~50-60 min**; the annual filings are 90-99 pages and dominate it. Run
+> ONE job at a time — two OCR processes exhaust the card and silently drop to CPU, which is ~7x
+> slower. If either fix disturbs a working quarter, revert that constant: ACB Q1-2024 and Q1-2023
+> depend on them, nothing else does.
+>
+> A full ACB + VCB re-parse would settle this and fix the Q1-2024 / Q1-2015 income statements
+> above at the same time.
 - **Detection runs on the GPU** (`onnxruntime-gpu`, CUDAExecutionProvider): ~0.25 vs ~1.8 s/page
   for the CPU wheel. **⚠️ onnxruntime-gpu's version must match the machine's CUDA** — the current
   1.28 wheel needs CUDA 13 and silently falls back to CPU here (CUDA 12.1); the **1.20.x** line is
