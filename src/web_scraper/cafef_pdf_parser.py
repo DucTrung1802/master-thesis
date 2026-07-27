@@ -68,8 +68,7 @@ class Statement:
     # How close an OCR'd line name must be to count as the line we are looking for.
     NAME_MATCH = 0.85
 
-    @staticmethod
-    def _first_value(values: List[Optional[int]]) -> Optional[int]:
+    def _first_value(self, values: List[Optional[int]]) -> Optional[int]:
         """The current-period figure = the FIRST populated column, not literally column 0.
 
         Columns are left-to-right (current period first), so the leftmost non-None value is
@@ -79,8 +78,25 @@ class Statement:
         grand total as [None, 176999825…, None, 167881047…, None] — 5 columns where there are
         2 — so a strict `values[0]` read it as empty and the statement was rejected for "no
         total assets" even though the figure was parsed correctly.
+
+        EXCEPT when the statement has exactly TWO columns, where there is nowhere for an
+        over-segmented figure to hide: index 0 IS the current period and index 1 IS the
+        comparative, so falling through returns LAST YEAR'S number for a line the filing
+        printed as a dash. ACB's Q1-2022 does this four times — `hdkd_20` reads 9,009,073 and
+        `hddt_mua_sam_bat_dong_san_dau_tu` 148,453, both of them 2021 figures against a blank
+        2022 column, and both silently plausible. It also splits a wrapped label across two
+        rows, leaving the first holding only the comparative ("…uy_thac_dau_tu_cho_vay_ma_tctd"
+        [., -8,456]) and the continuation holding the real one ("chiu_rui_ro" [-6,890, .]);
+        returning None for the first is what lets the second be found.
+
+        The over-segmentation this guards against needs three or more columns by definition —
+        a spurious column plus the two real ones — so the two cases cannot collide.
         """
-        return next((v for v in values if v is not None), None) if values else None
+        if not values:
+            return None
+        if self.n_columns == 2 and len(values) == 2 and values[0] is None:
+            return None
+        return next((v for v in values if v is not None), None)
 
     def find(self, *needles: str) -> Optional[int]:
         """The current-period value on a row whose name is (or is close to) one of `needles`.

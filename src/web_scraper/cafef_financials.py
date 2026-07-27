@@ -216,7 +216,8 @@ class FinancialsBuilder:
         return self._parsers[engine]
 
     def _parse_cascaded(self, path: str, period_end,
-                        template: str, history: Dict[str, List[int]]):
+                        template: str, history: Dict[str, List[int]],
+                        open_ref: Optional[int] = None):
         """Parse every statement of one filing, escalating OCR config until each reconciles.
 
         -> (accepted, doc_facts) where `accepted[report] = (row, statement, "engine@dpi")` holds
@@ -267,7 +268,8 @@ class FinancialsBuilder:
                 if st is None:
                     continue
                 row = self.map_to_schema(st, template, relax_totals=layer.relax_totals)
-                if (self.reconcile(st, row, verify_cash=layer.relax_totals) is None
+                if (self.reconcile(st, row, verify_cash=layer.relax_totals,
+                                   open_ref=open_ref) is None
                         and self.sane(st, history[report], row) is None):
                     accepted[report] = (row, st, layer.name)
         return accepted, facts
@@ -455,6 +457,27 @@ class FinancialsBuilder:
         self._schema_cache[key] = items
         return items
 
+    # The filings ABBREVIATE where the chart of accounts spells out, and the two then share
+    # almost no characters: "vay các TCTD khác" against "vay các tổ chức tín dụng khác" scores
+    # ~0.70 and the line is simply lost. That is how ACB's Q1-2022 mis-filled
+    # `ii_tien_gui_va_vay_cac_tctd_khac` — neither of its two children could reach its own
+    # account, so one of them won the PARENT's slot on containment instead. Expanded on both
+    # sides before scoring, each child matches its own line exactly and the parent is left alone.
+    ABBREV = {
+        "tctd": "tochuctindung",
+        "nhnn": "nganhangnhanuoc",
+        "tscd": "taisancodinh",
+        "tndn": "thunhapdoanhnghiep",
+        "bdsdt": "batdongsandautu",
+    }
+
+    @classmethod
+    def _expand(cls, s: str) -> str:
+        for short, full in cls.ABBREV.items():
+            if short in s:
+                s = s.replace(short, full)
+        return s
+
     def _label_score(self, account: str, key: str, relax: bool = False) -> float:
         """How alike a schema account and a parsed row label are, both separator-stripped.
 
@@ -477,6 +500,7 @@ class FinancialsBuilder:
         """
         from difflib import SequenceMatcher
 
+        account, key = self._expand(account), self._expand(key)
         r = SequenceMatcher(None, account, key).ratio()
         if (len(account) >= self.MIN_CONTAINS
                 and min(len(account), len(key)) >= self.MIN_CONTAINS_FRAGMENT
@@ -505,44 +529,163 @@ class FinancialsBuilder:
         the balance-sheet grand-total columns from label variants the fuzzy match rejects — see
         `_recover_totals`.
         """
-        from difflib import SequenceMatcher
-
         schema = self.schema_of(template, st.report)
         if not schema:
             return {}
 
-        out: Dict[str, int] = {}
-        i = 0                                   # next schema line still open
-        for row in st.rows:
-            # The current-period figure is the first POPULATED column, not literally index 0:
-            # OCR can over-segment the columns (a left-hand note-reference number clustering as
-            # its own spurious column) and push the real value into index 1 — ACB's Q2-2010
-            # grand total parsed as [None, 176999825…, None, …]. A strict values[0] read it as
-            # empty, dropped it, and the balance sheet was rejected for "no total assets".
+        # The current-period figure is the first POPULATED column, not literally index 0: OCR
+        # can over-segment the columns (a left-hand note-reference number clustering as its own
+        # spurious column) and push the real value into index 1 — ACB's Q2-2010 grand total
+        # parsed as [None, 176999825…, None, …]. A strict values[0] read it as empty, dropped
+        # it, and the balance sheet was rejected for "no total assets".
+        rows = []
+        for i, row in enumerate(st.rows):
             val = st._first_value(row.values)
             if val is None:
                 continue
-            key = row.key.replace("_", "")
-            if not key:
-                continue
-            best_j, best = -1, 0.0
-            # a window: a line never moves far from its place in the statement
-            for j in range(i, min(len(schema), i + self.SCHEMA_WINDOW)):
-                col, account = schema[j]
-                if col in out:
-                    continue
-                a = account.replace("_", "")
-                r = self._label_score(a, key, relax_totals)
-                if r > best:
-                    best_j, best = j, r
-            if best_j >= 0 and best >= self.SCHEMA_MATCH:
-                out[schema[best_j][0]] = val
-                i = best_j + 1                  # never match backwards
+            key = self._split_merged(row.key, row.label).replace("_", "")
+            if key:
+                rows.append((i, val, key))
 
-        self._anchor(out, schema, st, relax_totals)
+        accounts = [a.replace("_", "") for _, a in schema]
+        out: Dict[str, int] = {}
+        src: Dict[str, int] = {}                # column -> the parsed row that filled it
+        for j, ri in self._align([k for _, _, k in rows], accounts, relax_totals).items():
+            self._claim(out, src, schema[j][0], rows[ri][0], rows[ri][1])
+
+        self._anchor(out, schema, st, relax_totals, src)
         if relax_totals:
-            self._recover_totals(out, st)
+            self._recover_totals(out, st, src)
         return out
+
+    # A row OCR built by merging a SECTION HEADER with the numbered line beneath it. The filing
+    # numbers its lines ("09.", "15."), so a two-digit group sitting mid-label is the seam:
+    # what precedes it is the header, what follows is the line that actually owns the figure.
+    # ACB's Q1-2022 reads "Những thay đổi về tài sản hoạt động" and "09. (Tăng)/giảm các khoản
+    # tiền gửi…" as one row carrying 2,671,012; the header wins on containment, so a title ends
+    # up holding a figure it cannot have while line 09 comes out empty. Splitting at the seam
+    # puts it back. The length floors keep this off ordinary labels — a header runs well over 12
+    # characters, and a "…_v_1" note reference is a single digit at the END, not two in the
+    # middle.
+    # The seam is a line MARKER: the two-digit number the cash flow prints ("09.", "15.") or the
+    # roman numeral the balance sheet prints ("XII."). ACB's Q1-2022 merges "b. Hao mòn bất động
+    # sản đầu tư" — a dash — with "XII. Tài sản có khác" and its 7,710,713, so the amortisation
+    # line ends up holding another section's total. Single-letter numerals are deliberately
+    # excluded: "…_v_1" and "…_v_6" are note references sitting at the end of ordinary labels,
+    # and splitting on those would shred them.
+    MERGED_SEAM_RE = re.compile(
+        r"^(.{12,}?)_(?:\d{2}|xviii|xvii|xvi|xiv|xiii|xii|xix|xi|xv|viii|vii|vi|iv|ix|ii)_(.{5,})$")
+
+    # How far to re-slug a label when hunting for the seam. `PdfParser.slug` caps a row key at
+    # 60 characters, which is ample for a real line and far too short for a merged one — and a
+    # merged row is long BY DEFINITION, so the marker that reveals the seam is exactly what the
+    # cap throws away. ACB's Q1-2022 balance sheet reads "…B NỢ PHẢI TRẢ VÀ VỐN CHỦ SỞ HỮU / Các
+    # khoản nợ Chính phủ và Ngân hàng Nhà nước / II Tiền gửi và vay các TCTD khác V.8" as one row
+    # carrying 44,323,457: the key stops at "…cac_khoan_no_chinh_phu", so the "II" that owns the
+    # figure is gone and nothing can place it.
+    SEAM_SLUG_LEN = 400
+
+    def _split_merged(self, key: str, label: str = "") -> str:
+        """The part of a merged row's label that owns its figure — the text after the last
+        section marker OCR swept in, or the key unchanged when there is no seam.
+
+        The FULL label is searched first and the (capped) key second, but a seam found in
+        neither leaves the key exactly as it was. That is what keeps this off ordinary rows: a
+        long label with no marker in it — ACB's `iv_cac_cong_cu_tai_chinh_phai_sinh…v_3_von_tai_tro…`
+        is one — comes back byte-identical to before.
+        """
+        from web_scraper.cafef_pdf_parser import PdfParser
+
+        candidates = [key]
+        if label:
+            candidates.insert(0, PdfParser.slug(label, maxlen=self.SEAM_SLUG_LEN))
+        for cand in candidates:
+            m = self.MERGED_SEAM_RE.match(cand)
+            if m:
+                return m.group(2)
+        return key
+
+    @staticmethod
+    def _claim(out: Dict[str, int], src: Dict[str, int], col: str,
+               row_i: Optional[int], val: int) -> None:
+        """Write a value and record WHICH parsed row it came from, evicting any other column
+        that same row had filled.
+
+        One printed line is one line item, and until this was enforced across the whole mapping
+        a single row could answer two accounts at once. ACB's Q1-2022 prints "Dự phòng rủi ro
+        khác" and "TỔNG NỢ PHẢI TRẢ" on what OCR reads as one row: the ordered pass gave its
+        480,433,095 to `vii_3_du_phong_rui_ro_khac`, then `_anchor` gave the same figure to
+        `tong_no_phai_tra`. The second is right; the first is a provision line holding total
+        liabilities, and nothing downstream could tell, because both were merely "mapped".
+        """
+        if row_i is not None:
+            for c, ri in list(src.items()):
+                if ri == row_i and c != col:
+                    out.pop(c, None)
+                    src.pop(c, None)
+        out[col] = val
+        src[col] = row_i
+
+    # Tie-break only: a hair of cost per schema line stepped over, so that among alignments of
+    # equal score the COMPACT one wins. Far too small (0.001 against a 0.80 match floor) to buy
+    # a wrong match with a shorter path.
+    SCHEMA_GAP = 0.001
+
+    def _align(self, keys: List[str], accounts: List[str],
+               relax: bool) -> Dict[int, int]:
+        """Best monotonic alignment of parsed rows onto schema lines -> {schema index: row index}.
+
+        The ordered walk this replaces was greedy: each row took the best account still open
+        ahead of it and the cursor never went back, so whichever row asked FIRST won — and
+        accounting names NEST, so the row that asks first is very often the wrong one. ACB's
+        Q1-2022 balance sheet prints the parent "Tiền gửi VÀ cho vay các TCTD khác" (54,337,806)
+        above its two children; the parent's name contains "cho vay các TCTD khác", so it scored
+        the containment 0.95 against `iii_2` and took it, the real `iii_2` (2,960,720) arrived to
+        find the cursor past it and settled for `iii_3`, and a provision line ended up holding a
+        loan balance. The same shape cost the income statement its credit-provision line, where
+        the wrapped fragment "ro_tin_dung" outbid the exact match one row below it.
+
+        Scoring the whole grid and maximising the TOTAL fixes it with no new threshold, because
+        the right answer is worth more: parent->iii_, child->iii_1, child->iii_2 scores
+        0.70 + 1.00 + 1.00 against the greedy 0.95 + 0.95. Order is preserved by construction —
+        this is sequence alignment, and the schema's own sequence is still what keeps a fuzzy
+        match honest. Short damaged fragments keep working, since one only has to beat whatever
+        else competes for that line: "hoanlai" still answers line 8, "chiu_rui_ro" still answers
+        `hdkd_19`.
+        """
+        n, m = len(keys), len(accounts)
+        if not n or not m:
+            return {}
+        f = [[0.0] * (m + 1) for _ in range(n + 1)]
+        bt = [[0] * (m + 1) for _ in range(n + 1)]     # 0 skip row, 1 skip account, 2 match
+        for i in range(1, n + 1):
+            fi, fp, bi = f[i], f[i - 1], bt[i]
+            key = keys[i - 1]
+            for j in range(1, m + 1):
+                best, b = fp[j], 0
+                cand = fi[j - 1] - self.SCHEMA_GAP
+                if cand > best:
+                    best, b = cand, 1
+                s = self._label_score(accounts[j - 1], key, relax)
+                if s >= self.SCHEMA_MATCH:
+                    cand = fp[j - 1] + s
+                    if cand > best:
+                        best, b = cand, 2
+                fi[j], bi[j] = best, b
+
+        pairs: Dict[int, int] = {}
+        i, j = n, m
+        while i > 0 and j > 0:
+            b = bt[i][j]
+            if b == 2:
+                pairs[j - 1] = i - 1
+                i -= 1
+                j -= 1
+            elif b == 1:
+                j -= 1
+            else:
+                i -= 1
+        return pairs
 
     # The grand-total lines, and the printed-label variants that identify each even when the
     # strict fuzzy match rejects them. A row's key (separators stripped) that CONTAINS one of
@@ -576,7 +719,38 @@ class FinancialsBuilder:
         """
         return self.CASH_TAIL in key.replace("_", "")
 
-    def _recover_totals(self, out: Dict[str, int], st: Statement) -> None:
+    # The cash phrase WITHOUT the trailing "tại" that dates it. Deliberately not CASH_TAIL and
+    # deliberately not used in its place: it also matches the breakdown header printed under the
+    # closing balance ("Tiền và các khoản tương đương tiền GỒM CÓ"), which carries a component
+    # figure and would be taken for the closing line itself.
+    CASH_PHRASE = "tienvacackhoantuongduongtien"
+
+    def _cash_balance_rows(self, st: Statement) -> List[Tuple[int, object]]:
+        """The opening and closing balance rows when OCR has destroyed the DATE on both.
+
+        `_is_cash_tail` recognises the balance lines by the date the filing prints on them. A
+        second mangling defeats that: OCR merges the TRAILING words of the previous row onto the
+        front of the next, so VCB's FY-2011 annual reads its two balance lines as
+        `tien_va_cac_khoan_tuong_duong_tien_v` and
+        `tai_thoi_diem_dau_nam_vii_tien_va_cac_khoan_tuong_duong_tien` — the date has moved off
+        one line and onto the other, and neither contains "…tiền TẠI…". Both figures are read
+        perfectly (96,678,346 and 124,705,018); only the labels are wrong.
+
+        So this falls back to the undated cash phrase, and it runs ONLY when the dated scan found
+        fewer than two rows — because the phrase alone is not specific enough to lead: it also
+        matches the "gồm có" breakdown header, which is why ACB's statements, where the dated
+        scan succeeds, never reach this. The breakdown header is excluded here as well, and
+        whatever this returns still has to satisfy `_cash_flow_identity`, so a wrong pairing is
+        rejected rather than written.
+        """
+        rows = [(i, r) for i, r in enumerate(st.rows)
+                if self.CASH_PHRASE in r.key.replace("_", "")
+                and "gomco" not in r.key.replace("_", "")
+                and st._first_value(r.values) is not None]
+        return rows if len(rows) >= 2 else []
+
+    def _recover_totals(self, out: Dict[str, int], st: Statement,
+                        src: Optional[Dict[str, int]] = None) -> None:
         """Fill a statement's subtotal columns from label variants (relaxed layers only).
 
         Runs after the ordered walk and `_anchor` have done their best and the statement STILL
@@ -593,13 +767,52 @@ class FinancialsBuilder:
         a perfect 1.00 ratio, while the real closing line scores 0.955 and lost to it. The
         filing prints opening first and closing last, so first and last is what they are.
         """
+        if src is None:
+            src = {}
         if st.report == CASH_FLOW:
-            dated = [(i, r) for i, r in enumerate(st.rows)
-                     if self._is_cash_tail(r.key)
-                     and st._first_value(r.values) is not None]
+            # Matched on the LABEL alone, with no requirement that the row carry a figure. A
+            # balance line whose current-period cell is a dash — or whose figure OCR pushed onto
+            # the next row when the label wrapped — still marks its POSITION, and position is
+            # what the opening/closing pairing and the IV guess below are built on. Filtering it
+            # out for having no value cost ACB's Q1-2022 its IV: row 33 holds the opening's label
+            # and only the comparative figure, so dropping it left one dated row, no pairing, and
+            # the -8,595,083 sitting immediately above went unclaimed.
+            dated = [(i, r) for i, r in enumerate(st.rows) if self._is_cash_tail(r.key)]
+            if len(dated) < 2:
+                dated = self._cash_balance_rows(st)
             if len(dated) >= 2:
-                for col, (_, row) in zip(self.CASH_BALANCES, (dated[0], dated[-1])):
-                    out[col] = st._first_value(row.values)
+                # THE OPENING BALANCE IS TAKEN STRICTLY FROM THE CURRENT-PERIOD COLUMN — never
+                # by falling through to the next populated one, the way every other figure here
+                # is read. It is the one field on the statement where the comparative column is
+                # INDISTINGUISHABLE from a correct answer: an opening balance simply IS a prior
+                # period's closing, so a fall-through returns a number of exactly the right kind,
+                # and the identity it feeds then "verifies" against it. ACB's Q1-2022 loses this
+                # one cell to OCR and `_first_value` hands back 46,022,071 — Q1-2021's opening —
+                # in place of the 82,601,567 the filing prints, so a statement whose closing
+                # (74,021,373), IV and FX are all correct fails to close and is thrown away.
+                # Left unmapped instead, `_cash_flow_identity` substitutes the previous year's
+                # closing and the statement verifies exactly.
+                opening = dated[0][1]
+                # The closing is the LAST dated row that actually carries a figure, and never
+                # the opening's own row: the pairing is positional, but a row the filing left
+                # blank cannot BE the closing balance.
+                closing = next((r for i, r in reversed(dated)
+                                if i != dated[0][0]
+                                and st._first_value(r.values) is not None), None)
+                v = opening.values[0] if opening.values else None
+                if v is not None:
+                    self._claim(out, src, self.CASH_BALANCES[0], dated[0][0], v)
+                else:
+                    # It must be REMOVED, not merely left unset. The ordered walk in
+                    # `map_to_schema` has already matched this row through the CASH_TAIL
+                    # shortcut and written `_first_value` into the column — the very
+                    # fall-through this is here to undo — so declining to overwrite leaves the
+                    # comparative figure sitting there and nothing downstream can tell.
+                    out.pop(self.CASH_BALANCES[0], None)
+                if closing is not None:
+                    ci = next(i for i, r in dated if r is closing)
+                    self._claim(out, src, self.CASH_BALANCES[1], ci,
+                                st._first_value(closing.values))
                 # IV, the net movement, is printed immediately above the opening balance. OCR
                 # merges its label into the financing-section header above it ("LƯU CHUYỂN TIỀN
                 # TỪ HOẠT ĐỘNG TÀI CHÍNH 02 Tiền thu từ phát hành…"), so it never matches its
@@ -612,17 +825,17 @@ class FinancialsBuilder:
                 if first_i > 0 and iv not in out:
                     v = st._first_value(st.rows[first_i - 1].values)
                     if v is not None:
-                        out[iv] = v
+                        self._claim(out, src, iv, first_i - 1, v)
             return
         if st.report != BALANCE_SHEET:
             return
         for col, aliases in self.TOTAL_ALIASES.items():
-            for row in st.rows:
+            for ri, row in enumerate(st.rows):
                 k = row.key.replace("_", "")
                 if any(a in k for a in aliases):
                     v = st._first_value(row.values)
                     if v is not None:
-                        out[col] = v
+                        self._claim(out, src, col, ri, v)
         return
 
     # The lines reconciliation stands on. They are unambiguous — no other line in a statement
@@ -644,7 +857,8 @@ class FinancialsBuilder:
     ANCHOR_LEN_RATIO = 0.85       # damaged label must be >= this fraction of the target length
 
     def _anchor(self, out: Dict[str, int], schema: List[Tuple[str, str]],
-                st: Statement, relax: bool = False) -> None:
+                st: Statement, relax: bool = False,
+                src: Optional[Dict[str, int]] = None) -> None:
         """Re-match the subtotals without regard to position.
 
         The ordered walk drifts. Once it has advanced past a column, a row that belongs there
@@ -698,7 +912,9 @@ class FinancialsBuilder:
         for r, ln, col, ri, val in cands:
             if col in taken_col or ri in taken_row:
                 continue
-            out[col] = val
+            # through _claim, so winning an anchor also RELEASES whatever else this row had
+            # been given by the alignment pass — one printed line, one line item
+            self._claim(out, src if src is not None else {}, col, ri, val)
             taken_col.add(col)
             taken_row.add(ri)
 
@@ -725,7 +941,8 @@ class FinancialsBuilder:
 
     def reconcile(self, st: Statement,
                   mapped: Optional[Dict[str, int]] = None,
-                  verify_cash: bool = False) -> Optional[str]:
+                  verify_cash: bool = False,
+                  open_ref: Optional[int] = None) -> Optional[str]:
         """None if the statement balances against its OWN printed subtotals, else why not.
 
         The subtotals are taken from the CANONICAL columns when the rows have been mapped —
@@ -764,13 +981,39 @@ class FinancialsBuilder:
 
         if st.report == CASH_FLOW:
             close = get(self.C_CASH_CLOSE, *self.CASH_CLOSE)
-            if get(self.C_NET_CF, *self.NET_CF) is None and close is None:
-                return "no cash-flow subtotal"
-            if verify_cash and close is not None:
-                bad = self._closing_breakdown(st, close)
-                if bad:
-                    return bad
-                bad = self._cash_flow_identity(mapped or {})
+            # THE CLOSING BALANCE IS REQUIRED, not "either this or IV". Satisfying the gate with
+            # IV alone is what wrote five quarters as `pdf` with an empty closing-balance column
+            # — ACB Q3-2012, Q1-2015, Q1-2019 and VCB Q4-2011, Q2-2019 — each with the figure
+            # sitting on the page, read correctly, under a label the strict match does not
+            # recognise. That is the worst of both outcomes: the grid claims a parsed row and the
+            # one column the statement is probed on is blank, so it reads as neither a gap nor a
+            # value. Requiring it changes nothing where it already maps, and escalates the rest
+            # to the relaxed layers, which recognise those labels and whose recovery
+            # `_cash_flow_identity` then has to verify before anything is written.
+            if close is None:
+                return "no closing cash balance"
+            # And CHECK it on every layer, not only the relaxed ones. Requiring the closing
+            # balance without checking it merely trades one failure for a worse one: ACB's
+            # Q3-2012 and Q1-2019 stop failing for an absent figure and start passing with the
+            # COMPARATIVE column's — 54,560,217 and 22,356,020, each its own prior-year quarter,
+            # each internally consistent and contradicted by nothing else on the page. The
+            # breakdown printed beneath the closing balance states that figure a second time and
+            # is the only thing that tells them apart. It fails open when the filing prints no
+            # breakdown, so a statement that cannot answer it is judged exactly as before.
+            bad = self._closing_breakdown(st, close)
+            if bad:
+                return bad
+            # The IDENTITY, by contrast, stays on the relaxed layers only. It tests the whole
+            # statement at once and so cannot say WHICH term is wrong — and on a strict layer the
+            # wrong one is usually not the closing balance. ACB's FY-2013 reads its closing
+            # 9,762,451 and its opening 16,668,138 correctly at nearly every layer (the opening
+            # matches Q4-2012's closing exactly), but IV maps to -6,905,687, which is precisely
+            # closing - opening: a figure that already absorbs the FX line. Adding the mapped fx
+            # of -445,111 on top double-counts it, the identity misses by exactly that, and a
+            # sound quarter is thrown away. On a relaxed layer the mapping was recovered by label
+            # variant and has to be proved, so there it still runs (fix #12).
+            if verify_cash:
+                bad = self._cash_flow_identity(mapped or {}, open_ref)
                 if bad:
                     return bad
         return None
@@ -783,7 +1026,8 @@ class FinancialsBuilder:
                        "hddt_ii_luu_chuyen_tien_thuan_tu_hd_dau_tu",
                        "hdtc_iii_luu_chuyen_tien_thuan_tu_hd_tai_chinh")
 
-    def _cash_flow_identity(self, mapped: Dict[str, int]) -> Optional[str]:
+    def _cash_flow_identity(self, mapped: Dict[str, int],
+                            open_ref: Optional[int] = None) -> Optional[str]:
         """Closing must equal opening + movement + FX — the statement's own arithmetic.
 
         `_closing_breakdown` proves ONE figure, and that turned out not to be enough: ACB's
@@ -817,6 +1061,25 @@ class FinancialsBuilder:
         # investing line took the comparative column. The breakdown proves one figure; only this
         # ties the whole statement together, so if it cannot run, the CafeF tabs are the better
         # source — they are keyed by item code and cannot mis-assign a line at all.
+        # An opening balance OCR could not read is not a dead end. "Đầu kỳ" is 1 January, so it is
+        # the CLOSING BALANCE OF THE PREVIOUS YEAR'S Q4 — a figure this run has already accepted
+        # and verified. Substituting it costs nothing in rigour because the identity must then
+        # close EXACTLY: ACB's Q1-2022 gives 82,601,567 - 8,595,083 + 14,889 = 74,021,373, the
+        # closing its own printed components independently confirm. A statement whose interior
+        # came from the comparative column cannot pass this — its IV and FX belong to a different
+        # period, so the sum misses — which is what keeps Q1-2024's failure mode caught.
+        if open_ is None and open_ref is not None and None not in (close, net, fx):
+            if open_ref + net + fx == close:
+                open_ = open_ref
+        # A filing that made no FX adjustment prints no such line, and demanding one would refuse
+        # a statement that verifies perfectly without it: VCB's FY-2011 closes
+        # 96,678,346 + 28,026,672 = 124,705,018 with nothing left over, and its Q2-2019 likewise.
+        # The absent line may stand in as zero ONLY when the identity then holds to the đồng —
+        # no tolerance at all, where the check below allows `_equal`. An FX line that exists and
+        # was missed would have to be exactly zero to slip through, which is the same as it not
+        # being there.
+        if fx is None and None not in (close, open_, net) and open_ + net == close:
+            fx = 0
         if close is None or open_ is None or fx is None or net is None:
             missing = [n for n, v in (("opening", open_), ("movement", net), ("fx", fx),
                                       ("closing", close)) if v is None]
@@ -999,8 +1262,14 @@ class FinancialsBuilder:
                 self._warn(f"  {period}: file missing on disk — {d['path']}")
                 continue
             # Escalate OCR config per statement until each reconciles (see _parse_cascaded).
+            # "Đầu kỳ" is 1 January, so every quarter of a year opens on the SAME figure: the
+            # closing balance of the previous year's Q4, already accepted and verified earlier in
+            # this run. Handed to `_cash_flow_identity`, it rescues a statement whose opening cell
+            # OCR lost — and only when the identity then closes exactly.
+            prev_q4 = data[CASH_FLOW].get(f"Q4-{int(period.split('-')[1]) - 1}", {})
+            open_ref = next((prev_q4[c] for c in self.C_CASH_CLOSE if c in prev_q4), None)
             accepted, facts = self._parse_cascaded(
-                path, self._period_end(period), template, history)
+                path, self._period_end(period), template, history, open_ref)
 
             # the document's own date, kept whether or not any of its statements reconcile
             assurance[period] = d["assurance"]

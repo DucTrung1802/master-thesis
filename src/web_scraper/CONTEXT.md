@@ -91,6 +91,23 @@ Two things got it from 81% to complete, and both are structural rather than tuni
   The PDF is still read first (CafeF transcribes, has gaps, rounds), and every row records which
   it was in `source`: `pdf` (164 quarters, 77%) or `cafef` (49, 23%).
 
+**⚠️ BUT CAFEF'S QUARTERLY TABS ARE NOT UNIFORMLY RIGHT, AND Q4 IS THE WEAK ONE.** For VCB
+2011-13, 2015 and 2020 the four quarterly figures **do not sum to CafeF's own ANNUAL tab**, and
+the entire shortfall is in Q4 — 2013 reads Q4 = 1,752,672 where the annual implies ~3,216,740.
+Anything still filled from `from_api` for a Q4 may carry this. Seven wrong CafeF values were
+confirmed against the filings in one session: ACB Q4-2012 PBT (−215,386 vs **−374,433**), ACB
+Q1-2019 closing cash (30,335,949 vs **36,335,949**), VCB Q4-2011 (124,304,308 vs **124,705,018**),
+VCB Q2-2019 (207,056,920 vs **209,368,161**), VCB Q4-2025 (540,799,468 vs the **541,688,802** the
+Q1-2026 filing prints as its opening), VCB Q2-2021 PBT, and the Q4-vs-annual class above. Prefer
+`annual − (Q1+Q2+Q3)` for a Q4 whenever the annual and all three quarters came from the PDF —
+which is what `_decumulate` already does, since it runs BEFORE the fallback and can only subtract
+PDF-parsed quarters.
+
+**Two more places CafeF is the lesser source:** it stores a literal **0** for lines the filing
+prints as a dash (46 of the 89 field-level differences on ACB Q1-2022 are this), and it stores
+expenses **positive** where the filing prints them negative. Anything summing a column across
+`pdf` and `cafef` rows will get the wrong answer for the expense lines.
+
 **ACB re-parsed through a PARSE-LAYER pipeline on GPU — all 65 filings, Q1-2010 → Q1-2026, which
 is every ACB filing CafeF has.** ACB is the stress case: ~2/3 of its filings are scans, many
 carrying the SUBSTITUTION-mojibake text layer. Each way
@@ -147,6 +164,63 @@ against `from_api` rather than trusting the PDF row.**
 - **Adding a way to parse a stubborn filing is adding a `ParseLayer` to `LAYERS`** — a new engine,
   a new DPI, or a new matching relaxation. The strict-first / relaxed-last ordering is what keeps
   a relaxation from ever loosening a quarter the strict layers already read correctly.
+
+### ⚠️ A STATEMENT CAN BE `pdf` AND STILL HAVE A HOLE — the cash flow's closing balance
+
+`reconcile` used to accept a cash flow on **either** IV or the closing balance, so a statement
+that mapped IV alone passed at the FIRST layer and never escalated to one that could read the
+balance lines. The result was the worst of both: the grid claims a parsed row and the one column
+the statement is probed on is blank, so it reads as neither a gap nor a value. **27 quarters were
+written that way** (ACB 24, VCB 3), and ACB's are every Q1 and Q3 — its unaudited quarterlies,
+which print the balance lines DATED ("tại ngày 31 tháng 3") where the schema names the period, so
+only the relaxed layers match them.
+
+The closing balance is now **required**, and — this is the part that matters — **checked on every
+layer** by `_closing_breakdown`. Requiring it without checking it merely trades one failure for a
+worse one: ACB's Q3-2012 and Q1-2019 stopped failing for an absent figure and started passing with
+the COMPARATIVE column's (54,560,217 and 22,356,020, each its own prior-year quarter, internally
+consistent and contradicted by nothing else). The components printed beneath the closing balance
+state it a second time and are the only thing that tells them apart; the check fails open when the
+filing prints no breakdown.
+
+**The identity stays relax-only, deliberately.** It tests the whole statement at once and so
+cannot say WHICH term is wrong — and on a strict layer the wrong one is usually not the closing
+balance. ACB's FY-2013 reads its closing 9,762,451 and opening 16,668,138 correctly at nearly
+every layer, but IV maps to −6,905,687, which is exactly `closing − opening`: a figure that
+already absorbs the FX line. Adding the mapped fx of −445,111 on top double-counts, the identity
+misses by precisely that, and a sound quarter is thrown away. Running it everywhere cost 1 of 18
+regression quarters; scoping it back to relaxed layers restored it.
+
+Three supporting rules came out of the same work:
+- **`_cash_balance_rows`** — a fallback for a second mangling: OCR merges the PREVIOUS row's
+  trailing words onto the front of the balance line, so VCB's FY-2011 reads
+  `tien_va_cac_khoan_tuong_duong_tien_v` and
+  `tai_thoi_diem_dau_nam_vii_tien_va_cac_khoan_tuong_duong_tien` — the date has moved off one line
+  onto the other and neither contains "…tiền TẠI…". Runs only when the dated scan found fewer than
+  two rows, since the undated phrase also matches the "gồm có" breakdown header.
+- **A missing FX line may stand as zero**, but only when the identity then closes EXACTLY — no
+  tolerance. VCB's FY-2011 gives 96,678,346 + 28,026,672 = 124,705,018 with nothing left over.
+- **The opening is read STRICTLY from the current-period column**, and REMOVED if that cell is
+  empty (the ordered pass has already written `_first_value` into it). It is the one field where
+  the comparative column is indistinguishable from a correct answer — an opening balance simply IS
+  a prior period's closing — so a fall-through returns a number of exactly the right kind and the
+  identity "verifies" against it. Unmapped, `_cash_flow_identity` substitutes the previous year's
+  Q4 closing (`open_ref`, threaded from `build`) and requires an exact close: ACB Q1-2022 gives
+  82,601,567 − 8,595,083 + 14,889 = 74,021,373, the figure its own printed components confirm.
+
+### ⚠️ IN A TWO-COLUMN STATEMENT, INDEX 0 IS THE CURRENT PERIOD — do not fall through
+
+`Statement._first_value` returns the first POPULATED column, which is right when OCR
+over-segments (a spurious note column pushing the real value to index 1 — that needs three or
+more columns by definition). With exactly two columns there is nowhere for a figure to hide, so
+falling through returns **last year's number for a line the filing printed as a dash**. ACB's
+Q1-2022 did this four times, every one silently plausible: `hdkd_20` read 9,009,073 and
+`hddt_mua_sam_bat_dong_san_dau_tu` 148,453, both 2021 figures against a blank 2022 column.
+
+It also splits a **wrapped label across two rows**, leaving the first holding only the comparative
+and the continuation holding the real figure — `…uy_thac_dau_tu_cho_vay_ma_tctd` `[., -8,456]`
+then `chiu_rui_ro` `[-6,890, .]`. Returning None for the first is what lets the second be found.
+The opening balance was never "lost" either: it sits on the next row (`thang_1`, 82,601,567).
 
 **Seven hardenings took ACB from 189 to 193, and every one is scoped so it CANNOT reach a quarter
 that already parses** — that is the design rule here, not a nicety: a change that improves five
@@ -214,30 +288,34 @@ to re-run the ones that already work. Each was traced to a specific cause in the
   comparative column; the true figure is ~4,892bn. **Q1-2015** repeats Q1-2014's 318,253. Gate #4
   is what detects this class, so re-running is worth it for more than the two open cells.
 
-> ### ⚠️ OUTSTANDING: THE REGRESSION FOR #8 AND #9 WAS NEVER COMPLETED
+> ### ✅ RESOLVED: #8 AND #9 CARRY THEIR OWN WEIGHT (2026-07-27)
 >
-> Fixes **1-7 and 10-12 are relax-scoped or additive** and cannot reach a quarter that already
-> parses. **#8 (`CROP_PAD_PT`) and #9 (`Y_TOL`) are different: they change the crop handed to the
-> recogniser and the line grouping on EVERY onnx-parsed page, for every ticker.** The four ACB
-> quarters they fixed are each verified individually, and 16 accepted cash flows passed against
-> fixes 1-7 — but **no regression has been run against #8 and #9.** The run was started three
-> times and lost each time (a session ended, and twice two jobs contended for the 4 GB card and
-> fell back to CPU).
+> The regression this block asked for was superseded by something far larger: a **full ACB + VCB
+> re-parse** with both constants live — 137 filings, 411 statements, 5.2 h. Two independent
+> references were then asked which version is right, and **neither favours the pre-#8/#9 output
+> anywhere**:
 >
-> **Before trusting this beyond ACB, re-run:**
-> ```
-> python scripts/…/regress_cf.py     # 16 accepted cash flows at 2 DPIs, expect "16 reconcile, 0 fail"
-> python scripts/…/verify_cascade.py # VCB Q1-2023/Q3-2024 + ACB Q4-2021/Q4-2022/Q2-2023 balance sheets
-> ```
-> (both live in session scratch — recreate them: seed `history` CHRONOLOGICALLY from disk, parse
-> each quarter at onnx@200 and @300, and compare `reconcile()` and the probe column against the
-> committed row.) Budget **~50-60 min**; the annual filings are 90-99 pages and dominate it. Run
-> ONE job at a time — two OCR processes exhaust the card and silently drop to CPU, which is ~7x
-> slower. If either fix disturbs a working quarter, revert that constant: ACB Q1-2024 and Q1-2023
-> depend on them, nothing else does.
+> - **CafeF's ANNUAL tab** (code-keyed, no OCR, independent of any single quarter): of 31
+>   ticker-years, the re-parse wins 6 and ties 25. **Zero favour the old data.** VCB 2020 goes
+>   13,162 → **23,050 bn** and 2013 4,279 → **5,743 bn**, both landing on the annual figure
+>   exactly; ACB 2012 was unreadable before and now sums to 1,043 bn.
+> - **The opening/closing chain** (a Q1 opening must equal the prior Q4 closing): ACB matches
+>   **7 of 7** against 5 of 7 before; VCB 8 against 5.
 >
-> A full ACB + VCB re-parse would settle this and fix the Q1-2024 / Q1-2015 income statements
-> above at the same time.
+> Both **known corruptions are fixed and confirmed**: ACB Q1-2024 PBT 5,156,497 → **4,892,313**
+> (the ~4,892bn predicted above) and Q1-2015 318,253 → **359,265**, each matching CafeF's
+> quarterly tab to the million. The phantom-leading-digit signature of #8 unwinds cleanly through
+> de-cumulation — Q1-2022 loses a fabricated leading 1 (14,114,005 → 4,114,005) and Q2-2022 moves
+> by exactly the offsetting −10,000,000, leaving the annual total untouched.
+>
+> **What this still is not:** a controlled A/B (many things changed at once), and both tickers are
+> `bank`-template. Nothing here speaks to `corp` / `securities` / `insurance` — and it cannot,
+> since ACB and VCB are the only tickers with committed statements to regress against. That
+> becomes testable the first time a corp ticker is built.
+>
+> Coverage over the whole re-parse: **360 → 393** statement-quarters read from the filing. VCB
+> gains 34 (balance sheet 57→67, income statement 46→65, cash flow 62→67); ACB was already
+> complete.
 - **Detection runs on the GPU** (`onnxruntime-gpu`, CUDAExecutionProvider): ~0.25 vs ~1.8 s/page
   for the CPU wheel. **⚠️ onnxruntime-gpu's version must match the machine's CUDA** — the current
   1.28 wheel needs CUDA 13 and silently falls back to CPU here (CUDA 12.1); the **1.20.x** line is
@@ -677,6 +755,43 @@ the data rather than buried: **HVA** is filed under `chung-khoan-va-ngan-hang-da
     real damaged total is **full length** (26/26 chars) and is accepted. Validated with zero
     regression across VCB/ACB, but net effect on the full run is small — the balance sheets it
     recovers in isolation often hit the magnitude guard (`sane`) instead.
+  - **⚠️ MATCHING IS A MONOTONIC ALIGNMENT, NOT A GREEDY WALK** (`_align`, 2026-07-28). The
+    ordered walk it replaces let whichever row asked FIRST take an account, and never went back —
+    and accounting names NEST, so the row that asks first is very often the wrong one. ACB's
+    Q1-2022 prints the parent *Tiền gửi VÀ cho vay các TCTD khác* (54,337,806) above its two
+    children; the parent's name CONTAINS *cho vay các TCTD khác*, so it scored the containment
+    0.95 against `iii_2` and took it, the real `iii_2` (2,960,720) found the cursor past it and
+    settled for `iii_3`, and a provision line ended up holding a loan balance. Scoring the whole
+    (row × account) grid and maximising the TOTAL fixes it with no new threshold, because the
+    right answer is worth more — `parent→iii_, child→iii_1, child→iii_2` scores 0.70+1.00+1.00
+    against the greedy 0.95+0.95. Order is still what keeps a fuzzy match honest; it is now a
+    property of the alignment rather than of the cursor. Short damaged fragments keep working
+    (`hoanlai` → line 8, `chiu_rui_ro` → `hdkd_19`) since each only has to beat what competes for
+    that line. Costs ~4× the `_label_score` calls — tens of ms, irrelevant beside OCR.
+  - **ONE PRINTED LINE FILLS ONE COLUMN** (`_claim`). Provenance is tracked through the
+    alignment, `_anchor` and `_recover_totals`, so claiming a line RELEASES whatever else that row
+    had been given. ACB's Q1-2022 reads *Dự phòng rủi ro khác* and *TỔNG NỢ PHẢI TRẢ* as one row:
+    the ordered pass gave its 480,433,095 to `vii_3_du_phong_rui_ro_khac` and `_anchor` gave the
+    same figure to `tong_no_phai_tra`. The second is right; the first was a provision line holding
+    total liabilities, and nothing downstream could tell, because both were merely "mapped".
+  - **A MERGED ROW IS SPLIT AT ITS LINE MARKER** (`_split_merged`). OCR joins a section header to
+    the line beneath it, and the header then wins the match on containment — so a *title* holds a
+    figure it cannot have while the real line comes out empty. The seam is the marker the filing
+    prints: a two-digit number (`09.`, `15.`) or a roman numeral (`XII.`). Single-letter numerals
+    are excluded, because `…_v_1` is a note reference at the END of an ordinary label.
+    - **⚠️ LOOK FOR THE SEAM IN THE FULL LABEL, NOT THE KEY.** `PdfParser.slug` caps a row key at
+      **60 characters** — ample for a real line, and a merged row is long BY DEFINITION, so the
+      cap throws away exactly the marker needed to split it. ACB's Q1-2022 reads three printed
+      lines as one row carrying 44,323,457; the key stops at `…cac_khoan_no_chinh_phu` and the
+      `II` that owns the figure is gone. Re-slugging the label uncapped recovers it. When no seam
+      is found in either, the key is returned byte-identical, so ordinary rows are untouched —
+      raising the cap globally would instead shift every long label's score.
+  - **THE FILINGS ABBREVIATE WHERE THE SCHEMA SPELLS OUT** (`ABBREV` / `_expand`). *vay các TCTD
+    khác* against *vay các tổ chức tín dụng khác* shares almost no characters and scores ~0.70, so
+    the line is simply lost — which is how `ii_tien_gui_va_vay_cac_tctd_khac` came to hold its own
+    child's figure: neither child could reach its own account, so one won the PARENT's slot on
+    containment instead. Expanded on both sides before scoring, each child matches exactly and the
+    parent is left alone. Currently TCTD / NHNN / TSCĐ / TNDN / BĐSĐT.
   - **Reconciliation reads its subtotals from the CANONICAL columns**, not by searching OCR
     text. Searching the text is what most rejections actually were — the row was parsed, its
     figure correct, and the lookup simply could not recognise the name OCR had mangled.
