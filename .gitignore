@@ -68,6 +68,8 @@ experiment/experiment_5/*.json
 experiment/experiment_7/pdf_cache/
 experiment/experiment_7/pdf_pages/
 *.pdf
+# but the progress reports at the repo root are deliverables, not filings
+!/THESIS_*.pdf
 
 *.txt
 
