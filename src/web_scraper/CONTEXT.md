@@ -157,11 +157,14 @@ OCR pass. The winning layer name is recorded per statement (`ocr_config`).
 Judge the parser on Q1-2010 → Q1-2026 and nothing else; measured against the raw 74-quarter grid
 it will always read ~88% and look broken when it is not.
 
-**Result over the PDF era, Q1-2010 → Q1-2026 (65 quarters, 195 cells): 186 of 195** (re-parse of
-2026-07-29). balance_sheet 65/65, income_statement 65/65, **cash_flow 56/65**.
+**Result over the PDF era, Q1-2010 → Q1-2026 (65 quarters, 195 cells): 193 of 195** (re-parse of
+2026-07-29 + the seven quarters recovered by the `+components` / `+pad6` layers).
+balance_sheet 65/65, income_statement 65/65, **cash_flow 63/65** — and, unlike the 65/65 this
+file used to claim, **every one of the 63 carries a closing balance checked against the
+components printed beneath it** (the old data had 23 with none at all; see below).
 
-On the full written grid (Q1-2008 → Q2-2026, 74 quarters, 222 cells): `pdf` **186**, `cafef` 36,
-**0 missing**. 27 of the 36 are structural and none of those is a parse failure:
+On the full written grid (Q1-2008 → Q2-2026, 74 quarters, 222 cells): `pdf` **193**, `cafef` 29,
+**0 missing**. 27 of the 29 are structural and none of those is a parse failure:
 
 | | quarters | why |
 |---|---|---|
@@ -190,7 +193,7 @@ WRONG committed figure rather than a lost one: Q4-2010 is stored as 33,310,887 w
 prints **38,310,887** (its components sum to it, and opening 40,311,008 − 1,772,378 − 227,743
 gives it exactly), and Q3-2017's stored 13,316,705 is the COMPARATIVE column, i.e. Q3-2016's.
 
-**Seven of the nine are now fixed by the layers added below; Q2-2012 and Q3-2017 are not.**
+**Seven of the nine are fixed and WRITTEN (cash_flow 63/65); Q2-2012 and Q3-2017 are not.**
 
 - **It is deterministic** — two independent full runs produced the same nine, no more and no
   fewer, so it is diagnosable one quarter at a time rather than being OCR flakiness.
@@ -222,10 +225,26 @@ earlier ~2.6 h figure predates the `tesseract@400+relax` layer). A single quarte
 alone costs ~4 min when it fails (it runs every layer, including the CPU-only tesseract ones)
 and ~6-7 min when a relaxed layer carries it.
 
-**⚠️ Re-running a SUBSET rewrites the whole grid.** `build(periods=[…])` filters the documents
-but still writes the full contiguous grid, so every quarter outside the subset loses its `pdf`
-row and is re-filled from the CafeF tabs. Investigate a failing quarter through
-`_parse_cascaded` directly; only a full-ticker run may write the CSVs.
+**Re-running a SUBSET now MERGES** (`build(periods=[…])`, `merge` defaults on whenever `periods`
+is given). It upserts: only the quarters the run actually produced are rewritten, the rest keep
+what is on disk, and the file stays in quarter order — so the seven recoveries above cost 47 min
+rather than a 3.7 h full re-parse. Before this, a subset run rebuilt the grid from what it held
+in memory and every quarter it did not parse lost its `pdf` row to the CafeF tabs.
+
+- **A quarter it attempted and FAILED is left alone**, not overwritten with a blank `missing`
+  row — failing to re-read a statement is not evidence the statement is unreadable, and the row
+  on disk may be a good one.
+- **`open_ref` is read back from the file** when this run has no previous Q4 of its own,
+  so a re-parsed Q1 is not judged more harshly than the same quarter in a full run.
+- **`sane` fails open** in a subset run — it has no neighbouring quarters to judge magnitude
+  against. Reconcile and the cash-flow breakdown are unaffected.
+- **⚠️ A MERGING RUN DOES NOT SNAPSHOT.** The per-quarter snapshot is a PROGRESS VIEW whose
+  income statements are still cumulative, and merging one into the authoritative file cannot be
+  taken back: `_decumulate` drops the cumulative row from `data`, the final write then sees the
+  quarter as "not produced" and leaves the file alone — leaving the snapshot. Q4-2010's income
+  statement came out holding the FULL-YEAR PBT 3,102,248 (Q1..Q3 1,422,302 + the true Q4
+  1,679,946) that way. A subset run is minutes, so it writes once, at the end, after
+  de-cumulation. Any post-loop transform of `data` has the same hazard, not only `_decumulate`.
 
 **⚠️ WHAT THIS DOES AND DOES NOT GUARANTEE.** The gates prove a statement's SUBTOTALS, not every
 line on it. Every accepted cash flow now closes `V + IV + VI = VII` to the đồng and its closing

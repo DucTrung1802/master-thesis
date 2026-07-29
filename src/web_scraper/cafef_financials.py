@@ -1341,9 +1341,44 @@ class FinancialsBuilder:
     # Build
     # ──────────────────────────────────────────────────────────────────────
 
+    def _existing(self, exchange: str, symbol: str, template: str,
+                  report: str) -> Dict[str, dict]:
+        """{period: row} already on disk for this statement, or {} — the base a partial run
+        merges into, and where a Q1's `open_ref` comes from when this run did not parse the
+        previous Q4."""
+        path = statement_path(template, report, exchange, symbol)
+        if not os.path.exists(path):
+            return {}
+        try:
+            with open(path, encoding="utf-8-sig") as f:
+                return {r["period"]: r for r in csv.DictReader(f) if r.get("period")}
+        except Exception as e:
+            self._warn(f"  could not read existing {path}: {e}")
+            return {}
+
     def build(self, exchange: str, symbol: str,
               periods: Optional[List[str]] = None,
-              use_api: bool = True) -> Dict[str, int]:
+              use_api: bool = True,
+              merge: Optional[bool] = None) -> Dict[str, int]:
+        """Parse the archive into the three statement CSVs.
+
+        `periods` restricts which quarters are PARSED; `merge` decides what happens to the ones
+        that are not.
+
+        ⚠️ **A SUBSET RUN MUST MERGE, or it destroys the quarters it did not parse.** The grid is
+        rebuilt from what this run holds in memory, so `build(periods=["Q4-2010"])` used to write
+        a file in which every other quarter had lost its `pdf` row and been re-filled from the
+        CafeF tabs — a 4-hour full run thrown away by a 6-minute one. Merging upserts instead:
+        only the quarters this run actually produced are rewritten, the rest are left exactly as
+        they were, and the file stays in quarter order. Defaults to on whenever `periods` is
+        given, off for a full run (which legitimately owns the whole grid).
+
+        Two things are weaker in a subset run and are compensated where possible: `sane` has no
+        neighbouring quarters to judge magnitude against (it fails open), and `open_ref` is read
+        back from the file on disk rather than from this run's own Q4.
+        """
+        if merge is None:
+            merge = bool(periods)
         docs = self.documents(exchange, symbol)
         if periods:
             docs = [d for d in docs if d["period"] in set(periods)]
@@ -1384,8 +1419,20 @@ class FinancialsBuilder:
             # closing balance of the previous year's Q4, already accepted and verified earlier in
             # this run. Handed to `_cash_flow_identity`, it rescues a statement whose opening cell
             # OCR lost — and only when the identity then closes exactly.
-            prev_q4 = data[CASH_FLOW].get(f"Q4-{int(period.split('-')[1]) - 1}", {})
+            prev_key = f"Q4-{int(period.split('-')[1]) - 1}"
+            prev_q4 = data[CASH_FLOW].get(prev_key, {})
             open_ref = next((prev_q4[c] for c in self.C_CASH_CLOSE if c in prev_q4), None)
+            if open_ref is None and merge:
+                # A SUBSET RUN HAS NO PREVIOUS Q4 IN MEMORY — read it back off disk, where the
+                # full run that produced it already accepted and verified it. Without this a
+                # re-parsed Q1 is judged more harshly than the same quarter in a full run, and
+                # would fail for an opening balance the file on disk can supply.
+                on_disk = self._existing(exchange, symbol, template, CASH_FLOW).get(prev_key, {})
+                if on_disk.get("source") == "pdf":
+                    for c in self.C_CASH_CLOSE:
+                        if on_disk.get(c):
+                            open_ref = int(on_disk[c])
+                            break
             accepted, facts = self._parse_cascaded(
                 path, self._period_end(period), template, history, open_ref)
 
@@ -1425,12 +1472,22 @@ class FinancialsBuilder:
             # (they are de-cumulated below), and the CafeF-tab fallback has not run yet, so
             # quarters no PDF could produce are absent until the final write. `attempted` counts
             # every document seen so far so a failed quarter shows as `missing`, not vanished.
-            attempted_so_far = [(int(dd["year"]), int(dd["quarter"]))
-                                for dd in docs[:di + 1]]
-            attempted_so_far += [(int(p.split("-")[1]), int(p[1]))
-                                 for r in REPORTS for p in data[r]]
-            self._write(exchange, symbol, data, items, meta, attempted_so_far, template,
-                        published, assurance, shares)
+            #
+            # ⚠️ NOT IN MERGE MODE. A snapshot is a PROGRESS VIEW — income statements in it are
+            # still cumulative — and a merging write puts it into the authoritative file, where
+            # `_decumulate` can no longer take it back: it drops the cumulative row from `data`,
+            # the final write then sees the quarter as "not produced" and leaves the file alone,
+            # and what it leaves is the snapshot. ACB's Q4-2010 income statement came out holding
+            # the FULL-YEAR PBT 3,102,248 (Q1..Q3 1,422,302 + the true Q4 1,679,946) — the exact
+            # cumulative-in-a-quarterly-row error the parser exists to prevent. A subset run is
+            # short and needs no progress view; it writes once, at the end, after de-cumulation.
+            if not merge:
+                attempted_so_far = [(int(dd["year"]), int(dd["quarter"]))
+                                    for dd in docs[:di + 1]]
+                attempted_so_far += [(int(p.split("-")[1]), int(p[1]))
+                                     for r in REPORTS for p in data[r]]
+                self._write(exchange, symbol, data, items, meta, attempted_so_far, template,
+                            published, assurance, shares, merge=merge)
 
         self._decumulate(data, half_year)
 
@@ -1460,7 +1517,7 @@ class FinancialsBuilder:
         attempted += [(int(p.split("-")[1]), int(p[1]))
                       for r in REPORTS for p in data[r]]
         return self._write(exchange, symbol, data, items, meta, attempted, template,
-                           published, assurance, shares)
+                           published, assurance, shares, merge=merge)
 
     # ──────────────────────────────────────────────────────────────────────
     # The fallback: CafeF's own tabs
@@ -1580,7 +1637,8 @@ class FinancialsBuilder:
                meta: Dict[str, Dict[str, dict]],
                attempted: List[Tuple[int, int]], template: str,
                published: Dict[str, str], assurance: Dict[str, str],
-               shares: Dict[str, Dict[str, Optional[int]]]) -> Dict[str, int]:
+               shares: Dict[str, Dict[str, Optional[int]]],
+               merge: bool = False) -> Dict[str, int]:
         """One CSV per report, under the ticker's own TEMPLATE — so every file in a directory
         has the same columns and they mean the same thing.
 
@@ -1643,6 +1701,28 @@ class FinancialsBuilder:
             # is the same for every ticker on this template
             schema_cols = [c for c, _ in self.schema_of(template, report)]
             extra = [c for c in items[report] if c not in schema_cols]
+
+            prev_head: List[str] = []
+            if merge:
+                # UPSERT: only the quarters this run PRODUCED are rewritten. A quarter it did not
+                # parse keeps whatever the file already holds — which is the whole point, since
+                # the rest of the grid is the output of a run that may have cost hours. A quarter
+                # it attempted and FAILED is likewise left alone rather than being overwritten
+                # with a blank `missing` row: failing to re-read a statement is not evidence that
+                # the statement is unreadable, and the row on disk may be a good one.
+                path_rows = self._existing(exchange, symbol, template, report)
+                if path_rows:
+                    with open(path, encoding="utf-8-sig") as f:
+                        prev_head = csv.DictReader(f).fieldnames or []
+                produced = set(rows)
+                merged = dict(path_rows)
+                for row in out:
+                    if row["period"] in produced or row["period"] not in merged:
+                        merged[row["period"]] = row
+                out = sorted(merged.values(),
+                             key=lambda r: (int(r["year"]), int(r["quarter"])))
+                extra += [c for c in prev_head
+                          if c not in schema_cols and c not in extra and c not in DATA_COLS]
             head = DATA_COLS + schema_cols + extra
             tmp = path + ".tmp"
             with open(tmp, "w", newline="", encoding="utf-8-sig") as f:
