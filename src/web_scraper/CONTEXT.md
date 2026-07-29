@@ -94,9 +94,11 @@ Two things got it from 81% to complete, and both are structural rather than tuni
 **⚠️ BUT CAFEF'S QUARTERLY TABS ARE NOT UNIFORMLY RIGHT, AND Q4 IS THE WEAK ONE.** For VCB
 2011-13, 2015 and 2020 the four quarterly figures **do not sum to CafeF's own ANNUAL tab**, and
 the entire shortfall is in Q4 — 2013 reads Q4 = 1,752,672 where the annual implies ~3,216,740.
-Anything still filled from `from_api` for a Q4 may carry this. Seven wrong CafeF values were
-confirmed against the filings in one session: ACB Q4-2012 PBT (−215,386 vs **−374,433**), ACB
-Q1-2019 closing cash (30,335,949 vs **36,335,949**), VCB Q4-2011 (124,304,308 vs **124,705,018**),
+Anything still filled from `from_api` for a Q4 may carry this. Eight wrong CafeF values are now
+confirmed against the filings: ACB Q4-2012 PBT (−215,386 vs **−374,433**), ACB
+Q1-2019 closing cash (30,335,949 vs **36,335,949**), **ACB Q3-2023 closing cash (112,599,304 vs
+112,718,456** — the filing prints VII = 112.718.456, its four components sum to it, and
+103,510,228 + 9,332,621 − 124,393 closes on it), VCB Q4-2011 (124,304,308 vs **124,705,018**),
 VCB Q2-2019 (207,056,920 vs **209,368,161**), VCB Q4-2025 (540,799,468 vs the **541,688,802** the
 Q1-2026 filing prints as its opening), VCB Q2-2021 PBT, and the Q4-vs-annual class above. Prefer
 `annual − (Q1+Q2+Q3)` for a Q4 whenever the annual and all three quarters came from the PDF —
@@ -265,6 +267,29 @@ in memory and every quarter it did not parse lost its `pdf` row to the CafeF tab
   statement came out holding the FULL-YEAR PBT 3,102,248 (Q1..Q3 1,422,302 + the true Q4
   1,679,946) that way. A subset run is minutes, so it writes once, at the end, after
   de-cumulation. Any post-loop transform of `data` has the same hazard, not only `_decumulate`.
+
+### ✅ HOW THE 195/195 WAS VERIFIED — and what it still does not claim (2026-07-29)
+
+Four independent checks, none of which is the gate that accepted the rows in the first place:
+
+| check | result |
+|---|---|
+| era recount, all three reports | 65/65 `pdf` each |
+| the PROBE column populated on every parsed row | **0 blank** (the old data had 23) |
+| a year's opening = the previous Q4's closing | **57 of 58 exact**; Q1-2023 off by 3 (in millions — one digit, 3e-8) |
+| cash-flow closing ≥ the balance sheet's own cash on hand | 62/62 consistent, 0 impossible |
+| vs CafeF's code-keyed tab | 48 match, 6 differ, 11 CafeF has no value |
+
+Of the six disagreements with CafeF, **two are settled and both go to the parser** (ACB Q1-2019
+and Q3-2023, above). **Four are unverified and nobody should assume either side**: Q4-2012
+(70,232), Q2-2014 (4,811), Q1-2017 (15,165), Q4-2013 (1 — rounding). Opening those four filings
+is the cheapest remaining accuracy work on this ticker.
+
+**⚠️ A NOTES PAGE IS BEING SWEPT INTO THE CASH-FLOW RUN.** Seen on both filings rendered during
+this work — Q2-2012 reports `pages [10, 11]` and Q3-2023 `[6, 7]`, and in both the second page is
+prose (board members, accounting policies), not a statement. Neither quarter is corrupted by it,
+but the page classifier is one page greedy at the tail and that is where a stray figure would come
+from. Not yet diagnosed.
 
 **⚠️ WHAT THIS DOES AND DOES NOT GUARANTEE.** The gates prove a statement's SUBTOTALS, not every
 line on it. Every accepted cash flow now closes `V + IV + VI = VII` to the đồng and its closing
