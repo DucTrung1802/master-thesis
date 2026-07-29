@@ -134,21 +134,43 @@ OCR pass. The winning layer name is recorded per statement (`ocr_config`).
 Judge the parser on Q1-2010 → Q1-2026 and nothing else; measured against the raw 74-quarter grid
 it will always read ~88% and look broken when it is not.
 
-**Result over the PDF era, Q1-2010 → Q1-2026 (65 quarters, 195 cells): 195 of 195.**
-balance_sheet 65/65, income_statement 65/65, cash_flow 65/65 — **every statement of every quarter
-that has a filing, read from the filing.** Nothing in this span falls back to CafeF.
+**Result over the PDF era, Q1-2010 → Q1-2026 (65 quarters, 195 cells): 186 of 195** (re-parse of
+2026-07-29). balance_sheet 65/65, income_statement 65/65, **cash_flow 56/65**.
 
-On the full written grid (Q1-2008 → Q2-2026, 74 quarters, 222 cells) that is **`pdf` 98 → 195**,
-`cafef` 124 → **27**, **0 missing**. All 27 are structural and none is a parse failure:
+On the full written grid (Q1-2008 → Q2-2026, 74 quarters, 222 cells): `pdf` **186**, `cafef` 36,
+**0 missing**. 27 of the 36 are structural and none of those is a parse failure:
 
 | | quarters | why |
 |---|---|---|
 | Q1-2008 … Q4-2009 | 8 × 3 = 24 | **no filing in the archive** — ACB listed on HNX in Nov-2006 but CafeF's document list starts 2010 |
 | Q2-2026 | 1 × 3 = 3 | not filed yet at the time of the run |
 
-Whole run ~2.6 h on an RTX 3050; a single quarter re-parsed alone costs ~4 min when it fails (it
-runs every layer, including the CPU-only tesseract one) and ~6-7 min when a relaxed layer carries
-it.
+### ⚠️ NINE CASH FLOWS REGRESSED — the parser no longer reads what this file used to claim
+
+**Q4-2010, Q1-2012, Q2-2012, Q1-2013, Q3-2017, Q3-2018, Q3-2019, Q1-2020, Q3-2023** were `pdf`
+in the data written before 2026-07-29 and now fall through every layer to the CafeF tabs. This
+block previously read "195 of 195 … nothing in this span falls back to CafeF"; that is no longer
+true, and the number was left standing while the code moved underneath it.
+
+- **It is deterministic** — two independent full runs produced the same nine, no more and no
+  fewer, so it is diagnosable one quarter at a time rather than being OCR flakiness.
+- **Only the cash flow is affected.** Both other statements still read 65/65, and the PDF rows
+  are RICHER than the ones they replace (584 balance-sheet, 292 income-statement and 447
+  cash-flow cells are now populated where the old data was blank), so this is a specific
+  regression, not a general one.
+- **The uncommitted-then-committed `_closing_breakdown` "gồm có" fix recovers Q3-2010 only.**
+  Its comment claims five quarters (Q3-2010, Q4-2010, Q1-2012, Q2-2012, Q1-2013); the other four
+  still fail, so their cause is something else and is still unidentified.
+
+Whole run **~3.7 h** on an RTX 3050 (221 min for ACB's 65 filings, GPU otherwise idle; the
+earlier ~2.6 h figure predates the `tesseract@400+relax` layer). A single quarter re-parsed
+alone costs ~4 min when it fails (it runs every layer, including the CPU-only tesseract ones)
+and ~6-7 min when a relaxed layer carries it.
+
+**⚠️ Re-running a SUBSET rewrites the whole grid.** `build(periods=[…])` filters the documents
+but still writes the full contiguous grid, so every quarter outside the subset loses its `pdf`
+row and is re-filled from the CafeF tabs. Investigate a failing quarter through
+`_parse_cascaded` directly; only a full-ticker run may write the CSVs.
 
 **⚠️ WHAT THIS DOES AND DOES NOT GUARANTEE.** The gates prove a statement's SUBTOTALS, not every
 line on it. Every accepted cash flow now closes `V + IV + VI = VII` to the đồng and its closing
@@ -561,7 +583,7 @@ raw_data/cafef/pdfs/                 (in)   the filings
 
 raw_data/cafef/financials/           (out)
 ├── schema/<template>_<report>.csv          the 4 charts of accounts x 3 statements
-├── statements/<template>/<report>/<EXCHANGE>_<SYMBOL>.csv
+├── statements/<template>/<report>/<bs|is|cf>_<EXCHANGE>_<SYMBOL>.csv
 └── templates.csv                           ticker -> template + cash-flow method
 ```
 
@@ -719,6 +741,27 @@ the data rather than buried: **HVA** is filed under `chung-khoan-va-ngan-hang-da
   (preferring reviewed/audited), maps its rows onto the canonical schema, gates it, and writes
   a contiguous quarter grid — a quarter it could not read is a blank `source=missing` row,
   never zero-filled.
+  - **The file name carries its report** (`bs_` / `is_` / `cf_`), formed in ONE place —
+    `statement_path()`. The directory is still the authority on which statement a file holds;
+    the prefix is for the file once it has left the directory, where three tabs all reading
+    `HOSE_ACB.csv` say nothing. Readers call the helper rather than rebuilding the name.
+  - **`method` records WHICH PARSE LAYER read each statement** (`onnx@200`, `tesseract@200`,
+    `onnx@300+relax`), blank on a `cafef` / `missing` row. The cascade always knew it and used
+    to discard it at the CSV boundary. It is what makes the layer mix visible: on ACB the
+    income statement never left `onnx@200`, while **over 40% of cash flows needed a relaxed
+    layer** — and it predicts a re-run's cost, since a tesseract quarter is minutes where an
+    `onnx@200` one is seconds.
+  - **⚠️ A COLUMN ADDED HERE MUST BE ADDED TO `CAFEF_FINANCIAL_META_COLS`** in
+    `data_preprocessor.py`. That list is defined by exclusion — a line item is "any column
+    that is not meta" — so an unlisted text column is fed to a decimal cast and the bronze
+    ingest fails.
+  - **⚠️ A FAILED CafeF TAB VOIDS THE WHOLE REPORT'S FALLBACK, by design.** The tabs come in
+    SECTIONS ("NV" is every liability and equity line, "HDTC" every financing line), and
+    filling a quarter from only the sections that answered writes a row that reads as complete
+    while missing half its accounts — ACB's 2008-09 balance sheets came out with 54 of 107
+    columns and a blank `tong_no_phai_tra` that way, from three timeouts in one run. `_get`
+    now retries 3× with backoff, and a section that still fails drops that report's fill
+    entirely.
   - **Snapshots to disk after EACH quarter** (atomic temp+rename), so a long OCR run's progress
     is visible on disk and survives an interrupt. The mid-run snapshots are *progress views
     only*: income statements are still cumulative (de-cumulated at the end) and CafeF-tab

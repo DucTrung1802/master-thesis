@@ -1298,10 +1298,16 @@ class DataPreprocessor:
     CAFEF_FINANCIAL_TEMPLATES = ("bank", "corp", "securities", "insurance")
     CAFEF_FINANCIAL_REPORTS = ("balance_sheet", "income_statement", "cash_flow")
 
-    # The 13 non-line-item columns every statement CSV carries. They describe the
+    # The 14 non-line-item columns every statement CSV carries. They describe the
     # DOCUMENT a quarter was read from, not the accounts, and are split off into
     # `cafef_financial_reports`; `source` is kept on the statement table too so a
     # `missing` quarter is identifiable without a join.
+    #
+    # ⚠️ A COLUMN ADDED TO THE STATEMENT CSV MUST BE LISTED HERE OR IT IS TREATED AS A
+    # LINE ITEM — `line_cols` is defined as "everything that is not meta", and a text
+    # column reaching `_helper_cast_columns(decimal_cols=…)` is not a wrong number, it
+    # is a failed cast. That is what `method` (the OCR parse layer: "onnx@200",
+    # "tesseract@200") would have hit.
     CAFEF_FINANCIAL_META_COLS = (
         "exchange",
         "ticker",
@@ -1309,6 +1315,7 @@ class DataPreprocessor:
         "period",
         "year",
         "quarter",
+        "method",
         "source",
         "publish_date",
         "assurance",

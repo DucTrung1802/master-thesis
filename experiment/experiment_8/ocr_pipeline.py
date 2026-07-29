@@ -406,7 +406,9 @@ def cafef_truth(report: str, year: int, symbol: str = "ACB", exchange: str = "HO
       * cash flow — already cumulative year-to-date, so Q4 IS the full year. Summing it would
         quadruple-count.
     """
-    path = os.path.join(STATEMENTS_DIR, template, report, f"{exchange}_{symbol}.csv")
+    # named by cafef_financials, not here — the module owns the layout (it re-points
+    # STATEMENTS_DIR above, and `statement_path` reads that global at call time)
+    path = cafef_financials.statement_path(template, report, exchange, symbol)
     if not os.path.exists(path):
         return {}
     with open(path, encoding="utf-8-sig") as f:

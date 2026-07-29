@@ -61,7 +61,37 @@ SCHEMA_DIR = os.path.join(FIN_DIR, "schema")
 STATEMENTS_DIR = os.path.join(FIN_DIR, "statements")
 TEMPLATES_INDEX = os.path.join(FIN_DIR, "templates.csv")
 
-DATA_COLS = ["symbol", "exchange", "template", "period", "year", "quarter", "source",
+# The report's short code, prefixed onto the file name. Inside the tree the directory already
+# says which statement a file holds, so the prefix is redundant there — but a file LEAVES its
+# directory constantly (opened in an editor tab, attached to a mail, copied beside two others
+# for a diff) and three tabs all reading `HOSE_ACB.csv` say nothing about which statement each
+# one is. The directory stays the authority; this only makes the name self-describing.
+REPORT_PREFIX = {BALANCE_SHEET: "bs", INCOME_STATEMENT: "is", CASH_FLOW: "cf"}
+
+
+def statement_path(template: str, report: str, exchange: str, symbol: str) -> str:
+    """The single place a statement CSV's path is formed — the writer and every reader share
+    it, so the naming can change here without hunting down the readers that hardcoded it.
+
+    Reads `STATEMENTS_DIR` at CALL time, not import time, because the experiment harnesses
+    re-point that module global to an absolute path (they run from their own directory, where
+    the relative default resolves to nothing).
+    """
+    return os.path.join(STATEMENTS_DIR, template, report,
+                        f"{REPORT_PREFIX[report]}_{exchange}_{symbol}.csv")
+
+DATA_COLS = ["symbol", "exchange", "template", "period", "year", "quarter",
+             # WHICH PARSE LAYER READ THIS STATEMENT ("onnx@200", "tesseract@200",
+             # "onnx@300+relax"). The cascade already knows it — `_parse_cascaded` records the
+             # winning layer per statement — and it was being thrown away at the CSV boundary,
+             # which is exactly where it is worth having: a quarter carried by a RELAXED layer
+             # passed a different set of gates than one read at onnx@200, and the layer mix is
+             # how the cost of a re-run is predicted (a tesseract quarter is minutes, an
+             # onnx@200 one is seconds). Blank for a `cafef` or `missing` row — no layer parsed
+             # it. Not to be confused with `cash_flow_method` below, which is the COMPANY's
+             # accounting choice (direct/indirect), nothing to do with OCR.
+             "method",
+             "source",
              "publish_date", "assurance", "cash_flow_method", "unit", "n_columns",
              "document",
              # Share capital read from the filing's "Vốn cổ phần" note — a per-DOCUMENT fact
@@ -1135,8 +1165,26 @@ class FinancialsBuilder:
             # "Chứng khoán đầu tư" but reported 1,003,259 of it in Q1-2024, which turned a
             # breakdown that agrees exactly into one that overshoots by that amount.
             v = row.values[0] if row.values else None
-            if v is not None:
-                parts.append(v)
+            if v is None:
+                continue
+            # "GỒM CÓ" IS A HEADER, AND ON ITS OWN LINE IT RESTATES THE TOTAL. ACB's Q3-2010
+            # prints "Tiền và các khoản tương đương tiền gồm có" carrying 28,792,816 — the very
+            # figure the four component lines beneath it add up to. Counted as a component it
+            # doubles the breakdown EXACTLY (57,585,632 against a claimed 28,792,816) and the
+            # check rejects a statement whose every figure is right, as a misread digit. Five
+            # quarters were lost this way (Q3-2010, Q4-2010, Q1-2012, Q2-2012, Q1-2013).
+            #
+            # The marker stays in CASH_COMPONENT for the OTHER mangling it was added for, where
+            # OCR MERGES the header into the first component ("…tương đương tiền gồm có tiền mặt
+            # vàng bạc đá quý") and the row genuinely does hold a component's value. That row
+            # does not equal the closing balance, so it is untouched.
+            #
+            # Skipping only the exact-total case cannot hide a real discrepancy: a component that
+            # genuinely equalled the whole balance would leave fewer than two parts, and the
+            # check then falls open and judges the statement exactly as before.
+            if "gomco" in k and self._equal(v, close):
+                continue
+            parts.append(v)
         if len(parts) < 2:
             return None                     # no breakdown to check against
 
@@ -1391,8 +1439,18 @@ class FinancialsBuilder:
                     v = _get(f"{url}?symbol={symbol}&pageIndex=1&pageSize={n}"
                              f"&reportType={sec}&TypeTime=QUY").get("value") or {}
                 except Exception as e:
-                    self._warn(f"cafef financials: {symbol} {report}/{sec} tab failed: {e}")
-                    continue
+                    # ⚠️ A DEAD SECTION VOIDS THE WHOLE REPORT, it does not merely skip itself.
+                    # The sections are HALVES OF ONE STATEMENT — "NV" is every liability and
+                    # equity line of the balance sheet, "HDTC" every financing line of the cash
+                    # flow — so filling a quarter from the survivors writes a row that reads as
+                    # complete and silently has no `tong_no_phai_tra`. Continuing here is what
+                    # put 54-of-107-column balance sheets into ACB's 2008-09 quarters on the
+                    # 2026-07-29 run. A gap is recoverable; a plausible-looking half-row is not.
+                    self._warn(f"cafef financials: {symbol} {report}/{sec} tab failed: {e} — "
+                               f"dropping the whole {report} fallback rather than writing "
+                               f"rows missing this section")
+                    out[report] = {}
+                    break
                 blocks = (v["data"][0]["data"] if shape == "nested" and v.get("data")
                           else v.get("data") or [])
                 for blk in blocks:
@@ -1480,6 +1538,9 @@ class FinancialsBuilder:
                 m = meta[report].get(period, {})
                 row = {"symbol": symbol, "exchange": exchange, "template": template,
                        "period": period, "year": y, "quarter": q,
+                       # the cascade layer that produced this statement; empty unless
+                       # `source == "pdf"`, since nothing else came off a filing
+                       "method": m.get("ocr_config", ""),
                        # `pdf` = read off the filing; `cafef` = taken from CafeF's tabs
                        # because the filing could not be read
                        "source": (m.get("source", "pdf") if period in rows else "missing"),
@@ -1505,8 +1566,7 @@ class FinancialsBuilder:
                 out.append(row)
                 y, q = (y + 1, 1) if q == 4 else (y, q + 1)
 
-            path = os.path.join(STATEMENTS_DIR, template, report,
-                                f"{exchange}_{symbol}.csv")
+            path = statement_path(template, report, exchange, symbol)
             os.makedirs(os.path.dirname(path), exist_ok=True)
             # every column the chart of accounts defines, in ITS order — a line the filings
             # never reported is an empty column, not an absent one, so the shape of the table

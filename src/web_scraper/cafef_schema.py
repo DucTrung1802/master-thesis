@@ -3,6 +3,7 @@
 # ===== Standard Library =====
 import json
 import re
+import time
 import unicodedata
 import urllib.request
 from dataclasses import dataclass
@@ -242,10 +243,32 @@ def build_columns(items: List[dict], section: str, start: int,
     return out
 
 
+GET_ATTEMPTS = 3
+GET_BACKOFF = 3.0        # seconds, doubled per retry
+
+
 def _get(url: str) -> dict:
-    req = urllib.request.Request(url, headers={"User-Agent": UA, "Referer": REFERER})
-    with urllib.request.urlopen(req, timeout=60) as r:
-        return json.loads(r.read().decode("utf-8"))
+    """One tab request, retried — because a section that fails here does not fail loudly.
+
+    CafeF times out under load (`WinError 10060`) and a single dropped request costs a whole
+    SECTION of a statement: the balance sheet's "NV" carries every liability and equity line,
+    the cash flow's "HDTC" every financing line. The caller then fills a quarter from the
+    sections that did answer, and the row it writes looks complete while missing half its
+    accounts. One ACB run lost the income statement's only tab and both of those sections that
+    way, and nothing downstream could tell.
+    """
+    last = None
+    for attempt in range(GET_ATTEMPTS):
+        try:
+            req = urllib.request.Request(
+                url, headers={"User-Agent": UA, "Referer": REFERER})
+            with urllib.request.urlopen(req, timeout=60) as r:
+                return json.loads(r.read().decode("utf-8"))
+        except Exception as e:                       # timeout, reset, malformed JSON
+            last = e
+            if attempt < GET_ATTEMPTS - 1:
+                time.sleep(GET_BACKOFF * (2 ** attempt))
+    raise last
 
 
 def fetch(report: str, symbol: str = "VCB") -> List[Item]:
