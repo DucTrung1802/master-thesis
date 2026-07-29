@@ -119,8 +119,9 @@ CafeF-tab fallback (see `_parse_cascaded`). `FinancialsBuilder.LAYERS`:
   → tesseract@400+relax → onnx@200+components → onnx@300+components
   → onnx@200+relax+components → onnx@200+pad6+components → onnx@200+pad6+relax+components
   → onnx@300+split → onnx@300+split+components
+  → onnx@200+join+components → onnx@200+join+relax+components
 
-**The seven `+components` / `+pad6` / `+split` layers are appended, never inserted** (2026-07-29), so a
+**The nine `+components` / `+pad6` / `+split` / `+join` layers are appended, never inserted** (2026-07-29), so a
 statement that reconciles today cannot reach them — `_parse_cascaded` skips a report once
 accepted. They add two relaxations, each traced to a specific cause and each recovering quarters
 whose figures were already correct:
@@ -146,7 +147,15 @@ whose figures were already correct:
   dpi the same filing also reads `tiền mặt` as 4,080,492 rather than 492, and
   4,080,492 + 7,411,264 + 3,553,094 = 15,044,850 — so the breakdown CONFIRMS the spliced figure
   instead of merely permitting it.
-- **⚠️ The parse cache key is `(engine, dpi, crop_pad)`.** Keyed on `(engine, dpi)` alone the
+- **`join_digits` — a thousands separator read as a SPACE.** `_split_number_runs` exists for one
+  box holding TWO period figures; the same box can instead hold ONE whose separator was lost, and
+  splitting it keeps only the tail. ACB's Q2-2012 reads `'3 396.864'` for a printed 3.396.864 and
+  came out short by exactly 3,000,000. The two are told apart by the FIRST part: a lost separator
+  leaves a BARE 1-3 digit group in front, which cannot be a period figure of its own (they are all
+  4-9 digits), and every part after it must continue the grouping exactly — so
+  `'135.272.610 126.501.216'` still splits. Regressed on Q1-2025, the very filing that motivated
+  the splitter.
+- **⚠️ The parse cache key is `(engine, dpi, crop_pad, join_digits)`.** Keyed on `(engine, dpi)` alone the
   wider-crop layer is handed the narrow crop's cached parse — the one that just failed — and the
   layer silently does nothing.
 
@@ -167,14 +176,18 @@ OCR pass. The winning layer name is recorded per statement (`ocr_config`).
 Judge the parser on Q1-2010 → Q1-2026 and nothing else; measured against the raw 74-quarter grid
 it will always read ~88% and look broken when it is not.
 
-**Result over the PDF era, Q1-2010 → Q1-2026 (65 quarters, 195 cells): 194 of 195** (re-parse of
-2026-07-29 + the eight quarters recovered by the `+components` / `+pad6` / `+split` layers).
-balance_sheet 65/65, income_statement 65/65, **cash_flow 64/65** — and, unlike the 65/65 this
-file used to claim, **every one of the 64 carries a closing balance checked against the
-components printed beneath it** (the old data had 23 with none at all; see below).
+**Result over the PDF era, Q1-2010 → Q1-2026 (65 quarters, 195 cells): 195 of 195.**
+balance_sheet 65/65, income_statement 65/65, cash_flow 65/65 — every statement of every quarter
+that has a filing, read from the filing.
 
-On the full written grid (Q1-2008 → Q2-2026, 74 quarters, 222 cells): `pdf` **194**, `cafef` 28,
-**0 missing**. 27 of the 28 are structural and none of those is a parse failure:
+**⚠️ THIS IS NOT THE OLD "195 of 195" RESTORED — IT IS THE FIRST ONE THAT MEANS WHAT IT SAYS.**
+The figure this file carried before 2026-07-29 counted **23 cash flows with NO closing balance**,
+written as `pdf` while the one column the statement is probed on was blank. **Every one of the 65
+now carries a closing balance checked against the components printed beneath it.** Score coverage
+on the closing balance, never on the row count — the two agreed only by accident.
+
+On the full written grid (Q1-2008 → Q2-2026, 74 quarters, 222 cells): `pdf` **195**, `cafef` 27,
+**0 missing**. All 27 are structural and none is a parse failure:
 
 | | quarters | why |
 |---|---|---|
@@ -203,7 +216,7 @@ WRONG committed figure rather than a lost one: Q4-2010 is stored as 33,310,887 w
 prints **38,310,887** (its components sum to it, and opening 40,311,008 − 1,772,378 − 227,743
 gives it exactly), and Q3-2017's stored 13,316,705 is the COMPARATIVE column, i.e. Q3-2016's.
 
-**Eight of the nine are fixed and WRITTEN (cash_flow 64/65). Only Q2-2012 is not.**
+**All nine are fixed and WRITTEN — cash_flow 65/65, every row verified.**
 
 - **It is deterministic** — two independent full runs produced the same nine, no more and no
   fewer, so it is diagnosable one quarter at a time rather than being OCR flakiness.
@@ -214,22 +227,18 @@ gives it exactly), and Q3-2017's stored 13,316,705 is the COMPARATIVE column, i.
   quarters (Q3-2010, Q4-2010, Q1-2012, Q2-2012, Q1-2013); the other four needed the treasury-bill
   component below, and Q2-2012 is still unread.
 
-### ⚠️ STILL UNREAD: Q2-2012 — and the gate refusing it is RIGHT
+### ⚠️ WHEN THE ARITHMETIC WON'T SAY WHICH FIGURE IS WRONG, LOOK AT THE PAGE
 
-**One component is short by exactly 3,000,000** (`chứng khoán đầu tư` reads 200,000), so the
-breakdown misses and the statement is refused. It reads IDENTICALLY at crop pads 2, 6 and 10 and
-at 200 and 400 dpi, so no OCR configuration recovers it and no layer will.
+Q2-2012 was diagnosed three times from its sums and wrongly each time. Its breakdown was short by
+exactly 3,000,000 and the components read IDENTICALLY at crop pads 2/6/10 and at 200/400 dpi, so
+the conclusion was that no OCR configuration could recover it — twice it was written up as
+unreadable, once with an argument for why refusing it was correct.
 
-**Its closing balance 51,691,157 is nevertheless right, confirmed twice independently:** CafeF's
-own tab prints that figure, and the identity closes to the đồng (58,475,599 − 6,738,622 − 45,820).
-So the quarter COULD be admitted by a layer that accepts a statement whose identity closes exactly
-even though its printed breakdown does not.
-
-**That was deliberately not done.** It generalises: it changes what "verified" means for every
-future quarter and ticker, trading a specific check (this figure, stated twice on the page) for a
-whole-statement one, and the evidence that makes it look safe here — CafeF agreeing — is not
-available to the gate at parse time. `from_api` fills the quarter anyway, keyed by item code, so
-the cost of refusing is one row sourced `cafef` rather than a gap.
+**Rendering the page settled it in one look.** The filing prints `3.396.864` for the NHNN deposit
+line, and the recogniser returns the box as `'3 396.864'` — the thousands separator read as a
+SPACE. Nothing was clipped, which is exactly why more pixels never helped; `_split_number_runs`
+was throwing the leading group away. See `join_digits`. **A cheap `page.get_pixmap()` of the
+region beats another sweep** whenever the arithmetic can only tell you that SOMETHING is wrong.
 
 Whole run **~3.7 h** on an RTX 3050 (221 min for ACB's 65 filings, GPU otherwise idle; the
 earlier ~2.6 h figure predates the `tesseract@400+relax` layer). A single quarter re-parsed

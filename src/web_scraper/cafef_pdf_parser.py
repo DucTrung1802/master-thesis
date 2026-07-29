@@ -245,6 +245,8 @@ class PdfParser:
         self.engine = (engine or OCR_ENGINE)
         self.dpi = dpi or self.OCR_DPI
         self._onnx = None
+        # set per PARSE LAYER; see _join_split_number
+        self.join_split_digits = False
         self.ocr_ready = self._init_ocr()
 
     def set_dpi(self, dpi: int) -> None:
@@ -253,6 +255,11 @@ class PdfParser:
         self.dpi = dpi
         if self._onnx is not None:
             self._onnx.dpi = dpi
+
+    def set_join_split(self, on: bool) -> None:
+        """Treat a lost thousands SEPARATOR as one number rather than several (see
+        `_join_split_number`). Set per parse layer, off by default."""
+        self.join_split_digits = bool(on)
 
     def set_crop_pad(self, pad: Optional[float]) -> None:
         """How far outside a detected box to crop before RECOGNISING it (onnx only; points).
@@ -565,8 +572,32 @@ class PdfParser:
     # alone.
     NUM_RUN_RE = re.compile(r"^[\s\d.,()\-–—]+$")
 
+    # A THOUSANDS SEPARATOR READ AS A SPACE. The same box that can hold two period figures can
+    # instead hold ONE whose separator the recogniser lost: ACB's Q2-2012 returns '3 396.864'
+    # for a printed 3.396.864. Splitting that on whitespace keeps 396.864 and throws the leading
+    # group away — a figure short by exactly 3,000,000, which is why the breakdown missed by that
+    # amount and the quarter could not be read at ANY dpi or crop padding.
+    #
+    # The two cases are told apart by the FIRST part. A box holding two figures has a
+    # well-formed grouped number on both sides ('135.272.610 126.501.216'); a lost separator
+    # leaves a BARE 1-3 digit group in front ('3'), which cannot be a period figure of its own —
+    # every figure in these statements is 4-9 digits — and what follows it must continue the
+    # grouping exactly.
+    JOIN_HEAD_RE = re.compile(r"^\(?-?\d{1,3}$")
+    JOIN_TAIL_RE = re.compile(r"^\d{3}(\.\d{3})*\)?$")
+
     @classmethod
-    def _split_number_runs(cls, words: list) -> list:
+    def _join_split_number(cls, txt: str) -> Optional[str]:
+        """'3 396.864' -> '3.396.864', or None when the run is genuinely several figures."""
+        parts = txt.split()
+        if len(parts) < 2 or not cls.JOIN_HEAD_RE.match(parts[0]):
+            return None
+        if not all(cls.JOIN_TAIL_RE.match(p) for p in parts[1:]):
+            return None
+        return ".".join(parts)
+
+    @classmethod
+    def _split_number_runs(cls, words: list, join_split: bool = False) -> list:
         """Split a box holding SEVERAL period figures into one box per figure.
 
         The onnx engine detects text LINES, not words, and on some rows it boxes both period
@@ -590,6 +621,13 @@ class PdfParser:
                     or not any(c.isdigit() for c in txt)):
                 out.append(w)
                 continue
+            if join_split:
+                joined = cls._join_split_number(txt)
+                if joined is not None:
+                    # keep the ORIGINAL box: its right edge is what the column clustering uses
+                    # and it is already correct — only the text was wrong
+                    out.append((w[0], w[1], w[2], w[3], joined) + tuple(w[5:]))
+                    continue
             x0, y0, x1, y1 = w[0], w[1], w[2], w[3]
             width, n = x1 - x0, len(txt)
             if width <= 0 or n == 0:
@@ -628,10 +666,10 @@ class PdfParser:
 
         if self.engine == "onnx":
             text, words = self._onnx.read_page(page)
-            return text, self._split_number_runs(words)
+            return text, self._split_number_runs(words, self.join_split_digits)
         if self.engine == "easyocr":
             text, words = self._ocr_page_easyocr(page)
-            return text, self._split_number_runs(words)
+            return text, self._split_number_runs(words, self.join_split_digits)
 
         tp = page.get_textpage_ocr(language=OCR_LANG, dpi=self.dpi, full=True,
                                    tessdata=TESSDATA_DIR)

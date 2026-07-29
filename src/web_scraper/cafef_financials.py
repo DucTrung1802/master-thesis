@@ -63,6 +63,7 @@ class ParseLayer:
     relax_totals: bool = False
     relax_components: bool = False
     relax_split_tail: bool = False
+    join_digits: bool = False
     crop_pad: Optional[float] = None
 
 PDFS_DIR = os.path.join(CAFEF_RAW_DATA_DIR, "pdfs")
@@ -300,6 +301,16 @@ class FinancialsBuilder:
                    relax_totals=True, relax_split_tail=True),
         ParseLayer("onnx@300+split+components", "onnx", 300,
                    relax_totals=True, relax_split_tail=True, relax_components=True),
+        # A THOUSANDS SEPARATOR THE RECOGNISER READ AS A SPACE (`join_digits`). ACB's Q2-2012
+        # returns '3 396.864' for a printed 3.396.864, and the run splitter — built for the
+        # opposite case, one box holding two period figures — keeps only 396.864, leaving the
+        # breakdown short by exactly 3,000,000 at every dpi and crop padding. Joined, the five
+        # components come to 8,789,172 + 3,396,864 + 36,517,230 + 200,000 + 2,787,891 =
+        # 51,691,157, the closing balance the filing prints.
+        ParseLayer("onnx@200+join+components", "onnx", 200,
+                   relax_components=True, join_digits=True),
+        ParseLayer("onnx@200+join+relax+components", "onnx", 200,
+                   relax_totals=True, relax_components=True, join_digits=True),
     ]
 
     def __init__(self, logger=None):
@@ -344,10 +355,11 @@ class FinancialsBuilder:
             # engine and DPI but crop differently produce different text, and keying on
             # (engine, dpi) alone would hand the wider-crop layer the narrow crop's cached parse
             # — the one that already failed.
-            key = (layer.engine, layer.dpi, layer.crop_pad)
+            key = (layer.engine, layer.dpi, layer.crop_pad, layer.join_digits)
             if key not in parsed:
                 parser.set_dpi(layer.dpi)
                 parser.set_crop_pad(layer.crop_pad)
+                parser.set_join_split(layer.join_digits)
                 try:
                     parsed[key] = parser.parse(path, period_end)
                 except Exception as e:
