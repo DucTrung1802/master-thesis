@@ -62,6 +62,7 @@ class ParseLayer:
     dpi: int
     relax_totals: bool = False
     relax_components: bool = False
+    relax_split_tail: bool = False
     crop_pad: Optional[float] = None
 
 PDFS_DIR = os.path.join(CAFEF_RAW_DATA_DIR, "pdfs")
@@ -290,6 +291,15 @@ class FinancialsBuilder:
                    relax_components=True, crop_pad=6.0),
         ParseLayer("onnx@200+pad6+relax+components", "onnx", 200,
                    relax_totals=True, relax_components=True, crop_pad=6.0),
+        # THE BALANCE LINE'S LABEL WRAPPED AND TOOK ITS FIGURE WITH IT (`relax_split_tail`).
+        # At 300 dpi — and only there — ACB's Q3-2017 also reads its `tiền mặt` component as
+        # 4,080,492 rather than 492, and 4,080,492 + 7,411,264 + 3,553,094 = 15,044,850 is
+        # exactly the orphaned figure, so the recovery is confirmed by the breakdown rather than
+        # asserted. Last of all, after every cheaper layer.
+        ParseLayer("onnx@300+split", "onnx", 300,
+                   relax_totals=True, relax_split_tail=True),
+        ParseLayer("onnx@300+split+components", "onnx", 300,
+                   relax_totals=True, relax_split_tail=True, relax_components=True),
     ]
 
     def __init__(self, logger=None):
@@ -362,7 +372,8 @@ class FinancialsBuilder:
                 st = statements.get(report)
                 if st is None:
                     continue
-                row = self.map_to_schema(st, template, relax_totals=layer.relax_totals)
+                row = self.map_to_schema(st, template, relax_totals=layer.relax_totals,
+                                         relax_split_tail=layer.relax_split_tail)
                 if (self.reconcile(st, row, verify_cash=layer.relax_totals,
                                    open_ref=open_ref,
                                    relax_components=layer.relax_components) is None
@@ -607,7 +618,8 @@ class FinancialsBuilder:
         return r
 
     def map_to_schema(self, st: Statement, template: str,
-                     relax_totals: bool = False) -> Dict[str, int]:
+                     relax_totals: bool = False,
+                     relax_split_tail: bool = False) -> Dict[str, int]:
         """Parsed rows -> canonical columns.
 
         This is what makes the output a PANEL rather than a pile. Keyed on the OCR text, the
@@ -651,7 +663,7 @@ class FinancialsBuilder:
 
         self._anchor(out, schema, st, relax_totals, src)
         if relax_totals:
-            self._recover_totals(out, st, src)
+            self._recover_totals(out, st, src, relax_split_tail)
         return out
 
     # A row OCR built by merging a SECTION HEADER with the numbered line beneath it. The filing
@@ -845,8 +857,30 @@ class FinancialsBuilder:
                 and st._first_value(r.values) is not None]
         return rows if len(rows) >= 2 else []
 
+    # A DATE ORPHANED ON ITS OWN ROW. When the balance line's label wraps, OCR can break it at
+    # the date and put the figure on the continuation: ACB's Q3-2017 reads
+    # `…tuong_duong_tien_tai_ngay` with an EMPTY current-period cell and `thang_9` on the next
+    # row holding 15,044,850. The continuation is a bare date fragment — no account is named
+    # "tháng 9" — which is what makes it safe to recognise and splice back.
+    SPLIT_TAIL_KEY = re.compile(r"^(thang|ngay|nam)(_\d+)*$")
+
+    def _split_tail_value(self, st: Statement, i: int) -> Optional[int]:
+        """The figure belonging to a balance line whose label wrapped, or None.
+
+        Only ever consulted when the balance row's OWN current-period cell is empty — the case
+        where `_first_value` would otherwise fall through and return the COMPARATIVE column, i.e.
+        the prior year's closing balance, which is indistinguishable from a right answer.
+        """
+        if i + 1 >= len(st.rows):
+            return None
+        nxt = st.rows[i + 1]
+        if not self.SPLIT_TAIL_KEY.match(nxt.key):
+            return None
+        return nxt.values[0] if nxt.values else None
+
     def _recover_totals(self, out: Dict[str, int], st: Statement,
-                        src: Optional[Dict[str, int]] = None) -> None:
+                        src: Optional[Dict[str, int]] = None,
+                        split_tail: bool = False) -> None:
         """Fill a statement's subtotal columns from label variants (relaxed layers only).
 
         Runs after the ordered walk and `_anchor` have done their best and the statement STILL
@@ -905,6 +939,24 @@ class FinancialsBuilder:
                     # fall-through this is here to undo — so declining to overwrite leaves the
                     # comparative figure sitting there and nothing downstream can tell.
                     out.pop(self.CASH_BALANCES[0], None)
+                if split_tail:
+                    # THE CLOSING BALANCE MAY BE ON THE NEXT ROW. Re-pick it before the normal
+                    # choice: the row whose label carries the date can be the one with an EMPTY
+                    # current-period cell (its figure went to the continuation), and the test
+                    # above — "the last dated row that carries a figure" — then selects it anyway
+                    # on the strength of its COMPARATIVE column. ACB's Q3-2017 takes 13,316,705,
+                    # which is Q3-2016's closing balance, while its own 15,044,850 sits one row
+                    # below on `thang_9` and is exactly what its components sum to.
+                    for ci, r in reversed(dated):
+                        if ci == dated[0][0]:
+                            continue
+                        if r.values and r.values[0] is not None:
+                            break
+                        v = self._split_tail_value(st, ci)
+                        if v is not None:
+                            self._claim(out, src, self.CASH_BALANCES[1], ci, v)
+                            closing = None          # claimed here; do not overwrite below
+                            break
                 if closing is not None:
                     ci = next(i for i, r in dated if r is closing)
                     self._claim(out, src, self.CASH_BALANCES[1], ci,

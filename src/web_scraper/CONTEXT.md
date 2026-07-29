@@ -118,8 +118,9 @@ CafeF-tab fallback (see `_parse_cascaded`). `FinancialsBuilder.LAYERS`:
   onnx@200 → onnx@300 → onnx@400 → tesseract@200 → onnx@200+relax → onnx@300+relax
   → tesseract@400+relax → onnx@200+components → onnx@300+components
   → onnx@200+relax+components → onnx@200+pad6+components → onnx@200+pad6+relax+components
+  → onnx@300+split → onnx@300+split+components
 
-**The five `+components` / `+pad6` layers are appended, never inserted** (2026-07-29), so a
+**The seven `+components` / `+pad6` / `+split` layers are appended, never inserted** (2026-07-29), so a
 statement that reconciles today cannot reach them — `_parse_cascaded` skips a report once
 accepted. They add two relaxations, each traced to a specific cause and each recovering quarters
 whose figures were already correct:
@@ -136,6 +137,15 @@ whose figures were already correct:
   line as 261.018 at 200/300/400 dpi and on tesseract, and correctly at pad 6, after which the
   breakdown closes to the đồng. This is the MIRROR of the phantom-leading-digit bug that set
   `CROP_PAD_PT = 2` — too tight invents a digit, too tight in the other direction loses one.
+- **`relax_split_tail` — the balance line's label WRAPPED and took its figure with it.** ACB's
+  Q3-2017 reads `…tương đương tiền tại ngày` with an empty current-period cell and `thang_9` on
+  the next row holding **15,044,850**; `_first_value` then falls through to the comparative
+  column and returns 13,316,705, which is Q3-2016's closing balance — a wrong answer of exactly
+  the right shape, and what the old committed data stored. The continuation is a bare date
+  fragment (no account is named "tháng 9"), which is what makes it safe to splice back. At 300
+  dpi the same filing also reads `tiền mặt` as 4,080,492 rather than 492, and
+  4,080,492 + 7,411,264 + 3,553,094 = 15,044,850 — so the breakdown CONFIRMS the spliced figure
+  instead of merely permitting it.
 - **⚠️ The parse cache key is `(engine, dpi, crop_pad)`.** Keyed on `(engine, dpi)` alone the
   wider-crop layer is handed the narrow crop's cached parse — the one that just failed — and the
   layer silently does nothing.
@@ -157,14 +167,14 @@ OCR pass. The winning layer name is recorded per statement (`ocr_config`).
 Judge the parser on Q1-2010 → Q1-2026 and nothing else; measured against the raw 74-quarter grid
 it will always read ~88% and look broken when it is not.
 
-**Result over the PDF era, Q1-2010 → Q1-2026 (65 quarters, 195 cells): 193 of 195** (re-parse of
-2026-07-29 + the seven quarters recovered by the `+components` / `+pad6` layers).
-balance_sheet 65/65, income_statement 65/65, **cash_flow 63/65** — and, unlike the 65/65 this
-file used to claim, **every one of the 63 carries a closing balance checked against the
+**Result over the PDF era, Q1-2010 → Q1-2026 (65 quarters, 195 cells): 194 of 195** (re-parse of
+2026-07-29 + the eight quarters recovered by the `+components` / `+pad6` / `+split` layers).
+balance_sheet 65/65, income_statement 65/65, **cash_flow 64/65** — and, unlike the 65/65 this
+file used to claim, **every one of the 64 carries a closing balance checked against the
 components printed beneath it** (the old data had 23 with none at all; see below).
 
-On the full written grid (Q1-2008 → Q2-2026, 74 quarters, 222 cells): `pdf` **193**, `cafef` 29,
-**0 missing**. 27 of the 29 are structural and none of those is a parse failure:
+On the full written grid (Q1-2008 → Q2-2026, 74 quarters, 222 cells): `pdf` **194**, `cafef` 28,
+**0 missing**. 27 of the 28 are structural and none of those is a parse failure:
 
 | | quarters | why |
 |---|---|---|
@@ -193,7 +203,7 @@ WRONG committed figure rather than a lost one: Q4-2010 is stored as 33,310,887 w
 prints **38,310,887** (its components sum to it, and opening 40,311,008 − 1,772,378 − 227,743
 gives it exactly), and Q3-2017's stored 13,316,705 is the COMPARATIVE column, i.e. Q3-2016's.
 
-**Seven of the nine are fixed and WRITTEN (cash_flow 63/65); Q2-2012 and Q3-2017 are not.**
+**Eight of the nine are fixed and WRITTEN (cash_flow 64/65). Only Q2-2012 is not.**
 
 - **It is deterministic** — two independent full runs produced the same nine, no more and no
   fewer, so it is diagnosable one quarter at a time rather than being OCR flakiness.
@@ -204,21 +214,22 @@ gives it exactly), and Q3-2017's stored 13,316,705 is the COMPARATIVE column, i.
   quarters (Q3-2010, Q4-2010, Q1-2012, Q2-2012, Q1-2013); the other four needed the treasury-bill
   component below, and Q2-2012 is still unread.
 
-### ⚠️ STILL UNREAD: Q2-2012 and Q3-2017 — do NOT loosen a gate to admit them
+### ⚠️ STILL UNREAD: Q2-2012 — and the gate refusing it is RIGHT
 
-Both defeat all twelve layers, and in both the closing balance the statement would be judged on
-is demonstrably obtainable, so the temptation is to relax something. Their causes are known:
+**One component is short by exactly 3,000,000** (`chứng khoán đầu tư` reads 200,000), so the
+breakdown misses and the statement is refused. It reads IDENTICALLY at crop pads 2, 6 and 10 and
+at 200 and 400 dpi, so no OCR configuration recovers it and no layer will.
 
-- **Q3-2017 — the closing label is SPLIT ACROSS TWO ROWS.** `…tại ngày 30` holds no value and
-  the continuation row `thang_9` holds the figure **15,044,850**; the balance never maps, and
-  `_first_value` then falls through to the comparative column. Its `tiền mặt` component also
-  reads 492 for a printed 4,080,492 (the next year's filing prints that as its comparative). Both
-  components and the split figure agree — 4,080,492 + 7,411,264 + 3,553,094 = 15,044,850 — so the
-  quarter is recoverable by a row-merge rule for a split label, which is a change that touches
-  EVERY statement and needs its own regression pass.
-- **Q2-2012 — one component is short by exactly 3,000,000** (`chứng khoán đầu tư` reads 200,000).
-  A wider crop does not recover it, unlike Q3-2023's, so the digit is lost somewhere other than
-  the crop edge.
+**Its closing balance 51,691,157 is nevertheless right, confirmed twice independently:** CafeF's
+own tab prints that figure, and the identity closes to the đồng (58,475,599 − 6,738,622 − 45,820).
+So the quarter COULD be admitted by a layer that accepts a statement whose identity closes exactly
+even though its printed breakdown does not.
+
+**That was deliberately not done.** It generalises: it changes what "verified" means for every
+future quarter and ticker, trading a specific check (this figure, stated twice on the page) for a
+whole-statement one, and the evidence that makes it look safe here — CafeF agreeing — is not
+available to the gate at parse time. `from_api` fills the quarter anyway, keyed by item code, so
+the cost of refusing is one row sourced `cafef` rather than a gap.
 
 Whole run **~3.7 h** on an RTX 3050 (221 min for ACB's 65 filings, GPU otherwise idle; the
 earlier ~2.6 h figure predates the `tesseract@400+relax` layer). A single quarter re-parsed
