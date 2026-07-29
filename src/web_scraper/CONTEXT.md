@@ -66,15 +66,47 @@ tabs. Scored on the raw grid ACB reads 88% and VCB 91% and both look broken; sco
 where filings actually exist, **both are 100%**. Use `source == 'missing'` to find real gaps —
 `cafef` on a pre-archive quarter is the system working as designed.
 
-**Where the statement parser stands — VCB, Q3-2008 → Q1-2026 (71 quarters, its whole PDF era):**
+**Where the statement parser stands — VCB, Q3-2008 → Q1-2026 (71 quarters, its whole PDF era).**
+Re-parsed 2026-07-29 with the four new relaxations, 238 min:
 
-| report | quarters | pdf | cafef | missing | coverage | dated |
-|---|---|---|---|---|---|---|
-| balance_sheet | 71 | 57 | 14 | 0 | **100%** | 70/71 |
-| income_statement | 71 | 46 | 25 | 0 | **100%** | 70/71 |
-| cash_flow | 71 | 61 | 10 | 0 | **100%** | 70/71 |
+| report | quarters | pdf | cafef | was pdf | gain |
+|---|---|---|---|---|---|
+| balance_sheet | 71 | **68** | 3 | 57 | +11 |
+| income_statement | 71 | **65** | 6 | 46 | +19 |
+| cash_flow | 71 | **69** | 2 | 61 | +8 |
 
-**213 / 213 — every quarter VCB financial data exists for.** The written grid starts at Q4-2006
+**202 of 213 read from the filings, +38, and NOTHING was lost** — no quarter that read from a
+filing before stopped doing so. All 6 formerly HOLLOW cash flows (a `pdf` row with an empty
+closing balance) now carry one that is checked. The 11 remaining are filled from CafeF's tabs, so
+every quarter still has data.
+
+### ⚠️ VCB'S COVERAGE IS GOOD AND ITS Q4 CLOSING BALANCES ARE NOT — verify before use
+
+The same checks that gave ACB 57/58 and 48/54 give VCB **45/62 on the opening/closing chain** and
+**32/54 against CafeF's tab**. That is not a rounding difference, and two Q4s carry a specific,
+diagnosable signature — **a closing balance identical to another quarter's OPENING**:
+
+| quarter | our closing | equals | CafeF says |
+|---|---|---|---|
+| Q4-2017 | 157,564,955 | Q3-2017's **opening** | 258,262,431 |
+| Q4-2023 | 412,235,294 | Q1-2023's **opening** | 371,827,129 |
+
+Neither agrees with the following year's openings either (2018 reads 305,534,247 and 2024
+372,818,730 across all four quarters, which is what a 1-January opening should equal). A closing
+that lands on an opening row is a wrong-row read, not OCR noise. **Do not trust a VCB Q4/annual
+closing balance until this is diagnosed** — the coverage is sound, the annual cash position is
+not. ACB shows no such pattern, so it is VCB's annual layout, not the cascade.
+
+Some VCB-vs-CafeF differences are CafeF's fault, already confirmed: Q4-2011 (ours 124,705,018),
+Q2-2019 (ours 209,368,161), Q4-2025 (ours 541,688,802, which the Q1-2026 filing prints as its
+opening). Others are ours. **The comparison alone does not say which side is wrong** — render the
+page.
+
+**⚠️ Some VCB filings have a DAMAGED PAGE TREE** ("non-page object in page tree"). `scan()` already
+loads pages by index to survive it, but ad-hoc tooling that iterates the document will silently
+stop at the bad node.
+
+**The 213/213 this section used to claim was measured differently and is not comparable:** The written grid starts at Q4-2006
 (an FY-2006 annual report sits in the archive) and those 7 pre-listing quarters are blank:
 VCB IPO'd Dec-2007 and listed Jun-2009, and neither the filings nor CafeF hold anything before
 Q3-2008. On the raw 78-quarter grid that reads 91%; there is no data to be had.
