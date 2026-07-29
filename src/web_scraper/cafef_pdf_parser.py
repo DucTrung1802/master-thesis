@@ -254,6 +254,24 @@ class PdfParser:
         if self._onnx is not None:
             self._onnx.dpi = dpi
 
+    def set_crop_pad(self, pad: Optional[float]) -> None:
+        """How far outside a detected box to crop before RECOGNISING it (onnx only; points).
+
+        `None` restores the engine default. A wider crop recovers a leading digit the detector
+        box cut off — ACB's Q3-2023 reads 93.261.018 as 261.018 at the default and correctly at
+        6 — and it is set per PARSE LAYER rather than globally, so only a statement that has
+        already failed every other layer is ever re-read this way. A no-op on the other engines,
+        which do their own cropping.
+        """
+        if self._onnx is None:
+            return
+        if pad is None:
+            # imported lazily, like the engine itself — this module must stay importable on a
+            # machine with no onnxruntime
+            from web_scraper.onnx_ocr import CROP_PAD_PT
+            pad = CROP_PAD_PT
+        self._onnx.crop_pad = pad
+
     def _log(self, msg: str) -> None:
         if self._logger:
             self._logger.log_info(msg)

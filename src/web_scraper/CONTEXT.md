@@ -116,6 +116,29 @@ of reading a filing — an OCR engine + its settings + optional matching relaxat
 CafeF-tab fallback (see `_parse_cascaded`). `FinancialsBuilder.LAYERS`:
 
   onnx@200 → onnx@300 → onnx@400 → tesseract@200 → onnx@200+relax → onnx@300+relax
+  → tesseract@400+relax → onnx@200+components → onnx@300+components
+  → onnx@200+relax+components → onnx@200+pad6+components → onnx@200+pad6+relax+components
+
+**The five `+components` / `+pad6` layers are appended, never inserted** (2026-07-29), so a
+statement that reconciles today cannot reach them — `_parse_cascaded` skips a report once
+accepted. They add two relaxations, each traced to a specific cause and each recovering quarters
+whose figures were already correct:
+
+- **`relax_components` — a bank's fifth cash equivalent is a TREASURY BILL.** `CASH_COMPONENT`
+  knows cash, deposits, securities and gold, so a filing listing `tín phiếu` beneath its closing
+  balance had that line dropped from the sum and was refused for a discrepancy it did not have.
+  Six quarters, each closing EXACTLY once counted: Q4-2010, Q1-2012, Q1-2013, Q3-2018, Q3-2019,
+  Q1-2020. Widened per layer, never globally — a marker that is too narrow makes the sum fall
+  short (recoverable, a later layer still gets it), one too wide makes it OVERSHOOT and can
+  refuse a quarter that passes today.
+- **`crop_pad` — the detector box starts INSIDE the number.** The recogniser cannot read pixels
+  it was never shown, so raising the DPI does nothing: ACB's Q3-2023 reads its 93.261.018 deposit
+  line as 261.018 at 200/300/400 dpi and on tesseract, and correctly at pad 6, after which the
+  breakdown closes to the đồng. This is the MIRROR of the phantom-leading-digit bug that set
+  `CROP_PAD_PT = 2` — too tight invents a digit, too tight in the other direction loses one.
+- **⚠️ The parse cache key is `(engine, dpi, crop_pad)`.** Keyed on `(engine, dpi)` alone the
+  wider-crop layer is handed the narrow crop's cached parse — the one that just failed — and the
+  layer silently does nothing.
 
 The first four are STRICT (higher resolution, then a different engine, for a filing whose scan
 merges lines or misreads a digit). The last two set `relax_totals`: they recover the balance
@@ -145,22 +168,54 @@ On the full written grid (Q1-2008 → Q2-2026, 74 quarters, 222 cells): `pdf` **
 | Q1-2008 … Q4-2009 | 8 × 3 = 24 | **no filing in the archive** — ACB listed on HNX in Nov-2006 but CafeF's document list starts 2010 |
 | Q2-2026 | 1 × 3 = 3 | not filed yet at the time of the run |
 
-### ⚠️ NINE CASH FLOWS REGRESSED — the parser no longer reads what this file used to claim
+### ⚠️ THE OLD "195 of 195" COUNTED 23 HOLLOW CASH FLOWS — coverage was never what it claimed
 
-**Q4-2010, Q1-2012, Q2-2012, Q1-2013, Q3-2017, Q3-2018, Q3-2019, Q1-2020, Q3-2023** were `pdf`
-in the data written before 2026-07-29 and now fall through every layer to the CafeF tabs. This
-block previously read "195 of 195 … nothing in this span falls back to CafeF"; that is no longer
-true, and the number was left standing while the code moved underneath it.
+Nine cash flows fall to the CafeF tabs that used to read `pdf`: **Q4-2010, Q1-2012, Q2-2012,
+Q1-2013, Q3-2017, Q3-2018, Q3-2019, Q1-2020, Q3-2023**. That looks like a regression and mostly
+is not. **Score the closing balance, not the row**, and the old data reads far worse:
+
+| | pdf rows | with NO closing balance |
+|---|---|---|
+| before 2026-07-29 | 65 | **23** |
+| after | 56 | **0** |
+
+Six of the nine (Q1-2012, Q1-2013, Q3-2018, Q3-2019, Q1-2020, Q3-2023) are hollow rows of
+exactly the kind described below — written as `pdf` while the one column the statement is probed
+on is blank, because `reconcile` accepted a cash flow on IV alone. Refusing them is the gate
+working. **On verified content the re-parse is 56 against 42**, and 17 previously-hollow quarters
+now carry a checked closing balance.
+
+Only **three were real regressions** — Q4-2010, Q2-2012, Q3-2017 — and two of those exposed a
+WRONG committed figure rather than a lost one: Q4-2010 is stored as 33,310,887 where the filing
+prints **38,310,887** (its components sum to it, and opening 40,311,008 − 1,772,378 − 227,743
+gives it exactly), and Q3-2017's stored 13,316,705 is the COMPARATIVE column, i.e. Q3-2016's.
+
+**Seven of the nine are now fixed by the layers added below; Q2-2012 and Q3-2017 are not.**
 
 - **It is deterministic** — two independent full runs produced the same nine, no more and no
   fewer, so it is diagnosable one quarter at a time rather than being OCR flakiness.
-- **Only the cash flow is affected.** Both other statements still read 65/65, and the PDF rows
-  are RICHER than the ones they replace (584 balance-sheet, 292 income-statement and 447
-  cash-flow cells are now populated where the old data was blank), so this is a specific
-  regression, not a general one.
-- **The uncommitted-then-committed `_closing_breakdown` "gồm có" fix recovers Q3-2010 only.**
-  Its comment claims five quarters (Q3-2010, Q4-2010, Q1-2012, Q2-2012, Q1-2013); the other four
-  still fail, so their cause is something else and is still unidentified.
+- **Only the cash flow is affected.** Both other statements read 65/65, and the PDF rows are
+  RICHER than the ones they replace (584 balance-sheet, 292 income-statement and 447 cash-flow
+  cells populated where the old data was blank).
+- **The `_closing_breakdown` "gồm có" fix recovers Q3-2010 only.** Its comment claims five
+  quarters (Q3-2010, Q4-2010, Q1-2012, Q2-2012, Q1-2013); the other four needed the treasury-bill
+  component below, and Q2-2012 is still unread.
+
+### ⚠️ STILL UNREAD: Q2-2012 and Q3-2017 — do NOT loosen a gate to admit them
+
+Both defeat all twelve layers, and in both the closing balance the statement would be judged on
+is demonstrably obtainable, so the temptation is to relax something. Their causes are known:
+
+- **Q3-2017 — the closing label is SPLIT ACROSS TWO ROWS.** `…tại ngày 30` holds no value and
+  the continuation row `thang_9` holds the figure **15,044,850**; the balance never maps, and
+  `_first_value` then falls through to the comparative column. Its `tiền mặt` component also
+  reads 492 for a printed 4,080,492 (the next year's filing prints that as its comparative). Both
+  components and the split figure agree — 4,080,492 + 7,411,264 + 3,553,094 = 15,044,850 — so the
+  quarter is recoverable by a row-merge rule for a split label, which is a change that touches
+  EVERY statement and needs its own regression pass.
+- **Q2-2012 — one component is short by exactly 3,000,000** (`chứng khoán đầu tư` reads 200,000).
+  A wider crop does not recover it, unlike Q3-2023's, so the digit is lost somewhere other than
+  the crop edge.
 
 Whole run **~3.7 h** on an RTX 3050 (221 min for ACB's 65 filings, GPU otherwise idle; the
 earlier ~2.6 h figure predates the `tesseract@400+relax` layer). A single quarter re-parsed

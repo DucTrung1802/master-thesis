@@ -39,11 +39,30 @@ class ParseLayer:
         Off for the strict layers so every other quarter is untouched; the relaxed layers run
         ONLY after the strict ones fail, and the reconcile + magnitude gates still guard whatever
         they recover.
+      * `relax_components` — widen what counts as a CASH-EQUIVALENT in the closing balance's
+        printed breakdown (`CASH_COMPONENT_RELAXED`). The narrow set knows cash, deposits,
+        securities and gold; a bank also parks cash in TREASURY BILLS, and a filing that lists
+        `tín phiếu` as its fifth component has that line silently dropped from the sum. The check
+        then reports a balance that disagrees with its own components and refuses a statement
+        whose every figure is right — six ACB quarters (see CASH_COMPONENT_RELAXED).
+
+        Scoped as a LAYER rather than widened globally on purpose: adding a marker to the narrow
+        set would re-judge all 65 quarters at once, and a component wrongly swept in makes the
+        sum OVERSHOOT, turning a passing quarter into a rejected one. Here only a statement that
+        has already failed every existing layer is ever judged this way.
+      * `crop_pad` — how far outside a detected box to crop before RECOGNISING it (onnx only,
+        in points; `None` = the engine default of 2). The detector sometimes starts its box
+        INSIDE a number and the leading digit is simply not in the crop, so the recogniser
+        cannot read what it was never shown: ACB's Q3-2023 reads 93.261.018 as 261.018 at every
+        DPI and correctly at 6. Raising the DPI cannot help — the missing pixels are missing at
+        any resolution — which is why this is its own knob rather than another DPI step.
     """
     name: str
     engine: str
     dpi: int
     relax_totals: bool = False
+    relax_components: bool = False
+    crop_pad: Optional[float] = None
 
 PDFS_DIR = os.path.join(CAFEF_RAW_DATA_DIR, "pdfs")
 FIN_DIR = os.path.join(CAFEF_RAW_DATA_DIR, "financials")
@@ -189,6 +208,23 @@ class FinancialsBuilder:
     # that amount.
     CASH_COMPONENT = ("tienmat", "tiengui", "chungkhoan", "vangbac", "gomco")
 
+    # ⚠️ A BANK'S FIFTH CASH EQUIVALENT IS A TREASURY BILL, and the narrow set above cannot see
+    # it. ACB lists "Tín phiếu Chính phủ đủ điều kiện chiết khấu với NHNN" (and later just "Tín
+    # phiếu Ngân hàng Nhà nước") beneath its closing balance, and dropping that line from the sum
+    # is not a small error — it is the whole reason six quarters were refused, each of which adds
+    # up EXACTLY once the line is counted:
+    #
+    #   Q4-2010  36,663,890 + 1,646,997 = 38,310,887      Q3-2018  24,329,090 + 2,484,412 = 26,813,502
+    #   Q1-2012  46,762,473 + 5,252,163 = 52,014,636      Q3-2019  30,543,805 +   516,752 = 31,060,557
+    #   Q1-2013  11,292,341 + 4,440,122 = 15,732,463      Q1-2020  38,337,214 + 1,272,095 = 39,609,309
+    #
+    # Reached only through a `relax_components` layer, never by default. The direction of the
+    # error is what makes that matter: a marker that is too narrow makes the sum fall SHORT and
+    # refuses a sound statement (recoverable — a later layer can still take it), while one that
+    # is too wide makes it OVERSHOOT and can refuse a quarter that passes today. Widening the
+    # default set would put every quarter at that second risk to fix six.
+    CASH_COMPONENT_RELAXED = CASH_COMPONENT + ("tinphieu",)
+
     # How alike two labels must be to be the SAME line item across quarters.
     #
     # The filing prints no item codes, so a line is identified by its label — and OCR renders
@@ -230,6 +266,30 @@ class FinancialsBuilder:
         # onnx layer reaches it, and what it recovers still faces reconcile + `sane` + the cash
         # breakdown and identity gates.
         ParseLayer("tesseract@400+relax", "tesseract", 400, relax_totals=True),
+        # THE BREAKDOWN'S COMPONENT SET, WIDENED — added last, after every existing layer, so a
+        # statement that reconciles today can never reach them (the design rule here: a change
+        # that recovers six quarters and quietly breaks a sixtieth is a net loss). These recover
+        # the filings whose closing balance is right and whose breakdown lists a TREASURY BILL
+        # the narrow set skips; see CASH_COMPONENT_RELAXED. The OCR configs are the two cheapest,
+        # because for these quarters the pixels were never the problem — every engine and DPI
+        # already reads the figures identically, and the first is a cache hit on onnx@200's
+        # existing parse, so this costs a re-map and no second OCR pass.
+        ParseLayer("onnx@200+components", "onnx", 200, relax_components=True),
+        ParseLayer("onnx@300+components", "onnx", 300, relax_components=True),
+        # …and with the total-label relaxations too, for a quarter that needs both.
+        ParseLayer("onnx@200+relax+components", "onnx", 200,
+                   relax_totals=True, relax_components=True),
+        # A WIDER CROP, LAST OF ALL — for the filings whose figures are wrong rather than
+        # unmatched. The detector box starts inside the number and the leading digit is never
+        # shown to the recogniser: ACB's Q3-2023 reads its 93.261.018 deposit line as 261.018,
+        # identically at 200/300/400 dpi and on tesseract, so no existing layer can reach it. At
+        # pad 6 it reads correctly and the breakdown then closes to the đồng (6,552,560 +
+        # 12,405,261 + 93,261,018 + 499,617 = 112,718,456). Re-renders the pages, so it is the
+        # most expensive thing here and runs only when everything cheaper has failed.
+        ParseLayer("onnx@200+pad6+components", "onnx", 200,
+                   relax_components=True, crop_pad=6.0),
+        ParseLayer("onnx@200+pad6+relax+components", "onnx", 200,
+                   relax_totals=True, relax_components=True, crop_pad=6.0),
     ]
 
     def __init__(self, logger=None):
@@ -270,9 +330,14 @@ class FinancialsBuilder:
             parser = self._parser_for(layer.engine)
             if not parser.ocr_ready and layer.engine != "onnx":
                 continue                                  # engine unavailable on this machine
-            key = (layer.engine, layer.dpi)
+            # The crop padding is part of the KEY, not just a setting: two layers that share an
+            # engine and DPI but crop differently produce different text, and keying on
+            # (engine, dpi) alone would hand the wider-crop layer the narrow crop's cached parse
+            # — the one that already failed.
+            key = (layer.engine, layer.dpi, layer.crop_pad)
             if key not in parsed:
                 parser.set_dpi(layer.dpi)
+                parser.set_crop_pad(layer.crop_pad)
                 try:
                     parsed[key] = parser.parse(path, period_end)
                 except Exception as e:
@@ -299,7 +364,8 @@ class FinancialsBuilder:
                     continue
                 row = self.map_to_schema(st, template, relax_totals=layer.relax_totals)
                 if (self.reconcile(st, row, verify_cash=layer.relax_totals,
-                                   open_ref=open_ref) is None
+                                   open_ref=open_ref,
+                                   relax_components=layer.relax_components) is None
                         and self.sane(st, history[report], row) is None):
                     accepted[report] = (row, st, layer.name)
         return accepted, facts
@@ -972,7 +1038,8 @@ class FinancialsBuilder:
     def reconcile(self, st: Statement,
                   mapped: Optional[Dict[str, int]] = None,
                   verify_cash: bool = False,
-                  open_ref: Optional[int] = None) -> Optional[str]:
+                  open_ref: Optional[int] = None,
+                  relax_components: bool = False) -> Optional[str]:
         """None if the statement balances against its OWN printed subtotals, else why not.
 
         The subtotals are taken from the CANONICAL columns when the rows have been mapped —
@@ -1030,7 +1097,7 @@ class FinancialsBuilder:
             # breakdown printed beneath the closing balance states that figure a second time and
             # is the only thing that tells them apart. It fails open when the filing prints no
             # breakdown, so a statement that cannot answer it is judged exactly as before.
-            bad = self._closing_breakdown(st, close)
+            bad = self._closing_breakdown(st, close, relax_components)
             if bad:
                 return bad
             # The IDENTITY, by contrast, stays on the relaxed layers only. It tests the whole
@@ -1119,7 +1186,8 @@ class FinancialsBuilder:
                     f"+ fx {fx:.6g} != closing {close:.6g}")
         return None
 
-    def _closing_breakdown(self, st: Statement, close: int) -> Optional[str]:
+    def _closing_breakdown(self, st: Statement, close: int,
+                           relax_components: bool = False) -> Optional[str]:
         """Check the closing cash balance against the components printed beneath it.
 
         Alone among the three statements the cash flow has no internal identity to test — the
@@ -1154,10 +1222,12 @@ class FinancialsBuilder:
         # — the marker is there, just not at the front. Matching on the prefix found nothing at
         # all and the check silently never ran. The breakdown is the last block on the page, so
         # the scan runs to the end and simply skips anything that is not a component.
+        markers = (self.CASH_COMPONENT_RELAXED if relax_components
+                   else self.CASH_COMPONENT)
         parts = []
         for row in st.rows[last + 1:]:
             k = row.key.replace("_", "")
-            if not any(m in k for m in self.CASH_COMPONENT):
+            if not any(m in k for m in markers):
                 continue
             # STRICTLY the current period here, not `_first_value`. A component the bank did not
             # hold this quarter is printed "-", and falling through to the next populated column

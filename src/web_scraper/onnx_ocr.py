@@ -64,6 +64,13 @@ REC_BATCH = 24
 #
 # The padding feeds the RECOGNISER only. The box reported downstream is the detector's own, so
 # the right-edge column clustering is unchanged.
+#
+# ⚠️ THE ERROR RUNS BOTH WAYS, and the opposite one needs MORE than 2. A crop that clips the
+# glyphs makes the recogniser INVENT a leading digit (96.922.247 -> 196.922.247); a detector box
+# that starts inside the number instead makes it LOSE one, and no amount of resolution helps
+# because the missing pixels were never in the crop. ACB's Q3-2023 reads 93.261.018 as 261.018
+# at every DPI, and at pad 6 reads it correctly — see the `+pad6` layers, which is where a wider
+# crop is applied rather than here, so no quarter that parses today is re-rendered.
 CROP_PAD_PT = 2.0
 
 
@@ -228,12 +235,16 @@ class OnnxOcr:
     """DB detection + VietOCR, page in / positioned words out. Built lazily, once per parser."""
 
     def __init__(self, logger=None, dpi: int = RENDER_DPI, min_score: float = MIN_SCORE,
-                 side_len: int = DET_SIDE_LEN, device: Optional[str] = None):
+                 side_len: int = DET_SIDE_LEN, device: Optional[str] = None,
+                 crop_pad: float = CROP_PAD_PT):
         self._logger = logger
         self.dpi = dpi
         self.min_score = min_score
         self.side_len = side_len
         self.device = device
+        # Per-instance so a PARSE LAYER can widen it (see FinancialsBuilder.LAYERS); the module
+        # constant remains the default every ordinary parse uses.
+        self.crop_pad = crop_pad
         self._det = None
         self._rec = None
 
@@ -275,7 +286,7 @@ class OnnxOcr:
 
         boxes = self.detector(img[:, :, ::-1])            # detector expects BGR
         h_img, w_img = img.shape[:2]
-        pad = max(1, int(round(CROP_PAD_PT * scale)))
+        pad = max(1, int(round(self.crop_pad * scale)))
         crops, rects = [], []
         for quad in boxes:
             xs, ys = quad[:, 0], quad[:, 1]
