@@ -2,6 +2,7 @@
 
 # ===== Standard Library =====
 import csv
+import glob
 import json
 import os
 import random
@@ -1159,15 +1160,35 @@ class TradingViewScraper(BaseScraper):
     # TradingView link-based data scraping – task adders
     # ──────────────────────────────────────────────────────────────────────
 
-    def _add_generic_link_data_tasks(self, asset_type: ScrapeMainType) -> int:
+    def _add_generic_link_data_tasks(
+        self, asset_type: ScrapeMainType, skip_existing: bool = True
+    ) -> int:
         """Generic task adder for any TradingView link-based asset type.
 
         Maps each enabled switch path to the corresponding links CSV directory
         by stripping the 'web_scraper/trading_view/data' prefix and prepending
         TRADING_VIEW_RAW_DATA_DIR/links, which works regardless of directory depth
         (forex has 2 sub-parts, bonds 3, stocks 4, etc.).
+
+        ⚠️ `skip_existing` IS CHECKED HERE, AT TASK-ADD TIME, NOT INSIDE THE SCRAPE.
+        Every navigation passes through a GLOBAL 8-second gate
+        (`SCRAPER_NAV_STAGGER`, a monotonic lock — see
+        `_scrape_data_trading_view_link_attempt`), so a symbol that is merely skipped
+        late still costs its 8 s. Skipping before the task is queued costs nothing, and
+        across the 4,675 links currently on disk that is the difference between ~10.4 h
+        and minutes. This scraper had NO skip at all before: the data path never checked,
+        and the links path explicitly deletes and re-fetches, so a full run re-scraped
+        everything every time.
+
+        ⚠️ THE FILENAME CARRIES ITS END DATE (`<SYMBOL>_<start>_<today>.csv`), so an
+        existing file is matched by GLOB on the symbol prefix, never by equality — the
+        name changes every day and an equality test would skip nothing.
+
+        ⚠️ SKIPPING NEVER REFRESHES. A file from three months ago satisfies the check,
+        exactly as it does for the CafeF and Simplize scrapers. To re-fetch a symbol,
+        delete its CSV; to re-fetch everything, pass `skip_existing=False`.
         """
-        added = 0
+        added = skipped = 0
         for path in self._switch_handler.get_enabled_paths(
             "web_scraper", "trading_view", "data", asset_type.value
         ):
@@ -1183,6 +1204,9 @@ class TradingViewScraper(BaseScraper):
             if not csv_files:
                 self._logger.log_warning(f"No links CSV found in: {links_dir}")
                 continue
+            # The data tree mirrors the links tree, which is what makes this cheap:
+            # the same `sub_parts` name both folders.
+            data_dir = os.path.join(TRADING_VIEW_RAW_DATA_DIR, "data", *sub_parts)
             links_path = os.path.join(links_dir, csv_files[0])
             with open(links_path, "r", encoding="utf-8") as f:
                 reader = csv.DictReader(f)
@@ -1191,6 +1215,11 @@ class TradingViewScraper(BaseScraper):
                     if not url:
                         continue
                     symbol = url.split("symbol=")[-1] if "symbol=" in url else url
+                    if skip_existing and glob.glob(
+                        os.path.join(data_dir, f"{symbol.replace(':', '_')}_*.csv")
+                    ):
+                        skipped += 1
+                        continue
                     task_name = format_key_for_name(("data", *sub_parts, symbol))
                     self._thread_manager.add_task(
                         Task(
@@ -1200,31 +1229,40 @@ class TradingViewScraper(BaseScraper):
                         )
                     )
                     added += 1
+        if skipped:
+            self._logger.log_info(
+                f"Trading View {asset_type.value} data: skipped {skipped} symbol(s) "
+                f"already on disk, queued {added}. (skip_existing=True; delete a CSV "
+                f"to re-fetch it.)"
+            )
         return added
 
-    def _add_stock_data_tasks(self) -> int:
-        return self._add_generic_link_data_tasks(ScrapeMainType.STOCKS)
+    # Each forwards `skip_existing` so a caller can force a full re-fetch per asset class
+    # (`_add_stock_data_tasks(skip_existing=False)`); the default matches the CafeF and
+    # Simplize scrapers, which have always skipped what is already on disk.
+    def _add_stock_data_tasks(self, skip_existing: bool = True) -> int:
+        return self._add_generic_link_data_tasks(ScrapeMainType.STOCKS, skip_existing)
 
-    def _add_fund_data_tasks(self) -> int:
-        return self._add_generic_link_data_tasks(ScrapeMainType.FUNDS)
+    def _add_fund_data_tasks(self, skip_existing: bool = True) -> int:
+        return self._add_generic_link_data_tasks(ScrapeMainType.FUNDS, skip_existing)
 
-    def _add_futures_data_tasks(self) -> int:
-        return self._add_generic_link_data_tasks(ScrapeMainType.FUTURES)
+    def _add_futures_data_tasks(self, skip_existing: bool = True) -> int:
+        return self._add_generic_link_data_tasks(ScrapeMainType.FUTURES, skip_existing)
 
-    def _add_forex_data_tasks(self) -> int:
-        return self._add_generic_link_data_tasks(ScrapeMainType.FOREX)
+    def _add_forex_data_tasks(self, skip_existing: bool = True) -> int:
+        return self._add_generic_link_data_tasks(ScrapeMainType.FOREX, skip_existing)
 
-    def _add_crypto_data_tasks(self) -> int:
-        return self._add_generic_link_data_tasks(ScrapeMainType.CRYPTO)
+    def _add_crypto_data_tasks(self, skip_existing: bool = True) -> int:
+        return self._add_generic_link_data_tasks(ScrapeMainType.CRYPTO, skip_existing)
 
-    def _add_indices_data_tasks(self) -> int:
-        return self._add_generic_link_data_tasks(ScrapeMainType.INDICES)
+    def _add_indices_data_tasks(self, skip_existing: bool = True) -> int:
+        return self._add_generic_link_data_tasks(ScrapeMainType.INDICES, skip_existing)
 
-    def _add_bonds_data_tasks(self) -> int:
-        return self._add_generic_link_data_tasks(ScrapeMainType.BONDS)
+    def _add_bonds_data_tasks(self, skip_existing: bool = True) -> int:
+        return self._add_generic_link_data_tasks(ScrapeMainType.BONDS, skip_existing)
 
-    def _add_economy_data_tasks(self) -> int:
-        return self._add_generic_link_data_tasks(ScrapeMainType.ECONOMY)
+    def _add_economy_data_tasks(self, skip_existing: bool = True) -> int:
+        return self._add_generic_link_data_tasks(ScrapeMainType.ECONOMY, skip_existing)
 
     def _add_options_data_tasks(self) -> int:
         return 0

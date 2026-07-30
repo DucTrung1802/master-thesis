@@ -1,0 +1,47 @@
+{
+    "// WHAT THIS IS": "The load list for orchestration/definitions.py. Set an asset to false and it is NOT LOADED - gone from the UI, from `*`, and from every selection. true or ABSENT = enabled, so a newly added asset is on by default.",
+    "// NOT THE RUN PLAN": "This is not switch_config.json. The ordinary way to not run something is to not select it, and to skip one inside a bigger run use `--select \"group:cafef and not key:\\\"raw/cafef_news\\\"\"`. Use this file only for `must never load in this repo`.",
+    "// DOWNSTREAM IS NOT DISABLED": "Dagster keeps the edge and shows a disabled node as an unexecutable external asset, so bronze/cafef_index_price still resolves with its raw/ parent off. To stop a chain, disable the downstream too.",
+    "// A TYPO IS AN ERROR": "A key here that matches no asset RAISES at load time and lists the valid keys. That is deliberate - a silently-ignored key is the exact failure switch_config.json's trailing-slash bug had.",
+    "// KEYS ARE AS THE UI SHOWS THEM": "prefix/name, e.g. raw/cafef_news or bronze/cafef_index_price.",
+
+    "// ---- TradingView: the universe, then the OHLCV ----": "",
+    "raw/trading_view_links": true,
+    "// raw/trading_view_collected_links": "nothing reads this - kept because main.py runs the phase",
+    "raw/trading_view_collected_links": true,
+    "// raw/trading_view_data": "HEAVY - Selenium, hours",
+    "raw/trading_view_data": true,
+
+    "// ---- CafeF: the five per-stock tabs ----": "each needs raw/trading_view_links[stocks]",
+    "raw/cafef_price": true,
+    "raw/cafef_order_stats": true,
+    "raw/cafef_foreign": true,
+    "raw/cafef_prop_trading": true,
+    "raw/cafef_insider_txn": true,
+    "// raw/cafef_news": "HEAVY - ~2 h, ~405k rows over the full universe",
+    "raw/cafef_news": true,
+
+    "// ---- CafeF market indices: no upstream, minutes ----": "",
+    "raw/cafef_index_price": true,
+    "raw/cafef_index_order_stats": true,
+    "raw/cafef_index_foreign": true,
+    "raw/cafef_index_prop_trading": true,
+
+    "// ---- CafeF filings: partitioned per ticker ----": "",
+    "// raw/cafef_pdfs": "HEAVY - ~1.0-1.7 GB PER PARTITION, 100 partitions",
+    "raw/cafef_pdfs": true,
+    "raw/cafef_financials_templates": true,
+    "// raw/cafef_financials": "HEAVY - ~2.4 h PER PARTITION (OCR)",
+    "raw/cafef_financials": true,
+
+    "// ---- Simplize + GICS ----": "",
+    "raw/simplize_stocks": true,
+    "raw/simplize_industry": true,
+    "raw/gics_structure": true,
+
+    "// ---- bronze: the first database layer ----": "",
+    "bronze/cafef_index_price": true,
+    "bronze/cafef_index_order_stats": true,
+    "bronze/cafef_index_foreign": true,
+    "bronze/cafef_index_prop_trading": true
+}

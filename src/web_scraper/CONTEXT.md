@@ -869,6 +869,32 @@ the data rather than buried: **HVA** is filed under `chung-khoan-va-ngan-hang-da
   All 12 files exist under `raw_data/cafef/financials/schema/<template>_<report>.csv`, built by
   `cafef_schema.save()` from a reference ticker per template (VCB / FPT / SSI / BVH).
 
+- **⚠️ THE 12 SCHEMA CSVs ARE A GIT-TRACKED INPUT WITH NO PRODUCER IN THE PIPELINE — and a
+  missing one used to cost 2.4 h of OCR and report itself as something else.** Nothing in
+  `src/` calls `cafef_schema.save()`; the files are committed (`raw_data/cafef/financials/`
+  is the single exception in `.gitignore`), so "absent" always means deleted or moved, never
+  "a run has not produced it yet". `FinancialsBuilder.schema_of` read them behind an
+  `if os.path.exists(path)` and returned an **empty list** when absent — an empty chart of
+  accounts, against which nothing matches — so `map_to_schema` mapped no line, `reconcile`
+  found no subtotal, and **every statement of every quarter was rejected**, after the full
+  parse, looking exactly like a hard OCR problem. The same guard in `_from_api` silently
+  dropped that report's CafeF-tab fallback, turning recoverable quarters into permanent
+  `source='missing'` rows.
+  - Both now go through `utils.inputs.require_file`, which raises naming the file, the
+    consequence and the fix.
+  - **`FinancialsBuilder.preflight(exchange, symbol)` checks every input up front** — the
+    template, the three charts of accounts, the PDF index and the archive — and `build()`
+    calls it as its first statement, so `main.py`, a notebook and the orchestrator are all
+    covered. A ~2.4 h parse must never start on inputs that can be validated in milliseconds.
+
+- **⚠️ `build_templates_index` also reads `raw_data/simplize/industry.csv`** — an OPTIONAL
+  input, and the only place the dependency is written down. The template itself is
+  fingerprinted over the network, so absence stops nothing; it silently BLANKS the
+  `sector` / `industry_group_code` / `industry_group_slug` columns, which are the only
+  reason a GICS-vs-fingerprint disagreement (HVA: securities group, corporate template) is
+  visible in the data. A blank column reads like "no disagreement", so it now goes through
+  `utils.inputs.optional_file`, which logs a WARNING naming exactly what was blanked.
+
 - **⚠️ FINGERPRINT THE TICKER — DO NOT CLASSIFY IT.** `detect_template(symbol)` reads CafeF's
   own chart of accounts and matches it against `FINGERPRINTS` (the line-item count of each
   section). GICS says what the business *is*; the chart of accounts says what the *filing*

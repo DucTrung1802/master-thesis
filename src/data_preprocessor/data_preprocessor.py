@@ -31,6 +31,7 @@ from utils.constants import (
     GOLD_SCHEMA,
 )
 from utils.enums import *
+from utils.exceptions import MissingSourceDataError, PipelineError
 from utils.utils import *
 from utils.switch_handler import SwitchHandler
 
@@ -536,7 +537,13 @@ class DataPreprocessor:
             f"(Inserted: {inserted_total}, Updated: {updated_total})"
         )
 
-    def _helper_load_csvs(self, folder_path: str) -> tuple[pd.DataFrame, list] | None:
+    def _helper_load_csvs(self, folder_path: str) -> tuple[pd.DataFrame, list]:
+        """⚠️ RAISES `MissingSourceDataError` — it used to return None.
+
+        Every caller answered that None with `log_error(...); return`, i.e. the ingest
+        finished normally having written nothing. The return type is now unconditional:
+        either a frame, or an exception.
+        """
         file_paths = get_all_file_names_with_extensions(
             logger=self._logger,
             folder_path=folder_path,
@@ -544,8 +551,7 @@ class DataPreprocessor:
         )
 
         if not file_paths:
-            self._logger.log_error(f'Data in "{folder_path}" does not exist.')
-            return None
+            raise MissingSourceDataError(f'Data in "{folder_path}" does not exist.')
 
         dataframes = []
 
@@ -557,8 +563,9 @@ class DataPreprocessor:
                 dataframes.append(df)
 
         if not dataframes:
-            self._logger.log_error(f'No valid CSV data found in "{folder_path}".')
-            return None
+            raise MissingSourceDataError(
+                f'No valid CSV data found in "{folder_path}".'
+            )
 
         df = pd.concat(dataframes, ignore_index=True).drop_duplicates()
 
@@ -664,8 +671,9 @@ class DataPreprocessor:
         csv_files = glob(os.path.join(economy_dir, "**", "*.csv"), recursive=True)
 
         if not csv_files:
-            self._logger.log_error(f'No economy CSV files found in "{economy_dir}".')
-            return
+            raise MissingSourceDataError(
+                f'No economy CSV files found in "{economy_dir}".'
+            )
 
         dataframes = []
         for fp in csv_files:
@@ -674,8 +682,7 @@ class DataPreprocessor:
                 dataframes.append(df)
 
         if not dataframes:
-            self._logger.log_error("No valid economy CSV data found.")
-            return
+            raise MissingSourceDataError("No valid economy CSV data found.")
 
         df = pd.concat(dataframes, ignore_index=True).drop_duplicates()
 
@@ -712,8 +719,9 @@ class DataPreprocessor:
         csv_files = glob(os.path.join(forex_dir, "**", "*.csv"), recursive=True)
 
         if not csv_files:
-            self._logger.log_error(f'No forex CSV files found in "{forex_dir}".')
-            return
+            raise MissingSourceDataError(
+                f'No forex CSV files found in "{forex_dir}".'
+            )
 
         dataframes = []
         for fp in csv_files:
@@ -722,8 +730,7 @@ class DataPreprocessor:
                 dataframes.append(df)
 
         if not dataframes:
-            self._logger.log_error("No valid forex CSV data found.")
-            return
+            raise MissingSourceDataError("No valid forex CSV data found.")
 
         df = pd.concat(dataframes, ignore_index=True).drop_duplicates()
 
@@ -760,8 +767,9 @@ class DataPreprocessor:
         csv_files = glob(os.path.join(funds_dir, "**", "*.csv"), recursive=True)
 
         if not csv_files:
-            self._logger.log_error(f'No funds CSV files found in "{funds_dir}".')
-            return
+            raise MissingSourceDataError(
+                f'No funds CSV files found in "{funds_dir}".'
+            )
 
         dataframes = []
         for fp in csv_files:
@@ -770,8 +778,7 @@ class DataPreprocessor:
                 dataframes.append(df)
 
         if not dataframes:
-            self._logger.log_error("No valid funds CSV data found.")
-            return
+            raise MissingSourceDataError("No valid funds CSV data found.")
 
         df = pd.concat(dataframes, ignore_index=True).drop_duplicates()
 
@@ -812,8 +819,9 @@ class DataPreprocessor:
         csv_files = glob(os.path.join(indices_dir, "**", "*.csv"), recursive=True)
 
         if not csv_files:
-            self._logger.log_error(f'No indices CSV files found in "{indices_dir}".')
-            return
+            raise MissingSourceDataError(
+                f'No indices CSV files found in "{indices_dir}".'
+            )
 
         dataframes = []
         for fp in csv_files:
@@ -822,8 +830,7 @@ class DataPreprocessor:
                 dataframes.append(df)
 
         if not dataframes:
-            self._logger.log_error("No valid indices CSV data found.")
-            return
+            raise MissingSourceDataError("No valid indices CSV data found.")
 
         df = pd.concat(dataframes, ignore_index=True).drop_duplicates()
 
@@ -868,8 +875,9 @@ class DataPreprocessor:
         csv_files = glob(os.path.join(stocks_dir, "**", "*.csv"), recursive=True)
 
         if not csv_files:
-            self._logger.log_error(f'No stocks CSV files found in "{stocks_dir}".')
-            return
+            raise MissingSourceDataError(
+                f'No stocks CSV files found in "{stocks_dir}".'
+            )
 
         dataframes = []
         for fp in csv_files:
@@ -878,8 +886,7 @@ class DataPreprocessor:
                 dataframes.append(df)
 
         if not dataframes:
-            self._logger.log_error("No valid stocks CSV data found.")
-            return
+            raise MissingSourceDataError("No valid stocks CSV data found.")
 
         df = pd.concat(dataframes, ignore_index=True).drop_duplicates()
 
@@ -922,9 +929,13 @@ class DataPreprocessor:
     # `symbol = "<EXCHANGE>:<TICKER>"` to match the TradingView / Simplize
     # convention so the silver merge can split it the same way.
 
-    def _helper_load_cafef_folder(self, folder: str) -> pd.DataFrame | None:
+    def _helper_load_cafef_folder(self, folder: str) -> pd.DataFrame:
         """Concat every CSV under raw_data/cafef/<folder>/ (one per ticker),
-        dropping empty / all-NA frames. Returns None if nothing valid is found."""
+        dropping empty / all-NA frames.
+
+        ⚠️ RAISES `MissingSourceDataError` when nothing valid is found — it used to
+        return None, which every caller turned into `log_error(...); return`, i.e. an
+        ingest that wrote no table and reported success anyway."""
         files = glob(
             os.path.join(CAFEF_RAW_DATA_DIR, folder, "**", "*.csv"), recursive=True
         )
@@ -934,9 +945,12 @@ class DataPreprocessor:
             if not (df := pd.read_csv(fp, encoding="utf-8")).empty
             and not df.dropna(how="all").empty
         ]
-        return (
-            pd.concat(frames, ignore_index=True).drop_duplicates() if frames else None
-        )
+        if not frames:
+            raise MissingSourceDataError(
+                f'No valid CafeF "{folder}" CSV data found '
+                f"({len(files)} file(s) under {CAFEF_RAW_DATA_DIR}/{folder})."
+            )
+        return pd.concat(frames, ignore_index=True).drop_duplicates()
 
     def _helper_split_symbol_column(self, df: pd.DataFrame) -> pd.DataFrame:
         """Split the `"<EXCHANGE>:<TICKER>"` colon key into separate `exchange` and
@@ -989,9 +1003,6 @@ class DataPreprocessor:
         self._logger.log_info(f"Ingesting bronze CafeF {folder} data...")
 
         df = self._helper_load_cafef_folder(folder)
-        if df is None:
-            self._logger.log_error(f'No valid CafeF "{folder}" CSV data found.')
-            return
 
         if split_key:
             df = df.rename(columns={"symbol": "ticker"})
@@ -1204,9 +1215,6 @@ class DataPreprocessor:
         )
 
         df = self._helper_load_cafef_folder("insider_txn")
-        if df is None:
-            self._logger.log_error('No valid CafeF "insider_txn" CSV data found.')
-            return
 
         # Keep the key split (exchange + ticker); the raw CSV stores them apart.
         df = df.rename(columns={"symbol": "ticker"})
@@ -1309,8 +1317,7 @@ class DataPreprocessor:
             frames.append(df)
 
         if not frames:
-            self._logger.log_error('No valid CafeF "news" CSV data found.')
-            return
+            raise MissingSourceDataError('No valid CafeF "news" CSV data found.')
 
         df = pd.concat(frames, ignore_index=True).drop_duplicates()
 
@@ -1473,10 +1480,9 @@ class DataPreprocessor:
 
         file_path = os.path.join(CAFEF_RAW_DATA_DIR, "financials", "templates.csv")
         if not os.path.exists(file_path):
-            self._logger.log_error(
+            raise MissingSourceDataError(
                 f'No CafeF financials "templates.csv" at {file_path}.'
             )
-            return
 
         df = pd.read_csv(file_path, encoding="utf-8")
         df = df.rename(columns={"symbol": "ticker"})
@@ -1530,14 +1536,18 @@ class DataPreprocessor:
                 None,
             )
             if template is None:
-                self._logger.log_error(f"Unknown financial schema template: {stem}")
-                continue
+                # Not skippable: an unrecognised template means CAFEF_FINANCIAL_TEMPLATES
+                # is out of date, and the chart of accounts would be silently missing a
+                # whole template's line items.
+                raise PipelineError(
+                    f"Unknown financial schema template: {stem} "
+                    f"(known: {sorted(self.CAFEF_FINANCIAL_TEMPLATES)})"
+                )
             df["report"] = stem[len(template) + 1 :]
             frames.append(df)
 
         if not frames:
-            self._logger.log_error("No CafeF financial schema CSVs found.")
-            return
+            raise MissingSourceDataError("No CafeF financial schema CSVs found.")
 
         df = pd.concat(frames, ignore_index=True)
         df = df.rename(columns={"order": "line_order", "column": "line_id"})
@@ -1609,10 +1619,13 @@ class DataPreprocessor:
                     if not (df := pd.read_csv(fp, encoding="utf-8")).empty
                 ]
                 if not frames:
-                    self._logger.log_error(
-                        f"No valid CafeF financial statement CSVs in {folder}."
+                    # `files` was non-empty to get here, so the CSVs exist and are all
+                    # unreadable/empty — a real failure, not an unparsed template (that
+                    # case `continue`s a few lines above, on `if not files`).
+                    raise MissingSourceDataError(
+                        f"No valid CafeF financial statement CSVs in {folder} "
+                        f"({len(files)} file(s) present but all empty)."
                     )
-                    continue
 
                 df = pd.concat(frames, ignore_index=True)
                 df = df.rename(columns={"symbol": "ticker"})
@@ -1671,8 +1684,7 @@ class DataPreprocessor:
                 )
 
         if not report_rows:
-            self._logger.log_error("No CafeF financial statement CSVs found.")
-            return
+            raise MissingSourceDataError("No CafeF financial statement CSVs found.")
 
         self._logger.log_info("Ingesting bronze CafeF financial reports...")
 
@@ -1714,10 +1726,9 @@ class DataPreprocessor:
         csv_files = glob(os.path.join(stocks_dir, "**", "*.csv"), recursive=True)
 
         if not csv_files:
-            self._logger.log_error(
+            raise MissingSourceDataError(
                 f'No Simplize stocks CSV files found in "{stocks_dir}".'
             )
-            return
 
         dataframes = []
         for fp in csv_files:
@@ -1726,8 +1737,7 @@ class DataPreprocessor:
                 dataframes.append(df)
 
         if not dataframes:
-            self._logger.log_error("No valid Simplize stocks CSV data found.")
-            return
+            raise MissingSourceDataError("No valid Simplize stocks CSV data found.")
 
         df = pd.concat(dataframes, ignore_index=True).drop_duplicates()
 
@@ -1791,13 +1801,13 @@ class DataPreprocessor:
 
         path = os.path.join(SIMPLIZE_RAW_DATA_DIR, "industry.csv")
         if not os.path.exists(path):
-            self._logger.log_error(f'Simplize industry CSV not found at "{path}".')
-            return
+            raise MissingSourceDataError(
+                f'Simplize industry CSV not found at "{path}".'
+            )
 
         df = pd.read_csv(path, encoding="utf-8", dtype=str)
         if df.empty:
-            self._logger.log_error("No Simplize industry data found.")
-            return
+            raise MissingSourceDataError("No Simplize industry data found.")
 
         df = self._helper_clean(
             df,
@@ -1826,13 +1836,11 @@ class DataPreprocessor:
 
         path = os.path.join(GICS_RAW_DATA_DIR, "gics_2023_official.csv")
         if not os.path.exists(path):
-            self._logger.log_error(f'GICS structure CSV not found at "{path}".')
-            return
+            raise MissingSourceDataError(f'GICS structure CSV not found at "{path}".')
 
         df = pd.read_csv(path, encoding="utf-8", dtype=str)
         if df.empty:
-            self._logger.log_error("No GICS structure data found.")
-            return
+            raise MissingSourceDataError("No GICS structure data found.")
 
         df = self._helper_clean(
             df,
@@ -1860,8 +1868,9 @@ class DataPreprocessor:
         csv_files = glob(os.path.join(bonds_dir, "**", "*.csv"), recursive=True)
 
         if not csv_files:
-            self._logger.log_error(f'No bonds CSV files found in "{bonds_dir}".')
-            return
+            raise MissingSourceDataError(
+                f'No bonds CSV files found in "{bonds_dir}".'
+            )
 
         dataframes = []
         for fp in csv_files:
@@ -1870,8 +1879,7 @@ class DataPreprocessor:
                 dataframes.append(df)
 
         if not dataframes:
-            self._logger.log_error("No valid bonds CSV data found.")
-            return
+            raise MissingSourceDataError("No valid bonds CSV data found.")
 
         df = pd.concat(dataframes, ignore_index=True).drop_duplicates()
 
@@ -3334,10 +3342,11 @@ class DataPreprocessor:
 
         transform_layers = list(ta_layers or []) + self._helper_build_feature_layers(df)
         if not transform_layers:
-            self._logger.log_error(
-                f"No transform layers resolved for gold {table_name}; skipping."
+            raise PipelineError(
+                f"No transform layers resolved for gold {table_name} — the silver "
+                f"table's columns matched no feature layer, so the gold table would "
+                f"be a copy of its input."
             )
-            return
 
         def _checkpoint(chunk: pd.DataFrame) -> None:
             # Use REAL (4-byte float) for all float columns to stay within
@@ -3441,240 +3450,206 @@ class DataPreprocessor:
 
     # endregion Helper functions
 
-    def ingest_bronze_data(self) -> None:
+    def _run_layer(
+        self,
+        data_quality: DataQuality,
+        schema: str,
+        switch_branch: str,
+        ingests: List[tuple],
+    ) -> List[str]:
+        """Shared body of the three public entry points: connect, run each ENABLED
+        leaf, disconnect, and report which leaves failed.
 
-        if self._switch_handler.is_enabled("data_preprocessor", "data_quality_bronze"):
-            try:
-                connection_model = PostgreSQLConnectionDto(
-                    logger=self._logger,
-                    host=os.getenv("POSTGRES_HOST"),
-                    user=os.getenv("POSTGRES_USER"),
-                    password=os.getenv("POSTGRES_PASSWORD"),
-                    port=os.getenv("POSTGRES_PORT"),
-                    database="postgres",
-                )
-                self._database_driver.connect(connection_model)
+        ⚠️ THIS IS THE `main.py` COMPATIBILITY SHIM, AND IT DELIBERATELY DOES NOT
+        RAISE. `main.py` calls the three entry points unconditionally and has always
+        run to completion; keeping that means a failing table must not abort the
+        others or kill the process. What changed is that the failure is no longer
+        INVISIBLE — it used to be one ERROR line among thousands, from a single
+        `try/except` wrapped around every leaf at once, which also meant the FIRST
+        failure silently skipped every leaf after it. Now each leaf is isolated, and
+        the run ends with an unmissable summary naming exactly what failed.
 
-                self._database_driver.create_database(DATABASE_MAIN_V2)
+        ⚠️ ORCHESTRATION MUST NOT COME THROUGH HERE. Dagster assets call the
+        `_ingest_*` methods DIRECTLY so the exception propagates and the asset goes
+        red — see `orchestration/resources.py`. If a future caller needs a hard
+        failure from this path, act on the returned list of failed leaves; it is
+        returned rather than raised precisely so the choice belongs to the caller.
 
-                self._database_driver.create_schema(BRONZE_SCHEMA)
+        `ingests` is a list of `(leaf, callable | [callable, ...])`. A leaf holding
+        several callables runs them IN ORDER and stops that leaf at the first failure
+        — they are chained (`stocks_financials`'s `_fa` step reads the table the step
+        before it writes), so continuing past a failure would build on a stale input.
+        """
+        label = data_quality.value
 
-                if self._switch_handler.is_enabled(
-                    "data_preprocessor", "data_quality_bronze", "bonds"
+        try:
+            connection_model = PostgreSQLConnectionDto(
+                logger=self._logger,
+                host=os.getenv("POSTGRES_HOST"),
+                user=os.getenv("POSTGRES_USER"),
+                password=os.getenv("POSTGRES_PASSWORD"),
+                port=os.getenv("POSTGRES_PORT"),
+                database="postgres",
+            )
+            self._database_driver.connect(connection_model)
+            self._database_driver.create_database(DATABASE_MAIN_V2)
+            self._database_driver.create_schema(schema)
+        except Exception as e:
+            # Nothing can run without a connection, so this is the one case that
+            # ends the layer outright.
+            self._logger.log_error(
+                f"`{label}`: could not connect / create schema — layer SKIPPED: {e}"
+            )
+            return ["<connection>"]
+
+        ran: List[str] = []
+        failed: List[str] = []
+
+        try:
+            for leaf, steps in ingests:
+                if not self._switch_handler.is_enabled(
+                    "data_preprocessor", switch_branch, leaf
                 ):
-                    self._ingest_bronze_bonds()
+                    continue
 
-                if self._switch_handler.is_enabled(
-                    "data_preprocessor", "data_quality_bronze", "economy"
-                ):
-                    self._ingest_bronze_economy()
+                try:
+                    for step in steps if isinstance(steps, (list, tuple)) else [steps]:
+                        step()
+                    ran.append(leaf)
+                except Exception as e:
+                    failed.append(leaf)
+                    self._logger.log_error(
+                        f"`{label}` leaf '{leaf}' FAILED: {type(e).__name__}: {e}"
+                    )
+        finally:
+            self._database_driver.disconnect()
 
-                if self._switch_handler.is_enabled(
-                    "data_preprocessor", "data_quality_bronze", "forex"
-                ):
-                    self._ingest_bronze_forex()
+        if failed:
+            self._logger.log_error(
+                f"`{label}` finished with {len(failed)} FAILED leaf/leaves: "
+                f"{failed} (succeeded: {ran})"
+            )
+        else:
+            self._logger.log_info(f"`{label}` finished: {len(ran)} leaves OK {ran}")
 
-                if self._switch_handler.is_enabled(
-                    "data_preprocessor", "data_quality_bronze", "funds"
-                ):
-                    self._ingest_bronze_funds()
+        return failed
 
-                if self._switch_handler.is_enabled(
-                    "data_preprocessor", "data_quality_bronze", "indices"
-                ):
-                    self._ingest_bronze_indices()
+    def ingest_bronze_data(self) -> List[str]:
+        """Returns the list of leaves that failed (empty = all clean). See `_run_layer`."""
+        if not self._switch_handler.is_enabled(
+            "data_preprocessor", "data_quality_bronze"
+        ):
+            return []
 
-                # ONE LEAF PER SOURCE TABLE, not one `stocks` leaf for all ten. Bronze is
-                # raw-faithful and each of these reads a different raw_data folder, so they
-                # share nothing but the schema — yet lumped together the cheap ones could not
-                # be run without the expensive ones (re-ingesting the financials CSVs, ~2 s,
-                # meant also re-reading 2.4 M price rows + 2.7 M Simplize rows). The leaves
-                # are independent: bronze has no cross-table dependency, so any subset is a
-                # valid run. Order is only convention (universe, then daily, then event, then
-                # reference).
-                bronze_ingests = [
-                    ("trading_view_stocks", self._ingest_bronze_stocks_trading_view),
-                    ("cafef_price", self._ingest_bronze_cafef_price),
-                    ("cafef_foreign", self._ingest_bronze_cafef_foreign),
-                    ("cafef_order_stats", self._ingest_bronze_cafef_order_stats),
-                    ("cafef_prop_trading", self._ingest_bronze_cafef_prop_trading),
-                    ("cafef_index_price", self._ingest_bronze_cafef_index_price),
-                    ("cafef_index_foreign", self._ingest_bronze_cafef_index_foreign),
-                    (
-                        "cafef_index_order_stats",
-                        self._ingest_bronze_cafef_index_order_stats,
-                    ),
-                    (
-                        "cafef_index_prop_trading",
-                        self._ingest_bronze_cafef_index_prop_trading,
-                    ),
-                    (
-                        "cafef_insider_txn",
-                        self._ingest_bronze_cafef_insider_shareholder_transactions,
-                    ),
-                    ("cafef_news", self._ingest_bronze_cafef_news),
-                    ("cafef_financials", self._ingest_bronze_cafef_financials),
-                    ("simplize_stocks", self._ingest_bronze_stocks_simplize),
-                    ("simplize_industry", self._ingest_bronze_simplize_industry),
-                    ("gics", self._ingest_bronze_gics),
-                ]
-                for leaf, ingest in bronze_ingests:
-                    if self._switch_handler.is_enabled(
-                        "data_preprocessor", "data_quality_bronze", leaf
-                    ):
-                        ingest()
+        # ONE LEAF PER SOURCE TABLE, not one `stocks` leaf for all ten. Bronze is
+        # raw-faithful and each of these reads a different raw_data folder, so they
+        # share nothing but the schema — yet lumped together the cheap ones could not
+        # be run without the expensive ones (re-ingesting the financials CSVs, ~2 s,
+        # meant also re-reading 2.4 M price rows + 2.7 M Simplize rows). The leaves
+        # are independent: bronze has no cross-table dependency, so any subset is a
+        # valid run. Order is only convention (universe, then daily, then event, then
+        # reference).
+        bronze_ingests = [
+            ("bonds", self._ingest_bronze_bonds),
+            ("economy", self._ingest_bronze_economy),
+            ("forex", self._ingest_bronze_forex),
+            ("funds", self._ingest_bronze_funds),
+            ("indices", self._ingest_bronze_indices),
+            ("trading_view_stocks", self._ingest_bronze_stocks_trading_view),
+            ("cafef_price", self._ingest_bronze_cafef_price),
+            ("cafef_foreign", self._ingest_bronze_cafef_foreign),
+            ("cafef_order_stats", self._ingest_bronze_cafef_order_stats),
+            ("cafef_prop_trading", self._ingest_bronze_cafef_prop_trading),
+            ("cafef_index_price", self._ingest_bronze_cafef_index_price),
+            ("cafef_index_foreign", self._ingest_bronze_cafef_index_foreign),
+            ("cafef_index_order_stats", self._ingest_bronze_cafef_index_order_stats),
+            ("cafef_index_prop_trading", self._ingest_bronze_cafef_index_prop_trading),
+            (
+                "cafef_insider_txn",
+                self._ingest_bronze_cafef_insider_shareholder_transactions,
+            ),
+            ("cafef_news", self._ingest_bronze_cafef_news),
+            ("cafef_financials", self._ingest_bronze_cafef_financials),
+            ("simplize_stocks", self._ingest_bronze_stocks_simplize),
+            ("simplize_industry", self._ingest_bronze_simplize_industry),
+            ("gics", self._ingest_bronze_gics),
+        ]
 
-            except Exception as e:
-                self._logger.log_error(
-                    f"Error preprocessing `{DataQuality.BRONZE.value}` data: {e}"
-                )
+        return self._run_layer(
+            DataQuality.BRONZE, BRONZE_SCHEMA, "data_quality_bronze", bronze_ingests
+        )
 
-            finally:
-                self._database_driver.disconnect()
+    def ingest_silver_data(self) -> List[str]:
+        """Returns the list of leaves that failed (empty = all clean). See `_run_layer`."""
+        if not self._switch_handler.is_enabled(
+            "data_preprocessor", "data_quality_silver"
+        ):
+            return []
 
-    def ingest_silver_data(self) -> None:
+        silver_ingests = [
+            ("bonds", self._ingest_silver_bonds),
+            ("economy", self._ingest_silver_economy),
+            ("forex", self._ingest_silver_forex),
+            ("funds", self._ingest_silver_funds),
+            ("indices", self._ingest_silver_indices),
+            ("gics", self._ingest_silver_gics),
+            (
+                "financials",
+                [
+                    self._ingest_silver_cafef_financials,
+                    self._ingest_silver_cafef_financials_bank,
+                ],
+            ),
+            # The one-to-one source carry-ups. Split off `stocks_basic`'s leaf because
+            # they are not its inputs — `stocks_basic` joins the BRONZE tables directly,
+            # so neither needs the other and rebuilding the 2.4 M-row panel to refresh a
+            # carry-up (or vice versa) was pure cost.
+            (
+                "cafef_carry_ups",
+                [
+                    self._ingest_silver_cafef_price,
+                    self._ingest_silver_cafef_order_stats,
+                    self._ingest_silver_cafef_foreign,
+                    self._ingest_silver_cafef_prop_trading,
+                    self._ingest_silver_cafef_insider_shareholder_transactions,
+                ],
+            ),
+            # News sentiment reads bronze.cafef_news only (independent of the
+            # stocks/financials tables), so it gets its own leaf.
+            ("news_sentiment", self._ingest_silver_cafef_news_sentiment),
+            ("stocks_basic", self._ingest_silver_stocks_basic),
+            # Depends on BOTH silver.stocks_basic and silver.cafef_financials_bank,
+            # so it runs after both are (re)built. The _fa step then reads the
+            # plain-join table just built and appends the fundamental indicators.
+            (
+                "stocks_financials",
+                [
+                    self._ingest_silver_stocks_basic_financials_bank,
+                    self._ingest_silver_stocks_basic_financials_bank_fa,
+                ],
+            ),
+        ]
 
-        if self._switch_handler.is_enabled("data_preprocessor", "data_quality_silver"):
-            try:
-                connection_model = PostgreSQLConnectionDto(
-                    logger=self._logger,
-                    host=os.getenv("POSTGRES_HOST"),
-                    user=os.getenv("POSTGRES_USER"),
-                    password=os.getenv("POSTGRES_PASSWORD"),
-                    port=os.getenv("POSTGRES_PORT"),
-                    database="postgres",
-                )
-                self._database_driver.connect(connection_model)
+        return self._run_layer(
+            DataQuality.SILVER, SILVER_SCHEMA, "data_quality_silver", silver_ingests
+        )
 
-                self._database_driver.create_database(DATABASE_MAIN_V2)
+    def ingest_gold_data(self) -> List[str]:
+        """Returns the list of leaves that failed (empty = all clean). See `_run_layer`."""
+        if not self._switch_handler.is_enabled(
+            "data_preprocessor", "data_quality_gold"
+        ):
+            return []
 
-                self._database_driver.create_schema(SILVER_SCHEMA)
+        gold_ingests = [
+            ("bonds", self._ingest_gold_bonds),
+            ("economy", self._ingest_gold_economy),
+            ("forex", self._ingest_gold_forex),
+            ("funds", self._ingest_gold_funds),
+            ("indices", self._ingest_gold_indices),
+            ("stocks", self._ingest_gold_stocks),
+        ]
 
-                if self._switch_handler.is_enabled(
-                    "data_preprocessor", "data_quality_silver", "bonds"
-                ):
-                    self._ingest_silver_bonds()
-
-                if self._switch_handler.is_enabled(
-                    "data_preprocessor", "data_quality_silver", "economy"
-                ):
-                    self._ingest_silver_economy()
-
-                if self._switch_handler.is_enabled(
-                    "data_preprocessor", "data_quality_silver", "forex"
-                ):
-                    self._ingest_silver_forex()
-
-                if self._switch_handler.is_enabled(
-                    "data_preprocessor", "data_quality_silver", "funds"
-                ):
-                    self._ingest_silver_funds()
-
-                if self._switch_handler.is_enabled(
-                    "data_preprocessor", "data_quality_silver", "indices"
-                ):
-                    self._ingest_silver_indices()
-
-                if self._switch_handler.is_enabled(
-                    "data_preprocessor", "data_quality_silver", "gics"
-                ):
-                    self._ingest_silver_gics()
-
-                if self._switch_handler.is_enabled(
-                    "data_preprocessor", "data_quality_silver", "financials"
-                ):
-                    self._ingest_silver_cafef_financials()
-                    self._ingest_silver_cafef_financials_bank()
-
-                # The one-to-one source carry-ups. Split off `stocks_basic`'s leaf because
-                # they are not its inputs — `stocks_basic` joins the BRONZE tables directly,
-                # so neither needs the other and rebuilding the 2.4 M-row panel to refresh a
-                # carry-up (or vice versa) was pure cost.
-                if self._switch_handler.is_enabled(
-                    "data_preprocessor", "data_quality_silver", "cafef_carry_ups"
-                ):
-                    self._ingest_silver_cafef_price()
-                    self._ingest_silver_cafef_order_stats()
-                    self._ingest_silver_cafef_foreign()
-                    self._ingest_silver_cafef_prop_trading()
-                    self._ingest_silver_cafef_insider_shareholder_transactions()
-
-                # News sentiment reads bronze.cafef_news only (independent of the
-                # stocks/financials tables), so it gets its own leaf.
-                if self._switch_handler.is_enabled(
-                    "data_preprocessor", "data_quality_silver", "news_sentiment"
-                ):
-                    self._ingest_silver_cafef_news_sentiment()
-
-                if self._switch_handler.is_enabled(
-                    "data_preprocessor", "data_quality_silver", "stocks_basic"
-                ):
-                    self._ingest_silver_stocks_basic()
-
-                # Depends on BOTH silver.stocks_basic and silver.cafef_financials_bank,
-                # so it runs after both are (re)built. The _fa step then reads the
-                # plain-join table just built and appends the fundamental indicators.
-                if self._switch_handler.is_enabled(
-                    "data_preprocessor", "data_quality_silver", "stocks_financials"
-                ):
-                    self._ingest_silver_stocks_basic_financials_bank()
-                    self._ingest_silver_stocks_basic_financials_bank_fa()
-
-            except Exception as e:
-                self._logger.log_error(
-                    f"Error preprocessing `{DataQuality.SILVER.value}` data: {e}"
-                )
-
-            finally:
-                self._database_driver.disconnect()
-
-    def ingest_gold_data(self) -> None:
-
-        if self._switch_handler.is_enabled("data_preprocessor", "data_quality_gold"):
-            try:
-                connection_model = PostgreSQLConnectionDto(
-                    logger=self._logger,
-                    host=os.getenv("POSTGRES_HOST"),
-                    user=os.getenv("POSTGRES_USER"),
-                    password=os.getenv("POSTGRES_PASSWORD"),
-                    port=os.getenv("POSTGRES_PORT"),
-                    database="postgres",
-                )
-                self._database_driver.connect(connection_model)
-
-                self._database_driver.create_database(DATABASE_MAIN_V2)
-
-                self._database_driver.create_schema(GOLD_SCHEMA)
-
-                if self._switch_handler.is_enabled(
-                    "data_preprocessor", "data_quality_gold", "bonds"
-                ):
-                    self._ingest_gold_bonds()
-                if self._switch_handler.is_enabled(
-                    "data_preprocessor", "data_quality_gold", "economy"
-                ):
-                    self._ingest_gold_economy()
-                if self._switch_handler.is_enabled(
-                    "data_preprocessor", "data_quality_gold", "forex"
-                ):
-                    self._ingest_gold_forex()
-                if self._switch_handler.is_enabled(
-                    "data_preprocessor", "data_quality_gold", "funds"
-                ):
-                    self._ingest_gold_funds()
-                if self._switch_handler.is_enabled(
-                    "data_preprocessor", "data_quality_gold", "indices"
-                ):
-                    self._ingest_gold_indices()
-                if self._switch_handler.is_enabled(
-                    "data_preprocessor", "data_quality_gold", "stocks"
-                ):
-                    self._ingest_gold_stocks()
-
-            except Exception as e:
-                self._logger.log_error(
-                    f"Error preprocessing `{DataQuality.GOLD.value}` data: {e}"
-                )
-
-            finally:
-                self._database_driver.disconnect()
+        return self._run_layer(
+            DataQuality.GOLD, GOLD_SCHEMA, "data_quality_gold", gold_ingests
+        )

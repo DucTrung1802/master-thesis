@@ -16,6 +16,7 @@ from dtos.tabular_database_driver_dtos.postgre_sql_connection_dto import (
 )
 from dtos.tabular_database_driver_dtos.tabular_database_driver_dtos import *
 from utils.enums import DatabaseExecutionStatus
+from utils.exceptions import DatabaseQueryError
 from utils.constants import *
 from utils.utils import *
 
@@ -668,5 +669,14 @@ FROM
             return pd.DataFrame(results, columns=column_names)
 
         except Exception as e:
+            # ⚠️ RAISES — it used to `return pd.DataFrame()`, and that was the single
+            # most dangerous swallow in the repo. A typo'd column, a table that does
+            # not exist yet, or a dropped connection all came back as "0 rows", which
+            # is indistinguishable from a legitimately empty table: the caller then
+            # cleaned an empty frame, wrote nothing, and logged success. A genuinely
+            # empty table still returns an empty DataFrame through the normal path
+            # above, so the two are now distinguishable.
             self._logger.log_error(f"Error selecting records: {e}")
-            return pd.DataFrame()
+            raise DatabaseQueryError(
+                f"select from {schema_name}.{table_name} failed: {e}"
+            ) from e

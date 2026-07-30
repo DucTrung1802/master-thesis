@@ -90,3 +90,7 @@ src/train_test_set/
 ocr_env8/Lib/
 
 ocr_env9/Lib/
+
+# Dagster instance home (run history, logs, telemetry) - regenerable
+.dagster/
+.tmp_dagster*/

@@ -1,0 +1,10 @@
+# workspace.yaml — the Dagster code location for this repo.
+#
+# Loaded by a bare `dagster dev` run from the repo root. `working_directory: .` is
+# load-bearing: SwitchHandler, Logger and the *_RAW_DATA_DIR constants all use paths
+# relative to the CWD (orchestration/_bootstrap.py enforces the same thing in-process,
+# for safety when a module is loaded some other way).
+load_from:
+  - python_file:
+      relative_path: orchestration/definitions.py
+      working_directory: .

@@ -12,6 +12,8 @@ from web_scraper.cafef_pdf_parser import (
     BALANCE_SHEET, CASH_FLOW, INCOME_STATEMENT, REPORTS, PdfParser, Statement,
 )
 from utils.constants import CAFEF_FINANCIALS_TICKERS, CAFEF_RAW_DATA_DIR
+from utils.exceptions import MissingSourceDataError
+from utils.inputs import optional_file, require_dir, require_file
 
 
 @dataclass(frozen=True)
@@ -431,9 +433,24 @@ class FinancialsBuilder:
         """
         from web_scraper.cafef_schema import cash_flow_method, detect_template
 
+        # ⚠️ OPTIONAL, AND THE WARNING IS THE POINT. The template itself is fingerprinted
+        # over the network, so this file's absence does not stop anything — it silently
+        # BLANKS the sector / industry_group columns, which are the only reason a
+        # GICS-vs-fingerprint disagreement is visible in the data at all (HVA sits in the
+        # securities group and files corporate). A blank column reads like "no
+        # disagreement", so the degradation has to be said out loud.
         gics = {}
         path = os.path.join(CAFEF_RAW_DATA_DIR, "..", "simplize", "industry.csv")
-        if os.path.exists(path):
+        if optional_file(
+            path,
+            logger,
+            what="the Simplize industry map",
+            degrades=(
+                "templates.csv keeps its fingerprinted template but its sector / "
+                "industry_group_code / industry_group_slug columns are left BLANK, so a "
+                "GICS-vs-fingerprint disagreement becomes invisible"
+            ),
+        ):
             with open(path, encoding="utf-8-sig") as f:
                 gics = {r["ticker"]: r for r in csv.DictReader(f)}
 
@@ -465,7 +482,8 @@ class FinancialsBuilder:
     @classmethod
     def build_all(cls, logger=None, switch_handler=None,
                   symbols: Optional[List[Tuple[str, str]]] = None,
-                  use_api: bool = True) -> Dict[str, Dict[str, int]]:
+                  use_api: bool = True,
+                  skip_existing: bool = True) -> Dict[str, Dict[str, int]]:
         """Switch-driven batch entry point (`web_scraper/cafef/financials`) — main.py's
         way in, mirroring the scrapers' `scrape()` even though nothing here is scraped:
         this reads the LOCAL PDF archive `CafeFPdfScraper` already downloaded.
@@ -500,16 +518,42 @@ class FinancialsBuilder:
 
         builder = cls(logger=logger)
         results: Dict[str, Dict[str, int]] = {}
+        failed: List[str] = []
+
         for exchange, symbol in universe:
             key = f"{exchange}:{symbol}"
             try:
-                results[key] = builder.build(exchange, symbol, use_api=use_api)
+                results[key] = builder.build(
+                    exchange, symbol, use_api=use_api, skip_existing=skip_existing
+                )
                 if logger:
                     logger.log_info(f"cafef financials DONE {key}: {results[key]}")
             except Exception as e:
+                # Per-ticker isolation is kept DELIBERATELY: a ticker costs ~2.4 h, so
+                # letting one failure discard the nine that already parsed would be far
+                # worse than the failure itself.
                 results[key] = {}
+                failed.append(key)
                 if logger:
-                    logger.log_error(f"cafef financials FAILED {key}: {e}")
+                    logger.log_error(
+                        f"cafef financials FAILED {key}: {type(e).__name__}: {e}"
+                    )
+
+        # ⚠️ The summary is the point. `results[key] = {}` for a failure is
+        # indistinguishable from a ticker that legitimately produced no rows, and a
+        # single FAILED line among hours of OCR logging goes unread. Orchestration does
+        # NOT come through here — a Dagster ticker partition calls `build()` directly,
+        # so the exception propagates and that partition goes red on its own.
+        if logger:
+            if failed:
+                logger.log_error(
+                    f"cafef financials: {len(failed)} of {len(universe)} ticker(s) "
+                    f"FAILED: {failed}"
+                )
+            else:
+                logger.log_info(
+                    f"cafef financials: all {len(universe)} ticker(s) OK."
+                )
         return results
 
     def template_of(self, symbol: str) -> Optional[str]:
@@ -625,26 +669,84 @@ class FinancialsBuilder:
     INDEX_RE = re.compile(r"^(?:[ivxlc]+_|\d+_|[a-z]_)+")
 
     def schema_of(self, template: str, report: str) -> List[Tuple[str, str]]:
-        """[(canonical column, its account name)] in statement order, from schema/."""
+        """[(canonical column, its account name)] in statement order, from schema/.
+
+        ⚠️ REQUIRED, AND IT RAISES. This used to be guarded by `if os.path.exists(path)`
+        and returned an EMPTY list when the file was absent — an empty chart of accounts,
+        against which nothing matches, so `map_to_schema` mapped no line, `reconcile`
+        found no subtotal, and every statement of every quarter was rejected. After ~2.4 h
+        of OCR, and reported as a parsing failure rather than a missing file.
+
+        The 12 schema CSVs have NO PRODUCER in the pipeline — `cafef_schema.save()` writes
+        them but nothing calls it — so they are a git-tracked repo input, and "absent"
+        means someone deleted or moved one, never that a run has not reached them yet.
+        """
         key = (template, report)
         if key in self._schema_cache:
             return self._schema_cache[key]
 
-        path = os.path.join(SCHEMA_DIR, f"{template}_{report}.csv")
+        path = require_file(
+            os.path.join(SCHEMA_DIR, f"{template}_{report}.csv"),
+            what=f"the {template}/{report} chart of accounts",
+            why=(
+                "every parsed line is matched against it, so without it NOTHING maps "
+                "and every statement is rejected as unreconcilable"
+            ),
+            fix=f"cafef_schema.save({template!r}, SCHEMA_DIR) — or restore it from git",
+        )
         items: List[Tuple[str, str]] = []
-        if os.path.exists(path):
-            with open(path, encoding="utf-8-sig") as f:
-                for r in csv.DictReader(f):
-                    col = r["column"]
-                    rest = col
-                    for p in self.COL_PREFIXES:
-                        if rest.startswith(p):
-                            rest = rest[len(p):]
-                            break
-                    account = self.INDEX_RE.sub("", rest)
-                    items.append((col, account or rest))
+        with open(path, encoding="utf-8-sig") as f:
+            for r in csv.DictReader(f):
+                col = r["column"]
+                rest = col
+                for p in self.COL_PREFIXES:
+                    if rest.startswith(p):
+                        rest = rest[len(p):]
+                        break
+                account = self.INDEX_RE.sub("", rest)
+                items.append((col, account or rest))
         self._schema_cache[key] = items
         return items
+
+    def preflight(self, exchange: str, symbol: str) -> str:
+        """Validate every input `build()` needs, BEFORE spending hours on OCR. Returns
+        the resolved template.
+
+        ⚠️ THE POINT IS THE ORDERING. Each of these was already fatal; each was
+        discovered late, and one of them not as itself — a missing chart of accounts
+        surfaced as "all 65 filings failed to reconcile". A parse is ~2.4 h per ticker,
+        so an input check that costs milliseconds belongs in front of it, not inside it.
+
+        Called at the top of `build()`, so main.py, a notebook and an orchestrator all
+        get it — this must never live only in the Dagster asset.
+        """
+        template = self.template_of(symbol)
+        if not template:
+            raise MissingSourceDataError(
+                f"no accounting template for {symbol}: it is absent from "
+                f"{TEMPLATES_INDEX!r} and the fingerprint call returned nothing. "
+                f"Fix: FinancialsBuilder.build_templates_index([({exchange!r}, "
+                f"{symbol!r})]) — note it REWRITES the file, so pass the whole list."
+            )
+
+        for report in REPORTS:
+            self.schema_of(template, report)  # raises, with the actionable message
+
+        require_file(
+            os.path.join(PDFS_DIR, "index", f"{exchange}_{symbol}.csv"),
+            what=f"the {exchange}:{symbol} PDF index",
+            why="it says which filing covers which quarter; `documents()` cannot choose",
+            fix=f"CafeFPdfScraper().scrape_pdfs({exchange!r}, {symbol!r})",
+        )
+        require_dir(
+            os.path.join(PDFS_DIR, "files", f"{exchange}_{symbol}"),
+            what=f"the {exchange}:{symbol} filing archive",
+            why="the statements are parsed from those PDFs; there is nothing to read",
+            fix=f"CafeFPdfScraper().scrape_pdfs({exchange!r}, {symbol!r})",
+        )
+
+        self._log(f"cafef financials preflight OK: {exchange}:{symbol} -> {template}")
+        return template
 
     # The filings ABBREVIATE where the chart of accounts spells out, and the two then share
     # almost no characters: "vay các TCTD khác" against "vay các tổ chức tín dụng khác" scores
@@ -1490,10 +1592,43 @@ class FinancialsBuilder:
             self._warn(f"  could not read existing {path}: {e}")
             return {}
 
+    def _skippable_years(self, exchange: str, symbol: str, template: str,
+                         docs: List[dict]) -> set:
+        """Years in which EVERY attempted quarter already reads `source == 'pdf'` in all
+        three statements — i.e. nothing left for a re-parse to win.
+
+        ⚠️ THE UNIT IS A YEAR, NOT A QUARTER, AND THAT IS A CORRECTNESS REQUIREMENT.
+        `_decumulate` turns a cumulative income statement into a standalone quarter as
+        `YTD − (Q1..Q(q-1))`, and it takes those priors from THIS RUN'S `data` — a
+        quarter whose priors are absent is DROPPED, not guessed. So skipping Q1..Q3 of
+        2014 because they are already `pdf`, while Q4-2014 still needs parsing, would
+        delete the very Q4 the run exists to fix, and it would do so every time. Keeping
+        a year whole means the priors are always present. It also matches the documented
+        behaviour that "fixing a Q1/Q2 pays for its Q4 as well".
+
+        Cross-YEAR dependencies are already safe: a Q1's `open_ref` is read back from the
+        file on disk when this run did not parse the previous Q4.
+        """
+        existing = {r: self._existing(exchange, symbol, template, r) for r in REPORTS}
+        by_year: Dict[int, List[str]] = {}
+        for d in docs:
+            by_year.setdefault(int(d["period"].split("-")[1]), []).append(d["period"])
+
+        return {
+            year
+            for year, periods_ in by_year.items()
+            if all(
+                existing[report].get(period, {}).get("source") == "pdf"
+                for period in periods_
+                for report in REPORTS
+            )
+        }
+
     def build(self, exchange: str, symbol: str,
               periods: Optional[List[str]] = None,
               use_api: bool = True,
-              merge: Optional[bool] = None) -> Dict[str, int]:
+              merge: Optional[bool] = None,
+              skip_existing: bool = True) -> Dict[str, int]:
         """Parse the archive into the three statement CSVs.
 
         `periods` restricts which quarters are PARSED; `merge` decides what happens to the ones
@@ -1510,14 +1645,65 @@ class FinancialsBuilder:
         Two things are weaker in a subset run and are compensated where possible: `sane` has no
         neighbouring quarters to judge magnitude against (it fails open), and `open_ref` is read
         back from the file on disk rather than from this run's own Q4.
+
+        `skip_existing=True` (the default, matching every other scraper here) drops any YEAR
+        whose quarters already read `source == 'pdf'` in all three statements — there is
+        nothing a re-parse could win there, and at ~2.4 h per ticker that is the difference
+        between a re-run costing minutes and costing hours. ⚠️ THE UNIT IS A YEAR because
+        de-cumulation needs a quarter's priors in the same run; see `_skippable_years`.
+
+        ⚠️ **`skip_existing=False` IS THE AUTHORITATIVE RUN, and it is not merely slower.**
+        Skipping makes every run a subset run, which switches `sane` — the magnitude guard
+        that compares a figure against its neighbouring quarters — to failing open. That
+        guard is what caught ACB's Q1-2024 carrying Q1-2023's PBT. Use the default for
+        "fill the gaps"; use `skip_existing=False` when the parser itself has changed.
         """
         if merge is None:
             merge = bool(periods)
+
+        # ⚠️ INPUTS FIRST, OCR SECOND. `preflight` costs milliseconds and checks every
+        # file this run needs — the template, the three charts of accounts, the PDF index
+        # and the archive itself. Without it a missing chart of accounts was discovered
+        # only after ~2.4 h, and not as itself: `schema_of` returned an empty list, so it
+        # surfaced as "all 65 filings failed to reconcile". See `preflight`.
+        template = self.preflight(exchange, symbol)
+
         docs = self.documents(exchange, symbol)
         if periods:
             docs = [d for d in docs if d["period"] in set(periods)]
-        # the chart of accounts the parsed rows are mapped onto — fingerprinted, not guessed
-        template = self.template_of(symbol) or "unknown"
+
+        if skip_existing:
+            done = self._skippable_years(exchange, symbol, template, docs)
+            if done:
+                before = len(docs)
+                docs = [d for d in docs if int(d["period"].split("-")[1]) not in done]
+                # ⚠️ A PARTIAL RUN MUST MERGE. `_write` rebuilds the grid from what this
+                # run holds, so without merging the skipped years — the COMPLETE ones —
+                # would lose their `pdf` rows and be re-filled from CafeF's tabs. That is
+                # the documented way a 6-minute run destroys a 4-hour one.
+                merge = True
+                self._log(
+                    f"cafef financials: {symbol}: skipping {len(done)} complete "
+                    f"year(s) {sorted(done)} — {before - len(docs)} of {before} quarters "
+                    f"already read `pdf` in all 3 statements (skip_existing=True; pass "
+                    f"False for an authoritative full re-parse)"
+                )
+
+        if not docs:
+            # Nothing to do. Return early rather than rewriting the file with an empty
+            # `data` — a merging write would be a no-op, but a non-merging one would not,
+            # and "it happened to be harmless" is not a guarantee worth relying on.
+            counts = {
+                report: sum(
+                    1
+                    for row in self._existing(exchange, symbol, template, report).values()
+                    if row.get("source") == "pdf"
+                )
+                for report in REPORTS
+            }
+            self._log(f"cafef financials: {symbol}: nothing to parse, {counts} on disk")
+            return counts
+
         self._log(f"cafef financials: {symbol} ({template}): "
                   f"{len(docs)} consolidated quarters to parse")
 
@@ -1683,12 +1869,24 @@ class FinancialsBuilder:
         """
         from web_scraper.cafef_schema import TABS, _get
 
-        # canonical column for each of CafeF's codes, from the schema we already built
+        # Canonical column for each of CafeF's codes, from the chart of accounts.
+        # ⚠️ REQUIRED — this used to `continue` past a missing schema file, and the loop
+        # below then skips that report entirely (`if not codes: continue`). The fallback
+        # is what fills a quarter whose scan is unreadable, so losing it silently turns a
+        # recoverable quarter into a permanent `source='missing'` row. `require_file`
+        # rather than a bare open, so the message names the fix.
         by_code: Dict[str, Dict[str, str]] = {}
         for report in REPORTS:
-            path = os.path.join(SCHEMA_DIR, f"{template}_{report}.csv")
-            if not os.path.exists(path):
-                continue
+            path = require_file(
+                os.path.join(SCHEMA_DIR, f"{template}_{report}.csv"),
+                what=f"the {template}/{report} chart of accounts",
+                why=(
+                    "it maps CafeF's item codes onto canonical columns; without it the "
+                    "CafeF-tab fallback silently skips this report and unreadable "
+                    "quarters become permanent gaps"
+                ),
+                fix=f"cafef_schema.save({template!r}, SCHEMA_DIR) — or restore it from git",
+            )
             with open(path, encoding="utf-8-sig") as f:
                 by_code[report] = {r["cafef_code"]: r["column"]
                                    for r in csv.DictReader(f) if r["cafef_code"]}
