@@ -64,6 +64,7 @@ class ParseLayer:
     relax_components: bool = False
     relax_split_tail: bool = False
     join_digits: bool = False
+    title_over_form: bool = False
     crop_pad: Optional[float] = None
 
 PDFS_DIR = os.path.join(CAFEF_RAW_DATA_DIR, "pdfs")
@@ -311,6 +312,14 @@ class FinancialsBuilder:
                    relax_components=True, join_digits=True),
         ParseLayer("onnx@200+join+relax+components", "onnx", 200,
                    relax_totals=True, relax_components=True, join_digits=True),
+        # THE FILING MIS-STAMPED ITS OWN FORM CODE (`title_over_form`). VCB's Q2-2014 interim
+        # report prints "Mẫu B04a/TCTD-HN" on both its income statement and its cash flow, so the
+        # income statement is classified as a cash flow and never reaches the row builder — a
+        # page-CLASSIFICATION failure, which is why no engine, dpi or crop setting touches it.
+        # A verbatim title match overrules the code here, and nowhere else.
+        ParseLayer("onnx@200+title", "onnx", 200, title_over_form=True),
+        ParseLayer("onnx@200+title+relax", "onnx", 200,
+                   relax_totals=True, title_over_form=True),
     ]
 
     def __init__(self, logger=None):
@@ -355,11 +364,13 @@ class FinancialsBuilder:
             # engine and DPI but crop differently produce different text, and keying on
             # (engine, dpi) alone would hand the wider-crop layer the narrow crop's cached parse
             # — the one that already failed.
-            key = (layer.engine, layer.dpi, layer.crop_pad, layer.join_digits)
+            key = (layer.engine, layer.dpi, layer.crop_pad, layer.join_digits,
+                   layer.title_over_form)
             if key not in parsed:
                 parser.set_dpi(layer.dpi)
                 parser.set_crop_pad(layer.crop_pad)
                 parser.set_join_split(layer.join_digits)
+                parser.set_title_over_form(layer.title_over_form)
                 try:
                     parsed[key] = parser.parse(path, period_end)
                 except Exception as e:
@@ -1524,6 +1535,14 @@ class FinancialsBuilder:
                     "cash_flow_method": st.cash_flow_method or "",
                     "ocr_config": cfg,          # which cascade config produced this statement
                 }
+                # ⚠️ THE INDEX SAYS THE FILING IS CUMULATIVE; THE STATEMENT SAYS WHETHER IT
+                # ACTUALLY IS. A semi-annual or annual report is de-cumulated because it is
+                # assumed to print only the year-to-date column — but VCB's Q2-2014 prints
+                # "Quý II" BESIDE "Lũy kế từ đầu năm", so column 0 is already the standalone
+                # quarter and subtracting Q1 removes it twice (PBT −154,988 for a bank that
+                # earned 1,345,661). The document itself is the authority, not the index.
+                if report == INCOME_STATEMENT and st.quarter_column:
+                    half_year[period] = False
                 v = self._probe(report, row, st)
                 if v is not None:
                     history[report].append(v)

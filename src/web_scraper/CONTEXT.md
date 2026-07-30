@@ -72,10 +72,10 @@ Re-parsed 2026-07-29 with the four new relaxations, 238 min:
 | report | quarters | pdf | cafef | was pdf | gain |
 |---|---|---|---|---|---|
 | balance_sheet | 71 | **68** | 3 | 57 | +11 |
-| income_statement | 71 | **65** | 6 | 46 | +19 |
+| income_statement | 71 | **67** | 4 | 46 | +21 |
 | cash_flow | 71 | **69** | 2 | 61 | +8 |
 
-**202 of 213 read from the filings, +38, and NOTHING was lost** — no quarter that read from a
+**204 of 213 read from the filings, +40, and NOTHING was lost** — no quarter that read from a
 filing before stopped doing so. All 6 formerly HOLLOW cash flows (a `pdf` row with an empty
 closing balance) now carry one that is checked. The 11 remaining are filled from CafeF's tabs, so
 every quarter still has data.
@@ -154,8 +154,9 @@ CafeF-tab fallback (see `_parse_cascaded`). `FinancialsBuilder.LAYERS`:
   → onnx@200+relax+components → onnx@200+pad6+components → onnx@200+pad6+relax+components
   → onnx@300+split → onnx@300+split+components
   → onnx@200+join+components → onnx@200+join+relax+components
+  → onnx@200+title → onnx@200+title+relax
 
-**The nine `+components` / `+pad6` / `+split` / `+join` layers are appended, never inserted** (2026-07-29), so a
+**The eleven `+components` / `+pad6` / `+split` / `+join` / `+title` layers are appended, never inserted**, so a
 statement that reconciles today cannot reach them — `_parse_cascaded` skips a report once
 accepted. They add two relaxations, each traced to a specific cause and each recovering quarters
 whose figures were already correct:
@@ -189,6 +190,16 @@ whose figures were already correct:
   4-9 digits), and every part after it must continue the grouping exactly — so
   `'135.272.610 126.501.216'` still splits. Regressed on Q1-2025, the very filing that motivated
   the splitter.
+- **`title_over_form` — THE FILING MIS-STAMPED ITS OWN FORM CODE.** VCB's Q2-2014 interim report
+  prints `Mẫu B04a/TCTD-HN` on BOTH its income statement (page 9) and its cash flow (page 11).
+  `B04` maps to the cash flow and a form code is trusted absolutely, so the income statement was
+  claimed as a cash flow and never reached the row builder; its balance sheet is correctly `B02a`,
+  so the document is mis-stamped, not garbled. **All sixteen earlier layers failed IDENTICALLY —
+  both engines, four DPIs, every crop setting — which is the tell: OCR variation cannot produce
+  identical results unless the failure is upstream of OCR.** No parse layer can fix a page the
+  classifier never offers. A VERBATIM title match (score exactly 1.0, not the usual 0.80) now
+  overrules a code that names a different statement; exact containment is what stops the
+  auditor's report, which NAMES every statement, from overruling a sound code.
 - **⚠️ The parse cache key is `(engine, dpi, crop_pad, join_digits)`.** Keyed on `(engine, dpi)` alone the
   wider-crop layer is handed the narrow crop's cached parse — the one that just failed — and the
   layer silently does nothing.
@@ -1000,6 +1011,23 @@ the data rather than buried: **HVA** is filed under `chung-khoan-va-ngan-hang-da
     standalone quarter — VCB Q2-2024 prints PBT 20,835bn where the quarter is 10,116bn, and
     the cumulative figures balance perfectly against each other); *OCR* (a misread digit).
     The half-year case is handled by de-cumulating, YTD − the quarters already accepted.
+  - **⚠️ …BUT SOME INTERIM FILINGS PRINT THE STANDALONE QUARTER TOO, and then de-cumulating
+    REMOVES IT TWICE** (`Statement.quarter_column`, 2026-07-30). VCB's Q2-2014 prints four
+    columns — "Quý II" (this year, last year) AND "Lũy kế từ đầu năm" (this year, last year) — so
+    column 0 is already the quarter. Subtracting Q1 turned interest income 6,928,272 into 226,646
+    and gave **PBT −154,988 for a bank that earned 1,345,661**, and it was WRITTEN: a quarter
+    column reconciles against itself perfectly, and `sane` fails open in a subset run for want of
+    neighbours. The index says a filing is cumulative; only the STATEMENT says whether it is, so
+    the parser reads the column HEADINGS and `build` clears `half_year` when both "quý" and
+    "lũy kế" appear.
+    - **Detected from the header WORDS, not from `n_columns == 4`** — four columns can equally be
+      a note reference plus an over-segmented pair, which is the very thing `_first_value` exists
+      to survive. The words are the filing stating outright what it prints.
+    - **NOT layer-scoped, unlike the relaxations**: a wrong de-cumulation is wrong at every
+      layer, so it cannot be a fallback. Verified in both directions — ACB Q2/Q4-2022 and VCB
+      Q2-2024 / Q4-2023 all still report `quarter_column=False`, `n_columns=2` and keep
+      de-cumulating (VCB Q2-2024 is the filing that prints PBT 20,835bn cumulative against a
+      10,116bn quarter, so it MUST).
 
 ### GICS — `gics_scraper.py` (reference taxonomy; requests + openpyxl)
 - Downloads MSCI's published **"GICS structure & definitions eff. 17 Mar 2023"**

@@ -55,6 +55,16 @@ class Statement:
     shares_authorized: Optional[int] = None    # "Vốn cổ phần theo giấy phép"
     shares_issued: Optional[int] = None        # "Cổ phiếu đã phát hành" (published)
     shares_outstanding: Optional[int] = None   # "Cổ phiếu đang lưu hành"
+    # ⚠️ THE STATEMENT PRINTS A STANDALONE-QUARTER COLUMN BESIDE THE CUMULATIVE ONE.
+    # An interim income statement is assumed to print ONLY "Lũy kế từ đầu năm", which is why a
+    # half-year or annual filing is de-cumulated (YTD − the quarters already accepted). VCB's
+    # Q2-2014 prints FOUR columns — "Quý II" (this year, last year) AND "Lũy kế" (this year,
+    # last year) — so column 0 is ALREADY the standalone quarter and subtracting Q1 from it
+    # takes the quarter off twice: interest income 6,928,272 was written as 226,746 and PBT came
+    # out at −154,988 for a bank that earned 1,345,661. Reconcile cannot see it (a quarter column
+    # balances against itself perfectly) and `sane` fails open in a subset run, so nothing else
+    # catches it. When this is True, `build` does NOT mark the period cumulative.
+    quarter_column: bool = False
 
     @property
     def cash_flow_method(self) -> Optional[str]:
@@ -247,6 +257,8 @@ class PdfParser:
         self._onnx = None
         # set per PARSE LAYER; see _join_split_number
         self.join_split_digits = False
+        # set per PARSE LAYER; see _page_kind
+        self.title_over_form = False
         self.ocr_ready = self._init_ocr()
 
     def set_dpi(self, dpi: int) -> None:
@@ -260,6 +272,11 @@ class PdfParser:
         """Treat a lost thousands SEPARATOR as one number rather than several (see
         `_join_split_number`). Set per parse layer, off by default."""
         self.join_split_digits = bool(on)
+
+    def set_title_over_form(self, on: bool) -> None:
+        """Let a VERBATIM statement title overrule a form code that names a different
+        statement — for a filing that mis-stamps its own pages (see `_page_kind`)."""
+        self.title_over_form = bool(on)
 
     def set_crop_pad(self, pad: Optional[float]) -> None:
         """How far outside a detected box to crop before RECOGNISING it (onnx only; points).
@@ -379,6 +396,27 @@ class PdfParser:
             code = re.sub(r"\s+", "", m.group(1)).upper()
             kind = self.FORMS[m.group(2).upper()].get(code)
             if kind:
+                # ⚠️ THE FORM CODE CAN BE WRONG IN THE FILING ITSELF, and then trusting it
+                # absolutely loses a whole statement. VCB's Q2-2014 interim report stamps
+                # "Mẫu B04a/TCTD-HN" on BOTH its income statement (page 9) and its cash flow
+                # (page 11) — B04 maps to the cash flow, so the income statement is claimed as
+                # one and disappears; its balance sheet is correctly B02a, so the document is
+                # not garbled, it is simply mis-stamped. No OCR setting can help: all sixteen
+                # layers, both engines, every dpi, produce the same wrong classification.
+                #
+                # The TITLE is the semantic truth ("BÁO CÁO KẾT QUẢ HOẠT ĐỘNG KINH DOANH" vs
+                # "BÁO CÁO LƯU CHUYỂN TIỀN TỆ"), so when it matches a DIFFERENT statement
+                # verbatim, it wins. Gated behind `title_over_form` and reached only by a
+                # relaxed parse layer, because the reverse case is real too: a page whose title
+                # merely mentions another statement must not be able to overrule a sound code.
+                # Requiring an exact containment (score 1.0) is what separates the two.
+                if self.title_over_form:
+                    header_ns = self.norm("\n".join(
+                        [l for l in text.splitlines() if l.strip()][:self.HEADER_LINES]
+                    )).replace(" ", "")
+                    for report, needles in self.HEADING.items():
+                        if report != kind and self._title_score(header_ns, needles) == 1.0:
+                            return report, True
                 return kind, True
 
         header = "\n".join(
@@ -403,6 +441,24 @@ class PdfParser:
         if best is not None and score >= self.TITLE_MATCH:
             return best, False
         return None, False
+
+    # Column headings that say the statement carries BOTH a standalone quarter and a
+    # year-to-date column. Accents stripped and spaces removed, like every other header test.
+    QUARTER_COL_NS = ("quy",)
+    CUMULATIVE_COL_NS = ("luyke", "luykotudaunam", "luykotu")
+
+    def _prints_quarter_column(self, text: str) -> bool:
+        """Does this income statement print a standalone-quarter column beside the cumulative
+        one? (VCB Q2-2014: "Quý II | Lũy kế từ đầu năm".)
+
+        Both must be present. "Lũy kế" alone is the ordinary interim statement, which IS
+        cumulative and must still be de-cumulated; "Quý" alone appears in ordinary prose. Only
+        the two together mean column 0 is already the quarter.
+        """
+        header = "\n".join([l for l in text.splitlines() if l.strip()][:self.HEADER_LINES])
+        ns = self.norm(header).replace(" ", "")
+        return (any(q in ns for q in self.QUARTER_COL_NS)
+                and any(c in ns for c in self.CUMULATIVE_COL_NS))
 
     def _title_score(self, header_ns: str, needles: List[str]) -> float:
         """How well the header matches a statement's title: 1.0 for a verbatim hit, else the best
@@ -1142,12 +1198,19 @@ class PdfParser:
                 if not columns:
                     continue
                 unit = self.unit_of(pages, on)
+                # Read the COLUMN HEADINGS, not the column count: 4 columns can equally be a
+                # note reference plus an over-segmented pair. The words "quý" and "lũy kế"
+                # appearing together in the header is the filing stating outright that it prints
+                # both, which is the only thing that licenses skipping de-cumulation.
+                qcol = (report == INCOME_STATEMENT
+                        and self._prints_quarter_column(pages[on[0]]["text"]))
                 rows = self.table_rows(words_by_page, columns)
                 # scale here, once: the values leave the parser in đồng
                 for r in rows:
                     r.values = [None if v is None else v * unit for v in r.values]
                 out[report] = Statement(report=report, pages=[i + 1 for i in on],
                                         unit=unit, n_columns=len(columns), rows=rows,
+                                        quarter_column=qcol,
                                         publish_date=published,
                                         shares_authorized=shares["shares_authorized"],
                                         shares_issued=shares["shares_issued"],
