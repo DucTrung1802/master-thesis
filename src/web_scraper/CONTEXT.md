@@ -16,8 +16,10 @@ src/main.py  ──►  TradingViewScraper.scrape()   ← universe authority (li
                        │                            + OHLCV per symbol (Selenium)
                        ▼
                   CafeFScraper.scrape()         ← per-stock fields TV lacks (requests)
-                  CafeFPdfScraper.scrape()      ← the filing PDFs (requests)
                   CafeFNewsScraper.scrape()     ← company-news / disclosure feed (requests)
+                  CafeFPdfScraper.scrape()      ← the filing PDFs (requests)
+                  FinancialsBuilder.build_all() ← OCRs those PDFs → statement CSVs (LOCAL,
+                                                   no network; must follow the line above)
                   SimplizeScraper.scrape()      ← validated daily-panel backbone (requests)
                   GicsScraper.scrape()          ← MSCI GICS taxonomy (independent)
                        │
@@ -1084,6 +1086,18 @@ Matches the bronze-source decision (memory `project-bronze-source-per-field`):
 
 ## 5. How it's driven — SwitchHandler + `src/switch_config.json`
 
+**HOW TO RUN ANYTHING HERE: edit `src/switch_config.json`, then `python src\main.py`
+from the repo root.** There is no per-scraper runner and no CLI flag — `main.py` calls
+every scraper unconditionally and each one no-ops unless its leaf is on, so the config
+IS the run plan. Truncate `logs/app.log` first; it is the only record of what ran.
+
+```jsonc
+// re-parse the financial statements from the PDF archive already on disk
+"web_scraper": true,
+"web_scraper/cafef": true,
+"web_scraper/cafef/financials": true,     // ~2.4 h PER TICKER — read §3a first
+```
+
 - `SwitchHandler` (`src/utils/switch_handler.py`) reads a **flat JSON of
   slash-path → bool**. A path is enabled only when **every prefix is explicitly
   true** (disabling a parent disables the whole subtree); missing key = false; keys
@@ -1091,13 +1105,41 @@ Matches the bronze-source decision (memory `project-bronze-source-per-field`):
 - Two APIs: `is_enabled("a","b","c")` (all-ancestors check) and
   `get_enabled_paths(*prefix)` (returns enabled **leaf** paths — used by the TV task
   adders to enumerate exactly which `(country, stock_type, sector)` etc. to scrape).
-- Config hierarchy for TV:
-  `web_scraper/trading_view/{links|collected_links|data}/{asset}/{dim1}/{dim2?}/{dim3?}`.
-  CafeF/Simplize/GICS are **not** switch-gated at the asset level — they run
-  wholesale when `main.py` calls them (they take `switch_handler` but CafeF/Simplize
-  use it only via the shared base; GICS ignores it entirely).
-- **Current committed state:** `"web_scraper": false` (master off). When enabling,
-  set `web_scraper` + the `trading_view/links` (or `/data`) subtree you want.
+- **⚠️ A BRANCH KEY MUST NOT END IN `/`.** `is_enabled("web_scraper","cafef","price")`
+  looks up the prefix `web_scraper/cafef`, so the key `"web_scraper/cafef/"` never
+  matches and the branch is unreachable *no matter what its leaves say*. That exact typo
+  disabled the whole CafeF **and** Simplize branch until it was found on 2026-07-30 —
+  and it fails silently, because a false switch is a normal outcome. Same trap applies
+  to a **BOM**: `_load_config` swallows a read error and returns `{}`, i.e. every switch
+  false and `main.py` a complete no-op (now read as `utf-8-sig`, so only a JSON typo
+  does it). When a run does nothing, check the log line
+  `Switch config loaded: N switches (M enabled)`.
+- **The leaves, by source:**
+
+  | Leaf | Drives | Cost |
+  |---|---|---|
+  | `web_scraper/trading_view/{links,collected_links,data}/…` | TV, gated per `(asset, country, sector)` | varies |
+  | `web_scraper/cafef/{price,order_stats,foreign,prop_trading,insider_txn}` | `CafeFScraper` daily tabs | whole universe |
+  | `web_scraper/cafef/news` | `CafeFNewsScraper` | whole universe (already on disk) |
+  | `web_scraper/cafef/pdfs` | `CafeFPdfScraper` | **~1.0-1.7 GB/ticker**, `CAFEF_PDF_TICKERS` = VN100 |
+  | `web_scraper/cafef/financials` | `FinancialsBuilder.build_all` | **~2.4 h/ticker**, `CAFEF_FINANCIALS_TICKERS` = VCB+ACB |
+  | `web_scraper/simplize/{stocks,industry}` | `SimplizeScraper` | stocks = 2.6 M rows; industry = minutes |
+  | `web_scraper/gics/structure` | `GicsScraper` | one file |
+
+- **⚠️ The two per-FILING pipelines are scoped by an explicit LIST, not by the universe** —
+  `CAFEF_PDF_TICKERS` (VN100, read from the repo-root `vn100.csv`; ~97 GB, matching the 108
+  folders on disk) and `CAFEF_FINANCIALS_TICKERS` (VCB + ACB — only what has actually been
+  parsed) in `src/utils/constants.py`. They cost orders of magnitude more per ticker than
+  the daily tabs, so the full 777 codes would be a terabyte-scale download / a multi-week
+  parse, not a longer version of the same job. **Add a ticker by editing that list.**
+  Every `scrape()` still takes a `symbols=` override for a one-off.
+- The remaining scrapers (TV, the CafeF daily tabs, **news**, Simplize, GICS) keep the
+  **full universe** as their default — they are per-ticker-cheap and `skip_existing=True`
+  makes a re-run skip what is already on disk.
+- **Current committed state:** `"web_scraper": false` (master off), and the three heavy
+  leaves (`pdfs`, `financials`, `news`) plus `simplize/industry` ship `false` — opt in.
+  The daily-tab leaves ship `true`, so enabling the master alone starts a full-universe
+  CafeF + Simplize price run.
 
 ## 6. Shared infra it depends on (outside this dir)
 
@@ -1140,12 +1182,23 @@ Matches the bronze-source decision (memory `project-bronze-source-per-field`):
   (at least the links phase) first, or they scrape nothing. The two newer CafeF scrapers do
   the same, but both take a `symbols=[(exchange, symbol), …]` override, which is how a run
   is scoped to VN30/VN100 instead of all ~777 codes.
-- **Nothing added since `CafeFScraper` is wired into `main.py` yet.** `CafeFPdfScraper`,
-  `CafeFNewsScraper` and the whole PDF-reading pipeline (§3a) are registered and importable,
-  but nothing drives them — `main.py` still runs only TradingView / CafeF / Simplize / GICS.
-  Note `CafeFPdfScraper` must NOT be pointed at the full 777-ticker universe by default: the
-  archive averages ~1.0 GB *per ticker* (VN100 alone is ~97 GB), so it takes a `symbols=`
-  override — it is currently run for VN100 (all 100 tickers on disk).
+- **Everything is wired into `main.py` as of 2026-07-30.** `CafeFNewsScraper`,
+  `CafeFPdfScraper` and the PDF-reading pipeline (§3a) used to be registered and importable
+  with nothing driving them — they were run by hand-editing `test.py`. They now each have a
+  switch leaf and run from `main.py` like the rest (§5). The parse pipeline is not a
+  `BaseScraper` (it reads the LOCAL archive, nothing is scraped), so it is driven by
+  `FinancialsBuilder.build_all(logger, switch_handler)` rather than `scrape()`.
+  `CafeFPdfScraper` still must NOT be pointed at the full 777-ticker universe: the archive
+  averages ~1.0-1.7 GB *per ticker* (VN100 alone is ~97 GB), which is why its `scrape()`
+  defaults to `CAFEF_PDF_TICKERS` rather than `get_stock_symbols()`.
+- **⚠️ `build_templates_index` REWRITES `templates.csv` from exactly the symbols handed to
+  it — it does not upsert.** Calling it per ticker therefore leaves a ONE-ROW file naming
+  only the last ticker parsed: that is how VCB lost its row when ACB was parsed alone on
+  2026-07-24, leaving a `templates.csv` that mapped no ticker to the statement CSVs sitting
+  right beside it. `build_all` closes this by building the index **once, for the whole
+  `CAFEF_FINANCIALS_TICKERS` list, before any parsing** — so the file is correct regardless
+  of which subset actually parses, or of one ticker failing. Never call
+  `build_templates_index` with a subset directly.
 - **There are FOUR financial-statement schemas, not one** (bank / corp / securities /
   insurance) and they share no line items. Pick one by **fingerprinting the ticker**
   (`cafef_schema.detect_template`), never by its GICS sector or industry group — HVA sits in

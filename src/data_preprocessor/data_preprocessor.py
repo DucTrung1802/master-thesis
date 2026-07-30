@@ -3389,24 +3389,35 @@ class DataPreprocessor:
                 ):
                     self._ingest_bronze_indices()
 
-                if self._switch_handler.is_enabled(
-                    "data_preprocessor", "data_quality_bronze", "stocks"
-                ):
-                    self._ingest_bronze_stocks_trading_view()
-                    self._ingest_bronze_cafef_price()
-                    self._ingest_bronze_cafef_foreign()
-                    self._ingest_bronze_cafef_order_stats()
-                    self._ingest_bronze_cafef_prop_trading()
-                    self._ingest_bronze_cafef_insider_shareholder_transactions()
-                    self._ingest_bronze_cafef_news()
-                    self._ingest_bronze_cafef_financials()
-                    self._ingest_bronze_stocks_simplize()
-                    self._ingest_bronze_simplize_industry()
-
-                if self._switch_handler.is_enabled(
-                    "data_preprocessor", "data_quality_bronze", "gics"
-                ):
-                    self._ingest_bronze_gics()
+                # ONE LEAF PER SOURCE TABLE, not one `stocks` leaf for all ten. Bronze is
+                # raw-faithful and each of these reads a different raw_data folder, so they
+                # share nothing but the schema — yet lumped together the cheap ones could not
+                # be run without the expensive ones (re-ingesting the financials CSVs, ~2 s,
+                # meant also re-reading 2.4 M price rows + 2.7 M Simplize rows). The leaves
+                # are independent: bronze has no cross-table dependency, so any subset is a
+                # valid run. Order is only convention (universe, then daily, then event, then
+                # reference).
+                bronze_ingests = [
+                    ("trading_view_stocks", self._ingest_bronze_stocks_trading_view),
+                    ("cafef_price", self._ingest_bronze_cafef_price),
+                    ("cafef_foreign", self._ingest_bronze_cafef_foreign),
+                    ("cafef_order_stats", self._ingest_bronze_cafef_order_stats),
+                    ("cafef_prop_trading", self._ingest_bronze_cafef_prop_trading),
+                    (
+                        "cafef_insider_txn",
+                        self._ingest_bronze_cafef_insider_shareholder_transactions,
+                    ),
+                    ("cafef_news", self._ingest_bronze_cafef_news),
+                    ("cafef_financials", self._ingest_bronze_cafef_financials),
+                    ("simplize_stocks", self._ingest_bronze_stocks_simplize),
+                    ("simplize_industry", self._ingest_bronze_simplize_industry),
+                    ("gics", self._ingest_bronze_gics),
+                ]
+                for leaf, ingest in bronze_ingests:
+                    if self._switch_handler.is_enabled(
+                        "data_preprocessor", "data_quality_bronze", leaf
+                    ):
+                        ingest()
 
             except Exception as e:
                 self._logger.log_error(
@@ -3470,8 +3481,12 @@ class DataPreprocessor:
                     self._ingest_silver_cafef_financials()
                     self._ingest_silver_cafef_financials_bank()
 
+                # The one-to-one source carry-ups. Split off `stocks_basic`'s leaf because
+                # they are not its inputs — `stocks_basic` joins the BRONZE tables directly,
+                # so neither needs the other and rebuilding the 2.4 M-row panel to refresh a
+                # carry-up (or vice versa) was pure cost.
                 if self._switch_handler.is_enabled(
-                    "data_preprocessor", "data_quality_silver", "stocks"
+                    "data_preprocessor", "data_quality_silver", "cafef_carry_ups"
                 ):
                     self._ingest_silver_cafef_price()
                     self._ingest_silver_cafef_order_stats()
@@ -3487,7 +3502,7 @@ class DataPreprocessor:
                     self._ingest_silver_cafef_news_sentiment()
 
                 if self._switch_handler.is_enabled(
-                    "data_preprocessor", "data_quality_silver", "stocks"
+                    "data_preprocessor", "data_quality_silver", "stocks_basic"
                 ):
                     self._ingest_silver_stocks_basic()
 

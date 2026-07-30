@@ -1,5 +1,7 @@
 # src\utils\constants.py
 
+import csv
+import os
 from datetime import datetime
 
 # ===========================
@@ -181,6 +183,47 @@ TRADING_VIEW_RAW_DATA_DIR = f"{RAW_DATA_DIR}/trading_view"
 CAFEF_RAW_DATA_DIR = f"{RAW_DATA_DIR}/cafef"
 GICS_RAW_DATA_DIR = f"{RAW_DATA_DIR}/gics"
 SIMPLIZE_RAW_DATA_DIR = f"{RAW_DATA_DIR}/simplize"
+
+# ── Per-filing CafeF pipelines: the tickers they run on ────────────────────────
+# These two read or produce ONE DOCUMENT AT A TIME and cost orders of magnitude more
+# per ticker than the daily tabs, so neither may default to the ~777-code universe the
+# way `price`/`foreign`/`order_stats` do. Each is scoped explicitly here, so turning
+# the switch on has a cost you can read off before you run it. (The news feed is NOT
+# in this group — it is one request per article but has already been scraped for the
+# full universe, so `CafeFNewsScraper` keeps the universe default.)
+
+
+def _vn100_symbols() -> list[tuple[str, str]]:
+    """VN100 constituents from the repo-root `vn100.csv` (utf-8-BOM, see
+    web_scraper/CONTEXT.md §8). Falls back to VN30 (UNIFIED_TICKERS, all HOSE) if the
+    file is absent, so an import never fails on a missing reference file."""
+    path = os.path.join(os.path.dirname(__file__), "..", "..", "vn100.csv")
+    try:
+        with open(path, encoding="utf-8-sig", newline="") as f:
+            return [
+                (r["exchange"], r["ticker"])
+                for r in csv.DictReader(f)
+                if r.get("ticker")
+            ]
+    except OSError:
+        return [("HOSE", t) for t in UNIFIED_TICKERS]
+
+
+# PDF filing archive (CafeFPdfScraper) — ~1.0-1.7 GB per ticker into raw_data/cafef/pdfs/.
+# VN100 is what is on disk today (108 folders = VN100 + 8 leftovers, ~97 GB) and is the
+# most that is practical; the full universe would be terabyte-scale.
+CAFEF_PDF_TICKERS: list[tuple[str, str]] = _vn100_symbols()
+
+# Statement parse (FinancialsBuilder) — OCRs the archive above into the three statement
+# CSVs. ~2.4 h per ticker, and it needs that ticker's PDFs already on disk, so this is a
+# far shorter list than CAFEF_PDF_TICKERS and grows one ticker at a time.
+# ⚠️ `build_templates_index` REWRITES templates.csv from exactly this list, so a ticker
+# dropped from here loses its row (and therefore its template mapping) even though its
+# statement CSVs survive. Add, never substitute.
+CAFEF_FINANCIALS_TICKERS: list[tuple[str, str]] = [
+    ("HOSE", "VCB"),
+    ("HOSE", "ACB"),
+]
 
 # ── GICS classification crosswalk ──────────────────────────────────────────────
 # Map each Simplize industry group (its GICS-based VN taxonomy, 50 groups) to an

@@ -3,6 +3,9 @@
 from logger.logger import LogType, Logger
 from web_scraper.trading_view_scraper import TradingViewScraper
 from web_scraper.cafef_scraper import CafeFScraper
+from web_scraper.cafef_news_scraper import CafeFNewsScraper
+from web_scraper.cafef_pdf_scraper import CafeFPdfScraper
+from web_scraper.cafef_financials import FinancialsBuilder
 from web_scraper.simplize_scraper import SimplizeScraper
 from web_scraper.gics_scraper import GicsScraper
 from data_preprocessor.data_preprocessor import DataPreprocessor
@@ -29,6 +32,21 @@ def main():
     # CafeF fills the per-stock fields TradingView lacks (raw/adjusted close,
     # matched/negotiated volume, foreign flow); depends on the links above.
     CafeFScraper(logger=my_logger, switch_handler=my_switch_handler).scrape()
+
+    # CafeF company news / disclosure feed — an event stream, not a daily series, so it
+    # is a separate scraper on its own leaf (`web_scraper/cafef/news`).
+    CafeFNewsScraper(logger=my_logger, switch_handler=my_switch_handler).scrape()
+
+    # ── CafeF financial statements: download, then parse ──────────────────────
+    # Two stages that must run in this order and are deliberately separate leaves —
+    # the download is network-bound and ~1.7 GB per ticker, the parse is CPU/OCR-bound
+    # and ~2.4 h per ticker, and the parse can be re-run over an archive already on
+    # disk (which is the common case after a parser fix).
+    CafeFPdfScraper(logger=my_logger, switch_handler=my_switch_handler).scrape()
+
+    # Reads the LOCAL archive above — no network. Not a BaseScraper, so it is driven by
+    # its own switch-aware batch entry point rather than `scrape()`.
+    FinancialsBuilder.build_all(logger=my_logger, switch_handler=my_switch_handler)
 
     # Simplize: the validated backbone for the daily panel — fully-adjusted OHLC,
     # true volume, and foreign flow (2009→) — also derives its universe from the

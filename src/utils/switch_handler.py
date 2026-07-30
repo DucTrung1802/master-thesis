@@ -51,7 +51,12 @@ class SwitchHandler:
             return {}
 
         try:
-            with open(self._config_path, "r", encoding="utf-8") as f:
+            # utf-8-SIG, not utf-8: this file is hand-edited, and several Windows
+            # editors (and PowerShell's `Out-File -Encoding utf8` on 5.1) write a BOM.
+            # Plain utf-8 raises on it, which lands in the `except` below and returns
+            # {} — every switch false, so main.py runs to completion doing NOTHING and
+            # says so only in one log line. Reading utf-8-sig accepts both.
+            with open(self._config_path, "r", encoding="utf-8-sig") as f:
                 data = json.load(f)
 
             if not isinstance(data, dict):

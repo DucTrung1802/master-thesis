@@ -164,8 +164,12 @@ DTO helpers come from
   (bank / corp / securities / insurance) and they share no line items — each has a
   "code 1" and it means something different in each — so their columns must never
   meet in one table. Hence **12 statement tables (4 templates × 3 reports)** + **3
-  reference tables**. Only parsed templates get a table; today that is `bank` (VCB),
-  so 3 of the 12 exist.
+  reference tables**. Only parsed templates get a table; today that is `bank`
+  (**VCB + ACB**, 152 rows each as of 2026-07-30), so 3 of the 12 exist.
+  ⚠️ **A second ticker on the same template does NOT widen the schema** — ACB and VCB
+  produced byte-identical column names *and* order, because both are mapped onto the
+  same `schema/bank_<report>.csv` chart of accounts, so adding ACB was a pure upsert.
+  A ticker on a *new* template mints new tables instead; it never joins these.
   - `cafef_financials_<template>_<report>` — the figures. PK
     `(exchange, ticker, year, quarter)`; a contiguous quarter grid where an unreadable
     quarter is a **blank `source='missing'` row, never zero-filled** (so the null-drop
@@ -186,8 +190,14 @@ DTO helpers come from
       which roughly DOUBLED the VCB rebuild to ~2.4h; not yet bounded. OCR misreads in a
       handful of quarters were repaired offline (see `web_scraper/CONTEXT.md`), so the
       panel is monotone.
-  - `cafef_financial_reports` — the 13 per-DOCUMENT metadata columns, split off
-    because they describe the filing, not the accounts. PK
+  - `cafef_financial_reports` — the 14 per-DOCUMENT metadata columns (+`report`), split
+    off because they describe the filing, not the accounts. ⚠️ **The parser gained a
+    `method` column** (the OCR layer that finally read the filing — `onnx@200`,
+    `tesseract@200`, `onnx@200+relax+components`, …), which the live table predated; since
+    `create_table` is `IF NOT EXISTS` the upsert failed with `column "method" does not
+    exist` until the table was **dropped and rebuilt** (2026-07-30). It is regenerated in
+    full from the statement CSVs in the same pass, so dropping it loses nothing — do that
+    whenever `CAFEF_FINANCIAL_META_COLS` changes. PK
     `(exchange, ticker, report, year, quarter)` — **per report, not per quarter**: the
     three statements of one quarter often come from different documents (36 of VCB's
     78 quarters). (The share counts are ALSO a per-document fact but are kept on the
@@ -232,9 +242,9 @@ DTO helpers come from
     infers **`VARCHAR`** for them (only `bigint` columns stay numeric). So the decimal
     price/value columns land as TEXT in silver — values correct and aligned, type
     degraded. Add a `_helper_cast_columns` call before save (as bronze does) to fix.
-  - Wired into `ingest_silver_data` under the silver `stocks` switch, ahead of
-    `_ingest_silver_stocks_basic`. Verified: each silver table row count == its current
-    bronze count.
+  - Wired into `ingest_silver_data` under the silver **`cafef_carry_ups`** leaf (was the
+    shared `stocks` leaf until 2026-07-30), ahead of `_ingest_silver_stocks_basic`.
+    Verified: each silver table row count == its current bronze count.
 - **`_ingest_silver_gics`** (added 2026-07-19) — the same basic-clean carry-up
   pattern applied to the bronze `gics` reference table (not a CafeF source, so it
   has its own method, not `_helper_load_cafef_folder`/`_ingest_silver_cafef_daily`).
@@ -244,8 +254,8 @@ DTO helpers come from
   not per ticker); `sub_industry_definition` keeps its bronze `TEXT` override.
   Wired into `ingest_silver_data` under its own new switch leaf,
   `data_preprocessor/data_quality_silver/gics` (sits alongside `bonds`/`economy`/
-  `forex`/`funds`/`indices`/`stocks`, independent of the `stocks` switch that gates
-  the CafeF carry-ups above).
+  `forex`/`funds`/`indices`/`stocks_basic`, independent of the `cafef_carry_ups` leaf
+  that gates the CafeF carry-ups above).
 - **CafeF financials → silver** (added 2026-07-19), gated by a new
   `data_preprocessor/data_quality_silver/financials` switch leaf. Two steps:
   - **`_ingest_silver_cafef_financials`** — carry every bronze
@@ -437,24 +447,63 @@ DTO helpers come from
 
 ## 5. How it's driven — SwitchHandler + `src/switch_config.json`
 
+**HOW TO RUN ANYTHING HERE: edit two lines of `src/switch_config.json`, then
+`python src\main.py` from the repo root.** There is no per-module runner and no CLI
+flag; `main.py` calls all three entry points unconditionally and every ingest inside
+them is switch-gated, so the config IS the run plan. Truncate `logs/app.log` first —
+that log is the only record of what actually ran.
+
+```jsonc
+// re-ingest ONLY the CafeF financial statements (~1 s), touching nothing else
+"data_preprocessor/data_quality_bronze": true,
+"data_preprocessor/data_quality_bronze/cafef_financials": true,
+```
+
 - `SwitchHandler` reads a **flat JSON of slash-path → bool**; a path is enabled only
-  when **every ancestor is explicitly true**. The three entry points each gate on
-  `data_preprocessor/data_quality_{bronze|silver|gold}` and then on a per-asset leaf
-  (`.../bronze/stocks`, `.../silver/bonds`, `.../gold/economy`, …). `gics` is a
-  **bronze + silver** leaf (`.../bronze/gics`, `.../silver/gics`) — the silver copy
-  is a straight reference-table carry-up; there is still no `gics` gold table.
-  `bronze.gics` also feeds `silver.stocks_basic`'s GICS tree (via
+  when **every ancestor is explicitly true**, so a master flag off disables its whole
+  subtree without touching the leaves. The three entry points each gate on
+  `data_preprocessor/data_quality_{bronze|silver|gold}` and then on a per-table leaf.
+  Keys beginning `//` are comments and are ignored — the heavy leaves carry one giving
+  their cost, so you can read the price of a run before starting it.
+- ⚠️ **The config is read as `utf-8-sig`, and a branch key must NOT end in `/`.** Two
+  ways this file silently does nothing, both hit in practice:
+  - a **BOM** (PowerShell 5.1's `Out-File -Encoding utf8` writes one, as do several
+    Windows editors) used to throw inside `_load_config`, which swallows the error and
+    returns `{}` — *every* switch false, `main.py` running to completion doing nothing,
+    one ERROR line in the log as the only clue. Fixed 2026-07-30 by reading `utf-8-sig`;
+    a malformed-JSON typo still fails the same quiet way, so check that log line
+    (`Switch config loaded: N switches (M enabled)`) when a run does nothing.
+  - `"web_scraper/cafef/"` (trailing slash) never matches, because `is_enabled` looks
+    up the prefix `web_scraper/cafef`. That typo made the whole CafeF + Simplize
+    scraper branch unreachable until 2026-07-30.
+- **⚠️ BRONZE IS ONE LEAF PER SOURCE TABLE** (since 2026-07-30) — `trading_view_stocks`,
+  `cafef_{price,foreign,order_stats,prop_trading,insider_txn,news,financials}`,
+  `simplize_{stocks,industry}`, `gics`. The **single `.../bronze/stocks` leaf is GONE**:
+  it fired all ten ingests, so re-reading the financials CSVs (~1 s) also meant
+  re-reading 2.4 M CafeF price rows and 2.7 M Simplize rows. Bronze has **no
+  cross-table dependency** — each ingest reads its own `raw_data/` folder and writes its
+  own table — so **any subset is a valid run**; the order in `bronze_ingests` is
+  convention only (universe → daily → event → reference). All ship `false`: opt in.
+- **Silver leaves** are `bonds`/`economy`/`forex`/`funds`/`indices`/`gics`/
+  `cafef_carry_ups`/`stocks_basic`/`financials`/`stocks_financials`/`news_sentiment`.
+  The old `.../silver/stocks` leaf was **split in two** on 2026-07-30: `cafef_carry_ups`
+  (the five one-to-one bronze→silver lifts) and `stocks_basic` (the four-way join).
+  They are not each other's inputs — `stocks_basic` joins the **bronze** tables directly —
+  so rebuilding the 2.4 M-row panel to refresh a carry-up was pure cost.
+- `gics` is a **bronze + silver** leaf (`.../bronze/gics`, `.../silver/gics`) — the
+  silver copy is a straight reference-table carry-up; there is still no `gics` gold
+  table. `bronze.gics` also feeds `silver.stocks_basic`'s GICS tree (via
   `_helper_build_gics_classification`) regardless of the silver `gics` leaf.
-  The silver-only leaf `.../silver/stocks_financials` (added 2026-07-21) gates **two
+- The silver-only leaf `.../silver/stocks_financials` (added 2026-07-21) gates **two
   chained ingests in order**: `_ingest_silver_stocks_basic_financials_bank` (the raw
   price×financials as-of join → `stocks_basic_financials_bank`) then
   `_ingest_silver_stocks_basic_financials_bank_fa` (that table + the indicator catalog →
   `stocks_basic_financials_bank_fa`). It reads `silver.stocks_basic` +
   `silver.cafef_financials_bank`, so it runs after both — but note `stocks_basic` is
-  itself under the separate `.../silver/stocks` leaf, so if you flip `stocks_financials`
-  on while `stocks` is off it reuses whatever `stocks_basic` is already materialised.
+  itself under the separate `.../silver/stocks_basic` leaf, so if you flip
+  `stocks_financials` on while that is off it reuses whatever is already materialised.
 - **Order matters:** silver reads bronze tables; gold reads silver tables. Run the
-  layers in bronze → silver → gold order (main.py does).
+  layers in bronze → silver → gold order (main.py does). Within bronze, order is free.
 
 ## 6. Shared infra it depends on (outside this dir)
 
@@ -550,11 +599,17 @@ DTO helpers come from
   `_helper_transform` stays a simple sequential per-ticker loop — don't parallelize
   it without cause. FeatureSelector cost note: memory `project-feature-selection-ta-cost`.
 
-## 8. Current materialized state (snapshot — 2026-07-16)
+## 8. Current materialized state (snapshot — 2026-07-16, financials refreshed 2026-07-30)
 
 > Row counts below are unchanged by the 2026-07-16 key split — that reshape moved the
 > `symbol` colon key to split `(exchange, ticker)` columns without adding or dropping
 > a single row (verified: every table re-ingested to the same count).
+>
+> **2026-07-30:** the 4 financials tables were re-ingested from
+> `raw_data/cafef/financials/statements` and now carry **ACB beside VCB** (152 rows per
+> statement table, 456 reports). Verified cell-by-cell against the raw CSVs — 152 rows ×
+> 89/28/39 numeric columns, **0 mismatches**, 0 duplicate keys, `source='missing'`
+> blank-but-keyed rows intact. Every other bronze table is untouched by that run.
 
 `bronze_schema` in `database_main_v2` — **21 tables** (15 + the 6 financials tables
 that exist so far; 30 once all four templates are parsed):
@@ -573,10 +628,10 @@ that exist so far; 30 once all four templates are parsed):
 | `cafef_prop_trading` | 64,139 | daily; now joined into silver.stocks_basic |
 | `cafef_insider_shareholder_transactions` | 13,607 | event-based, `row_id` PK; carried 1:1 to silver (own method) |
 | `cafef_news` | 5,599 | event-based, `row_id` PK, `(exchange, ticker)` key; **VCB/PNJ/FPT only** (1,629 / 1,715 / 2,255) — the scraper has run on 3 tickers; not yet in silver |
-| `cafef_financials_bank_balance_sheet` | 78 | 100 cols (incl. 3 share cols); VCB only, Q4-2006 → Q1-2026 |
-| `cafef_financials_bank_income_statement` | 78 | 36 cols (incl. 3 share cols); VCB only |
-| `cafef_financials_bank_cash_flow` | 78 | 57 cols (incl. 3 share cols); VCB only |
-| `cafef_financial_reports` | 234 | 78 quarters × 3 reports; 71/78 readable per report, `publish_date` on 210/213 |
+| `cafef_financials_bank_balance_sheet` | 152 | 100 cols (incl. 3 share cols); VCB 78 (Q4-2006→Q1-2026) + ACB 74 (Q1-2008→Q2-2026) |
+| `cafef_financials_bank_income_statement` | 152 | 36 cols (incl. 3 share cols); VCB 78 + ACB 74 |
+| `cafef_financials_bank_cash_flow` | 152 | 57 cols (incl. 3 share cols); VCB 78 + ACB 74 |
+| `cafef_financial_reports` | 456 | 152 quarters × 3 reports; **15 cols** (gained `method`, the OCR layer that read the filing); `publish_date` on 408/456 |
 | `cafef_financial_schema` | 842 | all 12 charts of accounts (753 distinct line ids) |
 | `cafef_financial_templates` | 1 | VCB → `bank` / direct; grows with the parse |
 | `simplize_stocks` | 2,658,773 | PRIMARY daily backbone |

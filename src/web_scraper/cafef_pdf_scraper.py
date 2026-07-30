@@ -19,6 +19,7 @@ import requests
 # ===== Local / Custom Modules =====
 from logger.logger import Logger
 from utils.constants import (
+    CAFEF_PDF_TICKERS,
     CAFEF_RAW_DATA_DIR,
     TRADING_VIEW_RAW_DATA_DIR,
     SCRAPER_RETRY_ATTEMPTS,
@@ -370,7 +371,20 @@ class CafeFPdfScraper(BaseScraper):
 
     def scrape(self, exchanges: Tuple[str, ...] = None,
                symbols: List[Tuple[str, str]] = None) -> None:
-        self.scrape_all_pdfs(exchanges=exchanges, symbols=symbols)
+        """Switch-driven entry point (`web_scraper/cafef/pdfs`).
+
+        Defaults to CAFEF_PDF_TICKERS rather than the full ~777-code universe: the
+        archive is ~1.7 GB per ticker, so an unscoped run is a terabyte-scale download,
+        not a longer version of the same job. Pass `symbols` to override for a one-off.
+        """
+        if self._switch_handler and not self._switch_handler.is_enabled(
+            "web_scraper", "cafef", "pdfs"
+        ):
+            return
+        self.scrape_all_pdfs(
+            exchanges=exchanges,
+            symbols=symbols if symbols is not None else list(CAFEF_PDF_TICKERS),
+        )
 
     def scrape_all_pdfs(self, skip_existing: bool = True,
                         exchanges: Tuple[str, ...] = None,

@@ -11,7 +11,7 @@ from typing import Dict, List, Optional, Tuple
 from web_scraper.cafef_pdf_parser import (
     BALANCE_SHEET, CASH_FLOW, INCOME_STATEMENT, REPORTS, PdfParser, Statement,
 )
-from utils.constants import CAFEF_RAW_DATA_DIR
+from utils.constants import CAFEF_FINANCIALS_TICKERS, CAFEF_RAW_DATA_DIR
 
 
 @dataclass(frozen=True)
@@ -461,6 +461,56 @@ class FinancialsBuilder:
             w.writerows(rows)
         os.replace(tmp, TEMPLATES_INDEX)
         return rows
+
+    @classmethod
+    def build_all(cls, logger=None, switch_handler=None,
+                  symbols: Optional[List[Tuple[str, str]]] = None,
+                  use_api: bool = True) -> Dict[str, Dict[str, int]]:
+        """Switch-driven batch entry point (`web_scraper/cafef/financials`) — main.py's
+        way in, mirroring the scrapers' `scrape()` even though nothing here is scraped:
+        this reads the LOCAL PDF archive `CafeFPdfScraper` already downloaded.
+
+        ⚠️ THE TEMPLATE INDEX IS REBUILT FROM THE WHOLE LIST, ONCE, BEFORE ANY PARSING.
+        `build_templates_index` writes templates.csv from exactly the symbols handed to
+        it, so calling it per ticker inside the loop would leave a one-row file naming
+        only the last ticker parsed — which is how VCB lost its row when ACB was parsed
+        on its own. Building the index for every ticker up front makes that failure
+        impossible regardless of which subset actually parses.
+
+        Cost is per ticker and large (~2.4 h each — the note-page OCR that reads the
+        share counts roughly doubled it), so the universe is the explicit
+        CAFEF_FINANCIALS_TICKERS, never the ~777-code listing. One ticker failing does
+        not abort the rest; the returned dict maps `EXCHANGE:TICKER` to that ticker's
+        per-report row counts (`{}` where it raised).
+        """
+        if switch_handler and not switch_handler.is_enabled(
+            "web_scraper", "cafef", "financials"
+        ):
+            return {}
+
+        universe = list(symbols if symbols is not None else CAFEF_FINANCIALS_TICKERS)
+        if not universe:
+            if logger:
+                logger.log_warning(
+                    "cafef financials: no tickers configured (CAFEF_FINANCIALS_TICKERS)."
+                )
+            return {}
+
+        cls.build_templates_index(universe, logger=logger)
+
+        builder = cls(logger=logger)
+        results: Dict[str, Dict[str, int]] = {}
+        for exchange, symbol in universe:
+            key = f"{exchange}:{symbol}"
+            try:
+                results[key] = builder.build(exchange, symbol, use_api=use_api)
+                if logger:
+                    logger.log_info(f"cafef financials DONE {key}: {results[key]}")
+            except Exception as e:
+                results[key] = {}
+                if logger:
+                    logger.log_error(f"cafef financials FAILED {key}: {e}")
+        return results
 
     def template_of(self, symbol: str) -> Optional[str]:
         """From templates.csv when it is there, else fingerprint the ticker."""

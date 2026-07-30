@@ -334,6 +334,16 @@ class CafeFNewsScraper(CafeFScraper):
 
     def scrape(self, exchanges: Tuple[str, ...] = None,
                symbols: List[Tuple[str, str]] = None) -> None:
+        """Switch-driven entry point (`web_scraper/cafef/news`).
+
+        Keeps the FULL universe as its default, unlike the two per-filing pipelines: the
+        feed has already been scraped for all 777 tickers, and `skip_existing=True` makes
+        a re-run cheap for the ones on disk. Pass `symbols` to scope a one-off.
+        """
+        if self._switch_handler and not self._switch_handler.is_enabled(
+            "web_scraper", "cafef", "news"
+        ):
+            return
         self.scrape_all_news(exchanges=exchanges, symbols=symbols)
 
     def scrape_all_news(self, skip_existing: bool = True,

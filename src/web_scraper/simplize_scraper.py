@@ -330,7 +330,15 @@ class SimplizeScraper(BaseScraper):
         )
 
     def scrape(self) -> None:
-        """BaseScraper entry point: scrape all stocks from Simplize."""
+        """BaseScraper entry point: the daily price panel and the industry reference.
+
+        Two independent leaves — `industry.csv` is one row per ticker and takes minutes,
+        the price panel is 2.6 M rows and takes hours, so they are rarely wanted together.
+        Industry runs first: it is what `templates.csv` and the GICS tree read.
+        """
+
+        if self._switch_handler.is_enabled("web_scraper", "simplize", "industry"):
+            self.scrape_all_industries()
 
         if self._switch_handler.is_enabled("web_scraper", "simplize", "stocks"):
             self.scrape_all_stocks()
