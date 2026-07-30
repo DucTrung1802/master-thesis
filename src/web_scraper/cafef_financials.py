@@ -65,6 +65,7 @@ class ParseLayer:
     relax_split_tail: bool = False
     join_digits: bool = False
     title_over_form: bool = False
+    loose_form_code: bool = False
     crop_pad: Optional[float] = None
 
 PDFS_DIR = os.path.join(CAFEF_RAW_DATA_DIR, "pdfs")
@@ -320,6 +321,13 @@ class FinancialsBuilder:
         ParseLayer("onnx@200+title", "onnx", 200, title_over_form=True),
         ParseLayer("onnx@200+title+relax", "onnx", 200,
                    relax_totals=True, title_over_form=True),
+        # OCR APPENDED A STRAY DIGIT TO THE FORM CODE (`loose_form_code`), which costs the page
+        # its anchor and stops `_drop_islands` pruning — VCB's Q1-2009 income statement came out
+        # as five pages, four of them notes that merely echo "hoạt động kinh doanh" in a note
+        # heading. Last of all, and the pruning it enables is what the gates then judge.
+        ParseLayer("onnx@200+loose", "onnx", 200, loose_form_code=True),
+        ParseLayer("onnx@200+loose+relax", "onnx", 200,
+                   relax_totals=True, loose_form_code=True),
     ]
 
     def __init__(self, logger=None):
@@ -365,12 +373,13 @@ class FinancialsBuilder:
             # (engine, dpi) alone would hand the wider-crop layer the narrow crop's cached parse
             # — the one that already failed.
             key = (layer.engine, layer.dpi, layer.crop_pad, layer.join_digits,
-                   layer.title_over_form)
+                   layer.title_over_form, layer.loose_form_code)
             if key not in parsed:
                 parser.set_dpi(layer.dpi)
                 parser.set_crop_pad(layer.crop_pad)
                 parser.set_join_split(layer.join_digits)
                 parser.set_title_over_form(layer.title_over_form)
+                parser.set_loose_form_code(layer.loose_form_code)
                 try:
                     parsed[key] = parser.parse(path, period_end)
                 except Exception as e:

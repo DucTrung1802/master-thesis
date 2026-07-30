@@ -177,6 +177,22 @@ class PdfParser:
     FORM_RE = re.compile(
         r"(?:M[ẫâa]u\s*(?:s[ốô]\s*)?[:.]?\s*)?\b(B\s*\d{2})\s*[a-z]?\s*[-/]?\s*(TCTD|DN)",
         re.I)
+    # ⚠️ OCR ALSO APPENDS A STRAY DIGIT, and that costs far more than the code itself. VCB's
+    # Q1-2009 prints "Mẫu số: B040/TCTD-HN" and its Q2-2014 balance sheet "Mẫu B020/TCTD-HN" —
+    # the strict pattern tolerates a junk LETTER after the two digits but not a junk digit, so
+    # neither matches and the page has NO form-coded anchor. `_drop_islands` prunes by anchor, so
+    # without one every notes page that fuzzy-matches a statement title is kept: Q1-2009's income
+    # statement came out as pages [5, 14, 28, 29, 30] — 57 rows of which 2 mapped — and was
+    # refused for "no profit before tax" although its own page 5 read perfectly. Note 15 is
+    # titled "Lãi/lỗ thuần từ hoạt động kinh doanh (mua bán) chứng khoán", which clears the title
+    # threshold against "BÁO CÁO KẾT QUẢ HOẠT ĐỘNG KINH DOANH".
+    #
+    # Up to two junk characters, of either kind. Form codes are B01..B09 — two digits, never
+    # three — so anything past them is noise. Reached only via `loose_form_code`, so a filing
+    # whose codes read cleanly is untouched.
+    FORM_RE_LOOSE = re.compile(
+        r"(?:M[ẫâa]u\s*(?:s[ốô]\s*)?[:.]?\s*)?\b(B\s*\d{2})\s*[0-9a-z]{0,2}\s*[-/]?\s*(TCTD|DN)",
+        re.I)
     FORMS = {
         "TCTD": {"B02": BALANCE_SHEET, "B03": INCOME_STATEMENT,
                  "B04": CASH_FLOW, "B05": NOTES},
@@ -259,6 +275,8 @@ class PdfParser:
         self.join_split_digits = False
         # set per PARSE LAYER; see _page_kind
         self.title_over_form = False
+        # set per PARSE LAYER; see FORM_RE_LOOSE
+        self.loose_form_code = False
         self.ocr_ready = self._init_ocr()
 
     def set_dpi(self, dpi: int) -> None:
@@ -272,6 +290,11 @@ class PdfParser:
         """Treat a lost thousands SEPARATOR as one number rather than several (see
         `_join_split_number`). Set per parse layer, off by default."""
         self.join_split_digits = bool(on)
+
+    def set_loose_form_code(self, on: bool) -> None:
+        """Tolerate junk characters OCR appends to a form code, so the page keeps its ANCHOR and
+        `_drop_islands` can prune the notes pages that merely echo a statement title."""
+        self.loose_form_code = bool(on)
 
     def set_title_over_form(self, on: bool) -> None:
         """Let a VERBATIM statement title overrule a form code that names a different
@@ -386,12 +409,13 @@ class PdfParser:
         # fed its own page numbers into the period-column clustering. A real statement page
         # carries exactly ONE form code, its own; two or more distinct ones mean the page is
         # talking ABOUT the statements. (Found via experiment_8 on ACB's FY-2013 filing.)
+        form_re = self.FORM_RE_LOOSE if self.loose_form_code else self.FORM_RE
         codes = {re.sub(r"\s+", "", m.group(1)).upper()
-                 for m in self.FORM_RE.finditer(text)}
+                 for m in form_re.finditer(text)}
         if len(codes) > 1:
             return None, False
 
-        m = self.FORM_RE.search(text)
+        m = form_re.search(text)
         if m:
             code = re.sub(r"\s+", "", m.group(1)).upper()
             kind = self.FORMS[m.group(2).upper()].get(code)

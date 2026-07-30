@@ -72,10 +72,10 @@ Re-parsed 2026-07-29 with the four new relaxations, 238 min:
 | report | quarters | pdf | cafef | was pdf | gain |
 |---|---|---|---|---|---|
 | balance_sheet | 71 | **68** | 3 | 57 | +11 |
-| income_statement | 71 | **67** | 4 | 46 | +21 |
+| income_statement | 71 | **69** | 2 | 46 | +23 |
 | cash_flow | 71 | **69** | 2 | 61 | +8 |
 
-**204 of 213 read from the filings, +40, and NOTHING was lost** — no quarter that read from a
+**206 of 213 read from the filings, +42, and NOTHING was lost** — no quarter that read from a
 filing before stopped doing so. All 6 formerly HOLLOW cash flows (a `pdf` row with an empty
 closing balance) now carry one that is checked. The 11 remaining are filled from CafeF's tabs, so
 every quarter still has data.
@@ -154,9 +154,9 @@ CafeF-tab fallback (see `_parse_cascaded`). `FinancialsBuilder.LAYERS`:
   → onnx@200+relax+components → onnx@200+pad6+components → onnx@200+pad6+relax+components
   → onnx@300+split → onnx@300+split+components
   → onnx@200+join+components → onnx@200+join+relax+components
-  → onnx@200+title → onnx@200+title+relax
+  → onnx@200+title → onnx@200+title+relax → onnx@200+loose → onnx@200+loose+relax
 
-**The eleven `+components` / `+pad6` / `+split` / `+join` / `+title` layers are appended, never inserted**, so a
+**The thirteen `+components` / `+pad6` / `+split` / `+join` / `+title` / `+loose` layers are appended, never inserted**, so a
 statement that reconciles today cannot reach them — `_parse_cascaded` skips a report once
 accepted. They add two relaxations, each traced to a specific cause and each recovering quarters
 whose figures were already correct:
@@ -200,6 +200,24 @@ whose figures were already correct:
   classifier never offers. A VERBATIM title match (score exactly 1.0, not the usual 0.80) now
   overrules a code that names a different statement; exact containment is what stops the
   auditor's report, which NAMES every statement, from overruling a sound code.
+- **`loose_form_code` — OCR APPENDS A STRAY DIGIT AND THE PAGE LOSES ITS ANCHOR.** VCB's Q1-2009
+  prints `Mẫu số: B040/TCTD-HN`; the strict pattern tolerates a junk LETTER after the two digits
+  but not a junk DIGIT, so nothing matches. That matters far beyond the code itself, because
+  `_drop_islands` prunes BY ANCHOR: with no form-coded page, every notes page that fuzzy-matches a
+  statement title is kept. Q1-2009's income statement came out as pages **[5, 14, 28, 29, 30] —
+  57 rows of which 2 mapped** — and was refused for "no profit before tax" while its own page 5
+  read perfectly. Note 15, *"Lãi/lỗ thuần từ hoạt động kinh doanh (mua bán) chứng khoán"*, clears
+  the 0.80 title threshold against *BÁO CÁO KẾT QUẢ HOẠT ĐỘNG KINH DOANH*. Allows up to two junk
+  characters of either kind — codes are B01..B09, so a third character is always noise. The same
+  defect was silently costing VCB's Q2-2014 balance sheet its anchor (`B020`), which survived only
+  by falling back to the title.
+  - **One fix, two quarters, via de-cumulation.** Q4-2009's income statement always parsed
+    (PBT 5,004,374, reconciled); it was dropped because the FY annual is genuinely cumulative and
+    Q1-2009 was missing. **Fixing a Q1/Q2 pays for its Q4 as well** — the same shape as Q2-2014
+    unlocking Q4-2014.
+  - **Q4-2009 is where the de-cumulated figure BEATS CafeF.** Ours reads 697,896; CafeF says
+    1,395,082. Our four quarters sum to 5,004,372 against the audited FY PBT of **5,004,374**;
+    CafeF's sum to 5,701,558, too much by 697,184. This is the Q4-vs-annual class above.
 - **⚠️ The parse cache key is `(engine, dpi, crop_pad, join_digits)`.** Keyed on `(engine, dpi)` alone the
   wider-crop layer is handed the narrow crop's cached parse — the one that just failed — and the
   layer silently does nothing.
