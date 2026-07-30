@@ -55,6 +55,11 @@ class CafeFScraper(BaseScraper):
     ORDER_STATS_START_YEAR = 2010  # order-placement stats (ThongKeDL) history starts ~2010
     PROP_START_YEAR = 2023  # proprietary-desk trades (GDTuDoanh) history starts ~2023
 
+    # A date window is paginated until CafeF stops adding rows. 12 is far above the
+    # ~3 pages a 2-month window needs (≤ ~46 trading days at PageSize 20) and only
+    # bounds a runaway loop; it is never expected to be reached.
+    MAX_WINDOW_PAGES = 12
+
     # Price-history tab (cafef .../vcb-1.chn → PriceHistory.ashx).
     PRICE_COLUMNS = [
         "date", "exchange", "symbol",
@@ -173,21 +178,34 @@ class CafeFScraper(BaseScraper):
         date_key differs by endpoint (price/foreign use "Ngay"; the order-stats and
         proprietary-trade tabs use "Date"); list_key handles endpoints that nest the
         row list one level deeper (GDTuDoanh → "ListDataTudoanh").
+
+        ⚠️ A SHORT PAGE DOES NOT MEAN THE LAST PAGE — do not stop on `len(rec) < 20`.
+        CafeF serves an under-full page mid-sequence: for HNX-INDEX over
+        05/01/2026..07/06/2026 the price tab returns 19 rows on page 1 and then 20
+        and 6 on pages 2-3, so treating the short first page as terminal kept 19 of
+        45 rows. It cost the HNX, HNX30 and UPCOM index price series 23 trading days
+        each, and it is silent — a truncated window looks exactly like a
+        market holiday once the CSV is written. Pagination therefore ends only on an
+        EMPTY page, or on a page that contributes no date this window has not already
+        seen (which is how a repeated page terminates).
         """
         by_date: dict = {}
         for sd, ed in self._windows(start_year):
+            seen_in_window: set = set()
             page = 1
-            while page <= 6:
+            while page <= self.MAX_WINDOW_PAGES:
                 rec = self._get(ashx, {"Symbol": symbol, "ExchangeType": exchange.upper(),
                                        "StartDate": sd, "EndDate": ed,
                                        "PageIndex": page, "PageSize": 20},
                                 list_key=list_key)
                 if not rec:
                     break
+                dates = {row[date_key] for row in rec}
+                if dates <= seen_in_window:
+                    break
+                seen_in_window |= dates
                 for row in rec:
                     by_date[row[date_key]] = row
-                if len(rec) < 20:
-                    break
                 page += 1
         return by_date
 
@@ -195,11 +213,18 @@ class CafeFScraper(BaseScraper):
                        list_key: str = None, page_size: int = 20,
                        max_pages: int = 500) -> list:
         """Collect an event-based (non-daily) endpoint by paginating PageIndex over
-        the full history in a single wide date range, until a short/empty page. Used
-        by the insider-transaction tab, whose rows are transactions, not trading days
-        (so no date-window splitting or by-date dedup applies)."""
+        the full history in a single wide date range. Used by the insider-transaction
+        tab, whose rows are transactions, not trading days (so no date-window
+        splitting or by-date dedup applies).
+
+        ⚠️ Ends on an EMPTY or REPEATED page, never on a short one — see `_collect`:
+        CafeF serves under-full pages mid-sequence, so `len(rec) < page_size` is not
+        end-of-data. A page is compared with its predecessor before being kept, so a
+        server that clamps PageIndex (returning the last page forever) terminates
+        instead of duplicating rows."""
         out: list = []
         today = date.today().strftime("%m/%d/%Y")
+        prev_signature = None
         page = 1
         while page <= max_pages:
             rec = self._get(ashx, {"Symbol": symbol, "ExchangeType": exchange.upper(),
@@ -208,9 +233,11 @@ class CafeFScraper(BaseScraper):
                             list_key=list_key)
             if not rec:
                 break
-            out.extend(rec)
-            if len(rec) < page_size:
+            signature = repr(rec)
+            if signature == prev_signature:
                 break
+            prev_signature = signature
+            out.extend(rec)
             page += 1
         return out
 

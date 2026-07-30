@@ -16,6 +16,8 @@ src/main.py  ──►  TradingViewScraper.scrape()   ← universe authority (li
                        │                            + OHLCV per symbol (Selenium)
                        ▼
                   CafeFScraper.scrape()         ← per-stock fields TV lacks (requests)
+                  CafeFIndexScraper.scrape()    ← the same 4 tabs for the 6 MARKET INDICES
+                                                   (requests; needs no TV links)
                   CafeFNewsScraper.scrape()     ← company-news / disclosure feed (requests)
                   CafeFPdfScraper.scrape()      ← the filing PDFs (requests)
                   FinancialsBuilder.build_all() ← OCRs those PDFs → statement CSVs (LOCAL,
@@ -35,6 +37,9 @@ src/main.py  ──►  TradingViewScraper.scrape()   ← universe authority (li
   (`get_stock_symbols()` reads `raw_data/trading_view/links/stocks/**/*.csv`),
   so TV must run first; the other two enrich the same universe. `main.py` runs
   them in that order deliberately.
+  - **`CafeFIndexScraper` is the exception — it needs no links at all.** An index has
+    no TradingView link CSV, so its universe is a fixed six-entry list on the class
+    (`INDEXES`). It can therefore run standalone, before TV has ever been run.
 - **Each source writes one CSV per stock** (except GICS = one taxonomy CSV, and
   TV links = one CSV per filter leaf). All writers use **temp-file + atomic
   `os.replace`** so an interrupted run never leaves a partial file that
@@ -56,6 +61,7 @@ regenerated; delete it or restore the scraper rather than modelling on it.
 | `order_stats/` | `cafef_scraper.py` | 777 tickers (HOSE+HNX+UPCOM) — full universe |
 | `prop_trading/` | `cafef_scraper.py` | 777 tickers queried (full universe); 431 have data, 350 have no prop-desk trades (history from ~2023) |
 | `insider_txn/` | `cafef_scraper.py` | VN100 (HOSE) |
+| `index_price/`, `index_order_stats/`, `index_foreign/`, `index_prop_trading/` | `cafef_index_scraper.py` | the 6 market indices, full history (§3, *CafeF indices*) |
 | `news/` | `cafef_news_scraper.py` | 777 tickers (full universe); ~405k rows, ~495 MB |
 | `pdfs/` | `cafef_pdf_scraper.py` | all VN100 (100 tickers, all years) + 8 non-VN100 leftovers = 108 folders, ~97 GB |
 | `financials/` | `cafef_financials.py` (§3a) | the 12 schemas + `templates.csv`; statements per template — **the only part of `raw_data/` that is TRACKED in git** (it is 0.3 MB and costs hours of OCR to rebuild) |
@@ -558,6 +564,7 @@ src/web_scraper/
 ├── base_scraper.py           BaseScraper ABC + SCRAPER_REGISTRY + @register_scraper + build_scraper
 ├── trading_view_scraper.py   SOURCE_NAME="trading_view"  (Selenium/Chrome + BS4, ~1600 lines)
 ├── cafef_scraper.py          SOURCE_NAME="cafef"         (requests → CafeF AJAX; the 5 daily tabs)
+├── cafef_index_scraper.py    SOURCE_NAME="cafef_index"   (subclasses CafeFScraper; 4 tabs × 6 indices)
 ├── cafef_pdf_scraper.py      SOURCE_NAME="cafef_pdf"     (requests → the filing PDFs themselves)
 ├── cafef_news_scraper.py     SOURCE_NAME="cafef_news"    (requests → company-news / disclosure feed)
 ├── cafef_schema.py           ── the PDF-reading pipeline: canonical chart of accounts
@@ -574,7 +581,8 @@ one-shot, parsing is expensive and iterative, so they are kept apart: the parser
 re-run over the 2.4 GB archive as often as it takes without touching the network.
 
 The CafeF scrapers are separate sources, not one: `cafef_scraper` pulls the daily price/flow
-tabs, `cafef_pdf_scraper` downloads the filings, `cafef_news_scraper` pulls the event stream.
+tabs, `cafef_index_scraper` pulls those same tabs for the market indices,
+`cafef_pdf_scraper` downloads the filings, `cafef_news_scraper` pulls the event stream.
 Each registers its own `SOURCE_NAME` and writes its own folder under `raw_data/cafef/`.
 
 **Pattern = Strategy + registry/factory** (`base_scraper.py`):
@@ -679,6 +687,69 @@ Each registers its own `SOURCE_NAME` and writes its own folder under `raw_data/c
   across the full 777-ticker universe; insider_txn still VN100-only → ~681 tickers
   remaining for that one). Note prop_trading only queried the full universe: 431 tickers
   have data and 350 have no prop-desk trades (nothing written for those — history ~2023).
+
+### CafeF indices — `cafef_index_scraper.py` (the 6 market indices; requests)
+
+The same four daily tabs as above, for the **market indices** rather than a stock.
+`CafeFIndexScraper` **subclasses `CafeFScraper`** because an index is served by the
+identical `.ashx` endpoints with the identical JSON keys — the windowing, pagination,
+retry and all four row builders are inherited unchanged, and only the universe, the
+unit scaling and the output folders are overridden. There is no index analogue of the
+insider tab (-6), so it is not scraped.
+
+- **The universe is a fixed 6-entry list** (`INDEXES`), not TradingView-derived — an
+  index has no link CSV, so **this scraper can run before TV ever has**. The code is the
+  URL slug of its history page, uppercased, which is what the rest of the repo calls it
+  (cf. `MarketIndexConfig(index_code="VNINDEX")` in `main.py`).
+- **Output:** `raw_data/cafef/index_{price,order_stats,foreign,prop_trading}/<EXCHANGE>_<INDEX>.csv`,
+  **column-identical to the matching per-stock folder**, so the same reader handles both.
+  A full run from scratch is **~18 min** for all 6 × 4 (2026-07-30, 16 workers).
+
+| index | exchange | price rows | span | order_stats | foreign | prop |
+|---|---|---|---|---|---|---|
+| `VNINDEX` | HOSE | **6,328** | 2000-07-28 → today | 4,568 | 4,267 | 931 |
+| `VN30INDEX` | HOSE | 3,595 | 2012-02-06 → | 3,553 | 3,032 | 86 |
+| `VN100-INDEX` | HOSE | 2,273 | 2014-02-07 → **2025-04-29** | 3,088 | 2,522 | 1 |
+| `HNX-INDEX` | HNX | 5,122 | 2005-07-14 → | 4,588 | 4,248 | 200 |
+| `HNX30-INDEX` | HNX | 3,440 | 2012-07-09 → | 2,888 | 2,865 | 78 |
+| `UPCOM-INDEX` | UPCOM | 4,204 | 2009-06-24 → | 4,178 | 3,613 | 198 |
+
+VNINDEX starts on **HOSE's opening day** and its first close is the index base, 100.00.
+Each tab starts at the later of the index's inception and that tab's own earliest data
+(`TAB_START_FLOOR`: order_stats/foreign 2007, prop 2022), so no window is requested
+where neither could hold anything.
+
+- **⚠️ AN INDEX VALUE IS A POINT, NOT '000 VND — `_mul` is overridden to identity.**
+  The per-stock builder multiplies OHLC and both closes by 1000 because CafeF quotes a
+  share price in thousands of đồng. An index level is a pure number: ×1000 would store
+  VNINDEX as 1,824,090 instead of 1824.09 — internally consistent, plots fine, wrong by
+  10³. Neutralising `_mul` (rather than copying `_build_price_rows`) keeps the scaling
+  decision in exactly one place per class and stops the two paths drifting.
+- **⚠️ `VN100-INDEX`'s PRICE TAB STOPS AT 2025-04-29** while its order_stats and foreign
+  run to today. CafeF stopped serving that one series; it is not a scrape failure and no
+  symbol spelling recovers it (`vn100index` / `vn100` / `VN100` all return nothing).
+  It also has **129 rows in 2015 with `open`/`high`/`low` = 0** and only a close.
+- **⚠️ `prop_trading` IS EFFECTIVELY AN EXCHANGE-LEVEL SERIES.** VNINDEX, HNX-INDEX and
+  UPCOM-INDEX carry history from late 2022; the three sub-indices (VN30/VN100/HNX30)
+  hold only a 2026 trickle — VN100 exactly **one row**. A prop desk's trades are reported
+  per exchange, not per index basket. All six are queried anyway, so the files are the
+  honest record of what CafeF serves.
+- **⚠️ `order_stats` IS PARTLY ZERO-FILLED BY CAFEF.** VN30INDEX/VN100-INDEX return rows
+  whose every count is literally 0, and the HNX/UPCOM indices report `n_sell_orders`
+  while leaving `sell_order_vol` at 0. A zero here is CafeF's and is indistinguishable
+  from a real zero — check before treating these as a breadth signal.
+- **⚠️ `foreign` HAS REAL HOLES IN THE OLDER YEARS, and they are CafeF's.** Whole 2-month
+  windows return nothing while the price tab answers for the same index and the same
+  dates — deterministically, on repeated attempts, at every page and at 1-month
+  granularity. `foreign_room_left` / `foreign_own` are always 0 (an index has no foreign
+  ownership limit); the columns are kept for layout parity.
+- **The last row can be an UNFINISHED SESSION** — VNINDEX on the run date carried
+  `open`/`high`/`value_matched` = 0 with a live close. Same behaviour as the per-stock
+  price tab; drop the current day if a complete bar matters.
+- Both closes are kept although CafeF derives no dividend adjustment for an index. On
+  HOSE they are identical, but on **HNX/UPCOM `close_raw` carries full precision**
+  (HNX-INDEX 235.1647) where `close_adjust` is rounded to 2dp (235.16) — so the columns
+  are not redundant and `close_raw` is the better series for those three.
 
 ### CafeF PDFs — `cafef_pdf_scraper.py` (the filings themselves; requests, no PDF library)
 - **Why:** the filings are the PRIMARY source — CafeF's JSON financial API is a
@@ -1071,6 +1142,7 @@ Matches the bronze-source decision (memory `project-bronze-source-per-field`):
 |---|---|---|
 | OHLC / volume / foreign flow | **Simplize** | fully adjusted, true volume, most complete |
 | split-only / negotiated volume, raw vs adj close | **CafeF** | matched/negotiated split, `close_raw`/`close_adjust`, '000 VND |
+| market-index level + breadth | **CafeF** | the only source here for index-level order flow / prop / foreign (§3, *CafeF indices*) |
 | universe (which tickers exist) | **TradingView** | the link CSVs everyone else reads |
 | fundamentals as filed (the source of truth) | **CafeF PDFs** | the statements CafeF's own API transcribes; the only place its gaps exist |
 | news / disclosure events | **CafeF** | headline + body + filing PDF link, categorised |
@@ -1120,6 +1192,7 @@ IS the run plan. Truncate `logs/app.log` first; it is the only record of what ra
   |---|---|---|
   | `web_scraper/trading_view/{links,collected_links,data}/…` | TV, gated per `(asset, country, sector)` | varies |
   | `web_scraper/cafef/{price,order_stats,foreign,prop_trading,insider_txn}` | `CafeFScraper` daily tabs | whole universe |
+  | `web_scraper/cafef_index/{price,order_stats,foreign,prop_trading}` | `CafeFIndexScraper` | 6 indices — **minutes**, all four tabs |
   | `web_scraper/cafef/news` | `CafeFNewsScraper` | whole universe (already on disk) |
   | `web_scraper/cafef/pdfs` | `CafeFPdfScraper` | **~1.0-1.7 GB/ticker**, `CAFEF_PDF_TICKERS` = VN100 |
   | `web_scraper/cafef/financials` | `FinancialsBuilder.build_all` | **~2.4 h/ticker**, `CAFEF_FINANCIALS_TICKERS` = VCB+ACB |
@@ -1179,7 +1252,8 @@ IS the run plan. Truncate `logs/app.log` first; it is the only record of what ra
 ## 7. Gotchas
 
 - **Order matters:** CafeF/Simplize read TV's link CSVs for their universe — run TV
-  (at least the links phase) first, or they scrape nothing. The two newer CafeF scrapers do
+  (at least the links phase) first, or they scrape nothing. (`CafeFIndexScraper` is the
+  one exception — its universe is a fixed list, so it is order-independent.) The two newer CafeF scrapers do
   the same, but both take a `symbols=[(exchange, symbol), …]` override, which is how a run
   is scoped to VN30/VN100 instead of all ~777 codes.
 - **Everything is wired into `main.py` as of 2026-07-30.** `CafeFNewsScraper`,
@@ -1223,10 +1297,35 @@ IS the run plan. Truncate `logs/app.log` first; it is the only record of what ra
   `finally` (the links path uses `quit()`). `close()` can leak the driver process if
   it were the last window — harmless here because each data task uses its own driver,
   but worth knowing.
+- **⚠️ A SHORT PAGE FROM CAFEF IS NOT THE LAST PAGE — fixed 2026-07-30, and the
+  PER-STOCK CSVs ON DISK PREDATE THE FIX.** `_collect` / `_collect_paged` used to stop
+  paginating a window on `len(rec) < PageSize`, which is wrong: for HNX-INDEX over
+  `05/01/2026..07/06/2026` the price tab returns **19 rows on page 1** and then 20 and 6
+  on pages 2-3, so the short first page was read as end-of-data and 19 of 45 rows were
+  kept. It cost the HNX, HNX30 and UPCOM index price series **23 trading days each**,
+  recovered by the re-run (5,099 → 5,122 / 3,417 → 3,440 / 4,181 → 4,204).
+  Pagination now ends only on an EMPTY page or one contributing no new date.
+  - **It is silent, which is what makes it dangerous:** a truncated window is
+    indistinguishable from a market holiday once the CSV is written, and nothing in the
+    log fires — no request failed. It was found only by noticing that `prop_trading`
+    held 22 dates the price series lacked.
+  - **The same bug applied to every per-stock tab**, so `price/`, `foreign/`,
+    `order_stats/`, `prop_trading/` and `insider_txn/` on disk may each be missing rows
+    wherever CafeF served a short non-final page. They were scraped before the fix and
+    `skip_existing=True` will not refresh them — a re-scrape with `skip_existing=False`
+    is the only way to close it, and has NOT been done.
 - **CafeF needs UPPERCASE `ExchangeType`** for HNX/UPCOM tickers or it silently
   defaults to HOSE and returns empty.
 - **CafeF prices are '000 VND** — `_mul` ×1000 is applied to OHLC + both closes but
-  NOT to volumes/values (those come pre-scaled).
+  NOT to volumes/values (those come pre-scaled). **For an INDEX there is no ×1000 at
+  all** — the value is a point, not a price (§3, *CafeF indices*).
+- **⚠️ `value_matched` AND `value_negotiated` ARE IN DIFFERENT UNITS, in `price/` and
+  `index_price/` alike.** CafeF's `GiaTriKhopLenh` is **billions of VND** (VCB 319.09
+  for 4,951,400 shares at 64,400 đ; VNINDEX 19,127.05) while `GtThoaThuan` is **raw VND**
+  (1,235,389,240,000). Neither is scaled by the scraper, so the two columns of the same
+  row differ by 10⁹. This is pre-existing behaviour that bronze already ingests, so the
+  index folders mirror it deliberately rather than diverge — but anything comparing or
+  summing the two must convert first.
 - **`skip_existing=True`** on the CafeF/Simplize per-stock scrapes means re-running
   skips any ticker whose CSV already exists — delete the file (or pass `False`) to
   refresh. (CafeF now has one scrape per tab: `scrape_price/_foreign/_order_stats/
@@ -1247,6 +1346,12 @@ IS the run plan. Truncate `logs/app.log` first; it is the only record of what ra
   (`_ingest_silver_stocks`), not bronze. `order_stats/` / `prop_trading/` /
   `insider_txn/` reach bronze but are **not yet consumed by silver/gold** — turning
   them into signals is future preprocessor work.
+- **⚠️ THE FOUR `index_*/` FOLDERS ARE SCRAPED BUT NOT INGESTED.** Nothing in
+  `data_preprocessor` reads them yet — there is no `_ingest_bronze_cafef_index_*` and no
+  bronze table. They are raw-data-complete and downstream-invisible until that is
+  written, which also needs a decision the stock path did not: the `symbol` column holds
+  an INDEX code, not a ticker, so these must not be unioned into `cafef_price` or they
+  will appear as six phantom stocks in `silver.stocks_basic`.
 
 ## 8. Index-membership reference files — `vn30.csv` / `vn100.csv` (repo root)
 

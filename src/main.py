@@ -3,6 +3,7 @@
 from logger.logger import LogType, Logger
 from web_scraper.trading_view_scraper import TradingViewScraper
 from web_scraper.cafef_scraper import CafeFScraper
+from web_scraper.cafef_index_scraper import CafeFIndexScraper
 from web_scraper.cafef_news_scraper import CafeFNewsScraper
 from web_scraper.cafef_pdf_scraper import CafeFPdfScraper
 from web_scraper.cafef_financials import FinancialsBuilder
@@ -32,6 +33,11 @@ def main():
     # CafeF fills the per-stock fields TradingView lacks (raw/adjusted close,
     # matched/negotiated volume, foreign flow); depends on the links above.
     CafeFScraper(logger=my_logger, switch_handler=my_switch_handler).scrape()
+
+    # The same CafeF tabs for the six MARKET INDICES (VNINDEX, VN30, VN100, HNX,
+    # HNX30, UPCOM). Independent of the TradingView links — an index has no link CSV,
+    # so its universe is the fixed list on the class and this can run standalone.
+    CafeFIndexScraper(logger=my_logger, switch_handler=my_switch_handler).scrape()
 
     # CafeF company news / disclosure feed — an event stream, not a daily series, so it
     # is a separate scraper on its own leaf (`web_scraper/cafef/news`).
