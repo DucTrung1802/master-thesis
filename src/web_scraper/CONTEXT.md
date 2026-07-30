@@ -1346,12 +1346,17 @@ IS the run plan. Truncate `logs/app.log` first; it is the only record of what ra
   (`_ingest_silver_stocks`), not bronze. `order_stats/` / `prop_trading/` /
   `insider_txn/` reach bronze but are **not yet consumed by silver/gold** — turning
   them into signals is future preprocessor work.
-- **⚠️ THE FOUR `index_*/` FOLDERS ARE SCRAPED BUT NOT INGESTED.** Nothing in
-  `data_preprocessor` reads them yet — there is no `_ingest_bronze_cafef_index_*` and no
-  bronze table. They are raw-data-complete and downstream-invisible until that is
-  written, which also needs a decision the stock path did not: the `symbol` column holds
-  an INDEX code, not a ticker, so these must not be unioned into `cafef_price` or they
-  will appear as six phantom stocks in `silver.stocks_basic`.
+- **The four `index_*/` folders REACH BRONZE as of 2026-07-30** —
+  `_ingest_bronze_cafef_index_{price,foreign,order_stats,prop_trading}` →
+  `bronze.cafef_index_*`, PK `(exchange, ticker, date)`, gated by
+  `data_preprocessor/data_quality_bronze/cafef_index_*`. Because this scraper subclasses
+  the stock one and reuses its column constants, the ingests are thin wrappers on the
+  same `_ingest_bronze_cafef_daily` helper with the same cast lists.
+  **⚠️ THEY ARE SEPARATE TABLES AND MUST STAY THAT WAY.** `ticker` holds an INDEX code,
+  not a company, so unioning them into `cafef_price` would put six phantom stocks into
+  `silver.stocks_basic` with NULL GICS classes and carry them into every cross-sectional
+  model. An index is a different GRAIN, not another ticker. Nothing in silver or gold
+  reads them yet — that is the open work.
 
 ## 8. Index-membership reference files — `vn30.csv` / `vn100.csv` (repo root)
 

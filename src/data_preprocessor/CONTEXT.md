@@ -14,6 +14,7 @@ raw_data/<source>/*.csv,*.xlsx           (produced by src/web_scraper)
         ▼   ingest_bronze_data()   ← load CSVs as-is, one bronze table per source/tab
   bronze_schema:  trading_view_{bonds,economy,forex,funds,indices,stocks},
                   cafef_{price,foreign,order_stats,prop_trading},
+                  cafef_index_{price,foreign,order_stats,prop_trading}  (6 MARKET INDICES),
                   cafef_insider_shareholder_transactions, cafef_news,
                   cafef_financial_{templates,schema,reports},
                   cafef_financials_<template>_<report>   (4 templates x 3 reports),
@@ -133,6 +134,32 @@ DTO helpers come from
   - `cafef_foreign` — foreign buy/sell/net flow (vol+val), `foreign_room_left`, `foreign_own`. PK `(exchange, ticker, date)`.
   - `cafef_order_stats` — buy/sell order counts, volume, avg vol/order. PK `(exchange, ticker, date)`.
   - `cafef_prop_trading` — proprietary-desk buy/sell vol+val. PK `(exchange, ticker, date)`.
+- **CafeF MARKET INDICES — the same four tabs, four more tables** (added 2026-07-30):
+  `cafef_index_{price,foreign,order_stats,prop_trading}`, from the `index_*/` folders
+  `CafeFIndexScraper` writes. That scraper **subclasses the stock one and reuses its
+  column constants**, so the folders are column-identical to their per-stock twins and
+  these ingests are thin wrappers on the SAME `_ingest_bronze_cafef_daily` with the same
+  cast lists and `split_key=True`. PK `(exchange, ticker, date)`. Six indices: `VNINDEX`,
+  `VN30INDEX`, `VN100-INDEX` (HOSE), `HNX-INDEX`, `HNX30-INDEX` (HNX), `UPCOM-INDEX`.
+  - **⚠️ SEPARATE TABLES ON PURPOSE — NEVER UNION THESE INTO THE STOCK ONES.** `ticker`
+    holds an INDEX CODE, not a company. Appended to `cafef_price` the six would surface
+    as phantom stocks in `silver.stocks_basic`, pick up NULL GICS classes, and flow into
+    every downstream cross-sectional model as if they were tradeable names. An index is a
+    different GRAIN, not another ticker. (Verified after the ingest: 0 index-coded rows in
+    any of the four stock tables.)
+  - **⚠️ The values are ALREADY correctly scaled — do not add a `_mul`.** The scraper
+    neutralises its ×1000 because an index level is a POINT, not '000 VND; VNINDEX's first
+    row is the base `100.0` on 2000-07-28, HOSE's opening day. Storing ×1000 would give
+    1,824,090 for a 1824.09 close — internally consistent, plots fine, wrong by 10³.
+  - **⚠️ Three of the four carry holes that are CAFEF'S, and bronze is faithful to them**
+    (see `web_scraper/CONTEXT.md §3`): `VN100-INDEX`'s price stops dead at **2025-04-29**;
+    `order_stats` is **literally zero-filled** for VN30INDEX/VN100-INDEX and leaves
+    `sell_order_vol` 0 on the HNX/UPCOM indices; `prop_trading` is effectively
+    **exchange-level** (VN100-INDEX has ONE row) because a prop desk reports per exchange,
+    not per index basket. A consumer reading those zeros as data gets a breadth signal made
+    of CafeF's padding. `foreign_room_left`/`foreign_own` are always 0 — an index has no
+    ownership limit; the columns exist for layout parity.
+  - Not read by silver or gold yet.
   - `cafef_insider_shareholder_transactions` — registered vs executed buy/sell by
     insiders, related persons and major shareholders (from the `insider_txn/`
     folder). **Event-based** (no natural date key) → deterministic **md5 `row_id`
@@ -478,6 +505,7 @@ that log is the only record of what actually ran.
     scraper branch unreachable until 2026-07-30.
 - **⚠️ BRONZE IS ONE LEAF PER SOURCE TABLE** (since 2026-07-30) — `trading_view_stocks`,
   `cafef_{price,foreign,order_stats,prop_trading,insider_txn,news,financials}`,
+  `cafef_index_{price,foreign,order_stats,prop_trading}`,
   `simplize_{stocks,industry}`, `gics`. The **single `.../bronze/stocks` leaf is GONE**:
   it fired all ten ingests, so re-reading the financials CSVs (~1 s) also meant
   re-reading 2.4 M CafeF price rows and 2.7 M Simplize rows. Bronze has **no
@@ -610,9 +638,15 @@ that log is the only record of what actually ran.
 > statement table, 456 reports). Verified cell-by-cell against the raw CSVs — 152 rows ×
 > 89/28/39 numeric columns, **0 mismatches**, 0 duplicate keys, `source='missing'`
 > blank-but-keyed rows intact. Every other bronze table is untouched by that run.
+>
+> **2026-07-30, later:** the four **`cafef_index_*`** tables were added (69,866 rows over
+> the 6 market indices). Verified against the raw CSVs — row counts equal, **0 mismatches**
+> across every numeric column, 0 duplicate keys, index levels confirmed unscaled (VNINDEX
+> opens at the base 100.0 on HOSE's opening day), and **0 index-coded rows in any of the
+> four per-stock tables**.
 
-`bronze_schema` in `database_main_v2` — **21 tables** (15 + the 6 financials tables
-that exist so far; 30 once all four templates are parsed):
+`bronze_schema` in `database_main_v2` — **25 tables** (counts below re-read live from
+`information_schema` on 2026-07-30; 34 once all four financials templates are parsed):
 
 | Table | Rows | Notes |
 |---|---:|---|
@@ -622,10 +656,14 @@ that exist so far; 30 once all four templates are parsed):
 | `trading_view_funds` | 18,662 | |
 | `trading_view_indices` | 24,095 | |
 | `trading_view_stocks` | 1,312,523 | universe + sector fallback |
-| `cafef_price` | 2,388,368 | daily `(symbol, date)` |
-| `cafef_foreign` | 1,772,666 | daily `(symbol, date)` |
-| `cafef_order_stats` | 320,838 | daily; now joined into silver.stocks_basic |
-| `cafef_prop_trading` | 64,139 | daily; now joined into silver.stocks_basic |
+| `cafef_price` | 2,388,368 | daily `(exchange, ticker, date)` |
+| `cafef_foreign` | 1,772,666 | daily `(exchange, ticker, date)` |
+| `cafef_order_stats` | 351,373 | daily; joined into silver.stocks_basic |
+| `cafef_prop_trading` | 64,139 | daily; joined into silver.stocks_basic |
+| `cafef_index_price` | 24,962 | **6 MARKET INDICES**, 2000-07-28 → today; VN100-INDEX stops 2025-04-29 |
+| `cafef_index_order_stats` | 22,863 | 6 indices; ⚠️ zero-filled for VN30/VN100 |
+| `cafef_index_foreign` | 20,547 | 6 indices; ⚠️ real holes in the older years (CafeF's) |
+| `cafef_index_prop_trading` | 1,494 | 6 indices; ⚠️ effectively exchange-level (VN100-INDEX = 1 row) |
 | `cafef_insider_shareholder_transactions` | 13,607 | event-based, `row_id` PK; carried 1:1 to silver (own method) |
 | `cafef_news` | 5,599 | event-based, `row_id` PK, `(exchange, ticker)` key; **VCB/PNJ/FPT only** (1,629 / 1,715 / 2,255) — the scraper has run on 3 tickers; not yet in silver |
 | `cafef_financials_bank_balance_sheet` | 152 | 100 cols (incl. 3 share cols); VCB 78 (Q4-2006→Q1-2026) + ACB 74 (Q1-2008→Q2-2026) |
@@ -633,7 +671,7 @@ that exist so far; 30 once all four templates are parsed):
 | `cafef_financials_bank_cash_flow` | 152 | 57 cols (incl. 3 share cols); VCB 78 + ACB 74 |
 | `cafef_financial_reports` | 456 | 152 quarters × 3 reports; **15 cols** (gained `method`, the OCR layer that read the filing); `publish_date` on 408/456 |
 | `cafef_financial_schema` | 842 | all 12 charts of accounts (753 distinct line ids) |
-| `cafef_financial_templates` | 1 | VCB → `bank` / direct; grows with the parse |
+| `cafef_financial_templates` | 2 | VCB + ACB → `bank` / direct; grows with the parse. ⚠️ the on-disk `templates.csv` holds only ACB (a subset parse rewrote it); the TABLE has both because the ingest upserts |
 | `simplize_stocks` | 2,658,773 | PRIMARY daily backbone |
 | `simplize_industry` | 777 | per-ticker GICS industry |
 | `gics` | 163 | official sub-industry taxonomy |

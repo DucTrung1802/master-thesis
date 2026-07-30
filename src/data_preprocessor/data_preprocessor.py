@@ -1097,6 +1097,101 @@ class DataPreprocessor:
             split_key=True,
         )
 
+    # ── CafeF MARKET INDICES — the same four daily tabs, for the six indices ──────
+    # `CafeFIndexScraper` writes `index_<tab>/` folders that are COLUMN-IDENTICAL to the
+    # per-stock ones (it subclasses the stock scraper and reuses its column constants),
+    # so these reuse `_ingest_bronze_cafef_daily` unchanged — same cast lists, same
+    # `split_key=True`, same PK. Only the folder and the table name differ.
+    #
+    # ⚠️ THEY GET THEIR OWN TABLES AND MUST NEVER BE UNIONED INTO THE STOCK ONES.
+    # `ticker` here holds an INDEX CODE (`VNINDEX`, `VN30INDEX`, `VN100-INDEX`,
+    # `HNX-INDEX`, `HNX30-INDEX`, `UPCOM-INDEX`), not a company. Appended to
+    # `cafef_price` the six would surface as phantom stocks in `silver.stocks_basic`,
+    # pick up NULL GICS classes, and flow into every downstream cross-sectional model as
+    # if they were tradeable names. An index is a different GRAIN, not another ticker.
+    #
+    # ⚠️ The values are ALREADY correctly scaled — the scraper neutralises its `_mul`
+    # because an index level is a point, not '000 VND (VNINDEX's first row is the base,
+    # 100.0, on HOSE's opening day). Nothing here re-scales; don't add it.
+    #
+    # ⚠️ Three of the four series carry holes that are CAFEF'S, not ingest failures, and
+    # bronze is faithful to them (see web_scraper/CONTEXT.md §3, *CafeF indices*):
+    # VN100-INDEX's price stops at 2025-04-29; `order_stats` is literally zero-filled for
+    # VN30INDEX/VN100-INDEX and leaves `sell_order_vol` 0 on the HNX/UPCOM indices;
+    # `prop_trading` is effectively exchange-level (VN100-INDEX has ONE row). A consumer
+    # that reads those zeros as data gets a breadth signal made of CafeF's padding.
+
+    def _ingest_bronze_cafef_index_price(self) -> None:
+        """Index price tab — OHLC + both closes as index POINTS, plus matched/negotiated
+        volume and value. On HNX/UPCOM `close_raw` carries full precision where
+        `close_adjust` is rounded to 2dp, so the two are not redundant there.
+        PK (exchange, ticker, date)."""
+        self._ingest_bronze_cafef_daily(
+            folder="index_price",
+            table_name="cafef_index_price",
+            decimal_cols=[
+                "open",
+                "high",
+                "low",
+                "close_raw",
+                "close_adjust",
+                "value_matched",
+                "value_negotiated",
+            ],
+            bigint_cols=["volume_matched", "volume_negotiated"],
+            required_col="close_adjust",
+            split_key=True,
+        )
+
+    def _ingest_bronze_cafef_index_foreign(self) -> None:
+        """Index foreign-trading tab. `foreign_room_left` / `foreign_own` are always 0 —
+        an index has no ownership limit; the columns exist for layout parity with
+        `cafef_foreign`. PK (exchange, ticker, date)."""
+        self._ingest_bronze_cafef_daily(
+            folder="index_foreign",
+            table_name="cafef_index_foreign",
+            decimal_cols=[
+                "foreign_buy_value",
+                "foreign_sell_value",
+                "foreign_net_value",
+                "foreign_own",
+            ],
+            bigint_cols=[
+                "foreign_buy_volume",
+                "foreign_sell_volume",
+                "foreign_net_volume",
+                "foreign_room_left",
+            ],
+            split_key=True,
+        )
+
+    def _ingest_bronze_cafef_index_order_stats(self) -> None:
+        """Index order-placement stats — the whole market's order book aggregated.
+        PK (exchange, ticker, date)."""
+        self._ingest_bronze_cafef_daily(
+            folder="index_order_stats",
+            table_name="cafef_index_order_stats",
+            decimal_cols=["avg_vol_per_buy_order", "avg_vol_per_sell_order"],
+            bigint_cols=[
+                "n_buy_orders",
+                "buy_order_vol",
+                "n_sell_orders",
+                "sell_order_vol",
+            ],
+            split_key=True,
+        )
+
+    def _ingest_bronze_cafef_index_prop_trading(self) -> None:
+        """Index proprietary-desk trades. Effectively an EXCHANGE-level series — the
+        three sub-indices hold almost nothing. PK (exchange, ticker, date)."""
+        self._ingest_bronze_cafef_daily(
+            folder="index_prop_trading",
+            table_name="cafef_index_prop_trading",
+            decimal_cols=["prop_buy_val", "prop_sell_val"],
+            bigint_cols=["prop_buy_vol", "prop_sell_vol"],
+            split_key=True,
+        )
+
     def _ingest_bronze_cafef_insider_shareholder_transactions(self) -> None:
         """CafeF insider & major-shareholder transactions — registered (planned) vs
         actually-executed buy/sell by insiders, related persons and major
@@ -3403,6 +3498,16 @@ class DataPreprocessor:
                     ("cafef_foreign", self._ingest_bronze_cafef_foreign),
                     ("cafef_order_stats", self._ingest_bronze_cafef_order_stats),
                     ("cafef_prop_trading", self._ingest_bronze_cafef_prop_trading),
+                    ("cafef_index_price", self._ingest_bronze_cafef_index_price),
+                    ("cafef_index_foreign", self._ingest_bronze_cafef_index_foreign),
+                    (
+                        "cafef_index_order_stats",
+                        self._ingest_bronze_cafef_index_order_stats,
+                    ),
+                    (
+                        "cafef_index_prop_trading",
+                        self._ingest_bronze_cafef_index_prop_trading,
+                    ),
                     (
                         "cafef_insider_txn",
                         self._ingest_bronze_cafef_insider_shareholder_transactions,
