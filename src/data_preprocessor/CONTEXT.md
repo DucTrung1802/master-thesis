@@ -526,6 +526,35 @@ DTO helpers come from
     `_ingest_gold_table(table_name="stocks", silver_table_name="stocks_basic")`.
 
 ### Gold (`_ingest_gold_*`) — feature engineering
+- **`stock_market` — the WIDE index panel (2026-08-01).** `silver.stock_market` →
+  `gold.stock_market`: **one row per TRADING DAY** (PK `date`), one column per
+  index × measure named `{exchange}__{ticker}__{measure}` —
+  `hose__vnindex__close_adjust`, `hnx__hnx_index__n_buy_orders`. **6,339 days ×
+  162 columns** (6 indices × 27 measures), 2000-07-28 → 2026-07-30.
+  - ⚠️ **THE TICKERS CONTAIN HYPHENS AND POSTGRESQL CANNOT.** `HNX-INDEX`,
+    `VN100-INDEX`, `HNX30-INDEX`, `UPCOM-INDEX` are real index codes, but `hnx-index`
+    unquoted parses as `hnx MINUS index` — and `_helper_build_upsert_sql` interpolates
+    column names **unquoted**. Hyphens become underscores, and the result is checked for
+    collisions: sanitising two indices into one column name would merge them silently.
+    Verified distinct: `hnx_index`, `hnx30_index`, `upcom_index`, `vn100_index`,
+    `vn30index`, `vnindex`.
+  - ⚠️ **NO as-of fill, unlike `gold.economy`** — and the difference is the source, not
+    a preference. Macro series are published on a lag and are stale-but-valid between
+    releases. An index either traded that day or it did not: a gap means VN100-INDEX did
+    not exist yet (it starts 2014-02) or that tab has no record, so filling it would
+    invent prices for days the market was shut. NULL stays NULL, which is why the panel
+    is 34-71% filled per index — each index simply starts on a different day.
+  - **DECIMAL, not REAL.** `gold.economy` is REAL because 1,034 float8 columns would
+    exceed PostgreSQL's ~8 kB row limit; at 162 columns there is no such pressure, and
+    `value_matched` reaches ~1e12 where REAL's ~7 significant digits lose thousands.
+    So this panel round-trips EXACTLY.
+  - The calendar is the distinct dates in silver, not a synthetic `bdate_range` —
+    Vietnamese exchange holidays are not weekends.
+  - An invariant check **raises** if the pivot's non-null cell count differs from the
+    observation count going in.
+  - **Verified**: 532,188 observations compared, **0 missing, 0 value mismatches**, and
+    gold holds exactly 532,188 cells. Max column name 42 bytes.
+
 - **`economy` — the WIDE macro panel (2026-08-01).** `silver.economy` +
   `silver.economy_series` → `gold.economy`: **one row per BUSINESS DAY** (PK
   `date`), one column per series named

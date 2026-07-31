@@ -1,9 +1,20 @@
 # orchestration\assets\gold.py
 """The GOLD layer — `silver_schema` → `gold_schema`.
 
-One asset: `gold/economy`, the WIDE macro panel — one row per business day, one
-column per series, named
-`{country}__{scrape_main_type}__{category}__{exchange}__{ticker}`.
+Two assets, both WIDE — one row per date, one column per (entity × measure):
+
+* `gold/economy` — the macro panel, `{country}__{scrape_main_type}__{category}__{exchange}__{ticker}`,
+  one row per BUSINESS DAY, as-of filled.
+* `gold/stock_market` — the six market indices, `{exchange}__{ticker}__{measure}`, one
+  row per TRADING DAY, **not** filled.
+
+⚠️ **Why one is filled and the other is not.** Macro series are published on a lag and
+are stale-but-valid between releases, so carrying them forward is what a reader would
+actually know. An index either traded that day or it did not — a gap means VN100-INDEX
+did not exist yet (it starts 2014), and filling it would invent prices for days the
+market was shut.
+
+The macro panel below:
 
 ⚠️ **This is the layer where the wide shape belongs, and the reason is not aesthetics.**
 Every step that makes the panel usable is a MODELLING decision, and gold is the layer
@@ -99,4 +110,53 @@ def gold_economy(
     )
 
 
-assets: List[Callable] = [gold_economy]
+@asset(
+    name="stock_market",
+    key_prefix=["gold"],
+    group_name="gold",
+    compute_kind="postgres",
+    deps=[AssetKey(["silver", "stock_market"])],
+    description=(
+        "silver.stock_market → gold.stock_market: ONE ROW PER TRADING DAY (PK `date`), "
+        "one column per index × measure named `{exchange}__{ticker}__{measure}` — "
+        "6 indices × 27 measures. ⚠️ Hyphenated tickers (HNX-INDEX, VN100-INDEX) are "
+        "sanitised to underscores because PostgreSQL cannot take a hyphen in an "
+        "unquoted identifier; collisions are checked. No as-of fill: a gap means the "
+        "index did not trade, not that the value is stale."
+    ),
+)
+def gold_stock_market(
+    context: AssetExecutionContext, preprocessor: PreprocessorResource
+) -> MaterializeResult:
+    with preprocessor.session(schema="gold_schema") as prep:
+        prep._ingest_gold_stock_market()
+
+        with prep._database_driver._cursor_ctx() as cur:
+            cur.execute("SELECT COUNT(*) FROM gold_schema.stock_market")
+            rows = int(cur.fetchone()[0])
+            cur.execute(
+                "SELECT COUNT(*) FROM information_schema.columns WHERE "
+                "table_schema = 'gold_schema' AND table_name = 'stock_market'"
+            )
+            columns = int(cur.fetchone()[0])
+            cur.execute("SELECT MIN(date), MAX(date) FROM gold_schema.stock_market")
+            first, last = cur.fetchone()
+            cur.execute("SELECT COUNT(*) FROM silver_schema.stock_market")
+            silver_rows = int(cur.fetchone()[0])
+
+    context.log.info(
+        f"gold.stock_market: {rows} trading days × {columns - 1} columns "
+        f"(silver holds {silver_rows} index-days)"
+    )
+    return MaterializeResult(
+        metadata={
+            "rows": rows,
+            "columns": columns - 1,
+            "silver_index_days": silver_rows,
+            "date_range": MetadataValue.text(f"{first} → {last}"),
+            "table": MetadataValue.text("gold_schema.stock_market"),
+        }
+    )
+
+
+assets: List[Callable] = [gold_economy, gold_stock_market]

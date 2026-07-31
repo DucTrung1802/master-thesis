@@ -3967,6 +3967,140 @@ class DataPreprocessor:
             use_copy=True,
         )
 
+    # ── gold.stock_market — the WIDE index panel ─────────────────────────────────
+    #
+    #     {exchange}__{ticker}__{measure}
+    #     hose__vnindex__close_adjust,  hnx__hnx_index__n_buy_orders
+    #
+    # Same `__` convention as gold.economy: the values contain single underscores
+    # (`close_adjust`, `n_buy_orders`), so only a double underscore can be split back.
+    #
+    # ⚠️ THE TICKERS CONTAIN HYPHENS AND POSTGRES CANNOT. `HNX-INDEX`, `VN100-INDEX`,
+    # `HNX30-INDEX` and `UPCOM-INDEX` are real index codes, but `hnx-index` unquoted
+    # parses as `hnx MINUS index` - and `_helper_build_upsert_sql` interpolates column
+    # names UNQUOTED. Hyphens therefore become underscores, and the result is checked
+    # for collisions: sanitising two different tickers into one column name would merge
+    # two indices silently.
+    GOLD_MARKET_NAME_SEP = "__"
+
+    def _sanitize_identifier(self, value: str) -> str:
+        """Lowercase, and turn anything PostgreSQL cannot take unquoted into `_`."""
+        out = "".join(
+            ch if (ch.isalnum() or ch == "_") else "_" for ch in str(value).strip().lower()
+        )
+        return out if (out and not out[0].isdigit()) else f"i_{out}"
+
+    def _ingest_gold_stock_market(self) -> None:
+        """`silver.stock_market` -> `gold.stock_market`: **one row per DATE**, PK `date`,
+        one column per (index x measure) named `{exchange}__{ticker}__{measure}`.
+
+        6 indices x 27 measures = 162 columns on the trading-day calendar the data
+        itself defines (the distinct dates in silver), not a synthetic business-day
+        range - Vietnamese exchange holidays are not weekends.
+
+        ⚠️ **NO as-of fill here, unlike `gold.economy`, and the difference is the
+        source.** Macro series are published on a lag and are *stale but valid* between
+        releases, so carrying them forward is what a reader would know. An index either
+        traded on a day or it did not: a gap means VN100-INDEX did not exist yet
+        (it starts 2014) or that tab has no record, and forward-filling would invent
+        prices for days the market was shut. NULL stays NULL.
+
+        ⚠️ **Column types are inferred (DECIMAL), not forced to REAL.** `gold.economy`
+        uses REAL because 1,034 float8 columns would exceed PostgreSQL's ~8 kB row limit;
+        at 162 columns there is no such pressure, and `value_matched` reaches ~1e12 where
+        REAL's ~7 significant digits would start losing whole thousands.
+        """
+        self._logger.log_info("Ingesting gold stock_market (wide, 1 row per date)...")
+
+        KEYS = ["exchange", "ticker", "date"]
+
+        df = self._helper_select(schema_name=SILVER_SCHEMA, table_name="stock_market")
+        if df.empty:
+            raise MissingSourceDataError(
+                f"{SILVER_SCHEMA}.stock_market is empty - run the silver stock_market "
+                f"ingest first."
+            )
+
+        df["date"] = pd.to_datetime(df["date"]).dt.date
+        measures = [c for c in df.columns if c not in KEYS]
+
+        # Cast before melting: the driver hands back `numeric` as Decimal (object
+        # dtype), and a melted object column would land in gold as VARCHAR.
+        decimal_cols, bigint_cols = [], []
+        for dec, big in self.INDEX_TABS.values():
+            decimal_cols += dec
+            bigint_cols += big
+        df = self._helper_cast_columns(
+            df,
+            decimal_cols=[c for c in decimal_cols if c in df.columns],
+            bigint_cols=[c for c in bigint_cols if c in df.columns],
+        )
+
+        long = df.melt(
+            id_vars=KEYS, value_vars=measures, var_name="measure", value_name="value"
+        ).dropna(subset=["value"])
+
+        sep = self.GOLD_MARKET_NAME_SEP
+        long["column"] = (
+            long["exchange"].map(self._sanitize_identifier)
+            + sep
+            + long["ticker"].map(self._sanitize_identifier)
+            + sep
+            + long["measure"].map(self._sanitize_identifier)
+        )
+
+        # Sanitising must not merge two indices into one column, and the result must fit
+        # PostgreSQL's identifier limit. Both are checked, not assumed.
+        pairs = long[["exchange", "ticker", "measure", "column"]].drop_duplicates()
+        collided = pairs.groupby("column").size()
+        collided = collided[collided > 1]
+        if len(collided):
+            raise PipelineError(
+                f"gold.stock_market: {len(collided)} column name(s) are produced by more "
+                f"than one (exchange, ticker, measure) - sanitising merged distinct "
+                f"indices, e.g. {list(collided.index[:3])}. Rename before publishing."
+            )
+        too_long = [
+            c for c in pairs["column"].unique()
+            if len(c.encode()) > self.PG_IDENTIFIER_LIMIT
+        ]
+        if too_long:
+            raise PipelineError(
+                f"{len(too_long)} gold.stock_market column name(s) exceed PostgreSQL's "
+                f"{self.PG_IDENTIFIER_LIMIT}-byte identifier limit and would be "
+                f"TRUNCATED SILENTLY, e.g. {sorted(too_long)[:3]}."
+            )
+
+        wide = long.pivot(index="date", columns="column", values="value")
+        wide = wide.sort_index().reset_index()
+        wide.columns.name = None
+
+        # Nothing may be lost on the way through: one non-null cell per observation.
+        landed = int(wide.drop(columns=["date"]).notna().sum().sum())
+        if landed != len(long):
+            raise PipelineError(
+                f"gold.stock_market: {len(long)} observations went into the pivot but "
+                f"{landed} cells came out. A duplicate (exchange, ticker, date, measure) "
+                f"in silver.stock_market is the usual cause."
+            )
+
+        cells = len(wide) * (len(wide.columns) - 1)
+        self._logger.log_info(
+            f"gold stock_market: {len(wide)} trading days x {len(wide.columns) - 1} "
+            f"columns, {landed} observations "
+            f"({100.0 * landed / max(cells, 1):.1f}% of cells filled)."
+        )
+
+        self._database_driver.drop_table(GOLD_SCHEMA, "stock_market")
+        self._helper_save_pandas_table_to_database(
+            schema_name=GOLD_SCHEMA,
+            table_name="stock_market",
+            primary_keys=["date"],
+            df=wide,
+            dtype_overrides={"date": DataType.DATE()},
+            chunk_size=1_000,
+        )
+
     def _ingest_gold_stocks(self) -> None:
         # Reads silver `stocks_basic` (the CafeF panel + GICS tree), writes gold `stocks`.
         self._ingest_gold_table(

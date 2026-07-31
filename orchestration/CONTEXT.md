@@ -1,9 +1,9 @@
 # Context — `orchestration` (Dagster migration of `src/main.py`)
 
 > Handoff notes. **Status (2026-08-01): the LANDING layer and the whole BRONZE layer are
-> assets and have both been materialised green; silver has 3 and gold 1.** 43 assets.
+> assets and have both been materialised green; silver has 3 and gold 2.** 44 assets.
 > `src/main.py` is untouched and still runs the pipeline the old way. What is left is
-> silver (12 of 15) and gold (5 of 6) — see §4. Verify anything before acting on it: the code
+> silver (12 of 15) and gold (4 of 6) — see §4. Verify anything before acting on it: the code
 > and `src/switch_config.json` are still the sources of truth.
 
 ## 1. Why this is worth doing
@@ -32,10 +32,10 @@ PARTITIONS of two assets, not 320 assets. The remaining 61 map to ~55-65 assets.
 
 ## 2. What exists — LANDING + BRONZE complete, silver started (2026-08-01)
 
-**43 assets: 19 landing + 20 bronze + 3 silver + 1 gold.** Every scraper in `main.py` lands to
+**44 assets: 19 landing + 20 bronze + 3 silver + 2 gold.** Every scraper in `main.py` lands to
 `raw_data/` as an asset ([assets/scrape.py](assets/scrape.py)); every bronze ingest leaf
 is an asset ([assets/bronze.py](assets/bronze.py), 20 leaves → 25 tables); silver has
-three ([assets/silver.py](assets/silver.py)) and gold one ([assets/gold.py](assets/gold.py)).
+three ([assets/silver.py](assets/silver.py)) and gold two ([assets/gold.py](assets/gold.py)).
 They are separate modules on purpose: the
 landing layer is correct-on-disk and re-runnable with no database at all.
 
@@ -64,7 +64,7 @@ gics_structure
 | `gics` | structure | — |
 | `bronze` | **all 20 ingest leaves** (25 tables) | — |
 | `silver` | `economy` (long fact), `economy_series` (dimension), `stock_market` (4 index tabs joined) | — |
-| `gold` | `economy` (wide, as-of) | — |
+| `gold` | `economy` (wide, as-of), `stock_market` (wide, unfilled) | — |
 
 ### ⚠️ The edges, read out of the code (2026-07-31 correction)
 
@@ -245,7 +245,7 @@ split across the two modules.
 
 | claim | how it was checked | result |
 |---|---|---|
-| the flat `src/` layout can be imported by Dagster | `dagster definitions validate` | passes, **43 assets** (19 landing + 20 bronze + 3 silver + 1 gold), all code locations OK |
+| the flat `src/` layout can be imported by Dagster | `dagster definitions validate` | passes, **44 assets** (19 landing + 20 bronze + 3 silver + 2 gold), all code locations OK |
 | partitions resolve | reading the definitions back | TV **9**, pdfs **100**, financials **2** (`HOSE_VCB`, `HOSE_ACB`) |
 | the index scrape assets run | `--select "group:cafef_index"` | 4/4 green |
 | the TradingView path works incl. `build_unblocked` | `--select "raw/trading_view_collected_links"` | green, rewrote `all_links_2026-06-26.csv` (313 KB) |
@@ -380,7 +380,7 @@ UI, from `*`, and from every selection. Reserve this for "must never load in thi
 "raw/cafef_news": false
 ```
 
-All 43 keys are listed in the file as a menu, grouped by source, with `//` comment keys
+All 44 keys are listed in the file as a menu, grouped by source, with `//` comment keys
 marking the expensive ones (same comment convention as `switch_config.json`).
 `true` or **absent** = loaded, so a newly added asset is on by default.
 
@@ -388,10 +388,10 @@ Behaviour, all verified:
 
 | case | result |
 |---|---|
-| one key `false` | that asset not loaded (43 → 42); `//` comment keys ignored |
+| one key `false` | that asset not loaded (44 → 43); `//` comment keys ignored |
 | a key matching no asset | **raises**, listing the valid keys |
 | malformed JSON | **raises** — never read as "disable everything" |
-| file absent | 43 assets — absent means "no opinion", not "all off" |
+| file absent | 44 assets — absent means "no opinion", not "all off" |
 | file with a **BOM** | handled (`utf-8-sig`) |
 
 The last three are direct lessons from `switch_config.json`:
@@ -529,6 +529,33 @@ VN100-INDEX. An invariant check raises if the join count ever differs from the k
 
 ⚠️ **`ticker` here is an INDEX CODE, not a company.** This table must never be unioned
 into `silver.stocks_basic`.
+
+### `gold/stock_market` — the index panel, 1 row per trading day (2026-08-01)
+
+```powershell
+dagster asset materialize -f orchestration/definitions.py --select "gold/stock_market"
+```
+
+| check | result |
+|---|---|
+| materialised | **RUN_SUCCESS, 4.2 s** |
+| shape | **6,339 trading days × 162 columns** (6 indices × 27 measures), PK `date` unique |
+| naming | `{exchange}__{ticker}__{measure}`, max 42 bytes, all identifier-safe |
+| **exact round-trip** | 532,188 observations compared vs silver — **0 missing, 0 mismatches** |
+
+⚠️ **Hyphens.** `HNX-INDEX` / `VN100-INDEX` / `HNX30-INDEX` / `UPCOM-INDEX` cannot be
+unquoted PostgreSQL identifiers (`hnx-index` parses as subtraction) and
+`_helper_build_upsert_sql` does not quote. They are sanitised to underscores and the
+result is **collision-checked**, because merging two indices into one column would be
+silent.
+
+⚠️ **No as-of fill here, unlike `gold/economy`.** Macro series are stale-but-valid
+between releases; an index either traded or it did not. Filling would invent prices for
+days the market was shut — so the panel is 34-71% filled per index, which is just each
+index starting on a different day (VNINDEX 2000-07, VN100-INDEX 2014-02).
+
+**DECIMAL, not REAL:** at 162 columns there is no row-size pressure, and `value_matched`
+reaches ~1e12 where REAL would lose thousands. Hence the exact round-trip above.
 
 ## 2a. Cost of a full materialize (2026-07-31)
 
@@ -754,7 +781,7 @@ than either alone.
 | phase | scope | estimate |
 |---|---|---|
 | 0 | exception propagation | ✅ **done** |
-| 1 | preprocessor, ~41 assets | bronze ✅ **done**; silver 3/15, gold 1/6 |
+| 1 | preprocessor, ~41 assets | bronze ✅ **done**; silver 3/15, gold 2/6 |
 | 2 | cheap scrapers, ~13 assets | 1 day |
 | 3 | TradingView + partitions | 1 day |
 | 4 | pdfs/financials, ticker partitions | 1 day |
