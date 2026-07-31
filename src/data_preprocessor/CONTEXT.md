@@ -271,25 +271,17 @@ DTO helpers come from
   > `symbol`, because bronze splits it on read. All five raised `KeyError('symbol')`
   > (confirmed empirically on the live tables, not by reading). The two lines are gone;
   > `exchange` and `ticker` come straight out of bronze. See §`symbol` below.
-- **`trading_view_economy` — the PIVOTED macro panel (added 2026-07-31, Dagster-only).**
-  `_ingest_silver_trading_view_economy` reshapes the long bronze table to **one row per
-  DATE, one column per ticker**, PK `date`. 9,719 dates × 1,034 tickers.
-  - **Why wide:** a model joins macro data on `date` alone — the shape
-    `DataPostprocessor._join_macroeconomics_columns` already expects.
-  - ⚠️ **~94% NULL is correct.** Every series keeps its own calendar and frequency
-    (`VNINBR` daily, 6,836 obs; `VNGDPYY` quarterly, 103). 10.0 M cells hold 579,459
-    observations — **exactly** the bronze row count, verified. Forward-filling belongs
-    in gold: doing it here invents observations and destroys the "published today?"
-    signal.
-  - **Column names are the lowercased ticker.** Safe because all 1,034 match
-    `^[A-Za-z][A-Za-z0-9_]*$`, are ≤20 chars, unique case-insensitively and collide with
-    no reserved word — which matters, because `_helper_build_upsert_sql` interpolates
-    column names **unquoted**.
-  - ⚠️ `chunk_size=250`, not the 5,000 default: `execute_values` inlines every value into
-    one statement, so 5,000 × 1,035 columns would build a ~5 M-value SQL string.
-  - `country`/`category`/`exchange` cannot survive a one-row-per-date table; that mapping
-    stays in bronze. Dates run to **2036-10-01** (129 forward-dated rows over 47 series —
-    the source publishes projections); silver keeps them, filtering is gold's call.
+- **`economy` — rebuilt and re-ingested 2026-08-01.** `_ingest_silver_economy` now
+  reads `exchange`/`ticker` straight from bronze, applies the null-key/order clean,
+  casts, dedupes on the PK and **raises `MissingSourceDataError` on empty bronze**
+  instead of logging and returning. Materialised through Dagster (`silver/economy`):
+  **579,459 rows / 1,034 tickers — exactly the bronze row count**, a true 1:1 lift.
+  > **`silver.trading_view_economy` (the PIVOTED panel, 1 row per DATE × 1 column per
+  > ticker, 9,719 × 1,035) was built 2026-07-31 and DROPPED 2026-08-01.** It verified
+  > clean — non-null cells = 579,459 = the bronze row count, 0 mismatches on 525
+  > spot-checked values — but the canonical long grain replaces it. No data was lost:
+  > every observation is in `silver.economy`, and the wide shape is one `pivot(index=
+  > "date", columns="ticker")` away. Code in git history at `fa74ad3`.
 - **Per-source CafeF carry-ups** (`_ingest_silver_cafef_*`, added 2026-07-18) — a
   source-named lift of the bronze CafeF tables into silver, one-to-one, NOT the
   canonical asset merge. Each **selects the bronze table, applies a basic clean pass

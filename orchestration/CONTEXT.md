@@ -62,7 +62,7 @@ gics_structure
 | `simplize` | stocks, industry | — |
 | `gics` | structure | — |
 | `bronze` | **all 20 ingest leaves** (25 tables) | — |
-| `silver` | `trading_view_economy` (pivoted) | — |
+| `silver` | `economy` (canonical long) | — |
 
 ### ⚠️ The edges, read out of the code (2026-07-31 correction)
 
@@ -459,35 +459,37 @@ were stale bronze catching up with raw data the scrapers had already written —
 2,523,196, `cafef_prop_trading` 64,139 → 73,810 — and each now equals its raw folder
 row-for-row.
 
-### The first SILVER asset — `silver/trading_view_economy` (2026-07-31)
+### The first SILVER asset — `silver/economy` (2026-08-01)
 
-`bronze.trading_view_economy` → `silver.trading_view_economy`, **pivoted to one row per
-DATE, one column per ticker** (PK `date`). Same table name on both sides, deliberately.
-Thin wrapper as always: the reshape is
-`DataPreprocessor._ingest_silver_trading_view_economy`
-([assets/silver.py](assets/silver.py) only calls it and reads the counts back).
+`bronze.trading_view_economy` → `silver.economy`, PK `(exchange, ticker, date)` — the
+canonical LONG panel, one row per series per date. Thin wrapper over
+`DataPreprocessor._ingest_silver_economy` ([assets/silver.py](assets/silver.py)).
+
+⚠️ **This ingest had never once succeeded.** It re-derived the key with
+`df["symbol"].str.split(":")` against a frame that has no `symbol` — bronze splits it on
+read — so it raised `KeyError('symbol')` every run; the `silver.economy` table on disk
+predated the bronze change. Fixed with the rest of the `symbol` → `ticker` work, and it
+now also RAISES on empty bronze instead of logging and returning (its four siblings —
+`bonds`/`forex`/`funds`/`indices` — still take the silent path and should follow).
 
 ```powershell
-dagster asset materialize -f orchestration/definitions.py --select "silver/trading_view_economy"
+dagster asset materialize -f orchestration/definitions.py --select "silver/economy"
 ```
 
 | check | result |
 |---|---|
-| materialised | **RUN_SUCCESS, 20.2 s** |
-| shape | **9,719 dates × 1,034 tickers** (1,035 cols incl. `date`) |
-| PK | 9,719 rows / 9,719 distinct dates |
-| **no observation lost or invented** | non-null cells = **579,459** = bronze row count, exactly |
-| types | 1 `date` + 1,034 `numeric` (DECIMAL — no float rounding) |
-| values | 525 cells across 3 series (`vncpi`, `vngdpyy`, `a006re1q156nbea`) vs bronze — **0 mismatches** |
+| materialised | **RUN_SUCCESS, 25.6 s** |
+| rows | **579,459** — exactly the bronze row count, a true 1:1 lift |
+| tickers | 1,034 |
+| the dep is real | `deps=[bronze/trading_view_economy]`, expressible only now that every bronze leaf is an asset |
 
-⚠️ **It has NO upstream asset, on purpose.** Its input is the bronze TABLE, and bronze is
-only partly migrated (`assets/bronze.py` = the 4 `cafef_index_*` tables, not this one).
-An edge to an asset that does not exist would be fiction; the precondition is enforced in
-the ingest instead, which raises `MissingSourceDataError` on an empty bronze table.
-Phase 1 adds the 20 bronze leaves and this `deps=` gets filled in then.
-
-⚠️ **~94% of the panel is NULL and that is the data, not a bug** — each series keeps its
-own calendar (`VNINBR` daily, `VNGDPYY` quarterly). Forward-filling is a gold decision.
+**Retired the same day: `silver/trading_view_economy`.** The same bronze table pivoted to
+one row per DATE × one column per ticker (9,719 × 1,035 columns, 5.8% filled). It was
+built and verified on 2026-07-31 — non-null cells = 579,459 = the bronze row count
+exactly, 0 value mismatches on 525 spot-checked cells — then dropped in favour of the
+canonical long grain. **Nothing was lost:** every observation it held is in
+`silver.economy`, and the wide shape is one `pivot` away whenever a model wants it.
+The asset and `_ingest_silver_trading_view_economy` are in git history at `fa74ad3`.
 
 ## 2a. Cost of a full materialize (2026-07-31)
 

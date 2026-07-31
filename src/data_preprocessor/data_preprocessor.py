@@ -1969,51 +1969,17 @@ class DataPreprocessor:
         )
 
     def _ingest_silver_economy(self) -> None:
-        self._logger.log_info("Ingesting silver economy data...")
+        """`bronze.trading_view_economy` → `silver.economy`, PK
+        `(exchange, ticker, date)`. The canonical long panel: one row per series per
+        date, which is the grain every other silver asset uses.
 
-        df = self._helper_select(
-            schema_name=BRONZE_SCHEMA, table_name="trading_view_economy"
-        )
-
-        if df.empty:
-            self._logger.log_info("No bronze economy data found.")
-            return
-
-        df = df[["exchange", "ticker", "date", "value"]]
-
-        self._helper_save_pandas_table_to_database(
-            schema_name=SILVER_SCHEMA,
-            table_name="economy",
-            primary_keys=["exchange", "ticker", "date"],
-            df=df,
-            dtype_overrides={"date": DataType.DATE()},
-        )
-
-    def _ingest_silver_trading_view_economy(self) -> None:
-        """`bronze.trading_view_economy` → `silver.trading_view_economy`, PIVOTED:
-        **one row per DATE, one column per ticker.**
-
-        Bronze is already unique on `(ticker, date)` — 579,459 rows, 579,459 distinct
-        pairs — so this is a reshape, not a de-duplication: the long EAV table becomes
-        the wide macro panel a model can join on `date` alone (the shape
-        `DataPostprocessor._join_macroeconomics_columns` already expects).
-
-        ⚠️ **The result is ~94% NULL and that is correct, not a defect.** Each series
-        keeps its own calendar and frequency — VNINBR is daily (6,836 obs), VNGDPYY is
-        quarterly (~100) — so on any given date only the series that actually reported
-        are non-null. 9,719 dates × 1,034 tickers = 10.0 M cells for 579 k observations
-        (5.8% filled). Forward-filling is a MODELLING decision and belongs in gold: doing
-        it here would invent observations and destroy the "was this published today?"
-        signal that release-date-sensitive features need.
-
-        ⚠️ **Ticker is the only column identity that survives.** `country`, `category`
-        and `exchange` cannot ride along in a one-row-per-date table; that mapping stays
-        in bronze (and in the long `silver.economy`). Column names are the LOWERCASED
-        ticker — verified safe: all 1,034 are `^[A-Za-z][A-Za-z0-9_]*$`, ≤20 chars,
-        unique case-insensitively, no exchange collisions, no reserved words. This
-        matters because `_helper_build_upsert_sql` interpolates column names UNQUOTED.
+        ⚠️ **RAISES on empty bronze** rather than logging and returning. Its four
+        siblings (`bonds`/`forex`/`funds`/`indices`) still take the silent path — an
+        empty source there reads as a successful ingest, which is the exact Phase 0
+        failure mode (`utils/exceptions.py`), and they should follow when they are next
+        touched.
         """
-        self._logger.log_info("Ingesting silver trading_view_economy data (pivoted)...")
+        self._logger.log_info("Ingesting silver economy data...")
 
         df = self._helper_select(
             schema_name=BRONZE_SCHEMA, table_name="trading_view_economy"
@@ -2025,55 +1991,35 @@ class DataPreprocessor:
                 f"economy ingest first."
             )
 
-        # ── basic clean layer ────────────────────────────────────────────────────
+        # `exchange` and `ticker` come STRAIGHT OUT OF BRONZE. Until 2026-08-01 this
+        # re-derived them with `df["symbol"].str.split(":")`, against a frame that has
+        # no `symbol` column — bronze splits it on read — so this method raised
+        # `KeyError('symbol')` every time it ran.
         df = self._helper_clean(
             df,
             [
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("exchange"),
                 CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("ticker"),
                 CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("date"),
                 CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("value"),
-                CleanLayer.REMOVE_IF_ALL_COLUMNS_ARE_NULL(),
-                CleanLayer.ORDER_BY(["date", "ticker"]),
+                CleanLayer.ORDER_BY(["exchange", "ticker", "date"]),
             ],
         )
 
+        df = self._helper_cast_columns(df, decimal_cols=["value"], bigint_cols=[])
         df["date"] = pd.to_datetime(df["date"]).dt.date
-        df["ticker"] = df["ticker"].astype(str).str.strip().str.lower()
-        df["value"] = pd.to_numeric(df["value"], errors="coerce")
-        df = df.dropna(subset=["ticker", "date", "value"])
-
-        # Bronze's PK makes this a no-op today, but `pivot` RAISES on a duplicate
-        # (index, column) pair — so the guarantee is enforced here rather than assumed.
-        before = len(df)
-        df = self._helper_remove_duplicates(df, primary_keys=["ticker", "date"])
-        if len(df) != before:
-            self._logger.log_warning(
-                f"Dropped {before - len(df)} duplicate (ticker, date) row(s) before "
-                f"pivoting — bronze is supposed to be unique on that key."
-            )
-
-        # ── the pivot: 1 row = 1 date ────────────────────────────────────────────
-        wide = df.pivot(index="date", columns="ticker", values="value")
-        wide = wide.sort_index().reset_index()
-        wide.columns.name = None
-
-        self._logger.log_info(
-            f"Pivoted {before} observations into {len(wide)} dates × "
-            f"{len(wide.columns) - 1} tickers "
-            f"({100.0 * before / max((len(wide)) * (len(wide.columns) - 1), 1):.2f}% "
-            f"of cells filled)."
+        df = self._helper_remove_duplicates(
+            df, primary_keys=["exchange", "ticker", "date"]
         )
 
-        # ⚠️ chunk_size is deliberately small. `execute_values` inlines every value into
-        # ONE statement, so the default 5,000 rows × 1,035 columns would build a ~5 M
-        # value SQL string per chunk. 250 keeps each statement in the low MB.
+        df = df[["exchange", "ticker", "date", "value"]]
+
         self._helper_save_pandas_table_to_database(
             schema_name=SILVER_SCHEMA,
-            table_name="trading_view_economy",
-            primary_keys=["date"],
-            df=wide,
+            table_name="economy",
+            primary_keys=["exchange", "ticker", "date"],
+            df=df,
             dtype_overrides={"date": DataType.DATE()},
-            chunk_size=250,
         )
 
     def _ingest_silver_forex(self) -> None:

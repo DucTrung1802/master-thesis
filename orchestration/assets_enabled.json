@@ -68,6 +68,5 @@
     "bronze/gics": true,
 
     "// ---- silver: canonical / reshaped ----": "",
-    "// silver/trading_view_economy": "pivoted: 1 row per DATE, 1 col per ticker (~1034 cols)",
-    "silver/trading_view_economy": true
+    "silver/economy": true
 }
