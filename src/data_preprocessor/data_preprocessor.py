@@ -1968,18 +1968,107 @@ class DataPreprocessor:
             dtype_overrides={"date": DataType.DATE()},
         )
 
+    # `silver.economy` column naming — the wide panel's whole interface.
+    #
+    #     {country}__{scrape_main_type}__{category}__{exchange}__{ticker}
+    #     vietnam__economy__prices__economics__vncpi
+    #
+    # ⚠️ THE SEPARATOR IS TWO UNDERSCORES BECAUSE THE VALUES CONTAIN ONE.
+    # `mainland_china`, `south_korea`, `order_stats` — with a single `_` no rule can
+    # split a name back into its fields. With `__`, `name.split("__")` is exact.
+    #
+    # Coarse → fine, so alphabetical column order groups a country's series together and
+    # `column_name LIKE 'vietnam__economy__prices%'` is a usable selector.
+    #
+    # NB `scrape_main_type` is CONSTANT here (one distinct value, `economy`) and
+    # `exchange` is the data VENDOR (`ECONOMICS`/`FRED`), not a bourse. Since ticker is
+    # already 1:1 with the series, every prefix is redundant for IDENTITY — it earns its
+    # place as a grouping key and as lineage, not as an identifier.
+    SILVER_ECONOMY_NAME_PARTS = (
+        "country",
+        "scrape_main_type",
+        "category",
+        "exchange",
+        "ticker",
+    )
+    SILVER_ECONOMY_NAME_SEP = "__"
+
+    # PostgreSQL truncates identifiers over 63 BYTES silently, and two names that
+    # truncate to the same thing collide. Today's longest is 57, but the vocabulary
+    # allows 14 + 7 + 10 + 9 + 20 + 8 separators = 68 — the longest ticker simply does
+    # not co-occur with the longest country and category. That is luck, not a guarantee,
+    # so `_build_silver_economy_columns` checks rather than trusts.
+    #
+    # ⚠️ THE LIMIT CANNOT BE RAISED ON THIS SERVER. It is `NAMEDATALEN - 1`, and
+    # NAMEDATALEN is a COMPILE-TIME constant in `src/include/pg_config_manual.h` —
+    # changing it means building PostgreSQL from source and `initdb`-ing a fresh cluster
+    # (the on-disk catalogue layout changes, so an existing data directory is not
+    # readable by the rebuilt binary, and vice versa). It is not a GUC, not a per-column
+    # option, not something `ALTER` can reach. So the template must fit 63; if it ever
+    # stops fitting, shorten the NAME, never the server.
+    PG_IDENTIFIER_LIMIT = 63
+
+    def _build_silver_economy_columns(self, df: pd.DataFrame) -> pd.Series:
+        """The composite column name for every row, verified fit for PostgreSQL.
+
+        RAISES rather than let a name be silently truncated into a collision — the
+        failure would otherwise surface as an upsert writing to the wrong series.
+        """
+        parts = [
+            df[part].astype("string").str.strip().str.lower()
+            for part in self.SILVER_ECONOMY_NAME_PARTS
+        ]
+        names = parts[0]
+        for part in parts[1:]:
+            names = names + self.SILVER_ECONOMY_NAME_SEP + part
+
+        too_long = sorted(
+            {n for n in names.dropna().unique() if len(n.encode()) > self.PG_IDENTIFIER_LIMIT}
+        )
+        if too_long:
+            raise PipelineError(
+                f"{len(too_long)} silver.economy column name(s) exceed PostgreSQL's "
+                f"{self.PG_IDENTIFIER_LIMIT}-byte identifier limit and would be "
+                f"TRUNCATED SILENTLY, e.g. {too_long[:3]}. Shorten the template — drop "
+                f"`scrape_main_type` (it is constant, -9 chars) or use ISO country "
+                f"codes (-12) — rather than let two series share a column."
+            )
+
+        unique_names = names.dropna().unique()
+        truncated = {n[: self.PG_IDENTIFIER_LIMIT] for n in unique_names}
+        if len(truncated) != len(unique_names):
+            raise PipelineError(
+                f"silver.economy column names collide after truncation: "
+                f"{len(unique_names)} names → {len(truncated)} distinct."
+            )
+        return names
+
     def _ingest_silver_economy(self) -> None:
-        """`bronze.trading_view_economy` → `silver.economy`, PK
-        `(exchange, ticker, date)`. The canonical long panel: one row per series per
-        date, which is the grain every other silver asset uses.
+        """`bronze.trading_view_economy` → `silver.economy`, **PIVOTED: one row per
+        DATE**, PK `date`, one column per series named
+        `{country}__{scrape_main_type}__{category}__{exchange}__{ticker}`.
+
+        9,719 dates × 1,034 series. The wide macro panel joins on `date` alone, which is
+        the shape `DataPostprocessor._join_macroeconomics_columns` expects.
+
+        ⚠️ **~94% NULL is the data, not a defect.** Every series keeps its own calendar
+        and frequency (`VNINBR` daily, 6,836 observations; `VNGDPYY` quarterly, 103), so
+        a date carries only the series that reported on it. The cell count is exactly the
+        bronze row count — nothing is invented. Forward-filling is a MODELLING decision
+        and belongs in gold: doing it here would destroy the "was this published today?"
+        signal that release-date-sensitive features need.
+
+        ⚠️ **The table is DROPPED first.** The grain changed from `(exchange, ticker,
+        date)` to `date` and `create_table` is `IF NOT EXISTS`, so an upsert into the old
+        shape would fail on a missing PK column. The CafeF carry-ups drop for the same
+        reason.
 
         ⚠️ **RAISES on empty bronze** rather than logging and returning. Its four
         siblings (`bonds`/`forex`/`funds`/`indices`) still take the silent path — an
         empty source there reads as a successful ingest, which is the exact Phase 0
-        failure mode (`utils/exceptions.py`), and they should follow when they are next
-        touched.
+        failure mode (`utils/exceptions.py`), and they should follow when next touched.
         """
-        self._logger.log_info("Ingesting silver economy data...")
+        self._logger.log_info("Ingesting silver economy data (pivoted, 1 row/date)...")
 
         df = self._helper_select(
             schema_name=BRONZE_SCHEMA, table_name="trading_view_economy"
@@ -1998,8 +2087,10 @@ class DataPreprocessor:
         df = self._helper_clean(
             df,
             [
-                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("exchange"),
-                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("ticker"),
+                *(
+                    CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL(part)
+                    for part in self.SILVER_ECONOMY_NAME_PARTS
+                ),
                 CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("date"),
                 CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("value"),
                 CleanLayer.ORDER_BY(["exchange", "ticker", "date"]),
@@ -2008,18 +2099,43 @@ class DataPreprocessor:
 
         df = self._helper_cast_columns(df, decimal_cols=["value"], bigint_cols=[])
         df["date"] = pd.to_datetime(df["date"]).dt.date
-        df = self._helper_remove_duplicates(
-            df, primary_keys=["exchange", "ticker", "date"]
+        df = df.dropna(subset=["value"])
+
+        df["series"] = self._build_silver_economy_columns(df)
+
+        # Bronze's PK makes this a no-op today, but `pivot` RAISES on a duplicate
+        # (index, column) pair — so the guarantee is enforced, not assumed.
+        before = len(df)
+        df = self._helper_remove_duplicates(df, primary_keys=["series", "date"])
+        if len(df) != before:
+            self._logger.log_warning(
+                f"Dropped {before - len(df)} duplicate (series, date) row(s) before "
+                f"pivoting — bronze is supposed to be unique on that key."
+            )
+
+        wide = df.pivot(index="date", columns="series", values="value")
+        wide = wide.sort_index().reset_index()
+        wide.columns.name = None
+
+        cells = len(wide) * (len(wide.columns) - 1)
+        self._logger.log_info(
+            f"Pivoted {before} observations into {len(wide)} dates × "
+            f"{len(wide.columns) - 1} series ({100.0 * before / max(cells, 1):.2f}% "
+            f"of cells filled)."
         )
 
-        df = df[["exchange", "ticker", "date", "value"]]
+        self._database_driver.drop_table(SILVER_SCHEMA, "economy")
 
+        # ⚠️ chunk_size is deliberately small. `execute_values` inlines every value into
+        # ONE statement, so the default 5,000 rows × 1,035 columns would build a ~5 M
+        # value SQL string per chunk. 250 keeps each statement in the low MB.
         self._helper_save_pandas_table_to_database(
             schema_name=SILVER_SCHEMA,
             table_name="economy",
-            primary_keys=["exchange", "ticker", "date"],
-            df=df,
+            primary_keys=["date"],
+            df=wide,
             dtype_overrides={"date": DataType.DATE()},
+            chunk_size=250,
         )
 
     def _ingest_silver_forex(self) -> None:

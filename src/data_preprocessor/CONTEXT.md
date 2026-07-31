@@ -271,17 +271,44 @@ DTO helpers come from
   > `symbol`, because bronze splits it on read. All five raised `KeyError('symbol')`
   > (confirmed empirically on the live tables, not by reading). The two lines are gone;
   > `exchange` and `ticker` come straight out of bronze. See §`symbol` below.
-- **`economy` — rebuilt and re-ingested 2026-08-01.** `_ingest_silver_economy` now
-  reads `exchange`/`ticker` straight from bronze, applies the null-key/order clean,
-  casts, dedupes on the PK and **raises `MissingSourceDataError` on empty bronze**
-  instead of logging and returning. Materialised through Dagster (`silver/economy`):
-  **579,459 rows / 1,034 tickers — exactly the bronze row count**, a true 1:1 lift.
-  > **`silver.trading_view_economy` (the PIVOTED panel, 1 row per DATE × 1 column per
-  > ticker, 9,719 × 1,035) was built 2026-07-31 and DROPPED 2026-08-01.** It verified
-  > clean — non-null cells = 579,459 = the bronze row count, 0 mismatches on 525
-  > spot-checked values — but the canonical long grain replaces it. No data was lost:
-  > every observation is in `silver.economy`, and the wide shape is one `pivot(index=
-  > "date", columns="ticker")` away. Code in git history at `fa74ad3`.
+- **`economy` — PIVOTED to one row per DATE (2026-08-01), PK `date`.** 9,719 dates ×
+  1,034 series, one column per series:
+
+  ```
+  {country}__{scrape_main_type}__{category}__{exchange}__{ticker}
+  vietnam__economy__prices__economics__vncpi
+  ```
+
+  - ⚠️ **The separator is TWO underscores because the values contain one.**
+    `mainland_china`, `south_korea` — with a single `_` no rule can split a name back
+    into fields; with `__`, `split("__")` is exact. Verified: all 1,034 names have
+    exactly 5 fields. Coarse → fine ordering means alphabetical column order groups a
+    country's series together and `split_part(column_name,'__',1)` is a usable GROUP BY.
+  - ⚠️ **63 BYTES IS A HARD CEILING AND CANNOT BE RAISED HERE.** It is `NAMEDATALEN - 1`,
+    and NAMEDATALEN is a COMPILE-TIME constant — changing it means building PostgreSQL
+    from source and `initdb`-ing a fresh cluster, not a GUC or an `ALTER`. Today's
+    longest name is **57**, but the *vocabulary* allows 14 + 7 + 10 + 9 + 20 + 8
+    separators = **68**: the longest ticker simply never co-occurs with the longest
+    country and category. That is luck. `_build_silver_economy_columns` therefore
+    **raises** if any name exceeds 63 bytes or collides after truncation — an
+    over-length name would otherwise be truncated SILENTLY and two series could share a
+    column. If it ever fires, shorten the template (drop the constant
+    `scrape_main_type`, −9; ISO country codes, −12 → worst case 47), never the server.
+  - `scrape_main_type` is CONSTANT (`economy`, 1 distinct value) and `exchange` is the
+    data VENDOR (`ECONOMICS`/`FRED`), not a bourse. Ticker is already 1:1 with the
+    series, so **every prefix is redundant for identity** — it earns its place as a
+    grouping key and as lineage.
+  - ⚠️ **~94% NULL is the data.** Each series keeps its own calendar and frequency
+    (`VNINBR` daily 6,836 obs, `VNGDPYY` quarterly 103). Verified: **579,459 non-null
+    cells = the bronze row count exactly** — nothing lost, nothing invented — and 2,393
+    values across 12 random series matched bronze with **0 mismatches**. Forward-filling
+    is a gold decision; here it would destroy the "was this published today?" signal.
+  - ⚠️ **The table is DROPPED and rebuilt each run.** The grain changed from
+    `(exchange, ticker, date)` and `create_table` is `IF NOT EXISTS`, so an upsert into
+    the old shape would fail on a missing PK column. `chunk_size=250`, not the 5,000
+    default: `execute_values` inlines every value into one statement.
+  - The ingest also now **raises on empty bronze**; its four siblings
+    (`bonds`/`forex`/`funds`/`indices`) still return silently and should follow.
 - **Per-source CafeF carry-ups** (`_ingest_silver_cafef_*`, added 2026-07-18) — a
   source-named lift of the bronze CafeF tables into silver, one-to-one, NOT the
   canonical asset merge. Each **selects the bronze table, applies a basic clean pass

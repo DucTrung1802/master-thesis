@@ -42,10 +42,12 @@ from orchestration.resources import PreprocessorResource
     compute_kind="postgres",
     deps=[AssetKey(["bronze", "trading_view_economy"])],
     description=(
-        "bronze.trading_view_economy → silver.economy, PK (exchange, ticker, date) — "
-        "the canonical LONG panel, one row per series per date. ⚠️ This ingest raised "
-        "KeyError('symbol') on every run until 2026-08-01: it re-derived the key from a "
-        "column bronze splits on read and has never stored."
+        "bronze.trading_view_economy → silver.economy, PIVOTED to ONE ROW PER DATE "
+        "(PK `date`), one column per series named "
+        "`{country}__{scrape_main_type}__{category}__{exchange}__{ticker}`. "
+        "9,719 dates × 1,034 series. ⚠️ ~94% NULL by construction — each series keeps "
+        "its own calendar — and the table is DROPPED and rebuilt each run because the "
+        "grain changed."
     ),
 )
 def silver_economy(
@@ -61,21 +63,26 @@ def silver_economy(
         with prep._database_driver._cursor_ctx() as cur:
             cur.execute(f"SELECT COUNT(*) FROM silver_schema.{table}")
             rows = int(cur.fetchone()[0])
-            cur.execute(f"SELECT COUNT(DISTINCT ticker) FROM silver_schema.{table}")
-            tickers = int(cur.fetchone()[0])
+            cur.execute(
+                "SELECT COUNT(*) FROM information_schema.columns "
+                "WHERE table_schema = 'silver_schema' AND table_name = %s",
+                (table,),
+            )
+            columns = int(cur.fetchone()[0])
             cur.execute(f"SELECT MIN(date), MAX(date) FROM silver_schema.{table}")
             first, last = cur.fetchone()
             cur.execute("SELECT COUNT(*) FROM bronze_schema.trading_view_economy")
             bronze_rows = int(cur.fetchone()[0])
 
     context.log.info(
-        f"silver.{table}: {rows} rows / {tickers} tickers "
-        f"(bronze had {bronze_rows})"
+        f"silver.{table}: {rows} dates × {columns - 1} series "
+        f"(bronze had {bronze_rows} observations)"
     )
     return MaterializeResult(
         metadata={
             "rows": rows,
-            "tickers": tickers,
+            "columns": columns,
+            "series": columns - 1,
             "bronze_rows": bronze_rows,
             "date_range": MetadataValue.text(f"{first} → {last}"),
             "table": MetadataValue.text(f"silver_schema.{table}"),

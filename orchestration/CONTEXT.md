@@ -461,16 +461,17 @@ row-for-row.
 
 ### The first SILVER asset — `silver/economy` (2026-08-01)
 
-`bronze.trading_view_economy` → `silver.economy`, PK `(exchange, ticker, date)` — the
-canonical LONG panel, one row per series per date. Thin wrapper over
-`DataPreprocessor._ingest_silver_economy` ([assets/silver.py](assets/silver.py)).
+`bronze.trading_view_economy` → `silver.economy`, **pivoted to ONE ROW PER DATE**
+(PK `date`), one column per series:
 
-⚠️ **This ingest had never once succeeded.** It re-derived the key with
-`df["symbol"].str.split(":")` against a frame that has no `symbol` — bronze splits it on
-read — so it raised `KeyError('symbol')` every run; the `silver.economy` table on disk
-predated the bronze change. Fixed with the rest of the `symbol` → `ticker` work, and it
-now also RAISES on empty bronze instead of logging and returning (its four siblings —
-`bonds`/`forex`/`funds`/`indices` — still take the silent path and should follow).
+```
+{country}__{scrape_main_type}__{category}__{exchange}__{ticker}
+vietnam__economy__prices__economics__vncpi
+```
+
+Thin wrapper over `DataPreprocessor._ingest_silver_economy`
+([assets/silver.py](assets/silver.py)); the dep on `bronze/trading_view_economy` is real
+and only expressible now that every bronze leaf is an asset.
 
 ```powershell
 dagster asset materialize -f orchestration/definitions.py --select "silver/economy"
@@ -478,18 +479,24 @@ dagster asset materialize -f orchestration/definitions.py --select "silver/econo
 
 | check | result |
 |---|---|
-| materialised | **RUN_SUCCESS, 25.6 s** |
-| rows | **579,459** — exactly the bronze row count, a true 1:1 lift |
-| tickers | 1,034 |
-| the dep is real | `deps=[bronze/trading_view_economy]`, expressible only now that every bronze leaf is an asset |
+| materialised | **RUN_SUCCESS, 21.6 s** |
+| shape | **9,719 dates × 1,034 series** (1,035 cols), PK `date` unique |
+| **no observation lost or invented** | non-null cells = **579,459** = the bronze row count, exactly |
+| values | 2,393 across 12 RANDOM series vs bronze — **0 mismatches** |
+| names | 1,034/1,034 with exactly 5 `__` fields, all lowercase, unique, **max 57 ≤ 63** |
 
-**Retired the same day: `silver/trading_view_economy`.** The same bronze table pivoted to
-one row per DATE × one column per ticker (9,719 × 1,035 columns, 5.8% filled). It was
-built and verified on 2026-07-31 — non-null cells = 579,459 = the bronze row count
-exactly, 0 value mismatches on 525 spot-checked cells — then dropped in favour of the
-canonical long grain. **Nothing was lost:** every observation it held is in
-`silver.economy`, and the wide shape is one `pivot` away whenever a model wants it.
-The asset and `_ingest_silver_trading_view_economy` are in git history at `fa74ad3`.
+⚠️ **The 63-byte identifier limit is `NAMEDATALEN - 1` and is COMPILE-TIME** — raising it
+means rebuilding PostgreSQL from source and `initdb`-ing a fresh cluster. The template's
+vocabulary allows 68 characters even though today's longest is 57, so the ingest
+**raises** rather than let a name truncate silently into a collision.
+
+⚠️ **~94% NULL by construction** — each series keeps its own calendar. Forward-filling is
+gold's decision. And the table is **dropped and rebuilt** each run, because the grain
+changed from `(exchange, ticker, date)` to `date`.
+
+> **Also retired 2026-08-01: `silver/trading_view_economy`.** The same pivot under a
+> different table name, built 2026-07-31 and verified clean, then folded into
+> `silver.economy` — one economy table, not two. Code at `fa74ad3`.
 
 ## 2a. Cost of a full materialize (2026-07-31)
 
