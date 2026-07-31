@@ -72,6 +72,6 @@
     "silver/economy_series": true,
 
     "// ---- gold: model-ready shapes ----": "",
-    "// gold/economy_panel": "WIDE: 1 row per business day, 1 col per series, as-of filled",
-    "gold/economy_panel": true
+    "// gold/economy": "WIDE: 1 row per business day, 1 col per series, as-of filled",
+    "gold/economy": true
 }

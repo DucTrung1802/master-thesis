@@ -1,7 +1,7 @@
 # orchestration\assets\gold.py
 """The GOLD layer — `silver_schema` → `gold_schema`.
 
-One asset: `gold/economy_panel`, the WIDE macro panel — one row per business day, one
+One asset: `gold/economy`, the WIDE macro panel — one row per business day, one
 column per series, named
 `{country}__{scrape_main_type}__{category}__{exchange}__{ticker}`.
 
@@ -17,6 +17,13 @@ allowed to make them:
   value; carrying it forward takes the panel from 5.8% filled to ~91%.
 * **staleness cap** — but bounded per frequency, so a series that stopped reporting in
   2010 does not read as live data in 2026.
+
+⚠️ **`gold.economy` used to be something else** — the generic `_ingest_gold_table`
+output, i.e. the LONG grain with per-series TA features (579,459 x 16: returns,
+volatility, rolling stats), with this panel beside it as `gold.economy_panel`. Two gold
+tables for one asset is one too many, so the wide panel took the name (2026-08-01).
+Restoring the feature table is one line in `_ingest_gold_economy`; the generic builder is
+untouched and still drives bonds/forex/funds/indices/stocks.
 
 Silver keeps the raw-faithful long table and none of these assumptions
 (`assets/silver.py`). Both lag tables are ASSUMPTIONS, documented as such in
@@ -42,7 +49,7 @@ from orchestration.resources import PreprocessorResource
 
 
 @asset(
-    name="economy_panel",
+    name="economy",
     key_prefix=["gold"],
     group_name="gold",
     compute_kind="postgres",
@@ -51,34 +58,34 @@ from orchestration.resources import PreprocessorResource
         AssetKey(["silver", "economy_series"]),
     ],
     description=(
-        "silver.economy + silver.economy_series → gold.economy_panel: ONE ROW PER "
+        "silver.economy + silver.economy_series → gold.economy: ONE ROW PER "
         "BUSINESS DAY (PK `date`), one column per series named "
         "`{country}__{scrape_main_type}__{category}__{exchange}__{ticker}`. As-of "
         "filled with a per-frequency publication lag and staleness cap. Columns are "
         "REAL, not DOUBLE — 1,034 float8 would exceed PostgreSQL's ~8 kB row limit."
     ),
 )
-def gold_economy_panel(
+def gold_economy(
     context: AssetExecutionContext, preprocessor: PreprocessorResource
 ) -> MaterializeResult:
     with preprocessor.session(schema="gold_schema") as prep:
-        prep._ingest_gold_economy_panel()
+        prep._ingest_gold_economy()
 
         with prep._database_driver._cursor_ctx() as cur:
-            cur.execute("SELECT COUNT(*) FROM gold_schema.economy_panel")
+            cur.execute("SELECT COUNT(*) FROM gold_schema.economy")
             rows = int(cur.fetchone()[0])
             cur.execute(
                 "SELECT COUNT(*) FROM information_schema.columns "
-                "WHERE table_schema = 'gold_schema' AND table_name = 'economy_panel'"
+                "WHERE table_schema = 'gold_schema' AND table_name = 'economy'"
             )
             columns = int(cur.fetchone()[0])
-            cur.execute("SELECT MIN(date), MAX(date) FROM gold_schema.economy_panel")
+            cur.execute("SELECT MIN(date), MAX(date) FROM gold_schema.economy")
             first, last = cur.fetchone()
             cur.execute("SELECT COUNT(*) FROM silver_schema.economy")
             silver_rows = int(cur.fetchone()[0])
 
     context.log.info(
-        f"gold.economy_panel: {rows} business days × {columns - 1} series "
+        f"gold.economy: {rows} business days × {columns - 1} series "
         f"(silver.economy holds {silver_rows} observations)"
     )
     return MaterializeResult(
@@ -87,9 +94,9 @@ def gold_economy_panel(
             "series": columns - 1,
             "silver_observations": silver_rows,
             "date_range": MetadataValue.text(f"{first} → {last}"),
-            "table": MetadataValue.text("gold_schema.economy_panel"),
+            "table": MetadataValue.text("gold_schema.economy"),
         }
     )
 
 
-assets: List[Callable] = [gold_economy_panel]
+assets: List[Callable] = [gold_economy]

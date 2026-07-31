@@ -63,7 +63,7 @@ gics_structure
 | `gics` | structure | — |
 | `bronze` | **all 20 ingest leaves** (25 tables) | — |
 | `silver` | `economy` (long fact), `economy_series` (dimension) | — |
-| `gold` | `economy_panel` (wide, as-of) | — |
+| `gold` | `economy` (wide, as-of) | — |
 
 ### ⚠️ The edges, read out of the code (2026-07-31 correction)
 
@@ -469,7 +469,7 @@ bronze/trading_view_economy
    ├─► silver/economy          LONG fact, PK (exchange, ticker, date), 579,459 rows, 0 nulls
    └─► silver/economy_series   DIMENSION, PK (exchange, ticker), 1,034 rows + derived frequency
             └──────┬──────────►
-   silver/economy ─┴─► gold/economy_panel   WIDE, 1 row per BUSINESS DAY, 1,034 columns
+   silver/economy ─┴─► gold/economy   WIDE, 1 row per BUSINESS DAY, 1,034 columns
 ```
 
 ```powershell
@@ -480,7 +480,7 @@ dagster asset materialize -f orchestration/definitions.py --select "group:silver
 |---|---|
 | `silver/economy` | 579,459 rows / 1,034 series — **exactly the bronze row count**, 0 nulls, 17.6 s |
 | `silver/economy_series` | 1,034 series: 500 monthly, 226 quarterly, 206 annual, 66 daily, 32 weekly, 4 irregular, 3.8 s |
-| `gold/economy_panel` | **6,935 business days × 1,034 series, 88.6% filled** (long form is 5.8% of that grid), 13.1 s |
+| `gold/economy` | **6,935 business days × 1,034 series, 88.6% filled** (long form is 5.8% of that grid), 13.1 s |
 
 ⚠️ **The wide panel is in GOLD, not silver, and that is a layering decision made on
 measurements.** As silver it was 5.8% filled — but the nulls cost ~1 bit each, so the

@@ -1989,7 +1989,7 @@ class DataPreprocessor:
         * **`date` is the REFERENCE period, not the release date.** Vietnam's Q1 GDP is
           dated 2026-03-31 and published in April, so any wide panel joined on `date`
           hands a model a number a week before it existed. That needs a publication lag,
-          which is a MODELLING decision - see `_ingest_gold_economy_panel`, where it
+          which is a MODELLING decision - see `_ingest_gold_economy`, where it
           lives.
 
         Nulls were never the problem: a NULL costs ~1 bit in the row's null bitmap, so
@@ -2080,7 +2080,7 @@ class DataPreprocessor:
         observed `frequency`, `observations`, `first_date`/`last_date`.
 
         `frequency` is DERIVED, not given - TradingView publishes no frequency field -
-        and it is what sets the publication lag in `_ingest_gold_economy_panel`.
+        and it is what sets the publication lag in `_ingest_gold_economy`.
         """
         self._logger.log_info("Ingesting silver economy series dimension...")
 
@@ -3553,7 +3553,7 @@ class DataPreprocessor:
             checkpoint_size=100_000,
         )
 
-    # ── gold.economy_panel — the WIDE macro panel ────────────────────────────────
+    # ── gold.economy — the WIDE macro panel ─────────────────────────────────────
     #
     #     {country}__{scrape_main_type}__{category}__{exchange}__{ticker}
     #     vietnam__economy__prices__economics__vncpi
@@ -3637,7 +3637,7 @@ class DataPreprocessor:
         )
         if too_long:
             raise PipelineError(
-                f"{len(too_long)} gold.economy_panel column name(s) exceed PostgreSQL's "
+                f"{len(too_long)} gold.economy column name(s) exceed PostgreSQL's "
                 f"{self.PG_IDENTIFIER_LIMIT}-byte identifier limit and would be "
                 f"TRUNCATED SILENTLY, e.g. {too_long[:3]}. Shorten the template - drop "
                 f"`scrape_main_type` (constant, -9 chars) or use ISO country codes "
@@ -3647,14 +3647,22 @@ class DataPreprocessor:
         truncated = {n[: self.PG_IDENTIFIER_LIMIT] for n in unique_names}
         if len(truncated) != len(unique_names):
             raise PipelineError(
-                f"gold.economy_panel column names collide after truncation: "
+                f"gold.economy column names collide after truncation: "
                 f"{len(unique_names)} names -> {len(truncated)} distinct."
             )
         return names
 
-    def _ingest_gold_economy_panel(self) -> None:
-        """`silver.economy` + `silver.economy_series` -> `gold.economy_panel`:
+    def _ingest_gold_economy(self) -> None:
+        """`silver.economy` + `silver.economy_series` -> `gold.economy`:
         **one row per business day**, one column per series, AS-OF filled.
+
+        ⚠️ **THIS IS THE ONLY GOLD ECONOMY TABLE.** Until 2026-08-01 `gold.economy` was
+        the generic `_ingest_gold_table("economy")` output instead — the LONG grain with
+        per-series TA features (579,459 rows x 16 columns: returns, volatility, rolling
+        stats), and the wide panel lived beside it as `gold.economy_panel`. Two gold
+        tables for one asset is one too many, so the wide panel took the name. Restoring
+        the feature table is one line (`self._ingest_gold_table("economy")`) — the
+        generic builder is untouched and still drives bonds/forex/funds/indices/stocks.
 
         This is the wide macro panel a model joins on `date` alone - the shape
         `DataPostprocessor._join_macroeconomics_columns` expects. It lives in GOLD, not
@@ -3685,7 +3693,7 @@ class DataPreprocessor:
         far fewer than REAL's ~7 significant digits, so nothing is lost - the same reason
         `_ingest_gold_table` casts its feature columns.
         """
-        self._logger.log_info("Ingesting gold economy panel (wide, as-of filled)...")
+        self._logger.log_info("Ingesting gold economy (wide, as-of filled)...")
 
         fact = self._helper_select(schema_name=SILVER_SCHEMA, table_name="economy")
         dim = self._helper_select(
@@ -3771,7 +3779,7 @@ class DataPreprocessor:
         landed = int(wide.notna().sum().sum())
         if landed != expected_in_range:
             raise PipelineError(
-                f"gold.economy_panel lost {expected_in_range - landed} observation(s) "
+                f"gold.economy lost {expected_in_range - landed} observation(s) "
                 f"in the reindex: {expected_in_range} distinct (series, available_from) "
                 f"pairs fall on or before {last_day.date()}, but only {landed} cells "
                 f"landed. An availability date that is not a business day is the usual "
@@ -3780,7 +3788,7 @@ class DataPreprocessor:
         dropped_future = expected_cells - expected_in_range
         if dropped_future:
             self._logger.log_info(
-                f"economy_panel: {dropped_future} observation(s) have an availability "
+                f"gold economy: {dropped_future} observation(s) have an availability "
                 f"date after {last_day.date()} (projections) and are not in the panel; "
                 f"they remain in silver.economy."
             )
@@ -3806,7 +3814,7 @@ class DataPreprocessor:
         filled = int(wide.drop(columns=["date"]).notna().sum().sum())
         cells = len(wide) * (len(wide.columns) - 1)
         self._logger.log_info(
-            f"economy_panel: {len(wide)} business days x {len(wide.columns) - 1} series "
+            f"gold economy: {len(wide)} business days x {len(wide.columns) - 1} series "
             f"- {raw_cells} observations visible after the publication lag, "
             f"{filled} cells after the as-of carry ({100.0 * filled / max(cells, 1):.1f}% "
             f"filled, from {100.0 * raw_cells / max(cells, 1):.1f}%)."
@@ -3817,10 +3825,10 @@ class DataPreprocessor:
             if col != "date":
                 overrides[col] = "REAL"
 
-        self._database_driver.drop_table(GOLD_SCHEMA, "economy_panel")
+        self._database_driver.drop_table(GOLD_SCHEMA, "economy")
         self._helper_save_pandas_table_to_database(
             schema_name=GOLD_SCHEMA,
-            table_name="economy_panel",
+            table_name="economy",
             primary_keys=["date"],
             df=wide,
             dtype_overrides=overrides,
@@ -3891,9 +3899,6 @@ class DataPreprocessor:
 
     def _ingest_gold_bonds(self) -> None:
         self._ingest_gold_table("bonds")
-
-    def _ingest_gold_economy(self) -> None:
-        self._ingest_gold_table("economy")
 
     def _ingest_gold_forex(self) -> None:
         self._ingest_gold_table("forex")

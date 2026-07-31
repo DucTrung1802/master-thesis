@@ -501,12 +501,19 @@ DTO helpers come from
     `_ingest_gold_table(table_name="stocks", silver_table_name="stocks_basic")`.
 
 ### Gold (`_ingest_gold_*`) — feature engineering
-- **`economy_panel` — the WIDE macro panel (2026-08-01).** `silver.economy` +
-  `silver.economy_series` → `gold.economy_panel`: **one row per BUSINESS DAY** (PK
+- **`economy` — the WIDE macro panel (2026-08-01).** `silver.economy` +
+  `silver.economy_series` → `gold.economy`: **one row per BUSINESS DAY** (PK
   `date`), one column per series named
   `{country}__{scrape_main_type}__{category}__{exchange}__{ticker}`. 6,935 days ×
   1,034 series, **88.6% filled** (the long form is 5.8% of a date × series grid).
-  It lives in GOLD because every step that makes it usable is a modelling decision:
+  It lives in GOLD because every step that makes it usable is a modelling decision.
+  ⚠️ **It is the ONLY gold economy table.** `gold.economy` used to be the generic
+  `_ingest_gold_table("economy")` output — the LONG grain with per-series TA features
+  (579,459 × 16: returns, volatility, rolling stats) — with the panel beside it as
+  `economy_panel`. Two gold tables for one asset is one too many, so the panel took the
+  name and the feature table was dropped (2026-08-01). Restoring it is one line
+  (`self._ingest_gold_table("economy")`); the generic builder is untouched and still
+  drives bonds/forex/funds/indices/stocks.
   - ⚠️ **PUBLICATION LAG — this is the look-ahead guard.** The source `date` is the
     REFERENCE period, not the release date: Vietnam's Q1 GDP is dated 2026-03-31 and
     published in April, so a panel joined on `date` hands a model a figure ~a week
