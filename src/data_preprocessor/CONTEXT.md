@@ -318,6 +318,37 @@ DTO helpers come from
     silently.
   - **Verified**: all four sources matched row-for-row, **532,188 cells compared, 0
     mismatches**.
+- **`stocks_basic` — SIX bronze tables into one per-stock-day panel (Dagster asset
+  2026-08-01).** `cafef_price` is the SPINE; `cafef_order_stats` / `cafef_foreign` /
+  `cafef_prop_trading` LEFT JOIN on the full `(exchange, ticker, date)` key, and the
+  8 GICS columns come from `simplize_industry × gics` on `(exchange, ticker)`.
+  **2,388,368 stock-days × 38 columns, 781 tickers** — exactly the spine's row count,
+  no fan-out.
+  - **Re-materialised after the bronze re-ingest**, and the payoff is large:
+    order-stats coverage went **347,841 → 2,323,351 rows (+1,975,510)** and prop-trading
+    **63,389 → 72,607**, because `bronze.cafef_order_stats` itself grew 351,373 →
+    2,523,196 when the full-universe scrape was finally ingested. Each block now equals
+    exactly what its source can attach to a price day.
+  - **Verified**: all four joined blocks compared against their bronze sources over the
+    whole 2.4 M rows — **0 mismatches** on price, order stats, foreign and prop.
+  - ⚠️ **The spine costs ~200k order-stat days, and that is inherent to the left join.**
+    199,845 `cafef_order_stats` rows have no matching price row and are dropped:
+    **193,116 of them INSIDE the price date range** (all 781 tickers, 2010-01 → 2026-07 —
+    days CafeF reports order stats for but no price), plus 6,729 simply newer than the
+    price scrape (`cafef_price` ends 2026-07-08, `cafef_order_stats` runs to 2026-07-22).
+    `cafef_foreign` loses 13 rows and `cafef_prop_trading` 1,203 the same way.
+    `silver.stock_market` made the OPPOSITE choice for the six indices — outer join,
+    because there a left join would have dropped 973 of 25,935 index-days. If those
+    193 k stock-days matter, the same change applies here; it is a one-word edit and a
+    re-materialise.
+  - ⚠️ **`simplize_stocks` is NOT a source**, despite being the largest bronze table
+    (2.7 M rows). This is a CafeF-faithful merge — no Simplize price/volume/foreign
+    fallback.
+  - 4 tickers (6,517 rows) have no GICS crosswalk; the left join keeps their rows with
+    NULL classification rather than dropping them.
+  - ✅ **Empty spine now RAISES** (`MissingSourceDataError`) where it used to log and
+    return — that silent path would have been a green Dagster asset over a missing
+    table. A missing OPTIONAL tab still only warns, and the table builds one block short.
 - **Per-source CafeF carry-ups** (`_ingest_silver_cafef_*`, added 2026-07-18) — a
   source-named lift of the bronze CafeF tables into silver, one-to-one, NOT the
   canonical asset merge. Each **selects the bronze table, applies a basic clean pass

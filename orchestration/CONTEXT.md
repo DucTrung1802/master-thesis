@@ -1,9 +1,9 @@
 # Context — `orchestration` (Dagster migration of `src/main.py`)
 
 > Handoff notes. **Status (2026-08-01): the LANDING layer and the whole BRONZE layer are
-> assets and have both been materialised green; silver has 3 and gold 2.** 44 assets.
+> assets and have both been materialised green; silver has 4 and gold 2.** 45 assets.
 > `src/main.py` is untouched and still runs the pipeline the old way. What is left is
-> silver (12 of 15) and gold (4 of 6) — see §4. Verify anything before acting on it: the code
+> silver (11 of 15) and gold (4 of 6) — see §4. Verify anything before acting on it: the code
 > and `src/switch_config.json` are still the sources of truth.
 
 ## 1. Why this is worth doing
@@ -32,10 +32,10 @@ PARTITIONS of two assets, not 320 assets. The remaining 61 map to ~55-65 assets.
 
 ## 2. What exists — LANDING + BRONZE complete, silver started (2026-08-01)
 
-**44 assets: 19 landing + 20 bronze + 3 silver + 2 gold.** Every scraper in `main.py` lands to
+**45 assets: 19 landing + 20 bronze + 4 silver + 2 gold.** Every scraper in `main.py` lands to
 `raw_data/` as an asset ([assets/scrape.py](assets/scrape.py)); every bronze ingest leaf
 is an asset ([assets/bronze.py](assets/bronze.py), 20 leaves → 25 tables); silver has
-three ([assets/silver.py](assets/silver.py)) and gold two ([assets/gold.py](assets/gold.py)).
+four ([assets/silver.py](assets/silver.py)) and gold two ([assets/gold.py](assets/gold.py)).
 They are separate modules on purpose: the
 landing layer is correct-on-disk and re-runnable with no database at all.
 
@@ -73,7 +73,7 @@ raw/cafef_index_{price,order_stats,foreign,prop_trading}
 | `simplize` | stocks, industry | — |
 | `gics` | structure | — |
 | `bronze` | **all 20 ingest leaves** (25 tables) | — |
-| `silver` | `economy` (long fact), `economy_series` (dimension), `stock_market` (4 index tabs joined) | — |
+| `silver` | `economy` (long fact), `economy_series` (dimension), `stock_market` (4 index tabs), `stocks_basic` (6 sources) | — |
 | `gold` | `economy` (wide, as-of), `stock_market` (wide, unfilled) | — |
 
 ### ⚠️ The edges, read out of the code (2026-07-31 correction)
@@ -255,7 +255,7 @@ split across the two modules.
 
 | claim | how it was checked | result |
 |---|---|---|
-| the flat `src/` layout can be imported by Dagster | `dagster definitions validate` | passes, **44 assets** (19 landing + 20 bronze + 3 silver + 2 gold), all code locations OK |
+| the flat `src/` layout can be imported by Dagster | `dagster definitions validate` | passes, **45 assets** (19 landing + 20 bronze + 4 silver + 2 gold), all code locations OK |
 | partitions resolve | reading the definitions back | TV **9**, pdfs **100**, financials **2** (`HOSE_VCB`, `HOSE_ACB`) |
 | the index scrape assets run | `--select "group:cafef_index"` | 4/4 green |
 | the TradingView path works incl. `build_unblocked` | `--select "raw/trading_view_collected_links"` | green, rewrote `all_links_2026-06-26.csv` (313 KB) |
@@ -390,7 +390,7 @@ UI, from `*`, and from every selection. Reserve this for "must never load in thi
 "raw/cafef_news": false
 ```
 
-All 44 keys are listed in the file as a menu, grouped by source, with `//` comment keys
+All 45 keys are listed in the file as a menu, grouped by source, with `//` comment keys
 marking the expensive ones (same comment convention as `switch_config.json`).
 `true` or **absent** = loaded, so a newly added asset is on by default.
 
@@ -398,10 +398,10 @@ Behaviour, all verified:
 
 | case | result |
 |---|---|
-| one key `false` | that asset not loaded (44 → 43); `//` comment keys ignored |
+| one key `false` | that asset not loaded (45 → 44); `//` comment keys ignored |
 | a key matching no asset | **raises**, listing the valid keys |
 | malformed JSON | **raises** — never read as "disable everything" |
-| file absent | 44 assets — absent means "no opinion", not "all off" |
+| file absent | 45 assets — absent means "no opinion", not "all off" |
 | file with a **BOM** | handled (`utf-8-sig`) |
 
 The last three are direct lessons from `switch_config.json`:
@@ -566,6 +566,31 @@ index starting on a different day (VNINDEX 2000-07, VN100-INDEX 2014-02).
 
 **DECIMAL, not REAL:** at 162 columns there is no row-size pressure, and `value_matched`
 reaches ~1e12 where REAL would lose thousands. Hence the exact round-trip above.
+
+### `silver/stocks_basic` — six bronze tables into the per-stock panel (2026-08-01)
+
+```powershell
+dagster asset materialize -f orchestration/definitions.py --select "silver/stocks_basic"
+```
+
+| check | result |
+|---|---|
+| materialised | **RUN_SUCCESS, 7m36s** — the biggest silver build so far |
+| shape | **2,388,368 stock-days × 38 columns**, 781 tickers, = the spine's row count exactly |
+| **values** | all four joined blocks vs their bronze sources over the full table — **0 mismatches** |
+| coverage gain | order stats **347,841 → 2,323,351**, prop **63,389 → 72,607** |
+
+The gain is not from this asset: `bronze.cafef_order_stats` grew 351,373 → 2,523,196 in
+the layer-wide re-ingest, and `stocks_basic` had never been rebuilt against it.
+
+⚠️ **The `cafef_price` spine drops ~200k order-stat days.** 199,845 order-stats rows have
+no price row — 193,116 of them INSIDE the price date range (all 781 tickers), 6,729 newer
+than the price scrape. `silver/stock_market` made the opposite call (outer join) for the
+same reason; if those stock-days matter here, it is the same one-word change.
+
+⚠️ **Six sources, two different keys.** Four CafeF tabs on `(exchange, ticker, date)`,
+plus `simplize_industry × gics` on `(exchange, ticker)` for the GICS tree — so the asset
+declares six bronze deps, not four.
 
 ## 2a. Cost of a full materialize (2026-07-31)
 
@@ -796,7 +821,7 @@ than either alone.
 | phase | scope | estimate |
 |---|---|---|
 | 0 | exception propagation | ✅ **done** |
-| 1 | preprocessor, ~41 assets | bronze ✅ **done**; silver 3/15, gold 2/6 |
+| 1 | preprocessor, ~41 assets | bronze ✅ **done**; silver 4/15, gold 2/6 |
 | 2 | cheap scrapers, ~13 assets | ✅ **done** |
 | 3 | TradingView + partitions | ✅ **done** (9 partitions, not 320 — see 4.4) |
 | 4 | pdfs/financials, ticker partitions | ✅ **built**, not yet run end-to-end |

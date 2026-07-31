@@ -3326,8 +3326,14 @@ class DataPreprocessor:
 
         base = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="cafef_price")
         if base.empty:
-            self._logger.log_info("No bronze cafef_price data found.")
-            return
+            # ⚠️ RAISES, where this used to log and return. `cafef_price` is the SPINE:
+            # without it the method produced no table at all and still reported success,
+            # which under Dagster would be a green asset over a missing table.
+            raise MissingSourceDataError(
+                f"{BRONZE_SCHEMA}.cafef_price is empty — it is the spine of "
+                f"silver.stocks_basic, so there is nothing to build. Run the bronze "
+                f"ingests first (--select group:bronze)."
+            )
 
         df = base
         for table_name in ["cafef_order_stats", "cafef_foreign", "cafef_prop_trading"]:
@@ -3335,8 +3341,12 @@ class DataPreprocessor:
                 schema_name=BRONZE_SCHEMA, table_name=table_name
             )
             if right.empty:
-                self._logger.log_info(
-                    f"No bronze {table_name} data found; skipping its columns."
+                # An OPTIONAL source, unlike the spine: the table still builds, one
+                # measure block short. WARNING rather than INFO because the loss is
+                # silent in the output — those columns are simply absent.
+                self._logger.log_warning(
+                    f"No bronze {table_name} data found; silver.stocks_basic will be "
+                    f"built WITHOUT its columns."
                 )
                 continue
             df = df.merge(right, on=KEYS, how="left")

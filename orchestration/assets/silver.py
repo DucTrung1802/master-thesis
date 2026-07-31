@@ -20,11 +20,15 @@ Splitting them out also keeps the fact table identical in shape to its four sibl
 > column-per-series table makes the SCHEMA a function of the DATA, so every new series
 > becomes a DDL change. Long form takes new series as rows.
 
-The third consolidates the four CafeF index tabs:
+The other two are the same idea at two different granularities — several bronze tables
+folded into one per-entity-per-day panel:
 
 * `silver/stock_market` — the four `bronze.cafef_index_*` tables joined into ONE, PK
   `(exchange, ticker, date)`. ⚠️ `ticker` here is an INDEX CODE (`VNINDEX`, `VN30INDEX`,
   …), never a company — this must not be unioned into `stocks_basic`.
+* `silver/stocks_basic` — the PER-STOCK equivalent: **six** bronze tables, four on the
+  day key with `cafef_price` as the spine, plus `simplize_industry × gics` on
+  `(exchange, ticker)` for the GICS tree.
 
 All are thin wrappers — the logic lives in `DataPreprocessor`, so `main.py`, a notebook
 and Dagster all build the same tables (`orchestration/CONTEXT.md` §3).
@@ -52,6 +56,17 @@ INDEX_TABS = [
     "cafef_index_order_stats",
     "cafef_index_foreign",
     "cafef_index_prop_trading",
+]
+# The six bronze tables `_ingest_silver_stocks_basic` opens: four daily CafeF tabs keyed
+# `(exchange, ticker, date)` with `cafef_price` as the spine, plus the two the GICS
+# crosswalk needs, keyed `(exchange, ticker)`.
+STOCKS_BASIC_SOURCES = [
+    "cafef_price",
+    "cafef_order_stats",
+    "cafef_foreign",
+    "cafef_prop_trading",
+    "simplize_industry",
+    "gics",
 ]
 
 
@@ -184,4 +199,70 @@ def silver_stock_market(
     )
 
 
-assets: List[Callable] = [silver_economy, silver_economy_series, silver_stock_market]
+@asset(
+    name="stocks_basic",
+    key_prefix=["silver"],
+    group_name="silver",
+    compute_kind="postgres",
+    deps=[AssetKey(["bronze", t]) for t in STOCKS_BASIC_SOURCES],
+    description=(
+        "SIX bronze tables → silver.stocks_basic, PK (exchange, ticker, date): "
+        "cafef_price as the spine, LEFT JOIN cafef_{order_stats,foreign,prop_trading} "
+        "on the full day key, plus the GICS tree from simplize_industry × gics on "
+        "(exchange, ticker). ⚠️ A CafeF-faithful merge — simplize_stocks is NOT a "
+        "source here despite being the bigger daily table."
+    ),
+)
+def silver_stocks_basic(
+    context: AssetExecutionContext, preprocessor: PreprocessorResource
+) -> MaterializeResult:
+    with preprocessor.session(schema="silver_schema") as prep:
+        prep._ingest_silver_stocks_basic()
+
+        with prep._database_driver._cursor_ctx() as cur:
+            cur.execute("SELECT COUNT(*) FROM silver_schema.stocks_basic")
+            rows = int(cur.fetchone()[0])
+            cur.execute("SELECT COUNT(DISTINCT ticker) FROM silver_schema.stocks_basic")
+            tickers = int(cur.fetchone()[0])
+            cur.execute(
+                "SELECT COUNT(*) FROM information_schema.columns WHERE "
+                "table_schema = 'silver_schema' AND table_name = 'stocks_basic'"
+            )
+            columns = int(cur.fetchone()[0])
+            cur.execute("SELECT MIN(date), MAX(date) FROM silver_schema.stocks_basic")
+            first, last = cur.fetchone()
+            cur.execute("SELECT COUNT(*) FROM bronze_schema.cafef_price")
+            spine_rows = int(cur.fetchone()[0])
+            # Coverage per joined block — a left join fills what each source has.
+            cur.execute(
+                "SELECT COUNT(n_buy_orders), COUNT(foreign_buy_volume), "
+                "COUNT(prop_buy_vol), COUNT(sector) FROM silver_schema.stocks_basic"
+            )
+            order_stats, foreign, prop, gics = (int(x) for x in cur.fetchone())
+
+    context.log.info(
+        f"silver.stocks_basic: {rows} stock-days × {columns} columns "
+        f"(spine bronze.cafef_price has {spine_rows})"
+    )
+    return MaterializeResult(
+        metadata={
+            "rows": rows,
+            "columns": columns,
+            "tickers": tickers,
+            "spine_rows": spine_rows,
+            "rows with order_stats": order_stats,
+            "rows with foreign": foreign,
+            "rows with prop_trading": prop,
+            "rows with GICS": gics,
+            "date_range": MetadataValue.text(f"{first} → {last}"),
+            "table": MetadataValue.text("silver_schema.stocks_basic"),
+        }
+    )
+
+
+assets: List[Callable] = [
+    silver_economy,
+    silver_economy_series,
+    silver_stock_market,
+    silver_stocks_basic,
+]

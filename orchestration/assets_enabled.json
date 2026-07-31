@@ -71,6 +71,8 @@
     "silver/economy": true,
     "silver/economy_series": true,
     "silver/stock_market": true,
+    "// silver/stocks_basic": "2.4 M rows - the per-stock spine",
+    "silver/stocks_basic": true,
 
     "// ---- gold: model-ready shapes ----": "",
     "// gold/economy": "WIDE: 1 row per business day, 1 col per series, as-of filled",
