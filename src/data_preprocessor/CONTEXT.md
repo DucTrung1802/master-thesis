@@ -112,24 +112,40 @@ DTO helpers come from
   price/daily table is PK'd on `(exchange, ticker, date)` and the event tables carry
   `exchange`/`ticker` beside their surrogate keys. Two split paths, by raw shape:
   - **TradingView** stores only the colon `symbol` → `_helper_split_symbol_column`
-    splits it on the FIRST `:` (applied just before save, so dedup still runs on the
-    intact key). Note this splits a **data-provider prefix**, not always a bourse:
+    splits it on the FIRST `:`, **on read** (2026-08-01; it used to run just before
+    save). Note this splits a **data-provider prefix**, not always a bourse:
     `ECONOMICS:CN14RRR`, `B2PRIME:AUDCAD`, `TVC:VN01` → `exchange` is the vendor
     namespace for the non-stock assets.
   - **CafeF & Simplize** keep `exchange` and the ticker apart in the raw CSV already,
-    so they just `rename(symbol → ticker)` — they no longer fold-then-split.
-  - `_helper_normalise_cafef_symbol` (the old fold-to-colon helper) is now UNUSED by
-    any live ingest; kept only for reference.
+    so they just `rename(symbol → ticker)`.
+  - ✅ **`symbol` now exists in exactly one place: `_helper_split_symbol_column`,
+    called on read (2026-08-01).** Before that it was the layer's working key —
+    the six TradingView ingests cleaned, ordered and deduped on `symbol` and split it
+    only at the end, and `_ingest_bronze_cafef_daily` had a `split_key=False` branch
+    that FOLDED CafeF's `(exchange, symbol)` into `"HOSE:VCB"` just to split it apart
+    again. **All 8 callers passed `split_key=True`**, so that round-trip was dead code
+    — but it kept `symbol` looking like a bronze concept, which is exactly how five
+    silver ingests came to split a column no bronze table has ever stored. The dead
+    branch and `_helper_normalise_cafef_symbol` are deleted; clean/order/dedupe now key
+    on `(exchange, ticker, date)` everywhere.
+    > **Verified by re-ingesting all 20 bronze leaves** (2026-08-01, via Dagster
+    > `--select group:bronze`, 20/20 green): **22 of 25 tables reproduced their row
+    > count exactly**. The three that changed — `cafef_news` 5,599 → 405,320,
+    > `cafef_order_stats` 351,373 → 2,523,196, `cafef_prop_trading` 64,139 → 73,810 —
+    > are **stale bronze catching up with raw data** (those scrapers ran 2026-07-23/24
+    > over the full 777-781 ticker universe; news had been 3 tickers). Each now matches
+    > its raw folder exactly: 2,523,196 = 2,523,196, 73,810 = 73,810; news drops 2 rows
+    > of 405,322 on the null-key clean.
 - **Simple TradingView asset classes** (`bonds/economy/forex/funds/indices` +
   `trading_view_stocks`): glob `raw_data/trading_view/data/<asset>/**/*.csv`, concat,
-  clean (drop rows null on `symbol`/`date`/`value|close`), cast, `date → date`, dedup
-  on `(symbol, date)`, **split symbol → `(exchange, ticker)`**, save. PK
-  `(exchange, ticker, date)`.
+  **split `symbol` → `(exchange, ticker)` immediately**, clean (drop rows null on
+  `exchange`/`ticker`/`date`/`value|close`), cast, `date → date`, dedup on
+  `(exchange, ticker, date)`, save. Same PK.
 - **CafeF — one bronze table per scraper link-folder** (mirrors the scraper's
   one-folder-per-link design; the former single merged `cafef_stocks` is gone —
   the price+foreign merge moved to silver). All share the `_helper_load_cafef_folder`
   helper; the four daily ones go through the generic `_ingest_bronze_cafef_daily`
-  (with `split_key=True` → PK `(exchange, ticker, date)`):
+  (PK `(exchange, ticker, date)`):
   - `cafef_price` — OHLC (`close_raw`/`close_adjust`) + matched/negotiated vol/val. PK `(exchange, ticker, date)`.
   - `cafef_foreign` — foreign buy/sell/net flow (vol+val), `foreign_room_left`, `foreign_own`. PK `(exchange, ticker, date)`.
   - `cafef_order_stats` — buy/sell order counts, volume, avg vol/order. PK `(exchange, ticker, date)`.
@@ -248,9 +264,32 @@ DTO helpers come from
   PK `sub_industry_code`; `sub_industry_definition` overridden to `TEXT`.
 
 ### Silver (`_ingest_silver_*`) — canonical, cross-source merged
-- **Simple assets** (`bonds/economy/forex/funds/indices`): split `symbol` →
-  `(exchange, ticker)`, select the canonical columns, cast, save. PK
-  `(exchange, ticker, date)`.
+- **Simple assets** (`bonds/economy/forex/funds/indices`): select the canonical columns
+  from bronze, cast, save. PK `(exchange, ticker, date)`.
+  > ✅ **Fixed 2026-08-01.** All five used to re-derive the key with
+  > `df["exchange"] = df["symbol"].str.split(":")…` — against a frame that has no
+  > `symbol`, because bronze splits it on read. All five raised `KeyError('symbol')`
+  > (confirmed empirically on the live tables, not by reading). The two lines are gone;
+  > `exchange` and `ticker` come straight out of bronze. See §`symbol` below.
+- **`trading_view_economy` — the PIVOTED macro panel (added 2026-07-31, Dagster-only).**
+  `_ingest_silver_trading_view_economy` reshapes the long bronze table to **one row per
+  DATE, one column per ticker**, PK `date`. 9,719 dates × 1,034 tickers.
+  - **Why wide:** a model joins macro data on `date` alone — the shape
+    `DataPostprocessor._join_macroeconomics_columns` already expects.
+  - ⚠️ **~94% NULL is correct.** Every series keeps its own calendar and frequency
+    (`VNINBR` daily, 6,836 obs; `VNGDPYY` quarterly, 103). 10.0 M cells hold 579,459
+    observations — **exactly** the bronze row count, verified. Forward-filling belongs
+    in gold: doing it here invents observations and destroys the "published today?"
+    signal.
+  - **Column names are the lowercased ticker.** Safe because all 1,034 match
+    `^[A-Za-z][A-Za-z0-9_]*$`, are ≤20 chars, unique case-insensitively and collide with
+    no reserved word — which matters, because `_helper_build_upsert_sql` interpolates
+    column names **unquoted**.
+  - ⚠️ `chunk_size=250`, not the 5,000 default: `execute_values` inlines every value into
+    one statement, so 5,000 × 1,035 columns would build a ~5 M-value SQL string.
+  - `country`/`category`/`exchange` cannot survive a one-row-per-date table; that mapping
+    stays in bronze. Dates run to **2036-10-01** (129 forward-dated rows over 47 series —
+    the source publishes projections); silver keeps them, filtering is gold's call.
 - **Per-source CafeF carry-ups** (`_ingest_silver_cafef_*`, added 2026-07-18) — a
   source-named lift of the bronze CafeF tables into silver, one-to-one, NOT the
   canonical asset merge. Each **selects the bronze table, applies a basic clean pass
@@ -658,14 +697,14 @@ that log is the only record of what actually ran.
 | `trading_view_stocks` | 1,312,523 | universe + sector fallback |
 | `cafef_price` | 2,388,368 | daily `(exchange, ticker, date)` |
 | `cafef_foreign` | 1,772,666 | daily `(exchange, ticker, date)` |
-| `cafef_order_stats` | 351,373 | daily; joined into silver.stocks_basic |
-| `cafef_prop_trading` | 64,139 | daily; joined into silver.stocks_basic |
+| `cafef_order_stats` | 2,523,196 | daily; joined into silver.stocks_basic. **2026-08-01: 351,373 → 2,523,196** — bronze had lagged the 781-ticker scrape |
+| `cafef_prop_trading` | 73,810 | daily; joined into silver.stocks_basic. **2026-08-01: 64,139 → 73,810** (431 tickers) |
 | `cafef_index_price` | 24,962 | **6 MARKET INDICES**, 2000-07-28 → today; VN100-INDEX stops 2025-04-29 |
 | `cafef_index_order_stats` | 22,863 | 6 indices; ⚠️ zero-filled for VN30/VN100 |
 | `cafef_index_foreign` | 20,547 | 6 indices; ⚠️ real holes in the older years (CafeF's) |
 | `cafef_index_prop_trading` | 1,494 | 6 indices; ⚠️ effectively exchange-level (VN100-INDEX = 1 row) |
 | `cafef_insider_shareholder_transactions` | 13,607 | event-based, `row_id` PK; carried 1:1 to silver (own method) |
-| `cafef_news` | 5,599 | event-based, `row_id` PK, `(exchange, ticker)` key; **VCB/PNJ/FPT only** (1,629 / 1,715 / 2,255) — the scraper has run on 3 tickers; not yet in silver |
+| `cafef_news` | 405,320 | event-based, `row_id` PK, `(exchange, ticker)` key. **2026-08-01: 5,599 → 405,320** — the scraper has since run the FULL 777-ticker universe (was VCB/PNJ/FPT only); not yet in silver |
 | `cafef_financials_bank_balance_sheet` | 152 | 100 cols (incl. 3 share cols); VCB 78 (Q4-2006→Q1-2026) + ACB 74 (Q1-2008→Q2-2026) |
 | `cafef_financials_bank_income_statement` | 152 | 36 cols (incl. 3 share cols); VCB 78 + ACB 74 |
 | `cafef_financials_bank_cash_flow` | 152 | 57 cols (incl. 3 share cols); VCB 78 + ACB 74 |

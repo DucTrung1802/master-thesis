@@ -1,9 +1,10 @@
 # Context — `orchestration` (Dagster migration of `src/main.py`)
 
-> Handoff notes. **Status: PROTOTYPE, one slice, proven end-to-end.** `src/main.py`
-> is untouched and remains the way the pipeline runs. This file describes what the
-> prototype establishes and the plan for the rest. Verify anything before acting on
-> it — the code and `src/switch_config.json` are still the sources of truth.
+> Handoff notes. **Status (2026-08-01): the LANDING layer and the whole BRONZE layer are
+> assets and have both been materialised green; silver has its first asset.** 40 assets.
+> `src/main.py` is untouched and still runs the pipeline the old way. What is left is
+> silver (14 of 15) and gold (6) — see §4. Verify anything before acting on it: the code
+> and `src/switch_config.json` are still the sources of truth.
 
 ## 1. Why this is worth doing
 
@@ -29,13 +30,13 @@ What Dagster adds that is not already there:
 TradingView** `(asset_class, country, type, sector)` combinations — those are
 PARTITIONS of two assets, not 320 assets. The remaining 61 map to ~55-65 assets.
 
-## 2. What exists — the LANDING LAYER, complete (2026-07-31)
+## 2. What exists — LANDING + BRONZE complete, silver started (2026-08-01)
 
-**23 assets.** Every scraper in `main.py` now lands to `raw_data/` as an asset
-([assets/scrape.py](assets/scrape.py)), plus 4 bronze assets
-([assets/bronze.py](assets/bronze.py)) that prove the disk→PostgreSQL hop. The two are
-separate modules on purpose: the landing layer is correct-on-disk and re-runnable with
-no database at all.
+**40 assets: 19 landing + 20 bronze + 1 silver.** Every scraper in `main.py` lands to
+`raw_data/` as an asset ([assets/scrape.py](assets/scrape.py)); every bronze ingest leaf
+is an asset ([assets/bronze.py](assets/bronze.py), 20 leaves → 25 tables); silver has its
+first ([assets/silver.py](assets/silver.py)). They are separate modules on purpose: the
+landing layer is correct-on-disk and re-runnable with no database at all.
 
 ```
 trading_view_links[9 asset classes]
@@ -60,7 +61,8 @@ gics_structure
 | `cafef_filings` | pdfs, financials_templates, financials | **100** / **2** — one per ticker |
 | `simplize` | stocks, industry | — |
 | `gics` | structure | — |
-| `bronze` | the 4 index tables | — |
+| `bronze` | **all 20 ingest leaves** (25 tables) | — |
+| `silver` | `trading_view_economy` (pivoted) | — |
 
 ### ⚠️ The edges, read out of the code (2026-07-31 correction)
 
@@ -241,7 +243,7 @@ split across the two modules.
 
 | claim | how it was checked | result |
 |---|---|---|
-| the flat `src/` layout can be imported by Dagster | `dagster definitions validate` | passes, **23 assets**, all code locations OK |
+| the flat `src/` layout can be imported by Dagster | `dagster definitions validate` | passes, **40 assets** (19 landing + 20 bronze + 1 silver), all code locations OK |
 | partitions resolve | reading the definitions back | TV **9**, pdfs **100**, financials **2** (`HOSE_VCB`, `HOSE_ACB`) |
 | the index scrape assets run | `--select "group:cafef_index"` | 4/4 green |
 | the TradingView path works incl. `build_unblocked` | `--select "raw/trading_view_collected_links"` | green, rewrote `all_links_2026-06-26.csv` (313 KB) |
@@ -317,6 +319,12 @@ dagster asset materialize -f orchestration/definitions.py --select "group:cafef_
 # D. one partition of a per-ticker asset
 dagster asset materialize -f orchestration/definitions.py `
     --select "raw/cafef_financials" --partition "HOSE_VCB"
+
+# E. the WHOLE bronze layer, 20 assets — ~9 min, 10.6 M rows (raw_data must be populated)
+dagster asset materialize -f orchestration/definitions.py --select "group:bronze"
+
+# F. a table AND everything upstream of it — scrape, then ingest, in order
+dagster asset materialize -f orchestration/definitions.py --select "+bronze/trading_view_economy"
 ```
 
 **Bringing the landing layer up from nothing**, in dependency order — the universe
@@ -329,6 +337,13 @@ dagster asset materialize -f orchestration/definitions.py --select "group:cafef"
 dagster asset materialize -f orchestration/definitions.py --select "group:simplize"
 dagster asset materialize -f orchestration/definitions.py --select "group:cafef_index"  # independent
 dagster asset materialize -f orchestration/definitions.py --select "group:gics"         # independent
+```
+
+**Then the database layers**, which need only `raw_data/` on disk:
+
+```powershell
+dagster asset materialize -f orchestration/definitions.py --select "group:bronze"   # 20 assets, ~9 min
+dagster asset materialize -f orchestration/definitions.py --select "group:silver"
 ```
 
 Or in the UI: select the graph and hit Materialize — Dagster walks the edges itself,
@@ -363,7 +378,7 @@ UI, from `*`, and from every selection. Reserve this for "must never load in thi
 "raw/cafef_news": false
 ```
 
-All 23 keys are listed in the file as a menu, grouped by source, with `//` comment keys
+All 40 keys are listed in the file as a menu, grouped by source, with `//` comment keys
 marking the expensive ones (same comment convention as `switch_config.json`).
 `true` or **absent** = loaded, so a newly added asset is on by default.
 
@@ -371,10 +386,10 @@ Behaviour, all verified:
 
 | case | result |
 |---|---|
-| one key `false` | that asset not loaded (23 → 22); `//` comment keys ignored |
+| one key `false` | that asset not loaded (40 → 39); `//` comment keys ignored |
 | a key matching no asset | **raises**, listing the valid keys |
 | malformed JSON | **raises** — never read as "disable everything" |
-| file absent | 23 assets — absent means "no opinion", not "all off" |
+| file absent | 40 assets — absent means "no opinion", not "all off" |
 | file with a **BOM** | handled (`utf-8-sig`) |
 
 The last three are direct lessons from `switch_config.json`:
@@ -417,6 +432,62 @@ RUN_SUCCESS
 
 **Sanity check without running anything:** `dagster definitions validate` (it should
 report 8 assets and "All code locations passed validation").
+
+### ✅ Phase 1a — the whole BRONZE layer, 20 assets (2026-08-01)
+
+[assets/bronze.py](assets/bronze.py) now covers **all 20 ingest leaves**, generated from
+an `INGESTS` spec table (name, method, tables, upstream). The four `cafef_index_*` keys
+are unchanged, so their run history survives.
+
+**Bronze has no cross-table dependency** — each ingest reads its own `raw_data/` folder —
+so the layer is flat and every edge points UP at the landing asset that writes that
+folder. ⚠️ The six TradingView edges are **per partition**
+(`SpecificPartitionsPartitionMapping(["economy"])` etc.): `_ingest_bronze_economy` globs
+`data/economy/**` only, and the default all-partitions mapping would claim it needs forex
+and crypto to build. `cafef_financials` is ONE asset writing SIX tables (it is one
+method) and reports a row count per table.
+
+```powershell
+dagster asset materialize -f orchestration/definitions.py --select "group:bronze"
+```
+
+**20/20 green, ~9 minutes**, 10.6 M rows re-ingested. This run doubled as the acceptance
+test for the `symbol` → `ticker` refactor in `src/` (see `data_preprocessor/CONTEXT.md`
+§4-bronze): **22 of 25 tables reproduced their row count EXACTLY.** The three that moved
+were stale bronze catching up with raw data the scrapers had already written —
+`cafef_news` 5,599 → 405,320 (3 tickers → the full 777), `cafef_order_stats` 351,373 →
+2,523,196, `cafef_prop_trading` 64,139 → 73,810 — and each now equals its raw folder
+row-for-row.
+
+### The first SILVER asset — `silver/trading_view_economy` (2026-07-31)
+
+`bronze.trading_view_economy` → `silver.trading_view_economy`, **pivoted to one row per
+DATE, one column per ticker** (PK `date`). Same table name on both sides, deliberately.
+Thin wrapper as always: the reshape is
+`DataPreprocessor._ingest_silver_trading_view_economy`
+([assets/silver.py](assets/silver.py) only calls it and reads the counts back).
+
+```powershell
+dagster asset materialize -f orchestration/definitions.py --select "silver/trading_view_economy"
+```
+
+| check | result |
+|---|---|
+| materialised | **RUN_SUCCESS, 20.2 s** |
+| shape | **9,719 dates × 1,034 tickers** (1,035 cols incl. `date`) |
+| PK | 9,719 rows / 9,719 distinct dates |
+| **no observation lost or invented** | non-null cells = **579,459** = bronze row count, exactly |
+| types | 1 `date` + 1,034 `numeric` (DECIMAL — no float rounding) |
+| values | 525 cells across 3 series (`vncpi`, `vngdpyy`, `a006re1q156nbea`) vs bronze — **0 mismatches** |
+
+⚠️ **It has NO upstream asset, on purpose.** Its input is the bronze TABLE, and bronze is
+only partly migrated (`assets/bronze.py` = the 4 `cafef_index_*` tables, not this one).
+An edge to an asset that does not exist would be fiction; the precondition is enforced in
+the ingest instead, which raises `MissingSourceDataError` on an empty bronze table.
+Phase 1 adds the 20 bronze leaves and this `deps=` gets filled in then.
+
+⚠️ **~94% of the panel is NULL and that is the data, not a bug** — each series keeps its
+own calendar (`VNINBR` daily, `VNGDPYY` quarterly). Forward-filling is a gold decision.
 
 ## 2a. Cost of a full materialize (2026-07-31)
 
@@ -583,6 +654,10 @@ per-leaf isolation means it costs you one leaf, not the layer.
 
 ### 4.2 Phase 1 — the preprocessor (~41 assets, low risk)
 
+> **✅ BRONZE IS DONE (2026-08-01)** — all 20 leaves are assets and have been
+> materialised green; see §"Phase 1a" above. What remains of Phase 1 is silver (~15,
+> one done) and gold (6).
+
 Pure DB work, fast to iterate, no network. One asset per bronze leaf (20), per silver
 ingest (~15 — the multi-ingest leaves like `cafef_carry_ups` and `stocks_financials`
 split naturally, which is an improvement), and per gold leaf (6).
@@ -638,7 +713,7 @@ than either alone.
 | phase | scope | estimate |
 |---|---|---|
 | 0 | exception propagation | ✅ **done** |
-| 1 | preprocessor, ~41 assets | 1-2 days |
+| 1 | preprocessor, ~41 assets | bronze ✅ **done**; silver 1/15, gold 0/6 |
 | 2 | cheap scrapers, ~13 assets | 1 day |
 | 3 | TradingView + partitions | 1 day |
 | 4 | pdfs/financials, ticker partitions | 1 day |

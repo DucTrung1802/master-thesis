@@ -686,14 +686,22 @@ class DataPreprocessor:
 
         df = pd.concat(dataframes, ignore_index=True).drop_duplicates()
 
+        # ⚠️ SPLIT ON READ. `symbol` ("ECONOMICS:VNCPI") is the RAW CSV's key; the bronze
+        # convention is (exchange, ticker), so it is split here and every clean, order
+        # and dedupe below keys on the real stored columns. It used to be split LAST,
+        # which left `symbol` as the working key through the whole method — and is why
+        # five silver ingests still reach for a column no bronze table has ever held.
+        df = self._helper_split_symbol_column(df)
+
         df = self._helper_clean(
             df,
             [
-                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("symbol"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("exchange"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("ticker"),
                 CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("date"),
                 CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("value"),
                 CleanLayer.REMOVE_IF_ALL_COLUMNS_ARE_NULL(),
-                CleanLayer.ORDER_BY(["symbol", "date"]),
+                CleanLayer.ORDER_BY(["exchange", "ticker", "date"]),
             ],
         )
 
@@ -701,8 +709,9 @@ class DataPreprocessor:
 
         df["date"] = pd.to_datetime(df["date"]).dt.date
 
-        df = self._helper_remove_duplicates(df, primary_keys=["symbol", "date"])
-        df = self._helper_split_symbol_column(df)
+        df = self._helper_remove_duplicates(
+            df, primary_keys=["exchange", "ticker", "date"]
+        )
 
         self._helper_save_pandas_table_to_database(
             schema_name=BRONZE_SCHEMA,
@@ -734,14 +743,22 @@ class DataPreprocessor:
 
         df = pd.concat(dataframes, ignore_index=True).drop_duplicates()
 
+        # ⚠️ SPLIT ON READ. `symbol` ("ECONOMICS:VNCPI") is the RAW CSV's key; the bronze
+        # convention is (exchange, ticker), so it is split here and every clean, order
+        # and dedupe below keys on the real stored columns. It used to be split LAST,
+        # which left `symbol` as the working key through the whole method — and is why
+        # five silver ingests still reach for a column no bronze table has ever held.
+        df = self._helper_split_symbol_column(df)
+
         df = self._helper_clean(
             df,
             [
-                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("symbol"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("exchange"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("ticker"),
                 CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("date"),
                 CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("value"),
                 CleanLayer.REMOVE_IF_ALL_COLUMNS_ARE_NULL(),
-                CleanLayer.ORDER_BY(["symbol", "date"]),
+                CleanLayer.ORDER_BY(["exchange", "ticker", "date"]),
             ],
         )
 
@@ -749,8 +766,9 @@ class DataPreprocessor:
 
         df["date"] = pd.to_datetime(df["date"]).dt.date
 
-        df = self._helper_remove_duplicates(df, primary_keys=["symbol", "date"])
-        df = self._helper_split_symbol_column(df)
+        df = self._helper_remove_duplicates(
+            df, primary_keys=["exchange", "ticker", "date"]
+        )
 
         self._helper_save_pandas_table_to_database(
             schema_name=BRONZE_SCHEMA,
@@ -782,14 +800,22 @@ class DataPreprocessor:
 
         df = pd.concat(dataframes, ignore_index=True).drop_duplicates()
 
+        # ⚠️ SPLIT ON READ. `symbol` ("ECONOMICS:VNCPI") is the RAW CSV's key; the bronze
+        # convention is (exchange, ticker), so it is split here and every clean, order
+        # and dedupe below keys on the real stored columns. It used to be split LAST,
+        # which left `symbol` as the working key through the whole method — and is why
+        # five silver ingests still reach for a column no bronze table has ever held.
+        df = self._helper_split_symbol_column(df)
+
         df = self._helper_clean(
             df,
             [
-                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("symbol"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("exchange"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("ticker"),
                 CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("date"),
                 CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("close"),
                 CleanLayer.REMOVE_IF_ALL_COLUMNS_ARE_NULL(),
-                CleanLayer.ORDER_BY(["symbol", "date"]),
+                CleanLayer.ORDER_BY(["exchange", "ticker", "date"]),
             ],
         )
 
@@ -801,8 +827,9 @@ class DataPreprocessor:
 
         df["date"] = pd.to_datetime(df["date"]).dt.date
 
-        df = self._helper_remove_duplicates(df, primary_keys=["symbol", "date"])
-        df = self._helper_split_symbol_column(df)
+        df = self._helper_remove_duplicates(
+            df, primary_keys=["exchange", "ticker", "date"]
+        )
 
         self._helper_save_pandas_table_to_database(
             schema_name=BRONZE_SCHEMA,
@@ -834,14 +861,22 @@ class DataPreprocessor:
 
         df = pd.concat(dataframes, ignore_index=True).drop_duplicates()
 
+        # ⚠️ SPLIT ON READ. `symbol` ("ECONOMICS:VNCPI") is the RAW CSV's key; the bronze
+        # convention is (exchange, ticker), so it is split here and every clean, order
+        # and dedupe below keys on the real stored columns. It used to be split LAST,
+        # which left `symbol` as the working key through the whole method — and is why
+        # five silver ingests still reach for a column no bronze table has ever held.
+        df = self._helper_split_symbol_column(df)
+
         df = self._helper_clean(
             df,
             [
-                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("symbol"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("exchange"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("ticker"),
                 CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("date"),
                 CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("close"),
                 CleanLayer.REMOVE_IF_ALL_COLUMNS_ARE_NULL(),
-                CleanLayer.ORDER_BY(["symbol", "date"]),
+                CleanLayer.ORDER_BY(["exchange", "ticker", "date"]),
             ],
         )
 
@@ -853,8 +888,9 @@ class DataPreprocessor:
 
         df["date"] = pd.to_datetime(df["date"]).dt.date
 
-        df = self._helper_remove_duplicates(df, primary_keys=["symbol", "date"])
-        df = self._helper_split_symbol_column(df)
+        df = self._helper_remove_duplicates(
+            df, primary_keys=["exchange", "ticker", "date"]
+        )
 
         self._helper_save_pandas_table_to_database(
             schema_name=BRONZE_SCHEMA,
@@ -890,14 +926,22 @@ class DataPreprocessor:
 
         df = pd.concat(dataframes, ignore_index=True).drop_duplicates()
 
+        # ⚠️ SPLIT ON READ. `symbol` ("ECONOMICS:VNCPI") is the RAW CSV's key; the bronze
+        # convention is (exchange, ticker), so it is split here and every clean, order
+        # and dedupe below keys on the real stored columns. It used to be split LAST,
+        # which left `symbol` as the working key through the whole method — and is why
+        # five silver ingests still reach for a column no bronze table has ever held.
+        df = self._helper_split_symbol_column(df)
+
         df = self._helper_clean(
             df,
             [
-                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("symbol"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("exchange"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("ticker"),
                 CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("date"),
                 CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("close"),
                 CleanLayer.REMOVE_IF_ALL_COLUMNS_ARE_NULL(),
-                CleanLayer.ORDER_BY(["symbol", "date"]),
+                CleanLayer.ORDER_BY(["exchange", "ticker", "date"]),
             ],
         )
 
@@ -909,8 +953,9 @@ class DataPreprocessor:
 
         df["date"] = pd.to_datetime(df["date"]).dt.date
 
-        df = self._helper_remove_duplicates(df, primary_keys=["symbol", "date"])
-        df = self._helper_split_symbol_column(df)
+        df = self._helper_remove_duplicates(
+            df, primary_keys=["exchange", "ticker", "date"]
+        )
 
         self._helper_save_pandas_table_to_database(
             schema_name=BRONZE_SCHEMA,
@@ -953,9 +998,15 @@ class DataPreprocessor:
         return pd.concat(frames, ignore_index=True).drop_duplicates()
 
     def _helper_split_symbol_column(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Split the `"<EXCHANGE>:<TICKER>"` colon key into separate `exchange` and
-        `ticker` columns (dropping `symbol`). The inverse of the colon convention —
-        used by the sources that keep a single colon `symbol` (TradingView).
+        """Split the RAW CSV's `"<EXCHANGE>:<TICKER>"` colon key into separate
+        `exchange` and `ticker` columns (dropping `symbol`).
+
+        ⚠️ **THE ONLY PLACE `symbol` MAY APPEAR, and it is called ON READ.** `symbol` is
+        TradingView's CSV column, never a bronze column: every bronze table stores
+        `(exchange, ticker)`. Calling this at the END of an ingest — as all six
+        TradingView ingests did until 2026-08-01 — makes `symbol` look like the layer's
+        key, which is how five silver ingests came to split a column that no bronze
+        table has ever stored (`KeyError('symbol')`, all five).
 
         Splits on the FIRST `:` only, because TradingView's provider-prefixed symbols
         are still `PREFIX:REST` (`ECONOMICS:CN14RRR`, `B2PRIME:AUDCAD`) and REST may
@@ -970,17 +1021,6 @@ class DataPreprocessor:
         df["ticker"] = parts[1].str.strip()
         return df.drop(columns=["symbol"])
 
-    def _helper_normalise_cafef_symbol(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Fold CafeF's split (exchange, symbol) into the bronze convention
-        `symbol = "<EXCHANGE>:<TICKER>"` and drop the redundant `exchange` column."""
-        df = df.copy()
-        df["symbol"] = (
-            df["exchange"].astype("string").str.strip()
-            + ":"
-            + df["symbol"].astype("string").str.strip()
-        )
-        return df.drop(columns=["exchange"])
-
     def _ingest_bronze_cafef_daily(
         self,
         folder: str,
@@ -988,28 +1028,25 @@ class DataPreprocessor:
         decimal_cols: List[str],
         bigint_cols: List[str],
         required_col: Optional[str] = None,
-        split_key: bool = False,
     ) -> None:
         """Ingest one DAILY-series CafeF folder as its own bronze table
-        (raw-faithful). Drives price / foreign / order_stats / prop_trading.
+        (raw-faithful). Drives price / foreign / order_stats / prop_trading and the
+        four index tables. PK `(exchange, ticker, date)`.
 
-        `split_key` selects the key convention:
-        - `False` (default) — fold CafeF's raw (exchange, symbol) columns into the
-          `symbol = "<EXCHANGE>:<TICKER>"` colon key so the source merges uniformly
-          with Simplize/TradingView in silver. PK (symbol, date).
-        - `True` — keep the key SPLIT as separate `exchange` + `ticker` columns
-          (raw-faithful to the CSV, which already stores the two apart). PK
-          (exchange, ticker, date)."""
+        The CSV already stores the key apart, so `symbol` is only ever the CSV's name
+        for the ticker and is renamed on read.
+
+        > Until 2026-08-01 a `split_key` flag also offered the opposite convention:
+        > fold `(exchange, symbol)` into `symbol = "<EXCHANGE>:<TICKER>"`, then split it
+        > back apart before saving. **All 8 callers passed `split_key=True`**, so that
+        > round-trip was dead code that nonetheless kept `symbol` alive in the layer's
+        > vocabulary — and cost the silver ingests a column that never reaches disk."""
         self._logger.log_info(f"Ingesting bronze CafeF {folder} data...")
 
         df = self._helper_load_cafef_folder(folder)
 
-        if split_key:
-            df = df.rename(columns={"symbol": "ticker"})
-            key_cols = ["exchange", "ticker"]
-        else:
-            df = self._helper_normalise_cafef_symbol(df)
-            key_cols = ["symbol"]
+        df = df.rename(columns={"symbol": "ticker"})
+        key_cols = ["exchange", "ticker"]
 
         clean_layers = [
             CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL(col) for col in key_cols
@@ -1057,7 +1094,6 @@ class DataPreprocessor:
             ],
             bigint_cols=["volume_matched", "volume_negotiated"],
             required_col="close_adjust",
-            split_key=True,
         )
 
     def _ingest_bronze_cafef_foreign(self) -> None:
@@ -1078,7 +1114,6 @@ class DataPreprocessor:
                 "foreign_net_volume",
                 "foreign_room_left",
             ],
-            split_key=True,
         )
 
     def _ingest_bronze_cafef_order_stats(self) -> None:
@@ -1094,7 +1129,6 @@ class DataPreprocessor:
                 "n_sell_orders",
                 "sell_order_vol",
             ],
-            split_key=True,
         )
 
     def _ingest_bronze_cafef_prop_trading(self) -> None:
@@ -1105,14 +1139,13 @@ class DataPreprocessor:
             table_name="cafef_prop_trading",
             decimal_cols=["prop_buy_val", "prop_sell_val"],
             bigint_cols=["prop_buy_vol", "prop_sell_vol"],
-            split_key=True,
         )
 
     # ── CafeF MARKET INDICES — the same four daily tabs, for the six indices ──────
     # `CafeFIndexScraper` writes `index_<tab>/` folders that are COLUMN-IDENTICAL to the
     # per-stock ones (it subclasses the stock scraper and reuses its column constants),
     # so these reuse `_ingest_bronze_cafef_daily` unchanged — same cast lists, same
-    # `split_key=True`, same PK. Only the folder and the table name differ.
+    # (exchange, ticker, date) PK. Only the folder and the table name differ.
     #
     # ⚠️ THEY GET THEIR OWN TABLES AND MUST NEVER BE UNIONED INTO THE STOCK ONES.
     # `ticker` here holds an INDEX CODE (`VNINDEX`, `VN30INDEX`, `VN100-INDEX`,
@@ -1151,7 +1184,6 @@ class DataPreprocessor:
             ],
             bigint_cols=["volume_matched", "volume_negotiated"],
             required_col="close_adjust",
-            split_key=True,
         )
 
     def _ingest_bronze_cafef_index_foreign(self) -> None:
@@ -1173,7 +1205,6 @@ class DataPreprocessor:
                 "foreign_net_volume",
                 "foreign_room_left",
             ],
-            split_key=True,
         )
 
     def _ingest_bronze_cafef_index_order_stats(self) -> None:
@@ -1189,7 +1220,6 @@ class DataPreprocessor:
                 "n_sell_orders",
                 "sell_order_vol",
             ],
-            split_key=True,
         )
 
     def _ingest_bronze_cafef_index_prop_trading(self) -> None:
@@ -1200,7 +1230,6 @@ class DataPreprocessor:
             table_name="cafef_index_prop_trading",
             decimal_cols=["prop_buy_val", "prop_sell_val"],
             bigint_cols=["prop_buy_vol", "prop_sell_vol"],
-            split_key=True,
         )
 
     def _ingest_bronze_cafef_insider_shareholder_transactions(self) -> None:
@@ -1883,14 +1912,22 @@ class DataPreprocessor:
 
         df = pd.concat(dataframes, ignore_index=True).drop_duplicates()
 
+        # ⚠️ SPLIT ON READ. `symbol` ("ECONOMICS:VNCPI") is the RAW CSV's key; the bronze
+        # convention is (exchange, ticker), so it is split here and every clean, order
+        # and dedupe below keys on the real stored columns. It used to be split LAST,
+        # which left `symbol` as the working key through the whole method — and is why
+        # five silver ingests still reach for a column no bronze table has ever held.
+        df = self._helper_split_symbol_column(df)
+
         df = self._helper_clean(
             df,
             [
-                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("symbol"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("exchange"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("ticker"),
                 CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("date"),
                 CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("value"),
                 CleanLayer.REMOVE_IF_ALL_COLUMNS_ARE_NULL(),
-                CleanLayer.ORDER_BY(["symbol", "date"]),
+                CleanLayer.ORDER_BY(["exchange", "ticker", "date"]),
             ],
         )
 
@@ -1898,8 +1935,9 @@ class DataPreprocessor:
 
         df["date"] = pd.to_datetime(df["date"]).dt.date
 
-        df = self._helper_remove_duplicates(df, primary_keys=["symbol", "date"])
-        df = self._helper_split_symbol_column(df)
+        df = self._helper_remove_duplicates(
+            df, primary_keys=["exchange", "ticker", "date"]
+        )
 
         self._helper_save_pandas_table_to_database(
             schema_name=BRONZE_SCHEMA,
@@ -1919,9 +1957,6 @@ class DataPreprocessor:
         if df.empty:
             self._logger.log_info("No bronze bonds data found.")
             return
-
-        df["exchange"] = df["symbol"].str.split(":").str[0]
-        df["ticker"] = df["symbol"].str.split(":").str[1]
 
         df = df[["exchange", "ticker", "date", "value"]]
 
@@ -1944,9 +1979,6 @@ class DataPreprocessor:
             self._logger.log_info("No bronze economy data found.")
             return
 
-        df["exchange"] = df["symbol"].str.split(":").str[0]
-        df["ticker"] = df["symbol"].str.split(":").str[1]
-
         df = df[["exchange", "ticker", "date", "value"]]
 
         self._helper_save_pandas_table_to_database(
@@ -1955,6 +1987,93 @@ class DataPreprocessor:
             primary_keys=["exchange", "ticker", "date"],
             df=df,
             dtype_overrides={"date": DataType.DATE()},
+        )
+
+    def _ingest_silver_trading_view_economy(self) -> None:
+        """`bronze.trading_view_economy` → `silver.trading_view_economy`, PIVOTED:
+        **one row per DATE, one column per ticker.**
+
+        Bronze is already unique on `(ticker, date)` — 579,459 rows, 579,459 distinct
+        pairs — so this is a reshape, not a de-duplication: the long EAV table becomes
+        the wide macro panel a model can join on `date` alone (the shape
+        `DataPostprocessor._join_macroeconomics_columns` already expects).
+
+        ⚠️ **The result is ~94% NULL and that is correct, not a defect.** Each series
+        keeps its own calendar and frequency — VNINBR is daily (6,836 obs), VNGDPYY is
+        quarterly (~100) — so on any given date only the series that actually reported
+        are non-null. 9,719 dates × 1,034 tickers = 10.0 M cells for 579 k observations
+        (5.8% filled). Forward-filling is a MODELLING decision and belongs in gold: doing
+        it here would invent observations and destroy the "was this published today?"
+        signal that release-date-sensitive features need.
+
+        ⚠️ **Ticker is the only column identity that survives.** `country`, `category`
+        and `exchange` cannot ride along in a one-row-per-date table; that mapping stays
+        in bronze (and in the long `silver.economy`). Column names are the LOWERCASED
+        ticker — verified safe: all 1,034 are `^[A-Za-z][A-Za-z0-9_]*$`, ≤20 chars,
+        unique case-insensitively, no exchange collisions, no reserved words. This
+        matters because `_helper_build_upsert_sql` interpolates column names UNQUOTED.
+        """
+        self._logger.log_info("Ingesting silver trading_view_economy data (pivoted)...")
+
+        df = self._helper_select(
+            schema_name=BRONZE_SCHEMA, table_name="trading_view_economy"
+        )
+
+        if df.empty:
+            raise MissingSourceDataError(
+                f"{BRONZE_SCHEMA}.trading_view_economy is empty — run the bronze "
+                f"economy ingest first."
+            )
+
+        # ── basic clean layer ────────────────────────────────────────────────────
+        df = self._helper_clean(
+            df,
+            [
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("ticker"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("date"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("value"),
+                CleanLayer.REMOVE_IF_ALL_COLUMNS_ARE_NULL(),
+                CleanLayer.ORDER_BY(["date", "ticker"]),
+            ],
+        )
+
+        df["date"] = pd.to_datetime(df["date"]).dt.date
+        df["ticker"] = df["ticker"].astype(str).str.strip().str.lower()
+        df["value"] = pd.to_numeric(df["value"], errors="coerce")
+        df = df.dropna(subset=["ticker", "date", "value"])
+
+        # Bronze's PK makes this a no-op today, but `pivot` RAISES on a duplicate
+        # (index, column) pair — so the guarantee is enforced here rather than assumed.
+        before = len(df)
+        df = self._helper_remove_duplicates(df, primary_keys=["ticker", "date"])
+        if len(df) != before:
+            self._logger.log_warning(
+                f"Dropped {before - len(df)} duplicate (ticker, date) row(s) before "
+                f"pivoting — bronze is supposed to be unique on that key."
+            )
+
+        # ── the pivot: 1 row = 1 date ────────────────────────────────────────────
+        wide = df.pivot(index="date", columns="ticker", values="value")
+        wide = wide.sort_index().reset_index()
+        wide.columns.name = None
+
+        self._logger.log_info(
+            f"Pivoted {before} observations into {len(wide)} dates × "
+            f"{len(wide.columns) - 1} tickers "
+            f"({100.0 * before / max((len(wide)) * (len(wide.columns) - 1), 1):.2f}% "
+            f"of cells filled)."
+        )
+
+        # ⚠️ chunk_size is deliberately small. `execute_values` inlines every value into
+        # ONE statement, so the default 5,000 rows × 1,035 columns would build a ~5 M
+        # value SQL string per chunk. 250 keeps each statement in the low MB.
+        self._helper_save_pandas_table_to_database(
+            schema_name=SILVER_SCHEMA,
+            table_name="trading_view_economy",
+            primary_keys=["date"],
+            df=wide,
+            dtype_overrides={"date": DataType.DATE()},
+            chunk_size=250,
         )
 
     def _ingest_silver_forex(self) -> None:
@@ -1967,9 +2086,6 @@ class DataPreprocessor:
         if df.empty:
             self._logger.log_info("No bronze forex data found.")
             return
-
-        df["exchange"] = df["symbol"].str.split(":").str[0]
-        df["ticker"] = df["symbol"].str.split(":").str[1]
 
         # Forex is a single-value series (OHLC columns are null in bronze;
         # the price lives in `value`), so treat it like bonds/economy.
@@ -1994,9 +2110,6 @@ class DataPreprocessor:
         if df.empty:
             self._logger.log_info("No bronze funds data found.")
             return
-
-        df["exchange"] = df["symbol"].str.split(":").str[0]
-        df["ticker"] = df["symbol"].str.split(":").str[1]
 
         df = df[
             ["exchange", "ticker", "date", "open", "high", "low", "close", "volume"]
@@ -2023,9 +2136,6 @@ class DataPreprocessor:
         if df.empty:
             self._logger.log_info("No bronze indices data found.")
             return
-
-        df["exchange"] = df["symbol"].str.split(":").str[0]
-        df["ticker"] = df["symbol"].str.split(":").str[1]
 
         df = df[
             ["exchange", "ticker", "date", "open", "high", "low", "close", "volume"]
