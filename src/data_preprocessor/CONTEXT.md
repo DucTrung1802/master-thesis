@@ -293,6 +293,31 @@ DTO helpers come from
   > 63% of all observations and imposed a 9,719-day grid on 500 monthly and 226 quarterly
   > ones — on their own grids those buckets are 76-93% filled, so the sparsity was an
   > artefact of the shape), and it silently invited **look-ahead bias** (see below).
+- **`stock_market` — the four CafeF INDEX tabs joined into ONE table (2026-08-01).**
+  `bronze.cafef_index_{price,order_stats,foreign,prop_trading}` →
+  `silver.stock_market`, PK `(exchange, ticker, date)`. **25,935 index-days × 30
+  columns**, 6 indices, 2000-07-28 → 2026-07-30. The four tabs are four MEASURES of the
+  same entity (index × day), split across tables only because the scraper writes one
+  folder per CafeF tab; no measure name collides across them, so the merge needs no
+  suffixes.
+  - ⚠️ **`ticker` IS AN INDEX CODE, NOT A COMPANY** — `VNINDEX`, `VN30INDEX`,
+    `VN100-INDEX`, `HNX-INDEX`, `HNX30-INDEX`, `UPCOM-INDEX`. Never union this into
+    `stocks_basic`; that separation is the whole reason it is its own table.
+  - ⚠️ **OUTER join, a deliberate divergence from `stocks_basic`'s left-join-on-price.**
+    Measured: the key union is **25,935** against price's **24,962**, so a left join
+    would silently drop **973 index-days** that have data in another tab but no price
+    row — 930 with order stats, 539 with foreign flow, 6 with prop trading, and 842 of
+    them VN100-INDEX (2014-04 → 2026-07). For six indices, discarding a thousand days of
+    real observations to keep a convention is the wrong trade.
+  - The tabs have very different histories — price from 2000-07, foreign 2007-01, order
+    stats 2007-11, prop trading only 2022-11 — so **NULL in a measure means "that tab has
+    no record for this index-day", never zero**. Coverage: 24,962 price / 22,863 order
+    stats / 20,547 foreign / 1,494 prop, each exactly its bronze row count.
+  - An invariant check **raises** if the join's row count differs from the union of the
+    four key sets, which is how a duplicate key in any input would otherwise fan out
+    silently.
+  - **Verified**: all four sources matched row-for-row, **532,188 cells compared, 0
+    mismatches**.
 - **Per-source CafeF carry-ups** (`_ingest_silver_cafef_*`, added 2026-07-18) — a
   source-named lift of the bronze CafeF tables into silver, one-to-one, NOT the
   canonical asset merge. Each **selects the bronze table, applies a basic clean pass

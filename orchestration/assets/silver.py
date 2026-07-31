@@ -1,7 +1,7 @@
 # orchestration\assets\silver.py
 """The SILVER layer — `bronze_schema` → `silver_schema`.
 
-Two assets, and they are a FACT table plus its DIMENSION:
+Three assets. Two are a FACT table plus its DIMENSION:
 
 * `silver/economy` — long, one row per series per date, PK `(exchange, ticker, date)`.
   The same grain as `bonds`/`forex`/`funds`/`indices`, and the grain
@@ -20,7 +20,13 @@ Splitting them out also keeps the fact table identical in shape to its four sibl
 > column-per-series table makes the SCHEMA a function of the DATA, so every new series
 > becomes a DDL change. Long form takes new series as rows.
 
-Both are thin wrappers — the logic lives in `DataPreprocessor`, so `main.py`, a notebook
+The third consolidates the four CafeF index tabs:
+
+* `silver/stock_market` — the four `bronze.cafef_index_*` tables joined into ONE, PK
+  `(exchange, ticker, date)`. ⚠️ `ticker` here is an INDEX CODE (`VNINDEX`, `VN30INDEX`,
+  …), never a company — this must not be unioned into `stocks_basic`.
+
+All are thin wrappers — the logic lives in `DataPreprocessor`, so `main.py`, a notebook
 and Dagster all build the same tables (`orchestration/CONTEXT.md` §3).
 """
 
@@ -41,6 +47,12 @@ bootstrap()
 from orchestration.resources import PreprocessorResource
 
 BRONZE_ECONOMY = AssetKey(["bronze", "trading_view_economy"])
+INDEX_TABS = [
+    "cafef_index_price",
+    "cafef_index_order_stats",
+    "cafef_index_foreign",
+    "cafef_index_prop_trading",
+]
 
 
 @asset(
@@ -124,4 +136,52 @@ def silver_economy_series(
     )
 
 
-assets: List[Callable] = [silver_economy, silver_economy_series]
+@asset(
+    name="stock_market",
+    key_prefix=["silver"],
+    group_name="silver",
+    compute_kind="postgres",
+    deps=[AssetKey(["bronze", t]) for t in INDEX_TABS],
+    description=(
+        "The four bronze.cafef_index_* tabs (price, order_stats, foreign, prop_trading) "
+        "→ ONE silver.stock_market, PK (exchange, ticker, date). 6 market indices. "
+        "⚠️ OUTER join, unlike stocks_basic's left-join-on-price: the key union is "
+        "25,935 against price's 24,962, so a left join would drop 973 index-days that "
+        "have order/foreign/prop data but no price row."
+    ),
+)
+def silver_stock_market(
+    context: AssetExecutionContext, preprocessor: PreprocessorResource
+) -> MaterializeResult:
+    with preprocessor.session(schema="silver_schema") as prep:
+        prep._ingest_silver_stock_market()
+
+        with prep._database_driver._cursor_ctx() as cur:
+            cur.execute("SELECT COUNT(*) FROM silver_schema.stock_market")
+            rows = int(cur.fetchone()[0])
+            cur.execute(
+                "SELECT COUNT(*) FROM information_schema.columns WHERE "
+                "table_schema = 'silver_schema' AND table_name = 'stock_market'"
+            )
+            columns = int(cur.fetchone()[0])
+            cur.execute(
+                "SELECT ticker, COUNT(*) FROM silver_schema.stock_market "
+                "GROUP BY 1 ORDER BY 2 DESC"
+            )
+            by_index = {t: int(n) for t, n in cur.fetchall()}
+            cur.execute("SELECT MIN(date), MAX(date) FROM silver_schema.stock_market")
+            first, last = cur.fetchone()
+
+    context.log.info(f"silver.stock_market: {rows} index-days × {columns} columns")
+    return MaterializeResult(
+        metadata={
+            "rows": rows,
+            "columns": columns,
+            "indices": MetadataValue.json(by_index),
+            "date_range": MetadataValue.text(f"{first} → {last}"),
+            "table": MetadataValue.text("silver_schema.stock_market"),
+        }
+    )
+
+
+assets: List[Callable] = [silver_economy, silver_economy_series, silver_stock_market]

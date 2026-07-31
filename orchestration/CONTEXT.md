@@ -1,9 +1,9 @@
 # Context — `orchestration` (Dagster migration of `src/main.py`)
 
 > Handoff notes. **Status (2026-08-01): the LANDING layer and the whole BRONZE layer are
-> assets and have both been materialised green; silver has its first asset.** 40 assets.
+> assets and have both been materialised green; silver has 3 and gold 1.** 43 assets.
 > `src/main.py` is untouched and still runs the pipeline the old way. What is left is
-> silver (13 of 15) and gold (5 of 6) — see §4. Verify anything before acting on it: the code
+> silver (12 of 15) and gold (5 of 6) — see §4. Verify anything before acting on it: the code
 > and `src/switch_config.json` are still the sources of truth.
 
 ## 1. Why this is worth doing
@@ -32,10 +32,11 @@ PARTITIONS of two assets, not 320 assets. The remaining 61 map to ~55-65 assets.
 
 ## 2. What exists — LANDING + BRONZE complete, silver started (2026-08-01)
 
-**42 assets: 19 landing + 20 bronze + 2 silver + 1 gold.** Every scraper in `main.py` lands to
+**43 assets: 19 landing + 20 bronze + 3 silver + 1 gold.** Every scraper in `main.py` lands to
 `raw_data/` as an asset ([assets/scrape.py](assets/scrape.py)); every bronze ingest leaf
-is an asset ([assets/bronze.py](assets/bronze.py), 20 leaves → 25 tables); silver has its
-first ([assets/silver.py](assets/silver.py)). They are separate modules on purpose: the
+is an asset ([assets/bronze.py](assets/bronze.py), 20 leaves → 25 tables); silver has
+three ([assets/silver.py](assets/silver.py)) and gold one ([assets/gold.py](assets/gold.py)).
+They are separate modules on purpose: the
 landing layer is correct-on-disk and re-runnable with no database at all.
 
 ```
@@ -62,7 +63,7 @@ gics_structure
 | `simplize` | stocks, industry | — |
 | `gics` | structure | — |
 | `bronze` | **all 20 ingest leaves** (25 tables) | — |
-| `silver` | `economy` (long fact), `economy_series` (dimension) | — |
+| `silver` | `economy` (long fact), `economy_series` (dimension), `stock_market` (4 index tabs joined) | — |
 | `gold` | `economy` (wide, as-of) | — |
 
 ### ⚠️ The edges, read out of the code (2026-07-31 correction)
@@ -244,7 +245,7 @@ split across the two modules.
 
 | claim | how it was checked | result |
 |---|---|---|
-| the flat `src/` layout can be imported by Dagster | `dagster definitions validate` | passes, **42 assets** (19 landing + 20 bronze + 2 silver + 1 gold), all code locations OK |
+| the flat `src/` layout can be imported by Dagster | `dagster definitions validate` | passes, **43 assets** (19 landing + 20 bronze + 3 silver + 1 gold), all code locations OK |
 | partitions resolve | reading the definitions back | TV **9**, pdfs **100**, financials **2** (`HOSE_VCB`, `HOSE_ACB`) |
 | the index scrape assets run | `--select "group:cafef_index"` | 4/4 green |
 | the TradingView path works incl. `build_unblocked` | `--select "raw/trading_view_collected_links"` | green, rewrote `all_links_2026-06-26.csv` (313 KB) |
@@ -379,7 +380,7 @@ UI, from `*`, and from every selection. Reserve this for "must never load in thi
 "raw/cafef_news": false
 ```
 
-All 42 keys are listed in the file as a menu, grouped by source, with `//` comment keys
+All 43 keys are listed in the file as a menu, grouped by source, with `//` comment keys
 marking the expensive ones (same comment convention as `switch_config.json`).
 `true` or **absent** = loaded, so a newly added asset is on by default.
 
@@ -387,10 +388,10 @@ Behaviour, all verified:
 
 | case | result |
 |---|---|
-| one key `false` | that asset not loaded (42 → 41); `//` comment keys ignored |
+| one key `false` | that asset not loaded (43 → 42); `//` comment keys ignored |
 | a key matching no asset | **raises**, listing the valid keys |
 | malformed JSON | **raises** — never read as "disable everything" |
-| file absent | 42 assets — absent means "no opinion", not "all off" |
+| file absent | 43 assets — absent means "no opinion", not "all off" |
 | file with a **BOM** | handled (`utf-8-sig`) |
 
 The last three are direct lessons from `switch_config.json`:
@@ -503,6 +504,31 @@ an invariant check raises if the reindex loses anything. 565,171 observations in
 
 > **Retired the same day: `silver/trading_view_economy`**, an earlier version of the same
 > pivot under its own table name. Code at `fa74ad3`.
+
+### `silver/stock_market` — four bronze tables into one (2026-08-01)
+
+The four `bronze.cafef_index_*` tabs are four MEASURES of the same entity (index × day),
+so they join on the full key into one table:
+
+```powershell
+dagster asset materialize -f orchestration/definitions.py --select "silver/stock_market"
+```
+
+| check | result |
+|---|---|
+| materialised | **RUN_SUCCESS, 3.0 s** |
+| shape | **25,935 index-days × 30 columns**, PK `(exchange, ticker, date)` unique |
+| indices | 6 — `VNINDEX`, `VN30INDEX`, `VN100-INDEX`, `HNX-INDEX`, `HNX30-INDEX`, `UPCOM-INDEX` |
+| **every source value preserved** | **532,188 cells compared vs the four bronze tables, 0 mismatches** |
+| coverage | 24,962 price / 22,863 order stats / 20,547 foreign / 1,494 prop — each exactly its bronze row count |
+
+⚠️ **OUTER join, unlike `stocks_basic`'s left-join-on-price.** The key union is 25,935
+against price's 24,962, so a left join would have dropped **973 index-days** that carry
+order-stats (930), foreign (539) or prop (6) data with no price row — 842 of them
+VN100-INDEX. An invariant check raises if the join count ever differs from the key union.
+
+⚠️ **`ticker` here is an INDEX CODE, not a company.** This table must never be unioned
+into `silver.stocks_basic`.
 
 ## 2a. Cost of a full materialize (2026-07-31)
 
@@ -728,7 +754,7 @@ than either alone.
 | phase | scope | estimate |
 |---|---|---|
 | 0 | exception propagation | ✅ **done** |
-| 1 | preprocessor, ~41 assets | bronze ✅ **done**; silver 2/15, gold 1/6 |
+| 1 | preprocessor, ~41 assets | bronze ✅ **done**; silver 3/15, gold 1/6 |
 | 2 | cheap scrapers, ~13 assets | 1 day |
 | 3 | TradingView + partitions | 1 day |
 | 4 | pdfs/financials, ticker partitions | 1 day |

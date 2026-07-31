@@ -2148,6 +2148,138 @@ class DataPreprocessor:
             },
         )
 
+    # The four CafeF index tabs, and how each column must be cast coming out of bronze.
+    # Names are taken straight from the bronze ingests - VERIFIED to be collision-free
+    # across the four tabs, so the merge needs no suffixes and no renaming.
+    INDEX_TABS = {
+        "cafef_index_price": (
+            ["open", "high", "low", "close_raw", "close_adjust",
+             "value_matched", "value_negotiated"],
+            ["volume_matched", "volume_negotiated"],
+        ),
+        "cafef_index_order_stats": (
+            ["avg_vol_per_buy_order", "avg_vol_per_sell_order"],
+            ["n_buy_orders", "buy_order_vol", "n_sell_orders", "sell_order_vol"],
+        ),
+        "cafef_index_foreign": (
+            ["foreign_buy_value", "foreign_sell_value", "foreign_net_value",
+             "foreign_own"],
+            ["foreign_buy_volume", "foreign_sell_volume", "foreign_net_volume",
+             "foreign_room_left"],
+        ),
+        "cafef_index_prop_trading": (
+            ["prop_buy_val", "prop_sell_val"],
+            ["prop_buy_vol", "prop_sell_vol"],
+        ),
+    }
+
+    def _ingest_silver_stock_market(self) -> None:
+        """The four `bronze.cafef_index_*` tabs -> ONE `silver.stock_market`,
+        PK `(exchange, ticker, date)`. 6 market indices, 30 columns.
+
+        The four tabs are four MEASURES of the same entity (index x day) split across
+        tables only because the scraper writes one folder per CafeF tab. Joined on the
+        full key they become one row per index per day: price + order stats + foreign
+        flow + proprietary-desk trades.
+
+        ⚠️ **`ticker` HERE IS AN INDEX CODE, NOT A COMPANY** - `VNINDEX`, `VN30INDEX`,
+        `VN100-INDEX`, `HNX-INDEX`, `HNX30-INDEX`, `UPCOM-INDEX`. This table must never
+        be unioned into `silver.stocks_basic`; that is why it is its own table with its
+        own name rather than extra rows in the per-stock one.
+
+        ⚠️ **OUTER JOIN, and that is a deliberate divergence from
+        `_ingest_silver_stocks_basic`,** which left-joins everything onto `cafef_price`.
+        Measured on the live tables: the union of keys is **25,935** while `price` alone
+        has **24,962** - so a left join would silently DROP 973 index-days that have
+        order-stats, foreign or prop-trading data but no price row (VN100-INDEX is the
+        worst: 3,088 order-stats days against 2,273 price days). For the per-stock table
+        a price day is the natural spine; for six indices, discarding a thousand days of
+        real observations to keep that convention is the wrong trade.
+
+        The tabs have very different histories - price from 2000-07, foreign 2007-01,
+        order stats 2007-11, prop trading only 2022-11 - so NULL in a measure column
+        means "that tab has no record for this index-day", never "zero".
+
+        The old silver table is dropped first so a schema change re-materialises past
+        the driver's IF NOT EXISTS create.
+        """
+        self._logger.log_info(
+            "Ingesting silver stock_market data (4 CafeF index tabs -> 1 table)..."
+        )
+
+        KEYS = ["exchange", "ticker", "date"]
+
+        frames: dict[str, pd.DataFrame] = {}
+        for table_name in self.INDEX_TABS:
+            frame = self._helper_select(
+                schema_name=BRONZE_SCHEMA, table_name=table_name
+            )
+            if frame.empty:
+                raise MissingSourceDataError(
+                    f"{BRONZE_SCHEMA}.{table_name} is empty - run the bronze index "
+                    f"ingests first (--select group:bronze)."
+                )
+            frame["date"] = pd.to_datetime(frame["date"]).dt.date
+            frames[table_name] = frame
+
+        df = None
+        for table_name, frame in frames.items():
+            df = frame if df is None else df.merge(frame, on=KEYS, how="outer")
+
+        # The join must not invent or lose keys: the result is exactly the UNION of the
+        # four key sets. Checked rather than assumed - a duplicate key in any input
+        # would fan the merge out silently.
+        expected = set()
+        for frame in frames.values():
+            expected |= set(map(tuple, frame[KEYS].itertuples(index=False, name=None)))
+        if len(df) != len(expected):
+            raise PipelineError(
+                f"silver.stock_market: joined {len(df)} rows but the union of the four "
+                f"tabs' keys is {len(expected)}. A duplicate (exchange, ticker, date) "
+                f"in one of the bronze index tables is the usual cause."
+            )
+
+        df = self._helper_clean(
+            df,
+            [
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("exchange"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("ticker"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("date"),
+                CleanLayer.REMOVE_IF_ALL_COLUMNS_ARE_NULL(),
+                CleanLayer.ORDER_BY(KEYS),
+            ],
+        )
+
+        # The driver reads bronze `numeric` as Decimal -> pandas object; without this
+        # they would land as VARCHAR in silver, the way the earlier per-source carry-ups
+        # already do.
+        decimal_cols, bigint_cols = [], []
+        for dec, big in self.INDEX_TABS.values():
+            decimal_cols += dec
+            bigint_cols += big
+        df = self._helper_cast_columns(
+            df,
+            decimal_cols=[c for c in decimal_cols if c in df.columns],
+            bigint_cols=[c for c in bigint_cols if c in df.columns],
+        )
+
+        df = self._helper_remove_duplicates(df, primary_keys=KEYS)
+        df = df[KEYS + [c for c in df.columns if c not in KEYS]]
+
+        self._logger.log_info(
+            f"stock_market: {len(df)} index-days x {len(df.columns)} columns, "
+            f"{df['ticker'].nunique()} indices."
+        )
+
+        self._database_driver.drop_table(SILVER_SCHEMA, "stock_market")
+        self._helper_save_pandas_table_to_database(
+            schema_name=SILVER_SCHEMA,
+            table_name="stock_market",
+            primary_keys=KEYS,
+            df=df,
+            dtype_overrides={"date": DataType.DATE()},
+        )
+
     def _ingest_silver_forex(self) -> None:
         self._logger.log_info("Ingesting silver forex data...")
 
