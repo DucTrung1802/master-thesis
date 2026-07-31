@@ -27,6 +27,7 @@ from bs4 import BeautifulSoup, Tag
 from logger.logger import Logger
 from utils.constants import *
 from utils.enums import *
+from utils.exceptions import PipelineError
 from utils.utils import *
 from utils.switch_handler import SwitchHandler
 from dtos.thread_manager_dtos.task import Task
@@ -330,63 +331,128 @@ class TradingViewScraper(BaseScraper):
 
             time.sleep(1)
 
+    # The symbol list is a VIRTUALISED list: only the visible rows exist in the DOM, so
+    # collecting everything means scrolling its container. Two selectors are involved and
+    # they are not equally trustworthy:
+    #
+    #   * `div[data-role="list-item"][data-symbol-name]` — SEMANTIC markup. Stable.
+    #   * `.scrollContainer-<hash>` — a CSS-module class whose suffix is a BUILD HASH.
+    #     It rotates whenever TradingView redeploys.
+    #
+    # ⚠️ On 2026-07-31 `scrollContainer-FSX6AatX` became `scrollContainer-Q9nrHY0X` and
+    # took every links task with it: 140 of 140 tasks collected 0 symbols, wrote
+    # header-only CSVs and reported SUCCESS. The items were on the page the whole time
+    # (verified: 50 rendered for stocks/vietnam/finance, `HOSE:VCB` first) — the old
+    # `if (!container) return { symbols: [] }` threw them away. So: match the hash-free
+    # PREFIX, fall back to the first scrollable ancestor of a real list item, and never
+    # discard symbols because the container lookup failed.
+    _SYMBOL_ITEM_SELECTOR = 'div[data-role="list-item"][data-symbol-name]'
+
+    _EXTRACT_SYMBOLS_JS = """
+        const items = Array.from(document.querySelectorAll(arguments[0]));
+        const symbols = items.map(el => el.getAttribute('data-symbol-name'));
+
+        let container = document.querySelector('[class*="scrollContainer"]');
+        if (!container && items.length) {
+            let el = items[0].parentElement;
+            while (el && el.scrollHeight <= el.clientHeight + 5) el = el.parentElement;
+            container = el;
+        }
+
+        // Symbols are returned even with no container — a failed container lookup must
+        // cost us the SCROLLING, never the rows already rendered.
+        if (!container) return { symbols: symbols, scrollTop: -1, container: false };
+
+        const currentTop = container.scrollTop;
+        container.scrollTop += 3000;
+        return { symbols: symbols, scrollTop: currentTop, container: true };
+    """
+
     def _helper_extract_trading_view_links(
         self, web_driver: ChromiumDriver
     ) -> List[str]:
         """
         Scroll the TradingView symbol list and collect every data-symbol-name attribute.
         Waits for items to actually render before starting, then stops after 3
-        consecutive scroll attempts that produce no movement.
+        consecutive attempts that neither scroll the container nor find a new symbol.
+
+        Raises `PipelineError` when the page rendered symbol rows but extraction got
+        nothing out of them, or when the list could not be scrolled — both mean the
+        selectors have drifted, and a drifted selector must not read as "this filter
+        matched no symbols". A genuinely empty result (no rows rendered at all) is
+        legitimate — `futures/vietnam/*` and `economy/*/health` have always been empty —
+        and still returns [].
         """
         # Wait until the list has actually populated. Some asset classes (indices,
         # bonds, economy) load noticeably slower than stocks, and the upstream
         # time.sleep(5) is not always enough.
+        items_rendered = True
         try:
             WebDriverWait(web_driver, 20).until(
                 lambda d: d.execute_script(
-                    "return document.querySelectorAll('div[data-role=\"list-item\"][data-symbol-name]').length > 0;"
+                    "return document.querySelectorAll(arguments[0]).length > 0;",
+                    self._SYMBOL_ITEM_SELECTOR,
                 )
             )
         except TimeoutException:
+            # NOT an error by itself: some filter combinations legitimately match
+            # nothing. It is the only thing that distinguishes "empty" from "broken"
+            # below, which is why it is recorded rather than just logged.
+            items_rendered = False
             self._logger.log_warning(
-                "Timed out waiting for symbol list items to render. "
-                "Proceeding with extraction anyway."
+                "No symbol list items rendered within 20s — treating as an empty "
+                "result. If this filter is supposed to have symbols, the page or the "
+                f"selector ({self._SYMBOL_ITEM_SELECTOR}) has changed."
             )
 
         collected_symbols = set()
         last_scroll_top = -1
-        no_move_count = 0
-        max_no_move = 3
+        no_progress_count = 0
+        max_no_progress = 3
+        container_found = False
 
-        while no_move_count < max_no_move:
-            result = web_driver.execute_script("""
-                const container = document.querySelector('.scrollContainer-FSX6AatX');
-                if (!container) return { symbols: [], scrollTop: -1 };
+        while no_progress_count < max_no_progress:
+            result = web_driver.execute_script(
+                self._EXTRACT_SYMBOLS_JS, self._SYMBOL_ITEM_SELECTOR
+            )
 
-                const symbols = Array.from(
-                    document.querySelectorAll('div[data-role="list-item"][data-symbol-name]')
-                ).map(el => el.getAttribute('data-symbol-name'));
-
-                const currentTop = container.scrollTop;
-                container.scrollTop += 3000;
-
-                return { symbols: symbols, scrollTop: currentTop };
-            """)
-
+            before = len(collected_symbols)
             for symbol in result["symbols"]:
                 if symbol:
                     collected_symbols.add(symbol.strip())
+            found_new = len(collected_symbols) > before
+            container_found = container_found or result["container"]
 
             self._logger.log_info(f"Collected symbols: {len(collected_symbols)}")
 
+            # Progress is EITHER the container moving OR a new symbol appearing. Scroll
+            # position alone was the old test, so a stuck/absent container ended the
+            # loop after three no-op iterations — the shape every one of the 140 broken
+            # tasks had in the log.
             current_scroll_top = result["scrollTop"]
-            if current_scroll_top == last_scroll_top:
-                no_move_count += 1
+            if current_scroll_top == last_scroll_top and not found_new:
+                no_progress_count += 1
             else:
-                no_move_count = 0
+                no_progress_count = 0
                 last_scroll_top = current_scroll_top
 
             time.sleep(0.3)
+
+        # ── Fail loudly rather than return a plausible-looking empty list ────────────
+        if items_rendered and not collected_symbols:
+            raise PipelineError(
+                "TradingView rendered symbol rows but none could be read. The "
+                f"item selector ({self._SYMBOL_ITEM_SELECTOR}) no longer matches the "
+                "page. Refusing to report an empty result as success."
+            )
+
+        if collected_symbols and not container_found:
+            raise PipelineError(
+                f"Collected {len(collected_symbols)} symbol(s) but found no scrollable "
+                "container, so the virtualised list could not be paged — this result is "
+                "the first screen only, not the full set. Fix the container lookup in "
+                "`_EXTRACT_SYMBOLS_JS` before trusting it."
+            )
 
         links = [
             f"https://www.tradingview.com/chart/?symbol={symbol}"
@@ -409,9 +475,10 @@ class TradingViewScraper(BaseScraper):
     ) -> None:
         """
         Single attempt at scraping TradingView chart links for any asset class.
-        Opens a dedicated Chrome instance, applies filters, scrolls the symbol
-        list, and writes results to CSV.  Raises on any failure so the retry
-        wrapper can catch it.
+        Opens a dedicated Chrome instance — under `_browser_semaphore`, so at most
+        SCRAPER_MAX_CONCURRENT_BROWSERS are alive at once — applies filters, scrolls
+        the symbol list, and writes results to CSV.  Raises on any failure so the
+        retry wrapper can catch it.
 
         Parameters
         ----------
@@ -426,40 +493,49 @@ class TradingViewScraper(BaseScraper):
         folder_path : str
             Parent directory; created if absent.
         """
-        web_driver, _ = self._helper_initialize_web_driver_and_bs4_parser()
-        try:
-            if os.path.exists(file_path):
-                self._logger.log_info(
-                    f"File exists: {file_path}, deleting to re-fetch."
+        # Hard cap on concurrent Chrome instances, the same semaphore the data phase
+        # takes. The thread pool (SCRAPER_MAX_WORKERS = 16) is deliberately WIDER than
+        # this cap: threads queue here instead of each opening a browser. Acquired
+        # BEFORE the driver is created and held until it quits — a permit taken after
+        # `webdriver.Chrome()` would cap nothing.
+        with self._browser_semaphore:
+            web_driver, _ = self._helper_initialize_web_driver_and_bs4_parser()
+            try:
+                os.makedirs(folder_path, exist_ok=True)
+
+                web_driver, _ = self._helper_navigate_to_url(
+                    web_driver, TRADING_VIEW_HOME_PAGE_URL
                 )
-                os.remove(file_path)
 
-            os.makedirs(folder_path, exist_ok=True)
+                self._helper_execute_scrape_actions(web_driver, scrape_actions)
+                time.sleep(5)  # allow filtered list to fully render
 
-            web_driver, _ = self._helper_navigate_to_url(
-                web_driver, TRADING_VIEW_HOME_PAGE_URL
-            )
+                self._logger.log_info(
+                    f"Current URL after filters: {web_driver.current_url}"
+                )
 
-            self._helper_execute_scrape_actions(web_driver, scrape_actions)
-            time.sleep(5)  # allow filtered list to fully render
+                links = self._helper_extract_trading_view_links(web_driver)
+                self._logger.log_info(f"Total links extracted: {len(links)}")
 
-            self._logger.log_info(
-                f"Current URL after filters: {web_driver.current_url}"
-            )
+                # ⚠️ The existing file is replaced only ONCE THE SCRAPE HAS SUCCEEDED.
+                # This used to run before the browser even opened, so a failed attempt
+                # left nothing behind and a broken-selector run overwrote a good CSV
+                # with a header-only one (2026-07-31: 140 of them).
+                if os.path.exists(file_path):
+                    self._logger.log_info(
+                        f"File exists: {file_path}, replacing with the fresh scrape."
+                    )
 
-            links = self._helper_extract_trading_view_links(web_driver)
-            self._logger.log_info(f"Total links extracted: {len(links)}")
+                with open(file_path, "w", newline="", encoding="utf-8") as f:
+                    writer = csv.writer(f)
+                    writer.writerow(TRADING_VIEW_TABLE_SCHEMA)
+                    for url in links:
+                        writer.writerow(csv_rows_builder(url))
 
-            with open(file_path, "w", newline="", encoding="utf-8") as f:
-                writer = csv.writer(f)
-                writer.writerow(TRADING_VIEW_TABLE_SCHEMA)
-                for url in links:
-                    writer.writerow(csv_rows_builder(url))
+                self._logger.log_info(f"Saved {len(links)} links to {file_path}")
 
-            self._logger.log_info(f"Saved {len(links)} links to {file_path}")
-
-        finally:
-            web_driver.quit()
+            finally:
+                web_driver.quit()
 
     def _scrape_links_with_retry(
         self,
@@ -1001,6 +1077,21 @@ class TradingViewScraper(BaseScraper):
             "web_scraper", "trading_view", "links", ScrapeMainType.OPTIONS.value
         ):
             parts = path.split("/")
+            # Expected: web_scraper/trading_view/links/options/{country}
+            #
+            # ⚠️ The 4-part path IS reachable, which is why this guard exists (crypto has
+            # the same one). `options` and `crypto` are the two asset classes whose switch
+            # node is a LEAF — no countries configured beneath them — so
+            # `SwitchConfig.build_unblocked`, which forces the run-plan ancestors true for
+            # every Dagster TradingView materialisation, makes the node itself an enabled
+            # path. Without this, `trading_view_links` partition `options` died on
+            # `IndexError: list index out of range` before queueing a single task.
+            if len(parts) < 5:
+                self._logger.log_warning(
+                    f"Skipping incomplete options links path (expected 5 parts, got "
+                    f"{len(parts)}): {path}"
+                )
+                continue
             country = Country(parts[4])
             task_name = format_key_for_name(
                 (

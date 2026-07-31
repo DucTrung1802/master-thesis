@@ -608,6 +608,44 @@ Each registers its own `SOURCE_NAME` and writes its own folder under `raw_data/c
   `futures`, `forex` (source), `crypto` (source/type/exchange — data step is a
   no-op, not yet implemented), `indices`, `bonds`, `economy`, `options`
   (links only; `_add_options_data_tasks` returns 0).
+- **⚠️ How LINKS are extracted, and the one selector that broke (2026-07-31).** The
+  symbol list is **virtualised** — only visible rows exist in the DOM — so
+  `_helper_extract_trading_view_links` scrolls a container and unions what renders. Two
+  selectors, and they are NOT equally trustworthy:
+  `div[data-role="list-item"][data-symbol-name]` is semantic markup and has been stable;
+  `.scrollContainer-<hash>` carries a **build hash that rotates on every TradingView
+  redeploy**. It rotated (`FSX6AatX` → `Q9nrHY0X`) and **all 140 links tasks collected 0
+  symbols, wrote header-only CSVs and reported SUCCESS** — the rows were on the page the
+  whole time (50 rendered for `stocks/vietnam/finance`, `HOSE:VCB` first); the old JS did
+  `if (!container) return { symbols: [] }` and threw them away. Three fixes, all in place:
+  - the container is matched by **hash-free prefix** (`[class*="scrollContainer"]`), with
+    the first scrollable ancestor of a list item as a fallback — and symbols are returned
+    even when the lookup fails;
+  - **progress** is "container moved **OR** a new symbol appeared", not scroll position
+    alone. Scroll-only was what let a dead container end the loop after 3 no-op passes;
+  - it **raises `PipelineError`** when rows rendered but nothing was read, or when
+    symbols were found with no scrollable container (a first-screen-only result). A
+    genuinely empty filter still returns `[]` — `futures/vietnam/*` and
+    `economy/*/health` have always been empty, so 0 cannot be an error by itself. The
+    20-second wait for list items is what tells the two apart.
+  - The CSV is now replaced **after** a successful scrape. The delete used to run before
+    the browser even opened, so a broken run overwrote good data with a header.
+  - **The lesson:** anchor on `data-*` attributes, never on a CSS-module class. This was
+    the only hashed selector in the repo; the `TradingViewXpath` locators use semantic
+    attributes and were unaffected.
+
+  Verified after the fix, one leaf per asset class through the real task adders:
+  stocks 20, funds 21, forex 48, indices 50, economy 32 links; `futures/vietnam/agriculture`
+  and `bonds/vietnam/corporate` **0 and legitimately so** (header-only in June too, and
+  the empty path no longer raises); crypto and options queue no tasks (see below).
+- **⚠️ `crypto` and `options` are the two asset classes whose switch node is a LEAF** —
+  no countries/sources configured beneath them — so `build_unblocked` forcing the
+  run-plan ancestor true makes the NODE ITSELF an enabled path, and the adder gets a
+  4-part path where it expects 5-7. `_add_crypto_links_tasks` guarded against this;
+  `_add_options_links_tasks` did not, and died on `IndexError: list index out of range`
+  before queueing anything — i.e. Dagster's `trading_view_links` partition `options`
+  could never run. Both now warn and skip. Neither class has ever produced links
+  (`raw_data/trading_view/links/` has no `crypto/` or `options/` folder).
 - **How data is extracted:** navigates the chart, optionally toggles **ADJ**
   (`_helper_toggle_adj_dividends` — dividend adjustment, chart defaults ADJ **off**),
   sets a custom date range (`SCRAPER_START_DATE`=2000-01-01 → today), waits for the
@@ -616,7 +654,13 @@ Each registers its own `SOURCE_NAME` and writes its own folder under `raw_data/c
   detector** (structural slot-count + semantic OHLC invariants) decides OHLCV vs a
   single `value` series.
 - **Concurrency hardening:** `Semaphore(SCRAPER_MAX_CONCURRENT_BROWSERS=8)` caps
-  Chrome instances; a `_nav_time_lock` staggers navigations by
+  Chrome instances in **both** phases — `_scrape_data_trading_view_link_attempt`
+  and, since 2026-07-31, `_scrape_links_attempt`. ⚠️ The links path used to open a
+  driver *outside* the semaphore, so the real cap there was the 16-thread pool: 16
+  browsers, twice the documented number, on every links run. The permit is taken
+  before `webdriver.Chrome()` and held until `quit()`; a wider pool now only deepens
+  the queue. Verified with a fake driver: 24 tasks, 16 workers → **peak 8**.
+  A `_nav_time_lock` staggers navigations by
   `SCRAPER_NAV_STAGGER=8s`; random pre-acquire sleeps desync threads; a background
   `_dialog_remover_loop` thread kills pop-ups. Chrome runs with images+CSS disabled,
   JS on.
@@ -1261,6 +1305,8 @@ IS the run plan. Truncate `logs/app.log` first; it is the only record of what ra
     predictable. TradingView is still separately capped at
     `SCRAPER_MAX_CONCURRENT_BROWSERS` (8) browsers by its own semaphore, so a wider
     pool there only deepens the task queue, it does not open more Chrome instances.
+    (True of the DATA phase only until 2026-07-31 — the LINKS phase took no permit
+    and ran 16. Fixed; this paragraph now describes both.)
     - Every scraper that overrides `__init__` (`CafeFScraper`, `CafeFPdfScraper`,
       `CafeFNewsScraper`) now takes `max_workers` and forwards it to `super().__init__`
       — omitting it there raised `TypeError: unexpected keyword argument 'max_workers'`

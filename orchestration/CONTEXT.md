@@ -205,6 +205,14 @@ to do. `build_unblocked` forces the run-plan ancestors true and leaves the param
 leaves exactly as the JSON has them. Only TradingView and GICS need it — every other
 scraper is driven by calling its per-tab method directly, which consults no switch.
 
+⚠️ **It has one edge, found 2026-07-31: forcing an ancestor true can make a LEAF true.**
+`crypto` and `options` have no children in `switch_config.json`, so
+`web_scraper/trading_view/links/options` is itself a leaf — forcing it hands the adder a
+4-part path where it expects 5, and `_add_options_links_tasks` had no guard:
+`trading_view_links` partition `options` raised `IndexError` before queueing a task.
+Guarded now (crypto always was). Both classes legitimately queue **0 tasks**, so those
+two partitions are `landed()`-red on an empty folder — neither has ever produced links.
+
 ### ⚠️ Every landing asset verifies what landed
 
 `_common.landed()` counts files/rows in the target folder afterwards and **raises if a
@@ -213,6 +221,14 @@ the preprocessor, not this layer (`GicsScraper.scrape` does
 `if not self._download_structure(...): log_error(...); return`) — so without the check
 a failed download is a green asset. `require=False` is used for TradingView's crypto
 and options DATA steps, which are documented no-ops.
+
+⚠️ **`landed()` did not catch the 2026-07-31 links breakage, and could not have.** All
+140 tasks wrote header-only CSVs, but `landed()` rglobs the whole asset-class folder and
+the *previous* dated files are still in it — so `files` and `rows` both looked healthy
+and the asset went green. The check answers "is this folder empty?", not "did THIS run
+produce anything". The fix belongs in the scraper (it now raises — see
+`web_scraper/CONTEXT.md` §3 TradingView); if a per-run check is ever wanted here, it has
+to compare against the run's own output file, not the folder.
 
 ### The original prototype slice
 
@@ -236,7 +252,8 @@ split across the two modules.
 | **a DB error FAILS the run** | synthetic asset querying a missing table | `STEP_FAILURE`, `run.success == False` |
 | dependencies resolve on this machine | `pip install` into `mt_env` (py3.12.10, Windows) | dagster 1.13.15, 36 packages, **0 conflicts** |
 
-⚠️ **The heavy assets are wired but have NOT been run end-to-end here**:
+⚠️ **The heavy assets are wired but have NOT been run end-to-end here** (`trading_view_links`
+excepted — it has now run for real, see the crash log below):
 `trading_view_links` / `trading_view_data` (Selenium, hours), the five CafeF stock tabs
 and `cafef_news` (full-universe network), `cafef_pdfs` (GB per partition) and
 `cafef_financials` (~2.4 h per partition). They are the same per-tab/per-ticker methods
@@ -245,6 +262,37 @@ and `cafef_news` (full-universe network), `cafef_pdfs` (GB per partition) and
 
 The only pre-existing versions touched by the install are `grpcio` 1.78→1.83 and
 `coloredlogs` 15.0.1→14.0 (only `onnxruntime-gpu` requires it, unpinned — safe).
+
+### ⚠️ What crashed in the first real materialize (2026-07-31)
+
+The landing layer was run for real and `logs/app.log` is the record. **Everything below
+was found in one run**, and the two that mattered most were both GREEN at the time —
+which is the recurring lesson of this file: a failure that does not raise is not a
+failure the orchestrator can see.
+
+| # | symptom in the log | what it really was | status |
+|---|---|---|---|
+| 1 | 140/140 links tasks: `Total links extracted: 0`, `Saved 0 links`, `Failed Tasks (0)` | TradingView rotated the build hash in `.scrollContainer-<hash>` (`FSX6AatX` → `Q9nrHY0X`). The rows were on the page; the JS did `if (!container) return {symbols: []}` and threw them away | **FIXED** — prefix match + scrollable-ancestor fallback, and it now **raises `PipelineError`** when rows rendered but nothing was read |
+| 2 | `IndexError: list index out of range` in `_add_options_links_tasks` | `build_unblocked` + a leaf switch node — see §`build_unblocked` above. **Reachable only through Dagster**, so `main.py` never hit it: partition `options` could never run | **FIXED** — guarded like crypto |
+| 3 | 140 header-only CSVs on disk, asset green | `landed()` rglobs the folder, where the PREVIOUS dated files still live — see below | open, by design; the scraper raises instead |
+| 4 | 2 × `failed to change window state to 'minimized'` | Chrome transient; the retry wrapper caught both | no action |
+| 5 | `Skipping incomplete crypto links path` | correct guard doing its job | no action |
+
+Two things this run did **not** prove and are still open:
+
+* `trading_view_links` partitions **`crypto` and `options` queue 0 tasks** (no children
+  in `switch_config.json`) and neither folder has ever existed, so `landed(require=True)`
+  makes both **red with nothing wrong**. Either give them `require=False` like the DATA
+  steps, or accept two permanently-red partitions.
+* A **0-link result is legitimate** for some leaves (`futures/vietnam/*`,
+  `bonds/vietnam/corporate`, `economy/*/health` — header-only since June), so "0 rows"
+  can never be the failure test on its own. What separates empty from broken is whether
+  symbol ROWS RENDERED, which is why the 20-second item wait is load-bearing, not a
+  convenience.
+
+Verified after the fixes, one leaf per asset class through the real adders: stocks 20,
+funds 21, forex 48, indices 50, economy 32 links; futures and bonds 0 and legitimately
+so; crypto and options 0 tasks, no crash.
 
 ### Run it
 
@@ -423,6 +471,22 @@ doubles them:
 |---|---|---|
 | `resource: browser` | 1 | `SCRAPER_MAX_CONCURRENT_BROWSERS = 8` is an in-process semaphore — 4 processes is 32 Chrome instances, and 4× the global stagger against TradingView |
 | `resource: gpu` | 1 | OCR runs onnxruntime-gpu on a 4 GB RTX 3050; two partitions is VRAM exhaustion |
+
+**So a materialize opens at most 8 Chrome instances**, and only while a TradingView
+step runs — nothing else in the repo imports Selenium. The 8 is per PROCESS and the
+`browser` tag keeps exactly one browser step running, so the two multiply to 8, not 8×N.
+
+⚠️ **Fixed 2026-07-31: the links phase ignored the semaphore.**
+`_scrape_links_attempt` created its driver outside it, so the effective cap there was
+the 16-thread pool — 16 browsers (~100-160 `chrome.exe` processes), twice what this
+table and `web_scraper/CONTEXT.md` both claimed. It now takes the permit before
+`webdriver.Chrome()` and holds it until `quit()`. Verified with a fake driver: 24 tasks
+(what the `stocks` links partition queues), 16 workers → **peak 8**.
+
+⚠️ **A multi-run backfill still escapes this.** `tag_concurrency_limits` is EXECUTOR
+config, i.e. per run. Backfilling the 9 TradingView partitions the default way launches
+9 runs, and `.dagster/dagster.yaml` is empty — 9 × 8 = 72 browsers. Use a single-run
+backfill, or give the instance a real concurrency pool, if you ever backfill TV.
 
 Everything else is `requests`-bound and safe to overlap — 4 assets × a 16-thread pool is
 ~64 in-flight requests, the concurrency the news scraper already runs at.
