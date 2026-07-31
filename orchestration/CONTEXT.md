@@ -3,7 +3,7 @@
 > Handoff notes. **Status (2026-08-01): the LANDING layer and the whole BRONZE layer are
 > assets and have both been materialised green; silver has its first asset.** 40 assets.
 > `src/main.py` is untouched and still runs the pipeline the old way. What is left is
-> silver (14 of 15) and gold (6) — see §4. Verify anything before acting on it: the code
+> silver (13 of 15) and gold (5 of 6) — see §4. Verify anything before acting on it: the code
 > and `src/switch_config.json` are still the sources of truth.
 
 ## 1. Why this is worth doing
@@ -32,7 +32,7 @@ PARTITIONS of two assets, not 320 assets. The remaining 61 map to ~55-65 assets.
 
 ## 2. What exists — LANDING + BRONZE complete, silver started (2026-08-01)
 
-**40 assets: 19 landing + 20 bronze + 1 silver.** Every scraper in `main.py` lands to
+**42 assets: 19 landing + 20 bronze + 2 silver + 1 gold.** Every scraper in `main.py` lands to
 `raw_data/` as an asset ([assets/scrape.py](assets/scrape.py)); every bronze ingest leaf
 is an asset ([assets/bronze.py](assets/bronze.py), 20 leaves → 25 tables); silver has its
 first ([assets/silver.py](assets/silver.py)). They are separate modules on purpose: the
@@ -62,7 +62,8 @@ gics_structure
 | `simplize` | stocks, industry | — |
 | `gics` | structure | — |
 | `bronze` | **all 20 ingest leaves** (25 tables) | — |
-| `silver` | `economy` (canonical long) | — |
+| `silver` | `economy` (long fact), `economy_series` (dimension) | — |
+| `gold` | `economy_panel` (wide, as-of) | — |
 
 ### ⚠️ The edges, read out of the code (2026-07-31 correction)
 
@@ -243,7 +244,7 @@ split across the two modules.
 
 | claim | how it was checked | result |
 |---|---|---|
-| the flat `src/` layout can be imported by Dagster | `dagster definitions validate` | passes, **40 assets** (19 landing + 20 bronze + 1 silver), all code locations OK |
+| the flat `src/` layout can be imported by Dagster | `dagster definitions validate` | passes, **42 assets** (19 landing + 20 bronze + 2 silver + 1 gold), all code locations OK |
 | partitions resolve | reading the definitions back | TV **9**, pdfs **100**, financials **2** (`HOSE_VCB`, `HOSE_ACB`) |
 | the index scrape assets run | `--select "group:cafef_index"` | 4/4 green |
 | the TradingView path works incl. `build_unblocked` | `--select "raw/trading_view_collected_links"` | green, rewrote `all_links_2026-06-26.csv` (313 KB) |
@@ -378,7 +379,7 @@ UI, from `*`, and from every selection. Reserve this for "must never load in thi
 "raw/cafef_news": false
 ```
 
-All 40 keys are listed in the file as a menu, grouped by source, with `//` comment keys
+All 42 keys are listed in the file as a menu, grouped by source, with `//` comment keys
 marking the expensive ones (same comment convention as `switch_config.json`).
 `true` or **absent** = loaded, so a newly added asset is on by default.
 
@@ -386,10 +387,10 @@ Behaviour, all verified:
 
 | case | result |
 |---|---|
-| one key `false` | that asset not loaded (40 → 39); `//` comment keys ignored |
+| one key `false` | that asset not loaded (42 → 41); `//` comment keys ignored |
 | a key matching no asset | **raises**, listing the valid keys |
 | malformed JSON | **raises** — never read as "disable everything" |
-| file absent | 40 assets — absent means "no opinion", not "all off" |
+| file absent | 42 assets — absent means "no opinion", not "all off" |
 | file with a **BOM** | handled (`utf-8-sig`) |
 
 The last three are direct lessons from `switch_config.json`:
@@ -459,44 +460,49 @@ were stale bronze catching up with raw data the scrapers had already written —
 2,523,196, `cafef_prop_trading` 64,139 → 73,810 — and each now equals its raw folder
 row-for-row.
 
-### The first SILVER asset — `silver/economy` (2026-08-01)
+### SILVER + GOLD — the economy chain (2026-08-01)
 
-`bronze.trading_view_economy` → `silver.economy`, **pivoted to ONE ROW PER DATE**
-(PK `date`), one column per series:
+Three assets, and the split between them is the whole point:
 
 ```
-{country}__{scrape_main_type}__{category}__{exchange}__{ticker}
-vietnam__economy__prices__economics__vncpi
+bronze/trading_view_economy
+   ├─► silver/economy          LONG fact, PK (exchange, ticker, date), 579,459 rows, 0 nulls
+   └─► silver/economy_series   DIMENSION, PK (exchange, ticker), 1,034 rows + derived frequency
+            └──────┬──────────►
+   silver/economy ─┴─► gold/economy_panel   WIDE, 1 row per BUSINESS DAY, 1,034 columns
 ```
-
-Thin wrapper over `DataPreprocessor._ingest_silver_economy`
-([assets/silver.py](assets/silver.py)); the dep on `bronze/trading_view_economy` is real
-and only expressible now that every bronze leaf is an asset.
 
 ```powershell
-dagster asset materialize -f orchestration/definitions.py --select "silver/economy"
+dagster asset materialize -f orchestration/definitions.py --select "group:silver,group:gold"
 ```
 
-| check | result |
+| asset | result |
 |---|---|
-| materialised | **RUN_SUCCESS, 21.6 s** |
-| shape | **9,719 dates × 1,034 series** (1,035 cols), PK `date` unique |
-| **no observation lost or invented** | non-null cells = **579,459** = the bronze row count, exactly |
-| values | 2,393 across 12 RANDOM series vs bronze — **0 mismatches** |
-| names | 1,034/1,034 with exactly 5 `__` fields, all lowercase, unique, **max 57 ≤ 63** |
+| `silver/economy` | 579,459 rows / 1,034 series — **exactly the bronze row count**, 0 nulls, 17.6 s |
+| `silver/economy_series` | 1,034 series: 500 monthly, 226 quarterly, 206 annual, 66 daily, 32 weekly, 4 irregular, 3.8 s |
+| `gold/economy_panel` | **6,935 business days × 1,034 series, 88.6% filled** (long form is 5.8% of that grid), 13.1 s |
 
-⚠️ **The 63-byte identifier limit is `NAMEDATALEN - 1` and is COMPILE-TIME** — raising it
-means rebuilding PostgreSQL from source and `initdb`-ing a fresh cluster. The template's
-vocabulary allows 68 characters even though today's longest is 57, so the ingest
-**raises** rather than let a name truncate silently into a collision.
+⚠️ **The wide panel is in GOLD, not silver, and that is a layering decision made on
+measurements.** As silver it was 5.8% filled — but the nulls cost ~1 bit each, so the
+real arguments were: a column-per-series table makes the **schema a function of the
+data** (new series ⇒ DDL, 65% of PostgreSQL's 1,600-column ceiling), it **mixed
+frequencies on one calendar** (67 daily series imposed a 9,719-day grid on 500 monthly
+ones; on their own grids the buckets are 76-93% filled), and every step that makes the
+panel dense is a **modelling** decision that silver must not take.
 
-⚠️ **~94% NULL by construction** — each series keeps its own calendar. Forward-filling is
-gold's decision. And the table is **dropped and rebuilt** each run, because the grain
-changed from `(exchange, ticker, date)` to `date`.
+⚠️ **The look-ahead guard is the reason gold owns it.** The source `date` is the
+reference period, not the release date, so each observation is shifted by a per-frequency
+publication lag, carried forward as-of with a staleness cap, and the calendar stops
+TODAY. Verified: VNGDPYY's Q1-2026 figure first appears at ref + 45 days.
 
-> **Also retired 2026-08-01: `silver/trading_view_economy`.** The same pivot under a
-> different table name, built 2026-07-31 and verified clean, then folded into
-> `silver.economy` — one economy table, not two. Code at `fa74ad3`.
+⚠️ **A weekend nearly ate a quarter of GDP.** `2025-12-31 + 45 days` is a Saturday, and
+reindexing onto a business-day calendar dropped that observation SILENTLY — the series
+jumped Q3 → Q1. Availability dates are rolled forward to the next business day now, and
+an invariant check raises if the reindex loses anything. 565,171 observations in range,
+**0 missing**.
+
+> **Retired the same day: `silver/trading_view_economy`**, an earlier version of the same
+> pivot under its own table name. Code at `fa74ad3`.
 
 ## 2a. Cost of a full materialize (2026-07-31)
 
@@ -722,7 +728,7 @@ than either alone.
 | phase | scope | estimate |
 |---|---|---|
 | 0 | exception propagation | ✅ **done** |
-| 1 | preprocessor, ~41 assets | bronze ✅ **done**; silver 1/15, gold 0/6 |
+| 1 | preprocessor, ~41 assets | bronze ✅ **done**; silver 2/15, gold 1/6 |
 | 2 | cheap scrapers, ~13 assets | 1 day |
 | 3 | TradingView + partitions | 1 day |
 | 4 | pdfs/financials, ticker partitions | 1 day |

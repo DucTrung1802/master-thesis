@@ -271,44 +271,28 @@ DTO helpers come from
   > `symbol`, because bronze splits it on read. All five raised `KeyError('symbol')`
   > (confirmed empirically on the live tables, not by reading). The two lines are gone;
   > `exchange` and `ticker` come straight out of bronze. See §`symbol` below.
-- **`economy` — PIVOTED to one row per DATE (2026-08-01), PK `date`.** 9,719 dates ×
-  1,034 series, one column per series:
-
-  ```
-  {country}__{scrape_main_type}__{category}__{exchange}__{ticker}
-  vietnam__economy__prices__economics__vncpi
-  ```
-
-  - ⚠️ **The separator is TWO underscores because the values contain one.**
-    `mainland_china`, `south_korea` — with a single `_` no rule can split a name back
-    into fields; with `__`, `split("__")` is exact. Verified: all 1,034 names have
-    exactly 5 fields. Coarse → fine ordering means alphabetical column order groups a
-    country's series together and `split_part(column_name,'__',1)` is a usable GROUP BY.
-  - ⚠️ **63 BYTES IS A HARD CEILING AND CANNOT BE RAISED HERE.** It is `NAMEDATALEN - 1`,
-    and NAMEDATALEN is a COMPILE-TIME constant — changing it means building PostgreSQL
-    from source and `initdb`-ing a fresh cluster, not a GUC or an `ALTER`. Today's
-    longest name is **57**, but the *vocabulary* allows 14 + 7 + 10 + 9 + 20 + 8
-    separators = **68**: the longest ticker simply never co-occurs with the longest
-    country and category. That is luck. `_build_silver_economy_columns` therefore
-    **raises** if any name exceeds 63 bytes or collides after truncation — an
-    over-length name would otherwise be truncated SILENTLY and two series could share a
-    column. If it ever fires, shorten the template (drop the constant
-    `scrape_main_type`, −9; ISO country codes, −12 → worst case 47), never the server.
-  - `scrape_main_type` is CONSTANT (`economy`, 1 distinct value) and `exchange` is the
-    data VENDOR (`ECONOMICS`/`FRED`), not a bourse. Ticker is already 1:1 with the
-    series, so **every prefix is redundant for identity** — it earns its place as a
-    grouping key and as lineage.
-  - ⚠️ **~94% NULL is the data.** Each series keeps its own calendar and frequency
-    (`VNINBR` daily 6,836 obs, `VNGDPYY` quarterly 103). Verified: **579,459 non-null
-    cells = the bronze row count exactly** — nothing lost, nothing invented — and 2,393
-    values across 12 random series matched bronze with **0 mismatches**. Forward-filling
-    is a gold decision; here it would destroy the "was this published today?" signal.
-  - ⚠️ **The table is DROPPED and rebuilt each run.** The grain changed from
-    `(exchange, ticker, date)` and `create_table` is `IF NOT EXISTS`, so an upsert into
-    the old shape would fail on a missing PK column. `chunk_size=250`, not the 5,000
-    default: `execute_values` inlines every value into one statement.
-  - The ingest also now **raises on empty bronze**; its four siblings
-    (`bonds`/`forex`/`funds`/`indices`) still return silently and should follow.
+- **`economy` + `economy_series` — a FACT table and its DIMENSION (2026-08-01).**
+  - `silver.economy` — LONG, PK `(exchange, ticker, date)`, **579,459 rows = the bronze
+    row count exactly, 0 nulls by construction.** Same grain as its four siblings and as
+    `_ingest_gold_economy`.
+  - `silver.economy_series` — one row per series (1,034), PK `(exchange, ticker)`:
+    `country`, `scrape_main_type`, `category`, plus a **derived `frequency`** (500
+    monthly, 226 quarterly, 206 annual, 66 daily, 32 weekly, 4 irregular), the
+    observation count and the first/last date. TradingView publishes no frequency field —
+    it is the median gap between consecutive observations.
+  - ⚠️ **The dimensions are NOT columns on the fact table**, and not for tidiness:
+    `_ingest_gold_table` coerces every column outside `{exchange, ticker, date, GICS}`
+    with `pd.to_numeric`, so carrying `country`/`category` on `silver.economy` would wipe
+    all three to NaN in `gold.economy`.
+  > **`silver.economy` was WIDE for one afternoon** (one row per date × 1,034 columns)
+  > before the shape review moved that panel to gold. It measured **5.8% filled**, but
+  > the nulls were the least of it — a NULL costs ~1 bit, so 9.4 M of them was ~1.2 MB.
+  > The deciding arguments: a column-per-series table makes the **SCHEMA a function of
+  > the DATA** (every new series is a DDL change; it also sat at 65% of PostgreSQL's
+  > 1,600-column ceiling), it **mixed frequencies on one calendar** (67 daily series hold
+  > 63% of all observations and imposed a 9,719-day grid on 500 monthly and 226 quarterly
+  > ones — on their own grids those buckets are 76-93% filled, so the sparsity was an
+  > artefact of the shape), and it silently invited **look-ahead bias** (see below).
 - **Per-source CafeF carry-ups** (`_ingest_silver_cafef_*`, added 2026-07-18) — a
   source-named lift of the bronze CafeF tables into silver, one-to-one, NOT the
   canonical asset merge. Each **selects the bronze table, applies a basic clean pass
@@ -517,6 +501,39 @@ DTO helpers come from
     `_ingest_gold_table(table_name="stocks", silver_table_name="stocks_basic")`.
 
 ### Gold (`_ingest_gold_*`) — feature engineering
+- **`economy_panel` — the WIDE macro panel (2026-08-01).** `silver.economy` +
+  `silver.economy_series` → `gold.economy_panel`: **one row per BUSINESS DAY** (PK
+  `date`), one column per series named
+  `{country}__{scrape_main_type}__{category}__{exchange}__{ticker}`. 6,935 days ×
+  1,034 series, **88.6% filled** (the long form is 5.8% of a date × series grid).
+  It lives in GOLD because every step that makes it usable is a modelling decision:
+  - ⚠️ **PUBLICATION LAG — this is the look-ahead guard.** The source `date` is the
+    REFERENCE period, not the release date: Vietnam's Q1 GDP is dated 2026-03-31 and
+    published in April, so a panel joined on `date` hands a model a figure ~a week
+    before it existed. Each observation becomes visible at
+    `date + ECONOMY_PUBLICATION_LAG_DAYS[frequency]`. **Verified**: VNGDPYY's Q1-2026
+    value (7.83) first appears on 2026-05-15 = ref + 45d, and the panel still shows the
+    Q4-2025 figure (8.46) up to 2026-05-14.
+  - ⚠️ **ROLL FORWARD TO THE NEXT BUSINESS DAY, and this one bites.** 2025-12-31 + 45
+    days is **Saturday** 2026-02-14; the panel is indexed by business day, so a plain
+    `reindex` DROPPED that observation outright — the series jumped Q3 → Q1 and Vietnam's
+    Q4-2025 GDP vanished. Availability dates are now rolled forward, and an invariant
+    check **raises** if the reindex loses any observation.
+  - **As-of carry**, bounded by `ECONOMY_MAX_STALENESS_BDAYS[frequency]`, so a series
+    that stopped reporting (e.g. JPLTUR, last observation 2014) is NULL today rather than
+    carrying a 12-year-old value forever.
+  - ⚠️ **The calendar ENDS TODAY.** 47 series carry projections dated to 2036; on a
+    business-day calendar those were 2,685 rows at 2.3% filled whose only real effect was
+    to make a look-ahead join possible. They stay in bronze/silver as raw data (132
+    observations excluded from the panel).
+  - ⚠️ **Both lag tables are ASSUMPTIONS, not data** — TradingView gives no release
+    dates. Tighten them if release dates are ever scraped.
+  - ⚠️ **`REAL`, not `DOUBLE PRECISION`**: 1,034 float8 columns is 8,272 bytes against
+    PostgreSQL's ~8,160-byte row limit; float4 halves it to ~4.1 kB. Measured cost:
+    **max relative error 1.16e-7** (float32 epsilon) over 565,171 cells, 0 above 1e-6.
+  - **Verified**: 565,171 observations in range, **0 missing from the panel**, 0
+    relative-error outliers, staleness confirmed on a dead series.
+
 - All routed through **`_ingest_gold_table`**: read the silver table, coerce numeric
   columns to float (GICS class columns passed through untouched), apply
   `_helper_build_feature_layers` (returns / intraday range / return-vol / rolling

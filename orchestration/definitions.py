@@ -20,7 +20,7 @@ from orchestration._bootstrap import bootstrap
 
 bootstrap()
 
-from orchestration.assets import bronze, scrape, silver
+from orchestration.assets import bronze, gold, scrape, silver
 from orchestration.resources import PreprocessorResource, RepoLogger, SwitchConfig
 
 import json
@@ -146,7 +146,7 @@ _repo_logger = RepoLogger()
 _switches = SwitchConfig()
 
 defs = Definitions(
-    assets=_enabled([*scrape.assets, *bronze.assets, *silver.assets]),
+    assets=_enabled([*scrape.assets, *bronze.assets, *silver.assets, *gold.assets]),
     resources={
         "repo_logger": _repo_logger,
         "switches": _switches,

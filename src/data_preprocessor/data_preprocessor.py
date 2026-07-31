@@ -1968,107 +1968,38 @@ class DataPreprocessor:
             dtype_overrides={"date": DataType.DATE()},
         )
 
-    # `silver.economy` column naming — the wide panel's whole interface.
-    #
-    #     {country}__{scrape_main_type}__{category}__{exchange}__{ticker}
-    #     vietnam__economy__prices__economics__vncpi
-    #
-    # ⚠️ THE SEPARATOR IS TWO UNDERSCORES BECAUSE THE VALUES CONTAIN ONE.
-    # `mainland_china`, `south_korea`, `order_stats` — with a single `_` no rule can
-    # split a name back into its fields. With `__`, `name.split("__")` is exact.
-    #
-    # Coarse → fine, so alphabetical column order groups a country's series together and
-    # `column_name LIKE 'vietnam__economy__prices%'` is a usable selector.
-    #
-    # NB `scrape_main_type` is CONSTANT here (one distinct value, `economy`) and
-    # `exchange` is the data VENDOR (`ECONOMICS`/`FRED`), not a bourse. Since ticker is
-    # already 1:1 with the series, every prefix is redundant for IDENTITY — it earns its
-    # place as a grouping key and as lineage, not as an identifier.
-    SILVER_ECONOMY_NAME_PARTS = (
-        "country",
-        "scrape_main_type",
-        "category",
-        "exchange",
-        "ticker",
-    )
-    SILVER_ECONOMY_NAME_SEP = "__"
-
-    # PostgreSQL truncates identifiers over 63 BYTES silently, and two names that
-    # truncate to the same thing collide. Today's longest is 57, but the vocabulary
-    # allows 14 + 7 + 10 + 9 + 20 + 8 separators = 68 — the longest ticker simply does
-    # not co-occur with the longest country and category. That is luck, not a guarantee,
-    # so `_build_silver_economy_columns` checks rather than trusts.
-    #
-    # ⚠️ THE LIMIT CANNOT BE RAISED ON THIS SERVER. It is `NAMEDATALEN - 1`, and
-    # NAMEDATALEN is a COMPILE-TIME constant in `src/include/pg_config_manual.h` —
-    # changing it means building PostgreSQL from source and `initdb`-ing a fresh cluster
-    # (the on-disk catalogue layout changes, so an existing data directory is not
-    # readable by the rebuilt binary, and vice versa). It is not a GUC, not a per-column
-    # option, not something `ALTER` can reach. So the template must fit 63; if it ever
-    # stops fitting, shorten the NAME, never the server.
-    PG_IDENTIFIER_LIMIT = 63
-
-    def _build_silver_economy_columns(self, df: pd.DataFrame) -> pd.Series:
-        """The composite column name for every row, verified fit for PostgreSQL.
-
-        RAISES rather than let a name be silently truncated into a collision — the
-        failure would otherwise surface as an upsert writing to the wrong series.
-        """
-        parts = [
-            df[part].astype("string").str.strip().str.lower()
-            for part in self.SILVER_ECONOMY_NAME_PARTS
-        ]
-        names = parts[0]
-        for part in parts[1:]:
-            names = names + self.SILVER_ECONOMY_NAME_SEP + part
-
-        too_long = sorted(
-            {n for n in names.dropna().unique() if len(n.encode()) > self.PG_IDENTIFIER_LIMIT}
-        )
-        if too_long:
-            raise PipelineError(
-                f"{len(too_long)} silver.economy column name(s) exceed PostgreSQL's "
-                f"{self.PG_IDENTIFIER_LIMIT}-byte identifier limit and would be "
-                f"TRUNCATED SILENTLY, e.g. {too_long[:3]}. Shorten the template — drop "
-                f"`scrape_main_type` (it is constant, -9 chars) or use ISO country "
-                f"codes (-12) — rather than let two series share a column."
-            )
-
-        unique_names = names.dropna().unique()
-        truncated = {n[: self.PG_IDENTIFIER_LIMIT] for n in unique_names}
-        if len(truncated) != len(unique_names):
-            raise PipelineError(
-                f"silver.economy column names collide after truncation: "
-                f"{len(unique_names)} names → {len(truncated)} distinct."
-            )
-        return names
-
     def _ingest_silver_economy(self) -> None:
-        """`bronze.trading_view_economy` → `silver.economy`, **PIVOTED: one row per
-        DATE**, PK `date`, one column per series named
-        `{country}__{scrape_main_type}__{category}__{exchange}__{ticker}`.
+        """`bronze.trading_view_economy` -> `silver.economy`, PK
+        `(exchange, ticker, date)`. **LONG**: one row per series per date, the same grain
+        as its four siblings (`bonds`/`forex`/`funds`/`indices`) and the grain
+        `_ingest_gold_economy` reads.
 
-        9,719 dates × 1,034 series. The wide macro panel joins on `date` alone, which is
-        the shape `DataPostprocessor._join_macroeconomics_columns` expects.
+        WARNING - IT WAS BRIEFLY WIDE (2026-08-01) AND THAT WAS THE WRONG LAYER FOR IT.
+        One row per date x 1,034 columns measured **5.8% filled**, and the nulls were the
+        least of it - three things were wrong:
 
-        ⚠️ **~94% NULL is the data, not a defect.** Every series keeps its own calendar
-        and frequency (`VNINBR` daily, 6,836 observations; `VNGDPYY` quarterly, 103), so
-        a date carries only the series that reported on it. The cell count is exactly the
-        bronze row count — nothing is invented. Forward-filling is a MODELLING decision
-        and belongs in gold: doing it here would destroy the "was this published today?"
-        signal that release-date-sensitive features need.
+        * **the schema became a function of the data.** Every new series TradingView
+          publishes is a DDL change, every retired one leaves a dead column, and each
+          upsert chunk carries a 1,034-term `ON CONFLICT DO UPDATE`. In long form a new
+          series is ROWS. (It also sat at 65% of PostgreSQL's 1,600-column ceiling.)
+        * **it mixed frequencies on one calendar.** 67 daily series hold 63% of all
+          observations and imposed a 9,719-day grid on 500 monthly and 226 quarterly
+          series that can never fill it. On their own grids those buckets are 76-93%
+          filled - the sparsity was an artefact of the shape, not of the data.
+        * **`date` is the REFERENCE period, not the release date.** Vietnam's Q1 GDP is
+          dated 2026-03-31 and published in April, so any wide panel joined on `date`
+          hands a model a number a week before it existed. That needs a publication lag,
+          which is a MODELLING decision - see `_ingest_gold_economy_panel`, where it
+          lives.
 
-        ⚠️ **The table is DROPPED first.** The grain changed from `(exchange, ticker,
-        date)` to `date` and `create_table` is `IF NOT EXISTS`, so an upsert into the old
-        shape would fail on a missing PK column. The CafeF carry-ups drop for the same
-        reason.
+        Nulls were never the problem: a NULL costs ~1 bit in the row's null bitmap, so
+        9.4 M of them was ~1.2 MB. Shape and layer were the problem.
 
-        ⚠️ **RAISES on empty bronze** rather than logging and returning. Its four
-        siblings (`bonds`/`forex`/`funds`/`indices`) still take the silent path — an
-        empty source there reads as a successful ingest, which is the exact Phase 0
-        failure mode (`utils/exceptions.py`), and they should follow when next touched.
+        WARNING - RAISES on empty bronze rather than logging and returning. Its four
+        siblings still take the silent path - an empty source there reads as a successful
+        ingest, the exact Phase 0 failure mode - and should follow when next touched.
         """
-        self._logger.log_info("Ingesting silver economy data (pivoted, 1 row/date)...")
+        self._logger.log_info("Ingesting silver economy data...")
 
         df = self._helper_select(
             schema_name=BRONZE_SCHEMA, table_name="trading_view_economy"
@@ -2076,21 +2007,19 @@ class DataPreprocessor:
 
         if df.empty:
             raise MissingSourceDataError(
-                f"{BRONZE_SCHEMA}.trading_view_economy is empty — run the bronze "
+                f"{BRONZE_SCHEMA}.trading_view_economy is empty - run the bronze "
                 f"economy ingest first."
             )
 
         # `exchange` and `ticker` come STRAIGHT OUT OF BRONZE. Until 2026-08-01 this
         # re-derived them with `df["symbol"].str.split(":")`, against a frame that has
-        # no `symbol` column — bronze splits it on read — so this method raised
+        # no `symbol` column - bronze splits it on read - so this method raised
         # `KeyError('symbol')` every time it ran.
         df = self._helper_clean(
             df,
             [
-                *(
-                    CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL(part)
-                    for part in self.SILVER_ECONOMY_NAME_PARTS
-                ),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("exchange"),
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("ticker"),
                 CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("date"),
                 CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("value"),
                 CleanLayer.ORDER_BY(["exchange", "ticker", "date"]),
@@ -2099,43 +2028,124 @@ class DataPreprocessor:
 
         df = self._helper_cast_columns(df, decimal_cols=["value"], bigint_cols=[])
         df["date"] = pd.to_datetime(df["date"]).dt.date
-        df = df.dropna(subset=["value"])
-
-        df["series"] = self._build_silver_economy_columns(df)
-
-        # Bronze's PK makes this a no-op today, but `pivot` RAISES on a duplicate
-        # (index, column) pair — so the guarantee is enforced, not assumed.
-        before = len(df)
-        df = self._helper_remove_duplicates(df, primary_keys=["series", "date"])
-        if len(df) != before:
-            self._logger.log_warning(
-                f"Dropped {before - len(df)} duplicate (series, date) row(s) before "
-                f"pivoting — bronze is supposed to be unique on that key."
-            )
-
-        wide = df.pivot(index="date", columns="series", values="value")
-        wide = wide.sort_index().reset_index()
-        wide.columns.name = None
-
-        cells = len(wide) * (len(wide.columns) - 1)
-        self._logger.log_info(
-            f"Pivoted {before} observations into {len(wide)} dates × "
-            f"{len(wide.columns) - 1} series ({100.0 * before / max(cells, 1):.2f}% "
-            f"of cells filled)."
+        df = self._helper_remove_duplicates(
+            df, primary_keys=["exchange", "ticker", "date"]
         )
 
+        # ONLY the canonical four columns, matching the siblings - the dimensions
+        # (`country`/`category`/`scrape_main_type`) live in `silver.economy_series`, a
+        # proper dimension table. Carrying them here would break `_ingest_gold_table`,
+        # which coerces every column outside {exchange, ticker, date, GICS} with
+        # `pd.to_numeric` and would wipe all three to NaN.
+        df = df[["exchange", "ticker", "date", "value"]]
+
+        # The grain changed back from `date` (the brief wide version) and `create_table`
+        # is IF NOT EXISTS, so the stale shape has to go before the upsert.
         self._database_driver.drop_table(SILVER_SCHEMA, "economy")
 
-        # ⚠️ chunk_size is deliberately small. `execute_values` inlines every value into
-        # ONE statement, so the default 5,000 rows × 1,035 columns would build a ~5 M
-        # value SQL string per chunk. 250 keeps each statement in the low MB.
         self._helper_save_pandas_table_to_database(
             schema_name=SILVER_SCHEMA,
             table_name="economy",
-            primary_keys=["date"],
-            df=wide,
+            primary_keys=["exchange", "ticker", "date"],
+            df=df,
             dtype_overrides={"date": DataType.DATE()},
-            chunk_size=250,
+        )
+
+    # Median days between consecutive observations -> frequency class. The boundaries are
+    # generous because real macro calendars are ragged: a "monthly" series that skips a
+    # month still has a median gap near 30. Measured over the live table: 67 daily,
+    # 32 weekly, 500 monthly, 226 quarterly, 206 annual, 4 single-observation.
+    ECONOMY_FREQUENCY_BOUNDS = (
+        (4, "daily"),
+        (10, "weekly"),
+        (45, "monthly"),
+        (135, "quarterly"),
+        (400, "annual"),
+    )
+
+    def _classify_economy_frequency(self, median_gap_days: float) -> str:
+        if pd.isna(median_gap_days):
+            return "single"
+        for bound, label in self.ECONOMY_FREQUENCY_BOUNDS:
+            if median_gap_days <= bound:
+                return label
+        return "irregular"
+
+    def _ingest_silver_economy_series(self) -> None:
+        """`silver.economy_series` - the DIMENSION table for the economy fact table.
+        One row per series (1,034), PK `(exchange, ticker)`.
+
+        Holds what a one-row-per-date panel cannot carry and what `silver.economy` must
+        not carry (see there): `country`, `scrape_main_type`, `category`, plus the
+        observed `frequency`, `observations`, `first_date`/`last_date`.
+
+        `frequency` is DERIVED, not given - TradingView publishes no frequency field -
+        and it is what sets the publication lag in `_ingest_gold_economy_panel`.
+        """
+        self._logger.log_info("Ingesting silver economy series dimension...")
+
+        df = self._helper_select(
+            schema_name=BRONZE_SCHEMA, table_name="trading_view_economy"
+        )
+
+        if df.empty:
+            raise MissingSourceDataError(
+                f"{BRONZE_SCHEMA}.trading_view_economy is empty - run the bronze "
+                f"economy ingest first."
+            )
+
+        df["date"] = pd.to_datetime(df["date"])
+        df = df.sort_values(["exchange", "ticker", "date"])
+
+        gaps = (
+            df.groupby(["exchange", "ticker"])["date"]
+            .apply(lambda s: s.diff().dt.days.median())
+            .rename("median_gap_days")
+        )
+        agg = df.groupby(["exchange", "ticker"]).agg(
+            country=("country", "first"),
+            scrape_main_type=("scrape_main_type", "first"),
+            category=("category", "first"),
+            observations=("value", "size"),
+            first_date=("date", "min"),
+            last_date=("date", "max"),
+        )
+        dim = agg.join(gaps).reset_index()
+        dim["frequency"] = dim["median_gap_days"].map(self._classify_economy_frequency)
+        dim["first_date"] = dim["first_date"].dt.date
+        dim["last_date"] = dim["last_date"].dt.date
+
+        dim = dim[
+            [
+                "exchange",
+                "ticker",
+                "country",
+                "scrape_main_type",
+                "category",
+                "frequency",
+                "observations",
+                "median_gap_days",
+                "first_date",
+                "last_date",
+            ]
+        ]
+
+        self._logger.log_info(
+            "economy_series: "
+            + f"{len(dim)} series - "
+            + ", ".join(f"{n} {f}" for f, n in dim["frequency"].value_counts().items())
+        )
+
+        self._database_driver.drop_table(SILVER_SCHEMA, "economy_series")
+        self._helper_save_pandas_table_to_database(
+            schema_name=SILVER_SCHEMA,
+            table_name="economy_series",
+            primary_keys=["exchange", "ticker"],
+            df=dim,
+            dtype_overrides={
+                "first_date": DataType.DATE(),
+                "last_date": DataType.DATE(),
+            },
         )
 
     def _ingest_silver_forex(self) -> None:
@@ -3541,6 +3551,280 @@ class DataPreprocessor:
             transform_layers,
             checkpoint_fn=_checkpoint,
             checkpoint_size=100_000,
+        )
+
+    # ── gold.economy_panel — the WIDE macro panel ────────────────────────────────
+    #
+    #     {country}__{scrape_main_type}__{category}__{exchange}__{ticker}
+    #     vietnam__economy__prices__economics__vncpi
+    #
+    # THE SEPARATOR IS TWO UNDERSCORES BECAUSE THE VALUES CONTAIN ONE.
+    # `mainland_china`, `south_korea` - with a single `_` no rule can split a name back
+    # into its fields; with `__`, `split("__")` is exact and
+    # `split_part(column_name,'__',1)` is a usable GROUP BY. Coarse -> fine, so
+    # alphabetical column order groups a country's series together. Lowercase, because
+    # `_helper_build_upsert_sql` interpolates column names UNQUOTED.
+    ECONOMY_PANEL_NAME_PARTS = (
+        "country",
+        "scrape_main_type",
+        "category",
+        "exchange",
+        "ticker",
+    )
+    ECONOMY_PANEL_NAME_SEP = "__"
+
+    # PostgreSQL truncates identifiers over 63 BYTES silently, and two names that
+    # truncate alike collide. Today's longest is 57, but the vocabulary allows
+    # 14 + 7 + 10 + 9 + 20 + 8 separators = 68 - the longest ticker simply does not
+    # co-occur with the longest country and category. That is luck, so this is checked.
+    #
+    # THE LIMIT CANNOT BE RAISED ON THIS SERVER. It is `NAMEDATALEN - 1`, and NAMEDATALEN
+    # is a COMPILE-TIME constant in `src/include/pg_config_manual.h`: changing it means
+    # building PostgreSQL from source and `initdb`-ing a fresh cluster (the catalogue
+    # layout changes, so an existing data directory is unreadable by the rebuilt binary).
+    # It is not a GUC and `ALTER` cannot reach it. Shorten the NAME, never the server.
+    PG_IDENTIFIER_LIMIT = 63
+
+    # ⚠️ BOTH DICTS BELOW ARE ASSUMPTIONS, NOT DATA. TradingView gives a reference period
+    # and no release date, so the lag cannot be read off the source - it is imposed.
+    #
+    # `date` in the source is the period the figure DESCRIBES. Vietnam's Q1 GDP is dated
+    # 2026-03-31 and published in the first week of April, so joining a panel on `date`
+    # would hand a model a number ~a week before it existed - look-ahead bias, straight
+    # into a backtest. Shifting each observation forward by its frequency's typical
+    # publication lag is the conservative fix; tighten per series if release dates are
+    # ever scraped.
+    ECONOMY_PUBLICATION_LAG_DAYS = {
+        "daily": 0,
+        "weekly": 3,
+        "monthly": 30,
+        "quarterly": 45,
+        "annual": 90,
+        "single": 0,
+        "irregular": 30,
+    }
+
+    # How long a value stays "the current known value" before it goes stale, in BUSINESS
+    # DAYS (~1.5-2x the natural period). Without a cap, a series that stopped reporting
+    # in 2010 would carry its last value forward to 2036 and read as live data.
+    ECONOMY_MAX_STALENESS_BDAYS = {
+        "daily": 5,
+        "weekly": 10,
+        "monthly": 45,
+        "quarterly": 130,
+        "annual": 400,
+        "single": 0,
+        "irregular": 45,
+    }
+
+    def _build_economy_panel_columns(self, df: pd.DataFrame) -> pd.Series:
+        """The composite column name for every row, verified fit for PostgreSQL.
+
+        RAISES rather than let a name be truncated into a collision - the failure would
+        otherwise surface as two series quietly sharing one column.
+        """
+        parts = [
+            df[part].astype("string").str.strip().str.lower()
+            for part in self.ECONOMY_PANEL_NAME_PARTS
+        ]
+        names = parts[0]
+        for part in parts[1:]:
+            names = names + self.ECONOMY_PANEL_NAME_SEP + part
+
+        unique_names = list(pd.unique(names.dropna()))
+        too_long = sorted(
+            n for n in unique_names if len(n.encode()) > self.PG_IDENTIFIER_LIMIT
+        )
+        if too_long:
+            raise PipelineError(
+                f"{len(too_long)} gold.economy_panel column name(s) exceed PostgreSQL's "
+                f"{self.PG_IDENTIFIER_LIMIT}-byte identifier limit and would be "
+                f"TRUNCATED SILENTLY, e.g. {too_long[:3]}. Shorten the template - drop "
+                f"`scrape_main_type` (constant, -9 chars) or use ISO country codes "
+                f"(-12) - rather than let two series share a column."
+            )
+
+        truncated = {n[: self.PG_IDENTIFIER_LIMIT] for n in unique_names}
+        if len(truncated) != len(unique_names):
+            raise PipelineError(
+                f"gold.economy_panel column names collide after truncation: "
+                f"{len(unique_names)} names -> {len(truncated)} distinct."
+            )
+        return names
+
+    def _ingest_gold_economy_panel(self) -> None:
+        """`silver.economy` + `silver.economy_series` -> `gold.economy_panel`:
+        **one row per business day**, one column per series, AS-OF filled.
+
+        This is the wide macro panel a model joins on `date` alone - the shape
+        `DataPostprocessor._join_macroeconomics_columns` expects. It lives in GOLD, not
+        silver, because every step below is a modelling decision:
+
+        1. **publication lag** - each observation becomes visible only
+           `ECONOMY_PUBLICATION_LAG_DAYS[frequency]` days after the period it describes,
+           because `date` in the source is the REFERENCE period, not the release date;
+        2. **as-of carry** - between releases the last published value IS the current
+           known value, so it is carried forward on a business-day calendar;
+        3. **staleness cap** - but only for `ECONOMY_MAX_STALENESS_BDAYS[frequency]`, so
+           a series that stopped reporting in 2010 does not read as live data in 2026;
+        4. **business-day roll-forward** - an availability date landing on a weekend
+           becomes the next business day, because the panel is indexed by business day
+           and a plain reindex would DROP that observation (see the code comment: this
+           silently lost Vietnam's Q4-2025 GDP);
+        5. **the calendar ends TODAY** - projection rows dated out to 2036 are raw data
+           in bronze/silver, but in a model panel they are 2,685 near-empty rows that
+           only make a look-ahead join possible.
+
+        Silver stays long and raw-faithful; none of this touches it.
+
+        Density: the long source is 5.8% of a date x series grid; after the as-of carry
+        the panel is ~91% filled, which is the point of building it.
+
+        ⚠️ **`REAL`, not `DOUBLE PRECISION`.** 1,034 float8 columns is 8,272 bytes and
+        PostgreSQL's row limit is ~8,160; float4 halves it to ~4.1 kB. Macro series carry
+        far fewer than REAL's ~7 significant digits, so nothing is lost - the same reason
+        `_ingest_gold_table` casts its feature columns.
+        """
+        self._logger.log_info("Ingesting gold economy panel (wide, as-of filled)...")
+
+        fact = self._helper_select(schema_name=SILVER_SCHEMA, table_name="economy")
+        dim = self._helper_select(
+            schema_name=SILVER_SCHEMA, table_name="economy_series"
+        )
+
+        if fact.empty:
+            raise MissingSourceDataError(
+                f"{SILVER_SCHEMA}.economy is empty - run the silver economy ingest first."
+            )
+        if dim.empty:
+            raise MissingSourceDataError(
+                f"{SILVER_SCHEMA}.economy_series is empty - run the silver economy "
+                f"series ingest first. Without it the panel cannot name its columns or "
+                f"pick a publication lag."
+            )
+
+        df = fact.merge(
+            dim[
+                [
+                    "exchange",
+                    "ticker",
+                    "country",
+                    "scrape_main_type",
+                    "category",
+                    "frequency",
+                ]
+            ],
+            on=["exchange", "ticker"],
+            how="inner",
+            validate="many_to_one",
+        )
+        if len(df) != len(fact):
+            # An inner join that loses rows means the dimension is stale - rebuild it
+            # rather than silently publish a panel missing whole series.
+            raise PipelineError(
+                f"{len(fact) - len(df)} of {len(fact)} silver.economy rows have no "
+                f"matching row in silver.economy_series. Re-run the dimension ingest."
+            )
+
+        df["date"] = pd.to_datetime(df["date"])
+        df["value"] = pd.to_numeric(df["value"], errors="coerce")
+        df = df.dropna(subset=["value"])
+        df["series"] = self._build_economy_panel_columns(df)
+
+        lag = df["frequency"].map(self.ECONOMY_PUBLICATION_LAG_DAYS).fillna(30)
+
+        # ⚠️ ROLL FORWARD TO THE NEXT BUSINESS DAY, DO NOT JUST ADD THE LAG.
+        # The panel is indexed by business day, so an availability date landing on a
+        # weekend would be dropped outright by the reindex below — silently. Found the
+        # hard way: Vietnam's Q4-2025 GDP is dated 2025-12-31, and 2025-12-31 + 45 days
+        # is Saturday 2026-02-14, so that figure VANISHED from the panel entirely (the
+        # series jumped straight from Q3 to Q1). Rolling forward also matches reality:
+        # a release nobody can act on until Monday becomes known on Monday.
+        df["available_from"] = (df["date"] + pd.to_timedelta(lag, unit="D")).map(
+            pd.offsets.BusinessDay().rollforward
+        )
+
+        # A lag can push two observations of one series onto the same day; the later
+        # REFERENCE period wins, which is what a reader on that day would see.
+        df = df.sort_values(["series", "available_from", "date"])
+        expected_cells = df.groupby(["series", "available_from"], sort=False).ngroups
+
+        wide = df.pivot_table(
+            index="available_from", columns="series", values="value", aggfunc="last"
+        )
+
+        # ⚠️ THE PANEL STOPS AT TODAY. 47 series carry projections with reference dates
+        # out to 2036; on a business-day calendar those became 2,685 rows that were 2.3%
+        # filled — a decade of near-empty rows whose only real effect is to make a
+        # look-ahead join possible. Projections stay in bronze and silver, where they are
+        # raw data; the MODEL panel is "what was knowable by then", so it ends now.
+        last_day = pd.offsets.BusinessDay().rollback(pd.Timestamp.today().normalize())
+        calendar = pd.bdate_range(wide.index.min(), last_day, name="date")
+        wide = wide.reindex(calendar)
+
+        # Every observation the lag made visible on or before `last_day` must survive the
+        # reindex. This is the invariant the weekend bug broke, so it is checked, not
+        # assumed.
+        expected_in_range = df.loc[
+            df["available_from"] <= last_day, ["series", "available_from"]
+        ].drop_duplicates().shape[0]
+        landed = int(wide.notna().sum().sum())
+        if landed != expected_in_range:
+            raise PipelineError(
+                f"gold.economy_panel lost {expected_in_range - landed} observation(s) "
+                f"in the reindex: {expected_in_range} distinct (series, available_from) "
+                f"pairs fall on or before {last_day.date()}, but only {landed} cells "
+                f"landed. An availability date that is not a business day is the usual "
+                f"cause."
+            )
+        dropped_future = expected_cells - expected_in_range
+        if dropped_future:
+            self._logger.log_info(
+                f"economy_panel: {dropped_future} observation(s) have an availability "
+                f"date after {last_day.date()} (projections) and are not in the panel; "
+                f"they remain in silver.economy."
+            )
+
+        # Per-frequency staleness cap, so the carry cannot outlive the series.
+        staleness = (
+            dim.assign(series=self._build_economy_panel_columns(dim))
+            .set_index("series")["frequency"]
+            .map(self.ECONOMY_MAX_STALENESS_BDAYS)
+            .fillna(45)
+            .astype(int)
+        )
+        raw_cells = int(wide.notna().sum().sum())
+        for limit, cols in staleness.groupby(staleness):
+            present = [c for c in cols.index if c in wide.columns]
+            if present and limit > 0:
+                wide[present] = wide[present].ffill(limit=int(limit))
+
+        wide = wide.reset_index()
+        wide.columns.name = None
+        wide["date"] = wide["date"].dt.date
+
+        filled = int(wide.drop(columns=["date"]).notna().sum().sum())
+        cells = len(wide) * (len(wide.columns) - 1)
+        self._logger.log_info(
+            f"economy_panel: {len(wide)} business days x {len(wide.columns) - 1} series "
+            f"- {raw_cells} observations visible after the publication lag, "
+            f"{filled} cells after the as-of carry ({100.0 * filled / max(cells, 1):.1f}% "
+            f"filled, from {100.0 * raw_cells / max(cells, 1):.1f}%)."
+        )
+
+        overrides: dict[str, str] = {"date": DataType.DATE()}
+        for col in wide.columns:
+            if col != "date":
+                overrides[col] = "REAL"
+
+        self._database_driver.drop_table(GOLD_SCHEMA, "economy_panel")
+        self._helper_save_pandas_table_to_database(
+            schema_name=GOLD_SCHEMA,
+            table_name="economy_panel",
+            primary_keys=["date"],
+            df=wide,
+            dtype_overrides=overrides,
+            use_copy=True,
         )
 
     def _ingest_gold_stocks(self) -> None:
