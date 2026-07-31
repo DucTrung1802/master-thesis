@@ -50,8 +50,18 @@ trading_view_links[9 asset classes]
 
 cafef_financials_templates ─► cafef_financials[2 tickers]     (no TradingView dep)
 cafef_pdfs[100 tickers]                                        (no TradingView dep)
-cafef_index_{price,order_stats,foreign,prop_trading} ─► bronze/cafef_index_*
-gics_structure
+cafef_index_{price,order_stats,foreign,prop_trading}           (no TradingView dep)
+gics_structure                                                 (no TradingView dep)
+
+── and every landing asset feeds the bronze table whose folder it writes ──
+
+raw/trading_view_data[economy] ─► bronze/trading_view_economy ─┬─► silver/economy ──────┐
+                                                               │                        ├─► gold/economy
+                                                               └─► silver/economy_series┘   (wide, as-of)
+
+raw/cafef_index_{price,order_stats,foreign,prop_trading}
+        └─► bronze/cafef_index_* (x4) ─► silver/stock_market ─► gold/stock_market
+                                         (4 tabs joined)        (wide, unfilled)
 ```
 
 | group | assets | partitions |
@@ -652,13 +662,15 @@ return to sequential execution.
   Dagster's job now.**
 - **`PreprocessorResource.session` has no `except` clause.** This is the point of the
   migration — see §4.1.
-- **The repo `Logger` is kept as-is** and the executor is pinned `in_process`.
-  `Logger` calls `logging.basicConfig(filename="logs/app.log")` on the ROOT logger and
-  is threaded through every scraper/preprocessor constructor, so replacing it with
-  `context.log` is a wide refactor and a separate decision. Under the default
-  multiprocess executor, several step processes would interleave writes into that one
-  file. Every scraper already parallelises internally with its own `ThreadManager`, so
-  step-level multiprocessing buys little here anyway.
+- **The repo `Logger` is kept as-is.** It calls
+  `logging.basicConfig(filename="logs/app.log")` on the ROOT logger and is threaded
+  through every scraper/preprocessor constructor, so replacing it with `context.log` is
+  a wide refactor and a separate decision.
+  > ⚠️ **This bullet used to end "and the executor is pinned `in_process`" — that is no
+  > longer true.** The executor is MULTIPROCESS (§2a), which is exactly why several step
+  > processes now interleave writes into that one file. The trade was made deliberately:
+  > the file stays (that was the requirement), each line still names its class and
+  > method, and Dagster's own per-step logs are in `.dagster/`.
 - **`_bootstrap.py` sets `sys.path` and the CWD.** The repo's modules import each
   other flat (`from web_scraper.x import y`), which works today only because
   `python src/main.py` puts `src/` at `sys.path[0]`; `pytest.ini` solves the same
@@ -737,38 +749,41 @@ transcribed directly.
 
 Note `data_quality_unified` is a **dead switch** — no code reads it. Drop it.
 
-### 4.3 Phase 2 — the cheap scrapers (~13 assets)
+### 4.3 ✅ Phase 2 — the cheap scrapers (BUILT)
 
-`cafef_index` (done), `cafef/{price,foreign,order_stats,prop_trading,insider_txn}`,
-`simplize/{stocks,industry}`, `gics/structure`. Same wrapper shape as the prototype.
+`cafef_index`, `cafef/{price,foreign,order_stats,prop_trading,insider_txn}`,
+`cafef_news`, `simplize/{stocks,industry}`, `gics/structure` are all assets in
+[assets/scrape.py](assets/scrape.py).
 
-The CafeF and Simplize assets take a `deps=[tv_collected_links]` edge — they read the
-TradingView link CSVs for their universe.
+⚠️ **The planned `deps=[tv_collected_links]` edge was WRONG and is not what was built.**
+The audit in §2 found that CafeF and Simplize read `links/stocks/` directly, not the
+aggregate — nothing reads `collected_links` at all. The real edge is
+`trading_view_links` partition `stocks`, via `SpecificPartitionsPartitionMapping`.
 
-### 4.4 Phase 3 — TradingView (2 assets + partitions)
+### 4.4 ✅ Phase 3 — TradingView (BUILT, but partitioned differently than planned)
 
-`tv_links` and `tv_data` become **partitioned** by the enabled
-`(asset_class, country, type, sector)` leaves — a `StaticPartitionsDefinition` built
-from the same 320 switch keys, which stay in `switch_config.json` as *parameters*.
-`tv_collected_links` sits between them, unpartitioned.
+`trading_view_links` / `trading_view_data` are partitioned by **asset class (9)**, not
+by the 320 `(asset_class, country, type, sector)` switch leaves as this plan proposed.
+320 partitions would re-encode `switch_config.json` in a second place and be unusable in
+the UI; the sub-leaves stay in the JSON as *parameters* that each scraper's own task
+adder reads. `trading_view_collected_links` sits between them, unpartitioned.
 
-Selenium under Dagster needs care: `SCRAPER_MAX_CONCURRENT_BROWSERS=8` is enforced by
-an in-process semaphore, so if steps ever move to multiprocess that cap silently stops
-applying. Keep TV in-process.
+⚠️ **The "keep TV in-process" instruction was superseded.** The executor IS multiprocess
+now; what keeps the in-process browser semaphore meaningful is the
+`resource: browser` tag limit of 1 (§2a), not sequential execution.
 
-### 4.5 Phase 4 — the heavy per-filing pipelines (2 assets, partitioned by ticker)
+### 4.5 ✅ Phase 4 — the heavy per-filing pipelines (BUILT)
 
-`cafef/pdfs` (~1.0-1.7 GB/ticker) and `cafef/financials` (~2.4 h/ticker) become
-**ticker-partitioned**, replacing `CAFEF_PDF_TICKERS` / `CAFEF_FINANCIALS_TICKERS` in
-constants.py. This is the largest single ergonomic win: re-parsing one ticker becomes
-one partition with its own success/failure record, instead of editing a constant and
-reading `app.log` to find out what happened.
+`cafef_pdfs` (100 partitions) and `cafef_financials` (2) are ticker-partitioned, and
+`CAFEF_PDF_TICKERS` / `CAFEF_FINANCIALS_TICKERS` no longer scope a run — selection does.
 
-⚠️ `build_templates_index` **rewrites `templates.csv` from exactly the symbols handed
-to it** — it does not upsert (this is how VCB lost its row when ACB was parsed alone).
-Under per-ticker partitions this hazard gets *worse*, not better. The index must be a
-SEPARATE unpartitioned asset built from the full ticker list, upstream of the
-partitioned parse.
+The `build_templates_index` hazard was handled exactly as this plan demanded:
+`cafef_financials_templates` is a SEPARATE unpartitioned asset upstream of the
+partitioned parse, because the builder REWRITES `templates.csv` from exactly the symbols
+handed to it (which is how VCB lost its row when ACB was parsed alone).
+
+⚠️ **Built is not run.** These two, plus `trading_view_data` and the full-universe CafeF
+tabs, have never been materialised end-to-end here — see the warning in §2.
 
 ### 4.6 Phase 5 — retire the switch config's run-plan role
 
@@ -782,12 +797,17 @@ than either alone.
 |---|---|---|
 | 0 | exception propagation | ✅ **done** |
 | 1 | preprocessor, ~41 assets | bronze ✅ **done**; silver 3/15, gold 2/6 |
-| 2 | cheap scrapers, ~13 assets | 1 day |
-| 3 | TradingView + partitions | 1 day |
-| 4 | pdfs/financials, ticker partitions | 1 day |
-| 5 | retire switch config | half a day |
+| 2 | cheap scrapers, ~13 assets | ✅ **done** |
+| 3 | TradingView + partitions | ✅ **done** (9 partitions, not 320 — see 4.4) |
+| 4 | pdfs/financials, ticker partitions | ✅ **built**, not yet run end-to-end |
+| 5 | retire switch config | half a day — the only phase not started |
 
 `main.py` ends up empty and `switch_config.json` shrinks to ~320 parameter keys.
+
+**Where it actually stands (2026-08-01):** phases 0-4 are built; every landing and bronze
+asset has been materialised green, silver has 3 assets and gold 2. What remains is the
+rest of silver (12 leaves), the rest of gold (4), phase 5, and end-to-end runs of the
+four heavy assets.
 
 ## 5. Gotchas
 

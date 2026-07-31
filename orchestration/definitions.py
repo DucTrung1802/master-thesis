@@ -1,13 +1,22 @@
 # orchestration\definitions.py
-"""The Dagster code location — what `dagster dev` loads.
+"""The Dagster code location — what `dagster dev` loads. **44 assets.**
 
-Two layers, kept in separate modules on purpose:
+Four layers, kept in separate modules on purpose:
 
   * `assets/scrape.py`  — THE LANDING LAYER: every scraper, network → `raw_data/`.
-                          No database. This is all of `main.py`'s scraping half.
-  * `assets/bronze.py`  — the first database layer, and only the 4 index tables:
-                          the proof that landing connects to PostgreSQL. The other
-                          16 bronze tables are Phase 1 (see CONTEXT.md §4.2).
+                          No database at all, so it is correct-on-disk and re-runnable
+                          without one. This is all of `main.py`'s scraping half (19).
+  * `assets/bronze.py`  — raw_data/ → `bronze_schema`. ALL 20 ingest leaves (25 tables),
+                          generated from a spec table. A flat layer: bronze has no
+                          cross-table dependency, so every edge points up at the landing
+                          asset whose folder that ingest reads.
+  * `assets/silver.py`  — `bronze_schema` → `silver_schema` (3): the economy fact table
+                          and its dimension, plus the four CafeF index tabs joined into
+                          one `stock_market`.
+  * `assets/gold.py`    — `silver_schema` → `gold_schema` (2): the wide, model-ready
+                          panels. Every assumption that makes a panel dense — publication
+                          lag, as-of carry, staleness cap — lives HERE and never in
+                          silver.
 
 `src/main.py` is untouched and still runs the whole pipeline the old way.
 """
