@@ -12,14 +12,24 @@ what it actually establishes, and **whether to cite it, follow it, or both**.
 |---|---|---|---|
 | 9 | Khan et al. — *Stock market prediction using ML classifiers and social media, news* | 2020 | **Cite, do not follow** |
 | 28 | Vargas, de Lima, Evsukoff — *Deep learning for stock market prediction from financial news articles* | 2017 | **Cite; borrow the architecture, not the setup** |
+| 43 | Usmani & Shamsi — *LSTM based stock prediction using weighted and categorized financial news* | 2023 | **Cite; borrow the NEWS HIERARCHY — the one idea to build on** |
 
-**They are a matched pair, and the pairing is the point.** Both add news text to
-price features to predict next-day direction. Paper 9 collapses the text to **one
-scalar column** appended to OHLCV; paper 28 keeps it as a **sequence with its own
-encoder**, fused late with the technical branch. Paper 28 is the better paper on
-every axis that matters (chronological split, reproducible architecture, clean
-ablation grid) and is the one paper 9 cites. Cite the contrast — it is a ready-made
-methods paragraph.
+**They form a progression, and the progression is the point.** All three add news
+text to price features to predict next-day direction, and they differ in *how the
+text enters the model*:
+
+| | paper 9 (2020) | paper 28 (2017) | paper 43 (2023) |
+|---|---|---|---|
+| text enters as | **one scalar** beside OHLCV | a **sequence + own encoder** | **three weighted streams** (market / sector / stock) |
+| split | random 70/30 ⚠️ | chronological | time-series CV, val ahead of train |
+| test size | 150 | **187** ⚠️ | 41 stocks × per-stock test |
+| baseline reported | — | **none** ⚠️ | **none** ⚠️ |
+| accuracy | 80.5% (leaked) | 62.0% | **~0.50–0.55** |
+
+Read together: the *more careful* the evaluation gets, the closer accuracy falls to
+chance. Paper 43 is the most methodologically careful of the three and lands at
+coin-flip — which makes its near-chance result the most informative number in the
+folder, not the least.
 
 ---
 
@@ -328,21 +338,193 @@ the sequencing, and it is the same conclusion paper 9 reaches from the other sid
 
 ---
 
-## Combined reading — where the two papers leave the thesis
+# Paper 43 — Usmani, Shamsi (2023)
 
-1. **Both papers predict the wrong target for this thesis** (per-stock or index
-   absolute next-day direction). Neither touches cross-sectional relative return.
-2. **On integration, paper 28 wins outright.** Sentiment-as-scalar (paper 9) conflates
-   polarity with document volume by construction; text-as-sequence-with-encoder
-   (paper 28) does not. If text is ever added here, it is via paper 28's shape.
-3. **Neither reports a baseline that would prove skill** — paper 9 leaks through a
-   random split over overlapping labels, paper 28 omits the majority class on a
-   187-sample test set. Both reinforce that the evaluation protocol already in use
-   (chronological, purged, costed) is the differentiator, not the model.
-4. **The binding constraint is the CORPUS, not the architecture.** Paper 28 quantifies
-   what a working text model needs — ~10 titles/day/target. Experiment_6 delivers
-   ~0.35. That gap, not the choice of encoder, is what decides whether text becomes a
-   thesis chapter.
+*LSTM based stock prediction using weighted and categorized financial news.*
+**PLOS ONE** 18(3): e0282234 · DOI 10.1371/journal.pone.0282234 · Systems Research
+Laboratory, FAST-NUCES Karachi. 27 pp, **open access**, **data public** on Mendeley
+(`10.17632/mc4s7zvx9c.1`).
+file: `43. LSTM based stock prediction using weighted and categorized financial news.pdf`.
+
+> **→ Verdict: cite it, and borrow the NEWS HIERARCHY — market / sector / stock as
+> three separately weighted streams. That single idea is the most transferable
+> thing in this folder**, because it is already a cross-sectional decomposition and
+> because it is the standard fix for a sparse per-ticker corpus. Take nothing else:
+> the accuracies are ~0.50–0.55, i.e. coin-flip.
+
+### Setup
+
+| | |
+|---|---|
+| Market | **Pakistan Stock Exchange (PSX)**, prices Jan 2006 → Aug 2018 |
+| Universe | **41 stocks / 6 sectors** (Oil & Gas, Textile, Technology & Communication, Power Gen & Distribution, Refinery, Commercial Banks) |
+| Text | headlines from *The News* archive 2006–2018, categorised by the authors' own semi-automatic scheme [11] |
+| Lexicons | **HIV4** (Harvard IV, general), **LM** (Loughran–McDonald, financial), **Vader** (social) |
+| Time steps | **n ∈ {3, 7, 10}** — ablated |
+| Split | 70% train; the remaining 30% halved into test + early-stopping. **Time-series split CV, 3 folds, validation always ahead of training** |
+| Training | RMSProp, lr 0.001 with decay, batch 32, max 500 epochs, early stop patience 10; grid search over neurons {20,50,100,200}, dropout {0.2,0.35,0.5} |
+
+### One training sample
+
+**One sample = one (stock, day) pair.** Four parallel sequences over `[t−n, t−1]`:
+
+| track | shape | contents |
+|---|---|---|
+| **δ** price | `n × 12` | close, volume + **10 technical indicators** — MA10/20/30, MACD (DIFF), MACD (DEA), MACD, RSI6/12/24, MFI (Table 3, from Li et al. [8]) |
+| **θ1** market | `n × d` | daily lexicon sentiment of **PSX/market-wide** headlines |
+| **θ2** sector | `n × d` | daily lexicon sentiment of that stock's **sector** headlines |
+| **θ3** stock | `n × d` | daily lexicon sentiment of **the stock's own** headlines |
+
+`y` = binary (Eq. 1): **`1` if `Close_t > Close_{t−1}`, else `0`** — next-day direction.
+Inputs stop at `t−1`, so the alignment is clean; no leakage of the paper-9 kind.
+
+⚠️ **`d` — the sentiment-vector width — is never stated.** It is the width of three
+of the four input tracks. Genuine reproducibility gap.
+
+### Model — WCN-LSTM (Fig. 2)
+
+Four independent towers, hierarchical fusion:
+
+```
+δ  price+TA → LSTM → Drop → LSTM → Drop ──────────────────────┐
+θ1 market   → LSTM → Drop → LSTM → Drop ──×α ┐                │
+θ2 sector   → LSTM → Drop → LSTM → Drop ──×β ├→ concat → Dense┤→ concat → Dense(sigmoid)
+θ3 stock    → LSTM → Drop → LSTM → Drop ──×γ ┘                ┘
+```
+
+subject to **α + β + γ = 1** (Eq. 3). Baseline = Li et al. [8]: same data, **one
+uncategorised** sentiment stream concatenated by date into a single LSTM stack (Fig. 3).
+
+⚠️ α/β/γ are called "learned weights" but Table 5 shows them **grid-searched** over
+`{0.2, 0.3, 0.4, 0.5, 0.6}` under the sum-to-1 constraint — tuned hyper-parameters,
+not gradient-learned. Mild overclaim.
+
+**Their selected values are the most useful number in the paper:** α (market) lands
+at **0.4–0.6 in all nine scenarios**; β (sector) and γ (stock) at 0.2–0.4. Market-level
+news dominates — and market news is also by far the most abundant category (Table 2).
+
+### Results
+
+| | HIV4 | LM | Vader |
+|---|---|---|---|
+| **accuracy** WCN > LSTM, t=3 | 32/41 | 28/41 | 22/41 |
+| t=7 | 28/41 | 23/41 | 23/41 |
+| t=10 | 24/41 | 22/41 | 26/41 |
+| **F1** WCN > LSTM, t=3 | 15/41 | 21/41 | 24/41 |
+| t=10 | 17/41 | 18/41 | 18/41 |
+
+Wilcoxon signed-rank on paired per-stock accuracy: WCN-LSTM significantly better in
+**7 of 9** scenarios (Table 6). **HIV4 (general) beats LM (financial-domain)** —
+flagged by the authors as unexpected, with BERT-based lexicon adaptation proposed as
+future work. Time steps 3 and 7 beat 10 (Table 8).
+
+### ⚠️ Three problems
+
+1. **The accuracies are ~0.50–0.55.** Sector-average accuracy in Figs 10–12 runs
+   **0.48–0.55**. On binary next-day direction that is coin-flip, and — as in paper
+   28 — **no majority-class baseline appears anywhere**. The paper shows model A
+   differs from model B; it does not show either has skill.
+2. **Accuracy rises while F1 falls.** WCN-LSTM wins most accuracy cells and *loses*
+   most F1 cells. On an imbalanced binary target that means it is predicting the
+   majority class more often — buying accuracy with recall. Both numbers are
+   reported; the contradiction is never interpreted. Most important unremarked
+   finding in the paper, and it undercuts the headline claim.
+3. **The Wilcoxon test does not test what matters.** Paired over 41 stocks, it asks
+   "is WCN consistently above LSTM?" A consistent +2–3 pp gap around 50% is easily
+   significant at n=41 and still economically meaningless. Significance *between two
+   near-chance models* is not evidence of signal.
+
+Also: stock-level news is desperately thin — Table 2 lists **BPL 0, HTL 0, SNGP 1,
+PAKD 1, PKGP 1, KAPCO 2, SYS 2** headlines over 12 years, yet γ = 0.2–0.4 weights
+those near-empty sequences. Refinery has 112 sector headlines over 12 years for 4
+stocks. No trading simulation, no costs.
+
+### What it does better than papers 9 and 28
+
+Time-series split CV with validation ahead of training; **statistical testing across
+stocks** (rare in this literature); an honest three-lexicon head-to-head that reports
+the *domain-specific* lexicon losing; a time-step ablation; **public data**. It is
+the most careful of the three — which is exactly why its near-chance accuracy is the
+most informative result in the folder.
+
+### How to use it in the thesis — the hierarchy is the deliverable
+
+**The citable contribution is the three-level decomposition (market / sector / stock)
+entering as separately weighted streams.** Not the LSTM, not the lexicons, not the
+accuracy.
+
+**1. The hierarchy IS a cross-sectional decomposition.** The thesis target is `rel5`
+— market-*relative* 5-day return. Their three streams map onto it directly:
+
+| their stream | effect on `rel5` |
+|---|---|
+| **market** news (θ1) | hits every stock alike → **cancels in the cross-section** |
+| **sector** news (θ2) | the sector tilt — a real cross-sectional signal |
+| **stock** news (θ3) | idiosyncratic — the purest `rel5` signal |
+
+They need all three because they predict *absolute* direction. **The thesis needs the
+decomposition for the opposite reason** — to separate what cancels from what does
+not. Their finding that **α (market) dominates** is, for a cross-sectional target, a
+statement that most of their signal is precisely the component to difference away.
+That is a citable, non-obvious argument for the design here.
+
+**2. It answers paper 28's density blocker.** Paper 28 needs ~10 titles/day/target;
+experiment_6 delivers **0.35**. The hierarchy is the standard fix — sparse per-ticker
+news is *backed by* abundant market- and sector-level streams, so a ticker with
+near-zero own-news still gets a populated input. Table 2 is the proof case: stocks
+with 0–2 headlines still train.
+
+**3. The sector layer already exists here.** The Simplize industry tree (GICS-based,
+10 groups / 50 sub-groups) gives ticker→sector for VN — that is θ2's grouping,
+already scraped. Market level = a CafeF/VietStock market feed. Only θ3 needs the
+per-ticker scrape experiment_6 prototyped.
+
+**Do not take:**
+- **Lexicon sentiment.** HIV4 / LM / Vader are English. "General beats domain-specific"
+  is a claim about Pakistani English-language newspaper prose; for VN the question is
+  *which fine-tuned transformer*, not which lexicon.
+- **The four-tower LSTM.** Experiments 1.6, 1.7, 2.1, 2.3 show sequence models do not
+  beat point-in-time GBM on this data. Keep the **streams**, feed them to the existing
+  model class.
+- **Target and evaluation.** Next-day absolute direction; accuracy/F1 only; no costs,
+  no baseline.
+- **α+β+γ=1 by grid search.** If streams are weighted, let the model learn it
+  (attention, or plain learned scalars) — or hand all three to a GBM and read the
+  importances.
+
+⚠️ **Honest caveat:** paper 43 gets ~0.52 on 12 years of real news across 41 stocks
+with a careful protocol. Adopt the hierarchy because it makes a sparse VN corpus
+*usable*, **not** because it promises accuracy.
+
+---
+
+## Combined reading — where the three papers leave the thesis
+
+1. **All three predict the wrong target for this thesis** — per-stock or index
+   absolute next-day direction. None touches cross-sectional relative return.
+2. **On integration, the ordering is 43 > 28 > 9.** Sentiment-as-scalar (9) conflates
+   polarity with document volume by construction; text-as-sequence-with-encoder (28)
+   fixes that; **text-as-hierarchy** (43) additionally separates the component that
+   cancels in a cross-section from the one that does not. **Take 43's streams and
+   28's encoder shape; take nothing structural from 9.**
+3. **None reports a baseline that would prove skill** — 9 leaks through a random split
+   over overlapping labels; 28 omits the majority class on 187 test samples; 43 never
+   states the base rate while sitting at ~0.52. All three reinforce that the protocol
+   already in use here (chronological, purged, costed) is the differentiator.
+4. **⚠️ Accuracy falls toward chance as evaluation quality rises: 80.5% → 62.0% →
+   ~0.52.** That ordering across the three papers is itself the finding. Read with
+   experiment_3 — where a genuine AUC-0.77 signal still failed to beat Buy&Hold after
+   costs — the expected value of a VN news-sentiment feature should be set **low**.
+5. **The binding constraint is the CORPUS, not the architecture.** Paper 28 quantifies
+   what a working text model needs (~10 titles/day/target); experiment_6 delivers
+   **0.35**. Paper 43 supplies the fix — back sparse per-ticker news with abundant
+   market- and sector-level streams. The sector layer already exists (Simplize
+   industry tree); the market layer needs a market-wide feed; θ3 needs experiment_6
+   generalised beyond VCB.
+6. **If text becomes a thesis chapter, the shape is settled:** three streams
+   (market / sector / stock) × a transformer sentence encoder for VN × lagged to
+   `d+1` × ranked cross-sectionally against the VN30/VN100 panel × fed to the
+   existing GBM, and judged by costed walk-forward — **not** by accuracy.
 
 ---
 
@@ -354,3 +536,7 @@ the sequencing, and it is the same conclusion paper 9 reaches from the other sid
 - `28. Deep learning for stock market prediction from financial news articles.pdf`
   — Vargas, de Lima, Evsukoff 2017, IEEE. 6 pp. *SI-RCNN dual-branch text+technical;
   cite and borrow the architecture.*
+- `43. LSTM based stock prediction using weighted and categorized financial news.pdf`
+  — Usmani & Shamsi 2023, PLOS ONE (open access, data on Mendeley). 27 pp.
+  *WCN-LSTM market/sector/stock weighted news hierarchy; **cite and borrow the
+  hierarchy** — the one idea in this folder to build on.*
