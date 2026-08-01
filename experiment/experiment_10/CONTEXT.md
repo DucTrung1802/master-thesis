@@ -11,6 +11,15 @@ what it actually establishes, and **whether to cite it, follow it, or both**.
 | # | Paper | Year | Verdict |
 |---|---|---|---|
 | 9 | Khan et al. — *Stock market prediction using ML classifiers and social media, news* | 2020 | **Cite, do not follow** |
+| 28 | Vargas, de Lima, Evsukoff — *Deep learning for stock market prediction from financial news articles* | 2017 | **Cite; borrow the architecture, not the setup** |
+
+**They are a matched pair, and the pairing is the point.** Both add news text to
+price features to predict next-day direction. Paper 9 collapses the text to **one
+scalar column** appended to OHLCV; paper 28 keeps it as a **sequence with its own
+encoder**, fused late with the technical branch. Paper 28 is the better paper on
+every axis that matters (chronological split, reproducible architecture, clean
+ablation grid) and is the one paper 9 cites. Cite the contrast — it is a ready-made
+methods paragraph.
 
 ---
 
@@ -169,7 +178,179 @@ justification. **Zero lines of code.**
 
 ---
 
+# Paper 28 — Vargas, de Lima, Evsukoff (2017)
+
+*Deep learning for stock market prediction from financial news articles.*
+**IEEE** (978-1-5090-4253-1/17), COPPE / Universidade Federal do Rio de Janeiro.
+file: `28. Deep learning for stock market prediction from financial news articles.pdf` (6 pp).
+This is the "Vargas et al." that paper 9 lists in its related work.
+
+> **→ Verdict: cite it, and borrow the ARCHITECTURE — a text encoder and a
+> technical encoder fused late — but not the target, the temporal claims, or the
+> evaluation.** More useful than paper 9: chronological splits, a precisely
+> specified model, and three clean ablation axes. Undone by a **187-sample test
+> set** and **no majority-class baseline**.
+
+### Setup
+
+| | |
+|---|---|
+| Target series | **S&P 500 index** (Yahoo Finance) — index level, not single stocks |
+| Text | **106,494 Reuters articles**, 2006-10-20 → 2013-11-21 (the Ding et al. [29] dataset) |
+| Filter | keep only titles referring to the ~100 index constituents → **17,171 documents survive** |
+| Text used | **titles only** — [29] found titles more useful than article contents |
+| Split | **chronological**: train 2006-10-02→2012-06-18 · dev →2013-02-21 · test 2013-02-22→2013-11-21 |
+| Instances | **1,419 / 168 / 187** (≈10–12 news per day) |
+| Framework | TensorFlow; SGD, momentum 0.9, lr 0.1 |
+
+### One training sample
+
+**One sample = one trading day.** Days with no released news are **dropped**.
+Two parallel inputs:
+
+| branch | shape | contents |
+|---|---|---|
+| **Text** | `L × 300` | `L` = news **titles** that day (varies). Each title → one 300-d **sentence embedding** = the **mean** of its word2vec word vectors |
+| **Technical** | `7 × 5` | 7 technical indicators (from [3]) over a delay window `n = 5`, chronological |
+
+`y` = binary one-hot — `[1,0]` if close(t+1) > close(t), `[0,1]` if it falls.
+
+```
+X_text = [[…300 floats…],    # title 1 of day t
+          […300 floats…], …] # L rows, L varies per day
+X_tech = 7 × 5 indicator matrix ending at day t
+y      = [1,0]               # index rises tomorrow
+```
+
+Word2vec: 300-d CBOW **initialised from Google News pretrained vectors** (100 bn
+words); out-of-vocabulary words initialised randomly.
+
+### Model — SI-RCNN (Fig. 1)
+
+Dual-branch, late fusion:
+
+```
+titles → sentence-embed → 1-D CNN → temporal max-pool → LSTM(128) ┐
+                                                                   ├→ concat → FC + softmax → up/down
+7 indicators × 5 days ──────────────────────────────→ LSTM(50)    ┘
+```
+
+- **CNN:** filter widths `[3×300] [4×300] [5×300]`, **64 filters each** (→192 maps),
+  stride 1, padded, ReLU, **dropout 0.5**, max-pool window 2 → `[((L−2)/2)+1 × 192]`.
+- **Recurrent:** conv output read as a sequence of `L−R+1` steps by a **128-unit
+  LSTM**; the technical branch has its own **50-unit LSTM**.
+- Naming grid `{W|S}{I?}-{CNN|RCNN}`: W = word embedding, S = sentence embedding,
+  I = technical indicators included. Three clean ablation axes.
+
+### Results — S&P 500 direction, test accuracy (Table II)
+
+| model | test | | baseline | test |
+|---|---|---|---|---|
+| W-CNN | 57.22 | | BW-SVM [36] | 56.38 |
+| S-CNN | 60.96 | | E-NN [29] | 58.83 |
+| W-RCNN | 60.22 | | WB-CNN [30] | 60.57 |
+| S-RCNN | 61.49 | | **EB-CNN [30]** | **64.21** |
+| WI-RCNN | 61.29 | | | |
+| **SI-RCNN (proposed)** | **62.03** | | | |
+
+Claims: sentence embedding > word embedding (all 3 pairs); RCNN > CNN; technical
+indicators help; **day-before news beats week/month aggregation**. The proposed
+model **loses to EB-CNN's event embedding**, which the authors state plainly.
+
+### ⚠️ Why the numbers cannot carry weight
+
+1. **187 test samples.** SE on 62% ≈ **3.6 pp** → 95% interval ≈ **±7 pp**. Every
+   ranking in the left column (S-RCNN 61.49 / WI-RCNN 61.29 / SI-RCNN 62.03) is
+   noise. Single run, no seed variance.
+2. **No majority-class baseline anywhere.** The test window (2013-02→2013-11) is a
+   strong S&P bull run; "always predict up" plausibly scores mid-to-high 50s.
+   **Until that number is computed, 62.03% cannot be called skill.** This is the
+   decisive missing figure in a results section made entirely of accuracy.
+3. **Days without news are dropped** — breaks series continuity, and the dropped
+   days are not random.
+4. **Accuracy only** — no precision/recall, no trading simulation, **no costs**
+   (listed as future work).
+
+### What it does right — and paper 9 does not
+
+Chronological train/dev/test with genuine separation; an architecture specified
+precisely enough to reimplement; a systematic ablation grid (W vs S, CNN vs RCNN,
+±I). The *consistency* of S-* > W-* across three independent pairs is the paper's
+most robust finding, even though each individual gap sits inside the noise band.
+
+### How to use it in the thesis
+
+**Cite — three uses, all higher-value than paper 9's:**
+1. **The architectural template.** Text enters as a *sequence with its own encoder*,
+   fused late with the technical branch — the direct answer to paper 9 collapsing it
+   to one scalar. The 9-vs-28 contrast is a ready-made methods paragraph.
+2. **The encoding choice** — sentence-level representation addresses word sparsity in
+   short-title corpora (S-* > W-* on all three pairs).
+3. **News has a short temporal effect** — day-before-only beats past-week and
+   past-month aggregations. Their cleanest result (same architecture, ablated), and
+   directly actionable for lagging/windowing a VN news feature.
+   Via [29], **titles beat article bodies** — bears on experiment_6, which scraped both.
+
+**Borrow:**
+- **Two-branch late fusion.** The technical branch here is already built and
+  saturated (GBM/MLP over 1,053 features, AUC 0.62–0.77). A parallel text encoder
+  concatenated before the head is the correct integration and leaves the existing
+  feature pipeline undisturbed.
+- **Sentence-level embedding** for headlines — for VN that means a PhoBERT-class
+  sentence encoder, not mean-pooled word2vec (2013-era, no usable VN equivalent).
+- **Chronological train/dev/test** — already house standard; cite as precedent.
+
+**Do not follow:**
+- **The target.** Index-level binary next-day direction; the thesis target is
+  **`rel5`** (cross-sectional market-relative 5-day return), settled in experiment_3.3.
+- **The temporal architecture.** Experiments 1.6, 1.7, 2.1 and 2.3 already show
+  sequence models do not beat point-in-time GBM on this data and that short lookbacks
+  win — the LSTM-on-technicals branch is the part with the most evidence against it.
+- **The evaluation.** 187 samples, accuracy only, no baseline, no costs. Experiment_3
+  established costed walk-forward as the deciding test.
+
+### ⚠️ The blocking practical issue — news DENSITY
+
+SI-RCNN needs `L` titles **per day per target**, averaging **10–12**. Experiment_6's
+VCB feed carries **1,629 headlines over 18.5 years ≈ 0.35 per trading day** — about
+**30× too sparse**, and VCB is the best-covered ticker in the repo. Per-ticker, this
+architecture is **not feasible on VN data as currently scraped**. Two routes, both
+real work:
+
+- **Pool market-wide news** (CafeF / VietStock market feed, not the per-ticker event
+  stream) and treat it as a **common factor** — which suits the cross-sectional
+  target: a market-wide text signal is exactly what should be differenced out per
+  stock, or used to condition the cross-section.
+- **Broaden the per-ticker scrape** beyond CafeF's disclosure feed to raise density.
+
+Either way **the corpus must exist before the model question is askable.** That is
+the sequencing, and it is the same conclusion paper 9 reaches from the other side.
+
+---
+
+## Combined reading — where the two papers leave the thesis
+
+1. **Both papers predict the wrong target for this thesis** (per-stock or index
+   absolute next-day direction). Neither touches cross-sectional relative return.
+2. **On integration, paper 28 wins outright.** Sentiment-as-scalar (paper 9) conflates
+   polarity with document volume by construction; text-as-sequence-with-encoder
+   (paper 28) does not. If text is ever added here, it is via paper 28's shape.
+3. **Neither reports a baseline that would prove skill** — paper 9 leaks through a
+   random split over overlapping labels, paper 28 omits the majority class on a
+   187-sample test set. Both reinforce that the evaluation protocol already in use
+   (chronological, purged, costed) is the differentiator, not the model.
+4. **The binding constraint is the CORPUS, not the architecture.** Paper 28 quantifies
+   what a working text model needs — ~10 titles/day/target. Experiment_6 delivers
+   ~0.35. That gap, not the choice of encoder, is what decides whether text becomes a
+   thesis chapter.
+
+---
+
 ## File index
 
 - `9. Stock market prediction using machine learning classifiers and social media, news.pdf`
-  — Khan et al. 2020, JAIHC (Springer). 24 pp.
+  — Khan et al. 2020, JAIHC (Springer). 24 pp. *Sentiment scalar appended to OHLCV;
+  cite as pipeline exemplar + leakage counter-example.*
+- `28. Deep learning for stock market prediction from financial news articles.pdf`
+  — Vargas, de Lima, Evsukoff 2017, IEEE. 6 pp. *SI-RCNN dual-branch text+technical;
+  cite and borrow the architecture.*
