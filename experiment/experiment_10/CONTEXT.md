@@ -30,6 +30,7 @@ this file updated → committed and pushed. PDFs themselves stay untracked
 | 45 | Xiao & Ihnaini — *Stock trend prediction using sentiment analysis* | 2023 | **Cite the RECIPE (tool validation + market-hours window); do not follow the design** |
 | 46 | Wu, Liu, Zou, Weng — *S_I_LSTM: stock price prediction based on multiple data sources and sentiment analysis* | 2021 | **⚠️ PROVABLE LABEL LEAK — cite only the CJK pipeline + forum-heavy corpus** |
 | 47 | Koukaras, Nousi, Tjortjis — *Stock market prediction using microblogging sentiment analysis and ML* | 2022 | **⚠️ SELF-REFUTING — cite as the evaluation cautionary tale; do not follow** |
+| 48 | Gu et al. — *Predicting stock prices with FinBERT-LSTM: integrating news sentiment analysis* | 2024 | **Cite the 3-D SOFTMAX sentiment + the corpus scale; ⚠️ worse than persistence** |
 
 **They form a progression, and the progression is the point.** All five add news or
 social text to price features to predict short-horizon direction, and they differ in
@@ -1041,7 +1042,102 @@ but at n≈15 it is noise and must **not** be cited as a finding.
 
 ---
 
-## Combined reading — where the seven papers leave the thesis
+# Paper 48 — Gu, Zhong, Li, Wei, Dong, Wang, Yan (2024)
+
+*Predicting Stock Prices with FinBERT-LSTM: Integrating News Sentiment Analysis.*
+**ICCBDC 2024** (ACM), Oxford, UK · DOI 10.1145/3694860.3694870 · Johns Hopkins
+(Carey) / NYU Courant / SMU Cox / UC Berkeley / Northeastern. 6 pp, CC-BY.
+file: `48. Predicting Stock Prices with FinBERT-LSTM Integrating NewsSentiment Analysis.pdf`.
+
+> **→ Verdict: cite the 3-DIMENSIONAL SOFTMAX sentiment representation and the corpus
+> scale. ⚠️ Do not follow the evaluation — MAPE 4.5% on next-day close is roughly
+> 2–3× WORSE than the persistence baseline they never compute**, and their "Accuracy"
+> is `1 − MAPE`, i.e. error wearing a different name.
+
+### Setup
+
+| | |
+|---|---|
+| Universe | **NASDAQ-100** |
+| Text | **843,062 Benzinga articles**, 2009-02-15 → 2020-06-12 — **by far the largest corpus in this folder** |
+| Prices | Yahoo Finance |
+| Split | "hierarchical segmentation", 85% per stock to train+val, then 85/15 → **609,113 / 107,490 / 126,459** |
+| Training | 3 stacked LSTM(50) → Dense(1), MSE, Adam, 100 epochs, Tesla P100 |
+
+### One training sample
+
+**One sample = one (stock, day)** with an **8-session lookback**:
+
+| shape | contents |
+|---|---|
+| `8 × 4` | per timestep: **3 FinBERT softmax probabilities** (neutral / positive / negative) + **1 normalised closing price** |
+
+`y` = **next day's closing price** (regression, MinMax-normalised to (0,1)).
+**No volume, no OHLC, no technical indicators** — 4 features total.
+
+Baselines: the same LSTM on price only (8 days), and a DNN (256/128/64, LeakyReLU
+α=0.01, price only).
+
+### ⭐ The one genuinely good idea — keep the whole distribution
+
+They feed **all three FinBERT softmax probabilities as separate features** instead of
+collapsing them into a single polarity scalar. That preserves the **neutral mass**,
+and a day that is 90% neutral is a fundamentally different information state from a
+day with balanced positive/negative — which `(pos−neg)/(pos+neg)` **cannot
+distinguish**. Papers 9, 45 and 46 all discard it. Cost: two extra columns.
+
+### ⚠️⚠️ The model is worse than doing nothing, and nobody checks
+
+| approach | test loss | MAE | MAPE | "Accuracy" |
+|---|---|---|---|---|
+| **FinBERT-LSTM** | 0.00083 | 173.67 | **0.045** | 0.955 |
+| LSTM | 0.00092 | 183.36 | 0.072 | 0.928 |
+| DNN | 21.77 | 489.32 | 0.22 | 0.78 |
+
+**MAPE 4.5% on a next-day close.** A NASDAQ-100 stock's mean absolute *daily* return
+over 2009–2020 runs roughly 1.5–2%. So the persistence baseline `Ĉ_{t+1} = C_t` —
+predicting no change at all — sits around **2–3× better than the proposed model**.
+It is never computed. For price-level regression, persistence is the mandatory
+benchmark, and without it the whole table is uninterpretable.
+
+**"Accuracy = 1 − MAPE" (Eq. 3) is not accuracy.** It is error rebranded into a number
+that invites comparison against classification accuracy. 0.955 means MAPE 4.5%.
+
+### ⚠️ Three more
+
+1. **Pooled dollar MAE across a 100-stock universe.** MAE 173.67 with MAPE 0.045
+   implies an average price near **$3,860** — no such NASDAQ-100 average exists, so the
+   figure is dominated by a few high-priced names. Same defect as paper 46.
+2. **MAE and MAPE move by very different factors** — LSTM → FinBERT-LSTM improves MAE
+   5.3% but MAPE 37%. A stable error distribution would move both together; the gap
+   means the gain concentrates in low-priced stocks. **Fourth instance of the folder's
+   metric-divergence pattern.**
+3. **The DNN baseline never converged** — test loss 21.77 vs 0.00083 on the same
+   normalised (0,1) target, a 26,000× gap. A broken third place flatters the ranking.
+
+Also: the split is "hierarchical segmentation… to ensure equitable representation",
+**never stated as chronological** — a reproducibility gap on the most important design
+choice; and sentiment is aggregated by **calendar date**, the same alignment flaw as
+9, 28, 43, 44 and 46.
+
+### How to use it in the thesis
+
+**Cite — two uses:**
+1. **⭐ The 3-D softmax sentiment representation.** Keep `P(neutral), P(positive),
+   P(negative)` as three features rather than one polarity scalar. Cheap, directly
+   transferable to a VN transformer scorer, and strictly more informative than the
+   scalar in papers 9/45/46. **Add to the assembled design.**
+2. **The scale reference point.** 843k articles over 11 years is what "enough news"
+   looks like — set against paper 28's ~10 titles/day/target requirement and
+   experiment_6's **0.35/day**. Useful for sizing the corpus argument.
+
+**Do not follow:** price-level regression scored by MAPE with no persistence baseline,
+"accuracy" that is rebranded error, pooled dollar MAE, an unconverged baseline, four
+input features, and an unstated split policy.
+
+---
+
+## Combined reading — where the eight papers leave the thesis
 
 1. **All six predict the wrong target for this thesis** — per-stock or index absolute
    short-horizon direction (45 the overnight gap, 46 the price level itself). None
@@ -1062,9 +1158,10 @@ but at n≈15 it is noise and must **not** be cited as a finding.
    imbalance as the reason its best model wins and still does not report the rate**;
    46 reports currency-unit MAE with no persistence (`Ĉ_t = C_{t−1}`) benchmark.
    **⭐ Only 47 publishes enough to compute one — and its model lands exactly on the
-   base rate (53.5% majority vs 54.83% best validation).** All seven reinforce that
-   the protocol already in use here (chronological, purged, costed) is the
-   differentiator.
+   base rate (53.5% majority vs 54.83% best validation).** **48 omits the persistence
+   benchmark on a price-level regression and lands ~2–3× WORSE than it.** All eight
+   reinforce that the protocol already in use here (chronological, purged, costed) is
+   the differentiator.
 4. **⚠️ Accuracy tracks evaluation looseness, inversely: 80.5% and ~0.60 from the two
    papers that use random/k-fold CV on time series (9, 45); ~0.51–0.52 from the two
    most careful (43, 44); and 46's flattering MAE comes from a target its own inputs
@@ -1110,7 +1207,9 @@ but at n≈15 it is noise and must **not** be cited as a finding.
       do not have *(46)*
     - **scorer** — a VN transformer sentence encoder, **validated on labelled VN
       financial text first** *(45)*, separately for prose vs forum registers
-    - **per-document score** — signed and normalised, engagement-weighted *(45)*
+    - **per-document score** — keep the **full 3-way softmax** `P(neu)/P(pos)/P(neg)`
+      as three features, not one polarity scalar, so a high-neutral day stays
+      distinguishable from a balanced one *(48)*; engagement-weighted *(45)*
     - **aggregation** — mean not sum, over a **09:00→09:00 ICT** market-hours window,
       with exponential decay across Tết and weekends, document count kept as its own
       feature *(45)*
@@ -1154,3 +1253,8 @@ but at n≈15 it is noise and must **not** be cited as a finding.
   77 days, Twitter+StockTwits × TextBlob+VADER × 7 classifiers. **⚠️ Self-refuting** —
   Table 10 shows 52% validation against a 76.3% abstract; cite as the evaluation
   cautionary tale and for the one computable base rate in the folder.*
+- `48. Predicting Stock Prices with FinBERT-LSTM Integrating NewsSentiment Analysis.pdf`
+  — Gu, Zhong, Li, Wei, Dong, Wang & Yan 2024, ICCBDC (ACM). 6 pp. *843k Benzinga
+  articles → FinBERT 3-way softmax + 8-day price → stacked LSTM → next close.
+  **Cite the 3-D sentiment representation and the corpus scale**; ⚠️ MAPE 4.5% is
+  worse than persistence, and "Accuracy" is `1 − MAPE`.*
