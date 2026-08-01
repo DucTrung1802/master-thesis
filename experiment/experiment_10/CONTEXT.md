@@ -33,6 +33,7 @@ this file updated → committed and pushed. PDFs themselves stay untracked
 | 48 | Gu et al. — *Predicting stock prices with FinBERT-LSTM: integrating news sentiment analysis* | 2024 | **Cite the 3-D SOFTMAX sentiment + the corpus scale; ⚠️ worse than persistence** |
 | 49 | Maqbool et al. — *Stock prediction by integrating sentiment scores of financial news and MLP-Regressor* | 2023 | **⭐ Cite the 10/30/100-day DECAY TABLE — the folder's best test-size evidence** |
 | 50 | Khedr, Salama, Yaseen — *Predicting stock market behavior using data mining technique and news sentiment analysis* | 2017 | **⚠️ FEATURE = LABEL. Cite only its Kappa 0.078 — sentiment alone has no skill** |
+| 51 | Fazlija & Harder — *Using financial news sentiment for stock price direction prediction* | 2022 | **⭐⭐ THE METHODOLOGICAL TEMPLATE — follow the PROTOCOL, not the method** |
 
 **They form a progression, and the progression is the point.** All five add news or
 social text to price features to predict short-horizon direction, and they differ in
@@ -1327,7 +1328,141 @@ labels are never explained, and the target copied into the feature matrix.
 
 ---
 
-## Combined reading — where the ten papers leave the thesis
+# Paper 51 — Fazlija, Harder (2022) ⭐⭐ THE METHODOLOGICAL TEMPLATE
+
+*Using Financial News Sentiment for Stock Price Direction Prediction.*
+**Mathematics** (MDPI) 2022, 10, 2156 · DOI 10.3390/math10132156 · School of Management
+and Law, ZHAW Zurich University of Applied Sciences. 20 pp, open access CC-BY.
+file: `51. Using Financial News Sentiment for Stock Price Direction Prediction.pdf`.
+
+> **→ Verdict: ⭐⭐ the only paper in this folder whose EVALUATION PROTOCOL should be
+> followed.** Its target (index direction) is still wrong for this thesis, but it is
+> the first study here with a **naive benchmark**, **base-rate-corrected metrics**,
+> **explicit leak prevention**, and **walk-forward out-of-sample testing**. It also
+> settles a question the rest of the folder gets wrong: **content beats titles.**
+> ⚠️ And note what the honest protocol yields: **MCC 0.069, before transaction costs.**
+
+### Setup
+
+| | |
+|---|---|
+| Target | **S&P 500 total-return index**, next-day direction, binary (zero-returns oversampled with the previous day's value) |
+| Text | **Bloomberg** 447,279 articles (2007-01-03 → 2013-11-26) + **Reuters** 8,556,310 items (2007-01-01 → 2016-08-16); Reuters ships no content, so **345,776 articles were scraped from their URLs** |
+| Normalisation | capped at **exactly 58 items/day** (the smallest daily count), randomly sampled ⚠️ discards information |
+| Scorer | **FinBERT** (BERT_BASE uncased, 12 encoders) **fine-tuned on the Financial PhraseBank** — 4,846 sentences at >50% annotator agreement; max_seq_len 48, lr 2e-5, 4 epochs, batch 32 |
+| Model | Random forest (GridSearchCV, k=8, in-sample only) + a no-ML "simple strategy" |
+
+### One training sample
+
+**One sample = one trading day.**
+`X` = **58 sentiment scores** for that day, each `P(positive) − P(negative)`, in three
+variants — **title**, **content**, or **title+content** — optionally plus 1-day-lagged
+moving averages of the index.
+`y` = **next day's** index direction.
+
+For multi-sentence content, the sentence-level scores are averaged into one document
+score.
+
+### ⭐ Six things no other paper in this folder does
+
+1. **⭐ A RANDOM-WALK BENCHMARK** (Eq. 8), simulated **1,000 times** and averaged.
+   **The first naive baseline in eleven papers.**
+2. **⭐ MCC and Binary Brier Score** reported alongside accuracy — base-rate-corrected
+   and calibration measures, not just the headline metric.
+3. **⭐ Explicit same-day leak prevention**, stated outright: *"This also prevents
+   news, respectively sentiment scores, from being used for the prediction of the
+   return direction of the same day."* Friday/Saturday/Sunday sentiment is averaged
+   into Monday; missing trading days are forward-filled.
+4. **⭐ Walk-forward EXPANDING-WINDOW out-of-sample, 6 folds** (Table 4): fit
+   2007–2010 → test 2011; fit 2007–2011 → test 2012; … → test 2016.
+5. **⭐ The sentiment model is validated before use** — FinBERT scores **accuracy
+   0.836 / weighted F1 0.837** on held-out PhraseBank data (Table 6, Fig. 7).
+6. **⭐ k-fold CV is confined to hyperparameter tuning inside the in-sample block**,
+   with the time-series objection acknowledged in the text and the final test kept
+   genuinely out-of-sample.
+
+### Results — Table 11
+
+| | Accuracy | Brier | **MCC** |
+|---|---|---|---|
+| **RFC Content** | **0.561** | **0.439** | **0.069** |
+| RFC Title & Content | 0.554 | 0.446 | 0.039 |
+| RFC Title, Content & MA | 0.552 | 0.448 | 0.045 |
+| RFC Title | 0.535 | 0.465 | **−0.023** |
+| Content Sentiment (no ML) | 0.518 | 0.482 | 0.026 |
+| Title Sentiment (no ML) | 0.206 | 0.794 | 0.007 |
+| **Random Walk Model** | 0.499 | 0.501 | −0.011 |
+
+**Best MCC = 0.069.** MCC is the prediction-vs-truth correlation corrected for base
+rate; 0 is random. The authors say so themselves: *"one would not expect overly high
+accuracy or MCC."* Beating the random walk by ~6 pp of accuracy is real but marginal.
+
+Trading (Tables 7–10, OOS 2011-01-01 → 2016-08-16):
+
+| | Return p.a. | Return/Risk | **Max Drawdown** |
+|---|---|---|---|
+| S&P 500 TR | 12.045% | 0.797 | **18.641%** |
+| RFC Content SC | **16.261%** | **1.078** | **28.187%** ⚠️ |
+| Content SC (no ML) | 15.208% | 1.008 | 20.598% |
+| RFC Title SC | 7.673% | 0.508 | 25.518% |
+| Title SC (no ML) | −0.934% | −0.062 | 32.089% |
+
+### ⭐ The substantive finding: CONTENT BEATS TITLES, decisively
+
+Content wins on every metric — MCC **0.069 vs −0.023**, return **16.26% vs 7.67%**.
+Title-only sentiment is worse than useless: 0.206 accuracy means it predicts "down"
+almost always while the index rises, and the no-ML title strategy **loses money**.
+
+**This directly contradicts papers 28 and 46**, both of which use headlines only on
+the authority of Ding et al. **→ For experiment_6, which scraped headline AND content
+for 1,629 VCB items, this says: use the `content` column, not the headline.**
+
+### ⚠️ Where it still falls short
+
+1. **⚠️ No transaction costs** — their own first-listed limitation. The strategy
+   rebalances **daily** and takes **100% short** positions on negative signals. At
+   realistic costs the ~4 pp excess over the index very likely vanishes.
+2. **⚠️ They trace the entire outperformance to ONE episode.** Quoted: *"an
+   outperformance is generated at the end of 2011, which explains the outperformance
+   of this strategy since, in the following years, all price downturns are taken along
+   and are not correctly reflected by the content sentiment scores."* After 2011 the
+   strategy is simply long the market, drawdowns included.
+3. **Max drawdown is worse than the index** — 28.19% vs 18.64% for the best model.
+   Higher return/risk bought with a much deeper hole.
+4. **Recall-optimised RF models were excluded from the paper** because they degenerated
+   into predicting "up" for everything. Honest — and it shows how close the exercise
+   sits to trivial.
+5. Index-level, not cross-sectional. The OOS window 2011–2016 is a strong bull market.
+6. The **58-items/day cap with random sampling** throws away most of the corpus and
+   injects sampling noise.
+
+### How to use it in the thesis
+
+**⭐⭐ This is the answer to "can I follow any of them?" — follow the PROTOCOL, not
+the method.** Adopt, wholesale:
+
+- **MCC + Brier alongside accuracy.** MCC would have exposed 47, 49 and 50 instantly.
+- **A naive benchmark, always** — random walk for direction, persistence for price
+  level, majority class for classification.
+- **An explicit written statement of how same-day leakage is prevented.**
+- **Walk-forward expanding window**, with hyperparameter tuning confined to the
+  in-sample block.
+- **Validate the sentiment scorer before using it** (with **45**).
+- **Report max drawdown, not just return.**
+
+Add the one thing 51 omits and experiment_3 already enforces: **transaction costs.**
+
+**Also cite:** the **content-over-titles** result, which overturns the headline-only
+convention of 28 and 46 and tells experiment_6 which field to use.
+
+**⚠️ And cite what the honest protocol produced: MCC 0.069, before costs, on 8.5
+million news articles.** The best-designed study in the folder finds a real but
+marginal effect that its own authors attribute to a single month in 2011. **That is
+the most credible estimate available of the ceiling on this whole line of work.**
+
+---
+
+## Combined reading — where the eleven papers leave the thesis
 
 1. **All six predict the wrong target for this thesis** — per-stock or index absolute
    short-horizon direction (45 the overnight gap, 46 the price level itself). None
@@ -1365,6 +1500,10 @@ labels are never explained, and the target copied into the feature matrix.
    - **⭐ 50 — the direct measurement.** It publishes **Kappa = 0.078 for sentiment
      alone**, the base-rate-corrected statistic. Not "weak" — *no agreement beyond
      chance*. Its 59.18% sentiment-only accuracy is pure majority class.
+   - **⭐⭐ 51 — the properly-run experiment.** The only paper with a random-walk
+     benchmark, MCC/Brier, explicit leak prevention and walk-forward OOS. Its verdict:
+     **MCC 0.069, before transaction costs**, on 8.5M articles — and the authors trace
+     the entire outperformance to one month in 2011. **This is the ceiling estimate.**
 
    Across the folder, accuracy tracks looseness inversely: 80.5% and ~0.60 from the
    papers using random/k-fold CV on time series (9, 45); ~0.51–0.52 from the two most
@@ -1424,7 +1563,14 @@ labels are never explained, and the target copied into the feature matrix.
       stream cancels and the idiosyncratic stream survives *(43 + this thesis)*
     - **lag** — news from `d` predicts from `d+1`
     - **model** — the existing GBM, not a sequence net *(experiments 1.6–2.3)*
+    - **text field** — the **content**, not the headline; title-only sentiment is
+      worse than useless *(51, overturning 28 and 46)*
     - **judgement** — costed walk-forward on `rel5`, **never accuracy** *(experiment_3, 44)*
+    - **⭐⭐ protocol** — **51's, wholesale**: a naive benchmark always (random walk /
+      persistence / majority class), **MCC + Brier** beside accuracy, a written
+      statement of how same-day leakage is prevented, walk-forward expanding window
+      with tuning confined to the in-sample block, and **max drawdown reported** —
+      plus the transaction costs 51 omits and experiment_3 already enforces
 
 ---
 
@@ -1473,3 +1619,8 @@ labels are never explained, and the target copied into the feature matrix.
   discretized OHLC → KNN on 3 NASDAQ names. **⚠️ Feature = label** (discretized close
   vs previous close IS the raise/fall target); **cite only Kappa 0.078** — sentiment
   alone has no skill beyond chance.*
+- `51. Using Financial News Sentiment for Stock Price Direction Prediction.pdf`
+  — Fazlija & Harder 2022, Mathematics (MDPI, open access). 20 pp. *FinBERT fine-tuned
+  on the Financial PhraseBank → 58 daily scores → RF → S&P 500 direction.
+  **⭐⭐ THE METHODOLOGICAL TEMPLATE** — random-walk benchmark, MCC/Brier, explicit
+  leak prevention, walk-forward OOS; **content beats titles**; ⚠️ MCC 0.069, no costs.*
