@@ -35,6 +35,7 @@ this file updated → committed and pushed. PDFs themselves stay untracked
 | 50 | Khedr, Salama, Yaseen — *Predicting stock market behavior using data mining technique and news sentiment analysis* | 2017 | **⚠️ FEATURE = LABEL. Cite only its Kappa 0.078 — sentiment alone has no skill** |
 | 51 | Fazlija & Harder — *Using financial news sentiment for stock price direction prediction* | 2022 | **⭐⭐ THE METHODOLOGICAL TEMPLATE — follow the PROTOCOL, not the method** |
 | 52 | Nemes & Kiss — *Prediction of stock values changes using sentiment analysis of stock news headlines* | 2021 | **⚠️ NO PREDICTION MODEL AT ALL — cite only as "tool choice decides the answer"** |
+| 53 | Li, Wu, Wang — *Incorporating stock prices and news sentiments for stock market prediction: a case of Hong Kong* | 2020 | **⭐ Cite the QUANTILE LABELS + LMFinance win; ⚠️ every result is below its own base rate** |
 
 **They form a progression, and the progression is the point.** All five add news or
 social text to price features to predict short-horizon direction, and they differ in
@@ -1550,7 +1551,126 @@ movie-review-trained RNN, and an unfine-tuned BERT serving as ground truth.
 
 ---
 
-## Combined reading — where the twelve papers leave the thesis
+# Paper 53 — Li, Wu, Wang (2020)
+
+*Incorporating stock prices and news sentiments for stock market prediction: A case of
+Hong Kong.*
+**Information Processing & Management** (Elsevier) · DOI 10.1016/j.ipm.2020.102212 ·
+College of Computer and Information, Hohai University, Nanjing. 19 pp.
+file: `53. Incorporating stock prices and news sentiments for stock market prediction - A case of Hong Kong.pdf`.
+
+> **→ Verdict: a well-executed study whose own labelling scheme lets you compute the
+> baseline — and ⚠️ NOTHING IN IT CLEARS THAT BASELINE.** Labels are set by 25%/75%
+> return quantiles, so "always predict horizontal" scores ~50%; the best sector-average
+> accuracy in the paper is 0.496. Cite it for the **quantile-label design**, the
+> **LMFinance-beats-general-dictionaries** result, and **per-window Z-scoring**.
+
+### Setup
+
+| | |
+|---|---|
+| Market | **Hong Kong Exchange (HKEx)**, FINET news |
+| Period | **Jan 2003 → Mar 2008** |
+| Universe | **12 stocks, 3 per sector** — Properties (0001/0012/0016), Utilities (0002/0003/0006), Finance (**0005 HSBC**/0011/2388), Commerce (0013/0762/0941) |
+| News density | **0.53 → 7.06** articles/stock/day (Table 2) |
+| Dictionaries | **SenticNet 5**, **SentiWordNet 3.0**, **Vader**, **Loughran–McDonald Financial 2018 (LMFinance)** |
+| Model | 2-layer LSTM + dropout → dense softmax (3 classes); RMSProp, batch 32, early stop |
+| Baselines | SVM and **EasyMKL** — *both ML models; no naive benchmark* ⚠️ |
+| Split | **chronological**: train Mar 2003–Mar 2007 (80%) · early-stop Mar–Sep 2007 (10%) · **test Sep 2007–Mar 2008** (10%) |
+
+### One training sample
+
+**One sample = one rolling window of τ trading days for one stock**, step 1 day. Each
+day contributes `Q_i = [P_i, T_i, S_i]`:
+
+| block | contents |
+|---|---|
+| `P` | Close, Volume |
+| `T` | **10 technical indicators** — MA10/20/30, MACD (DIFF), MACD (DEA), MACD, RSI6/12/24, MFI — **identical to paper 43's set** |
+| `S` | daily news sentiment vector: per-word dictionary vectors summed per article (Eq. 6), then **averaged across that day's articles** |
+
+`y` = **3 classes from the close-to-close return of the day AFTER the window** (Eq. 21):
+
+```
+fall (0)        r < p25
+horizontal (1)  p25 ≤ r ≤ p75     ← 50% of the sample BY CONSTRUCTION
+rise (2)        r > p75
+```
+
+The label comes from the period *after* the window closes — **clean, no same-day leak**.
+
+### ⭐ Four things it does right
+
+1. **Chronological split, stated and justified**: *"we neither shuffle the input samples
+   nor use a bidirectional LSTM layer… because stock data are strictly time-ordered,
+   which means that we cannot use future data to predict stock histories."*
+2. **Time-series split cross-validation** (Fig. 4) — 3-fold expanding, validation always
+   after training. Same discipline as paper 43.
+3. **⭐ Per-window Z-score normalisation** (Eq. 7) — mean and std computed *within each
+   rolling window*, so no global-statistics leak. Cheap and worth adopting.
+4. **⭐ Quantile-defined labels**, which make the base rate explicit instead of hidden.
+
+### ⚠️⚠️ And point 4 sinks the paper
+
+**25/50/25 by construction means "always predict horizontal" scores ~50%** — not 33%.
+Test-set LSTM accuracy, averaged over the 12 stocks (Tables 6–9):
+
+| dictionary | mean LSTM test accuracy |
+|---|---|
+| **LMFinance** | **0.487** |
+| SenticNet | 0.365 |
+| Vader | 0.362 |
+| SentiWordNet | 0.354 |
+
+Sector averages (Table 10) peak at **0.496** (LSTM) and 0.502 (MKL). The single best
+cell anywhere in the paper is 0.617.
+
+**Nothing beats the trivial classifier.** The crash skews the test window's class mix
+somewhat, but nowhere near enough to lower the bar to the 33% random rate — and the
+comparison is only ever against SVM and MKL, never against predicting the middle class.
+
+### ⚠️ Two more
+
+1. **The "up to 120% improvement from sentiment" is measured against a broken
+   baseline.** Table 11 / Fig. 7: for 0016.HK the price-only model scores **~0.25 on a
+   three-class problem** — *below random*. Improving a model that loses to coin-flipping
+   is not evidence that sentiment helps.
+2. **⚠️ The test window is the onset of the GFC** — Sep 2007 → Mar 2008, HSI ~31,000 →
+   ~21,000. The model trains on a four-year bull market and is tested on a crash. That
+   explains the collapse from ~0.82 validation (Table 5) to ~0.49 test, and it means
+   the numbers largely measure regime-shift failure. **The paper never mentions it.**
+
+### ⭐ The one solid, transferable finding
+
+**The domain-specific dictionary wins, decisively and systematically.** LMFinance beats
+SenticNet, SentiWordNet and Vader on essentially every stock, model and metric
+(Figs. 5–6), with Δ_news gains "over 80%" against 10–40% for the general dictionaries.
+
+**This settles the 43-vs-45 disagreement.** Paper 43 found general HIV4 beating
+domain-specific LM; paper 45 found FinBERT (86%) crushing VADER (54%) on financial
+prose. Paper 53 is the most systematic test of the three — **12 stocks × 3 models × 4
+dictionaries** — and it lands with 45. **Two against one: use a finance-domain scorer.**
+For VN that means a finance-tuned model, not off-the-shelf general sentiment.
+
+### How to use it in the thesis
+
+**Cite — three uses:**
+1. **⭐⭐ The quantile-labelled 3-class design.** Classes set by the 25th/75th percentiles
+   give a **known base rate** and clean extremes. It maps directly onto the thesis
+   target: **rank by `rel5` per date → top quartile long, bottom quartile short/avoid,
+   middle 50% ignored** — which is what experiment_3's top-6/bottom-6 construction
+   already does. A citable precedent for that design.
+2. **⭐ LMFinance > general dictionaries**, settling domain-specificity (with **45**,
+   against **43**).
+3. **⭐ Per-window Z-score normalisation** as leak-free feature scaling.
+
+**Do not follow:** every reported accuracy sits at or below the ~50% baseline the
+paper's own labelling guarantees; the headline improvement is measured against a
+sub-random price-only model; and the test window is an unacknowledged regime break.
+
+---
+
+## Combined reading — where the thirteen papers leave the thesis
 
 1. **All six predict the wrong target for this thesis** — per-stock or index absolute
    short-horizon direction (45 the overnight gap, 46 the price level itself). None
@@ -1592,6 +1712,10 @@ movie-review-trained RNN, and an unfine-tuned BERT serving as ground truth.
      benchmark, MCC/Brier, explicit leak prevention and walk-forward OOS. Its verdict:
      **MCC 0.069, before transaction costs**, on 8.5M articles — and the authors trace
      the entire outperformance to one month in 2011. **This is the ceiling estimate.**
+   - **⭐ 53 — the computable one.** Labels are set by 25%/75% return quantiles, so
+     "always predict horizontal" scores **~50% by construction**. Best sector-average
+     accuracy in the paper: **0.496**. Its own design supplies the bar and nothing
+     clears it.
 
    Across the folder, accuracy tracks looseness inversely: 80.5% and ~0.60 from the
    papers using random/k-fold CV on time series (9, 45); ~0.51–0.52 from the two most
@@ -1637,8 +1761,11 @@ movie-review-trained RNN, and an unfine-tuned BERT serving as ground truth.
     - **segmentation** — VN word segmentation (underthesea / VnCoreNLP) + a VN
       stopword list **before any encoder**; a mandatory stage the English-only papers
       do not have *(46)*
-    - **scorer** — a VN transformer sentence encoder, **validated on labelled VN
-      financial text first** *(45)*, separately for prose vs forum registers
+    - **scorer** — a **finance-domain** VN transformer sentence encoder, **validated on
+      labelled VN financial text first** *(45)*, separately for prose vs forum
+      registers. Domain-specific beats general — **53** (12 stocks × 3 models ×
+      4 dictionaries) and **45** both say so; only **43** dissents, and it was applying
+      a 10-K-derived lexicon to newspaper headlines
     - **per-document score** — keep the **full 3-way softmax** `P(neu)/P(pos)/P(neg)`
       as three features, not one polarity scalar, so a high-neutral day stays
       distinguishable from a balanced one *(48)*; engagement-weighted *(45)*
@@ -1649,6 +1776,11 @@ movie-review-trained RNN, and an unfine-tuned BERT serving as ground truth.
       grid-searched *(44)*
     - **cross-section** — ranked per date against the VN30/VN100 panel, so the market
       stream cancels and the idiosyncratic stream survives *(43 + this thesis)*
+    - **labels** — **quantile-defined**: top quartile of `rel5` long, bottom quartile
+      short/avoid, middle 50% ignored. Makes the base rate **known by construction**
+      and matches experiment_3's top-6/bottom-6 *(53)*
+    - **scaling** — **per-window Z-score** (local mean/std inside each rolling window),
+      never global statistics *(53)*
     - **lag** — news from `d` predicts from `d+1`
     - **model** — the existing GBM, not a sequence net *(experiments 1.6–2.3)*
     - **text field** — the **content**, not the headline; title-only sentiment is
@@ -1717,3 +1849,9 @@ movie-review-trained RNN, and an unfine-tuned BERT serving as ground truth.
   *TextBlob/VADER/RNN/BERT over ~13 days of finviz headlines on 4 tech names.
   **⚠️ No prediction model — same-day correlations only**; cite only that the four
   tools disagree in SIGN on identical data.*
+- `53. Incorporating stock prices and news sentiments for stock market prediction - A case of Hong Kong.pdf`
+  — Li, Wu & Wang 2020, Information Processing & Management (Elsevier). 19 pp.
+  *2-layer LSTM over price + 10 TA + 4 sentiment dictionaries, 12 HKEx stocks.
+  **⭐ Cite the quantile-label design, LMFinance beating general dictionaries, and
+  per-window Z-scoring**; ⚠️ every accuracy sits at or below the ~50% base rate its own
+  25/50/25 labelling guarantees, and the test window is the GFC onset.*
