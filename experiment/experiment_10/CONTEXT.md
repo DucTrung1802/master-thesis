@@ -8,6 +8,19 @@ binding constraint is DATA, not model/target"* — puts on the table.
 One entry per paper below: what it does, what one training sample looks like,
 what it actually establishes, and **whether to cite it, follow it, or both**.
 
+## Naming convention
+
+**Every PDF is prefixed with its paper number** — `9. …pdf`, `28. …pdf`, `43. …pdf`.
+The number is the paper's identity everywhere: the `#` column below, the section
+heading (`# Paper 28 — …`), the file index, and how the paper is referred to in
+conversation. **"analyze paper 28" means the file whose filename starts with `28.`**
+— resolve by prefix, not by title. Numbers are assigned by the user and are not
+sequential; gaps are expected.
+
+Workflow: one paper per request → analysis (sample I/O · model · cite? · follow?) →
+this file updated → committed and pushed. PDFs themselves stay untracked
+(`.gitignore: *.pdf`); **CONTEXT.md is the only artefact in git.**
+
 | # | Paper | Year | Verdict |
 |---|---|---|---|
 | 9 | Khan et al. — *Stock market prediction using ML classifiers and social media, news* | 2020 | **Cite, do not follow** |
