@@ -26,23 +26,26 @@ this file updated → committed and pushed. PDFs themselves stay untracked
 | 9 | Khan et al. — *Stock market prediction using ML classifiers and social media, news* | 2020 | **Cite, do not follow** |
 | 28 | Vargas, de Lima, Evsukoff — *Deep learning for stock market prediction from financial news articles* | 2017 | **Cite; borrow the architecture, not the setup** |
 | 43 | Usmani & Shamsi — *LSTM based stock prediction using weighted and categorized financial news* | 2023 | **Cite; borrow the NEWS HIERARCHY — the one idea to build on** |
+| 44 | Huang et al. — *ML-GAT: a multilevel graph attention model for stock prediction* | 2022 | **Cite for its NEGATIVE results; do not follow** |
 
-**They form a progression, and the progression is the point.** All three add news
-text to price features to predict next-day direction, and they differ in *how the
+**They form a progression, and the progression is the point.** All four add news text
+to price features to predict short-horizon direction, and they differ in *how the
 text enters the model*:
 
-| | paper 9 (2020) | paper 28 (2017) | paper 43 (2023) |
-|---|---|---|---|
-| text enters as | **one scalar** beside OHLCV | a **sequence + own encoder** | **three weighted streams** (market / sector / stock) |
-| split | random 70/30 ⚠️ | chronological | time-series CV, val ahead of train |
-| test size | 150 | **187** ⚠️ | 41 stocks × per-stock test |
-| baseline reported | — | **none** ⚠️ | **none** ⚠️ |
-| accuracy | 80.5% (leaked) | 62.0% | **~0.50–0.55** |
+| | paper 9 (2020) | paper 28 (2017) | paper 43 (2023) | paper 44 (2022) |
+|---|---|---|---|---|
+| text enters as | **one scalar** beside OHLCV | a **sequence + own encoder** | **three weighted streams** (market/sector/stock) | **BERT `[CLS]`** summed into a graph node |
+| stock relations | — | — | implicit (sector grouping) | **explicit graph** (Wikidata, 2-level attention) |
+| split | random 70/30 ⚠️ | chronological | time-series CV, val ahead of train | chronological |
+| test size | 150 | **187** ⚠️ | 41 stocks, per-stock | 316 d × 423/286 stocks |
+| repeats | 1 | 1 | 1 | **10, means reported** |
+| baseline reported | — | **none** ⚠️ | **none** ⚠️ | **none** ⚠️ |
+| accuracy | 80.5% (leaked) | 62.0% | **~0.50–0.55** | ~0.51/0.57 (**3-class**) |
 
-Read together: the *more careful* the evaluation gets, the closer accuracy falls to
-chance. Paper 43 is the most methodologically careful of the three and lands at
-coin-flip — which makes its near-chance result the most informative number in the
-folder, not the least.
+Read together: **the more careful the evaluation gets, the closer accuracy falls to
+chance.** Papers 43 and 44 are the most methodologically careful and both land near
+coin-flip — which makes their weak results the most informative numbers in the
+folder, not the least. **Not one of the four reports a majority-class baseline.**
 
 ---
 
@@ -511,30 +514,186 @@ with a careful protocol. Adopt the hierarchy because it makes a sparse VN corpus
 
 ---
 
-## Combined reading — where the three papers leave the thesis
+# Paper 44 — Huang, Li, Liu, Yang, Yu (2022)
 
-1. **All three predict the wrong target for this thesis** — per-stock or index
-   absolute next-day direction. None touches cross-sectional relative return.
-2. **On integration, the ordering is 43 > 28 > 9.** Sentiment-as-scalar (9) conflates
-   polarity with document volume by construction; text-as-sequence-with-encoder (28)
-   fixes that; **text-as-hierarchy** (43) additionally separates the component that
-   cancels in a cross-section from the one that does not. **Take 43's streams and
-   28's encoder shape; take nothing structural from 9.**
-3. **None reports a baseline that would prove skill** — 9 leaks through a random split
-   over overlapping labels; 28 omits the majority class on 187 test samples; 43 never
-   states the base rate while sitting at ~0.52. All three reinforce that the protocol
-   already in use here (chronological, purged, costed) is the differentiator.
+*ML-GAT: A Multilevel Graph Attention Model for Stock Prediction.*
+**IEEE Access** vol. 10, pp. 86408–86422 · DOI 10.1109/ACCESS.2022.3199008 ·
+Zhejiang Univ. of Science & Technology / Zhejiang Yuexiu Univ. / UCSI Malaysia.
+15 pp, open access (CC BY-NC-ND).
+file: `44. ML-GATA_Multilevel_Graph_Attention_Model_for_Stock_Prediction.pdf`
+(*filename says "ML-GATA"; the paper is ML-GAT*).
+
+> **→ Verdict: cite it for its NEGATIVE results — accuracy up / Sharpe down, and
+> relation choice mattering more than architecture — and do not follow the method.**
+> The relational module rests on Wikidata corporate entities, which do not exist at
+> usable coverage for VN listed firms, and the headline gain is contaminated by
+> selecting relation types on the test set.
+
+### Setup
+
+| | |
+|---|---|
+| Universe | **S&P 500 → 423 stocks** + **CSI 300 → 286 stocks** (stocks with no Wikidata relations dropped) |
+| Price | Yahoo Finance (S&P) / CSMAR (CSI) |
+| Text | ~**150,000** news texts tied to target stocks |
+| Relations | **Wikidata** — 9 first-order + 62 second-order relation types (Tables 7–8), meta-path ≤ 2 hops, heterogeneous → homogeneous company graph |
+| Split | **chronological** — train 2013-02-08→2017-05-23 (1,080 d) · val →2018-03-27 (213 d) · test →2019-08-29 (**316 d**) |
+| Training | Adam, lr 5e-4, weight decay 5e-5, batch 32, dropout 0.5, leaky ReLU, 100 epochs, **10 independent repetitions** |
+
+### One training sample
+
+**One sample = one (stock, day) node in a graph spanning the whole index.** Three
+encoders feed one node representation:
+
+| source | encoder | output |
+|---|---|---|
+| **price** | LSTM over the **price change rate** `R_i^t = (P^t − P^{t−1})/P^{t−1}`, **sequence length 50** | last hidden state `e_i ∈ R^128` |
+| **news** | **BERT**, `T` texts for that stock, final-layer `[CLS]`, max 128 tokens, batch 32 | `f_i ∈ R^V` |
+| **relations** | Wikidata graph → meta-path → **ML-GAT** two-level attention | `e_i^r` |
+
+Fused by **plain addition**: `rep_i = e_i^r + e_i + f_i` (Eq. 12), then
+`ŷ_i = softmax(W_n·rep_i + b_n)` (Eq. 13), cross-entropy loss (Eq. 14).
+
+`y` = **3 classes** (Eq. 15): `up` if `R ≥ r_up`, `down` if `R ≤ r_down`, else `neutral`.
+
+### Model — the actual contribution
+
+Two stacked attention levels over the relation graph:
+
+```
+level 1  "state attention"    → attend over NEIGHBOURS within one relation type r_m → Z_i^{r_m}  (Eq. 8–9)
+level 2  "relation attention" → attend ACROSS relation types                        → e_i^r      (Eq. 10–11)
+```
+
+*Which peers matter inside a relation*, then *which relations matter at all*. This is
+a **learned generalisation of paper 43's hand-specified market/sector/stock weights**
+— arbitrary relation types, gradient-learned instead of grid-searched.
+
+### Results — mean of 10 runs (Tables 5–6)
+
+| | MLP | CNN | LSTM | GCN | TGC | **ML-GAT** |
+|---|---|---|---|---|---|---|
+| F1 S&P / CSI | .357/.379 | .394/.383 | .400/.427 | .415/.432 | .441/.451 | **.510/.569** |
+| Acc S&P / CSI | .302/.359 | .328/.392 | .443/.403 | .442/.414 | .463/.444 | **.509/.570** |
+| Sharpe S&P / CSI | .42/.48 | .43/.49 | .79/.75 | .52/.59 | .85/.95 | **1.89/1.90** |
+
+### ⚠️ Five problems, two of them serious
+
+1. **⚠️ Relation types were selected ON THE TEST SET.** Tables 3–4 rank every relation
+   type by **test-set F1** (best 0.458, worst 0.267), then §IV-E: *"we use the 10 best
+   relations obtained in our experiments to create relational graphs."* Headline
+   numbers are reported on the same test set used to choose the graph. Since relation
+   choice alone swings F1 by **19 pp**, this plausibly accounts for the entire margin
+   over TGC.
+2. **⚠️ The prediction offset is never stated.** The LSTM consumes `R_i^t` up to and
+   including `t`, and the label is the class of *a* price change rate — the paper
+   never says `R^t` or `R^{t+1}`. With the trading rule ("if upside probability is
+   highest, the stock is bought **at the closing price of the day**"), the decision
+   uses the day-*t* close and executes at the day-*t* close. As written it cannot be
+   shown look-ahead-free.
+3. **The label thresholds are broken as printed.** `r_up = 0.6`, `r_down = −0.6` on a
+   *rate* means **±60% in a day** — under which nearly every label is `neutral` and a
+   trivial classifier scores ~99%, contradicting the reported 0.30–0.57. The real
+   threshold must be 0.6% or a scaled quantity; the paper never says. Same units
+   ambiguity hits "average daily return 0.1193" — 11.9% *per day* as a fraction,
+   irreconcilable with Fig. 4's 1000 → ~2000 over 316 days.
+4. **No majority-class baseline** — fourth paper in a row. On 3 classes with a
+   dominant `neutral`, 0.51 may sit *below* "always predict neutral".
+5. **Trading sim has no costs**, goes **all-in on a single stock**, and Sharpe is
+   never stated as daily or annualised (per-run values span −2.08 to +6.2).
+
+### What it does right
+
+Chronological split with explicit dates; **10 independent repetitions with means
+reported** — the only paper in this folder to do so; profitability metrics alongside
+accuracy; two real ablations (news component, relation types).
+
+### ⭐ The most valuable result is a NEGATIVE one
+
+**Fig. 3 — adding the BERT news module raises F1 (+18.08%), accuracy (+11.54%) and
+average daily return (+2.3%), but LOWERS the Sharpe ratio.** The authors call it
+regrettable and blame news sparsity.
+
+That is **experiment_3's conclusion reached independently**, by another team, on
+another market: *classification gains do not translate into risk-adjusted return.* A
+published paper whose own ablation shows accuracy improving while Sharpe degrades is
+a far stronger citation for the evaluation chapter than any in-house assertion.
+
+Second citable negative: **GCN — which aggregates all relations equally — scores
+below plain LSTM on accuracy** (.442 vs .443 S&P). Naive relational averaging does
+not help; only weighted aggregation does. And relation *choice* moves F1 from 0.267
+to 0.458 — **the edges matter more than the architecture**.
+
+### How to use it in the thesis
+
+**Cite — three uses:**
+1. **The accuracy-vs-Sharpe divergence** (Fig. 3). Independent corroboration of
+   experiment_3. This alone justifies the citation.
+2. **Relation choice dominates architecture** (Tables 3–4) and **unweighted graph
+   aggregation underperforms no graph at all** (GCN < LSTM). The two things to know
+   before building any cross-sectional graph.
+3. **Multilevel attention** — within-relation then across-relation — as the learned
+   generalisation of paper 43's fixed market/sector/stock weights.
+
+**Do not follow:**
+- **⚠️ Wikidata corporate relations do not exist for VN at usable coverage.** The
+  whole relational module rests on them; VN listed firms have thin-to-absent entries.
+  Their own drop from 500 → **423** S&P constituents shows the coverage cliff even
+  for US large-caps.
+- **The headline gain is contaminated** by test-set relation selection — there is no
+  reliable effect size to aim at.
+- **The offset ambiguity** makes a look-ahead-safe reimplementation impossible from
+  the paper alone.
+- Experiments 1.6, 1.7, 2.1–2.3 already show DL losing to point-in-time GBM on this
+  panel; a GNN over 30–100 tickers with thin edges is not where that flips.
+
+**What IS worth taking, cheaply:** experiment 1.8 already found **cross-sectional
+volatility rank** among the few useful added features. A per-date cross-sectional
+rank is a degenerate, zero-cost version of what a GNN computes by message-passing
+over a fully-connected panel. If more relational structure is ever wanted, the
+affordable VN edge sets are **sector membership** (Simplize tree, already scraped)
+and **ownership / subsidiary links** (recoverable from statement notes via the
+experiment_7/8/9 pipeline) — **not Wikidata**.
+
+---
+
+## Combined reading — where the four papers leave the thesis
+
+1. **All four predict the wrong target for this thesis** — per-stock or index
+   absolute short-horizon direction. None touches cross-sectional relative return.
+2. **On integration, the ordering is 43 ≈ 44 > 28 > 9.** Sentiment-as-scalar (9)
+   conflates polarity with document volume by construction; text-as-sequence-with-encoder
+   (28) fixes that; **text-as-hierarchy** (43) separates the component that cancels in
+   a cross-section from the one that does not; **44 learns that weighting** instead of
+   grid-searching it, over arbitrary relation types. **Take 43's streams, 28's encoder
+   shape, and 44's two-level weighting idea; take nothing structural from 9.**
+3. **⚠️ NOT ONE of the four reports a majority-class baseline.** 9 leaks through a
+   random split over overlapping labels; 28 omits the base rate on 187 test samples;
+   43 sits at ~0.52 without stating it; 44 reports 0.51 on a **3-class** target whose
+   dominant class is never quantified. All four reinforce that the protocol already in
+   use here (chronological, purged, costed) is the differentiator.
 4. **⚠️ Accuracy falls toward chance as evaluation quality rises: 80.5% → 62.0% →
-   ~0.52.** That ordering across the three papers is itself the finding. Read with
-   experiment_3 — where a genuine AUC-0.77 signal still failed to beat Buy&Hold after
-   costs — the expected value of a VN news-sentiment feature should be set **low**.
-5. **The binding constraint is the CORPUS, not the architecture.** Paper 28 quantifies
+   ~0.52 → ~0.51.** That ordering across the four papers is itself the finding. Read
+   with experiment_3 — where a genuine AUC-0.77 signal still failed to beat Buy&Hold
+   after costs — the expected value of a VN news feature should be set **low**.
+5. **⭐ Paper 44 supplies the sharpest evidence for that, from its own ablation:**
+   adding news raises F1 +18.1%, accuracy +11.5% and daily return +2.3% while
+   **lowering the Sharpe ratio**. An independent team, another market, the same
+   lesson experiment_3 learned — *classification gains need not become risk-adjusted
+   return*. Cite this rather than asserting it.
+6. **The binding constraint is the CORPUS, not the architecture.** Paper 28 quantifies
    what a working text model needs (~10 titles/day/target); experiment_6 delivers
    **0.35**. Paper 43 supplies the fix — back sparse per-ticker news with abundant
-   market- and sector-level streams. The sector layer already exists (Simplize
-   industry tree); the market layer needs a market-wide feed; θ3 needs experiment_6
-   generalised beyond VCB.
-6. **If text becomes a thesis chapter, the shape is settled:** three streams
+   market- and sector-level streams. Paper 44 confirms the same sparsity problem from
+   the other end (its Sharpe regression is blamed on thin news). The sector layer
+   already exists (Simplize industry tree); the market layer needs a market-wide feed;
+   θ3 needs experiment_6 generalised beyond VCB.
+7. **On relational structure:** paper 44 shows the **edges matter more than the
+   architecture** (relation choice swings F1 0.267 → 0.458) and that **unweighted
+   aggregation is worse than no graph** (GCN < LSTM). For VN, Wikidata is not a viable
+   edge source; sector membership and ownership links are. And experiment 1.8's
+   cross-sectional rank features are already a zero-cost degenerate GNN.
+8. **If text becomes a thesis chapter, the shape is settled:** three streams
    (market / sector / stock) × a transformer sentence encoder for VN × lagged to
    `d+1` × ranked cross-sectionally against the VN30/VN100 panel × fed to the
    existing GBM, and judged by costed walk-forward — **not** by accuracy.
@@ -553,3 +712,7 @@ with a careful protocol. Adopt the hierarchy because it makes a sparse VN corpus
   — Usmani & Shamsi 2023, PLOS ONE (open access, data on Mendeley). 27 pp.
   *WCN-LSTM market/sector/stock weighted news hierarchy; **cite and borrow the
   hierarchy** — the one idea in this folder to build on.*
+- `44. ML-GATA_Multilevel_Graph_Attention_Model_for_Stock_Prediction.pdf`
+  — Huang et al. 2022, IEEE Access (open access). 15 pp. *ML-GAT two-level graph
+  attention over Wikidata corporate relations; **cite the negative results** —
+  accuracy up / Sharpe down, and edges mattering more than architecture.*
