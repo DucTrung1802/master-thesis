@@ -1,4 +1,4 @@
-# orchestration\assets\silver.py
+# src\orchestration\assets\silver.py
 """The SILVER layer — `bronze_schema` → `silver_schema`.
 
 Seven assets. Two are a FACT table plus its DIMENSION:
@@ -46,7 +46,7 @@ in March, weeks before it existed. The asset asserts it: it counts rows with
 `publish_date > date` and raises if any exist.
 
 All are thin wrappers — the logic lives in `DataPreprocessor`, so `main.py`, a notebook
-and Dagster all build the same tables (`orchestration/CONTEXT.md` §3).
+and Dagster all build the same tables (`src/orchestration/CONTEXT.md` §3).
 """
 
 from typing import Callable, List

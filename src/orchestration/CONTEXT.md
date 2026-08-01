@@ -1,13 +1,21 @@
-# Context — `orchestration` (Dagster migration of `src/main.py`)
+# Context — `src/orchestration` (Dagster migration of `src/main.py`)
 
 > # ▶️ THIS IS THE ENTRY POINT. Work happens here.
+>
+> **📁 Moved 2026-08-01: this package lives under `src/`, not at the repo root.** It is a
+> module of the codebase like every other, so it sits beside the ones it wraps. The only
+> thing that changes for a user is the path in every command — **`-f
+> src/orchestration/definitions.py`** — and `workspace.yaml`, which was updated with it.
+> One thing changes for a reader, and it is in §5 *Gotchas*: `definitions.py` now repeats
+> `_bootstrap`'s two-line `sys.path` insert INLINE, because the package can no longer be
+> imported until `src/` is on the path.
 >
 > Handoff notes. **Status (2026-08-01): the LANDING layer and the whole BRONZE layer are
 > assets and have both been materialised green; silver has 7 and gold 3.** 49 assets.
 > What is left is silver (8 of 15 leaves) and gold (4 of 7 tables) — see §4. Verify
 > anything before acting on it: the code is the source of truth.
 >
-> **[`src/data_preprocessor`](../src/data_preprocessor/CONTEXT.md) is ARCHIVED as of
+> **[`src/data_preprocessor`](../data_preprocessor/CONTEXT.md) is ARCHIVED as of
 > 2026-08-01** — as a *way to run things*. It is still the implementation library every
 > asset wraps (`resources.py:23` imports `DataPreprocessor`, and all the transform logic
 > lives there), so the directory must not be moved or deleted; what is retired is
@@ -23,9 +31,9 @@
 ## 1. Why this is worth doing
 
 `main.py` is already a DAG, written as `if switch: call()`. The evidence is
-[data_preprocessor.py:3495-3525](../src/data_preprocessor/data_preprocessor.py#L3495-L3525),
+[data_preprocessor.py:3495-3525](../data_preprocessor/data_preprocessor.py#L3495-L3525),
 a hand-written list of `(leaf_name, callable)` pairs iterated against the switch
-config, and [cafef_scraper.py:516-534](../src/web_scraper/cafef_scraper.py#L516-L534),
+config, and [cafef_scraper.py:516-534](../web_scraper/cafef_scraper.py#L516-L534),
 the same shape for the scrapers. The dependency edges (TV links → CafeF/Simplize
 universe; `raw_data/<folder>` → one bronze table; bronze → silver → gold) exist only
 as source-code ORDER plus comments.
@@ -184,7 +192,7 @@ opposite:
 
 The second hides best under expensive work, which is exactly where it was found.
 
-[src/utils/inputs.py](../src/utils/inputs.py) makes the choice explicit at the read
+[src/utils/inputs.py](../utils/inputs.py) makes the choice explicit at the read
 site: **`require_file` / `require_dir`** raise `MissingSourceDataError` with *what* is
 missing, *what breaks*, and *how to fix it*; **`optional_file`** returns a bool and logs
 a WARNING that must name the degradation (`degrades=` is not decoration — "sector and
@@ -346,39 +354,39 @@ $env:DAGSTER_HOME = "D:\GIT\master-thesis\.dagster"
 dagster dev                       # http://localhost:3000 ; Ctrl-C to stop
 
 # B. headless, one asset
-dagster asset materialize -f orchestration/definitions.py --select "bronze/cafef_index_price"
+dagster asset materialize -f src/orchestration/definitions.py --select "bronze/cafef_index_price"
 
 # C. headless, a cheap known-good slice (4 scrapes, seconds — files already on disk)
-dagster asset materialize -f orchestration/definitions.py --select "group:cafef_index"
+dagster asset materialize -f src/orchestration/definitions.py --select "group:cafef_index"
 
 # D. one partition of a per-ticker asset
-dagster asset materialize -f orchestration/definitions.py `
+dagster asset materialize -f src/orchestration/definitions.py `
     --select "raw/cafef_financials" --partition "HOSE_VCB"
 
 # E. the WHOLE bronze layer, 20 assets — ~9 min, 10.6 M rows (raw_data must be populated)
-dagster asset materialize -f orchestration/definitions.py --select "group:bronze"
+dagster asset materialize -f src/orchestration/definitions.py --select "group:bronze"
 
 # F. a table AND everything upstream of it — scrape, then ingest, in order
-dagster asset materialize -f orchestration/definitions.py --select "+bronze/trading_view_economy"
+dagster asset materialize -f src/orchestration/definitions.py --select "+bronze/trading_view_economy"
 ```
 
 **Bringing the landing layer up from nothing**, in dependency order — the universe
 first, because CafeF and Simplize read it:
 
 ```powershell
-dagster asset materialize -f orchestration/definitions.py --select "raw/trading_view_links"        --partition stocks
-dagster asset materialize -f orchestration/definitions.py --select "raw/trading_view_collected_links"
-dagster asset materialize -f orchestration/definitions.py --select "group:cafef"        # ⚠️ hours
-dagster asset materialize -f orchestration/definitions.py --select "group:simplize"
-dagster asset materialize -f orchestration/definitions.py --select "group:cafef_index"  # independent
-dagster asset materialize -f orchestration/definitions.py --select "group:gics"         # independent
+dagster asset materialize -f src/orchestration/definitions.py --select "raw/trading_view_links"        --partition stocks
+dagster asset materialize -f src/orchestration/definitions.py --select "raw/trading_view_collected_links"
+dagster asset materialize -f src/orchestration/definitions.py --select "group:cafef"        # ⚠️ hours
+dagster asset materialize -f src/orchestration/definitions.py --select "group:simplize"
+dagster asset materialize -f src/orchestration/definitions.py --select "group:cafef_index"  # independent
+dagster asset materialize -f src/orchestration/definitions.py --select "group:gics"         # independent
 ```
 
 **Then the database layers**, which need only `raw_data/` on disk:
 
 ```powershell
-dagster asset materialize -f orchestration/definitions.py --select "group:bronze"   # 20 assets, ~9 min
-dagster asset materialize -f orchestration/definitions.py --select "group:silver"
+dagster asset materialize -f src/orchestration/definitions.py --select "group:bronze"   # 20 assets, ~9 min
+dagster asset materialize -f src/orchestration/definitions.py --select "group:silver"
 ```
 
 Or in the UI: select the graph and hit Materialize — Dagster walks the edges itself,
@@ -483,7 +491,7 @@ and crypto to build. `cafef_financials` is ONE asset writing SIX tables (it is o
 method) and reports a row count per table.
 
 ```powershell
-dagster asset materialize -f orchestration/definitions.py --select "group:bronze"
+dagster asset materialize -f src/orchestration/definitions.py --select "group:bronze"
 ```
 
 **20/20 green, ~9 minutes**, 10.6 M rows re-ingested. This run doubled as the acceptance
@@ -507,7 +515,7 @@ bronze/trading_view_economy
 ```
 
 ```powershell
-dagster asset materialize -f orchestration/definitions.py --select "group:silver,group:gold"
+dagster asset materialize -f src/orchestration/definitions.py --select "group:silver,group:gold"
 ```
 
 | asset | result |
@@ -544,7 +552,7 @@ The four `bronze.cafef_index_*` tabs are four MEASURES of the same entity (index
 so they join on the full key into one table:
 
 ```powershell
-dagster asset materialize -f orchestration/definitions.py --select "silver/stock_market"
+dagster asset materialize -f src/orchestration/definitions.py --select "silver/stock_market"
 ```
 
 | check | result |
@@ -566,7 +574,7 @@ into `silver.stocks_basic`.
 ### `gold/stock_market` — the index panel, 1 row per trading day (2026-08-01)
 
 ```powershell
-dagster asset materialize -f orchestration/definitions.py --select "gold/stock_market"
+dagster asset materialize -f src/orchestration/definitions.py --select "gold/stock_market"
 ```
 
 | check | result |
@@ -593,7 +601,7 @@ reaches ~1e12 where REAL would lose thousands. Hence the exact round-trip above.
 ### `silver/stocks_basic` — six bronze tables into the per-stock panel (2026-08-01)
 
 ```powershell
-dagster asset materialize -f orchestration/definitions.py --select "silver/stocks_basic"
+dagster asset materialize -f src/orchestration/definitions.py --select "silver/stocks_basic"
 ```
 
 | check | result |
@@ -618,8 +626,8 @@ declares six bronze deps, not four.
 ### The FINANCIALS chain — 3 silver assets + 1 gold (2026-08-01)
 
 ```powershell
-dagster asset materialize -f orchestration/definitions.py --select "gold/stocks_financials_bank_fa"
-dagster asset materialize -f orchestration/definitions.py --select "+gold/stocks_financials_bank_fa"   # incl. upstream
+dagster asset materialize -f src/orchestration/definitions.py --select "gold/stocks_financials_bank_fa"
+dagster asset materialize -f src/orchestration/definitions.py --select "+gold/stocks_financials_bank_fa"   # incl. upstream
 ```
 
 Four assets, and the chain is the only silver→silver one in the layer — each step reads
@@ -818,7 +826,7 @@ return to sequential execution.
 ## 3. Design decisions, and why
 
 - **No pipeline logic lives here.** Every asset is a thin wrapper over a method that
-  already exists in `src/`. Delete `orchestration/` and nothing is lost but the
+  already exists in `src/`. Delete `src/orchestration/` and nothing is lost but the
   scheduling; `main.py` keeps working the whole time. This is what makes the
   migration incremental rather than a rewrite.
 - **Assets are generated from a spec table**, not copy-pasted — `TABS` in
@@ -846,6 +854,9 @@ return to sequential execution.
   defaults to the *relative* `src/switch_config.json`, `Logger` to a relative
   `logs/app.log`, and the `*_RAW_DATA_DIR` constants are relative — and a wrong CWD
   fails **quietly** (an unreadable switch config returns `{}`, i.e. every switch off).
+  > ⚠️ **Since the move into `src/`, that path entry is also what makes THIS package
+  > importable** — so `definitions.py` cannot reach `_bootstrap` through an import and
+  > repeats the insert inline instead. See §5 *Gotchas*.
 - **Counts are read through a raw cursor, not `driver.select`.** Written before Phase 0
   fixed `select` (which used to return an empty DataFrame on error, so a missing table
   read as a legitimate 0 rows). `select` now raises, so this is belt-and-braces rather
@@ -857,7 +868,7 @@ return to sequential execution.
 ### 4.1 ✅ Phase 0 — exception propagation (DONE, 2026-07-31)
 
 A stage that did not do its work now raises. New module
-[src/utils/exceptions.py](../src/utils/exceptions.py): `PipelineError` base,
+[src/utils/exceptions.py](../utils/exceptions.py): `PipelineError` base,
 `MissingSourceDataError` (input absent/empty), `DatabaseQueryError` (query failed).
 
 | was | now |
@@ -893,7 +904,7 @@ Verified:
 `DatabaseExecutionStatus.ERROR` enum that no caller checks. They are left alone
 because the live write path does not use them — `_helper_save_pandas_table_to_database`
 builds its own SQL and **already re-raises** from its worker threads
-([data_preprocessor.py:529-531](../src/data_preprocessor/data_preprocessor.py#L529-L531))
+([data_preprocessor.py:529-531](../data_preprocessor/data_preprocessor.py#L529-L531))
 — and because a failed `create_table` surfaces immediately as a failed insert anyway.
 
 ⚠️ **Expect red on the first wide run.** Turning on a bronze leaf whose scraper has
@@ -914,7 +925,7 @@ split naturally, which is an improvement), and per gold leaf (6).
 
 Bronze has **no cross-table dependency** — each ingest reads its own `raw_data/`
 folder — so those 20 are a flat layer. Silver and gold edges are already documented in
-[data_preprocessor/CONTEXT.md](../src/data_preprocessor/CONTEXT.md) §4 and can be
+[data_preprocessor/CONTEXT.md](../data_preprocessor/CONTEXT.md) §4 and can be
 transcribed directly.
 
 Note `data_quality_unified` is a **dead switch** — no code reads it. Drop it.
@@ -991,9 +1002,27 @@ separate, mechanical change.
 
 - **`DAGSTER_HOME` must be an absolute path** and must exist. `.dagster/dagster.yaml`
   may be empty but silences a warning on every command.
-- **`dagster asset materialize` needs `-f orchestration/definitions.py`** even though
+- **`dagster asset materialize` needs `-f src/orchestration/definitions.py`** even though
   `workspace.yaml` exists — the workspace file is honoured by `dagster dev`, not by the
   one-shot asset commands.
+- **⚠️ `definitions.py` REPEATS `_bootstrap`'s `sys.path` insert INLINE, and that is not
+  redundancy** (2026-08-01, when this package moved into `src/`). `dagster -f <file>`
+  loads the file as a **top-level module** — named `definitions`, with no package context
+  — and puts only the **working directory** (the repo root) on `sys.path`. `src/` is not
+  on it, so `from orchestration._bootstrap import bootstrap` would fail on the very line
+  that exists to add `src/`: the bootstrap cannot bootstrap its own package. Relative
+  imports (`from ._bootstrap import …`) are not the way out either — a file loaded by
+  path has no parent package. Hence four lines of prelude in that ONE file, above its
+  first `orchestration` import. Every other module here is reached through the package
+  and needs nothing. **Do not "tidy" it away**, and do not move `definitions.py` deeper
+  without re-checking the `parent.parent` it computes.
+  - The same applies to anything else that loads a module here BY PATH. Importing it
+    normally (`sys.path.insert(0, "src"); import orchestration.definitions`) is fine —
+    `orchestration/__init__.py` calls `bootstrap()` and the package import already
+    required `src/` to be reachable.
+  - `working_directory` in `workspace.yaml` stays the **repo root**, not `src/`: it is
+    the CWD that the relative `raw_data/`, `logs/app.log` and `src/switch_config.json`
+    paths resolve against.
 - **Dagster loads `.env` itself** on startup (confirmed: it reported loading
   `POSTGRES_*`), so the `load_dotenv()` calls in the repo are belt-and-braces here.
   Do NOT rely on that for scripts run outside Dagster.

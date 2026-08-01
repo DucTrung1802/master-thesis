@@ -1,4 +1,4 @@
-# orchestration\__init__.py
+# src\orchestration\__init__.py
 """Dagster orchestration layer — the DAG that `src/main.py` runs as a script today.
 
 Nothing here holds pipeline LOGIC. Every asset is a thin wrapper over a method that

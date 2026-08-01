@@ -1,5 +1,5 @@
 {
-    "// WHAT THIS IS": "The load list for orchestration/definitions.py. Set an asset to false and it is NOT LOADED - gone from the UI, from `*`, and from every selection. true or ABSENT = enabled, so a newly added asset is on by default.",
+    "// WHAT THIS IS": "The load list for src/orchestration/definitions.py. Set an asset to false and it is NOT LOADED - gone from the UI, from `*`, and from every selection. true or ABSENT = enabled, so a newly added asset is on by default.",
     "// NOT THE RUN PLAN": "This is not switch_config.json. The ordinary way to not run something is to not select it, and to skip one inside a bigger run use `--select \"group:cafef and not key:\\\"raw/cafef_news\\\"\"`. Use this file only for `must never load in this repo`.",
     "// DOWNSTREAM IS NOT DISABLED": "Dagster keeps the edge and shows a disabled node as an unexecutable external asset, so bronze/cafef_index_price still resolves with its raw/ parent off. To stop a chain, disable the downstream too.",
     "// A TYPO IS AN ERROR": "A key here that matches no asset RAISES at load time and lists the valid keys. That is deliberate - a silently-ignored key is the exact failure switch_config.json's trailing-slash bug had.",

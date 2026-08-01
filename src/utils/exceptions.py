@@ -6,7 +6,7 @@ one ERROR line and **returned normally**: `if df is None: log_error(...); return
 every ingest, and `except Exception: return pd.DataFrame()` in `driver.select`. A
 caller therefore could not tell a successful ingest from a failed one, and neither
 could an orchestrator — the only trace was a line in `logs/app.log` that nothing
-read. `orchestration/` needs the opposite: a stage that did not do its work must
+read. `src/orchestration/` needs the opposite: a stage that did not do its work must
 raise, so the asset goes red.
 
 The classes are narrow on purpose. A caller that wants to tolerate a specific

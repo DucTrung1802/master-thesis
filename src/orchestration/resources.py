@@ -1,4 +1,4 @@
-# orchestration\resources.py
+# src\orchestration\resources.py
 """Shared resources: the repo `Logger`, and a connected `DataPreprocessor`.
 
 Both exist so an asset body stays two or three lines. The important design choice

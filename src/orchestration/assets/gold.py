@@ -1,4 +1,4 @@
-# orchestration\assets\gold.py
+# src\orchestration\assets\gold.py
 """The GOLD layer — `silver_schema` → `gold_schema`.
 
 Three assets. Two are WIDE — one row per date, one column per (entity × measure):

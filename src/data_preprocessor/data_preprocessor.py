@@ -4442,7 +4442,7 @@ class DataPreprocessor:
 
         ⚠️ ORCHESTRATION MUST NOT COME THROUGH HERE. Dagster assets call the
         `_ingest_*` methods DIRECTLY so the exception propagates and the asset goes
-        red — see `orchestration/resources.py`. If a future caller needs a hard
+        red — see `src/orchestration/resources.py`. If a future caller needs a hard
         failure from this path, act on the returned list of failed leaves; it is
         returned rather than raised precisely so the choice belongs to the caller.
 

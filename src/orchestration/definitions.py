@@ -1,4 +1,4 @@
-# orchestration\definitions.py
+# src\orchestration\definitions.py
 """The Dagster code location — what `dagster dev` loads. **44 assets.**
 
 Four layers, kept in separate modules on purpose:
@@ -22,8 +22,21 @@ Four layers, kept in separate modules on purpose:
 """
 
 import os
+import sys
+from pathlib import Path
 
 from dagster import Definitions, multiprocess_executor
+
+# ⚠️ THIS PRELUDE IS LOAD-BEARING AND MUST STAY ABOVE THE FIRST `orchestration` IMPORT.
+# `dagster ... -f src/orchestration/definitions.py` loads this file as a TOP-LEVEL module
+# (named `definitions`, no package context) and puts only the WORKING DIRECTORY — the repo
+# root — on `sys.path`. Since this package now lives under `src/`, `import orchestration`
+# would fail before `_bootstrap` ever got the chance to add `src/`. Relative imports are
+# not an option either: a file loaded by path has no parent package. So the two lines
+# `_bootstrap.bootstrap()` would run are repeated here, for this one file.
+_SRC = str(Path(__file__).resolve().parent.parent)
+if _SRC not in sys.path:
+    sys.path.insert(0, _SRC)
 
 from orchestration._bootstrap import bootstrap
 
@@ -35,7 +48,7 @@ from orchestration.resources import PreprocessorResource, RepoLogger, SwitchConf
 import json
 from pathlib import Path
 
-# ── Which assets are loaded — orchestration/assets_enabled.json ───────────────
+# ── Which assets are loaded — src/orchestration/assets_enabled.json ───────────
 # `false` there means NOT LOADED: gone from the UI, from `*`, and from every selection.
 # `true` or ABSENT means loaded, so a newly added asset is on by default.
 #

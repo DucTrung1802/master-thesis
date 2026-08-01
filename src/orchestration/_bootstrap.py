@@ -1,4 +1,4 @@
-# orchestration\_bootstrap.py
+# src\orchestration\_bootstrap.py
 """Make the flat `src/` modules importable, and pin the process's working directory.
 
 Two things every Dagster process here needs, and neither is Dagster's job:
@@ -8,6 +8,13 @@ Two things every Dagster process here needs, and neither is Dagster's job:
    because `python src/main.py` puts `src/` at `sys.path[0]`. Dagster imports a
    module instead, so nothing puts `src/` on the path. `pytest.ini` solves the same
    problem with `pythonpath = src`; this is that, for Dagster.
+
+   ⚠️ **This package now LIVES in `src/`, so the path entry it adds is also what makes
+   `orchestration` itself importable.** That is a chicken-and-egg for the entry point:
+   `definitions.py` cannot `from orchestration._bootstrap import bootstrap` until `src/`
+   is already on the path, which is why that one file repeats the two-line insert
+   inline before its first import. Every OTHER module here is reached through the
+   package and needs nothing.
 
 2. **cwd = repo root.** `SwitchHandler` defaults to the RELATIVE path
    `src/switch_config.json`, `Logger` writes a relative `logs/app.log`, and the
@@ -25,8 +32,8 @@ import os
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-SRC = REPO_ROOT / "src"
+SRC = Path(__file__).resolve().parent.parent  # …/src (this package sits inside it)
+REPO_ROOT = SRC.parent
 
 
 def bootstrap() -> Path:

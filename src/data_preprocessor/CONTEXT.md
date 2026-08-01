@@ -2,12 +2,12 @@
 
 > # 🗄️ ARCHIVED (2026-08-01) — this is no longer how the pipeline is RUN.
 >
-> **[`orchestration/`](../../orchestration/CONTEXT.md) is the entry point now.** Point
+> **[`src/orchestration/`](../orchestration/CONTEXT.md) is the entry point now.** Point
 > new work there, read this file for how a table is BUILT.
 >
 > ⚠️ **Archived does not mean unused, and the directory must not be moved or deleted.**
 > Every one of the 49 Dagster assets is a thin wrapper over an `_ingest_*` method in
-> [data_preprocessor.py](data_preprocessor.py) — `orchestration/resources.py:23` imports
+> [data_preprocessor.py](data_preprocessor.py) — `src/orchestration/resources.py:23` imports
 > `DataPreprocessor` directly. All of the transformation logic still lives here and is
 > still executed on every materialisation. What is archived is the way it is DRIVEN:
 >
