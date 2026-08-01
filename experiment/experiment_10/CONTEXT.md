@@ -34,6 +34,7 @@ this file updated → committed and pushed. PDFs themselves stay untracked
 | 49 | Maqbool et al. — *Stock prediction by integrating sentiment scores of financial news and MLP-Regressor* | 2023 | **⭐ Cite the 10/30/100-day DECAY TABLE — the folder's best test-size evidence** |
 | 50 | Khedr, Salama, Yaseen — *Predicting stock market behavior using data mining technique and news sentiment analysis* | 2017 | **⚠️ FEATURE = LABEL. Cite only its Kappa 0.078 — sentiment alone has no skill** |
 | 51 | Fazlija & Harder — *Using financial news sentiment for stock price direction prediction* | 2022 | **⭐⭐ THE METHODOLOGICAL TEMPLATE — follow the PROTOCOL, not the method** |
+| 52 | Nemes & Kiss — *Prediction of stock values changes using sentiment analysis of stock news headlines* | 2021 | **⚠️ NO PREDICTION MODEL AT ALL — cite only as "tool choice decides the answer"** |
 
 **They form a progression, and the progression is the point.** All five add news or
 social text to price features to predict short-horizon direction, and they differ in
@@ -1462,7 +1463,94 @@ the most credible estimate available of the ceiling on this whole line of work.*
 
 ---
 
-## Combined reading — where the eleven papers leave the thesis
+# Paper 52 — Nemes, Kiss (2021)
+
+*Prediction of stock values changes using sentiment analysis of stock news headlines.*
+**Journal of Information and Telecommunication** 5:3, 375–394 · Taylor & Francis ·
+DOI 10.1080/24751839.2021.1874252 · Dept. of Information Systems, ELTE Eötvös Loránd
+University, Budapest / J. Selye University, Komárno. 20 pp, open access CC-BY.
+**Widely read — 22,562 views, 44 citing articles.**
+file: `52. Prediction of stock values changes using sentiment analysis of stock news headlines.pdf`.
+
+> **→ Verdict: ⚠️ despite the title, this paper contains NO PREDICTION MODEL.** No
+> target variable, no train/test split for forecasting, no error metric, **no lag** —
+> it computes **same-day correlation matrices** over ~13 trading days. Cite it for one
+> inverted lesson: **with a small sample and an unvalidated scorer, the choice of
+> sentiment tool determines the conclusion.**
+
+### Setup
+
+| | |
+|---|---|
+| Universe | **AMD, AMZN, FB, GOOG** |
+| Period | **2020-10-27 → 2020-11-14 — about THREE WEEKS, ~13 trading days** ⚠️ |
+| Text | headlines scraped from **finviz.com** (scraper code published, Listing 1) |
+| Prices | Yahoo Finance |
+| Scorers | **TextBlob**, **NLTK-VADER**, a **custom RNN**, and **BERT** as "benchmark" |
+
+### There is no training sample
+
+Nothing supervised is constructed. The analysis is
+`corr(Compound, {open, high, low, adjclose, volume})` **on the same day** —
+descriptive of the period, not predictive of anything.
+
+### ⭐ The one useful result — and not the one they claim
+
+Four tools, **identical headlines over identical days**, produce correlation matrices
+that **disagree in SIGN** (Figs 14–16):
+
+| pair | TextBlob | VADER | **RNN** |
+|---|---|---|---|
+| Compound ↔ adjclose | +0.74 | +0.68 | **−0.87** |
+| Compound ↔ high | +0.96 | +0.89 | **−0.35** |
+| Compound ↔ volume | −0.77 | −0.63 | **+0.92** |
+
+The authors read this as a finding about model quality — *"the correlation matrix of
+RNN is completely different and surprising"* — and treat the volume correlation as a
+discovery.
+
+It is neither. **A correlation over ~13 observations carries a standard error near
+0.3**, so no value here is distinguishable from zero and sign flips are exactly what
+noise produces at that sample size. But the demonstration is citable **inverted**:
+*when the sample is small and the scorer unvalidated, the tool chosen decides the
+answer.* The strongest available argument for paper 45's validate-first discipline —
+skip validation and any conclusion is available on request.
+
+### ⚠️ Four more
+
+1. **The RNN is trained on the IMDB movie-review dataset** and applied to financial
+   headlines. Paper 45 measured general-domain scorers at ~54% on financial prose
+   against FinBERT's 86%; movie reviews sit further away still.
+2. **"BERT" is plain BERT, not FinBERT**, with no stated sentiment fine-tuning — and it
+   outputs **50.5% positive / 49.5% negative**, a coin flip. Using it as the *benchmark*
+   the other three are judged against compounds the error.
+3. **⚠️ Minimising the neutral class is treated as a GOAL** — *"A key factor is to
+   minimize neutral values"* — and the RNN is praised for eliminating it (0% neutral),
+   even though TextBlob reads **75.25%** of these headlines as genuinely neutral.
+   Forcing those into positive/negative adds noise, not information. **Directly
+   contradicts paper 48**, whose one good idea is that the neutral mass is informative.
+4. **~13 trading days**, four stocks, one three-week window in late 2020.
+
+**Small credit:** the scraper is published (`finviz.com/quote.ashx?t=<ticker>`,
+BeautifulSoup, `id='news-table'`), and the authors are candid in places — calling
+their own result *"thought-provoking"* and its detail *"questionable"*.
+
+### How to use it in the thesis
+
+**Cite — two negative lessons:**
+1. **⭐ Tool choice determines the conclusion** at small n with an unvalidated scorer:
+   four tools, one dataset, sign-flipped correlations. Pair with **45** (validate
+   first) and **49** (small test sets manufacture skill) — three different mechanisms,
+   one message.
+2. **The neutral-minimisation anti-pattern**, against **48**. An explicit design
+   decision to reject in the assembled pipeline.
+
+**Do not follow:** no prediction model, no target, no lag, no split, ~13 days, a
+movie-review-trained RNN, and an unfine-tuned BERT serving as ground truth.
+
+---
+
+## Combined reading — where the twelve papers leave the thesis
 
 1. **All six predict the wrong target for this thesis** — per-stock or index absolute
    short-horizon direction (45 the overnight gap, 46 the price level itself). None
@@ -1624,3 +1712,8 @@ the most credible estimate available of the ceiling on this whole line of work.*
   on the Financial PhraseBank → 58 daily scores → RF → S&P 500 direction.
   **⭐⭐ THE METHODOLOGICAL TEMPLATE** — random-walk benchmark, MCC/Brier, explicit
   leak prevention, walk-forward OOS; **content beats titles**; ⚠️ MCC 0.069, no costs.*
+- `52. Prediction of stock values changes using sentiment analysis of stock news headlines.pdf`
+  — Nemes & Kiss 2021, J. Information and Telecommunication (T&F, open access). 20 pp.
+  *TextBlob/VADER/RNN/BERT over ~13 days of finviz headlines on 4 tech names.
+  **⚠️ No prediction model — same-day correlations only**; cite only that the four
+  tools disagree in SIGN on identical data.*
