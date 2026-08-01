@@ -28,6 +28,7 @@ this file updated → committed and pushed. PDFs themselves stay untracked
 | 43 | Usmani & Shamsi — *LSTM based stock prediction using weighted and categorized financial news* | 2023 | **Cite; borrow the NEWS HIERARCHY — the one idea to build on** |
 | 44 | Huang et al. — *ML-GAT: a multilevel graph attention model for stock prediction* | 2022 | **Cite for its NEGATIVE results; do not follow** |
 | 45 | Xiao & Ihnaini — *Stock trend prediction using sentiment analysis* | 2023 | **Cite the RECIPE (tool validation + market-hours window); do not follow the design** |
+| 46 | Wu, Liu, Zou, Weng — *S_I_LSTM: stock price prediction based on multiple data sources and sentiment analysis* | 2021 | **⚠️ PROVABLE LABEL LEAK — cite only the CJK pipeline + forum-heavy corpus** |
 
 **They form a progression, and the progression is the point.** All five add news or
 social text to price features to predict short-horizon direction, and they differ in
@@ -46,15 +47,20 @@ social text to price features to predict short-horizon direction, and they diffe
 | baseline reported | — | **none** ⚠️ | **none** ⚠️ | **none** ⚠️ | **none** ⚠️ |
 | accuracy | 80.5% (leaked) | 62.0% | **~0.50–0.55** | ~0.51/0.57 (**3-class**) | ~0.60 (leaked) |
 
+**Paper 46 sits outside this table** — it is the only **regression** paper (target =
+the closing price level, scored by MAE/MSE/RMSE) and the only one with a *provable*
+label leak, so its numbers are not comparable to any column above.
+
 Read together: **the more careful the evaluation gets, the closer accuracy falls to
 chance.** Papers 43 and 44 are the most methodologically careful and both land near
 coin-flip; papers 9 and 45 are the loosest and report the highest numbers. That
-ordering is itself the folder's main finding. **Not one of the five reports a
-majority-class baseline.**
+ordering is itself the folder's main finding. **Not one of the six reports a
+majority-class or naive baseline.**
 
 **The design splits cleanly across papers.** Nobody has all the pieces:
 **45 = the aggregation recipe** · **43 = the hierarchy** · **28 = the encoder shape**
-· **44 = the warning**. Paper 9 contributes nothing structural.
+· **44 = the warning** · **46 = the non-English pipeline stage**. Paper 9 contributes
+nothing structural.
 
 ---
 
@@ -795,32 +801,169 @@ central methodological sin. **Take its recipe, not its results.**
 
 ---
 
-## Combined reading — where the five papers leave the thesis
+# Paper 46 — Wu, Liu, Zou, Weng (2021)
 
-1. **All five predict the wrong target for this thesis** — per-stock or index
-   absolute short-horizon direction (45 even predicts the overnight gap). None
+*S_I_LSTM: stock price prediction based on multiple data sources and sentiment analysis.*
+**Connection Science** (Taylor & Francis) · DOI 10.1080/09540091.2021.1940101 ·
+Hunan University, Changsha + Providence University, Taichung. 20 pp.
+file: `46. Stock price prediction based on multiple data sources and sentiment analysis.pdf`.
+
+> **→ Verdict: ⚠️ DISQUALIFIED as a method — the label is algebraically recoverable
+> from three of its own input features, provable from the paper's own Table 2.** Cite
+> it for exactly three things: the **CJK/non-English pipeline stage**, the
+> **forum-dominant corpus composition** that matches a VN build, and the **metric
+> contradiction** it shares with papers 43 and 44.
+
+### Setup
+
+| | |
+|---|---|
+| Universe | **5 Shanghai A-shares** — CITIC Securities (600030) + **four of the Big-4 banks**: BOC, ICBC, CCB, ABC ⚠️ essentially one factor |
+| Period | 2017-07-01 → 2020-04-30, **3,377 stock-days** |
+| Text | **2,351 news articles + 33,500 forum posts** from EastMoney.com — headlines only, per Vargas et al. |
+| Split | chronological — train → 2019-12-31, **test 2020-01-01 → 2020-04-30 (~80 days)** ⚠️ the COVID crash |
+| Task | **REGRESSION** — predict the closing price; MAE / MSE / RMSE |
+
+### One training sample
+
+**One sample = one (stock, day).** The only regression paper in the folder.
+
+| # | feature | note |
+|---|---|---|
+| 1–4 | Open, High, Low, **Close** | Close is the **label**; Open/High/Low of the **same day** are inputs |
+| 5 | Volume | |
+| 6 | **Sentiment index** | Eq. 7 — `(M_tpos − M_tneg)/(M_tpos + M_tneg)` over that day's news + posts |
+| 7–9 | **%K, %R, RSI** | TA-Lib, window 7 |
+
+`y` = `Close_t`, the same-day closing price.
+
+**Sentiment module:** Jieba word segmentation + HIT stopword list → Word2Vec
+skip-gram → 3-branch 1-D CNN (128 filters each, global max-pool, concatenate, dense,
+dropout) → positive/negative. CNN training labels come from `R_at = O_{a+t} − C_a`.
+**Price module:** LSTM(32) over a 10-step window → attention layer → dense.
+
+### ⚠️⚠️ The label is algebraically recoverable from the inputs
+
+Not an inference — it follows from the paper's own Eq. 1 and Table 2.
+
+`%K = 100·(C − L)/(H − L)` uses the **same day's** close. Rearranged:
+
+```
+C = L + (%K / 100) × (H − L)
+```
+
+`L`, `H` and `%K` are all input features. Checking their own Table 2, row 2019/12/31
+— Open 25.59, High 25.72, Low 25.00, Close 25.30, %K 41.66:
+
+```
+25.00 + 0.4166 × (25.72 − 25.00) = 25.00 + 0.300 = 25.30    ✓ EXACT
+```
+
+`%R = 100·(H − C)/(H − L)` = `100 × 0.42/0.72` = **58.33** ✓ — also exact, also a
+same-day function of the close.
+
+**The model receives three numbers from which the target is computable in closed
+form.** Whatever the reported errors measure, it is not out-of-sample forecasting.
+And structurally it was never a forecast: `High` and `Low` for day *t* are only known
+once day *t* has ended, by which point the close is known too. **Same-day
+interpolation presented as prediction.**
+
+### ⚠️ Four further problems
+
+1. **MAE in price units across stocks spanning 3.4 → 25.7 CNY.** The headline
+   `MAE = 2.386835` is ~9% of price for CITIC and ~68% for BOC — not comparable across
+   the five. Table 6 then compares it to **other papers on other stocks in other
+   periods** (GAN 3.041; S_EMDAM_LSTM 2.396). Currency-unit MAE cannot be compared
+   across datasets at all.
+2. **⚠️ The metric contradiction — third instance in this folder** (Table 5):
+
+   | source | MAE | MSE | RMSE |
+   |---|---|---|---|
+   | transaction only | 2.469 | 7.461 | 2.732 |
+   | **technical only** | 2.459 | **6.865** | **2.620** |
+   | sentiment only | **2.507** ⚠️ worst | 7.705 | 2.776 |
+   | **multi-source** | **2.387** | 7.272 | 2.697 |
+
+   Multi-source wins on MAE and **loses on MSE and RMSE** to technicals-only. Squared
+   error punishes large misses, so adding sentiment shaved typical errors while making
+   the bad ones worse. Noted by the authors, never resolved. **Sentiment-only is the
+   worst of the four single sources** — they say so plainly.
+3. **The "sentiment index" is a distilled return forecast, not an opinion measure.**
+   The CNN's training labels come from `R_at = O_{a+t} − C_a` — *future* price
+   movement. Text is labelled by what the price subsequently did, the CNN learns to
+   predict returns from text, and its output becomes a feature for predicting returns.
+   Circular, and the label construction reaches forward in time.
+4. **One regime, one factor, 400 test rows** — the COVID crash, 80 days, all five
+   stocks falling together, four of them the same Big-4 bank exposure.
+
+Minor: Eq. 7's stated range "between −0.5 and +0.5" is wrong; `(a−b)/(a+b)` spans
+[−1, +1].
+
+### How to use it in the thesis
+
+**Cite — three narrow uses:**
+
+1. **⭐ The non-English pipeline precedent.** The only paper here handling a language
+   that requires **word segmentation** before anything else — Jieba plus a
+   language-specific stopword list, then embeddings. **Vietnamese has the same
+   requirement** (*"học sinh"* is one word written as two syllables), so the VN
+   analogue is **underthesea / VnCoreNLP segmentation** ahead of any encoder. Papers
+   9, 28, 43 and 45 all assume space-delimited English and skip the stage entirely.
+   Cite 46 as the precedent that the pipeline gains a mandatory step.
+2. **The corpus composition matches what a VN build would produce** — **33,500 forum
+   posts to 2,351 news articles, 14:1**. That is the VN situation exactly, where
+   F319/F247-style forum volume dwarfs formal financial journalism. Every other paper
+   here is news-dominant or Twitter-only. The citation to use when arguing for a
+   forum-weighted VN corpus.
+3. **The metric contradiction**, alongside 43 (accuracy↑/F1↓) and 44
+   (accuracy↑/Sharpe↓). Three independent papers, three different metric pairs, the
+   same shape: **the headline metric improves while a second metric degrades, and
+   none of them resolves it.** A strong evidential base for insisting on costed
+   walk-forward on `rel5` over any single error number.
+
+**Do not follow — this one is disqualifying, not merely weak.** The other five have
+design flaws; this has a **provable leak**, demonstrable from its own worked example.
+Nothing downstream of it can be trusted, and the framing was never a forecasting task.
+Two further reasons it would not transfer even if repaired: the target is a **price
+level** where experiment_3 settled on `rel5`, and the universe is five names of which
+four are the same bank factor — the opposite of a cross-section.
+
+**⚠️ Negative to carry forward:** sentiment-only is the *worst* single source here,
+and adding sentiment to technicals made squared error worse. With paper 44's Sharpe
+regression that is now **two independent papers where the text feature degrades the
+more risk-sensitive metric**.
+
+---
+
+## Combined reading — where the six papers leave the thesis
+
+1. **All six predict the wrong target for this thesis** — per-stock or index absolute
+   short-horizon direction (45 the overnight gap, 46 the price level itself). None
    touches cross-sectional relative return.
-2. **On integration, the ordering is 43 ≈ 44 > 28 > 45 > 9.** Sentiment-as-scalar (9)
-   conflates polarity with document volume by construction; text-as-sequence-with-encoder
-   (28) fixes that; **text-as-hierarchy** (43) separates the component that cancels in
-   a cross-section from the one that does not; **44 learns that weighting** instead of
-   grid-searching it, over arbitrary relation types. **45 is a scalar again — but the
-   RIGHT scalar**, signed, engagement-weighted and market-hours aligned. **Take 45's
-   recipe, 43's streams, 28's encoder shape, and 44's two-level weighting; take
-   nothing structural from 9.**
-3. **⚠️ NOT ONE of the five reports a majority-class baseline.** 9 leaks through a
-   random split over overlapping labels; 28 omits the base rate on 187 test samples;
-   43 sits at ~0.52 without stating it; 44 reports 0.51 on a **3-class** target whose
-   dominant class is never quantified; **45 explicitly diagnoses class imbalance as
-   the reason its best model wins and still does not report the rate.** All five
-   reinforce that the protocol already in use here (chronological, purged, costed) is
-   the differentiator.
+2. **On integration, the ordering is 43 ≈ 44 > 28 > 45 > 9 > 46.** Sentiment-as-scalar
+   (9) conflates polarity with document volume by construction;
+   text-as-sequence-with-encoder (28) fixes that; **text-as-hierarchy** (43) separates
+   the component that cancels in a cross-section from the one that does not; **44
+   learns that weighting** instead of grid-searching it, over arbitrary relation types.
+   **45 is a scalar again — but the RIGHT scalar**, signed, engagement-weighted and
+   market-hours aligned. **46 is disqualified** by its leak. **Take 45's recipe, 43's
+   streams, 28's encoder shape, 44's two-level weighting, and 46's segmentation stage;
+   take nothing structural from 9.**
+3. **⚠️ NOT ONE of the six reports a majority-class or naive baseline.** 9 leaks
+   through a random split over overlapping labels; 28 omits the base rate on 187 test
+   samples; 43 sits at ~0.52 without stating it; 44 reports 0.51 on a **3-class**
+   target whose dominant class is never quantified; **45 explicitly diagnoses class
+   imbalance as the reason its best model wins and still does not report the rate**;
+   46 reports currency-unit MAE with no persistence (`Ĉ_t = C_{t−1}`) benchmark. All
+   six reinforce that the protocol already in use here (chronological, purged, costed)
+   is the differentiator.
 4. **⚠️ Accuracy tracks evaluation looseness, inversely: 80.5% and ~0.60 from the two
    papers that use random/k-fold CV on time series (9, 45); ~0.51–0.52 from the two
-   most careful (43, 44).** That ordering across five papers is itself the finding.
-   Read with experiment_3 — where a genuine AUC-0.77 signal still failed to beat
-   Buy&Hold after costs — the expected value of a VN news feature should be set **low**.
-5. **⚠️ Four of the five aggregate text by CALENDAR DAY**, which drops post-close news
+   most careful (43, 44); and 46's flattering MAE comes from a target its own inputs
+   determine exactly.** That ordering across six papers is itself the finding. Read
+   with experiment_3 — where a genuine AUC-0.77 signal still failed to beat Buy&Hold
+   after costs — the expected value of a VN news feature should be set **low**.
+5. **⚠️ Five of the six aggregate text by CALENDAR DAY**, which drops post-close news
    into the same row as that day's close. Only 45 treats the window as a design
    decision and tests a market-hours division. Any implementation here must align to
    VN market hours (**09:00 → 09:00 ICT**) and lag to `d+1`.
@@ -828,11 +971,18 @@ central methodological sin. **Take its recipe, not its results.**
    and finds an 86%-vs-53% domain split between professional prose and laypeople's
    messages. That single step is the cheapest, highest-value thing to copy, and it
    retroactively explains 43's puzzling "general lexicon beats domain-specific" result.
-7. **⭐ Paper 44 supplies the sharpest evidence for point 4, from its own ablation:**
-   adding news raises F1 +18.1%, accuracy +11.5% and daily return +2.3% while
-   **lowering the Sharpe ratio**. An independent team, another market, the same
-   lesson experiment_3 learned — *classification gains need not become risk-adjusted
-   return*. Cite this rather than asserting it.
+7. **⭐ THE METRIC CONTRADICTION APPEARS IN THREE INDEPENDENT PAPERS**, with three
+   different metric pairs, and none of them resolves it:
+   - **44** — news raises F1 +18.1%, accuracy +11.5%, daily return +2.3%, and **lowers
+     the Sharpe ratio**
+   - **43** — WCN-LSTM wins most accuracy cells and **loses most F1 cells**
+   - **46** — multi-source wins MAE and **loses MSE and RMSE**; sentiment-only is the
+     **worst** of its four single sources
+
+   Three teams, three markets, three metric pairs, one shape: *the headline metric
+   improves while a risk- or error-sensitive second metric degrades.* This is
+   experiment_3's conclusion — a better classifier is not a better portfolio — arrived
+   at independently three times. **Cite the triple rather than asserting the claim.**
 8. **The binding constraint is the CORPUS, not the architecture.** Paper 28 quantifies
    what a working text model needs (~10 titles/day/target); experiment_6 delivers
    **0.35**. Paper 43 supplies the fix — back sparse per-ticker news with abundant
@@ -846,7 +996,10 @@ central methodological sin. **Take its recipe, not its results.**
    edge source; sector membership and ownership links are. And experiment 1.8's
    cross-sectional rank features are already a zero-cost degenerate GNN.
 10. **If text becomes a thesis chapter, the shape is now fully specified** — and no
-    single paper has it, so it is assembled across four:
+    single paper has it, so it is assembled across five:
+    - **segmentation** — VN word segmentation (underthesea / VnCoreNLP) + a VN
+      stopword list **before any encoder**; a mandatory stage the English-only papers
+      do not have *(46)*
     - **scorer** — a VN transformer sentence encoder, **validated on labelled VN
       financial text first** *(45)*, separately for prose vs forum registers
     - **per-document score** — signed and normalised, engagement-weighted *(45)*
@@ -883,3 +1036,8 @@ central methodological sin. **Take its recipe, not its results.**
   — Xiao & Ihnaini 2023, PeerJ Comput. Sci. (open access, data supplied). 18 pp.
   *VADER-on-tweets + FinBERT-on-news, market-hours aggregation window, holiday decay;
   **cite the recipe** — the only paper here that validates its scorer first.*
+- `46. Stock price prediction based on multiple data sources and sentiment analysis.pdf`
+  — Wu, Liu, Zou & Weng 2021, Connection Science (Taylor & Francis). 20 pp.
+  *S_I_LSTM, Jieba→Word2Vec→CNN sentiment + Att-LSTM price regression on 5 Shanghai
+  A-shares. **⚠️ Provable label leak** (`C = L + %K/100 × (H − L)`); cite only the
+  CJK segmentation stage, the 14:1 forum-to-news corpus, and the MAE/MSE contradiction.*
