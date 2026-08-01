@@ -394,7 +394,7 @@
     "data_preprocessor/data_quality_gold/economy": true,
     "data_preprocessor/data_quality_gold/forex": true,
     "data_preprocessor/data_quality_gold/funds": true,
-    "// data_preprocessor/data_quality_gold/indices": "RETIRED 2026-08-01 - gold.indices duplicated gold.stock_market (same 6 VN indices, 27 measures vs OHLCV). Leaf and method removed; silver.indices and bronze.indices are untouched",
+    "// data_preprocessor/data_quality_gold/indices": "RETIRED 2026-08-01 - gold.indices duplicated gold.stock_market (same 6 VN indices, 27 measures vs OHLCV). Leaf and method removed, table dropped; silver.indices and bronze.trading_view_indices are untouched",
     "data_preprocessor/data_quality_gold/stocks": true,
     "data_preprocessor/data_quality_unified": true
 }

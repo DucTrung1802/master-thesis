@@ -4414,9 +4414,10 @@ class DataPreprocessor:
     # TradingView index series (24,095 x 22, the generic single-series feature build)
     # and it duplicated `gold.stock_market`, which covers the same six Vietnamese
     # indices from CafeF with 27 measures apiece instead of OHLCV. `silver.indices` and
-    # `bronze.indices` are untouched — only the gold table is retired, so nothing
-    # upstream loses its history. The existing `gold_schema.indices` table is NOT
-    # dropped by this change; it simply stops being rebuilt.
+    # `bronze.trading_view_indices` are untouched — only the gold table is retired, so
+    # nothing upstream loses its history and restoring it is one line. The
+    # `gold_schema.indices` table was dropped the same day, so the schema matches the
+    # code.
 
     # endregion Helper functions
 

@@ -733,10 +733,11 @@ DTO helpers come from
   TradingView index series through the generic single-series feature build (24,095 × 22
   — `value` + returns/vol/rolling) and it **duplicated `gold.stock_market`**, which
   carries the same six Vietnamese indices from CafeF at 27 measures apiece instead of
-  one. `bronze.indices` and `silver.indices` are untouched: only the gold table is
-  retired, so no history is lost and the decision is reversible in one line.
-  ⚠️ The existing `gold_schema.indices` table is **not dropped** by the code change —
-  it simply stops being rebuilt, and is still on disk until someone drops it.
+  one. `bronze.trading_view_indices` and `silver.indices` are untouched: only the gold
+  table is retired, so no history is lost and the decision is reversible in one line.
+  The `gold_schema.indices` table was **dropped** the same day (24,095 rows, 6 tickers,
+  2000-07-28 → 2026-06-09, 4064 kB), so the schema and the code agree. Restoring it is
+  `_ingest_gold_table("indices")` plus its leaf — the source data never went anywhere.
 - ⚠️ **`_ingest_gold_stocks` IS STALE AND WILL RAISE.** `gold.stocks` in the database
   was built before the 2026-07-19 rewrite of `silver.stocks_basic` and still carries
   that era's columns (`close`, `volume`, `f_buy_vol`, `own_pct` — 935 of them).

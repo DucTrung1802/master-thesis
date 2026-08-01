@@ -699,7 +699,8 @@ either.
 
 ### Gold housekeeping — what the schema holds, and what it is allowed to hold
 
-Eight tables exist in `gold_schema`; **seven** are things the code can still build.
+**Seven tables**, and every one of them is something the code can still build — the
+schema and the pipeline agree, which is the point of the housekeeping.
 
 | table | shape | built by | state |
 |---|---|---|---|
@@ -710,7 +711,7 @@ Eight tables exist in `gold_schema`; **seven** are things the code can still bui
 | `forex` | 1,324,940 × 16 | leaf | unknown age |
 | `funds` | 18,662 × 22 | leaf | unknown age |
 | `stocks` | 2,678,167 × 935 | leaf | ⚠️ **stale AND raises** |
-| ~~`indices`~~ | 24,095 × 22 | — | ⚠️ **RETIRED 2026-08-01** |
+| ~~`indices`~~ | ~~24,095 × 22~~ | — | **RETIRED + DROPPED 2026-08-01** |
 
 ⚠️ **`gold.indices` is retired because it was a duplicate.** It was `silver.indices`
 (the TradingView index series) through the generic single-series feature build —
@@ -719,13 +720,14 @@ the same six Vietnamese indices from CafeF at **27 measures apiece** (OHLC, orde
 foreign flow, prop trading, matched/negotiated split) instead of one. Two gold tables
 for one asset is one too many — the same call made for `economy` vs `economy_panel` on
 2026-08-01. `_ingest_gold_indices`, the `data_quality_gold/indices` leaf and the switch
-key are all gone; `bronze.indices` and `silver.indices` are **untouched**, so no history
-is lost and the reversal is one line.
+key are all gone, and the table itself was **dropped** the same day (24,095 rows, 6
+tickers, 2000-07-28 → 2026-06-09, 4064 kB).
 
-⚠️ **The `gold_schema.indices` TABLE is still on disk.** Removing it from the code stops
-it being rebuilt; it does not drop it. That is deliberate — dropping 24,095 rows is a
-data decision, not a code cleanup — but it means the schema will read one table richer
-than the pipeline until someone runs `DROP TABLE gold_schema.indices`.
+**Nothing upstream was touched** — `bronze_schema.trading_view_indices` and
+`silver_schema.indices` (24,095 rows) are both intact, so no history is lost and the
+reversal is one line (`_ingest_gold_table("indices")` + its leaf). ⚠️ Note the bronze
+table is `trading_view_indices`, not `indices`: silver renames it, and only silver and
+gold used the short name.
 
 ⚠️ **The two per-stock panels share an identical 888-column TA block** — 337 overlap
 studies, 293 momentum, 90 cycle, 60 price transform, 58 volatility, 50 volume, from 43
