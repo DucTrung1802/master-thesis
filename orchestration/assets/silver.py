@@ -1,7 +1,7 @@
 # orchestration\assets\silver.py
 """The SILVER layer — `bronze_schema` → `silver_schema`.
 
-Three assets. Two are a FACT table plus its DIMENSION:
+Seven assets. Two are a FACT table plus its DIMENSION:
 
 * `silver/economy` — long, one row per series per date, PK `(exchange, ticker, date)`.
   The same grain as `bonds`/`forex`/`funds`/`indices`, and the grain
@@ -29,6 +29,21 @@ folded into one per-entity-per-day panel:
 * `silver/stocks_basic` — the PER-STOCK equivalent: **six** bronze tables, four on the
   day key with `cafef_price` as the spine, plus `simplize_industry × gics` on
   `(exchange, ticker)` for the GICS tree.
+
+The last three are the FINANCIALS chain, and it is the only silver→silver chain in the
+layer — each step reads the table the one before it wrote:
+
+```
+bronze/cafef_financials ─► silver/cafef_financials_bank        (quarterly, 180 cols)
+                                     └─┬─► silver/stocks_basic_financials_bank  (daily)
+silver/stocks_basic ─────────────────┘         └─► …_fa  (+ 26 indicators) ─► gold
+```
+
+⚠️ **`publish_date` is what makes the daily join honest.** A quarter's figures are
+attached to a price day only from the day they were PUBLISHED (`publish_date <= date`),
+never from the period end — a period-end join would hand a model VCB's Q1 balance sheet
+in March, weeks before it existed. The asset asserts it: it counts rows with
+`publish_date > date` and raises if any exist.
 
 All are thin wrappers — the logic lives in `DataPreprocessor`, so `main.py`, a notebook
 and Dagster all build the same tables (`orchestration/CONTEXT.md` §3).
@@ -260,9 +275,192 @@ def silver_stocks_basic(
     )
 
 
+@asset(
+    name="cafef_financials_bank",
+    key_prefix=["silver"],
+    group_name="silver",
+    compute_kind="postgres",
+    deps=[AssetKey(["bronze", "cafef_financials"])],
+    description=(
+        "The bronze cafef_financials_<template>_<report> STATEMENT tables carried up "
+        "one-to-one, then the three `bank` reports OUTER-joined on "
+        "(exchange, ticker, year, quarter) into silver.cafef_financials_bank — 180 "
+        "columns, report-prefixed, plus ONE publish_date joined from "
+        "bronze.cafef_financial_reports. ⚠️ The join is OUTER because a quarter can "
+        "have a balance sheet and no cash flow."
+    ),
+)
+def silver_cafef_financials_bank(
+    context: AssetExecutionContext, preprocessor: PreprocessorResource
+) -> MaterializeResult:
+    with preprocessor.session(schema="silver_schema") as prep:
+        # Both halves of main.py's `financials` leaf, in order: the per-report
+        # carry-ups first, then the wide per-template join that reads them.
+        prep._ingest_silver_cafef_financials()
+        prep._ingest_silver_cafef_financials_bank()
+
+        with prep._database_driver._cursor_ctx() as cur:
+            cur.execute(
+                "SELECT COUNT(*), COUNT(DISTINCT ticker), COUNT(publish_date) "
+                "FROM silver_schema.cafef_financials_bank"
+            )
+            rows, tickers, dated = cur.fetchone()
+            cur.execute(
+                "SELECT COUNT(*) FROM information_schema.columns WHERE "
+                "table_schema = 'silver_schema' AND table_name = 'cafef_financials_bank'"
+            )
+            columns = int(cur.fetchone()[0])
+            cur.execute(
+                "SELECT MIN(year || '-Q' || quarter), MAX(year || '-Q' || quarter) "
+                "FROM silver_schema.cafef_financials_bank"
+            )
+            first, last = cur.fetchone()
+
+    context.log.info(
+        f"silver.cafef_financials_bank: {rows} quarters × {columns} columns "
+        f"({dated} with a publish_date)"
+    )
+    return MaterializeResult(
+        metadata={
+            "rows": int(rows),
+            "columns": columns,
+            "tickers": int(tickers),
+            "quarters with publish_date": int(dated),
+            "period_range": MetadataValue.text(f"{first} → {last}"),
+            "table": MetadataValue.text("silver_schema.cafef_financials_bank"),
+        }
+    )
+
+
+@asset(
+    name="stocks_basic_financials_bank",
+    key_prefix=["silver"],
+    group_name="silver",
+    compute_kind="postgres",
+    deps=[
+        AssetKey(["silver", "stocks_basic"]),
+        AssetKey(["silver", "cafef_financials_bank"]),
+    ],
+    description=(
+        "silver.stocks_basic (DAILY) × silver.cafef_financials_bank (QUARTERLY), "
+        "as-of on publish_date — every price day carries the most recently PUBLISHED "
+        "quarter, so a figure steps on its release date and holds flat. PK "
+        "(exchange, ticker, date). ⚠️ INNER scope: only tickers that have financials, "
+        "only days on/after their first publish."
+    ),
+)
+def silver_stocks_basic_financials_bank(
+    context: AssetExecutionContext, preprocessor: PreprocessorResource
+) -> MaterializeResult:
+    with preprocessor.session(schema="silver_schema") as prep:
+        prep._ingest_silver_stocks_basic_financials_bank()
+
+        with prep._database_driver._cursor_ctx() as cur:
+            cur.execute(
+                "SELECT COUNT(*), COUNT(DISTINCT ticker), MIN(date), MAX(date) "
+                "FROM silver_schema.stocks_basic_financials_bank"
+            )
+            rows, tickers, first, last = cur.fetchone()
+            cur.execute(
+                "SELECT COUNT(*) FROM information_schema.columns WHERE "
+                "table_schema = 'silver_schema' AND "
+                "table_name = 'stocks_basic_financials_bank'"
+            )
+            columns = int(cur.fetchone()[0])
+            # The look-ahead invariant: no day may carry a quarter published after it.
+            cur.execute(
+                "SELECT COUNT(*) FROM silver_schema.stocks_basic_financials_bank "
+                "WHERE publish_date > date"
+            )
+            look_ahead = int(cur.fetchone()[0])
+
+    if look_ahead:
+        raise ValueError(
+            f"{look_ahead} rows have publish_date > date — the as-of join leaked "
+            f"future financials into the panel."
+        )
+
+    context.log.info(
+        f"silver.stocks_basic_financials_bank: {rows} stock-days × {columns} columns"
+    )
+    return MaterializeResult(
+        metadata={
+            "rows": int(rows),
+            "columns": columns,
+            "tickers": int(tickers),
+            "rows_with_look_ahead": look_ahead,
+            "date_range": MetadataValue.text(f"{first} → {last}"),
+            "table": MetadataValue.text("silver_schema.stocks_basic_financials_bank"),
+        }
+    )
+
+
+@asset(
+    name="stocks_basic_financials_bank_fa",
+    key_prefix=["silver"],
+    group_name="silver",
+    compute_kind="postgres",
+    deps=[AssetKey(["silver", "stocks_basic_financials_bank"])],
+    description=(
+        "silver.stocks_basic_financials_bank + the 26 fundamental indicators "
+        "(EPS/BVPS/ROE/ROA/NIM/LDR/CIR, the YoY growths, and the price-dependent "
+        "P/E, P/B, P/S, market cap, earnings yield). Keeps all source columns. "
+        "⚠️ No re-join: the as-of merge is already baked into the source, so the "
+        "indicators inherit its zero look-ahead."
+    ),
+)
+def silver_stocks_basic_financials_bank_fa(
+    context: AssetExecutionContext, preprocessor: PreprocessorResource
+) -> MaterializeResult:
+    with preprocessor.session(schema="silver_schema") as prep:
+        prep._ingest_silver_stocks_basic_financials_bank_fa()
+
+        with prep._database_driver._cursor_ctx() as cur:
+            cur.execute(
+                "SELECT COUNT(*), COUNT(DISTINCT ticker), MIN(date), MAX(date) "
+                "FROM silver_schema.stocks_basic_financials_bank_fa"
+            )
+            rows, tickers, first, last = cur.fetchone()
+            cur.execute(
+                "SELECT COUNT(*) FROM information_schema.columns WHERE "
+                "table_schema = 'silver_schema' AND "
+                "table_name = 'stocks_basic_financials_bank_fa'"
+            )
+            columns = int(cur.fetchone()[0])
+            # Coverage of the indicators that need a full 4-quarter TTM window vs the
+            # ones that need only the current balance sheet.
+            cur.execute(
+                "SELECT COUNT(pe_ttm), COUNT(pb), COUNT(roe), COUNT(nim) "
+                "FROM silver_schema.stocks_basic_financials_bank_fa"
+            )
+            pe, pb, roe, nim = (int(x) for x in cur.fetchone())
+
+    context.log.info(
+        f"silver.stocks_basic_financials_bank_fa: {rows} stock-days × {columns} columns"
+    )
+    return MaterializeResult(
+        metadata={
+            "rows": int(rows),
+            "columns": columns,
+            "tickers": int(tickers),
+            "rows with pe_ttm": pe,
+            "rows with pb": pb,
+            "rows with roe": roe,
+            "rows with nim": nim,
+            "date_range": MetadataValue.text(f"{first} → {last}"),
+            "table": MetadataValue.text(
+                "silver_schema.stocks_basic_financials_bank_fa"
+            ),
+        }
+    )
+
+
 assets: List[Callable] = [
     silver_economy,
     silver_economy_series,
     silver_stock_market,
     silver_stocks_basic,
+    silver_cafef_financials_bank,
+    silver_stocks_basic_financials_bank,
+    silver_stocks_basic_financials_bank_fa,
 ]

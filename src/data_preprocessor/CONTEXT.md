@@ -1,5 +1,27 @@
 # Context — `src/data_preprocessor` (bronze → silver → gold ETL)
 
+> # 🗄️ ARCHIVED (2026-08-01) — this is no longer how the pipeline is RUN.
+>
+> **[`orchestration/`](../../orchestration/CONTEXT.md) is the entry point now.** Point
+> new work there, read this file for how a table is BUILT.
+>
+> ⚠️ **Archived does not mean unused, and the directory must not be moved or deleted.**
+> Every one of the 49 Dagster assets is a thin wrapper over an `_ingest_*` method in
+> [data_preprocessor.py](data_preprocessor.py) — `orchestration/resources.py:23` imports
+> `DataPreprocessor` directly. All of the transformation logic still lives here and is
+> still executed on every materialisation. What is archived is the way it is DRIVEN:
+>
+> | archived — do not add to it | live — still the implementation |
+> |---|---|
+> | `ingest_bronze_data()` / `ingest_silver_data()` / `ingest_gold_data()` — the three `main.py` entry points and their leaf lists | every `_ingest_bronze_*` / `_ingest_silver_*` / `_ingest_gold_*` method |
+> | the `data_preprocessor/data_quality_*` keys in `src/switch_config.json` as a RUN PLAN | every `_helper_*` (the toolkit, the transform layers, the TA battery) |
+> | `src/main.py` as the way to run a layer | the `PostgreSQLDriver` underneath |
+>
+> Selection in Dagster (`--select`) is the run plan; the switch leaves are dead weight
+> awaiting phase 5 of the migration. A leaf removed from a list below therefore stops
+> `main.py` building that table and says nothing about the assets — which is exactly how
+> gold `indices` was retired (§4-gold).
+
 > Handoff notes for a new session. Describes the medallion ETL that turns the raw
 > CSV/xlsx written by `src/web_scraper` (under `raw_data/<source>/`) into three
 > PostgreSQL schemas — **bronze → silver → gold** — inside one database
@@ -626,18 +648,105 @@ DTO helpers come from
   - **Verified**: 565,171 observations in range, **0 missing from the panel**, 0
     relative-error outliers, staleness confirmed on a dead series.
 
+- **`stocks_financials_bank_fa` — the per-stock FEATURE panel (2026-08-01).**
+  `silver.stocks_basic_financials_bank_fa` → `gold.stocks_financials_bank_fa`
+  (`_ingest_gold_stocks_financials_bank_fa`): every source column plus the standard
+  feature layers and the full per-stock TA battery. **8,265 stock-days × 1,150
+  columns** (242 in, 908 added), PK `(exchange, ticker, date)` unique, **VCB 4,235
+  (2009-06-30→2026-06-25) + ACB 4,030 (2010-04-20→2026-06-25)**, 65 MB. Same grain and
+  same row count as its source — this adds columns, never rows (the asset raises if the
+  count moves). It is the one table a model can read end to end: price, flow, GICS,
+  fundamentals, technicals.
+  - ⚠️ **THE SOURCE HAS NO USABLE OHLC SET, AND USING IT AS-IS WOULD BE WRONG BOTH
+    WAYS.** `open`/`high`/`low` are RAW (they track `close_raw`); only the close comes
+    adjusted, as `close_adjust`. VCB on 2009-06-30 is the whole problem in one row:
+    `open`=`high`=`low`=`close_raw`=60,000 while `close_adjust`=9,130. TA on
+    `close_adjust` with the source `high`/`low` puts two price scales inside one
+    indicator (ATR, Stochastic, MFI, Williams %R, every price transform); TA on
+    `close_raw` keeps one scale but re-introduces every split as a fake overnight
+    crash. `_helper_adjust_ohlc` rebuilds the adjusted set with the standard factor
+    `close_adjust / close_raw` applied to that same day's open/high/low.
+  - ⚠️ **Gold's `open`/`high`/`low` are therefore NOT silver's** — same names,
+    adjusted values, because that is what TA-Lib's defaults, `add_intraday_range` and
+    `_helper_build_feature_layers` all read. The source values are kept beside them as
+    `open_raw`/`high_raw`/`low_raw` (+ the untouched `close_raw`); `close` is the
+    adjusted close and `close_adjust` is dropped as an exact duplicate of it.
+  - ⚠️ **DOUBLE PRECISION for the carried financial lines**, against gold's usual
+    REAL: VND figures reach ~1e15-1e17 (VCB's total assets ~2.6e15) where REAL's ~7
+    significant digits round to the nearest ~1e8-1e10. The ~900-column computed
+    feature block stays REAL — at 8 bytes each it is exactly what the ~8160-byte row
+    limit cannot take. Row width lands at ~5.2 kB; 220 double / 609 real / 207 bool /
+    91 bigint / 20 varchar / 2 date.
+  - ⚠️ **Pass-through columns must be NAMED.** `_ingest_gold_table` coerces everything
+    outside `{keys, GICS}` with `pd.to_numeric(errors="coerce")`, which turns a text
+    or date column into a column of NULLs **without raising** — `publish_date` and the
+    nine per-report `template`/`period`/`source` columns would have vanished silently.
+    They are derived from the source's `information_schema` at the CALL site, never
+    inside the generic builder: `silver.bonds.value` is a real number stored as
+    VARCHAR, and that one must still be coerced.
+  - **Verified**: 8,265 rows = the source's, keys unique; **0 mismatching cells** over
+    163 financial columns and over all 26 fundamental indicators (the DOUBLE PRECISION
+    round-trip is exact); `close` = `close_adjust` on every row and `high` =
+    `high_raw × factor` on every row; **0 rows with `publish_date > date`**; SMA-50
+    reproduces to 0.0 and RSI-14 to 6.8e-6 against an independent pandas computation
+    (that residual is float32 storage, as designed). 144 of the 145 rows where `close`
+    sits outside `[low, high]` are float noise of **7e-12 VND** (0 beyond 1e-9
+    relative).
+  - ⚠️ **The 145th is real, and it comes from CafeF.** ACB 2018-07-31 has
+    `high` 35,800 < `low` 36,500 in **`bronze.cafef_price`** — one of **262 such rows
+    in the 2.4 M-row bronze table**, carried faithfully through silver. The adjustment
+    multiplies both legs by the same positive factor, so it preserves the inversion
+    rather than causing it; the visible symptom in gold is `range_hl` going negative
+    (min −0.0197). Nothing here should "fix" it — a bronze-level data-quality screen
+    is the right place, and 262 rows is worth one.
+
 - All routed through **`_ingest_gold_table`**: read the silver table, coerce numeric
-  columns to float (GICS class columns passed through untouched), apply
+  columns to float (GICS class columns and any named `passthrough_cols` passed through
+  untouched), optionally reshape via `prepare_fn`, apply
   `_helper_build_feature_layers` (returns / intraday range / return-vol / rolling
   stats — chosen by OHLC vs single `value`) **plus** any table-specific TA layers,
-  then **checkpoint-save** in 100k-row chunks via `COPY` (`use_copy=True`).
+  then **drop the gold table** and **checkpoint-save** in 100k-row chunks via `COPY`
+  (`use_copy=True`).
+- ⚠️ **The drop is new (2026-08-01) and it is what makes a gold table RE-RUNNABLE.**
+  The COPY path assumes an empty table, so a second run over an existing gold table
+  died on the primary key — `duplicate key value violates unique constraint …
+  Key (exchange, ticker, date)=(HOSE, VCB, 2009-06-30) already exists` — which is
+  exactly what re-materialising an asset does. A gold table is a pure function of its
+  silver source, so replacing it is the correct semantic (and lets the column set move
+  when the feature list does). `_ingest_gold_economy` / `_ingest_gold_stock_market`
+  already dropped; the generic builder was the one path where "drop the gold table
+  first" stayed a manual instruction in this file. It happens as LATE as possible, so
+  a failure earlier in the build leaves the old table intact.
 - **All float columns are stored as `REAL`** (4-byte) in gold to stay under
-  PostgreSQL's 8160-byte row limit given the very wide TA feature set.
-- **`_ingest_gold_stocks`** adds the full **TA-Lib battery** (~40 indicators:
-  overlap studies, momentum, volume, cycle, price-transform, volatility) + three
-  microstructure features (foreign buy pressure, foreign net-val ratio, negotiated
-  vol ratio). TA functions come from `ta.ta_functions` and are mapped by
-  `_build_transform_func_map()` (module-level so it survives process-pool re-import).
+  PostgreSQL's 8160-byte row limit given the very wide TA feature set — except the
+  columns a caller names in `exact_float_cols`, which become DOUBLE PRECISION.
+- **`_helper_stock_ta_layers(volume_col)`** is the full **TA-Lib battery** (~40
+  indicators: overlap studies, momentum, volume, cycle, price-transform, volatility) +
+  three microstructure features (foreign buy pressure, foreign net-val ratio,
+  negotiated vol ratio), shared by `_ingest_gold_stocks` and
+  `_ingest_gold_stocks_financials_bank_fa` so the two cannot drift into different
+  feature sets while looking identical. TA functions come from `ta.ta_functions` and
+  are mapped by `_build_transform_func_map()` (module-level so it survives
+  process-pool re-import).
+- ⚠️ **`gold.indices` IS RETIRED (2026-08-01).** `_ingest_gold_indices`, its
+  `data_quality_gold/indices` leaf and its switch key are all gone. It was the
+  TradingView index series through the generic single-series feature build (24,095 × 22
+  — `value` + returns/vol/rolling) and it **duplicated `gold.stock_market`**, which
+  carries the same six Vietnamese indices from CafeF at 27 measures apiece instead of
+  one. `bronze.indices` and `silver.indices` are untouched: only the gold table is
+  retired, so no history is lost and the decision is reversible in one line.
+  ⚠️ The existing `gold_schema.indices` table is **not dropped** by the code change —
+  it simply stops being rebuilt, and is still on disk until someone drops it.
+- ⚠️ **`_ingest_gold_stocks` IS STALE AND WILL RAISE.** `gold.stocks` in the database
+  was built before the 2026-07-19 rewrite of `silver.stocks_basic` and still carries
+  that era's columns (`close`, `volume`, `f_buy_vol`, `own_pct` — 935 of them).
+  Today's source has neither `close` nor `volume`: it has `close_raw`/`close_adjust`
+  and `volume_matched`/`volume_negotiated`, so the first TA layer dies with
+  `ValueError: Column 'close' not found`. The fix is the one the `_fa` table already
+  applies — `prepare_fn=self._helper_adjust_ohlc` plus `volume_col="volume_matched"` —
+  and it is deliberately NOT switched on: it re-defines `gold.stocks`' `open`/`high`/
+  `low` as adjusted and commits to a ~2.4 M-row × ~900-column rebuild, which is a
+  decision to take on its own.
 
 ## 5. How it's driven — SwitchHandler + `src/switch_config.json`
 
@@ -783,8 +892,11 @@ that log is the only record of what actually ran.
   floats to avoid PostgreSQL REAL rejections; the 8160-byte row limit is the reason
   the stocks TA panel must stay `REAL`.
 - **Gold `COPY` path assumes a fresh/empty table** (plain insert, no conflict
-  handling). Re-running gold on an existing table will duplicate/conflict — drop the
-  gold table first if re-ingesting.
+  handling). **All three gold builders now drop the table themselves**
+  (`_ingest_gold_table` since 2026-08-01, `_ingest_gold_economy` /
+  `_ingest_gold_stock_market` from the start), so re-ingesting is a rebuild rather
+  than a duplicate-key crash — but the assumption itself still holds: never point a
+  new `use_copy=True` writer at a populated table without dropping it first.
 - **`_helper_connect_to_database` (per-quality DBs) is not the live path** — the
   three entry points connect to `"postgres"` and `create_database(DATABASE_MAIN_V2)`,
   putting all three schemas in **one** database rather than separate bronze/silver/gold
@@ -854,13 +966,21 @@ that log is the only record of what actually ran.
   cols of both, no indicators; **HOSE:VCB only, 4,235 rows** (2009-06-30…2026-06-25) — and
   **`silver.stocks_basic_financials_bank_fa`** — that table + the 26-indicator fundamental
   catalog (242 cols, same 4,235 rows).
+  Added 2026-08-01: **`gold.stocks_financials_bank_fa`** — that table + the standard
+  feature layers + the full TA battery, **4,235 rows × 1,150 cols** (see the gold
+  section above).
   **`gold.stocks` is still
-  stale** — it reflects the old canonical silver stocks schema (Simplize-primary OHLC
-  spine), which the rewrite has now replaced, so gold will not find several columns it
-  expects. `_ingest_gold_stocks` now reads **`silver.stocks_basic`** (writes
-  `gold.stocks`), so re-run `ingest_gold_data()` (drop the gold tables first — the gold
-  `COPY` path assumes empty) and expect `_ingest_gold_stocks` /
-  `_helper_build_feature_layers` to need updating for the CafeF-only column set (no
-  single `close` / Simplize OHLC spine; `close_adjust` is the adjusted close).
+  stale**, and 2026-08-01 pinned down exactly how: it reflects the old canonical silver
+  stocks schema (Simplize-primary OHLC spine, columns `close`/`volume`/`f_buy_vol`/
+  `own_pct`), which the rewrite replaced. `_ingest_gold_stocks` reads
+  **`silver.stocks_basic`** and now raises `ValueError: Column 'close' not found` on
+  its first TA layer, because that source has `close_raw`/`close_adjust` and
+  `volume_matched`/`volume_negotiated` instead. **The fix already exists and is
+  proven** — `prepare_fn=self._helper_adjust_ohlc` (rebuilds an adjusted OHLC set from
+  the `close_adjust / close_raw` factor) plus `volume_col="volume_matched"`, both
+  running in `_ingest_gold_stocks_financials_bank_fa`. Switching it on is a ~2.4 M-row
+  × ~900-column rebuild and re-defines `gold.stocks`' `open`/`high`/`low` as adjusted,
+  so it is left as a deliberate decision rather than a side effect. Drop the gold table
+  first — the gold `COPY` path assumes empty.
 - Regenerate this whole layer with a bronze drop + re-ingest (schema is fully
   derivable from `raw_data/`); counts will grow as the scrapers add history/tickers.

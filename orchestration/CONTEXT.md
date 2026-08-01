@@ -1,10 +1,24 @@
 # Context — `orchestration` (Dagster migration of `src/main.py`)
 
+> # ▶️ THIS IS THE ENTRY POINT. Work happens here.
+>
 > Handoff notes. **Status (2026-08-01): the LANDING layer and the whole BRONZE layer are
-> assets and have both been materialised green; silver has 4 and gold 2.** 45 assets.
-> `src/main.py` is untouched and still runs the pipeline the old way. What is left is
-> silver (11 of 15) and gold (4 of 6) — see §4. Verify anything before acting on it: the code
-> and `src/switch_config.json` are still the sources of truth.
+> assets and have both been materialised green; silver has 7 and gold 3.** 49 assets.
+> What is left is silver (8 of 15 leaves) and gold (4 of 7 tables) — see §4. Verify
+> anything before acting on it: the code is the source of truth.
+>
+> **[`src/data_preprocessor`](../src/data_preprocessor/CONTEXT.md) is ARCHIVED as of
+> 2026-08-01** — as a *way to run things*. It is still the implementation library every
+> asset wraps (`resources.py:23` imports `DataPreprocessor`, and all the transform logic
+> lives there), so the directory must not be moved or deleted; what is retired is
+> `main.py` + the three `ingest_*_data()` entry points + `switch_config.json` as a run
+> plan. **Selection is the run plan now.** Read that file for how a table is BUILT; add
+> new pipeline steps as assets HERE.
+>
+> ⚠️ `src/main.py` still exists and still works — nothing was ripped out from under it.
+> But it is no longer maintained as a run path: two of its gold leaves (`stocks`,
+> `indices`) already fail or are gone (§"Gold housekeeping"), and nothing has been done
+> about it, because the assets are what run.
 
 ## 1. Why this is worth doing
 
@@ -32,10 +46,10 @@ PARTITIONS of two assets, not 320 assets. The remaining 61 map to ~55-65 assets.
 
 ## 2. What exists — LANDING + BRONZE complete, silver started (2026-08-01)
 
-**45 assets: 19 landing + 20 bronze + 4 silver + 2 gold.** Every scraper in `main.py` lands to
+**49 assets: 19 landing + 20 bronze + 7 silver + 3 gold.** Every scraper in `main.py` lands to
 `raw_data/` as an asset ([assets/scrape.py](assets/scrape.py)); every bronze ingest leaf
 is an asset ([assets/bronze.py](assets/bronze.py), 20 leaves → 25 tables); silver has
-four ([assets/silver.py](assets/silver.py)) and gold two ([assets/gold.py](assets/gold.py)).
+seven ([assets/silver.py](assets/silver.py)) and gold three ([assets/gold.py](assets/gold.py)).
 They are separate modules on purpose: the
 landing layer is correct-on-disk and re-runnable with no database at all.
 
@@ -62,6 +76,15 @@ raw/trading_view_data[economy] ─► bronze/trading_view_economy ─┬─► s
 raw/cafef_index_{price,order_stats,foreign,prop_trading}
         └─► bronze/cafef_index_* (x4) ─► silver/stock_market ─► gold/stock_market
                                          (4 tabs joined)        (wide, unfilled)
+
+raw/cafef_financials[t] ─► bronze/cafef_financials ─► silver/cafef_financials_bank
+                                                              │  (quarterly, 180 cols)
+   silver/stocks_basic ──────────────────────────────────┐    │
+                                                         ▼    ▼
+                              silver/stocks_basic_financials_bank   (daily, as-of)
+                                              └─► …_fa   (+26 indicators)
+                                                    └─► gold/stocks_financials_bank_fa
+                                                            (+ the TA battery)
 ```
 
 | group | assets | partitions |
@@ -73,8 +96,8 @@ raw/cafef_index_{price,order_stats,foreign,prop_trading}
 | `simplize` | stocks, industry | — |
 | `gics` | structure | — |
 | `bronze` | **all 20 ingest leaves** (25 tables) | — |
-| `silver` | `economy` (long fact), `economy_series` (dimension), `stock_market` (4 index tabs), `stocks_basic` (6 sources) | — |
-| `gold` | `economy` (wide, as-of), `stock_market` (wide, unfilled) | — |
+| `silver` | `economy` (long fact), `economy_series` (dimension), `stock_market` (4 index tabs), `stocks_basic` (6 sources), `cafef_financials_bank` (quarterly), `stocks_basic_financials_bank` (as-of daily), `…_fa` (+26 indicators) | — |
+| `gold` | `economy` (wide, as-of), `stock_market` (wide, unfilled), `stocks_financials_bank_fa` (feature panel) | — |
 
 ### ⚠️ The edges, read out of the code (2026-07-31 correction)
 
@@ -255,7 +278,7 @@ split across the two modules.
 
 | claim | how it was checked | result |
 |---|---|---|
-| the flat `src/` layout can be imported by Dagster | `dagster definitions validate` | passes, **45 assets** (19 landing + 20 bronze + 4 silver + 2 gold), all code locations OK |
+| the flat `src/` layout can be imported by Dagster | `dagster definitions validate` | passes, **49 assets** (19 landing + 20 bronze + 7 silver + 3 gold), all code locations OK |
 | partitions resolve | reading the definitions back | TV **9**, pdfs **100**, financials **2** (`HOSE_VCB`, `HOSE_ACB`) |
 | the index scrape assets run | `--select "group:cafef_index"` | 4/4 green |
 | the TradingView path works incl. `build_unblocked` | `--select "raw/trading_view_collected_links"` | green, rewrote `all_links_2026-06-26.csv` (313 KB) |
@@ -390,7 +413,7 @@ UI, from `*`, and from every selection. Reserve this for "must never load in thi
 "raw/cafef_news": false
 ```
 
-All 45 keys are listed in the file as a menu, grouped by source, with `//` comment keys
+All 49 keys are listed in the file as a menu, grouped by source, with `//` comment keys
 marking the expensive ones (same comment convention as `switch_config.json`).
 `true` or **absent** = loaded, so a newly added asset is on by default.
 
@@ -401,7 +424,7 @@ Behaviour, all verified:
 | one key `false` | that asset not loaded (45 → 44); `//` comment keys ignored |
 | a key matching no asset | **raises**, listing the valid keys |
 | malformed JSON | **raises** — never read as "disable everything" |
-| file absent | 45 assets — absent means "no opinion", not "all off" |
+| file absent | 49 assets — absent means "no opinion", not "all off" |
 | file with a **BOM** | handled (`utf-8-sig`) |
 
 The last three are direct lessons from `switch_config.json`:
@@ -592,6 +615,124 @@ same reason; if those stock-days matter here, it is the same one-word change.
 plus `simplize_industry × gics` on `(exchange, ticker)` for the GICS tree — so the asset
 declares six bronze deps, not four.
 
+### The FINANCIALS chain — 3 silver assets + 1 gold (2026-08-01)
+
+```powershell
+dagster asset materialize -f orchestration/definitions.py --select "gold/stocks_financials_bank_fa"
+dagster asset materialize -f orchestration/definitions.py --select "+gold/stocks_financials_bank_fa"   # incl. upstream
+```
+
+Four assets, and the chain is the only silver→silver one in the layer — each step reads
+the table the step before it wrote, which is why they are four assets and not one:
+
+| asset | result |
+|---|---|
+| `silver/cafef_financials_bank` | **152 quarters × 180 columns** (136 with a `publish_date`) — both halves of `main.py`'s `financials` leaf: the per-report carry-ups, then the wide per-quarter join |
+| `silver/stocks_basic_financials_bank` | **8,265 stock-days × 216 columns**, 45 s — daily × quarterly, as-of on `publish_date`. **The asset counts rows with `publish_date > date` and RAISES** — the look-ahead guard is an assertion, not a comment |
+| `silver/stocks_basic_financials_bank_fa` | **8,265 × 242**, 11 s — + the 26 fundamental indicators |
+| `gold/stocks_financials_bank_fa` | **8,265 stock-days × 1,150 columns** (908 added), 65 MB, ~9 s |
+
+All four green, **VCB 4,235 + ACB 4,030**. The chain was first built VCB-only (silver
+predated ACB's statements landing in bronze on 2026-07-30); re-running it end to end is
+what picked ACB up — 4,235 → 8,265 rows at every step.
+
+⚠️ **The gold asset asserts its own grain**: it fails if its row count differs from
+silver's. A feature build must add columns, never rows, and a TA layer that silently
+duplicated a stock-day would otherwise look like a bigger, better table.
+
+⚠️ **`gold` had to REBUILD THE PRICE SERIES, and this is the interesting part.** The
+CafeF panel has no usable OHLC set: `open`/`high`/`low` are RAW while only the close is
+adjusted (`close_adjust`). VCB on 2009-06-30 is the whole problem in one row —
+`open`=`high`=`low`=`close_raw`=60,000, `close_adjust`=9,130. TA on the adjusted close
+with raw high/low puts two price scales inside one indicator; TA on the raw close
+re-introduces every split as a fake overnight crash. `_helper_adjust_ohlc` applies the
+standard factor `close_adjust / close_raw` to that same day's open/high/low, and the
+adjusted set takes the canonical names `open`/`high`/`low`/`close` (what TA-Lib's
+defaults read), with the source values kept as `open_raw`/`high_raw`/`low_raw`.
+**So gold's `open`/`high`/`low` are NOT silver's** — same names, adjusted values.
+
+Verified: 0 mismatching cells over 163 financial columns AND over all 26 indicators
+(DOUBLE PRECISION, so the round-trip is exact — REAL would round VND figures of ~1e15 to
+the nearest ~1e8); `close` = `close_adjust` and `high` = `high_raw × factor` on every
+row; 0 rows with `publish_date > date`; SMA-50 reproduces to 0.0 and RSI-14 to 6.8e-6
+against an independent pandas computation.
+
+⚠️ **One genuine bad row, and it is CafeF's.** ACB 2018-07-31 has `high` 35,800 < `low`
+36,500 in `bronze.cafef_price` — one of **262 such rows in that 2.4 M-row table** —
+which surfaces in gold as a negative `range_hl`. The adjustment scales both legs by the
+same positive factor, so it preserves the inversion rather than causing it. The fix
+belongs in a bronze data-quality screen, not here.
+
+### ⚠️ Three things this build broke on, all of them pre-existing
+
+**1. `sys.path` does not survive into a step.** `bootstrap()` runs when the asset module
+is imported — but Dagster loads a code location inside a context manager that RESTORES
+`sys.path` afterwards, so by the time a step executes, the entry it added is gone.
+Modules imported during the load survive in `sys.modules` and hide it completely; a
+module imported LAZILY at run time does not. `_build_transform_func_map` imports
+`ta.ta_functions` on the first `_helper_transform` call, so this asset died with
+`ModuleNotFoundError: No module named 'ta'` in the step subprocess while all 45 earlier
+assets passed — none of them had ever reached the TA path. **Fixed**:
+`PreprocessorResource.session` calls `bootstrap()` again on entry (it is idempotent and
+free). Any future asset that touches a lazily-imported repo module is covered.
+
+**2. No gold table built through `_ingest_gold_table` could be materialised TWICE.**
+The COPY writer assumes an empty table, so the second run died on the primary key —
+`duplicate key value violates unique constraint … Key (exchange, ticker, date)=(HOSE,
+VCB, 2009-06-30) already exists`. Re-materialising is the normal life of an asset, so
+"drop the gold table first", which is what `data_preprocessor/CONTEXT.md` §7 told a
+human to do, was never going to survive contact with an orchestrator. **Fixed**:
+`_ingest_gold_table` drops the table itself, as late as possible so an earlier failure
+leaves the old one intact — the same thing `_ingest_gold_economy` and
+`_ingest_gold_stock_market` always did. This also un-breaks re-runs of gold
+`bonds`/`forex`/`funds`/`indices`.
+
+**3. `_ingest_gold_stocks` is stale and raises.** `gold.stocks` in the database predates
+the 2026-07-19 rewrite of `silver.stocks_basic` and still carries that era's columns
+(`close`, `volume`, `f_buy_vol`, `own_pct`). The current source has neither `close` nor
+`volume`, so its first TA layer dies exactly the way this asset's did. **Not fixed, on
+purpose** — the remedy is the `prepare_fn` + `volume_col="volume_matched"` pair the `_fa`
+asset already uses, but switching it on re-defines `gold.stocks`' `open`/`high`/`low` as
+adjusted and commits to a ~2.4 M-row × ~900-column rebuild. That is a decision to take on
+its own, not a side effect of adding a different table. `gold/stocks` is not an asset yet
+either.
+
+### Gold housekeeping — what the schema holds, and what it is allowed to hold
+
+Eight tables exist in `gold_schema`; **seven** are things the code can still build.
+
+| table | shape | built by | state |
+|---|---|---|---|
+| `economy` | 6,935 × 1,035 | **asset** + leaf | current (wide, as-of filled) |
+| `stock_market` | 6,339 × 163 | **asset** only | current (wide, unfilled) |
+| `stocks_financials_bank_fa` | 8,265 × 1,150 | **asset** only | current |
+| `bonds` | 66,100 × 16 | leaf | unknown age |
+| `forex` | 1,324,940 × 16 | leaf | unknown age |
+| `funds` | 18,662 × 22 | leaf | unknown age |
+| `stocks` | 2,678,167 × 935 | leaf | ⚠️ **stale AND raises** |
+| ~~`indices`~~ | 24,095 × 22 | — | ⚠️ **RETIRED 2026-08-01** |
+
+⚠️ **`gold.indices` is retired because it was a duplicate.** It was `silver.indices`
+(the TradingView index series) through the generic single-series feature build —
+`value` plus returns/volatility/rolling, 22 columns. `gold.stock_market` already covers
+the same six Vietnamese indices from CafeF at **27 measures apiece** (OHLC, order stats,
+foreign flow, prop trading, matched/negotiated split) instead of one. Two gold tables
+for one asset is one too many — the same call made for `economy` vs `economy_panel` on
+2026-08-01. `_ingest_gold_indices`, the `data_quality_gold/indices` leaf and the switch
+key are all gone; `bronze.indices` and `silver.indices` are **untouched**, so no history
+is lost and the reversal is one line.
+
+⚠️ **The `gold_schema.indices` TABLE is still on disk.** Removing it from the code stops
+it being rebuilt; it does not drop it. That is deliberate — dropping 24,095 rows is a
+data decision, not a code cleanup — but it means the schema will read one table richer
+than the pipeline until someone runs `DROP TABLE gold_schema.indices`.
+
+⚠️ **The two per-stock panels share an identical 888-column TA block** — 337 overlap
+studies, 293 momentum, 90 cycle, 60 price transform, 58 volatility, 50 volume, from 43
+indicators via `_helper_stock_ta_layers`. 207 of them are boolean signals. That is the
+point of the shared helper: `gold.stocks` and `gold.stocks_financials_bank_fa` cannot
+drift into different feature sets while looking identical.
+
 ## 2a. Cost of a full materialize (2026-07-31)
 
 | | before | after |
@@ -760,8 +901,10 @@ per-leaf isolation means it costs you one leaf, not the layer.
 ### 4.2 Phase 1 — the preprocessor (~41 assets, low risk)
 
 > **✅ BRONZE IS DONE (2026-08-01)** — all 20 leaves are assets and have been
-> materialised green; see §"Phase 1a" above. What remains of Phase 1 is silver (~15,
-> one done) and gold (6).
+> materialised green; see §"Phase 1a" above. What remains of Phase 1 is silver (7 of
+> ~15 done) and gold (3 of 7 — `stocks_financials_bank_fa` is a table `main.py` cannot
+> build at all, like `stock_market` before it: new gold work lands as an asset and gets
+> no switch leaf, since phase 5 retires those anyway).
 
 Pure DB work, fast to iterate, no network. One asset per bronze leaf (20), per silver
 ingest (~15 — the multi-ingest leaves like `cafef_carry_ups` and `stocks_financials`
@@ -821,18 +964,26 @@ than either alone.
 | phase | scope | estimate |
 |---|---|---|
 | 0 | exception propagation | ✅ **done** |
-| 1 | preprocessor, ~41 assets | bronze ✅ **done**; silver 4/15, gold 2/6 |
+| 1 | preprocessor, ~41 assets | bronze ✅ **done**; silver 7/15, gold 3/7 |
 | 2 | cheap scrapers, ~13 assets | ✅ **done** |
 | 3 | TradingView + partitions | ✅ **done** (9 partitions, not 320 — see 4.4) |
 | 4 | pdfs/financials, ticker partitions | ✅ **built**, not yet run end-to-end |
-| 5 | retire switch config | half a day — the only phase not started |
+| 5 | retire switch config | half a day — started: `src/data_preprocessor` is archived as a RUN path (2026-08-01), the keys are still there |
 
 `main.py` ends up empty and `switch_config.json` shrinks to ~320 parameter keys.
 
 **Where it actually stands (2026-08-01):** phases 0-4 are built; every landing and bronze
-asset has been materialised green, silver has 3 assets and gold 2. What remains is the
-rest of silver (12 leaves), the rest of gold (4), phase 5, and end-to-end runs of the
-four heavy assets.
+asset has been materialised green, silver has 7 assets and gold 3. What remains is the
+rest of silver (8 leaves), the rest of gold (4 tables), phase 5, and end-to-end runs of
+the four heavy assets.
+
+⚠️ **Phase 5 is now half-true in the documentation and not at all in the code.**
+`src/data_preprocessor/CONTEXT.md` carries an ARCHIVED banner and this file says
+selection is the run plan — but every `data_preprocessor/data_quality_*` key is still in
+`switch_config.json`, and `_run_layer` still consults them. Nothing reads them on the
+asset path (assets call `_ingest_*` directly), so they are inert rather than dangerous;
+finishing phase 5 means deleting the keys and the three entry points, which is a
+separate, mechanical change.
 
 ## 5. Gotchas
 

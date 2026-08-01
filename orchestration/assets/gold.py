@@ -1,12 +1,20 @@
 # orchestration\assets\gold.py
 """The GOLD layer — `silver_schema` → `gold_schema`.
 
-Two assets, both WIDE — one row per date, one column per (entity × measure):
+Three assets. Two are WIDE — one row per date, one column per (entity × measure):
 
 * `gold/economy` — the macro panel, `{country}__{scrape_main_type}__{category}__{exchange}__{ticker}`,
   one row per BUSINESS DAY, as-of filled.
 * `gold/stock_market` — the six market indices, `{exchange}__{ticker}__{measure}`, one
   row per TRADING DAY, **not** filled.
+
+The third is the other kind of gold table — the FEATURE panel, same grain as its silver
+source with columns added:
+
+* `gold/stocks_financials_bank_fa` — `silver.stocks_basic_financials_bank_fa` (price ×
+  as-of bank financials × 26 fundamental indicators) plus the full per-stock TA battery.
+  One row per stock-day, PK `(exchange, ticker, date)` — the same shape `gold.stocks`
+  has, which is still built through `main.py` rather than as an asset.
 
 ⚠️ **Why one is filled and the other is not.** Macro series are published on a lag and
 are stale-but-valid between releases, so carrying them forward is what a reader would
@@ -159,4 +167,77 @@ def gold_stock_market(
     )
 
 
-assets: List[Callable] = [gold_economy, gold_stock_market]
+@asset(
+    name="stocks_financials_bank_fa",
+    key_prefix=["gold"],
+    group_name="gold",
+    compute_kind="postgres",
+    deps=[AssetKey(["silver", "stocks_basic_financials_bank_fa"])],
+    description=(
+        "silver.stocks_basic_financials_bank_fa → gold.stocks_financials_bank_fa: the "
+        "daily price × as-of bank financials × 26 fundamental indicators panel, plus "
+        "the same TA battery gold.stocks gets (~40 TA-Lib indicators + the three "
+        "microstructure features) and the standard return/volatility/rolling layers. "
+        "Same grain and row count as its source — this adds columns, never rows. "
+        "⚠️ The carried financial lines are DOUBLE PRECISION, not gold's usual REAL: "
+        "VND figures reach ~1e15-1e17, where REAL rounds to the nearest ~1e8."
+    ),
+)
+def gold_stocks_financials_bank_fa(
+    context: AssetExecutionContext, preprocessor: PreprocessorResource
+) -> MaterializeResult:
+    with preprocessor.session(schema="gold_schema") as prep:
+        prep._ingest_gold_stocks_financials_bank_fa()
+
+        with prep._database_driver._cursor_ctx() as cur:
+            cur.execute(
+                "SELECT COUNT(*), COUNT(DISTINCT ticker), MIN(date), MAX(date) "
+                "FROM gold_schema.stocks_financials_bank_fa"
+            )
+            rows, tickers, first, last = cur.fetchone()
+            cur.execute(
+                "SELECT COUNT(*) FROM information_schema.columns WHERE "
+                "table_schema = 'gold_schema' AND "
+                "table_name = 'stocks_financials_bank_fa'"
+            )
+            columns = int(cur.fetchone()[0])
+            cur.execute(
+                "SELECT COUNT(*) FROM silver_schema.stocks_basic_financials_bank_fa"
+            )
+            silver_rows = int(cur.fetchone()[0])
+            cur.execute(
+                "SELECT COUNT(*) FROM information_schema.columns WHERE "
+                "table_schema = 'silver_schema' AND "
+                "table_name = 'stocks_basic_financials_bank_fa'"
+            )
+            silver_columns = int(cur.fetchone()[0])
+
+    # The grain must survive the feature build: gold adds columns to every silver row.
+    if rows != silver_rows:
+        raise ValueError(
+            f"gold.stocks_financials_bank_fa has {rows} rows but silver has "
+            f"{silver_rows} — the feature build changed the grain."
+        )
+
+    context.log.info(
+        f"gold.stocks_financials_bank_fa: {rows} stock-days × {columns} columns "
+        f"(silver: {silver_rows} × {silver_columns})"
+    )
+    return MaterializeResult(
+        metadata={
+            "rows": int(rows),
+            "columns": columns,
+            "silver_columns": silver_columns,
+            "features_added": columns - silver_columns,
+            "tickers": int(tickers),
+            "date_range": MetadataValue.text(f"{first} → {last}"),
+            "table": MetadataValue.text("gold_schema.stocks_financials_bank_fa"),
+        }
+    )
+
+
+assets: List[Callable] = [
+    gold_economy,
+    gold_stock_market,
+    gold_stocks_financials_bank_fa,
+]

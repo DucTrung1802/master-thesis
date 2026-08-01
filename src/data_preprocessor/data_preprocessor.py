@@ -3628,6 +3628,9 @@ class DataPreprocessor:
         table_name: str,
         ta_layers: Optional[List[TransformLayer]] = None,
         silver_table_name: Optional[str] = None,
+        passthrough_cols: Optional[List[str]] = None,
+        exact_float_cols: Optional[List[str]] = None,
+        prepare_fn: Optional[Any] = None,
     ) -> None:
         """
         Generic gold ingest: read a silver table, coerce numeric source columns,
@@ -3638,6 +3641,32 @@ class DataPreprocessor:
         `table_name` (the gold table WRITTEN). They differ only where the silver and
         gold table names diverge — e.g. gold `stocks` is built from silver
         `stocks_basic`.
+
+        `passthrough_cols` — extra source columns to carry through UNTOUCHED, beyond
+        the keys and the GICS class columns. ⚠️ Everything else is
+        `pd.to_numeric(errors="coerce")`d, which turns a text or date column into a
+        column of NULLs **without raising**, so any non-numeric column a source adds
+        must be named here (`stocks_basic_financials_bank_fa` brings `publish_date`
+        and the nine per-report `template`/`period`/`source` provenance columns).
+        ⚠️ It is NOT derived from `information_schema` here, and must not be: several
+        silver carry-ups store real numbers as VARCHAR (`silver.bonds.value` is the
+        live example) and those MUST still be coerced. A caller whose source is known
+        to be properly typed may derive it — see
+        `_ingest_gold_stocks_financials_bank_fa`.
+
+        `exact_float_cols` — float columns to store as `DOUBLE PRECISION` instead of
+        gold's default `REAL`. REAL's ~7 significant digits are ample for prices and
+        ratios but not for VND balance-sheet lines, which reach ~1e15-1e17: at that
+        magnitude REAL's step is ~1e8-1e10, so the figure would come back off by
+        hundreds of millions of dong. Reserve it for columns carried from silver
+        (the computed feature block stays REAL — 900 of them at 8 bytes is what the
+        8160-byte row limit cannot take).
+
+        `prepare_fn(df) -> df` — a last reshape after the numeric coercion and BEFORE
+        the feature layers, for sources whose columns are not yet in the shape the TA
+        functions expect (`_helper_adjust_ohlc` is the one caller: it rebuilds a
+        split-adjusted OHLC set, because TA-Lib's defaults read `open`/`high`/`low`/
+        `close` and silver's `open`/`high`/`low` are RAW while `close_adjust` is not).
         """
         source_table = silver_table_name or table_name
         self._logger.log_info(
@@ -3659,10 +3688,19 @@ class DataPreprocessor:
         # fields carried through from silver: foreign flow, volume breakdown, etc.).
         # The GICS classification columns are categorical strings and are passed
         # through untouched (coercing them would wipe them to NaN).
-        _non_numeric = {"exchange", "ticker", "date", *self.GICS_CLASS_COLS}
+        _non_numeric = {
+            "exchange",
+            "ticker",
+            "date",
+            *self.GICS_CLASS_COLS,
+            *(passthrough_cols or []),
+        }
         for col in df.columns:
             if col not in _non_numeric:
                 df[col] = pd.to_numeric(df[col], errors="coerce")
+
+        if prepare_fn is not None:
+            df = prepare_fn(df)
 
         transform_layers = list(ta_layers or []) + self._helper_build_feature_layers(df)
         if not transform_layers:
@@ -3672,13 +3710,30 @@ class DataPreprocessor:
                 f"be a copy of its input."
             )
 
+        _exact = set(exact_float_cols or [])
+
+        # A pass-through DATE column arrives as `object` (psycopg2 hands back
+        # `datetime.date`), and `_helper_infer_sql_type` maps object → VARCHAR — so
+        # `publish_date` would land in gold as text unless it is named here.
+        _passthrough_dates = [
+            c
+            for c in (passthrough_cols or [])
+            if c in df.columns
+            and df[c].notna().any()
+            and df[c].dropna().map(lambda v: isinstance(v, date)).all()
+        ]
+
         def _checkpoint(chunk: pd.DataFrame) -> None:
             # Use REAL (4-byte float) for all float columns to stay within
             # PostgreSQL's 8160-byte row size limit given the large number of columns.
+            # `exact_float_cols` opts individual columns back up to DOUBLE PRECISION.
             overrides: dict[str, str] = {"date": DataType.DATE()}
+            overrides.update({c: DataType.DATE() for c in _passthrough_dates})
             for col in chunk.columns:
                 if str(chunk[col].dtype).lower().startswith("float"):
-                    overrides[col] = "REAL"
+                    overrides[col] = (
+                        "DOUBLE PRECISION" if col in _exact else "REAL"
+                    )
             self._helper_save_pandas_table_to_database(
                 schema_name=GOLD_SCHEMA,
                 table_name=table_name,
@@ -3687,6 +3742,20 @@ class DataPreprocessor:
                 dtype_overrides=overrides,
                 use_copy=True,
             )
+
+        # ⚠️ REBUILD, don't append. `_checkpoint` saves with `use_copy=True`, and the
+        # COPY path assumes an EMPTY table — re-running over an existing gold table
+        # dies on the primary key (`duplicate key value violates unique constraint …
+        # Key (exchange, ticker, date)=(HOSE, VCB, 2009-06-30) already exists`), which
+        # is exactly what a second materialisation of an ASSET is. A gold table is a
+        # pure function of its silver source, so replacing it is the correct semantic
+        # and a merge would be meaningless; dropping also lets the column set change
+        # when the feature list does. `_ingest_gold_economy` and
+        # `_ingest_gold_stock_market` already do this — the generic builder was the
+        # one path where "drop the gold table first" stayed a manual instruction.
+        # Kept as late as possible, so a failure earlier in the build leaves the old
+        # table intact.
+        self._database_driver.drop_table(GOLD_SCHEMA, table_name)
 
         self._helper_transform(
             df,
@@ -4111,66 +4180,224 @@ class DataPreprocessor:
             chunk_size=1_000,
         )
 
+    def _helper_stock_ta_layers(self, volume_col: str) -> List[TransformLayer]:
+        """The per-stock TA battery: ~40 TA-Lib indicators (overlap studies, momentum,
+        volume, cycle, price transform, volatility) plus the three microstructure
+        features built from the CafeF foreign-flow / volume-breakdown columns.
+
+        Shared by every gold table built on a daily per-stock OHLCV panel
+        (`gold.stocks` from `silver.stocks_basic`, `gold.stocks_financials_bank_fa`
+        from `silver.stocks_basic_financials_bank_fa`) so the two cannot drift into
+        different feature sets — which would make them incomparable while looking
+        identical.
+
+        Everything price-based takes TA-Lib's default `open`/`high`/`low`/`close`, so
+        the caller must hand `_ingest_gold_table` a frame that HAS those columns —
+        see `_helper_adjust_ohlc`. `volume_col` is explicit because the CafeF panel
+        splits volume into `volume_matched` / `volume_negotiated` and only the matched
+        side belongs in a money-flow indicator.
+
+        ⚠️ `volume_col="volume"` (what `_ingest_gold_stocks` still passes) has not
+        existed on `silver.stocks_basic` since the 2026-07-19 rewrite — see the note
+        on `_ingest_gold_stocks`."""
+        return [
+            # Overlap Studies
+            TransformLayer.TA_ADD_BBANDS(),
+            TransformLayer.TA_ADD_DEMA(),
+            TransformLayer.TA_ADD_EMA(),
+            TransformLayer.TA_ADD_KAMA(),
+            TransformLayer.TA_ADD_MIDPOINT(),
+            TransformLayer.TA_ADD_MIDPRICE(),
+            TransformLayer.TA_ADD_SAR(),
+            TransformLayer.TA_ADD_SMA(),
+            TransformLayer.TA_ADD_T3(),
+            TransformLayer.TA_ADD_TEMA(),
+            TransformLayer.TA_ADD_TRIMA(),
+            TransformLayer.TA_ADD_WMA(),
+            # Momentum Indicators
+            TransformLayer.TA_ADD_ADX(),
+            TransformLayer.TA_ADD_AROON(),
+            TransformLayer.TA_ADD_BOP(),
+            TransformLayer.TA_ADD_CCI(),
+            TransformLayer.TA_ADD_CMO(),
+            TransformLayer.TA_ADD_MACD(),
+            TransformLayer.TA_ADD_MFI(volume_col=volume_col),
+            TransformLayer.TA_ADD_MOM(),
+            TransformLayer.TA_ADD_PPO(),
+            TransformLayer.TA_ADD_ROC(),
+            TransformLayer.TA_ADD_RSI(),
+            TransformLayer.TA_ADD_STOCH(),
+            TransformLayer.TA_ADD_STOCH_RSI(),
+            TransformLayer.TA_ADD_TRIX(),
+            TransformLayer.TA_ADD_ULTOSC(),
+            TransformLayer.TA_ADD_WILLR(),
+            # Volume Indicators
+            TransformLayer.TA_ADD_AD(volume_col=volume_col),
+            TransformLayer.TA_ADD_ADOSC(volume_col=volume_col),
+            TransformLayer.TA_ADD_OBV(volume_col=volume_col),
+            # Cycle Indicators
+            TransformLayer.TA_ADD_HT_DCPERIOD(),
+            TransformLayer.TA_ADD_HT_DCPHASE(),
+            TransformLayer.TA_ADD_HT_PHASOR(),
+            TransformLayer.TA_ADD_HT_SINE(),
+            TransformLayer.TA_ADD_HT_TRENDMODE(),
+            # Price Transform
+            TransformLayer.TA_ADD_AVGPRICE(),
+            TransformLayer.TA_ADD_MEDPRICE(),
+            TransformLayer.TA_ADD_TYPPRICE(),
+            TransformLayer.TA_ADD_WCLPRICE(),
+            # Volatility Indicators
+            TransformLayer.TA_ADD_ATR(),
+            TransformLayer.TA_ADD_NATR(),
+            TransformLayer.TA_ADD_TRANGE(),
+            # Stock microstructure (foreign flow / volume breakdown)
+            TransformLayer.ADD_FOREIGN_BUY_PRESSURE(),
+            TransformLayer.ADD_FOREIGN_NET_VAL_RATIO(),
+            TransformLayer.ADD_NEGOTIATED_VOL_RATIO(),
+        ]
+
     def _ingest_gold_stocks(self) -> None:
         # Reads silver `stocks_basic` (the CafeF panel + GICS tree), writes gold `stocks`.
+        #
+        # ⚠️ **STALE AGAINST THE CURRENT SILVER SCHEMA, AND IT WILL RAISE.** `gold.stocks`
+        # in the database was built before the 2026-07-19 rewrite of `silver.stocks_basic`
+        # and still carries that era's columns (`close`, `volume`, `f_buy_vol`, `own_pct`).
+        # Today's source has no `close` and no `volume` at all: it has
+        # `close_raw`/`close_adjust` and `volume_matched`/`volume_negotiated`, so the first
+        # TA layer raises `ValueError: Column 'close' not found`.
+        #
+        # The fix is the same one `_ingest_gold_stocks_financials_bank_fa` already makes —
+        # `prepare_fn=self._helper_adjust_ohlc` and `volume_col="volume_matched"` — but it
+        # is left OFF here deliberately: applying it silently re-defines `gold.stocks`'
+        # `open`/`high`/`low` as adjusted and commits to a ~2.4 M-row × ~900-column
+        # rebuild, which is a decision to take on its own, not a side effect of adding a
+        # different table.
         self._ingest_gold_table(
             "stocks",
             silver_table_name="stocks_basic",
-            ta_layers=[
-                # Overlap Studies
-                TransformLayer.TA_ADD_BBANDS(),
-                TransformLayer.TA_ADD_DEMA(),
-                TransformLayer.TA_ADD_EMA(),
-                TransformLayer.TA_ADD_KAMA(),
-                TransformLayer.TA_ADD_MIDPOINT(),
-                TransformLayer.TA_ADD_MIDPRICE(),
-                TransformLayer.TA_ADD_SAR(),
-                TransformLayer.TA_ADD_SMA(),
-                TransformLayer.TA_ADD_T3(),
-                TransformLayer.TA_ADD_TEMA(),
-                TransformLayer.TA_ADD_TRIMA(),
-                TransformLayer.TA_ADD_WMA(),
-                # Momentum Indicators
-                TransformLayer.TA_ADD_ADX(),
-                TransformLayer.TA_ADD_AROON(),
-                TransformLayer.TA_ADD_BOP(),
-                TransformLayer.TA_ADD_CCI(),
-                TransformLayer.TA_ADD_CMO(),
-                TransformLayer.TA_ADD_MACD(),
-                TransformLayer.TA_ADD_MFI(volume_col="volume"),
-                TransformLayer.TA_ADD_MOM(),
-                TransformLayer.TA_ADD_PPO(),
-                TransformLayer.TA_ADD_ROC(),
-                TransformLayer.TA_ADD_RSI(),
-                TransformLayer.TA_ADD_STOCH(),
-                TransformLayer.TA_ADD_STOCH_RSI(),
-                TransformLayer.TA_ADD_TRIX(),
-                TransformLayer.TA_ADD_ULTOSC(),
-                TransformLayer.TA_ADD_WILLR(),
-                # Volume Indicators
-                TransformLayer.TA_ADD_AD(volume_col="volume"),
-                TransformLayer.TA_ADD_ADOSC(volume_col="volume"),
-                TransformLayer.TA_ADD_OBV(volume_col="volume"),
-                # Cycle Indicators
-                TransformLayer.TA_ADD_HT_DCPERIOD(),
-                TransformLayer.TA_ADD_HT_DCPHASE(),
-                TransformLayer.TA_ADD_HT_PHASOR(),
-                TransformLayer.TA_ADD_HT_SINE(),
-                TransformLayer.TA_ADD_HT_TRENDMODE(),
-                # Price Transform
-                TransformLayer.TA_ADD_AVGPRICE(),
-                TransformLayer.TA_ADD_MEDPRICE(),
-                TransformLayer.TA_ADD_TYPPRICE(),
-                TransformLayer.TA_ADD_WCLPRICE(),
-                # Volatility Indicators
-                TransformLayer.TA_ADD_ATR(),
-                TransformLayer.TA_ADD_NATR(),
-                TransformLayer.TA_ADD_TRANGE(),
-                # Stock microstructure (foreign flow / volume breakdown)
-                TransformLayer.ADD_FOREIGN_BUY_PRESSURE(),
-                TransformLayer.ADD_FOREIGN_NET_VAL_RATIO(),
-                TransformLayer.ADD_NEGOTIATED_VOL_RATIO(),
-            ],
+            ta_layers=self._helper_stock_ta_layers(volume_col="volume"),
+        )
+
+    # ── gold.stocks_financials_bank_fa ──────────────────────────────────────────
+    #
+    # `silver.stocks_basic_financials_bank_fa` (the daily price panel × the as-of bank
+    # quarter × the 26 fundamental indicators) with the same TA battery `gold.stocks`
+    # gets. The result is the one table a model can read end to end: price, flow,
+    # GICS, fundamentals and technicals on one row per stock-day.
+    #
+    # ⚠️ It is deliberately NOT a join against `gold.stocks`. The TA columns are
+    # recomputed from this table's own OHLCV, so the panel is self-contained and the
+    # two gold tables cannot disagree about a stock-day. The duplication costs
+    # ~900 columns over a few thousand rows (bank tickers only), which is nothing
+    # next to `gold.stocks`' 2.4 M.
+    #
+    # ⚠️ Look-ahead: none is introduced here. Every fundamental column already steps
+    # on `publish_date <= date` in silver, and TA-Lib indicators are backward-looking
+    # by construction.
+
+    def _helper_adjust_ohlc(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Rebuild a SPLIT-ADJUSTED OHLC set, and hand it the canonical names.
+
+        ⚠️ **The CafeF panel does not have one price series, it has two halves of two.**
+        `open`/`high`/`low` are RAW (they track `close_raw`); only the close comes in
+        both flavours, as `close_raw` and `close_adjust`. VCB on 2009-06-30 is the whole
+        problem in one row: `open`=`high`=`low`=`close_raw`=60,000 while
+        `close_adjust`=9,130. So:
+
+        * running TA on `close_adjust` with the source `high`/`low` mixes two price
+          scales inside a single indicator — ATR, Stochastic, MFI, Williams %R and every
+          price transform would read a 6.6× gap between the close and the day's range;
+        * running it on `close_raw` keeps one scale but re-introduces every split and
+          stock dividend as a fake overnight crash.
+
+        Neither is a defensible feature. The fix is the standard one: today's adjustment
+        factor is `close_adjust / close_raw`, and the same factor applies to the same
+        day's open, high and low.
+
+        The adjusted set takes the canonical names `open`/`high`/`low`/`close` — that is
+        what TA-Lib's defaults, `add_intraday_range` and `_helper_build_feature_layers`
+        all read, and passing 40 column kwargs to say the same thing would be worse. The
+        source values are kept beside them as `open_raw`/`high_raw`/`low_raw` +
+        the untouched `close_raw`. ⚠️ **So gold's `open`/`high`/`low` are NOT silver's**
+        — same name, adjusted values, which is a modelling decision and therefore gold's
+        to make. `close_adjust` is dropped: it would be an exact duplicate of `close`.
+        """
+        required = {"open", "high", "low", "close_raw", "close_adjust"}
+        missing = required - set(df.columns)
+        if missing:
+            raise PipelineError(
+                f"Cannot build an adjusted OHLC set: {sorted(missing)} missing. "
+                f"Present: {sorted(df.columns)[:20]}…"
+            )
+
+        df = df.rename(columns={"open": "open_raw", "high": "high_raw", "low": "low_raw"})
+
+        # A zero/absent raw close gives no factor — NaN, never a silently wrong price.
+        factor = df["close_adjust"] / df["close_raw"].replace(0, np.nan)
+        for col in ("open", "high", "low"):
+            df[col] = df[f"{col}_raw"] * factor
+        df["close"] = df["close_adjust"]
+        df = df.drop(columns=["close_adjust"])
+
+        unadjusted = int((factor.round(10) == 1).sum())
+        self._logger.log_info(
+            f"Adjusted OHLC rebuilt: {len(df)} rows, {factor.notna().sum()} with a "
+            f"factor ({unadjusted} of them 1.0 — no corporate action since)."
+        )
+        return df
+
+    def _ingest_gold_stocks_financials_bank_fa(self) -> None:
+        """Silver `stocks_basic_financials_bank_fa` → gold `stocks_financials_bank_fa`:
+        every source column, plus the standard return/volatility/rolling features and
+        the full per-stock TA battery (`_helper_stock_ta_layers`).
+
+        PK `(exchange, ticker, date)`, same grain and same row count as the source —
+        this adds columns, never rows.
+
+        ⚠️ **The carried financial lines are DOUBLE PRECISION, not gold's usual REAL.**
+        VND balance-sheet figures reach ~1e15-1e17 (VCB's total assets are ~2.6e15),
+        where REAL's ~7 significant digits round to the nearest ~1e8-1e10 — the gold
+        copy of a line item would differ from silver by hundreds of millions of dong
+        while looking fine. The computed TA/feature block stays REAL: ~900 columns at
+        8 bytes each is exactly what PostgreSQL's ~8160-byte row limit cannot take.
+        """
+        source_table = "stocks_basic_financials_bank_fa"
+
+        source_types = self._helper_column_types(SILVER_SCHEMA, source_table)
+        if not source_types:
+            raise MissingSourceDataError(
+                f"`{SILVER_SCHEMA}.{source_table}` does not exist — build the silver "
+                f"`stocks_financials` leaf first "
+                f"(_ingest_silver_stocks_basic_financials_bank then …_fa)."
+            )
+
+        # Pass-through = the source's own text/date columns beyond the keys and the
+        # GICS block: `publish_date` and the nine per-report provenance columns.
+        passthrough = [
+            col
+            for col, sql_type in source_types.items()
+            if sql_type in ("character varying", "text", "date")
+            and col not in ("exchange", "ticker", "date")
+        ]
+        # Exact = every numeric column CARRIED from silver (the ~200 statement lines
+        # and the fundamental indicators). Feature columns are not in `source_types`,
+        # so they keep gold's default REAL.
+        exact = [
+            col
+            for col, sql_type in source_types.items()
+            if sql_type in ("numeric", "double precision", "real", "bigint", "integer")
+        ]
+        # `_helper_adjust_ohlc` renames the three raw legs and mints `close`; all four
+        # are carried values, so they keep the exact type too.
+        exact += ["open_raw", "high_raw", "low_raw", "close"]
+
+        self._ingest_gold_table(
+            "stocks_financials_bank_fa",
+            silver_table_name=source_table,
+            ta_layers=self._helper_stock_ta_layers(volume_col="volume_matched"),
+            passthrough_cols=passthrough,
+            exact_float_cols=exact,
+            prepare_fn=self._helper_adjust_ohlc,
         )
 
     def _ingest_gold_bonds(self) -> None:
@@ -4182,8 +4409,14 @@ class DataPreprocessor:
     def _ingest_gold_funds(self) -> None:
         self._ingest_gold_table("funds")
 
-    def _ingest_gold_indices(self) -> None:
-        self._ingest_gold_table("indices")
+    # ⚠️ `_ingest_gold_indices` was REMOVED (2026-08-01) along with its
+    # `data_quality_gold/indices` leaf and switch key. `gold.indices` was the
+    # TradingView index series (24,095 x 22, the generic single-series feature build)
+    # and it duplicated `gold.stock_market`, which covers the same six Vietnamese
+    # indices from CafeF with 27 measures apiece instead of OHLCV. `silver.indices` and
+    # `bronze.indices` are untouched — only the gold table is retired, so nothing
+    # upstream loses its history. The existing `gold_schema.indices` table is NOT
+    # dropped by this change; it simply stops being rebuilt.
 
     # endregion Helper functions
 
@@ -4383,7 +4616,7 @@ class DataPreprocessor:
             ("economy", self._ingest_gold_economy),
             ("forex", self._ingest_gold_forex),
             ("funds", self._ingest_gold_funds),
-            ("indices", self._ingest_gold_indices),
+            # `indices` retired 2026-08-01 — duplicated `gold.stock_market`.
             ("stocks", self._ingest_gold_stocks),
         ]
 

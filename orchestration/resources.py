@@ -102,6 +102,18 @@ class PreprocessorResource(ConfigurableResource):
 
     @contextmanager
     def session(self, schema: str) -> Iterator[DataPreprocessor]:
+        # ⚠️ RE-ASSERT `src` ON sys.path, AT RUN TIME. Importing this module ran
+        # `bootstrap()` already — but Dagster loads a code location inside a context
+        # manager that RESTORES sys.path afterwards, so by the time a step actually
+        # executes, the entry bootstrap added is gone. Modules imported during the load
+        # survive in `sys.modules` and hide the problem; a module imported LAZILY at run
+        # time does not. `_build_transform_func_map` imports `ta.ta_functions` on the
+        # first `_helper_transform` call, which is why `gold/stocks_financials_bank_fa`
+        # died with `ModuleNotFoundError: No module named 'ta'` in the step subprocess
+        # while every earlier asset passed. `bootstrap()` is idempotent and costs
+        # nothing, so it belongs at the entry to every session.
+        bootstrap()
+
         logger = self.logger.build()
         preprocessor = DataPreprocessor(
             logger=logger, switch_handler=self.switches.build(logger)

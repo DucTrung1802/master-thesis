@@ -73,9 +73,16 @@
     "silver/stock_market": true,
     "// silver/stocks_basic": "2.4 M rows - the per-stock spine",
     "silver/stocks_basic": true,
+    "// silver/cafef_financials_bank": "the 3 bank statements carried up, then joined wide per quarter (180 cols)",
+    "silver/cafef_financials_bank": true,
+    "// silver/stocks_basic_financials_bank": "daily x quarterly, as-of on publish_date - INNER, bank tickers only",
+    "silver/stocks_basic_financials_bank": true,
+    "silver/stocks_basic_financials_bank_fa": true,
 
     "// ---- gold: model-ready shapes ----": "",
     "// gold/economy": "WIDE: 1 row per business day, 1 col per series, as-of filled",
     "gold/economy": true,
-    "gold/stock_market": true
+    "gold/stock_market": true,
+    "// gold/stocks_financials_bank_fa": "FEATURE panel: the _fa source + the full TA battery, ~1.1k columns",
+    "gold/stocks_financials_bank_fa": true
 }
