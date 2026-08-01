@@ -32,6 +32,7 @@ this file updated → committed and pushed. PDFs themselves stay untracked
 | 47 | Koukaras, Nousi, Tjortjis — *Stock market prediction using microblogging sentiment analysis and ML* | 2022 | **⚠️ SELF-REFUTING — cite as the evaluation cautionary tale; do not follow** |
 | 48 | Gu et al. — *Predicting stock prices with FinBERT-LSTM: integrating news sentiment analysis* | 2024 | **Cite the 3-D SOFTMAX sentiment + the corpus scale; ⚠️ worse than persistence** |
 | 49 | Maqbool et al. — *Stock prediction by integrating sentiment scores of financial news and MLP-Regressor* | 2023 | **⭐ Cite the 10/30/100-day DECAY TABLE — the folder's best test-size evidence** |
+| 50 | Khedr, Salama, Yaseen — *Predicting stock market behavior using data mining technique and news sentiment analysis* | 2017 | **⚠️ FEATURE = LABEL. Cite only its Kappa 0.078 — sentiment alone has no skill** |
 
 **They form a progression, and the progression is the point.** All five add news or
 social text to price features to predict short-horizon direction, and they differ in
@@ -1238,7 +1239,95 @@ market-wide news applied undifferentiated across four stocks, no baseline, and t
 
 ---
 
-## Combined reading — where the nine papers leave the thesis
+# Paper 50 — Khedr, Salama, Yaseen (2017)
+
+*Predicting Stock Market Behavior using Data Mining Technique and News Sentiment Analysis.*
+**I.J. Intelligent Systems and Applications** 2017, 7, 22–30 · MECS Press ·
+DOI 10.5815/ijisa.2017.07.03 · Future University in Egypt / Helwan University /
+King Abdulaziz University. 9 pp.
+file: `50. Predicting Stock Market Behavior using Data Mining Technique and News Sentiment Analysis.pdf`.
+
+> **→ Verdict: ⚠️ the feature IS the label — the most blatant leak in the folder,
+> stated in the paper's own consecutive sentences.** Cite it for exactly one number:
+> **Kappa = 0.078 for sentiment alone**, the base-rate-corrected statistic every other
+> paper omits, which says the sentiment signal has no skill at all.
+
+### Setup
+
+| | |
+|---|---|
+| Universe | **3 NASDAQ companies** — §III.A says Yahoo, **Microsoft**, Facebook; §IV says Yahoo, **Google**, Facebook ⚠️ contradictory |
+| Text | ~**3 news articles/day** from nasdaq.com, Reuters, WSJ, MarketWatch, Zacks, Yahoo/Google Finance |
+| Numeric | OHLC |
+| Period | **⚠️ NEVER STATED** — no date range, no sample counts, no split ratio |
+
+### One training sample
+
+**One sample = one (stock, day).**
+`X` = `news sentiment (pos/neg)` + **discretized Open, High, Low, Close**
+`y` = `raise` / `fall`
+
+**Sentiment stage:** tokenize → lowercase standardisation → stopwords → **Porter
+stemming** → abbreviation expansion → filter ≤2-char tokens → **bigrams → TF-IDF →
+Naïve Bayes**. **Prediction stage:** join by date → **KNN** → raise/fall.
+
+### ⚠️⚠️ The feature is the label
+
+§III.B.2, verbatim:
+
+> *"all four attributes values will be labelled with 'positive', 'negative' and
+> 'equal' based on the comparative with the previous day closing price. The second
+> step, computes a label for each data instance, the trend 'raise' or 'fall' is
+> calculated based on the difference between the closing price of the current day and
+> the previous day."*
+
+The discretized **Close** attribute is `positive ⟺ Close_d > Close_{d−1}`.
+The label is `raise ⟺ Close_d > Close_{d−1}`. **Identical comparison — one input
+column is the target, copied.** Paper 46 required algebra to expose; this is stated
+outright in two consecutive sentences.
+
+Table 3 shows precisely what that buys:
+
+| features | accuracy | **Kappa** |
+|---|---|---|
+| sentiment only | 59.18% | **0.078** |
+| sentiment **+ numeric** | **89.80%** | 0.79 |
+
+The 30-point jump is the leaked column being added.
+
+### ⭐ Kappa 0.078 — the number the whole folder has been missing
+
+Cohen's kappa is exactly the **base-rate-corrected** statistic. **0.078 means no
+agreement beyond chance.** The 59.18% "accuracy" for sentiment alone is the majority
+class and nothing else.
+
+Nine papers had failed to report any baseline. **50 accidentally publishes the
+corrected statistic anyway — and it reads ~0.** Paper 47 let the base rate be
+*computed*; paper 50 *prints* the base-rate-corrected result outright.
+
+### Also worth noting
+
+Their conclusion describes **three news categories — market news, company news, and
+financial reports published by financial experts** — which is paper 43's
+market/sector/stock hierarchy **six years earlier**. Useful for showing the hierarchy
+idea has independent lineage rather than originating with 43.
+
+### How to use it in the thesis
+
+**Cite — two uses:**
+1. **⭐ Kappa = 0.078.** The folder's only *published* base-rate-corrected measure of a
+   sentiment feature's standalone worth, and it is essentially zero. Pairs directly
+   with **47**'s computable base rate and **49**'s decay table.
+2. **The clearest teachable leak.** Feature and label are the same comparison, in the
+   authors' own words — far easier to present than 46's algebraic recovery.
+
+**Do not follow:** no date range, no sample counts, no split description, a
+self-contradictory universe, 2017-era NB/TF-IDF sentiment whose ground-truth polarity
+labels are never explained, and the target copied into the feature matrix.
+
+---
+
+## Combined reading — where the ten papers leave the thesis
 
 1. **All six predict the wrong target for this thesis** — per-stock or index absolute
    short-horizon direction (45 the overnight gap, 46 the price level itself). None
@@ -1273,6 +1362,9 @@ market-wide news applied undifferentiated across four stocks, no baseline, and t
      abstract, on ~15 test samples.
    - **48 / 49** — price regressions reporting MAPE at or **worse than predicting no
      change**, with the persistence benchmark never computed.
+   - **⭐ 50 — the direct measurement.** It publishes **Kappa = 0.078 for sentiment
+     alone**, the base-rate-corrected statistic. Not "weak" — *no agreement beyond
+     chance*. Its 59.18% sentiment-only accuracy is pure majority class.
 
    Across the folder, accuracy tracks looseness inversely: 80.5% and ~0.60 from the
    papers using random/k-fold CV on time series (9, 45); ~0.51–0.52 from the two most
@@ -1376,3 +1468,8 @@ market-wide news applied undifferentiated across four stocks, no baseline, and t
   open access). 12 pp. *VADER+TextBlob+FLAIR → MLP-Regressor on 4 Indian stocks,
   10 years. **⭐ Cite the 10/30/100-day decay table** (0.90 → 0.70 → 0.56) — the
   folder's best evidence that small test sets manufacture skill.*
+- `50. Predicting Stock Market Behavior using Data Mining Technique and News Sentiment Analysis.pdf`
+  — Khedr, Salama & Yaseen 2017, IJISA (MECS Press). 9 pp. *NB/TF-IDF sentiment +
+  discretized OHLC → KNN on 3 NASDAQ names. **⚠️ Feature = label** (discretized close
+  vs previous close IS the raise/fall target); **cite only Kappa 0.078** — sentiment
+  alone has no skill beyond chance.*
