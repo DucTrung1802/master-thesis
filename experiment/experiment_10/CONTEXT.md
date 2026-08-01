@@ -29,6 +29,7 @@ this file updated → committed and pushed. PDFs themselves stay untracked
 | 44 | Huang et al. — *ML-GAT: a multilevel graph attention model for stock prediction* | 2022 | **Cite for its NEGATIVE results; do not follow** |
 | 45 | Xiao & Ihnaini — *Stock trend prediction using sentiment analysis* | 2023 | **Cite the RECIPE (tool validation + market-hours window); do not follow the design** |
 | 46 | Wu, Liu, Zou, Weng — *S_I_LSTM: stock price prediction based on multiple data sources and sentiment analysis* | 2021 | **⚠️ PROVABLE LABEL LEAK — cite only the CJK pipeline + forum-heavy corpus** |
+| 47 | Koukaras, Nousi, Tjortjis — *Stock market prediction using microblogging sentiment analysis and ML* | 2022 | **⚠️ SELF-REFUTING — cite as the evaluation cautionary tale; do not follow** |
 
 **They form a progression, and the progression is the point.** All five add news or
 social text to price features to predict short-horizon direction, and they differ in
@@ -935,7 +936,112 @@ more risk-sensitive metric**.
 
 ---
 
-## Combined reading — where the six papers leave the thesis
+# Paper 47 — Koukaras, Nousi, Tjortjis (2022)
+
+*Stock Market Prediction Using Microblogging Sentiment Analysis and Machine Learning.*
+**Telecom** (MDPI) 3, 358–378 · DOI 10.3390/telecom3020019 · School of Science and
+Technology, International Hellenic University, Thessaloniki. 21 pp, open access CC-BY.
+file: `47. Stock Market Prediction Using Microblogging Sentiment Analysis and Machine Learning.pdf`.
+
+> **→ Verdict: ⚠️ the paper refutes itself. Its own Table 10 and Figure 9 show
+> validation ≈ 52% while the abstract advertises 76.3%.** Cite it as the folder's
+> cautionary tale on headline-vs-honest numbers, and for the one base-rate check the
+> literature actually permits. Take nothing methodological.
+
+### Setup
+
+| | |
+|---|---|
+| Universe | **Microsoft only** |
+| Period | **16 Jul → 31 Oct 2020 — 77 trading days** |
+| Text | **90,000 tweets** (Twitter API, `#Microsoft`/`#MSFT`) + **7,440 StockTwits** (`$MSFT`) |
+| Sentiment | **TextBlob** and **VADER** — both general-purpose, **neither validated** ⚠️ |
+| Design | 2×2 (Twitter/StockTwits × TextBlob/VADER) × 7 classifiers (KNN, SVM, LR, NB, DT, RF, MLP) |
+| Split | 80/20; test = **10–31 Oct 2020 ≈ 15 samples** ⚠️ |
+| Metrics | F-score and AUC only |
+
+### One training sample
+
+**One sample = one trading day of MSFT.**
+
+`X` = `daily mean sentiment score, Low, High, Volume, Adj Close`
+`y` = `StockChange = (Close − Open)/Open` (Eq. 17), binarised to ±1.
+
+### ⚠️ Same-day leak — the paper-46 pattern repeated
+
+The target is the **same day's** open-to-close return, while `High_t`, `Low_t`,
+`Volume_t` and `Adj Close_t` are inputs. From their own Table 3, Adj Close is a fixed
+multiple of Close across this window:
+
+```
+208.36 / 211.60 = 0.98468        205.55 / 208.75 = 0.98468     ✓ identical
+```
+
+`Close` is therefore exactly recoverable from `Adj Close`, giving the model
+`(Close − Low)/(High − Low)` — the same %K quantity that leaked paper 46. This is not
+forecasting; it is classifying a session that has already ended.
+
+### ⚠️⚠️ Table 10 and Figure 9 contradict the abstract
+
+| model | avg **training** score | avg **validation** score |
+|---|---|---|
+| **SVM** | 72.0% | **54.83%** |
+| NB | 66.9% | 51.58% |
+| LR | 63.03% | 53.13% |
+| RF | 62.85% | 52.0% |
+| DT | 60.93% | 52.3% |
+| KNN | 59.13% | 51.5% |
+| MLP | 66.4% | 51.5% |
+
+Figure 9's learning curve agrees — validation sits at **0.40–0.55** for every model at
+every training size while training runs 0.6–0.9. **The honest number is ~52%.** The
+abstract advertises **76.3%**, which is one cell out of `4 datasets × 7 models ×
+2 metrics = 56 reported numbers`, computed on **~15 test samples**.
+
+**⭐ And here the base rate is finally computable.** Table 5 publishes the class
+distribution — Twitter+VADER: **53 buy / 46 sell = 53.5% majority class**. Best
+average validation across all seven models: **54.83%**. **The model performs at the
+base rate.** No other paper in this folder supplies enough to run this check; 47 does,
+and it fails.
+
+### ⚠️ Three more
+
+1. **9.6%–27.3% of the data deleted as "outliers"** (Table 4) — floored at the 10th
+   and capped at the 90th percentile of *sentiment*, i.e. **precisely the days with
+   the strongest sentiment signal are removed**.
+2. **Missing sentiment replaced by the mean; missing prices linearly interpolated**
+   across non-trading days, then predicted from.
+3. **The target definition is written backwards** (§3.2.4): *"if the stock change is
+   larger than zero, the stock movement is positive **and the stock price falls**"* —
+   incoherent as printed.
+
+### What it does honestly
+
+Publishes the learning curve and average validation scores that undercut its own
+headline; publishes the class distribution; and an explicit limitations section naming
+sarcasm, bot/spam accounts and class imbalance. That candour is what makes it citable.
+
+### How to use it in the thesis
+
+**Cite — two narrow uses:**
+1. **⭐ The self-refuting example.** A published paper whose own Table 10 and Figure 9
+   show ~52% validation against a 76.3% abstract. A stronger illustration of
+   headline-vs-honest-number divergence than any in-house assertion, and it is on the
+   record in the paper itself.
+2. **The base-rate check** — the only paper here publishing its class distribution,
+   and the model lands on the majority-class rate.
+
+**Do not follow.** Same-day leak, ~15 test samples, 56 reported numbers with no
+multiple-comparison discipline, unvalidated general-purpose sentiment tools, 20% of
+the sentiment distribution deleted, mean/linear imputation, no price-only baseline.
+
+⚠️ Their **StockTwits-vs-Twitter** comparison (general Twitter beat finance-specialist
+StockTwits) maps onto the VN question of general social vs F319/F247-style forums —
+but at n≈15 it is noise and must **not** be cited as a finding.
+
+---
+
+## Combined reading — where the seven papers leave the thesis
 
 1. **All six predict the wrong target for this thesis** — per-stock or index absolute
    short-horizon direction (45 the overnight gap, 46 the price level itself). None
@@ -949,14 +1055,16 @@ more risk-sensitive metric**.
    market-hours aligned. **46 is disqualified** by its leak. **Take 45's recipe, 43's
    streams, 28's encoder shape, 44's two-level weighting, and 46's segmentation stage;
    take nothing structural from 9.**
-3. **⚠️ NOT ONE of the six reports a majority-class or naive baseline.** 9 leaks
+3. **⚠️ NOT ONE of the seven reports a majority-class or naive baseline.** 9 leaks
    through a random split over overlapping labels; 28 omits the base rate on 187 test
    samples; 43 sits at ~0.52 without stating it; 44 reports 0.51 on a **3-class**
    target whose dominant class is never quantified; **45 explicitly diagnoses class
    imbalance as the reason its best model wins and still does not report the rate**;
-   46 reports currency-unit MAE with no persistence (`Ĉ_t = C_{t−1}`) benchmark. All
-   six reinforce that the protocol already in use here (chronological, purged, costed)
-   is the differentiator.
+   46 reports currency-unit MAE with no persistence (`Ĉ_t = C_{t−1}`) benchmark.
+   **⭐ Only 47 publishes enough to compute one — and its model lands exactly on the
+   base rate (53.5% majority vs 54.83% best validation).** All seven reinforce that
+   the protocol already in use here (chronological, purged, costed) is the
+   differentiator.
 4. **⚠️ Accuracy tracks evaluation looseness, inversely: 80.5% and ~0.60 from the two
    papers that use random/k-fold CV on time series (9, 45); ~0.51–0.52 from the two
    most careful (43, 44); and 46's flattering MAE comes from a target its own inputs
@@ -1041,3 +1149,8 @@ more risk-sensitive metric**.
   *S_I_LSTM, Jieba→Word2Vec→CNN sentiment + Att-LSTM price regression on 5 Shanghai
   A-shares. **⚠️ Provable label leak** (`C = L + %K/100 × (H − L)`); cite only the
   CJK segmentation stage, the 14:1 forum-to-news corpus, and the MAE/MSE contradiction.*
+- `47. Stock Market Prediction Using Microblogging Sentiment Analysis and Machine Learning.pdf`
+  — Koukaras, Nousi & Tjortjis 2022, Telecom (MDPI, open access). 21 pp. *MSFT only,
+  77 days, Twitter+StockTwits × TextBlob+VADER × 7 classifiers. **⚠️ Self-refuting** —
+  Table 10 shows 52% validation against a 76.3% abstract; cite as the evaluation
+  cautionary tale and for the one computable base rate in the folder.*
