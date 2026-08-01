@@ -31,6 +31,7 @@ this file updated → committed and pushed. PDFs themselves stay untracked
 | 46 | Wu, Liu, Zou, Weng — *S_I_LSTM: stock price prediction based on multiple data sources and sentiment analysis* | 2021 | **⚠️ PROVABLE LABEL LEAK — cite only the CJK pipeline + forum-heavy corpus** |
 | 47 | Koukaras, Nousi, Tjortjis — *Stock market prediction using microblogging sentiment analysis and ML* | 2022 | **⚠️ SELF-REFUTING — cite as the evaluation cautionary tale; do not follow** |
 | 48 | Gu et al. — *Predicting stock prices with FinBERT-LSTM: integrating news sentiment analysis* | 2024 | **Cite the 3-D SOFTMAX sentiment + the corpus scale; ⚠️ worse than persistence** |
+| 49 | Maqbool et al. — *Stock prediction by integrating sentiment scores of financial news and MLP-Regressor* | 2023 | **⭐ Cite the 10/30/100-day DECAY TABLE — the folder's best test-size evidence** |
 
 **They form a progression, and the progression is the point.** All five add news or
 social text to price features to predict short-horizon direction, and they differ in
@@ -1137,7 +1138,107 @@ input features, and an unstated split policy.
 
 ---
 
-## Combined reading — where the eight papers leave the thesis
+# Paper 49 — Maqbool, Aggarwal, Kaur, Mittal, Ganaie (2023)
+
+*Stock Prediction by Integrating Sentiment Scores of Financial News and MLP-Regressor:
+A Machine Learning Approach.*
+**Procedia Computer Science** 218 (2023) 1067–1078 · ICMLDE · Elsevier ·
+DOI 10.1016/j.procs.2023.01.086 · UIET, Panjab University, Chandigarh. 12 pp,
+open access CC BY-NC-ND.
+file: `49. Stock Prediction by Integrating Sentiment Scores of Financial News and MLP-Regressor A Machine Learning Approach.pdf`.
+
+> **→ Verdict: ⭐ cite the 10/30/100-day accuracy DECAY TABLE — the single cleanest
+> demonstration in this folder that small test sets manufacture skill.** Same model,
+> same data, same features; accuracy falls **0.90 → 0.70 → 0.56** as the test set
+> grows. Take nothing else.
+
+### Setup
+
+| | |
+|---|---|
+| Universe | **4 Indian stocks, 4 sectors** — Reliance, Tata Motors, Tata Steel, HDFC |
+| Period | **Jan 2010 → Jan 2020 — ten years** (Reliance to May 2020) |
+| Text | Indian financial news; headline + short description **concatenated per date** |
+| Sentiment | **VADER** (pos/neg/neu/compound), **TextBlob** (subjectivity/polarity), **FLAIR** (score_sum) — all general-purpose, **none validated** ⚠️; all 8 combinations tested |
+| Model | **MLP-Regressor** (scikit-learn), Google Colab defaults |
+| Metrics | MAPE for price; accuracy/precision/recall/F1 for derived trend |
+
+### One training sample
+
+**One sample = one (stock, day).** Per Table 4: `Close, label, subjectivity, polarity,
+compound, negative, neutral, positive, score_sum` — previous close plus up to 9
+sentiment scores plus a **company-relevance flag** (`label` = 1 if the news mentions
+that company's keywords). `y` = **closing price**; `trend` (Eq. 1) and `future trend`
+(Eq. 2, n = 5) are derived from the prediction and scored.
+
+⚠️ **An unresolved contradiction that blocks reproduction.** §4.3 states *"The other
+two features include Trend and Future Trend"* — but `future trend` is defined from
+**`C_{d+n}` with n = 5**, five days ahead. As an input that is a five-day look-ahead
+leak. **Table 4's dataset view contains no such columns.** The paper never reconciles
+the two, so it cannot be reimplemented under either reading.
+
+### ⭐ The accidental experiment — the folder's best result
+
+Every configuration is reported at **three test horizons: 10, 30 and 100 days.** Same
+model, same data, same features — **only the test-set size changes** (HDFC, Table 7):
+
+| features | 10 days | 30 days | **100 days** |
+|---|---|---|---|
+| FLAIR | **0.90** | 0.70 | **0.56** |
+| VADER + TextBlob | **0.90** | 0.70 | **0.62** |
+| FLAIR + TextBlob | 0.90 | 0.73 | 0.62 |
+| VADER | 0.80 | 0.66 | **0.53** |
+| TextBlob | 0.70 | 0.63 | **0.56** |
+| VADER+TextBlob+FLAIR | 0.60 | 0.66 | **0.52** |
+
+**Accuracy decays monotonically toward chance as the test set grows.** The abstract
+headlines **0.90** — which is 9 correct out of **10 samples**. At 100 days everything
+lands in **0.52–0.62**.
+
+This is **stronger evidence than paper 47's train-vs-validation gap**, because
+test-set size is the *only* variable that moves. Every other paper in this folder
+reports a single small-n number; 49 accidentally shows what happens when you don't.
+
+### ⚠️ Three more
+
+1. **Recall = 1.00 in many cells** — VADER, TextBlob and FLAIR all reach recall 1.0 on
+   future-trend at 10 days. Table 5 clubs `0/1` together as "upward or static", so
+   recall 1.0 with accuracy 0.8 means **the model predicts "up" for nearly everything**
+   — and Indian equities 2010–2020 were a bull market. The majority-class pathology,
+   visible directly in the recall column. **Ninth paper in a row with no
+   majority-class baseline.**
+2. **MAPE 1.48–2.32 — at or worse than persistence, again.** Indian large caps move
+   ~1.5% on an average day, so `Ĉ_{t+1} = C_t` scores ≈1.5% MAPE. Best here is FLAIR
+   at **1.48**; VADER 1.77; TextBlob 2.32. Per company: HDFC 1.61, Tata Steel 2.55,
+   Reliance 2.57, **Tata Motors 4.71**. Same omission as paper 48.
+3. **The news is not company-specific.** *"All financial news headlines were added
+   without segregating news of different sectors or companies."* Every stock receives
+   the same market-wide text — **paper 43's market stream alone**, with no sector or
+   stock stream, which is very likely why the signal is so weak. Notably, adding the
+   company-relevance `label` **reduces MAPE by 0.17** — a small independent echo of
+   43's hierarchy result.
+
+Minor: Table 2 lists Reliance as "Telecom"; it is an energy/petrochemical conglomerate.
+
+### How to use it in the thesis
+
+**Cite — one strong use plus one weak one:**
+1. **⭐ The 10/30/100-day decay table.** The folder's best evidence for test-set-size
+   effects, produced by the authors' own systematic sweep rather than by critique.
+   Use it verbatim in the evaluation chapter: *published headline 0.90 on 10 samples,
+   0.56 on 100, same model throughout.* Combined with **47**'s 52% validation and
+   **48**'s sub-persistence MAPE, the case for costed walk-forward over headline
+   metrics is now made **entirely from the literature's own numbers**.
+2. The `label` relevance-flag result weakly corroborates paper 43's hierarchy —
+   filtering market-wide news down to company-relevant news measurably helps.
+
+**Do not follow:** MLP on price-level regression, general-purpose unvalidated scorers,
+market-wide news applied undifferentiated across four stocks, no baseline, and the
+§4.3-vs-Table 4 contradiction over a five-day-forward feature.
+
+---
+
+## Combined reading — where the nine papers leave the thesis
 
 1. **All six predict the wrong target for this thesis** — per-stock or index absolute
    short-horizon direction (45 the overnight gap, 46 the price level itself). None
@@ -1158,16 +1259,28 @@ input features, and an unstated split policy.
    imbalance as the reason its best model wins and still does not report the rate**;
    46 reports currency-unit MAE with no persistence (`Ĉ_t = C_{t−1}`) benchmark.
    **⭐ Only 47 publishes enough to compute one — and its model lands exactly on the
-   base rate (53.5% majority vs 54.83% best validation).** **48 omits the persistence
-   benchmark on a price-level regression and lands ~2–3× WORSE than it.** All eight
-   reinforce that the protocol already in use here (chronological, purged, costed) is
-   the differentiator.
-4. **⚠️ Accuracy tracks evaluation looseness, inversely: 80.5% and ~0.60 from the two
-   papers that use random/k-fold CV on time series (9, 45); ~0.51–0.52 from the two
-   most careful (43, 44); and 46's flattering MAE comes from a target its own inputs
-   determine exactly.** That ordering across six papers is itself the finding. Read
-   with experiment_3 — where a genuine AUC-0.77 signal still failed to beat Buy&Hold
-   after costs — the expected value of a VN news feature should be set **low**.
+   base rate (53.5% majority vs 54.83% best validation).** **48 and 49 both omit the
+   persistence benchmark on price-level regressions and both land at or WORSE than
+   it** (MAPE 4.5% and 1.48–2.32% against ~1.5–2% daily moves). All nine reinforce
+   that the protocol already in use here (chronological, purged, costed) is the
+   differentiator.
+4. **⚠️⚠️ REPORTED SKILL IS A FUNCTION OF TEST-SET SIZE, AND THE LITERATURE PROVES IT
+   ITSELF.** Three independent demonstrations, none of them a critique from outside:
+   - **49 — the decisive one.** Same model, same data, same features, three test
+     horizons: **0.90 (10 days) → 0.70 (30) → 0.56 (100)**. Test-set size is the only
+     variable that moves.
+   - **47** — own Table 10 and learning curve: **~52% validation** against a **76.3%**
+     abstract, on ~15 test samples.
+   - **48 / 49** — price regressions reporting MAPE at or **worse than predicting no
+     change**, with the persistence benchmark never computed.
+
+   Across the folder, accuracy tracks looseness inversely: 80.5% and ~0.60 from the
+   papers using random/k-fold CV on time series (9, 45); ~0.51–0.52 from the two most
+   careful (43, 44); 46's flattering MAE from a target its own inputs determine
+   exactly. Read with experiment_3 — where a genuine AUC-0.77 signal still failed to
+   beat Buy&Hold after costs — **the expected value of a VN news feature should be set
+   low, and the evaluation chapter can be argued entirely from these papers' own
+   numbers.**
 5. **⚠️ Five of the six aggregate text by CALENDAR DAY**, which drops post-close news
    into the same row as that day's close. Only 45 treats the window as a design
    decision and tests a market-hours division. Any implementation here must align to
@@ -1258,3 +1371,8 @@ input features, and an unstated split policy.
   articles → FinBERT 3-way softmax + 8-day price → stacked LSTM → next close.
   **Cite the 3-D sentiment representation and the corpus scale**; ⚠️ MAPE 4.5% is
   worse than persistence, and "Accuracy" is `1 − MAPE`.*
+- `49. Stock Prediction by Integrating Sentiment Scores of Financial News and MLP-Regressor A Machine Learning Approach.pdf`
+  — Maqbool, Aggarwal, Kaur, Mittal & Ganaie 2023, Procedia Comput. Sci. (Elsevier,
+  open access). 12 pp. *VADER+TextBlob+FLAIR → MLP-Regressor on 4 Indian stocks,
+  10 years. **⭐ Cite the 10/30/100-day decay table** (0.90 → 0.70 → 0.56) — the
+  folder's best evidence that small test sets manufacture skill.*
