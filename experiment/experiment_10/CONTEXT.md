@@ -27,25 +27,34 @@ this file updated → committed and pushed. PDFs themselves stay untracked
 | 28 | Vargas, de Lima, Evsukoff — *Deep learning for stock market prediction from financial news articles* | 2017 | **Cite; borrow the architecture, not the setup** |
 | 43 | Usmani & Shamsi — *LSTM based stock prediction using weighted and categorized financial news* | 2023 | **Cite; borrow the NEWS HIERARCHY — the one idea to build on** |
 | 44 | Huang et al. — *ML-GAT: a multilevel graph attention model for stock prediction* | 2022 | **Cite for its NEGATIVE results; do not follow** |
+| 45 | Xiao & Ihnaini — *Stock trend prediction using sentiment analysis* | 2023 | **Cite the RECIPE (tool validation + market-hours window); do not follow the design** |
 
-**They form a progression, and the progression is the point.** All four add news text
-to price features to predict short-horizon direction, and they differ in *how the
-text enters the model*:
+**They form a progression, and the progression is the point.** All five add news or
+social text to price features to predict short-horizon direction, and they differ in
+*how the text enters the model*:
 
-| | paper 9 (2020) | paper 28 (2017) | paper 43 (2023) | paper 44 (2022) |
-|---|---|---|---|---|
-| text enters as | **one scalar** beside OHLCV | a **sequence + own encoder** | **three weighted streams** (market/sector/stock) | **BERT `[CLS]`** summed into a graph node |
-| stock relations | — | — | implicit (sector grouping) | **explicit graph** (Wikidata, 2-level attention) |
-| split | random 70/30 ⚠️ | chronological | time-series CV, val ahead of train | chronological |
-| test size | 150 | **187** ⚠️ | 41 stocks, per-stock | 316 d × 423/286 stocks |
-| repeats | 1 | 1 | 1 | **10, means reported** |
-| baseline reported | — | **none** ⚠️ | **none** ⚠️ | **none** ⚠️ |
-| accuracy | 80.5% (leaked) | 62.0% | **~0.50–0.55** | ~0.51/0.57 (**3-class**) |
+| | paper 9 (2020) | paper 28 (2017) | paper 43 (2023) | paper 44 (2022) | paper 45 (2023) |
+|---|---|---|---|---|---|
+| text enters as | **one scalar** beside OHLCV | a **sequence + own encoder** | **three weighted streams** (market/sector/stock) | **BERT `[CLS]`** summed into a graph node | **one scalar**, but signed, engagement-weighted, market-hours aligned |
+| price features | yes | yes | yes | yes | **none** ⚠️ |
+| stock relations | — | — | implicit (sector) | **explicit graph** (Wikidata) | — |
+| sentiment tool validated? | no | n/a | no (3 lexicons compared post-hoc) | no | **⭐ YES — on labelled benchmarks first** |
+| aggregation window | calendar day ⚠️ | calendar day ⚠️ | calendar day ⚠️ | calendar day ⚠️ | **market hours, tested** ⭐ |
+| split | random 70/30 ⚠️ | chronological | time-series CV, val ahead | chronological | **10-fold CV** ⚠️ |
+| test size | 150 | **187** ⚠️ | 41 stocks, per-stock | 316 d × 423/286 stocks | **~25/fold** ⚠️ |
+| repeats | 1 | 1 | 1 | **10, means reported** | 1 |
+| baseline reported | — | **none** ⚠️ | **none** ⚠️ | **none** ⚠️ | **none** ⚠️ |
+| accuracy | 80.5% (leaked) | 62.0% | **~0.50–0.55** | ~0.51/0.57 (**3-class**) | ~0.60 (leaked) |
 
 Read together: **the more careful the evaluation gets, the closer accuracy falls to
 chance.** Papers 43 and 44 are the most methodologically careful and both land near
-coin-flip — which makes their weak results the most informative numbers in the
-folder, not the least. **Not one of the four reports a majority-class baseline.**
+coin-flip; papers 9 and 45 are the loosest and report the highest numbers. That
+ordering is itself the folder's main finding. **Not one of the five reports a
+majority-class baseline.**
+
+**The design splits cleanly across papers.** Nobody has all the pieces:
+**45 = the aggregation recipe** · **43 = the hierarchy** · **28 = the encoder shape**
+· **44 = the warning**. Paper 9 contributes nothing structural.
 
 ---
 
@@ -657,46 +666,200 @@ experiment_7/8/9 pipeline) — **not Wikidata**.
 
 ---
 
-## Combined reading — where the four papers leave the thesis
+# Paper 45 — Xiao, Ihnaini (2023)
 
-1. **All four predict the wrong target for this thesis** — per-stock or index
-   absolute short-horizon direction. None touches cross-sectional relative return.
-2. **On integration, the ordering is 43 ≈ 44 > 28 > 9.** Sentiment-as-scalar (9)
+*Stock trend prediction using sentiment analysis.*
+**PeerJ Computer Science** 9:e1293 · DOI 10.7717/peerj-cs.1293 · Dept. of Computer
+Science, Wenzhou Kean University, China. 18 pp, open access CC-BY, **raw data in
+supplemental files**.
+file: `45. Stock trend prediction using sentiment analysis.pdf`.
+
+> **→ Verdict: cite it for the AGGREGATION RECIPE — validate the sentiment scorer on
+> labelled data first, then aggregate over a MARKET-HOURS window with holiday decay
+> and engagement weighting. Do not follow the experimental design**, which is the
+> weakest in the folder (10-fold CV on a time series, one year, four stocks, no price
+> features, no baseline).
+
+### Setup
+
+| | |
+|---|---|
+| Universe | **4 stocks** — AAPL, MSFT (Technology), AMZN, NFLX (Service) |
+| Period | **2021-01-04 → 2021-12-31 — ONE YEAR**, ~250 days/stock |
+| Tweets | **260,000**, harvested by cashtag via **Twint** (not the official API) |
+| News | **6,000** headlines from 8 outlets — CNBC, Forbes, The Street, Reuters, The Motley Fool, Business Insider, WSJ, Bloomberg |
+| Models | KNN, Tree, SVM, RF, **NB**, LR — **10-fold CV** |
+
+### ⭐ The genuinely good part — sentiment tools VALIDATED before use
+
+Three scorers benchmarked on **labelled** data first: 1,300 hand-labelled tweets, and
+the **Financial PhraseBank** (4,845 annotated sentences, Malo et al. 2014):
+
+| | on tweets | on news |
+|---|---|---|
+| **VADER** | **68%** | 54% |
+| Loughran-McDonald | 56% | — |
+| **FinBERT** | 53% | **86%** |
+
+A clean domain split — **VADER for laypeople's messages, FinBERT for professional
+prose** — and they select accordingly. **No other paper in this folder validates its
+sentiment tool before trusting it.** This also *explains* paper 43's odd result that
+general HIV4 beat domain-specific LM: LM is built from 10-K filings and was being
+applied to newspaper headlines — the same domain mismatch, in the other direction.
+
+### One training sample
+
+**One sample = one trading day for one stock**, and the input is
+**sentiment only — NO price or technical features at all.**
+
+| feature | construction |
+|---|---|
+| `CN` | natural-hours combined: `α·TN_modified + (1−α)·NN_modified`, **α = 0.25** |
+| `CO` | opening-hours combined: `α·TO_modified + (1−α)·NO_modified`, **α = 0.25** |
+
+Built bottom-up — **this chain is the deliverable**:
+
+1. **per tweet** — `T_weighted = VADER compound × (retweets + 1)` (Eq. 3) — engagement weighting
+2. **per headline** — `N_weighted = (pos − neg)/(pos + neg)` from **FinBERT** (Eq. 4) — signed and normalised
+3. **per day** — summed over one of **two time divisions** (Eqs 5–6):
+   - **TD1 "natural hours"** `00:00ₜ → 00:00ₜ₊₁`
+   - **TD2 "opening hours"** `09:30ₜ → 09:30ₜ₊₁`
+4. **holiday / weekend** — exponential decay into the next trading day (Eqs 7–8):
+   `TO_modified = e⁻ⁿTOₜ₋ₙ + … + e⁻¹TOₜ₋₁ + TOₜ`
+
+`y` — **two separate binary targets**:
+- **Goal I** (Eq. 1): `1 if Openₜ ≤ Openₜ₊₁` — open-to-open
+- **Goal II** (Eq. 2): `1 if Closeₜ ≤ Openₜ₊₁` — **the overnight gap**
+
+### Results (accuracy)
+
+| stock | Goal I best | Goal II best |
+|---|---|---|
+| AAPL | NB 0.604 (TD1) | NB 0.609 (TD2) |
+| AMZN | NB **0.624** (TD1) | LR/NB 0.621 (TD2) |
+| MSFT | NB 0.600 (TD1) | KNN 0.590 (TD2) |
+| NFLX | LR 0.588 (TD1) | NB 0.594 (TD2) |
+
+Naïve Bayes wins 6 of 8. Claimed pattern: natural hours (`CN`) better for Goal I,
+opening hours (`CO`) better for Goal II.
+
+### ⚠️ Five problems
+
+1. **⚠️ 10-fold CV on a time series.** No chronological split anywhere — paper 9's
+   central sin repeated. With ~250 rows per stock each fold tests on **~25 samples**,
+   so every accuracy carries an SE near **10 pp**.
+2. **One year, four stocks.** 2021 only; no out-of-period validation.
+3. **⚠️ No majority-class baseline — and they come within one sentence of noticing.**
+   The conclusion reads: *"the dataset might be highly skewed, with one class being
+   much more prevalent than the others. NB is known to perform well in such
+   scenarios."* They diagnose imbalance as **the reason their best model wins** and
+   still never state the base rate. All four stocks rose through 2021, so "up" is the
+   majority class and 0.60 may sit at or below the trivial rate.
+4. **α = 0.25 chosen because "result is best"** — tuned on the reported data.
+5. **No price features, so no ablation is possible.** Framed as a strength ("only
+   sentiment features"), it means nothing shows sentiment beats price alone. The
+   62.4% is then compared to Kabbani & Usta's 63.6% — different data, stocks, period.
+
+Minor: the abstract claims opening-hours "outperformed" natural-hours, but their own
+tables split it by goal (`CN` wins Goal I, `CO` wins Goal II). And Goal II — the
+overnight gap — is not tradable the way the framing implies.
+
+### How to use it in the thesis
+
+**Cite — two techniques, both directly transferable:**
+
+1. **⭐ Validate the sentiment scorer on labelled data before using it.** The most
+   actionable item in the folder. For VN: benchmark any PhoBERT-class model on a
+   labelled Vietnamese financial-text set *before* trusting it, and expect the
+   prose-vs-laypeople split to reappear between forum posts (F319/F247-style) and
+   CafeF / VietStock articles. Paper 45 supplies both the template and the reason.
+2. **Treat the aggregation window as a design decision.** This is the fix for the
+   alignment flaw in papers 9, 28, 43 and 44 — all of which sum by calendar day, which
+   drops post-close news into the same row as that day's close. A **market-hours
+   window** does not. VN analogue: a **09:00 → 09:00 ICT** division. Their holiday
+   exponential decay matters *more* here than in the US — **Tết closes the VN market
+   for up to ~9 days**, exactly the case the decay term exists for.
+
+Also worth lifting: **engagement weighting** (`compound × (retweets+1)`), which maps
+onto views/replies on VN forums; and the **signed normalised** news score
+`(pos−neg)/(pos+neg)` — the correct version of what paper 9 got wrong by summing a
+0–4 scale whose neutral is 2.
+
+**Do not follow:** 10-fold CV on time series, one year, four stocks, no chronological
+split, no baseline, no price features, no costs. Its ~0.60 sits high *because* the
+evaluation is loose.
+
+**The framing worth writing down:** paper 45 fixes exactly the two things paper 9 got
+wrong — calendar-day summation and unvalidated tooling — while repeating paper 9's
+central methodological sin. **Take its recipe, not its results.**
+
+---
+
+## Combined reading — where the five papers leave the thesis
+
+1. **All five predict the wrong target for this thesis** — per-stock or index
+   absolute short-horizon direction (45 even predicts the overnight gap). None
+   touches cross-sectional relative return.
+2. **On integration, the ordering is 43 ≈ 44 > 28 > 45 > 9.** Sentiment-as-scalar (9)
    conflates polarity with document volume by construction; text-as-sequence-with-encoder
    (28) fixes that; **text-as-hierarchy** (43) separates the component that cancels in
    a cross-section from the one that does not; **44 learns that weighting** instead of
-   grid-searching it, over arbitrary relation types. **Take 43's streams, 28's encoder
-   shape, and 44's two-level weighting idea; take nothing structural from 9.**
-3. **⚠️ NOT ONE of the four reports a majority-class baseline.** 9 leaks through a
+   grid-searching it, over arbitrary relation types. **45 is a scalar again — but the
+   RIGHT scalar**, signed, engagement-weighted and market-hours aligned. **Take 45's
+   recipe, 43's streams, 28's encoder shape, and 44's two-level weighting; take
+   nothing structural from 9.**
+3. **⚠️ NOT ONE of the five reports a majority-class baseline.** 9 leaks through a
    random split over overlapping labels; 28 omits the base rate on 187 test samples;
    43 sits at ~0.52 without stating it; 44 reports 0.51 on a **3-class** target whose
-   dominant class is never quantified. All four reinforce that the protocol already in
-   use here (chronological, purged, costed) is the differentiator.
-4. **⚠️ Accuracy falls toward chance as evaluation quality rises: 80.5% → 62.0% →
-   ~0.52 → ~0.51.** That ordering across the four papers is itself the finding. Read
-   with experiment_3 — where a genuine AUC-0.77 signal still failed to beat Buy&Hold
-   after costs — the expected value of a VN news feature should be set **low**.
-5. **⭐ Paper 44 supplies the sharpest evidence for that, from its own ablation:**
+   dominant class is never quantified; **45 explicitly diagnoses class imbalance as
+   the reason its best model wins and still does not report the rate.** All five
+   reinforce that the protocol already in use here (chronological, purged, costed) is
+   the differentiator.
+4. **⚠️ Accuracy tracks evaluation looseness, inversely: 80.5% and ~0.60 from the two
+   papers that use random/k-fold CV on time series (9, 45); ~0.51–0.52 from the two
+   most careful (43, 44).** That ordering across five papers is itself the finding.
+   Read with experiment_3 — where a genuine AUC-0.77 signal still failed to beat
+   Buy&Hold after costs — the expected value of a VN news feature should be set **low**.
+5. **⚠️ Four of the five aggregate text by CALENDAR DAY**, which drops post-close news
+   into the same row as that day's close. Only 45 treats the window as a design
+   decision and tests a market-hours division. Any implementation here must align to
+   VN market hours (**09:00 → 09:00 ICT**) and lag to `d+1`.
+6. **⭐ Only 45 validates its sentiment scorer on labelled data before using it** —
+   and finds an 86%-vs-53% domain split between professional prose and laypeople's
+   messages. That single step is the cheapest, highest-value thing to copy, and it
+   retroactively explains 43's puzzling "general lexicon beats domain-specific" result.
+7. **⭐ Paper 44 supplies the sharpest evidence for point 4, from its own ablation:**
    adding news raises F1 +18.1%, accuracy +11.5% and daily return +2.3% while
    **lowering the Sharpe ratio**. An independent team, another market, the same
    lesson experiment_3 learned — *classification gains need not become risk-adjusted
    return*. Cite this rather than asserting it.
-6. **The binding constraint is the CORPUS, not the architecture.** Paper 28 quantifies
+8. **The binding constraint is the CORPUS, not the architecture.** Paper 28 quantifies
    what a working text model needs (~10 titles/day/target); experiment_6 delivers
    **0.35**. Paper 43 supplies the fix — back sparse per-ticker news with abundant
    market- and sector-level streams. Paper 44 confirms the same sparsity problem from
    the other end (its Sharpe regression is blamed on thin news). The sector layer
    already exists (Simplize industry tree); the market layer needs a market-wide feed;
    θ3 needs experiment_6 generalised beyond VCB.
-7. **On relational structure:** paper 44 shows the **edges matter more than the
+9. **On relational structure:** paper 44 shows the **edges matter more than the
    architecture** (relation choice swings F1 0.267 → 0.458) and that **unweighted
    aggregation is worse than no graph** (GCN < LSTM). For VN, Wikidata is not a viable
    edge source; sector membership and ownership links are. And experiment 1.8's
    cross-sectional rank features are already a zero-cost degenerate GNN.
-8. **If text becomes a thesis chapter, the shape is settled:** three streams
-   (market / sector / stock) × a transformer sentence encoder for VN × lagged to
-   `d+1` × ranked cross-sectionally against the VN30/VN100 panel × fed to the
-   existing GBM, and judged by costed walk-forward — **not** by accuracy.
+10. **If text becomes a thesis chapter, the shape is now fully specified** — and no
+    single paper has it, so it is assembled across four:
+    - **scorer** — a VN transformer sentence encoder, **validated on labelled VN
+      financial text first** *(45)*, separately for prose vs forum registers
+    - **per-document score** — signed and normalised, engagement-weighted *(45)*
+    - **aggregation** — mean not sum, over a **09:00→09:00 ICT** market-hours window,
+      with exponential decay across Tết and weekends, document count kept as its own
+      feature *(45)*
+    - **streams** — market / sector / stock, weighted *(43)*, learned rather than
+      grid-searched *(44)*
+    - **cross-section** — ranked per date against the VN30/VN100 panel, so the market
+      stream cancels and the idiosyncratic stream survives *(43 + this thesis)*
+    - **lag** — news from `d` predicts from `d+1`
+    - **model** — the existing GBM, not a sequence net *(experiments 1.6–2.3)*
+    - **judgement** — costed walk-forward on `rel5`, **never accuracy** *(experiment_3, 44)*
 
 ---
 
@@ -716,3 +879,7 @@ experiment_7/8/9 pipeline) — **not Wikidata**.
   — Huang et al. 2022, IEEE Access (open access). 15 pp. *ML-GAT two-level graph
   attention over Wikidata corporate relations; **cite the negative results** —
   accuracy up / Sharpe down, and edges mattering more than architecture.*
+- `45. Stock trend prediction using sentiment analysis.pdf`
+  — Xiao & Ihnaini 2023, PeerJ Comput. Sci. (open access, data supplied). 18 pp.
+  *VADER-on-tweets + FinBERT-on-news, market-hours aggregation window, holiday decay;
+  **cite the recipe** — the only paper here that validates its scorer first.*
