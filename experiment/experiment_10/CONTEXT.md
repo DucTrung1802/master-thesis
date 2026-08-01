@@ -36,6 +36,7 @@ this file updated → committed and pushed. PDFs themselves stay untracked
 | 51 | Fazlija & Harder — *Using financial news sentiment for stock price direction prediction* | 2022 | **⭐⭐ THE METHODOLOGICAL TEMPLATE — follow the PROTOCOL, not the method** |
 | 52 | Nemes & Kiss — *Prediction of stock values changes using sentiment analysis of stock news headlines* | 2021 | **⚠️ NO PREDICTION MODEL AT ALL — cite only as "tool choice decides the answer"** |
 | 53 | Li, Wu, Wang — *Incorporating stock prices and news sentiments for stock market prediction: a case of Hong Kong* | 2020 | **⭐ Cite the QUANTILE LABELS + LMFinance win; ⚠️ every result is below its own base rate** |
+| 54 | Joshi, Bharathi, Rao — *Stock trend prediction using news sentiment analysis* | 2016 | **⚠️ CIRCULAR LABELLING — cite only as the anti-pattern; no stock prediction in it** |
 
 **They form a progression, and the progression is the point.** All five add news or
 social text to price features to predict short-horizon direction, and they differ in
@@ -1670,7 +1671,103 @@ sub-random price-only model; and the test window is an unacknowledged regime bre
 
 ---
 
-## Combined reading — where the thirteen papers leave the thesis
+# Paper 54 — Joshi, Bharathi H. N., Rao (2016)
+
+*Stock Trend Prediction Using News Sentiment Analysis.*
+Dept. of Computer Engineering, **K. J. Somaiya College of Engineering, Mumbai**.
+11 pp. Student paper / preprint; no journal identified.
+file: `54. Stock trend prediction using news sentiment analysis.pdf`.
+
+> **→ Verdict: ⚠️ the paper contains NO STOCK PREDICTION.** Every reported number
+> measures how accurately a classifier reproduces a **lexicon's own output on the same
+> documents that produced it**. Cite it for exactly one thing — as the folder's
+> cleanest example of **circular labelling**, which is the precise trap awaiting any
+> VN sentiment corpus built without human annotation.
+
+### Setup
+
+| | |
+|---|---|
+| Universe | **Apple Inc (AAPL) only** |
+| Period | **1 Feb 2013 → 2 Apr 2016** |
+| Text | "major key events news articles" from news.google.com, reuters.com, finance.yahoo.com — **92 documents total** ⚠️ |
+| Sentiment | bag-of-words dictionary — general polarity words **+ Loughran–McDonald finance words**; **2,360 positive / 7,383 negative**; own finance-specific stopword list |
+| Score | `count(pos matches) − count(neg matches)`; **≥ 0 → positive**, else negative |
+| Models | RF, NB, SVM over **TF-IDF**, via Weka |
+
+### ⚠️⚠️ There is no prediction of stock movement
+
+From their own Fig. 1:
+
+```
+Phase 1:  news text → dictionary counting rule → (News, Polarity score)
+Phase 2:  TF-IDF of the SAME news text → RF / NB / SVM → predict that polarity label
+Phase 3:  plot sentiment, plot price, "observe the relationship"
+```
+
+**All results come from Phase 2.** Prices appear nowhere in the evaluation. Phase 3 is
+Fig. 4 — two stacked time series, **no correlation, no lag, no metric**. The abstract
+confirms the task: *"in comparison with news random labelling with 50% of accuracy"* —
+a random baseline for **polarity classification**, not for price direction.
+
+### The circularity IS the result
+
+```
+label    = f(text)   where f = count(pos) − count(neg), thresholded at 0
+features = TF-IDF(text)
+```
+
+The classifier's only job is to **rediscover `f`** from a bag-of-words view of the same
+text. That is close to a solved problem, which is exactly why accuracies land at
+80–96%. **A self-labelling loop — the number says nothing about markets.**
+
+*(Distinct from paper 46's circularity, where labels came from future returns. Here
+label and features are two functions of the same document.)*
+
+### ⚠️ The sample sizes
+
+| test option | actual counts |
+|---|---|
+| k-fold CV | **92 documents total** — RF 80/92, NB 76/92, SVM 75/92 |
+| 70% split | **28 test samples** — SVM 27/28 = "96.42%" |
+| 80% split | **18 test samples** — SVM 17/18 = "94.44%" |
+| "new data" | **20 articles** — SVM 18/20 = the headline **"90%"** |
+
+**92 articles for AAPL over three years** — ~30/year for one of the most heavily
+covered stocks in the world. Set against paper 48's **843,062**.
+
+Minor: with 2,360 positive vs 7,383 negative dictionary entries and ties assigned to
+positive (*"if the score of the document is 0, then we label it as positive"*), the
+labelling carries an unexamined bias.
+
+### ⭐ The one thing worth taking — as a warning
+
+**This is the cleanest circular-labelling example in the folder, and it is precisely
+the temptation awaiting a VN corpus build.**
+
+There is no Vietnamese Financial PhraseBank. The cheap path is to auto-label VN
+financial text with a lexicon and train a model on it. **54 shows what that yields**:
+a 90% headline measuring only how well a model re-derives the rule that made its
+labels.
+
+**→ Labels must come from HUMAN ANNOTATION** — as in **45** and **51**, both of which
+use the human-annotated Financial PhraseBank (16 annotators, 4,846 sentences) — **or
+from an independent source. Never from a lexicon applied to the same text being
+trained on.**
+
+### How to use it in the thesis
+
+**Cite — one use:** the circular-labelling anti-pattern, paired with **46**'s
+label-from-future-returns circularity. Two distinct ways to build a sentiment model
+that measures itself.
+
+**Do not follow:** no target variable, no price alignment, no lag, no trading, 92
+documents, a 20-article "test set", and a title describing work the paper does not
+contain. **The weakest entry in this folder.**
+
+---
+
+## Combined reading — where the fourteen papers leave the thesis
 
 1. **All six predict the wrong target for this thesis** — per-stock or index absolute
    short-horizon direction (45 the overnight gap, 46 the price level itself). None
@@ -1761,6 +1858,11 @@ sub-random price-only model; and the test window is an unacknowledged regime bre
     - **segmentation** — VN word segmentation (underthesea / VnCoreNLP) + a VN
       stopword list **before any encoder**; a mandatory stage the English-only papers
       do not have *(46)*
+    - **⚠️ annotation** — labels for the VN scorer must come from **human annotation**
+      (the Financial PhraseBank pattern: 16 annotators, 4,846 sentences) or an
+      independent source. **Never auto-label with a lexicon and train on the same
+      text** — that measures only the lexicon *(54; and 46's label-from-future-returns
+      is the other flavour of the same mistake)*
     - **scorer** — a **finance-domain** VN transformer sentence encoder, **validated on
       labelled VN financial text first** *(45)*, separately for prose vs forum
       registers. Domain-specific beats general — **53** (12 stocks × 3 models ×
@@ -1855,3 +1957,8 @@ sub-random price-only model; and the test window is an unacknowledged regime bre
   **⭐ Cite the quantile-label design, LMFinance beating general dictionaries, and
   per-window Z-scoring**; ⚠️ every accuracy sits at or below the ~50% base rate its own
   25/50/25 labelling guarantees, and the test window is the GFC onset.*
+- `54. Stock trend prediction using news sentiment analysis.pdf`
+  — Joshi, Bharathi H. N. & Rao 2016, K. J. Somaiya College of Engineering, Mumbai.
+  11 pp. *Dictionary labels → TF-IDF → RF/NB/SVM on **92 AAPL articles**.
+  **⚠️ Circular labelling — no stock prediction in the paper at all**; cite only as the
+  anti-pattern for auto-labelled sentiment corpora.*
