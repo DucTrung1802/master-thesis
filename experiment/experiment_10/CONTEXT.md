@@ -37,6 +37,7 @@ this file updated → committed and pushed. PDFs themselves stay untracked
 | 52 | Nemes & Kiss — *Prediction of stock values changes using sentiment analysis of stock news headlines* | 2021 | **⚠️ NO PREDICTION MODEL AT ALL — cite only as "tool choice decides the answer"** |
 | 53 | Li, Wu, Wang — *Incorporating stock prices and news sentiments for stock market prediction: a case of Hong Kong* | 2020 | **⭐ Cite the QUANTILE LABELS + LMFinance win; ⚠️ every result is below its own base rate** |
 | 54 | Joshi, Bharathi, Rao — *Stock trend prediction using news sentiment analysis* | 2016 | **⚠️ CIRCULAR LABELLING — cite only as the anti-pattern; no stock prediction in it** |
+| 55 | Bharathi & Geetha — *Sentiment analysis for effective stock market prediction* | 2017 | **⭐ Cite the VETO framing (sentiment abstains, never generates); ⚠️ target undefined** |
 
 **They form a progression, and the progression is the point.** All five add news or
 social text to price features to predict short-horizon direction, and they differ in
@@ -1767,7 +1768,108 @@ contain. **The weakest entry in this folder.**
 
 ---
 
-## Combined reading — where the fourteen papers leave the thesis
+# Paper 55 — Bharathi, Geetha (2017)
+
+*Sentiment Analysis for Effective Stock Market Prediction.*
+**International Journal of Intelligent Engineering & Systems** (INASS) Vol. 10, No. 3,
+pp. 146–154 · DOI 10.22266/ijies2017.0630.16 · Dept. of Computer Science and
+Engineering, B.S. Abdur Rahman University, Chennai. 9 pp.
+file: `55. Sentiment Analysis for Effective Stock Market Prediction.pdf`.
+
+> **→ Verdict: ⭐ cite it for ONE idea the authors do not appear to realise they had —
+> sentiment used as a VETO that only withdraws a signal, never generates one.**
+> Independently corroborated by paper 51's divest-don't-short result. ⚠️ Everything
+> else fails: the target variable is never defined, the experiment is one month, and
+> the paper calls a Jordanian series "Sensex" throughout.
+
+### Setup
+
+| | |
+|---|---|
+| Target | **ARBK (Arab Bank), Amman Stock Exchange** — though Fig. 6's 6,600–7,200 range is the **ASE general index**, not ARBK's ~25–30 JOD share price ⚠️ |
+| Text | RSS feed, `investing.einnews.com/news/ase-stock` |
+| Prices | `marketstoday.net/markets/jordan` |
+| Period | prices "2005 to 2007", but the analysis is **April 2006 only** (Fig. 6 covers 1–18 April) ⚠️ |
+| Scorer | POS tagger (**noun + adverb only**, "chosen for the best result") → **SentiWordNet** → Sentence Sentiment Score |
+
+### One sample — and there is no learned model
+
+**One sample = one trading day.** Two signals combined by a **hand-written 4-row lookup
+table** (Table 1). Nothing is fitted; no parameters, no training, no split.
+
+| signal | construction |
+|---|---|
+| **MA rule** | `MA5 > MA10 > MA15` → positive · `MA5 < MA10 < MA15` → negative · otherwise neutral |
+| **Sentiment** | SSS = sum of SentiWordNet word scores per sentence → positive / negative / neutral |
+
+| sentiment | MA | → output |
+|---|---|---|
+| Positive | Positive | **Positive** |
+| Positive | Negative | Neutral |
+| Negative | Positive | Neutral |
+| Negative | Negative | **Negative** |
+
+### ⭐ The one idea worth taking — sentiment as a VETO, not a generator
+
+Read that truth table closely. **Sentiment can never flip a call from positive to
+negative or back.** It can only downgrade an MA signal to Neutral when the two
+disagree. The sentiment layer is a pure **abstention mechanism** — it withdraws
+signals, it never creates them.
+
+**No other paper in this folder does this**; in all fourteen others sentiment generates
+directional calls. And it is the right shape for a weak signal:
+
+- **⭐ Paper 51 found the same thing independently.** Its "SC2" variants — which
+  *divest* rather than short on a negative prediction — beat the shorting variants on
+  every metric (RFC Title: return **9.92% vs 7.67%**, drawdown **18.67% vs 25.52%**).
+  **Two papers, two markets: a weak signal should REDUCE exposure, not reverse it.**
+- **It fits experiment_3's binding constraint.** If costs are what kill the strategy, a
+  layer that only *removes* trades is directly testable in a costed backtest and can
+  only reduce turnover.
+
+**→ For this thesis:** the GBM ranks `rel5` as it already does; sentiment only drops
+names where the text disagrees. A materially cheaper claim to defend than "sentiment
+predicts returns", and it is falsifiable with the walk-forward machinery already built.
+
+### ⚠️ Five failures
+
+1. **⚠️ The target variable is never defined.** Table 2 reports "Correctly Classified
+   391/499 = 78.75%", but the paper never states what counts as correct, how ground
+   truth was established, the class distribution, or any split. And since the sentiment
+   layer only converts directional calls into *neutral* ones, the whole 64.32% → 78.75%
+   improvement hinges on how neutral predictions are scored — never explained.
+2. **⚠️ "Sensex" is used throughout for a Jordanian series.** §3.1 and Eq. 1 define the
+   **BSE Sensex** (India, 30 stocks); reference [15] is `bseindia.com`. The data is ASE.
+   Eq. 1 is therefore irrelevant to anything computed, and it is left unclear whether
+   the target is the stock or the index.
+3. **One month of data.** "499 total instances" from a single security over ~20 April
+   2006 trading days is never reconciled.
+4. **The baselines come from a different paper on different data** — ID3 (46.69%) and
+   C4.5 (47.49%) are quoted from Al-radaideh et al. [16], not re-run. Both fall *below*
+   the 3-line MA heuristic (64.32%), which suggests they were misapplied there too.
+5. **"Precision %" is accuracy.** The Table 2 row is labelled Precision but computed as
+   correct/total. Eqs. 4–5 define precision and recall properly; neither is ever
+   computed per class.
+
+Also: **SentiWordNet is general-purpose** — paper 53 showed LMFinance beating it
+decisively across 12 stocks × 3 models — the **noun+adverb** POS restriction was
+selected on outcome (and is odd, since adjectives carry most English sentiment), and
+**no lag is stated anywhere**.
+
+### How to use it in the thesis
+
+**Cite — one use:** the **veto / abstention framing**, paired with **51**'s
+divest-don't-short result. Two independent studies converging on *a weak signal should
+reduce exposure, not reverse it* is a defensible basis for designing the VN sentiment
+feature as a filter over the existing GBM ranking rather than as a predictor.
+
+**Do not follow:** undefined ground truth, one month, a target that may be a stock or
+an index, borrowed baselines, general-purpose scorer, no lag, and a paper-wide
+terminology error.
+
+---
+
+## Combined reading — where the fifteen papers leave the thesis
 
 1. **All six predict the wrong target for this thesis** — per-stock or index absolute
    short-horizon direction (45 the overnight gap, 46 the price level itself). None
@@ -1888,6 +1990,12 @@ contain. **The weakest entry in this folder.**
     - **text field** — the **content**, not the headline; title-only sentiment is
       worse than useless *(51, overturning 28 and 46)*
     - **judgement** — costed walk-forward on `rel5`, **never accuracy** *(experiment_3, 44)*
+    - **⭐ role** — sentiment as a **VETO over the existing GBM ranking, not a
+      predictor**: it may drop a name where the text disagrees, never flip a call.
+      **55** and **51** converge on this independently — a weak signal should *reduce*
+      exposure, not reverse it (51's divest-only SC2 beat its shorting SC on every
+      metric). It is also the only framing that is cheap to defend and directly
+      testable in the costed walk-forward already built
     - **⭐⭐ protocol** — **51's, wholesale**: a naive benchmark always (random walk /
       persistence / majority class), **MCC + Brier** beside accuracy, a written
       statement of how same-day leakage is prevented, walk-forward expanding window
@@ -1962,3 +2070,9 @@ contain. **The weakest entry in this folder.**
   11 pp. *Dictionary labels → TF-IDF → RF/NB/SVM on **92 AAPL articles**.
   **⚠️ Circular labelling — no stock prediction in the paper at all**; cite only as the
   anti-pattern for auto-labelled sentiment corpora.*
+- `55. Sentiment Analysis for Effective Stock Market Prediction.pdf`
+  — Bharathi & Geetha 2017, IJIES (INASS). 9 pp. *SentiWordNet SSS + MA5/10/15 rule
+  combined by a 4-row lookup table, ARBK on the Amman exchange, April 2006.
+  **⭐ Cite the veto framing** — sentiment only withdraws a signal, never generates one
+  (with 51's divest-don't-short); ⚠️ target never defined, "Sensex" used for a
+  Jordanian series.*
