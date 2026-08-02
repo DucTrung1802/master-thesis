@@ -40,6 +40,7 @@ this file updated → committed and pushed. PDFs themselves stay untracked
 | 55 | Bharathi & Geetha — *Sentiment analysis for effective stock market prediction* | 2017 | **⭐ Cite the VETO framing (sentiment abstains, never generates); ⚠️ target undefined** |
 | 56 | Li, Xie, Chen, Wang, Deng — *News impact on stock price return via sentiment analysis* | 2014 | **⭐⭐ THE THRESHOLD PROOF — accuracy is gameable by labelling; th must exceed costs** |
 | 57 | Heston & Sinha — *News vs. sentiment: predicting stock returns from news stories* | 2017 | **⭐⭐⭐ THE RESEARCH DESIGN — cross-sectional, weekly formation, negative-news asymmetry** |
+| 58 | Nti, Adekoya, Weyori — *Predicting stock market price movement using sentiment analysis: evidence from Ghana* | 2020 | **⭐ Cite the FRONTIER-MARKET framing + Google Trends + dedup; ⚠️ future-looking imputation** |
 | 64 | *(duplicate of 56 — byte-identical file)* | — | see paper 56 |
 
 **They form a progression, and the progression is the point.** All five add news or
@@ -2160,7 +2161,121 @@ the single most valuable idea to come out of this folder.
 
 ---
 
-## Combined reading — where the seventeen papers leave the thesis
+# Paper 58 — Nti, Adekoya, Weyori (2020)
+
+*Predicting Stock Market Price Movement Using Sentiment Analysis: Evidence From Ghana.*
+**Applied Computer Systems** (Sciendo / Riga Technical University) Vol. 25, No. 1,
+pp. 33–42 · DOI 10.2478/acss-2020-0004 · University of Energy and Natural Resources,
+Sunyani, Ghana. 10 pp, open access CC-BY.
+file: `58. Predicting Stock Market Price Movement Using Sentiment Analysis - Evidence From Ghana.pdf`.
+
+> **→ Verdict: ⭐ the closest paper in this folder to VIETNAM'S actual situation** — a
+> frontier market with thin coverage, a local-platform forum, and an explicit argument
+> that developed-market findings do not transfer. Cite the **frontier-market framing**,
+> **Google Trends as a source**, and the **cosine-similarity deduplication**.
+> ⚠️ Do not follow: missing prices are imputed with *future* data, and accuracy rises
+> monotonically with horizon.
+
+### Setup
+
+| | |
+|---|---|
+| Market | **Ghana Stock Exchange (GSE)** — 3 stocks: GCB, MTNGH, TOTAL |
+| Period | **Jan 2010 → Sep 2019** |
+| Twitter | **2,184 tweets** (Tweepy, `$` cashtag) |
+| Web news | **1,581 headlines** — myjoyonline.com, ghanaweb.com, graphic.com.gh |
+| Forum | **sikasem.org** — a local Ghanaian financial forum (Pyglet API) |
+| **⭐ Google Trends** | **263 records**, search volume 0–100, **Ghana-restricted** |
+| Scorer | polarity + subjectivity (2 dimensions, NLTK/TextBlob-style) |
+| Model | MLP-ANN **16:33:33:33:1**, L-BFGS, ReLU/sigmoid, lr 0.001, 80/20 split |
+
+### One training sample
+
+**One sample = one (stock, day)** — 16 features, 4 price + **12 from four alt-data
+sources** (Table VI, Appendix A):
+
+| source | features |
+|---|---|
+| price | previous close, open, close, total shares traded |
+| **Twitter** | polarity, subjectivity, **favourite count**, **retweet count**, possible-sensitive flag |
+| **Web news** | polarity, subjectivity, **shared count**, **comment count** |
+| **Forum** | polarity, subjectivity, comment count |
+| **Google Trends** | search-volume index |
+
+`y` = binary rise/fall from `Return(S,i) = Close_{i+d}/Close_i − 1` (Eq. 3), at
+**d ∈ {1, 7, 30, 60, 90} days**.
+
+### ⭐ Why it is worth reading despite the flaws
+
+**It is the closest study here to this thesis's market conditions**, and it argues the
+point explicitly:
+
+> *"a very high percentage of the existing studies on sentiments from SNSs and stock
+> market movements concentrated on developed nations… investor sentiments from
+> developing nations require extra attention from researchers, as the irrationality of
+> investor behaviour and the degree of inadequacy of stock markets vary across states."*
+
+**A directly citable justification for running this on VN rather than assuming US
+results transfer.**
+
+**Three transferable pieces:**
+
+1. **⭐⭐ Google Trends as a data source.** **None of the other 17 papers use it**, and it
+   **is available for Vietnam**. Ticker search volume is free, dense, needs no scraping,
+   and **does not depend on news existing**. Given VN's sparsity (experiment_6: 0.35
+   headlines/day for VCB), a *dense attention series* may be worth more than a *sparse
+   sentiment* one. **The single most actionable idea in this paper.**
+2. **⭐ Cosine-similarity deduplication** (Eq. 1) to strip the same story republished
+   across outlets. **CafeF / VietStock / Vietnambiz republish each other constantly** —
+   no other paper here implements this.
+3. **⭐ Diffusion / engagement features kept SEPARATE from sentiment** — retweet,
+   favourite, shared and comment counts. Their finding: *"the spread of news headlines
+   had a better influence (64 %) on the volume of stock than the number of comments
+   (62.2 %)"*. Pairs with **45**'s engagement weighting.
+
+**Weak corroboration of 57:** they report positive sentiment affecting upward moves
+**32 %** vs negative sentiment **50 %** — the same directional asymmetry Heston & Sinha
+document rigorously. The measurement here is vaguely defined, so treat it as a footnote,
+not as evidence.
+
+### ⚠️ Four problems
+
+1. **⚠️ Missing prices imputed with FUTURE data.** Eq. 2:
+   `M_value = (Close_{d−1} + Close_{d+1})/2` — **centred** interpolation. Any imputed row
+   carries `Close_{d+1}`; used to predict forward, it leaks. (Paper 47 did the same by
+   linear interpolation; 58 states the forward term explicitly.)
+2. **⚠️ Accuracy rises MONOTONICALLY with horizon** — 70.66 → 73.69 → 75.02 → 76.57 →
+   **77.12 %** at 90 days. Longer horizons being *easier* inverts every finance
+   intuition; the natural explanation is a progressively more skewed base rate, and
+   **no majority-class baseline is reported** to rule it out.
+3. **⚠️ RMSE/MAPE and accuracy are mutually inconsistent.** Both are reported on the same
+   binary output. At 90 days MAPE falls to **0.36 %** and RMSE to **0.0034** — numbers
+   implying near-perfect prediction — while accuracy says 77 %. Both cannot hold.
+4. **The forum source sits at ~41.5 % at every horizon** (41.52, 41.52, 41.58, 41.77,
+   41.77) — *below* coin-flip and suspiciously stable, i.e. a degenerate classifier
+   predicting one class and being wrong more often than right.
+
+Also: 2,184 tweets + 1,581 news over ~10 years across 3 stocks ≈ **0.6 and 0.4 items/day**
+— as sparse as experiment_6; and Eq. 3 (`i` → `i+d`) contradicts the text
+(*"between a day before (d−1) and day (d)"*).
+
+### How to use it in the thesis
+
+**Cite — three uses:**
+1. **The frontier/developing-market argument** — that sentiment findings from developed
+   markets need re-testing where investor behaviour and market efficiency differ. The
+   cleanest available justification for a VN-specific study.
+2. **⭐⭐ Google Trends** as a dense attention proxy that sidesteps the corpus-sparsity
+   blocker. **Add to the assembled design.**
+3. **Cosine-similarity deduplication** as a mandatory preprocessing step for a VN corpus
+   built from mutually-republishing outlets.
+
+**Do not follow:** future-looking imputation, no baseline, incoherent metric pairing, and
+an accuracy-rises-with-horizon pattern that points at base-rate drift rather than skill.
+
+---
+
+## Combined reading — where the eighteen papers leave the thesis
 
 1. **All six predict the wrong target for this thesis** — per-stock or index absolute
    short-horizon direction (45 the overnight gap, 46 the price level itself). None
@@ -2256,6 +2371,12 @@ the single most valuable idea to come out of this folder.
     - **segmentation** — VN word segmentation (underthesea / VnCoreNLP) + a VN
       stopword list **before any encoder**; a mandatory stage the English-only papers
       do not have *(46)*
+    - **⭐⭐ attention channel** — add **Google Trends** ticker search volume *(58)*.
+      Free, dense, no scraping, and **independent of whether news exists** — the one
+      source that sidesteps the corpus-sparsity blocker entirely. Keep engagement counts
+      (views/replies/shares) as their own features too *(58, 45)*
+    - **dedup** — **cosine-similarity duplicate removal** before scoring *(58)*; VN
+      outlets republish each other constantly
     - **⚠️ annotation** — labels for the VN scorer must come from **human annotation**
       (the Financial PhraseBank pattern: 16 annotators, 4,846 sentences) or an
       independent source. **Never auto-label with a lexicon and train on the same
@@ -2402,3 +2523,9 @@ the single most valuable idea to come out of this folder.
   1–2 days for daily; **negative news predicts for a quarter, positive for a week, via
   short-sale constraints**; `If_news`/`Positive`/`Negative` estimated separately;
   momentum-controlled. ⚠️ No transaction costs, proprietary scorer.*
+- `58. Predicting Stock Market Price Movement Using Sentiment Analysis - Evidence From Ghana.pdf`
+  — Nti, Adekoya & Weyori 2020, Applied Computer Systems (Sciendo, open access). 10 pp.
+  *MLP-ANN over price + Twitter + web news + local forum + **Google Trends**, 3 GSE
+  stocks. **⭐ Closest paper here to VN conditions** — cite the frontier-market framing,
+  Google Trends, and cosine-similarity dedup; ⚠️ missing prices imputed with `Close_{d+1}`,
+  accuracy rises with horizon, no baseline.*
