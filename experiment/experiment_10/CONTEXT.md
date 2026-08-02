@@ -38,6 +38,8 @@ this file updated → committed and pushed. PDFs themselves stay untracked
 | 53 | Li, Wu, Wang — *Incorporating stock prices and news sentiments for stock market prediction: a case of Hong Kong* | 2020 | **⭐ Cite the QUANTILE LABELS + LMFinance win; ⚠️ every result is below its own base rate** |
 | 54 | Joshi, Bharathi, Rao — *Stock trend prediction using news sentiment analysis* | 2016 | **⚠️ CIRCULAR LABELLING — cite only as the anti-pattern; no stock prediction in it** |
 | 55 | Bharathi & Geetha — *Sentiment analysis for effective stock market prediction* | 2017 | **⭐ Cite the VETO framing (sentiment abstains, never generates); ⚠️ target undefined** |
+| 56 | Li, Xie, Chen, Wang, Deng — *News impact on stock price return via sentiment analysis* | 2014 | **⭐⭐ THE THRESHOLD PROOF — accuracy is gameable by labelling; th must exceed costs** |
+| 64 | *(duplicate of 56 — byte-identical file)* | — | see paper 56 |
 
 **They form a progression, and the progression is the point.** All five add news or
 social text to price features to predict short-horizon direction, and they differ in
@@ -1869,7 +1871,141 @@ terminology error.
 
 ---
 
-## Combined reading — where the fifteen papers leave the thesis
+# Paper 56 — Li, Xie, Chen, Wang, Deng (2014) ⭐⭐ THE THRESHOLD PROOF
+
+*News impact on stock price return via sentiment analysis.*
+**Knowledge-Based Systems** 69 (2014) 14–23 · Elsevier · DOI 10.1016/j.knosys.2014.04.022 ·
+City University of Hong Kong / Hong Kong Baptist University / Shanghai Jiaotong. 10 pp.
+files: `56. News impact on stock price return via sentiment analysis.pdf`
+**= `64. …` (byte-identical, same MD5 `2b78fb86…`) — one paper, two numbers.**
+*Same first author as paper 53, and its direct predecessor; 53 cites this.*
+
+> **→ Verdict: ⭐⭐ cite it for the single best methodological result in this folder —
+> an ANALYTICAL PROOF that classification accuracy can be driven to 1.00 by widening
+> the neutral band, with no change to the model** — plus the rule that **the label
+> threshold must exceed round-trip transaction costs**. ⚠️ Do not follow the target:
+> intraday news labelled with the *same day's* open-to-close return is contemporaneous
+> impact, not forecasting.
+
+### Setup
+
+| | |
+|---|---|
+| Market | **HKEx**, Hang Seng Index constituents; news from **FINET** |
+| Universe | **22 stocks** across Commerce 10 / Finance 5 / Properties 4 / Utilities 3 |
+| ⭐ Universe hygiene | stocks added to the HSI after 2003-01-01 are **removed** — *"during the first few months the newly added constituents do not appear rational and they are usually mispriced"* (**tyranny of the index**); 50 → 22 |
+| Period | **Jan 2003 → Mar 2008** |
+| Split | **chronological** — train 2003–2005 · validation 2006 · **independent test Jan 2007 – Mar 2008** |
+| Model | **SVM (RBF)**, grid search over 90 (γ, C) pairs |
+
+### One training sample
+
+**One sample = one (stock, trading day).**
+
+`X` = **sentiment vector** `S = N ⊙ D` (Eq. 3) — term-frequency vector `N` of that day's
+news inner-multiplied with dictionary `D`: **Harvard IV-4 (182 dimensions)** or
+**Loughran–McDonald (6 dimensions)**. Multiple items for one stock-day are concatenated
+into one document first.
+
+`y` = **3 classes from the Open-to-Close return** `R = (Close − Open)/Open` (Eq. 4):
+
+```
+positive   R ≥ th
+neutral    −th < R < th
+negative   R ≤ −th
+```
+
+Open-to-Close is chosen over Close-to-Close for three stated reasons: seasonality,
+the non-trading-day gap, and **HK's T+0 mechanism** — *"Information has been reflected
+in the Close price by the intra-day trading."*
+
+### ⭐⭐ The threshold analysis (§4.2, Eqs. 14–17, Figs. 4–5)
+
+No other paper here attempts this. Assume Gaussian returns and draw predictions
+randomly from the prior; then `acc = P²₋₁ + P²₀ + P²₊₁`, and by symmetry
+(`P₋₁ = P₊₁ = P`, `P₀ = 1 − 2P`):
+
+```
+acc = 6P² − 4P + 1                    (Eq. 17)
+```
+
+A U-curve with **minimum 1/3 at P = 1/3**, rising toward **1.00** as `th` widens and
+almost everything becomes neutral. In their own words:
+
+> *"the accuracy can be increased only by manipulating the labeling method without any
+> change of the learning model."*
+
+Fig. 4 confirms it empirically on four stocks — accuracy climbs to ~1.0 with `th`.
+
+**⭐ And they then choose `th` honestly**, under two constraints: it must exceed the
+**HK transaction cost of 0.003 (30 bps)**, and it must not sit in the inflating region.
+They select **th = 0.005 (50 bps), deliberately near the MINIMUM of the trivial-accuracy
+curve** — the threshold least flattering to their own results.
+
+**This is the analytical counterpart to paper 49's empirical 0.90 → 0.70 → 0.56 decay.
+Together: the theory and the demonstration of the same failure.**
+
+### ⭐ Results — and the polarity ratio collapses
+
+Index-level accuracy (Table 15):
+
+| approach | validation | independent test |
+|---|---|---|
+| **LMD** (6-dim, financial) | **0.5976** | **0.5527** |
+| HVD (182-dim, general) | 0.5892 | 0.5460 |
+| SN (SenticNet) | 0.5876 | 0.5445 |
+| BoW | 0.5858 | 0.5391 |
+| **PO** — polarity ratio `(pos−neg)/(pos+neg)` | **0.2230** | **0.2789** |
+| **APO** — adversarial polarity | 0.2172 | 0.2665 |
+
+**Conclusion #2, verbatim: *"Simply focusing on positive and negative dimensions could
+not bring useful predictions."*** A direct empirical refutation of the single-polarity
+scalar used by **9, 45, 46 and 55** — and corroboration of **48**'s keep-the-full-softmax
+insight from the opposite direction. **The dictionary's multi-dimensional structure is
+what carries the signal; collapsing it to one ratio destroys it.**
+
+**⭐ Explicit CV rejection**, footnote 15: *"It would be better not use cross-validation
+for time-series-like problem, which might bring look-into-the-future issue if the lagged
+correlation is high."* Only **51** is this explicit.
+
+### ⚠️ Two problems
+
+1. **⚠️ This is a contemporaneous IMPACT study, not a forecast.** Their own Fig. 3
+   worked example uses news timestamped **2008-03-17 11:19 — mid-session** — to label
+   *that same day's* open-to-close return. Their third justification for the
+   open-to-close target explicitly invokes intraday information reflection. That
+   establishes **contemporaneity, not predictability**. The title says "impact"; the
+   conclusions say "prediction". The former is what was measured.
+2. **The sentiment-beats-BoW claim is a coin flip.** Pairwise wins across 22 stocks
+   (Tables 11–12): HVD beats BoW **12–10** in validation but **loses 8–14** in the
+   independent test; LMD goes 14–8 then 12–10. Index-level, LMD leads BoW by **1.4 pp**.
+   Real but marginal, and unstable between sets.
+
+Also: no trading simulation despite cost-awareness at the labelling stage, and no
+majority-class baseline stated (though Eq. 17 supplies the random-prior one implicitly).
+
+### How to use it in the thesis
+
+**⭐⭐ Adopt two things directly:**
+1. **The threshold discipline.** Before reporting any classification metric, state the
+   **trivial-guessing accuracy at the chosen threshold**, and pick the threshold near
+   the *minimum* of that curve rather than where it flatters the result.
+2. **Label thresholds must exceed round-trip transaction costs.** This ties labelling to
+   tradability at the source — exactly experiment_3's finding. For `rel5`: do not label
+   a move "up" unless it clears costs. A concrete, cheap design constraint with a
+   citation behind it.
+
+**Also cite:**
+- **The polarity-ratio refutation** (PO/APO at 0.22–0.28 vs 0.55 for full dictionaries),
+  with **48**, against **9/45/46/55**.
+- **The tyranny-of-the-index correction** — directly applicable to VN30/VN100 constituent
+  churn, which is a live bias source in the panel here.
+
+**Do not follow:** the same-day open-to-close target with intraday news.
+
+---
+
+## Combined reading — where the sixteen papers leave the thesis
 
 1. **All six predict the wrong target for this thesis** — per-stock or index absolute
    short-horizon direction (45 the overnight gap, 46 the price level itself). None
@@ -1915,6 +2051,11 @@ terminology error.
      "always predict horizontal" scores **~50% by construction**. Best sector-average
      accuracy in the paper: **0.496**. Its own design supplies the bar and nothing
      clears it.
+   - **⭐⭐ 56 — the analytical proof.** `acc = 6P² − 4P + 1` for random guessing from
+     the prior, so **widening the neutral band drives accuracy to 1.00 with no model
+     change at all**. The authors say so outright and then deliberately pick the
+     threshold at the *minimum* of that curve. **With 49's empirical decay, this is
+     theory plus demonstration for the same failure.**
 
    Across the folder, accuracy tracks looseness inversely: 80.5% and ~0.60 from the
    papers using random/k-fold CV on time series (9, 45); ~0.51–0.52 from the two most
@@ -1970,9 +2111,11 @@ terminology error.
       registers. Domain-specific beats general — **53** (12 stocks × 3 models ×
       4 dictionaries) and **45** both say so; only **43** dissents, and it was applying
       a 10-K-derived lexicon to newspaper headlines
-    - **per-document score** — keep the **full 3-way softmax** `P(neu)/P(pos)/P(neg)`
-      as three features, not one polarity scalar, so a high-neutral day stays
-      distinguishable from a balanced one *(48)*; engagement-weighted *(45)*
+    - **per-document score** — keep the **full multi-dimensional** sentiment
+      representation, **never a single polarity ratio**. **56** measures the cost
+      directly: full dictionaries score 0.55 at index level, `(pos−neg)/(pos+neg)`
+      scores **0.22–0.28**. Keep the 3-way softmax `P(neu)/P(pos)/P(neg)` as separate
+      features *(48)*; engagement-weighted *(45)*
     - **aggregation** — mean not sum, over a **09:00→09:00 ICT** market-hours window,
       with exponential decay across Tết and weekends, document count kept as its own
       feature *(45)*
@@ -1982,7 +2125,10 @@ terminology error.
       stream cancels and the idiosyncratic stream survives *(43 + this thesis)*
     - **labels** — **quantile-defined**: top quartile of `rel5` long, bottom quartile
       short/avoid, middle 50% ignored. Makes the base rate **known by construction**
-      and matches experiment_3's top-6/bottom-6 *(53)*
+      and matches experiment_3's top-6/bottom-6 *(53)*. **⭐⭐ And the threshold must
+      EXCEED round-trip transaction costs**, with the trivial-guessing accuracy at that
+      threshold stated alongside every metric — `acc = 6P² − 4P + 1`, so a wider neutral
+      band buys accuracy for free *(56)*
     - **scaling** — **per-window Z-score** (local mean/std inside each rolling window),
       never global statistics *(53)*
     - **lag** — news from `d` predicts from `d+1`
@@ -2076,3 +2222,10 @@ terminology error.
   **⭐ Cite the veto framing** — sentiment only withdraws a signal, never generates one
   (with 51's divest-don't-short); ⚠️ target never defined, "Sensex" used for a
   Jordanian series.*
+- `56. News impact on stock price return via sentiment analysis.pdf`
+  **= `64. …` (byte-identical duplicate, same MD5)** — Li, Xie, Chen, Wang & Deng 2014,
+  Knowledge-Based Systems (Elsevier). 10 pp. *HVD/LMD sentiment vectors → SVM →
+  open-to-close direction, 22 HSI stocks. **⭐⭐ Cite the threshold proof**
+  (`acc = 6P² − 4P + 1`; th must exceed transaction costs), the polarity-ratio
+  refutation, and the tyranny-of-the-index correction; ⚠️ intraday news vs same-day
+  return is impact, not forecasting.*
