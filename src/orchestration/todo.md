@@ -65,20 +65,126 @@ Chưa có silver hay gold nào cho news. `silver.cafef_news_sentiment` tồn t�
 **⚠️ Nguyên tắc xuyên suốt:** bước 1–5 không cần NLP. Làm xong bước 5 mới biết có đáng đầu
 tư vào scorer không.
 
+---
+
+## ✅ KẾT QUẢ MỤC 1–6 (chạy 2026-08-03)
+
+### 🔴 Kết luận: `if_news` KHÔNG có tác dụng. Tiêu chí dừng của mục 6 đã kích hoạt một nửa.
+
+`gold.news_weekly_panel`, VN-top100 theo thanh khoản trailing, walk-forward 6 fold có purge
++ embargo, chi phí khứ hồi 0,5%, nhãn phân vị 25/50/25:
+
+| horizon | features | MCC | macro-F1 | CAGR | bench | Sharpe |
+|---|---|---:|---:|---:|---:|---:|
+| **4 tuần** | controls | **+0,053** | 0,276 | **14,63%** | 10,57% | **0,64** |
+| | **news** | **+0,001** | 0,224 | 3,21% | 10,57% | 0,25 |
+| | controls + news | +0,051 | 0,276 | 12,19% | 10,57% | 0,57 |
+| **13 tuần** | controls | **+0,053** | 0,274 | **17,62%** | 12,27% | **0,84** |
+| | **news** | **−0,000** | 0,224 | 10,15% | 12,27% | 0,50 |
+| | controls + news | +0,056 | 0,276 | 17,08% | 12,27% | 0,81 |
+
+**Ba điều đọc được, theo thứ tự quan trọng:**
+
+1. **`news` một mình = MCC 0,000–0,008 ở MỌI chân trời.** Per-fold: `+0.015 −0.007 −0.007
+   −0.001 +0.000 +0.004` — dao động quanh 0, vài fold âm. **Publication effect của paper 57
+   không đo được trên VN.**
+2. **Thêm news vào controls làm KÉM ĐI**, ở h=1, 4, 8: CAGR 14,63% → **12,19%** (h=4),
+   16,40% → **14,93%** (h=8). Chênh lệch MCC nằm trọn trong biên độ giữa các fold.
+3. **Tín hiệu duy nhất là momentum/thanh khoản** — `controls` cho MCC **+0,052…+0,061**,
+   **dương ở cả 6 fold, ở cả 5 chân trời**, và đánh bại benchmark ở h=4/8/13.
+
+⚠️ **Đây là §6a của `src/sentiment/CONTEXT.md` tái lập ở 777 mã thay vì 3.** Kết luận cũ
+(*"adding sentiment makes the model WORSE… the only faint signal is price/TA"*) **giữ nguyên
+sau khi tăng độ rộng 259 lần.** Đòn bẩy mà chính module đó gọi là *"the biggest lever"* đã
+được kéo, và nó không đổi kết quả.
+
+**Nhưng tiêu chí dừng chỉ đúng MỘT nửa** — nó có hai vế:
+
+| vế | thực tế |
+|---|---|
+| *"`if_news` không làm gì"* | ✅ **đúng** |
+| *"panel quá thưa"* | ❌ **SAI** — trên universe top-100 thanh khoản, **64,2% ticker-tuần có tin**, **32,5% có editorial** |
+
+Panel **không** thưa ở nơi giao dịch được. Vậy nên đây **chưa phải** bằng chứng rằng *sắc thái*
+vô dụng — mục 6 chỉ đo **số lượng tin**, không đo **nội dung**. Xem "Quyết định cần lấy" dưới.
+
+### Chi tiết từng mục
+
+**✅ 1. Lỗ hổng 2012 — CÓ THẬT, và sắc nét hơn dự đoán.** Không phải "2012 ít tin" mà là
+**hố 6 tháng, dropout ~98%**:
+
+| tháng | 2012-05 | **06** | **07** | **08** | **09** | **10** | **11** | 2012-12 | 2013-01 |
+|---|---|---|---|---|---|---|---|---|---|
+| dòng | 293 | **37** | **35** | **24** | **23** | **24** | **20** | 309 | 1.600 |
+
+Ảnh hưởng 458 mã (2011: 464) → là **hố theo thời gian**, không phải thiếu một nhóm mã.
+→ **Sàn dữ liệu đặt ở 2013-01-01** (`--start` mặc định của runner).
+
+**✅ 2. Bronze khớp đĩa CHÍNH XÁC.** `type` 326.722 / 78.017 / 581 ✓ · cả 6 `category` ✓ ·
+date-only 89.639 disclosure + 59 editorial = **89.698** ✓ · 405.320 = 405.322 − 2 (null-key).
+Chênh duy nhất: `avg(length(content))` editorial 2.695 (DB) vs 2.687 (đĩa) — do `length(NULL)`
+bị `avg()` bỏ qua trong khi pandas đếm chuỗi rỗng là 0. Không phải lỗi.
+
+**✅ 3. `src/sentiment/news_clean.py`** — tầng 1, thuần pandas, lịch phiên là tham số.
+
+**✅ 4. `silver.cafef_news` — 395.470 dòng × 18 cột**, 777 mã, 1,7 phút.
+Bỏ 9.850: `error` 581 · rỗng 1 · **không có phiên / gap quá xa 7.322** · trùng 1.946.
+
+> ### 🐛 Bug bắt được nhờ đọc metadata thay vì đọc màu xanh
+>
+> Lần materialise đầu **xanh** với 400.191 dòng — nhưng `trading_date` nhỏ nhất là
+> **2009-01-02**, trong khi bronze bắt đầu 2007-02. `silver.stocks_basic` chỉ có lịch từ
+> 2009-01-02, nên `searchsorted` **dồn toàn bộ 4.841 bài trước 2009 vào đúng một phiên** —
+> một cú nhảy tin giả trên chính cột (`n_docs`) sinh ra để đếm tin.
+>
+> Sửa: `MAX_SESSION_GAP_DAYS = 15`, chọn theo phân bố thật chứ không theo cảm tính — các
+> pile-up hợp lệ đều là **Tết/lễ** (2026-02-02: 761, 2025-02-04: 726, 2020-01-30: 627,
+> 2021-05-06: 558), gap dài nhất hợp lệ **11 ngày**; các gap sai nằm ở **155–302 ngày**.
+> Sau khi sửa: `max_gap = 15`, mọi pile-up còn lại đều là Tết/lễ.
+>
+> **Bài học ghi vào quy tắc đầu file:** row count + max/min vào metadata, và *đọc chúng*.
+
+**✅ 5. `gold.news_weekly_panel` — 497.207 ticker-tuần × 27 cột**, 781 mã, 1,1 phút.
+Toàn panel: **39,0%** ticker-tuần có tin, **10,5%** có editorial.
+**Materialise HAI LẦN liên tiếp đều xanh, số liệu giống hệt** → drop-self đạt.
+
+**✅ 6. `src/sentiment/weekly_xsec.py` + `run_weekly_prototype.py`** — bảng kết quả ở trên.
+Thêm hai số phụ đáng ghi:
+- **99,0% số tuần có q75 vượt chi phí khứ hồi 0,5%** → kiểm tra ngưỡng của paper 56 **đạt**;
+  nhãn không chứa toàn những cú chạy không trả nổi phí.
+- Max drawdown **−46%…−83%** trên mọi cấu hình. Đây là long-only top-quartile tái cân bằng
+  theo tuần, **không có kiểm soát rủi ro** — nó là phép thử tín hiệu, không phải chiến lược.
+
+### ⛔ Quyết định cần lấy trước khi sang mục 7
+
+Mục 6 bác bỏ **số lượng tin**, không bác bỏ **sắc thái**. Ba lựa chọn:
+
+| | việc | lập luận |
+|---|---|---|
+| **A** | **Dừng Phần A**, viết negative result | Tiết kiệm mục 7–13. Bằng chứng: MCC ≈ 0 ở 5 chân trời × 6 fold, cộng §6a cũ, cộng paper 51 (MCC 0,069 với 8,5 triệu bài) và paper 63 (50,4% out-of-sample). |
+| **B** | **Làm tiếp mục 7–13** | Panel **không** thưa (64,2% coverage). Chưa ai đo sắc thái tiếng Việt hiệu chỉnh tài chính trên VN. Chi phí: ~1–2 ngày gán nhãn + fine-tune. |
+| **C** | **Đổi hướng sang controls** | Tín hiệu thật duy nhất tìm được là momentum/thanh khoản: MCC +0,053, dương ở **30/30 fold**, CAGR 17,62% vs 12,27% ở h=13. Đây là kết quả **dương** đầu tiên, và nó không cần NLP. |
+
+**Khuyến nghị: B trên một tập con, rồi quyết.** Chạy mục 7–11 **chỉ với 30 mã đưa tin nhiều
+nhất** (VIC/HPG/MWG/HAG/FPT/VNM/NVL/VCB/STB/MSN…), nơi coverage editorial cao nhất. Nếu sắc
+thái không thêm gì ở đó thì nó sẽ không thêm gì ở bất kỳ đâu, và câu trả lời tốn ~1/3 công.
+
+---
+
 ### A1. Kiểm tra dữ liệu trước khi xây
 
-- [ ] **1. Kiểm tra lỗ hổng 2012 trong `bronze.cafef_news`.**
+- [x] **1. Kiểm tra lỗ hổng 2012 trong `bronze.cafef_news`.**
   2012 chỉ có 3.781 dòng, so với 11.318 (2011) và 15.703 (2013). Xác định là lỗi scrape hay
   thật. **Acceptance:** biết fold nào không dùng được; ghi kết luận vào guidance.md §2.4.
 
-- [ ] **2. Đếm phân bố `type` / `category` / timestamp date-only trực tiếp trên bảng bronze**,
+- [x] **2. Đếm phân bố `type` / `category` / timestamp date-only trực tiếp trên bảng bronze**,
   đối chiếu với số đo trên đĩa (78.017 editorial · 326.722 disclosure · 581 error ·
   89.698 dòng `00:00:00`). **Acceptance:** khớp, hoặc biết vì sao lệch (bronze drop 2 dòng
   null-key).
 
 ### A2. Silver — làm sạch
 
-- [ ] **3. `src/sentiment/news_clean.py` — TẦNG 1, pure functions, không đụng DB.**
+- [x] **3. `src/sentiment/news_clean.py` — TẦNG 1, pure functions, không đụng DB.**
   Loại `type='error'` + content rỗng · dedup `(ticker, ngày, headline chuẩn hoá)` · bóc
   boilerplate (`Normal 0 false false false EN-US X-NONE …`, `- File đính kèm: *.pdf`,
   `Theo HOSE`) · `ts_resolved` + `ts_is_date_only` · **`trading_date` = phiên đầu tiên mở
@@ -86,7 +192,7 @@ tư vào scorer không.
   `is_editorial`.
   Nhận DataFrame, trả DataFrame. Lịch phiên truyền vào như tham số, **không tự query**.
 
-- [ ] **4. Bảng `silver.cafef_news` — ĐỦ BA TẦNG.**
+- [x] **4. Bảng `silver.cafef_news` — ĐỦ BA TẦNG.**
 
   | tầng | việc |
   |---|---|
@@ -104,7 +210,7 @@ tư vào scorer không.
 
 ### A3. Gold — panel tuần, chưa có sentiment
 
-- [ ] **5. Bảng `gold.news_weekly_panel`, phiên bản TỐI THIỂU — ĐỦ BA TẦNG.**
+- [x] **5. Bảng `gold.news_weekly_panel`, phiên bản TỐI THIỂU — ĐỦ BA TẦNG.**
   Chỉ `if_news`, `n_docs`, `n_days` + 5 cột event count. **Chưa chấm sentiment.**
   Grain `(exchange, ticker, iso_week)`. Cửa sổ 09:00 ICT phiên đầu tuần `w` → phiên đầu tuần `w+1`.
 
@@ -121,7 +227,7 @@ tư vào scorer không.
   `gold/stocks_financials_bank_fa` assert row count của nó · row count vào metadata ·
   **materialise HAI LẦN liên tiếp phải cùng xanh** (đây là bài kiểm tra cho việc drop-self).
 
-- [ ] **6. ⭐ Chạy Model 2 + walk-forward có tính phí, CHỈ với `if_news` / `n_docs`.**
+- [x] **6. ⭐ Chạy Model 2 + walk-forward có tính phí, CHỈ với `if_news` / `n_docs`.**
   Dùng `purged_walkforward_folds` có sẵn. Universe VN100. Target `rel_h`, h ∈ {1,2,4,8,13} tuần,
   nhãn phân vị 25/50/25.
   **Đây là điểm quyết định của cả Phần A.** Nó kiểm định publication effect của paper 57 và

@@ -78,11 +78,15 @@
     "// silver/stocks_basic_financials_bank": "daily x quarterly, as-of on publish_date - INNER, bank tickers only",
     "silver/stocks_basic_financials_bank": true,
     "silver/stocks_basic_financials_bank_fa": true,
+    "// silver/cafef_news": "395k articles cleaned + de-duped + ALIGNED TO A SESSION (trading_date is the look-ahead guard); needs silver/stocks_basic for the calendar",
+    "silver/cafef_news": true,
 
     "// ---- gold: model-ready shapes ----": "",
     "// gold/economy": "WIDE: 1 row per business day, 1 col per series, as-of filled",
     "gold/economy": true,
     "gold/stock_market": true,
     "// gold/stocks_financials_bank_fa": "FEATURE panel: the _fa source + the full TA battery, ~1.1k columns",
-    "gold/stocks_financials_bank_fa": true
+    "gold/stocks_financials_bank_fa": true,
+    "// gold/news_weekly_panel": "497k ticker-WEEKS, news + event counts, no sentiment - the panel the if_news baseline runs on",
+    "gold/news_weekly_panel": true
 }

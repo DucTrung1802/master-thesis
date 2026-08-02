@@ -3208,6 +3208,114 @@ class DataPreprocessor:
             },
         )
 
+    def _ingest_silver_cafef_news(self) -> None:
+        """Silver `cafef_news` — bronze news cleaned, de-duplicated and **aligned to a
+        trading session**. One row per surviving `row_id`; PK `row_id`.
+
+        The transform itself is `sentiment.news_clean` (pure pandas), imported here so
+        this module owns only the ETL: read bronze → read the session calendar →
+        `clean_news` → assert → save. Same split as `_ingest_silver_cafef_news_sentiment`
+        and `src/ta`.
+
+        What changes relative to bronze:
+
+        * `type='error'` rows (scrape failures) and empty articles are dropped;
+        * republished stories collapse on `(ticker, trading_date, normalised headline)` —
+          the URL differs, so the bronze `row_id` does NOT catch them;
+        * Word-export residue (`Normal 0 false false false EN-US …`), the
+          `- File đính kèm: x.pdf` stub and the `Theo HOSE` sign-off are stripped;
+        * `ts_is_date_only` flags the 22.2% of bronze rows stamped exactly `00:00:00`
+          (89,639 disclosures, 137 errors, **59 editorials**);
+        * `relevance_score` counts how often the ticker is actually named.
+
+        ⚠️ **`trading_date` is the look-ahead guard and the reason this table exists.**
+        An article is assigned the first session whose OPEN comes after it, on a 09:00 ICT
+        boundary; a date-only stamp is treated as end-of-day, i.e. the NEXT session, which
+        can only ever delay information rather than advance it. 65.5% of this corpus
+        publishes outside 09:00-15:00 (the mode is 17:00), so the calendar-day assignment
+        every paper in `experiment/experiment_10` except one uses would put post-close news
+        in the same row as that day's close. `leakage_violations` is asserted to be EMPTY
+        before anything is written — that is the defect which disqualifies papers 46, 47
+        and 50.
+
+        The old table is dropped first so a schema change re-materialises past the
+        driver's IF NOT EXISTS create.
+        """
+        from sentiment.news_clean import clean_news, leakage_violations
+
+        self._logger.log_info(
+            "Ingesting silver cafef_news (clean + de-dup + session alignment)..."
+        )
+        out_table = "cafef_news"
+
+        news = self._helper_select(schema_name=BRONZE_SCHEMA, table_name="cafef_news")
+        if news.empty:
+            raise MissingSourceDataError(
+                f"{BRONZE_SCHEMA}.cafef_news is empty - run the bronze news ingest "
+                f"first (--select bronze/cafef_news)."
+            )
+
+        # ⚠️ The session calendar comes from a DISTINCT query, never a full read:
+        # silver.stocks_basic is ~2.4M rows and fetching it whole has stalled runs before.
+        with self._database_driver._cursor_ctx() as cur:
+            cur.execute(
+                f"SELECT DISTINCT date FROM {SILVER_SCHEMA}.stocks_basic ORDER BY date"
+            )
+            sessions = [row[0] for row in cur.fetchall()]
+        if not sessions:
+            raise MissingSourceDataError(
+                f"{SILVER_SCHEMA}.stocks_basic has no dates - the trading calendar is "
+                f"required to align news to sessions (--select silver/stocks_basic)."
+            )
+        session_arr = pd.to_datetime(pd.Series(sessions)).to_numpy(dtype="datetime64[D]")
+
+        result = clean_news(news, session_arr)
+        dropped = result.attrs.get("dropped", {})
+        self._logger.log_info(
+            f"cafef_news: {len(news)} bronze -> {len(result)} silver "
+            f"(dropped {dropped})"
+        )
+
+        # ⚠️ The invariant, asserted rather than commented.
+        violations = leakage_violations(result)
+        if len(violations) > 0:
+            raise PipelineError(
+                f"{SILVER_SCHEMA}.{out_table}: {len(violations)} rows would let an "
+                f"article inform the session it was published into. First offenders: "
+                f"{violations.head(3)[['row_id', 'ts_resolved', 'trading_date']].to_dict('records')}"
+            )
+
+        result = self._helper_clean(
+            result,
+            [
+                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("row_id"),
+                CleanLayer.ORDER_BY(["exchange", "ticker", "trading_date", "news_order"]),
+            ],
+        )
+        result = self._helper_cast_columns(
+            result,
+            decimal_cols=["relevance_score"],
+            bigint_cols=["news_order", "content_len", "ticker_hits"],
+        )
+
+        self._database_driver.drop_table(SILVER_SCHEMA, out_table)
+        self._helper_save_pandas_table_to_database(
+            schema_name=SILVER_SCHEMA,
+            table_name=out_table,
+            primary_keys=["row_id"],
+            df=result,
+            dtype_overrides={
+                "timestamp": DataType.TIMESTAMP(),
+                "ts_resolved": DataType.TIMESTAMP(),
+                "trading_date": DataType.DATE(),
+                "type": DataType.VARCHAR(),
+                "category": DataType.VARCHAR(),
+                "headline": DataType.TEXT(),
+                "content_clean": DataType.TEXT(),
+                "url": DataType.TEXT(),
+            },
+        )
+
     def _ingest_silver_cafef_news_sentiment(self) -> None:
         """Silver `cafef_news_sentiment` — Vietnamese sentiment scored over
         `bronze.cafef_news`, one row per news `row_id`.
@@ -4398,6 +4506,138 @@ class DataPreprocessor:
             passthrough_cols=passthrough,
             exact_float_cols=exact,
             prepare_fn=self._helper_adjust_ohlc,
+        )
+
+    def _ingest_gold_news_weekly_panel(self) -> None:
+        """Gold `news_weekly_panel` — one row per `(exchange, ticker, week)`, PK the same.
+
+        The MINIMAL panel: news COUNTS and event counts, **no sentiment**. It exists so
+        the costed walk-forward can be run on `if_news`/`n_docs` alone before any NLP work
+        (`experiment/experiment_10/guidance.md` §8, steps 5-6) — that run is the baseline
+        a sentiment block would later have to beat, and it is cheap enough to answer the
+        question before the expensive part starts.
+
+        ⚠️ **Weekly, not daily, and neither reason is a taste call.** Paper 57 measures
+        daily news predicting 1-2 days (Day 3 t=1.2, gone) against weekly news predicting
+        13 weeks; and on this corpus editorials cover **1.6% of ticker-DAYS** but **8.7%
+        of ticker-WEEKS** (top-30: 12.2% → 51.7%). A daily feature is not weak, it is
+        absent.
+
+        ⚠️ **The spine is PRICE, not news.** Every week a stock traded gets a row, with
+        `if_news = 0` where nothing was published. Paper 28 dropped no-news rows and broke
+        series continuity; and `if_news` is itself the effect paper 57 measures (covered
+        stocks beat uncovered ones by 2.24%/week in small caps, regardless of tone).
+
+        Both GROUP BYs run in SQL: `silver.stocks_basic` is ~2.4M rows and pulling it into
+        pandas whole has stalled runs before. The news read is column-scoped for the same
+        reason — `content_clean` is ~300 MB of text this step never looks at.
+
+        The old table is dropped first, as every gold ingest must: the COPY writer assumes
+        an empty table, so a second materialisation would otherwise die on the PK.
+        """
+        from sentiment.news_panel import (
+            aggregate_news_weekly,
+            build_news_weekly_panel,
+            grain_violations,
+        )
+
+        self._logger.log_info(
+            "Ingesting gold news_weekly_panel (per ticker-week news counts)..."
+        )
+        out_table = "news_weekly_panel"
+
+        # ── price spine, aggregated server-side ──────────────────────────────────────
+        with self._database_driver._cursor_ctx() as cur:
+            cur.execute(
+                f"""
+                SELECT exchange, ticker,
+                       date_trunc('week', date)::date            AS week_start,
+                       COUNT(*)                                  AS sessions,
+                       SUM(COALESCE(value_matched, 0))           AS value_w,
+                       (ARRAY_AGG(close_adjust ORDER BY date))[1]      AS close_first,
+                       (ARRAY_AGG(close_adjust ORDER BY date DESC))[1] AS close_last
+                FROM {SILVER_SCHEMA}.stocks_basic
+                WHERE close_adjust IS NOT NULL
+                GROUP BY 1, 2, 3
+                """
+            )
+            price_weekly = pd.DataFrame(
+                cur.fetchall(),
+                columns=[
+                    "exchange", "ticker", "week_start",
+                    "sessions", "value_w", "close_first", "close_last",
+                ],
+            )
+        if price_weekly.empty:
+            raise MissingSourceDataError(
+                f"{SILVER_SCHEMA}.stocks_basic produced no weekly rows - build it first "
+                f"(--select silver/stocks_basic)."
+            )
+
+        news = self._helper_select(
+            schema_name=SILVER_SCHEMA,
+            table_name="cafef_news",
+            columns=[
+                "row_id", "exchange", "ticker", "trading_date",
+                "type", "category", "is_editorial", "has_ticker", "relevance_score",
+            ],
+        )
+        if news.empty:
+            raise MissingSourceDataError(
+                f"{SILVER_SCHEMA}.cafef_news is empty - build it first "
+                f"(--select silver/cafef_news)."
+            )
+
+        news_weekly = aggregate_news_weekly(news)
+        result = build_news_weekly_panel(price_weekly, news_weekly)
+
+        # ⚠️ The grain invariant, asserted. A feature build adds COLUMNS, never ROWS.
+        duplicates = grain_violations(result)
+        if duplicates:
+            raise PipelineError(
+                f"{GOLD_SCHEMA}.{out_table}: {duplicates} duplicate "
+                f"(exchange, ticker, week_start) rows - the news merge fanned out."
+            )
+        if len(result) != len(price_weekly):
+            raise PipelineError(
+                f"{GOLD_SCHEMA}.{out_table}: {len(result)} rows against a price spine of "
+                f"{len(price_weekly)} - the join must preserve the spine exactly."
+            )
+
+        self._logger.log_info(
+            f"news_weekly_panel: {len(result)} ticker-weeks, "
+            f"{int(result['if_news'].sum())} with news "
+            f"({result['if_news'].mean():.1%})"
+        )
+
+        result = self._helper_clean(
+            result,
+            [
+                CleanLayer.ORDER_BY(["exchange", "ticker", "week_start"]),
+            ],
+        )
+        result = self._helper_cast_columns(
+            result,
+            decimal_cols=[
+                "value_w", "close_first", "close_last", "relevance_max",
+                "ret_w", "log_value_w",
+                *[f"mom_{w}w" for w in (1, 4, 12, 26)],
+            ],
+            bigint_cols=[
+                "sessions", "n_docs", "n_days", "n_editorial", "n_disclosure",
+                "n_docs_named", "n_earnings", "n_insider_txn", "n_dividend",
+                "n_personnel", "n_capital", "n_uncategorized",
+                "if_news", "if_earnings_week",
+            ],
+        )
+
+        self._database_driver.drop_table(GOLD_SCHEMA, out_table)
+        self._helper_save_pandas_table_to_database(
+            schema_name=GOLD_SCHEMA,
+            table_name=out_table,
+            primary_keys=["exchange", "ticker", "week_start"],
+            df=result,
+            dtype_overrides={"week_start": DataType.DATE()},
         )
 
     def _ingest_gold_bonds(self) -> None:

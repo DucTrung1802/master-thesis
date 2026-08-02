@@ -455,6 +455,124 @@ def silver_stocks_basic_financials_bank_fa(
     )
 
 
+@asset(
+    name="cafef_news",
+    key_prefix=["silver"],
+    group_name="silver",
+    compute_kind="postgres",
+    deps=[AssetKey(["bronze", "cafef_news"]), AssetKey(["silver", "stocks_basic"])],
+    description=(
+        "bronze.cafef_news → silver.cafef_news, PK row_id — cleaned, de-duplicated and "
+        "ALIGNED TO A TRADING SESSION. ⚠️ trading_date is the look-ahead guard: an "
+        "article maps to the first session whose OPEN comes after it (09:00 ICT), and a "
+        "date-only stamp rolls to the NEXT session. 65.5% of this corpus publishes "
+        "outside 09:00-15:00 (mode 17:00), so a calendar-day assignment would put "
+        "post-close news in the same row as that day's close — the defect that "
+        "disqualifies papers 46/47/50 in experiment_10. Depends on silver/stocks_basic "
+        "for the session calendar, not for any column."
+    ),
+)
+def silver_cafef_news(
+    context: AssetExecutionContext, preprocessor: PreprocessorResource
+) -> MaterializeResult:
+    with preprocessor.session(schema="silver_schema") as prep:
+        prep._ingest_silver_cafef_news()
+
+        with prep._database_driver._cursor_ctx() as cur:
+            cur.execute("SELECT COUNT(*) FROM silver_schema.cafef_news")
+            rows = int(cur.fetchone()[0])
+            cur.execute("SELECT COUNT(*) FROM bronze_schema.cafef_news")
+            bronze_rows = int(cur.fetchone()[0])
+            cur.execute("SELECT COUNT(DISTINCT ticker) FROM silver_schema.cafef_news")
+            tickers = int(cur.fetchone()[0])
+            cur.execute(
+                "SELECT COUNT(*) FROM information_schema.columns WHERE "
+                "table_schema = 'silver_schema' AND table_name = 'cafef_news'"
+            )
+            columns = int(cur.fetchone()[0])
+            cur.execute(
+                "SELECT COUNT(*) FILTER (WHERE is_editorial), "
+                "COUNT(*) FILTER (WHERE ts_is_date_only), "
+                "COUNT(*) FILTER (WHERE has_ticker) FROM silver_schema.cafef_news"
+            )
+            editorial, date_only, with_ticker = (int(x) for x in cur.fetchone())
+            cur.execute(
+                "SELECT MIN(trading_date), MAX(trading_date) FROM silver_schema.cafef_news"
+            )
+            first, last = cur.fetchone()
+
+            # ⚠️ The invariants, re-checked against what actually landed. The ingest
+            # asserts on the frame; this asserts on the table.
+            cur.execute(
+                "SELECT COUNT(*) FROM silver_schema.cafef_news n "
+                "WHERE NOT EXISTS (SELECT 1 FROM silver_schema.stocks_basic s "
+                "                  WHERE s.date = n.trading_date)"
+            )
+            orphan_sessions = int(cur.fetchone()[0])
+            cur.execute(
+                "SELECT COUNT(*) FROM silver_schema.cafef_news "
+                "WHERE trading_date = ts_resolved::date "
+                "  AND (EXTRACT(HOUR FROM ts_resolved) >= 9 OR ts_is_date_only)"
+            )
+            leaks = int(cur.fetchone()[0])
+            # ⚠️ The first run of this asset swept 4,841 pre-calendar articles onto
+            # 2009-01-02 (stocks_basic starts there; the news starts 2007-02). Tết is
+            # the only legitimate long wait, ~9 days.
+            cur.execute(
+                "SELECT MAX(trading_date - ts_resolved::date) FROM silver_schema.cafef_news"
+            )
+            max_gap = int(cur.fetchone()[0])
+            cur.execute(
+                "SELECT MAX(cnt) FROM (SELECT COUNT(*) cnt FROM silver_schema.cafef_news "
+                "GROUP BY trading_date) g"
+            )
+            max_per_day = int(cur.fetchone()[0])
+
+    if rows > bronze_rows:
+        raise ValueError(
+            f"silver.cafef_news has {rows} rows against bronze's {bronze_rows}: "
+            f"cleaning must never ADD rows."
+        )
+    if orphan_sessions:
+        raise ValueError(
+            f"silver.cafef_news: {orphan_sessions} rows carry a trading_date that is "
+            f"not a real session in silver.stocks_basic."
+        )
+    if leaks:
+        raise ValueError(
+            f"silver.cafef_news: {leaks} rows let an article inform the session it was "
+            f"published into (look-ahead)."
+        )
+    if max_gap > 15:
+        raise ValueError(
+            f"silver.cafef_news: an article waited {max_gap} days for its session. "
+            f"Tết is ~9; anything past a fortnight means articles are being swept onto "
+            f"the wrong end of a calendar hole (see MAX_SESSION_GAP_DAYS)."
+        )
+
+    context.log.info(
+        f"silver.cafef_news: {rows} articles × {columns} columns "
+        f"(bronze {bronze_rows} → dropped {bronze_rows - rows})"
+    )
+    return MaterializeResult(
+        metadata={
+            "rows": rows,
+            "bronze_rows": bronze_rows,
+            "dropped": bronze_rows - rows,
+            "columns": columns,
+            "tickers": tickers,
+            "editorial": editorial,
+            "date_only_timestamps": date_only,
+            "rows naming the ticker": with_ticker,
+            "leakage_violations": leaks,
+            "max_session_gap_days": max_gap,
+            "max_articles_on_one_session": max_per_day,
+            "trading_date_range": MetadataValue.text(f"{first} → {last}"),
+            "table": MetadataValue.text("silver_schema.cafef_news"),
+        }
+    )
+
+
 assets: List[Callable] = [
     silver_economy,
     silver_economy_series,
@@ -463,4 +581,5 @@ assets: List[Callable] = [
     silver_cafef_financials_bank,
     silver_stocks_basic_financials_bank,
     silver_stocks_basic_financials_bank_fa,
+    silver_cafef_news,
 ]

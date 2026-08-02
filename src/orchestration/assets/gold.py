@@ -236,8 +236,91 @@ def gold_stocks_financials_bank_fa(
     )
 
 
+@asset(
+    name="news_weekly_panel",
+    key_prefix=["gold"],
+    group_name="gold",
+    compute_kind="postgres",
+    deps=[
+        AssetKey(["silver", "cafef_news"]),
+        AssetKey(["silver", "stocks_basic"]),
+    ],
+    description=(
+        "silver.cafef_news × silver.stocks_basic → gold.news_weekly_panel, PK "
+        "(exchange, ticker, week_start). The MINIMAL panel: news and event COUNTS, no "
+        "sentiment — it exists so the costed walk-forward can be run on if_news/n_docs "
+        "before any NLP work. ⚠️ WEEKLY: paper 57 measures daily news predicting 1-2 days "
+        "against weekly news predicting 13 weeks, and on this corpus editorials cover "
+        "1.6% of ticker-DAYS but 8.7% of ticker-WEEKS. ⚠️ The spine is PRICE, so "
+        "if_news=0 rows are KEPT — that dummy is paper 57's publication effect, not "
+        "missing data."
+    ),
+)
+def gold_news_weekly_panel(
+    context: AssetExecutionContext, preprocessor: PreprocessorResource
+) -> MaterializeResult:
+    with preprocessor.session(schema="gold_schema") as prep:
+        prep._ingest_gold_news_weekly_panel()
+
+        with prep._database_driver._cursor_ctx() as cur:
+            cur.execute("SELECT COUNT(*) FROM gold_schema.news_weekly_panel")
+            rows = int(cur.fetchone()[0])
+            cur.execute(
+                "SELECT COUNT(*) FROM information_schema.columns WHERE "
+                "table_schema = 'gold_schema' AND table_name = 'news_weekly_panel'"
+            )
+            columns = int(cur.fetchone()[0])
+            cur.execute(
+                "SELECT COUNT(DISTINCT ticker), MIN(week_start), MAX(week_start) "
+                "FROM gold_schema.news_weekly_panel"
+            )
+            tickers, first, last = cur.fetchone()
+            cur.execute(
+                "SELECT COUNT(*) FILTER (WHERE if_news = 1), "
+                "       COUNT(*) FILTER (WHERE n_editorial > 0), "
+                "       COUNT(*) FILTER (WHERE if_earnings_week = 1) "
+                "FROM gold_schema.news_weekly_panel"
+            )
+            with_news, with_editorial, earnings_weeks = (int(x) for x in cur.fetchone())
+            # ⚠️ The grain, re-checked against what landed rather than against the frame.
+            cur.execute(
+                "SELECT COUNT(*) FROM (SELECT 1 FROM gold_schema.news_weekly_panel "
+                "GROUP BY exchange, ticker, week_start HAVING COUNT(*) > 1) d"
+            )
+            duplicates = int(cur.fetchone()[0])
+
+    if duplicates:
+        raise ValueError(
+            f"gold.news_weekly_panel: {duplicates} duplicate (exchange, ticker, "
+            f"week_start) groups — the grain is one row per ticker-week."
+        )
+
+    context.log.info(
+        f"gold.news_weekly_panel: {rows} ticker-weeks × {columns} columns, "
+        f"{with_news} with news ({with_news / max(rows, 1):.1%}), "
+        f"{with_editorial} with an editorial ({with_editorial / max(rows, 1):.1%})"
+    )
+    return MaterializeResult(
+        metadata={
+            "rows": rows,
+            "columns": columns,
+            "tickers": int(tickers),
+            "ticker_weeks_with_news": with_news,
+            "ticker_weeks_with_editorial": with_editorial,
+            "earnings_weeks": earnings_weeks,
+            "news_coverage": MetadataValue.float(round(with_news / max(rows, 1), 4)),
+            "editorial_coverage": MetadataValue.float(
+                round(with_editorial / max(rows, 1), 4)
+            ),
+            "week_range": MetadataValue.text(f"{first} → {last}"),
+            "table": MetadataValue.text("gold_schema.news_weekly_panel"),
+        }
+    )
+
+
 assets: List[Callable] = [
     gold_economy,
     gold_stock_market,
     gold_stocks_financials_bank_fa,
+    gold_news_weekly_panel,
 ]
