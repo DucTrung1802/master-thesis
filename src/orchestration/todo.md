@@ -11,6 +11,51 @@
 
 ---
 
+## ⚠️ Quy tắc bắt buộc — mọi bảng bronze / silver / gold PHẢI là Dagster asset
+
+**Không script rời, không notebook, không hàm gọi tay.** Một bảng = một asset. Áp dụng cho
+mọi mục có chữ `silver.` hoặc `gold.` trong file này: **4, 5, 13, 14** (Phần A) và
+**17, 18, 19** (Phần B).
+
+Asset là **wrapper mỏng** — nguyên tắc đã có trong [CONTEXT.md](CONTEXT.md) §3:
+
+> *"No pipeline logic lives here. Every asset is a thin wrapper over a method that already
+> exists in `src/`. Delete `src/orchestration/` and nothing is lost but the scheduling."*
+
+**Ba tầng, không được trộn:**
+
+| tầng | ở đâu | chứa gì |
+|---|---|---|
+| 1. **pure functions** | `src/sentiment/*.py` | biến đổi DataFrame, **không biết gì về DB**, import torch lazily |
+| 2. **ingest method** | `src/data_preprocessor/data_preprocessor.py` | `_ingest_{silver,gold}_*` — đọc bảng, gọi tầng 1, ghi bảng |
+| 3. **asset** | `src/orchestration/assets/{silver,gold}.py` | `@asset` gọi tầng 2, khai `deps`, trả metadata |
+
+**Checklist cho MỖI asset mới — thiếu một dòng là chưa xong:**
+
+- [ ] `@asset(name=…, key_prefix=["silver"|"gold"], group_name=…, deps=[…])`
+- [ ] **`deps` khai theo cái code THỰC SỰ MỞ, không theo văn xuôi.** Bài học §2 của
+      CONTEXT.md: 3 edge đã bị khai sai lần trước vì đọc mô tả thay vì đọc code.
+- [ ] **row count vào metadata** (`MetadataValue.int`) — đây là thứ để đọc.
+      ⚠️ *Green ≠ dữ liệu mới*: `skip_existing=True` khiến asset có thể xanh trong 500 ms mà
+      không làm gì.
+- [ ] **invariant assert TRONG asset và RAISE nếu sai** — không phải comment, không phải
+      `log_error` rồi `return`. Precedent: `silver/stocks_basic_financials_bank` đếm dòng có
+      `publish_date > date` và **raise**; `gold/stocks_financials_bank_fa` raise nếu row
+      count khác silver.
+- [ ] ⚠️ **Asset gold phải tự DROP bảng trước khi ghi.** `_ingest_gold_table` đã sửa; nếu
+      asset mới tự viết đường ghi riêng thì lần materialise **thứ hai** chết trên PK
+      (`duplicate key value violates unique constraint`). Re-materialise là đời sống bình
+      thường của một asset.
+- [ ] Có mặt trong [`assets_enabled.json`](assets_enabled.json) — `true` **hoặc vắng mặt**
+      = được load. Thêm `//` comment key nếu asset đắt.
+- [ ] `dagster definitions validate` pass và **asset count tăng đúng số**.
+
+⚠️ **`bootstrap()` phải được gọi lại trong resource.** `sys.path` không sống sót vào step
+subprocess của Dagster; module import lazily (như `ta.ta_functions` đã từng) sẽ chết
+`ModuleNotFoundError` trong step trong khi mọi asset trước đó vẫn xanh.
+
+---
+
 ## Phần A — Luồng news sentiment
 
 **Trạng thái đầu vào:** `bronze.cafef_news` = 405.320 dòng / 777 mã (đã green 2026-08-01).
@@ -33,29 +78,48 @@ tư vào scorer không.
 
 ### A2. Silver — làm sạch
 
-- [ ] **3. Viết `src/sentiment/news_clean.py`** (pure functions, không đụng DB).
+- [ ] **3. `src/sentiment/news_clean.py` — TẦNG 1, pure functions, không đụng DB.**
   Loại `type='error'` + content rỗng · dedup `(ticker, ngày, headline chuẩn hoá)` · bóc
   boilerplate (`Normal 0 false false false EN-US X-NONE …`, `- File đính kèm: *.pdf`,
   `Theo HOSE`) · `ts_resolved` + `ts_is_date_only` · **`trading_date` = phiên đầu tiên mở
   cửa sau `ts_resolved`** (09:00 ICT) · `relevance_score` · `text_for_scoring` (đã tách từ) ·
   `is_editorial`.
+  Nhận DataFrame, trả DataFrame. Lịch phiên truyền vào như tham số, **không tự query**.
 
-- [ ] **4. `data_preprocessor._ingest_silver_cafef_news` + asset `silver/cafef_news`.**
-  Deps: `bronze/cafef_news`, `silver/stocks_basic` (cần lịch phiên).
+- [ ] **4. Bảng `silver.cafef_news` — ĐỦ BA TẦNG.**
+
+  | tầng | việc |
+  |---|---|
+  | 2 | `data_preprocessor._ingest_silver_cafef_news` — đọc `bronze.cafef_news` + lịch phiên từ `silver.stocks_basic`, gọi `news_clean`, ghi bảng |
+  | 3 | `@asset(name="cafef_news", key_prefix=["silver"], group_name="silver")` trong [assets/silver.py](assets/silver.py), `deps=["bronze/cafef_news", "silver/stocks_basic"]` |
+
   ```powershell
   dagster asset materialize -f src/orchestration/definitions.py --select "silver/cafef_news"
   ```
-  **Acceptance (assert trong asset, không phải comment):**
-  - row count ≤ 405.320
+  **Acceptance — assert TRONG asset và RAISE, không phải comment:**
+  - row count ≤ 405.320, và **vào metadata**
   - mọi `trading_date` là phiên có thật trong `silver.stocks_basic`
   - **0 dòng có `trading_date` = ngày đăng khi bài đăng sau 15:00 ICT** ← chống rò rỉ kiểu paper 46/47/50
+  - `dagster definitions validate` pass, asset count **49 → 50**
 
 ### A3. Gold — panel tuần, chưa có sentiment
 
-- [ ] **5. Viết `src/sentiment/news_panel.py` + asset `gold/news_weekly_panel`, phiên bản
-  TỐI THIỂU: chỉ `if_news`, `n_docs`, `n_days` + 5 cột event count.** Chưa chấm sentiment.
-  Grain: `(exchange, ticker, iso_week)`. Cửa sổ 09:00 ICT phiên đầu tuần `w` → phiên đầu tuần `w+1`.
-  **Acceptance:** assert grain 1 dòng/(mã, tuần), như `gold/stocks_financials_bank_fa` đã làm.
+- [ ] **5. Bảng `gold.news_weekly_panel`, phiên bản TỐI THIỂU — ĐỦ BA TẦNG.**
+  Chỉ `if_news`, `n_docs`, `n_days` + 5 cột event count. **Chưa chấm sentiment.**
+  Grain `(exchange, ticker, iso_week)`. Cửa sổ 09:00 ICT phiên đầu tuần `w` → phiên đầu tuần `w+1`.
+
+  | tầng | việc |
+  |---|---|
+  | 1 | `src/sentiment/news_panel.py` — gộp DataFrame → panel tuần |
+  | 2 | `data_preprocessor._ingest_gold_news_weekly_panel` — ⚠️ **phải DROP bảng trước khi ghi** |
+  | 3 | `@asset(name="news_weekly_panel", key_prefix=["gold"], group_name="gold")` trong [assets/gold.py](assets/gold.py), `deps=["silver/cafef_news", "silver/stocks_basic"]` |
+
+  ```powershell
+  dagster asset materialize -f src/orchestration/definitions.py --select "gold/news_weekly_panel"
+  ```
+  **Acceptance:** assert grain **1 dòng / (mã, tuần)** và RAISE nếu sai — cùng cách
+  `gold/stocks_financials_bank_fa` assert row count của nó · row count vào metadata ·
+  **materialise HAI LẦN liên tiếp phải cùng xanh** (đây là bài kiểm tra cho việc drop-self).
 
 - [ ] **6. ⭐ Chạy Model 2 + walk-forward có tính phí, CHỈ với `if_news` / `n_docs`.**
   Dùng `purged_walkforward_folds` có sẵn. Universe VN100. Target `rel_h`, h ∈ {1,2,4,8,13} tuần,
@@ -94,17 +158,31 @@ tư vào scorer không.
 - [ ] **12. Sửa `sentiment_functions.py`** — trỏ sang checkpoint mới, **đổi `model_version`**,
   giữ nguyên 3 xác suất (không ghi `sentiment_score = p(pos) − p(neg)` làm cột chính nữa).
 
-- [ ] **13. Build lại `silver.cafef_news_sentiment` cho 777 mã** + asset
-  `silver/cafef_news_sentiment` (đọc từ `silver.cafef_news`, không phải bronze).
-  Ước tính ~3 phút GPU cho 78k editorial, ~13 phút nếu chấm cả 405k.
-  **Acceptance:** `model_version` mới, row count = row count của `silver.cafef_news`.
+- [ ] **13. Bảng `silver.cafef_news_sentiment` — build lại cho 777 mã, ĐỦ BA TẦNG.**
+  Bảng đã tồn tại nhưng **stale** (dựng khi news còn 3 mã) và hiện chỉ có ingest method,
+  **chưa có asset**.
+
+  | tầng | việc |
+  |---|---|
+  | 1 | `sentiment_functions.score_news_frame` — đã có, giữ interface |
+  | 2 | `_ingest_silver_cafef_news_sentiment` — **sửa nguồn: đọc `silver.cafef_news`, không phải bronze** |
+  | 3 | `@asset(name="cafef_news_sentiment", key_prefix=["silver"], group_name="silver")`, `deps=["silver/cafef_news"]` — **asset MỚI** |
+
+  ⚠️ Asset này dùng GPU → cân nhắc `tags={"resource": "gpu"}` như `cafef_pdfs`, vì
+  `max_concurrent=4` mà hai step cùng nạp PhoBERT là hết VRAM trên RTX 3050 4 GB.
+  Ước tính ~3 phút cho 78k editorial, ~13 phút nếu chấm cả 405k.
+  **Acceptance:** `model_version` mới trong metadata · row count = row count của
+  `silver.cafef_news` · `HF_HUB_OFFLINE=1` vẫn còn.
 
 ### A5. Panel đầy đủ + kết quả
 
-- [ ] **14. Mở rộng `gold/news_weekly_panel` lên đủ ~40 cột** — thêm scope `s_*` / `k_*` /
-  `m_*` (sector lấy từ cây GICS trong `silver.stocks_basic`, **loại chính nó**) + 5 cột
-  cross-sectional. Trung bình không tổng; Z-score theo từng cửa sổ; `if_news=0` giữ dòng,
-  cột sentiment NULL.
+- [ ] **14. Mở rộng `gold.news_weekly_panel` lên đủ ~40 cột** — sửa cả ba tầng của mục 5.
+  Thêm scope `s_*` / `k_*` / `m_*` (sector lấy từ cây GICS trong `silver.stocks_basic`,
+  **loại chính nó**) + 5 cột cross-sectional. Trung bình không tổng · Z-score theo từng cửa
+  sổ · `if_news=0` giữ dòng, cột sentiment NULL.
+  ⚠️ **Thêm `deps=["silver/cafef_news_sentiment"]`** vào asset — cạnh mới, phải khai.
+  **Acceptance:** grain KHÔNG đổi (vẫn 1 dòng/(mã, tuần)) — feature build chỉ được thêm CỘT,
+  không bao giờ thêm DÒNG; assert cũ của mục 5 phải vẫn pass.
 
 - [ ] **15. Chạy Model 2 đầy đủ + 6 ablation** (§7.3 của guidance.md):
   `If_news` → `+Pos/Neg` · scope · chân trời · tuần-vs-ngày trên top-30 · content-vs-headline ·
@@ -122,9 +200,13 @@ tư vào scorer không.
 
 ### B1. Silver còn thiếu (7 assets đã có / còn ~8 leaf)
 
+> Mục 17–19 đều là việc asset — **áp dụng nguyên checklist ở đầu file**. Ở đây tầng 1 và 2
+> đã tồn tại (leaf chạy được từ `main.py`), nên chỉ còn tầng 3: wrapper + `deps` + metadata
+> + invariant.
+
 - [ ] **17. Asset hoá các silver leaf còn lại:** `bonds`, `forex`, `funds`, `indices`,
   `gics`, `cafef_carry_ups`. Edge đã có sẵn trong `data_preprocessor/CONTEXT.md` §4, chép
-  thẳng sang.
+  thẳng sang — **nhưng verify lại bằng cách đọc code mở file gì**, đừng chép văn xuôi.
 
 ### B2. Gold còn thiếu (3/7)
 
