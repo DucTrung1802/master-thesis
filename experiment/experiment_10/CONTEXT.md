@@ -41,6 +41,7 @@ this file updated → committed and pushed. PDFs themselves stay untracked
 | 56 | Li, Xie, Chen, Wang, Deng — *News impact on stock price return via sentiment analysis* | 2014 | **⭐⭐ THE THRESHOLD PROOF — accuracy is gameable by labelling; th must exceed costs** |
 | 57 | Heston & Sinha — *News vs. sentiment: predicting stock returns from news stories* | 2017 | **⭐⭐⭐ THE RESEARCH DESIGN — cross-sectional, weekly formation, negative-news asymmetry** |
 | 58 | Nti, Adekoya, Weyori — *Predicting stock market price movement using sentiment analysis: evidence from Ghana* | 2020 | **⭐ Cite the FRONTIER-MARKET framing + Google Trends + dedup; ⚠️ future-looking imputation** |
+| 59 | Nguyen, Shirai, Velcin — *Sentiment analysis on social media for stock movement prediction* | 2015 | **⭐ Cite FREE human labels + "sentiment helps where price fails"; ⚠️ +2.07 pp, no baseline** |
 | 64 | *(duplicate of 56 — byte-identical file)* | — | see paper 56 |
 
 **They form a progression, and the progression is the point.** All five add news or
@@ -2275,7 +2276,136 @@ an accuracy-rises-with-horizon pattern that points at base-rate drift rather tha
 
 ---
 
-## Combined reading — where the eighteen papers leave the thesis
+# Paper 59 — Nguyen, Shirai, Velcin (2015)
+
+*Sentiment analysis on social media for stock movement prediction.*
+**Expert Systems With Applications** 42 (2015) 9603–9611 · Elsevier ·
+DOI 10.1016/j.eswa.2015.07.052 · School of Information Science, JAIST (Japan) /
+ERIC Lab, University of Lyon 2 (France). 9 pp.
+file: `59. Sentiment analysis on social media for stock movement prediction.pdf`.
+
+> **→ Verdict: partially followable.** Cite three genuinely useful things — a **free
+> source of HUMAN sentiment labels**, the **4pm-to-4pm alignment window**, and the
+> conditional finding that **sentiment helps precisely where price history does not**.
+> ⚠️ Do not take the headline: +2.07 pp over price-only, no baseline, and the
+> human-label signal is essentially one stock.
+
+### Setup
+
+| | |
+|---|---|
+| Universe | **18 stocks** — AAPL, AMZN, BA, BAC, CSCO, DELL, EBAY, ETFC, GOOG, IBM, INTC, KO, MSFT, NVDA, ORCL, T, XOM, YHOO |
+| Text | **Yahoo Finance Message Board**, 23 Jul 2012 → 19 Jul 2013 |
+| Prices | Yahoo Finance **adjusted close**, **249 transaction dates** |
+| Split | **chronological** — train 171 dates (Jul 2012 → 28 Mar 2013), test 78 dates (1 Apr → 19 Jul 2013) |
+| Model | **SVM, linear kernel** |
+
+### One training sample
+
+**One sample = one (stock, trading day).** Every feature set includes
+`price_{t−1}, price_{t−2}` (previous up/down moves); they differ in the text block
+(Table 3):
+
+| method | added features |
+|---|---|
+| Price only | — (baseline) |
+| **Human sentiment** | `Hsent_{i,t}, Hsent_{i,t−1}` — % of messages in each of 5 **user-tagged** classes |
+| Sentiment classification | `Csent` — SVM-imputed tags for the untagged 84.4% |
+| LDA-based | `lda_{i,t}, lda_{i,t−1}` — 50 topics |
+| JST-based | `jst_{i,j,t}` — 50 topics × 3 sentiments |
+| **⭐ Aspect-based (proposed)** | `Asent_{i,t}, Asent_{i,t−1}` **+ `I_{i,t}` topic importance** |
+
+`y` = binary up/down vs the previous transaction date.
+
+### ⭐⭐ Three things worth taking
+
+**1. ⭐⭐ The corpus carries FREE human sentiment labels.** **15.6%** of Yahoo
+message-board posts carry a **user-selected tag** — Strong Buy / Buy / Hold / Sell /
+Strong Sell.
+
+**This is the direct answer to paper 54's circular-labelling trap.** No lexicon
+auto-labelling is needed when the platform's own users have already labelled. **→ Check
+whether F319 / F247 / VietStock expose anything equivalent; if they do, that is the VN
+annotation set, free.** (See also **45**/**51**, which buy the same thing via the
+human-annotated Financial PhraseBank.)
+
+**2. ⭐ The 4pm-to-4pm alignment window.** *"Messages posted from 4 pm of the previous
+transaction date to 4 pm of the current transaction date belong to the current
+transaction date. We choose 4 pm because that is the time of closing transaction."*
+**Independently arrives at paper 45's market-hours idea eight years earlier** — and
+predates every calendar-day aggregation in this folder.
+
+**3. ⭐⭐ Sentiment helps precisely where price history does NOT.** §5.2 / Fig. 7: set a
+threshold α, **discard** stocks whose price-only accuracy exceeds it, re-average. At
+**α = 0.50** the aspect-based model beats price-only by **+9.83%** (vs +2.07% across all
+18) and human sentiment by +3.03%. Their reasoning:
+
+> *"if the accuracy of the price only model is high, there are trends and historical
+> repetition in the stock… integration of the sentiment may not improve the accuracy
+> much. On the other hand, if the accuracy of the price only model is low, the stock
+> seems to have no pattern in its history. For such stocks, the use of sentiment may be
+> effective."*
+
+**→ This maps straight onto experiment_1.5**, where VN30 predictability varied hugely by
+ticker — **VCB 0.767 AUC but HDB 0.413, TPB 0.409, VRE 0.408**. The rule: **apply the
+sentiment feature to the tickers where the price model is WEAK, not across the board.**
+Concrete, testable, non-obvious.
+
+⚠️ **But as presented it likely selects on TEST-set outcomes** — the paper never states
+whether `A_PriceOnly` is measured in- or out-of-sample. If out-of-sample, filtering on
+it and reporting improvement on that same test set is circular. **The idea is sound; the
+demonstration needs an in-sample estimate of price-model strength.**
+
+**Also worth lifting:**
+- **Distance-weighted opinion attachment** (Fig. 6):
+  `sentimentValue_{t_i} += opinionValue(o_j) / distance(t_i, o_j)` — opinion words are
+  assigned to the *nearest* topic rather than scoring the whole document.
+- **Topic importance as a separate feature** — `I_{i,t} = N_{i,t}/N_t`, the fraction of
+  messages mentioning topic *i*. Separates **what is discussed** from **how it is felt
+  about** — the same decomposition logic as **57**'s `If_news`/`Positive`/`Negative`.
+
+### Results — Table 6, average over 18 stocks
+
+| Price only | Human sentiment | Sentiment classification | LDA | JST | **Aspect-based** |
+|---|---|---|---|---|---|
+| 0.5234 | 0.5425 | 0.5187 | 0.5227 | 0.5154 | **0.5441** |
+
+### ⚠️ Four problems
+
+1. **⚠️ 54.41% vs 52.34% price-only — +2.07 pp, and no majority-class baseline.** Their
+   defence is an appeal to convention: *"degrees of accuracy of 56% hit rate are often
+   reported as satisfying results for stock prediction."*
+2. **⚠️ The human-annotation signal is essentially AAPL-only.** Table 2: AAPL averages
+   **1,678 messages and 350 human tags per day**; **KO gets 2, IBM 3, XOM 4, T 8**. Most
+   of the 18 boards are far too thin to support the feature that carries the paper.
+3. **AAPL uses a DIFFERENT train/test period from the other 17** (footnote 3) — 61 train
+   / 83 test dates over a separate window, because only seven months of pages were
+   collectable. Inconsistent design on the one stock with the data.
+4. Several price-only accuracies fall far below chance (**AAPL 0.3951, KO 0.4079**);
+   50 topics is fixed across all stocks (conceded inappropriate, but grid search was too
+   slow); no trading simulation, no costs.
+
+**Credit where due:** they state plainly that *"the model with sentiment analysis is
+worse than the price only model for several stocks"* and that *"the average accuracy is
+only 54.41%."*
+
+### How to use it in the thesis
+
+**Cite — four uses:**
+1. **⭐⭐ Free human sentiment labels from platform tagging** — the non-circular route to
+   a VN annotation set (with **54** as the anti-pattern it avoids).
+2. **⭐⭐ Conditional targeting: apply sentiment where the price model is weak.** Test on
+   the experiment_1.5 tier split (VCB/BCM/FPT strong vs HDB/TPB/VRE weak), with the
+   price-model strength estimated **in-sample**.
+3. **The 4pm alignment window**, corroborating **45**.
+4. **Topic importance as its own feature**, separate from polarity — with **57**.
+
+**Do not follow:** the +2.07 pp headline, the α-filter as demonstrated, or the
+50-topics-for-everything LDA/JST setup.
+
+---
+
+## Combined reading — where the nineteen papers leave the thesis
 
 1. **All six predict the wrong target for this thesis** — per-stock or index absolute
    short-horizon direction (45 the overnight gap, 46 the price level itself). None
@@ -2381,7 +2511,16 @@ an accuracy-rises-with-horizon pattern that points at base-rate drift rather tha
       (the Financial PhraseBank pattern: 16 annotators, 4,846 sentences) or an
       independent source. **Never auto-label with a lexicon and train on the same
       text** — that measures only the lexicon *(54; and 46's label-from-future-returns
-      is the other flavour of the same mistake)*
+      is the other flavour of the same mistake)*. **⭐ 59 supplies the cheapest route:
+      platform-native user tags.** Yahoo's board let posters self-label Strong Buy →
+      Strong Sell and 15.6% did — free human annotation at scale. **Check F319 / F247 /
+      VietStock for equivalent tagging before commissioning any manual annotation**
+    - **⭐ targeting** — apply the sentiment feature **where the price model is WEAKEST**,
+      not uniformly. **59** finds the gain rising from +2.07 pp across all stocks to
+      **+9.83 pp** once names with strong price-only accuracy are excluded; and
+      experiment_1.5 already shows exactly that spread in VN30 (**VCB 0.767 AUC vs VRE
+      0.408**). ⚠️ Estimate price-model strength **in-sample** — 59's own filter appears
+      to select on test-set outcomes
     - **scorer** — a **finance-domain** VN transformer sentence encoder, **validated on
       labelled VN financial text first** *(45)*, separately for prose vs forum
       registers. Domain-specific beats general — **53** (12 stocks × 3 models ×
@@ -2529,3 +2668,9 @@ an accuracy-rises-with-horizon pattern that points at base-rate drift rather tha
   stocks. **⭐ Closest paper here to VN conditions** — cite the frontier-market framing,
   Google Trends, and cosine-similarity dedup; ⚠️ missing prices imputed with `Close_{d+1}`,
   accuracy rises with horizon, no baseline.*
+- `59. Sentiment analysis on social media for stock movement prediction.pdf`
+  — Nguyen, Shirai & Velcin 2015, Expert Systems With Applications (Elsevier). 9 pp.
+  *Aspect-based topic-sentiment + SVM over 18 Yahoo message boards, 249 dates.
+  **⭐ Cite the FREE platform-native human labels** (15.6% user-tagged posts), the
+  4pm-to-4pm window, and **"sentiment helps where price history fails"** (+9.83 pp on
+  weak-price stocks); ⚠️ +2.07 pp overall, no baseline, human tags are AAPL-only.*
