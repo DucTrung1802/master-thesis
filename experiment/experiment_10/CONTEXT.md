@@ -44,6 +44,7 @@ this file updated → committed and pushed. PDFs themselves stay untracked
 | 59 | Nguyen, Shirai, Velcin — *Sentiment analysis on social media for stock movement prediction* | 2015 | **⭐ Cite FREE human labels + "sentiment helps where price fails"; ⚠️ +2.07 pp, no baseline** |
 | 60 | Li & Pan — *A novel ensemble deep learning model for stock prediction based on stock prices and news* | 2022 | **⚠️ TEST SET = 9 PREDICTIONS. Cite only the per-source decomposition** |
 | 61 | Gite et al. — *Explainable stock prices prediction from financial news articles using sentiment analysis* | 2021 | **⭐⭐ Cite the XAI/LIME DIAGNOSTIC — its own explainer proves the model is broken** |
+| 62 | Mittal & Goel — *Stock prediction using Twitter sentiment analysis* | ~2011 | **⭐ Cite the k-SCV walk-forward + Bollen critique; ⚠️ NOT peer-reviewed, target hand-edited** |
 | 64 | *(duplicate of 56 — byte-identical file)* | — | see paper 56 |
 
 **They form a progression, and the progression is the point.** All five add news or
@@ -2617,7 +2618,127 @@ loss gap left unaddressed, and no baseline.
 
 ---
 
-## Combined reading — where the twenty-one papers leave the thesis
+# Paper 62 — Mittal, Goel (Stanford University, ~2011)
+
+*Stock Prediction Using Twitter Sentiment Analysis.* 5 pp.
+⚠️ **NOT PEER-REVIEWED** — a CS229-style class project report: no venue, no DOI, and the
+acknowledgments thank Stanford NLP course staff. It is nonetheless very heavily cited,
+so it is worth knowing what it contains. **State the venue whenever citing it.**
+file: `62. Stock Prediction Using Twitter Sentiment Analysis.pdf`.
+
+> **→ Verdict: ⭐ cite it for one thing — an early, clear statement that walk-forward
+> evaluation deflates cherry-picked test windows, used to attack Bollen et al.'s famous
+> 87%.** ⚠️ Follow nothing: **the target series had its hard cases removed by hand**
+> before evaluation.
+
+### Setup
+
+| | |
+|---|---|
+| Target | **DJIA**, June → December 2009 (7 months), Yahoo Finance |
+| Text | **476 million tweets** from 17M users, same period |
+| Lineage | built directly on **Bollen, Mao & Zeng (2011)** — "Twitter mood predicts the stock market" |
+| Moods | **Calm, Happy, Alert, Kind** — POMS questionnaire (65 words → 6 POMS states → 4 moods), extended via SentiWordNet + thesaurus |
+| Filter | only tweets containing *"feel"*, *"makes me"*, *"I'm"*, *"I am"* |
+| Models | Linear Regression, Logistic Regression, SVM (LIBSVM), **SOFNN** (self-organising fuzzy neural network) |
+
+### One training sample
+
+**One sample = one day.** Features = **past-3-day DJIA values** + **past-3-day mood
+scores** in various combinations (`I_D`, `I_CD`, `I_CHD`, …). Output = next-day DJIA
+value (regression) or direction.
+
+Daily mood score = `(# times the word matches tweets in a day) / (# total matches of all
+words)` — the denominator normalises for varying daily tweet volume, which is the fix
+paper 9 failed to make.
+
+### ⚠️⚠️ The target series was hand-edited before evaluation
+
+Three preprocessing steps, quoted verbatim:
+
+1. **⚠️ Future-looking interpolation.** *"if the DJIA value on a given day is x and the
+   next available data point is y with n days in between, we approximate the missing data
+   by estimating the first day after x to be (y+x)/2 and then following the same method
+   recursively till all gaps are filled."* Weekends and holidays — ~40% of calendar days
+   — are filled using the **next** real value. (Same defect as **58**, at larger scale.)
+2. **⚠️⚠️ Large moves manually removed.** *"such jumps/falls are due to some major
+   aberrations and cannot be predicted… Therefore, we adjusted our stock values by
+   shifting up/down for steep falls/jumps."*
+3. **⚠️⚠️ Volatile periods deleted.** *"the values contained significant periods of
+   volatile activity which are very difficult to predict. We pruned our dataset by
+   removing these periods for final training and testing."*
+
+**Steps 2 and 3 mean the reported accuracy is measured on a series from which the
+hard-to-predict moves and periods were removed by hand.** The most explicit test-set
+curation in this folder — and unlike everyone else's implicit leaks, stated openly as a
+method step.
+
+### ⭐⭐ But the baseline is recoverable, and they invented walk-forward
+
+**Table 2 gives away the base rate.** **Logistic Regression scores 60% across all seven
+feature sets; SVM 59.75% across all seven** — identical whether fed price only (`I_D`)
+or price plus three moods (`I_CHKD`). Both are predicting a constant class.
+**→ The majority-class baseline is ~60%.** (Second paper after **47** where the baseline
+can be recovered from the authors' own numbers.)
+
+| Algorithm | I_D | I_CD | **I_CHD** | I_CAD | I_CKD | I_CHAD | I_CHKD |
+|---|---|---|---|---|---|---|---|
+| Linear Regression | 64.44% | 64.44% | 71.11% | 64.44% | 64.44% | 68.89% | 71.11% |
+| **Logistic Regression** | **60%** | **60%** | **60%** | **60%** | **60%** | **60%** | **60%** ⚠️ |
+| **SVM** | **59.75%** | **59.75%** | **59.75%** | **59.75%** | **59.75%** | **59.75%** | **59.75%** ⚠️ |
+| **SOFNN** | 64.44% | 71.11% | **75.56%** | 68.89% | 73.33% | 73.33% | 73.33% |
+
+Accuracies resolve to **n/45 — 45 predictions** (they note needing "at least 30–40
+entries" in a test set).
+
+**⭐⭐ And they get the evaluation principle right, in ~2011:**
+
+> *"the direct k-fold cross validation method is not applicable in this context as the
+> stock data is actually a time series unlike other scenarios where the data is available
+> as a set. Therefore, it is meaningless to analyze past stock data after training on
+> future values."*
+
+Their **k-fold Sequential Cross Validation (k-SCV)** — train on all days up to a point,
+test the next *k* — is expanding-window walk-forward, correctly motivated. And they use
+it to **attack Bollen et al.'s famous 87%**:
+
+> *"[Bollen et al.] have used a specific test period which gives a 87.6% Directional
+> Accuracy… But we have on the other hand cross validated over the entire period, using
+> our 5-fold SCV technique… the usual cross validation would essentially be using future
+> stock values to predict the past ones, which is an incorrect technique when financial
+> data is concerned."*
+
+**A 2011 student report stating the exact thesis this folder has converged on** — that a
+single cherry-picked test window inflates the number — and demonstrating it
+(**87% → 75.56%**).
+
+**⭐ Two further good instincts:**
+- **Granger causality used to SELECT the mood dimension and lag before modelling**
+  (Table 1). **Calm** is significant at all 5 lags (p 0.0069–0.0336); Happy, Alert and
+  Kind mostly are not; lags 3–4 are strongest. ⚠️ But 4 moods × 5 lags = **20 tests with
+  no multiple-comparison correction**, and Happy's p-values (0.0658 / 0.0682 / 0.0798)
+  are treated as causative anyway.
+- **Adding more moods is correctly read as overfitting** — `I_CHD` 75.56% beats
+  `I_CHAD` 73.33% and `I_CHKD` 73.33%: *"by adding more features we would essentially be
+  overfitting the data."*
+
+### How to use it in the thesis
+
+**Cite — one use:** the **k-SCV justification and the Bollen critique**, as an early and
+unusually clear statement that walk-forward evaluation deflates cherry-picked windows.
+Pairs with **51** (protocol), **49** (test-size decay) and **56** (threshold proof).
+**Always state that it is an unrefereed class report.**
+
+Minor: their daily mood score **normalises by total word matches**, which is the
+volume-vs-polarity fix paper **9** failed to make.
+
+**Do not follow:** a hand-edited target series, future-looking weekend interpolation, 45
+predictions, and a portfolio simulation (527 Dow points against a 920-point total range)
+with no transaction costs.
+
+---
+
+## Combined reading — where the twenty-two papers leave the thesis
 
 1. **All six predict the wrong target for this thesis** — per-stock or index absolute
    short-horizon direction (45 the overnight gap, 46 the price level itself). None
@@ -2906,3 +3027,9 @@ loss gap left unaddressed, and no baseline.
   negative weight on "SBI" (a bank's name) and the wrong sign on "Surge", exposing
   day-memorisation; ⚠️ 7-prediction final test, same-day headlines share labels across a
   random split.*
+- `62. Stock Prediction Using Twitter Sentiment Analysis.pdf`
+  — Mittal & Goel, Stanford, ~2011. 5 pp. **⚠️ NOT peer-reviewed — a class project
+  report**, but heavily cited. *POMS moods over 476M tweets → SOFNN → DJIA. **⭐ Cite the
+  k-SCV walk-forward justification and its critique of Bollen et al.'s 87%**; ⚠️ large
+  moves and volatile periods removed from the target by hand, weekends interpolated from
+  future values, 45 predictions.*
