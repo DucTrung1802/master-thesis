@@ -43,6 +43,7 @@ this file updated → committed and pushed. PDFs themselves stay untracked
 | 58 | Nti, Adekoya, Weyori — *Predicting stock market price movement using sentiment analysis: evidence from Ghana* | 2020 | **⭐ Cite the FRONTIER-MARKET framing + Google Trends + dedup; ⚠️ future-looking imputation** |
 | 59 | Nguyen, Shirai, Velcin — *Sentiment analysis on social media for stock movement prediction* | 2015 | **⭐ Cite FREE human labels + "sentiment helps where price fails"; ⚠️ +2.07 pp, no baseline** |
 | 60 | Li & Pan — *A novel ensemble deep learning model for stock prediction based on stock prices and news* | 2022 | **⚠️ TEST SET = 9 PREDICTIONS. Cite only the per-source decomposition** |
+| 61 | Gite et al. — *Explainable stock prices prediction from financial news articles using sentiment analysis* | 2021 | **⭐⭐ Cite the XAI/LIME DIAGNOSTIC — its own explainer proves the model is broken** |
 | 64 | *(duplicate of 56 — byte-identical file)* | — | see paper 56 |
 
 **They form a progression, and the progression is the point.** All five add news or
@@ -2501,7 +2502,122 @@ and a single VADER scalar per source (see **56** on why polarity ratios fail).
 
 ---
 
-## Combined reading — where the twenty papers leave the thesis
+# Paper 61 — Gite, Khatavkar, Kotecha, Srivastava, Maheshwari, Pandey (2021)
+
+*Explainable stock prices prediction from financial news articles using sentiment analysis.*
+**PeerJ Computer Science** 7:e340 · DOI 10.7717/peerj-cs.340 · Symbiosis Institute of
+Technology / Symbiosis Centre for Applied AI, Pune. 21 pp, open access CC-BY.
+**⭐ Code and data public** — GitHub `Hrituja/Stock-Market-Prediction` + supplementary files.
+file: `61. Explainable stock prices prediction from.pdf`.
+
+> **→ Verdict: ⭐⭐ the only paper in this folder that inspects WHICH TOKENS drive its
+> predictions — and its own LIME output shows the model keying on bank names,
+> boilerplate and stopwords rather than sentiment.** Cite the **XAI diagnostic step**,
+> and cite it as a *worked example of the check catching a broken model*. ⚠️ Follow
+> nothing else: the final test is **7 predictions**, and same-day headlines share labels
+> across a random split.
+
+### Setup
+
+| | |
+|---|---|
+| Market | **NSE / BSE-SENSEX** (India), prices from Yahoo Finance |
+| Text | **Pulse by Zerodha** — 210,000+ Indian finance headlines (Business Standard, The Hindu Business, Reuters…) |
+| Used | **19,736 entries**, filtered to headlines containing *"Sensex"*; columns = headline, website, timestamp |
+| Split | stated as **80/10/10** in one section and **70/30** in another ⚠️ |
+| Embedding | top **2,000** words by index, rest zeroed; max length 100, zero-padded |
+| Training | Adam lr 1e-3, binary cross-entropy, ReduceLROnPlateau + EarlyStopping (stops ~epoch 15) |
+
+### One training sample — two incomparable models in one table
+
+| model | input | output | reported |
+|---|---|---|---|
+| **LSTM-CNN** | **one news headline** — Embedding → Conv1D (32 filters, 3×) → MaxPooling1D(2) → LSTM(100) → Dense(sigmoid) | binary next-day direction | **74.76%** |
+| LSTM | OHLC series | **opening price** (regression) | **88.73% "accuracy"** ⚠️ |
+
+**An LSTM predicting the opening price cannot have an accuracy.** Table 3 tabulates a
+classifier and a regressor side by side as though they were commensurable.
+
+Note the headline model takes **no price input at all** — it maps headline text to the
+label "did the market rise from publication day to the next day". That framing is
+legitimate; the split is not.
+
+### ⚠️⚠️ Same-day headlines share a label, and the split is random
+
+**Their own Fig. 5** shows the cleaned dataset: rows 24, 46, 89, 90, 112, 119, 121 all
+carry timestamp **2017-06-30** with identical `result`, `ms_today`, `ms_tomorrow`.
+**Seven headlines, one day, one label.**
+
+With `train_test_split` over 19,736 headlines drawn from a few hundred days, headlines
+from the **same day land on both sides of the split carrying the same label**. The model
+does not need sentiment — it needs to recognise *which day* a headline came from.
+
+That would explain a **74.76%** that nothing else in this literature approaches (**51**'s
+best is 56.1% with 8.5M articles and a proper protocol), and it matches the training log
+in Fig. 10: **`loss: 0.1693` vs `val_loss: 0.8140`** — a **4.8× gap**, reported without
+comment. (The text also quotes the *training* accuracy 93.15% as "our accuracy" while
+`val_acc` sits at 0.7388.)
+
+### ⭐⭐ And LIME proves it — the reason to keep this paper
+
+Table 4 / Fig. 12, the words driving predictions:
+
+| word | weight | what it actually is |
+|---|---|---|
+| **Higher** | **+0.8** | ✓ genuinely sentiment-bearing |
+| **SBI** | **−0.7** | ⚠️ **a bank's name — the largest negative weight in the model** |
+| Edges | +0.5 | boilerplate (*"Sensex edges higher/lower"*) |
+| **Live** | +0.3 | ⚠️ pure boilerplate (*"Markets Live:"*) |
+| Bank | +0.2 | sector noun |
+| **Baroda** | +0.1 | ⚠️ a bank's name |
+| Sensex | −0.1 | the index's own name |
+| **Of** | −0.05 | ⚠️ a stopword |
+| **Surge** | **−0.15** | ⚠️ sentiment-bearing, **WRONG SIGN** |
+
+**The model keys on entity names, boilerplate and stopwords — not sentiment. Its single
+strongest negative feature is a ticker name.** "Surge" carries a negative weight, which
+the authors rationalise as *"the word surge is mostly related in a negative context."*
+
+**This is exactly the day-memorisation the duplicated labels predict** — *SBI appeared on
+day X; day X fell.* **The XAI output diagnoses the leak, and the authors present it as a
+success**: *"Our model is not just a black box now, and the customers know the insides of
+the system."*
+
+### One point in the paper's favour, computed honestly
+
+The final test (Table 5) is **7 predictions**, 07–15 July 2020. Persistence
+(`open ≈ previous close`) computed from their own columns:
+
+| | mean absolute error |
+|---|---|
+| **their model** | **0.32%** |
+| persistence | **0.50%** |
+
+**On those seven days the model does beat doing nothing** — the first time that check has
+come out positive anywhere in this folder. At n=7 it establishes nothing, but it should
+be recorded accurately. (Test case 1's rise/fall of 170.84 should read 70.84 — an
+arithmetic typo; the other six are correct.)
+
+### How to use it in the thesis
+
+**⭐⭐ Cite — one use, and it is a strong one: the XAI diagnostic.**
+
+This is the only paper here that asks **which tokens** drive its predictions, and the
+answer exposes the model. Given **54**'s circular labelling and **52**'s tool
+disagreement, **LIME/SHAP over the scorer is the single check that catches both.**
+
+**→ Add to the assembled design as a validation gate:** run LIME/SHAP on the VN sentiment
+model before any backtest. **If the top-weighted tokens are ticker names, dates,
+boilerplate or stopwords rather than sentiment-bearing words, the feature is
+memorisation, not signal** — and that is knowable *before* spending a walk-forward on it.
+
+**Do not follow:** a 7-prediction final test, random splitting over same-day duplicated
+labels, a classifier and a regressor tabulated as comparable, a 4.8× train/validation
+loss gap left unaddressed, and no baseline.
+
+---
+
+## Combined reading — where the twenty-one papers leave the thesis
 
 1. **All six predict the wrong target for this thesis** — per-stock or index absolute
    short-horizon direction (45 the overnight gap, 46 the price level itself). None
@@ -2666,6 +2782,12 @@ and a single VADER scalar per source (see **56** on why polarity ratios fail).
       control for the publication effect (covered stocks differ from uncovered ones by
       **2.24%/week** in small caps) and for **momentum** (57's news strategy correlates
       **0.80** with it) *(57)*
+    - **⭐⭐ explainability gate** — run **LIME/SHAP over the scorer BEFORE any
+      backtest** *(61)*. If the top-weighted tokens are **ticker names, dates,
+      boilerplate or stopwords** rather than sentiment-bearing words, the feature is
+      memorisation, not signal. 61's own LIME output put its largest negative weight on
+      *"SBI"* — a bank's name — and gave *"Surge"* the wrong sign. **This one check
+      catches both 54's circular labelling and 52's tool-disagreement failure modes**
     - **⭐⭐ protocol** — **51's, wholesale**: a naive benchmark always (random walk /
       persistence / majority class), **MCC + Brier** beside accuracy, a written
       statement of how same-day leakage is prevented, walk-forward expanding window
@@ -2777,3 +2899,10 @@ and a single VADER scalar per source (see **56** on why polarity ratios fail).
   blending ensemble over VADER scores from 4 outlets → S&P 500 close. **⚠️ Test set = 9
   predictions** (every MDA is n/9); MPA spans 0.36 pp across all models and matches
   persistence. **Cite only the per-source decomposition.***
+- `61. Explainable stock prices prediction from.pdf`
+  — Gite, Khatavkar, Kotecha, Srivastava, Maheshwari & Pandey 2021, PeerJ Computer
+  Science (open access, **code + data public**). 21 pp. *LSTM-CNN over Pulse headlines +
+  **LIME**. **⭐⭐ Cite the XAI diagnostic** — their own explainer puts the largest
+  negative weight on "SBI" (a bank's name) and the wrong sign on "Surge", exposing
+  day-memorisation; ⚠️ 7-prediction final test, same-day headlines share labels across a
+  random split.*
