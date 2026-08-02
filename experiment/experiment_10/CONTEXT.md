@@ -42,6 +42,7 @@ this file updated → committed and pushed. PDFs themselves stay untracked
 | 57 | Heston & Sinha — *News vs. sentiment: predicting stock returns from news stories* | 2017 | **⭐⭐⭐ THE RESEARCH DESIGN — cross-sectional, weekly formation, negative-news asymmetry** |
 | 58 | Nti, Adekoya, Weyori — *Predicting stock market price movement using sentiment analysis: evidence from Ghana* | 2020 | **⭐ Cite the FRONTIER-MARKET framing + Google Trends + dedup; ⚠️ future-looking imputation** |
 | 59 | Nguyen, Shirai, Velcin — *Sentiment analysis on social media for stock movement prediction* | 2015 | **⭐ Cite FREE human labels + "sentiment helps where price fails"; ⚠️ +2.07 pp, no baseline** |
+| 60 | Li & Pan — *A novel ensemble deep learning model for stock prediction based on stock prices and news* | 2022 | **⚠️ TEST SET = 9 PREDICTIONS. Cite only the per-source decomposition** |
 | 64 | *(duplicate of 56 — byte-identical file)* | — | see paper 56 |
 
 **They form a progression, and the progression is the point.** All five add news or
@@ -2405,7 +2406,102 @@ only 54.41%."*
 
 ---
 
-## Combined reading — where the nineteen papers leave the thesis
+# Paper 60 — Li, Pan (2022)
+
+*A novel ensemble deep learning model for stock prediction based on stock prices and news.*
+**International Journal of Data Science and Analytics** (Springer) 13:139–149 ·
+DOI 10.1007/s41060-021-00279-9 · Dept. of Computer Science, Georgia State University.
+11 pp.
+file: `60. A novel ensemble deep learning model for stock prediction based on.pdf`.
+
+> **→ Verdict: ⚠️ the entire evaluation rests on NINE predictions.** 121 trading days,
+> split 83/19/19, and a 10-day rolling window leaves **9 test time steps** — the paper
+> says so outright. Every headline number is a fraction over 9. Cite **one** idea: news
+> sources kept as **separate features per outlet**.
+
+### Setup
+
+| | |
+|---|---|
+| Target | **S&P 500 Index** adjusted close (regression) |
+| Text | CNBC.com, Reuters.com, WSJ.com, Fortune.com — **titles only**, Dec 2017 → end Jun 2018 |
+| Scorer | **VADER** compound (general-purpose, one signed scalar per source per day) |
+| Dataset | **121 trading days**, 6 columns |
+| Split | train 12/07/2017–04/09/2018 (**83 d**) · validation (**19 d**) · **test 05/07/2018–06/01/2018 (19 d)** |
+| ⚠️ Effective test | **9 time steps** after the 10-day rolling window |
+
+### One training sample
+
+**One sample = a 10-day rolling window** → next day's adjusted close.
+Features per day: **four news compound scores (WSJ, Reuters, CNBC, Fortune)** +
+adjusted close, all rescaled to [0, 1].
+
+**Model — blending ensemble (stacking):** Level 0 = LSTM (4 layers × 50 neurons,
+dropout 0.2, 100 epochs) and GRU (same shape), trained on the training set; their
+**validation** predictions form the Level 1 training set; a 3-layer fully-connected
+ReLU meta-learner produces the final prediction. Architecturally this is textbook-correct
+stacking with the meta-learner fitted on held-out predictions.
+
+### ⚠️⚠️ Every headline number is a fraction over nine
+
+| | LSTM | DP-LSTM | GRU | Avg ens | W.avg ens | **Blending** |
+|---|---|---|---|---|---|---|
+| MSE | 438.94 | 330.97 | 249.34 | 231.16 | 229.52 | **186.32** |
+| MPA | 99.29% | 99.48% | 99.57% | 99.57% | 99.57% | **99.65%** |
+| Precision | 25% | 20% | 40% | 25% | 40% | **60%** |
+| Recall | 25% | 25% | 50% | 25% | 50% | **75%** |
+| F1 | 25% | 22.22% | 44.44% | 25% | 44.44% | **66.67%** |
+| **MDA** | 33.33% | 22.22% | 44.44% | 33.33% | 33.33% | **66.67%** |
+
+**MDA values are 2/9, 3/9, 4/9, 6/9.** Precision runs 1/5, 2/5, 3/5; recall 1/4, 2/4,
+3/4. The abstract's *"increasing precision rate by 40%, recall by 50%, F1-score by
+44.78%, and movement direction accuracy by 33.34%"* is **the difference between 3
+correct out of 9 and 6 correct out of 9.**
+
+**The smallest evaluation in this folder** — below 54's 20-article test and 49's 10-day
+cell, and unlike 49 it is the *only* test set, not one of three.
+
+### ⚠️ The price metrics are indistinguishable from persistence
+
+**MPA spans 99.29% → 99.65% across all six models** — a 0.36 pp spread. On an index near
+2,700 that is a mean absolute error of ~19 vs ~9.5 points; **the S&P moved ~20 points on
+an average day in 2018.** So even the winning model's error is about one day's move.
+MSE 186.32 → **RMSE ≈ 13.6 index points**, same conclusion.
+
+**No persistence benchmark** — the third price-level regression here (with **48** and
+**49**) to omit it, and the third whose reported error sits at or worse than predicting
+no change.
+
+Also: the *"60% accuracy delivers solid results"* justification for the paper's central
+claim cites **a blog post** (NikolaNews, ref [20]); and titles-only is justified via
+Ding et al., which **51** empirically refuted (content beats titles decisively).
+
+**⭐ Credit where due:** they found an error in the DP-LSTM baseline's published code,
+re-ran it, and reported the corrected MSE (198.75 → **330.97**). Clean disclosure —
+though the correction happens to enlarge their own margin.
+
+### ⭐ The one idea worth keeping — per-SOURCE decomposition
+
+**WSJ, Reuters, CNBC and Fortune are kept as four separate features**, not pooled into
+one daily score. Outlets differ in latency, reliability and audience, and letting the
+model weight them independently is sensible. **No other paper in this folder does this.**
+
+**→ For VN this maps onto CafeF / VietStock / Vietnambiz / forum as separate channels** —
+and it composes cleanly with **43**'s hierarchy: **43 decomposes by SCOPE**
+(market/sector/stock), **60 by SOURCE**. Both axes, not either.
+
+### How to use it in the thesis
+
+**Cite — one use:** per-source decomposition, as a second axis alongside 43's scope
+hierarchy. **Add to the assembled design.**
+
+**Do not follow:** a 9-prediction test set, price metrics that cannot be separated from
+persistence, no naive benchmark, a blog post as the standard of evidence, titles-only,
+and a single VADER scalar per source (see **56** on why polarity ratios fail).
+
+---
+
+## Combined reading — where the twenty papers leave the thesis
 
 1. **All six predict the wrong target for this thesis** — per-stock or index absolute
    short-horizon direction (45 the overnight gap, 46 the price level itself). None
@@ -2534,8 +2630,10 @@ only 54.41%."*
     - **aggregation** — mean not sum, over a **09:00→09:00 ICT** market-hours window,
       with exponential decay across Tết and weekends, document count kept as its own
       feature *(45)*
-    - **streams** — market / sector / stock, weighted *(43)*, learned rather than
-      grid-searched *(44)*
+    - **streams** — **two decomposition axes, not one**: by **scope** (market / sector /
+      stock) *(43)*, weighted and learned rather than grid-searched *(44)*; **and by
+      SOURCE** (CafeF / VietStock / Vietnambiz / forum kept as separate features)
+      *(60)*, since outlets differ in latency, reliability and audience
     - **cross-section** — ranked per date against the VN30/VN100 panel, so the market
       stream cancels and the idiosyncratic stream survives *(43 + this thesis)*
     - **labels** — **quantile-defined**: top quartile of `rel5` long, bottom quartile
@@ -2674,3 +2772,8 @@ only 54.41%."*
   **⭐ Cite the FREE platform-native human labels** (15.6% user-tagged posts), the
   4pm-to-4pm window, and **"sentiment helps where price history fails"** (+9.83 pp on
   weak-price stocks); ⚠️ +2.07 pp overall, no baseline, human tags are AAPL-only.*
+- `60. A novel ensemble deep learning model for stock prediction based on.pdf`
+  — Li & Pan 2022, Int. J. Data Science and Analytics (Springer). 11 pp. *LSTM+GRU
+  blending ensemble over VADER scores from 4 outlets → S&P 500 close. **⚠️ Test set = 9
+  predictions** (every MDA is n/9); MPA spans 0.36 pp across all models and matches
+  persistence. **Cite only the per-source decomposition.***
