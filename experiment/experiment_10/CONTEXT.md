@@ -45,6 +45,7 @@ this file updated → committed and pushed. PDFs themselves stay untracked
 | 60 | Li & Pan — *A novel ensemble deep learning model for stock prediction based on stock prices and news* | 2022 | **⚠️ TEST SET = 9 PREDICTIONS. Cite only the per-source decomposition** |
 | 61 | Gite et al. — *Explainable stock prices prediction from financial news articles using sentiment analysis* | 2021 | **⭐⭐ Cite the XAI/LIME DIAGNOSTIC — its own explainer proves the model is broken** |
 | 62 | Mittal & Goel — *Stock prediction using Twitter sentiment analysis* | ~2011 | **⭐ Cite the k-SCV walk-forward + Bollen critique; ⚠️ NOT peer-reviewed, target hand-edited** |
+| 63 | Souma, Vodenska, Aoyama — *Enhanced news sentiment analysis using deep learning methods* | 2019 | **⭐⭐ THE CLEANEST HONEST NULL — 97.5% train → 50.4% test on Reuters tick data** |
 | 64 | *(duplicate of 56 — byte-identical file)* | — | see paper 56 |
 
 **They form a progression, and the progression is the point.** All five add news or
@@ -2738,7 +2739,130 @@ with no transaction costs.
 
 ---
 
-## Combined reading — where the twenty-two papers leave the thesis
+# Paper 63 — Souma, Vodenska, Aoyama (2019) ⭐⭐ THE CLEANEST HONEST NULL
+
+*Enhanced news sentiment analysis using deep learning methods.*
+**Journal of Computational Social Science** (Springer) 2:33–46 ·
+DOI 10.1007/s42001-019-00035-x · College of Science and Technology, Nihon University /
+Metropolitan College & Center for Polymer Studies, Boston University / Kyoto University /
+RIETI. 14 pp, open access CC-BY.
+file: `63. Enhanced news sentiment analysis using deep learning methods.pdf`.
+
+> **→ Verdict: ⭐⭐ cite this as the folder's cleanest NULL RESULT.** Professional data
+> (Thomson Reuters news archive + millisecond tick history), the tightest identification
+> here (a **one-minute** event window), proven model capacity (**97.5% training
+> accuracy**) — and **50.4% out-of-sample on a balanced binary task**, reported without
+> spin. A 47-point train/test collapse, published plainly.
+
+### Setup
+
+| | |
+|---|---|
+| Data | **Thomson Reuters News Archive (TRNA)** + **Thomson Reuters Tick History (TRTH)** |
+| Universe | **DJ29** (DJIA 30 minus DWDP, added Sept 2017), **2003–2013** |
+| Corpus | **375,367 articles** pertaining to DJ29, 2003–2012 → **186,897 positive / 188,470 negative** |
+| Language | English only (~75% of TRNA; Japanese ~10%) |
+| Embedding | **GloVe** pre-trained on Wikipedia 2014 + Gigaword 5 — 400K words, **200 dimensions** |
+| Model | **RNN with LSTM**, TensorFlow; batch 24, **64 LSTM units**, 2 classes, max sequence **550** (mean article length), **400k iterations** |
+| Test | **2013** — 16,856 positive / 17,213 negative |
+
+### One training sample
+
+**One sample = one news article.**
+
+`X` = the **article body**, GloVe-embedded, **50–550 words**. ⭐ **Headlines are explicitly
+excluded** — *"The peak near the origin represents mostly news headlines… the longer
+articles are classified more appropriately compared to the short articles including the
+headlines"* — **independently agreeing with paper 51's content-beats-titles result**, and
+against 28/46/60.
+
+`y` = **binary polarity defined by the ONE-MINUTE price reaction** (Eq. 1):
+
+```
+r_i(t) = log( p̄_after,i / p̄_before,i )
+```
+
+`p̄_before` = mean stock price over the **minute before** publication;
+`p̄_after` = mean over the **minute after**. Positive if `r > 0`, negative if `r < 0`.
+
+**Training-set construction (the paper's stated contribution):** two schemes —
+**random** (12,500 positive + 12,500 negative sampled from the full pools) vs
+**hierarchical** (the 12,500 *highest*-positive and 12,500 *highest*-negative polarity
+articles; cut-offs `r = +0.00354` / `−0.00364`).
+
+### ⭐⭐ The result
+
+| | |
+|---|---|
+| **Training accuracy** | **~97.5%** (hierarchical) · ~95% (random) — Fig. 5 |
+| Training loss | ~5% (hierarchical) · ~10% (random) — Fig. 6 |
+| **TEST accuracy** | **~50.4%** |
+
+Test statistic `P = (1/29) Σ(p_i − n_i)` (Eq. 3), the average tilt toward the correct
+class:
+
+- **P = +0.76%** on positive test news
+- **P = −0.75%** on negative test news
+
+Since `p + n = 1`, `p = (1 + 0.0076)/2 =` **50.38%** — on a **balanced binary task**.
+**Chance.** Figs 7–8 show it visually: all 29 stocks' bars sit at roughly 50/50.
+
+The authors state it without spin: *"although the percentage is small, on average, the
+model predicts the positive news as positive."*
+
+**Training 97.5% → test 50.4%. A 47-point collapse, both numbers published.**
+
+### Why this is the most valuable null in the folder
+
+Every other weak result here is explainable by thin data, a bad scorer, or a broken
+protocol. **This one is not:**
+
+1. **Professional-grade data** — the Thomson Reuters archive *and* millisecond tick
+   history, not scraped headlines.
+2. **⭐ Tightest identification in the folder** — a **one-minute** window around a
+   timestamped release. Reverse causality is minimised structurally rather than assumed
+   away (contrast **56**, whose intraday news labels a whole session).
+3. **Capacity is proven** — 97.5% training accuracy shows the model *can* fit the task;
+   it simply does not generalise.
+4. **The baseline is built in** — classes are balanced by construction, so 50% is the
+   bar, and they land on it.
+
+**→ One sentence for the evaluation chapter:** *Souma, Vodenska & Aoyama (2019) trained
+an LSTM on 375,367 Thomson Reuters articles to predict the one-minute price reaction to
+each article; training accuracy reached 97.5%, out-of-sample accuracy 50.4%.*
+
+### ⚠️ Where the paper's own claim is weaker than its null
+
+Their headline contribution — **hierarchical beats random training-data selection** — is
+evidenced by **97.5% vs 95% TRAINING accuracy** and 5% vs 10% **training** loss
+(Figs 5–6). On test data (Figs 9–10) both scatter widely around P ≈ 0–10 with no clean
+separation. **The claim is demonstrated where it means least.**
+
+Note also that this *is* paper **46**'s circular labelling — labels derived from price
+movement, a text model trained to reproduce them. The difference is what is claimed:
+**46 fed that signal forward as a return predictor; 63 treats it as the task itself and
+honestly reports failure.**
+
+Their future work independently proposes **56**'s fix: *"introduction of threshold to
+r_i(t) to analyze truly positive and truly negative news reducing the noise of positive
+or negative sentiment news that are close to neutral."*
+
+### How to use it in the thesis
+
+**⭐⭐ Cite — two uses:**
+1. **The null itself**, as the strongest available evidence that the signal is not there
+   even with ideal data. Pairs with **51** (MCC 0.069 done properly), **53** (below its
+   own 50% base rate) and **50** (Kappa 0.078).
+2. **Content over headlines**, corroborating **51** from an independent direction — they
+   discard headlines as too short to classify reliably.
+
+**Do not follow:** the hierarchical-vs-random claim as evidenced, and note that
+price-reaction labelling is the same circularity as **46** — legitimate only when the
+task is honestly framed as "predict the reaction", as it is here.
+
+---
+
+## Combined reading — where the twenty-three papers leave the thesis
 
 1. **All six predict the wrong target for this thesis** — per-stock or index absolute
    short-horizon direction (45 the overnight gap, 46 the price level itself). None
@@ -2784,6 +2908,12 @@ with no transaction costs.
      "always predict horizontal" scores **~50% by construction**. Best sector-average
      accuracy in the paper: **0.496**. Its own design supplies the bar and nothing
      clears it.
+   - **⭐⭐ 63 — the cleanest null, on the best data.** Thomson Reuters archive +
+     millisecond tick history, a **one-minute** event window, 375,367 articles, and a
+     model demonstrably able to fit the task: **97.5% training accuracy → 50.4%
+     out-of-sample on a balanced binary target.** A 47-point collapse, reported without
+     spin. **When the identification is tight and the data is professional, the signal
+     is not there.**
    - **⭐⭐ 56 — the analytical proof.** `acc = 6P² − 4P + 1` for random guessing from
      the prior, so **widening the neutral band drives accuracy to 1.00 with no model
      change at all**. The authors say so outright and then deliberately pick the
@@ -2884,7 +3014,8 @@ with no transaction costs.
     - **lag** — news from `d` predicts from `d+1`
     - **model** — the existing GBM, not a sequence net *(experiments 1.6–2.3)*
     - **text field** — the **content**, not the headline; title-only sentiment is
-      worse than useless *(51, overturning 28 and 46)*
+      worse than useless *(51, overturning 28 and 46)*, and **63** discards headlines
+      independently as too short to classify reliably
     - **judgement** — costed walk-forward on `rel5`, **never accuracy** *(experiment_3, 44)*
     - **⭐⭐⭐ role** — sentiment as an **EXCLUSION rule over the existing GBM ranking,
       not a predictor**: it may drop a name where the text disagrees, never flip a call.
@@ -3033,3 +3164,10 @@ with no transaction costs.
   k-SCV walk-forward justification and its critique of Bollen et al.'s 87%**; ⚠️ large
   moves and volatile periods removed from the target by hand, weekends interpolated from
   future values, 45 predictions.*
+- `63. Enhanced news sentiment analysis using deep learning methods.pdf`
+  — Souma, Vodenska & Aoyama 2019, J. Computational Social Science (Springer, open
+  access). 14 pp. *GloVe + LSTM over 375,367 Thomson Reuters articles, polarity defined
+  by the **one-minute** price reaction (TRTH tick data). **⭐⭐ THE CLEANEST HONEST
+  NULL — 97.5% training accuracy, 50.4% out-of-sample on a balanced binary task.**
+  Also discards headlines for article bodies, corroborating 51.*
+- `64. …` — **byte-identical duplicate of paper 56**; see that entry.
