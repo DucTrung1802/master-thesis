@@ -39,6 +39,7 @@ this file updated → committed and pushed. PDFs themselves stay untracked
 | 54 | Joshi, Bharathi, Rao — *Stock trend prediction using news sentiment analysis* | 2016 | **⚠️ CIRCULAR LABELLING — cite only as the anti-pattern; no stock prediction in it** |
 | 55 | Bharathi & Geetha — *Sentiment analysis for effective stock market prediction* | 2017 | **⭐ Cite the VETO framing (sentiment abstains, never generates); ⚠️ target undefined** |
 | 56 | Li, Xie, Chen, Wang, Deng — *News impact on stock price return via sentiment analysis* | 2014 | **⭐⭐ THE THRESHOLD PROOF — accuracy is gameable by labelling; th must exceed costs** |
+| 57 | Heston & Sinha — *News vs. sentiment: predicting stock returns from news stories* | 2017 | **⭐⭐⭐ THE RESEARCH DESIGN — cross-sectional, weekly formation, negative-news asymmetry** |
 | 64 | *(duplicate of 56 — byte-identical file)* | — | see paper 56 |
 
 **They form a progression, and the progression is the point.** All five add news or
@@ -2005,7 +2006,161 @@ majority-class baseline stated (though Eq. 17 supplies the random-prior one impl
 
 ---
 
-## Combined reading — where the sixteen papers leave the thesis
+# Paper 57 — Heston, Sinha (2017) ⭐⭐⭐ THE RESEARCH DESIGN
+
+*News vs. Sentiment: Predicting Stock Returns from News Stories.*
+**Financial Analysts Journal** (CFA Institute) Vol. 73, No. 3, pp. 67–83 ·
+Steven L. Heston (Robert H. Smith School, Univ. of Maryland — of the Heston
+stochastic-volatility model) and Nitish Ranjan Sinha (**Board of Governors of the
+Federal Reserve System**). Submitted Nov 2015, accepted Dec 2016.
+file: `57. News vs. Sentiment - Predicting Stock Returns from News Stories.pdf`.
+
+> **→ Verdict: ⭐⭐⭐ the most important paper in this folder for this thesis, and the
+> only one in a proper empirical-asset-pricing tradition.** Paper 51 supplies the
+> evaluation *protocol*; **57 supplies the RESEARCH DESIGN** — cross-sectional
+> long–short, **weekly** formation, with the news-publication effect and momentum
+> explicitly controlled. Its central asymmetry (**negative news predicts for a quarter,
+> positive news for a week**) rests on **short-sale constraints**, which bind *harder*
+> in Vietnam than in the US.
+
+### Setup
+
+| | |
+|---|---|
+| Data | **900,754 Thomson Reuters articles, 2003–2010**, company-tagged, matched to CRSP |
+| Filters | multi-company stories excluded · unmatched tickers excluded · **relevance < 35% excluded** |
+| Scorer | **Thomson Reuters NewsScope** — proprietary neural sentiment engine, trained on **3,000 triple-annotated** articles, ~75% agreement with human analysts ⚠️ not reproducible |
+| Method | **decile / quintile long–short spreads** + **Fama–MacBeth cross-sectional regressions** |
+| Benchmark | excess returns over a market portfolio (Brown & Warner 1985 methodology) |
+
+### One sample
+
+**One sample = one (stock, week) in a cross-sectional sort** — not a supervised
+classification row.
+
+`X` = NewsScope sentiment for stock *i* in formation week *t*, **decomposed into three
+separate variables**: `If_news` (dummy for *any* news), `Positive`, `Negative`
+`y` = the stock's **excess return** in weeks *t+1 … t+13*
+
+```
+r_i,t = α_k,t + γ_k,t·If_news_{i,t−k} + β_k,t·Positive_{i,t−k} + δ_k,t·Negative_{i,t−k} + ε_i,t   (Eq. 1)
+```
+
+### ⭐⭐ Why it matters more than the other sixteen
+
+**It is the only proper CROSS-SECTIONAL LONG–SHORT study in the folder** — which is
+exactly this thesis's `rel5` VN30/VN100 framing. Everything else predicts one stock's or
+one index's *absolute* direction.
+
+### ⭐⭐ Finding 1 — weekly aggregation beats daily, and they explain why
+
+| formation | predictability duration |
+|---|---|
+| **daily** news | **1–2 days** — Day 1 +0.17% (t=9.8), Day 2 +0.04% (t=2.5), **Day 3 t=1.2, gone** |
+| **weekly** news | **13 WEEKS** — Weeks 1–13 = **+2.15% (t=8.2)**; momentum-adj 2.22%, size-adj 2.65% |
+
+Mechanism, Fig. 3: the 20th and 80th percentiles of *daily* net sentiment swing wildly
+and at points nearly touch. Their words — *"daily news sentiment is a noisy way of
+classifying companies on the basis of sentiment. The weekly cutoffs still show some
+variation but are much more stable over time."*
+
+**⭐ This explains why every daily-aggregation paper in this folder finds nothing:** the
+daily cross-sectional sentiment distribution is too unstable to rank on. It also argues
+for testing horizons **well beyond `rel5`/`rel10`** — experiment_3 stopped at 10 days.
+
+Secondary: companies with **multiple** articles in the formation week are more
+predictable (Weeks 1–13 = 2.02%, t=4.80) than single-article ones (1.24%, t=5.68).
+
+### ⭐⭐⭐ Finding 2 — the positive/negative asymmetry, and why it matters MORE in VN
+
+Fama–MacBeth coefficients (Table 6), cumulated over 13 weeks:
+
+| | cumulative | pattern |
+|---|---|---|
+| **Positive sentiment** | **+0.0321** | significant at **Lag 0 and Lag 1 only**, then ~zero and sign-flipping |
+| **Negative sentiment** | **−0.0593** | **negative at ALL 13 lags**, significant at Lags 1–6 and Lag 10 |
+
+*"Positive news predicts positive returns for only about one week, but negative news
+predicts negative returns for up to a quarter."* Their explanation: **short-sale
+constraints** stop a small informed minority from fully impounding bad news.
+
+**⭐⭐⭐ Vietnam has STRONGER short-sale constraints than the US — single-stock shorting
+is effectively unavailable on HOSE** (experiment_3.2). The mechanism therefore predicts
+the negative-news effect should be **more** persistent in VN, not less. And since it
+cannot be shorted, the actionable form is **EXCLUSION** — underweight or drop bad-news
+names rather than buy good-news ones.
+
+**This converges with 51's divest-don't-short and 55's veto framing — but supplies the
+MECHANISM those two lacked.** Three papers, one conclusion, now with a reason.
+
+### ⭐ Finding 3 — control for the EXISTENCE of news, separately from its tone
+
+Table 2, weekly returns by size decile:
+
+| decile | with news | without news | difference | t |
+|---|---|---|---|---|
+| 1 (smallest) | **+2.00%** | −0.24% | **+2.24%** | 3.47 |
+| 2 | +1.51% | −0.23% | +1.75% | 3.59 |
+
+Without the `If_news` dummy, "positive-news stocks outperform" partly just measures
+"covered stocks outperform uncovered ones." **No other paper in this folder controls for
+this.** They also find **neutral news has a POSITIVE effect** (γ positive at all nonzero
+lags) — contradicting "no news is good news" (Campbell & Hentschel 1992).
+
+### ⭐ Two robustness results worth copying
+
+1. **Momentum and earnings-surprise controls.** The news strategy correlates **0.80 with
+   momentum** (Table 5A) — potentially fatal. Regressing news returns on momentum and
+   earnings surprise leaves intercepts of **0.148%/week** and **0.096%/week** with small
+   standard errors, so the effect survives. The standard asset-pricing check, absent
+   everywhere else here.
+2. **They show the pre-publication drift and read it correctly.** Days −9 to −1 are all
+   significantly positive (t up to 22.4): *"stock returns predict news, rather than the
+   converse."* Honest handling of the reverse-causality that Day-0 numbers conceal.
+
+**⭐ Connection to experiment_4:** Table 7 shows the delayed response concentrates in
+**earnings-announcement weeks** (Weeks 1–13 = **5.57%, t=2.66**) and is *insignificant*
+pre-earnings (0.25%, t=0.11). Earnings releases are the channel through which news gets
+incorporated — which makes **experiment_4's point-in-time VCB disclosure calendar the
+natural conditioning variable** for any VN news feature.
+
+### ⚠️ Three caveats
+
+1. **⚠️ No transaction costs anywhere.** Decile long–short spreads with weekly
+   rebalancing; 2.15% over 13 weeks ≈ 8.6% annualised gross. Costs could consume much
+   of it.
+2. **⚠️ The profitable leg is the one VN cannot trade.** The effect lives in negative
+   news and persists *because* shorting is constrained. For a long-only investor the
+   accessible version is avoiding the drag — real, but materially weaker than the
+   headline. The anomaly survives precisely because it is not arbitrageable.
+3. **Proprietary scorer.** NewsScope is not reproducible without the vendor feed;
+   substituting a VN transformer inherits different measurement error.
+
+Also: small-cap results *"may not represent a profit opportunity"* given illiquidity —
+they say so themselves; and 2003–2010 spans the GFC.
+
+### How to use it in the thesis
+
+**⭐⭐⭐ Follow the RESEARCH DESIGN:**
+- **Cross-sectional long–short (or long/exclude) sorts**, not per-stock classification
+- **WEEKLY formation**, not daily — daily cross-sectional sentiment cutoffs are too
+  unstable to rank on
+- **Decompose sentiment into `If_news` / `Positive` / `Negative`** and estimate their
+  effects separately; never a single signed scalar
+- **Control for the publication effect** (`If_news`) and for **momentum** — a 0.80
+  correlation with momentum is the first thing an examiner will ask about
+- **Test horizons well past 5–10 days**; the weekly-formation effect runs a full quarter
+
+**⭐⭐⭐ And take the central hypothesis to VN:** short-sale constraints are *tighter* on
+HOSE, so **negative news should be the persistent, exploitable side — as an exclusion
+rule for a long-only book.** That is a mechanism-backed, testable hypothesis, and it is
+the single most valuable idea to come out of this folder.
+
+**Add what 57 omits:** transaction costs (experiment_3), and a reproducible scorer.
+
+---
+
+## Combined reading — where the seventeen papers leave the thesis
 
 1. **All six predict the wrong target for this thesis** — per-stock or index absolute
    short-horizon direction (45 the overnight gap, 46 the price level itself). None
@@ -2136,12 +2291,23 @@ majority-class baseline stated (though Eq. 17 supplies the random-prior one impl
     - **text field** — the **content**, not the headline; title-only sentiment is
       worse than useless *(51, overturning 28 and 46)*
     - **judgement** — costed walk-forward on `rel5`, **never accuracy** *(experiment_3, 44)*
-    - **⭐ role** — sentiment as a **VETO over the existing GBM ranking, not a
-      predictor**: it may drop a name where the text disagrees, never flip a call.
-      **55** and **51** converge on this independently — a weak signal should *reduce*
-      exposure, not reverse it (51's divest-only SC2 beat its shorting SC on every
-      metric). It is also the only framing that is cheap to defend and directly
-      testable in the costed walk-forward already built
+    - **⭐⭐⭐ role** — sentiment as an **EXCLUSION rule over the existing GBM ranking,
+      not a predictor**: it may drop a name where the text disagrees, never flip a call.
+      **51**, **55** and **57** converge on this from three directions — 51's
+      divest-only SC2 beat its shorting SC on every metric; 55's truth table only ever
+      abstains; and **57 supplies the MECHANISM**: negative news predicts for a full
+      quarter *because* short-sale constraints stop it being arbitraged, while positive
+      news is gone in a week. **HOSE's constraints are tighter than the US's, so the
+      negative side should be the persistent one here — and exclusion is the only way a
+      long-only book can act on it**
+    - **⭐⭐ formation frequency** — **WEEKLY, not daily.** 57 shows daily news predicts
+      1–2 days while weekly news predicts **13 weeks**, because the daily
+      cross-sectional sentiment percentiles are too unstable to rank on (their Fig. 3).
+      Test horizons well past `rel5`/`rel10`
+    - **⭐ decomposition** — estimate `If_news` / `Positive` / `Negative` **separately**;
+      control for the publication effect (covered stocks differ from uncovered ones by
+      **2.24%/week** in small caps) and for **momentum** (57's news strategy correlates
+      **0.80** with it) *(57)*
     - **⭐⭐ protocol** — **51's, wholesale**: a naive benchmark always (random walk /
       persistence / majority class), **MCC + Brier** beside accuracy, a written
       statement of how same-day leakage is prevented, walk-forward expanding window
@@ -2229,3 +2395,10 @@ majority-class baseline stated (though Eq. 17 supplies the random-prior one impl
   (`acc = 6P² − 4P + 1`; th must exceed transaction costs), the polarity-ratio
   refutation, and the tyranny-of-the-index correction; ⚠️ intraday news vs same-day
   return is impact, not forecasting.*
+- `57. News vs. Sentiment - Predicting Stock Returns from News Stories.pdf`
+  — Heston & Sinha 2017, **Financial Analysts Journal** (CFA Institute). 17 pp.
+  *900,754 Reuters articles → NewsScope sentiment → cross-sectional decile long–short +
+  Fama–MacBeth. **⭐⭐⭐ THE RESEARCH DESIGN** — weekly formation predicts 13 weeks vs
+  1–2 days for daily; **negative news predicts for a quarter, positive for a week, via
+  short-sale constraints**; `If_news`/`Positive`/`Negative` estimated separately;
+  momentum-controlled. ⚠️ No transaction costs, proprietary scorer.*
