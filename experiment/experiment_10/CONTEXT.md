@@ -8,6 +8,12 @@ binding constraint is DATA, not model/target"* — puts on the table.
 One entry per paper below: what it does, what one training sample looks like,
 what it actually establishes, and **whether to cite it, follow it, or both**.
 
+> **→ [guidance.md](guidance.md) turns this file into a build plan.** This file answers
+> *"what does the literature say"*; guidance.md answers *"what to type, where, in what
+> order"* — measured against `bronze.cafef_news` (405,320 rows / 777 tickers) and the
+> existing `src/sentiment` module, which already ran this experiment on 3 tickers and
+> found a negative result.
+
 ## Naming convention
 
 **Every PDF is prefixed with its paper number** — `9. …pdf`, `28. …pdf`, `43. …pdf`.
