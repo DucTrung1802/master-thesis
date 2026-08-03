@@ -31,7 +31,51 @@ Design choices and the paper behind each:
 Run:
     python experiment/experiment_10/news_result.py                 # h=1,5,10, editorials
     python experiment/experiment_10/news_result.py --quick         # 8k articles, fast
+    python experiment/experiment_10/news_result.py --min-relevance 1.0
     python experiment/experiment_10/news_result.py --include-disclosures
+
+────────────────────────────────────────────────────────────────────────────────────────
+## RESULTS AS RUN — 2026-08-03, 58,660 editorials, FULL content
+
+Two representations on identical rows, folds and labels (see `sentiment/doc_encoder.py`):
+`lead` = the first 254-token window ≈ the old 256-token slice, which measurement showed
+saw **38.7%** of the average article; `full` = the whole document, 3.44 chunks on average,
+pooled as mean ‖ max ‖ lead.
+
+| rep | h | train | test | base | macro-F1 | QWK | QWK shuffled |
+|---|---|---|---|---|---|---|---|
+| lead | 1 | 0.469 | 0.220 | 0.205 | 0.216 | +0.005 | +0.006 |
+| lead | 5 | 0.465 | 0.214 | 0.207 | 0.211 | +0.004 | +0.002 |
+| lead | 10 | 0.437 | 0.212 | 0.207 | 0.209 | +0.012 | −0.009 |
+| **full** | 1 | 0.521 | 0.224 | 0.205 | 0.219 | +0.008 | +0.005 |
+| **full** | 5 | 0.496 | **0.224** | 0.207 | 0.220 | **+0.020** | +0.004 |
+| **full** | 10 | 0.485 | 0.214 | 0.207 | 0.212 | +0.014 | −0.002 |
+
+Paired, full minus lead, same folds:
+
+| h | Δaccuracy | Δmacro-F1 | ΔQWK | folds won |
+|---|---|---|---|---|
+| 1 | +0.0049 | +0.0033 | +0.0031 | 3/5 |
+| 5 | +0.0092 | +0.0093 | +0.0157 | 4/5 |
+| 10 | +0.0024 | +0.0028 | +0.0017 | 3/5 |
+
+**Reading the whole article helps — consistently (9 of 9 deltas positive) and marginally
+(at most +0.9 pp of accuracy).** It does not change the verdict: the best cell is 0.224
+against a 0.207 base rate with QWK +0.020, and train 0.496 → test 0.224 is still a
+collapse. Paper 63 went 97.5% → 50.4% on a balanced binary task; this goes 49.6% → 22.4%
+on five classes whose base rate is 20%.
+
+⚠️ **The consistent sign is the honest part and the small size is the important part.** A
+reviewer who asks "but you only fed it 600 characters" now has an answer measured on the
+same folds rather than an assumption.
+
+Two other arms, both negative:
+* `--min-relevance 1.0` (keep only articles naming the ticker; 48% of the corpus) makes it
+  WORSE — test 0.220 against a base rate of 0.222, i.e. at or below chance.
+* The shuffled-label control sits at +0.004 for the best cell, and BEATS the model at h=1.
+
+The one positive result is not about direction at all: normalised WITHIN ticker, news days
+carry **1.15×** the absolute excess move of quiet days. News predicts MAGNITUDE, not SIGN.
 """
 
 from __future__ import annotations
@@ -77,6 +121,7 @@ DIVERGE_NEG, DIVERGE_MID, DIVERGE_POS = "#e34948", "#f0efec", "#2a78d6"
 
 LEVELS = ["rất tiêu cực", "tiêu cực", "trung tính", "tích cực", "rất tích cực"]
 HORIZONS = (1, 5, 10)
+REP_LEAD, REP_FULL = "lead (256 tok)", "full doc (chunked)"
 
 plt.rcParams.update(
     {
@@ -212,40 +257,46 @@ def build_reactions(
 # ── model ────────────────────────────────────────────────────────────────────────────
 
 
-def get_embeddings(df: pd.DataFrame, tag: str) -> np.ndarray:
-    """Frozen mean-pooled PhoBERT over `headline. content-lead`.
+def get_embeddings(df: pd.DataFrame, tag: str) -> dict[str, np.ndarray]:
+    """→ `{"lead": (n, 768), "full": (n, 2304)}` — the WHOLE article, chunk-pooled.
+
+    ⚠️ `lead` is kept deliberately: it is (near enough) the old 256-token representation,
+    which measurement showed saw **38.7%** of the average article. Carrying both makes the
+    lead-vs-full comparison an ablation on identical rows, folds and labels rather than a
+    comparison against a number from a previous run.
 
     ⚠️ Cached **by `row_id`**, not by row count. Keying on `len(df)` looked simpler and was
-    wrong: any change to the filters — the price-sanity screen below, a different horizon
-    set — silently invalidates the whole cache and re-pays 13 GPU-minutes. Keyed by
-    row_id, a filter is free and only genuinely new articles are embedded.
+    wrong: any change to the filters silently invalidated the cache and re-paid the GPU
+    time. Keyed by row_id, a filter is free and only genuinely new articles are encoded.
     """
-    cache = CACHE / f"emb_{tag}.npz"
+    cache = CACHE / f"docemb_{tag}.npz"
     want = df["row_id"].to_numpy()
 
-    have_ids, have_vecs = np.array([], dtype=object), None
+    have_ids = np.array([], dtype=object)
+    have = {"lead": None, "full": None}
     if cache.exists():
         z = np.load(cache, allow_pickle=True)
-        have_ids, have_vecs = z["ids"], z["vecs"]
+        have_ids, have["lead"], have["full"] = z["ids"], z["lead"], z["full"]
 
     known = {rid: i for i, rid in enumerate(have_ids)}
     missing = [rid for rid in want if rid not in known]
 
     if missing:
-        from sentiment.text_reaction_model import build_text, embed_texts
+        from sentiment.doc_encoder import build_document_text, encode_documents
 
         sub = df[df["row_id"].isin(set(missing))]
-        texts = build_text(sub["headline"], sub["content"])
-        print(f"  embedding {len(texts):,} new articles (PhoBERT, frozen)…")
-        new_vecs = embed_texts(texts).astype(np.float32)
+        print(f"  encoding {len(sub):,} new articles — FULL content, chunked…")
+        new = encode_documents(build_document_text(sub["headline"], sub["content"]))
         have_ids = np.concatenate([have_ids, sub["row_id"].to_numpy()])
-        have_vecs = new_vecs if have_vecs is None else np.vstack([have_vecs, new_vecs])
-        np.savez(cache, ids=have_ids, vecs=have_vecs)
+        for k in ("lead", "full"):
+            have[k] = new[k] if have[k] is None else np.vstack([have[k], new[k]])
+        np.savez(cache, ids=have_ids, lead=have["lead"], full=have["full"])
         known = {rid: i for i, rid in enumerate(have_ids)}
     else:
-        print(f"  embeddings: {len(want):,} articles served from cache")
+        print(f"  document embeddings: {len(want):,} articles served from cache")
 
-    return have_vecs[[known[rid] for rid in want]]
+    take = [known[rid] for rid in want]
+    return {k: have[k][take] for k in ("lead", "full")}
 
 
 def walkforward(
@@ -412,11 +463,11 @@ def chart_model(results: dict, df: pd.DataFrame, path: Path):
     ax = fig.add_subplot(gs[0, :2])
     width = 0.26
     for i, h in enumerate(HORIZONS):
-        f = pd.DataFrame(results[h]["folds"])
+        f = pd.DataFrame(results[(REP_FULL, h)]["folds"])
         x = np.arange(len(f)) + (i - 1) * width
         ax.bar(x, f["acc"] * 100, width=width * 0.9, color=SERIES[i], zorder=3,
                label=f"h = {h} phiên")
-    f0 = pd.DataFrame(results[HORIZONS[0]]["folds"])
+    f0 = pd.DataFrame(results[(REP_FULL, HORIZONS[0])]["folds"])
     ax.axhline(20, color=DIVERGE_NEG, lw=2, ls="--", zorder=4)
     ax.text(len(f0) - 0.4, 20.6, "tỷ lệ nền 20% (5 lớp phân vị)", ha="right",
             fontsize=8.5, color=DIVERGE_NEG, fontweight="600")
@@ -430,7 +481,7 @@ def chart_model(results: dict, df: pd.DataFrame, path: Path):
 
     # ── train vs test collapse — paper 63's headline ─────────────────────────────────
     ax = fig.add_subplot(gs[0, 2])
-    f = pd.DataFrame(results[5]["folds"])
+    f = pd.DataFrame(results[(REP_FULL, 5)]["folds"])
     ax.plot([0] * len(f), f["train_acc"] * 100, "o", ms=9, color=SERIES[1], zorder=3)
     ax.plot([1] * len(f), f["acc"] * 100, "o", ms=9, color=SERIES[0], zorder=3)
     for a, b in zip(f["train_acc"] * 100, f["acc"] * 100):
@@ -448,7 +499,7 @@ def chart_model(results: dict, df: pd.DataFrame, path: Path):
 
     # ── confusion matrix ─────────────────────────────────────────────────────────────
     ax = fig.add_subplot(gs[1, 0])
-    p = results[5]["preds"]
+    p = results[(REP_FULL, 5)]["preds"]
     cm = confusion_matrix(p["y"], p["pred"], labels=range(5), normalize="true") * 100
     cmap = matplotlib.colors.LinearSegmentedColormap.from_list("seq", SEQ_BLUE)
     im = ax.imshow(cm, cmap=cmap, vmin=0, vmax=max(60, cm.max()))
@@ -466,8 +517,8 @@ def chart_model(results: dict, df: pd.DataFrame, path: Path):
     # ── QWK vs shuffled-label control ────────────────────────────────────────────────
     ax = fig.add_subplot(gs[1, 1])
     xs = np.arange(len(HORIZONS))
-    q = [np.mean([f["qwk"] for f in results[h]["folds"]]) for h in HORIZONS]
-    qs = [np.mean([f["qwk_shuffled"] for f in results[h]["folds"]]) for h in HORIZONS]
+    q = [np.mean([f["qwk"] for f in results[(REP_FULL, h)]["folds"]]) for h in HORIZONS]
+    qs = [np.mean([f["qwk_shuffled"] for f in results[(REP_FULL, h)]["folds"]]) for h in HORIZONS]
     ax.bar(xs - 0.18, q, width=0.34, color=SERIES[0], zorder=3, label="mô hình")
     ax.bar(xs + 0.18, qs, width=0.34, color=MUTED, zorder=3, label="nhãn xáo trộn")
     for x, v in zip(xs - 0.18, q):
@@ -481,7 +532,7 @@ def chart_model(results: dict, df: pd.DataFrame, path: Path):
 
     # ── decile plot: the real test ───────────────────────────────────────────────────
     ax = fig.add_subplot(gs[1, 2])
-    pp = results[5]["preds"].copy()
+    pp = results[(REP_FULL, 5)]["preds"].copy()
     pp["exc"] = df.loc[pp["src"], "exc5"].to_numpy() * 100
     pp["dec"] = pd.qcut(pp["p_top"], 10, labels=False, duplicates="drop")
     d = pp.groupby("dec")["exc"].mean()
@@ -502,7 +553,7 @@ def chart_model(results: dict, df: pd.DataFrame, path: Path):
 
 def write_examples(df: pd.DataFrame, results: dict, path: Path, n: int = 6):
     """The eyeball test. Six buckets, each answering a different question."""
-    p = results[5]["preds"].copy()
+    p = results[(REP_FULL, 5)]["preds"].copy()
     ex = df.loc[p["src"]].copy()
     ex["y"] = p["y"].to_numpy()
     ex["pred"] = p["pred"].to_numpy()
@@ -601,26 +652,44 @@ def main():
 
     tag = ("all" if args.include_disclosures else "ed") + ("_q" if args.quick else "")
     emb = get_embeddings(df, tag)
+    print(f"  representations: lead {emb['lead'].shape} · full {emb['full'].shape}")
 
+    # ⚠️ Two arms on identical rows, folds and labels. `lead` ≈ the old 256-token slice
+    # (38.7% of the average article); `full` is the whole document, chunk-pooled.
+    arms = {"lead (256 tok)": emb["lead"], "full doc (chunked)": emb["full"]}
     results = {}
-    for h in HORIZONS:
-        print(f"  walk-forward h={h}…")
-        results[h] = walkforward(df, emb, h, n_folds=args.folds)
+    for rep, mat in arms.items():
+        for h in HORIZONS:
+            print(f"  walk-forward  {rep:<20} h={h}…", flush=True)
+            results[(rep, h)] = walkforward(df, mat, h, n_folds=args.folds)
 
-    print("\n" + "=" * 94)
-    print(f"{'h':>3}{'fold':>6}{'period':>18}{'n_test':>9}{'train':>9}{'test':>9}"
-          f"{'base':>8}{'macroF1':>9}{'QWK':>9}{'QWK shuf':>10}")
-    print("-" * 94)
+    print("\n" + "=" * 104)
+    print(f"{'representation':<21}{'h':>3}{'fold':>6}{'period':>18}{'n_test':>9}"
+          f"{'train':>8}{'test':>8}{'base':>8}{'macroF1':>9}{'QWK':>8}{'QWK shuf':>10}")
+    print("-" * 104)
+    for rep in arms:
+        for h in HORIZONS:
+            for f in results[(rep, h)]["folds"]:
+                print(f"{'':<21}{h:>3}{f['fold']:>6}{f['period']:>18}{f['n_test']:>9,}"
+                      f"{f['train_acc']:>8.3f}{f['acc']:>8.3f}{f['base']:>8.3f}"
+                      f"{f['macro_f1']:>9.3f}{f['qwk']:>8.3f}{f['qwk_shuffled']:>10.3f}")
+            m = pd.DataFrame(results[(rep, h)]["folds"]).mean(numeric_only=True)
+            print(f"{rep:<21}{h:>3}{'MEAN':>6}{'':>18}{'':>9}{m['train_acc']:>8.3f}"
+                  f"{m['acc']:>8.3f}{m['base']:>8.3f}{m['macro_f1']:>9.3f}"
+                  f"{m['qwk']:>8.3f}{m['qwk_shuffled']:>10.3f}")
+            print("-" * 104)
+
+    print("\n⭐ PAIRED — full doc minus lead, same folds:")
+    print(f"  {'h':>3}{'Δacc':>10}{'ΔmacroF1':>11}{'ΔQWK':>10}{'folds won':>12}")
     for h in HORIZONS:
-        for f in results[h]["folds"]:
-            print(f"{h:>3}{f['fold']:>6}{f['period']:>18}{f['n_test']:>9,}"
-                  f"{f['train_acc']:>9.3f}{f['acc']:>9.3f}{f['base']:>8.3f}"
-                  f"{f['macro_f1']:>9.3f}{f['qwk']:>9.3f}{f['qwk_shuffled']:>10.3f}")
-        m = pd.DataFrame(results[h]["folds"]).mean(numeric_only=True)
-        print(f"{h:>3}{'MEAN':>6}{'':>18}{'':>9}{m['train_acc']:>9.3f}{m['acc']:>9.3f}"
-              f"{m['base']:>8.3f}{m['macro_f1']:>9.3f}{m['qwk']:>9.3f}"
-              f"{m['qwk_shuffled']:>10.3f}")
-        print("-" * 94)
+        a = pd.DataFrame(results[("full doc (chunked)", h)]["folds"])
+        b = pd.DataFrame(results[("lead (256 tok)", h)]["folds"])
+        n = min(len(a), len(b))
+        d_acc = (a["acc"][:n] - b["acc"][:n])
+        d_f1 = (a["macro_f1"][:n] - b["macro_f1"][:n])
+        d_qwk = (a["qwk"][:n] - b["qwk"][:n])
+        print(f"  {h:>3}{d_acc.mean():>+10.4f}{d_f1.mean():>+11.4f}{d_qwk.mean():>+10.4f}"
+              f"{f'{int((d_qwk > 0).sum())}/{n}':>12}")
 
     print("\nCharts…")
     stats = chart_does_news_move_prices(
@@ -631,8 +700,8 @@ def main():
 
     mad_news, mad_quiet = stats.loc[True, "mad"], stats.loc[False, "mad"]
     rel_news, rel_quiet = stats.loc[True, "rel"], stats.loc[False, "rel"]
-    acc5 = np.mean([f["acc"] for f in results[5]["folds"]])
-    qwk5 = np.mean([f["qwk"] for f in results[5]["folds"]])
+    acc5 = np.mean([f["acc"] for f in results[(REP_FULL, 5)]["folds"]])
+    qwk5 = np.mean([f["qwk"] for f in results[(REP_FULL, 5)]["folds"]])
     print(
         f"\nVERDICT\n"
         f"  news-day |excess 5d| {mad_news:.3%} vs quiet-day {mad_quiet:.3%} "
