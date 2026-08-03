@@ -1,7 +1,7 @@
 # src\orchestration\definitions.py
-"""The Dagster code location — what `dagster dev` loads. **44 assets.**
+"""The Dagster code location — what `dagster dev` loads. **55 assets.**
 
-Four layers, kept in separate modules on purpose:
+Five layers, kept in separate modules on purpose:
 
   * `assets/scrape.py`  — THE LANDING LAYER: every scraper, network → `raw_data/`.
                           No database at all, so it is correct-on-disk and re-runnable
@@ -10,13 +10,17 @@ Four layers, kept in separate modules on purpose:
                           generated from a spec table. A flat layer: bronze has no
                           cross-table dependency, so every edge points up at the landing
                           asset whose folder that ingest reads.
-  * `assets/silver.py`  — `bronze_schema` → `silver_schema` (3): the economy fact table
-                          and its dimension, plus the four CafeF index tabs joined into
-                          one `stock_market`.
-  * `assets/gold.py`    — `silver_schema` → `gold_schema` (2): the wide, model-ready
+  * `assets/silver.py`  — `bronze_schema` → `silver_schema` (8): the canonical long
+                          facts and dimensions — the economy fact table and its
+                          dimension, the four CafeF index tabs joined into one
+                          `stock_market`, the per-stock spine, the bank financials.
+  * `assets/gold.py`    — `silver_schema` → `gold_schema` (7): the wide, model-ready
                           panels. Every assumption that makes a panel dense — publication
                           lag, as-of carry, staleness cap — lives HERE and never in
                           silver.
+  * `assets/unified.py` — `silver_schema` → `unified_schema_<ticker>` (1): ONE ticker,
+                          cut into the feature groups a model selects over. The first
+                          layer scoped to a single company rather than the universe.
 
 `src/main.py` is untouched and still runs the whole pipeline the old way.
 """
@@ -42,7 +46,7 @@ from orchestration._bootstrap import bootstrap
 
 bootstrap()
 
-from orchestration.assets import bronze, gold, scrape, silver
+from orchestration.assets import bronze, gold, scrape, silver, unified
 from orchestration.resources import PreprocessorResource, RepoLogger, SwitchConfig
 
 import json
@@ -168,7 +172,15 @@ _repo_logger = RepoLogger()
 _switches = SwitchConfig()
 
 defs = Definitions(
-    assets=_enabled([*scrape.assets, *bronze.assets, *silver.assets, *gold.assets]),
+    assets=_enabled(
+        [
+            *scrape.assets,
+            *bronze.assets,
+            *silver.assets,
+            *gold.assets,
+            *unified.assets,
+        ]
+    ),
     resources={
         "repo_logger": _repo_logger,
         "switches": _switches,

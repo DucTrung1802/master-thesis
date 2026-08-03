@@ -29,6 +29,7 @@ from utils.constants import (
     BRONZE_SCHEMA,
     SILVER_SCHEMA,
     GOLD_SCHEMA,
+    UNIFIED_SCHEMA,
 )
 from utils.enums import *
 from utils.exceptions import MissingSourceDataError, PipelineError
@@ -3739,6 +3740,7 @@ class DataPreprocessor:
         passthrough_cols: Optional[List[str]] = None,
         exact_float_cols: Optional[List[str]] = None,
         prepare_fn: Optional[Any] = None,
+        standard_features: bool = True,
     ) -> None:
         """
         Generic gold ingest: read a silver table, coerce numeric source columns,
@@ -3775,6 +3777,15 @@ class DataPreprocessor:
         functions expect (`_helper_adjust_ohlc` is the one caller: it rebuilds a
         split-adjusted OHLC set, because TA-Lib's defaults read `open`/`high`/`low`/
         `close` and silver's `open`/`high`/`low` are RAW while `close_adjust` is not).
+
+        `standard_features=False` — build the table with NO derived columns at all:
+        neither the `ta_layers` (pass none) nor the standard
+        `_helper_build_feature_layers` block. The gold table is then the prepared
+        silver frame, written as-is. ⚠️ **This deliberately disables the empty-layer
+        guard below**, which exists to catch a table that came out a copy of its input
+        BY ACCIDENT — with this flag that is the stated intent, so the two cases must
+        be distinguishable. `gold.stocks` is the one caller: it is the plain price
+        panel, and its feature-bearing twin is `gold.stocks_ta`.
         """
         source_table = silver_table_name or table_name
         self._logger.log_info(
@@ -3810,13 +3821,15 @@ class DataPreprocessor:
         if prepare_fn is not None:
             df = prepare_fn(df)
 
-        transform_layers = list(ta_layers or []) + self._helper_build_feature_layers(df)
-        if not transform_layers:
-            raise PipelineError(
-                f"No transform layers resolved for gold {table_name} — the silver "
-                f"table's columns matched no feature layer, so the gold table would "
-                f"be a copy of its input."
-            )
+        transform_layers = list(ta_layers or [])
+        if standard_features:
+            transform_layers += self._helper_build_feature_layers(df)
+            if not transform_layers:
+                raise PipelineError(
+                    f"No transform layers resolved for gold {table_name} — the silver "
+                    f"table's columns matched no feature layer, so the gold table would "
+                    f"be a copy of its input."
+                )
 
         _exact = set(exact_float_cols or [])
 
@@ -3864,6 +3877,20 @@ class DataPreprocessor:
         # Kept as late as possible, so a failure earlier in the build leaves the old
         # table intact.
         self._database_driver.drop_table(GOLD_SCHEMA, table_name)
+
+        # ⚠️ `_helper_transform` returns the frame UNTOUCHED when no layer resolves —
+        # it never reaches `checkpoint_fn`. That is right for its own contract and
+        # wrong here: with `standard_features=False` there is nothing to compute but
+        # there is still a table to write, so a `standard_features=False` build routed
+        # through it would log success and write NOTHING. Write the prepared frame
+        # directly instead, in the same 100k chunks the checkpoint path uses.
+        if not transform_layers:
+            for start in range(0, len(df), 100_000):
+                _checkpoint(df.iloc[start : start + 100_000].copy())
+                self._logger.log_info(
+                    f"Checkpoint saved: {min(start + 100_000, len(df))}/{len(df)} rows"
+                )
+            return
 
         self._helper_transform(
             df,
@@ -4364,26 +4391,117 @@ class DataPreprocessor:
             TransformLayer.ADD_NEGOTIATED_VOL_RATIO(),
         ]
 
+    # ── gold.stocks / gold.stocks_ta — the per-stock panel, SPLIT IN TWO ────────
+    #
+    # One source (`silver.stocks_basic`), two gold tables, and the split is by whether
+    # a column is CARRIED or COMPUTED:
+    #
+    #   gold.stocks     — the price/flow panel and nothing else (~42 columns)
+    #   gold.stocks_ta  — the same panel plus the ~900-column feature block
+    #
+    # ⚠️ **They are not built from each other.** `stocks_ta` recomputes its own base
+    # from silver rather than joining `stocks`, for the same reason
+    # `stocks_financials_bank_fa` does not join it either: a table that carried its
+    # base from another gold table could disagree with it about a stock-day while
+    # looking identical. The cost is one extra read of a 2.4 M-row table.
+    #
+    # ⚠️ **A reader wanting only prices should read `stocks`.** `stocks_ta` is ~11 GB
+    # against ~200 MB, and PostgreSQL still reads the whole row.
+    #
+    # The pair replaces the single `gold.stocks` that existed until 2026-08-03 — 935
+    # columns of which 30 were the panel. `unified_schema_creator.ipynb` already split
+    # them by hand (`GOLD_NON_TA` vs `pool__ta`); this makes the split a table boundary.
+
+    def _helper_gold_stocks_column_types(self) -> tuple[list[str], list[str]]:
+        """`(passthrough_cols, exact_float_cols)` for a gold table built on
+        `silver.stocks_basic`, derived from the source's own declared types.
+
+        Deriving is safe HERE and is not in general (see `_ingest_gold_table`):
+        `silver.stocks_basic` is a typed join of six bronze tables, not one of the
+        carry-ups that store numbers as VARCHAR.
+
+        ⚠️ Every carried numeric column is DOUBLE PRECISION, not gold's default REAL.
+        `value_matched` reaches ~1e12 and `value_negotiated` further, where REAL's ~7
+        significant digits round to the nearest ~1e5 — the gold copy would differ from
+        silver by hundreds of thousands of dong. Gold defaults to REAL only because a
+        ~900-column feature block cannot fit PostgreSQL's ~8160-byte row limit at 8
+        bytes a column; the carried block is ~40 columns and has no such pressure.
+        """
+        source_types = self._helper_column_types(SILVER_SCHEMA, "stocks_basic")
+        if not source_types:
+            raise MissingSourceDataError(
+                f"`{SILVER_SCHEMA}.stocks_basic` does not exist — build the silver "
+                f"`stocks_basic` leaf first."
+            )
+
+        passthrough = [
+            col
+            for col, sql_type in source_types.items()
+            if sql_type in ("character varying", "text", "date")
+            and col not in ("exchange", "ticker", "date")
+        ]
+        exact = [
+            col
+            for col, sql_type in source_types.items()
+            if sql_type in ("numeric", "double precision", "real", "bigint", "integer")
+        ]
+        # `_helper_adjust_ohlc` renames the three raw legs and mints `open`/`high`/
+        # `low`/`close`; all seven are carried (or a carried value times a factor), so
+        # they keep the exact type too.
+        exact += ["open_raw", "high_raw", "low_raw", "open", "high", "low", "close"]
+        return passthrough, exact
+
     def _ingest_gold_stocks(self) -> None:
-        # Reads silver `stocks_basic` (the CafeF panel + GICS tree), writes gold `stocks`.
-        #
-        # ⚠️ **STALE AGAINST THE CURRENT SILVER SCHEMA, AND IT WILL RAISE.** `gold.stocks`
-        # in the database was built before the 2026-07-19 rewrite of `silver.stocks_basic`
-        # and still carries that era's columns (`close`, `volume`, `f_buy_vol`, `own_pct`).
-        # Today's source has no `close` and no `volume` at all: it has
-        # `close_raw`/`close_adjust` and `volume_matched`/`volume_negotiated`, so the first
-        # TA layer raises `ValueError: Column 'close' not found`.
-        #
-        # The fix is the same one `_ingest_gold_stocks_financials_bank_fa` already makes —
-        # `prepare_fn=self._helper_adjust_ohlc` and `volume_col="volume_matched"` — but it
-        # is left OFF here deliberately: applying it silently re-defines `gold.stocks`'
-        # `open`/`high`/`low` as adjusted and commits to a ~2.4 M-row × ~900-column
-        # rebuild, which is a decision to take on its own, not a side effect of adding a
-        # different table.
+        """Silver `stocks_basic` → gold `stocks`: the per-stock price/flow panel with
+        a SPLIT-ADJUSTED OHLC set and **no derived columns at all**.
+
+        PK `(exchange, ticker, date)`, one row per stock-day, same row count as its
+        source. The technicals live in `gold.stocks_ta`.
+
+        ⚠️ **`open`/`high`/`low`/`close` here are ADJUSTED, and they are not silver's.**
+        The CafeF panel has raw `open`/`high`/`low` beside `close_raw`/`close_adjust`,
+        which is two price scales in one row (VCB 2009-06-30: raw 60,000, adjusted
+        9,130) — see `_helper_adjust_ohlc`. The source values are kept beside them as
+        `open_raw`/`high_raw`/`low_raw`/`close_raw`, so nothing is lost and neither
+        scale is implicit: a reader who wants the unadjusted print can still have it.
+        """
+        passthrough, exact = self._helper_gold_stocks_column_types()
         self._ingest_gold_table(
             "stocks",
             silver_table_name="stocks_basic",
-            ta_layers=self._helper_stock_ta_layers(volume_col="volume"),
+            passthrough_cols=passthrough,
+            exact_float_cols=exact,
+            prepare_fn=self._helper_adjust_ohlc,
+            standard_features=False,
+        )
+
+    def _ingest_gold_stocks_ta(self) -> None:
+        """Silver `stocks_basic` → gold `stocks_ta`: everything `gold.stocks` carries,
+        plus the full per-stock TA battery (`_helper_stock_ta_layers`) and the standard
+        return/volatility/rolling layers. ~900 added columns, ~2.4 M rows.
+
+        ⚠️ **This is the fixed version of what used to be `_ingest_gold_stocks`**, which
+        had been stale since the 2026-07-19 rewrite of `silver.stocks_basic` and raised
+        `ValueError: Column 'close' not found` — it still asked for `volume` and a
+        `close`, neither of which has existed on that table since. The two changes are
+        the ones `_ingest_gold_stocks_financials_bank_fa` already made:
+        `prepare_fn=self._helper_adjust_ohlc` and `volume_col="volume_matched"` (only
+        the matched side belongs in a money-flow indicator).
+
+        ⚠️ **`gold.stocks_ta` in the database is OLDER than this method.** It is the
+        2026-08-03 rename of the pre-rewrite `gold.stocks` — 2,678,167 rows on the old
+        column names (`close`, `volume`, `f_buy_vol`, `own_pct`). Running this REPLACES
+        it with the current schema on ~2.39 M rows, which is a ~900-column rebuild over
+        the full universe. Renaming did not run it; that was deliberate.
+        """
+        passthrough, exact = self._helper_gold_stocks_column_types()
+        self._ingest_gold_table(
+            "stocks_ta",
+            silver_table_name="stocks_basic",
+            ta_layers=self._helper_stock_ta_layers(volume_col="volume_matched"),
+            passthrough_cols=passthrough,
+            exact_float_cols=exact,
+            prepare_fn=self._helper_adjust_ohlc,
         )
 
     # ── gold.stocks_financials_bank_fa ──────────────────────────────────────────
@@ -4774,6 +4892,115 @@ class DataPreprocessor:
     # `gold_schema.indices` table was dropped the same day, so the schema matches the
     # code.
 
+    # ── UNIFIED — the per-ticker modelling schema ───────────────────────────────
+    #
+    # `unified_schema_<ticker>` is the fourth layer, and it is not a fourth copy of the
+    # pipeline: it is ONE TICKER's slice, cut into the FEATURE GROUPS a model consumes
+    # (`pool__basic`, `pool__ta`, `pool__macro`, `pool__calendar`, `pool__targets`), so
+    # a feature-selection run can be scoped to a group. Built until now only by
+    # `train_test_creator/unified_schema_creator.ipynb`.
+    #
+    # ⚠️ The schema name embeds the ticker, so the ticker is an IDENTIFIER, not a value —
+    # it cannot be parameterised into the SQL and must be validated instead. Hence
+    # `_helper_unified_schema`.
+
+    # A ticker that reaches an identifier position must match this exactly. CafeF/HOSE
+    # tickers are 3 letters today, but the pattern allows what PostgreSQL allows so a
+    # future index or foreign listing does not need a code change — what it does NOT
+    # allow is anything that could close the identifier and continue the statement.
+    UNIFIED_TICKER_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,20}$")
+
+    def _helper_unified_schema(self, ticker: str) -> str:
+        """`unified_schema_vcb` for `VCB`. Raises if the ticker is not identifier-safe.
+
+        ⚠️ **This validation is the only thing between a ticker and arbitrary SQL.**
+        Every other user-supplied value in this class reaches the database as a bound
+        parameter; a schema NAME cannot be bound, so it is interpolated — and a ticker
+        arrives from a CSV, a config or a Dagster partition key, none of which this
+        class controls.
+        """
+        if not self.UNIFIED_TICKER_PATTERN.match(ticker or ""):
+            raise PipelineError(
+                f"Ticker {ticker!r} is not a valid SQL identifier and cannot name a "
+                f"schema. Expected e.g. 'VCB' — letters, digits and underscores only, "
+                f"starting with a letter."
+            )
+        return f"{UNIFIED_SCHEMA}_{ticker.lower()}"
+
+    def _ingest_unified_pool_basic(self, ticker: str) -> None:
+        """`silver.stocks_basic` (one ticker) → `unified_schema_<ticker>.pool__basic`.
+
+        **Every column of `silver.stocks_basic`, with silver's own types**, PK
+        `(exchange, ticker, date)`.
+
+        ⚠️ **`CREATE TABLE AS`, not a pandas round-trip, and the reason is type
+        fidelity.** psycopg2 hands a PostgreSQL `numeric` back as a Python `Decimal`,
+        which lands in a DataFrame as dtype `object` — and `_helper_infer_sql_type`
+        maps `object` to VARCHAR. Reading this table out and writing it back would
+        therefore turn every price and value column into TEXT while looking like it
+        worked: exactly the "degraded VARCHAR" the silver carry-ups suffer from (§4).
+        A server-side CTAS never materialises a Python value at all, so `numeric` stays
+        `numeric` and `bigint` stays `bigint`, and it never holds 4k rows in memory.
+
+        ⚠️ **The schema is created if absent and the table is REPLACED**, so this is
+        re-runnable — which is what an orchestrated asset needs. It is scoped to the one
+        table: sibling `pool__*` tables in the same schema are left alone.
+        """
+        schema = self._helper_unified_schema(ticker)
+        self._logger.log_info(
+            f"Ingesting unified {schema}.pool__basic (from {SILVER_SCHEMA}.stocks_basic)..."
+        )
+
+        # The source must exist AND hold this ticker — an empty result would otherwise
+        # create a real, empty, correctly-typed table, which is the failure that looks
+        # most like success.
+        source_types = self._helper_column_types(SILVER_SCHEMA, "stocks_basic")
+        if not source_types:
+            raise MissingSourceDataError(
+                f"`{SILVER_SCHEMA}.stocks_basic` does not exist — build the silver "
+                f"`stocks_basic` leaf first."
+            )
+
+        self._database_driver.create_schema(schema)
+
+        with self._database_driver._cursor_ctx() as cur:
+            cur.execute(
+                f"SELECT COUNT(*) FROM {SILVER_SCHEMA}.stocks_basic WHERE ticker = %s",
+                (ticker,),
+            )
+            available = int(cur.fetchone()[0])
+            if not available:
+                raise MissingSourceDataError(
+                    f"`{SILVER_SCHEMA}.stocks_basic` holds no rows for ticker "
+                    f"{ticker!r}, so {schema}.pool__basic would be empty. Check the "
+                    f"ticker, or rebuild silver `stocks_basic`."
+                )
+
+            # Dropped as late as possible, so a failure above leaves the old table intact
+            # — the same ordering `_ingest_gold_table` uses.
+            cur.execute(f"DROP TABLE IF EXISTS {schema}.pool__basic")
+            cur.execute(
+                f"CREATE TABLE {schema}.pool__basic AS "
+                f"SELECT * FROM {SILVER_SCHEMA}.stocks_basic WHERE ticker = %s",
+                (ticker,),
+            )
+            # CTAS copies types but never constraints, so the grain is asserted here.
+            cur.execute(
+                f"ALTER TABLE {schema}.pool__basic "
+                f"ADD PRIMARY KEY (exchange, ticker, date)"
+            )
+            cur.execute(f"SELECT COUNT(*) FROM {schema}.pool__basic")
+            written = int(cur.fetchone()[0])
+
+        if written != available:
+            raise PipelineError(
+                f"{schema}.pool__basic wrote {written} rows but silver holds "
+                f"{available} for {ticker}."
+            )
+        self._logger.log_info(
+            f"{schema}.pool__basic: {written} rows x {len(source_types)} columns."
+        )
+
     # endregion Helper functions
 
     def _run_layer(
@@ -4974,6 +5201,10 @@ class DataPreprocessor:
             ("funds", self._ingest_gold_funds),
             # `indices` retired 2026-08-01 — duplicated `gold.stock_market`.
             ("stocks", self._ingest_gold_stocks),
+            # `stocks_ta` gets NO switch leaf, per the convention every gold table added
+            # since `stock_market`: new gold work lands as a Dagster asset, and phase 5
+            # of the migration retires these keys anyway. It is also ~900 columns over
+            # 2.4 M rows — not something a layer-wide run should pull in by default.
         ]
 
         return self._run_layer(

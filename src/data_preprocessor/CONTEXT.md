@@ -738,16 +738,80 @@ DTO helpers come from
   The `gold_schema.indices` table was **dropped** the same day (24,095 rows, 6 tickers,
   2000-07-28 → 2026-06-09, 4064 kB), so the schema and the code agree. Restoring it is
   `_ingest_gold_table("indices")` plus its leaf — the source data never went anywhere.
-- ⚠️ **`_ingest_gold_stocks` IS STALE AND WILL RAISE.** `gold.stocks` in the database
-  was built before the 2026-07-19 rewrite of `silver.stocks_basic` and still carries
-  that era's columns (`close`, `volume`, `f_buy_vol`, `own_pct` — 935 of them).
-  Today's source has neither `close` nor `volume`: it has `close_raw`/`close_adjust`
-  and `volume_matched`/`volume_negotiated`, so the first TA layer dies with
-  `ValueError: Column 'close' not found`. The fix is the one the `_fa` table already
-  applies — `prepare_fn=self._helper_adjust_ohlc` plus `volume_col="volume_matched"` —
-  and it is deliberately NOT switched on: it re-defines `gold.stocks`' `open`/`high`/
-  `low` as adjusted and commits to a ~2.4 M-row × ~900-column rebuild, which is a
-  decision to take on its own.
+- ✅ **`gold.stocks` SPLIT IN TWO, and `_ingest_gold_stocks` un-stalled (2026-08-03).**
+  It had been raising since the 2026-07-19 rewrite of `silver.stocks_basic`: it still
+  asked for `volume` and a `close`, and today's source has `close_raw`/`close_adjust`
+  and `volume_matched`/`volume_negotiated`, so the first TA layer died with
+  `ValueError: Column 'close' not found`. One source now builds **two** tables:
+
+  | table | built by | shape | contents |
+  |---|---|---|---|
+  | `gold.stocks` | `_ingest_gold_stocks` | 2,388,368 × 42 | the price/flow panel, **no derived columns** |
+  | `gold.stocks_ta` | `_ingest_gold_stocks_ta` | ~2.39 M × ~940 | the same panel + the ~900-column feature block |
+
+  Both apply the fix the `_fa` table already had — `prepare_fn=self._helper_adjust_ohlc`
+  plus `volume_col="volume_matched"`.
+
+  ⚠️ **The split is by CARRIED vs COMPUTED, and it buys one thing: a price read that
+  is ~200 MB instead of ~11 GB.** PostgreSQL reads the whole row, so every query that
+  wanted OHLC out of the old 935-column table paid for 905 TA columns it did not want.
+  `unified_schema_creator.ipynb` was already splitting them by hand (`GOLD_NON_TA` vs
+  `pool__ta`); this makes the split a table boundary.
+
+  ⚠️ **Neither is built from the other**, for the same reason `stocks_financials_bank_fa`
+  is not built from `gold.stocks`: a table carrying its base from another gold table
+  could disagree with it about a stock-day while looking identical. Each recomputes
+  from silver; `_helper_stock_ta_layers` is what stops the feature sets drifting.
+
+  ⚠️ **`gold.stocks`' `open`/`high`/`low`/`close` are ADJUSTED and are NOT silver's** —
+  the decision this file used to defer. It is not lossy: `_helper_adjust_ohlc` keeps the
+  source legs beside them as `open_raw`/`high_raw`/`low_raw`/`close_raw`, so both scales
+  are present and neither is implicit.
+
+  ⚠️ **Carried numerics are DOUBLE PRECISION here, not gold's default REAL.** The
+  default exists because ~900 float8 columns cannot fit the ~8160-byte row limit; at 42
+  columns there is no such pressure, and `value_matched` reaches ~1e12 where REAL would
+  round to the nearest ~1e5.
+
+  ⚠️ **`_ingest_gold_table(standard_features=False)` is what makes a zero-feature gold
+  table possible**, and it deliberately disables the empty-layer guard — which exists to
+  catch a table that came out a copy of its input BY ACCIDENT. It also takes its own
+  write path: `_helper_transform` returns the frame untouched when no layer resolves and
+  never reaches `checkpoint_fn`, so routing a featureless build through it would log
+  success and write nothing.
+
+  ⚠️ **`gold.stocks_ta` in the database is OLDER than `_ingest_gold_stocks_ta`, and
+  rebuilding it COSTS HISTORY.** It is the 2026-08-03 **rename** of the pre-rewrite
+  `gold.stocks` — 2,678,167 rows on the old column names. The rename did not rebuild it,
+  on purpose: 296,316 of those stock-days are not in today's silver (98,464 of them
+  **before 2009-01-02**, where CafeF's price history stops, and 197,852 more that the
+  `cafef_price` spine drops), and they came from the source-priority merge the
+  2026-07-19 rewrite removed. Materialising `gold/stocks_ta` replaces the table with a
+  2,388,368-row one and those years are gone.
+
+  ⚠️ **`stocks_ta` gets no switch leaf** — only the Dagster asset, per the convention
+  every gold table added since `stock_market`. `data_quality_gold/stocks` still exists
+  and now builds the non-TA table.
+
+### Unified (`_ingest_unified_*`) — one ticker, cut into feature groups
+
+- **`_ingest_unified_pool_basic(ticker)` (2026-08-03)** — `silver.stocks_basic` filtered
+  to one ticker → `unified_schema_<ticker>.pool__basic`: **every column of the silver
+  table with silver's own types**, PK `(exchange, ticker, date)`. VCB is 4,235 × 38.
+  Creates the schema if absent and REPLACES the table, so it is re-runnable.
+  - ⚠️ **`CREATE TABLE AS`, not a pandas round-trip.** psycopg2 hands back `numeric` as
+    `Decimal` → DataFrame dtype `object` → `_helper_infer_sql_type` → **VARCHAR**. A
+    round-trip would turn every price column into text while looking like it worked —
+    the same degradation the carry-ups above have. Server-side CTAS keeps the types by
+    construction and never holds the rows in memory.
+  - ⚠️ **The ticker names a SCHEMA, so it is an identifier and cannot be bound.**
+    `_helper_unified_schema` validates it against `UNIFIED_TICKER_PATTERN` and raises;
+    it is the only thing between a ticker read from a CSV/config/partition key and
+    arbitrary SQL.
+  - ⚠️ Raises if the ticker has no rows in silver rather than creating a real, empty,
+    correctly-typed table — the failure that looks most like success.
+  - The other four groups (`pool__ta`, `pool__macro`, `pool__calendar`, `pool__targets`)
+    are still notebook-only; see `train_test_creator/unified_schema_creator.ipynb`.
 
 ## 5. How it's driven — SwitchHandler + `src/switch_config.json`
 

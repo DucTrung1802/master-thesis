@@ -85,10 +85,18 @@
     "// gold/economy": "WIDE: 1 row per business day, 1 col per series, as-of filled",
     "gold/economy": true,
     "gold/stock_market": true,
+    "// gold/stocks": "The per-stock price/flow panel, ~2.4M stock-days x ~42 cols, adjusted OHLC, NO derived columns",
+    "gold/stocks": true,
+    "// gold/stocks_ta": "HEAVY - gold/stocks + the ~900-column TA block over 2.4M rows: hours, ~11 GB",
+    "gold/stocks_ta": true,
     "// gold/stocks_financials_bank_fa": "FEATURE panel: the _fa source + the full TA battery, ~1.1k columns",
     "gold/stocks_financials_bank_fa": true,
     "// gold/news_weekly_panel": "497k ticker-WEEKS, news + event counts, no sentiment - the panel the if_news baseline runs on",
     "gold/news_weekly_panel": true,
     "// gold/news_daily_panel": "DAILY twin of the weekly panel - trailing 5/10-session news windows for rel5/rel10",
-    "gold/news_daily_panel": true
+    "gold/news_daily_panel": true,
+
+    "// ---- unified: ONE ticker, cut into feature groups ----": "the schema is created by the asset",
+    "// unified_vcb/pool__basic": "every column of silver.stocks_basic for VCB, silver's own types",
+    "unified_vcb/pool__basic": true
 }

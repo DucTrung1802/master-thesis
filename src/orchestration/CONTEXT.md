@@ -10,10 +10,11 @@
 > `_bootstrap`'s two-line `sys.path` insert INLINE, because the package can no longer be
 > imported until `src/` is on the path.
 >
-> Handoff notes. **Status (2026-08-01): the LANDING layer and the whole BRONZE layer are
-> assets and have both been materialised green; silver has 7 and gold 3.** 49 assets.
-> What is left is silver (8 of 15 leaves) and gold (4 of 7 tables) — see §4. Verify
-> anything before acting on it: the code is the source of truth.
+> Handoff notes. **Status (2026-08-03): the LANDING layer and the whole BRONZE layer are
+> assets and have both been materialised green; silver has 8, gold 7, and there is now a
+> fifth layer — `unified` (1).** 55 assets. What is left is the rest of silver (~7
+> leaves) and the rest of the unified schema — see §4. Verify anything before acting on
+> it: the code is the source of truth.
 >
 > **[`src/data_preprocessor`](../data_preprocessor/CONTEXT.md) is ARCHIVED as of
 > 2026-08-01** — as a *way to run things*. It is still the implementation library every
@@ -54,10 +55,12 @@ PARTITIONS of two assets, not 320 assets. The remaining 61 map to ~55-65 assets.
 
 ## 2. What exists — LANDING + BRONZE complete, silver started (2026-08-01)
 
-**49 assets: 19 landing + 20 bronze + 7 silver + 3 gold.** Every scraper in `main.py` lands to
-`raw_data/` as an asset ([assets/scrape.py](assets/scrape.py)); every bronze ingest leaf
-is an asset ([assets/bronze.py](assets/bronze.py), 20 leaves → 25 tables); silver has
-seven ([assets/silver.py](assets/silver.py)) and gold three ([assets/gold.py](assets/gold.py)).
+**55 assets: 19 landing + 20 bronze + 8 silver + 7 gold + 1 unified.** Every scraper in
+`main.py` lands to `raw_data/` as an asset ([assets/scrape.py](assets/scrape.py)); every
+bronze ingest leaf is an asset ([assets/bronze.py](assets/bronze.py), 20 leaves → 25
+tables); silver has eight ([assets/silver.py](assets/silver.py)), gold seven
+([assets/gold.py](assets/gold.py)) and the per-ticker unified schema one
+([assets/unified.py](assets/unified.py)).
 They are separate modules on purpose: the
 landing layer is correct-on-disk and re-runnable with no database at all.
 
@@ -105,7 +108,8 @@ raw/cafef_financials[t] ─► bronze/cafef_financials ─► silver/cafef_finan
 | `gics` | structure | — |
 | `bronze` | **all 20 ingest leaves** (25 tables) | — |
 | `silver` | `economy` (long fact), `economy_series` (dimension), `stock_market` (4 index tabs), `stocks_basic` (6 sources), `cafef_financials_bank` (quarterly), `stocks_basic_financials_bank` (as-of daily), `…_fa` (+26 indicators) | — |
-| `gold` | `economy` (wide, as-of), `stock_market` (wide, unfilled), `stocks_financials_bank_fa` (feature panel) | — |
+| `gold` | `economy` (wide, as-of), `stock_market` (wide, unfilled), `stocks` (price panel, no features), `stocks_ta` (+ the ~900-column TA block), `stocks_financials_bank_fa` (feature panel), `news_{weekly,daily}_panel` | — |
+| `unified_vcb` | `pool__basic` (one ticker, every column of `silver.stocks_basic`) | — |
 
 ### ⚠️ The edges, read out of the code (2026-07-31 correction)
 
@@ -286,7 +290,7 @@ split across the two modules.
 
 | claim | how it was checked | result |
 |---|---|---|
-| the flat `src/` layout can be imported by Dagster | `dagster definitions validate` | passes, **49 assets** (19 landing + 20 bronze + 7 silver + 3 gold), all code locations OK |
+| the flat `src/` layout can be imported by Dagster | `dagster definitions validate` | passes, **55 assets** (19 landing + 20 bronze + 8 silver + 7 gold + 1 unified), all code locations OK |
 | partitions resolve | reading the definitions back | TV **9**, pdfs **100**, financials **2** (`HOSE_VCB`, `HOSE_ACB`) |
 | the index scrape assets run | `--select "group:cafef_index"` | 4/4 green |
 | the TradingView path works incl. `build_unblocked` | `--select "raw/trading_view_collected_links"` | green, rewrote `all_links_2026-06-26.csv` (313 KB) |
@@ -387,6 +391,8 @@ dagster asset materialize -f src/orchestration/definitions.py --select "group:gi
 ```powershell
 dagster asset materialize -f src/orchestration/definitions.py --select "group:bronze"   # 20 assets, ~9 min
 dagster asset materialize -f src/orchestration/definitions.py --select "group:silver"
+dagster asset materialize -f src/orchestration/definitions.py --select "group:gold"     # ⚠️ incl. stocks_ta: hours
+dagster asset materialize -f src/orchestration/definitions.py --select "group:unified_vcb"
 ```
 
 Or in the UI: select the graph and hit Materialize — Dagster walks the edges itself,
@@ -421,7 +427,7 @@ UI, from `*`, and from every selection. Reserve this for "must never load in thi
 "raw/cafef_news": false
 ```
 
-All 49 keys are listed in the file as a menu, grouped by source, with `//` comment keys
+All 55 keys are listed in the file as a menu, grouped by source, with `//` comment keys
 marking the expensive ones (same comment convention as `switch_config.json`).
 `true` or **absent** = loaded, so a newly added asset is on by default.
 
@@ -432,7 +438,7 @@ Behaviour, all verified:
 | one key `false` | that asset not loaded (45 → 44); `//` comment keys ignored |
 | a key matching no asset | **raises**, listing the valid keys |
 | malformed JSON | **raises** — never read as "disable everything" |
-| file absent | 49 assets — absent means "no opinion", not "all off" |
+| file absent | all 55 assets — absent means "no opinion", not "all off" |
 | file with a **BOM** | handled (`utf-8-sig`) |
 
 The last three are direct lessons from `switch_config.json`:
@@ -474,7 +480,7 @@ RUN_SUCCESS
 ```
 
 **Sanity check without running anything:** `dagster definitions validate` (it should
-report 8 assets and "All code locations passed validation").
+report 55 assets and "All code locations passed validation").
 
 ### ✅ Phase 1a — the whole BRONZE layer, 20 assets (2026-08-01)
 
@@ -698,27 +704,96 @@ leaves the old one intact — the same thing `_ingest_gold_economy` and
 **3. `_ingest_gold_stocks` is stale and raises.** `gold.stocks` in the database predates
 the 2026-07-19 rewrite of `silver.stocks_basic` and still carries that era's columns
 (`close`, `volume`, `f_buy_vol`, `own_pct`). The current source has neither `close` nor
-`volume`, so its first TA layer dies exactly the way this asset's did. **Not fixed, on
-purpose** — the remedy is the `prepare_fn` + `volume_col="volume_matched"` pair the `_fa`
-asset already uses, but switching it on re-defines `gold.stocks`' `open`/`high`/`low` as
-adjusted and commits to a ~2.4 M-row × ~900-column rebuild. That is a decision to take on
-its own, not a side effect of adding a different table. `gold/stocks` is not an asset yet
-either.
+`volume`, so its first TA layer dies exactly the way this asset's did. **Not fixed at the
+time, on purpose** — the remedy is the `prepare_fn` + `volume_col="volume_matched"` pair
+the `_fa` asset already uses, but switching it on re-defines `gold.stocks`'
+`open`/`high`/`low` as adjusted and commits to a ~2.4 M-row × ~900-column rebuild. That
+is a decision to take on its own, not a side effect of adding a different table.
+✅ **Taken on its own on 2026-08-03 — see "The per-stock panel, split in two" below.**
+
+### The per-stock panel, split in two — `gold/stocks` + `gold/stocks_ta` (2026-08-03)
+
+One silver source, two gold tables, split by whether a column is **carried** or
+**computed**:
+
+```
+silver/stocks_basic ─┬─► gold/stocks      2,388,368 × 42    adjusted OHLC + flow, NO features
+                     └─► gold/stocks_ta   2,388,368 × ~940  the same + the ~900-column TA block
+```
+
+```powershell
+dagster asset materialize -f src/orchestration/definitions.py --select "gold/stocks"
+dagster asset materialize -f src/orchestration/definitions.py --select "gold/stocks_ta"   # ⚠️ hours, ~11 GB
+```
+
+⚠️ **What the split buys is one thing, and it is not tidiness.** PostgreSQL reads the
+whole row, so every query that wanted OHLC out of the old 935-column table paid for 905
+TA columns it did not want — ~11 GB against ~200 MB.
+[unified_schema_creator.ipynb](../train_test_creator/unified_schema_creator.ipynb) was
+already splitting them by hand (`GOLD_NON_TA` vs its `pool__ta` group); this makes the
+split a table boundary instead of a convention two notebooks have to agree on.
+
+⚠️ **This is where the deferred OHLC decision got taken.** `_ingest_gold_stocks` had been
+raising since 2026-07-19 (§"Three things this build broke on", item 3) and the fix was
+held back because it re-defines `open`/`high`/`low` as adjusted. It does — and it is not
+lossy: `_helper_adjust_ohlc` keeps the source legs beside them as
+`open_raw`/`high_raw`/`low_raw`/`close_raw`, so both scales are present and neither is
+implicit. 2,388,368 rows got a factor, 524,633 of them exactly 1.0.
+
+⚠️ **Neither table is built from the other**, for the same reason
+`stocks_financials_bank_fa` is not built from `gold.stocks`: a table carrying its base
+from another gold table could disagree with it about a stock-day while looking identical.
+Each recomputes from silver — the cost is one extra read of a 2.4 M-row table.
+
+⚠️ **`gold.stocks_ta` in the database is OLDER than the code that builds it, and
+rebuilding it COSTS HISTORY.** It is the **rename** of the pre-rewrite `gold.stocks` —
+2,678,167 rows on the old column names (`close`, `volume`, `f_buy_vol`, `own_pct`).
+Renaming does not rebuild, and the rebuild was deliberately not run. Measured against
+today's silver:
+
+| | rows |
+|---|---|
+| in `stocks_ta` only, **before 2009-01-02** | **98,464** — current silver starts 2009-01-02; CafeF's price history does not go back further |
+| in `stocks_ta` only, 2009 onward | **197,852** — stock-days the `cafef_price` spine drops |
+| in current silver only | 6,517 — data newer than the old build (to 2026-07-08) |
+| shared | 2,381,851 |
+
+So materialising `gold/stocks_ta` replaces a 2,678,167-row table with a 2,388,368-row
+one and **loses 296,316 stock-days, including every day before 2009**. That history came
+from the source-priority merge the 2026-07-19 silver rewrite removed, and no current
+asset can rebuild it. Dump the table first if those years matter. The row-count assertion
+in the asset is what makes the change visible rather than silent.
+
+⚠️ **Carried numerics are DOUBLE PRECISION in this pair, not gold's default REAL.** The
+default exists because ~900 float8 columns cannot fit PostgreSQL's ~8160-byte row limit;
+at 42 columns there is no such pressure, and `value_matched` reaches ~1e12 where REAL
+rounds to the nearest ~1e5.
+
+⚠️ **`_ingest_gold_table(standard_features=False)` is the new mechanism, and it disables
+a guard on purpose.** The empty-layer `PipelineError` exists to catch a gold table that
+came out a copy of its input BY ACCIDENT; with this flag that is the stated intent, so
+the two cases have to be distinguishable. It also needs its own write path —
+`_helper_transform` returns the frame untouched when no layer resolves and **never
+reaches `checkpoint_fn`**, so a featureless build routed through it would log success and
+write nothing.
 
 ### Gold housekeeping — what the schema holds, and what it is allowed to hold
 
-**Seven tables**, and every one of them is something the code can still build — the
+**Ten tables**, and every one of them is something the code can still build — the
 schema and the pipeline agree, which is the point of the housekeeping.
 
 | table | shape | built by | state |
 |---|---|---|---|
 | `economy` | 6,935 × 1,035 | **asset** + leaf | current (wide, as-of filled) |
 | `stock_market` | 6,339 × 163 | **asset** only | current (wide, unfilled) |
+| `stocks` | 2,388,368 × 42 | **asset** + leaf | current — the price panel, no features (2026-08-03) |
+| `stocks_ta` | 2,678,167 × 935 | **asset** only | ⚠️ the RENAME of the old `stocks`; the builder is current, the TABLE is not |
 | `stocks_financials_bank_fa` | 8,265 × 1,150 | **asset** only | current |
+| `news_weekly_panel` | 429,052 × 28 | **asset** only | current |
+| `news_daily_panel` | 2,058,604 × 26 | **asset** only | current |
 | `bonds` | 66,100 × 16 | leaf | unknown age |
 | `forex` | 1,324,940 × 16 | leaf | unknown age |
 | `funds` | 18,662 × 22 | leaf | unknown age |
-| `stocks` | 2,678,167 × 935 | leaf | ⚠️ **stale AND raises** |
 | ~~`indices`~~ | ~~24,095 × 22~~ | — | **RETIRED + DROPPED 2026-08-01** |
 
 ⚠️ **`gold.indices` is retired because it was a duplicate.** It was `silver.indices`
@@ -737,11 +812,71 @@ reversal is one line (`_ingest_gold_table("indices")` + its leaf). ⚠️ Note t
 table is `trading_view_indices`, not `indices`: silver renames it, and only silver and
 gold used the short name.
 
-⚠️ **The two per-stock panels share an identical 888-column TA block** — 337 overlap
-studies, 293 momentum, 90 cycle, 60 price transform, 58 volatility, 50 volume, from 43
-indicators via `_helper_stock_ta_layers`. 207 of them are boolean signals. That is the
-point of the shared helper: `gold.stocks` and `gold.stocks_financials_bank_fa` cannot
-drift into different feature sets while looking identical.
+⚠️ **The two per-stock FEATURE panels share an identical 888-column TA block** — 337
+overlap studies, 293 momentum, 90 cycle, 60 price transform, 58 volatility, 50 volume,
+from 43 indicators via `_helper_stock_ta_layers`. 207 of them are boolean signals. That
+is the point of the shared helper: `gold.stocks_ta` and
+`gold.stocks_financials_bank_fa` cannot drift into different feature sets while looking
+identical. `gold.stocks` has none of them by design — that is the split.
+
+### UNIFIED — the fourth layer, and the first scoped to ONE TICKER (2026-08-03)
+
+`unified_schema_<ticker>` is not a fourth copy of the pipeline. It is one company's
+slice, cut into the **feature groups a model selects over**:
+
+```
+silver/stocks_basic ──► unified_vcb/pool__basic     4,235 × 38, PK (exchange, ticker, date)
+                        pool__ta / pool__macro / pool__calendar / pool__targets   ⚠️ NOT ASSETS YET
+```
+
+```powershell
+dagster asset materialize -f src/orchestration/definitions.py --select "unified_vcb/pool__basic"
+```
+
+| check | result |
+|---|---|
+| materialised | **RUN_SUCCESS, 611 ms**; re-run green (the asset REPLACES its table) |
+| shape | **4,235 rows × 38 columns**, 1 ticker, 2009-06-30 → 2026-06-25 |
+| column name + type + ORDER vs `silver.stocks_basic` | **identical, all 38** |
+| every value vs silver, 35 non-key columns | **0 mismatches** over 4,235 rows |
+
+⚠️ **The schema is created BY THE ASSET.** `PreprocessorResource.session` already issues
+`CREATE SCHEMA` for whatever schema it is handed — the same preamble
+`ingest_bronze_data` runs — so naming `unified_schema_vcb` there is what brings it into
+existence. `_ingest_unified_pool_basic` creates it too, so the method is still correct
+from a notebook or `main.py`.
+
+⚠️ **`CREATE TABLE AS`, not a pandas round-trip, and that is type fidelity not taste.**
+psycopg2 returns a PostgreSQL `numeric` as a Python `Decimal`, which lands in a DataFrame
+as dtype `object`, and `_helper_infer_sql_type` maps `object` → VARCHAR. Reading this
+table out and writing it back would turn every price and value column into TEXT **while
+looking like it worked** — the same "degraded VARCHAR" the silver carry-ups have. A
+server-side CTAS never materialises a Python value, so the types are silver's by
+construction, which is what the check above confirms.
+
+⚠️ **The ticker is an IDENTIFIER, not a value.** It is interpolated into a schema NAME,
+and a name cannot be a bound parameter. `_helper_unified_schema` validates it against
+`UNIFIED_TICKER_PATTERN` and raises otherwise — it is the only thing between a ticker
+(which arrives from a CSV, a config or a partition key) and arbitrary SQL.
+
+⚠️ **`UNIFIED_TICKER = "VCB"` is a constant, not a partition**, deliberately. A partition
+would imply the other four `pool__*` tables are per-ticker assets too, and they are not
+assets at all — `train_test_creator/unified_schema_creator.ipynb` still builds them.
+
+⚠️ **THE REST OF THE SCHEMA WAS DROPPED ON 2026-08-03 AND NOTHING REBUILDS IT.**
+`unified_schema_vcb` held **140 objects — 113 tables and 27 views, 126 MB**: the five
+`pool__*` groups and 135 `<target>__lb<N>__<group>__<n>` feature-selection outputs across
+three targets × ten lookbacks. All of it was dropped at the user's explicit instruction
+(`DROP SCHEMA … CASCADE`), and only `pool__basic` has been rebuilt. The selection outputs
+were notebook work — the `pool__ta` ensemble alone cost ~6.6 h at lookback=20 (memory
+`project-feature-selection-ta-cost`) — so re-running the notebook is the only way back,
+and its `GOLD_NON_TA` / `pool__ta` split now wants rewriting against `gold.stocks` and
+`gold.stocks_ta` instead of the one 935-column table it was written for.
+
+⚠️ **`pool__basic` is now 4,235 rows where every dropped sibling had 4,242**, because it
+is built from `silver.stocks_basic` (which ends 2026-06-25) rather than from the old
+`gold.stocks` (2026-06-26). Anything rebuilt to join against it has to be built from the
+same source or it will silently lose the difference.
 
 ## 2a. Cost of a full materialize (2026-07-31)
 
@@ -985,10 +1120,11 @@ than either alone.
 
 `main.py` ends up empty and `switch_config.json` shrinks to ~320 parameter keys.
 
-**Where it actually stands (2026-08-01):** phases 0-4 are built; every landing and bronze
-asset has been materialised green, silver has 7 assets and gold 3. What remains is the
-rest of silver (8 leaves), the rest of gold (4 tables), phase 5, and end-to-end runs of
-the four heavy assets.
+**Where it actually stands (2026-08-03):** phases 0-4 are built; every landing and bronze
+asset has been materialised green, silver has 8 assets, gold 7, and a fifth `unified`
+layer has 1. What remains is the rest of silver (~7 leaves), the four remaining
+`pool__*` groups of the unified schema, phase 5, and end-to-end runs of the four heavy
+assets.
 
 ⚠️ **Phase 5 is now half-true in the documentation and not at all in the code.**
 `src/data_preprocessor/CONTEXT.md` carries an ARCHIVED banner and this file says

@@ -1,20 +1,27 @@
 # src\orchestration\assets\gold.py
 """The GOLD layer — `silver_schema` → `gold_schema`.
 
-Three assets. Two are WIDE — one row per date, one column per (entity × measure):
+Two assets are WIDE — one row per date, one column per (entity × measure):
 
 * `gold/economy` — the macro panel, `{country}__{scrape_main_type}__{category}__{exchange}__{ticker}`,
   one row per BUSINESS DAY, as-of filled.
 * `gold/stock_market` — the six market indices, `{exchange}__{ticker}__{measure}`, one
   row per TRADING DAY, **not** filled.
 
-The third is the other kind of gold table — the FEATURE panel, same grain as its silver
-source with columns added:
+The rest are the other kind of gold table — same grain as their silver source, PK
+`(exchange, ticker, date)`, columns added and never rows:
 
+* `gold/stocks` — `silver.stocks_basic` with a split-adjusted OHLC set and **nothing
+  else**. The plain price/flow panel.
+* `gold/stocks_ta` — the same panel plus the ~900-column TA block. ⚠️ The pair replaced
+  a single 935-column `gold.stocks` on 2026-08-03; splitting them makes "prices without
+  technicals" a ~200 MB read instead of an ~11 GB one.
 * `gold/stocks_financials_bank_fa` — `silver.stocks_basic_financials_bank_fa` (price ×
-  as-of bank financials × 26 fundamental indicators) plus the full per-stock TA battery.
-  One row per stock-day, PK `(exchange, ticker, date)` — the same shape `gold.stocks`
-  has, which is still built through `main.py` rather than as an asset.
+  as-of bank financials × 26 fundamental indicators) plus that same TA battery.
+
+⚠️ **None of the three is built from either of the others.** Each recomputes its base
+from silver, so two gold tables cannot disagree about a stock-day while looking
+identical. The shared `_helper_stock_ta_layers` is what stops the feature sets drifting.
 
 ⚠️ **Why one is filled and the other is not.** Macro series are published on a lag and
 are stale-but-valid between releases, so carrying them forward is what a reader would
@@ -396,9 +403,122 @@ def gold_news_daily_panel(
     )
 
 
+def _stocks_panel_result(
+    context: AssetExecutionContext, prep, table: str
+) -> MaterializeResult:
+    """Shared verification + metadata for the `stocks` / `stocks_ta` pair.
+
+    ⚠️ The row-count assertion is the point. Both tables are the same grain as
+    `silver.stocks_basic` — one row per stock-day — so a build that changed the row
+    count either dropped stock-days or duplicated them, and a bigger table would
+    otherwise read as a better one.
+    """
+    with prep._database_driver._cursor_ctx() as cur:
+        cur.execute(
+            f"SELECT COUNT(*), COUNT(DISTINCT ticker), MIN(date), MAX(date) "
+            f"FROM gold_schema.{table}"
+        )
+        rows, tickers, first, last = cur.fetchone()
+        cur.execute(
+            "SELECT COUNT(*) FROM information_schema.columns WHERE "
+            "table_schema = 'gold_schema' AND table_name = %s",
+            (table,),
+        )
+        columns = int(cur.fetchone()[0])
+        cur.execute("SELECT COUNT(*) FROM silver_schema.stocks_basic")
+        silver_rows = int(cur.fetchone()[0])
+        cur.execute(
+            "SELECT COUNT(*) FROM information_schema.columns WHERE "
+            "table_schema = 'silver_schema' AND table_name = 'stocks_basic'"
+        )
+        silver_columns = int(cur.fetchone()[0])
+        cur.execute(
+            f"SELECT pg_size_pretty(pg_total_relation_size('gold_schema.{table}'))"
+        )
+        size = cur.fetchone()[0]
+
+    if rows != silver_rows:
+        raise ValueError(
+            f"gold.{table} has {rows} rows but silver.stocks_basic has {silver_rows} "
+            f"— the build changed the grain. Both are one row per stock-day."
+        )
+
+    context.log.info(
+        f"gold.{table}: {rows} stock-days × {columns} columns, {tickers} tickers, {size} "
+        f"(silver.stocks_basic: {silver_rows} × {silver_columns})"
+    )
+    return MaterializeResult(
+        metadata={
+            "rows": int(rows),
+            "columns": columns,
+            "silver_columns": silver_columns,
+            "columns_added": columns - silver_columns,
+            "tickers": int(tickers),
+            "size": MetadataValue.text(size),
+            "date_range": MetadataValue.text(f"{first} → {last}"),
+            "table": MetadataValue.text(f"gold_schema.{table}"),
+        }
+    )
+
+
+@asset(
+    name="stocks",
+    key_prefix=["gold"],
+    group_name="gold",
+    compute_kind="postgres",
+    deps=[AssetKey(["silver", "stocks_basic"])],
+    description=(
+        "silver.stocks_basic → gold.stocks: the per-stock price/flow panel, PK "
+        "(exchange, ticker, date), with a SPLIT-ADJUSTED OHLC set and NO derived "
+        "columns — the technicals are gold/stocks_ta. ⚠️ `open`/`high`/`low`/`close` "
+        "are ADJUSTED and are NOT silver's: CafeF ships raw legs beside "
+        "close_raw/close_adjust, which is two price scales in one row (VCB 2009-06-30: "
+        "raw 60,000, adjusted 9,130). The source values are kept as "
+        "open_raw/high_raw/low_raw/close_raw, so nothing is lost. ⚠️ Carried numerics "
+        "are DOUBLE PRECISION, not gold's usual REAL — at ~42 columns there is no "
+        "row-size pressure, and value_matched reaches ~1e12 where REAL loses hundreds "
+        "of thousands of dong."
+    ),
+)
+def gold_stocks(
+    context: AssetExecutionContext, preprocessor: PreprocessorResource
+) -> MaterializeResult:
+    with preprocessor.session(schema="gold_schema") as prep:
+        prep._ingest_gold_stocks()
+        return _stocks_panel_result(context, prep, "stocks")
+
+
+@asset(
+    name="stocks_ta",
+    key_prefix=["gold"],
+    group_name="gold",
+    compute_kind="postgres",
+    deps=[AssetKey(["silver", "stocks_basic"])],
+    description=(
+        "silver.stocks_basic → gold.stocks_ta: everything gold/stocks carries plus the "
+        "full per-stock TA battery (~40 TA-Lib indicators + the three microstructure "
+        "features) and the standard return/volatility/rolling layers. ~900 added "
+        "columns over ~2.4 M rows. ⚠️ HEAVY — hours, and ~11 GB on disk. ⚠️ It is NOT "
+        "built from gold/stocks: the base is recomputed from silver so the two cannot "
+        "disagree about a stock-day while looking identical. ⚠️ The table in the "
+        "database predates this asset — it is the 2026-08-03 rename of the "
+        "pre-2026-07-19 gold.stocks and still carries that era's column names; the "
+        "first materialisation REPLACES it."
+    ),
+)
+def gold_stocks_ta(
+    context: AssetExecutionContext, preprocessor: PreprocessorResource
+) -> MaterializeResult:
+    with preprocessor.session(schema="gold_schema") as prep:
+        prep._ingest_gold_stocks_ta()
+        return _stocks_panel_result(context, prep, "stocks_ta")
+
+
 assets: List[Callable] = [
     gold_economy,
     gold_stock_market,
+    gold_stocks,
+    gold_stocks_ta,
     gold_stocks_financials_bank_fa,
     gold_news_weekly_panel,
     gold_news_daily_panel,
