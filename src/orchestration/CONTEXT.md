@@ -825,8 +825,8 @@ identical. `gold.stocks` has none of them by design — that is the split.
 slice, cut into the **feature groups a model selects over**:
 
 ```
-silver/stocks_basic ──► unified_vcb/pool__basic     4,235 × 38, PK (exchange, ticker, date)
-                              └──► unified_vcb/pool__targets   4,235 × 2, PK date
+silver/stocks_basic ──► unified_vcb/pool__basic     4,235 × 38, PK (date, exchange, ticker)
+                              └──► unified_vcb/pool__targets   4,235 × 7, PK (date, exchange, ticker)
                         pool__ta / pool__macro / pool__calendar   ⚠️ NOT ASSETS YET
 ```
 
@@ -840,7 +840,7 @@ dagster asset materialize -f src/orchestration/definitions.py --select "group:un
 | shape | **4,235 rows × 38 columns**, 1 ticker, 2009-06-30 → 2026-06-25 |
 | column name + type + ORDER vs `silver.stocks_basic` | **identical, all 38** |
 | every value vs silver, 35 non-key columns | **0 mismatches** over 4,235 rows |
-| `pool__targets` materialised | **RUN_SUCCESS**, 4,235 rows × 2 columns, PK `date` |
+| `pool__targets` materialised | **RUN_SUCCESS**, 4,235 rows × 7 columns, PK `(date, exchange, ticker)` |
 | `return_5day` vs an independent pandas `close.shift(-5)/close - 1` | **max abs diff 1.5e-16**, null pattern identical |
 | label coverage | 4,230 labelled + a **5-row NULL tail**; range -18.8% → +29.1%, mean +0.32% |
 
@@ -884,7 +884,35 @@ same source or it will silently lose the difference. **This is why `pool__target
 `pool__basic` and not `gold.stocks`** — the two share one calendar by construction, and
 the asset asserts it (a symmetric `EXCEPT` in both directions, not just a row count).
 
-#### `pool__targets` — `date` + one column per horizon (2026-08-04: now **5 AND 10**)
+#### ⚠️ EVERY unified table is keyed `(date, exchange, ticker)` — 2026-08-04
+
+`DataPreprocessor.UNIFIED_PRIMARY_KEY` is the contract, and **the ORDER is part of
+it**. `_helper_unified_primary_key` applies it and reads the key back from
+`pg_index.indkey`; both assets assert it independently and fail the run on drift.
+
+⚠️ **Read from `pg_index`, not `information_schema.key_column_usage`.** The latter
+reports position within the CONSTRAINT, which PostgreSQL does not guarantee matches
+the index's own column order — and the index order is the thing that decides what a
+range scan can use.
+
+Three reasons, and the third is why it was worth changing:
+
+1. **A join needs no special case.** `pool__targets` was keyed on `date` alone, so
+   joining it to `pool__basic` meant intersecting key sets and hoping. Every pool now
+   joins to every other on the same three columns.
+2. **`date` FIRST.** Every access pattern here is time-ordered — walk-forward folds,
+   purge gaps, as-of joins — and only a leading `date` lets the PK's index serve a
+   range scan. `(exchange, ticker, date)`, the previous order, could not.
+3. **The cross-sectional panel.** A multi-ticker pool is keyed this way by necessity.
+   Keying the single-ticker pools identically makes that move a wider table rather
+   than a different convention, and turns `COUNT(DISTINCT ticker) = 1` from a
+   structural assumption into the assertion it always was.
+
+⚠️ `pool__targets` therefore carries `exchange` and `ticker` even though neither
+varies in a one-company schema. Verified 2026-08-04: both tables
+`PK = (date, exchange, ticker)` read back from the index.
+
+#### `pool__targets` — the key + one column per horizon (2026-08-04: now **5 AND 10**)
 
 `return_{h}day = close[t+h] / close[t] - 1`, the forward simple return, computed
 server-side with `LEAD(close_adjust, h) OVER (ORDER BY date)`. `pool__basic` is one row

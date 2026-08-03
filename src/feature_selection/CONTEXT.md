@@ -102,15 +102,22 @@ median from its own train slice. The whole-sample ranking uses a whole-sample
 median and says so — that ranking is descriptive, and the walk-forward numbers are
 the ones carrying a generalisation claim.
 
-## 3. The join, and why it is not on `date + ticker`
+## 3. The join — now on all three key columns
 
-The request was "join on date + ticker". **`pool__targets` has no `ticker`
-column** — it is `(date, return_5day)`, because a one-company label table has
-nowhere to put one. So `join()` uses the INTERSECTION of `(exchange, ticker, date)`
-present in both frames, requires `date` to be in it, and records what it used in
-`join_log`. For `["pool__basic", "pool__targets"]` that is `["date"]`; add a pool
-that does carry `ticker` and the same call joins on `(exchange, ticker, date)` with
-no change.
+**Every `unified_schema_<ticker>` table is keyed `(date, exchange, ticker)`** as of
+2026-08-04 (`DataPreprocessor.UNIFIED_PRIMARY_KEY`), so `join()` on
+`["pool__basic", "pool__targets"]` uses all three.
+
+⚠️ **It did not used to.** `pool__targets` was `(date, return_5day)` — a one-company
+label table has nowhere to put a ticker — so the join ran on `date` alone and every
+join to it was a special case. `join()` still intersects `KEY_COLS` per pair rather
+than assuming all three, requires `date` in the result, and records what it used in
+`join_log`: a pool that predates the change joins correctly instead of silently
+wrongly.
+
+⚠️ **`date` leads the key**, matching the layer's contract — every access pattern
+here is time-ordered, and only a leading `date` lets the PK's index serve a range
+scan.
 
 ⚠️ **Every merge is validated one-to-one on both sides first.** A duplicated key
 turns a 4,235-row panel into a longer one that still looks like a panel, and the

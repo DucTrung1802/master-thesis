@@ -16,11 +16,13 @@ does not have to:
    `.mean()` downstream would either fail or silently coerce. `read()` casts by
    the SQL type read from `information_schema`, not by guessing from the values.
 
-3. **The pools do not all carry the same key.** `pool__basic` is keyed
-   `(exchange, ticker, date)`; `pool__targets` is keyed `date` alone — one ticker's
-   labels have nowhere to put a ticker. So `join()` uses the INTERSECTION of
-   `(exchange, ticker, date)` present in both frames, requires `date` to be in it,
-   and records what it used in `join_log` rather than leaving the reader to assume.
+3. **Every pool is keyed `(date, exchange, ticker)`** — `UNIFIED_PRIMARY_KEY`, in
+   that order, as of 2026-08-04. It was not always so: `pool__targets` used to be
+   keyed on `date` alone, because a one-company label table has nowhere to put a
+   ticker, and that made every join to it a special case. So `join()` still uses the
+   INTERSECTION of `KEY_COLS` present in both frames, requires `date` to be in it,
+   and records what it used in `join_log` — a pool that predates the change joins
+   correctly rather than silently wrongly.
 
 ⚠️ **The join is validated one-to-one, not merged hopefully.** A duplicated key on
 either side turns a 4,235-row panel into a longer one that still looks like a
@@ -52,9 +54,15 @@ UNIFIED_SCHEMA_TEMPLATE = "unified_schema_{ticker}"
 # docstring for why a regex sits between a ticker and a schema name.
 TICKER_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,20}$")
 
-# The candidate join keys, in the order a composite key is written. A pool joins
-# on whichever of these it shares with the frame it is being joined to.
-KEY_COLS = ("exchange", "ticker", "date")
+# The candidate join keys, in the order a composite key is written — the same order
+# as `DataPreprocessor.UNIFIED_PRIMARY_KEY`, and `date` leads for the same reason:
+# every access pattern here is time-ordered.
+#
+# ⚠️ As of 2026-08-04 EVERY `pool__*` table carries all three, so this is the join
+# key rather than a menu of candidates. It is still intersected per pair, because a
+# pool that predates the change (or a hand-built one) would otherwise join wrongly
+# instead of failing — `join()` raises if the intersection loses `date`.
+KEY_COLS = ("date", "exchange", "ticker")
 
 # information_schema.data_type values that must land as float64 rather than object.
 _NUMERIC_SQL_TYPES = frozenset(
@@ -283,11 +291,10 @@ class UnifiedSchemaReader:
     ) -> pd.DataFrame:
         """Join the given tables on the keys each PAIR shares, left to right.
 
-        The keys are the intersection of `KEY_COLS` present in both frames, which
-        for `["pool__basic", "pool__targets"]` is `["date"]` — `pool__targets` has
-        no `ticker` column, because a one-company label table has nowhere to put
-        one. Every join is checked one-to-one on both sides first, so a duplicated
-        key raises instead of quietly multiplying rows.
+        The keys are the intersection of `KEY_COLS` present in both frames — for
+        two current pools that is all three of `(date, exchange, ticker)`. Every
+        join is checked one-to-one on both sides first, so a duplicated key raises
+        instead of quietly multiplying rows.
 
         Args:
             tables: pool names, e.g. `["pool__basic", "pool__targets"]`.

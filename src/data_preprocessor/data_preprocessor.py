@@ -4927,11 +4927,62 @@ class DataPreprocessor:
             )
         return f"{UNIFIED_SCHEMA}_{ticker.lower()}"
 
+    # ⚠️ THE KEY OF EVERY `unified_schema_<ticker>` TABLE, IN THIS ORDER.
+    #
+    # Every `pool__*` table carries all three columns and is keyed on all three, even
+    # where a table holds one company and two of them never vary. Three reasons, and
+    # the third is the one that made it worth changing:
+    #
+    # 1. **A join needs no special cases.** `pool__targets` used to be keyed on `date`
+    #    alone, so joining it to `pool__basic` meant intersecting key sets and hoping
+    #    the result was right. Now every pool joins to every other pool on the same
+    #    three columns.
+    # 2. **`date` FIRST is deliberate.** Every access pattern here is time-ordered —
+    #    walk-forward folds, purge gaps, as-of joins — and a leading `date` lets the
+    #    PK's own index serve a range scan. `(exchange, ticker, date)` cannot, because
+    #    a b-tree can only range-scan on its leading column.
+    # 3. **The cross-sectional panel is the point.** A multi-ticker pool is keyed
+    #    `(date, exchange, ticker)` by necessity, and a cross-sectional model groups by
+    #    date. Keying the single-ticker pools the same way means the move is a wider
+    #    table, not a different schema convention — and `COUNT(DISTINCT ticker) = 1`
+    #    stops being a structural assumption and becomes the assertion it always was.
+    UNIFIED_PRIMARY_KEY = ("date", "exchange", "ticker")
+
+    def _helper_unified_primary_key(self, cur, schema: str, table: str) -> None:
+        """Add `UNIFIED_PRIMARY_KEY` to a freshly-created unified table, and verify it.
+
+        ⚠️ Verified rather than assumed, because `ADD PRIMARY KEY` succeeds on any
+        column ORDER — `(exchange, ticker, date)` and `(date, exchange, ticker)` are
+        both valid keys over the same three columns and differ only in which queries
+        their index can serve. A silently-reordered key would be invisible until
+        someone measured a scan.
+        """
+        columns = ", ".join(self.UNIFIED_PRIMARY_KEY)
+        cur.execute(f"ALTER TABLE {schema}.{table} ADD PRIMARY KEY ({columns})")
+        cur.execute(
+            """SELECT a.attname
+               FROM pg_index i
+               JOIN pg_class c ON c.oid = i.indrelid
+               JOIN pg_namespace n ON n.oid = c.relnamespace
+               JOIN unnest(i.indkey) WITH ORDINALITY AS k(attnum, ord) ON TRUE
+               JOIN pg_attribute a
+                 ON a.attrelid = c.oid AND a.attnum = k.attnum
+               WHERE i.indisprimary AND n.nspname = %s AND c.relname = %s
+               ORDER BY k.ord""",
+            (schema, table),
+        )
+        actual = tuple(row[0] for row in cur.fetchall())
+        if actual != self.UNIFIED_PRIMARY_KEY:
+            raise PipelineError(
+                f"{schema}.{table} primary key is {actual}, expected "
+                f"{self.UNIFIED_PRIMARY_KEY} — column ORDER is part of the contract."
+            )
+
     def _ingest_unified_pool_basic(self, ticker: str) -> None:
         """`silver.stocks_basic` (one ticker) → `unified_schema_<ticker>.pool__basic`.
 
         **Every column of `silver.stocks_basic`, with silver's own types**, PK
-        `(exchange, ticker, date)`.
+        `(date, exchange, ticker)` — see `UNIFIED_PRIMARY_KEY` for why in that order.
 
         ⚠️ **`CREATE TABLE AS`, not a pandas round-trip, and the reason is type
         fidelity.** psycopg2 hands a PostgreSQL `numeric` back as a Python `Decimal`,
@@ -4985,10 +5036,7 @@ class DataPreprocessor:
                 (ticker,),
             )
             # CTAS copies types but never constraints, so the grain is asserted here.
-            cur.execute(
-                f"ALTER TABLE {schema}.pool__basic "
-                f"ADD PRIMARY KEY (exchange, ticker, date)"
-            )
+            self._helper_unified_primary_key(cur, schema, "pool__basic")
             cur.execute(f"SELECT COUNT(*) FROM {schema}.pool__basic")
             written = int(cur.fetchone()[0])
 
@@ -5028,9 +5076,15 @@ class DataPreprocessor:
     def _ingest_unified_pool_targets(self, ticker: str) -> None:
         """`unified_schema_<ticker>.pool__basic` → `…​.pool__targets`.
 
-        `date` (PK) plus **one column per horizon in `UNIFIED_TARGET_HORIZONS`** —
-        `return_5day`, `return_10day` — each the forward simple return
-        `close[t+h] / close[t] - 1` on the SPLIT-ADJUSTED close.
+        `UNIFIED_PRIMARY_KEY` — `(date, exchange, ticker)` — plus **two columns per
+        horizon in `UNIFIED_TARGET_HORIZONS`**: `return_{h}day`, the forward simple
+        return `close[t+h] / close[t] - 1` on the SPLIT-ADJUSTED close, and
+        `return_rel_{h}day`, the same minus the benchmark's return over that window.
+
+        ⚠️ **`exchange` and `ticker` are carried even though they never vary here.**
+        This table was keyed on `date` alone, which made every join to it a special
+        case — the reader had to intersect key sets and hope. Every pool now shares one
+        key.
 
         ⚠️ **The source is `pool__basic`, not `gold.stocks`, and that is what keeps the
         two tables joinable.** They are joined on `date` by every downstream selection
@@ -5126,21 +5180,26 @@ class DataPreprocessor:
                 ]
             )
             # Dropped as late as possible: a failure above leaves the old table intact.
+            #
+            # ⚠️ `exchange` and `ticker` are carried through from `pool__basic` even
+            # though they never vary here. They are what make this table join to every
+            # other pool on `UNIFIED_PRIMARY_KEY` instead of on `date` alone — and the
+            # LEAD window still orders by `date` only, because within one company the
+            # session order IS the date order.
             cur.execute(f"DROP TABLE IF EXISTS {schema}.pool__targets")
             cur.execute(
                 f"CREATE TABLE {schema}.pool__targets AS "
                 f"WITH joined AS ("
-                f"  SELECT b.date, b.close_adjust AS px, "
+                f"  SELECT b.date, b.exchange, b.ticker, b.close_adjust AS px, "
                 f"         m.{self.UNIFIED_BENCHMARK_COLUMN} AS bm "
                 f"  FROM {schema}.pool__basic b "
                 f"  LEFT JOIN {self.UNIFIED_BENCHMARK_TABLE} m ON m.date = b.date"
                 f") "
-                f"SELECT date, {columns} FROM joined "
+                f"SELECT date, exchange, ticker, {columns} FROM joined "
                 f"WINDOW w AS (ORDER BY date)"
             )
-            cur.execute(f"ALTER TABLE {schema}.pool__targets ADD PRIMARY KEY (date)")
+            self._helper_unified_primary_key(cur, schema, "pool__targets")
 
-            all_cols = {**target_cols}
             counts = ", ".join(
                 f"COUNT({col})"
                 for col in list(target_cols.values()) + list(relative_cols.values())

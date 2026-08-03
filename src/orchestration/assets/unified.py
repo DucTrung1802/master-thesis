@@ -54,6 +54,28 @@ UNIFIED_TICKER = "VCB"
 UNIFIED_SCHEMA_NAME = f"unified_schema_{UNIFIED_TICKER.lower()}"
 
 
+def _primary_key(cur, table: str) -> tuple:
+    """The table's primary key columns, IN INDEX ORDER.
+
+    ⚠️ `information_schema.key_column_usage` reports `ordinal_position`, which for a
+    PK is the position within the CONSTRAINT — and PostgreSQL does not guarantee that
+    matches the index's own column order. `pg_index.indkey` is the index order, which
+    is the thing that decides what a range scan can use, so that is what is read.
+    """
+    cur.execute(
+        """SELECT a.attname
+           FROM pg_index i
+           JOIN pg_class c ON c.oid = i.indrelid
+           JOIN pg_namespace n ON n.oid = c.relnamespace
+           JOIN unnest(i.indkey) WITH ORDINALITY AS k(attnum, ord) ON TRUE
+           JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum = k.attnum
+           WHERE i.indisprimary AND n.nspname = %s AND c.relname = %s
+           ORDER BY k.ord""",
+        (UNIFIED_SCHEMA_NAME, table),
+    )
+    return tuple(row[0] for row in cur.fetchall())
+
+
 @asset(
     name="pool__basic",
     key_prefix=["unified_vcb"],
@@ -63,7 +85,8 @@ UNIFIED_SCHEMA_NAME = f"unified_schema_{UNIFIED_TICKER.lower()}"
     description=(
         f"silver.stocks_basic (ticker {UNIFIED_TICKER} only) → "
         f"{UNIFIED_SCHEMA_NAME}.pool__basic: EVERY column of the silver table, with "
-        f"silver's own types, PK (exchange, ticker, date). ⚠️ Built with CREATE TABLE "
+        f"silver's own types, PK (date, exchange, ticker) — DataPreprocessor."
+        f"UNIFIED_PRIMARY_KEY, and the order is asserted. ⚠️ Built with CREATE TABLE "
         f"AS, not a pandas round-trip: psycopg2 returns `numeric` as Decimal, which a "
         f"DataFrame carries as dtype `object` and the writer maps to VARCHAR — a "
         f"round-trip would silently turn every price column into TEXT. ⚠️ Creates the "
@@ -111,7 +134,17 @@ def unified_vcb_pool_basic(
                 (UNIFIED_SCHEMA_NAME,),
             )
             missing = [r[0] for r in cur.fetchall()]
+            primary_key = _primary_key(cur, "pool__basic")
+            expected_key = tuple(prep.UNIFIED_PRIMARY_KEY)
 
+    # ⚠️ The key ORDER is asserted, not just its membership. `ADD PRIMARY KEY`
+    # accepts any ordering of the same three columns, and only a leading `date`
+    # lets the index serve the time-range scans every consumer here does.
+    if primary_key != expected_key:
+        raise ValueError(
+            f"{UNIFIED_SCHEMA_NAME}.pool__basic primary key is {primary_key}, "
+            f"expected {expected_key} — order is part of the contract."
+        )
     if missing:
         raise ValueError(
             f"{UNIFIED_SCHEMA_NAME}.pool__basic is missing {len(missing)} column(s) of "
@@ -138,6 +171,7 @@ def unified_vcb_pool_basic(
             "columns": columns,
             "silver_columns": silver_columns,
             "ticker": MetadataValue.text(UNIFIED_TICKER),
+            "primary_key": MetadataValue.text(", ".join(primary_key)),
             "date_range": MetadataValue.text(f"{first} → {last}"),
             "table": MetadataValue.text(f"{UNIFIED_SCHEMA_NAME}.pool__basic"),
         }
@@ -152,7 +186,8 @@ def unified_vcb_pool_basic(
     deps=[AssetKey(["unified_vcb", "pool__basic"])],
     description=(
         f"{UNIFIED_SCHEMA_NAME}.pool__basic → {UNIFIED_SCHEMA_NAME}.pool__targets: "
-        f"`date` (PK) plus TWO COLUMNS PER HORIZON in "
+        f"PK (date, exchange, ticker) — the same key as every other pool, so a join "
+        f"needs no special case — plus TWO COLUMNS PER HORIZON in "
         f"DataPreprocessor.UNIFIED_TARGET_HORIZONS — `return_{{h}}day`, the forward "
         f"simple return close[t+h]/close[t]-1 on the SPLIT-ADJUSTED close, and "
         f"`return_rel_{{h}}day`, the same minus the VNINDEX return over the same "
@@ -220,8 +255,17 @@ def unified_vcb_pool_targets(
                 f") d"
             )
             unaligned = int(cur.fetchone()[0])
+            primary_key = _primary_key(cur, "pool__targets")
+            expected_key = tuple(prep.UNIFIED_PRIMARY_KEY)
 
-    expected = ["date"] + list(target_cols.values()) + list(relative_cols.values())
+    if primary_key != expected_key:
+        raise ValueError(
+            f"{UNIFIED_SCHEMA_NAME}.pool__targets primary key is {primary_key}, "
+            f"expected {expected_key} — order is part of the contract."
+        )
+    expected = list(expected_key) + list(target_cols.values()) + list(
+        relative_cols.values()
+    )
     if columns != expected:
         raise ValueError(
             f"{UNIFIED_SCHEMA_NAME}.pool__targets should hold exactly {expected}, "
@@ -259,7 +303,8 @@ def unified_vcb_pool_targets(
     metadata = {
         "rows": int(rows),
         "horizons": MetadataValue.text(", ".join(str(h) for h in horizons)),
-        "targets": MetadataValue.text(", ".join(expected[1:])),
+        "targets": MetadataValue.text(", ".join(expected[len(expected_key):])),
+        "primary_key": MetadataValue.text(", ".join(primary_key)),
         "benchmark": MetadataValue.text(
             f"{prep_benchmark_table}.{prep_benchmark_column}"
         ),
