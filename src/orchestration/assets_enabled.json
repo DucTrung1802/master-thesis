@@ -98,5 +98,7 @@
 
     "// ---- unified: ONE ticker, cut into feature groups ----": "the schema is created by the asset",
     "// unified_vcb/pool__basic": "every column of silver.stocks_basic for VCB, silver's own types",
-    "unified_vcb/pool__basic": true
+    "unified_vcb/pool__basic": true,
+    "// unified_vcb/pool__targets": "date + return_5day (forward 5-day simple return on the adjusted close)",
+    "unified_vcb/pool__targets": true
 }

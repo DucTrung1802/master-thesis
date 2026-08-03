@@ -12,7 +12,7 @@
 >
 > Handoff notes. **Status (2026-08-03): the LANDING layer and the whole BRONZE layer are
 > assets and have both been materialised green; silver has 8, gold 7, and there is now a
-> fifth layer — `unified` (1).** 55 assets. What is left is the rest of silver (~7
+> fifth layer — `unified` (2).** 56 assets. What is left is the rest of silver (~7
 > leaves) and the rest of the unified schema — see §4. Verify anything before acting on
 > it: the code is the source of truth.
 >
@@ -55,11 +55,11 @@ PARTITIONS of two assets, not 320 assets. The remaining 61 map to ~55-65 assets.
 
 ## 2. What exists — LANDING + BRONZE complete, silver started (2026-08-01)
 
-**55 assets: 19 landing + 20 bronze + 8 silver + 7 gold + 1 unified.** Every scraper in
+**56 assets: 19 landing + 20 bronze + 8 silver + 7 gold + 2 unified.** Every scraper in
 `main.py` lands to `raw_data/` as an asset ([assets/scrape.py](assets/scrape.py)); every
 bronze ingest leaf is an asset ([assets/bronze.py](assets/bronze.py), 20 leaves → 25
 tables); silver has eight ([assets/silver.py](assets/silver.py)), gold seven
-([assets/gold.py](assets/gold.py)) and the per-ticker unified schema one
+([assets/gold.py](assets/gold.py)) and the per-ticker unified schema two
 ([assets/unified.py](assets/unified.py)).
 They are separate modules on purpose: the
 landing layer is correct-on-disk and re-runnable with no database at all.
@@ -109,7 +109,7 @@ raw/cafef_financials[t] ─► bronze/cafef_financials ─► silver/cafef_finan
 | `bronze` | **all 20 ingest leaves** (25 tables) | — |
 | `silver` | `economy` (long fact), `economy_series` (dimension), `stock_market` (4 index tabs), `stocks_basic` (6 sources), `cafef_financials_bank` (quarterly), `stocks_basic_financials_bank` (as-of daily), `…_fa` (+26 indicators) | — |
 | `gold` | `economy` (wide, as-of), `stock_market` (wide, unfilled), `stocks` (price panel, no features), `stocks_ta` (+ the ~900-column TA block), `stocks_financials_bank_fa` (feature panel), `news_{weekly,daily}_panel` | — |
-| `unified_vcb` | `pool__basic` (one ticker, every column of `silver.stocks_basic`) | — |
+| `unified_vcb` | `pool__basic` (one ticker, every column of `silver.stocks_basic`), `pool__targets` (`date` + `return_5day`) | — |
 
 ### ⚠️ The edges, read out of the code (2026-07-31 correction)
 
@@ -290,7 +290,7 @@ split across the two modules.
 
 | claim | how it was checked | result |
 |---|---|---|
-| the flat `src/` layout can be imported by Dagster | `dagster definitions validate` | passes, **55 assets** (19 landing + 20 bronze + 8 silver + 7 gold + 1 unified), all code locations OK |
+| the flat `src/` layout can be imported by Dagster | `dagster definitions validate` | passes, **56 assets** (19 landing + 20 bronze + 8 silver + 7 gold + 2 unified), all code locations OK |
 | partitions resolve | reading the definitions back | TV **9**, pdfs **100**, financials **2** (`HOSE_VCB`, `HOSE_ACB`) |
 | the index scrape assets run | `--select "group:cafef_index"` | 4/4 green |
 | the TradingView path works incl. `build_unblocked` | `--select "raw/trading_view_collected_links"` | green, rewrote `all_links_2026-06-26.csv` (313 KB) |
@@ -427,7 +427,7 @@ UI, from `*`, and from every selection. Reserve this for "must never load in thi
 "raw/cafef_news": false
 ```
 
-All 55 keys are listed in the file as a menu, grouped by source, with `//` comment keys
+All 56 keys are listed in the file as a menu, grouped by source, with `//` comment keys
 marking the expensive ones (same comment convention as `switch_config.json`).
 `true` or **absent** = loaded, so a newly added asset is on by default.
 
@@ -438,7 +438,7 @@ Behaviour, all verified:
 | one key `false` | that asset not loaded (45 → 44); `//` comment keys ignored |
 | a key matching no asset | **raises**, listing the valid keys |
 | malformed JSON | **raises** — never read as "disable everything" |
-| file absent | all 55 assets — absent means "no opinion", not "all off" |
+| file absent | all 56 assets — absent means "no opinion", not "all off" |
 | file with a **BOM** | handled (`utf-8-sig`) |
 
 The last three are direct lessons from `switch_config.json`:
@@ -480,7 +480,7 @@ RUN_SUCCESS
 ```
 
 **Sanity check without running anything:** `dagster definitions validate` (it should
-report 55 assets and "All code locations passed validation").
+report 56 assets and "All code locations passed validation").
 
 ### ✅ Phase 1a — the whole BRONZE layer, 20 assets (2026-08-01)
 
@@ -826,19 +826,23 @@ slice, cut into the **feature groups a model selects over**:
 
 ```
 silver/stocks_basic ──► unified_vcb/pool__basic     4,235 × 38, PK (exchange, ticker, date)
-                        pool__ta / pool__macro / pool__calendar / pool__targets   ⚠️ NOT ASSETS YET
+                              └──► unified_vcb/pool__targets   4,235 × 2, PK date
+                        pool__ta / pool__macro / pool__calendar   ⚠️ NOT ASSETS YET
 ```
 
 ```powershell
-dagster asset materialize -f src/orchestration/definitions.py --select "unified_vcb/pool__basic"
+dagster asset materialize -f src/orchestration/definitions.py --select "group:unified_vcb"
 ```
 
 | check | result |
 |---|---|
-| materialised | **RUN_SUCCESS, 611 ms**; re-run green (the asset REPLACES its table) |
+| `pool__basic` materialised | **RUN_SUCCESS, 611 ms**; re-run green (the asset REPLACES its table) |
 | shape | **4,235 rows × 38 columns**, 1 ticker, 2009-06-30 → 2026-06-25 |
 | column name + type + ORDER vs `silver.stocks_basic` | **identical, all 38** |
 | every value vs silver, 35 non-key columns | **0 mismatches** over 4,235 rows |
+| `pool__targets` materialised | **RUN_SUCCESS**, 4,235 rows × 2 columns, PK `date` |
+| `return_5day` vs an independent pandas `close.shift(-5)/close - 1` | **max abs diff 1.5e-16**, null pattern identical |
+| label coverage | 4,230 labelled + a **5-row NULL tail**; range -18.8% → +29.1%, mean +0.32% |
 
 ⚠️ **The schema is created BY THE ASSET.** `PreprocessorResource.session` already issues
 `CREATE SCHEMA` for whatever schema it is handed — the same preamble
@@ -876,7 +880,36 @@ and its `GOLD_NON_TA` / `pool__ta` split now wants rewriting against `gold.stock
 ⚠️ **`pool__basic` is now 4,235 rows where every dropped sibling had 4,242**, because it
 is built from `silver.stocks_basic` (which ends 2026-06-25) rather than from the old
 `gold.stocks` (2026-06-26). Anything rebuilt to join against it has to be built from the
-same source or it will silently lose the difference.
+same source or it will silently lose the difference. **This is why `pool__targets` reads
+`pool__basic` and not `gold.stocks`** — the two share one calendar by construction, and
+the asset asserts it (a symmetric `EXCEPT` in both directions, not just a row count).
+
+#### `pool__targets` — `date` + `return_5day`
+
+`return_5day = close[t+5] / close[t] - 1`, the forward 5-day simple return, computed
+server-side with `LEAD(close_adjust, 5) OVER (ORDER BY date)`. `pool__basic` is one row
+per session, so a ROW offset is a trading-day offset and no calendar arithmetic is
+involved — which is what `close.shift(-5)` meant in the notebook too.
+
+⚠️ **`close_adjust`, not `close_raw`.** A return on the raw close reads every split and
+stock dividend as a real overnight loss (VCB 2009-06-30: raw 60,000, adjusted 9,130).
+That is a corporate action, not a label.
+
+⚠️ **The last 5 rows are NULL and are KEPT.** Their future does not exist yet. Dropping
+them here would break the `date` join against the feature pools that the notebook's
+`<target>__final` views rely on; drop them when fitting instead. The asset asserts the
+tail is **exactly** 5 rows — more would mean NULL or zero closes putting silent holes in
+the labels.
+
+⚠️ **The column name is derived from the horizon** (`UNIFIED_TARGET_HORIZON = 5` →
+`return_5day`), so changing the horizon renames the column rather than silently
+re-defining it.
+
+⚠️ **Only one of the notebook's four targets is built here.** `return_rel_5day`,
+`direction_5day` and `probability_gain_5pct_5day` are not — and `return_rel_5day` cannot
+be, as written: it subtracted the VNINDEX return read from `gold.indices`, which was
+**retired and dropped on 2026-08-01**. Its replacement is
+`gold.stock_market.hose__vnindex__close_adjust`.
 
 ## 2a. Cost of a full materialize (2026-07-31)
 
@@ -1122,7 +1155,7 @@ than either alone.
 
 **Where it actually stands (2026-08-03):** phases 0-4 are built; every landing and bronze
 asset has been materialised green, silver has 8 assets, gold 7, and a fifth `unified`
-layer has 1. What remains is the rest of silver (~7 leaves), the four remaining
+layer has 2. What remains is the rest of silver (~7 leaves), the three remaining
 `pool__*` groups of the unified schema, phase 5, and end-to-end runs of the four heavy
 assets.
 

@@ -6,10 +6,10 @@ silver / gold each hold the whole universe in one table, `unified_schema_vcb` ho
 company cut into the FEATURE GROUPS a model consumes:
 
     pool__basic      the price/flow panel            ← this module
+    pool__targets    the labels                      ← this module
     pool__ta         the technical block
     pool__macro      the macro series
     pool__calendar   calendar features
-    pool__targets    the labels
 
 The point of the split is feature SELECTION: a run can be scoped to one group, which is
 why `train_test_creator/unified_schema_creator.ipynb` (the only builder until now) also
@@ -144,4 +144,97 @@ def unified_vcb_pool_basic(
     )
 
 
-assets: List[Callable] = [unified_vcb_pool_basic]
+@asset(
+    name="pool__targets",
+    key_prefix=["unified_vcb"],
+    group_name="unified_vcb",
+    compute_kind="postgres",
+    deps=[AssetKey(["unified_vcb", "pool__basic"])],
+    description=(
+        f"{UNIFIED_SCHEMA_NAME}.pool__basic → {UNIFIED_SCHEMA_NAME}.pool__targets: two "
+        f"columns, `date` (PK) and `return_5day` — the forward 5-day simple return, "
+        f"close[t+5]/close[t]-1 on the SPLIT-ADJUSTED close. ⚠️ Sourced from "
+        f"pool__basic, not gold.stocks, so the labels and the features share one "
+        f"calendar by construction — the dropped version had 4,242 rows against "
+        f"pool__basic's 4,235 for exactly that reason. ⚠️ The last 5 rows are NULL "
+        f"(their future does not exist yet) and are kept so the table still joins."
+    ),
+)
+def unified_vcb_pool_targets(
+    context: AssetExecutionContext, preprocessor: PreprocessorResource
+) -> MaterializeResult:
+    with preprocessor.session(schema=UNIFIED_SCHEMA_NAME) as prep:
+        prep._ingest_unified_pool_targets(UNIFIED_TICKER)
+        horizon = prep.UNIFIED_TARGET_HORIZON
+        target_col = f"return_{horizon}day"
+
+        with prep._database_driver._cursor_ctx() as cur:
+            cur.execute(
+                f"SELECT COUNT(*), COUNT({target_col}), MIN(date), MAX(date), "
+                f"       MIN({target_col}), MAX({target_col}), AVG({target_col}) "
+                f"FROM {UNIFIED_SCHEMA_NAME}.pool__targets"
+            )
+            rows, labelled, first, last, lo, hi, mean = cur.fetchone()
+            cur.execute(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_schema = %s AND table_name = 'pool__targets' "
+                "ORDER BY ordinal_position",
+                (UNIFIED_SCHEMA_NAME,),
+            )
+            columns = [r[0] for r in cur.fetchall()]
+            cur.execute(
+                f"SELECT COUNT(*) FROM {UNIFIED_SCHEMA_NAME}.pool__basic"
+            )
+            basic_rows = int(cur.fetchone()[0])
+            # ⚠️ The join to the feature pools is the whole reason this table exists,
+            # so it is checked rather than assumed: every target date must be a
+            # pool__basic date and vice versa.
+            cur.execute(
+                f"SELECT COUNT(*) FROM ("
+                f"  SELECT date FROM {UNIFIED_SCHEMA_NAME}.pool__targets"
+                f"  EXCEPT SELECT date FROM {UNIFIED_SCHEMA_NAME}.pool__basic"
+                f"  UNION ALL"
+                f"  SELECT date FROM {UNIFIED_SCHEMA_NAME}.pool__basic"
+                f"  EXCEPT SELECT date FROM {UNIFIED_SCHEMA_NAME}.pool__targets"
+                f") d"
+            )
+            unaligned = int(cur.fetchone()[0])
+
+    if columns != ["date", target_col]:
+        raise ValueError(
+            f"{UNIFIED_SCHEMA_NAME}.pool__targets should hold exactly "
+            f"['date', {target_col!r}], got {columns}."
+        )
+    if unaligned:
+        raise ValueError(
+            f"{UNIFIED_SCHEMA_NAME}.pool__targets and pool__basic disagree on "
+            f"{unaligned} date(s) — they must share one calendar to join on `date`."
+        )
+    if rows != basic_rows:
+        raise ValueError(
+            f"{UNIFIED_SCHEMA_NAME}.pool__targets has {rows} rows against "
+            f"pool__basic's {basic_rows}."
+        )
+
+    context.log.info(
+        f"{UNIFIED_SCHEMA_NAME}.pool__targets: {rows} rows ({first} → {last}), "
+        f"{labelled} labelled + {rows - labelled} unlabelled tail; {target_col} "
+        f"range {float(lo):.4f} → {float(hi):.4f}, mean {float(mean):.5f}"
+    )
+    return MaterializeResult(
+        metadata={
+            "rows": int(rows),
+            "labelled": int(labelled),
+            "unlabelled_tail": int(rows - labelled),
+            "horizon_trading_days": horizon,
+            "target": MetadataValue.text(target_col),
+            "date_range": MetadataValue.text(f"{first} → {last}"),
+            "return_min": MetadataValue.float(round(float(lo), 6)),
+            "return_max": MetadataValue.float(round(float(hi), 6)),
+            "return_mean": MetadataValue.float(round(float(mean), 6)),
+            "table": MetadataValue.text(f"{UNIFIED_SCHEMA_NAME}.pool__targets"),
+        }
+    )
+
+
+assets: List[Callable] = [unified_vcb_pool_basic, unified_vcb_pool_targets]

@@ -1,5 +1,5 @@
 # src\orchestration\definitions.py
-"""The Dagster code location — what `dagster dev` loads. **55 assets.**
+"""The Dagster code location — what `dagster dev` loads. **56 assets.**
 
 Five layers, kept in separate modules on purpose:
 
@@ -18,7 +18,7 @@ Five layers, kept in separate modules on purpose:
                           panels. Every assumption that makes a panel dense — publication
                           lag, as-of carry, staleness cap — lives HERE and never in
                           silver.
-  * `assets/unified.py` — `silver_schema` → `unified_schema_<ticker>` (1): ONE ticker,
+  * `assets/unified.py` — `silver_schema` → `unified_schema_<ticker>` (2): ONE ticker,
                           cut into the feature groups a model selects over. The first
                           layer scoped to a single company rather than the universe.
 

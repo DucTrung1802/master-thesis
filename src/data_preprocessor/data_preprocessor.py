@@ -5001,6 +5001,103 @@ class DataPreprocessor:
             f"{schema}.pool__basic: {written} rows x {len(source_types)} columns."
         )
 
+    # The label horizon, in TRADING DAYS — `pool__basic` is one row per session, so a
+    # row offset IS a trading-day offset and no calendar arithmetic is involved.
+    # ⚠️ The target COLUMN NAME is derived from this (`return_5day`), so the two cannot
+    # drift: changing the horizon renames the column instead of silently re-defining it.
+    UNIFIED_TARGET_HORIZON = 5
+
+    def _ingest_unified_pool_targets(self, ticker: str) -> None:
+        """`unified_schema_<ticker>.pool__basic` → `…​.pool__targets`.
+
+        Two columns: `date` (PK) and **`return_5day` — the forward 5-day simple
+        return**, `close[t+5] / close[t] - 1`, on the SPLIT-ADJUSTED close.
+
+        ⚠️ **The source is `pool__basic`, not `gold.stocks`, and that is what keeps the
+        two tables joinable.** They are joined on `date` by every downstream selection
+        table, so a target built from a different source would silently contribute its
+        own calendar — which is exactly what happened before: the dropped `pool__targets`
+        had 4,242 rows against silver's 4,235 because it came from a `gold.stocks` that
+        ran one session longer.
+
+        ⚠️ **`close_adjust`, not `close_raw`.** A return computed on the raw close reads
+        every split and stock dividend as a real overnight loss — VCB's 2009-06-30 raw
+        close is 60,000 against an adjusted 9,130. That is not a label, it is a corporate
+        action.
+
+        ⚠️ **The last 5 rows are NULL, and that is correct.** Their future does not exist
+        yet. Drop them when fitting; keeping them means the table still joins cleanly
+        against the feature pools, which is what the notebook's `<target>__final` views
+        rely on.
+
+        ⚠️ **No look-ahead is introduced by the LEAD itself** — a forward-looking LABEL is
+        the point of a target table. The look-ahead that matters is a FEATURE that peeks,
+        and nothing here feeds a feature.
+        """
+        schema = self._helper_unified_schema(ticker)
+        horizon = self.UNIFIED_TARGET_HORIZON
+        target_col = f"return_{horizon}day"
+        self._logger.log_info(
+            f"Ingesting unified {schema}.pool__targets (from {schema}.pool__basic)..."
+        )
+
+        source_types = self._helper_column_types(schema, "pool__basic")
+        if not source_types:
+            raise MissingSourceDataError(
+                f"`{schema}.pool__basic` does not exist — build it first "
+                f"(`_ingest_unified_pool_basic`)."
+            )
+        if "close_adjust" not in source_types:
+            raise MissingSourceDataError(
+                f"`{schema}.pool__basic` has no `close_adjust` column, so a return "
+                f"cannot be computed on an adjusted price. Present: "
+                f"{sorted(source_types)[:20]}…"
+            )
+
+        with self._database_driver._cursor_ctx() as cur:
+            cur.execute(f"SELECT COUNT(*) FROM {schema}.pool__basic")
+            available = int(cur.fetchone()[0])
+            if available <= horizon:
+                raise MissingSourceDataError(
+                    f"`{schema}.pool__basic` holds {available} rows, which is not more "
+                    f"than the {horizon}-day horizon — every label would be NULL."
+                )
+
+            # Dropped as late as possible: a failure above leaves the old table intact.
+            cur.execute(f"DROP TABLE IF EXISTS {schema}.pool__targets")
+            cur.execute(
+                f"CREATE TABLE {schema}.pool__targets AS "
+                f"SELECT date, ("
+                f"    LEAD(close_adjust, {horizon}) OVER (ORDER BY date)"
+                f"    / NULLIF(close_adjust, 0) - 1.0"
+                f")::double precision AS {target_col} "
+                f"FROM {schema}.pool__basic"
+            )
+            cur.execute(f"ALTER TABLE {schema}.pool__targets ADD PRIMARY KEY (date)")
+
+            cur.execute(
+                f"SELECT COUNT(*), COUNT({target_col}) FROM {schema}.pool__targets"
+            )
+            written, labelled = (int(x) for x in cur.fetchone())
+
+        if written != available:
+            raise PipelineError(
+                f"{schema}.pool__targets wrote {written} rows but pool__basic holds "
+                f"{available} — the two must share one calendar."
+            )
+        # Exactly the last `horizon` rows may be unlabelled. More than that means the
+        # source has NULL or zero closes, which would put silent holes in the labels.
+        if written - labelled != horizon:
+            raise PipelineError(
+                f"{schema}.pool__targets has {written - labelled} NULL {target_col} "
+                f"values; exactly {horizon} (the tail with no future) were expected. "
+                f"Check `pool__basic.close_adjust` for NULLs or zeros."
+            )
+        self._logger.log_info(
+            f"{schema}.pool__targets: {written} rows, {labelled} labelled, "
+            f"{horizon} unlabelled tail."
+        )
+
     # endregion Helper functions
 
     def _run_layer(
