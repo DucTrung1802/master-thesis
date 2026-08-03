@@ -47,9 +47,14 @@ UNIVERSE_LOOKBACK_WEEKS = 12
 
 #: Feature blocks. The ablation IS the finding (same shape as `price_predictor.evaluate`).
 NEWS_FEATURES = [
-    "if_news", "n_docs", "n_days", "n_editorial", "n_disclosure", "n_docs_named",
-    "n_earnings", "n_insider_txn", "n_dividend", "n_personnel", "n_capital",
-    "n_uncategorized", "if_earnings_week", "relevance_max",
+    "if_news", "if_editorial", "n_docs", "n_days", "n_editorial", "n_disclosure",
+    "n_docs_named", "n_earnings", "n_insider_txn", "n_dividend", "n_personnel",
+    "n_capital", "n_uncategorized", "if_earnings_week", "relevance_max",
+]
+#: Editorials only — the 78k real articles, without the 327k filing stubs diluting them.
+#: If tone is ever going to help, it rides on THIS block, so it gets its own arm.
+EDITORIAL_FEATURES = [
+    "if_editorial", "n_editorial", "n_docs_named", "relevance_max", "if_earnings_week",
 ]
 CONTROL_FEATURES = [
     "ret_w", "mom_1w", "mom_4w", "mom_12w", "mom_26w", "log_value_w", "sessions",
@@ -281,6 +286,28 @@ def _backtest(picks: pd.DataFrame, horizon: int, cost: float) -> Dict[str, float
     return out
 
 
+def paired_delta(candidate: Result, baseline: Result) -> Dict[str, float]:
+    """Per-fold `candidate − baseline` MCC. **This is the decision statistic.**
+
+    Comparing two averages cannot separate "news adds nothing" from "news adds a little,
+    drowned in fold noise". Pairing does: the same fold, the same rows, the same labels,
+    one feature block added. Reports the mean delta, its spread across folds, and how
+    many folds it won — with 6 folds, 3-3 is exactly what a null looks like.
+    """
+    n = min(len(candidate.folds), len(baseline.folds))
+    if n == 0:
+        return {}
+    d = np.array([candidate.folds[i].mcc - baseline.folds[i].mcc for i in range(n)])
+    return {
+        "mean": float(d.mean()),
+        "std": float(d.std(ddof=1)) if n > 1 else 0.0,
+        "wins": int((d > 0).sum()),
+        "folds": n,
+        # mean / standard error — |t| under ~2 is indistinguishable from zero at this n
+        "t": float(d.mean() / (d.std(ddof=1) / np.sqrt(n))) if n > 1 and d.std(ddof=1) > 0 else 0.0,
+    }
+
+
 def format_report(results: List[Result], cost: float = ROUND_TRIP_COST) -> str:
     """One table per horizon. ⚠️ Every accuracy sits next to its majority-class rate —
     without that column the number is meaningless (papers 47, 49, 50, 53)."""
@@ -311,4 +338,20 @@ def format_report(results: List[Result], cost: float = ROUND_TRIP_COST) -> str:
         for r in by_h[horizon]:
             per_fold = "  ".join(f"{f.mcc:+.3f}" for f in r.folds)
             lines.append(f"    {r.name:<22}{per_fold}")
+
+        base = next((r for r in by_h[horizon] if r.name == "controls"), None)
+        if base is not None:
+            lines.append("\n  ⭐ PAIRED vs 'controls' — same folds, same rows, news block added:")
+            lines.append(f"    {'candidate':<22}{'ΔMCC':>10}{'sd':>9}{'t':>8}{'folds won':>12}")
+            for r in by_h[horizon]:
+                if r is base:
+                    continue
+                d = paired_delta(r, base)
+                if not d:
+                    continue
+                won = f"{d['wins']}/{d['folds']}"
+                lines.append(
+                    f"    {r.name:<22}{d['mean']:>+10.4f}{d['std']:>9.4f}"
+                    f"{d['t']:>8.2f}{won:>12}"
+                )
     return "\n".join(lines)

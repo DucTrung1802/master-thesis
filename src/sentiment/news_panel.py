@@ -53,8 +53,24 @@ CATEGORY_COLUMNS = {
 #: news effect from a momentum effect.
 MOMENTUM_WEEKS = (1, 4, 12, 26)
 
+#: ⚠️ The panel starts here, and it is a DATA-QUALITY cut, not a preference.
+#:
+#: `bronze.cafef_news` has a **six-month hole at ~98% dropout**, 2012-06 → 2012-11:
+#: 37 / 35 / 24 / 23 / 24 / 20 rows a month against 600-1,600 either side, across 458 of
+#: the 464 tickers that had news in 2011. A hole in the news feed reads as `if_news = 0`,
+#: which is exactly the feature this panel exists to measure — so those months would not
+#: look like missing data, they would look like *evidence that nothing was published*.
+#:
+#: The pre-hole years are thin as well (441-464 tickers with any news against 700+ from
+#: 2017), so the cut is placed after it rather than around it.
+#:
+#: ⚠️ Applied AFTER the momentum columns are computed, so the first weeks of 2013 carry a
+#: full 26-week lookback instead of NaN. Filtering the input instead would hand the
+#: baseline model a half-year of missing controls and quietly understate it.
+PANEL_START = "2013-01-01"
+
 NEWS_FEATURES = [
-    "if_news", "n_docs", "n_days", "n_editorial", "n_disclosure",
+    "if_news", "if_editorial", "n_docs", "n_days", "n_editorial", "n_disclosure",
     "n_docs_named", "relevance_max",
     "n_earnings", "n_insider_txn", "n_dividend", "n_personnel", "n_capital",
     "n_uncategorized", "if_earnings_week",
@@ -102,7 +118,9 @@ def aggregate_news_weekly(news: pd.DataFrame) -> pd.DataFrame:
 
 
 def build_news_weekly_panel(
-    price_weekly: pd.DataFrame, news_weekly: pd.DataFrame
+    price_weekly: pd.DataFrame,
+    news_weekly: pd.DataFrame,
+    start: str | None = PANEL_START,
 ) -> pd.DataFrame:
     """Price spine LEFT JOIN news counts, + momentum controls.
 
@@ -131,6 +149,7 @@ def build_news_weekly_panel(
 
     # ⚠️ if_news = 0 is a FEATURE (paper 57's publication effect), not missing data.
     panel["if_news"] = (panel["n_docs"] > 0).astype(int)
+    panel["if_editorial"] = (panel["n_editorial"] > 0).astype(int)
     panel["if_earnings_week"] = (panel["n_earnings"] > 0).astype(int)
 
     # ── controls, all computed from CLOSED weeks only ────────────────────────────────
@@ -140,6 +159,10 @@ def build_news_weekly_panel(
     for weeks in MOMENTUM_WEEKS:
         panel[f"mom_{weeks}w"] = grp.pct_change(weeks)
     panel["log_value_w"] = np.log1p(panel["value_w"].clip(lower=0))
+
+    # ⚠️ The cut goes here, AFTER momentum — see PANEL_START.
+    if start is not None:
+        panel = panel[panel["week_start"] >= pd.Timestamp(start)]
 
     return panel.reset_index(drop=True)
 

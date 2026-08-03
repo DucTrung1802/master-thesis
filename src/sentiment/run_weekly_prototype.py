@@ -36,6 +36,7 @@ from dtos.tabular_database_driver_dtos.postgre_sql_connection_dto import (
 from logger.logger import LogType, Logger
 from sentiment.weekly_xsec import (
     CONTROL_FEATURES,
+    EDITORIAL_FEATURES,
     NEWS_FEATURES,
     ROUND_TRIP_COST,
     build_labels,
@@ -67,21 +68,37 @@ def main() -> None:
     ap.add_argument("--horizons", default="1,2,4,8,13", help="forward horizons in WEEKS")
     ap.add_argument("--cost", type=float, default=ROUND_TRIP_COST)
     ap.add_argument("--folds", type=int, default=6)
-    ap.add_argument("--start", default="2013-01-01", help="⚠️ 2012-06→11 is a scrape hole")
+    ap.add_argument(
+        "--top-tickers",
+        type=int,
+        default=0,
+        help="restrict to the N best-covered tickers by editorial count (0 = all). "
+        "⚠️ The decisive test: if tone cannot help where coverage is HIGHEST, it "
+        "cannot help anywhere.",
+    )
     args = ap.parse_args()
 
     logger = Logger(file_name=LOG_FILE_BASE, level=LogType.INFO)
     driver = _connect(logger)
     panel = driver.select(schema_name=GOLD_SCHEMA, table_name="news_weekly_panel")
-    print(f"gold.news_weekly_panel: {len(panel):,} ticker-weeks, {panel['ticker'].nunique()} tickers")
-
     panel["week_start"] = pd.to_datetime(panel["week_start"])
-    before = len(panel)
-    panel = panel[panel["week_start"] >= args.start]
     print(
-        f"start filter {args.start}: {before:,} → {len(panel):,} "
-        f"(2012-06→2012-11 is a ~98% scrape dropout — see todo.md item 1)"
+        f"gold.news_weekly_panel: {len(panel):,} ticker-weeks, "
+        f"{panel['ticker'].nunique()} tickers, "
+        f"{panel['week_start'].min():%Y-%m-%d} → {panel['week_start'].max():%Y-%m-%d}"
     )
+    print("  (the 2012-06→11 scrape hole is cut in the PANEL now — see news_panel.PANEL_START)")
+
+    if args.top_tickers:
+        rank = (
+            panel.groupby("ticker")["n_editorial"].sum().sort_values(ascending=False)
+        )
+        keep = rank.head(args.top_tickers).index
+        panel = panel[panel["ticker"].isin(keep)]
+        print(
+            f"  top-{args.top_tickers} by editorial count → {len(panel):,} ticker-weeks: "
+            f"{', '.join(list(keep)[:12])}…"
+        )
 
     results = []
     for horizon in [int(h) for h in args.horizons.split(",")]:
@@ -92,13 +109,15 @@ def main() -> None:
             f"\nh={horizon:>2}w  labelled rows {len(uni):>7,}  "
             f"weeks {uni['widx'].nunique():>4}  "
             f"news coverage {uni['if_news'].mean():.1%}  "
-            f"editorial {(uni['n_editorial'] > 0).mean():.1%}  "
+            f"editorial {uni['if_editorial'].mean():.1%}  "
             f"weeks whose q75 clears cost: {tradeable.mean():.1%}"
         )
         for name, feats in [
             ("controls", CONTROL_FEATURES),
-            ("news", NEWS_FEATURES),
+            ("news (all)", NEWS_FEATURES),
+            ("news (editorial)", EDITORIAL_FEATURES),
             ("controls + news", CONTROL_FEATURES + NEWS_FEATURES),
+            ("controls + editorial", CONTROL_FEATURES + EDITORIAL_FEATURES),
         ]:
             results.append(
                 evaluate(labelled, feats, name, horizon, n_folds=args.folds, cost=args.cost)
@@ -106,10 +125,12 @@ def main() -> None:
 
     print(format_report(results, cost=args.cost))
     print(
-        "\nVERDICT — read the A/B, not the level: 'controls + news' vs 'controls'.\n"
-        "  If the gap sits inside the per-fold spread, the publication effect is not\n"
-        "  measurable here and steps 7-13 (annotation, fine-tune, LIME) buy nothing.\n"
-        "  Compare against paper 51's MCC 0.069, the folder's best honest result."
+        "\nVERDICT — read the PAIRED table, not the levels.\n"
+        "  ΔMCC is 'controls + news' minus 'controls' on the SAME folds. If |t| < 2 and\n"
+        "  the fold count is near half, the news block adds nothing measurable, and\n"
+        "  steps 7-13 (annotation, fine-tune, LIME) buy nothing on this data.\n"
+        "  Reference points: paper 51 MCC 0.069 (8.5M articles, done properly);\n"
+        "  paper 63 50.4% out-of-sample on a balanced binary task with tick-level labels."
     )
 
 

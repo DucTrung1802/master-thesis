@@ -67,46 +67,78 @@ tư vào scorer không.
 
 ---
 
-## ✅ KẾT QUẢ MỤC 1–6 (chạy 2026-08-03)
+## ✅ KẾT QUẢ MỤC 1–6 (chạy 2026-08-03, cutoff 2013-01-01 đưa vào panel)
 
-### 🔴 Kết luận: `if_news` KHÔNG có tác dụng. Tiêu chí dừng của mục 6 đã kích hoạt một nửa.
+### 🔴 KẾT LUẬN: **DỪNG mục 7–13.** Khối news không thêm gì, ở mọi chân trời, kể cả nơi độ phủ cao nhất.
 
-`gold.news_weekly_panel`, VN-top100 theo thanh khoản trailing, walk-forward 6 fold có purge
-+ embargo, chi phí khứ hồi 0,5%, nhãn phân vị 25/50/25:
+Cutoff 2013-01-01 giờ nằm trong `news_panel.PANEL_START` (áp **sau** khi tính momentum, để
+đầu 2013 vẫn có đủ lookback 26 tuần). Panel: **429.052 ticker-tuần × 28 cột**.
 
-| horizon | features | MCC | macro-F1 | CAGR | bench | Sharpe |
-|---|---|---:|---:|---:|---:|---:|
-| **4 tuần** | controls | **+0,053** | 0,276 | **14,63%** | 10,57% | **0,64** |
-| | **news** | **+0,001** | 0,224 | 3,21% | 10,57% | 0,25 |
-| | controls + news | +0,051 | 0,276 | 12,19% | 10,57% | 0,57 |
-| **13 tuần** | controls | **+0,053** | 0,274 | **17,62%** | 12,27% | **0,84** |
-| | **news** | **−0,000** | 0,224 | 10,15% | 12,27% | 0,50 |
-| | controls + news | +0,056 | 0,276 | 17,08% | 12,27% | 0,81 |
+### ⭐ Phép kiểm định quyết định — ghép cặp theo fold
 
-**Ba điều đọc được, theo thứ tự quan trọng:**
+So sánh hai trung bình không tách được *"news vô dụng"* khỏi *"news có chút ít, chìm trong
+nhiễu fold"*. Ghép cặp thì tách được: **cùng fold, cùng dòng, cùng nhãn, chỉ thêm khối news.**
 
-1. **`news` một mình = MCC 0,000–0,008 ở MỌI chân trời.** Per-fold: `+0.015 −0.007 −0.007
-   −0.001 +0.000 +0.004` — dao động quanh 0, vài fold âm. **Publication effect của paper 57
-   không đo được trên VN.**
-2. **Thêm news vào controls làm KÉM ĐI**, ở h=1, 4, 8: CAGR 14,63% → **12,19%** (h=4),
-   16,40% → **14,93%** (h=8). Chênh lệch MCC nằm trọn trong biên độ giữa các fold.
-3. **Tín hiệu duy nhất là momentum/thanh khoản** — `controls` cho MCC **+0,052…+0,061**,
-   **dương ở cả 6 fold, ở cả 5 chân trời**, và đánh bại benchmark ở h=4/8/13.
+**Top-30 mã đưa tin nhiều nhất** — nơi độ phủ editorial cao nhất, tức phép thử dễ nhất cho news:
 
-⚠️ **Đây là §6a của `src/sentiment/CONTEXT.md` tái lập ở 777 mã thay vì 3.** Kết luận cũ
-(*"adding sentiment makes the model WORSE… the only faint signal is price/TA"*) **giữ nguyên
+| horizon | candidate | ΔMCC | t | fold thắng |
+|---|---|---:|---:|---:|
+| **1 tuần** | controls + news | −0,0023 | **−0,42** | 2/6 |
+| | controls + editorial | +0,0037 | **+1,00** | 4/6 |
+| **4 tuần** | controls + news | −0,0010 | **−0,22** | 4/6 |
+| | controls + editorial | +0,0017 | **+0,37** | 3/6 |
+| **13 tuần** | controls + news | +0,0047 | **+1,52** | 4/6 |
+| | controls + editorial | −0,0028 | **−0,74** | 3/6 |
+
+**Mọi |t| < 2. Số fold thắng quanh một nửa (2–4/6). Dấu đổi chiều giữa các chân trời và giữa
+hai khối news.** Đây là hình dạng chuẩn của một kết quả null.
+
+Và phía danh mục thì dứt khoát hơn nữa — thêm news **luôn làm mất tiền**:
+
+| top-30, h=4 | CAGR | Sharpe | | top-30, h=13 | CAGR | Sharpe |
+|---|---:|---:|---|---|---:|---:|
+| **controls** | **30,39%** | **1,10** | | **controls** | **28,63%** | **1,06** |
+| controls + editorial | 28,05% | 1,04 | | controls + editorial | 23,78% | 0,94 |
+| controls + news | 22,31% | 0,86 | | controls + news | 22,75% | 0,87 |
+| *benchmark* | *18,07%* | | | *benchmark* | *19,34%* | |
+
+**Thêm news trả giá 2–8 pp CAGR để đổi lấy ΔMCC ±0,003.** Chính là "metric contradiction"
+mà CONTEXT.md ghi nhận ở paper 44 (F1 +18% / Sharpe giảm), 43 (accuracy tăng / F1 giảm) và
+46 (MAE tốt / MSE tệ) — lần này ngay cả chỉ số phân loại cũng gần như không nhúc nhích.
+
+⚠️ **Về t = +2,16 ở lần chạy universe đầy đủ, h=13.** Nó không sống sót: cùng phép so sánh
+trên top-30 chỉ còn **t = 1,52**, và ở h=1/h=4 thì **âm**. Với 5 feature set × 5 chân trời ×
+2 universe, một t = 2,16 lẻ loi là đúng cái bẫy multiple-comparison mà paper 62 mắc (20 test,
+không hiệu chỉnh). CAGR đi ngược chiều ở **mọi** trường hợp.
+
+### 🟢 Kết quả DƯƠNG duy nhất tìm được — và nó không cần NLP
+
+`controls` (momentum 1/4/12/26 tuần + thanh khoản + số phiên):
+
+| | MCC | dương ở | CAGR (top-30, h=4) | Sharpe |
+|---|---:|---|---:|---:|
+| universe đầy đủ | +0,052…+0,061 | **30/30 fold** | 14,63% (bench 10,57%) | 0,64 |
+| **top-30** | +0,033…+0,041 | 17/18 fold | **30,39% (bench 18,07%)** | **1,10** |
+
+Tín hiệu **mạnh hơn trên nhóm thanh khoản cao**, và MCC +0,053 nằm đúng khoảng paper 51 đạt
+được (**0,069**) sau khi xử lý 8,5 triệu bài báo — nhưng ở đây nó đến **miễn phí**, không cần
+corpus, không cần gán nhãn, không cần fine-tune.
+
+⚠️ **Đây là §6a của `src/sentiment/CONTEXT.md` tái lập ở 777 mã thay vì 3.** Kết luận cũ —
+*"adding sentiment makes the model WORSE… the only faint signal is price/TA"* — **giữ nguyên
 sau khi tăng độ rộng 259 lần.** Đòn bẩy mà chính module đó gọi là *"the biggest lever"* đã
 được kéo, và nó không đổi kết quả.
 
-**Nhưng tiêu chí dừng chỉ đúng MỘT nửa** — nó có hai vế:
+### Hai điều còn phải nói cho trung thực
 
-| vế | thực tế |
-|---|---|
-| *"`if_news` không làm gì"* | ✅ **đúng** |
-| *"panel quá thưa"* | ❌ **SAI** — trên universe top-100 thanh khoản, **64,2% ticker-tuần có tin**, **32,5% có editorial** |
-
-Panel **không** thưa ở nơi giao dịch được. Vậy nên đây **chưa phải** bằng chứng rằng *sắc thái*
-vô dụng — mục 6 chỉ đo **số lượng tin**, không đo **nội dung**. Xem "Quyết định cần lấy" dưới.
+1. **Mục 6 đo SỐ LƯỢNG và LOẠI tin, không đo SẮC THÁI.** Về mặt logic, tone vẫn chưa bị bác
+   bỏ trực tiếp.
+2. **Nhưng lý do để tin vào tone vừa sụp.** Publication effect của paper 57 là phần *rẻ nhất*
+   và *thô nhất* của tín hiệu — nếu ngay cả "có tin hay không" cũng không đo được, thì
+   "tin nói gì" phải mạnh hơn hẳn mới cứu được, trong khi ba nguồn độc lập đều nói ngược:
+   §6a nội bộ (tone làm mô hình tệ đi), paper 51 (MCC 0,069 với 8,5 triệu bài, quy về một
+   tháng năm 2011), paper 63 (50,4% out-of-sample trên dữ liệu Reuters + tick).
+   Và **độ phủ không còn là lý do bào chữa**: trên top-30 độ phủ cao mà kết quả vẫn null.
 
 ### Chi tiết từng mục
 
@@ -118,7 +150,11 @@ vô dụng — mục 6 chỉ đo **số lượng tin**, không đo **nội dung*
 | dòng | 293 | **37** | **35** | **24** | **23** | **24** | **20** | 309 | 1.600 |
 
 Ảnh hưởng 458 mã (2011: 464) → là **hố theo thời gian**, không phải thiếu một nhóm mã.
-→ **Sàn dữ liệu đặt ở 2013-01-01** (`--start` mặc định của runner).
+→ **Sàn dữ liệu 2013-01-01, đặt trong `news_panel.PANEL_START`** — trong PANEL chứ không
+phải cờ của runner, và **áp sau khi tính momentum** để đầu 2013 vẫn có đủ lookback 26 tuần
+(lọc đầu vào thì sẽ đưa cho mô hình baseline nửa năm control rỗng và làm nó yếu đi một cách
+âm thầm). Cắt bỏ **39.916 dòng / 12.756 editorial / 488 mã**; giữ **365.404 / 65.261 / 777**.
+Bronze giữ nguyên đủ — cắt là quyết định modelling nên nó thuộc gold.
 
 **✅ 2. Bronze khớp đĩa CHÍNH XÁC.** `type` 326.722 / 78.017 / 581 ✓ · cả 6 `category` ✓ ·
 date-only 89.639 disclosure + 59 editorial = **89.698** ✓ · 405.320 = 405.322 − 2 (null-key).
@@ -144,9 +180,11 @@ Bỏ 9.850: `error` 581 · rỗng 1 · **không có phiên / gap quá xa 7.322**
 >
 > **Bài học ghi vào quy tắc đầu file:** row count + max/min vào metadata, và *đọc chúng*.
 
-**✅ 5. `gold.news_weekly_panel` — 497.207 ticker-tuần × 27 cột**, 781 mã, 1,1 phút.
-Toàn panel: **39,0%** ticker-tuần có tin, **10,5%** có editorial.
+**✅ 5. `gold.news_weekly_panel` — 429.052 ticker-tuần × 28 cột** (2013+), 1,1 phút.
+Toàn panel: **40,7%** ticker-tuần có tin, **10,0%** có editorial.
 **Materialise HAI LẦN liên tiếp đều xanh, số liệu giống hệt** → drop-self đạt.
+Trước khi cắt: 497.207 × 27 cột từ 2009. Cột thứ 28 là `if_editorial`, thêm để tách 78k bài
+báo thật khỏi 327k stub công bố thông tin — khối editorial được chạy như một arm riêng.
 
 **✅ 6. `src/sentiment/weekly_xsec.py` + `run_weekly_prototype.py`** — bảng kết quả ở trên.
 Thêm hai số phụ đáng ghi:
@@ -155,19 +193,36 @@ Thêm hai số phụ đáng ghi:
 - Max drawdown **−46%…−83%** trên mọi cấu hình. Đây là long-only top-quartile tái cân bằng
   theo tuần, **không có kiểm soát rủi ro** — nó là phép thử tín hiệu, không phải chiến lược.
 
-### ⛔ Quyết định cần lấy trước khi sang mục 7
+### ⛔ QUYẾT ĐỊNH: dừng mục 7–13, chuyển sang hướng controls
 
-Mục 6 bác bỏ **số lượng tin**, không bác bỏ **sắc thái**. Ba lựa chọn:
+Lần chạy trước đã khuyến nghị *"làm tiếp trên top-30 rồi quyết"* vì độ phủ chưa bị loại trừ.
+**Phép thử đó vừa chạy xong và nó không cứu được news.** Trên chính 30 mã được đưa tin nhiều
+nhất, mọi |t| < 2, số fold thắng quanh một nửa, dấu đổi chiều, và CAGR mất 2–8 pp.
 
-| | việc | lập luận |
-|---|---|---|
-| **A** | **Dừng Phần A**, viết negative result | Tiết kiệm mục 7–13. Bằng chứng: MCC ≈ 0 ở 5 chân trời × 6 fold, cộng §6a cũ, cộng paper 51 (MCC 0,069 với 8,5 triệu bài) và paper 63 (50,4% out-of-sample). |
-| **B** | **Làm tiếp mục 7–13** | Panel **không** thưa (64,2% coverage). Chưa ai đo sắc thái tiếng Việt hiệu chỉnh tài chính trên VN. Chi phí: ~1–2 ngày gán nhãn + fine-tune. |
-| **C** | **Đổi hướng sang controls** | Tín hiệu thật duy nhất tìm được là momentum/thanh khoản: MCC +0,053, dương ở **30/30 fold**, CAGR 17,62% vs 12,27% ở h=13. Đây là kết quả **dương** đầu tiên, và nó không cần NLP. |
+| | trạng thái |
+|---|---|
+| ~~A. Dừng Phần A, viết negative result~~ | ✅ **CHỌN** |
+| ~~B. Làm tiếp 7–13~~ | ❌ loại — lý do duy nhất để làm (độ phủ) đã bị kiểm tra và bác bỏ |
+| ~~C. Đổi hướng sang controls~~ | ✅ **CHỌN, chạy song song** |
 
-**Khuyến nghị: B trên một tập con, rồi quyết.** Chạy mục 7–11 **chỉ với 30 mã đưa tin nhiều
-nhất** (VIC/HPG/MWG/HAG/FPT/VNM/NVL/VCB/STB/MSN…), nơi coverage editorial cao nhất. Nếu sắc
-thái không thêm gì ở đó thì nó sẽ không thêm gì ở bất kỳ đâu, và câu trả lời tốn ~1/3 công.
+**Việc tiếp theo, thay cho mục 7–13:**
+
+1. **Viết chương negative result.** Nó đã đủ mạnh để bảo vệ: giao thức đúng chuẩn paper 51
+   (naive benchmark, MCC + Brier, purge + embargo, chi phí giao dịch, max drawdown, per-fold),
+   nhãn phân vị có tỷ lệ nền biết trước (paper 53), ngưỡng vượt chi phí (paper 56 — **99,0%**
+   số tuần đạt), và **phép kiểm định ghép cặp** mà không paper nào trong 23 paper chạy.
+   Trên một corpus 78k bài tiếng Việt chưa ai dùng, ở một thị trường cận biên mà paper 58 lập
+   luận là cần kiểm định lại. **Đây là chương "News does not predict VN cross-sectional
+   returns", không phải một thất bại.**
+2. **Theo đuổi khối `controls`.** MCC +0,053 dương ở 30/30 fold, CAGR 30,39% vs bench 18,07%
+   trên top-30 h=4, Sharpe 1,10. Nối vào `src/model/cross_sectional/` và experiment_1.8
+   (cross-sectional volatility rank đã nằm trong nhóm feature hữu ích).
+3. **Giữ `gold.news_weekly_panel`.** Nó rẻ, đã có asset, và là bằng chứng cho kết luận. Chạy
+   lại miễn phí nếu sau này muốn thử tone.
+
+**Nếu vẫn muốn chạm vào tone** (không khuyến nghị, nhưng nếu hội đồng yêu cầu): làm **chỉ
+mục 7–11 trên top-30**, coi như một phụ lục, và ước lượng trước rằng nó sẽ trả về null —
+vì `if_news` đã null ở chính tập đó.
 
 ---
 

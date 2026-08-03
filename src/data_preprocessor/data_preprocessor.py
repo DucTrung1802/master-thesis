@@ -4598,10 +4598,17 @@ class DataPreprocessor:
                 f"{GOLD_SCHEMA}.{out_table}: {duplicates} duplicate "
                 f"(exchange, ticker, week_start) rows - the news merge fanned out."
             )
-        if len(result) != len(price_weekly):
+        # The join must preserve the spine exactly — bar the PANEL_START cut, which is
+        # the one place rows are deliberately removed (a six-month news hole in 2012).
+        from sentiment.news_panel import PANEL_START
+
+        spine_in_range = int(
+            (pd.to_datetime(price_weekly["week_start"]) >= pd.Timestamp(PANEL_START)).sum()
+        )
+        if len(result) != spine_in_range:
             raise PipelineError(
                 f"{GOLD_SCHEMA}.{out_table}: {len(result)} rows against a price spine of "
-                f"{len(price_weekly)} - the join must preserve the spine exactly."
+                f"{spine_in_range} from {PANEL_START} - the join must preserve the spine."
             )
 
         self._logger.log_info(
@@ -4627,7 +4634,7 @@ class DataPreprocessor:
                 "sessions", "n_docs", "n_days", "n_editorial", "n_disclosure",
                 "n_docs_named", "n_earnings", "n_insider_txn", "n_dividend",
                 "n_personnel", "n_capital", "n_uncategorized",
-                "if_news", "if_earnings_week",
+                "if_news", "if_editorial", "if_earnings_week",
             ],
         )
 
