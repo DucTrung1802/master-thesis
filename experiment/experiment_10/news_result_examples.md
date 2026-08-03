@@ -14,7 +14,7 @@ Những ngày cuối quý 1 đầu quý 2, lúc các doanh nghiệp đang gấp 
 
 | exc 1p | exc 5p | exc 10p | thực tế | dự đoán | tin cậy |
 |---|---|---|---|---|---|
-| +14.38% | **+98.86%** | +299.35% | 4 rất tích cực | 2 trung tính | 0.22 |
+| +14.38% | **+98.86%** | +299.35% | 2 tích cực | 2 tích cực | 0.39 |
 
 <https://cafef.vn/nha-dau-tu-chu-y-hang-loat-doanh-nghiep-dang-chot-quyen-nhan-co-tuc-ty-le-khung-2019042209473207.chn>
 
@@ -25,7 +25,7 @@ CTCP Đường Quảng Ngãi (QNS): Ngày 19/4 – ngày ĐKCC nhận cổ tức
 
 | exc 1p | exc 5p | exc 10p | thực tế | dự đoán | tin cậy |
 |---|---|---|---|---|---|
-| +11.27% | **+94.30%** | +233.46% | 4 rất tích cực | 3 tích cực | 0.29 |
+| +11.27% | **+94.30%** | +233.46% | 2 tích cực | 1 trung tính | 0.36 |
 
 <https://cafef.vn/lich-chot-quyen-nhan-co-tuc-bang-tien-cua-10-doanh-nghiep-20190408091101929.chn>
 
@@ -36,7 +36,7 @@ Tổng Công ty Hàng hải Việt Nam - CTCP (UpCOM: MVN) đã công bố BCTC 
 
 | exc 1p | exc 5p | exc 10p | thực tế | dự đoán | tin cậy |
 |---|---|---|---|---|---|
-| +14.62% | **+92.94%** | +143.52% | 4 rất tích cực | 2 trung tính | 0.23 |
+| +14.62% | **+92.94%** | +143.52% | 2 tích cực | 0 tiêu cực | 0.35 |
 
 <https://cafef.vn/kinh-doanh-van-tai-co-hieu-qua-vinalines-mvn-bao-lai-quy-22021-dat-375-ty-dong-cao-gap-6-lan-cung-ky-nam-truoc-20210730102208424.chn>
 
@@ -47,7 +47,7 @@ CTCP Dịch vụ Công nghệ Tin học HPT (mã chứng khoán HPT) vừa tổ 
 
 | exc 1p | exc 5p | exc 10p | thực tế | dự đoán | tin cậy |
 |---|---|---|---|---|---|
-| +11.33% | **+90.35%** | +29.57% | 4 rất tích cực | 4 rất tích cực | 0.22 |
+| +11.33% | **+90.35%** | +29.57% | 2 tích cực | 0 tiêu cực | 0.35 |
 
 <https://cafef.vn/co-phieu-cong-nghe-tai-tphcm-tang-650-dang-co-gia-22500-dong-pho-chu-tich-noi-gia-hop-ly-len-den-90000-dongcp-188250727225421797.chn>
 
@@ -58,7 +58,7 @@ CTCP Dịch vụ Công nghệ Tin học HPT (mã chứng khoán HPT) vừa tổ 
 
 | exc 1p | exc 5p | exc 10p | thực tế | dự đoán | tin cậy |
 |---|---|---|---|---|---|
-| +11.77% | **+80.70%** | +119.74% | 4 rất tích cực | 0 rất tiêu cực | 0.25 |
+| +11.77% | **+80.70%** | +119.74% | 2 tích cực | 0 tiêu cực | 0.37 |
 
 <https://cafef.vn/ssn-roi-tu-14000-xuong-2000-dong-mot-ca-nhan-vua-tranh-thu-mua-them-hon-4-trieu-co-phieu-20190705175910406.chn>
 
@@ -69,7 +69,7 @@ Thị trường chứng khoán những ngày qua không có những biến độ
 
 | exc 1p | exc 5p | exc 10p | thực tế | dự đoán | tin cậy |
 |---|---|---|---|---|---|
-| +15.25% | **+73.23%** | +241.33% | 4 rất tích cực | 0 rất tiêu cực | 0.26 |
+| +15.25% | **+73.23%** | +241.33% | 2 tích cực | 2 tích cực | 0.35 |
 
 <https://cafef.vn/nhieu-co-phieu-bat-ngo-song-lai-giup-nha-dau-tu-nhan-ba-nhan-nam-tai-khoan-20190410153533842.chn>
 
@@ -84,7 +84,7 @@ Tuần mới từ 17/5 đến 21/5/2021 có 46 doanh nghiệp chốt danh sách 
 
 | exc 1p | exc 5p | exc 10p | thực tế | dự đoán | tin cậy |
 |---|---|---|---|---|---|
-| +0.01% | **-46.81%** | -47.37% | 0 rất tiêu cực | 2 trung tính | 0.21 |
+| +0.01% | **-46.81%** | -47.37% | 0 tiêu cực | 2 tích cực | 0.36 |
 
 <https://cafef.vn/diem-danh-nhung-doanh-nghiep-chot-quyen-nhan-co-tuc-bang-tien-bang-co-phieu-va-co-phieu-thuong-tuan-tu-175215-20210516083631748.chn>
 
@@ -95,7 +95,7 @@ Từ chiều ngày 20/3, ứng dụng tiền mã hóa ONUS không thể đăng n
 
 | exc 1p | exc 5p | exc 10p | thực tế | dự đoán | tin cậy |
 |---|---|---|---|---|---|
-| -15.35% | **-46.75%** | -55.06% | 0 rất tiêu cực | 0 rất tiêu cực | 0.27 |
+| -15.35% | **-46.75%** | -55.06% | 0 tiêu cực | 0 tiêu cực | 0.37 |
 
 <https://cafef.vn/cong-ty-co-quan-he-mat-thiet-voi-onus-va-hanagold-von-mong-loi-nhuan-ca-nam-chi-vai-ty-nhung-om-tham-vong-lam-san-tai-san-so-188260322000115613.chn>
 
@@ -106,7 +106,7 @@ Tổng công ty Viglacera – CTCP (VGC): Ngày 25/5 – ngày ĐKCC nhận cổ
 
 | exc 1p | exc 5p | exc 10p | thực tế | dự đoán | tin cậy |
 |---|---|---|---|---|---|
-| +0.39% | **-45.68%** | -46.87% | 0 rất tiêu cực | 2 trung tính | 0.34 |
+| +0.39% | **-45.68%** | -46.87% | 0 tiêu cực | 2 tích cực | 0.37 |
 
 <https://cafef.vn/lich-chot-quyen-nhan-co-tuc-bang-tien-cua-8-doanh-nghiep-20210514082156721.chn>
 
@@ -117,7 +117,7 @@ Tuần mới từ 6/7 đến 10/7/2020 có 31 doanh nghiệp chốt danh sách c
 
 | exc 1p | exc 5p | exc 10p | thực tế | dự đoán | tin cậy |
 |---|---|---|---|---|---|
-| -0.41% | **-42.20%** | -42.53% | 0 rất tiêu cực | 2 trung tính | 0.23 |
+| -0.41% | **-42.20%** | -42.53% | 0 tiêu cực | 2 tích cực | 0.42 |
 
 <https://cafef.vn/diem-danh-nhung-doanh-nghiep-chot-quyen-nhan-co-tuc-bang-tien-bang-co-phieu-va-co-phieu-thuong-tuan-6107-20200703161759622.chn>
 
@@ -128,7 +128,7 @@ Trong bối cảnh thị trường xuất hiện nhiều rung lắc, cổ phiế
 
 | exc 1p | exc 5p | exc 10p | thực tế | dự đoán | tin cậy |
 |---|---|---|---|---|---|
-| -10.27% | **-40.90%** | -38.66% | 0 rất tiêu cực | 0 rất tiêu cực | 0.28 |
+| -10.27% | **-40.90%** | -38.66% | 0 tiêu cực | 0 tiêu cực | 0.39 |
 
 <https://cafef.vn/ky-la-co-phieu-chia-3-thi-gia-sau-11-phien-san-lien-tiep-du-ban-san-hon-14-cong-ty-doanh-nghiep-khang-dinh-kinh-doanh-binh-thuong-188230424220254805.chn>
 
@@ -139,7 +139,7 @@ Tuần vừa qua là khoảng thời gian đáng quên đối với cổ đông 
 
 | exc 1p | exc 5p | exc 10p | thực tế | dự đoán | tin cậy |
 |---|---|---|---|---|---|
-| -10.02% | **-40.30%** | -64.71% | 0 rất tiêu cực | 0 rất tiêu cực | 0.28 |
+| -10.02% | **-40.30%** | -64.71% | 0 tiêu cực | 2 tích cực | 0.37 |
 
 <https://cafef.vn/co-phieu-doanh-nghiep-cung-ung-he-thong-cho-cac-du-an-cua-heineken-biwase-bong-choc-boc-hoi-40-chi-sau-5-phien-18823041521342674.chn>
 
@@ -147,141 +147,141 @@ Tuần vừa qua là khoảng thời gian đáng quên đối với cổ đông 
 
 _Nếu có tín hiệu thật thì nó nằm ở đây — kiểm tra xem có phải chỉ là nhận ra tên mã / câu khuôn mẫu không (bẫy của paper 61)._
 
-**CTG** · 2021-09-30 · `general_uncategorized`  
-> Khối ngoại bán mạnh cổ phiếu ngân hàng, nhiều mã tìm đáy mới
+**DIG** · 2020-03-12 · `business_results_and_analysis`  
+> Đại gia địa ốc Vũng Tàu muốn chuyển nhượng 100ha đất trong năm 2020, dự kiến thu về 6.000 tỷ
 
-Phiên giao dịch ngày 29/9 thị trường chứng khoán biến động mạnh. Dòng tiền chảy vào các cổ phiếu lĩnh vực sản xuất, đầu tư công trong khi chạy khỏi dòng ngân hàng. Ghi nhận trên cả 3 sàn chỉ có 3 mã tăng giá, còn lại 24 mã giảm. Đáng chú ý, khối ngoại mạnh tay…
-
-| exc 1p | exc 5p | exc 10p | thực tế | dự đoán | tin cậy |
-|---|---|---|---|---|---|
-| -2.34% | **-6.38%** | -3.88% | 0 rất tiêu cực | 0 rất tiêu cực | 0.43 |
-
-<https://cafef.vn/khoi-ngoai-ban-manh-co-phieu-ngan-hang-nhieu-ma-tim-day-moi-20210929144005452.chn>
-
-**KDM** · 2023-03-23 · `business_results_and_analysis`  
-> Doanh thu nhiều quý bằng 0, một cổ phiếu bất động sản vẫn "bốc đầu" tăng kịch trần 5 phiên ngay khi vừa thoát đình chỉ giao dịch
-
-Thị trường chứng khoán đang ghi nhận sự trồi sụt nhất định, chủ yếu do tâm lý nhà đầu tư bị ảnh hưởng bởi hàng loạt thông tin bủa vây. Giữa bối cảnh đó, một cổ phiếu doanh nghiệp vật liệu xây dựng đang âm thầm có những nhịp bứt phá, đặc biệt là diễn biến chỉ d…
+Theo đó, đối tác là các nhà đầu tư cấp hai có khả năng tài chính mạnh và giàu kinh nghiệm đầu tư. Việc hợp tác này dự kiến mang lại nguồn thu trên 6.000 tỉ đồng. Kế hoạch ông lớn BĐS này đặt ra trong năm 2020 sẽ đạt doanh thu đạt 3.500 tỉ đồng và lợi nhuận 850…
 
 | exc 1p | exc 5p | exc 10p | thực tế | dự đoán | tin cậy |
 |---|---|---|---|---|---|
-| -1.48% | **-11.66%** | -9.52% | 0 rất tiêu cực | 0 rất tiêu cực | 0.41 |
+| +0.06% | **+0.23%** | -1.84% | 1 trung tính | 1 trung tính | 0.67 |
 
-<https://cafef.vn/doanh-thu-nhieu-quy-bang-0-mot-co-phieu-bat-dong-san-van-boc-dau-tang-kich-tran-5-phien-ngay-khi-vua-thoat-dinh-chi-giao-dich-20230322105258292.chn>
+<https://cafef.vn/dai-gia-dia-oc-vung-tau-muon-chuyen-nhuong-100ha-dat-trong-nam-2020-du-kien-thu-ve-6000-ty-20200311143546421.chn>
 
-**LDP** · 2024-01-02 · `general_uncategorized`  
-> Ồn ào tại Dược Lâm Đồng (LDP): Biến động thượng tầng liên quan nhóm Louis Holdings, Ban Kiểm Soát lên tiếng
-
-CTCP Dược Lâm Đồng (LDP) vừa công bố Nghị quyết Ban Kiểm soát, thông qua đề nghị HĐQT Công ty về việc xử lý các vấn đề khủng hoảng truyền thông làm ảnh hưởng đến hình ảnh và hoạt động Công ty, ảnh hưởng đến quyền và lợi ích hợp pháp của Công ty và các cổ đông.…
-
-| exc 1p | exc 5p | exc 10p | thực tế | dự đoán | tin cậy |
-|---|---|---|---|---|---|
-| +1.45% | **-4.97%** | -5.20% | 0 rất tiêu cực | 0 rất tiêu cực | 0.41 |
-
-<https://cafef.vn/on-ao-tai-duoc-lam-dong-ldp-bien-dong-thuong-tang-lien-quan-nhom-louis-holdings-ban-kiem-soat-len-tieng-188231231151323528.chn>
-
-**MVB** · 2021-09-06 · `business_results_and_analysis`  
-> Lợi nhuận nhiều doanh nghiệp biến động mạnh sau soát xét bán niên 2021
-
-Những doanh nghiệp bị nghi ngờ khả năng hoạt động liên tục Trong báo cáo tài chính soát xét 6 tháng đầu năm 2021 của nhiều doanh nghiệp, kiểm toán đã chỉ ra nhiều vấn đề tồn tại như lỗ lũy kế lớn, các khoản vay nợ quá hạn… có nguy cơ đe dọa tới khả năng hoạt đ…
-
-| exc 1p | exc 5p | exc 10p | thực tế | dự đoán | tin cậy |
-|---|---|---|---|---|---|
-| -2.10% | **-7.26%** | -0.67% | 0 rất tiêu cực | 0 rất tiêu cực | 0.40 |
-
-<https://cafef.vn/loi-nhuan-nhieu-doanh-nghiep-bien-dong-manh-sau-soat-xet-ban-nien-2021-20210903161354.chn>
-
-**GVR** · 2021-09-06 · `business_results_and_analysis`  
-> Lợi nhuận nhiều doanh nghiệp biến động mạnh sau soát xét bán niên 2021
-
-Những doanh nghiệp bị nghi ngờ khả năng hoạt động liên tục Trong báo cáo tài chính soát xét 6 tháng đầu năm 2021 của nhiều doanh nghiệp, kiểm toán đã chỉ ra nhiều vấn đề tồn tại như lỗ lũy kế lớn, các khoản vay nợ quá hạn… có nguy cơ đe dọa tới khả năng hoạt đ…
-
-| exc 1p | exc 5p | exc 10p | thực tế | dự đoán | tin cậy |
-|---|---|---|---|---|---|
-| -0.32% | **-5.88%** | -10.96% | 0 rất tiêu cực | 0 rất tiêu cực | 0.40 |
-
-<https://cafef.vn/loi-nhuan-nhieu-doanh-nghiep-bien-dong-manh-sau-soat-xet-ban-nien-2021-20210903161354.chn>
-
-**HQC** · 2021-09-06 · `business_results_and_analysis`  
-> Lợi nhuận nhiều doanh nghiệp biến động mạnh sau soát xét bán niên 2021
-
-Những doanh nghiệp bị nghi ngờ khả năng hoạt động liên tục Trong báo cáo tài chính soát xét 6 tháng đầu năm 2021 của nhiều doanh nghiệp, kiểm toán đã chỉ ra nhiều vấn đề tồn tại như lỗ lũy kế lớn, các khoản vay nợ quá hạn… có nguy cơ đe dọa tới khả năng hoạt đ…
-
-| exc 1p | exc 5p | exc 10p | thực tế | dự đoán | tin cậy |
-|---|---|---|---|---|---|
-| -3.70% | **-7.17%** | +2.05% | 0 rất tiêu cực | 0 rất tiêu cực | 0.40 |
-
-<https://cafef.vn/loi-nhuan-nhieu-doanh-nghiep-bien-dong-manh-sau-soat-xet-ban-nien-2021-20210903161354.chn>
-
-### 4. Mô hình TỰ TIN và SAI
-
-_Chi phí của việc tin vào mô hình._
-
-**SBT** · 2018-08-27 · `major_and_insider_shareholder_transactions`  
-> XNK Bến Tre bán ra hơn 20 triệu phiếu SBT khi cổ phiếu này tăng giá mạnh
+**NSC** · 2021-02-01 · `business_results_and_analysis`  
+> Giống cây trồng Việt Nam (NSC): Năm 2020 lãi 194 tỷ đồng, EPS đạt 10.817 đồng
 
 …
 
 | exc 1p | exc 5p | exc 10p | thực tế | dự đoán | tin cậy |
 |---|---|---|---|---|---|
-| -1.86% | **-4.09%** | +0.30% | 1 tiêu cực | 0 rất tiêu cực | 0.47 |
+| +0.42% | **-0.16%** | -1.28% | 1 trung tính | 1 trung tính | 0.65 |
 
-<https://cafef.vn/xnk-ben-tre-ban-ra-hon-20-trieu-phieu-sbt-khi-co-phieu-nay-tang-gia-manh-20180824224440908.chn>
+<https://cafef.vn/giong-cay-trong-viet-nam-nsc-nam-2020-lai-194-ty-dong-eps-dat-10817-dong-20210130161534759.chn>
 
-**EVG** · 2022-01-20 · `major_and_insider_shareholder_transactions`  
-> EVG giảm sâu, Chủ tịch Everland đăng ký mua 3 triệu cổ phiếu
+**THG** · 2020-10-28 · `general_uncategorized`  
+> Đầu tư và Xây dựng Tiền Giang (THG): 9 tháng lãi sau thuế 122 tỷ đồng, tăng 64% so với cùng kỳ
 
-Ông Lê Đình Vinh, Chủ tịch HĐQT CTCP Tập đoàn Everland (mã chứng khoán EVG) vừa thông báo đăng ký mua 3 triệu cổ phiếu EVG để gia tăng tỷ lệ sở hữu tại công ty. Giao dịch dự kiến thực hiện theo phương thức khớp lệnh hoặc thỏa thuận từ 25/1 đến 15/2/2022. Hiện…
-
-| exc 1p | exc 5p | exc 10p | thực tế | dự đoán | tin cậy |
-|---|---|---|---|---|---|
-| +0.30% | **-4.98%** | -0.28% | 1 tiêu cực | 3 tích cực | 0.46 |
-
-<https://cafef.vn/evg-giam-sau-chu-tich-everland-dang-ky-mua-3-trieu-co-phieu-20220119222158111.chn>
-
-**VCS** · 2018-07-06 · `general_uncategorized`  
-> Chứng khoán nuôi hy vọng xanh trong nghi ngờ
-
-Liên tục giảm điểm thậm chí hơn 41 điểm sau một ngày giao dịch, khối ngoại rút tiền, bất ổn từ tỷ giá… là những gì hiện hữu với thị trường chứng khoán (TTCK) hiện tại. Nhà đầu tư khủng hoảng, trong cơn bĩ cực chỉ số đã xuất hiện màu xanh. Đi ngược thị trường c…
+…
 
 | exc 1p | exc 5p | exc 10p | thực tế | dự đoán | tin cậy |
 |---|---|---|---|---|---|
-| +0.72% | **+13.06%** | +5.39% | 4 rất tích cực | 3 tích cực | 0.44 |
+| -1.06% | **-1.63%** | -0.63% | 1 trung tính | 1 trung tính | 0.60 |
 
-<https://cafef.vn/chung-khoan-nuoi-hy-vong-xanh-trong-nghi-ngo-20180704151600813.chn>
+<https://cafef.vn/dau-tu-va-xay-dung-tien-giang-thg-9-thang-lai-sau-thue-122-ty-dong-tang-64-so-voi-cung-ky-20201027164758912.chn>
 
-**FMC** · 2018-07-06 · `general_uncategorized`  
-> Chứng khoán nuôi hy vọng xanh trong nghi ngờ
+**VIC** · 2019-12-19 · `general_uncategorized`  
+> Vingroup rút hoàn toàn khỏi bán lẻ: Giải thể điện máy VinPro, sáp nhập Adayroi vào VinID
 
-Liên tục giảm điểm thậm chí hơn 41 điểm sau một ngày giao dịch, khối ngoại rút tiền, bất ổn từ tỷ giá… là những gì hiện hữu với thị trường chứng khoán (TTCK) hiện tại. Nhà đầu tư khủng hoảng, trong cơn bĩ cực chỉ số đã xuất hiện màu xanh. Đi ngược thị trường c…
-
-| exc 1p | exc 5p | exc 10p | thực tế | dự đoán | tin cậy |
-|---|---|---|---|---|---|
-| +1.30% | **-0.06%** | +7.46% | 2 trung tính | 3 tích cực | 0.44 |
-
-<https://cafef.vn/chung-khoan-nuoi-hy-vong-xanh-trong-nghi-ngo-20180704151600813.chn>
-
-**MWG** · 2018-07-06 · `general_uncategorized`  
-> Chứng khoán nuôi hy vọng xanh trong nghi ngờ
-
-Liên tục giảm điểm thậm chí hơn 41 điểm sau một ngày giao dịch, khối ngoại rút tiền, bất ổn từ tỷ giá… là những gì hiện hữu với thị trường chứng khoán (TTCK) hiện tại. Nhà đầu tư khủng hoảng, trong cơn bĩ cực chỉ số đã xuất hiện màu xanh. Đi ngược thị trường c…
+Ngày 18/12/2019, Tập đoàn Vingroup chính thức công bố rút lui khỏi mảng bán lẻ trực tiếp để tập trung nguồn lực cho Công Nghiệp – Công nghệ. Trong đó, trang thương mại điện tử Adayroi sẽ sáp nhập vào VinID; toàn bộ hệ thống siêu thị điện máy VinPro sẽ giải thể…
 
 | exc 1p | exc 5p | exc 10p | thực tế | dự đoán | tin cậy |
 |---|---|---|---|---|---|
-| -1.41% | **-1.01%** | +4.67% | 2 trung tính | 3 tích cực | 0.44 |
+| -0.28% | **-1.36%** | -1.85% | 1 trung tính | 1 trung tính | 0.58 |
 
-<https://cafef.vn/chung-khoan-nuoi-hy-vong-xanh-trong-nghi-ngo-20180704151600813.chn>
+<https://cafef.vn/vingroup-rut-hoan-toan-khoi-ban-le-giai-the-dien-may-vinpro-sap-nhap-adayroi-vao-vinid-20191218115728123.chn>
 
-**YEG** · 2018-07-06 · `general_uncategorized`  
-> Chứng khoán nuôi hy vọng xanh trong nghi ngờ
+**ACB** · 2021-03-11 · `general_uncategorized`  
+> Từ ACB, nhìn lại các thương vụ thoái vốn đình đám của Dragon Capital
 
-Liên tục giảm điểm thậm chí hơn 41 điểm sau một ngày giao dịch, khối ngoại rút tiền, bất ổn từ tỷ giá… là những gì hiện hữu với thị trường chứng khoán (TTCK) hiện tại. Nhà đầu tư khủng hoảng, trong cơn bĩ cực chỉ số đã xuất hiện màu xanh. Đi ngược thị trường c…
+…
 
 | exc 1p | exc 5p | exc 10p | thực tế | dự đoán | tin cậy |
 |---|---|---|---|---|---|
-| +7.00% | **+9.48%** | -0.56% | 4 rất tích cực | 3 tích cực | 0.44 |
+| -0.70% | **+0.35%** | -5.62% | 1 trung tính | 1 trung tính | 0.57 |
 
-<https://cafef.vn/chung-khoan-nuoi-hy-vong-xanh-trong-nghi-ngo-20180704151600813.chn>
+<https://cafef.vn/tu-acb-nhin-lai-cac-thuong-vu-thoai-von-dinh-dam-cua-dragon-capital-20210310100157013.chn>
+
+**VNM** · 2020-09-21 · `personnel_changes`  
+> Ông Nguyễn Bá Dương rời Hội đồng quản trị Vinamilk
+
+Theo thông tin từ Công ty cổ phần Sữa Việt Nam (Vinamilk), ngày 17/9 vừa qua, ông Nguyễn Bá Dương đã có đơn từ nhiệm chức vụ thành viên Hội đồng quản trị Vinamilk. Nguyên nhân ông Nguyễn Bá Dương từ nhiệm là do sức khỏe cá nhân nên không thể sắp xếp đủ thời gi…
+
+| exc 1p | exc 5p | exc 10p | thực tế | dự đoán | tin cậy |
+|---|---|---|---|---|---|
+| -0.48% | **-1.97%** | -1.09% | 1 trung tính | 1 trung tính | 0.57 |
+
+<https://cafef.vn/ong-nguyen-ba-duong-roi-hoi-dong-quan-tri-vinamilk-20200918104755943.chn>
+
+### 4. Mô hình TỰ TIN và SAI
+
+_Chi phí của việc tin vào mô hình._
+
+**VTR** · 2020-03-04 · `capital_increase_and_treasury_shares`  
+> Giữa tâm dịch Covid-19, Vietravel chốt bán cổ phiếu cho đối tác chiến lược bằng 1/4 thị giá
+
+…
+
+| exc 1p | exc 5p | exc 10p | thực tế | dự đoán | tin cậy |
+|---|---|---|---|---|---|
+| +3.19% | **+3.53%** | +3.68% | 2 tích cực | 1 trung tính | 0.62 |
+
+<https://cafef.vn/giua-tam-dich-covid19-vietravel-chot-ban-co-phieu-cho-doi-tac-chien-luoc-bang-14-thi-gia-20200303104249426.chn>
+
+**FCN** · 2026-06-11 · `general_uncategorized`  
+> Khi hạ tầng ngầm mở đường cho kỷ nguyên TOD
+
+…
+
+| exc 1p | exc 5p | exc 10p | thực tế | dự đoán | tin cậy |
+|---|---|---|---|---|---|
+| +0.56% | **+1.44%** | +0.67% | 2 tích cực | 1 trung tính | 0.59 |
+
+<https://cafef.vn/khi-ha-tang-ngam-mo-duong-cho-ky-nguyen-tod-188260610094932599.chn>
+
+**DHM** · 2021-01-25 · `business_results_and_analysis`  
+> Khoáng sản Dương Hiếu (DHM) báo lỗ tới 55 tỷ đồng trong quý 4
+
+CTCP Thương mại và khai thác khoáng sản Dương Hiếu (mã CK: DHM) đã công bố BCTC quý 4/2020 và lũy kế cả năm 2020 với khoản thua lỗ lớn. Theo đó riêng quý 4 doanh thu thuần đạt 182 tỷ đồng giảm 18% so với cùng kỳ, giá vốn hàng bán ngốn gần hết doanh thu thuần n…
+
+| exc 1p | exc 5p | exc 10p | thực tế | dự đoán | tin cậy |
+|---|---|---|---|---|---|
+| +1.36% | **+9.00%** | +9.04% | 2 tích cực | 0 tiêu cực | 0.55 |
+
+<https://cafef.vn/khoang-san-duong-hieu-dhm-bao-lo-toi-55-ty-dong-trong-quy-4-20210121154031585.chn>
+
+**DHG** · 2020-07-20 · `general_uncategorized`  
+> Dược Hậu Giang (DHG) đặt kế hoạch thận trọng sau khi về với người Nhật, sự hỗ trợ từ Taisho sẽ chỉ rõ nét từ năm 2022
+
+Chính thức trở thành công ty con của Taisho (1 công ty dược phẩm Nhật Bản nắm giữ 51% cổ phần), Dược Hậu Giang (DHG) trong lần chia sẻ với nhà đầu tư mới đây cho biết sự hỗ trợ từ Taisho sẽ có tác động rõ nét hơn đến diễn biến kinh d…
+
+| exc 1p | exc 5p | exc 10p | thực tế | dự đoán | tin cậy |
+|---|---|---|---|---|---|
+| +1.07% | **+4.78%** | +3.62% | 2 tích cực | 1 trung tính | 0.55 |
+
+<https://cafef.vn/duoc-hau-giang-dhg-dat-ke-hoach-than-trong-sau-khi-ve-voi-nguoi-nhat-su-ho-tro-tu-taisho-se-chi-ro-net-tu-nam-2022-2020071612122308.chn>
+
+**BID** · 2019-11-14 · `general_uncategorized`  
+> Hành trình trở thành ngân hàng có vốn điều lệ lớn nhất Việt Nam của BIDV
+
+Hành trình trở thành ngân hàng có vốn điều lệ lớn nhất Việt Nam của BIDV…
+
+| exc 1p | exc 5p | exc 10p | thực tế | dự đoán | tin cậy |
+|---|---|---|---|---|---|
+| -1.23% | **-2.72%** | -3.78% | 0 tiêu cực | 1 trung tính | 0.53 |
+
+<https://cafef.vn/hanh-trinh-tro-thanh-ngan-hang-co-von-dieu-le-lon-nhat-viet-nam-cua-bidv-20191113163647734.chn>
+
+**PNJ** · 2020-08-19 · `major_and_insider_shareholder_transactions`  
+> Nhóm quỹ Dragon Capital vừa mua thêm hơn 2 triệu cổ phiếu PNJ, nâng tỷ lệ sở hữu lên gần 10%
+
+Theo tin từ Sở GDCK TP.HCM (HoSE), nhóm quỹ do Dragon Capital quản lý đã mua vào gần 2,18 triệu cổ phiếu PNJ, qua đó nâng số lượng sở hữu lên gần 20,88 triệu cổ phiếu, tương ứng 9,27% lượng cổ phiếu lưu hành của công ty. Giao dịch được thực hiện vào ngày 13/8/…
+
+| exc 1p | exc 5p | exc 10p | thực tế | dự đoán | tin cậy |
+|---|---|---|---|---|---|
+| +0.11% | **+3.64%** | +6.38% | 2 tích cực | 0 tiêu cực | 0.53 |
+
+<https://cafef.vn/nhom-quy-dragon-capital-vua-mua-them-hon-2-trieu-co-phieu-pnj-nang-ty-le-so-huu-len-gan-10-202008181641092.chn>
 
 ### 5. Trực giác ngược — tin nghe TÍCH CỰC nhưng giá GIẢM mạnh
 
@@ -294,7 +294,7 @@ Tổng công ty Viglacera – CTCP (VGC): Ngày 25/5 – ngày ĐKCC nhận cổ
 
 | exc 1p | exc 5p | exc 10p | thực tế | dự đoán | tin cậy |
 |---|---|---|---|---|---|
-| +0.39% | **-45.68%** | -46.87% | 0 rất tiêu cực | 2 trung tính | 0.34 |
+| +0.39% | **-45.68%** | -46.87% | 0 tiêu cực | 2 tích cực | 0.37 |
 
 <https://cafef.vn/lich-chot-quyen-nhan-co-tuc-bang-tien-cua-8-doanh-nghiep-20210514082156721.chn>
 
@@ -305,7 +305,7 @@ Tổng Công ty Phát triển đô thị Kinh Bắc - CTCP (KBC): Ngày 15/7 –
 
 | exc 1p | exc 5p | exc 10p | thực tế | dự đoán | tin cậy |
 |---|---|---|---|---|---|
-| -0.45% | **-37.28%** | -12.58% | 0 rất tiêu cực | 4 rất tích cực | 0.23 |
+| -0.45% | **-37.28%** | -12.58% | 0 tiêu cực | 2 tích cực | 0.38 |
 
 <https://cafef.vn/lich-chot-quyen-nhan-co-tuc-bang-tien-cua-14-doanh-nghiep-20190704084608828.chn>
 
@@ -316,7 +316,7 @@ Tuần mới từ 11/3 đến 15/3/2019 có 20 doanh nghiệp chốt danh sách 
 
 | exc 1p | exc 5p | exc 10p | thực tế | dự đoán | tin cậy |
 |---|---|---|---|---|---|
-| -0.17% | **-36.05%** | -35.51% | 0 rất tiêu cực | 4 rất tích cực | 0.24 |
+| -0.17% | **-36.05%** | -35.51% | 0 tiêu cực | 1 trung tính | 0.38 |
 
 <https://cafef.vn/diem-danh-nhung-doanh-nghiep-tra-co-tuc-bang-tien-bang-co-phieu-va-co-phieu-thuong-tuan-nay-20190311085649164.chn>
 
@@ -327,7 +327,7 @@ CTCP Phát triển Bất động sản Phát Đạt (mã chứng khoán PDR) v�
 
 | exc 1p | exc 5p | exc 10p | thực tế | dự đoán | tin cậy |
 |---|---|---|---|---|---|
-| -3.29% | **-33.22%** | -59.01% | 0 rất tiêu cực | 4 rất tích cực | 0.24 |
+| -3.29% | **-33.22%** | -59.01% | 0 tiêu cực | 2 tích cực | 0.36 |
 
 <https://cafef.vn/phat-dat-pdr-dung-1263365m2-dat-vung-tau-bo-sung-tai-san-dam-bao-khi-lanh-dao-lien-tuc-bi-call-margin-20221112171442207.chn>
 
@@ -338,7 +338,7 @@ Tuần mới từ 29/6 đến 3/7/2020 có 42 doanh nghiệp chốt danh sách c
 
 | exc 1p | exc 5p | exc 10p | thực tế | dự đoán | tin cậy |
 |---|---|---|---|---|---|
-| -1.04% | **-33.12%** | -34.50% | 0 rất tiêu cực | 2 trung tính | 0.23 |
+| -1.04% | **-33.12%** | -34.50% | 0 tiêu cực | 2 tích cực | 0.36 |
 
 <https://cafef.vn/diem-danh-nhung-doanh-nghiep-chot-quyen-nhan-co-tuc-bang-tien-bang-co-phieu-va-co-phieu-thuong-tuan-29637-20200628182304576.chn>
 
@@ -349,7 +349,7 @@ Trong thông báo mới nhất, Công ty cổ phần NovaGroup đã báo cáo gi
 
 | exc 1p | exc 5p | exc 10p | thực tế | dự đoán | tin cậy |
 |---|---|---|---|---|---|
-| -8.08% | **-31.85%** | -36.55% | 0 rất tiêu cực | 0 rất tiêu cực | 0.25 |
+| -8.08% | **-31.85%** | -36.55% | 0 tiêu cực | 0 tiêu cực | 0.40 |
 
 <https://cafef.vn/novaland-giam-san-10-phien-lien-tiep-novagroup-chi-mua-vao-18-trieu-co-phieu-nvl-tren-tong-so-8-trieu-da-dang-ky-20221116165854973.chn>
 
@@ -357,68 +357,68 @@ Trong thông báo mới nhất, Công ty cổ phần NovaGroup đã báo cáo gi
 
 _Nếu nhiều bài cùng một mã-ngày mà nhãn giống hệt nhau thì bài toán là 'đoán xem hôm đó là ngày nào', không phải đọc hiểu — chính là lỗi paper 61 mắc._
 
-**SBT** · 2018-08-27 · `major_and_insider_shareholder_transactions`  
-> XNK Bến Tre bán ra hơn 20 triệu phiếu SBT khi cổ phiếu này tăng giá mạnh
+**THG** · 2020-10-28 · `general_uncategorized`  
+> Đầu tư và Xây dựng Tiền Giang (THG): 9 tháng lãi sau thuế 122 tỷ đồng, tăng 64% so với cùng kỳ
 
 …
 
 | exc 1p | exc 5p | exc 10p | thực tế | dự đoán | tin cậy |
 |---|---|---|---|---|---|
-| -1.86% | **-4.09%** | +0.30% | 1 tiêu cực | 0 rất tiêu cực | 0.47 |
+| -1.06% | **-1.63%** | -0.63% | 1 trung tính | 1 trung tính | 0.60 |
 
-<https://cafef.vn/xnk-ben-tre-ban-ra-hon-20-trieu-phieu-sbt-khi-co-phieu-nay-tang-gia-manh-20180824224440908.chn>
+<https://cafef.vn/dau-tu-va-xay-dung-tien-giang-thg-9-thang-lai-sau-thue-122-ty-dong-tang-64-so-voi-cung-ky-20201027164758912.chn>
 
-**VCS** · 2018-07-06 · `general_uncategorized`  
-> Chứng khoán nuôi hy vọng xanh trong nghi ngờ
+**VIC** · 2019-12-19 · `general_uncategorized`  
+> Vingroup rút hoàn toàn khỏi bán lẻ: Giải thể điện máy VinPro, sáp nhập Adayroi vào VinID
 
-Liên tục giảm điểm thậm chí hơn 41 điểm sau một ngày giao dịch, khối ngoại rút tiền, bất ổn từ tỷ giá… là những gì hiện hữu với thị trường chứng khoán (TTCK) hiện tại. Nhà đầu tư khủng hoảng, trong cơn bĩ cực chỉ số đã xuất hiện màu xanh. Đi ngược thị trường c…
-
-| exc 1p | exc 5p | exc 10p | thực tế | dự đoán | tin cậy |
-|---|---|---|---|---|---|
-| +0.72% | **+13.06%** | +5.39% | 4 rất tích cực | 3 tích cực | 0.44 |
-
-<https://cafef.vn/chung-khoan-nuoi-hy-vong-xanh-trong-nghi-ngo-20180704151600813.chn>
-
-**MWG** · 2018-07-06 · `general_uncategorized`  
-> Chứng khoán nuôi hy vọng xanh trong nghi ngờ
-
-Liên tục giảm điểm thậm chí hơn 41 điểm sau một ngày giao dịch, khối ngoại rút tiền, bất ổn từ tỷ giá… là những gì hiện hữu với thị trường chứng khoán (TTCK) hiện tại. Nhà đầu tư khủng hoảng, trong cơn bĩ cực chỉ số đã xuất hiện màu xanh. Đi ngược thị trường c…
+Ngày 18/12/2019, Tập đoàn Vingroup chính thức công bố rút lui khỏi mảng bán lẻ trực tiếp để tập trung nguồn lực cho Công Nghiệp – Công nghệ. Trong đó, trang thương mại điện tử Adayroi sẽ sáp nhập vào VinID; toàn bộ hệ thống siêu thị điện máy VinPro sẽ giải thể…
 
 | exc 1p | exc 5p | exc 10p | thực tế | dự đoán | tin cậy |
 |---|---|---|---|---|---|
-| -1.41% | **-1.01%** | +4.67% | 2 trung tính | 3 tích cực | 0.44 |
+| -0.28% | **-1.36%** | -1.85% | 1 trung tính | 1 trung tính | 0.58 |
 
-<https://cafef.vn/chung-khoan-nuoi-hy-vong-xanh-trong-nghi-ngo-20180704151600813.chn>
+<https://cafef.vn/vingroup-rut-hoan-toan-khoi-ban-le-giai-the-dien-may-vinpro-sap-nhap-adayroi-vao-vinid-20191218115728123.chn>
 
-**LDP** · 2024-01-02 · `general_uncategorized`  
-> Ồn ào tại Dược Lâm Đồng (LDP): Biến động thượng tầng liên quan nhóm Louis Holdings, Ban Kiểm Soát lên tiếng
+**ACB** · 2021-03-11 · `general_uncategorized`  
+> Từ ACB, nhìn lại các thương vụ thoái vốn đình đám của Dragon Capital
 
-CTCP Dược Lâm Đồng (LDP) vừa công bố Nghị quyết Ban Kiểm soát, thông qua đề nghị HĐQT Công ty về việc xử lý các vấn đề khủng hoảng truyền thông làm ảnh hưởng đến hình ảnh và hoạt động Công ty, ảnh hưởng đến quyền và lợi ích hợp pháp của Công ty và các cổ đông.…
-
-| exc 1p | exc 5p | exc 10p | thực tế | dự đoán | tin cậy |
-|---|---|---|---|---|---|
-| +1.45% | **-4.97%** | -5.20% | 0 rất tiêu cực | 0 rất tiêu cực | 0.41 |
-
-<https://cafef.vn/on-ao-tai-duoc-lam-dong-ldp-bien-dong-thuong-tang-lien-quan-nhom-louis-holdings-ban-kiem-soat-len-tieng-188231231151323528.chn>
-
-**GVR** · 2021-09-06 · `business_results_and_analysis`  
-> Lợi nhuận nhiều doanh nghiệp biến động mạnh sau soát xét bán niên 2021
-
-Những doanh nghiệp bị nghi ngờ khả năng hoạt động liên tục Trong báo cáo tài chính soát xét 6 tháng đầu năm 2021 của nhiều doanh nghiệp, kiểm toán đã chỉ ra nhiều vấn đề tồn tại như lỗ lũy kế lớn, các khoản vay nợ quá hạn… có nguy cơ đe dọa tới khả năng hoạt đ…
+…
 
 | exc 1p | exc 5p | exc 10p | thực tế | dự đoán | tin cậy |
 |---|---|---|---|---|---|
-| -0.32% | **-5.88%** | -10.96% | 0 rất tiêu cực | 0 rất tiêu cực | 0.40 |
+| -0.70% | **+0.35%** | -5.62% | 1 trung tính | 1 trung tính | 0.57 |
 
-<https://cafef.vn/loi-nhuan-nhieu-doanh-nghiep-bien-dong-manh-sau-soat-xet-ban-nien-2021-20210903161354.chn>
+<https://cafef.vn/tu-acb-nhin-lai-cac-thuong-vu-thoai-von-dinh-dam-cua-dragon-capital-20210310100157013.chn>
 
-**HQC** · 2021-09-06 · `business_results_and_analysis`  
-> Lợi nhuận nhiều doanh nghiệp biến động mạnh sau soát xét bán niên 2021
+**NT2** · 2020-07-14 · `general_uncategorized`  
+> Điện lực dầu khí Nhơn Trạch 2 (NT2) chi hơn 430 tỷ đồng trả cổ tức bằng tiền
 
-Những doanh nghiệp bị nghi ngờ khả năng hoạt động liên tục Trong báo cáo tài chính soát xét 6 tháng đầu năm 2021 của nhiều doanh nghiệp, kiểm toán đã chỉ ra nhiều vấn đề tồn tại như lỗ lũy kế lớn, các khoản vay nợ quá hạn… có nguy cơ đe dọa tới khả năng hoạt đ…
+Ngày 24/7 tới đây CTCP Điện lực dầu khí Nhơn Trạch 2 (mã chứng khoán NT2) sẽ chốt danh sách cổ đông thực hiện chi trả cổ tức còn lại năm 2019 bằng tiền tỷ lệ 15%, tương ứng cổ đông sở hữu 1 cổ phiếu được nhận về 1.500 đồng. Thời gian thanh toán 14/8/2020. Như…
 
 | exc 1p | exc 5p | exc 10p | thực tế | dự đoán | tin cậy |
 |---|---|---|---|---|---|
-| -3.70% | **-7.17%** | +2.05% | 0 rất tiêu cực | 0 rất tiêu cực | 0.40 |
+| -0.92% | **+0.20%** | +0.59% | 1 trung tính | 1 trung tính | 0.56 |
 
-<https://cafef.vn/loi-nhuan-nhieu-doanh-nghiep-bien-dong-manh-sau-soat-xet-ban-nien-2021-20210903161354.chn>
+<https://cafef.vn/dien-luc-dau-khi-nhon-trach-2-nt2-chi-hon-430-ty-dong-tra-co-tuc-bang-tien-20200713182951346.chn>
+
+**ACB** · 2018-05-08 · `general_uncategorized`  
+> Ngân hàng lại rục rịch rủ nhau giảm lãi suất
+
+Sau khi hàng loạt nhà băng điều chỉnh giảm lãi suất tiết kiệm trong 2 tháng vừa rồi, mới đây lại có thêm một số ngân hàng nữa hạ lãi suất, thậm chí một số ngân hàng đã giảm trong tháng 3 lại tiếp tục giảm nữa. Cụ thể, trong tháng 4, Techcombank đã hai lần giảm…
+
+| exc 1p | exc 5p | exc 10p | thực tế | dự đoán | tin cậy |
+|---|---|---|---|---|---|
+| -2.25% | **-2.43%** | -7.69% | 1 trung tính | 1 trung tính | 0.52 |
+
+<https://cafef.vn/ngan-hang-lai-ru-nhau-giam-lai-suat-huy-dong-20180507171421368.chn>
+
+**FPT** · 2025-04-16 · `business_results_and_analysis`  
+> Số lượng cổ đông tham dự Đại hội FPT cao kỷ lục
+
+Ngày 15/4, Tập đoàn FPT tổ chức Đại hội đồng cổ đông thường niên 2025, thảo luận nhiều nội dung quan trọng. Đại hội năm nay ghi nhận số lượng cổ đông tham dự tăng đột biến so với một năm trước với 2.020 cổ đông tham dự (bao gồm 1.551 cổ đông tham dự trực tiếp…
+
+| exc 1p | exc 5p | exc 10p | thực tế | dự đoán | tin cậy |
+|---|---|---|---|---|---|
+| +1.11% | **+1.83%** | -1.30% | 2 tích cực | 1 trung tính | 0.52 |
+
+<https://cafef.vn/so-luong-co-dong-tham-du-dai-hoi-fpt-cao-ky-luc-188250415144600408.chn>

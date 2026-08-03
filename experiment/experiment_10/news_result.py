@@ -35,44 +35,70 @@ Run:
     python experiment/experiment_10/news_result.py --include-disclosures
 
 ────────────────────────────────────────────────────────────────────────────────────────
-## RESULTS AS RUN — 2026-08-03, 58,660 editorials, FULL content
+## RESULTS AS RUN — 2026-08-03, 58,660 editorials, FULL content, 2 label schemes
 
-Two representations on identical rows, folds and labels (see `sentiment/doc_encoder.py`):
+Four arms on identical rows, folds and labels. Representation (`sentiment/doc_encoder.py`):
 `lead` = the first 254-token window ≈ the old 256-token slice, which measurement showed
-saw **38.7%** of the average article; `full` = the whole document, 3.44 chunks on average,
-pooled as mean ‖ max ‖ lead.
+saw **38.7%** of the average article; `full` = the whole document, 3.44 chunks, pooled as
+mean ‖ max ‖ lead. Label scheme: equal quantile bands at k = 3 and k = 5.
 
-| rep | h | train | test | base | macro-F1 | QWK | QWK shuffled |
-|---|---|---|---|---|---|---|---|
-| lead | 1 | 0.469 | 0.220 | 0.205 | 0.216 | +0.005 | +0.006 |
-| lead | 5 | 0.465 | 0.214 | 0.207 | 0.211 | +0.004 | +0.002 |
-| lead | 10 | 0.437 | 0.212 | 0.207 | 0.209 | +0.012 | −0.009 |
-| **full** | 1 | 0.521 | 0.224 | 0.205 | 0.219 | +0.008 | +0.005 |
-| **full** | 5 | 0.496 | **0.224** | 0.207 | 0.220 | **+0.020** | +0.004 |
-| **full** | 10 | 0.485 | 0.214 | 0.207 | 0.212 | +0.014 | −0.002 |
+| k | rep | h | train | test | base | **lift** | QWK | **MCC** | MCC shuf |
+|---|---|---|---|---|---|---|---|---|---|
+| 3 | full | 1 | 0.549 | 0.350 | 0.341 | 1.028 | +0.003 | +0.026 | −0.011 |
+| 3 | full | 5 | 0.581 | 0.351 | 0.341 | 1.029 | +0.018 | +0.026 | 0.000 |
+| 3 | full | 10 | 0.610 | 0.352 | 0.342 | 1.029 | +0.024 | +0.029 | −0.009 |
+| 5 | full | 1 | 0.521 | 0.224 | 0.205 | **1.093** | +0.008 | +0.031 | +0.001 |
+| 5 | full | 5 | 0.496 | 0.224 | 0.207 | **1.082** | +0.020 | +0.030 | −0.002 |
+| 5 | full | 10 | 0.485 | 0.214 | 0.207 | 1.034 | +0.014 | +0.018 | −0.002 |
 
-Paired, full minus lead, same folds:
+### A — does reading the WHOLE article help? (full minus lead, same folds)
 
-| h | Δaccuracy | Δmacro-F1 | ΔQWK | folds won |
-|---|---|---|---|---|
-| 1 | +0.0049 | +0.0033 | +0.0031 | 3/5 |
-| 5 | +0.0092 | +0.0093 | +0.0157 | 4/5 |
-| 10 | +0.0024 | +0.0028 | +0.0017 | 3/5 |
+| k | h | Δacc | ΔQWK | ΔMCC | folds won |
+|---|---|---|---|---|---|
+| 3 | 1 | −0.0039 | −0.0160 | −0.0058 | 0/5 |
+| 3 | 5 | +0.0051 | +0.0049 | +0.0079 | 3/5 |
+| 3 | 10 | +0.0030 | +0.0068 | +0.0047 | 2/5 |
+| 5 | 1 | +0.0049 | +0.0031 | +0.0062 | 3/5 |
+| 5 | 5 | **+0.0092** | **+0.0157** | **+0.0115** | 4/5 |
+| 5 | 10 | +0.0024 | +0.0017 | +0.0033 | 3/5 |
 
-**Reading the whole article helps — consistently (9 of 9 deltas positive) and marginally
-(at most +0.9 pp of accuracy).** It does not change the verdict: the best cell is 0.224
-against a 0.207 base rate with QWK +0.020, and train 0.496 → test 0.224 is still a
-collapse. Paper 63 went 97.5% → 50.4% on a balanced binary task; this goes 49.6% → 22.4%
-on five classes whose base rate is 20%.
+**Yes, consistently, and marginally** — at most +0.9 pp of accuracy. Note it is cleaner at
+k=5 (3/5, 4/5, 3/5) than at k=3 (0/5, 3/5, 2/5): **the extra information from reading the
+body lives in the TAILS, and three bands merge exactly those.**
 
-⚠️ **The consistent sign is the honest part and the small size is the important part.** A
-reviewer who asks "but you only fed it 600 characters" now has an answer measured on the
-same folds rather than an assumption.
+### B — 3 bands vs 5 bands (full doc, same folds)
 
-Two other arms, both negative:
-* `--min-relevance 1.0` (keep only articles naming the ticker; 48% of the corpus) makes it
+| h | Δacc | Δlift | ΔQWK | ΔMCC | folds won |
+|---|---|---|---|---|---|
+| 1 | **+0.1259** | −0.0643 | −0.0052 | −0.0046 | **1/5** |
+| 5 | **+0.1272** | −0.0533 | −0.0015 | −0.0033 | **1/5** |
+| 10 | **+0.1380** | −0.0050 | +0.0102 | +0.0109 | 4/5 |
+
+⚠️ **Accuracy jumps 12.6–13.8 pp and every point of it is the base rate**, which moves
+0.205 → 0.341 on its own. This is paper 56's result in its mildest form: accuracy rises
+by relabelling, with no change to the model. Reporting "3 classes lifted accuracy from
+22.4% to 35.1%" without the base rate beside it would be meaningless.
+
+**Corrected for that, three bands are NOT better — they are slightly worse at two of three
+horizons** (ΔMCC −0.005, −0.003, +0.011; 1/5 folds won at h=1 and h=5). And **lift falls
+from 1.08–1.09 to 1.03**: relative to its own base rate the 5-band model does more.
+
+Both remain null. MCC ≈ 0.026–0.031 either way, against a shuffled-label control at ≈ 0
+and paper 51's 0.069 on 8.5M articles — about half the literature's own ceiling.
+
+### Why equal bands, and not 25/50/25
+
+Paper 56 gives the accuracy of guessing from the prior as `Σ Pₖ²`, which for k classes is
+minimised exactly when every band is 1/k: **0.333 for tertiles against 0.375 for
+25/50/25**. Choosing the uneven split would hand out four free points of accuracy. Paper 56
+picked its own threshold at that minimum for the same reason.
+
+### Everything else, all negative
+* `--min-relevance 1.0` (only articles naming the ticker; 48% of the corpus) makes it
   WORSE — test 0.220 against a base rate of 0.222, i.e. at or below chance.
-* The shuffled-label control sits at +0.004 for the best cell, and BEATS the model at h=1.
+* The shuffled-label control sits at ≈ 0 and BEATS the model at h=1 on QWK.
+* Train 0.55–0.61 at k=3 against 0.49–0.52 at k=5 — the easier task is fitted better and
+  still lands on the base rate. The train→test gap moves; it does not close.
 
 The one positive result is not about direction at all: normalised WITHIN ticker, news days
 carry **1.15×** the absolute excess move of quiet days. News predicts MAGNITUDE, not SIGN.
@@ -102,7 +128,12 @@ import pandas as pd
 import psycopg2
 from dotenv import load_dotenv
 from sklearn.ensemble import HistGradientBoostingClassifier
-from sklearn.metrics import cohen_kappa_score, confusion_matrix, f1_score
+from sklearn.metrics import (
+    cohen_kappa_score,
+    confusion_matrix,
+    f1_score,
+    matthews_corrcoef,
+)
 
 OUT = Path(__file__).resolve().parent
 CACHE = OUT / "_cache"
@@ -119,9 +150,27 @@ SERIES = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4"]
 SEQ_BLUE = ["#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#0d366b"]
 DIVERGE_NEG, DIVERGE_MID, DIVERGE_POS = "#e34948", "#f0efec", "#2a78d6"
 
-LEVELS = ["rất tiêu cực", "tiêu cực", "trung tính", "tích cực", "rất tích cực"]
 HORIZONS = (1, 5, 10)
 REP_LEAD, REP_FULL = "lead (256 tok)", "full doc (chunked)"
+
+#: Label schemes. Both are EQUAL-SIZED quantile bands, so the base rate is 1/k by
+#: construction and known before a model is fitted (paper 53).
+#:
+#: ⚠️ **Equal bands are also the least flattering choice, deliberately.** Paper 56 derives
+#: the accuracy of guessing from the prior as `Σ Pₖ²`; for k classes that is minimised
+#: exactly when every band is 1/k. Tertiles therefore sit at the MINIMUM of the trivial
+#: curve — 0.333 — where a 25/50/25 split would hand out 0.375 for free, and a wider
+#: neutral band more still. Paper 56 picked its own threshold at that minimum for the same
+#: reason.
+#:
+#: ⚠️ **Accuracy is NOT comparable across k.** Going 5 → 3 raises the base rate 0.200 →
+#: 0.333, so accuracy must rise whatever the model does. Only the chance-corrected
+#: metrics — QWK and MCC — and the lift over base rate can be read across schemes.
+LEVEL_NAMES = {
+    3: ["tiêu cực", "trung tính", "tích cực"],
+    5: ["rất tiêu cực", "tiêu cực", "trung tính", "tích cực", "rất tích cực"],
+}
+LEVELS = LEVEL_NAMES[5]  # back-compat for the examples writer's default
 
 plt.rcParams.update(
     {
@@ -241,15 +290,19 @@ def build_reactions(
     n_insane = int((~sane).sum())
     df = df[sane].copy()
 
-    # ⚠️ Quintiles are cut per CALENDAR YEAR, not globally: volatility regimes differ
+    # ⚠️ Bands are cut per CALENDAR YEAR, not globally: volatility regimes differ
     # enormously (2020 vs 2023), and a global cut would label an entire year "positive".
     df["year"] = df["trading_date"].dt.year
-    for h in HORIZONS:
-        df[f"lab{h}"] = (
-            df.groupby("year")[f"exc{h}"]
-            .transform(lambda s: pd.qcut(s, 5, labels=False, duplicates="drop"))
-        )
-    out = df.dropna(subset=[f"lab{h}" for h in HORIZONS]).reset_index(drop=True)
+    label_cols = []
+    for k in LEVEL_NAMES:
+        for h in HORIZONS:
+            col = f"lab{k}_{h}"
+            df[col] = (
+                df.groupby("year")[f"exc{h}"]
+                .transform(lambda s: pd.qcut(s, k, labels=False, duplicates="drop"))
+            )
+            label_cols.append(col)
+    out = df.dropna(subset=label_cols).reset_index(drop=True)
     out.attrs["n_insane"] = n_insane
     return out, px
 
@@ -300,7 +353,7 @@ def get_embeddings(df: pd.DataFrame, tag: str) -> dict[str, np.ndarray]:
 
 
 def walkforward(
-    df: pd.DataFrame, emb: np.ndarray, horizon: int, n_folds: int = 5
+    df: pd.DataFrame, emb: np.ndarray, horizon: int, n_classes: int = 5, n_folds: int = 5
 ) -> dict:
     """Purged, embargoed, chronological. Returns metrics + out-of-sample predictions.
 
@@ -309,7 +362,7 @@ def walkforward(
     same-day articles carrying the same label landed on both sides — the model only had
     to recognise which day an article came from. This corpus averages 58 articles a day.
     """
-    y = df[f"lab{horizon}"].to_numpy(dtype=int)
+    y = df[f"lab{n_classes}_{horizon}"].to_numpy(dtype=int)
     dates = df["trading_date"].to_numpy()
     order = np.argsort(dates, kind="mergesort")
     emb, y, dates = emb[order], y[order], dates[order]
@@ -353,6 +406,13 @@ def walkforward(
                 "macro_f1": float(f1_score(y[test], p, average="macro", zero_division=0)),
                 "qwk": float(cohen_kappa_score(y[test], p, weights="quadratic")),
                 "qwk_shuffled": float(cohen_kappa_score(y[test], p_null, weights="quadratic")),
+                # ⚠️ MCC is the metric that survives a change of k: it is corrected for the
+                # class prior, so 3-class and 5-class runs can be put side by side. Raw
+                # accuracy cannot — the base rate moves 0.200 → 0.333 on its own.
+                "mcc": float(matthews_corrcoef(y[test], p)),
+                "mcc_shuffled": float(matthews_corrcoef(y[test], p_null)),
+                "lift": float((p == y[test]).mean()
+                              / pd.Series(y[test]).value_counts(normalize=True).max()),
                 "period": f"{pd.Timestamp(t0):%Y-%m}→{pd.Timestamp(t1):%Y-%m}",
             }
         )
@@ -454,7 +514,76 @@ def chart_does_news_move_prices(
     return stats
 
 
-def chart_model(results: dict, df: pd.DataFrame, path: Path):
+def chart_class_schemes(results: dict, path: Path):
+    """3 bands vs 5 bands, on the metrics where that comparison is legitimate.
+
+    ⚠️ The whole point of this figure is that **raw accuracy cannot be compared across k**.
+    Cutting five bands into three moves the base rate from 0.200 to 0.333, so accuracy
+    rises whatever the model does — paper 56's result, that widening bands buys accuracy
+    with no change to the model, in its mildest form. Panel 1 shows accuracy WITH its own
+    base rate so the reader sees the gap rather than the level; panels 2-3 show the
+    chance-corrected metrics that survive the change.
+    """
+    ks = sorted(LEVEL_NAMES)
+    fig, axes = plt.subplots(1, 3, figsize=(14.5, 4.5))
+    xs = np.arange(len(HORIZONS))
+    width = 0.34
+
+    ax = axes[0]
+    for i, k in enumerate(ks):
+        acc = [np.mean([f["acc"] for f in results[(k, REP_FULL, h)]["folds"]]) * 100
+               for h in HORIZONS]
+        base = [np.mean([f["base"] for f in results[(k, REP_FULL, h)]["folds"]]) * 100
+                for h in HORIZONS]
+        pos = xs + (i - 0.5) * width
+        ax.bar(pos, acc, width=width * 0.9, color=SERIES[i], zorder=3, label=f"{k} lớp")
+        ax.scatter(pos, base, marker="_", s=340, color=DIVERGE_NEG, zorder=5,
+                   linewidths=2.4, label="tỷ lệ nền" if i == 0 else None)
+        for x, a, b in zip(pos, acc, base):
+            ax.text(x, a + 0.7, f"+{a - b:.1f}", ha="center", fontsize=8,
+                    fontweight="600", color=INK_2)
+    ax.set_xticks(xs, [f"h={h}" for h in HORIZONS], fontsize=9)
+    ax.legend(frameon=False, fontsize=8.5, ncol=3, loc="upper left")
+    ax.set_ylim(0, 46)
+    _style(ax, "Accuracy — KHÔNG so sánh được giữa 3 và 5 lớp",
+           "cột = accuracy · gạch đỏ = tỷ lệ nền của chính nó · số = khoảng cách",
+           ylab="%")
+
+    for j, (metric, shuf, title, sub) in enumerate(
+        [
+            ("qwk", "qwk_shuffled", "QWK — đã hiệu chỉnh ngẫu nhiên",
+             "so sánh được giữa 3 và 5 lớp"),
+            ("mcc", "mcc_shuffled", "MCC — hiệu chỉnh theo tỷ lệ lớp",
+             "paper 51 đạt 0,069 với 8,5 triệu bài"),
+        ]
+    ):
+        ax = axes[j + 1]
+        for i, k in enumerate(ks):
+            v = [np.mean([f[metric] for f in results[(k, REP_FULL, h)]["folds"]])
+                 for h in HORIZONS]
+            pos = xs + (i - 0.5) * width
+            ax.bar(pos, v, width=width * 0.9, color=SERIES[i], zorder=3, label=f"{k} lớp")
+            for x, val in zip(pos, v):
+                ax.text(x, val, f"{val:+.3f}", ha="center",
+                        va="bottom" if val >= 0 else "top", fontsize=8, color=INK_2)
+        sh = [np.mean([f[shuf] for f in results[(ks[-1], REP_FULL, h)]["folds"]])
+              for h in HORIZONS]
+        ax.plot(xs, sh, "o--", color=MUTED, ms=6, lw=1.6, zorder=4, label="nhãn xáo trộn")
+        ax.axhline(0, color=BASELINE, lw=1.4)
+        ax.set_xticks(xs, [f"h={h}" for h in HORIZONS], fontsize=9)
+        # ⚠️ Headroom before the legend, not after: the value labels sit on the bar tops in
+        # DATA coordinates, so without this the tallest bar's label lands under the legend.
+        lo, hi = ax.get_ylim()
+        ax.set_ylim(min(lo, min(sh) * 1.4), hi * 1.42)
+        ax.legend(frameon=False, fontsize=8, ncol=3, loc="upper left")
+        _style(ax, title, sub, ylab=metric.upper())
+
+    fig.tight_layout()
+    fig.savefig(path, dpi=160, bbox_inches="tight", facecolor=SURFACE)
+    plt.close(fig)
+
+
+def chart_model(results: dict, df: pd.DataFrame, path: Path, n_classes: int = 5):
     """Panels 2-4 — can the text predict the level, and does the model degenerate?"""
     fig = plt.figure(figsize=(13.5, 8.6))
     gs = fig.add_gridspec(2, 3, hspace=0.45, wspace=0.32)
@@ -463,13 +592,14 @@ def chart_model(results: dict, df: pd.DataFrame, path: Path):
     ax = fig.add_subplot(gs[0, :2])
     width = 0.26
     for i, h in enumerate(HORIZONS):
-        f = pd.DataFrame(results[(REP_FULL, h)]["folds"])
+        f = pd.DataFrame(results[(n_classes, REP_FULL, h)]["folds"])
         x = np.arange(len(f)) + (i - 1) * width
         ax.bar(x, f["acc"] * 100, width=width * 0.9, color=SERIES[i], zorder=3,
                label=f"h = {h} phiên")
-    f0 = pd.DataFrame(results[(REP_FULL, HORIZONS[0])]["folds"])
-    ax.axhline(20, color=DIVERGE_NEG, lw=2, ls="--", zorder=4)
-    ax.text(len(f0) - 0.4, 20.6, "tỷ lệ nền 20% (5 lớp phân vị)", ha="right",
+    f0 = pd.DataFrame(results[(n_classes, REP_FULL, HORIZONS[0])]["folds"])
+    base_pct = 100.0 / n_classes
+    ax.axhline(base_pct, color=DIVERGE_NEG, lw=2, ls="--", zorder=4)
+    ax.text(len(f0) - 0.4, base_pct + 0.6, f"tỷ lệ nền {base_pct:.1f}% ({n_classes} lớp phân vị)", ha="right",
             fontsize=8.5, color=DIVERGE_NEG, fontweight="600")
     ax.set_xticks(np.arange(len(f0)))
     ax.set_xticklabels(f0["period"], fontsize=8)
@@ -481,12 +611,13 @@ def chart_model(results: dict, df: pd.DataFrame, path: Path):
 
     # ── train vs test collapse — paper 63's headline ─────────────────────────────────
     ax = fig.add_subplot(gs[0, 2])
-    f = pd.DataFrame(results[(REP_FULL, 5)]["folds"])
+    f = pd.DataFrame(results[(n_classes, REP_FULL, 5)]["folds"])
     ax.plot([0] * len(f), f["train_acc"] * 100, "o", ms=9, color=SERIES[1], zorder=3)
     ax.plot([1] * len(f), f["acc"] * 100, "o", ms=9, color=SERIES[0], zorder=3)
     for a, b in zip(f["train_acc"] * 100, f["acc"] * 100):
         ax.plot([0, 1], [a, b], color=BASELINE, lw=1.5, zorder=2)
-    ax.axhline(20, color=DIVERGE_NEG, lw=2, ls="--", zorder=4)
+    base_pct = 100.0 / n_classes
+    ax.axhline(base_pct, color=DIVERGE_NEG, lw=2, ls="--", zorder=4)
     ax.set_xticks([0, 1])
     ax.set_xticklabels(["train", "test"], fontsize=9.5)
     ax.set_xlim(-0.35, 1.35)
@@ -494,31 +625,32 @@ def chart_model(results: dict, df: pd.DataFrame, path: Path):
             fontweight="600", color=SERIES[0], va="center")
     ax.text(-0.05, f["train_acc"].mean() * 100, f"{f['train_acc'].mean() * 100:.1f}%",
             fontsize=10, fontweight="600", color=SERIES[1], va="center", ha="right")
-    _style(ax, "Sụp đổ train → test (h=5)",
+    _style(ax, f"Sụp đổ train → test (h=5, {n_classes} lớp)",
            "paper 63: 97,5% → 50,4%", ylab="accuracy (%)")
 
     # ── confusion matrix ─────────────────────────────────────────────────────────────
     ax = fig.add_subplot(gs[1, 0])
-    p = results[(REP_FULL, 5)]["preds"]
-    cm = confusion_matrix(p["y"], p["pred"], labels=range(5), normalize="true") * 100
+    p = results[(n_classes, REP_FULL, 5)]["preds"]
+    names = LEVEL_NAMES[n_classes]
+    cm = confusion_matrix(p["y"], p["pred"], labels=range(n_classes), normalize="true") * 100
     cmap = matplotlib.colors.LinearSegmentedColormap.from_list("seq", SEQ_BLUE)
     im = ax.imshow(cm, cmap=cmap, vmin=0, vmax=max(60, cm.max()))
-    for i in range(5):
-        for j in range(5):
+    for i in range(n_classes):
+        for j in range(n_classes):
             ax.text(j, i, f"{cm[i, j]:.0f}", ha="center", va="center", fontsize=8,
                     color="white" if cm[i, j] > cm.max() * 0.55 else INK)
-    ax.set_xticks(range(5), [str(i) for i in range(5)], fontsize=8.5)
-    ax.set_yticks(range(5), [f"{i} {LEVELS[i][:9]}" for i in range(5)], fontsize=8)
+    ax.set_xticks(range(n_classes), [str(i) for i in range(n_classes)], fontsize=8.5)
+    ax.set_yticks(range(n_classes), [f"{i} {names[i][:11]}" for i in range(n_classes)], fontsize=8)
     ax.grid(False)
-    _style(ax, "Ma trận nhầm lẫn (h=5), % theo hàng",
+    _style(ax, f"Ma trận nhầm lẫn (h=5, {n_classes} lớp), % theo hàng",
            "một cột sáng = mô hình chỉ đoán một lớp", xlab="dự đoán", ylab="thực tế")
     ax.grid(False)
 
     # ── QWK vs shuffled-label control ────────────────────────────────────────────────
     ax = fig.add_subplot(gs[1, 1])
     xs = np.arange(len(HORIZONS))
-    q = [np.mean([f["qwk"] for f in results[(REP_FULL, h)]["folds"]]) for h in HORIZONS]
-    qs = [np.mean([f["qwk_shuffled"] for f in results[(REP_FULL, h)]["folds"]]) for h in HORIZONS]
+    q = [np.mean([f["qwk"] for f in results[(n_classes, REP_FULL, h)]["folds"]]) for h in HORIZONS]
+    qs = [np.mean([f["qwk_shuffled"] for f in results[(n_classes, REP_FULL, h)]["folds"]]) for h in HORIZONS]
     ax.bar(xs - 0.18, q, width=0.34, color=SERIES[0], zorder=3, label="mô hình")
     ax.bar(xs + 0.18, qs, width=0.34, color=MUTED, zorder=3, label="nhãn xáo trộn")
     for x, v in zip(xs - 0.18, q):
@@ -532,7 +664,7 @@ def chart_model(results: dict, df: pd.DataFrame, path: Path):
 
     # ── decile plot: the real test ───────────────────────────────────────────────────
     ax = fig.add_subplot(gs[1, 2])
-    pp = results[(REP_FULL, 5)]["preds"].copy()
+    pp = results[(n_classes, REP_FULL, 5)]["preds"].copy()
     pp["exc"] = df.loc[pp["src"], "exc5"].to_numpy() * 100
     pp["dec"] = pd.qcut(pp["p_top"], 10, labels=False, duplicates="drop")
     d = pp.groupby("dec")["exc"].mean()
@@ -551,9 +683,12 @@ def chart_model(results: dict, df: pd.DataFrame, path: Path):
 # ── examples ─────────────────────────────────────────────────────────────────────────
 
 
-def write_examples(df: pd.DataFrame, results: dict, path: Path, n: int = 6):
+def write_examples(
+    df: pd.DataFrame, results: dict, path: Path, n: int = 6, n_classes: int = 5
+):
     """The eyeball test. Six buckets, each answering a different question."""
-    p = results[(REP_FULL, 5)]["preds"].copy()
+    LEVELS = LEVEL_NAMES[n_classes]
+    p = results[(n_classes, REP_FULL, 5)]["preds"].copy()
     ex = df.loc[p["src"]].copy()
     ex["y"] = p["y"].to_numpy()
     ex["pred"] = p["pred"].to_numpy()
@@ -650,58 +785,85 @@ def main():
     print(f"  ⚠️ dropped by the price-sanity screen (close_adjust breaks at some "
           f"corporate actions): {df.attrs.get('n_insane', 0):,}")
 
-    tag = ("all" if args.include_disclosures else "ed") + ("_q" if args.quick else "")
+    # ⚠️ No `_q` suffix: the cache is keyed by row_id, so a --quick subsample is served
+    # from the same store as the full run instead of re-encoding its own copy.
+    tag = "all" if args.include_disclosures else "ed"
     emb = get_embeddings(df, tag)
     print(f"  representations: lead {emb['lead'].shape} · full {emb['full'].shape}")
 
     # ⚠️ Two arms on identical rows, folds and labels. `lead` ≈ the old 256-token slice
     # (38.7% of the average article); `full` is the whole document, chunk-pooled.
-    arms = {"lead (256 tok)": emb["lead"], "full doc (chunked)": emb["full"]}
+    arms = {REP_LEAD: emb["lead"], REP_FULL: emb["full"]}
+    ks = sorted(LEVEL_NAMES)
     results = {}
-    for rep, mat in arms.items():
-        for h in HORIZONS:
-            print(f"  walk-forward  {rep:<20} h={h}…", flush=True)
-            results[(rep, h)] = walkforward(df, mat, h, n_folds=args.folds)
+    for k in ks:
+        for rep, mat in arms.items():
+            for h in HORIZONS:
+                print(f"  walk-forward  {k} lớp · {rep:<20} h={h}…", flush=True)
+                results[(k, rep, h)] = walkforward(
+                    df, mat, h, n_classes=k, n_folds=args.folds
+                )
 
-    print("\n" + "=" * 104)
-    print(f"{'representation':<21}{'h':>3}{'fold':>6}{'period':>18}{'n_test':>9}"
-          f"{'train':>8}{'test':>8}{'base':>8}{'macroF1':>9}{'QWK':>8}{'QWK shuf':>10}")
-    print("-" * 104)
-    for rep in arms:
-        for h in HORIZONS:
-            for f in results[(rep, h)]["folds"]:
-                print(f"{'':<21}{h:>3}{f['fold']:>6}{f['period']:>18}{f['n_test']:>9,}"
-                      f"{f['train_acc']:>8.3f}{f['acc']:>8.3f}{f['base']:>8.3f}"
-                      f"{f['macro_f1']:>9.3f}{f['qwk']:>8.3f}{f['qwk_shuffled']:>10.3f}")
-            m = pd.DataFrame(results[(rep, h)]["folds"]).mean(numeric_only=True)
-            print(f"{rep:<21}{h:>3}{'MEAN':>6}{'':>18}{'':>9}{m['train_acc']:>8.3f}"
-                  f"{m['acc']:>8.3f}{m['base']:>8.3f}{m['macro_f1']:>9.3f}"
-                  f"{m['qwk']:>8.3f}{m['qwk_shuffled']:>10.3f}")
-            print("-" * 104)
+    print("\n" + "=" * 112)
+    print(f"{'k':>2}{'representation':<21}{'h':>4}{'train':>8}{'test':>8}{'base':>8}"
+          f"{'lift':>7}{'macroF1':>9}{'QWK':>8}{'QWKshuf':>9}{'MCC':>8}{'MCCshuf':>9}")
+    print("-" * 112)
+    for k in ks:
+        for rep in arms:
+            for h in HORIZONS:
+                m = pd.DataFrame(results[(k, rep, h)]["folds"]).mean(numeric_only=True)
+                print(f"{k:>2}{rep:<21}{h:>4}{m['train_acc']:>8.3f}{m['acc']:>8.3f}"
+                      f"{m['base']:>8.3f}{m['lift']:>7.3f}{m['macro_f1']:>9.3f}"
+                      f"{m['qwk']:>8.3f}{m['qwk_shuffled']:>9.3f}"
+                      f"{m['mcc']:>8.3f}{m['mcc_shuffled']:>9.3f}")
+        print("-" * 112)
 
-    print("\n⭐ PAIRED — full doc minus lead, same folds:")
-    print(f"  {'h':>3}{'Δacc':>10}{'ΔmacroF1':>11}{'ΔQWK':>10}{'folds won':>12}")
+    print("\n⭐ PAIRED A — full doc minus lead, same folds (does reading it all help?):")
+    print(f"  {'k':>2}{'h':>4}{'Δacc':>10}{'ΔQWK':>10}{'ΔMCC':>10}{'folds won':>12}")
+    for k in ks:
+        for h in HORIZONS:
+            a = pd.DataFrame(results[(k, REP_FULL, h)]["folds"])
+            b = pd.DataFrame(results[(k, REP_LEAD, h)]["folds"])
+            n = min(len(a), len(b))
+            d_q = a["qwk"][:n] - b["qwk"][:n]
+            print(f"  {k:>2}{h:>4}{(a['acc'][:n] - b['acc'][:n]).mean():>+10.4f}"
+                  f"{d_q.mean():>+10.4f}{(a['mcc'][:n] - b['mcc'][:n]).mean():>+10.4f}"
+                  f"{f'{int((d_q > 0).sum())}/{n}':>12}")
+
+    print("\n⭐ PAIRED B — 3 bands minus 5 bands, full doc, same folds:")
+    print("  ⚠️ Δacc is MEANINGLESS here — the base rate moves 0.200 → 0.333 on its own.")
+    print("     Read ΔQWK and ΔMCC; both are corrected for the class prior.")
+    print(f"  {'h':>4}{'Δacc':>10}{'Δlift':>9}{'ΔQWK':>10}{'ΔMCC':>10}{'folds won (MCC)':>18}")
     for h in HORIZONS:
-        a = pd.DataFrame(results[("full doc (chunked)", h)]["folds"])
-        b = pd.DataFrame(results[("lead (256 tok)", h)]["folds"])
+        a = pd.DataFrame(results[(3, REP_FULL, h)]["folds"])
+        b = pd.DataFrame(results[(5, REP_FULL, h)]["folds"])
         n = min(len(a), len(b))
-        d_acc = (a["acc"][:n] - b["acc"][:n])
-        d_f1 = (a["macro_f1"][:n] - b["macro_f1"][:n])
-        d_qwk = (a["qwk"][:n] - b["qwk"][:n])
-        print(f"  {h:>3}{d_acc.mean():>+10.4f}{d_f1.mean():>+11.4f}{d_qwk.mean():>+10.4f}"
-              f"{f'{int((d_qwk > 0).sum())}/{n}':>12}")
+        d_m = a["mcc"][:n] - b["mcc"][:n]
+        print(f"  {h:>4}{(a['acc'][:n] - b['acc'][:n]).mean():>+10.4f}"
+              f"{(a['lift'][:n] - b['lift'][:n]).mean():>+9.4f}"
+              f"{(a['qwk'][:n] - b['qwk'][:n]).mean():>+10.4f}{d_m.mean():>+10.4f}"
+              f"{f'{int((d_m > 0).sum())}/{n}':>18}")
+
+    # ⚠️ Persist the fitted results BEFORE drawing. 120 walk-forward fits cost ~18 minutes;
+    # a label collision in a chart should not cost that again.
+    import pickle
+
+    with open(CACHE / f"results_{tag}.pkl", "wb") as fh:
+        pickle.dump({"results": results, "df": df, "ks": ks}, fh)
 
     print("\nCharts…")
     stats = chart_does_news_move_prices(
         df, px, df_full, OUT / "news_result_1_impact.png"
     )
-    chart_model(results, df, OUT / "news_result_2_model.png")
-    write_examples(df, results, OUT / "news_result_examples.md")
+    for k in ks:
+        chart_model(results, df, OUT / f"news_result_2_model_{k}class.png", n_classes=k)
+    chart_class_schemes(results, OUT / "news_result_3_class_schemes.png")
+    write_examples(df, results, OUT / "news_result_examples.md", n_classes=3)
 
     mad_news, mad_quiet = stats.loc[True, "mad"], stats.loc[False, "mad"]
     rel_news, rel_quiet = stats.loc[True, "rel"], stats.loc[False, "rel"]
-    acc5 = np.mean([f["acc"] for f in results[(REP_FULL, 5)]["folds"]])
-    qwk5 = np.mean([f["qwk"] for f in results[(REP_FULL, 5)]["folds"]])
+    acc5 = np.mean([f["acc"] for f in results[(5, REP_FULL, 5)]["folds"]])
+    qwk5 = np.mean([f["qwk"] for f in results[(5, REP_FULL, 5)]["folds"]])
     print(
         f"\nVERDICT\n"
         f"  news-day |excess 5d| {mad_news:.3%} vs quiet-day {mad_quiet:.3%} "
@@ -713,7 +875,8 @@ def main():
         f"  task with Reuters text and millisecond tick labels. On 5 ordered classes the\n"
         f"  base rate is 0.200 and QWK 0 means no agreement beyond chance.\n"
         f"\n  → experiment_10/news_result_1_impact.png\n"
-        f"  → experiment_10/news_result_2_model.png\n"
+        + "".join(f"  → experiment_10/news_result_2_model_{k}class.png\n" for k in ks)
+        + f"  → experiment_10/news_result_3_class_schemes.png\n"
         f"  → experiment_10/news_result_examples.md"
     )
 
