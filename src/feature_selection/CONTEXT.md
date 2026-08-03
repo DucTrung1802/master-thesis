@@ -4,12 +4,18 @@
 > the keys they share, and ranks every feature against one target. Built 2026-08-03
 > against `unified_schema_vcb.pool__basic ⋈ pool__targets`.
 >
-> **Two entry points, and the difference is the model they select FOR:**
+> **Three notebooks. Read the third one first.**
 >
 > | notebook | one sample is | for |
 > |---|---|---|
 > | [feature_selection.ipynb](feature_selection.ipynb) | one row → `y_N` | a per-row model. `lookback=1` |
-> | [windowed_selection.ipynb](windowed_selection.ipynb) | a `(d, n)` window → `y_N` | **a sequence model.** `d=20`, `h ∈ {5, 10}` (2026-08-04) |
+> | [windowed_selection.ipynb](windowed_selection.ipynb) | a `(d, n)` window → `y_N` | **a sequence model.** `d=20`, `h ∈ {5, 10}` |
+> | **[evaluation_study.ipynb](evaluation_study.ipynb)** | — | **whether either result is real.** It is not: see §6b-6d |
+>
+> ⚠️ **The first two both produce a positive out-of-sample IC. So does the same
+> pipeline run on shuffled labels.** The third notebook is what tells them apart, and
+> it is the one whose conclusion governs the other two. The rankings, kept sets and
+> stat profiles there are internally consistent descriptions of noise.
 >
 > The modules hold nothing notebook-specific, so the same runs script.
 
@@ -263,6 +269,94 @@ at the other is not selecting.
 **The pipeline itself is deterministic** — three identical runs give bit-identical fold
 ICs and kept sets, and `stability=True/False` changes nothing. So the variation above is
 the data, not the code.
+
+## 6c. The four-step study (2026-08-04) — what each step changed
+
+Run at `d=20, h=5`, holdout `2024-06-01` onward (487 samples), 20-draw block-shuffled
+null per configuration.
+
+### Step 3 — the null, built into the package ([evaluation.py](evaluation.py))
+
+`null_distribution` re-runs the WHOLE pipeline (selection included) on block-shuffled
+labels. `ic_summary` reports mean **and trend** with an `n_eff = n/h` error bar.
+`NullResult.bar` is the p95 — the number to beat instead of zero.
+
+### Step 1 — the purged holdout, and the control that broke it
+
+`FeatureSelector(holdout_start=…)` removes the holdout in `_prepare`, before any
+ranker sees it, and purges `lookback + horizon − 1` rows from the development side of
+the boundary too. `score_holdout` trains on all development data and scores once —
+against **`all channels`** and against a **shuffled-label control**.
+
+⚠️ **The control is what makes the holdout readable, and it says the holdout cannot
+decide anything.** A model trained on RANDOMLY PERMUTED labels scored **+0.169** on
+the holdout — higher than any real configuration in the study. At 487 rows and `h=5`,
+`n_eff` is 97 and SE(IC) ≈ 0.102, so every holdout number here is inside one standard
+error of zero. **A single holdout score with no control is unreadable**, and this is
+the demonstration.
+
+### Step 2 — normalisation made it WORSE
+
+| representation | dev IC | null bar (p95) | clears? | hit rate |
+|---|---|---|---|---|
+| `none` (raw levels) | **+0.046** | +0.053 | ❌ p=0.19 | 0.480 |
+| `zscore` | +0.038 | **+0.076** | ❌ p=0.38 | 0.500 |
+| `window_relative` | +0.000 | +0.059 | ❌ p=0.71 | 0.485 |
+
+⚠️ **Removing the era proxy removed the apparent signal**, which is the diagnosis
+confirming itself: the raw-level result was substantially the level acting as a date.
+What is left after normalising is nothing.
+
+⚠️ **`zscore` raised its own bar** (null mean +0.029 vs +0.013 for raw). Standardised
+windows give the selector *more* room to overfit, so a fair comparison had to re-run
+the null per representation — which is exactly why the bar is not a constant.
+
+⚠️ **Adding the holdout also lowered the dev IC** (+0.056 → +0.046): less training
+data, and the removed period is the recent one, where the signal had already decayed.
+
+### Step 4 — the market-relative target did not help either
+
+`pool__targets` gained `return_rel_{h}day` = stock return − VNINDEX return over the
+same window (`gold_schema.stock_market.hose__vnindex__close_adjust`, **not** the
+retired `gold.indices`). Its `sd` is smaller than the absolute target's, which is the
+market factor being removed — visible before any model is fitted.
+
+### The whole grid, `d=20, h=5`, holdout 2024-06-01, 20-draw null each
+
+| target / representation | dev IC | null bar | clears? | p | trend | hit |
+|---|---|---|---|---|---|---|
+| `return_5day` / none | **+0.046** | +0.053 | ❌ | 0.19 | +0.008 | 0.480 |
+| `return_5day` / zscore | +0.038 | +0.076 | ❌ | 0.38 | −0.012 | 0.501 |
+| `return_5day` / window_relative | +0.000 | +0.059 | ❌ | 0.71 | +0.024 | 0.485 |
+| `return_rel_5day` / none | +0.013 | +0.044 | ❌ | 0.29 | −0.016 | 0.495 |
+| `return_rel_5day` / zscore | −0.031 | +0.057 | ❌ | 0.90 | +0.013 | 0.484 |
+
+⚠️ **NOTHING CLEARS ITS OWN NULL.** Five configurations, three representations, two
+targets — every one inside what shuffled labels produce. Hit rates are 0.48-0.50
+throughout.
+
+> The table above is the **20-draw** run. `evaluation_study.ipynb` re-runs the same
+> grid at `N_NULL = 10` to keep its execution under ~20 minutes, so its bars differ
+> in the third decimal. The verdict is identical in every cell — which is itself the
+> point: the result is not close enough to the bar for draw count to matter.
+
+⚠️ **The holdout cannot separate them, and the control proves it.** Shuffled-label
+controls scored **−0.189 to +0.169**; the real configurations scored **−0.090 to
++0.071**. The control range strictly CONTAINS the real range.
+
+## 6d. ⚠️ Why more features cannot fix this
+
+`n_eff` is the binding constraint. At `h=5`, VCB's 4,235 sessions carry roughly
+**850 independent observations** (`n/h`), the development folds ~126 each, and the
+holdout **97**. Separating an IC of 0.05 from zero at conventional confidence needs
+on the order of 1,500. **A wider feature pool buys no observations — it only raises
+the null**, which `zscore` demonstrated by moving its own bar from +0.053 to +0.076.
+
+The way out is more **cross-section**, not more features, more history or a better
+model: N stocks × T days at the same `h` multiplies the independent count by N.
+`unified_schema_<ticker>` cannot express that by construction — it is one company —
+which is the same conclusion memory `project-cross-sectional-strategy` reached from
+the other direction.
 
 ## 7. Extending it
 

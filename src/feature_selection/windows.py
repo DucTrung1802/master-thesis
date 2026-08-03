@@ -71,10 +71,33 @@ def split_design_column(column: str) -> Tuple[str, str]:
     return channel, stat
 
 
+# How each window is rescaled BEFORE its statistics are taken.
+#
+# ⚠️ This is the single most consequential option in the package, because the raw
+# panel is non-stationary. `close_adjust` rises over seventeen years, so `last` on a
+# raw window is a near-monotone function of the DATE — a tree splitting on it is
+# identifying the era, not predicting the return, and it will top the ranking while
+# generalising to nothing.
+#
+#   "none"            raw values. What the first runs used.
+#   "zscore"          (x − window mean) / window sd. `last` becomes "how extreme is
+#                     today against its own last d days" — stationary, defined for
+#                     negative and zero-valued channels, and exactly what a
+#                     sequence model is normally fed. `mean` collapses to 0 and `sd`
+#                     to 1; both are then dropped as constants, VISIBLY, which is
+#                     the correct outcome rather than a loss.
+#   "window_relative" x / x[N] − 1: the window as returns against day N. Strictly
+#                     better for price-like channels, but undefined wherever the
+#                     last value is 0 — which `prop_buy_vol` and the foreign-flow
+#                     nets are, often. Those columns come out NaN.
+NORMALIZATIONS = ("none", "zscore", "window_relative")
+
+
 def window_design(
     frame: pd.DataFrame,
     lookback: int,
     stats: Sequence[str] = WINDOW_STATS,
+    normalize: str = "none",
 ) -> pd.DataFrame:
     """Summarise each column over its trailing `lookback`-day window.
 
@@ -104,11 +127,21 @@ def window_design(
     unknown = [s for s in stats if s not in WINDOW_STATS]
     if unknown:
         raise ValueError(f"unknown window stat(s) {unknown}; pick from {WINDOW_STATS}")
+    if normalize not in NORMALIZATIONS:
+        raise ValueError(
+            f"normalize must be one of {NORMALIZATIONS}, got {normalize!r}"
+        )
     if lookback < 1:
         raise ValueError(f"lookback must be >= 1, got {lookback}")
     if len(frame) < lookback:
         raise ValueError(
             f"{len(frame)} rows cannot form a single {lookback}-day window."
+        )
+    if lookback == 1 and normalize != "none":
+        raise ValueError(
+            f"normalize={normalize!r} is meaningless at lookback=1 — a one-day "
+            f"window has no dispersion to divide by and no last value other than "
+            f"itself. Use lookback > 1 or normalize='none'."
         )
     if lookback == 1 and tuple(stats) == ("last",):
         # The degenerate case is the identity, and saying so keeps the un-windowed
@@ -135,6 +168,32 @@ def window_design(
     # declared here instead of shouted about eight times.
     finite = np.count_nonzero(np.isfinite(windows), axis=1)
     empty = finite == 0
+
+    # ── normalisation, applied to the WINDOW before any statistic is taken ──
+    # ⚠️ Every scaling constant comes from the window itself — its own mean, sd or
+    # last value — so it uses no information after day N and needs no train/test
+    # fitting. That is the reason it is done here and not as a preprocessing step:
+    # a scaler fitted on a training slice would have to be carried into every fold,
+    # and the first version of that is always the one that leaks.
+    if normalize != "none":
+        with np.errstate(invalid="ignore", divide="ignore"), warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore", r"(Mean|All-NaN|Degrees of freedom)", RuntimeWarning
+            )
+            if normalize == "zscore":
+                centre = np.nanmean(windows, axis=1, keepdims=True)
+                scale = np.nanstd(windows, axis=1, keepdims=True)
+                # A window that never moved has sd 0. Its z-scores are 0/0; the
+                # honest value is 0 (today is exactly average), not NaN or inf.
+                windows = np.where(scale > 0, (windows - centre) / scale, 0.0)
+            else:  # window_relative
+                reference = windows[:, -1:, :]
+                windows = np.where(
+                    reference != 0, windows / reference - 1.0, np.nan
+                )
+        windows = np.where(empty[:, None, :], np.nan, windows)
+        finite = np.count_nonzero(np.isfinite(windows), axis=1)
+        empty = finite == 0
 
     computed: Dict[str, np.ndarray] = {}
     with np.errstate(invalid="ignore"), warnings.catch_warnings():

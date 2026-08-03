@@ -152,10 +152,16 @@ def unified_vcb_pool_basic(
     deps=[AssetKey(["unified_vcb", "pool__basic"])],
     description=(
         f"{UNIFIED_SCHEMA_NAME}.pool__basic → {UNIFIED_SCHEMA_NAME}.pool__targets: "
-        f"`date` (PK) plus ONE COLUMN PER HORIZON in "
-        f"DataPreprocessor.UNIFIED_TARGET_HORIZONS — `return_5day`, `return_10day` — "
-        f"each the forward simple return close[t+h]/close[t]-1 on the SPLIT-ADJUSTED "
-        f"close. ⚠️ Sourced from pool__basic, not gold.stocks, so the labels and the "
+        f"`date` (PK) plus TWO COLUMNS PER HORIZON in "
+        f"DataPreprocessor.UNIFIED_TARGET_HORIZONS — `return_{{h}}day`, the forward "
+        f"simple return close[t+h]/close[t]-1 on the SPLIT-ADJUSTED close, and "
+        f"`return_rel_{{h}}day`, the same minus the VNINDEX return over the same "
+        f"window (gold_schema.stock_market.hose__vnindex__close_adjust). ⚠️ The "
+        f"relative target exists because a single stock's ABSOLUTE forward return is "
+        f"dominated by the market factor, which no company-level feature predicts; "
+        f"subtracting the index leaves the part a stock-specific feature could "
+        f"explain. ⚠️ It reads gold.stock_market, NOT the retired gold.indices the "
+        f"old notebook used. ⚠️ Sourced from pool__basic, not gold.stocks, so the "
         f"features share one calendar by construction — the dropped version had 4,242 "
         f"rows against pool__basic's 4,235 for exactly that reason. ⚠️ Each column's "
         f"last h rows are NULL (their future does not exist yet) and are kept so the "
@@ -169,10 +175,16 @@ def unified_vcb_pool_targets(
         prep._ingest_unified_pool_targets(UNIFIED_TICKER)
         horizons = tuple(prep.UNIFIED_TARGET_HORIZONS)
         target_cols = {h: f"return_{h}day" for h in horizons}
+        relative_cols = {h: f"return_rel_{h}day" for h in horizons}
+        # Keyed so absolute and relative never collide: `h` for absolute, `-h` for
+        # the relative twin.
+        all_targets = {**target_cols, **{-h: c for h, c in relative_cols.items()}}
+        prep_benchmark_table = prep.UNIFIED_BENCHMARK_TABLE
+        prep_benchmark_column = prep.UNIFIED_BENCHMARK_COLUMN
 
         with prep._database_driver._cursor_ctx() as cur:
             stats = {}
-            for h, target_col in target_cols.items():
+            for h, target_col in all_targets.items():
                 cur.execute(
                     f"SELECT COUNT({target_col}), MIN({target_col}), "
                     f"       MAX({target_col}), AVG({target_col}) "
@@ -209,7 +221,7 @@ def unified_vcb_pool_targets(
             )
             unaligned = int(cur.fetchone()[0])
 
-    expected = ["date"] + list(target_cols.values())
+    expected = ["date"] + list(target_cols.values()) + list(relative_cols.values())
     if columns != expected:
         raise ValueError(
             f"{UNIFIED_SCHEMA_NAME}.pool__targets should hold exactly {expected}, "
@@ -238,21 +250,24 @@ def unified_vcb_pool_targets(
     context.log.info(
         f"{UNIFIED_SCHEMA_NAME}.pool__targets: {rows} rows ({first} → {last}) — "
         + "; ".join(
-            f"{target_cols[h]} {int(stats[h][0])} labelled + {rows - int(stats[h][0])} "
-            f"tail, range {float(stats[h][1]):.4f} → {float(stats[h][2]):.4f}, "
-            f"mean {float(stats[h][3]):.5f}"
-            for h in horizons
+            f"{col} {int(stats[key][0])} labelled + {rows - int(stats[key][0])} null, "
+            f"range {float(stats[key][1]):.4f} → {float(stats[key][2]):.4f}, "
+            f"mean {float(stats[key][3]):.5f}"
+            for key, col in all_targets.items()
         )
     )
     metadata = {
         "rows": int(rows),
         "horizons": MetadataValue.text(", ".join(str(h) for h in horizons)),
-        "targets": MetadataValue.text(", ".join(target_cols.values())),
+        "targets": MetadataValue.text(", ".join(expected[1:])),
+        "benchmark": MetadataValue.text(
+            f"{prep_benchmark_table}.{prep_benchmark_column}"
+        ),
         "date_range": MetadataValue.text(f"{first} → {last}"),
         "table": MetadataValue.text(f"{UNIFIED_SCHEMA_NAME}.pool__targets"),
     }
-    for h, target_col in target_cols.items():
-        labelled, lo, hi, mean = stats[h]
+    for key, target_col in all_targets.items():
+        labelled, lo, hi, mean = stats[key]
         metadata[f"{target_col}__labelled"] = int(labelled)
         metadata[f"{target_col}__unlabelled_tail"] = int(rows - int(labelled))
         metadata[f"{target_col}__min"] = MetadataValue.float(round(float(lo), 6))

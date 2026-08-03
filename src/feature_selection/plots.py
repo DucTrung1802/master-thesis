@@ -467,6 +467,42 @@ def plot_horizon_comparison(results: dict, ax=None):
     return ax
 
 
+def plot_null(null, ax=None):
+    """The shuffled-label null, with the observed result placed inside it.
+
+    One distribution, one series. The two reference lines are the whole chart:
+    the **p95 of the null** is the bar, and where the observed value falls
+    relative to it is the result. A bar chart of ICs without this is a chart of
+    numbers whose scale nobody knows.
+    """
+    if not len(null.draws):
+        print("No null draws.")
+        return None
+    if ax is None:
+        _, ax = plt.subplots(figsize=(8, 3.4))
+    ax.hist(null.draws, bins=12, color=SERIES[0], edgecolor=SURFACE, linewidth=0.6)
+    ax.axvline(0, color=GRIDLINE, linewidth=1.0)
+    ax.axvline(null.bar, color=INK_MUTED, linewidth=1.6, linestyle="-")
+    ax.axvline(null.observed, color=SERIES[1], linewidth=2.4)
+    top = ax.get_ylim()[1]
+    ax.text(null.bar, top * 0.98, "  null p95 = the bar", color=INK_SECONDARY,
+            fontsize=9, va="top")
+    ax.text(null.observed, top * 0.80, "  observed", color=SERIES[1], fontsize=9,
+            va="top", fontweight="600")
+    ax.set_xlabel("mean out-of-sample IC")
+    ax.set_ylabel("shuffled-label runs")
+    ax.grid(axis="x", visible=False)
+    verdict = "CLEARS the bar" if null.clears else "inside the null"
+    _titles(
+        ax,
+        f"Does it beat shuffled labels? — {verdict}",
+        f"{null.label or 'run'} · {len(null.draws)} block-shuffled reruns of the whole "
+        f"pipeline · observed {null.observed:+.4f} vs bar {null.bar:+.4f} · "
+        f"p = {null.p_value:.3f}",
+    )
+    return ax
+
+
 def plot_validation(validation: pd.DataFrame, ax=None):
     """Walk-forward out-of-sample IC per fold, selected vs all features.
 

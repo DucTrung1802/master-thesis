@@ -194,6 +194,13 @@ class SelectionResult:
     horizon: int = 5
     window_stats: List[str] = field(default_factory=lambda: ["last"])
     purge_gap: int = 5
+    normalize: str = "none"
+    # Design columns that normalisation made constant (zscore ⇒ mean, sd).
+    dropped_design_columns: List[str] = field(default_factory=list)
+    # The holdout the selection never saw. 0 = none configured.
+    n_holdout: int = 0
+    n_purged_at_boundary: int = 0
+    holdout_start: str = ""
     # Normalised scores per (channel, stat) — the detail behind the channel scores.
     design_scores: pd.DataFrame = field(default_factory=pd.DataFrame, repr=False)
     # Which window statistic carried each channel, per method.
@@ -207,9 +214,14 @@ class SelectionResult:
                 "target": self.target,
                 "horizon_h": self.horizon,
                 "lookback_d": self.lookback,
+                "normalize": self.normalize,
                 "purge_gap_rows": self.purge_gap,
                 "window_stats": ", ".join(self.window_stats),
-                "samples": self.n_rows,
+                "dropped_by_normalize": len(self.dropped_design_columns),
+                "dev_samples": self.n_rows,
+                "holdout_start": self.holdout_start or "—",
+                "holdout_rows": self.n_holdout,
+                "purged_at_boundary": self.n_purged_at_boundary,
                 "channels": len(self.features),
                 "design_columns": self.design_scores.shape[0],
                 "kept": len(self.kept),
@@ -304,6 +316,8 @@ class FeatureSelector:
         colsample_bytree: float = 0.8,
         lookback: int = 1,
         window_stats: Sequence[str] = WINDOW_STATS,
+        normalize: str = "none",
+        holdout_start: Optional[str] = None,
     ):
         self.lasso_converged: Optional[bool] = None
         # ⚠️ Only validated here — `"auto"` decides on the CANDIDATE COUNT, which is
@@ -327,6 +341,11 @@ class FeatureSelector:
         self.window_stats = (
             ("last",) if lookback == 1 else tuple(window_stats)
         )
+        self.normalize = normalize
+        # ⚠️ Rows on or after this date are removed from EVERYTHING the selection
+        # touches — ranking, pruning, the walk-forward CV. They are scored exactly
+        # once, by `score_holdout`. See `_prepare`.
+        self.holdout_start = pd.Timestamp(holdout_start) if holdout_start else None
         if target not in panel.columns:
             raise ValueError(f"target {target!r} is not a column of the panel.")
         self.panel = panel
@@ -347,13 +366,45 @@ class FeatureSelector:
     # ------------------------------------------------------------ preparation
 
     def _prepare(self) -> Tuple[pd.DataFrame, pd.Series, List[str], pd.Series]:
-        """Sort by date, drop the unlabelled tail, split X/y, drop dead columns."""
+        """Sort by date, drop the unlabelled tail, split X/y, drop dead columns.
+
+        ⚠️ **The holdout is removed HERE, before anything looks at anything.** Not
+        in `run()`, not in the CV — in the first function that touches the data, so
+        that no ranker, no prune and no fold can see it. A holdout that the feature
+        RANKING has already read is not a holdout.
+        """
         frame = self.panel.sort_values(self.date_col).reset_index(drop=True)
 
         # ⚠️ The last `horizon` rows have a NULL target by construction — their
         # future has not happened. The pool keeps them so the tables still join;
         # a fit must not.
         labelled = frame[frame[self.target].notna()].reset_index(drop=True)
+
+        if self.holdout_start is not None:
+            is_holdout = labelled[self.date_col] >= self.holdout_start
+            self.holdout_frame = labelled[is_holdout].reset_index(drop=True)
+            development = labelled[~is_holdout].reset_index(drop=True)
+            # ⚠️ AND the boundary is purged from the DEVELOPMENT side. The last
+            # `lookback + horizon - 1` development rows carry labels computed from
+            # prices inside the holdout, or windows that reach into it. Leaving
+            # them in trains the final model on the answer it is about to be
+            # scored against — the same leak the walk-forward gap exists to stop,
+            # at the one boundary a fold-level gap does not cover.
+            gap = self.cv.gap
+            if gap and len(development) > gap:
+                development = development.iloc[:-gap].reset_index(drop=True)
+            self.n_holdout = len(self.holdout_frame)
+            self.n_purged_at_boundary = gap
+            labelled = development
+            if labelled.empty:
+                raise ValueError(
+                    f"holdout_start={self.holdout_start.date()} leaves no "
+                    f"development rows."
+                )
+        else:
+            self.holdout_frame = pd.DataFrame()
+            self.n_holdout = 0
+            self.n_purged_at_boundary = 0
 
         candidates = [
             c
@@ -378,6 +429,25 @@ class FeatureSelector:
         X = labelled[features].astype(float)
         y = labelled[self.target].astype(float)
         return X, y, dropped_constant, coverage
+
+    def _columns_of(
+        self, channels: Sequence[str], available: Sequence[str]
+    ) -> Dict[str, List[str]]:
+        """`{channel: its design columns}`, restricted to columns that exist.
+
+        Normalisation removes the statistics it makes constant, so the nominal
+        `channel × stat` grid is wider than the design matrix. Selecting a channel
+        must hand the model the columns that are actually there.
+        """
+        present = set(available)
+        return {
+            channel: [
+                column
+                for stat in self.window_stats
+                if (column := windows.design_column(channel, stat)) in present
+            ]
+            for channel in channels
+        }
 
     @staticmethod
     def _impute(train: pd.DataFrame, *others: pd.DataFrame) -> List[pd.DataFrame]:
@@ -586,12 +656,10 @@ class FeatureSelector:
         — which is what a sequence model fed that channel would see too.
         """
         started = time.perf_counter()
-        columns_of = {
-            channel: [
-                windows.design_column(channel, stat) for stat in self.window_stats
-            ]
-            for channel in channels
-        }
+        # ⚠️ Intersected with the design's ACTUAL columns: normalisation drops the
+        # statistics it makes constant (zscore ⇒ mean, sd), so the nominal
+        # channel × stat grid is wider than the matrix.
+        columns_of = self._columns_of(channels, design.columns)
         sets = (
             ("all channels", list(channels)),
             ("selected", list(kept)),
@@ -627,6 +695,94 @@ class FeatureSelector:
         self.timings[f"validation ({self.device})"] = time.perf_counter() - started
         return pd.DataFrame(rows)
 
+    # --------------------------------------------------------------- holdout
+
+    def score_holdout(self, result: "SelectionResult") -> pd.DataFrame:
+        """Train on ALL development data, score the holdout ONCE.
+
+        This is the only number in the package that has not been contaminated by
+        the selection. It exists to be looked at at the END of a study, not tuned
+        against: score it, write it down, and if you then change anything, the
+        holdout is spent and a new one has to be carved out of data you have not
+        touched.
+
+        ⚠️ The comparison is `selected` vs `all channels` vs a `shuffled` control
+        trained the same way. The control is what tells you whether a positive
+        holdout IC means anything at all — with one score there is no fold spread
+        to read, so the control IS the error bar.
+
+        Raises:
+            ValueError: no holdout was configured.
+        """
+        if self.holdout_frame.empty:
+            raise ValueError(
+                "no holdout — construct the selector with holdout_start=<date>."
+            )
+        channels = result.features
+        dev_X = self.panel.sort_values(self.date_col).reset_index(drop=True)
+        dev_X = dev_X[dev_X[self.target].notna()].reset_index(drop=True)
+        is_holdout = dev_X[self.date_col] >= self.holdout_start
+        development = dev_X[~is_holdout].reset_index(drop=True)
+        gap = self.cv.gap
+        if gap and len(development) > gap:
+            development = development.iloc[:-gap].reset_index(drop=True)
+
+        def design_of(frame: pd.DataFrame) -> Tuple[pd.DataFrame, pd.Series]:
+            block = frame[channels].astype(float)
+            design = windows.window_design(
+                block, self.lookback, self.window_stats, self.normalize
+            )
+            return design, frame[self.target].astype(float).loc[design.index]
+
+        dev_design, dev_y = design_of(development)
+        # ⚠️ The holdout's own windows are built from the HOLDOUT ROWS ALONE. Letting
+        # a window reach back across the boundary would hand it development data —
+        # harmless for leakage in this direction, but it would make the first
+        # `lookback` holdout samples a different kind of sample from the rest.
+        hold_design, hold_y = design_of(self.holdout_frame)
+
+        # ⚠️ Intersected across BOTH designs. A statistic can be constant in the
+        # holdout slice but not in development (a channel that never moved in
+        # 2024-2026), and asking for it on one side only would raise here — after
+        # the study, at the one moment the code must not fail.
+        shared = set(dev_design.columns) & set(hold_design.columns)
+        columns_of = self._columns_of(channels, sorted(shared))
+        dev_design, hold_design = dev_design[sorted(shared)], hold_design[sorted(shared)]
+        rng = np.random.default_rng(self.random_state)
+        rows = []
+        for label, chosen in (
+            ("selected", list(result.kept)),
+            ("all channels", list(channels)),
+        ):
+            cols = [c for ch in chosen for c in columns_of[ch]]
+            X_tr, X_te = self._impute(dev_design[cols], hold_design[cols])
+            for variant in ("real", "shuffled control"):
+                y_tr = (
+                    dev_y
+                    if variant == "real"
+                    else pd.Series(
+                        rng.permutation(dev_y.to_numpy()), index=dev_y.index
+                    )
+                )
+                model = self._xgb().fit(X_tr, y_tr)
+                pred = model.predict(X_te)
+                ic = stats.spearmanr(pred, hold_y).statistic
+                rows.append(
+                    {
+                        "feature_set": label,
+                        "labels": variant,
+                        "n_channels": len(chosen),
+                        "n_train": len(X_tr),
+                        "n_holdout": len(X_te),
+                        "n_eff_holdout": round(len(X_te) / self.horizon, 1),
+                        "ic": float(ic),
+                        "hit_rate": float(
+                            np.mean(np.sign(pred) == np.sign(hold_y))
+                        ),
+                    }
+                )
+        return pd.DataFrame(rows)
+
     # ------------------------------------------------------------------- run
 
     def run(self, validate: bool = True, stability: bool = True) -> SelectionResult:
@@ -640,7 +796,21 @@ class FeatureSelector:
         # sees — the model reads a whole channel or none of it, so redundancy is a
         # property of channels, not of individual summary columns.
         started = time.perf_counter()
-        design = windows.window_design(X, self.lookback, self.window_stats)
+        design = windows.window_design(
+            X, self.lookback, self.window_stats, self.normalize
+        )
+        # ⚠️ Normalisation makes some statistics CONSTANT by construction: under
+        # `zscore` every window has mean 0 and sd 1. Dropping them here — and
+        # naming them — is what makes that visible rather than leaving six columns
+        # of zeros silently diluting the per-channel MAX.
+        design_nunique = design.nunique(dropna=True)
+        dropped_design = sorted(design_nunique[design_nunique <= 1].index.tolist())
+        if dropped_design:
+            design = design.drop(columns=dropped_design)
+        if design.empty:
+            raise ValueError(
+                f"normalize={self.normalize!r} left no non-constant design columns."
+            )
         # A window ending at row N needs N >= lookback-1, so the first lookback-1
         # labels have no sample. Align y to the design's own index.
         y_windowed = y.loc[design.index]
@@ -692,9 +862,9 @@ class FeatureSelector:
         # lookback=1 one. Which STAT actually carried a channel is a separate,
         # richer output — `best_stat` and `stat_scores` below.
         target_corr = (
-            design_corr.rename(index=dict(zip(design.columns, design.columns)))
-            .reindex([windows.design_column(c, "last") for c in order])
+            design_corr.reindex([windows.design_column(c, "last") for c in order])
             .set_axis(order)
+            .fillna(0.0)
             .rename("spearman_vs_target")
         )
 
@@ -740,4 +910,11 @@ class FeatureSelector:
             design_scores=normalised_design,
             best_stat=best_stat,
             purge_gap=self.cv.gap,
+            normalize=self.normalize,
+            dropped_design_columns=dropped_design,
+            n_holdout=self.n_holdout,
+            n_purged_at_boundary=self.n_purged_at_boundary,
+            holdout_start=(
+                str(self.holdout_start.date()) if self.holdout_start else ""
+            ),
         )

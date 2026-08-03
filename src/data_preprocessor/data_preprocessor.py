@@ -5011,6 +5011,20 @@ class DataPreprocessor:
     # second one anywhere else would put the label definition in two places.
     UNIFIED_TARGET_HORIZONS = (5, 10)
 
+    # The market benchmark for the RELATIVE targets, `return_rel_{h}day`.
+    #
+    # ⚠️ `gold_schema.stock_market`, NOT the retired `gold.indices` — the old
+    # notebook's `return_rel_5day` read `gold.indices`, which was dropped on
+    # 2026-08-01 (see `orchestration/CONTEXT.md` §"Gold housekeeping"), so that
+    # column could not be rebuilt as written. This is its replacement.
+    #
+    # ⚠️ Why a relative target exists at all: a single stock's ABSOLUTE forward
+    # return is dominated by the market factor, which no company-level feature
+    # predicts. Subtracting the index leaves the part a stock-specific feature could
+    # plausibly explain. See memory `project-cross-sectional-strategy`.
+    UNIFIED_BENCHMARK_TABLE = "gold_schema.stock_market"
+    UNIFIED_BENCHMARK_COLUMN = "hose__vnindex__close_adjust"
+
     def _ingest_unified_pool_targets(self, ticker: str) -> None:
         """`unified_schema_<ticker>.pool__basic` → `…​.pool__targets`.
 
@@ -5051,6 +5065,7 @@ class DataPreprocessor:
                 f"offsets, got {horizons}."
             )
         target_cols = {h: f"return_{h}day" for h in horizons}
+        relative_cols = {h: f"return_rel_{h}day" for h in horizons}
         longest = max(horizons)
         self._logger.log_info(
             f"Ingesting unified {schema}.pool__targets (from {schema}.pool__basic)..."
@@ -5079,26 +5094,63 @@ class DataPreprocessor:
                     f"NULL."
                 )
 
+            # How many pool__basic sessions have no benchmark close. A gap there
+            # propagates into `return_rel_*` and is counted below rather than
+            # absorbed into a loosened assertion.
+            cur.execute(
+                f"SELECT COUNT(*) FROM {schema}.pool__basic b "
+                f"LEFT JOIN {self.UNIFIED_BENCHMARK_TABLE} m ON m.date = b.date "
+                f"WHERE m.{self.UNIFIED_BENCHMARK_COLUMN} IS NULL"
+            )
+            benchmark_gaps = int(cur.fetchone()[0])
+
             # One LEAD per horizon over the same ORDER BY, so every label is computed
             # from the same row ordering and no two of them can disagree about which
             # session follows which.
+            #
+            # ⚠️ The relative return is `P[t+h]/P[t] − B[t+h]/B[t]`, which is the
+            # simple stock return MINUS the simple benchmark return (the −1 terms
+            # cancel). Written this way rather than as a difference of two ratios
+            # minus one so that the cancellation is visible instead of assumed.
             columns = ", ".join(
-                f"(LEAD(close_adjust, {h}) OVER (ORDER BY date)"
-                f" / NULLIF(close_adjust, 0) - 1.0)::double precision AS {col}"
-                for h, col in target_cols.items()
+                [
+                    f"(LEAD(px, {h}) OVER w / NULLIF(px, 0) - 1.0)"
+                    f"::double precision AS {col}"
+                    for h, col in target_cols.items()
+                ]
+                + [
+                    f"(LEAD(px, {h}) OVER w / NULLIF(px, 0)"
+                    f" - LEAD(bm, {h}) OVER w / NULLIF(bm, 0))"
+                    f"::double precision AS {col}"
+                    for h, col in relative_cols.items()
+                ]
             )
             # Dropped as late as possible: a failure above leaves the old table intact.
             cur.execute(f"DROP TABLE IF EXISTS {schema}.pool__targets")
             cur.execute(
                 f"CREATE TABLE {schema}.pool__targets AS "
-                f"SELECT date, {columns} FROM {schema}.pool__basic"
+                f"WITH joined AS ("
+                f"  SELECT b.date, b.close_adjust AS px, "
+                f"         m.{self.UNIFIED_BENCHMARK_COLUMN} AS bm "
+                f"  FROM {schema}.pool__basic b "
+                f"  LEFT JOIN {self.UNIFIED_BENCHMARK_TABLE} m ON m.date = b.date"
+                f") "
+                f"SELECT date, {columns} FROM joined "
+                f"WINDOW w AS (ORDER BY date)"
             )
             cur.execute(f"ALTER TABLE {schema}.pool__targets ADD PRIMARY KEY (date)")
 
-            counts = ", ".join(f"COUNT({col})" for col in target_cols.values())
+            all_cols = {**target_cols}
+            counts = ", ".join(
+                f"COUNT({col})"
+                for col in list(target_cols.values()) + list(relative_cols.values())
+            )
             cur.execute(f"SELECT COUNT(*), {counts} FROM {schema}.pool__targets")
             row = [int(x) for x in cur.fetchone()]
-            written, labelled = row[0], dict(zip(target_cols, row[1:]))
+            written = row[0]
+            n = len(horizons)
+            labelled = dict(zip(horizons, row[1 : 1 + n]))
+            labelled_rel = dict(zip(horizons, row[1 + n :]))
 
         if written != available:
             raise PipelineError(
@@ -5117,10 +5169,31 @@ class DataPreprocessor:
                     f"exactly {h} (the tail with no future) were expected. Check "
                     f"`pool__basic.close_adjust` for NULLs or zeros."
                 )
-        summary = ", ".join(
-            f"{col} {labelled[h]} labelled / {h} tail" for h, col in target_cols.items()
+        # ⚠️ The relative column loses its own tail PLUS every row a benchmark gap
+        # touches: a missing `B[t]` kills row `t`, and a missing `B[t+h]` kills row
+        # `t-h`. One gap therefore costs up to `h + 1` rows. The bound is asserted
+        # rather than the exact count, because two gaps within `h` of each other
+        # overlap — but it still fails loudly if the benchmark is broadly absent
+        # instead of merely pitted.
+        for h, col in relative_cols.items():
+            unlabelled = written - labelled_rel[h]
+            allowed = h + benchmark_gaps * (h + 1)
+            if not h <= unlabelled <= allowed:
+                raise PipelineError(
+                    f"{schema}.pool__targets has {unlabelled} NULL {col} values; "
+                    f"between {h} and {allowed} were expected ({h} tail + at most "
+                    f"{h + 1} per each of {benchmark_gaps} benchmark gap(s) in "
+                    f"{self.UNIFIED_BENCHMARK_TABLE}.{self.UNIFIED_BENCHMARK_COLUMN})."
+                )
+        summary = "; ".join(
+            f"{target_cols[h]} {labelled[h]} labelled / {written - labelled[h]} null, "
+            f"{relative_cols[h]} {labelled_rel[h]} / {written - labelled_rel[h]} null"
+            for h in horizons
         )
-        self._logger.log_info(f"{schema}.pool__targets: {written} rows — {summary}.")
+        self._logger.log_info(
+            f"{schema}.pool__targets: {written} rows, {benchmark_gaps} benchmark "
+            f"gap(s) — {summary}."
+        )
 
     # endregion Helper functions
 
