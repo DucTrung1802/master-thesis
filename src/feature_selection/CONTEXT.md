@@ -207,23 +207,62 @@ has `EXCLUDE_PRICE_LEVELS = True` to re-run without them and compare fold ICs.
 |---|---|---|
 | samples / purge gap | 4,211 / **24** | 4,206 / **29** |
 | design matrix | 162 columns from 27 channels | same |
-| out-of-sample IC by fold | +.067 +.066 +.116 +.050 **−.033** | +.081 +.072 +.070 +.003 **−.019** |
-| mean IC (selected) | +0.053 | +0.041 |
+| IC by fold (selected) | +.097 +.072 +.153 −.005 **−.037** | +.166 +.047 +.033 +.026 **−.070** |
+| mean IC — selected / all channels | **+0.056** / +0.034 | **+0.041** / +0.086 |
+| IC trend per fold | **−0.034** | **−0.049** |
+| **hit rate** | **0.477** | **0.460** |
+| R² | −1.19 | −1.03 |
 
 **8 of 12 channels are kept at BOTH horizons** — `close_adjust`, `foreign_own`,
 `foreign_room_left`, `foreign_net_value`, `value_negotiated`, `buy_order_vol`,
-`avg_vol_per_buy_order`, `avg_vol_per_sell_order`. Four differ each way, which is
-the honest read on the other four: a channel that survives at one horizon only is a
-coin flip between a horizon-specific effect and noise.
-
-⚠️ **Both horizons decay the same way** — positive in the early folds, negative in the
-last. Two horizons agreeing about *when* the signal was there is more informative than
-either mean: it is one slow effect that has faded, not two independent findings.
+`avg_vol_per_buy_order`, `avg_vol_per_sell_order`.
 
 ⚠️ **The stat profile is what the windowing bought.** `close_adjust` is carried by
 `last` (a level — the era proxy again), `volume_negotiated` by `slope`, `low` and
 `high` by `sd`, `sell_order_vol` by `max`. A channel that only ever wins on `last`
 never needed a window.
+
+## 6b. ⚠️ THE NULL TEST — and it does not clear it (2026-08-04)
+
+The whole pipeline was re-run **20 times on BLOCK-SHUFFLED labels** (blocks of
+`d + h`, so the label's own autocorrelation survives and the null is not made
+artificially tight). Selection included, because selection is what inflates.
+
+| | |
+|---|---|
+| null mean IC — **mean** | **+0.0167** |
+| null mean IC — sd / p95 / max | 0.0252 / **+0.0556** / **+0.0606** |
+| observed h=5 mean IC | **+0.0559** |
+| empirical p-value `P[null ≥ observed]` | **0.050** (1 of 20) |
+| z vs null | **+1.56** |
+
+⚠️ **The null is centred on +0.017, not on zero.** Picking 12 of 27 channels by their
+fit to the labels earns a positive IC from noise alone. So `IC > 0` is not a bar —
+**`IC > ~0.017` is the floor before anything has been said**, and it will rise with
+the number of candidates and configurations tried.
+
+⚠️ **Noise beat the real data once in 20 tries** (null max +0.0606 > observed
++0.0559). The observed result sits at the 95th percentile of its own null: it is not
+distinguishable from what this procedure produces on shuffled labels.
+
+⚠️ **The hit rate is BELOW 0.5 at both horizons** (0.477, 0.460) while the IC is
+positive. A model that ranks days but gets the direction wrong more often than right
+is reading MAGNITUDE, not direction — the same conclusion `experiment_10` reached for
+news, and consistent with memory `project-vcb-forecasting-conclusion`.
+
+⚠️ **Effective sample size, which is what makes all of this fragile.** Overlapping
+labels mean the independent count per fold is ~`n_test / h`: **147** at h=5, **74** at
+h=10, against 737 rows. SE(IC) per fold is then ~0.083 and ~0.117 — larger than every
+fold IC observed. The window overlap (`d−1` of `d` input days) makes even that
+optimistic.
+
+⚠️ **At h=10 the selection is WORSE than keeping everything** (+0.041 vs +0.086), while
+at h=5 it is better (+0.056 vs +0.034). A selection that helps at one horizon and hurts
+at the other is not selecting.
+
+**The pipeline itself is deterministic** — three identical runs give bit-identical fold
+ICs and kept sets, and `stability=True/False` changes nothing. So the variation above is
+the data, not the code.
 
 ## 7. Extending it
 
