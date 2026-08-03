@@ -4,6 +4,14 @@
 > the keys they share, and ranks every feature against one target. Built 2026-08-03
 > against `unified_schema_vcb.pool__basic ⋈ pool__targets`.
 >
+> ## ⚠️ VERDICT (2026-08-04): NO CONFIGURATION BEATS SHUFFLED LABELS
+>
+> Five configurations — three representations × two targets, `d=20, h=5`, purged CV,
+> an uncontaminated holdout and a 20-draw null each — and **every one sits inside
+> what the same pipeline scores on shuffled labels**. §6b-6d has the tables. The
+> binding constraint is `n_eff`, not features: **do not widen the pool, go
+> cross-sectional** (§7).
+>
 > **Three notebooks. Read the third one first.**
 >
 > | notebook | one sample is | for |
@@ -25,7 +33,8 @@
 |---|---|
 | [unified_reader.py](unified_reader.py) | connect, introspect, read with the right dtypes, join on `(exchange, ticker, date)` ∩ |
 | [windows.py](windows.py) | daily panel → windowed samples; scoring CHANNELS, not columns |
-| [selector.py](selector.py) | six rankers → ensemble → correlation prune → walk-forward validation |
+| [selector.py](selector.py) | six rankers → ensemble → correlation prune → purged walk-forward → holdout |
+| [evaluation.py](evaluation.py) | **the BAR** — the shuffled-label null, `n_eff`, and the IC summary that reports trend |
 | [gpu.py](gpu.py) | the CUDA paths, the size heuristic, and which steps have no GPU path |
 | [plots.py](plots.py) | the figures — one theme, one palette, applied by the job each colour does |
 
@@ -358,31 +367,64 @@ model: N stocks × T days at the same `h` multiplies the independent count by N.
 which is the same conclusion memory `project-cross-sectional-strategy` reached from
 the other direction.
 
-## 7. Extending it
+## 7. ⚠️ THE NEXT STEP IS CROSS-SECTIONAL, NOT MORE FEATURES
 
-* **Another pool** — add it to `POOLS`. `pool__ta` (~900 columns) does not exist as
-  an asset yet; `orchestration/CONTEXT.md` §UNIFIED has the status. At that width
-  `device="auto"` moves to the GPU on its own.
-* **Another ticker** — change `TICKER`. The schema name is a template and the
-  reader validates it as an identifier.
+**Read §6d before doing anything on this list.** The obvious next move — point the
+selector at `pool__ta`'s ~900 columns — produces a longer list of nothing, more
+slowly, and with a higher bar. Widening the pool buys no independent observations.
+
+**Do this instead:**
+
+1. **Build a multi-ticker panel** (VN30 ≈ 25 stocks × the same sessions). This is the
+   only change that alters the arithmetic in §6d: independent observations scale with
+   N, so VN30 is ~25× the sample from data already in `gold.stocks`.
+2. **Make the target the CROSS-SECTIONAL rank**, not a time-series return — day `t`'s
+   ranking of the 25 stocks. A cross-sectional IC is computed per day across stocks,
+   so the label overlap that costs a factor of `h` here does not apply the same way.
+3. **Reuse everything in this package unchanged.** The reader, `windows.py`, the
+   purged CV, channel-level scoring, the GPU paths and `evaluation.py` all transfer —
+   only the panel's shape changes. The CV gains a *grouping* by date (all stocks of a
+   day belong to the same fold, or the split leaks across the cross-section).
+4. **Only then** widen to `pool__ta` / `pool__macro` / `pool__calendar`.
+
+⚠️ **`unified_schema_<ticker>` cannot express any of this** — it is one company by
+construction, and `pool__basic` asserts `COUNT(DISTINCT ticker) = 1`. The multi-ticker
+pool is a new table, not a parameter change. See memory
+`project-cross-sectional-strategy`.
+
+### Smaller extensions, if the study continues as-is
+
+* **Another ticker** — change `TICKER`; the schema name is a template and the reader
+  validates it as an identifier. ⚠️ Each ticker is a *separate* single-stock study
+  with the same `n_eff` problem, not a bigger one.
 * **Another horizon** — add it to `DataPreprocessor.UNIFIED_TARGET_HORIZONS` and
-  re-materialise `unified_vcb/pool__targets`. The label definition lives there, in
-  one place, on one calendar.
+  re-materialise `unified_vcb/pool__targets`. The label definition lives there, in one
+  place, on one calendar. ⚠️ A longer `h` *lowers* `n_eff`.
 * **Another target** — ⚠️ `selector.py` is **regression-only**. `direction_5day` and
-  `probability_gain_5pct_5day` are binary and would be treated as continuous
-  labels: the tree rankers would still run and the numbers would still look
-  plausible. Classifier variants are the change to make first.
+  `probability_gain_5pct_5day` are binary and would be treated as continuous labels:
+  the tree rankers would still run and the numbers would still look plausible.
+  Classifier variants are the change to make first.
 
-## 8. ⚠️ Before this feeds a sequence model
+## 8. ⚠️ Standing rules, learned the hard way here
 
-**Normalisation has to be decided here, not later.** Whatever the model eats —
-per-window z-score, divide-by-last-close, differences — the selection must run on that
-same representation, or it has selected features for a different problem. Both runs to
-date are on **raw levels**, which is exactly why `last` ranks `close_adjust` first: it
-is measuring how well a price level identifies the era.
+**Every selection needs its own null, re-run whenever the pool or the representation
+changes.** `zscore` moved its own bar from +0.053 to +0.076 without any change to the
+data. A bar computed for one configuration says nothing about another.
 
-**And stage 2 is not built.** What is here is a screen: a surrogate tree model over
-window summaries, which cuts the candidate set cheaply and without needing the LSTM to
-exist. The faithful measurement — permute one channel's whole window across samples and
-read the drop in the *actual* model's out-of-sample IC — needs that model, and belongs
-beside it in `src/model/`.
+**Every single-score holdout needs a shuffled-label control.** With one score there is
+no fold spread to read, so the control IS the error bar — and here it reached +0.169
+against real results of at most +0.071.
+
+**Report the IC trend beside the mean.** A mean built from folds decaying to negative
+is not a signal that averages that mean.
+
+**Normalisation is chosen before selection, not after.** The selection must run on the
+representation the model will eat, or it has selected features for a different
+problem — and if the answer changes when you normalise, the original answer was the
+era proxy.
+
+**Stage 2 is still not built.** What is here is a screen: a surrogate tree over window
+summaries, cheap and not needing the LSTM to exist. The faithful measurement — permute
+one channel's whole window and read the drop in the *actual* model's out-of-sample
+IC — needs that model and belongs beside it in `src/model/`. ⚠️ On the current
+evidence there is nothing for it to measure; build it after §7 step 1.
