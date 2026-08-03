@@ -94,3 +94,5 @@ ocr_env9/Lib/
 # Dagster instance home (run history, logs, telemetry) - regenerable
 .dagster/
 .tmp_dagster*/
+# experiment_10 news_result.py embedding / frame cache (hundreds of MB)
+experiment/experiment_10/_cache/
