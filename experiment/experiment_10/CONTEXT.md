@@ -13,6 +13,12 @@ what it actually establishes, and **whether to cite it, follow it, or both**.
 > order"* — measured against `bronze.cafef_news` (405,320 rows / 777 tickers) and the
 > existing `src/sentiment` module, which already ran this experiment on 3 tickers and
 > found a negative result.
+>
+> **→ [conclusion.md](conclusion.md) is what the build FOUND.** Seven independent lines of
+> attack, all null: news does not predict the direction of Vietnamese cross-sectional
+> returns at any horizon from 1 session to 13 weeks. It does predict MAGNITUDE — news days
+> carry 1.15× the absolute excess move of quiet days for the same stock. The only positive
+> signal found anywhere was momentum, and it needs no text at all.
 
 ## Naming convention
 
