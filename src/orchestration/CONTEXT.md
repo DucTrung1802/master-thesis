@@ -109,7 +109,7 @@ raw/cafef_financials[t] ─► bronze/cafef_financials ─► silver/cafef_finan
 | `bronze` | **all 20 ingest leaves** (25 tables) | — |
 | `silver` | `economy` (long fact), `economy_series` (dimension), `stock_market` (4 index tabs), `stocks_basic` (6 sources), `cafef_financials_bank` (quarterly), `stocks_basic_financials_bank` (as-of daily), `…_fa` (+26 indicators) | — |
 | `gold` | `economy` (wide, as-of), `stock_market` (wide, unfilled), `stocks` (price panel, no features), `stocks_ta` (+ the ~900-column TA block), `stocks_financials_bank_fa` (feature panel), `news_{weekly,daily}_panel` | — |
-| `unified_vcb` | `pool__basic` (one ticker, every column of `silver.stocks_basic`), `pool__targets` (`date` + `return_5day`) | — |
+| `unified_vcb` | `pool__basic` (one ticker, every column of `silver.stocks_basic`), `pool__targets` (`date` + `return_5day` + `return_10day`) | — |
 
 ### ⚠️ The edges, read out of the code (2026-07-31 correction)
 
@@ -884,12 +884,30 @@ same source or it will silently lose the difference. **This is why `pool__target
 `pool__basic` and not `gold.stocks`** — the two share one calendar by construction, and
 the asset asserts it (a symmetric `EXCEPT` in both directions, not just a row count).
 
-#### `pool__targets` — `date` + `return_5day`
+#### `pool__targets` — `date` + one column per horizon (2026-08-04: now **5 AND 10**)
 
-`return_5day = close[t+5] / close[t] - 1`, the forward 5-day simple return, computed
-server-side with `LEAD(close_adjust, 5) OVER (ORDER BY date)`. `pool__basic` is one row
+`return_{h}day = close[t+h] / close[t] - 1`, the forward simple return, computed
+server-side with `LEAD(close_adjust, h) OVER (ORDER BY date)`. `pool__basic` is one row
 per session, so a ROW offset is a trading-day offset and no calendar arithmetic is
 involved — which is what `close.shift(-5)` meant in the notebook too.
+
+⚠️ **`UNIFIED_TARGET_HORIZON` (scalar) became `UNIFIED_TARGET_HORIZONS = (5, 10)`
+(tuple) on 2026-08-04**, so the table now holds `date`, `return_5day` **and**
+`return_10day`. A model comparing horizons needs both labels **on one calendar**, and
+deriving the second one anywhere else would put the label definition in two places —
+which is the same argument that put the first one here rather than in a notebook.
+Adding a horizon adds a column; changing one still renames rather than silently
+re-defines.
+
+⚠️ **The two columns have DIFFERENT usable ranges** — `return_5day` 4,230 labelled + a
+5-row tail, `return_10day` 4,225 + a 10-row tail. The NULL check is therefore **per
+column against that column's own `h`**; a single check against the longest horizon
+would have let a genuine hole in `return_5day` through. Anything fitting on both must
+drop each target's own tail, not a shared one, or the h=5 run silently loses 5 sessions
+it had every right to use.
+
+Verified 2026-08-04: **RUN_SUCCESS, 681 ms** — `return_5day` range -0.1876 → 0.2914,
+mean 0.00319; `return_10day` range -0.2742 → 0.3310, mean 0.00646.
 
 ⚠️ **`close_adjust`, not `close_raw`.** A return on the raw close reads every split and
 stock dividend as a real overnight loss (VCB 2009-06-30: raw 60,000, adjusted 9,130).
@@ -901,9 +919,9 @@ them here would break the `date` join against the feature pools that the noteboo
 tail is **exactly** 5 rows — more would mean NULL or zero closes putting silent holes in
 the labels.
 
-⚠️ **The column name is derived from the horizon** (`UNIFIED_TARGET_HORIZON = 5` →
-`return_5day`), so changing the horizon renames the column rather than silently
-re-defining it.
+⚠️ **Each column name is derived from its horizon** (`UNIFIED_TARGET_HORIZONS = (5, 10)`
+→ `return_5day`, `return_10day`), so changing a horizon renames its column rather than
+silently re-defining it.
 
 ⚠️ **Only one of the notebook's four targets is built here.** `return_rel_5day`,
 `direction_5day` and `probability_gain_5pct_5day` are not — and `return_rel_5day` cannot

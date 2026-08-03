@@ -62,10 +62,28 @@ from sklearn.inspection import permutation_importance
 from sklearn.linear_model import LassoCV
 from sklearn.preprocessing import StandardScaler
 
-from feature_selection import gpu
+from feature_selection import gpu, windows
+from feature_selection.windows import WINDOW_STATS
 
 # The ensemble members, in the order they appear in the score table.
 METHODS = ("spearman", "mutual_info", "xgb_gain", "xgb_shap", "lasso", "permutation")
+
+
+def _ic_scorer(estimator, X, y) -> float:
+    """Spearman IC as an sklearn scorer — the metric this package decides on.
+
+    Rank correlation of prediction against realised return. Higher is better, so it
+    is a scorer rather than a loss, and `permutation_importance` reads a DROP in it
+    as importance without any sign juggling.
+
+    ⚠️ Not R². For a forward equity return, R² is deeply negative for any honest
+    model (a level forecast of a near-noise series) while the RANKING can still be
+    useful — so R² ranks features by their contribution to something the rest of
+    this module says not to decide on.
+    """
+    prediction = estimator.predict(X)
+    ic = stats.spearmanr(prediction, y).statistic
+    return 0.0 if np.isnan(ic) else float(ic)
 
 
 # --------------------------------------------------------------------- CV split
@@ -74,39 +92,69 @@ METHODS = ("spearman", "mutual_info", "xgb_gain", "xgb_shap", "lasso", "permutat
 class PurgedWalkForward:
     """Expanding-window splits in date order, with a purge gap before each test.
 
-    Fold `i` trains on `[0, train_end)` and tests on `[test_start, test_end)`, where
-    `train_end = test_start - horizon`. The gap is the whole point: with a forward
-    label of `horizon` days, the last `horizon` training rows are computed from
-    prices inside the test window.
+    Fold `i` trains on `[0, train_end)` and tests on `[test_start, test_end)`, with
+    `train_end = test_start - gap`.
+
+    ## ⚠️ The gap is `lookback + horizon - 1`, not `horizon`
+
+    Sample `N` reads inputs from rows `[N-d+1, N]` and carries the label for
+    `[N, N+h]`. For a TRAINING sample at `M` to share nothing with a TEST sample at
+    `N`, its label period must end before the test sample's window begins:
+
+        M + h < N - d + 1     ⟹     N - M > d + h - 1
+
+    So at `d=20, h=5` the gap is **24 rows, not 5** — an un-windowed purge would
+    leave 19 rows of the test sample's own input window inside the training set.
+    This is the single easiest way to make a windowed model look predictive when it
+    is not, and it gets worse as the lookback grows.
+
+    `lookback=1` recovers a gap of exactly `horizon`, which is the un-windowed case.
 
     Args:
         n_splits: number of test blocks.
-        horizon: label horizon in ROWS. `pool__basic` is one row per session, so a
-            row offset is a trading-day offset — the same assumption
-            `LEAD(close_adjust, 5)` makes in the `pool__targets` asset.
+        horizon: label horizon `h` in ROWS. `pool__basic` is one row per session,
+            so a row offset is a trading-day offset — the same assumption
+            `LEAD(close_adjust, h)` makes in the `pool__targets` asset.
         min_train: rows required in the first fold's training set.
+        lookback: `d`, the window length in rows.
     """
 
-    def __init__(self, n_splits: int = 5, horizon: int = 5, min_train: int = 500):
+    def __init__(
+        self,
+        n_splits: int = 5,
+        horizon: int = 5,
+        min_train: int = 500,
+        lookback: int = 1,
+    ):
         if n_splits < 1:
             raise ValueError("n_splits must be >= 1")
+        if lookback < 1:
+            raise ValueError("lookback must be >= 1")
         self.n_splits = n_splits
         self.horizon = horizon
         self.min_train = min_train
+        self.lookback = lookback
+
+    @property
+    def gap(self) -> int:
+        """Rows dropped between the end of train and the start of test."""
+        return self.lookback + self.horizon - 1
 
     def split(self, n_samples: int) -> List[Tuple[np.ndarray, np.ndarray]]:
-        usable = n_samples - self.min_train - self.horizon
+        gap = self.gap
+        usable = n_samples - self.min_train - gap
         if usable < self.n_splits:
             raise ValueError(
-                f"{n_samples} rows cannot be split into {self.n_splits} purged "
-                f"folds with min_train={self.min_train} and horizon={self.horizon}."
+                f"{n_samples} samples cannot be split into {self.n_splits} purged "
+                f"folds with min_train={self.min_train}, horizon={self.horizon} and "
+                f"lookback={self.lookback} (purge gap {gap})."
             )
         block = usable // self.n_splits
         folds = []
         for i in range(self.n_splits):
-            test_start = self.min_train + self.horizon + i * block
+            test_start = self.min_train + gap + i * block
             test_end = test_start + block if i < self.n_splits - 1 else n_samples
-            train_end = test_start - self.horizon
+            train_end = test_start - gap
             folds.append(
                 (np.arange(0, train_end), np.arange(test_start, test_end))
             )
@@ -141,6 +189,41 @@ class SelectionResult:
     dead_methods: List[str] = field(default_factory=list)
     device: str = "cpu"
     timings: Dict[str, float] = field(default_factory=dict)
+    # --- the windowed setup. `lookback=1` is the un-windowed selector. ---
+    lookback: int = 1
+    horizon: int = 5
+    window_stats: List[str] = field(default_factory=lambda: ["last"])
+    purge_gap: int = 5
+    # Normalised scores per (channel, stat) — the detail behind the channel scores.
+    design_scores: pd.DataFrame = field(default_factory=pd.DataFrame, repr=False)
+    # Which window statistic carried each channel, per method.
+    best_stat: pd.DataFrame = field(default_factory=pd.DataFrame, repr=False)
+
+    @property
+    def setup(self) -> pd.Series:
+        """The experimental setup in one object — everything that changes an answer."""
+        return pd.Series(
+            {
+                "target": self.target,
+                "horizon_h": self.horizon,
+                "lookback_d": self.lookback,
+                "purge_gap_rows": self.purge_gap,
+                "window_stats": ", ".join(self.window_stats),
+                "samples": self.n_rows,
+                "channels": len(self.features),
+                "design_columns": self.design_scores.shape[0],
+                "kept": len(self.kept),
+                "device": self.device,
+            },
+            name="setup",
+        )
+
+    def stat_profile(self, method: str = "xgb_shap", top: int = 20) -> pd.DataFrame:
+        """`channel × window-stat` scores — does a channel matter through its level,
+        its trend or its dispersion?"""
+        return windows.stat_matrix(
+            self.design_scores, self.features[:top], method, self.window_stats
+        )
 
     @property
     def timing_table(self) -> pd.DataFrame:
@@ -219,6 +302,8 @@ class FeatureSelector:
         device: str = "auto",
         subsample: float = 0.8,
         colsample_bytree: float = 0.8,
+        lookback: int = 1,
+        window_stats: Sequence[str] = WINDOW_STATS,
     ):
         self.lasso_converged: Optional[bool] = None
         # ⚠️ Only validated here — `"auto"` decides on the CANDIDATE COUNT, which is
@@ -233,6 +318,15 @@ class FeatureSelector:
         self.subsample = subsample
         self.colsample_bytree = colsample_bytree
         self.timings: Dict[str, float] = {}
+        if lookback < 1:
+            raise ValueError(f"lookback must be >= 1, got {lookback}")
+        self.lookback = lookback
+        # `lookback=1` with only `last` is the identity, so the un-windowed path
+        # stays exactly what it was rather than becoming a special case of the new
+        # one that happens to agree.
+        self.window_stats = (
+            ("last",) if lookback == 1 else tuple(window_stats)
+        )
         if target not in panel.columns:
             raise ValueError(f"target {target!r} is not a column of the panel.")
         self.panel = panel
@@ -243,7 +337,10 @@ class FeatureSelector:
         self.corr_threshold = corr_threshold
         self.horizon = horizon
         self.cv = PurgedWalkForward(
-            n_splits=n_splits, horizon=horizon, min_train=min_train
+            n_splits=n_splits,
+            horizon=horizon,
+            min_train=min_train,
+            lookback=lookback,
         )
         self.random_state = random_state
 
@@ -385,7 +482,11 @@ class FeatureSelector:
             y.iloc[test_idx],
             n_repeats=10,
             random_state=self.random_state,
-            scoring="r2",
+            # ⚠️ Scored on the SAME metric the selection is judged by (§`_validate`),
+            # not on R². It used to be `"r2"`, which meant the ensemble ranked
+            # features by their contribution to a calibration the validation section
+            # explicitly says not to decide on.
+            scoring=_ic_scorer,
             n_jobs=1 if self.device == "cuda" else gpu.n_jobs_for(X.shape[1]),
         )
         # Negative = permuting it HELPED, i.e. it hurt out of sample. Clipped to 0
@@ -435,19 +536,28 @@ class FeatureSelector:
 
     # ------------------------------------------------------------- stability
 
-    def _stability(self, X: pd.DataFrame, y: pd.Series) -> pd.DataFrame:
-        """Per-fold SHAP ranking — does a feature matter in every era, or one?
+    def _stability(
+        self, design: pd.DataFrame, y: pd.Series, channels: Sequence[str]
+    ) -> pd.DataFrame:
+        """Per-fold SHAP ranking — does a channel matter in every era, or one?
 
-        A feature ranked 2nd in 2012 and 40th since is not a feature, it is a
+        A channel ranked 2nd in 2012 and 40th since is not a feature, it is a
         regime. This is a cheap SHAP-only ranking (the full ensemble per fold is
         not worth its cost) rendered as a rank so folds are comparable.
+
+        The fit is on the design matrix; the SHAP values are aggregated back to
+        channels with the same MAX rule as the main ranking, so a fold's ordering
+        is comparable with the ensemble's.
         """
         started = time.perf_counter()
         ranks = {}
-        for i, (train_idx, _) in enumerate(self.cv.split(len(X)), start=1):
-            X_tr = self._impute(X.iloc[train_idx])[0]
+        for i, (train_idx, _) in enumerate(self.cv.split(len(design)), start=1):
+            X_tr = self._impute(design.iloc[train_idx])[0]
             model = self._xgb().fit(X_tr, y.iloc[train_idx])
-            fold = pd.Series(gpu.tree_shap(model, X_tr), index=X.columns)
+            per_column = pd.DataFrame(
+                {"shap": gpu.tree_shap(model, X_tr)}, index=design.columns
+            )
+            fold = windows.aggregate_to_channels(per_column, channels)["shap"]
             ranks[f"fold {i}"] = fold.rank(ascending=False, method="min")
         self.timings[f"stability ({self.device})"] = time.perf_counter() - started
         return pd.DataFrame(ranks)
@@ -455,9 +565,13 @@ class FeatureSelector:
     # ------------------------------------------------------------ validation
 
     def _validate(
-        self, X: pd.DataFrame, y: pd.Series, kept: Sequence[str]
+        self,
+        design: pd.DataFrame,
+        y: pd.Series,
+        kept: Sequence[str],
+        channels: Sequence[str],
     ) -> pd.DataFrame:
-        """Walk-forward out-of-sample scores for the kept set vs everything.
+        """Walk-forward out-of-sample scores for the kept channels vs all of them.
 
         Reported per fold, not averaged into one number: with overlapping labels
         the fold spread IS the uncertainty, and a single mean would hide it.
@@ -465,13 +579,29 @@ class FeatureSelector:
         `ic` is the Spearman rank correlation of prediction against realised
         return — the metric that matters for ranking, and far more stable than R²,
         which one bad fold can drive deeply negative.
+
+        ⚠️ **The comparison is between CHANNEL SETS, so `n_features` counts channels
+        and the model gets every one of that channel's stat columns.** Selecting
+        `close_adjust` means the model sees its level, its slope and its dispersion
+        — which is what a sequence model fed that channel would see too.
         """
         started = time.perf_counter()
+        columns_of = {
+            channel: [
+                windows.design_column(channel, stat) for stat in self.window_stats
+            ]
+            for channel in channels
+        }
+        sets = (
+            ("all channels", list(channels)),
+            ("selected", list(kept)),
+        )
         rows = []
-        for i, (train_idx, test_idx) in enumerate(self.cv.split(len(X)), start=1):
-            for label, cols in (("all features", list(X.columns)), ("selected", list(kept))):
+        for i, (train_idx, test_idx) in enumerate(self.cv.split(len(design)), start=1):
+            for label, chosen in sets:
+                cols = [c for channel in chosen for c in columns_of[channel]]
                 X_tr, X_te = self._impute(
-                    X.iloc[train_idx][cols], X.iloc[test_idx][cols]
+                    design.iloc[train_idx][cols], design.iloc[test_idx][cols]
                 )
                 y_tr, y_te = y.iloc[train_idx], y.iloc[test_idx]
                 model = self._xgb().fit(X_tr, y_tr)
@@ -481,7 +611,8 @@ class FeatureSelector:
                     {
                         "fold": f"fold {i}",
                         "feature_set": label,
-                        "n_features": len(cols),
+                        "n_channels": len(chosen),
+                        "n_columns": len(cols),
                         "n_train": len(train_idx),
                         "n_test": len(test_idx),
                         "ic": float(ic),
@@ -501,21 +632,39 @@ class FeatureSelector:
     def run(self, validate: bool = True, stability: bool = True) -> SelectionResult:
         """Do the whole thing and return a `SelectionResult`."""
         X, y, dropped_constant, coverage = self._prepare()
+        channels = list(X.columns)
+
+        # ── the windowed design matrix ─────────────────────────────────────────
+        # `design` is what every MODEL sees: one column per (channel, stat). `X`
+        # stays the per-day channel panel, and remains what the CORRELATION PRUNE
+        # sees — the model reads a whole channel or none of it, so redundancy is a
+        # property of channels, not of individual summary columns.
+        started = time.perf_counter()
+        design = windows.window_design(X, self.lookback, self.window_stats)
+        # A window ending at row N needs N >= lookback-1, so the first lookback-1
+        # labels have no sample. Align y to the design's own index.
+        y_windowed = y.loc[design.index]
+        self.timings["window design (cpu)"] = time.perf_counter() - started
+
         self.device = gpu.resolve_device(
-            self.device_preference, n_features=X.shape[1]
+            self.device_preference, n_features=design.shape[1]
         )
-        self.timings.clear()
 
         # Both Spearman passes run on the GPU and share one code path, so the
         # magnitude the ensemble sees and the sign the chart shows can never
         # disagree about ties or missing values.
         started = time.perf_counter()
-        target_corr = gpu.spearman_vector(X, y, device=self.device)
+        design_corr = gpu.spearman_vector(design, y_windowed, device=self.device)
         self.timings[f"spearman vs target ({self.device})"] = (
             time.perf_counter() - started
         )
 
-        raw = self._score_methods(X, y, target_corr)
+        raw_design = self._score_methods(design, y_windowed, design_corr)
+        # ⚠️ Aggregated to CHANNELS before anything ranks. Scoring, ranking and
+        # pruning all happen at channel level because that is the unit the model
+        # consumes; `raw_design` is kept for the per-stat diagnostics.
+        raw = windows.aggregate_to_channels(raw_design, channels)
+
         # A method whose raw scores are all equal ranked nothing. It still enters
         # the blend as a constant (harmless), but the caller has to be told —
         # otherwise "the ensemble of six" quietly became an ensemble of five.
@@ -529,19 +678,39 @@ class FeatureSelector:
 
         order = ranks["ensemble"].sort_values().index.tolist()
         # ⚠️ The single most expensive step on a wide pool, and the reason `gpu.py`
-        # has a hand-written rank-correlation at all: this is O(p²) and `pool__ta`
-        # is ~900 columns.
+        # has a hand-written rank-correlation at all: this is O(p²). Computed on the
+        # CHANNEL panel, not the design matrix — `p` is 27, not 162.
         started = time.perf_counter()
         corr = gpu.spearman_matrix(X, device=self.device).loc[order, order]
-        self.timings[f"feature corr matrix ({self.device})"] = (
+        self.timings[f"channel corr matrix ({self.device})"] = (
             time.perf_counter() - started
         )
         kept, dropped_correlated = self._prune(order, corr)
-        target_corr = target_corr.reindex(order)
+
+        # The signed association a reader looks at stays defined on the channel's
+        # value at day N (`last`), so a lookback=20 chart is comparable with a
+        # lookback=1 one. Which STAT actually carried a channel is a separate,
+        # richer output — `best_stat` and `stat_scores` below.
+        target_corr = (
+            design_corr.rename(index=dict(zip(design.columns, design.columns)))
+            .reindex([windows.design_column(c, "last") for c in order])
+            .set_axis(order)
+            .rename("spearman_vs_target")
+        )
+
+        normalised_design = self._normalise(raw_design)
+        best_stat = pd.DataFrame(
+            {
+                method: windows.best_stat_per_channel(
+                    normalised_design, order, method
+                )
+                for method in METHODS
+            }
+        )
 
         return SelectionResult(
             target=self.target,
-            features=list(X.columns),
+            features=order,
             scores=scores.loc[order],
             ranks=ranks.loc[order],
             kept=kept,
@@ -550,13 +719,25 @@ class FeatureSelector:
             corr=corr,
             target_corr=target_corr,
             stability=(
-                self._stability(X, y).loc[order] if stability else pd.DataFrame()
+                self._stability(design, y_windowed, channels).loc[order]
+                if stability
+                else pd.DataFrame()
             ),
-            validation=self._validate(X, y, kept) if validate else pd.DataFrame(),
-            n_rows=len(X),
+            validation=(
+                self._validate(design, y_windowed, kept, channels)
+                if validate
+                else pd.DataFrame()
+            ),
+            n_rows=len(design),
             corr_threshold=self.corr_threshold,
             coverage=coverage,
             dead_methods=dead_methods,
             device=self.device,
             timings=dict(self.timings),
+            lookback=self.lookback,
+            horizon=self.horizon,
+            window_stats=list(self.window_stats),
+            design_scores=normalised_design,
+            best_stat=best_stat,
+            purge_gap=self.cv.gap,
         )

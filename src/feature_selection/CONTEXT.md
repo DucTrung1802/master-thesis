@@ -2,16 +2,23 @@
 
 > Reads a per-ticker `unified_schema_<ticker>` schema, joins its `pool__*` tables on
 > the keys they share, and ranks every feature against one target. Built 2026-08-03
-> against `unified_schema_vcb.pool__basic ⋈ pool__targets`, target `return_5day`.
+> against `unified_schema_vcb.pool__basic ⋈ pool__targets`.
 >
-> **Entry point: [feature_selection.ipynb](feature_selection.ipynb).** The three
-> modules hold nothing notebook-specific, so the same run scripts.
+> **Two entry points, and the difference is the model they select FOR:**
+>
+> | notebook | one sample is | for |
+> |---|---|---|
+> | [feature_selection.ipynb](feature_selection.ipynb) | one row → `y_N` | a per-row model. `lookback=1` |
+> | [windowed_selection.ipynb](windowed_selection.ipynb) | a `(d, n)` window → `y_N` | **a sequence model.** `d=20`, `h ∈ {5, 10}` (2026-08-04) |
+>
+> The modules hold nothing notebook-specific, so the same runs script.
 
 ## 1. What is here
 
 | file | does |
 |---|---|
 | [unified_reader.py](unified_reader.py) | connect, introspect, read with the right dtypes, join on `(exchange, ticker, date)` ∩ |
+| [windows.py](windows.py) | daily panel → windowed samples; scoring CHANNELS, not columns |
 | [selector.py](selector.py) | six rankers → ensemble → correlation prune → walk-forward validation |
 | [gpu.py](gpu.py) | the CUDA paths, the size heuristic, and which steps have no GPU path |
 | [plots.py](plots.py) | the figures — one theme, one palette, applied by the job each colour does |
@@ -24,14 +31,51 @@ blend and wrote `<target>__lb<N>__<group>__<n>` tables — see
 2026-08-03). **Nothing in this package writes to the database**; a selection is a
 result object and a set of figures, not a table.
 
+## 1a. ⚠️ The windowed setup — one sample, and the gap it forces
+
+```
+input   rows N-d+1 … N of the feature panel        a (d, n) matrix
+output  y_N = pool__targets.return_{h}day[N]        = close[N+h]/close[N] − 1
+```
+
+The label already looks forward and lives **on row `N`**; nothing is shifted here.
+
+A tree takes a vector, so `windows.window_design` reduces each channel's window to
+six statistics — `last, mean, slope, sd, min, max`. `(4211, 20, 27)` becomes a
+`(4211, 162)` design matrix. **`last` is the raw value at day `N`**, so `lookback=1`
+reduces to the un-windowed selector exactly (verified: 4,230 samples, gap 5, 27
+design columns, same as before the windowing existed).
+
+⚠️ **Not one column per (feature, lag).** That is what `unified_schema_creator.ipynb`
+did, it is 540 columns here and **18,000** on `pool__ta`, and it answers *which lag
+matters* when the model reads every lag anyway. The six stats answer the question
+that is useful — level, direction, or dispersion — at a third of the width, and
+`plot_stat_profile` turns the answer into a chart.
+
+⚠️ **THE PURGE GAP IS `d + h − 1`, NOT `h`.** Training sample `M` and test sample `N`
+share nothing only if `M + h < N − d + 1`. At `d=20, h=5` that is **24 rows, not 5** —
+purging only `h` would leave 19 rows of the test sample's own input window inside
+training. This is the easiest way to make a windowed model look predictive when it is
+not, and it gets worse as `d` grows. `PurgedWalkForward.gap` computes it; `lookback=1`
+recovers exactly `horizon`.
+
+⚠️ **Usable samples are `L − d − h + 1`, so the horizons differ**: 4,211 at `h=5`
+against 4,206 at `h=10`. Each target's own tail is dropped, never a shared one.
+
+⚠️ **The unit of selection is a CHANNEL.** The model consumes all `d` days of a
+feature or none, so scoring, pruning and validation all happen at channel level —
+scores are aggregated over a channel's six stats by **MAX** (`mean` and `last` are
+near-duplicates on a slow series, so a SUM would score a channel twice for saying one
+thing). Selecting `close_adjust` gives the model all six of its columns.
+
 ## 2. The three things that make the output mean anything
 
 **1. The label looks forward, so the CV is purged.** `return_5day` at day `t` is
 computed from the close at `t+5`. A random K-fold puts `t+1` in train and `t` in
 test and the model reads its own answer — the usual way a feature-selection
 notebook reports an R² of 0.4 on a series that is mostly noise. `PurgedWalkForward`
-is expanding-window, in date order, and drops the `horizon` training rows
-immediately before each test block.
+is expanding-window, in date order, and drops `lookback + horizon − 1` training rows
+immediately before each test block (see §1a).
 
 **2. Overlapping labels mean the effective sample is n/horizon.** Consecutive
 `return_5day` values share 4 of their 5 days. Nothing here fixes that; what it does
@@ -79,6 +123,11 @@ round-trip turning every price column into VARCHAR).
 it disagrees. The ensemble is a **rank** average, not a score average — `xgb_gain`
 routinely spans three orders of magnitude and would otherwise decide the blend
 alone after min-max.
+
+⚠️ **`permutation` is scored on Spearman IC, not R² (changed 2026-08-04).** It was
+`scoring="r2"`, which ranked features by their contribution to a calibration §6 of
+this file explicitly says not to decide on. The importance metric and the decision
+metric are now the same one.
 
 ⚠️ **A method that separated nothing is reported, not hidden.** On `pool__basic`,
 `LassoCV` zeroes every coefficient, so `lasso` contributes a constant to the blend.
@@ -152,6 +201,30 @@ contributing almost nothing on `spearman`: a level rises over seventeen years, s
 tree can use it to identify the ERA rather than predict the return. The notebook
 has `EXCLUDE_PRICE_LEVELS = True` to re-run without them and compare fold ICs.
 
+## 6a. The windowed run — `d = 20`, `h = 5` and `h = 10` (2026-08-04)
+
+| | h = 5 | h = 10 |
+|---|---|---|
+| samples / purge gap | 4,211 / **24** | 4,206 / **29** |
+| design matrix | 162 columns from 27 channels | same |
+| out-of-sample IC by fold | +.067 +.066 +.116 +.050 **−.033** | +.081 +.072 +.070 +.003 **−.019** |
+| mean IC (selected) | +0.053 | +0.041 |
+
+**8 of 12 channels are kept at BOTH horizons** — `close_adjust`, `foreign_own`,
+`foreign_room_left`, `foreign_net_value`, `value_negotiated`, `buy_order_vol`,
+`avg_vol_per_buy_order`, `avg_vol_per_sell_order`. Four differ each way, which is
+the honest read on the other four: a channel that survives at one horizon only is a
+coin flip between a horizon-specific effect and noise.
+
+⚠️ **Both horizons decay the same way** — positive in the early folds, negative in the
+last. Two horizons agreeing about *when* the signal was there is more informative than
+either mean: it is one slow effect that has faded, not two independent findings.
+
+⚠️ **The stat profile is what the windowing bought.** `close_adjust` is carried by
+`last` (a level — the era proxy again), `volume_negotiated` by `slope`, `low` and
+`high` by `sd`, `sell_order_vol` by `max`. A channel that only ever wins on `last`
+never needed a window.
+
 ## 7. Extending it
 
 * **Another pool** — add it to `POOLS`. `pool__ta` (~900 columns) does not exist as
@@ -159,7 +232,24 @@ has `EXCLUDE_PRICE_LEVELS = True` to re-run without them and compare fold ICs.
   `device="auto"` moves to the GPU on its own.
 * **Another ticker** — change `TICKER`. The schema name is a template and the
   reader validates it as an identifier.
+* **Another horizon** — add it to `DataPreprocessor.UNIFIED_TARGET_HORIZONS` and
+  re-materialise `unified_vcb/pool__targets`. The label definition lives there, in
+  one place, on one calendar.
 * **Another target** — ⚠️ `selector.py` is **regression-only**. `direction_5day` and
   `probability_gain_5pct_5day` are binary and would be treated as continuous
   labels: the tree rankers would still run and the numbers would still look
   plausible. Classifier variants are the change to make first.
+
+## 8. ⚠️ Before this feeds a sequence model
+
+**Normalisation has to be decided here, not later.** Whatever the model eats —
+per-window z-score, divide-by-last-close, differences — the selection must run on that
+same representation, or it has selected features for a different problem. Both runs to
+date are on **raw levels**, which is exactly why `last` ranks `close_adjust` first: it
+is measuring how well a price level identifies the era.
+
+**And stage 2 is not built.** What is here is a screen: a surrogate tree model over
+window summaries, which cuts the candidate set cheaply and without needing the LSTM to
+exist. The faithful measurement — permute one channel's whole window across samples and
+read the drop in the *actual* model's out-of-sample IC — needs that model, and belongs
+beside it in `src/model/`.

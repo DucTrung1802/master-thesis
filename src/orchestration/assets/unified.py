@@ -151,13 +151,15 @@ def unified_vcb_pool_basic(
     compute_kind="postgres",
     deps=[AssetKey(["unified_vcb", "pool__basic"])],
     description=(
-        f"{UNIFIED_SCHEMA_NAME}.pool__basic → {UNIFIED_SCHEMA_NAME}.pool__targets: two "
-        f"columns, `date` (PK) and `return_5day` — the forward 5-day simple return, "
-        f"close[t+5]/close[t]-1 on the SPLIT-ADJUSTED close. ⚠️ Sourced from "
-        f"pool__basic, not gold.stocks, so the labels and the features share one "
-        f"calendar by construction — the dropped version had 4,242 rows against "
-        f"pool__basic's 4,235 for exactly that reason. ⚠️ The last 5 rows are NULL "
-        f"(their future does not exist yet) and are kept so the table still joins."
+        f"{UNIFIED_SCHEMA_NAME}.pool__basic → {UNIFIED_SCHEMA_NAME}.pool__targets: "
+        f"`date` (PK) plus ONE COLUMN PER HORIZON in "
+        f"DataPreprocessor.UNIFIED_TARGET_HORIZONS — `return_5day`, `return_10day` — "
+        f"each the forward simple return close[t+h]/close[t]-1 on the SPLIT-ADJUSTED "
+        f"close. ⚠️ Sourced from pool__basic, not gold.stocks, so the labels and the "
+        f"features share one calendar by construction — the dropped version had 4,242 "
+        f"rows against pool__basic's 4,235 for exactly that reason. ⚠️ Each column's "
+        f"last h rows are NULL (their future does not exist yet) and are kept so the "
+        f"table still joins; the two horizons therefore have DIFFERENT usable ranges."
     ),
 )
 def unified_vcb_pool_targets(
@@ -165,16 +167,23 @@ def unified_vcb_pool_targets(
 ) -> MaterializeResult:
     with preprocessor.session(schema=UNIFIED_SCHEMA_NAME) as prep:
         prep._ingest_unified_pool_targets(UNIFIED_TICKER)
-        horizon = prep.UNIFIED_TARGET_HORIZON
-        target_col = f"return_{horizon}day"
+        horizons = tuple(prep.UNIFIED_TARGET_HORIZONS)
+        target_cols = {h: f"return_{h}day" for h in horizons}
 
         with prep._database_driver._cursor_ctx() as cur:
+            stats = {}
+            for h, target_col in target_cols.items():
+                cur.execute(
+                    f"SELECT COUNT({target_col}), MIN({target_col}), "
+                    f"       MAX({target_col}), AVG({target_col}) "
+                    f"FROM {UNIFIED_SCHEMA_NAME}.pool__targets"
+                )
+                stats[h] = cur.fetchone()
             cur.execute(
-                f"SELECT COUNT(*), COUNT({target_col}), MIN(date), MAX(date), "
-                f"       MIN({target_col}), MAX({target_col}), AVG({target_col}) "
+                f"SELECT COUNT(*), MIN(date), MAX(date) "
                 f"FROM {UNIFIED_SCHEMA_NAME}.pool__targets"
             )
-            rows, labelled, first, last, lo, hi, mean = cur.fetchone()
+            rows, first, last = cur.fetchone()
             cur.execute(
                 "SELECT column_name FROM information_schema.columns "
                 "WHERE table_schema = %s AND table_name = 'pool__targets' "
@@ -200,10 +209,11 @@ def unified_vcb_pool_targets(
             )
             unaligned = int(cur.fetchone()[0])
 
-    if columns != ["date", target_col]:
+    expected = ["date"] + list(target_cols.values())
+    if columns != expected:
         raise ValueError(
-            f"{UNIFIED_SCHEMA_NAME}.pool__targets should hold exactly "
-            f"['date', {target_col!r}], got {columns}."
+            f"{UNIFIED_SCHEMA_NAME}.pool__targets should hold exactly {expected}, "
+            f"got {columns}."
         )
     if unaligned:
         raise ValueError(
@@ -215,26 +225,40 @@ def unified_vcb_pool_targets(
             f"{UNIFIED_SCHEMA_NAME}.pool__targets has {rows} rows against "
             f"pool__basic's {basic_rows}."
         )
+    # ⚠️ Asserted per horizon: each column's unlabelled tail must be exactly its OWN
+    # h. A shared check against the longest would let a hole in `return_5day` pass.
+    for h, target_col in target_cols.items():
+        tail = rows - int(stats[h][0])
+        if tail != h:
+            raise ValueError(
+                f"{UNIFIED_SCHEMA_NAME}.pool__targets.{target_col} has a {tail}-row "
+                f"unlabelled tail; exactly {h} were expected."
+            )
 
     context.log.info(
-        f"{UNIFIED_SCHEMA_NAME}.pool__targets: {rows} rows ({first} → {last}), "
-        f"{labelled} labelled + {rows - labelled} unlabelled tail; {target_col} "
-        f"range {float(lo):.4f} → {float(hi):.4f}, mean {float(mean):.5f}"
+        f"{UNIFIED_SCHEMA_NAME}.pool__targets: {rows} rows ({first} → {last}) — "
+        + "; ".join(
+            f"{target_cols[h]} {int(stats[h][0])} labelled + {rows - int(stats[h][0])} "
+            f"tail, range {float(stats[h][1]):.4f} → {float(stats[h][2]):.4f}, "
+            f"mean {float(stats[h][3]):.5f}"
+            for h in horizons
+        )
     )
-    return MaterializeResult(
-        metadata={
-            "rows": int(rows),
-            "labelled": int(labelled),
-            "unlabelled_tail": int(rows - labelled),
-            "horizon_trading_days": horizon,
-            "target": MetadataValue.text(target_col),
-            "date_range": MetadataValue.text(f"{first} → {last}"),
-            "return_min": MetadataValue.float(round(float(lo), 6)),
-            "return_max": MetadataValue.float(round(float(hi), 6)),
-            "return_mean": MetadataValue.float(round(float(mean), 6)),
-            "table": MetadataValue.text(f"{UNIFIED_SCHEMA_NAME}.pool__targets"),
-        }
-    )
+    metadata = {
+        "rows": int(rows),
+        "horizons": MetadataValue.text(", ".join(str(h) for h in horizons)),
+        "targets": MetadataValue.text(", ".join(target_cols.values())),
+        "date_range": MetadataValue.text(f"{first} → {last}"),
+        "table": MetadataValue.text(f"{UNIFIED_SCHEMA_NAME}.pool__targets"),
+    }
+    for h, target_col in target_cols.items():
+        labelled, lo, hi, mean = stats[h]
+        metadata[f"{target_col}__labelled"] = int(labelled)
+        metadata[f"{target_col}__unlabelled_tail"] = int(rows - int(labelled))
+        metadata[f"{target_col}__min"] = MetadataValue.float(round(float(lo), 6))
+        metadata[f"{target_col}__max"] = MetadataValue.float(round(float(hi), 6))
+        metadata[f"{target_col}__mean"] = MetadataValue.float(round(float(mean), 6))
+    return MaterializeResult(metadata=metadata)
 
 
 assets: List[Callable] = [unified_vcb_pool_basic, unified_vcb_pool_targets]

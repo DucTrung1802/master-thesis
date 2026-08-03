@@ -5001,17 +5001,22 @@ class DataPreprocessor:
             f"{schema}.pool__basic: {written} rows x {len(source_types)} columns."
         )
 
-    # The label horizon, in TRADING DAYS — `pool__basic` is one row per session, so a
+    # The label horizons, in TRADING DAYS — `pool__basic` is one row per session, so a
     # row offset IS a trading-day offset and no calendar arithmetic is involved.
-    # ⚠️ The target COLUMN NAME is derived from this (`return_5day`), so the two cannot
-    # drift: changing the horizon renames the column instead of silently re-defining it.
-    UNIFIED_TARGET_HORIZON = 5
+    # ⚠️ Each target COLUMN NAME is derived from its horizon (`return_5day`), so the two
+    # cannot drift: changing a horizon renames the column instead of silently
+    # re-defining it, and ADDING one adds a column rather than replacing the table's
+    # meaning. That is why this is a tuple and not the scalar it started as — a model
+    # comparing h=5 against h=10 needs both labels on one calendar, and deriving the
+    # second one anywhere else would put the label definition in two places.
+    UNIFIED_TARGET_HORIZONS = (5, 10)
 
     def _ingest_unified_pool_targets(self, ticker: str) -> None:
         """`unified_schema_<ticker>.pool__basic` → `…​.pool__targets`.
 
-        Two columns: `date` (PK) and **`return_5day` — the forward 5-day simple
-        return**, `close[t+5] / close[t] - 1`, on the SPLIT-ADJUSTED close.
+        `date` (PK) plus **one column per horizon in `UNIFIED_TARGET_HORIZONS`** —
+        `return_5day`, `return_10day` — each the forward simple return
+        `close[t+h] / close[t] - 1` on the SPLIT-ADJUSTED close.
 
         ⚠️ **The source is `pool__basic`, not `gold.stocks`, and that is what keeps the
         two tables joinable.** They are joined on `date` by every downstream selection
@@ -5025,18 +5030,28 @@ class DataPreprocessor:
         close is 60,000 against an adjusted 9,130. That is not a label, it is a corporate
         action.
 
-        ⚠️ **The last 5 rows are NULL, and that is correct.** Their future does not exist
-        yet. Drop them when fitting; keeping them means the table still joins cleanly
-        against the feature pools, which is what the notebook's `<target>__final` views
-        rely on.
+        ⚠️ **Each column's tail is NULL for exactly its own horizon, and that is
+        correct.** `return_5day` loses 5 rows, `return_10day` loses 10 — their futures do
+        not exist yet. Drop them when fitting, per target; keeping them means the table
+        still joins cleanly against the feature pools, which is what the notebook's
+        `<target>__final` views rely on. ⚠️ It also means **the two labels do not have
+        the same usable range**: a run comparing h=5 against h=10 must drop each
+        target's own tail, not a shared one, or the h=5 comparison silently loses 5
+        sessions it had every right to use.
 
         ⚠️ **No look-ahead is introduced by the LEAD itself** — a forward-looking LABEL is
         the point of a target table. The look-ahead that matters is a FEATURE that peeks,
         and nothing here feeds a feature.
         """
         schema = self._helper_unified_schema(ticker)
-        horizon = self.UNIFIED_TARGET_HORIZON
-        target_col = f"return_{horizon}day"
+        horizons = tuple(self.UNIFIED_TARGET_HORIZONS)
+        if not horizons or any(h < 1 for h in horizons):
+            raise PipelineError(
+                f"UNIFIED_TARGET_HORIZONS must be one or more positive trading-day "
+                f"offsets, got {horizons}."
+            )
+        target_cols = {h: f"return_{h}day" for h in horizons}
+        longest = max(horizons)
         self._logger.log_info(
             f"Ingesting unified {schema}.pool__targets (from {schema}.pool__basic)..."
         )
@@ -5057,46 +5072,55 @@ class DataPreprocessor:
         with self._database_driver._cursor_ctx() as cur:
             cur.execute(f"SELECT COUNT(*) FROM {schema}.pool__basic")
             available = int(cur.fetchone()[0])
-            if available <= horizon:
+            if available <= longest:
                 raise MissingSourceDataError(
                     f"`{schema}.pool__basic` holds {available} rows, which is not more "
-                    f"than the {horizon}-day horizon — every label would be NULL."
+                    f"than the longest {longest}-day horizon — every label would be "
+                    f"NULL."
                 )
 
+            # One LEAD per horizon over the same ORDER BY, so every label is computed
+            # from the same row ordering and no two of them can disagree about which
+            # session follows which.
+            columns = ", ".join(
+                f"(LEAD(close_adjust, {h}) OVER (ORDER BY date)"
+                f" / NULLIF(close_adjust, 0) - 1.0)::double precision AS {col}"
+                for h, col in target_cols.items()
+            )
             # Dropped as late as possible: a failure above leaves the old table intact.
             cur.execute(f"DROP TABLE IF EXISTS {schema}.pool__targets")
             cur.execute(
                 f"CREATE TABLE {schema}.pool__targets AS "
-                f"SELECT date, ("
-                f"    LEAD(close_adjust, {horizon}) OVER (ORDER BY date)"
-                f"    / NULLIF(close_adjust, 0) - 1.0"
-                f")::double precision AS {target_col} "
-                f"FROM {schema}.pool__basic"
+                f"SELECT date, {columns} FROM {schema}.pool__basic"
             )
             cur.execute(f"ALTER TABLE {schema}.pool__targets ADD PRIMARY KEY (date)")
 
-            cur.execute(
-                f"SELECT COUNT(*), COUNT({target_col}) FROM {schema}.pool__targets"
-            )
-            written, labelled = (int(x) for x in cur.fetchone())
+            counts = ", ".join(f"COUNT({col})" for col in target_cols.values())
+            cur.execute(f"SELECT COUNT(*), {counts} FROM {schema}.pool__targets")
+            row = [int(x) for x in cur.fetchone()]
+            written, labelled = row[0], dict(zip(target_cols, row[1:]))
 
         if written != available:
             raise PipelineError(
                 f"{schema}.pool__targets wrote {written} rows but pool__basic holds "
                 f"{available} — the two must share one calendar."
             )
-        # Exactly the last `horizon` rows may be unlabelled. More than that means the
-        # source has NULL or zero closes, which would put silent holes in the labels.
-        if written - labelled != horizon:
-            raise PipelineError(
-                f"{schema}.pool__targets has {written - labelled} NULL {target_col} "
-                f"values; exactly {horizon} (the tail with no future) were expected. "
-                f"Check `pool__basic.close_adjust` for NULLs or zeros."
-            )
-        self._logger.log_info(
-            f"{schema}.pool__targets: {written} rows, {labelled} labelled, "
-            f"{horizon} unlabelled tail."
+        # ⚠️ Checked PER COLUMN, and the expected tail is that column's OWN horizon.
+        # Exactly `h` rows may be unlabelled; more than that means the source has NULL
+        # or zero closes, which would put silent holes in the labels. A single check
+        # against the longest horizon would have let a hole in `return_5day` through.
+        for h, col in target_cols.items():
+            unlabelled = written - labelled[h]
+            if unlabelled != h:
+                raise PipelineError(
+                    f"{schema}.pool__targets has {unlabelled} NULL {col} values; "
+                    f"exactly {h} (the tail with no future) were expected. Check "
+                    f"`pool__basic.close_adjust` for NULLs or zeros."
+                )
+        summary = ", ".join(
+            f"{col} {labelled[h]} labelled / {h} tail" for h, col in target_cols.items()
         )
+        self._logger.log_info(f"{schema}.pool__targets: {written} rows — {summary}.")
 
     # endregion Helper functions
 

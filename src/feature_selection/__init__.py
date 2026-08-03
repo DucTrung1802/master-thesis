@@ -4,6 +4,7 @@
 Three pieces, deliberately separate:
 
     unified_reader.py   read the `pool__*` tables and JOIN them on their shared keys
+    windows.py          daily panel → windowed samples; scoring CHANNELS not columns
     selector.py         rank the joined features against one target, then prune
     gpu.py              the CUDA paths — and which steps do not have one
     plots.py            the figures — one theme, one palette, no per-chart styling
@@ -23,8 +24,16 @@ from feature_selection.selector import (
     SelectionResult,
 )
 from feature_selection.gpu import cuda_available, device_report, resolve_device
+from feature_selection.windows import (
+    WINDOW_STATS,
+    usable_sample_count,
+    window_design,
+)
 
 __all__ = [
+    "WINDOW_STATS",
+    "usable_sample_count",
+    "window_design",
     "KEY_COLS",
     "UnifiedSchemaReader",
     "unified_schema_name",

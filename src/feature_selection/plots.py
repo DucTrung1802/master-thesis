@@ -400,6 +400,73 @@ def plot_ensemble_ranking(result, top: int = 25, ax=None):
     return ax
 
 
+def plot_stat_profile(result, method: str = "xgb_shap", top: int = 20, ax=None):
+    """`channel × window-stat` importance — HOW a channel carries its signal.
+
+    Magnitude, so one hue. This is the chart the windowed design exists to
+    produce: a channel bright on `slope` is a trend, one bright on `sd` is a
+    volatility signal, and one bright only on `last` never needed a window.
+    """
+    profile = result.stat_profile(method=method, top=top)
+    if profile.empty or profile.shape[1] <= 1:
+        print("No window statistics to profile — the run used lookback=1.")
+        return None
+    if ax is None:
+        _, ax = plt.subplots(
+            figsize=(1.25 * profile.shape[1] + 4.5, max(3, 0.32 * len(profile)))
+        )
+    _heatmap(
+        ax, profile, SEQUENTIAL_BLUE, 0.0, 1.0,
+        annotate=len(profile) <= 25, fmt=".2f",
+        cbar_label=f"normalised {method}",
+    )
+    _titles(
+        ax,
+        f"How each channel carries its signal (d = {result.lookback})",
+        f"top {len(profile)} channels by ensemble rank · {method} per "
+        f"(channel, window statistic), normalised across the whole design matrix",
+    )
+    return ax
+
+
+def plot_horizon_comparison(results: dict, ax=None):
+    """Out-of-sample IC per fold, one series per horizon.
+
+    Two horizons → two categorical slots and a legend. The question it answers is
+    not "which is bigger" but **"do they agree about when the signal was there"** —
+    two horizons whose ICs rise and fall together are reading one slow effect;
+    two that disagree fold by fold are reading noise.
+    """
+    series = {
+        label: (
+            result.validation[result.validation["feature_set"] == "selected"]
+            .set_index("fold")["ic"]
+        )
+        for label, result in results.items()
+    }
+    wide = pd.DataFrame(series)
+    if ax is None:
+        _, ax = plt.subplots(figsize=(8, 3.6))
+    x = np.arange(len(wide))
+    width = 0.8 / max(1, wide.shape[1])
+    for i, column in enumerate(wide.columns):
+        offset = (i - (wide.shape[1] - 1) / 2) * width
+        ax.bar(x + offset, wide[column].values, width * 0.94,
+               color=SERIES[i % len(SERIES)], label=column)
+    ax.axhline(0, color=AXIS, linewidth=1.0)
+    ax.set_xticks(x)
+    ax.set_xticklabels(wide.index)
+    ax.set_ylabel("Spearman IC (out of sample)")
+    ax.grid(axis="x", visible=False)
+    ax.legend(loc="best")
+    _titles(
+        ax,
+        "Selected channels, by horizon",
+        " · ".join(f"{k}: mean IC {v:+.3f}" for k, v in wide.mean().items()),
+    )
+    return ax
+
+
 def plot_validation(validation: pd.DataFrame, ax=None):
     """Walk-forward out-of-sample IC per fold, selected vs all features.
 
@@ -415,9 +482,7 @@ def plot_validation(validation: pd.DataFrame, ax=None):
         _, ax = plt.subplots(figsize=(8, 3.6))
     x = np.arange(len(wide))
     width = 0.36
-    for i, column in enumerate(["all features", "selected"]):
-        if column not in wide:
-            continue
+    for i, column in enumerate(list(wide.columns)[:2]):
         # A 2px surface gap between adjacent bars, not a stroke around them.
         ax.bar(
             x + (i - 0.5) * width, wide[column].values, width * 0.94,
