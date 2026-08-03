@@ -34,6 +34,7 @@ from dtos.tabular_database_driver_dtos.postgre_sql_connection_dto import (
     PostgreSQLConnectionDto,
 )
 from logger.logger import LogType, Logger
+from sentiment.news_panel import DAILY_CONTROL_FEATURES, DAILY_NEWS_FEATURES
 from sentiment.weekly_xsec import (
     CONTROL_FEATURES,
     EDITORIAL_FEATURES,
@@ -43,6 +44,22 @@ from sentiment.weekly_xsec import (
     evaluate,
     format_report,
 )
+
+#: `--grain` presets. The daily one is `rel5`/`rel10` — the target experiment_3.3 settled
+#: on — and it exists because weekly formation answers a slightly different question:
+#: it rebalances once a week, where `rel5` forms every session.
+GRAINS = {
+    "weekly": dict(
+        table="news_weekly_panel", date_col="week_start", close_col="close_last",
+        value_col="value_w", horizons="1,2", per_year=52.0, lookback=12, min_train=104,
+        rank_col="n_editorial",
+    ),
+    "daily": dict(
+        table="news_daily_panel", date_col="date", close_col="close_adjust",
+        value_col="value_matched", horizons="5,10", per_year=252.0, lookback=60,
+        min_train=504, rank_col="n_editorial_5d",
+    ),
+}
 from tabular_database_driver.postgre_sql_driver import PostgreSQLDriver
 from utils.constants import DATABASE_MAIN_V2, GOLD_SCHEMA, LOG_FILE_BASE
 
@@ -65,7 +82,13 @@ def _connect(logger: Logger) -> PostgreSQLDriver:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--horizons", default="1,2,4,8,13", help="forward horizons in WEEKS")
+    ap.add_argument(
+        "--grain",
+        choices=list(GRAINS),
+        default="weekly",
+        help="'daily' = rel5/rel10, the experiment_3.3 target; 'weekly' = paper 57's design",
+    )
+    ap.add_argument("--horizons", default=None, help="forward horizons, in the grain's unit")
     ap.add_argument("--cost", type=float, default=ROUND_TRIP_COST)
     ap.add_argument("--folds", type=int, default=6)
     ap.add_argument(
@@ -78,52 +101,94 @@ def main() -> None:
     )
     args = ap.parse_args()
 
+    cfg = GRAINS[args.grain]
+    unit = "d" if args.grain == "daily" else "w"
+
     logger = Logger(file_name=LOG_FILE_BASE, level=LogType.INFO)
     driver = _connect(logger)
-    panel = driver.select(schema_name=GOLD_SCHEMA, table_name="news_weekly_panel")
-    panel["week_start"] = pd.to_datetime(panel["week_start"])
+
+    # ⚠️ Raw cursor with explicit float casts, not driver.select: the daily panel is 2.1M
+    # rows and `numeric` comes back as Decimal→object, which is the thing that has stalled
+    # runs on stocks_basic before (sentiment/CONTEXT.md §5).
+    with driver._cursor_ctx() as cur:
+        cur.execute(
+            f"SELECT column_name, data_type FROM information_schema.columns "
+            f"WHERE table_schema = '{GOLD_SCHEMA}' AND table_name = '{cfg['table']}' "
+            f"ORDER BY ordinal_position"
+        )
+        cols = cur.fetchall()
+        select = ", ".join(
+            f"{c}::double precision AS {c}" if t in ("numeric", "bigint") else c
+            for c, t in cols
+        )
+        cur.execute(f"SELECT {select} FROM {GOLD_SCHEMA}.{cfg['table']}")
+        panel = pd.DataFrame(cur.fetchall(), columns=[c for c, _ in cols])
+
+    date_col = cfg["date_col"]
+    panel[date_col] = pd.to_datetime(panel[date_col])
     print(
-        f"gold.news_weekly_panel: {len(panel):,} ticker-weeks, "
+        f"gold.{cfg['table']} [{args.grain}]: {len(panel):,} rows, "
         f"{panel['ticker'].nunique()} tickers, "
-        f"{panel['week_start'].min():%Y-%m-%d} → {panel['week_start'].max():%Y-%m-%d}"
+        f"{panel[date_col].min():%Y-%m-%d} → {panel[date_col].max():%Y-%m-%d}"
     )
-    print("  (the 2012-06→11 scrape hole is cut in the PANEL now — see news_panel.PANEL_START)")
+    print("  (the 2012-06→11 scrape hole is cut in the PANEL — see news_panel.PANEL_START)")
 
     if args.top_tickers:
-        rank = (
-            panel.groupby("ticker")["n_editorial"].sum().sort_values(ascending=False)
-        )
+        rank = panel.groupby("ticker")[cfg["rank_col"]].sum().sort_values(ascending=False)
         keep = rank.head(args.top_tickers).index
         panel = panel[panel["ticker"].isin(keep)]
         print(
-            f"  top-{args.top_tickers} by editorial count → {len(panel):,} ticker-weeks: "
+            f"  top-{args.top_tickers} by editorial count → {len(panel):,} rows: "
             f"{', '.join(list(keep)[:12])}…"
         )
 
-    results = []
-    for horizon in [int(h) for h in args.horizons.split(",")]:
-        labelled = build_labels(panel, horizon=horizon, cost=args.cost)
-        uni = labelled[labelled["in_universe"] & labelled["label"].notna()]
-        tradeable = labelled.drop_duplicates("widx")["tradeable_week"]
-        print(
-            f"\nh={horizon:>2}w  labelled rows {len(uni):>7,}  "
-            f"weeks {uni['widx'].nunique():>4}  "
-            f"news coverage {uni['if_news'].mean():.1%}  "
-            f"editorial {uni['if_editorial'].mean():.1%}  "
-            f"weeks whose q75 clears cost: {tradeable.mean():.1%}"
-        )
-        for name, feats in [
+    if args.grain == "daily":
+        sets = [
+            ("controls", DAILY_CONTROL_FEATURES),
+            ("news (all)", DAILY_NEWS_FEATURES),
+            ("controls + news", DAILY_CONTROL_FEATURES + DAILY_NEWS_FEATURES),
+        ]
+        news_flag, ed_flag = "if_news_5d", "if_editorial_5d"
+    else:
+        sets = [
             ("controls", CONTROL_FEATURES),
             ("news (all)", NEWS_FEATURES),
             ("news (editorial)", EDITORIAL_FEATURES),
             ("controls + news", CONTROL_FEATURES + NEWS_FEATURES),
             ("controls + editorial", CONTROL_FEATURES + EDITORIAL_FEATURES),
-        ]:
+        ]
+        news_flag, ed_flag = "if_news", "if_editorial"
+
+    results = []
+    for horizon in [int(h) for h in (args.horizons or cfg["horizons"]).split(",")]:
+        labelled = build_labels(
+            panel, horizon=horizon, cost=args.cost, lookback=cfg["lookback"],
+            date_col=date_col, close_col=cfg["close_col"], value_col=cfg["value_col"],
+        )
+        uni = labelled[labelled["in_universe"] & labelled["label"].notna()]
+        tradeable = labelled.drop_duplicates("widx")["tradeable_week"]
+        print(
+            f"\nh={horizon:>2}{unit}  labelled rows {len(uni):>8,}  "
+            f"periods {uni['widx'].nunique():>5}  "
+            f"news coverage {uni[news_flag].mean():.1%}  "
+            f"editorial {uni[ed_flag].mean():.1%}  "
+            f"periods whose q75 clears cost: {tradeable.mean():.1%}"
+        )
+        for name, feats in sets:
             results.append(
-                evaluate(labelled, feats, name, horizon, n_folds=args.folds, cost=args.cost)
+                evaluate(
+                    labelled, feats, name, horizon, n_folds=args.folds, cost=args.cost,
+                    periods_per_year=cfg["per_year"], min_train=cfg["min_train"],
+                )
             )
 
-    print(format_report(results, cost=args.cost))
+    print(
+        format_report(
+            results,
+            cost=args.cost,
+            unit="trading session(s)" if args.grain == "daily" else "week(s)",
+        )
+    )
     print(
         "\nVERDICT — read the PAIRED table, not the levels.\n"
         "  ΔMCC is 'controls + news' minus 'controls' on the SAME folds. If |t| < 2 and\n"

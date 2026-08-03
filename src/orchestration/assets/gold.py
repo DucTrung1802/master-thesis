@@ -318,9 +318,88 @@ def gold_news_weekly_panel(
     )
 
 
+@asset(
+    name="news_daily_panel",
+    key_prefix=["gold"],
+    group_name="gold",
+    compute_kind="postgres",
+    deps=[
+        AssetKey(["silver", "cafef_news"]),
+        AssetKey(["silver", "stocks_basic"]),
+    ],
+    description=(
+        "The DAILY-formation twin of gold/news_weekly_panel, PK (exchange, ticker, date). "
+        "News enters as trailing 5- and 10-session windows, matched to the rel5/rel10 "
+        "horizons experiment_3.3 settled on. ⚠️ The trailing window includes the formation "
+        "day and that is not a leak — trading_date is already the first session whose OPEN "
+        "follows the article. ⚠️ Daily formation OVERLAPS: consecutive rows share h-1 days "
+        "of forward path, so the row count is ~5x the weekly panel's without 5x the "
+        "information, and a random split would be fatal."
+    ),
+)
+def gold_news_daily_panel(
+    context: AssetExecutionContext, preprocessor: PreprocessorResource
+) -> MaterializeResult:
+    with preprocessor.session(schema="gold_schema") as prep:
+        prep._ingest_gold_news_daily_panel()
+
+        with prep._database_driver._cursor_ctx() as cur:
+            cur.execute("SELECT COUNT(*) FROM gold_schema.news_daily_panel")
+            rows = int(cur.fetchone()[0])
+            cur.execute(
+                "SELECT COUNT(*) FROM information_schema.columns WHERE "
+                "table_schema = 'gold_schema' AND table_name = 'news_daily_panel'"
+            )
+            columns = int(cur.fetchone()[0])
+            cur.execute(
+                "SELECT COUNT(DISTINCT ticker), MIN(date), MAX(date) "
+                "FROM gold_schema.news_daily_panel"
+            )
+            tickers, first, last = cur.fetchone()
+            cur.execute(
+                "SELECT COUNT(*) FILTER (WHERE if_news_5d = 1), "
+                "       COUNT(*) FILTER (WHERE if_editorial_5d = 1), "
+                "       COUNT(*) FILTER (WHERE if_news_10d = 1) "
+                "FROM gold_schema.news_daily_panel"
+            )
+            news_5d, ed_5d, news_10d = (int(x) for x in cur.fetchone())
+            cur.execute(
+                "SELECT COUNT(*) FROM (SELECT 1 FROM gold_schema.news_daily_panel "
+                "GROUP BY exchange, ticker, date HAVING COUNT(*) > 1) d"
+            )
+            duplicates = int(cur.fetchone()[0])
+
+    if duplicates:
+        raise ValueError(
+            f"gold.news_daily_panel: {duplicates} duplicate (exchange, ticker, date) "
+            f"groups — the grain is one row per stock-day."
+        )
+
+    context.log.info(
+        f"gold.news_daily_panel: {rows} stock-days × {columns} columns, "
+        f"{news_5d} with news in the trailing 5 sessions ({news_5d / max(rows, 1):.1%}), "
+        f"{ed_5d} with an editorial ({ed_5d / max(rows, 1):.1%})"
+    )
+    return MaterializeResult(
+        metadata={
+            "rows": rows,
+            "columns": columns,
+            "tickers": int(tickers),
+            "stock_days_with_news_5d": news_5d,
+            "stock_days_with_editorial_5d": ed_5d,
+            "stock_days_with_news_10d": news_10d,
+            "news_coverage_5d": MetadataValue.float(round(news_5d / max(rows, 1), 4)),
+            "editorial_coverage_5d": MetadataValue.float(round(ed_5d / max(rows, 1), 4)),
+            "date_range": MetadataValue.text(f"{first} → {last}"),
+            "table": MetadataValue.text("gold_schema.news_daily_panel"),
+        }
+    )
+
+
 assets: List[Callable] = [
     gold_economy,
     gold_stock_market,
     gold_stocks_financials_bank_fa,
     gold_news_weekly_panel,
+    gold_news_daily_panel,
 ]

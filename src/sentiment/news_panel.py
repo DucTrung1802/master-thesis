@@ -32,6 +32,8 @@ to establish the baseline that a sentiment block would later have to beat.
 
 from __future__ import annotations
 
+from typing import Sequence
+
 import numpy as np
 import pandas as pd
 
@@ -167,8 +169,124 @@ def build_news_weekly_panel(
     return panel.reset_index(drop=True)
 
 
-def grain_violations(panel: pd.DataFrame) -> int:
-    """Duplicate `(exchange, ticker, week_start)` rows. Must be 0 — a feature build adds
+# ── daily grain — the `rel5` / `rel10` shape experiment_3 settled on ─────────────────
+
+#: Trailing windows in TRADING DAYS. 5 and 10 are the horizons the thesis actually cares
+#: about, so the news window is matched to them.
+DAILY_WINDOWS = (5, 10)
+
+DAILY_NEWS_FEATURES = [
+    f"{stem}_{w}d"
+    for w in DAILY_WINDOWS
+    for stem in ("if_news", "if_editorial", "n_docs", "n_editorial", "n_docs_named",
+                 "n_earnings", "relevance_max")
+]
+DAILY_CONTROL_FEATURES = [
+    "ret_1d", "ret_5d", "ret_10d", "ret_20d", "ret_60d", "vol_20d", "log_value_20d",
+]
+
+
+def aggregate_news_daily(news: pd.DataFrame) -> pd.DataFrame:
+    """`silver.cafef_news` → per `(exchange, ticker, trading_date)` counts.
+
+    Same grouping key as the weekly builder and for the same reason: `trading_date`
+    already answers "which session can this article first act on".
+    """
+    df = news.copy()
+    df["trading_date"] = pd.to_datetime(df["trading_date"]).dt.normalize()
+    df["is_editorial"] = df["is_editorial"].astype(bool)
+    df["has_ticker"] = df["has_ticker"].astype(bool)
+    df["relevance_score"] = pd.to_numeric(df["relevance_score"], errors="coerce").fillna(0.0)
+    df["n_earnings"] = (df["category"] == "business_results_and_analysis").astype(int)
+
+    return (
+        df.groupby(["exchange", "ticker", "trading_date"])
+        .agg(
+            n_docs=("row_id", "size"),
+            n_editorial=("is_editorial", "sum"),
+            n_docs_named=("has_ticker", "sum"),
+            n_earnings=("n_earnings", "sum"),
+            relevance_max=("relevance_score", "max"),
+        )
+        .reset_index()
+        .rename(columns={"trading_date": "date"})
+    )
+
+
+def build_news_daily_panel(
+    price_daily: pd.DataFrame,
+    news_daily: pd.DataFrame,
+    windows: Sequence[int] = DAILY_WINDOWS,
+    start: str | None = PANEL_START,
+) -> pd.DataFrame:
+    """Daily price spine + TRAILING news windows + daily momentum. PK `(exchange, ticker, date)`.
+
+    ⚠️ **The trailing window INCLUDES the formation day**, and that is not a leak: an
+    article's `trading_date` is the first session whose OPEN follows it, so news dated `d`
+    is public before `d`'s close, which is where the position forms. The target starts at
+    `d` and runs to `d + h`.
+
+    ⚠️ **Daily formation overlaps.** Consecutive rows share `h − 1` days of forward path
+    (paper 9's flaw #3). That is fine for TRAINING but fatal for a random split, which is
+    why the fold logic purges and embargoes `h` days around every cut. It also means the
+    sample count is ~5× the weekly panel's without carrying 5× the information — read the
+    per-fold spread, not the n.
+    """
+    panel = price_daily.copy()
+    panel["date"] = pd.to_datetime(panel["date"]).dt.normalize()
+    for col in ("close_adjust", "value_matched"):
+        panel[col] = pd.to_numeric(panel[col], errors="coerce")
+    panel = panel.dropna(subset=["close_adjust"])
+
+    nd = news_daily.copy()
+    nd["date"] = pd.to_datetime(nd["date"]).dt.normalize()
+    panel = panel.merge(nd, on=["exchange", "ticker", "date"], how="left")
+
+    raw = ["n_docs", "n_editorial", "n_docs_named", "n_earnings"]
+    for col in raw:
+        panel[col] = panel[col].fillna(0).astype(float)
+    panel["relevance_max"] = panel["relevance_max"].fillna(0.0).astype(float)
+
+    panel = panel.sort_values(["exchange", "ticker", "date"], kind="mergesort")
+    grp = panel.groupby(["exchange", "ticker"], sort=False)
+
+    for w in windows:
+        for col in raw:
+            panel[f"{col}_{w}d"] = (
+                grp[col].rolling(w, min_periods=1).sum().reset_index(level=[0, 1], drop=True)
+            )
+        panel[f"relevance_max_{w}d"] = (
+            grp["relevance_max"].rolling(w, min_periods=1).max().reset_index(level=[0, 1], drop=True)
+        )
+        panel[f"if_news_{w}d"] = (panel[f"n_docs_{w}d"] > 0).astype(int)
+        panel[f"if_editorial_{w}d"] = (panel[f"n_editorial_{w}d"] > 0).astype(int)
+
+    # ── controls, from CLOSED sessions only ──────────────────────────────────────────
+    close = grp["close_adjust"]
+    for d in (1, 5, 10, 20, 60):
+        panel[f"ret_{d}d"] = close.pct_change(d)
+    panel["vol_20d"] = (
+        grp["close_adjust"]
+        .pct_change(1)
+        .groupby([panel["exchange"], panel["ticker"]], sort=False)
+        .rolling(20, min_periods=10)
+        .std()
+        .reset_index(level=[0, 1], drop=True)
+    )
+    panel["log_value_20d"] = np.log1p(
+        grp["value_matched"].rolling(20, min_periods=5).mean()
+        .reset_index(level=[0, 1], drop=True).clip(lower=0)
+    )
+
+    if start is not None:
+        panel = panel[panel["date"] >= pd.Timestamp(start)]
+
+    drop = raw + ["relevance_max"]
+    return panel.drop(columns=drop).reset_index(drop=True)
+
+
+def grain_violations(panel: pd.DataFrame, key: str = "week_start") -> int:
+    """Duplicate `(exchange, ticker, <key>)` rows. Must be 0 — a feature build adds
     COLUMNS, never ROWS, and a silently fanned-out merge looks like a bigger, better table.
     """
-    return int(panel.duplicated(subset=["exchange", "ticker", "week_start"]).sum())
+    return int(panel.duplicated(subset=["exchange", "ticker", key]).sum())

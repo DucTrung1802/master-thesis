@@ -88,5 +88,7 @@
     "// gold/stocks_financials_bank_fa": "FEATURE panel: the _fa source + the full TA battery, ~1.1k columns",
     "gold/stocks_financials_bank_fa": true,
     "// gold/news_weekly_panel": "497k ticker-WEEKS, news + event counts, no sentiment - the panel the if_news baseline runs on",
-    "gold/news_weekly_panel": true
+    "gold/news_weekly_panel": true,
+    "// gold/news_daily_panel": "DAILY twin of the weekly panel - trailing 5/10-session news windows for rel5/rel10",
+    "gold/news_daily_panel": true
 }

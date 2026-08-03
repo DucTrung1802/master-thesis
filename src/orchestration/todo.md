@@ -129,6 +129,55 @@ corpus, không cần gán nhãn, không cần fine-tune.
 sau khi tăng độ rộng 259 lần.** Đòn bẩy mà chính module đó gọi là *"the biggest lever"* đã
 được kéo, và nó không đổi kết quả.
 
+### 🔴 Bổ sung 2026-08-03 — chạy riêng chân trời NGẮN (5 và 10 phiên): **tệ hơn, không khả quan hơn**
+
+Yêu cầu: chỉ quan tâm h = 5 hoặc 10 ngày. Đã dựng thêm **`gold.news_daily_panel`**
+(2.058.604 stock-days × 26 cột, cửa sổ tin trượt 5/10 phiên) vì `rel5`/`rel10` hình thành
+**mỗi phiên**, còn panel tuần chỉ tái cân bằng mỗi tuần — hai câu hỏi khác nhau. Daily cho
+**gấp ~5 lần số điểm hình thành**, tức là phép thử nhạy nhất có thể làm với dữ liệu này.
+
+**Bảy phép kiểm định ghép cặp, tất cả đều null:**
+
+| grain | universe | horizon | ΔMCC | t | fold thắng |
+|---|---|---|---:|---:|---:|
+| weekly | top-100 | 1 tuần ≈ 5 phiên | −0,0001 | −0,04 | 2/6 |
+| weekly | top-100 | 2 tuần ≈ 10 phiên | +0,0022 | +1,20 | 4/6 |
+| weekly | top-30 | 1 tuần | −0,0023 | −0,42 | 2/6 |
+| **daily** | top-100 | **rel5** | +0,0002 | **+0,11** | 3/6 |
+| **daily** | top-100 | **rel10** | +0,0005 | **+0,17** | 2/6 |
+| **daily** | top-30 | **rel5** | −0,0029 | **−1,26** | 2/6 |
+| **daily** | top-30 | **rel10** | +0,0003 | **+0,12** | 3/6 |
+
+**Mọi |t| < 1,3. Fold thắng 2–4/6. Dấu lẫn lộn.** Tăng số mẫu lên 5 lần không làm hiện ra
+gì cả — đúng như kỳ vọng khi hiệu ứng thật sự bằng 0.
+
+### ⚠️ Và một phát hiện đắt giá hơn: 5–10 phiên là chân trời TỆ NHẤT trong cả dải
+
+Không chỉ news chết ở đây — **momentum cũng chết**:
+
+| chân trời | universe | controls CAGR | benchmark |
+|---|---|---:|---:|
+| **rel5** | top-100 | **−2,78%** | 9,75% |
+| **rel5** | top-30 | **2,68%** | 16,48% |
+| **rel10** | top-100 | 9,86% | 9,98% |
+| **rel10** | top-30 | 7,69% | 16,74% |
+| 4 tuần | top-30 | **30,39%** | 18,07% |
+| 13 tuần | top-30 | **28,63%** | 19,34% |
+
+**Khối `controls` chỉ thắng benchmark từ 4 tuần trở lên.** Ở 5–10 phiên nó thua, kể cả trên
+nhóm thanh khoản cao nhất.
+
+Hai nguồn độc lập đã nói trước điều này và giờ đo được trên chính dữ liệu VN:
+- **memory `project-vcb-forecasting-conclusion`** — lợi suất ngắn hạn một cổ phiếu là không
+  dự báo được;
+- **paper 57** — tin theo ngày dự báo 1–2 ngày rồi hết (Ngày 3: t = 1,2), tin theo tuần dự
+  báo 13 tuần, vì phân vị cắt ngang theo ngày quá bất ổn để xếp hạng.
+
+→ **Nếu muốn giữ `rel5`/`rel10` làm mục tiêu, kết quả là null cho cả news lẫn momentum, và
+đó là kết luận cuối.** Tín hiệu duy nhất tìm được sống ở **4–13 tuần**, không ở 5–10 phiên.
+Đây là một kết quả đáng viết vào luận văn: *chân trời quyết định, và chân trời mà thị trường
+VN cho tín hiệu không phải chân trời ngắn.*
+
 ### Hai điều còn phải nói cho trung thực
 
 1. **Mục 6 đo SỐ LƯỢNG và LOẠI tin, không đo SẮC THÁI.** Về mặt logic, tone vẫn chưa bị bác

@@ -72,6 +72,9 @@ def build_labels(
     universe_size: int = UNIVERSE_SIZE,
     lookback: int = UNIVERSE_LOOKBACK_WEEKS,
     cost: float = ROUND_TRIP_COST,
+    date_col: str = "week_start",
+    close_col: str = "close_last",
+    value_col: str = "value_w",
 ) -> pd.DataFrame:
     """Add the liquidity universe, the forward relative return and the 3-class label.
 
@@ -81,29 +84,30 @@ def build_labels(
     (accuracy rising monotonically with horizon).
     """
     df = panel.copy()
-    df["week_start"] = pd.to_datetime(df["week_start"])
-    for col in ("close_last", "value_w"):
+    df = df.rename(columns={date_col: "period", close_col: "close_p", value_col: "value_p"})
+    df["period"] = pd.to_datetime(df["period"])
+    for col in ("close_p", "value_p"):
         df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    weeks = np.sort(df["week_start"].unique())
-    widx = pd.Series(np.arange(len(weeks)), index=weeks)
-    df["widx"] = df["week_start"].map(widx).astype(int)
+    periods = np.sort(df["period"].unique())
+    widx = pd.Series(np.arange(len(periods)), index=periods)
+    df["widx"] = df["period"].map(widx).astype(int)
 
     # ── liquidity universe, from TRAILING turnover only ──────────────────────────────
     df = df.sort_values(["exchange", "ticker", "widx"], kind="mergesort")
     df["turnover_med"] = (
-        df.groupby(["exchange", "ticker"], sort=False)["value_w"]
+        df.groupby(["exchange", "ticker"], sort=False)["value_p"]
         .transform(lambda s: s.rolling(lookback, min_periods=max(4, lookback // 3)).median())
     )
     df["liq_rank"] = df.groupby("widx")["turnover_med"].rank(ascending=False, method="first")
     df["in_universe"] = (df["liq_rank"] <= universe_size) & df["turnover_med"].notna()
 
     # ── forward return, by an explicit index join (gaps must NOT silently misalign) ──
-    fwd = df[["exchange", "ticker", "widx", "close_last"]].copy()
+    fwd = df[["exchange", "ticker", "widx", "close_p"]].copy()
     fwd["widx"] -= horizon
-    fwd = fwd.rename(columns={"close_last": "close_fwd"})
+    fwd = fwd.rename(columns={"close_p": "close_fwd"})
     df = df.merge(fwd, on=["exchange", "ticker", "widx"], how="left")
-    df["fwd_ret"] = df["close_fwd"] / df["close_last"] - 1.0
+    df["fwd_ret"] = df["close_fwd"] / df["close_p"] - 1.0
 
     # ── cross-sectional excess, within the universe of that week ─────────────────────
     uni = df[df["in_universe"] & df["fwd_ret"].notna()]
@@ -195,6 +199,8 @@ def evaluate(
     horizon: int,
     n_folds: int = 6,
     cost: float = ROUND_TRIP_COST,
+    periods_per_year: float = 52.0,
+    min_train: int = 104,
 ) -> Result:
     """Purged walk-forward. Returns per-fold classification metrics + a costed backtest."""
     df = labelled[labelled["in_universe"] & labelled["label"].notna()].copy()
@@ -203,7 +209,7 @@ def evaluate(
 
     picks: List[pd.DataFrame] = []
     for i, (train_end, test_start, test_end) in enumerate(
-        purged_folds(df["widx"], horizon, n_folds)
+        purged_folds(df["widx"], horizon, n_folds, min_train=min_train)
     ):
         tr = df[df["widx"] <= train_end]
         te = df[(df["widx"] >= test_start) & (df["widx"] < test_end)]
@@ -239,11 +245,13 @@ def evaluate(
         picks.append(out)
 
     if picks:
-        res.portfolio = _backtest(pd.concat(picks), horizon, cost)
+        res.portfolio = _backtest(pd.concat(picks), horizon, cost, periods_per_year)
     return res
 
 
-def _backtest(picks: pd.DataFrame, horizon: int, cost: float) -> Dict[str, float]:
+def _backtest(
+    picks: pd.DataFrame, horizon: int, cost: float, periods_per_year: float = 52.0
+) -> Dict[str, float]:
     """Long-only top-quartile by `p_long`, rebalanced every `horizon` weeks, costed.
 
     Long-only on purpose: single-stock shorting is effectively unavailable on HOSE
@@ -271,7 +279,7 @@ def _backtest(picks: pd.DataFrame, horizon: int, cost: float) -> Dict[str, float
     # counted h times over.
     bt = bt.iloc[::horizon]
 
-    per_year = 52.0 / horizon
+    per_year = periods_per_year / horizon
     out: Dict[str, float] = {}
     for col in ("strategy", "benchmark"):
         r = bt[col].to_numpy(dtype=float)
@@ -308,7 +316,9 @@ def paired_delta(candidate: Result, baseline: Result) -> Dict[str, float]:
     }
 
 
-def format_report(results: List[Result], cost: float = ROUND_TRIP_COST) -> str:
+def format_report(
+    results: List[Result], cost: float = ROUND_TRIP_COST, unit: str = "week(s)"
+) -> str:
     """One table per horizon. ⚠️ Every accuracy sits next to its majority-class rate —
     without that column the number is meaningless (papers 47, 49, 50, 53)."""
     lines: List[str] = []
@@ -317,7 +327,7 @@ def format_report(results: List[Result], cost: float = ROUND_TRIP_COST) -> str:
         by_h.setdefault(r.horizon, []).append(r)
 
     for horizon in sorted(by_h):
-        lines.append(f"\n{'=' * 96}\nHORIZON = {horizon} week(s)   round-trip cost = {cost:.2%}\n{'=' * 96}")
+        lines.append(f"\n{'=' * 96}\nHORIZON = {horizon} {unit}   round-trip cost = {cost:.2%}\n{'=' * 96}")
         lines.append(
             f"{'features':<22}{'folds':>6}{'acc':>8}{'major':>8}{'macroF1':>9}"
             f"{'MCC':>8}{'Brier':>8}{'CAGR':>9}{'bench':>9}{'Sharpe':>8}{'maxDD':>9}"

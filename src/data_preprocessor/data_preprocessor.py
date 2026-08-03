@@ -4647,6 +4647,114 @@ class DataPreprocessor:
             dtype_overrides={"week_start": DataType.DATE()},
         )
 
+    def _ingest_gold_news_daily_panel(self) -> None:
+        """Gold `news_daily_panel` — one row per `(exchange, ticker, date)`, PK the same.
+
+        The DAILY-formation twin of `news_weekly_panel`, built because the thesis target
+        is `rel5`/`rel10` (experiment_3.3) — 5 and 10 TRADING DAYS — and weekly formation
+        answers a slightly different question: it rebalances once a week, where `rel5`
+        forms every session.
+
+        News enters as **trailing 5- and 10-session windows**, matched to the horizons.
+
+        ⚠️ **The trailing window includes the formation day, and that is not a leak.** An
+        article's `trading_date` is the first session whose OPEN follows it, so news dated
+        `d` is public before `d`'s close, which is where the position forms.
+
+        ⚠️ **Daily formation OVERLAPS**: consecutive rows share `h − 1` days of forward
+        path (paper 9's flaw #3, the most likely source of its 75-80% figures). Harmless
+        for training, fatal for a random split — which is why the folds purge and embargo
+        `h` sessions around every cut. It also means the row count is ~5× the weekly
+        panel's without 5× the information; read the per-fold spread, not the n.
+
+        The price read is column-scoped (5 of 38) rather than a `_helper_select` on the
+        whole 2.4M-row table, which has stalled runs before. Old table dropped first.
+        """
+        from sentiment.news_panel import (
+            PANEL_START,
+            aggregate_news_daily,
+            build_news_daily_panel,
+            grain_violations,
+        )
+
+        self._logger.log_info(
+            "Ingesting gold news_daily_panel (trailing 5/10-session news windows)..."
+        )
+        out_table = "news_daily_panel"
+
+        with self._database_driver._cursor_ctx() as cur:
+            cur.execute(
+                f"""
+                SELECT exchange, ticker, date, close_adjust, value_matched
+                FROM {SILVER_SCHEMA}.stocks_basic
+                WHERE close_adjust IS NOT NULL
+                ORDER BY exchange, ticker, date
+                """
+            )
+            price_daily = pd.DataFrame(
+                cur.fetchall(),
+                columns=["exchange", "ticker", "date", "close_adjust", "value_matched"],
+            )
+        if price_daily.empty:
+            raise MissingSourceDataError(
+                f"{SILVER_SCHEMA}.stocks_basic is empty (--select silver/stocks_basic)."
+            )
+
+        news = self._helper_select(
+            schema_name=SILVER_SCHEMA,
+            table_name="cafef_news",
+            columns=[
+                "row_id", "exchange", "ticker", "trading_date",
+                "category", "is_editorial", "has_ticker", "relevance_score",
+            ],
+        )
+        if news.empty:
+            raise MissingSourceDataError(
+                f"{SILVER_SCHEMA}.cafef_news is empty (--select silver/cafef_news)."
+            )
+
+        result = build_news_daily_panel(price_daily, aggregate_news_daily(news))
+
+        duplicates = grain_violations(result, key="date")
+        if duplicates:
+            raise PipelineError(
+                f"{GOLD_SCHEMA}.{out_table}: {duplicates} duplicate "
+                f"(exchange, ticker, date) rows - the news merge fanned out."
+            )
+        spine_in_range = int(
+            (pd.to_datetime(price_daily["date"]) >= pd.Timestamp(PANEL_START)).sum()
+        )
+        if len(result) != spine_in_range:
+            raise PipelineError(
+                f"{GOLD_SCHEMA}.{out_table}: {len(result)} rows against a price spine of "
+                f"{spine_in_range} from {PANEL_START} - the join must preserve the spine."
+            )
+
+        self._logger.log_info(
+            f"news_daily_panel: {len(result)} stock-days, "
+            f"{int(result['if_news_5d'].sum())} with news in the trailing week "
+            f"({result['if_news_5d'].mean():.1%})"
+        )
+
+        result = self._helper_clean(
+            result, [CleanLayer.ORDER_BY(["exchange", "ticker", "date"])]
+        )
+        numeric = [c for c in result.columns if c not in ("exchange", "ticker", "date")]
+        result = self._helper_cast_columns(
+            result,
+            decimal_cols=[c for c in numeric if not c.startswith(("if_", "n_"))],
+            bigint_cols=[c for c in numeric if c.startswith(("if_", "n_"))],
+        )
+
+        self._database_driver.drop_table(GOLD_SCHEMA, out_table)
+        self._helper_save_pandas_table_to_database(
+            schema_name=GOLD_SCHEMA,
+            table_name=out_table,
+            primary_keys=["exchange", "ticker", "date"],
+            df=result,
+            dtype_overrides={"date": DataType.DATE()},
+        )
+
     def _ingest_gold_bonds(self) -> None:
         self._ingest_gold_table("bonds")
 
