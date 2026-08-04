@@ -653,8 +653,24 @@ single-ticker result — and the reason is worth keeping: there, the raw level w
 acting as a date proxy and the "signal" *was* the era. **A per-date target
 immunises against that automatically** — a feature that identifies the year cannot
 help rank stocks *within* a day — so the representation stops mattering once the
-target is cross-sectional. ⚠️ RAW's own null was run separately (§9g) rather than
-assumed from the baseline's, per §8.
+target is cross-sectional.
+
+⚠️ **RAW got its OWN null, and it clears — but the point is that its BAR did not
+move.** Per §8 a bar computed for one representation says nothing about another, so
+this was run rather than assumed:
+
+| representation | observed | null mean | **null p95 bar** | null max | z | clears |
+|---|---|---|---|---|---|---|
+| cs_rank features (20 draws) | +0.0289 | +0.0044 | **+0.0117** | +0.0119 | +6.09 | ✅ |
+| RAW features (10 draws) | +0.0326 | +0.0034 | **+0.0115** | +0.0153 | **+5.37** | ✅ |
+
+**The two bars agree to the third decimal (+0.0117 vs +0.0115).** That is the direct
+contrast with §6c, where `zscore` moved its own bar from +0.053 to +0.076 — a 43 %
+swing — purely by giving the selector more to overfit. Here the representation
+changes nothing about how much the pipeline can earn from noise, because **the
+per-date target caps that regardless of what the features look like.** §8's rule
+still stands (re-run the null when the representation changes); this is a case where
+obeying it produced a null result, which is the useful kind.
 
 ⚠️ **VN30 vs VN100 IS §9b's precision argument, measured.** The two ICs are similar
 (+0.022 vs +0.031) but VN30's **daily-IC sd is 0.205 against VN100's 0.130** — a
