@@ -75,6 +75,33 @@ class FinancialsConfig(Config):
 
     skip_existing: bool = True
 
+
+class TradingViewDataConfig(Config):
+    """Run config for the TradingView OHLCV scrape, settable per-run from the UI.
+
+    ⚠️ **`skip_existing=True` REFRESHES NOTHING THAT IS ALREADY ON DISK.** The check is
+    a glob on the symbol prefix at task-ADD time, so a symbol scraped once is never
+    fetched again — its CSV keeps whatever last date it had. A run can therefore be
+    green, fast, and leave every existing series stale, which is exactly what happened
+    on 2026-08-05: the forex partition queued 120 tasks for 120 NEW symbols and left
+    282 existing series ending 2026-06-08.
+
+    That default is right for "pick up what is new" and it is what removed ~8.6 h of
+    navigation stagger from a warm run. It is wrong whenever the point of the run is
+    FRESH DATA — then pass `skip_existing=False` and pay the full cost (~50 s per
+    symbol, dominated by the 8-second global navigation gate).
+
+    ```yaml
+    ops:
+      raw__trading_view_data:
+        config:
+          skip_existing: false
+    ```
+    """
+
+    skip_existing: bool = True
+
+
 from orchestration._bootstrap import bootstrap
 
 bootstrap()
@@ -251,13 +278,17 @@ def trading_view_collected_links(
     description=(
         "OHLCV per symbol by driving the chart widget → "
         "raw_data/trading_view/data/<asset>/…  Reads its OWN asset class's link CSVs. "
-        "⚠️ SKIPS symbols already on disk (delete a CSV to re-fetch); before that skip "
-        "existed this asset re-scraped all 4,675 links every run, ~10.4 h of pure "
-        "8-second navigation stagger. Replaces `web_scraper/trading_view/data/<asset>`."
+        "⚠️ By default SKIPS symbols already on disk, so a green run is NOT evidence of "
+        "fresh data — it refreshes NEW symbols only. Set skip_existing=False in the run "
+        "config to re-fetch every symbol (hours: each navigation pays an 8-second global "
+        "stagger). Replaces `web_scraper/trading_view/data/<asset>`."
     ),
 )
 def trading_view_data(
-    context: AssetExecutionContext, repo_logger: RepoLogger, switches: SwitchConfig
+    context: AssetExecutionContext,
+    repo_logger: RepoLogger,
+    switches: SwitchConfig,
+    config: TradingViewDataConfig,
 ) -> MaterializeResult:
     asset_class = context.partition_key
     logger = repo_logger.build()
@@ -265,8 +296,11 @@ def trading_view_data(
 
     adder = getattr(scraper, f"_add_{_ADDER_STEM[asset_class]}_data_tasks")
     scraper._thread_manager.remove_all_tasks()
-    queued = adder()
-    context.log.info(f"{asset_class}: queued {queued} data task(s)")
+    queued = adder(skip_existing=config.skip_existing)
+    context.log.info(
+        f"{asset_class}: queued {queued} data task(s) "
+        f"(skip_existing={config.skip_existing})"
+    )
     scraper._thread_manager.execute()
 
     meta = landed(

@@ -628,11 +628,48 @@ dagster asset materialize -f src/orchestration/definitions.py --select "*gold/bo
 dagster asset materialize -f src/orchestration/definitions.py --select "bronze/trading_view_bonds,silver/bonds,gold/bonds,bronze/trading_view_funds,silver/funds,gold/funds,bronze/trading_view_forex,silver/forex,gold/forex"
 ```
 
-| | silver | gold | measures each |
-|---|---|---|---|
-| `bonds` | 66,100 × 4, 18 tenor spellings | **4,642 × 118** | 13 |
-| `funds` | 18,662 × 8, 19 HOSE ETFs | **2,894 × 352** | up to 19 |
-| `forex` | 1,324,940 × 4, **328** series | **7,910 × 329** | **1** |
+**Scraped and built end to end on 2026-08-05** — all 9 DB assets green in 3m55s, the
+scrape 2h05m before it (bonds 1m32s / funds 4m46s / forex 1h59m, 0 ERROR lines):
+
+| | silver | gold | measures each | round-trip vs silver |
+|---|---|---|---|---|
+| `bonds` | 66,100 × 4, 18 tenor spellings | **4,642 × 118** | 13 | 33,050 cells, **0 mismatches** |
+| `funds` | 18,731 × 8, 21 HOSE ETFs | **2,921 × 390** | up to 19 | 93,655 cells, **0 mismatches**, 0 fund-days absent |
+| `forex` | 1,415,390 × 4, **357** series | **7,958 × 358** | **1** | **1,415,390 cells, 0 mismatches** |
+
+All three: rows == distinct dates == silver's distinct dates, PK `date` read back from
+`pg_index`. The column algebra closes exactly — bonds 9 collapsed tenors × 13 = 117,
+forex 357 × 1 = 357, funds 21 × 19 = 399 **minus 10 never written** because FUEBFVND's
+3 rows cannot fill a 5- or 21-day window and an all-NULL column is not created.
+`gold.bonds`' other 33,050 silver rows are the twin spellings the builder collapses.
+
+⚠️ **THE SCRAPE REFRESHED ONLY NEW SYMBOLS, AND THE TABLES SHOW IT.** `skip_existing`
+globs the symbol prefix at task-ADD time, so a symbol scraped once is never fetched
+again. Measured immediately after the run:
+
+| | series ending 2026-08-03/04 | series still ending 2026-06-08/09 or earlier |
+|---|---|---|
+| `forex` | 29 | **328** |
+| `funds` | 2 | **19** |
+| `bonds` | 0 | **18** (0 data tasks queued at all) |
+
+So `gold.forex`'s 48 rows after 2026-06-09 and `gold.funds`' 40 carry only the new
+symbols and are nearly empty; `gold.bonds` gained no new days whatever. **This is the
+documented default doing its job** (it is what removed ~8.6 h of navigation stagger from
+a warm run) and the tables are correct — but a green scrape is NOT evidence of fresh
+data, which is the standing warning in §5 *Gotchas* made concrete.
+
+**The fix is now one flag:** `TradingViewDataConfig.skip_existing=False`
+([assets/scrape.py](assets/scrape.py)) re-fetches every symbol. Budget ~50 s per symbol
+(the 8-second global gate dominates), so ~396 symbols across the three classes is
+roughly **5.5 hours**.
+
+```yaml
+ops:
+  raw__trading_view_data:
+    config:
+      skip_existing: false
+```
 
 ⚠️ **THE MEASURE SET SHRINKS AS THE ENTITY COUNT GROWS, and that is a ceiling talking,
 not taste.** PostgreSQL allows 1,600 columns per table. 9 tenors and 19 ETFs carry the
@@ -659,7 +696,7 @@ picking a number, not removing a duplicate.
 |---|---|
 | both materialised | **RUN_SUCCESS, 16 s**; re-run green (gold drops its own table first) |
 | `silver/funds` | **18,662 rows × 8 columns**, 19 HOSE ETFs, 2014-10-06 → 2026-06-26 — bronze's row count exactly |
-| `gold/funds` | **2,894 trading days × 351 measure columns**, 352,314 observations = 34.7% of cells |
+| `gold/funds` | **2,894 trading days × 351 measure columns**, 352,314 observations = 34.7% of cells (pre-scrape; 2,921 × 389 after 2026-08-05) |
 | grain | rows == distinct dates == **2,894**, `date` unique, and equal to silver's distinct dates |
 | **exact round-trip** | 93,310 carried OHLCV cells vs silver — **0 mismatches**; **0 of 18,662** fund-days absent from the panel |
 | a feature, independently | E1VFVN30 `return_simple` vs pandas `pct_change` — **max abs diff 0.0** over 2,893 rows |
@@ -1369,7 +1406,12 @@ separate, mechanical change.
 - **`skip_existing=True` still applies inside the scrapers**, so a scrape asset can
   materialise "successfully" in 500 ms having fetched nothing. That is correct
   behaviour, but it means a green materialisation is NOT evidence of fresh data — the
-  row-count metadata is what to read. (Cf. the short-page pagination bug in
+  row-count metadata is what to read.
+  > ⚠️ **Demonstrated 2026-08-05, and it is worse than "fetched nothing": it fetches
+  > SOME things.** The forex data partition queued 120 tasks, ran 1h59m, went green —
+  > and refreshed 29 series while leaving **328** ending 2026-06-08. A per-series max
+  > date is the only honest freshness check; `landed()` and the row count both look
+  > healthy. `TradingViewDataConfig.skip_existing=False` forces the full re-fetch. (Cf. the short-page pagination bug in
   `web_scraper/CONTEXT.md §7`: the per-stock CSVs on disk predate the fix and
   `skip_existing` will not refresh them.)
 - **The OCR venvs (`ocr_env8`/`ocr_env9`) are irrelevant here** — the production
