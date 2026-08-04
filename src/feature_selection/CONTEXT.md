@@ -11,10 +11,10 @@
 > an uncontaminated holdout and a 20-draw null each), and **every one sits inside what
 > the same pipeline scores on shuffled labels**. §6b-6d has the tables.
 >
-> **Half two — the SAME pipeline on the CROSS-SECTION clears its null by 6 sigma.**
-> §7 said the way out was N stocks × T days with a per-date target, not a wider
-> feature pool. Built (§9): `unified_schema_all`, VN100, `d=20, h=5`,
-> `cs_rank_5day`.
+> **Half two — the SAME pipeline on the CROSS-SECTION clears its null by 6 sigma at
+> VN100, and by 18 at 301 names.** §7 said the way out was N stocks × T days with a
+> per-date target, not a wider feature pool. Built (§9): `unified_schema_all`,
+> `d=20, h=5`, `cs_rank_5day`.
 >
 > | | VCB, time series | VN100, cross-section |
 > |---|---|---|
@@ -25,12 +25,22 @@
 > | clears? | ❌ | ✅ |
 > | hit rate | 0.477 — **below** a coin | 0.511, and **52.7-68.3 % of DAYS positive** |
 >
-> ⚠️ **The signal did not get bigger — the BAR got smaller.** The observed IC actually
-> *fell*, from +0.056 to +0.029. What collapsed is the null: from a mean of +0.017 to
-> +0.004. On 4,211 single-ticker samples, picking 12 of 27 channels earns +0.017 from
-> noise alone; on 2,860 dates × 100 names it earns +0.004. **That is the entire
-> argument of §9b, measured** — the cross-section does not buy independent
+> ⚠️ **At VN100 the signal did not get bigger — the BAR got smaller.** The observed IC
+> actually *fell*, from +0.056 to +0.029. What collapsed is the null: from a mean of
+> +0.017 to +0.004. On 4,211 single-ticker samples, picking 12 of 27 channels earns
+> +0.017 from noise alone; on 2,860 dates × 100 names it earns +0.004. **That is the
+> entire argument of §9b, measured** — the cross-section does not buy independent
 > observations, it buys precision, and precision is what shrinks the bar.
+>
+> ⚠️ **Past ~300 names the observed IC rises too, and §9b does NOT explain that.**
+> +0.023 (N=30) → +0.031 (100) → **+0.077 (301)** → +0.109 (780). A falling bar
+> cannot raise an observed value. Either less-liquid names are genuinely less
+> efficiently priced, or thin trading makes their ranks mechanically predictable —
+> §9j screens out the worst of the second and **+0.0768 still clears a bar of
+> +0.0245 by 18σ**, which is evidence for the first without being proof.
+>
+> ⚠️ **THE HOLDOUT DOES NOT CONFIRM ANY OF IT** (§9g): +0.011 against a shuffled
+> control of +0.0071, with SE ≈ 0.013. Read §9g before quoting a magnitude.
 >
 > **Four notebooks. Read the fourth one, then the third.**
 >
@@ -725,7 +735,8 @@ Same pipeline, same target, same `d=20, h=5`, same 20-draw `date_block` null.
 | VCB (§6b) | **1** | ~1.0 | +0.0559 | +0.0167 | **+0.0556** | +1.56 | ❌ |
 | VN30 | **30** | 0.205 | +0.0233 | +0.0110 | **+0.0248** | **+1.42** | ❌ |
 | **VN100** | **100** | 0.130 | +0.0289 | +0.0044 | **+0.0117** | **+6.09** | ✅ |
-| ALL (§9i) | **780** | — | **+0.109** | — | *(see §9i)* | — | ⚠️ |
+| **LIQUID301** (§9j, `d=1`) | **301** | — | **+0.0768** | +0.0216 | **+0.0245** | **+18.45** | ✅ |
+| ALL (§9i) | **780** | — | **+0.109** | — | *(never ran, §9k)* | — | ⚠️ |
 
 ⚠️ **THE BAR FALLS WITH `1/√N` AND THAT IS THE WHOLE STORY.** +0.0556 → +0.0248 →
 +0.0117. From VN30 to VN100 the predicted factor is `√(100/30) = 1.83` and the
@@ -787,3 +798,102 @@ effect and a staleness artefact are not distinguishable from this table.**
 `avg_vol_per_buy_order`, `close_adjust`, `buy_order_vol`, `sell_order_vol` all win
 on `last`), so the 20-day window is contributing very little at this width — which
 is also why §9j's `lookback=1` null is a fair proxy and not merely a cheap one.
+
+### 9j. LIQUID301 — removing the microcap tail, which answers warning 3
+
+The 780-name run's null was attempted twice at full width and never finished (§9k).
+This is the same question asked of a **liquidity-screened** universe instead:
+**301 tickers whose MEDIAN daily matched value since 2018 is ≥ 0.5 bn VND** —
+711,275 rows, 2,857 sessions, median cross-section width **260**. Half the memory,
+and it is *also* the direct test: if +0.109 were the illiquid tail being stale
+rather than an effect, screening the tail out should collapse it.
+
+⚠️ **The screen is applied over the WHOLE sample**, so a name's 2015 rows are kept
+because of liquidity it had in 2023. That is look-ahead in the strict sense and is
+standard for defining an investable universe; it is also the right instrument here,
+because identifying "the microcap tail" requires knowing which names are the tail.
+
+| | `d=20` | `d=1` |
+|---|---|---|
+| mean IC (selected) | **+0.0715** | **+0.0768** |
+| mean IC (all 27) | +0.0684 | +0.0782 |
+| fold ICs | .086 .081 .081 .047 .063 | .087 .084 .087 .052 .075 |
+| trend / hit rate | — / 0.522 | −0.0057 / **0.526** |
+| R² | +0.0003 … +0.0064 | −0.0014 … +0.0064 |
+
+⚠️ **IT DOES NOT COLLAPSE.** +0.109 → +0.0715 is a 35 % fall, not a disappearance,
+and it stays **2.3× the VN100 result**. So the wide-universe effect is *not* purely
+a microcap artefact — though part of it plainly is, and the honest reading is that
+roughly a third of the 780-name number came from the tail.
+
+⚠️ **`avg_vol_per_buy_order` RETURNS TO #1** (1.000 on `spearman` *and*
+`permutation`), displacing the `n_sell_orders` that led at 780 names. **The VN100
+leader survives the widening; the ALL-universe reordering toward order-counts was
+substantially the tail.** That is warning 3 of §9i, answered.
+
+⚠️ **The selection stops hurting.** At 780 names all 27 channels beat the pruned 12
+in every fold; here the pruned set wins at `d=20` (+0.0715 vs +0.0684). So §9i's
+warning 2 localises to the illiquid tail rather than to width as such.
+
+⚠️ **`d=1` ≈ `d=20` (+0.0768 vs +0.0715), which is why the null below runs at
+`d=1`.** The 20-day window is worth nothing at this width — consistent with `last`
+carrying the top channels — so the cheap configuration is also the faithful one.
+Observed and null both run at `d=1`, so the pair is internally consistent.
+
+**The IC ladder, now four points wide:**
+
+| universe | N | mean IC |
+|---|---|---|
+| VN30 | 30 | +0.0233 |
+| VN100 | 100 | +0.0313 |
+| **LIQUID301** | 301 | **+0.0715** |
+| ALL | 780 | +0.109 |
+
+⚠️ **The IC itself rises with N, which the §9b precision argument does NOT
+explain.** Precision predicts a falling *bar*, not a rising *observed* value. Two
+readings are consistent with this and the data here cannot separate them: smaller
+and less-liquid names are less efficiently priced (a real and well-documented
+effect), and thinner trading generates stale prices whose ranks are mechanically
+predictable. The liquidity screen removes the worst of the second and leaves
++0.0715 standing, which is evidence for the first — not proof of it.
+
+#### ⚠️ AND IT CLEARS ITS NULL BY THE WIDEST MARGIN IN THE STUDY
+
+10 draws, `date_block`, selection re-run inside every draw, observed and null both
+at `d=1, permutation_repeats=3`.
+
+| | observed | null mean | null sd | **p95 BAR** | null max | **z** | clears |
+|---|---|---|---|---|---|---|---|
+| LIQUID301 / `d=1` | **+0.0768** | +0.0216 | 0.0030 | **+0.0245** | +0.0249 | **+18.45** | ✅ |
+
+⚠️ **The observed is 3.1× the highest of ten null draws**, and the null is
+extraordinarily tight — sd **0.0030**, every draw inside +0.016 … +0.025. `p = 0.091`
+is the floor `1/(n+1)` at 10 draws, not a measurement; the z is the number.
+
+⚠️ **The null's MEAN is +0.0216 here against VN100's +0.0044** — five times higher.
+A wider panel gives the selector more to earn from noise, exactly as §8's rule
+anticipates, which is why this configuration needed its own null rather than
+VN100's. It got one, and the observed still clears by 18σ.
+
+**So §9i's warning 1 is discharged for the liquid universe and NOT for all 780.**
+A 301-name investable cross-section carries a real, large, null-clearing effect.
+Whether the extra +0.038 that the 780-name run adds on top is also real remains
+**unverified** — see §9k.
+
+### 9k. ⚠️ The 780-name null was attempted twice and never produced a number
+
+| attempt | configuration | outcome |
+|---|---|---|
+| 1 | ALL 780, `d=20`, 10 draws | abandoned — 61 min/run ⇒ ~10 h |
+| 2 | ALL 780, `d=1`, 2 modes × 10 draws | **died at ~4 h with a 0-byte output file** |
+| 3 | LIQUID301, `d=1`, 10 draws | ✅ §9j — 49 min, z = +18.45 |
+
+⚠️ **Attempt 2 lost everything, and the cause was a logging bug, not the compute.**
+The driver wrapped `sys.stdout` in a `TextIOWrapper`, which **re-buffers on top of
+`python -u`**; nothing reached disk, so when the process died (OOM or teardown — it
+is not recoverable which) four hours of draws vanished. Attempt 3 used
+`sys.stdout.reconfigure(line_buffering=True)` and printed each draw as it completed.
+
+**If you run anything long here, line-buffer it and write each draw to disk as it
+finishes.** A null is `n` independent runs; there is no reason for draw 9 to be lost
+because draw 10 crashed.
