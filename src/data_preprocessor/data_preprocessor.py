@@ -4873,8 +4873,221 @@ class DataPreprocessor:
             dtype_overrides={"date": DataType.DATE()},
         )
 
+    # ── gold.bonds — the WIDE yield-curve panel ─────────────────────────────────
+    #
+    #     {exchange}__{ticker}__{measure}
+    #     tvc__vn10y__value,  tvc__vn10y__volatility_21
+    #
+    # Same `__` convention and the same reason as `gold.stock_market` and
+    # `gold.economy`: the measures contain single underscores (`return_simple`,
+    # `value_roll_mean_21`), so only a double underscore can be split back.
+    #
+    # ⚠️ WHY WIDE AT ALL. A yield CURVE is read across tenors on one day — 10y minus
+    # 2y is the slope, and the slope is the series that carries macro information.
+    # In the long shape that is a self-join per tenor pair; one row per date makes it
+    # a subtraction. It is also what a `pool__macro` needs: a feature panel is keyed
+    # by date, and every consumer of the long table had to pivot it first.
+    GOLD_BONDS_NAME_SEP = "__"
+
+    # ⚠️ EVERY TENOR IS PRESENT TWICE, ALL THE WAY FROM BRONZE. TradingView exposes
+    # `TVC:VN01` and `TVC:VN01Y` as separate symbols and the scraper collected both,
+    # so silver holds 18 "tickers" that are 9 tenors: 66,100 rows for 33,050
+    # observations. Measured — all 9 pairs agree on every shared date, **0 differing
+    # values** — but agreement is ASSERTED here per pair rather than trusted, because
+    # the day the two spellings diverge is the day one of them is wrong and silently
+    # picking either would publish it.
+    #
+    # The `Y` spelling is the survivor: `VN10Y` reads as the 10-YEAR yield, which is
+    # what the series is, and it is TradingView's own canonical government-yield
+    # symbol. Set this to `None` to publish both spellings unchanged.
+    GOLD_BONDS_DUPLICATE_SUFFIX = "Y"
+
+    def _helper_bonds_drop_duplicate_tenors(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Drop `VN10` where `VN10Y` carries the same series. Asserts they agree.
+
+        ⚠️ Compared on the RAW `value` and on date COVERAGE, before any feature is
+        computed. The derived columns are a deterministic function of `value` within
+        a series, so two series with the same values on the same dates cannot
+        disagree downstream — checking the input is both sufficient and the only
+        place a divergence has a readable cause.
+        """
+        suffix = self.GOLD_BONDS_DUPLICATE_SUFFIX
+        if not suffix:
+            return df
+
+        present = set(zip(df["exchange"], df["ticker"]))
+        twins = [
+            (exchange, plain)
+            for exchange, plain in sorted(present)
+            if (exchange, f"{plain}{suffix}") in present
+        ]
+        if not twins:
+            return df
+
+        for exchange, plain in twins:
+            long_name = f"{plain}{suffix}"
+            a = df[(df["exchange"] == exchange) & (df["ticker"] == plain)]
+            b = df[(df["exchange"] == exchange) & (df["ticker"] == long_name)]
+            a = a.set_index("date")["value"].sort_index()
+            b = b.set_index("date")["value"].sort_index()
+            if not a.index.equals(b.index):
+                only_a, only_b = a.index.difference(b.index), b.index.difference(a.index)
+                raise PipelineError(
+                    f"gold.bonds: {exchange}:{plain} and {exchange}:{long_name} cover "
+                    f"different dates ({len(only_a)} only in {plain}, {len(only_b)} "
+                    f"only in {long_name}) — they are not the same series, so "
+                    f"dropping either would lose data. Set "
+                    f"GOLD_BONDS_DUPLICATE_SUFFIX = None to publish both."
+                )
+            # NaN == NaN is False, so compare on the null pattern too rather than
+            # letting a pair of all-NULL series pass as "differing".
+            differing = int(
+                ((a != b) & ~(a.isna() & b.isna())).sum()
+            )
+            if differing:
+                raise PipelineError(
+                    f"gold.bonds: {exchange}:{plain} and {exchange}:{long_name} "
+                    f"disagree on {differing} of {len(a)} dates. They were the same "
+                    f"series when this was written; one of them is now wrong and "
+                    f"this code cannot tell which. Investigate before publishing."
+                )
+
+        dropped = {(e, t) for e, t in twins}
+        keep = ~pd.Series(
+            list(zip(df["exchange"], df["ticker"])), index=df.index
+        ).isin(dropped)
+        self._logger.log_info(
+            f"gold.bonds: dropped {len(dropped)} duplicate tenor spelling(s) "
+            f"({', '.join(t for _, t in twins[:5])}"
+            f"{', …' if len(twins) > 5 else ''}) — each verified identical to its "
+            f"'{suffix}' twin on every date."
+        )
+        return df[keep].reset_index(drop=True)
+
     def _ingest_gold_bonds(self) -> None:
-        self._ingest_gold_table("bonds")
+        """`silver.bonds` -> `gold.bonds`: **one row per DATE**, PK `date`, one column
+        per (tenor x measure) named `{exchange}__{ticker}__{measure}`.
+
+        9 government tenors x 13 measures = 117 columns on the calendar the data
+        itself defines — the distinct dates in silver, not a synthetic business-day
+        range.
+
+        ⚠️ **NO as-of fill, the same choice `gold.stock_market` makes and for the same
+        reason.** A missing tenor-day means that tenor did not quote (VN15/VN20/VN30
+        begin in 2018, thirteen years after VN01), and carrying a yield forward would
+        invent a quote. `gold.economy` fills because a macro series is *stale but
+        valid* between releases; a quote is not. NULL stays NULL.
+
+        ⚠️ **The features are computed BEFORE the pivot, per series and in date
+        order** — `_helper_transform` groups by `(exchange, ticker)`. Computing a
+        return after pivoting would be a row-wise difference across the wide frame,
+        which is the same arithmetic only as long as no tenor has a gap; VN15 has
+        2,089 dates against VN01's 4,441, so it is not the same arithmetic.
+        """
+        self._logger.log_info("Ingesting gold bonds (wide, 1 row per date)...")
+
+        KEYS = ["exchange", "ticker", "date"]
+
+        df = self._helper_select(
+            schema_name=SILVER_SCHEMA,
+            table_name="bonds",
+            order_by=KEYS,
+        )
+        if df.empty:
+            raise MissingSourceDataError(
+                f"{SILVER_SCHEMA}.bonds is empty — run the silver bonds ingest first."
+            )
+
+        df["date"] = pd.to_datetime(df["date"]).dt.date
+        # ⚠️ `silver.bonds.value` is VARCHAR — the live example the generic builder's
+        # docstring names. It must be coerced, not inferred.
+        for col in df.columns:
+            if col not in KEYS:
+                df[col] = pd.to_numeric(df[col], errors="coerce")
+
+        df = self._helper_bonds_drop_duplicate_tenors(df)
+
+        layers = self._helper_build_feature_layers(df)
+        if not layers:
+            raise PipelineError(
+                "gold.bonds: no feature layer matched silver.bonds' columns, so the "
+                "table would be a bare pivot of `value`."
+            )
+        df = self._helper_transform(df, layers)
+
+        measures = [c for c in df.columns if c not in KEYS]
+        # ⚠️ `value_name="observation"`, not `"value"`. One of the MEASURES is itself
+        # called `value` (the yield), and pandas refuses a `value_name` that collides
+        # with an existing column. `gold.stock_market` never meets this because its
+        # measures are `close_adjust`/`n_buy_orders`; a single-value silver table
+        # always will.
+        long = df.melt(
+            id_vars=KEYS,
+            value_vars=measures,
+            var_name="measure",
+            value_name="observation",
+        ).dropna(subset=["observation"])
+
+        sep = self.GOLD_BONDS_NAME_SEP
+        long["column"] = (
+            long["exchange"].map(self._sanitize_identifier)
+            + sep
+            + long["ticker"].map(self._sanitize_identifier)
+            + sep
+            + long["measure"].map(self._sanitize_identifier)
+        )
+
+        # Sanitising must not merge two tenors, and the result must fit PostgreSQL's
+        # identifier limit. Both checked, not assumed — same as `gold.stock_market`.
+        pairs = long[["exchange", "ticker", "measure", "column"]].drop_duplicates()
+        collided = pairs.groupby("column").size()
+        collided = collided[collided > 1]
+        if len(collided):
+            raise PipelineError(
+                f"gold.bonds: {len(collided)} column name(s) are produced by more than "
+                f"one (exchange, ticker, measure) — sanitising merged distinct tenors, "
+                f"e.g. {list(collided.index[:3])}. Rename before publishing."
+            )
+        too_long = [
+            c for c in pairs["column"].unique()
+            if len(c.encode()) > self.PG_IDENTIFIER_LIMIT
+        ]
+        if too_long:
+            raise PipelineError(
+                f"{len(too_long)} gold.bonds column name(s) exceed PostgreSQL's "
+                f"{self.PG_IDENTIFIER_LIMIT}-byte identifier limit and would be "
+                f"TRUNCATED SILENTLY, e.g. {sorted(too_long)[:3]}."
+            )
+
+        wide = long.pivot(index="date", columns="column", values="observation")
+        wide = wide.sort_index().reset_index()
+        wide.columns.name = None
+
+        # Nothing may be lost on the way through: one non-null cell per observation.
+        landed = int(wide.drop(columns=["date"]).notna().sum().sum())
+        if landed != len(long):
+            raise PipelineError(
+                f"gold.bonds: {len(long)} observations went into the pivot but "
+                f"{landed} cells came out. A duplicate (exchange, ticker, date, "
+                f"measure) in silver.bonds is the usual cause."
+            )
+
+        cells = len(wide) * (len(wide.columns) - 1)
+        self._logger.log_info(
+            f"gold bonds: {len(wide)} trading days x {len(wide.columns) - 1} columns, "
+            f"{landed} observations "
+            f"({100.0 * landed / max(cells, 1):.1f}% of cells filled)."
+        )
+
+        self._database_driver.drop_table(GOLD_SCHEMA, "bonds")
+        self._helper_save_pandas_table_to_database(
+            schema_name=GOLD_SCHEMA,
+            table_name="bonds",
+            primary_keys=["date"],
+            df=wide,
+            dtype_overrides={"date": DataType.DATE()},
+            chunk_size=1_000,
+        )
 
     def _ingest_gold_forex(self) -> None:
         self._ingest_gold_table("forex")

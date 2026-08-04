@@ -50,7 +50,8 @@ raw_data/<source>/*.csv,*.xlsx           (produced by src/web_scraper)
                   cafef_financials_<template>_<report>
         │
         ▼   ingest_gold_data()     ← feature engineering (TA + returns/vol/rolling)
-  gold_schema:    {bonds,economy,forex,funds,indices,stocks}   (stocks ← silver.stocks_basic)
+  gold_schema:    {forex,funds,stocks}                  long, PK (exchange,ticker,date)
+                  {bonds,economy,stock_market}          WIDE, PK (date)
 ```
 
 - **One file, one class.** [data_preprocessor.py](data_preprocessor.py) holds the
@@ -608,6 +609,52 @@ DTO helpers come from
   - **Verified**: 532,188 observations compared, **0 missing, 0 value mismatches**, and
     gold holds exactly 532,188 cells. Max column name 42 bytes.
 
+- **`bonds` — the WIDE yield-curve panel (2026-08-05).** ⚠️ **RESHAPED — this table
+  used to be the generic long build.** `silver.bonds` → `gold.bonds`: **one row per
+  DATE** (PK `date`), one column per tenor × measure named
+  `{exchange}__{ticker}__{measure}` — `tvc__vn10y__value`,
+  `tvc__vn10y__volatility_21`. **4,642 days × 117 columns** (9 tenors × 13 measures),
+  2007-07-01 → 2026-06-08, rebuilt in 3.0 s. It was 66,100 rows ×
+  `(exchange, ticker, date)`.
+  - ⚠️ **WHY WIDE.** A yield CURVE is read ACROSS tenors on one day. The slope —
+    `tvc__vn10y__value - tvc__vn02y__value` — is the series that carries macro
+    information, and in the long shape it is a self-join per tenor pair; here it is a
+    subtraction (measured: +0.959 on 2026-06-08). It is also the shape a `pool__macro`
+    needs, since a feature panel is keyed by date.
+  - ⚠️ **EVERY TENOR WAS PRESENT TWICE, ALL THE WAY FROM BRONZE, AND HALF OF IT IS NOW
+    DROPPED.** TradingView exposes `TVC:VN01` and `TVC:VN01Y` as separate symbols and
+    the scraper collected both, so bronze/silver hold **18 "tickers" that are 9
+    tenors** — 66,100 rows for 33,050 observations. Measured: all 9 pairs agree on
+    every shared date, **0 differing values**, identical date coverage. The pivot
+    would otherwise have been 234 columns of which 117 were exact copies.
+  - ⚠️ **The agreement is ASSERTED per pair, not trusted.**
+    `_helper_bonds_drop_duplicate_tenors` compares the raw `value` and the date
+    coverage and **raises** on either mismatch, naming which dates differ. The day the
+    two spellings diverge is the day one of them is wrong, and silently keeping either
+    would publish it. `GOLD_BONDS_DUPLICATE_SUFFIX = None` publishes both spellings
+    unchanged. The `Y` survives because `VN10Y` reads as the 10-YEAR yield.
+    ⚠️ **The duplication itself belongs upstream** — bronze and silver still carry it.
+  - ⚠️ **Features are computed BEFORE the pivot, per series, in date order.** A return
+    taken after pivoting would be a row-wise difference across the wide frame, which
+    is the same arithmetic only if no tenor has a gap — VN15/VN20/VN30 begin in 2018
+    and hold 2,089 dates against VN01's 4,441, so it is not.
+  - **NO as-of fill**, the same choice `stock_market` makes: a missing tenor-day means
+    that tenor did not quote, and carrying a yield forward invents one.
+  - ⚠️ **`value_name="observation"` in the melt, not `"value"`.** One of the MEASURES
+    is itself called `value`, and pandas refuses a `value_name` colliding with an
+    existing column. `stock_market` never meets this because its measures are
+    `close_adjust`/`n_buy_orders`; **any single-value silver table will.**
+  - Same collision, identifier-length and cell-count invariants as `stock_market`, and
+    they raise rather than warn. Longest column name 30 bytes.
+  - **Verified**: `tvc__vn10y__value` has 4,407 non-null cells against silver's 4,407
+    `VN10Y` rows with **0 disagreements**; the derived columns reproduce the pre-reshape
+    long table (2026-06-08: value 4.473, `return_simple` 0.0, `volatility_21`
+    0.0033907 against the old REAL-rounded 0.003391).
+  - ⚠️ **Nothing consumed the long table** — `UNIFIED_MACRO_TABLES` in
+    `utils/constants.py` names `bonds` but is itself referenced nowhere, so the
+    reshape broke no caller. `forex`/`funds`/`stocks` still use the generic long
+    builder.
+
 - **`economy` — the WIDE macro panel (2026-08-01).** `silver.economy` +
   `silver.economy_series` → `gold.economy`: **one row per BUSINESS DAY** (PK
   `date`), one column per series named
@@ -620,7 +667,8 @@ DTO helpers come from
   `economy_panel`. Two gold tables for one asset is one too many, so the panel took the
   name and the feature table was dropped (2026-08-01). Restoring it is one line
   (`self._ingest_gold_table("economy")`); the generic builder is untouched and still
-  drives bonds/forex/funds/indices/stocks.
+  drives forex/funds/stocks. ⚠️ **`bonds` left it on 2026-08-05** — it is now a wide
+  per-date panel like `stock_market`, see its entry above.
   - ⚠️ **PUBLICATION LAG — this is the look-ahead guard.** The source `date` is the
     REFERENCE period, not the release date: Vietnam's Q1 GDP is dated 2026-03-31 and
     published in April, so a panel joined on `date` hands a model a figure ~a week
