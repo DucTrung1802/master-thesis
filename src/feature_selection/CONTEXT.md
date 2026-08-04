@@ -42,6 +42,25 @@
 > ⚠️ **THE HOLDOUT DOES NOT CONFIRM ANY OF IT** (§9g): +0.011 against a shuffled
 > control of +0.0071, with SE ≈ 0.013. Read §9g before quoting a magnitude.
 >
+> ## ⚠️ HALF THREE — THE WIDE POOLS, RUN 2026-08-04 ON THE SINGLE TICKER
+>
+> | pool | ch | observed | p95 bar | null max | z | verdict |
+> |---|---|---|---|---|---|---|
+> | `pool__basic` §6b | 27 | +0.0559 | +0.0556 | +0.0606 | +1.56 | ❌ |
+> | `pool__fa` §11 | 162 | +0.0157 | +0.0740 | +0.0896 | −0.25 | ❌ **below its null's mean** |
+> | **`pool__ta` §12** | **918** | **+0.1121** | **+0.0754** | **+0.1189** | **+2.52** | ⚠️ **clears the bar; noise still beat it once in 20** |
+>
+> ⚠️ **`pool__ta` is the only single-ticker run to clear its p95 bar, and it is still
+> not a pass.** One of twenty shuffled-label runs scored +0.1189, above the observed
+> +0.1121, so `p` sits at its `1/(n+1)` floor. Its 12 kept channels are eleven
+> moving-average crossover/slope channels and one cycle period — **trend-following** —
+> but **nine of the twelve are in raw price units** and §6c showed that removing the
+> price level removes the apparent signal. §12a is the caveat list; §12d is what
+> would settle it.
+>
+> ⚠️ **The bar rose from 27 to 162 channels and then stopped** (+0.0556 → +0.0740 →
+> +0.0754 at 918). §6d's "a wider pool only raises the null" is real but saturates.
+>
 > **Four notebooks. Read the fourth one, then the third.**
 >
 > | notebook | one sample is | for |
@@ -444,7 +463,7 @@ This section was the plan. Steps 1-3 are built and run; step 4 is still open.
 | 1. multi-ticker panel | VN30 ≈ 25 stocks | ✅ **`unified_schema_all`** — 781 tickers, 2.39 M rows, built by `_ingest_unified_pool_basic("ALL")`. Studies run on VN30 / VN100 / all of it |
 | 2. cross-sectional rank target | day `t`'s ranking | ✅ **`cs_rank_{h}day`**, uniform on `[-0.5, +0.5]` per date, built in `read_universe_panel` |
 | 3. reuse the package, group the CV by date | | ✅ **six hook overrides**, nothing re-implemented. `PurgedWalkForwardByDate` purges `d+h−1` **sessions** |
-| 4. widen to `pool__ta` / `pool__macro` / `pool__calendar` | | ⏳ **the tables now EXIST** (2026-08-04) — nothing has been run against them |
+| 4. widen to `pool__ta` / `pool__macro` / `pool__calendar` | | ⏳ **run on the SINGLE TICKER only** (2026-08-04): `pool__fa` §11, `pool__ta` §12. Neither has been run against a cross-sectional target, which is what step 4 actually asked for |
 
 ⚠️ **The order in the original plan was right and is worth keeping.** Widening the
 pool first would have produced "a longer list of nothing, more slowly, and with a
@@ -471,11 +490,24 @@ assertions that had to become series-aware.
 
 Full listing: [unified_schema_vcb__pool_columns.md](../../reports/feature_selection/unified_schema_vcb__pool_columns.md).
 
-⚠️ **THEY EXIST; NOTHING HAS BEEN RUN AGAINST THEM, AND §7 STILL SAYS WHY.** On a
-single ticker a wider pool buys no independent observations and **raises its own
-null** — `zscore` moved its bar 43 % on 27 channels, and `pool__ta` is 924. The
-order that worked was: go cross-sectional first, clear a null, *then* widen. These
-tables are for step 4, against a cross-sectional target, not for another VCB run.
+⚠️ **BOTH HAVE NOW BEEN RUN ON THE SINGLE TICKER, AND §7 WAS RIGHT ABOUT THE BAR.**
+The prediction was that a wider pool buys no independent observations and **raises
+its own null** — `zscore` moved its bar 43 % on 27 channels. Measured, same ticker,
+same target, same folds, same device:
+
+| pool | channels | observed IC | **null p95 BAR** | null max | z | § |
+|---|---|---|---|---|---|---|
+| `pool__basic` | 27 | +0.0559 | +0.0556 | +0.0606 | +1.56 | §6b |
+| `pool__fa` | 162 | +0.0157 | +0.0740 | +0.0896 | −0.25 | §11 |
+| **`pool__ta`** | **918** | **+0.1121** | **+0.0754** | **+0.1189** | **+2.52** | **§12** |
+
+⚠️ **The bar rose 27 → 162 channels and then STOPPED (+0.0556 → +0.0740 → +0.0754).**
+§6d's mechanism is real but it is not unbounded — what a selector can earn from
+shuffled labels saturates once the pool is wide enough that the top of it is already
+noise. The observed value is what separates the three, not the bar.
+
+These tables were built for step 4, against a **cross-sectional** target. Both
+single-ticker runs are the control for that, not the destination.
 
 ⚠️ **`pool__fa` exists for VCB and ACB only** — it is built from the CafeF *bank*
 chart of accounts. A cross-sectional FA study is not possible from this table.
@@ -485,11 +517,19 @@ chart of accounts. A cross-sectional FA study is not possible from this table.
 forward one session before trusting any FA-driven result — see
 `data_preprocessor/CONTEXT.md`.
 
-⚠️ **~207 of `pool__ta`'s columns are BOOLEAN** and `_prepare` drops bool dtypes, so
-a naive run would silently score ~717 of the 921, not all of them.
+⚠️ **207 of `pool__ta`'s columns are BOOLEAN** and `_prepare` drops bool dtypes, so
+a naive run scores **717 of the 921**, not all of them. §12 casts them to 0/1 in the
+panel before the selector sees it — the flags (`rsi_14_gt_70`,
+`macd_12_26_9_cross_above`, `close_bb_20_above_upper`, …) are real signals, and a
+0/1 column is a perfectly good feature for all six rankers. **Cast them, or say in
+the report that 204 indicators were never scored.** One more column,
+`ht_dcphase_quadrant`, is VARCHAR and is excluded by name rather than by accident.
 
-⚠️ **`pool__fa` HAS NOW BEEN RUN, and §11 is what came back.** It is the cleanest
-demonstration in this package of why §7's ordering exists.
+⚠️ **BOTH HAVE NOW BEEN RUN — `pool__fa` is §11, `pool__ta` is §12.** They came
+back at opposite ends: FA scored *below* its own null's mean (z = −0.25), TA cleared
+its p95 bar (z = +2.52) and is the only single-ticker configuration in this package
+to do so. Neither is a pass; §12's null max still exceeds its observed. Read both
+before pointing the selector at a wide pool again.
 
 ### Smaller extensions, if the study continues as-is
 
@@ -1167,3 +1207,131 @@ events, and neither adds any.
 3. **Shift `publish_date` forward one session** before believing anything: the lag
    reaches 0 days, so a statement released after the close is a half-day leak this
    layer cannot detect (`data_preprocessor/CONTEXT.md`).
+
+## 12. ⚠️ THE TA RUN (2026-08-04) — clears its p95 bar, and STILL is not a pass
+
+`unified_schema_vcb.pool__ta ⋈ pool__targets`, `return_5day`, `d=1, h=5`, **918
+channels**, `device="cpu"`, `max_features=12`, `permutation_repeats=10`, 20-draw
+block-shuffled null, holdout `2024-06-01` with a control. Every knob matched to §11
+so the two pools are the same procedure on different columns.
+Report: `reports/feature_selection/2026-08-04__unified_schema_vcb__pool_ta__return_5day`.
+
+| | observed | null mean | null sd | **p95 BAR** | null max | **z** | p | clears |
+|---|---|---|---|---|---|---|---|---|
+| **`pool__ta`, 918 ch** | **+0.1121** | +0.0249 | 0.0346 | **+0.0754** | **+0.1189** | **+2.52** | 0.048 | ⚠️ |
+| `pool__fa`, 162 ch (§11) | +0.0157 | +0.0242 | 0.0337 | +0.0740 | +0.0896 | −0.25 | 0.62 | ❌ |
+| `pool__basic`, 27 ch (§6b) | +0.0559 | +0.0167 | 0.0252 | +0.0556 | +0.0606 | +1.56 | 0.05 | ❌ |
+
+⚠️ **`clears_bar` IS `True` HERE AND THE HONEST VERDICT IS STILL "NOT A PASS".** The
+observed +0.1121 beats the p95 bar of +0.0754 — the first single-ticker
+configuration in this package to do so — but **draw 10 of 20 scored +0.1189 on
+SHUFFLED LABELS, above the observed.** `p = 0.0476` is `1/(n+1)`, the floor.
+§6b faced exactly this shape (+0.0559 against a bar of +0.0556 and a max of +0.0606)
+and called it ❌; the same reading applies at four times the z. **The boolean
+`clears_bar` is a mechanical p95 comparison and it is the wrong summary whenever the
+null max exceeds the observed — quote the max beside it.**
+
+⚠️ **The null is LOW-MEAN, FAT-TAILED, and that is the finding.** Draws: four
+negative, twelve below +0.04, then +0.055, +0.058, +0.060, +0.073 and +0.119. A mean
+of +0.0249 with a max of +0.1189 is a 4.8× ratio, against 3.6× for `pool__basic`. On
+918 channels the *typical* shuffled run earns little, but the tail of the selection
+distribution reaches the observed value — which is precisely why a mean-based z of
++2.52 overstates the case and 20 draws cannot resolve it. **This configuration needs
+100+ draws to be decidable, at ~5.3 min each (~9 h).**
+
+### 12a. What it found — one idea, twelve times
+
+| rank | channel | ensemble | carried by | reads as |
+|---|---|---|---|---|
+| **1** | **`close_ema_50_100_dist`** | **20.50** | `permutation` 1.000, `spearman` 0.820 | EMA-50 minus EMA-100 |
+| 2 | `close_ema_50_200_dist` | 22.83 | — | ⚠️ pruned into #1 |
+| 3 | `close_ema_100_200_dist` | 25.33 | `spearman` 0.733 | the same, slower pair |
+| 4 | `close_kama_50_200_dist` | 33.67 | `spearman` **1.000** | the same, KAMA |
+| … | | | | |
+| 9 | `ht_dcperiod_signal_10` | 54.00 | `xgb_shap` **1.000** | dominant-cycle period |
+
+**Eleven of the twelve kept channels are moving-average crossover distances or
+long-MA slopes** — `close_{ema,sma,kama,dema}_{50,100,200}_dist[_pct]`,
+`close_{sma,kama}_{100,200}_slope`. The twelfth is `ht_dcperiod_signal_10`. The
+|ρ| ≥ 0.9 prune kept them as distinct, which they are pairwise; **as a set they are
+one hypothesis — trend-following** — and that agrees with memory
+`project-vcb-forecasting-conclusion`, reached by a different route.
+
+⚠️ **NINE OF THE TWELVE ARE IN RAW PRICE UNITS, AND §6c IS ABOUT EXACTLY THIS.**
+`ta_functions.py` builds `{pair}_dist = ma_fast − ma_slow` in VND and `_dist_pct =
+dist / ma_slow` separately — the source comment on the `_pct` variants says
+*"removes price-level dominance"*. VCB's close ran ~9× over 2009-2026, so the
+absolute channels scale with the era, and §6c found that removing the price level
+removed the apparent signal. **Only `close_dema_100_200_dist_pct`,
+`close_dema_50_200_dist_pct` and `ht_dcperiod_signal_10` are scale-free.** The run
+that decides this is `normalize="zscore"` or a `_pct`-only pool, each with **its own
+null** (§8) — not yet done, and until it is, the trend-following reading is a
+hypothesis, not a result.
+
+⚠️ **`lasso` is a DEAD METHOD** — cross-validated shrinkage zeroed every coefficient
+across all 918, so the "ensemble of six" is five. Same as `pool__basic` (§4) and
+stronger than `pool__fa`, where a few coefficients outside the top 25 survived. **No
+linear signal survives a penalty in any pool tried on this ticker.**
+
+⚠️ **The hit rate is 0.516 selected and 0.494 for all channels**, against 0.477 in
+§6b. Marginally above a coin for the first time on a single ticker, and still inside
+noise at `n_eff = 149` per fold. R² stays deeply negative (−0.21 … −1.69).
+
+⚠️ **The IC trend is +0.0165, POSITIVE** — the only single-ticker configuration here
+that does not decay across folds (§6b: −0.034; h=10: −0.049). Fold ICs +0.166,
+−0.009, +0.094, +0.131, +0.179.
+
+### 12b. The holdout — real beats its control, by about one standard error
+
+| feature set | labels | IC | hit rate |
+|---|---|---|---|
+| selected (12) | real | **+0.1732** | **0.490** |
+| selected (12) | shuffled control | +0.0612 | 0.492 |
+| all channels (918) | real | **+0.2085** | 0.504 |
+| all channels (918) | shuffled control | +0.1076 | 0.490 |
+
+⚠️ **Real beats the control in both rows** (+0.112, +0.101), which §11b could not
+manage — there the control *beat* the real labels. But `n_eff` on 506 holdout rows is
+**101**, so SE(IC) ≈ 0.10 and a margin of +0.11 is **one standard error**. And a
+model trained on permuted labels scored **+0.1076**, which is §6c's demonstration
+repeating: a single holdout score is unreadable without its control, and with one it
+is merely suggestive.
+
+⚠️ **The selected set's holdout hit rate is 0.490 — below a coin — with an IC of
++0.173.** §6b's signature of a model reading MAGNITUDE, not direction. Note the
+holdout beat the development IC here (+0.173 vs +0.112), the reverse of §9g.
+
+### 12c. ⚠️ `lookback=1` — a choice about TA, not about wall clock
+
+A technical indicator **already is a window statistic**: `sma_200` is a 200-day mean,
+`bb_20_bandwidth` a rolling sd, `macd` a difference of two EMAs. Wrapping §1a's
+20-day `last/mean/slope/sd/min/max` around 918 of them computes windows of windows
+and multiplies the design matrix by six to 5,508 columns. §11 reached `lookback=1`
+for `pool__fa` for the opposite reason (the values barely change); here the reason is
+that the windowing is already inside the feature. §9i/§9j support it from a third
+direction — `last` carried nearly every top channel and `d=1 ≈ d=20`.
+
+It is *also* what makes the run affordable, and that is worth stating plainly: one
+pass is **332 s** on CPU, of which `permutation` is 62 % and `lasso` 22 %; the null
+alone took **105 min**. At `d=20` this run would not have finished in a day, which
+memory `project-feature-selection-ta-cost` measured for the retired selector (6.6 h
+on the old 18,100-column design).
+
+⚠️ **The `d=20` run is therefore UNTESTED, not dismissed.** If it is ever wanted, use
+GPU + a reduced `permutation_repeats` — and re-run the null at the same settings,
+because §9d's rule is that a bar computed from a cheaper pipeline than the number it
+judges is a different procedure.
+
+### 12d. What would actually settle this
+
+1. **Kill the era proxy.** Re-run on `_dist_pct`-style scale-free channels only, or
+   `normalize="zscore"`, each with its own null. §6c is the precedent and it is the
+   single largest threat to §12a's ranking.
+2. **More draws.** 20 cannot separate this null's tail from the observed. 100 draws
+   at ~5.3 min is ~9 h — line-buffered and checkpointed per draw (§9k), which this
+   run already did.
+3. **Go cross-sectional**, which is what §7 step 4 asked for and what neither §11 nor
+   §12 did. `pool__ta` exists for VCB only in this schema; the equivalent panel for
+   `unified_schema_all` does not exist yet. That is the run with something to gain —
+   §9's target has already beaten its null, so there is something for 918 technical
+   channels to add to.
