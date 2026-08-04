@@ -96,3 +96,10 @@ ocr_env9/Lib/
 .tmp_dagster*/
 # experiment_10 news_result.py embedding / frame cache (hundreds of MB)
 experiment/experiment_10/_cache/
+
+# Feature-selection run folders — reproducible from the notebook and ~1.2 MB each,
+# so they accumulate fast. `report.write_report()` writes one per run.
+reports/feature_selection/*/
+# but ONE prototype run is force-added as the reference for what the contract looks
+# like (metadata.json, the CSVs and the figures). A tracked file overrides this rule,
+# so re-running the notebook never re-adds a new folder by accident.

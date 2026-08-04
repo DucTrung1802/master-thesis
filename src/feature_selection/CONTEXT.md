@@ -51,6 +51,10 @@
 > | [evaluation_study.ipynb](evaluation_study.ipynb) | — | **whether either result is real.** It is not: §6b-6d |
 > | **[cross_sectional_selection.ipynb](cross_sectional_selection.ipynb)** | a `(d, n)` window → **`y` = the stock's RANK on day `N`** | **the one that works.** §9 |
 >
+> Plus one that is not a study:
+> **[feature_importance_report.ipynb](feature_importance_report.ipynb)** — set the
+> parameters, Run All, get an archived run folder. §10.
+>
 > ⚠️ **The first two both produce a positive out-of-sample IC. So does the same
 > pipeline run on shuffled labels.** The third notebook is what tells them apart, and
 > it governs the first two: their rankings and kept sets are internally consistent
@@ -71,6 +75,7 @@
 | [evaluation.py](evaluation.py) | **the BAR** — the shuffled-label null, `n_eff`, and the IC summary that reports trend |
 | [gpu.py](gpu.py) | the CUDA paths, the size heuristic, and which steps have no GPU path |
 | [plots.py](plots.py) | the figures — one theme, one palette, applied by the job each colour does |
+| **[report.py](report.py)** | **one run → one self-describing folder** — CSVs, PNGs and a `metadata.json` that records what may be compared with what (§10) |
 | **[test_cross_sectional.py](test_cross_sectional.py)** | **13 tests, no database, ~2 min** — one per way of faking a cross-sectional result |
 
 ⚠️ **`cross_sectional.py` re-implements NO ranker.** `CrossSectionalSelector`
@@ -897,3 +902,83 @@ is not recoverable which) four hours of draws vanished. Attempt 3 used
 **If you run anything long here, line-buffer it and write each draw to disk as it
 finishes.** A null is `n` independent runs; there is no reason for draw 9 to be lost
 because draw 10 crashed.
+
+## 10. THE REPORT PIPELINE — one run in, one self-describing folder out
+
+[report.py](report.py) + [feature_importance_report.ipynb](feature_importance_report.ipynb).
+Set the parameters, Run All, get an archived run. This is the operational half of
+the package; §6 and §9 are the studies.
+
+```
+reports/feature_selection/<date>__<schema>__<target>__<HHMMSS>/
+  metadata.json            what was run, on what, with which knobs, what came out
+  README.md                the same, for a human, in ~40 lines
+  feature_importance.csv   ⭐ the deliverable — 18 columns, see below
+  design_scores.csv        per (channel, stat), the detail the MAX aggregates
+  validation.csv           per fold x feature set: IC, R², hit rate, n_eff
+  target_correlation.csv   signed Spearman per channel
+  channel_correlation.csv  the matrix the redundancy prune used
+  stability.csv            per-fold SHAP rank (when stability=True)
+  coverage.csv             non-null share per channel
+  figures/01..10 *.png     ranking, method heatmap, correlations, stat profile,
+                           validation, stability, coverage, target dist, null
+```
+
+`feature_importance.csv` is one row per CHANNEL, ensemble-sorted, carrying `rank`,
+`ensemble`, `kept`, `dropped_for`, **all six method scores**, `spearman_vs_target`
+(the SIGN — a ranking without it cannot be read as a strategy) and
+`best_stat__<method>` (which window statistic carried the channel).
+
+### ⚠️ Why `metadata.json` is long, and why that is the point
+
+**A ranking is meaningless without the setup beside it.** §8 is a list of ways two
+runs look comparable and are not: `zscore` moved its own bar 43 % without touching
+the data, `device` changes the kept set outright, and a bar computed for one target
+says nothing about another. A bare CSV of feature names is precisely the artefact
+that gets quoted a month later against a different configuration. So the file
+records the input (schema, tables, **`join_log` — which keys each merge actually
+used**, row counts, date range), the target (definition, labelled/unlabelled split,
+moments), all 27 setup knobs, the results, the environment (library versions) and
+the **git commit**, because a ranking from before the cross-sectional hooks landed
+is not comparable with one from after.
+
+⚠️ **`"null": null` MEANS NO BAR WAS COMPUTED, and the README says so in bold.**
+An absent null is recorded as absent, never omitted and never implied to be a pass.
+`RUN_NULL` defaults to **False** so the notebook finishes in a minute; turn it on
+before any number leaves the machine. Same for `RUN_HOLDOUT`.
+
+⚠️ **`compare_reports([...])` exists to make INCOMPARABILITY visible.** It puts
+`target`, `normalize`, `feature_normalize`, `lookback_d` and `device` next to
+`ic_mean`, so the difference between two runs is seen *before* their ICs are.
+
+⚠️ **Nothing here writes to the database.** §1's rule is unchanged — this writes to
+a filesystem path the caller picks. And nothing is re-run: every artefact is read
+off an existing `SelectionResult`, so a report costs ~2 s.
+
+### 10a. The VCB prototype (2026-08-04) — checked in as the reference
+
+`unified_schema_vcb.pool__basic ⋈ pool__targets`, `return_5day`, `d=20, h=5`,
+executed end-to-end via `nbconvert`: **17 code cells, 0 errors, 18 artefacts,
+1.2 MB, report written in 2.2 s.**
+
+| | |
+|---|---|
+| panel | 4,235 × 42, 2009-06-30 → 2026-06-25 |
+| target | 4,230 labelled + a 5-row tail; mean +0.0032, sd 0.0430 |
+| kept | 12 of 27 channels, 161 design columns |
+| top 5 | `volume_negotiated`, `foreign_own`, `close_adjust`, `open`, `buy_order_vol` |
+| IC — selected / all | **+0.0636** / +0.0427, trend −0.0070 / −0.0370 |
+| hit rate | **0.492** |
+| null | **not computed** — `RUN_NULL=False` |
+
+⚠️ **Read that IC against §6b, not on its own.** +0.0636 with a hit rate BELOW 0.5
+is the same shape §6b measured and could not distinguish from shuffled labels; the
+run is checked in to demonstrate the *contract*, not to make a claim. This is
+exactly the situation the `"null": null` field and the README's bold warning exist
+for — and the prototype is more useful as the reference precisely because it shows
+what an unverified run looks like.
+
+⚠️ **`reports/feature_selection/*/` is gitignored** — 1.2 MB per run accumulates
+fast. This one folder is force-added as the reference for the layout; a tracked file
+overrides the ignore rule, so re-running the notebook never adds a folder by
+accident.
