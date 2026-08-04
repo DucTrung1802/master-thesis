@@ -10,9 +10,9 @@
 > `_bootstrap`'s two-line `sys.path` insert INLINE, because the package can no longer be
 > imported until `src/` is on the path.
 >
-> Handoff notes. **Status (2026-08-03): the LANDING layer and the whole BRONZE layer are
-> assets and have both been materialised green; silver has 8, gold 7, and there is now a
-> fifth layer — `unified` (2).** 56 assets. What is left is the rest of silver (~7
+> Handoff notes. **Status (2026-08-05): the LANDING layer and the whole BRONZE layer are
+> assets and have both been materialised green; silver has 11, gold 10, and there is now a
+> fifth layer — `unified` (2).** 62 assets. What is left is the rest of silver (~4
 > leaves) and the rest of the unified schema — see §4. Verify anything before acting on
 > it: the code is the source of truth.
 >
@@ -55,10 +55,10 @@ PARTITIONS of two assets, not 320 assets. The remaining 61 map to ~55-65 assets.
 
 ## 2. What exists — LANDING + BRONZE complete, silver started (2026-08-01)
 
-**56 assets: 19 landing + 20 bronze + 8 silver + 7 gold + 2 unified.** Every scraper in
+**62 assets: 19 landing + 20 bronze + 11 silver + 10 gold + 2 unified.** Every scraper in
 `main.py` lands to `raw_data/` as an asset ([assets/scrape.py](assets/scrape.py)); every
 bronze ingest leaf is an asset ([assets/bronze.py](assets/bronze.py), 20 leaves → 25
-tables); silver has eight ([assets/silver.py](assets/silver.py)), gold seven
+tables); silver has eleven ([assets/silver.py](assets/silver.py)), gold ten
 ([assets/gold.py](assets/gold.py)) and the per-ticker unified schema two
 ([assets/unified.py](assets/unified.py)).
 They are separate modules on purpose: the
@@ -84,6 +84,9 @@ raw/trading_view_data[economy] ─► bronze/trading_view_economy ─┬─► s
                                                                │                        ├─► gold/economy
                                                                └─► silver/economy_series┘   (wide, as-of)
 
+raw/trading_view_data[c]       ─► bronze/trading_view_<c>   ─► silver/<c>   ─► gold/<c>
+   for c in {bonds, funds, forex}                               (long)          (wide, unfilled)
+
 raw/cafef_index_{price,order_stats,foreign,prop_trading}
         └─► bronze/cafef_index_* (x4) ─► silver/stock_market ─► gold/stock_market
                                          (4 tabs joined)        (wide, unfilled)
@@ -107,8 +110,8 @@ raw/cafef_financials[t] ─► bronze/cafef_financials ─► silver/cafef_finan
 | `simplize` | stocks, industry | — |
 | `gics` | structure | — |
 | `bronze` | **all 20 ingest leaves** (25 tables) | — |
-| `silver` | `economy` (long fact), `economy_series` (dimension), `stock_market` (4 index tabs), `stocks_basic` (6 sources), `cafef_financials_bank` (quarterly), `stocks_basic_financials_bank` (as-of daily), `…_fa` (+26 indicators) | — |
-| `gold` | `economy` (wide, as-of), `stock_market` (wide, unfilled), `stocks` (price panel, no features), `stocks_ta` (+ the ~900-column TA block), `stocks_financials_bank_fa` (feature panel), `news_{weekly,daily}_panel` | — |
+| `silver` | `economy` (long fact), `economy_series` (dimension), `bonds`/`funds`/`forex` (TradingView projections), `stock_market` (4 index tabs), `stocks_basic` (6 sources), `cafef_financials_bank` (quarterly), `stocks_basic_financials_bank` (as-of daily), `…_fa` (+26 indicators) | — |
+| `gold` | `economy` (wide, as-of), `bonds`/`funds`/`forex` (wide, unfilled), `stock_market` (wide, unfilled), `stocks` (price panel, no features), `stocks_ta` (+ the ~900-column TA block), `stocks_financials_bank_fa` (feature panel), `news_{weekly,daily}_panel` | — |
 | `unified_vcb` | `pool__basic` (one ticker, every column of `silver.stocks_basic`), `pool__targets` (`date` + `return_5day` + `return_10day`) | — |
 
 ### ⚠️ The edges, read out of the code (2026-07-31 correction)
@@ -290,7 +293,7 @@ split across the two modules.
 
 | claim | how it was checked | result |
 |---|---|---|
-| the flat `src/` layout can be imported by Dagster | `dagster definitions validate` | passes, **56 assets** (19 landing + 20 bronze + 8 silver + 7 gold + 2 unified), all code locations OK |
+| the flat `src/` layout can be imported by Dagster | `dagster definitions validate` | passes, **62 assets** (19 landing + 20 bronze + 11 silver + 10 gold + 2 unified), all code locations OK |
 | partitions resolve | reading the definitions back | TV **9**, pdfs **100**, financials **2** (`HOSE_VCB`, `HOSE_ACB`) |
 | the index scrape assets run | `--select "group:cafef_index"` | 4/4 green |
 | the TradingView path works incl. `build_unblocked` | `--select "raw/trading_view_collected_links"` | green, rewrote `all_links_2026-06-26.csv` (313 KB) |
@@ -427,7 +430,7 @@ UI, from `*`, and from every selection. Reserve this for "must never load in thi
 "raw/cafef_news": false
 ```
 
-All 56 keys are listed in the file as a menu, grouped by source, with `//` comment keys
+All 62 keys are listed in the file as a menu, grouped by source, with `//` comment keys
 marking the expensive ones (same comment convention as `switch_config.json`).
 `true` or **absent** = loaded, so a newly added asset is on by default.
 
@@ -438,7 +441,7 @@ Behaviour, all verified:
 | one key `false` | that asset not loaded (45 → 44); `//` comment keys ignored |
 | a key matching no asset | **raises**, listing the valid keys |
 | malformed JSON | **raises** — never read as "disable everything" |
-| file absent | all 56 assets — absent means "no opinion", not "all off" |
+| file absent | all 62 assets — absent means "no opinion", not "all off" |
 | file with a **BOM** | handled (`utf-8-sig`) |
 
 The last three are direct lessons from `switch_config.json`:
@@ -480,7 +483,7 @@ RUN_SUCCESS
 ```
 
 **Sanity check without running anything:** `dagster definitions validate` (it should
-report 56 assets and "All code locations passed validation").
+report 62 assets and "All code locations passed validation").
 
 ### ✅ Phase 1a — the whole BRONZE layer, 20 assets (2026-08-01)
 
@@ -603,6 +606,106 @@ index starting on a different day (VNINDEX 2000-07, VN100-INDEX 2014-02).
 
 **DECIMAL, not REAL:** at 162 columns there is no row-size pressure, and `value_matched`
 reaches ~1e12 where REAL would lose thousands. Hence the exact round-trip above.
+
+### The BONDS / FUNDS / FOREX chains — three wide panels (2026-08-05)
+
+Three TradingView asset classes got a full chain on the same day, and they are **one
+spec table each in silver and gold** rather than six hand-written assets
+([silver.py](assets/silver.py) `PROJECTIONS`, [gold.py](assets/gold.py) `WIDE_PANELS`) —
+because the ASSERTIONS are the valuable part, and a copy-pasted panel gets the ones
+whoever wrote it remembered.
+
+```
+raw/trading_view_links[c] ─► raw/trading_view_data[c] ─► bronze/trading_view_<c>
+        └─► silver/<c>   LONG, one row per entity-day, a straight projection of bronze
+                └─► gold/<c>   WIDE, one row per TRADING DAY, PK date
+```
+
+```powershell
+# everything, scrape included
+dagster asset materialize -f src/orchestration/definitions.py --select "*gold/bonds,*gold/funds,*gold/forex"
+# DB layers only, from raw_data/ already on disk
+dagster asset materialize -f src/orchestration/definitions.py --select "bronze/trading_view_bonds,silver/bonds,gold/bonds,bronze/trading_view_funds,silver/funds,gold/funds,bronze/trading_view_forex,silver/forex,gold/forex"
+```
+
+| | silver | gold | measures each |
+|---|---|---|---|
+| `bonds` | 66,100 × 4, 18 tenor spellings | **4,642 × 118** | 13 |
+| `funds` | 18,662 × 8, 19 HOSE ETFs | **2,894 × 352** | up to 19 |
+| `forex` | 1,324,940 × 4, **328** series | **7,910 × 329** | **1** |
+
+⚠️ **THE MEASURE SET SHRINKS AS THE ENTITY COUNT GROWS, and that is a ceiling talking,
+not taste.** PostgreSQL allows 1,600 columns per table. 9 tenors and 19 ETFs carry the
+full 13-measure feature block comfortably; forex's **328 series would need 4,264
+columns** to do the same. So `gold.forex` carries `value` alone — which is the identical
+trade `gold.economy` already makes at 1,034 series, and it is why that table has no
+features either. Anything derived is one `_helper_transform` away from `silver.forex`,
+which keeps the long grain and every column.
+
+⚠️ **`gold.forex`'s columns are `{exchange}__{ticker}` with NO measure suffix.** At one
+measure, `saxo__eurusd__value` says "value" 328 times.
+`_helper_gold_wide_panel(include_measure=False)` **raises if the frame has more than one
+measure**, because every measure would otherwise compete for the same column name.
+
+⚠️ **THE 9 FOREX "EXCHANGES" ARE 9 BROKERS, AND MUST NOT BE COLLAPSED.** It is tempting
+to treat 99 pairs quoted 328 times the way `_helper_bonds_drop_duplicate_tenors` treats
+`VN01`/`VN01Y` — but those twins agree on **100%** of shared dates, and these do not.
+Measured 2026-08-05: SAXO vs JFX disagree on **160,781 of 161,816** shared ticker-days
+(**99.4%**), SAXO vs SWISSQUOTE 95.6%, B2PRIME vs SWISSQUOTE 99.9%. They are different
+feeds snapshotted at different times, so each is a real series and picking one would be
+picking a number, not removing a duplicate.
+
+| check | result |
+|---|---|
+| both materialised | **RUN_SUCCESS, 16 s**; re-run green (gold drops its own table first) |
+| `silver/funds` | **18,662 rows × 8 columns**, 19 HOSE ETFs, 2014-10-06 → 2026-06-26 — bronze's row count exactly |
+| `gold/funds` | **2,894 trading days × 351 measure columns**, 352,314 observations = 34.7% of cells |
+| grain | rows == distinct dates == **2,894**, `date` unique, and equal to silver's distinct dates |
+| **exact round-trip** | 93,310 carried OHLCV cells vs silver — **0 mismatches**; **0 of 18,662** fund-days absent from the panel |
+| a feature, independently | E1VFVN30 `return_simple` vs pandas `pct_change` — **max abs diff 0.0** over 2,893 rows |
+
+⚠️ **The wide panel REPLACED the long one under the same name**, which is the call
+`gold.economy` took on 2026-08-01. `gold.funds` was 18,662 × 22 — one row per fund-day
+through the generic `_ingest_gold_table("funds")`. Nothing is lost that cannot be
+rebuilt: the long table is one line (`self._ingest_gold_table("funds")`) from
+`silver.funds`, which is untouched.
+
+⚠️ **Why wide.** A fund panel is read ACROSS funds on one day — FUEVFVND against
+E1VFVN30 is the VN-Diamond-versus-VN30 spread, and every rotation or relative-strength
+feature is a comparison between two funds on the same date. Long form makes that a
+self-join per pair; one row per date makes it a subtraction.
+
+⚠️ **351 columns, not 361, and the shortfall is DATA not a bug.** 19 funds × 19 measures
+is 361. The ten absentees are all **FUEBFVND's** rolling and volatility columns, and
+FUEBFVND has **3 rows** (2023-08-11 → 2023-08-18) — a 5-day window and a 21-day
+volatility cannot produce one non-null value from three observations, so the melt's
+`dropna` removes them and the column is never created. Correct (an all-NULL column is
+noise), but it means **the column COUNT is a function of the data**: a fund gaining
+history gains columns, i.e. a DDL change. That is tolerable in gold, and is precisely
+the argument that kept `silver.economy` long.
+
+⚠️ **No as-of fill**, the same call `gold.stock_market` and `gold.bonds` make. A missing
+fund-day means that ETF had not listed yet — FUETPVND lists in 2025, eleven years after
+E1VFVN30 — and carrying a NAV forward would invent a price. Hence 34.7% filled, which is
+listing history rather than a defect.
+
+⚠️ **The features are computed BEFORE the pivot, per fund and in date order**
+(`_helper_transform` groups by `(exchange, ticker)`). A return computed after pivoting is
+a row-wise difference across the wide frame, which is the same arithmetic only if no fund
+has a gap — FUEBFVND has 3 dates against E1VFVN30's 2,894, so it is not.
+
+⚠️ **`_ingest_silver_funds` used to return SILENTLY on an empty bronze table** —
+`log_info("No bronze funds data found."); return` — which would have marked the new asset
+green over whatever the previous run left in `silver.funds`. It raises
+`MissingSourceDataError` now. **Its `bonds` / `forex` / `indices` / `gics` / `cafef_price`
+siblings still have the same swallow** (grep `No bronze .* data found`); each is a
+one-line fix and belongs with that table's own asset, not here.
+
+> **New helper: `_helper_gold_wide_panel`** — melt → name → check the names → pivot →
+> check nothing was lost, shared by any wide panel. `_ingest_gold_stock_market` and
+> `_ingest_gold_bonds` still INLINE the same steps because each has a published exact
+> round-trip check that would have to be re-run to prove a move was value-preserving;
+> that is a separate change, not a side effect of adding funds.
 
 ### `silver/stocks_basic` — six bronze tables into the per-stock panel (2026-08-01)
 
@@ -791,9 +894,9 @@ schema and the pipeline agree, which is the point of the housekeeping.
 | `stocks_financials_bank_fa` | 8,265 × 1,150 | **asset** only | current |
 | `news_weekly_panel` | 429,052 × 28 | **asset** only | current |
 | `news_daily_panel` | 2,058,604 × 26 | **asset** only | current |
-| `bonds` | 66,100 × 16 | leaf | unknown age |
-| `forex` | 1,324,940 × 16 | leaf | unknown age |
-| `funds` | 18,662 × 22 | leaf | unknown age |
+| `bonds` | 4,642 × 118 | **asset** + leaf | current (wide, unfilled) |
+| `forex` | **7,910 × 329** | **asset** + leaf | current — WIDE, 1 row per date, value only (2026-08-05) |
+| `funds` | **2,894 × 352** | **asset** + leaf | current — WIDE, 1 row per trading day (2026-08-05) |
 | ~~`indices`~~ | ~~24,095 × 22~~ | — | **RETIRED + DROPPED 2026-08-01** |
 
 ⚠️ **`gold.indices` is retired because it was a duplicate.** It was `silver.indices`
@@ -1146,10 +1249,11 @@ per-leaf isolation means it costs you one leaf, not the layer.
 ### 4.2 Phase 1 — the preprocessor (~41 assets, low risk)
 
 > **✅ BRONZE IS DONE (2026-08-01)** — all 20 leaves are assets and have been
-> materialised green; see §"Phase 1a" above. What remains of Phase 1 is silver (7 of
-> ~15 done) and gold (3 of 7 — `stocks_financials_bank_fa` is a table `main.py` cannot
-> build at all, like `stock_market` before it: new gold work lands as an asset and gets
-> no switch leaf, since phase 5 retires those anyway).
+> materialised green; see §"Phase 1a" above. What remains of Phase 1 is silver (9 of
+> ~15 done) and gold (**10 assets; every gold leaf now has one**). Several gold tables — `stock_market`, `stocks_ta`,
+> `stocks_financials_bank_fa`, both news panels — are things `main.py` cannot build at
+> all: new gold work lands as an asset and gets no switch leaf, since phase 5 retires
+> those anyway.
 
 Pure DB work, fast to iterate, no network. One asset per bronze leaf (20), per silver
 ingest (~15 — the multi-ingest leaves like `cafef_carry_ups` and `stocks_financials`
@@ -1209,7 +1313,7 @@ than either alone.
 | phase | scope | estimate |
 |---|---|---|
 | 0 | exception propagation | ✅ **done** |
-| 1 | preprocessor, ~41 assets | bronze ✅ **done**; silver 7/15, gold 3/7 |
+| 1 | preprocessor, ~41 assets | bronze ✅ **done**; silver 11/15, gold 10 assets (every leaf covered) |
 | 2 | cheap scrapers, ~13 assets | ✅ **done** |
 | 3 | TradingView + partitions | ✅ **done** (9 partitions, not 320 — see 4.4) |
 | 4 | pdfs/financials, ticker partitions | ✅ **built**, not yet run end-to-end |
@@ -1217,9 +1321,9 @@ than either alone.
 
 `main.py` ends up empty and `switch_config.json` shrinks to ~320 parameter keys.
 
-**Where it actually stands (2026-08-03):** phases 0-4 are built; every landing and bronze
-asset has been materialised green, silver has 8 assets, gold 7, and a fifth `unified`
-layer has 2. What remains is the rest of silver (~7 leaves), the three remaining
+**Where it actually stands (2026-08-05):** phases 0-4 are built; every landing and bronze
+asset has been materialised green, silver has 11 assets, gold 10, and a fifth `unified`
+layer has 2. What remains is the rest of silver (~4 leaves), the three remaining
 `pool__*` groups of the unified schema, phase 5, and end-to-end runs of the four heavy
 assets.
 

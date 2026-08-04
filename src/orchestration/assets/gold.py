@@ -514,8 +514,132 @@ def gold_stocks_ta(
         return _stocks_panel_result(context, prep, "stocks_ta")
 
 
+# ── The three WIDE TradingView panels: bonds, funds, forex ───────────────────────
+#
+# One silver source each, pivoted to ONE ROW PER TRADING DAY with a column per
+# (entity × measure). They are one spec table rather than three copies for the reason
+# `bronze.py` gives — and because the ASSERTIONS below are the valuable part, so
+# every panel must get all of them, not the ones whoever wrote it remembered.
+#
+# ⚠️ NONE of the three is as-of filled, unlike `gold/economy`. A macro series is
+# stale-but-valid between releases; a quote is not. A gap means that tenor / ETF /
+# broker pair did not quote that day, and filling would invent a price.
+#
+# ⚠️ THE MEASURE SET SHRINKS AS THE ENTITY COUNT GROWS, and that is the ceiling
+# talking, not taste: PostgreSQL allows 1,600 columns per table. 9 tenors and 19
+# ETFs carry the full 13-measure feature block; forex's 328 series would need 4,264
+# columns to do the same, so it carries `value` alone — the identical trade
+# `gold.economy` makes at 1,034 series.
+#
+# (name, entity noun, one-line shape description for the asset's UI description)
+WIDE_PANELS: list[tuple[str, str, str]] = [
+    (
+        "bonds",
+        "tenor-days",
+        "9 government tenors × 13 measures named `{exchange}__{ticker}__{measure}`. "
+        "⚠️ Every tenor is published TWICE (`VN01` and `VN01Y`); the builder asserts "
+        "the twins agree on every shared date before dropping the plain spelling.",
+    ),
+    (
+        "funds",
+        "fund-days",
+        "19 HOSE ETFs × up to 19 measures named `{exchange}__{ticker}__{measure}` — "
+        "351 columns rather than 361, because FUEBFVND's 3 rows cannot fill a 5- or "
+        "21-day window and an all-NULL column is not written. ⚠️ REPLACES the long "
+        "18,662 × 22 feature table the generic builder used to write.",
+    ),
+    (
+        "forex",
+        "quote-days",
+        "328 broker-quoted pairs, ONE `value` column each, named `{exchange}__"
+        "{ticker}` with no measure suffix. ⚠️ No features: 328 × 13 measures is 4,264 "
+        "columns against PostgreSQL's 1,600 ceiling, so the measure set gives way — "
+        "the same trade `gold.economy` makes. ⚠️ The 9 exchanges are 9 BROKERS and "
+        "disagree on 95-99.9% of shared ticker-days, so they are not duplicates.",
+    ),
+]
+
+
+def _build_gold_wide_panel(name: str, noun: str, shape: str):
+    @asset(
+        name=name,
+        key_prefix=["gold"],
+        group_name="gold",
+        compute_kind="postgres",
+        deps=[AssetKey(["silver", name])],
+        description=(
+            f"silver.{name} → gold.{name}: ONE ROW PER TRADING DAY (PK `date`). "
+            f"{shape} NOT as-of filled — a gap means it did not quote that day."
+        ),
+    )
+    def _gold_panel(
+        context: AssetExecutionContext, preprocessor: PreprocessorResource
+    ) -> MaterializeResult:
+        with preprocessor.session(schema="gold_schema") as prep:
+            getattr(prep, f"_ingest_gold_{name}")()
+
+            with prep._database_driver._cursor_ctx() as cur:
+                cur.execute(
+                    f"SELECT COUNT(*), COUNT(DISTINCT date), MIN(date), MAX(date) "
+                    f"FROM gold_schema.{name}"
+                )
+                rows, dates, first, last = cur.fetchone()
+                rows, dates = int(rows), int(dates)
+                cur.execute(
+                    "SELECT COUNT(*) FROM information_schema.columns "
+                    "WHERE table_schema = 'gold_schema' AND table_name = %s",
+                    (name,),
+                )
+                columns = int(cur.fetchone()[0])
+                cur.execute(
+                    f"SELECT COUNT(*), COUNT(DISTINCT date) FROM silver_schema.{name}"
+                )
+                silver_rows, silver_dates = (int(v) for v in cur.fetchone())
+
+        # ⚠️ THE GRAIN IS THE POINT OF THESE TABLES, so it is asserted rather than
+        # described. A PK on `date` already makes a duplicate impossible at the server,
+        # but this also catches the opposite slip — a pivot that LOST dates — which no
+        # constraint can, and which would look like a perfectly healthy smaller table.
+        if rows != dates:
+            raise ValueError(
+                f"gold.{name} is not one row per date: {rows} rows over {dates} "
+                f"distinct dates."
+            )
+        if dates != silver_dates:
+            raise ValueError(
+                f"gold.{name} covers {dates} dates but silver.{name} has "
+                f"{silver_dates}. The panel's calendar IS the set of distinct dates in "
+                f"silver, so a difference means the pivot dropped a trading day."
+            )
+
+        # The true fill percentage is logged by the builder, which has the frame in
+        # hand; counting non-nulls across hundreds of columns here would be a second,
+        # worse answer to a question already answered.
+        context.log.info(
+            f"gold.{name}: {rows} trading days × {columns - 1} columns, from "
+            f"{silver_rows} silver {noun}"
+        )
+        return MaterializeResult(
+            metadata={
+                "rows": rows,
+                "columns": columns - 1,
+                f"silver_{noun}": silver_rows,
+                "date_range": MetadataValue.text(f"{first} → {last}"),
+                "table": MetadataValue.text(f"gold_schema.{name}"),
+            }
+        )
+
+    return _gold_panel
+
+
+wide_panel_assets: List[Callable] = [
+    _build_gold_wide_panel(*spec) for spec in WIDE_PANELS
+]
+
+
 assets: List[Callable] = [
     gold_economy,
+    *wide_panel_assets,
     gold_stock_market,
     gold_stocks,
     gold_stocks_ta,

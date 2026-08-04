@@ -573,9 +573,95 @@ def silver_cafef_news(
     )
 
 
+# ── The three TradingView PROJECTION ingests ─────────────────────────────────────
+#
+# `funds`, `bonds` and `forex` are the same asset three times: read one bronze table,
+# keep a few columns, cast them, write. No join, no filter, no derived column — which
+# is what makes the row-count assertion below exact rather than approximate.
+#
+# Generated from a spec table for the reason `bronze.py` gives: three near-identical
+# copies drift, and the differences that matter (the entity noun, the columns kept)
+# are visible here in three lines instead of buried in three function bodies.
+#
+# ⚠️ All three RETURNED SILENTLY on an empty bronze table until 2026-08-05 —
+# `log_info("No bronze x data found."); return` — which would have marked the asset
+# green over whatever the previous run left in the table. All three raise
+# `MissingSourceDataError` now. `indices`, `gics` and the `cafef_*` silver ingests
+# still have the same swallow; each is a one-line fix and belongs with its own asset.
+#
+# (name, bronze table, entity noun, what the ingest keeps)
+PROJECTIONS: list[tuple[str, str, str, str]] = [
+    ("funds", "trading_view_funds", "funds", "the eight typed OHLCV columns"),
+    ("bonds", "trading_view_bonds", "tenors", "exchange/ticker/date/value"),
+    ("forex", "trading_view_forex", "pairs", "exchange/ticker/date/value"),
+]
+
+
+def _build_silver_projection(name: str, bronze_table: str, noun: str, kept: str):
+    @asset(
+        name=name,
+        key_prefix=["silver"],
+        group_name="silver",
+        compute_kind="postgres",
+        deps=[AssetKey(["bronze", bronze_table])],
+        description=(
+            f"bronze.{bronze_table} → silver.{name}, PK (exchange, ticker, date) — a "
+            f"straight projection ({kept}), one row per {noun[:-1]}-day. The grain "
+            f"`_ingest_gold_{name}` pivots into a one-row-per-date panel. ⚠️ Raises "
+            f"MissingSourceDataError on an empty bronze table (it returned silently "
+            f"until 2026-08-05)."
+        ),
+    )
+    def _silver_projection(
+        context: AssetExecutionContext, preprocessor: PreprocessorResource
+    ) -> MaterializeResult:
+        with preprocessor.session(schema="silver_schema") as prep:
+            getattr(prep, f"_ingest_silver_{name}")()
+
+            with prep._database_driver._cursor_ctx() as cur:
+                cur.execute(
+                    f"SELECT COUNT(*), COUNT(DISTINCT ticker), COUNT(DISTINCT date), "
+                    f"MIN(date), MAX(date) FROM silver_schema.{name}"
+                )
+                rows, tickers, dates, first, last = cur.fetchone()
+                cur.execute(f"SELECT COUNT(*) FROM bronze_schema.{bronze_table}")
+                bronze_rows = int(cur.fetchone()[0])
+
+        # A projection joins nothing and filters nothing, so its row count MUST be
+        # bronze's. Anything else means the ingest dropped rows on the floor.
+        if int(rows) != bronze_rows:
+            raise ValueError(
+                f"silver.{name} has {rows} rows against bronze.{bronze_table}'s "
+                f"{bronze_rows}. This ingest selects columns and casts them — it joins "
+                f"nothing and filters nothing, so the two counts must agree."
+            )
+
+        context.log.info(
+            f"silver.{name}: {rows} rows / {tickers} {noun} / {dates} dates"
+        )
+        return MaterializeResult(
+            metadata={
+                "rows": int(rows),
+                noun: int(tickers),
+                "trading_days": int(dates),
+                "bronze_rows": bronze_rows,
+                "date_range": MetadataValue.text(f"{first} → {last}"),
+                "table": MetadataValue.text(f"silver_schema.{name}"),
+            }
+        )
+
+    return _silver_projection
+
+
+projection_assets: List[Callable] = [
+    _build_silver_projection(*spec) for spec in PROJECTIONS
+]
+
+
 assets: List[Callable] = [
     silver_economy,
     silver_economy_series,
+    *projection_assets,
     silver_stock_market,
     silver_stocks_basic,
     silver_cafef_financials_bank,

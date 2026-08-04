@@ -1955,9 +1955,12 @@ class DataPreprocessor:
             schema_name=BRONZE_SCHEMA, table_name="trading_view_bonds"
         )
 
+        # RAISES rather than returning — see `_ingest_silver_funds`.
         if df.empty:
-            self._logger.log_info("No bronze bonds data found.")
-            return
+            raise MissingSourceDataError(
+                f"{BRONZE_SCHEMA}.trading_view_bonds is empty — run the bronze bonds "
+                f"ingest first (it reads raw_data/trading_view/data/bonds/)."
+            )
 
         df = df[["exchange", "ticker", "date", "value"]]
 
@@ -2288,9 +2291,14 @@ class DataPreprocessor:
             schema_name=BRONZE_SCHEMA, table_name="trading_view_forex"
         )
 
+        # RAISES rather than returning — a silent return leaves `silver.forex` holding
+        # the last successful run's rows while reporting success. See
+        # `_ingest_silver_funds` and `src/orchestration/CONTEXT.md` §4.1.
         if df.empty:
-            self._logger.log_info("No bronze forex data found.")
-            return
+            raise MissingSourceDataError(
+                f"{BRONZE_SCHEMA}.trading_view_forex is empty — run the bronze forex "
+                f"ingest first (it reads raw_data/trading_view/data/forex/)."
+            )
 
         # Forex is a single-value series (OHLC columns are null in bronze;
         # the price lives in `value`), so treat it like bonds/economy.
@@ -2312,9 +2320,17 @@ class DataPreprocessor:
             schema_name=BRONZE_SCHEMA, table_name="trading_view_funds"
         )
 
+        # ⚠️ RAISES rather than returning, unlike its `bonds`/`forex`/`indices`
+        # siblings. A silent `return` here leaves `silver.funds` holding whatever the
+        # LAST successful run wrote, and the caller — an orchestrator included —
+        # cannot tell that from a table that was just rebuilt. That is the exact
+        # failure Phase 0 exists to close (`src/orchestration/CONTEXT.md` §4.1); the
+        # siblings still have it, and each is a one-line fix when its own asset lands.
         if df.empty:
-            self._logger.log_info("No bronze funds data found.")
-            return
+            raise MissingSourceDataError(
+                f"{BRONZE_SCHEMA}.trading_view_funds is empty — run the bronze funds "
+                f"ingest first (it reads raw_data/trading_view/data/funds/)."
+            )
 
         df = df[
             ["exchange", "ticker", "date", "open", "high", "low", "close", "volume"]
@@ -5089,11 +5105,276 @@ class DataPreprocessor:
             chunk_size=1_000,
         )
 
+    # ── gold.forex — the currency panel, one row per date ────────────────────────
+    #
+    # ⚠️ WHY WIDE, and why it carries NO FEATURES while `bonds` and `funds` do.
+    # A currency panel is read ACROSS pairs on one day — USDVND against DXY, or one
+    # broker's EURUSD against another's — so one row per date is the shape every
+    # cross-rate and carry feature needs. But there are **328 series** (99 pairs
+    # quoted by 9 brokers), and at the 13 measures `gold.funds` carries that is 4,264
+    # columns against PostgreSQL's hard ceiling of 1,600. When the entity count is
+    # large the MEASURE SET is what has to give — which is exactly the trade
+    # `gold.economy` already makes: 1,034 series, one `value` column apiece, no
+    # features. Anything derived is one `_helper_transform` away from `silver.forex`,
+    # which keeps the long grain and every column.
+    #
+    # ⚠️ THE 9 EXCHANGES ARE 9 BROKERS, NOT DUPLICATE SPELLINGS — do not collapse
+    # them the way `_helper_bonds_drop_duplicate_tenors` collapses VN01/VN01Y. Those
+    # twins agreed on 100% of shared dates; measured 2026-08-05, SAXO and JFX disagree
+    # on **160,781 of 161,816** shared ticker-days (99.4%), and every other broker pair
+    # is 95.6-99.9%. They are different feeds taken at different snapshot times, so
+    # each is its own series and picking one would be picking a number, not a fix.
+    GOLD_FOREX_NAME_SEP = "__"
+
     def _ingest_gold_forex(self) -> None:
-        self._ingest_gold_table("forex")
+        """`silver.forex` -> `gold.forex`: **one row per DATE**, PK `date`, one column
+        per series named `{exchange}__{ticker}` — 328 broker-quoted currency pairs on
+        the calendar the data itself defines.
+
+        ⚠️ **No measure in the column name**, unlike `gold.bonds`/`gold.funds`. The
+        panel carries exactly one measure, so `saxo__eurusd__value` would repeat
+        "value" 328 times; `_helper_gold_wide_panel(include_measure=False)` enforces
+        that the frame really does have only one.
+
+        ⚠️ **NO as-of fill**, the same call `stock_market`/`bonds`/`funds` make. A gap
+        means that broker did not quote that pair that day — B2PRIME starts in 2015,
+        fifteen years after SAXO — and carrying a rate forward would invent a quote.
+        `gold.economy` fills because a macro release is *stale but valid* until the
+        next one; an FX quote is not.
+
+        ⚠️ **DECIMAL, not REAL.** 329 numeric columns is ~3.3 kB, comfortably inside
+        PostgreSQL's ~8 kB row limit, so there is no reason to take REAL's ~7
+        significant digits — JPY crosses run to five decimal places on values of
+        ~1e2, and rounding them would change the rate.
+        """
+        self._logger.log_info("Ingesting gold forex (wide, 1 row per date)...")
+
+        KEYS = ["exchange", "ticker", "date"]
+
+        df = self._helper_select(
+            schema_name=SILVER_SCHEMA,
+            table_name="forex",
+            order_by=KEYS,
+        )
+        if df.empty:
+            raise MissingSourceDataError(
+                f"{SILVER_SCHEMA}.forex is empty — run the silver forex ingest first."
+            )
+
+        df["date"] = pd.to_datetime(df["date"]).dt.date
+        # The driver hands `numeric` back as `Decimal` (object dtype); an object column
+        # melted into the panel would land in gold as VARCHAR.
+        df["value"] = pd.to_numeric(df["value"], errors="coerce")
+
+        wide = self._helper_gold_wide_panel(
+            df[KEYS + ["value"]],
+            table_name="forex",
+            sep=self.GOLD_FOREX_NAME_SEP,
+            keys=KEYS,
+            include_measure=False,
+        )
+
+        self._database_driver.drop_table(GOLD_SCHEMA, "forex")
+        self._helper_save_pandas_table_to_database(
+            schema_name=GOLD_SCHEMA,
+            table_name="forex",
+            primary_keys=["date"],
+            df=wide,
+            dtype_overrides={"date": DataType.DATE()},
+            chunk_size=1_000,
+        )
+
+    def _helper_gold_wide_panel(
+        self,
+        df: pd.DataFrame,
+        table_name: str,
+        sep: str,
+        keys: Optional[List[str]] = None,
+        include_measure: bool = True,
+    ) -> pd.DataFrame:
+        """`(exchange, ticker, date, *measures)` -> **one row per DATE**, one column
+        per `{exchange}{sep}{ticker}{sep}{measure}`.
+
+        `include_measure=False` drops the measure from the NAME, for a panel that
+        carries exactly one (`gold.forex` is 328 quotes of a single `value`, so
+        `saxo__eurusd__value` says "value" 328 times and `saxo__eurusd` does not).
+        It is rejected below if the frame actually has more than one measure, because
+        the names would silently collide.
+
+        The shared middle of a wide gold panel: melt, name, CHECK the names, pivot,
+        and check that nothing was lost on the way through.
+
+        ⚠️ `value_name="observation"`, not `"value"`. A single-series silver table has a
+        MEASURE called `value` (`bonds` holds the yield under that name), and pandas
+        refuses a `value_name` that collides with an existing column.
+
+        ⚠️ `_ingest_gold_stock_market` and `_ingest_gold_bonds` still INLINE these same
+        steps — they were written before this helper. Moving them onto it is a separate
+        change, because each has a published exact round-trip check
+        (`src/orchestration/CONTEXT.md`) that has to be re-run to prove the move
+        preserved every value; a refactor that is only *probably* value-preserving is
+        worth less than the duplication it removes.
+        """
+        keys = keys or ["exchange", "ticker", "date"]
+        measures = [c for c in df.columns if c not in keys]
+
+        if not include_measure and len(measures) != 1:
+            raise PipelineError(
+                f"gold.{table_name}: include_measure=False names a column "
+                f"`exchange{sep}ticker`, which is unique only for ONE measure — this "
+                f"frame has {len(measures)}: {measures[:5]}. Every measure would "
+                f"compete for the same column name."
+            )
+
+        long = df.melt(
+            id_vars=keys,
+            value_vars=measures,
+            var_name="measure",
+            value_name="observation",
+        ).dropna(subset=["observation"])
+
+        long["column"] = (
+            long["exchange"].map(self._sanitize_identifier)
+            + sep
+            + long["ticker"].map(self._sanitize_identifier)
+        )
+        if include_measure:
+            long["column"] += sep + long["measure"].map(self._sanitize_identifier)
+
+        # Sanitising must not merge two entities into one column, and the result must
+        # fit PostgreSQL's identifier limit. Both are checked, not assumed: a merge
+        # would publish one series under another's name, and an over-long name is
+        # TRUNCATED SILENTLY by the server.
+        pairs = long[["exchange", "ticker", "measure", "column"]].drop_duplicates()
+        collided = pairs.groupby("column").size()
+        collided = collided[collided > 1]
+        if len(collided):
+            raise PipelineError(
+                f"gold.{table_name}: {len(collided)} column name(s) are produced by "
+                f"more than one (exchange, ticker, measure) — sanitising merged "
+                f"distinct series, e.g. {list(collided.index[:3])}. Rename before "
+                f"publishing."
+            )
+        too_long = [
+            c for c in pairs["column"].unique()
+            if len(c.encode()) > self.PG_IDENTIFIER_LIMIT
+        ]
+        if too_long:
+            raise PipelineError(
+                f"{len(too_long)} gold.{table_name} column name(s) exceed PostgreSQL's "
+                f"{self.PG_IDENTIFIER_LIMIT}-byte identifier limit and would be "
+                f"TRUNCATED SILENTLY, e.g. {sorted(too_long)[:3]}."
+            )
+
+        wide = long.pivot(index="date", columns="column", values="observation")
+        wide = wide.sort_index().reset_index()
+        wide.columns.name = None
+
+        # Nothing may be lost on the way through: one non-null cell per observation.
+        landed = int(wide.drop(columns=["date"]).notna().sum().sum())
+        if landed != len(long):
+            raise PipelineError(
+                f"gold.{table_name}: {len(long)} observations went into the pivot but "
+                f"{landed} cells came out. A duplicate (exchange, ticker, date, "
+                f"measure) in the silver source is the usual cause."
+            )
+
+        cells = len(wide) * (len(wide.columns) - 1)
+        self._logger.log_info(
+            f"gold {table_name}: {len(wide)} trading days x {len(wide.columns) - 1} "
+            f"columns, {landed} observations "
+            f"({100.0 * landed / max(cells, 1):.1f}% of cells filled)."
+        )
+        return wide
+
+    # ── gold.funds — the ETF panel, one row per date ─────────────────────────────
+    #
+    # ⚠️ WHY WIDE. A fund panel is read ACROSS funds on one day: FUEVFVND against
+    # E1VFVN30 is the VN-Diamond-versus-VN30 spread, and every rotation, relative-
+    # strength or tracking-error feature is a comparison between two funds on the
+    # same date. In the long shape that is a self-join per pair; one row per date
+    # makes it a subtraction. It is also the shape a feature panel takes — keyed by
+    # date — so every consumer of the long table had to pivot it first.
+    #
+    # This REPLACES the generic `_ingest_gold_table("funds")` output (18,662 x 22,
+    # one row per fund-day), which is the same decision `gold.economy` took on
+    # 2026-08-01 when the wide panel took the name from the long feature table.
+    GOLD_FUNDS_NAME_SEP = "__"
 
     def _ingest_gold_funds(self) -> None:
-        self._ingest_gold_table("funds")
+        """`silver.funds` -> `gold.funds`: **one row per DATE**, PK `date`, one column
+        per (fund x measure) named `{exchange}__{ticker}__{measure}`.
+
+        19 HOSE ETFs x up to 19 measures (OHLCV + the 14 standard feature columns) on
+        the calendar the data itself defines — the distinct dates in silver, not a
+        synthetic business-day range. Vietnamese exchange holidays are not weekends.
+
+        ⚠️ **"UP TO" IS LITERAL: the column COUNT is a function of the data, not of the
+        measure list.** 19 x 19 is 361; the table has 351. The ten absentees are all
+        FUEBFVND's rolling and volatility columns, and FUEBFVND has **3 rows** — a
+        5-day window and a 21-day volatility cannot yield one non-null value from
+        three observations, so the melt's `dropna` removes them and the column is
+        never created. That is right (an all-NULL column is noise a model has to
+        learn to ignore), but it means a fund gaining history GAINS COLUMNS, i.e. a
+        DDL change. Acceptable in gold, which is where the wide shape is allowed to
+        live; it is exactly the argument that kept `silver.economy` long.
+
+        ⚠️ **NO as-of fill, the same choice `gold.stock_market` and `gold.bonds` make
+        and for the same reason.** A missing fund-day means that ETF did not exist yet
+        (FUETPVND lists in 2025, eleven years after E1VFVN30) or did not trade, and
+        carrying a NAV forward would invent a price. `gold.economy` fills because a
+        macro series is *stale but valid* between releases; a quote is not. NULL stays
+        NULL — which is why this panel is ~34% filled, and that number is the listing
+        history, not a defect.
+
+        ⚠️ **The features are computed BEFORE the pivot, per fund and in date order** —
+        `_helper_transform` groups by `(exchange, ticker)`. Computing a return after
+        pivoting would be a row-wise difference across the wide frame, which is the
+        same arithmetic only as long as no fund has a gap; FUEBFVND has 3 dates
+        against E1VFVN30's 2,894, so it is emphatically not the same arithmetic.
+        """
+        self._logger.log_info("Ingesting gold funds (wide, 1 row per date)...")
+
+        KEYS = ["exchange", "ticker", "date"]
+
+        df = self._helper_select(
+            schema_name=SILVER_SCHEMA,
+            table_name="funds",
+            order_by=KEYS,
+        )
+        if df.empty:
+            raise MissingSourceDataError(
+                f"{SILVER_SCHEMA}.funds is empty — run the silver funds ingest first."
+            )
+
+        df["date"] = pd.to_datetime(df["date"]).dt.date
+        # The driver hands `numeric` back as `Decimal` (object dtype) and `bigint` as
+        # object too; an object column melted into the panel would land as VARCHAR.
+        for col in df.columns:
+            if col not in KEYS:
+                df[col] = pd.to_numeric(df[col], errors="coerce")
+
+        layers = self._helper_build_feature_layers(df)
+        if not layers:
+            raise PipelineError(
+                "gold.funds: no feature layer matched silver.funds' columns, so the "
+                "table would be a bare pivot of the OHLCV block."
+            )
+        df = self._helper_transform(df, layers)
+
+        wide = self._helper_gold_wide_panel(
+            df, table_name="funds", sep=self.GOLD_FUNDS_NAME_SEP, keys=KEYS
+        )
+
+        self._database_driver.drop_table(GOLD_SCHEMA, "funds")
+        self._helper_save_pandas_table_to_database(
+            schema_name=GOLD_SCHEMA,
+            table_name="funds",
+            primary_keys=["date"],
+            df=wide,
+            dtype_overrides={"date": DataType.DATE()},
+            chunk_size=1_000,
+        )
 
     # ⚠️ `_ingest_gold_indices` was REMOVED (2026-08-01) along with its
     # `data_quality_gold/indices` leaf and switch key. `gold.indices` was the
