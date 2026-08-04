@@ -858,6 +858,66 @@ listed ticker would not.)
 Dagster asset, for the single-ticker path — a notebook calling
 `_ingest_unified_pool_basic` directly had no asset to catch a two-company schema.
 
+#### ⚠️ `ticker = "BANK"` builds `unified_schema_bank` — A GICS SECTOR (2026-08-05)
+
+The second sentinel, and the one that turned the first into a pattern.
+`UNIFIED_BANK = "BANK"` selects `silver.stocks_basic` on GICS
+**`industry_code = '401010'`** (Financials → Banks → Banks): **53,921 rows ×
+38 columns, 20 tickers, 4,358 sessions, 2009-01-02 → 2026-06-26**, built in
+**1.4 s** (1.0 s + 0.4 s). Verified against the single-ticker schema the same way
+`"ALL"` was: 4,235 VCB rows compared, **0 disagreeing `return_5day` values**.
+
+Both sentinels now resolve through one registry rather than a boolean:
+
+```python
+UNIFIED_MEMBER_FILTERS = {
+    UNIFIED_UNIVERSE: (None, ()),                    # no predicate
+    UNIFIED_BANK: ("industry_code = %s", ("401010",)),
+}
+```
+
+⚠️ **MEMBERSHIP IS DERIVED, NOT LISTED, AND THAT IS THE WHOLE POINT.** A hardcoded
+ticker list would have to be maintained against the taxonomy, and the day a bank
+lists or is reclassified the schema would quietly stop matching its own name. The
+predicate reads the classification `stocks_basic` already carries, so **a rebuild
+tracks GICS by construction** — the same argument that made `"ALL"` a sentinel
+rather than a listing.
+
+⚠️ **`industry_code`, NOT `sub_industry_code`.** `401010` covers `40101010`
+(diversified banks) and `40101015` (regional). Every VN bank is diversified today,
+so both give 20 names — and pinning the sub-industry would silently drop the first
+name reclassified as regional. The 15 `investment_banking_and_brokerage`
+(`40203020`) names sit under `capital_markets` and are correctly NOT banks.
+
+⚠️ **ONE DICT ENTRY WAS THE WHOLE CHANGE, and that is structural rather than lucky.**
+Membership is a `pool__basic` concern only: `_ingest_unified_pool_targets` reads
+`pool__basic` and counts the series it finds there, and
+`_helper_unified_pool_from_source` INNER JOINS `pool__ta` / `pool__fa` to that same
+spine on the whole key. Both therefore inherit the filter. **A new sector sentinel
+needs one entry and no change anywhere else** — which is what stops the three
+builders drifting apart, the same reason §"ticker = ALL" gives for not forking them.
+
+⚠️ **`_helper_unified_is_universe` now means "MORE THAN ONE COMPANY", not "the whole
+market".** Every caller was already asking the former — a sentinel that answered
+False would be filtered by `WHERE ticker = 'BANK'` and would produce a real, empty,
+correctly-typed table, which is the failure mode that looks most like success.
+
+⚠️ **And the MIRROR assertion was added**: a sentinel whose predicate matches fewer
+than 2 tickers now raises. A schema whose NAME promises a cross-section and whose
+CONTENTS are one time series is a silent version of the failure
+`feature_selection/CONTEXT.md` §9h documents — one that would be discovered only
+after a study had been run on it.
+
+⚠️ **The GICS predicate is PARAMETERISED even though the sentinel is interpolated.**
+Two different trust boundaries: a schema name cannot be bound and is validated
+against `UNIFIED_TICKER_PATTERN` instead, while a GICS code is an ordinary value
+with no business being interpolated.
+
+⚠️ **What the sector is good FOR is a separate question, and the answer so far is
+"not much".** `feature_selection/CONTEXT.md` §13 ran the §9c cross-sectional
+protocol on it: `z = +0.11`, 11 of 20 shuffled draws beat the real data. Banks are
+VN's largest GICS industry at 20 names, against a resolvability threshold of ~100.
+
 #### `_ingest_unified_pool_ta` / `_ingest_unified_pool_fa` (2026-08-04)
 
 The remaining two feature groups. Both follow `pool__basic`'s contract exactly —

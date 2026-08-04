@@ -4927,9 +4927,64 @@ class DataPreprocessor:
     # universe build would notice because its assertions count series, not rows.
     UNIFIED_UNIVERSE = "ALL"
 
+    # ⚠️ THE SECOND SENTINEL — a GICS SECTOR SLICE. `unified_schema_bank` holds every
+    # company GICS files under industry `401010` (Financials → Banks → Banks), which
+    # is 20 tickers today.
+    #
+    # Why a sentinel and not a ticker list: the same reason `"ALL"` is one. A list
+    # would have to be maintained against the taxonomy, and the day a bank lists or
+    # is reclassified the schema would quietly stop matching its own name. The
+    # predicate reads the classification that `silver.stocks_basic` already carries,
+    # so membership is DERIVED and a rebuild tracks GICS by construction.
+    #
+    # ⚠️ `industry_code`, NOT `sub_industry_code`. `401010` covers `40101010`
+    # (diversified banks) and `40101015` (regional banks); today every VN bank is
+    # diversified, and pinning the sub-industry would silently drop the first name
+    # reclassified as regional.
+    UNIFIED_BANK = "BANK"
+
+    # ⚠️ EVERY SENTINEL THAT NAMES A SET OF COMPANIES RATHER THAN ONE, mapped to the
+    # `silver.stocks_basic` predicate selecting its members. `None` = no predicate at
+    # all, i.e. the whole universe.
+    #
+    # ⚠️ Membership is a `pool__basic` concern ONLY, and that is not an omission.
+    # `pool__targets` reads `pool__basic` and counts the series it finds there;
+    # `pool__ta` / `pool__fa` INNER JOIN the source to `pool__basic` on the whole key.
+    # Both therefore inherit the filter from the spine, so a new sentinel needs one
+    # entry here and no change anywhere else — which is what stops the three builders
+    # from drifting apart the way a forked universe method would.
+    UNIFIED_MEMBER_FILTERS = {
+        UNIFIED_UNIVERSE: (None, ()),
+        UNIFIED_BANK: ("industry_code = %s", ("401010",)),
+    }
+
     def _helper_unified_is_universe(self, ticker: str) -> bool:
-        """Is this the whole-universe build rather than one company's?"""
-        return (ticker or "").upper() == self.UNIFIED_UNIVERSE
+        """Does this name a SET of companies rather than one?
+
+        ⚠️ True for `"ALL"` and for every sector sentinel, because what every caller
+        actually asks is "may this schema hold more than one series" — not "is this
+        the whole market". A sentinel that answered False here would be filtered by
+        `WHERE ticker = 'BANK'` and produce a real, empty, correctly-typed table.
+        """
+        return (ticker or "").upper() in self.UNIFIED_MEMBER_FILTERS
+
+    def _helper_unified_member_filter(self, ticker: str) -> Tuple[str, tuple]:
+        """`(predicate, params)` over `silver.stocks_basic` for a ticker or sentinel.
+
+        A bare boolean expression with no `WHERE`/`AND`, so the caller decides how to
+        attach it; `("", ())` means "select everything".
+
+        ⚠️ The predicate is PARAMETERISED even though the sentinel that chose it is
+        interpolated into a schema name. Those are two different trust boundaries: a
+        schema name cannot be bound and is validated against
+        `UNIFIED_TICKER_PATTERN` instead, while a GICS code is an ordinary value and
+        has no business being interpolated.
+        """
+        key = (ticker or "").upper()
+        if key in self.UNIFIED_MEMBER_FILTERS:
+            predicate, params = self.UNIFIED_MEMBER_FILTERS[key]
+            return (predicate or "", params)
+        return ("ticker = %s", (ticker,))
 
     def _helper_unified_schema(self, ticker: str) -> str:
         """`unified_schema_vcb` for `VCB`. Raises if the ticker is not identifier-safe.
@@ -5027,9 +5082,17 @@ class DataPreprocessor:
         """
         schema = self._helper_unified_schema(ticker)
         universe = self._helper_unified_is_universe(ticker)
+        predicate, params = self._helper_unified_member_filter(ticker)
+        # What was selected, for the log and for every error message below — one
+        # phrase, so the assertion that fails names the same scope the ingest logged.
+        scope = (
+            "the whole universe"
+            if not predicate
+            else f"{predicate.replace('%s', repr(*params))}"
+        )
         self._logger.log_info(
-            f"Ingesting unified {schema}.pool__basic (from {SILVER_SCHEMA}.stocks_basic"
-            f"{'' if universe else f', ticker {ticker}'})..."
+            f"Ingesting unified {schema}.pool__basic "
+            f"(from {SILVER_SCHEMA}.stocks_basic, {scope})..."
         )
 
         # The source must exist AND hold this ticker — an empty result would otherwise
@@ -5047,8 +5110,7 @@ class DataPreprocessor:
         # One `WHERE`, built once and reused by the count and the CTAS, so the row the
         # assertion counts and the row the table gets can never come from different
         # predicates.
-        where = "" if universe else " WHERE ticker = %s"
-        params = () if universe else (ticker,)
+        where = f" WHERE {predicate}" if predicate else ""
 
         with self._database_driver._cursor_ctx() as cur:
             cur.execute(
@@ -5057,10 +5119,9 @@ class DataPreprocessor:
             available = int(cur.fetchone()[0])
             if not available:
                 raise MissingSourceDataError(
-                    f"`{SILVER_SCHEMA}.stocks_basic` holds no rows"
-                    + ("" if universe else f" for ticker {ticker!r}")
-                    + f", so {schema}.pool__basic would be empty. Check the "
-                    f"ticker, or rebuild silver `stocks_basic`."
+                    f"`{SILVER_SCHEMA}.stocks_basic` holds no rows for {scope}, so "
+                    f"{schema}.pool__basic would be empty. Check the ticker or the "
+                    f"classification, or rebuild silver `stocks_basic`."
                 )
 
             # Dropped as late as possible, so a failure above leaves the old table intact
@@ -5081,7 +5142,7 @@ class DataPreprocessor:
         if written != available:
             raise PipelineError(
                 f"{schema}.pool__basic wrote {written} rows but silver holds "
-                f"{available}" + ("" if universe else f" for {ticker}") + "."
+                f"{available} for {scope}."
             )
         # ⚠️ The single-ticker contract is asserted HERE too, not only in the Dagster
         # asset. `unified_schema_vcb` holding two companies would break every
@@ -5091,6 +5152,17 @@ class DataPreprocessor:
             raise PipelineError(
                 f"{schema}.pool__basic holds {series} tickers — a single-ticker "
                 f"unified schema is one company by definition."
+            )
+        # ⚠️ And the MIRROR of it for a sector sentinel. A classification predicate
+        # that matched one company would build a schema whose name promises a
+        # cross-section and whose contents are a single time series — the §9h failure
+        # mode, arrived at silently. `"ALL"` is exempt only because it has no
+        # predicate to be wrong about.
+        if predicate and series < 2:
+            raise PipelineError(
+                f"{schema}.pool__basic holds {series} ticker(s) for {scope} — a "
+                f"sector schema is a CROSS-SECTION, and one company is not one. "
+                f"Check the classification in `{SILVER_SCHEMA}.stocks_basic`."
             )
         self._logger.log_info(
             f"{schema}.pool__basic: {written} rows x {len(source_types)} columns, "

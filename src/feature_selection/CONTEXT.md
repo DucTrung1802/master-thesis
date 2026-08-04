@@ -61,6 +61,20 @@
 > ⚠️ **The bar rose from 27 to 162 channels and then stopped** (+0.0556 → +0.0740 →
 > +0.0754 at 918). §6d's "a wider pool only raises the null" is real but saturates.
 >
+> ## ⚠️ HALF FOUR — THE BANK SECTOR, 2026-08-05 (§13)
+>
+> `unified_schema_bank` — 20 GICS `401010` names, the §9c protocol otherwise
+> unchanged. **Observed +0.0087 against a null MEAN of +0.0073: `z = +0.11`, and
+> 11 of 20 shuffled draws beat the real data.** The holdout is −0.0262 and its
+> shuffled control won. **A single-sector cross-section is not resolvable in this
+> market** — banks are VN's biggest GICS industry at 20 names, and §9h's threshold
+> is ~100.
+>
+> ⚠️ **It did confirm the mechanism it failed on.** Daily-IC sd **0.244** against
+> the **0.251** that `1/√N` predicts from VN30 — §9b now holds across four widths.
+> But the observed IC fell while the bar did not move, so §13d offers a second
+> reading worth testing: **a sector CO-MOVES, so there is less to rank.**
+>
 > **Four notebooks. Read the fourth one, then the third.**
 >
 > | notebook | one sample is | for |
@@ -812,6 +826,7 @@ Same pipeline, same target, same `d=20, h=5`, same 20-draw `date_block` null.
 | universe | N | daily-IC **sd** | observed IC | null mean | **null p95 BAR** | z | clears |
 |---|---|---|---|---|---|---|---|
 | VCB (§6b) | **1** | ~1.0 | +0.0559 | +0.0167 | **+0.0556** | +1.56 | ❌ |
+| **BANK, GICS (§13)** | **20** | **0.244** | **+0.0087** | +0.0073 | **+0.0249** | **+0.11** | ❌ **on the null's mean** |
 | VN30 | **30** | 0.205 | +0.0233 | +0.0110 | **+0.0248** | **+1.42** | ❌ |
 | **VN100** | **100** | 0.130 | +0.0289 | +0.0044 | **+0.0117** | **+6.09** | ✅ |
 | **LIQUID301** (§9j, `d=1`) | **301** | — | **+0.0768** | +0.0216 | **+0.0245** | **+18.45** | ✅ |
@@ -832,6 +847,15 @@ proposed VN30 ≈ 25 stocks, and **that would have failed.**
 narrower index should expect a null they cannot clear, and should not read that as
 absence of signal — VN30's observed IC (+0.023) is 80 % of VN100's, it just cannot
 be resolved against a bar of +0.025.
+
+⚠️ **BANK (N=20) IS THE PREDICTION CONFIRMED, AND IT GOES FURTHER THAN VN30 DID.**
+Its **daily-IC sd is 0.244 against the 0.251 that `1/√N` predicts from VN30's
+0.205** — a 3 % error, the cleanest confirmation of §9b's mechanism in the package.
+But its *observed* IC also collapsed, +0.0233 → +0.0087, which the precision
+argument does **not** predict, and its bar did **not** rise (+0.0248 → +0.0249). So
+at 20 names the failure is no longer "a real effect the panel cannot resolve" —
+`z = +0.11` means there is nothing there to resolve. §13 has the reason this may be
+about SECTORS rather than width.
 
 ### 9i. ⚠️ ALL 780 NAMES — the biggest number here, and the least trustworthy
 
@@ -1335,3 +1359,123 @@ judges is a different procedure.
    `unified_schema_all` does not exist yet. That is the run with something to gain —
    §9's target has already beaten its null, so there is something for 918 technical
    channels to add to.
+
+## 13. ⚠️ THE BANK SECTOR (2026-08-05) — a cross-section that is WIDE ENOUGH TO BUILD and not to resolve
+
+`unified_schema_bank.pool__basic ⋈ pool__targets`, `cs_rank_5day`, `d=20, h=5`,
+`cs_rank` features, 27 channels, 20-draw `date_block` null, holdout `2024-06-01`
+with a control. **The §9c protocol with one thing changed: the universe is a GICS
+SECTOR instead of an index.**
+Report: `reports/feature_selection/2026-08-05__unified_schema_bank__pool_basic__cs_rank_5day`.
+
+| | observed | null mean | null sd | **p95 BAR** | null max | **z** | p | clears |
+|---|---|---|---|---|---|---|---|---|
+| **BANK, 20 names** | **+0.0087** | **+0.0073** | 0.0134 | **+0.0249** | +0.0357 | **+0.11** | **0.52** | ❌ |
+| *VN30 (§9h)* | +0.0233 | +0.0110 | — | +0.0248 | — | +1.42 | — | ❌ |
+| *VN100 (§9d)* | +0.0289 | +0.0044 | 0.0040 | +0.0117 | +0.0119 | +6.09 | 0.048 | ✅ |
+
+⚠️ **ELEVEN OF TWENTY SHUFFLED-LABEL DRAWS BEAT THE REAL DATA** (`p = 0.52`), and the
+observed **+0.0087** sits on top of the null's mean **+0.0073**. This is the second
+weakest result in the package after `pool__fa`'s `z = −0.25`, and unlike VN30 it
+cannot be read as "a real effect too small to resolve" — there is no gap to resolve.
+
+### 13a. The panel
+
+`_ingest_unified_pool_basic(DataPreprocessor.UNIFIED_BANK)` — GICS
+`industry_code = '401010'` (Financials → Banks → Banks). **53,921 rows, 20 tickers,
+4,358 sessions, 2009-01-02 → 2026-06-26**, built in 1.4 s and verified against the
+single-ticker schema: 4,235 VCB rows compared, **0 disagreeing `return_5day`
+values** — the same check §9a ran for `unified_schema_all`.
+
+After `min_width=10`: **39,056 rows, 2,201 dates, 2017-08-17 → 2026-06-26, median
+width 20, density 0.885.**
+
+⚠️ **`min_width=10`, not §9's 20, and it is a real compromise.** Only 20 banks exist,
+so `min_width=20` starts the panel at **2021-03-24** and throws away half the
+sessions — and `n_eff` is `dates/h`, so sessions are the scarce thing. At 10 the
+panel keeps 2,201 dates at a median width of 20; the cost is ~99 early dates whose
+cross-section is 10-11 names.
+
+⚠️ **The bank universe is 20 names and GROWING** — 6 in 2009, 8 in 2015, 11 in 2017,
+15 in 2018, 20 from 2021. A sector panel is far more ragged than an index one, and
+the ragged part is the early history.
+
+### 13b. ⚠️ `1/√N` CONFIRMED TO 3 %, WHICH MAKES THE FAILURE MORE INTERESTING
+
+| fold | daily-IC sd | t | days positive |
+|---|---|---|---|
+| 1 | 0.2748 | −0.54 | 47.1 % |
+| 2 | 0.2456 | **+1.85** | **59.8 %** |
+| 3 | 0.2056 | +0.48 | 49.8 % |
+| 4 | 0.2574 | −0.24 | 51.7 % |
+| 5 | 0.2373 | +0.04 | 51.8 % |
+| **mean** | **0.244** | | **hit rate 0.497** |
+
+**Predicted from VN30's 0.205 by `√(30/20) = 1.22`: 0.251. Measured: 0.244.** §9b's
+precision argument now holds across four widths (1 → 20 → 30 → 100) and is the
+best-evidenced claim in this file.
+
+⚠️ **But the OBSERVED IC fell too, +0.0233 → +0.0087, and the BAR DID NOT MOVE**
+(+0.0248 → +0.0249). Precision predicts a rising bar at lower `N`; it did not rise.
+So the BANK result is not VN30's result made harder to see — **it is a different and
+weaker result**, and §13d is why that may be about sectors rather than about 20.
+
+### 13c. ⚠️ The holdout is NEGATIVE and its control beat it
+
+| feature set | labels | IC | hit rate |
+|---|---|---|---|
+| selected (12) | real | **−0.0262** | 0.485 |
+| selected (12) | **shuffled control** | **+0.0095** | 0.503 |
+| all channels (27) | real | −0.0136 | 0.490 |
+| all channels (27) | shuffled control | −0.0250 | 0.486 |
+
+⚠️ **Both real holdout ICs are negative, and on the selected set the control WON** —
+the §11b signature. Development said +0.0087, the untouched tail says −0.0262. At
+`n_eff = 97.8` with daily sd 0.244, SE ≈ 0.025, so every cell here is inside one
+standard error of zero: this refutes nothing and confirms nothing, and saying
+"banks mean-revert" from it would be reading noise.
+
+⚠️ **The selection HURTS**: all 27 channels beat the pruned 12 in the aggregate
+(+0.0147 vs +0.0087) and on the holdout (−0.0136 vs −0.0262). §9i saw the same at
+780 names. `max_features=12` was chosen for a 27-channel single-ticker pool and
+keeps failing to earn its place anywhere else.
+
+⚠️ **`lasso` scored 0.0 on 26 of 27 channels** — only `avg_vol_per_buy_order` kept a
+non-zero coefficient, so it is a hair away from `dead_methods` and should be read as
+dead. Same conclusion as §4 and §12a.
+
+### 13d. ⚠️ Why a SECTOR may be the wrong cross-section, not just a small one
+
+The kept set is the §9e family — `value_negotiated`, `close_adjust`,
+`sell_order_vol`, `avg_vol_per_sell_order`, `volume_negotiated`,
+`avg_vol_per_buy_order` — so the features are not the difference. Two readings, and
+this run cannot separate them:
+
+1. **Width.** 20 names is below VN30, which already failed. §9h's threshold stands
+   and nothing more needs explaining.
+2. **⚠️ A SECTOR CO-MOVES, SO THERE IS LESS TO RANK.** Twenty banks share a common
+   factor — rates, credit growth, one regulator — and `cs_rank_5day` asks which of
+   them beats the others *today*. Removing the market factor is what made the
+   cross-sectional target work (§9f); removing the SECTOR factor as well may leave
+   too little dispersion for any feature to explain. **This is testable and was not
+   tested**: compare the cross-sectional sd of `return_5day` within banks against
+   within a size-matched random 20 names from `unified_schema_all`. If the bank
+   dispersion is materially lower, reading 2 rather than 1 is the explanation.
+
+⚠️ **Do not conclude "bank stocks are efficiently priced."** The run establishes that
+*this pipeline, on this pool, at this width* cannot distinguish its output from
+shuffled labels. §9j found a large effect at 301 names using the same 27 channels.
+
+### 13e. What would test the sector hypothesis properly
+
+1. **Run the dispersion comparison in §13d.2 first** — it is minutes of work and it
+   decides which of the two readings to spend a run on.
+2. **A sector-neutral target on the WIDE panel.** Rank within sector but score across
+   all 780 names, so the cross-section stays wide while the sector factor is removed.
+   That separates "sectors have no internal signal" from "20 is too few".
+3. **A wider sector.** Banks are the biggest GICS industry in VN at 20 names, so no
+   VN sector reaches §9h's ~100 threshold — which is itself the finding: **a
+   single-sector cross-sectional study is not resolvable in this market.**
+4. ⚠️ **Not more features.** §11 and §12 both widened the pool on an unresolvable
+   panel and both raised their own bar. The constraint here is `N` and dispersion,
+   and neither `pool__ta` nor `pool__fa` supplies either.
