@@ -1,7 +1,7 @@
 {
   "report_schema_version": "1.0",
-  "generated_at": "2026-08-04T11:50:18.331308+00:00",
-  "git_commit": "a5082c8+dirty",
+  "generated_at": "2026-08-04T13:59:47.127732+00:00",
+  "git_commit": "7ab2488+dirty",
   "environment": {
     "python": "3.12.10",
     "platform": "Windows-11-10.0.26200-SP0",
@@ -119,14 +119,14 @@
     ],
     "timings_seconds": {
       "window design (cpu)": 0.11,
-      "spearman vs target (cpu)": 0.06,
-      "mutual_info (cpu)": 9.21,
-      "xgb gain + shap (cpu)": 1.09,
-      "lasso (cpu)": 1.64,
-      "permutation (cpu)": 11.66,
+      "spearman vs target (cpu)": 0.05,
+      "mutual_info (cpu)": 8.35,
+      "xgb gain + shap (cpu)": 0.94,
+      "lasso (cpu)": 1.24,
+      "permutation (cpu)": 9.94,
       "channel corr matrix (cpu)": 0.01,
-      "stability (cpu)": 4.13,
-      "validation (cpu)": 6.67
+      "stability (cpu)": 3.64,
+      "validation (cpu)": 5.36
     },
     "ic_summary": {
       "folds": 5.0,
@@ -156,7 +156,7 @@
   "null": null,
   "holdout": null,
   "notes": "",
-  "run_id": "2026-08-04__unified_schema_vcb__return_5day__185016",
+  "run_id": "2026-08-04__unified_schema_vcb__return_5day__205945",
   "artifacts": [
     {
       "file": "feature_importance.csv",
@@ -188,40 +188,40 @@
     },
     {
       "file": "figures/01_ensemble_ranking.png",
-      "bytes": 116272
+      "bytes": 126339
     },
     {
       "file": "figures/02_method_heatmap.png",
-      "bytes": 132409
+      "bytes": 238804
     },
     {
       "file": "figures/03_target_correlation.png",
-      "bytes": 108379
+      "bytes": 115449
     },
     {
       "file": "figures/04_channel_correlation.png",
-      "bytes": 226014
+      "bytes": 220205
     },
     {
       "file": "figures/05_stat_profile.png",
-      "bytes": 169721
+      "bytes": 169764
     },
     {
       "file": "figures/06_validation.png",
-      "bytes": 42673
+      "bytes": 47433
     },
     {
       "file": "figures/07_stability.png",
-      "bytes": 146717
+      "bytes": 146323
     },
     {
       "file": "figures/08_coverage.png",
-      "bytes": 74223
+      "bytes": 78406
     },
     {
       "file": "figures/09_target_distribution.png",
-      "bytes": 36756
+      "bytes": 40891
     }
   ],
-  "report_seconds": 2.17
+  "report_seconds": 2.1
 }

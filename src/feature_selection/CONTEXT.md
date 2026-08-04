@@ -978,7 +978,50 @@ exactly the situation the `"null": null` field and the README's bold warning exi
 for — and the prototype is more useful as the reference precisely because it shows
 what an unverified run looks like.
 
-⚠️ **`reports/feature_selection/*/` is gitignored** — 1.2 MB per run accumulates
+⚠️ **`reports/feature_selection/*/` is gitignored** — ~1 MB per run accumulates
 fast. This one folder is force-added as the reference for the layout; a tracked file
 overrides the ignore rule, so re-running the notebook never adds a folder by
 accident.
+
+### 10b. ⚠️ The figure specs — and the three faults the first version shipped
+
+[plots.py](plots.py) was rewritten 2026-08-04 after rendering the prototype and
+looking at it. The palette was never the problem — it was **computed, not
+eyeballed**, and passes every check (all-pairs CVD ΔE **9.2** against a target of
+8.0, normal-vision ΔE **24.0** against a floor of 15.0). The faults were in FORM
+and MARKS:
+
+**1. A ranking of mean RANKS was drawn as bars from zero.** Every channel sat
+between 11 and 19 on a 0-20 axis, so twenty-seven bars were visually identical: the
+chart displayed a ranking while hiding every difference in it. A mean rank is an
+ordinal position with no meaningful zero, so `plot_ensemble_ranking` is now a **dot
+plot**, where a non-zero baseline is honest rather than a lie, and the spread that
+decides the selection is the thing you see.
+
+**2. The corner radius was in DATA units, so it was anisotropic.** One radius
+applied to both axes means a corner that vanishes along a `ρ` axis (one unit ≈
+1,000 px) and swallows the bar along a category axis (one unit ≈ 30 px) — the IC
+bars came out shaped like tombstones. `_radius_in_data_units` converts one PIXEL
+radius into each axis's own units, which is why bars are drawn as paths rather than
+with `ax.bar`. ⚠️ **It reads the data transform, so limits must be set BEFORE the
+marks are drawn** — every caller here does that, and a new one must too.
+
+**3. Legends sat on the data, and the subtitle collided with the title.** The
+subtitle was positioned in axes fractions while the title pad was in points, so on a
+tall figure the two drifted into each other. Both are now in points. Legends are
+always **below and outside** the axes: `plot_validation`'s subtitle carries two mean
+ICs and a caveat, none of which can be shortened, so the legend is what moves.
+
+Also fixed: bars capped at `_BAR_FRACTION` of their slot (the rest is air) instead
+of filling it; the correlation matrix **masks its upper triangle** (it is symmetric
+— drawing both halves doubles the ink to say the same thing twice); the target-ρ
+chart uses **two flat fills instead of the diverging ramp**, because bar length
+already encodes the magnitude and shading by it made the small values invisible;
+and cell labels flip to white at 0.45 of the ramp rather than 0.55, where secondary
+ink on mid-blue lands near 3:1.
+
+⚠️ **`node` is not installed here, so `scripts/validate_palette.js` cannot be run
+directly.** Its checks were ported to Python — same thresholds, same
+Machado-Oliveira-Fernandes severity-1.0 transforms, same OKLab ΔE×100 — and the
+palette validated against them. If the palette ever changes, re-run those checks;
+do not eyeball the result.

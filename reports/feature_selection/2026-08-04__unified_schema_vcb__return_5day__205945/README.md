@@ -1,6 +1,6 @@
 # Feature-importance run — `return_5day`
 
-*Generated 2026-08-04T11:50:18.331308+00:00 at commit `a5082c8+dirty`.*
+*Generated 2026-08-04T13:59:47.127732+00:00 at commit `7ab2488+dirty`.*
 
 ## Input
 
