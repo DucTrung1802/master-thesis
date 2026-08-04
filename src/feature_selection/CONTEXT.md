@@ -488,6 +488,9 @@ forward one session before trusting any FA-driven result — see
 ⚠️ **~207 of `pool__ta`'s columns are BOOLEAN** and `_prepare` drops bool dtypes, so
 a naive run would silently score ~717 of the 921, not all of them.
 
+⚠️ **`pool__fa` HAS NOW BEEN RUN, and §11 is what came back.** It is the cleanest
+demonstration in this package of why §7's ordering exists.
+
 ### Smaller extensions, if the study continues as-is
 
 * **Another ticker** — change `TICKER`; the schema name is a template and the reader
@@ -1056,3 +1059,111 @@ directly.** Its checks were ported to Python — same thresholds, same
 Machado-Oliveira-Fernandes severity-1.0 transforms, same OKLab ΔE×100 — and the
 palette validated against them. If the palette ever changes, re-run those checks;
 do not eyeball the result.
+
+## 11. ⚠️ THE FA RUN (2026-08-04) — the observed result is BELOW its own null's MEAN
+
+`unified_schema_vcb.pool__fa ⋈ pool__targets`, `return_5day`, `d=1, h=5`, 162
+channels, 20-draw block-shuffled null, holdout `2024-06-01` with a control.
+Report: `reports/feature_selection/2026-08-04__unified_schema_vcb__pool_fa__return_5day`.
+
+| | observed | null mean | null sd | **p95 BAR** | null max | **z** | p | clears |
+|---|---|---|---|---|---|---|---|---|
+| **`pool__fa`, 162 ch** | **+0.0157** | **+0.0242** | 0.0337 | **+0.0740** | +0.0896 | **−0.25** | 0.62 | ❌ |
+| `pool__basic`, 27 ch (§6b) | +0.0559 | +0.0167 | 0.0252 | +0.0556 | +0.0606 | +1.56 | 0.05 | ❌ |
+
+⚠️ **THIRTEEN OF TWENTY SHUFFLED-LABEL RUNS BEAT THE REAL DATA.** The observed IC is
+not merely inside the null — it is **below the null's centre**. This is the only
+configuration in the package with a negative z, and it is the strongest available
+statement that a pool carries nothing: the pipeline does better when the labels are
+destroyed than when they are real.
+
+⚠️ **Widening the pool RAISED THE BAR by a third and LOWERED the result by 3.6×.**
+27 channels → 162 moved the p95 from +0.0556 to **+0.0740** while the observed fell
+from +0.0559 to +0.0157. §6d predicted exactly this ("a wider feature pool buys no
+observations — it only raises the null") and §8's rule demanded the re-run that
+measured it. This is the number to cite when someone proposes pointing the selector
+at `pool__ta`'s 921.
+
+### 11a. Why: a fundamental is a STEP FUNCTION, and there are only 69 steps
+
+**`pool__fa` changes value on 69 publish days out of 4,230 sessions — a channel
+moves about once every 64 sessions.** The row count is 4,230; the number of distinct
+feature configurations is **69**.
+
+| fold | train rows | **train publishes** | test rows | **test publishes** |
+|---|---|---|---|---|
+| 1 | 500 | **9** | 745 | 12 |
+| 2 | 1,245 | 21 | 745 | 13 |
+| 3 | 1,990 | 33 | 745 | 13 |
+| 4 | 2,735 | 45 | 745 | 13 |
+| 5 | 3,480 | 57 | 745 | 13 |
+
+⚠️ **Fold 1 fits 162 features to 9 distinct feature states.** Its `all channels`
+R² is **−5.52**, and folds 2 and 4 reach −6.69 and −3.72 — the signature of a model
+with far more parameters than information. The `selected` sets are saner (−0.40 to
+−0.001) and still carry no signal.
+
+⚠️ **`n_eff` here is NOT `n/h`.** §6d priced the single-ticker study at `4,230/5 ≈
+850` independent observations. That bound applies to the LABEL. The FEATURE side is
+bounded by publish events, so the honest count for "does this fundamental predict
+the forward return" is **~69**, and ~13 per test fold. `_effective_n` does not know
+this — it reports 149 per fold from the row count — so **every error bar in this
+run is roughly 3× too small.**
+
+⚠️ **The daily grain is a presentation, not information.** Forward-filling a
+quarterly statement across 64 sessions makes 64 rows that say one thing. A run at
+`lookback=20` would be worse than useless: over a window where the value never
+changes, `slope`=0, `sd`=0 and `min`=`max`=`last`, so five of the six window
+statistics collapse and the design matrix becomes ~1,000 constant columns. **That is
+why this run is `lookback=1`** — a property of the data, not a shortcut.
+
+### 11b. The holdout agrees, and the control is why it is readable
+
+| feature set | labels | IC | hit rate |
+|---|---|---|---|
+| selected | real | **+0.0232** | 0.528 |
+| selected | **shuffled control** | **+0.0322** | 0.443 |
+| all channels | real | −0.0111 | 0.528 |
+| all channels | shuffled control | −0.0448 | 0.449 |
+
+⚠️ **The shuffled control BEAT the real labels on the selected set** (+0.0322 vs
++0.0232), on 506 holdout rows carrying ~8 publish events. Consistent with §11's
+verdict and with §6c's finding that a single holdout score is unreadable without
+its control.
+
+### 11c. What the ranking says, and why it should not be quoted
+
+The ensemble is led by `balance_sheet_iv_chung_khoan_kinh_doanh` (trading
+securities), `equity_growth_yoy`, `balance_sheet_iii_2_cho_vay_cac_tctd_khac`
+(interbank lending) and `income_statement_ii_lai_lo_thuan_tu_hoat_dong_dich_vu`
+(net fee income). **Do not use this list.** It is an internally consistent
+description of noise — §6's standing warning, now with a negative z behind it. The
+figures and CSVs are in the report folder so the run is auditable, not so the
+ranking is actionable.
+
+⚠️ **`lasso` scored 0.0 on all of the top 25** — cross-validated shrinkage zeroed
+essentially every coefficient, which is itself a finding: no linear fundamental
+signal survives a penalty. It was not flagged in `dead_methods` only because a
+handful of channels outside the top 25 kept a non-zero coefficient.
+
+⚠️ **`year` and `quarter` were EXCLUDED, and that is not housekeeping.** §6c found
+price LEVELS acting as a date proxy, and the apparent signal died when they went.
+`year` is not a proxy for the era — it *is* the era, an integer counting up through
+the sample. Left in, it would have topped the ranking and meant nothing.
+
+### 11d. What would actually test fundamentals
+
+**Not more features and not another ticker.** The binding constraint is 69 publish
+events, and neither adds any.
+
+1. **Go cross-sectional** — the same move that worked in §9. `N` banks × the same
+   quarters multiplies publish events by `N`, which is the only thing that changes
+   this arithmetic. ⚠️ **`pool__fa` cannot express it**: the source is the CafeF
+   *bank* chart of accounts, so it exists for **VCB and ACB only**. Building a
+   cross-sectional FA study means parsing more issuers first.
+2. **Make the sample the EVENT, not the session.** One row per publish date, with
+   the label the return over the days following the announcement. That is ~69 rows
+   for VCB — honestly small, rather than 4,230 rows pretending to be.
+3. **Shift `publish_date` forward one session** before believing anything: the lag
+   reaches 0 days, so a statement released after the close is a half-day leak this
+   layer cannot detect (`data_preprocessor/CONTEXT.md`).
