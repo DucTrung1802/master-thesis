@@ -4910,6 +4910,27 @@ class DataPreprocessor:
     # allow is anything that could close the identifier and continue the statement.
     UNIFIED_TICKER_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,20}$")
 
+    # ⚠️ THE ONE TICKER THAT IS NOT A TICKER. `"ALL"` names the WHOLE UNIVERSE, and
+    # `unified_schema_all` therefore holds every ticker of `silver.stocks_basic`
+    # rather than one company's slice.
+    #
+    # Why a sentinel and not a separate pair of methods: the two builders differ by
+    # a `WHERE` clause and a `PARTITION BY`, and nothing else. Forking them would
+    # give the label definition two homes — the exact drift
+    # `UNIFIED_TARGET_HORIZONS` exists to prevent — and the cross-sectional schema
+    # would silently stop matching the single-ticker one it is compared against.
+    #
+    # ⚠️ It is safe as an identifier by the same rule everything else here is:
+    # `"ALL"` matches `UNIFIED_TICKER_PATTERN`, so the schema name is validated on
+    # the same path. And it cannot collide with a real listing — no VN ticker is
+    # `ALL` (checked: `silver.stocks_basic` holds none), and if one ever lists, the
+    # universe build would notice because its assertions count series, not rows.
+    UNIFIED_UNIVERSE = "ALL"
+
+    def _helper_unified_is_universe(self, ticker: str) -> bool:
+        """Is this the whole-universe build rather than one company's?"""
+        return (ticker or "").upper() == self.UNIFIED_UNIVERSE
+
     def _helper_unified_schema(self, ticker: str) -> str:
         """`unified_schema_vcb` for `VCB`. Raises if the ticker is not identifier-safe.
 
@@ -4996,10 +5017,19 @@ class DataPreprocessor:
         ⚠️ **The schema is created if absent and the table is REPLACED**, so this is
         re-runnable — which is what an orchestrated asset needs. It is scoped to the one
         table: sibling `pool__*` tables in the same schema are left alone.
+
+        ⚠️ **`ticker=UNIFIED_UNIVERSE` ("ALL") drops the filter entirely** and copies
+        the whole of `silver.stocks_basic` into `unified_schema_all.pool__basic` — the
+        cross-sectional panel. Same columns, same types, same key; only the row count
+        and `COUNT(DISTINCT ticker)` differ. That is the point: a cross-sectional run
+        must read the same table shape a single-ticker run does, or the two are not
+        comparable.
         """
         schema = self._helper_unified_schema(ticker)
+        universe = self._helper_unified_is_universe(ticker)
         self._logger.log_info(
-            f"Ingesting unified {schema}.pool__basic (from {SILVER_SCHEMA}.stocks_basic)..."
+            f"Ingesting unified {schema}.pool__basic (from {SILVER_SCHEMA}.stocks_basic"
+            f"{'' if universe else f', ticker {ticker}'})..."
         )
 
         # The source must exist AND hold this ticker — an empty result would otherwise
@@ -5014,16 +5044,22 @@ class DataPreprocessor:
 
         self._database_driver.create_schema(schema)
 
+        # One `WHERE`, built once and reused by the count and the CTAS, so the row the
+        # assertion counts and the row the table gets can never come from different
+        # predicates.
+        where = "" if universe else " WHERE ticker = %s"
+        params = () if universe else (ticker,)
+
         with self._database_driver._cursor_ctx() as cur:
             cur.execute(
-                f"SELECT COUNT(*) FROM {SILVER_SCHEMA}.stocks_basic WHERE ticker = %s",
-                (ticker,),
+                f"SELECT COUNT(*) FROM {SILVER_SCHEMA}.stocks_basic{where}", params
             )
             available = int(cur.fetchone()[0])
             if not available:
                 raise MissingSourceDataError(
-                    f"`{SILVER_SCHEMA}.stocks_basic` holds no rows for ticker "
-                    f"{ticker!r}, so {schema}.pool__basic would be empty. Check the "
+                    f"`{SILVER_SCHEMA}.stocks_basic` holds no rows"
+                    + ("" if universe else f" for ticker {ticker!r}")
+                    + f", so {schema}.pool__basic would be empty. Check the "
                     f"ticker, or rebuild silver `stocks_basic`."
                 )
 
@@ -5032,21 +5068,33 @@ class DataPreprocessor:
             cur.execute(f"DROP TABLE IF EXISTS {schema}.pool__basic")
             cur.execute(
                 f"CREATE TABLE {schema}.pool__basic AS "
-                f"SELECT * FROM {SILVER_SCHEMA}.stocks_basic WHERE ticker = %s",
-                (ticker,),
+                f"SELECT * FROM {SILVER_SCHEMA}.stocks_basic{where}",
+                params,
             )
             # CTAS copies types but never constraints, so the grain is asserted here.
             self._helper_unified_primary_key(cur, schema, "pool__basic")
-            cur.execute(f"SELECT COUNT(*) FROM {schema}.pool__basic")
-            written = int(cur.fetchone()[0])
+            cur.execute(
+                f"SELECT COUNT(*), COUNT(DISTINCT ticker) FROM {schema}.pool__basic"
+            )
+            written, series = (int(x) for x in cur.fetchone())
 
         if written != available:
             raise PipelineError(
                 f"{schema}.pool__basic wrote {written} rows but silver holds "
-                f"{available} for {ticker}."
+                f"{available}" + ("" if universe else f" for {ticker}") + "."
+            )
+        # ⚠️ The single-ticker contract is asserted HERE too, not only in the Dagster
+        # asset. `unified_schema_vcb` holding two companies would break every
+        # `COUNT(DISTINCT ticker) = 1` assumption downstream, and a notebook calling
+        # this method directly has no asset to catch it.
+        if not universe and series != 1:
+            raise PipelineError(
+                f"{schema}.pool__basic holds {series} tickers — a single-ticker "
+                f"unified schema is one company by definition."
             )
         self._logger.log_info(
-            f"{schema}.pool__basic: {written} rows x {len(source_types)} columns."
+            f"{schema}.pool__basic: {written} rows x {len(source_types)} columns, "
+            f"{series} ticker(s)."
         )
 
     # The label horizons, in TRADING DAYS — `pool__basic` is one row per session, so a
@@ -5110,8 +5158,20 @@ class DataPreprocessor:
         ⚠️ **No look-ahead is introduced by the LEAD itself** — a forward-looking LABEL is
         the point of a target table. The look-ahead that matters is a FEATURE that peeks,
         and nothing here feeds a feature.
+
+        ⚠️ **THE LEAD IS PARTITIONED BY `(exchange, ticker)`, ALWAYS.** On a
+        single-ticker pool that partition is a no-op; on `unified_schema_all` it is the
+        difference between a label and garbage — an unpartitioned `LEAD` would hand the
+        last row of AAA the first row of AAM as its future price. Writing it once, for
+        both, is why there is one method here and not two: a universe-only variant would
+        be the copy that drifts.
+
+        ⚠️ **The unlabelled tail is `h` rows PER SERIES**, not `h` rows in total, so the
+        assertion counts series. Every series must be longer than the longest horizon or
+        it would be entirely unlabelled; that is checked rather than assumed.
         """
         schema = self._helper_unified_schema(ticker)
+        universe = self._helper_unified_is_universe(ticker)
         horizons = tuple(self.UNIFIED_TARGET_HORIZONS)
         if not horizons or any(h < 1 for h in horizons):
             raise PipelineError(
@@ -5139,6 +5199,16 @@ class DataPreprocessor:
             )
 
         with self._database_driver._cursor_ctx() as cur:
+            # ⚠️ Row count, SERIES count and the SHORTEST series in one pass. On a
+            # universe pool the binding constraint is the shortest series, not the
+            # total: a freshly-listed ticker with 3 sessions would be entirely
+            # unlabelled and would quietly shift every tail assertion below.
+            cur.execute(
+                f"SELECT COUNT(*), MIN(rows) "
+                f"FROM (SELECT COUNT(*) AS rows FROM {schema}.pool__basic "
+                f"      GROUP BY exchange, ticker) s"
+            )
+            series, shortest = (int(x) for x in cur.fetchone())
             cur.execute(f"SELECT COUNT(*) FROM {schema}.pool__basic")
             available = int(cur.fetchone()[0])
             if available <= longest:
@@ -5147,12 +5217,23 @@ class DataPreprocessor:
                     f"than the longest {longest}-day horizon — every label would be "
                     f"NULL."
                 )
+            if shortest <= longest:
+                raise MissingSourceDataError(
+                    f"`{schema}.pool__basic` has a series with only {shortest} rows, "
+                    f"which is not more than the longest {longest}-day horizon — that "
+                    f"series would be entirely unlabelled. Filter the universe before "
+                    f"building the pool."
+                )
 
-            # How many pool__basic sessions have no benchmark close. A gap there
-            # propagates into `return_rel_*` and is counted below rather than
+            # How many pool__basic SESSIONS (distinct dates) have no benchmark close. A
+            # gap there propagates into `return_rel_*` and is counted below rather than
             # absorbed into a loosened assertion.
+            #
+            # ⚠️ Counted as DATES, not rows: on a universe pool one missing index close
+            # costs every series in the cross-section, so a row count would be the same
+            # number multiplied by the width and the bound would stop meaning anything.
             cur.execute(
-                f"SELECT COUNT(*) FROM {schema}.pool__basic b "
+                f"SELECT COUNT(DISTINCT b.date) FROM {schema}.pool__basic b "
                 f"LEFT JOIN {self.UNIFIED_BENCHMARK_TABLE} m ON m.date = b.date "
                 f"WHERE m.{self.UNIFIED_BENCHMARK_COLUMN} IS NULL"
             )
@@ -5182,10 +5263,16 @@ class DataPreprocessor:
             # Dropped as late as possible: a failure above leaves the old table intact.
             #
             # ⚠️ `exchange` and `ticker` are carried through from `pool__basic` even
-            # though they never vary here. They are what make this table join to every
-            # other pool on `UNIFIED_PRIMARY_KEY` instead of on `date` alone — and the
-            # LEAD window still orders by `date` only, because within one company the
-            # session order IS the date order.
+            # where they never vary. They are what make this table join to every other
+            # pool on `UNIFIED_PRIMARY_KEY` instead of on `date` alone — and on the
+            # universe pool they are also the PARTITION the LEAD runs over.
+            #
+            # ⚠️ `PARTITION BY exchange, ticker` is not optional and not universe-only.
+            # Without it the LEAD walks off the end of one company's history into the
+            # next one's, and the label at each series boundary becomes another
+            # company's price. On a single-ticker pool the partition is a no-op, so the
+            # same statement is correct for both and there is no second code path to
+            # keep in step.
             cur.execute(f"DROP TABLE IF EXISTS {schema}.pool__targets")
             cur.execute(
                 f"CREATE TABLE {schema}.pool__targets AS "
@@ -5196,7 +5283,7 @@ class DataPreprocessor:
                 f"  LEFT JOIN {self.UNIFIED_BENCHMARK_TABLE} m ON m.date = b.date"
                 f") "
                 f"SELECT date, exchange, ticker, {columns} FROM joined "
-                f"WINDOW w AS (ORDER BY date)"
+                f"WINDOW w AS (PARTITION BY exchange, ticker ORDER BY date)"
             )
             self._helper_unified_primary_key(cur, schema, "pool__targets")
 
@@ -5216,32 +5303,37 @@ class DataPreprocessor:
                 f"{schema}.pool__targets wrote {written} rows but pool__basic holds "
                 f"{available} — the two must share one calendar."
             )
-        # ⚠️ Checked PER COLUMN, and the expected tail is that column's OWN horizon.
-        # Exactly `h` rows may be unlabelled; more than that means the source has NULL
-        # or zero closes, which would put silent holes in the labels. A single check
-        # against the longest horizon would have let a hole in `return_5day` through.
+        # ⚠️ Checked PER COLUMN, and the expected tail is that column's OWN horizon
+        # TIMES THE NUMBER OF SERIES. Every partition loses its own last `h` rows, so
+        # on the universe pool the expected NULL count is `h × series`, not `h`. A
+        # check against `h` alone would pass only on a single-ticker schema and would
+        # have failed the universe build for being correct.
         for h, col in target_cols.items():
             unlabelled = written - labelled[h]
-            if unlabelled != h:
+            expected_tail = h * series
+            if unlabelled != expected_tail:
                 raise PipelineError(
                     f"{schema}.pool__targets has {unlabelled} NULL {col} values; "
-                    f"exactly {h} (the tail with no future) were expected. Check "
+                    f"exactly {expected_tail} ({h} per series × {series} series, the "
+                    f"tail with no future) were expected. Check "
                     f"`pool__basic.close_adjust` for NULLs or zeros."
                 )
         # ⚠️ The relative column loses its own tail PLUS every row a benchmark gap
         # touches: a missing `B[t]` kills row `t`, and a missing `B[t+h]` kills row
-        # `t-h`. One gap therefore costs up to `h + 1` rows. The bound is asserted
-        # rather than the exact count, because two gaps within `h` of each other
-        # overlap — but it still fails loudly if the benchmark is broadly absent
-        # instead of merely pitted.
+        # `t-h`. One gap DATE therefore costs up to `h + 1` rows IN EVERY SERIES. The
+        # bound is asserted rather than the exact count, because two gaps within `h` of
+        # each other overlap — but it still fails loudly if the benchmark is broadly
+        # absent instead of merely pitted.
         for h, col in relative_cols.items():
             unlabelled = written - labelled_rel[h]
-            allowed = h + benchmark_gaps * (h + 1)
-            if not h <= unlabelled <= allowed:
+            floor = h * series
+            allowed = floor + benchmark_gaps * (h + 1) * series
+            if not floor <= unlabelled <= allowed:
                 raise PipelineError(
                     f"{schema}.pool__targets has {unlabelled} NULL {col} values; "
-                    f"between {h} and {allowed} were expected ({h} tail + at most "
-                    f"{h + 1} per each of {benchmark_gaps} benchmark gap(s) in "
+                    f"between {floor} and {allowed} were expected ({h} tail × "
+                    f"{series} series + at most {h + 1} per series per each of "
+                    f"{benchmark_gaps} benchmark gap date(s) in "
                     f"{self.UNIFIED_BENCHMARK_TABLE}.{self.UNIFIED_BENCHMARK_COLUMN})."
                 )
         summary = "; ".join(
@@ -5250,8 +5342,8 @@ class DataPreprocessor:
             for h in horizons
         )
         self._logger.log_info(
-            f"{schema}.pool__targets: {written} rows, {benchmark_gaps} benchmark "
-            f"gap(s) — {summary}."
+            f"{schema}.pool__targets: {written} rows over {series} series, "
+            f"{benchmark_gaps} benchmark gap date(s) — {summary}."
         )
 
     # endregion Helper functions

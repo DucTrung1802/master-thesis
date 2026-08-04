@@ -810,8 +810,62 @@ DTO helpers come from
     arbitrary SQL.
   - ⚠️ Raises if the ticker has no rows in silver rather than creating a real, empty,
     correctly-typed table — the failure that looks most like success.
-  - The other four groups (`pool__ta`, `pool__macro`, `pool__calendar`, `pool__targets`)
-    are still notebook-only; see `train_test_creator/unified_schema_creator.ipynb`.
+  - The other three groups (`pool__ta`, `pool__macro`, `pool__calendar`) are still
+    notebook-only; see `train_test_creator/unified_schema_creator.ipynb`.
+
+- **`_ingest_unified_pool_targets(ticker)`** — `pool__basic` → `pool__targets`, same
+  PK, plus two columns per horizon in `UNIFIED_TARGET_HORIZONS = (5, 10)`:
+  `return_{h}day` (forward simple return on `close_adjust`) and `return_rel_{h}day`
+  (the same minus the VNINDEX return over the window, from
+  `gold_schema.stock_market.hose__vnindex__close_adjust`).
+  - ⚠️ **The `LEAD` is `PARTITION BY exchange, ticker` — always, not only on the
+    universe build.** Unpartitioned, it walks off the end of one company's history
+    into the next one's, so the label at every series boundary would be another
+    company's price. On a single-ticker pool the partition is a no-op, which is why
+    there is one method for both and no second path to keep in step.
+
+#### ⚠️ `ticker = "ALL"` builds `unified_schema_all` — THE WHOLE UNIVERSE (2026-08-04)
+
+`UNIFIED_UNIVERSE = "ALL"` is a sentinel, not a listing. Handed to either method it
+drops the `WHERE ticker = %s` and copies **all of `silver.stocks_basic`** into
+`unified_schema_all` — **2,388,368 rows × 38 columns, 781 tickers, 4,366 sessions,
+2009-01-02 → 2026-07-08**. Same columns, same types, same key, so the
+cross-sectional study reads the same table shape the single-ticker one does. Built
+in **57 s** (36 s + 21 s), and verified to reproduce `unified_schema_vcb` exactly
+for VCB: 4,235 rows compared, **0 disagreeing `return_5day` values**.
+
+⚠️ **A sentinel, not a fork.** The two builders differ by a `WHERE` clause and
+nothing else; forking them would give the label definition two homes — the drift
+`UNIFIED_TARGET_HORIZONS` exists to prevent. `"ALL"` matches
+`UNIFIED_TICKER_PATTERN`, so the schema name is validated on the same path, and no
+VN ticker is named `ALL` (checked).
+
+⚠️ **Three assertions had to become series-aware, and each one would have failed
+the universe build for being correct:**
+
+| assertion | single ticker | universe |
+|---|---|---|
+| unlabelled tail of `return_{h}day` | exactly `h` | **`h × series`** — every partition loses its own last `h` rows |
+| unlabelled tail of `return_rel_{h}day` | `h … h + gaps·(h+1)` | **`h·series … h·series + gaps·(h+1)·series`** |
+| benchmark gaps | counted as ROWS | **counted as DATES** — one missing index close costs every name in the cross-section, so a row count is the same number times the width and the bound stops meaning anything |
+
+Plus a new precondition: the **shortest series** must exceed the longest horizon,
+or that series would be entirely unlabelled and would silently shift every tail
+count. (Measured: min 19 rows, median 3,651, max 4,356 — it passes, but a newly
+listed ticker would not.)
+
+⚠️ **`COUNT(DISTINCT ticker) = 1` is now asserted in the METHOD**, not only in the
+Dagster asset, for the single-ticker path — a notebook calling
+`_ingest_unified_pool_basic` directly had no asset to catch a two-company schema.
+
+⚠️ **`close_adjust` can be NEGATIVE in silver, and the universe build is what
+exposed it.** `VNX` carries `close_adjust = -10.0` for **968 sessions** (2010-11 to
+2010-12, then 7,800 abruptly), which makes `unified_schema_all.return_5day` reach
+**−781.0** against a VN30 range of −0.33 … +0.55. `NULLIF(px, 0)` guards zero but
+not sign, so the row survives as a plausible-looking number. One ticker, 968 rows,
+no other column affected (`close_raw` has no negatives). **Fix it in silver**; until
+then `feature_selection.cross_sectional.read_universe_panel` excludes `VNX` by
+default and says why.
 
 ## 5. How it's driven — SwitchHandler + `src/switch_config.json`
 

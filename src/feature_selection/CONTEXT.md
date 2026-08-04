@@ -1,29 +1,52 @@
 # Context — `src/feature_selection`
 
-> Reads a per-ticker `unified_schema_<ticker>` schema, joins its `pool__*` tables on
-> the keys they share, and ranks every feature against one target. Built 2026-08-03
-> against `unified_schema_vcb.pool__basic ⋈ pool__targets`.
+> Ranks every feature of a `unified_schema_*` pool against one target, and refuses to
+> report the ranking until it has beaten the same pipeline run on shuffled labels.
+> Built 2026-08-03 against one ticker; extended 2026-08-04 to the cross-section.
 >
-> ## ⚠️ VERDICT (2026-08-04): NO CONFIGURATION BEATS SHUFFLED LABELS
+> ## ⚠️ THE VERDICT, IN TWO HALVES (2026-08-04)
 >
-> Five configurations — three representations × two targets, `d=20, h=5`, purged CV,
-> an uncontaminated holdout and a 20-draw null each — and **every one sits inside
-> what the same pipeline scores on shuffled labels**. §6b-6d has the tables. The
-> binding constraint is `n_eff`, not features: **do not widen the pool, go
-> cross-sectional** (§7).
+> **Half one — the single-ticker study found nothing, and that stands.** Five
+> configurations on VCB (three representations × two targets, `d=20, h=5`, purged CV,
+> an uncontaminated holdout and a 20-draw null each), and **every one sits inside what
+> the same pipeline scores on shuffled labels**. §6b-6d has the tables.
 >
-> **Three notebooks. Read the third one first.**
+> **Half two — the SAME pipeline on the CROSS-SECTION clears its null by 6 sigma.**
+> §7 said the way out was N stocks × T days with a per-date target, not a wider
+> feature pool. Built (§9): `unified_schema_all`, VN100, `d=20, h=5`,
+> `cs_rank_5day`.
+>
+> | | VCB, time series | VN100, cross-section |
+> |---|---|---|
+> | observed mean IC | +0.056 | **+0.029** |
+> | null mean / p95 bar | +0.017 / +0.056 | **+0.004 / +0.012** |
+> | null MAX over 20 draws | **+0.061 — above the observed** | **+0.012 — 2.4× below it** |
+> | z vs null | +1.56 | **+6.09** (and **+12.16** vs the `within_date` null) |
+> | clears? | ❌ | ✅ |
+> | hit rate | 0.477 — **below** a coin | 0.511, and **52.7-68.3 % of DAYS positive** |
+>
+> ⚠️ **The signal did not get bigger — the BAR got smaller.** The observed IC actually
+> *fell*, from +0.056 to +0.029. What collapsed is the null: from a mean of +0.017 to
+> +0.004. On 4,211 single-ticker samples, picking 12 of 27 channels earns +0.017 from
+> noise alone; on 2,860 dates × 100 names it earns +0.004. **That is the entire
+> argument of §9b, measured** — the cross-section does not buy independent
+> observations, it buys precision, and precision is what shrinks the bar.
+>
+> **Four notebooks. Read the fourth one, then the third.**
 >
 > | notebook | one sample is | for |
 > |---|---|---|
 > | [feature_selection.ipynb](feature_selection.ipynb) | one row → `y_N` | a per-row model. `lookback=1` |
 > | [windowed_selection.ipynb](windowed_selection.ipynb) | a `(d, n)` window → `y_N` | **a sequence model.** `d=20`, `h ∈ {5, 10}` |
-> | **[evaluation_study.ipynb](evaluation_study.ipynb)** | — | **whether either result is real.** It is not: see §6b-6d |
+> | [evaluation_study.ipynb](evaluation_study.ipynb) | — | **whether either result is real.** It is not: §6b-6d |
+> | **[cross_sectional_selection.ipynb](cross_sectional_selection.ipynb)** | a `(d, n)` window → **`y` = the stock's RANK on day `N`** | **the one that works.** §9 |
 >
 > ⚠️ **The first two both produce a positive out-of-sample IC. So does the same
 > pipeline run on shuffled labels.** The third notebook is what tells them apart, and
-> it is the one whose conclusion governs the other two. The rankings, kept sets and
-> stat profiles there are internally consistent descriptions of noise.
+> it governs the first two: their rankings and kept sets are internally consistent
+> descriptions of noise. The fourth changes the QUESTION — not *will VCB rise* but
+> *which of these stocks beats the others* — and is the first thing here to survive
+> its own null.
 >
 > The modules hold nothing notebook-specific, so the same runs script.
 
@@ -34,9 +57,20 @@
 | [unified_reader.py](unified_reader.py) | connect, introspect, read with the right dtypes, join on `(exchange, ticker, date)` ∩ |
 | [windows.py](windows.py) | daily panel → windowed samples; scoring CHANNELS, not columns |
 | [selector.py](selector.py) | six rankers → ensemble → correlation prune → purged walk-forward → holdout |
+| **[cross_sectional.py](cross_sectional.py)** | **N × T panels** — per-date target, per-date IC, date-grouped CV, panel-aware null |
 | [evaluation.py](evaluation.py) | **the BAR** — the shuffled-label null, `n_eff`, and the IC summary that reports trend |
 | [gpu.py](gpu.py) | the CUDA paths, the size heuristic, and which steps have no GPU path |
 | [plots.py](plots.py) | the figures — one theme, one palette, applied by the job each colour does |
+| **[test_cross_sectional.py](test_cross_sectional.py)** | **13 tests, no database, ~2 min** — one per way of faking a cross-sectional result |
+
+⚠️ **`cross_sectional.py` re-implements NO ranker.** `CrossSectionalSelector`
+overrides six hooks on `FeatureSelector` — `_design`, `_splits`, `_ic`,
+`_effective_n`, `_purge_boundary`, `_on_development` — and inherits the six rankers,
+the rank-average ensemble, the correlation prune, the stability pass and the holdout
+protocol unchanged. That is deliberate: **the two studies have to be the same
+procedure on differently-shaped panels, or §9's numbers cannot be set beside §6's.**
+The refactor that extracted those hooks was verified behaviour-preserving — the VCB
+run gives bit-identical fold ICs before and after.
 
 **This replaces `feature_selector.FeatureSelector`, which does not exist on this
 branch.** `train_test_creator/unified_schema_creator.ipynb` cell 23 still imports
@@ -369,35 +403,44 @@ on the order of 1,500. **A wider feature pool buys no observations — it only r
 the null**, which `zscore` demonstrated by moving its own bar from +0.053 to +0.076.
 
 The way out is more **cross-section**, not more features, more history or a better
-model: N stocks × T days at the same `h` multiplies the independent count by N.
-`unified_schema_<ticker>` cannot express that by construction — it is one company —
-which is the same conclusion memory `project-cross-sectional-strategy` reached from
-the other direction.
+model. `unified_schema_<ticker>` cannot express that by construction — it is one
+company — which is the same conclusion memory `project-cross-sectional-strategy`
+reached from the other direction.
 
-## 7. ⚠️ THE NEXT STEP IS CROSS-SECTIONAL, NOT MORE FEATURES
+> ⚠️ **CORRECTION (2026-08-04), and it matters for how §9 is read.** This section
+> originally said "N stocks × T days at the same `h` **multiplies the independent
+> count by N**". **That is wrong.** The cross-sectional mean IC is an average over
+> `T` daily ICs, consecutive days still overlap by `h−1` label days, and so `n_eff`
+> stays `T / h` — VN100 has 2,860 sessions and therefore **572** independent
+> observations, not 57,200. Widening the panel adds no dates.
+>
+> The conclusion survives for a *different* reason, which §9b sets out and §9c
+> measures: a day's IC is an average over `N` stocks, so its noise falls like
+> `1/√N` — the daily IC's own sd is ~0.13 instead of ~1.0. The cross-section buys
+> **precision per observation**, not observations. That is why the null's mean fell
+> from +0.017 to +0.004 while the observed IC also fell.
 
-**Read §6d before doing anything on this list.** The obvious next move — point the
-selector at `pool__ta`'s ~900 columns — produces a longer list of nothing, more
-slowly, and with a higher bar. Widening the pool buys no independent observations.
+## 7. ✅ THE CROSS-SECTIONAL STEP — DONE 2026-08-04, see §9
 
-**Do this instead:**
+This section was the plan. Steps 1-3 are built and run; step 4 is still open.
 
-1. **Build a multi-ticker panel** (VN30 ≈ 25 stocks × the same sessions). This is the
-   only change that alters the arithmetic in §6d: independent observations scale with
-   N, so VN30 is ~25× the sample from data already in `gold.stocks`.
-2. **Make the target the CROSS-SECTIONAL rank**, not a time-series return — day `t`'s
-   ranking of the 25 stocks. A cross-sectional IC is computed per day across stocks,
-   so the label overlap that costs a factor of `h` here does not apply the same way.
-3. **Reuse everything in this package unchanged.** The reader, `windows.py`, the
-   purged CV, channel-level scoring, the GPU paths and `evaluation.py` all transfer —
-   only the panel's shape changes. The CV gains a *grouping* by date (all stocks of a
-   day belong to the same fold, or the split leaks across the cross-section).
-4. **Only then** widen to `pool__ta` / `pool__macro` / `pool__calendar`.
+| | plan | what happened |
+|---|---|---|
+| 1. multi-ticker panel | VN30 ≈ 25 stocks | ✅ **`unified_schema_all`** — 781 tickers, 2.39 M rows, built by `_ingest_unified_pool_basic("ALL")`. Studies run on VN30 / VN100 / all of it |
+| 2. cross-sectional rank target | day `t`'s ranking | ✅ **`cs_rank_{h}day`**, uniform on `[-0.5, +0.5]` per date, built in `read_universe_panel` |
+| 3. reuse the package, group the CV by date | | ✅ **six hook overrides**, nothing re-implemented. `PurgedWalkForwardByDate` purges `d+h−1` **sessions** |
+| 4. widen to `pool__ta` / `pool__macro` / `pool__calendar` | | ❌ **still open — and now worth doing**, see §9f |
 
-⚠️ **`unified_schema_<ticker>` cannot express any of this** — it is one company by
-construction, and `pool__basic` asserts `COUNT(DISTINCT ticker) = 1`. The multi-ticker
-pool is a new table, not a parameter change. See memory
-`project-cross-sectional-strategy`.
+⚠️ **The order in the original plan was right and is worth keeping.** Widening the
+pool first would have produced "a longer list of nothing, more slowly, and with a
+higher bar". Widening it *now*, against a target that has already beaten its null, is
+a different proposition — there is something for the extra features to add to.
+
+⚠️ **`unified_schema_<ticker>` still cannot express any of this.** It is one company
+by construction and `pool__basic` asserts `COUNT(DISTINCT ticker) = 1`.
+`unified_schema_all` is that assertion's sibling, not its replacement — see
+`data_preprocessor/CONTEXT.md` §"ticker = ALL" for the sentinel and the three
+assertions that had to become series-aware.
 
 ### Smaller extensions, if the study continues as-is
 
@@ -435,3 +478,151 @@ summaries, cheap and not needing the LSTM to exist. The faithful measurement —
 one channel's whole window and read the drop in the *actual* model's out-of-sample
 IC — needs that model and belongs beside it in `src/model/`. ⚠️ On the current
 evidence there is nothing for it to measure; build it after §7 step 1.
+
+
+## 9. THE CROSS-SECTIONAL STUDY (2026-08-04) — the first result that survives
+
+Read [cross_sectional.py](cross_sectional.py)'s module docstring before changing
+anything here; it names the three specific mistakes that manufacture a
+cross-sectional result, and all three produce numbers that look *better* than these.
+
+### 9a. The panel
+
+`unified_schema_all` — `_ingest_unified_pool_basic(DataPreprocessor.UNIFIED_UNIVERSE)`
+— is `unified_schema_vcb`'s shape with every ticker in it: **2,388,368 rows × 38
+columns, 781 tickers, 4,366 sessions, 2009-01-02 → 2026-07-08**, same
+`(date, exchange, ticker)` key, built in 57 s. Verified against the single-ticker
+schema: 4,235 VCB rows compared, **0 disagreeing `return_5day` values**.
+
+| universe | tickers | rows | sessions | median width | label density |
+|---|---|---|---|---|---|
+| VN30 | 30 | 65,737 | 2,283 | 30 | 0.958 |
+| **VN100** (the headline) | 100 | 251,110 | 2,860 | 92 | 0.876 |
+| ALL | 780 | 1,853,043 | 2,862 | 675 | 0.828 |
+
+All three are `2015-01-01 → 2026-06-26`, `min_width=20`.
+
+⚠️ **Two data facts that the universe build exposed, both of which change what may
+be claimed:**
+
+1. **`close_adjust` is NEGATIVE for 968 sessions on `VNX`** (−10.0, then 7,800),
+   which makes `unified_schema_all.return_5day` reach **−781.0** against a VN30 range
+   of −0.33 … +0.55. One ticker, no other column affected. `read_universe_panel`
+   excludes it by default; **the fix belongs in silver.**
+2. **⚠️ THE UNIVERSE IS 100 % SURVIVORS.** Every one of the 781 tickers has data
+   through 2026 — `silver.stocks_basic` holds no delisted name. See §9e for which
+   part of the result this threatens and which part it does not.
+
+### 9b. The arithmetic — what the cross-section does and does not buy
+
+**`n_eff` is `n_dates / h`, NOT `n_rows / h`.** A hundred stocks on one Tuesday are
+one observation of the market, not a hundred. VN100 is 2,860 sessions, so **572**
+independent observations at `h=5` — against VCB's 847. *Fewer.* The panel is 59×
+wider and has **no more independent observations at all.**
+
+What it buys is precision *within* an observation:
+
+| | VCB, time series | VN100, cross-section |
+|---|---|---|
+| one observation is | one day's ±1 outcome | one day's IC over ~92 stocks |
+| sd of that observation | ~1.0 | **~0.13** (measured, §9c) |
+| observations | 847 | 572 |
+| SE of the fold mean | ~0.083 | **~0.006** |
+
+`selector._effective_n` is the hook that says so, `_validate` carries `n_eff_test`
+per fold, and `ic_summary` prefers that column over its own `n_rows / h` — because
+that function cannot tell the two panel shapes apart from a row count.
+
+⚠️ **`ic_summary`'s `se_ic_per_fold` is the WRONG error bar for a cross-sectional
+run** and is kept only for comparability with §6's tables. It is the standard error
+of *one* rank correlation (`1/√(n_eff−1)` = 0.107); the fold mean is an average of
+~440 of them. Read `CrossSectionalSelector.daily_ic_by_fold`'s `t_stat` instead.
+
+### 9c. The headline run — VN100, `d=20`, `h=5`, `cs_rank_5day`, `cs_rank` features
+
+**Every fold positive, no decay, and a hit rate above a coin for the first time.**
+
+| fold | IC | daily-IC sd | days | t | days positive |
+|---|---|---|---|---|---|
+| 1 | +0.0158 | 0.129 | 442 | 1.15 | 55.9 % |
+| 2 | **+0.0558** | 0.125 | 442 | **4.21** | **68.3 %** |
+| 3 | +0.0344 | 0.135 | 442 | 2.40 | 59.3 % |
+| 4 | +0.0267 | 0.121 | 442 | 2.07 | 57.5 % |
+| 5 | +0.0238 | 0.135 | 444 | 1.66 | 52.7 % |
+| **mean** | **+0.0313** | | 2,212 | | **hit rate 0.511** |
+
+`ic_trend_per_fold` **−0.0013** — flat, against −0.034 and −0.049 for the two
+single-ticker horizons. **R² is −0.01**, against −1.19: the rank target is a
+quantity a regressor can actually fit, which the raw forward return was not.
+
+### 9d. ⚠️ THE NULL — and this one clears it
+
+Two nulls, 20 draws each, the **selection re-run inside every draw**, and the
+observed run at the same `permutation_repeats=3` as its own null (a bar computed
+from a cheaper pipeline than the number it judges is a different procedure).
+
+| | observed | null mean | null sd | **p95 BAR** | null MAX | z | clears |
+|---|---|---|---|---|---|---|---|
+| `date_block` | **+0.0289** | +0.0044 | 0.0040 | +0.0117 | +0.0119 | **+6.09** | ✅ |
+| `within_date` | **+0.0289** | +0.0008 | 0.0023 | +0.0042 | +0.0063 | **+12.16** | ✅ |
+| *(VCB, §6b, for contrast)* | +0.0559 | +0.0167 | 0.0252 | +0.0556 | **+0.0606** | +1.56 | ❌ |
+
+⚠️ **Not one of the 40 null draws reached even half the observed value.** The
+maximum over both nulls is +0.0119, and the observed is **2.4× that**. `p = 0.048`
+is the floor `1/(n+1)`, not a measurement — 20 draws cannot distinguish p = 0.05
+from p = 0.001, which is why the z is the number to quote.
+
+⚠️ **The two nulls differ, and the weaker-looking one is the honest one to quote.**
+`date_block` pivots the label to `date × ticker` and permutes blocks of rows, so each
+stock keeps its **own** labels and the label's autocorrelation survives — but on a
+ragged panel a donor date has no label for a name that had not listed, and a draw
+keeps **230,685 of 250,610 labelled rows (92.0 %)**. Less training data means a
+weaker null model, a lower bar, and a bias *toward* a false positive. `within_date`
+is exactly lossless (250,610 of 250,610) and gives a far lower bar anyway. **Quote
+`date_block`'s +6.09.**
+
+⚠️ **The kept set barely moves with `permutation_repeats`.** At 10 repeats and at 3,
+**11 of 12 channels agree and the top five agree in order**; the twelfth is
+`value_negotiated` against `volume_negotiated`, which are each other's correlated
+twin. The wall-clock knob is not deciding the answer.
+
+### 9e. ⚠️ What the ranking says — and which parts of it to distrust
+
+Ensemble over six rankers, aggregated to channels by MAX, pruned at |ρ| ≥ 0.9.
+**No dead methods**: LASSO separated features here, where on VCB's `pool__basic` it
+zeroed every coefficient (§4).
+
+| rank | channel | ensemble | signed ρ vs target | carried by | reads as |
+|---|---|---|---|---|---|
+| **1** | **`avg_vol_per_buy_order`** | **3.83** | **+0.0373** | `last` | mean buy-order SIZE — big tickets relative to today's cross-section |
+| 2 | `close_adjust` | 5.33 | **−0.0286** | `min` | price LEVEL relative to the cross-section — ⚠️ see below |
+| 3 | `n_sell_orders` | 7.67 | −0.0121 | `last` | sell-side order COUNT |
+| 4 | `avg_vol_per_sell_order` | 11.50 | +0.0151 | `mean` | the sell-side twin of #1 |
+| 5 | `foreign_net_value` | 11.83 | −0.0121 | `last` | foreign net buying |
+| … | | | | | |
+| **27 (last)** | `foreign_own` | 23.33 | −0.0007 | `mean` | ⚠️ **top-3 in the single-ticker study** |
+
+⚠️ **`avg_vol_per_buy_order` tops four of the six rankers outright** — `spearman`,
+`xgb_gain`, `xgb_shap` and `permutation` all score it 1.000, including the only
+out-of-sample one. Nothing in §6 was ever agreed on by four methods. It is also the
+largest |ρ| in the table by 30 %.
+
+⚠️ **`close_adjust` at #2 is the one to distrust, and §9a.2 is why.** Its sign says
+*cheap stocks outperform*, and a universe containing no delisted names is exactly the
+sample that manufactures that: the stocks that were cheap and then went to zero are
+missing, so only the ones that recovered are in the panel. **Survivorship bias hits
+this channel directly.** It does not obviously hit #1 — an order-size effect has no
+comparable path from "the failures are absent" to "big buy orders precede
+outperformance" — but the honest statement is that **the study cannot separate them
+until a delisted-inclusive universe exists.**
+
+⚠️ **Survivorship biases the OVERALL result toward zero, not away from it.** The
+target is a rank *within* the surviving names, so a uniform survivor premium cancels;
+what is missing is the left tail, and features predicting disaster — usually the
+strongest ones — have nothing left to predict. The `+0.029` is therefore a *lower*
+bound on what a complete universe would show, **except** through channels like
+`close_adjust` where the truncation itself creates the pattern.
+
+⚠️ **`last` carries the top channel**, which means the 20-day window bought nothing
+for it — `avg_vol_per_buy_order` on day `N` alone would do. §1a's rule applies: a
+channel that only ever wins on `last` never needed a window.

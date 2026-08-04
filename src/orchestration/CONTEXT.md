@@ -867,6 +867,24 @@ and a name cannot be a bound parameter. `_helper_unified_schema` validates it ag
 would imply the other four `pool__*` tables are per-ticker assets too, and they are not
 assets at all — `train_test_creator/unified_schema_creator.ipynb` still builds them.
 
+#### ⚠️ `unified_schema_all` EXISTS AND IS NOT AN ASSET — 2026-08-04
+
+`DataPreprocessor.UNIFIED_UNIVERSE = "ALL"` handed to `_ingest_unified_pool_basic` /
+`_ingest_unified_pool_targets` builds **`unified_schema_all`**: the same two tables,
+the same 38 columns, the same `(date, exchange, ticker)` key, but **every** ticker —
+2,388,368 rows, 781 tickers, 2009-01-02 → 2026-07-08, in 57 s. It is what
+`feature_selection`'s cross-sectional study reads (see that package's CONTEXT §9).
+
+**It was built by calling the two methods directly, so the asset graph does NOT
+describe it.** `dagster asset materialize --select "group:unified_vcb"` rebuilds VCB
+and leaves `unified_schema_all` untouched and stale. Rebuild it the same way it was
+built, or promote it: the natural shape is `UNIFIED_TICKER` becoming a
+`StaticPartitionsDefinition` over `{"VCB", "ALL", …}` with the asset key stopping
+carrying the ticker — which is the change the comment above has been waiting for.
+⚠️ The two asset bodies also assert `COUNT(DISTINCT ticker) = 1`, which is correct
+for VCB and would fail for `ALL`; that assertion has to move behind the same
+sentinel the methods use.
+
 ⚠️ **THE REST OF THE SCHEMA WAS DROPPED ON 2026-08-03 AND NOTHING REBUILDS IT.**
 `unified_schema_vcb` held **140 objects — 113 tables and 27 views, 126 MB**: the five
 `pool__*` groups and 135 `<target>__lb<N>__<group>__<n>` feature-selection outputs across

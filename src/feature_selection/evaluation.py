@@ -99,6 +99,16 @@ def ic_summary(
         )
     ic = rows["ic"].to_numpy(float)
     n_test = int(rows["n_test"].iloc[0])
+    # ⚠️ `n_eff` comes from the SELECTOR when it supplied one. `n_test / h` is right
+    # for one company and wrong for a cross-section, where `N` stocks on one date are
+    # one observation of the market and not `N` of them — and this function cannot
+    # tell the two panels apart from a row count. The fallback keeps every result
+    # produced before the column existed readable.
+    n_eff = (
+        float(rows["n_eff_test"].iloc[0])
+        if "n_eff_test" in rows.columns
+        else effective_sample(n_test, horizon)
+    )
     trend = (
         stats.linregress(np.arange(len(ic)), ic).slope if len(ic) > 1 else np.nan
     )
@@ -112,8 +122,10 @@ def ic_summary(
             "ic_fold_sd": float(ic.std(ddof=1)) if len(ic) > 1 else np.nan,
             "hit_rate": float(rows["hit_rate"].mean()),
             "n_test_rows": n_test,
-            "n_eff_per_fold": round(effective_sample(n_test, horizon), 1),
-            "se_ic_per_fold": round(ic_standard_error(n_test, horizon), 4),
+            "n_eff_per_fold": round(n_eff, 1),
+            "se_ic_per_fold": round(
+                float(1.0 / np.sqrt(max(n_eff - 1.0, 1.0))), 4
+            ),
         },
         name=feature_set,
     )

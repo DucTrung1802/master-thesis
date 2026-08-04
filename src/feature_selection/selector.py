@@ -69,19 +69,21 @@ from feature_selection.windows import WINDOW_STATS
 METHODS = ("spearman", "mutual_info", "xgb_gain", "xgb_shap", "lasso", "permutation")
 
 
-def _ic_scorer(estimator, X, y) -> float:
-    """Spearman IC as an sklearn scorer — the metric this package decides on.
-
-    Rank correlation of prediction against realised return. Higher is better, so it
-    is a scorer rather than a loss, and `permutation_importance` reads a DROP in it
-    as importance without any sign juggling.
+def pooled_ic(prediction: np.ndarray, y: pd.Series) -> float:
+    """Spearman rank correlation of prediction against realised return.
 
     ⚠️ Not R². For a forward equity return, R² is deeply negative for any honest
     model (a level forecast of a near-noise series) while the RANKING can still be
     useful — so R² ranks features by their contribution to something the rest of
     this module says not to decide on.
+
+    ⚠️ **POOLED, which is the right answer for ONE ticker and the wrong one for a
+    cross-section.** Over a single company's time series there is only one axis to
+    correlate along. Over `N` stocks × `T` days a pooled rank correlation mixes
+    "which day was good" with "which stock was good on that day", and only the
+    second is tradeable — `cross_sectional.CrossSectionalSelector` overrides
+    `_ic` with the per-date version for exactly that reason.
     """
-    prediction = estimator.predict(X)
     ic = stats.spearmanr(prediction, y).statistic
     return 0.0 if np.isnan(ic) else float(ic)
 
@@ -318,6 +320,7 @@ class FeatureSelector:
         window_stats: Sequence[str] = WINDOW_STATS,
         normalize: str = "none",
         holdout_start: Optional[str] = None,
+        permutation_repeats: int = 10,
     ):
         self.lasso_converged: Optional[bool] = None
         # ⚠️ Only validated here — `"auto"` decides on the CANDIDATE COUNT, which is
@@ -362,6 +365,19 @@ class FeatureSelector:
             lookback=lookback,
         )
         self.random_state = random_state
+        # ⚠️ The one knob that trades the permutation ranker's PRECISION for wall
+        # clock, and it is here because on a cross-sectional panel that ranker is
+        # 57 % of the run: 10 repeats over a 162-column design is 1,620 predictions
+        # on a 40,000-row fold. Lowering it makes the permutation column noisier —
+        # it is a mean over `n_repeats` shuffles — which matters most for the
+        # features it separates least. Keep 10 for anything quoted; drop it only
+        # for a universe wide enough that the run would not otherwise finish, and
+        # say so when reporting.
+        if permutation_repeats < 1:
+            raise ValueError(
+                f"permutation_repeats must be >= 1, got {permutation_repeats}"
+            )
+        self.permutation_repeats = permutation_repeats
 
     # ------------------------------------------------------------ preparation
 
@@ -390,11 +406,10 @@ class FeatureSelector:
             # them in trains the final model on the answer it is about to be
             # scored against — the same leak the walk-forward gap exists to stop,
             # at the one boundary a fold-level gap does not cover.
-            gap = self.cv.gap
-            if gap and len(development) > gap:
-                development = development.iloc[:-gap].reset_index(drop=True)
+            before = len(development)
+            development = self._purge_boundary(development)
             self.n_holdout = len(self.holdout_frame)
-            self.n_purged_at_boundary = gap
+            self.n_purged_at_boundary = before - len(development)
             labelled = development
             if labelled.empty:
                 raise ValueError(
@@ -405,6 +420,12 @@ class FeatureSelector:
             self.holdout_frame = pd.DataFrame()
             self.n_holdout = 0
             self.n_purged_at_boundary = 0
+
+        # ⚠️ The DEVELOPMENT frame is announced here and nowhere else. Everything
+        # downstream — the folds, the windows, the per-date IC — addresses rows by
+        # position into exactly this frame, so a subclass that needs each row's date
+        # or ticker has to capture it at the one moment the frame is final.
+        self._on_development(labelled)
 
         candidates = [
             c
@@ -429,6 +450,75 @@ class FeatureSelector:
         X = labelled[features].astype(float)
         y = labelled[self.target].astype(float)
         return X, y, dropped_constant, coverage
+
+    # ------------------------------------------------------- the four hooks
+    #
+    # ⚠️ These four methods are the ONLY places this class assumes its panel is one
+    # company's time series. `cross_sectional.CrossSectionalSelector` overrides
+    # exactly these and inherits the six rankers, the ensemble, the prune, the
+    # stability pass and the holdout protocol unchanged. That is the point of
+    # factoring them out: the cross-sectional study has to be the SAME pipeline on a
+    # different panel shape, or its numbers are not comparable with §6 of CONTEXT.md.
+
+    def _on_development(self, frame: pd.DataFrame) -> None:
+        """Called once, with the final development frame, before X is built."""
+
+    def _design(
+        self, X: pd.DataFrame, source: Optional[pd.DataFrame] = None
+    ) -> pd.DataFrame:
+        """Channel panel → windowed design matrix.
+
+        One contiguous series, so `sliding_window_view` may run straight down it.
+
+        `source` is the frame `X`'s rows were taken from, for a subclass that needs
+        each row's date or ticker. `None` means the development frame announced by
+        `_on_development`.
+        """
+        return windows.window_design(
+            X, self.lookback, self.window_stats, self.normalize
+        )
+
+    def _splits(self, index: pd.Index) -> List[Tuple[np.ndarray, np.ndarray]]:
+        """Walk-forward folds as POSITIONS into a frame carrying `index`.
+
+        One row is one session here, so a row split is a date split.
+        """
+        return self.cv.split(len(index))
+
+    def _ic(
+        self, prediction: np.ndarray, y: pd.Series, dates: Optional[pd.Series] = None
+    ) -> float:
+        """The number every fold, holdout and null draw is judged on.
+
+        `dates` is ignored here and required by the cross-sectional override, which
+        computes one IC per date and averages them.
+        """
+        return pooled_ic(prediction, y)
+
+    def _effective_n(
+        self, y: pd.Series, dates: Optional[pd.Series] = None
+    ) -> float:
+        """Independent observations behind the IC computed over `y`.
+
+        ⚠️ On one company this is `n / h`, because consecutive `return_5day` values
+        share `h-1` of their `h` days. It is emphatically **not** `n / h` on a
+        cross-section — `N` stocks on the same day are one observation of the
+        market, not `N` — which `cross_sectional` overrides to say.
+        """
+        return max(1.0, len(y) / max(1, self.horizon))
+
+    def _purge_boundary(self, frame: pd.DataFrame) -> pd.DataFrame:
+        """Drop the development rows whose labels or windows touch the holdout.
+
+        `lookback + horizon - 1` ROWS, which on one contiguous series is the same
+        number of sessions.
+        """
+        gap = self.cv.gap
+        if gap and len(frame) > gap:
+            return frame.iloc[:-gap].reset_index(drop=True)
+        return frame
+
+    # ---------------------------------------------------------------------------
 
     def _columns_of(
         self, channels: Sequence[str], available: Sequence[str]
@@ -519,7 +609,7 @@ class FeatureSelector:
         #    ⚠️ Also CPU-bound: sklearn's coordinate descent has no GPU path, and
         #    cuML — which does — has no Windows wheel. Threaded across the folds.
         started = time.perf_counter()
-        purged = self.cv.split(len(Xi))
+        purged = self._splits(Xi.index)
         scaled = StandardScaler().fit_transform(Xi)
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always", ConvergenceWarning)
@@ -543,20 +633,28 @@ class FeatureSelector:
         #    each copy would claim its own slab of a 4 GB card; the predictions
         #    themselves already run on the GPU inside one process.
         started = time.perf_counter()
-        train_idx, test_idx = self.cv.split(len(Xi))[-1]
+        train_idx, test_idx = self._splits(Xi.index)[-1]
         X_tr, X_te = self._impute(X.iloc[train_idx], X.iloc[test_idx])
         fold_model = self._xgb().fit(X_tr, y.iloc[train_idx])
+
+        # ⚠️ Scored on the SAME metric the selection is judged by (§`_validate`), not
+        # on R². It used to be `"r2"`, which meant the ensemble ranked features by
+        # their contribution to a calibration the validation section explicitly says
+        # not to decide on.
+        #
+        # ⚠️ It goes through `self._ic`, so a cross-sectional run permutes against a
+        # PER-DATE IC. sklearn hands the scorer the permuted `X` as a DataFrame with
+        # its index intact, which is what lets `_ic` recover each row's date.
+        def scorer(estimator, X_scored, y_scored):
+            return self._ic(estimator.predict(X_scored), y_scored)
+
         perm = permutation_importance(
             fold_model,
             X_te,
             y.iloc[test_idx],
-            n_repeats=10,
+            n_repeats=self.permutation_repeats,
             random_state=self.random_state,
-            # ⚠️ Scored on the SAME metric the selection is judged by (§`_validate`),
-            # not on R². It used to be `"r2"`, which meant the ensemble ranked
-            # features by their contribution to a calibration the validation section
-            # explicitly says not to decide on.
-            scoring=_ic_scorer,
+            scoring=scorer,
             n_jobs=1 if self.device == "cuda" else gpu.n_jobs_for(X.shape[1]),
         )
         # Negative = permuting it HELPED, i.e. it hurt out of sample. Clipped to 0
@@ -621,7 +719,7 @@ class FeatureSelector:
         """
         started = time.perf_counter()
         ranks = {}
-        for i, (train_idx, _) in enumerate(self.cv.split(len(design)), start=1):
+        for i, (train_idx, _) in enumerate(self._splits(design.index), start=1):
             X_tr = self._impute(design.iloc[train_idx])[0]
             model = self._xgb().fit(X_tr, y.iloc[train_idx])
             per_column = pd.DataFrame(
@@ -665,7 +763,7 @@ class FeatureSelector:
             ("selected", list(kept)),
         )
         rows = []
-        for i, (train_idx, test_idx) in enumerate(self.cv.split(len(design)), start=1):
+        for i, (train_idx, test_idx) in enumerate(self._splits(design.index), start=1):
             for label, chosen in sets:
                 cols = [c for channel in chosen for c in columns_of[channel]]
                 X_tr, X_te = self._impute(
@@ -674,7 +772,7 @@ class FeatureSelector:
                 y_tr, y_te = y.iloc[train_idx], y.iloc[test_idx]
                 model = self._xgb().fit(X_tr, y_tr)
                 pred = model.predict(X_te)
-                ic = stats.spearmanr(pred, y_te).statistic
+                ic = self._ic(pred, y_te)
                 rows.append(
                     {
                         "fold": f"fold {i}",
@@ -683,6 +781,11 @@ class FeatureSelector:
                         "n_columns": len(cols),
                         "n_train": len(train_idx),
                         "n_test": len(test_idx),
+                        # ⚠️ Carried per fold rather than recomputed downstream as
+                        # `n_test / h`. On a cross-section that formula is wrong by
+                        # the width of the panel, and `ic_summary` has no way to
+                        # know the panel's shape — so the class that does, says.
+                        "n_eff_test": round(self._effective_n(y_te), 1),
                         "ic": float(ic),
                         "r2": float(
                             1.0
@@ -722,16 +825,16 @@ class FeatureSelector:
         dev_X = self.panel.sort_values(self.date_col).reset_index(drop=True)
         dev_X = dev_X[dev_X[self.target].notna()].reset_index(drop=True)
         is_holdout = dev_X[self.date_col] >= self.holdout_start
-        development = dev_X[~is_holdout].reset_index(drop=True)
-        gap = self.cv.gap
-        if gap and len(development) > gap:
-            development = development.iloc[:-gap].reset_index(drop=True)
+        development = self._purge_boundary(dev_X[~is_holdout].reset_index(drop=True))
 
         def design_of(frame: pd.DataFrame) -> Tuple[pd.DataFrame, pd.Series]:
-            block = frame[channels].astype(float)
-            design = windows.window_design(
-                block, self.lookback, self.window_stats, self.normalize
-            )
+            # ⚠️ The frame ITSELF is passed as `source`, not the development
+            # binding. The holdout and the development slice are two different
+            # frames whose row positions do not line up, and a cross-sectional
+            # `_design` windows per ticker — handed the wrong ids it would splice
+            # one company's window on to another's, silently, after the study is
+            # over.
+            design = self._design(frame[channels].astype(float), source=frame)
             return design, frame[self.target].astype(float).loc[design.index]
 
         dev_design, dev_y = design_of(development)
@@ -740,6 +843,13 @@ class FeatureSelector:
         # harmless for leakage in this direction, but it would make the first
         # `lookback` holdout samples a different kind of sample from the rest.
         hold_design, hold_y = design_of(self.holdout_frame)
+        # The holdout's own dates, for a cross-sectional `_ic`. `None` on the
+        # single-ticker path, where `_ic` does not look at them.
+        hold_dates = (
+            self.holdout_frame[self.date_col].loc[hold_design.index]
+            if self.date_col in self.holdout_frame.columns
+            else None
+        )
 
         # ⚠️ Intersected across BOTH designs. A statistic can be constant in the
         # holdout slice but not in development (a channel that never moved in
@@ -766,7 +876,7 @@ class FeatureSelector:
                 )
                 model = self._xgb().fit(X_tr, y_tr)
                 pred = model.predict(X_te)
-                ic = stats.spearmanr(pred, hold_y).statistic
+                ic = self._ic(pred, hold_y, dates=hold_dates)
                 rows.append(
                     {
                         "feature_set": label,
@@ -774,7 +884,9 @@ class FeatureSelector:
                         "n_channels": len(chosen),
                         "n_train": len(X_tr),
                         "n_holdout": len(X_te),
-                        "n_eff_holdout": round(len(X_te) / self.horizon, 1),
+                        "n_eff_holdout": round(
+                            self._effective_n(hold_y, dates=hold_dates), 1
+                        ),
                         "ic": float(ic),
                         "hit_rate": float(
                             np.mean(np.sign(pred) == np.sign(hold_y))
@@ -796,9 +908,7 @@ class FeatureSelector:
         # sees — the model reads a whole channel or none of it, so redundancy is a
         # property of channels, not of individual summary columns.
         started = time.perf_counter()
-        design = windows.window_design(
-            X, self.lookback, self.window_stats, self.normalize
-        )
+        design = self._design(X)
         # ⚠️ Normalisation makes some statistics CONSTANT by construction: under
         # `zscore` every window has mean 0 and sd 1. Dropping them here — and
         # naming them — is what makes that visible rather than leaving six columns
