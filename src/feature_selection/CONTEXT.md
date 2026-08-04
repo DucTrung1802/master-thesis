@@ -626,3 +626,148 @@ bound on what a complete universe would show, **except** through channels like
 ⚠️ **`last` carries the top channel**, which means the 20-day window bought nothing
 for it — `avg_vol_per_buy_order` on day `N` alone would do. §1a's rule applies: a
 channel that only ever wins on `last` never needed a window.
+
+### 9f. ⚠️ What moves the answer — and it is the TARGET, not the features
+
+Four one-line changes off the §9c baseline, same panel, same CV, same rankers.
+
+| configuration | IC | trend | hit | daily-IC sd | fold t-stats |
+|---|---|---|---|---|---|
+| **VN100 / cs_rank feats / `cs_rank_5day`** (baseline) | **+0.0313** | −0.0013 | 0.511 | 0.130 | 1.15 4.21 2.40 2.07 1.66 |
+| VN100 / **RAW** feats / `cs_rank_5day` | **+0.0326** | −0.0016 | 0.509 | 0.132 | 2.58 2.88 1.58 3.24 1.47 |
+| VN100 / cs_rank feats / **`return_5day`** | **+0.0074** | −0.0023 | **0.489** | 0.129 | 0.28 1.39 1.03 0.11 **−0.08** |
+| VN100 / cs_rank feats / `cs_rank_10day`, `h=10` | +0.0236 | −0.0015 | 0.505 | 0.135 | 0.38 2.27 1.00 2.29 **−0.13** |
+| **VN30** / cs_rank feats / `cs_rank_5day` | +0.0218 | −0.0046 | 0.507 | **0.205** | 1.07 1.06 0.99 1.06 0.11 |
+
+⚠️ **THE RANK TARGET IS THE WHOLE RESULT.** Swapping `cs_rank_5day` for the raw
+`return_5day` — same features, same panel, same folds — drops the IC **4×, from
++0.031 to +0.0074**, and pushes the hit rate to **0.489**: back below a coin, the
+exact §6b signature of a model reading MAGNITUDE rather than direction. Everything
+§9d claims rests on asking *which stock beats the others today*, not *what will this
+stock return*.
+
+⚠️ **THE CROSS-SECTIONAL FEATURE NORMALISATION IS NOT what makes this work.** RAW
+features score `+0.0326` against cs-ranked features' `+0.0313`, with *steadier* fold
+t-stats. That directly contradicts §6c, where normalising **destroyed** the
+single-ticker result — and the reason is worth keeping: there, the raw level was
+acting as a date proxy and the "signal" *was* the era. **A per-date target
+immunises against that automatically** — a feature that identifies the year cannot
+help rank stocks *within* a day — so the representation stops mattering once the
+target is cross-sectional. ⚠️ RAW's own null was run separately (§9g) rather than
+assumed from the baseline's, per §8.
+
+⚠️ **VN30 vs VN100 IS §9b's precision argument, measured.** The two ICs are similar
+(+0.022 vs +0.031) but VN30's **daily-IC sd is 0.205 against VN100's 0.130** — a
+ratio of 1.58 against the `1/√N` prediction of `√(92/30) = 1.75`. So VN30's fold
+t-stats are all ≈1.0 while VN100's reach 2-4 **on a comparable IC**. Widening the
+cross-section did not raise the signal; it lowered the noise on each day's estimate,
+which is the entire mechanism.
+
+⚠️ **`h=10` is worse, and for the documented reason**: `n_eff` halves to 44 days per
+fold, and the last fold goes negative.
+
+### 9g. ⚠️ THE HOLDOUT DOES NOT CONFIRM IT — read this before quoting §9d
+
+Scored **once**, `2024-06-01` onward: 50,662 holdout rows, 48,762 scored, **24
+sessions (2,352 rows) purged** from the development side of the boundary.
+
+| configuration | dev IC | **holdout IC** | **shuffled control** | margin | hit rate |
+|---|---|---|---|---|---|
+| VN100 / cs_rank, selected | +0.0273 | **+0.0110** | **+0.0071** | **+0.0039** | 0.504 |
+| VN100 / cs_rank, all channels | — | +0.0083 | −0.0027 | +0.0110 | 0.503 |
+| VN100 / RAW, selected | +0.0341 | **+0.0124** | **+0.0033** | +0.0091 | 0.508 |
+| VN100 / RAW, all channels | — | +0.0119 | +0.0049 | +0.0070 | 0.507 |
+
+⚠️ **The holdout IC is a THIRD of the development IC, and its margin over the
+shuffled control is inside the error bar.** The holdout spans 489 sessions, so
+`n_eff` is **97.8** and `SE ≈ 0.130/√97.8 ≈ 0.013`. A margin of +0.0039 against
+that is nothing. **The holdout neither confirms nor refutes §9d; it cannot resolve
+an effect this small at this length.**
+
+⚠️ **The gap between +0.027 and +0.011 is not mysterious — it is the selection.**
+The walk-forward ranks features on the whole development sample, including the
+periods it then tests on; the holdout's selection never saw the holdout. **The
+uncontaminated estimate of what this earns out of sample is +0.011, not +0.029.**
+
+⚠️ **That does NOT invalidate §9d**, and the distinction matters. The null re-runs
+the *whole* pipeline, selection included, on shuffled labels — so the observed
++0.0289 and the null's +0.0044 carry the *same* contamination, and the 6σ gap
+between them is still a statement about signal rather than about selection. What
+the holdout revises is the **magnitude to expect**, not the existence.
+
+**The honest summary of §9 in one line: the effect is real (6σ past a
+selection-inclusive null), small (+0.011 uncontaminated), and not yet confirmed on
+data the study never touched.**
+
+### 9h. ⚠️ THE WIDTH LADDER — the single most useful table here
+
+Same pipeline, same target, same `d=20, h=5`, same 20-draw `date_block` null.
+**Only the number of names changes.**
+
+| universe | N | daily-IC **sd** | observed IC | null mean | **null p95 BAR** | z | clears |
+|---|---|---|---|---|---|---|---|
+| VCB (§6b) | **1** | ~1.0 | +0.0559 | +0.0167 | **+0.0556** | +1.56 | ❌ |
+| VN30 | **30** | 0.205 | +0.0233 | +0.0110 | **+0.0248** | **+1.42** | ❌ |
+| **VN100** | **100** | 0.130 | +0.0289 | +0.0044 | **+0.0117** | **+6.09** | ✅ |
+| ALL (§9i) | **780** | — | **+0.109** | — | *(see §9i)* | — | ⚠️ |
+
+⚠️ **THE BAR FALLS WITH `1/√N` AND THAT IS THE WHOLE STORY.** +0.0556 → +0.0248 →
++0.0117. From VN30 to VN100 the predicted factor is `√(100/30) = 1.83` and the
+measured one is `0.0248 / 0.0117 = 2.12`. The observed IC barely moves (+0.023 →
++0.029). **Nothing is getting more predictable; the noise floor is dropping.**
+
+⚠️ **VN30 FAILS, AND THAT IS THE RESULT THAT MAKES VN100 BELIEVABLE.** A 30-name
+cross-section scores `z = +1.42` — statistically indistinguishable from VCB's
+`+1.56`, i.e. **a 30-stock panel is no better than one stock at resolving this.**
+The pipeline does not hand out a pass to any panel it is shown; §7's original plan
+proposed VN30 ≈ 25 stocks, and **that would have failed.**
+
+⚠️ **So the practical threshold is ~100 names, not ~30.** Anyone repeating this on a
+narrower index should expect a null they cannot clear, and should not read that as
+absence of signal — VN30's observed IC (+0.023) is 80 % of VN100's, it just cannot
+be resolved against a bar of +0.025.
+
+### 9i. ⚠️ ALL 780 NAMES — the biggest number here, and the least trustworthy
+
+1,853,043 rows, 780 tickers, `d=20`, `h=5`, 61 min.
+
+| fold | IC selected (12 ch) | IC **all 27 ch** | R² | hit rate |
+|---|---|---|---|---|
+| 1 | +0.1166 | **+0.1408** | +0.014 | 0.537 |
+| 2 | +0.1115 | +0.1377 | +0.014 | 0.531 |
+| 3 | +0.1139 | +0.1339 | +0.011 | 0.537 |
+| 4 | +0.1113 | +0.1382 | +0.014 | 0.531 |
+| 5 | +0.0930 | +0.0948 | +0.010 | 0.524 |
+| **mean** | **+0.109** | **+0.129** | | **0.532** |
+
+**3.5× VN100's IC, flat across folds, and the only POSITIVE R² anywhere in this
+package** (+0.010 … +0.014, against −1.19 for windowed VCB). Three warnings, in
+order of how much they should change your reading:
+
+⚠️ **1. IT HAS NO `d=20` NULL, AND IT IS THE CONFIGURATION THAT MOST NEEDS ONE.**
+One run is 61 min, so a 10-draw null is ~10 h. §9j runs the same universe at
+`lookback=1` — 27 design columns instead of 162, observed *and* null both at `d=1`
+so the pair is internally consistent — to answer the only question that matters
+here: does a 780-name cross-section clear its own bar at all? **Until §9j, treat
++0.109 as unverified.** §8's standing rule is not suspended because a run is
+expensive.
+
+⚠️ **2. THE SELECTION NOW HURTS.** All 27 channels beat the pruned 12 in **every
+fold** (+0.129 vs +0.109). By §6b's own rule — *a selection that helps at one
+setting and hurts at another is not selecting* — pruning to 12 channels is
+discarding information at this width. `max_features=12` was chosen for a 27-channel
+single-ticker pool and should not be carried here unexamined.
+
+⚠️ **3. THE RANKING REORDERS TOWARD LIQUIDITY, WHICH IS ALSO WHAT AN ARTEFACT WOULD
+DO.** `n_sell_orders` takes #1 (1.000 on both `xgb_shap` and `permutation`) with
+signed ρ **−0.0280**: *fewer sell orders → higher forward rank*. VN100's leader
+`avg_vol_per_buy_order` falls to #4 but still scores 1.000 on `spearman` (ρ
+**+0.0329**). The 780-name universe is mostly UPCOM microcaps, where thin trading
+and stale prices generate exactly this shape — a stock that barely trades has an
+unchanged `close_adjust`, hence a mid-rank return, predictably. **An order-count
+effect and a staleness artefact are not distinguishable from this table.**
+
+⚠️ **`last` carries almost every top channel here** (`n_sell_orders`,
+`avg_vol_per_buy_order`, `close_adjust`, `buy_order_vol`, `sell_order_vol` all win
+on `last`), so the 20-day window is contributing very little at this width — which
+is also why §9j's `lookback=1` null is a fair proxy and not merely a cheap one.
