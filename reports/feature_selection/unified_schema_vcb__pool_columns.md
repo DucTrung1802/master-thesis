@@ -1,0 +1,477 @@
+# `unified_schema_vcb` — feature-pool column listing
+
+`pool__ta` **924** columns (3 key + 921 indicators) · `pool__fa` **207** columns (3 key + 204 fundamentals). Both keyed `(date, exchange, ticker)`, both 4,235 rows on `pool__basic`'s calendar.
+
+## `pool__ta` — the technical block
+
+| family | columns |
+|---|---|
+| Bollinger Bands | 23 |
+| MACD | 20 |
+| RSI | 45 |
+| Stochastic | 26 |
+| Hilbert Transform | 90 |
+| Moving averages | 226 |
+| Price transforms (midprice / avg / med / typ / wcl) | 120 |
+| Parabolic SAR | 28 |
+| ADX / DI / DM | 10 |
+| Aroon | 15 |
+| Oscillators (CCI / CMO / MFI / MOM / ROC / PPO / TRIX) | 121 |
+| Ultimate / Williams / BOP | 52 |
+| Volatility (ATR / NATR / TRANGE / stddev / var) | 58 |
+| Volume (OBV / AD / ADOSC) | 50 |
+| Returns & change | 4 |
+| Foreign & flow (TA spelling) | 12 |
+| Raw price & volume | 2 |
+| Other | 19 |
+
+### Bollinger Bands (23)
+
+```
+close_bb_20_upper, close_bb_20_middle, close_bb_20_lower, close_bb_20_dist_upper
+close_bb_20_dist_middle, close_bb_20_dist_lower, close_bb_20_slope_upper, close_bb_20_slope_upper_acceleration
+close_bb_20_slope_middle, close_bb_20_slope_middle_acceleration, close_bb_20_slope_lower, close_bb_20_slope_lower_acceleration
+close_bb_20_bandwidth, close_bb_20_bandwidth_slope, close_bb_20_bandwidth_acceleration, close_bb_20_pct_b
+close_bb_20_pct_b_slope, close_bb_20_pct_b_gt_1, close_bb_20_pct_b_lt_0, close_bb_20_above_upper
+close_bb_20_below_lower, close_bb_20_inside_bands, close_bb_20_position
+```
+
+### MACD (20)
+
+```
+macd_12_26_9, macd_12_26_9_slope, macd_12_26_9_acceleration, macd_12_26_9_abs
+macd_12_26_9_direction, macd_12_26_9_gt_0, macd_12_26_9_lt_0, macd_12_26_9_signal
+macd_12_26_9_signal_slope, macd_12_26_9_signal_gt_0, macd_12_26_9_signal_lt_0, macd_12_26_9_hist
+macd_12_26_9_hist_slope, macd_12_26_9_hist_acceleration, macd_12_26_9_hist_gt_0, macd_12_26_9_hist_lt_0
+macd_12_26_9_hist_abs, macd_12_26_9_cross_above, macd_12_26_9_cross_below, macd_12_26_9_strength
+```
+
+### RSI (45)
+
+```
+rsi_14, rsi_14_slope, rsi_14_acceleration, rsi_14_abs
+rsi_14_direction, rsi_14_gt_70, rsi_14_lt_30, rsi_14_gt_50
+rsi_14_lt_50, rsi_14_extreme, rsi_14_signal, rsi_14_signal_slope
+rsi_14_hist, rsi_14_hist_slope, rsi_14_hist_acceleration, rsi_14_hist_gt_0
+rsi_14_hist_lt_0, rsi_14_hist_abs, rsi_14_strength, stoch_rsi_14_5_3_k
+stoch_rsi_14_5_3_k_slope, stoch_rsi_14_5_3_k_acceleration, stoch_rsi_14_5_3_k_abs, stoch_rsi_14_5_3_k_direction
+stoch_rsi_14_5_3_k_gt_80, stoch_rsi_14_5_3_k_lt_20, stoch_rsi_14_5_3_k_gt_50, stoch_rsi_14_5_3_k_lt_50
+stoch_rsi_14_5_3_k_extreme, stoch_rsi_14_5_3_d, stoch_rsi_14_5_3_d_slope, stoch_rsi_14_5_3_d_acceleration
+stoch_rsi_14_5_3_d_gt_80, stoch_rsi_14_5_3_d_lt_20, stoch_rsi_14_5_3_d_gt_50, stoch_rsi_14_5_3_d_lt_50
+stoch_rsi_14_5_3_kd_dist, stoch_rsi_14_5_3_kd_dist_abs, stoch_rsi_14_5_3_kd_direction, stoch_rsi_14_5_3_kd_dist_slope
+stoch_rsi_14_5_3_cross_above, stoch_rsi_14_5_3_cross_below, stoch_rsi_14_5_3_both_gt_80, stoch_rsi_14_5_3_both_lt_20
+stoch_rsi_14_5_3_strength
+```
+
+### Stochastic (26)
+
+```
+stoch_5_3_3_k, stoch_5_3_3_k_slope, stoch_5_3_3_k_acceleration, stoch_5_3_3_k_abs
+stoch_5_3_3_k_direction, stoch_5_3_3_k_gt_80, stoch_5_3_3_k_lt_20, stoch_5_3_3_k_gt_50
+stoch_5_3_3_k_lt_50, stoch_5_3_3_k_extreme, stoch_5_3_3_d, stoch_5_3_3_d_slope
+stoch_5_3_3_d_acceleration, stoch_5_3_3_d_gt_80, stoch_5_3_3_d_lt_20, stoch_5_3_3_d_gt_50
+stoch_5_3_3_d_lt_50, stoch_5_3_3_kd_dist, stoch_5_3_3_kd_dist_abs, stoch_5_3_3_kd_direction
+stoch_5_3_3_kd_dist_slope, stoch_5_3_3_cross_above, stoch_5_3_3_cross_below, stoch_5_3_3_both_gt_80
+stoch_5_3_3_both_lt_20, stoch_5_3_3_strength
+```
+
+### Hilbert Transform (90)
+
+```
+ht_dcperiod, ht_dcperiod_slope, ht_dcperiod_acceleration, ht_dcperiod_gt_prev
+ht_dcperiod_lt_prev, ht_dcperiod_direction, ht_dcperiod_valid, ht_dcperiod_signal_10
+ht_dcperiod_signal_10_slope, ht_dcperiod_hist_10, ht_dcperiod_hist_10_slope, ht_dcperiod_hist_10_acceleration
+ht_dcperiod_hist_10_gt_0, ht_dcperiod_hist_10_lt_0, ht_dcperiod_hist_10_abs, ht_dcperiod_10_strength
+ht_dcphase, ht_dcphase_wrapped, ht_dcphase_sin, ht_dcphase_cos
+ht_dcphase_slope, ht_dcphase_acceleration, ht_dcphase_quadrant, ht_dcphase_direction
+ht_dcphase_valid, ht_dcphase_signal_10, ht_dcphase_signal_10_slope, ht_dcphase_hist_10
+ht_dcphase_hist_10_slope, ht_dcphase_hist_10_acceleration, ht_dcphase_hist_10_gt_0, ht_dcphase_hist_10_lt_0
+ht_dcphase_hist_10_abs, ht_dcphase_10_strength, ht_phasor_inphase, ht_phasor_quadrature
+ht_phasor_amplitude, ht_phasor_phase, ht_phasor_phase_wrapped, ht_phasor_slope
+ht_phasor_acceleration, ht_phasor_direction, ht_phasor_valid, ht_phasor_signal_10
+ht_phasor_signal_10_slope, ht_phasor_hist_10, ht_phasor_hist_10_slope, ht_phasor_hist_10_acceleration
+ht_phasor_hist_10_gt_0, ht_phasor_hist_10_lt_0, ht_phasor_hist_10_abs, ht_phasor_10_strength
+ht_sine, ht_leadsine, ht_sine_diff, ht_sine_slope
+ht_sine_acceleration, ht_sine_direction, ht_sine_gt_0, ht_sine_lt_0
+ht_sine_cross_above, ht_sine_cross_below, ht_sine_valid, ht_sine_signal_10
+ht_sine_signal_10_slope, ht_sine_hist_10, ht_sine_hist_10_slope, ht_sine_hist_10_acceleration
+ht_sine_hist_10_gt_0, ht_sine_hist_10_lt_0, ht_sine_hist_10_abs, ht_sine_10_strength
+ht_trendmode, ht_trendmode_slope, ht_trendmode_acceleration, ht_trendmode_direction
+ht_trendmode_is_trend, ht_trendmode_is_cycle, ht_trendmode_switch_on, ht_trendmode_switch_off
+ht_trendmode_valid, ht_trendmode_signal_10, ht_trendmode_signal_10_slope, ht_trendmode_hist_10
+ht_trendmode_hist_10_slope, ht_trendmode_hist_10_acceleration, ht_trendmode_hist_10_gt_0, ht_trendmode_hist_10_lt_0
+ht_trendmode_hist_10_abs, ht_trendmode_10_strength
+```
+
+### Moving averages (226)
+
+```
+close_dema_50, close_dema_50_slope, close_dema_50_acceleration, close_dema_50_dist
+close_dema_50_dist_abs, close_dema_50_dist_pct, close_gt_dema_50, close_dema_100
+close_dema_100_slope, close_dema_100_acceleration, close_dema_100_dist, close_dema_100_dist_abs
+close_dema_100_dist_pct, close_gt_dema_100, close_dema_200, close_dema_200_slope
+close_dema_200_acceleration, close_dema_200_dist, close_dema_200_dist_abs, close_dema_200_dist_pct
+close_gt_dema_200, close_dema_50_100_dist, close_dema_50_100_dist_abs, close_dema_50_100_dist_pct
+close_dema_50_100_dist_slope, close_dema_50_100_dist_acceleration, close_dema_50_100_direction, close_dema_50_100_crossover_up
+close_dema_50_100_crossover_dn, close_dema_50_100_bars_since_crossover, close_dema_50_200_dist, close_dema_50_200_dist_abs
+close_dema_50_200_dist_pct, close_dema_50_200_dist_slope, close_dema_50_200_dist_acceleration, close_dema_50_200_direction
+close_dema_50_200_crossover_up, close_dema_50_200_crossover_dn, close_dema_50_200_bars_since_crossover, close_dema_100_200_dist
+close_dema_100_200_dist_abs, close_dema_100_200_dist_pct, close_dema_100_200_dist_slope, close_dema_100_200_dist_acceleration
+close_dema_100_200_direction, close_dema_100_200_crossover_up, close_dema_100_200_crossover_dn, close_dema_100_200_bars_since_crossover
+close_ema_50, close_ema_50_slope, close_ema_50_acceleration, close_gt_ema_50
+close_ema_50_dist, close_ema_50_dist_abs, close_ema_100, close_ema_100_slope
+close_ema_100_acceleration, close_gt_ema_100, close_ema_100_dist, close_ema_100_dist_abs
+close_ema_200, close_ema_200_slope, close_ema_200_acceleration, close_gt_ema_200
+close_ema_200_dist, close_ema_200_dist_abs, close_ema_50_100_dist, close_ema_50_100_dist_abs
+close_ema_50_100_direction, close_ema_50_100_dist_slope, close_ema_50_200_dist, close_ema_50_200_dist_abs
+close_ema_50_200_direction, close_ema_50_200_dist_slope, close_ema_100_200_dist, close_ema_100_200_dist_abs
+close_ema_100_200_direction, close_ema_100_200_dist_slope, close_kama_50, close_kama_50_slope
+close_kama_50_acceleration, close_gt_kama_50, close_kama_50_dist, close_kama_50_dist_abs
+close_kama_100, close_kama_100_slope, close_kama_100_acceleration, close_gt_kama_100
+close_kama_100_dist, close_kama_100_dist_abs, close_kama_200, close_kama_200_slope
+close_kama_200_acceleration, close_gt_kama_200, close_kama_200_dist, close_kama_200_dist_abs
+close_kama_50_100_dist, close_kama_50_100_dist_abs, close_kama_50_100_direction, close_kama_50_100_dist_slope
+close_kama_50_200_dist, close_kama_50_200_dist_abs, close_kama_50_200_direction, close_kama_50_200_dist_slope
+close_kama_100_200_dist, close_kama_100_200_dist_abs, close_kama_100_200_direction, close_kama_100_200_dist_slope
+close_sma_50, close_sma_50_slope, close_sma_50_acceleration, close_gt_sma_50
+close_sma_50_dist, close_sma_50_dist_abs, close_sma_100, close_sma_100_slope
+close_sma_100_acceleration, close_gt_sma_100, close_sma_100_dist, close_sma_100_dist_abs
+close_sma_200, close_sma_200_slope, close_sma_200_acceleration, close_gt_sma_200
+close_sma_200_dist, close_sma_200_dist_abs, close_sma_50_100_dist, close_sma_50_100_dist_abs
+close_sma_50_100_direction, close_sma_50_100_dist_slope, close_sma_50_200_dist, close_sma_50_200_dist_abs
+close_sma_50_200_direction, close_sma_50_200_dist_slope, close_sma_100_200_dist, close_sma_100_200_dist_abs
+close_sma_100_200_direction, close_sma_100_200_dist_slope, close_t3_5, close_t3_5_slope
+close_t3_5_acceleration, close_gt_t3_5, close_t3_5_dist, close_t3_5_dist_abs
+close_tema_30, close_tema_30_slope, close_tema_30_acceleration, close_gt_tema_30
+close_tema_30_dist, close_tema_30_dist_abs, close_trima_30, close_trima_30_slope
+close_trima_30_acceleration, close_gt_trima_30, close_trima_30_dist, close_trima_30_dist_abs
+close_wma_7, close_wma_7_slope, close_wma_7_acceleration, close_gt_wma_7
+close_wma_7_dist, close_wma_7_dist_abs, close_wma_14, close_wma_14_slope
+close_wma_14_acceleration, close_gt_wma_14, close_wma_14_dist, close_wma_14_dist_abs
+close_wma_21, close_wma_21_slope, close_wma_21_acceleration, close_gt_wma_21
+close_wma_21_dist, close_wma_21_dist_abs, close_wma_50, close_wma_50_slope
+close_wma_50_acceleration, close_gt_wma_50, close_wma_50_dist, close_wma_50_dist_abs
+close_wma_100, close_wma_100_slope, close_wma_100_acceleration, close_gt_wma_100
+close_wma_100_dist, close_wma_100_dist_abs, close_wma_7_14_dist, close_wma_7_14_dist_abs
+close_wma_7_14_direction, close_wma_7_14_dist_slope, close_wma_7_21_dist, close_wma_7_21_dist_abs
+close_wma_7_21_direction, close_wma_7_21_dist_slope, close_wma_7_50_dist, close_wma_7_50_dist_abs
+close_wma_7_50_direction, close_wma_7_50_dist_slope, close_wma_7_100_dist, close_wma_7_100_dist_abs
+close_wma_7_100_direction, close_wma_7_100_dist_slope, close_wma_14_21_dist, close_wma_14_21_dist_abs
+close_wma_14_21_direction, close_wma_14_21_dist_slope, close_wma_14_50_dist, close_wma_14_50_dist_abs
+close_wma_14_50_direction, close_wma_14_50_dist_slope, close_wma_14_100_dist, close_wma_14_100_dist_abs
+close_wma_14_100_direction, close_wma_14_100_dist_slope, close_wma_21_50_dist, close_wma_21_50_dist_abs
+close_wma_21_50_direction, close_wma_21_50_dist_slope, close_wma_21_100_dist, close_wma_21_100_dist_abs
+close_wma_21_100_direction, close_wma_21_100_dist_slope, close_wma_50_100_dist, close_wma_50_100_dist_abs
+close_wma_50_100_direction, close_wma_50_100_dist_slope
+```
+
+### Price transforms (midprice / avg / med / typ / wcl) (120)
+
+```
+close_midpoint_14, close_midpoint_14_slope, close_midpoint_14_acceleration, close_gt_midpoint_14
+close_midpoint_14_dist, close_midpoint_14_dist_abs, close_midpoint_50, close_midpoint_50_slope
+close_midpoint_50_acceleration, close_gt_midpoint_50, close_midpoint_50_dist, close_midpoint_50_dist_abs
+close_midpoint_100, close_midpoint_100_slope, close_midpoint_100_acceleration, close_gt_midpoint_100
+close_midpoint_100_dist, close_midpoint_100_dist_abs, close_midpoint_14_50_dist, close_midpoint_14_50_dist_abs
+close_midpoint_14_50_direction, close_midpoint_14_50_dist_slope, close_midpoint_14_100_dist, close_midpoint_14_100_dist_abs
+close_midpoint_14_100_direction, close_midpoint_14_100_dist_slope, close_midpoint_50_100_dist, close_midpoint_50_100_dist_abs
+close_midpoint_50_100_direction, close_midpoint_50_100_dist_slope, midprice_14, midprice_14_slope
+midprice_14_acceleration, close_gt_midprice_14, midprice_14_dist, midprice_14_dist_abs
+midprice_50, midprice_50_slope, midprice_50_acceleration, close_gt_midprice_50
+midprice_50_dist, midprice_50_dist_abs, midprice_100, midprice_100_slope
+midprice_100_acceleration, close_gt_midprice_100, midprice_100_dist, midprice_100_dist_abs
+midprice_14_50_dist, midprice_14_50_dist_abs, midprice_14_50_direction, midprice_14_50_dist_slope
+midprice_14_100_dist, midprice_14_100_dist_abs, midprice_14_100_direction, midprice_14_100_dist_slope
+midprice_50_100_dist, midprice_50_100_dist_abs, midprice_50_100_direction, midprice_50_100_dist_slope
+avgprice, avgprice_slope, avgprice_acceleration, avgprice_gt_close
+avgprice_lt_close, avgprice_direction, avgprice_signal_10, avgprice_signal_10_slope
+avgprice_hist_10, avgprice_hist_10_slope, avgprice_hist_10_acceleration, avgprice_hist_10_gt_0
+avgprice_hist_10_lt_0, avgprice_hist_10_abs, avgprice_10_strength, medprice
+medprice_slope, medprice_acceleration, medprice_gt_close, medprice_lt_close
+medprice_direction, medprice_signal_10, medprice_signal_10_slope, medprice_hist_10
+medprice_hist_10_slope, medprice_hist_10_acceleration, medprice_hist_10_gt_0, medprice_hist_10_lt_0
+medprice_hist_10_abs, medprice_10_strength, typprice, typprice_slope
+typprice_acceleration, typprice_gt_close, typprice_lt_close, typprice_direction
+typprice_signal_10, typprice_signal_10_slope, typprice_hist_10, typprice_hist_10_slope
+typprice_hist_10_acceleration, typprice_hist_10_gt_0, typprice_hist_10_lt_0, typprice_hist_10_abs
+typprice_10_strength, wclprice, wclprice_slope, wclprice_acceleration
+wclprice_gt_close, wclprice_lt_close, wclprice_direction, wclprice_signal_10
+wclprice_signal_10_slope, wclprice_hist_10, wclprice_hist_10_slope, wclprice_hist_10_acceleration
+wclprice_hist_10_gt_0, wclprice_hist_10_lt_0, wclprice_hist_10_abs, wclprice_10_strength
+```
+
+### Parabolic SAR (28)
+
+```
+sar_002_02, sar_002_02_slope, sar_002_02_acceleration, sar_002_02_above
+sar_002_02_below, sar_002_02_direction, sar_002_02_dist, sar_002_02_dist_abs
+sar_002_02_dist_pct, sar_002_02_up3, sar_002_02_down3, sar_002_02_trend3
+sar_004_02, sar_004_02_slope, sar_004_02_acceleration, sar_004_02_above
+sar_004_02_below, sar_004_02_direction, sar_004_02_dist, sar_004_02_dist_abs
+sar_004_02_dist_pct, sar_004_02_up3, sar_004_02_down3, sar_004_02_trend3
+sar_002_02_004_02_dist, sar_002_02_004_02_dist_abs, sar_002_02_004_02_direction, sar_002_02_004_02_dist_slope
+```
+
+### ADX / DI / DM (10)
+
+```
+adx_14, adx_14_gt_20, adx_14_gt_25, adx_14_slope
+adx_14_acceleration, plus_di_14, minus_di_14, plus_di_14_slope
+minus_di_14_slope, adx_14_di_strength
+```
+
+### Aroon (15)
+
+```
+aroon_up_25, aroon_down_25, aroon_osc_25, aroon_up_25_slope
+aroon_down_25_slope, aroon_osc_25_slope, aroon_25_distance, aroon_25_distance_abs
+aroon_25_ratio, aroon_25_direction, aroon_up_25_gt_70, aroon_down_25_gt_70
+aroon_up_25_lt_30, aroon_down_25_lt_30, aroon_25_strength
+```
+
+### Oscillators (CCI / CMO / MFI / MOM / ROC / PPO / TRIX) (121)
+
+```
+cci_14, cci_14_slope, cci_14_acceleration, cci_14_gt_100
+cci_14_lt_minus100, cci_14_gt_0, cci_14_lt_0, cci_14_abs
+cci_14_direction, cci_14_extreme, cci_14_signal, cci_14_signal_slope
+cci_14_hist, cci_14_hist_slope, cci_14_hist_gt_0, cci_14_hist_lt_0
+cci_14_strength, cmo_14, cmo_14_slope, cmo_14_acceleration
+cmo_14_abs, cmo_14_direction, cmo_14_gt_50, cmo_14_lt_minus50
+cmo_14_gt_0, cmo_14_lt_0, cmo_14_extreme, cmo_14_signal
+cmo_14_signal_slope, cmo_14_hist, cmo_14_hist_slope, cmo_14_hist_gt_0
+cmo_14_hist_lt_0, cmo_14_strength, mfi_14, mfi_14_slope
+mfi_14_acceleration, mfi_14_abs, mfi_14_direction, mfi_14_gt_80
+mfi_14_lt_20, mfi_14_gt_50, mfi_14_lt_50, mfi_14_extreme
+mfi_14_signal, mfi_14_signal_slope, mfi_14_hist, mfi_14_hist_slope
+mfi_14_hist_gt_0, mfi_14_hist_lt_0, mfi_14_strength, mom_10
+mom_10_slope, mom_10_acceleration, mom_10_abs, mom_10_direction
+mom_10_gt_0, mom_10_lt_0, mom_10_pct, mom_10_pct_slope
+mom_10_signal, mom_10_signal_slope, mom_10_hist, mom_10_hist_slope
+mom_10_hist_acceleration, mom_10_hist_gt_0, mom_10_hist_lt_0, mom_10_hist_abs
+mom_10_strength, ppo_12_26_9, ppo_12_26_9_slope, ppo_12_26_9_acceleration
+ppo_12_26_9_abs, ppo_12_26_9_direction, ppo_12_26_9_gt_0, ppo_12_26_9_lt_0
+ppo_12_26_9_signal, ppo_12_26_9_signal_slope, ppo_12_26_9_signal_gt_0, ppo_12_26_9_signal_lt_0
+ppo_12_26_9_hist, ppo_12_26_9_hist_slope, ppo_12_26_9_hist_acceleration, ppo_12_26_9_hist_gt_0
+ppo_12_26_9_hist_lt_0, ppo_12_26_9_hist_abs, ppo_12_26_9_cross_above, ppo_12_26_9_cross_below
+ppo_12_26_9_strength, roc_10, roc_10_slope, roc_10_acceleration
+roc_10_abs, roc_10_direction, roc_10_gt_0, roc_10_lt_0
+roc_10_signal, roc_10_signal_slope, roc_10_hist, roc_10_hist_slope
+roc_10_hist_acceleration, roc_10_hist_gt_0, roc_10_hist_lt_0, roc_10_hist_abs
+roc_10_strength, trix_15, trix_15_slope, trix_15_acceleration
+trix_15_abs, trix_15_direction, trix_15_gt_0, trix_15_lt_0
+trix_15_signal, trix_15_signal_slope, trix_15_hist, trix_15_hist_slope
+trix_15_hist_acceleration, trix_15_hist_gt_0, trix_15_hist_lt_0, trix_15_hist_abs
+trix_15_strength
+```
+
+### Ultimate / Williams / BOP (52)
+
+```
+bop, bop_slope, bop_acceleration, bop_gt_0
+bop_lt_0, bop_abs, bop_direction, bop_signal_14
+bop_signal_14_slope, bop_hist_14, bop_hist_14_slope, bop_hist_14_gt_0
+bop_hist_14_lt_0, bop_14_strength, ultosc_7_14_28, ultosc_7_14_28_slope
+ultosc_7_14_28_acceleration, ultosc_7_14_28_abs, ultosc_7_14_28_direction, ultosc_7_14_28_gt_70
+ultosc_7_14_28_lt_30, ultosc_7_14_28_gt_50, ultosc_7_14_28_lt_50, ultosc_7_14_28_extreme
+ultosc_7_14_28_signal, ultosc_7_14_28_signal_slope, ultosc_7_14_28_hist, ultosc_7_14_28_hist_slope
+ultosc_7_14_28_hist_acceleration, ultosc_7_14_28_hist_gt_0, ultosc_7_14_28_hist_lt_0, ultosc_7_14_28_hist_abs
+ultosc_7_14_28_strength, willr_14, willr_14_slope, willr_14_acceleration
+willr_14_abs, willr_14_direction, willr_14_gt_minus20, willr_14_lt_minus80
+willr_14_gt_minus50, willr_14_lt_minus50, willr_14_extreme, willr_14_signal
+willr_14_signal_slope, willr_14_hist, willr_14_hist_slope, willr_14_hist_acceleration
+willr_14_hist_gt_0, willr_14_hist_lt_0, willr_14_hist_abs, willr_14_strength
+```
+
+### Volatility (ATR / NATR / TRANGE / stddev / var) (58)
+
+```
+atr, atr_slope, atr_acceleration, atr_gt_prev
+atr_lt_prev, atr_direction, atr_normalized, atr_14
+atr_14_slope, atr_14_acceleration, atr_14_gt_prev, atr_14_lt_prev
+atr_14_normalized, atr_14_signal, atr_14_signal_slope, atr_14_hist
+atr_14_hist_slope, atr_14_hist_acceleration, atr_14_hist_gt_0, atr_14_hist_lt_0
+atr_14_hist_abs, atr_14_strength, natr, natr_slope
+natr_acceleration, natr_gt_prev, natr_lt_prev, natr_direction
+natr_14, natr_14_slope, natr_14_acceleration, natr_14_gt_prev
+natr_14_lt_prev, natr_14_signal, natr_14_signal_slope, natr_14_hist
+natr_14_hist_slope, natr_14_hist_acceleration, natr_14_hist_gt_0, natr_14_hist_lt_0
+natr_14_hist_abs, natr_14_strength, trange, trange_slope
+trange_acceleration, trange_gt_prev, trange_lt_prev, trange_direction
+trange_normalized, trange_signal_14, trange_signal_14_slope, trange_hist_14
+trange_hist_14_slope, trange_hist_14_acceleration, trange_hist_14_gt_0, trange_hist_14_lt_0
+trange_hist_14_abs, trange_14_strength
+```
+
+### Volume (OBV / AD / ADOSC) (50)
+
+```
+ad, ad_slope, ad_acceleration, ad_gt_0
+ad_lt_0, ad_direction, ad_signal_10, ad_signal_10_slope
+ad_hist_10, ad_hist_10_slope, ad_hist_10_acceleration, ad_hist_10_gt_0
+ad_hist_10_lt_0, ad_hist_10_abs, ad_10_strength, adosc_3_10
+adosc_3_10_slope, adosc_3_10_acceleration, adosc_3_10_abs, adosc_3_10_direction
+adosc_3_10_gt_0, adosc_3_10_lt_0, adosc_3_10_signal, adosc_3_10_signal_slope
+adosc_3_10_hist, adosc_3_10_hist_slope, adosc_3_10_hist_acceleration, adosc_3_10_hist_gt_0
+adosc_3_10_hist_lt_0, adosc_3_10_hist_abs, adosc_3_10_cross_above, adosc_3_10_cross_below
+adosc_3_10_strength, obv, obv_slope, obv_acceleration
+obv_gt_0, obv_lt_0, obv_direction, obv_signal_10
+obv_signal_10_slope, obv_hist_10, obv_hist_10_slope, obv_hist_10_acceleration
+obv_hist_10_gt_0, obv_hist_10_lt_0, obv_hist_10_abs, obv_10_strength
+obv_10_cross_above, obv_10_cross_below
+```
+
+### Returns & change (4)
+
+```
+net_change, pct_change, return_simple, return_log
+```
+
+### Foreign & flow (TA spelling) (12)
+
+```
+foreign_room, f_buy_vol, f_sell_vol, f_net_vol
+f_buy_val, f_sell_val, f_net_val, vol_matched
+vol_negotiated, val_matched_bn, val_negotiated_bn, own_pct
+```
+
+### Raw price & volume (2)
+
+```
+close, volume
+```
+
+### Other (19)
+
+```
+di_14_distance, di_14_distance_abs, di_14_ratio, trend_14_direction
+foreign_buy_pressure, foreign_net_val_ratio, negotiated_vol_ratio, range_hl
+body_oc, volatility_5, volatility_21, close_roll_mean_5
+close_roll_std_5, close_roll_min_5, close_roll_max_5, close_roll_mean_21
+close_roll_std_21, close_roll_min_21, close_roll_max_21
+```
+
+## `pool__fa` — the fundamental block
+
+| family | columns |
+|---|---|
+| Ratios & valuation | 17 |
+| Growth (YoY) | 4 |
+| Per-share & TTM | 4 |
+| Share counts | 4 |
+| Balance sheet | 93 |
+| Cash flow | 50 |
+| Income statement | 29 |
+| Period & provenance | 3 |
+
+### Ratios & valuation (17)
+
+```
+roe, roa, nim
+net_profit_margin, pretax_margin, effective_tax_rate
+cost_to_income, equity_multiplier, equity_to_assets
+ldr, loans_to_assets, deposits_to_assets
+market_cap, pe_ttm, pb
+ps_ttm, earnings_yield
+```
+
+### Growth (YoY) (4)
+
+```
+earnings_growth_yoy, opincome_growth_yoy, equity_growth_yoy
+asset_growth_yoy
+```
+
+### Per-share & TTM (4)
+
+```
+ttm_net_income, ttm_op_income, eps_ttm
+bvps
+```
+
+### Share counts (4)
+
+```
+shares_authorized, shares_issued, shares_outstanding
+shares_used
+```
+
+### Balance sheet (93)
+
+```
+balance_sheet_template, balance_sheet_period, balance_sheet_source
+balance_sheet_i_tien_mat_vang_bac_da_quy, balance_sheet_ii_tien_gui_tai_nhnn, balance_sheet_iii_tien_vang_gui_tai_cac_tctd_khac_va_cho_vay_ca
+balance_sheet_iii_1_tien_gui_tai_cac_tctd_khac, balance_sheet_iii_2_cho_vay_cac_tctd_khac, balance_sheet_iii_3_du_phong_rui_ro_cho_vay_cac_tctd_khac
+balance_sheet_iv_chung_khoan_kinh_doanh, balance_sheet_iv_1_chung_khoan_kinh_doanh, balance_sheet_iv_2_du_phong_rui_ro_chung_khoan_kinh_doanh
+balance_sheet_v_cac_cong_cu_tai_chinh_phai_sinh_va_cac_tai_san_, balance_sheet_vi_cho_vay_khach_hang, balance_sheet_vi_1_cho_vay_va_cho_thue_tai_chinh_khach_hang
+balance_sheet_vi_2_du_phong_rui_ro_cho_vay_va_cho_thue_tai_chin, balance_sheet_vii_hoat_dong_mua_no, balance_sheet_vii_1_mua_no
+balance_sheet_vii_2_du_phong_rui_ro_hoat_dong_mua_no, balance_sheet_viii_chung_khoan_dau_tu, balance_sheet_viii_1_chung_khoan_dau_tu_san_sang_de_ban
+balance_sheet_viii_2_chung_khoan_dau_tu_giu_den_ngay_dao_han, balance_sheet_viii_3_du_phong_rui_ro_chung_khoan_dau_tu, balance_sheet_ix_gop_von_dau_tu_dai_han
+balance_sheet_ix_1_dau_tu_vao_cong_ty_con, balance_sheet_ix_2_von_gop_lien_doanh, balance_sheet_ix_3_dau_tu_vao_cong_ty_lien_ket
+balance_sheet_ix_4_dau_tu_dai_han_khac, balance_sheet_ix_5_du_phong_giam_gia_dau_tu_dai_han, balance_sheet_x_tai_san_co_dinh
+balance_sheet_x_1_tai_san_co_dinh_huu_hinh, balance_sheet_x_1_a_nguyen_gia_tai_san_co_dinh, balance_sheet_x_1_b_hao_mon_tai_san_co_dinh
+balance_sheet_x_2_tai_san_co_dinh_thue_tai_chinh, balance_sheet_x_2_a_nguyen_gia_tai_san_co_dinh, balance_sheet_x_2_b_hao_mon_tai_san_co_dinh
+balance_sheet_x_3_tai_san_co_dinh_vo_hinh, balance_sheet_x_3_a_nguyen_gia_tai_san_co_dinh, balance_sheet_x_3_b_hao_mon_tai_san_co_dinh
+balance_sheet_xi_bat_dong_san_dau_tu, balance_sheet_xi_a_nguyen_gia_bdsdt, balance_sheet_xi_b_hao_mon_bdsdt
+balance_sheet_xii_tai_san_co_khac, balance_sheet_xii_1_cac_khoan_phai_thu, balance_sheet_xii_2_cac_khoan_lai_phi_phai_thu
+balance_sheet_xii_3_tai_san_thue_thu_nhap_doanh_nghiep_hoan_lai, balance_sheet_xii_4_tai_san_co_khac, balance_sheet_xii_4_trong_do_loi_the_thuong_mai
+balance_sheet_xii_5_cac_khoan_du_phong_rui_ro_cho_cac_tai_san_c, balance_sheet_tong_tai_san, balance_sheet_b_no_phai_tra_va_von_chu_so_huu
+balance_sheet_i_cac_khoan_no_chinh_phu_va_nhnn, balance_sheet_i_1_tien_gui_va_vay_chinh_phu_ngan_hang_nha_nuoc, balance_sheet_i_2_giao_dich_ban_va_mua_lai_trai_phieu_chinh_phu
+balance_sheet_ii_tien_gui_va_vay_cac_tctd_khac, balance_sheet_ii_1_tien_gui_cua_cac_to_chuc_tin_dung_khac, balance_sheet_ii_2_vay_cac_to_chuc_tin_dung_khac
+balance_sheet_iii_tien_gui_cua_khach_hang, balance_sheet_iv_cac_cong_cu_tai_chinh_phai_sinh_va_cac_khoan_n, balance_sheet_v_von_tai_tro_uy_thac_dau_tu_cho_vay_to_chuc_tin_
+balance_sheet_vi_phat_hanh_giay_to_co_gia, balance_sheet_vii_cac_khoan_no_khac, balance_sheet_vii_1_cac_khoan_lai_phi_phai_tra
+balance_sheet_vii_2_cac_khoan_phai_tra_va_cong_no_khac, balance_sheet_vii_3_du_phong_rui_ro_khac, balance_sheet_tong_no_phai_tra
+balance_sheet_viii_von_chu_so_huu, balance_sheet_viii_1_von_cua_tctd, balance_sheet_viii_1_a_von_dieu_le
+balance_sheet_viii_1_b_thang_du_von_co_phan, balance_sheet_viii_1_c_von_dau_tu_xay_dung_co_ban_mua_sam_tai_s, balance_sheet_viii_1_d_co_phieu_quy
+balance_sheet_viii_2_quy_cua_tctd, balance_sheet_viii_3_chenh_lech_ty_gia_hoi_doai, balance_sheet_viii_4_chenh_lech_danh_gia_lai_tai_san
+balance_sheet_viii_5_loi_nhuan_chua_phan_phoi, balance_sheet_viii_5_a_loi_nhuan_nam_nay, balance_sheet_viii_5_b_loi_nhuan_luy_ke_nam_truoc
+balance_sheet_ix_loi_ich_cua_co_dong_thieu_so, balance_sheet_tong_no_phai_tra_va_von_chu_so_huu, balance_sheet_n1_bao_lanh_vay_von
+balance_sheet_n2_cam_ket_giao_dich_hoi_doai, balance_sheet_n2_cam_ket_mua_ngoai_te, balance_sheet_n2_cam_ket_ban_ngoai_te
+balance_sheet_n2_cam_ket_giao_dich_hoan_doi, balance_sheet_n2_cam_ket_giao_dich_tuong_lai, balance_sheet_n3_cam_ket_cho_vay_khong_huy_ngang
+balance_sheet_n4_cam_ket_trong_nghiep_vu_l_c, balance_sheet_n5_bao_lanh_khac, balance_sheet_n6_cac_cam_ket_khac
+balance_sheet_n7_lai_cho_vay_va_phi_phai_thu_chua_thu_duoc, balance_sheet_n8_no_kho_doi_da_xu_ly, balance_sheet_n9_tai_san_va_chung_tu_khac
+```
+
+### Cash flow (50)
+
+```
+cash_flow_template, cash_flow_period, cash_flow_source
+cash_flow_hdkd_1_thu_nhap_lai_va_cac_khoan_thu_nhap_tuong_tu_nh, cash_flow_hdkd_2_chi_phi_lai_va_cac_chi_phi_tuong_tu_da_tra, cash_flow_hdkd_3_thu_nhap_tu_hoat_dong_dich_vu
+cash_flow_hdkd_4_chenh_lech_so_tien_thuc_thu_thuc_chi_tu_hoat_d, cash_flow_hdkd_5_lai_lo_tu_hoat_dong_khac, cash_flow_hdkd_6_tien_thu_cac_khoan_no_da_duoc_xu_ly_xoa_bu_dap
+cash_flow_hdkd_7_tien_chi_tra_cho_nhan_vien_va_hoat_dong_quan_l, cash_flow_hdkd_8_tien_thue_thu_nhap_thuc_nop_trong_ky, cash_flow_hdkd_luu_chuyen_tien_thuan_tu_hoat_dong_kinh_doanh_tr
+cash_flow_hdkd_nhung_thay_doi_ve_tai_san_hoat_dong, cash_flow_hdkd_9_tang_giam_cac_khoan_tien_gui_va_cho_vay_cac_tc, cash_flow_hdkd_10_tang_giam_cac_khoan_ve_kinh_doanh_chung_khoan
+cash_flow_hdkd_11_tang_giam_cac_cong_cu_tc_phai_sinh_va_cac_tai, cash_flow_hdkd_12_tang_giam_cac_khoan_cho_vay_khach_hang, cash_flow_hdkd_13_tang_giam_nguon_du_phong_de_xu_ly_rui_ro_xu_l
+cash_flow_hdkd_14_tang_giam_khac_ve_tai_san_hoat_dong, cash_flow_hdkd_nhung_thay_doi_ve_cong_no_hoat_dong, cash_flow_hdkd_15_tang_giam_cac_khoan_no_chinh_phu_va_nhnn
+cash_flow_hdkd_16_tang_giam_cac_khoan_tien_gui_tien_vay_cac_tct, cash_flow_hdkd_17_tang_giam_tien_gui_cua_khach_hang, cash_flow_hdkd_18_tang_giam_phat_hanh_giay_to_co_gia
+cash_flow_hdkd_19_tang_giam_von_tai_tro_uy_thac_dau_tu_cho_vay_, cash_flow_hdkd_20_tang_giam_cac_cong_cu_tc_phai_sinh_va_cac_kho, cash_flow_hdkd_21_tang_giam_khac_ve_cong_no_hoat_dong
+cash_flow_hdkd_22_chi_tu_cac_quy_cua_tctd, cash_flow_hdkd_i_luu_chuyen_tien_thuan_tu_hoat_dong_kinh_doanh, cash_flow_hddt_mua_sam_tai_san_co_dinh
+cash_flow_hddt_tien_thu_tu_thanh_ly_nhuong_ban_tscd, cash_flow_hddt_tien_chi_ve_thanh_ly_nhuong_ban_tscd, cash_flow_hddt_mua_sam_bat_dong_san_dau_tu
+cash_flow_hddt_tien_thu_tu_ban_thanh_ly_bat_dong_san_dau_tu, cash_flow_hddt_tien_chi_ra_do_ban_thanh_ly_bat_dong_san_dau_tu, cash_flow_hddt_tien_chi_dau_tu_gop_von_vao_cac_don_vi_khac
+cash_flow_hddt_tien_thu_dau_tu_gop_von_vao_cac_don_vi_khac, cash_flow_hddt_tien_thu_co_tuc_va_loi_nhuan_duoc_chia_tu_cac_kh, cash_flow_hddt_ii_luu_chuyen_tien_thuan_tu_hd_dau_tu
+cash_flow_hdtc_1_tang_von_co_phan_tu_phat_hanh_co_phieu, cash_flow_hdtc_2_tien_thu_tu_phat_hanh_giay_to_co_gia_dai_han_c, cash_flow_hdtc_3_tien_chi_thanh_toan_giay_to_co_gia_dai_han_co_
+cash_flow_hdtc_4_co_tuc_tra_cho_co_dong_loi_nhuan_da_chia, cash_flow_hdtc_5_tien_chi_ra_mua_co_phieu_quy, cash_flow_hdtc_6_tien_thu_duoc_do_ban_co_phieu_quy
+cash_flow_hdtc_iii_luu_chuyen_tien_thuan_tu_hd_tai_chinh, cash_flow_hdtc_iv_luu_chuyen_tien_thuan_trong_ky, cash_flow_hdtc_v_tien_va_cac_khoan_tuong_duong_tien_tai_thoi_di
+cash_flow_hdtc_vi_dieu_chinh_anh_huong_cua_thay_doi_ty_gia, cash_flow_hdtc_vii_tien_va_cac_khoan_tuong_duong_tien_tai_thoi_
+```
+
+### Income statement (29)
+
+```
+income_statement_template, income_statement_period, income_statement_source
+income_statement_n1_thu_nhap_lai_va_cac_khoan_thu_nhap_tuong_tu, income_statement_n2_chi_phi_lai_va_cac_chi_phi_tuong_tu, income_statement_i_thu_nhap_lai_thuan
+income_statement_n3_thu_nhap_tu_hoat_dong_dich_vu, income_statement_n4_chi_phi_hoat_dong_dich_vu, income_statement_ii_lai_lo_thuan_tu_hoat_dong_dich_vu
+income_statement_iii_lai_lo_thuan_tu_hoat_dong_kinh_doanh_ngoai, income_statement_iv_lai_lo_thuan_tu_mua_ban_chung_khoan_kinh_do, income_statement_v_lai_lo_thuan_tu_mua_ban_chung_khoan_dau_tu
+income_statement_n5_thu_nhap_tu_hoat_dong_khac, income_statement_n6_chi_phi_hoat_dong_khac, income_statement_vi_lai_lo_thuan_tu_hoat_dong_khac
+income_statement_vii_thu_nhap_tu_gop_von_mua_co_phan, income_statement_tong_thu_nhap_hoat_dong, income_statement_viii_chi_phi_hoat_dong
+income_statement_chi_phi_hoat_dong_khac, income_statement_ix_loi_nhuan_thuan_tu_hoat_dong_kinh_doanh_tru, income_statement_x_chi_phi_du_phong_rui_ro_tin_dung
+income_statement_xi_tong_loi_nhuan_truoc_thue, income_statement_n7_chi_phi_thue_tndn_hien_hanh, income_statement_n8_chi_phi_thue_tndn_hoan_lai
+income_statement_xii_chi_phi_thue_tndn, income_statement_xiii_loi_nhuan_sau_thue, income_statement_xiv_loi_ich_cua_co_dong_thieu_so
+income_statement_xv_loi_nhuan_sau_thue_cua_co_dong_cua_ngan_han, income_statement_lai_co_ban_tren_co_phieu_dong_1_co_phieu
+```
+
+### Period & provenance (3)
+
+```
+publish_date, year, quarter
+```
+

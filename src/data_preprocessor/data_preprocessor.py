@@ -7,7 +7,7 @@ from glob import glob
 import numpy as np
 from datetime import date, datetime, timezone
 from psycopg2.extras import execute_values
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Sequence, Tuple
 from concurrent.futures import ThreadPoolExecutor
 import threading
 
@@ -5344,6 +5344,272 @@ class DataPreprocessor:
         self._logger.log_info(
             f"{schema}.pool__targets: {written} rows over {series} series, "
             f"{benchmark_gaps} benchmark gap date(s) — {summary}."
+        )
+
+    # ── UNIFIED — the other two feature pools ───────────────────────────────────
+    #
+    # `pool__basic` is the price/flow panel and `pool__targets` the labels. These two
+    # are the remaining groups a model consumes: the technical block and the
+    # fundamental one. Both follow `pool__basic`'s contract exactly — CTAS for type
+    # fidelity, PK `(date, exchange, ticker)`, re-runnable, schema created if absent.
+
+    UNIFIED_TA_SOURCE = f"{GOLD_SCHEMA}.stocks_ta"
+    UNIFIED_FA_SOURCE = f"{GOLD_SCHEMA}.stocks_financials_bank_fa"
+
+    # ⚠️ COLUMNS THE FEATURE POOLS MUST NOT RE-CARRY. Identity and taxonomy belong to
+    # `pool__basic`; duplicating them here would make every join produce `_x`/`_y`
+    # pairs, and `UnifiedSchemaReader.join` would silently drop one copy. The keys
+    # themselves are added back explicitly — they are what the pools join ON.
+    UNIFIED_POOL_IDENTITY = (
+        "sector", "sector_code", "industry_group", "industry_group_code",
+        "industry", "industry_code", "sub_industry", "sub_industry_code",
+    )
+
+    # ⚠️ PRICE COLUMNS `pool__basic` ALREADY OWNS, under these names or others.
+    # `gold.stocks_ta` calls them `open/high/low/close`, the FA table adds
+    # `open_raw/high_raw/low_raw` — same prices, different spellings, and a model
+    # given both would see one series twice and the correlation prune would spend
+    # its budget discovering that.
+    UNIFIED_POOL_PRICE_DUPES = (
+        "open", "high", "low", "open_raw", "high_raw", "low_raw",
+    )
+
+    def _helper_unified_pool_columns(
+        self, source_schema: str, source_table: str, exclude: Sequence[str]
+    ) -> List[str]:
+        """Source columns for a pool: the key, then everything not excluded.
+
+        Order matters only for readability — the key leads, as it does in every
+        other unified table.
+        """
+        types = self._helper_column_types(source_schema, source_table)
+        if not types:
+            raise MissingSourceDataError(
+                f"`{source_schema}.{source_table}` does not exist — build it first."
+            )
+        missing = [k for k in self.UNIFIED_PRIMARY_KEY if k not in types]
+        if missing:
+            raise MissingSourceDataError(
+                f"`{source_schema}.{source_table}` has no {missing} column(s), so it "
+                f"cannot be keyed {self.UNIFIED_PRIMARY_KEY}."
+            )
+        dropped = set(exclude) | set(self.UNIFIED_PRIMARY_KEY)
+        return list(self.UNIFIED_PRIMARY_KEY) + [
+            c for c in types if c not in dropped
+        ]
+
+    def _helper_unified_pool_from_source(
+        self,
+        ticker: str,
+        pool: str,
+        source: str,
+        exclude: Sequence[str],
+    ) -> Tuple[int, int]:
+        """Shared body of `_ingest_unified_pool_ta` / `_ingest_unified_pool_fa`.
+
+        ⚠️ **The source is INNER JOINED to `pool__basic` on the whole key, not read
+        on its own.** `gold.stocks_ta` runs to 2026-06-26 where `pool__basic` stops
+        at 2026-06-25, so a straight copy would produce a pool with 4,242 rows
+        against `pool__basic`'s 4,235 — the exact mismatch that made the dropped
+        `pool__targets` unjoinable (see `_ingest_unified_pool_targets`). Joining to
+        the spine makes one calendar structural instead of hoped for.
+
+        Returns `(rows, columns)`.
+        """
+        schema = self._helper_unified_schema(ticker)
+        universe = self._helper_unified_is_universe(ticker)
+        source_schema, source_table = source.split(".", 1)
+
+        if not self._helper_column_types(schema, "pool__basic"):
+            raise MissingSourceDataError(
+                f"`{schema}.pool__basic` does not exist — it is the calendar spine "
+                f"every other pool is joined to. Build it first."
+            )
+
+        columns = self._helper_unified_pool_columns(source_schema, source_table, exclude)
+        selected = ", ".join(f"s.{c}" for c in columns)
+        where = "" if universe else " AND s.ticker = %s"
+        params = () if universe else (ticker,)
+
+        with self._database_driver._cursor_ctx() as cur:
+            cur.execute(
+                f"SELECT COUNT(*) FROM {source} s "
+                f"JOIN {schema}.pool__basic b ON b.date = s.date "
+                f" AND b.exchange = s.exchange AND b.ticker = s.ticker"
+                f"{'' if universe else ' WHERE TRUE' + where}",
+                params,
+            )
+            available = int(cur.fetchone()[0])
+            if not available:
+                raise MissingSourceDataError(
+                    f"`{source}` shares no (date, exchange, ticker) rows with "
+                    f"{schema}.pool__basic"
+                    + ("" if universe else f" for {ticker}")
+                    + f", so {schema}.{pool} would be empty."
+                )
+
+            # Dropped as late as possible: a failure above leaves the old table intact.
+            cur.execute(f"DROP TABLE IF EXISTS {schema}.{pool}")
+            cur.execute(
+                f"CREATE TABLE {schema}.{pool} AS "
+                f"SELECT {selected} FROM {source} s "
+                f"JOIN {schema}.pool__basic b ON b.date = s.date "
+                f" AND b.exchange = s.exchange AND b.ticker = s.ticker"
+                f"{'' if universe else ' WHERE TRUE' + where}",
+                params,
+            )
+            self._helper_unified_primary_key(cur, schema, pool)
+
+            cur.execute(f"SELECT COUNT(*) FROM {schema}.{pool}")
+            written = int(cur.fetchone()[0])
+            cur.execute(f"SELECT COUNT(*) FROM {schema}.pool__basic")
+            spine = int(cur.fetchone()[0])
+            # ⚠️ Symmetric EXCEPT, not a row count. Two tables can agree on how many
+            # rows they hold and disagree about WHICH — the same check
+            # `unified_vcb_pool_targets` makes, for the same reason.
+            cur.execute(
+                f"SELECT COUNT(*) FROM ("
+                f"  SELECT date, exchange, ticker FROM {schema}.{pool}"
+                f"  EXCEPT SELECT date, exchange, ticker FROM {schema}.pool__basic"
+                f"  UNION ALL"
+                f"  SELECT date, exchange, ticker FROM {schema}.pool__basic"
+                f"  EXCEPT SELECT date, exchange, ticker FROM {schema}.{pool}"
+                f") d"
+            )
+            unaligned = int(cur.fetchone()[0])
+
+        if written != available:
+            raise PipelineError(
+                f"{schema}.{pool} wrote {written} rows against {available} joinable."
+            )
+        if unaligned:
+            raise PipelineError(
+                f"{schema}.{pool} and pool__basic disagree on {unaligned} key(s). "
+                f"Every pool must sit on the spine's calendar or the join silently "
+                f"drops rows."
+            )
+        if written != spine:
+            raise PipelineError(
+                f"{schema}.{pool} has {written} rows against pool__basic's {spine}."
+            )
+        return written, len(columns)
+
+    def _ingest_unified_pool_ta(self, ticker: str) -> None:
+        """`gold.stocks_ta` → `unified_schema_<ticker>.pool__ta` — the technical block.
+
+        **~920 indicator columns** — Bollinger/MACD/RSI/Hilbert families and their
+        slopes, crossings and boolean flags — keyed `(date, exchange, ticker)` and on
+        `pool__basic`'s calendar.
+
+        ⚠️ **Identity, taxonomy and the duplicated OHLC are dropped.** `gold.stocks_ta`
+        repeats the 8 GICS columns and `open/high/low`, all of which `pool__basic`
+        already carries; keeping them would give a joined panel two copies of one
+        price and eight constant strings.
+
+        ⚠️ **~207 of these columns are BOOLEAN** (`*_gt_prev`, `*_valid`, crossing
+        flags). `FeatureSelector._prepare` excludes bool dtypes explicitly, so they
+        are stored but will not be scored until someone decides how to encode them —
+        which is a modelling decision, not an ingest one.
+
+        ⚠️ **This is the pool §7 of `feature_selection/CONTEXT.md` says to widen to
+        LAST**, after a target has cleared its own null. On a single ticker it buys a
+        longer list of nothing, more slowly, and with a higher bar.
+        """
+        schema = self._helper_unified_schema(ticker)
+        self._logger.log_info(
+            f"Ingesting unified {schema}.pool__ta (from {self.UNIFIED_TA_SOURCE})..."
+        )
+        rows, columns = self._helper_unified_pool_from_source(
+            ticker, "pool__ta", self.UNIFIED_TA_SOURCE,
+            exclude=self.UNIFIED_POOL_IDENTITY + self.UNIFIED_POOL_PRICE_DUPES,
+        )
+        self._logger.log_info(f"{schema}.pool__ta: {rows} rows x {columns} columns.")
+
+    def _ingest_unified_pool_fa(self, ticker: str) -> None:
+        """`gold.stocks_financials_bank_fa` → `…​.pool__fa` — the fundamental block.
+
+        **~204 columns**: the balance sheet (93), cash flow (50) and income statement
+        (29) line items, share counts, `eps`/`bvps`/`ttm_*`, and the period metadata
+        — keyed `(date, exchange, ticker)`, forward-filled to a DAILY grain on
+        `pool__basic`'s calendar.
+
+        ## ⚠️ `publish_date` IS THE ONLY THING STOPPING THIS BEING A TIME MACHINE
+
+        A quarterly statement is not knowable on the last day of its quarter — VCB's
+        Q1 is published around 29 April, a median **54 days** later. Attaching a
+        figure to the period it describes rather than to the day it was announced
+        would let a model read Q1's profit throughout Q1, and it would look like the
+        best feature ever found. The source already carries `publish_date` and is
+        expanded so that each row holds the most recent statement **published on or
+        before that row's date**; this method ASSERTS that rather than trusting it,
+        because it is the one property that decides whether the pool is usable.
+
+        ⚠️ **The lag reaches 0 days.** On a publication day the figures are attached
+        to that same session. If a statement was released after the close, a model
+        trading that close has seen tomorrow's news — a half-day leak this layer
+        cannot detect, and a reason to shift `publish_date` forward by one session
+        before trusting any result that leans on the FA pool.
+
+        ⚠️ **Bank template only, so only two tickers exist**: `VCB` and `ACB`.
+        `gold.stocks_financials_bank_fa` is built from the CafeF *bank* chart of
+        accounts; a non-bank ticker raises here rather than producing an empty table.
+        """
+        schema = self._helper_unified_schema(ticker)
+        self._logger.log_info(
+            f"Ingesting unified {schema}.pool__fa (from {self.UNIFIED_FA_SOURCE})..."
+        )
+
+        # ⚠️ The TA block is excluded by NAME INTERSECTION, not by a prefix guess.
+        # `gold.stocks_financials_bank_fa` is the FA block merged onto the TA one —
+        # 906 of its 1,150 columns are `gold.stocks_ta` columns — and letting those
+        # through would make `pool__fa` and `pool__ta` 906-way duplicates of each
+        # other, which the correlation prune would then spend its whole budget on.
+        ta_columns = tuple(self._helper_column_types(*self.UNIFIED_TA_SOURCE.split(".", 1)))
+        basic_columns = tuple(self._helper_column_types(SILVER_SCHEMA, "stocks_basic"))
+        exclude = (
+            self.UNIFIED_POOL_IDENTITY
+            + self.UNIFIED_POOL_PRICE_DUPES
+            + ta_columns
+            + basic_columns
+        )
+
+        rows, columns = self._helper_unified_pool_from_source(
+            ticker, "pool__fa", self.UNIFIED_FA_SOURCE, exclude=exclude
+        )
+
+        with self._database_driver._cursor_ctx() as cur:
+            # THE ASSERTION THIS METHOD EXISTS FOR.
+            cur.execute(
+                f"SELECT COUNT(*) FROM {schema}.pool__fa WHERE publish_date > date"
+            )
+            ahead = int(cur.fetchone()[0])
+            cur.execute(
+                f"SELECT COUNT(*) FROM {schema}.pool__fa WHERE publish_date IS NULL"
+            )
+            unpublished = int(cur.fetchone()[0])
+            cur.execute(
+                f"SELECT MIN(date - publish_date), "
+                f"       PERCENTILE_DISC(0.5) WITHIN GROUP (ORDER BY date - publish_date), "
+                f"       MAX(date - publish_date) FROM {schema}.pool__fa"
+            )
+            lag_min, lag_median, lag_max = cur.fetchone()
+
+        if ahead:
+            raise PipelineError(
+                f"{schema}.pool__fa has {ahead} row(s) whose publish_date is AFTER "
+                f"the row's own date. Every one of them lets a model read a "
+                f"statement before it was announced. Fix the expansion in "
+                f"{self.UNIFIED_FA_SOURCE}; do not filter them out here."
+            )
+        if unpublished:
+            raise PipelineError(
+                f"{schema}.pool__fa has {unpublished} row(s) with a NULL "
+                f"publish_date, so their look-ahead cannot be checked at all."
+            )
+        self._logger.log_info(
+            f"{schema}.pool__fa: {rows} rows x {columns} columns; "
+            f"publish lag min {lag_min} / median {lag_median} / max {lag_max} days, "
+            f"0 rows published after their own date."
         )
 
     # endregion Helper functions

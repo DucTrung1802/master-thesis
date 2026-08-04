@@ -444,7 +444,7 @@ This section was the plan. Steps 1-3 are built and run; step 4 is still open.
 | 1. multi-ticker panel | VN30 ≈ 25 stocks | ✅ **`unified_schema_all`** — 781 tickers, 2.39 M rows, built by `_ingest_unified_pool_basic("ALL")`. Studies run on VN30 / VN100 / all of it |
 | 2. cross-sectional rank target | day `t`'s ranking | ✅ **`cs_rank_{h}day`**, uniform on `[-0.5, +0.5]` per date, built in `read_universe_panel` |
 | 3. reuse the package, group the CV by date | | ✅ **six hook overrides**, nothing re-implemented. `PurgedWalkForwardByDate` purges `d+h−1` **sessions** |
-| 4. widen to `pool__ta` / `pool__macro` / `pool__calendar` | | ❌ **still open — and now worth doing**, see §9f |
+| 4. widen to `pool__ta` / `pool__macro` / `pool__calendar` | | ⏳ **the tables now EXIST** (2026-08-04) — nothing has been run against them |
 
 ⚠️ **The order in the original plan was right and is worth keeping.** Widening the
 pool first would have produced "a longer list of nothing, more slowly, and with a
@@ -456,6 +456,37 @@ by construction and `pool__basic` asserts `COUNT(DISTINCT ticker) = 1`.
 `unified_schema_all` is that assertion's sibling, not its replacement — see
 `data_preprocessor/CONTEXT.md` §"ticker = ALL" for the sentinel and the three
 assertions that had to become series-aware.
+
+### 7a. The other two pools now exist — `pool__ta` and `pool__fa` (2026-08-04)
+
+`unified_schema_vcb` holds four tables, all 4,235 rows on one calendar, all keyed
+`(date, exchange, ticker)`:
+
+| pool | columns | is |
+|---|---|---|
+| `pool__basic` | 38 | the price/flow panel |
+| `pool__targets` | 7 | the labels |
+| **`pool__ta`** | **924** | the technical block — ~226 moving-average columns, 121 oscillator, 120 price-transform, 90 Hilbert, 58 volatility, 50 volume, 45 RSI, 28 SAR, 26 stochastic, 23 Bollinger, 20 MACD |
+| **`pool__fa`** | **207** | the fundamental block — 93 balance-sheet, 50 cash-flow, 29 income-statement line items, 17 ratios (`roe`, `roa`, `nim`, `pe_ttm`, `pb`, `ldr`, …), 4 YoY growth, 4 per-share/TTM, 4 share counts |
+
+Full listing: [unified_schema_vcb__pool_columns.md](../../reports/feature_selection/unified_schema_vcb__pool_columns.md).
+
+⚠️ **THEY EXIST; NOTHING HAS BEEN RUN AGAINST THEM, AND §7 STILL SAYS WHY.** On a
+single ticker a wider pool buys no independent observations and **raises its own
+null** — `zscore` moved its bar 43 % on 27 channels, and `pool__ta` is 924. The
+order that worked was: go cross-sectional first, clear a null, *then* widen. These
+tables are for step 4, against a cross-sectional target, not for another VCB run.
+
+⚠️ **`pool__fa` exists for VCB and ACB only** — it is built from the CafeF *bank*
+chart of accounts. A cross-sectional FA study is not possible from this table.
+
+⚠️ **`pool__fa` is safe only because of `publish_date`**, which the ingest asserts
+(0 rows published after their own date). The lag reaches **0 days**, so shift it
+forward one session before trusting any FA-driven result — see
+`data_preprocessor/CONTEXT.md`.
+
+⚠️ **~207 of `pool__ta`'s columns are BOOLEAN** and `_prepare` drops bool dtypes, so
+a naive run would silently score ~717 of the 921, not all of them.
 
 ### Smaller extensions, if the study continues as-is
 

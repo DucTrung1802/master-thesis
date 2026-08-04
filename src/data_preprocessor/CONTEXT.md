@@ -858,6 +858,66 @@ listed ticker would not.)
 Dagster asset, for the single-ticker path — a notebook calling
 `_ingest_unified_pool_basic` directly had no asset to catch a two-company schema.
 
+#### `_ingest_unified_pool_ta` / `_ingest_unified_pool_fa` (2026-08-04)
+
+The remaining two feature groups. Both follow `pool__basic`'s contract exactly —
+CTAS for type fidelity, PK `(date, exchange, ticker)`, re-runnable, schema created
+if absent — and both share one body, `_helper_unified_pool_from_source`.
+
+| pool | source | VCB result |
+|---|---|---|
+| `pool__ta` | `gold_schema.stocks_ta` (935 cols, 777 tickers) | **4,235 × 924** in 0.4 s |
+| `pool__fa` | `gold_schema.stocks_financials_bank_fa` (1,150 cols, **2 tickers**) | **4,235 × 207** in 0.1 s |
+
+⚠️ **THE SOURCE IS INNER JOINED TO `pool__basic`, NOT READ ON ITS OWN.**
+`gold.stocks_ta` runs to 2026-06-26 where `pool__basic` stops at 2026-06-25, so a
+straight copy gives 4,242 rows against the spine's 4,235 — the exact mismatch that
+made the dropped `pool__targets` unjoinable. Joining to the spine makes one calendar
+structural rather than hoped for, and a **symmetric `EXCEPT`** asserts it afterwards
+(two tables can agree on how many rows they hold and disagree about which).
+
+⚠️ **Identity, taxonomy and duplicated OHLC are dropped.** `gold.stocks_ta` repeats
+the 8 GICS columns and `open/high/low`; the FA table adds `open_raw/high_raw/low_raw`
+— the same prices under different spellings. Keeping them would hand a joined panel
+two copies of one price and eight constant strings, and the correlation prune would
+spend its budget rediscovering that.
+
+⚠️ **`pool__fa` excludes the TA block BY NAME INTERSECTION, not by a prefix guess.**
+`gold.stocks_financials_bank_fa` is the FA block merged onto the TA one — **906 of
+its 1,150 columns are `gold.stocks_ta` columns**. Letting them through would make
+`pool__fa` and `pool__ta` 906-way duplicates of each other.
+
+##### ⚠️ `publish_date` is the only thing stopping `pool__fa` being a time machine
+
+A quarterly statement is not knowable on the last day of its quarter: VCB's Q1 is
+published around 29 April, a **median 48 days** later (min 0, max 161). Attaching a
+figure to the period it describes rather than the day it was announced would let a
+model read Q1's profit throughout Q1 — and it would look like the best feature ever
+found. The source is already expanded so each row carries the most recent statement
+**published on or before that row's date**; `_ingest_unified_pool_fa` **asserts**
+it (`publish_date > date` must be 0 rows, `publish_date IS NULL` must be 0 rows)
+rather than trusting it, because it is the one property that decides whether the
+pool is usable at all. Measured on VCB: **0 and 0**.
+
+⚠️ **The lag reaches 0 days.** On a publication day the figures are attached to that
+same session. If a statement was released after the close, a model trading that
+close has seen tomorrow's news — a half-day leak this layer cannot detect. **Shift
+`publish_date` forward one session before trusting any result that leans on
+`pool__fa`.**
+
+⚠️ **Bank template only, so `pool__fa` exists for `VCB` and `ACB` and nothing else.**
+`gold.stocks_financials_bank_fa` is built from the CafeF *bank* chart of accounts.
+A non-bank ticker raises rather than producing an empty table.
+
+⚠️ **~207 of `pool__ta`'s columns are BOOLEAN** (`*_gt_prev`, `*_valid`, crossing
+flags). `FeatureSelector._prepare` excludes bool dtypes, so they are stored but not
+scored until someone decides how to encode them — a modelling decision, not an
+ingest one.
+
+⚠️ **Neither pool is a Dagster asset.** They were built by calling the methods
+directly, the same way `unified_schema_all` was; `--select "group:unified_vcb"`
+rebuilds only `pool__basic` and `pool__targets`. See `orchestration/CONTEXT.md`.
+
 ⚠️ **`close_adjust` can be NEGATIVE in silver, and the universe build is what
 exposed it.** `VNX` carries `close_adjust = -10.0` for **968 sessions** (2010-11 to
 2010-12, then 7,800 abruptly), which makes `unified_schema_all.return_5day` reach
