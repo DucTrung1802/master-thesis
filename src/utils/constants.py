@@ -304,7 +304,17 @@ SCRAPER_BASE_WAIT_TIME = 1  # seconds
 
 SCRAPER_RETRY_ATTEMPTS = 5  # number of retry attempts on failure
 SCRAPER_RETRY_DELAY = 5  # seconds to wait between retries
-SCRAPER_MAX_CONCURRENT_BROWSERS = 1  # cap concurrent Chrome instances
+# ⚠️ THE HARD CAP ON CONCURRENT CHROME INSTANCES — the one number to change.
+# `TradingViewScraper` sizes BOTH its browser semaphore AND its thread pool from this, so
+# a thread can never be waiting to open a browser it is not allowed to have. It is the
+# only Selenium user in the repo, so this is the whole browser budget.
+# Override without editing code:  $env:SCRAPER_MAX_CONCURRENT_BROWSERS = "2"
+# ⚠️ It is an IN-PROCESS semaphore. One Dagster run holds one TradingView step at a time
+# (the `resource: browser` tag limit), so the cap is exact there — but a multi-run
+# backfill launches one process per partition and multiplies it. See orchestration §2a.
+SCRAPER_MAX_CONCURRENT_BROWSERS = int(
+    os.getenv("SCRAPER_MAX_CONCURRENT_BROWSERS", "4")
+)
 SCRAPER_NAV_STAGGER = 8.0  # minimum seconds between browser page navigations
 SCRAPER_MAX_WORKERS = 2  # thread-pool size for I/O-bound (requests) scrapers
 

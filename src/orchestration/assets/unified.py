@@ -61,13 +61,21 @@ from orchestration._bootstrap import bootstrap
 
 bootstrap()
 
+from orchestration import enabled
 from orchestration.resources import PreprocessorResource
 
 # ⚠️ The two sentinels here must stay in step with
 # `DataPreprocessor.UNIFIED_MEMBER_FILTERS`; everything else is an ordinary ticker.
 # Kept as literals rather than read off the class because a partition set has to be
 # known at DEFINITION time, before any database connection exists.
-UNIFIED_PARTITIONS = StaticPartitionsDefinition(["VCB", "ALL", "BANK"])
+#
+# One universe at a time can be switched off from `config.json` —
+# `"partitions": {"unified": {"ALL": false}}` — under the GROUP name `unified`, because all four `pool__*`
+# assets share this object and a pool offered for a universe its spine does not have
+# would be a broken edge.
+UNIFIED_PARTITIONS = StaticPartitionsDefinition(
+    enabled.register("unified", ["VCB", "ALL", "BANK"])
+)
 
 
 def _schema_of(universe: str) -> str:

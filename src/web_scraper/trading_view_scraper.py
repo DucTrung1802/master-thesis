@@ -8,6 +8,7 @@ import os
 import random
 import threading
 import time
+from contextlib import contextmanager
 from typing import Callable, List, Optional, Tuple, Literal
 from datetime import datetime
 
@@ -46,15 +47,32 @@ class TradingViewScraper(BaseScraper):
         power: int = THREAD_MANAGER_POWER,
         retry_attempts: int = SCRAPER_RETRY_ATTEMPTS,
         retry_delay: float = SCRAPER_RETRY_DELAY,
+        max_browsers: int = SCRAPER_MAX_CONCURRENT_BROWSERS,
     ):
+        max_browsers = max(1, int(max_browsers))
+
+        # ⚠️ THE THREAD POOL IS SIZED TO THE BROWSER CAP, not to SCRAPER_MAX_WORKERS.
+        # Every task in this scraper opens a browser, so a pool WIDER than the cap only
+        # buys threads that block on the semaphore, and a pool NARROWER than it makes the
+        # cap unreachable — which is what happened when the pool was 2 and the cap 8: the
+        # effective concurrency was 2, and the documented 8 was fiction. One knob now.
         super().__init__(
             logger=logger,
             switch_handler=switch_handler,
             power=power,
             retry_attempts=retry_attempts,
             retry_delay=retry_delay,
+            max_workers=max_browsers,
         )
-        self._browser_semaphore = threading.Semaphore(SCRAPER_MAX_CONCURRENT_BROWSERS)
+        self._max_browsers = max_browsers
+        self._browser_semaphore = threading.Semaphore(max_browsers)
+        self._browsers_live = 0
+        self._browsers_peak = 0
+        self._browser_count_lock = threading.Lock()
+        self._logger.log_info(
+            f"TradingViewScraper: at most {max_browsers} concurrent Chrome instance(s) "
+            f"(SCRAPER_MAX_CONCURRENT_BROWSERS); thread pool sized to match."
+        )
         self._nav_last_ts: float = 0.0
         self._nav_time_lock = threading.Lock()
 
@@ -72,6 +90,57 @@ class TradingViewScraper(BaseScraper):
             "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
         )
 
+        # ⚠️ WITHOUT THESE, A COVERED WINDOW SILENTLY STOPS PAGINATING. Chrome throttles
+        # timers and rendering in windows it believes nobody can see — and TradingView's
+        # symbol list appends its next 50 rows from a visibility-driven callback. During
+        # a run measured in hours the windows WILL end up behind something, so occlusion
+        # is the normal case, not the edge case. See `_helper_extract_trading_view_links`
+        # for what that cost: every leaf over 50 symbols truncated to exactly 50.
+        for flag in (
+            "--disable-backgrounding-occluded-windows",
+            "--disable-renderer-backgrounding",
+            "--disable-background-timer-throttling",
+        ):
+            self._chrome_options.add_argument(flag)
+
+    # ──────────────────────────────────────────────────────────────────────
+    # The browser budget
+    # ──────────────────────────────────────────────────────────────────────
+
+    @contextmanager
+    def _browser_slot(self):
+        """Hold one of the `max_browsers` permits for a driver's WHOLE life.
+
+        Every `webdriver.Chrome()` in this class is created inside this block and quit
+        before leaving it — a permit taken after the driver exists would cap nothing.
+
+        The live/peak counters are not decoration: they make "strictly N" an assertion
+        the log can be read back for, rather than a claim about a semaphore. The
+        `PipelineError` cannot fire while the permit accounting is correct, which is the
+        point — it fires only if someone opens a browser outside this block.
+        """
+        self._browser_semaphore.acquire()
+        try:
+            with self._browser_count_lock:
+                self._browsers_live += 1
+                live = self._browsers_live
+                self._browsers_peak = max(self._browsers_peak, live)
+                peak = self._browsers_peak
+            if live > self._max_browsers:
+                raise PipelineError(
+                    f"{live} Chrome instances alive but the cap is "
+                    f"{self._max_browsers} — a driver was created outside "
+                    f"`_browser_slot`."
+                )
+            self._logger.log_info(
+                f"Chrome slot taken: {live}/{self._max_browsers} live (peak {peak})."
+            )
+            yield
+        finally:
+            with self._browser_count_lock:
+                self._browsers_live -= 1
+            self._browser_semaphore.release()
+
     # ──────────────────────────────────────────────────────────────────────
     # Selenium / BS4 helpers
     # ──────────────────────────────────────────────────────────────────────
@@ -81,7 +150,19 @@ class TradingViewScraper(BaseScraper):
     ) -> Tuple[ChromiumDriver, BeautifulSoup]:
         web_driver: ChromiumDriver = webdriver.Chrome(options=self._chrome_options)
         bs4_parser: BeautifulSoup = BeautifulSoup(web_driver.page_source, "html.parser")
-        web_driver.minimize_window()
+
+        # ⚠️ THIS USED TO BE `minimize_window()`, AND THAT ONE CALL COST 998 US SERIES.
+        # A minimized window has no layout, so TradingView renders the first 50 symbols
+        # and its lazy loader never fires again however far the container is scrolled.
+        # Leaves under 50 symbols were unaffected, which is why it hid for months: 17 of
+        # 19 economy countries matched TradingView's own counts EXACTLY, and only the USA
+        # — the one country with categories over 50 — came back at exactly 50 per
+        # category. Proven by probe: same leaf, minimized 50 rows, sized window 276.
+        #
+        # The size is deliberate too. The list appends a page when the scroll approaches
+        # the bottom, so the viewport has to be tall enough to have a bottom worth
+        # approaching.
+        web_driver.set_window_size(1400, 1000)
         return (web_driver, bs4_parser)
 
     def _helper_update_bs4_parser(self, web_driver: ChromiumDriver) -> BeautifulSoup:
@@ -363,18 +444,58 @@ class TradingViewScraper(BaseScraper):
         // cost us the SCROLLING, never the rows already rendered.
         if (!container) return { symbols: symbols, scrollTop: -1, container: false };
 
+        // ⚠️ JUMP TO THE BOTTOM, don't nudge. `scrollTop += 3000` was a fixed step, and
+        // the list grows as it pages in — 50 rows is ~2,000px but 276 rows is ~11,000px,
+        // so a 3,000px step stops landing at the bottom once the list is a few pages
+        // deep. The next page is appended when the scroll REACHES the bottom, so a step
+        // that falls short simply stops the pagination. `scrollHeight` is always the
+        // bottom, whatever the list has grown to.
         const currentTop = container.scrollTop;
-        container.scrollTop += 3000;
+        container.scrollTop = container.scrollHeight;
         return { symbols: symbols, scrollTop: currentTop, container: true };
     """
+
+    # How long the symbol list may sit still before the scroll loop calls it finished.
+    # `_SCROLL_POLL_S * _SCROLL_MAX_NO_PROGRESS` must exceed the time TradingView takes
+    # to deliver the NEXT PAGE of 50 rows; at 0.3 x 3 = 0.9 s it did not, and every leaf
+    # with more than 50 symbols was silently truncated to exactly 50 (see
+    # `_helper_extract_trading_view_links`). 0.8 x 6 = 4.8 s.
+    _SCROLL_POLL_S = 0.8
+    _SCROLL_MAX_NO_PROGRESS = 6
 
     def _helper_extract_trading_view_links(
         self, web_driver: ChromiumDriver
     ) -> List[str]:
         """
         Scroll the TradingView symbol list and collect every data-symbol-name attribute.
-        Waits for items to actually render before starting, then stops after 3
-        consecutive attempts that neither scroll the container nor find a new symbol.
+        Waits for items to actually render before starting, then gives up once
+        `_SCROLL_POLL_S * _SCROLL_MAX_NO_PROGRESS` seconds pass with neither a scroll nor
+        a new symbol.
+
+        ⚠️ **THE IDLE BUDGET IS WHY THIS USED TO STOP AT EXACTLY 50 ROWS** (found
+        2026-08-05). The list is paged: TradingView renders 50, and fetches the next 50
+        only once the scroll approaches the bottom. The old budget was 3 iterations x
+        0.3 s = **0.9 s**, which is shorter than that round-trip — so the loop declared
+        "no progress" while the next page was still in flight and returned the first page
+        alone.
+
+        It was invisible because it only bites a leaf with MORE than 50 symbols, and
+        almost every leaf has fewer. Measured against TradingView's own symbol-search API
+        on the data this repo had already scraped:
+
+        | country | on disk | actually exists |
+        |---|---|---|
+        | vietnam / japan / china / south korea | 88 / 181 / 164 / 140 | **identical** |
+        | usa | **464** | **1,462** |
+
+        and within the USA the signature is unmistakable — `health` 4/4 and `taxes` 10/10
+        complete, while `labor` took 50 of 276, `money` 50 of 320, `business` 50 of 225.
+        Every category over 50 landed exactly 50.
+
+        Waiting LONGER is the fix, and the cost is bounded: it is paid once per leaf, at
+        the end, and only by leaves that really have stopped producing. 209 economy link
+        leaves x ~4 extra seconds is ~14 minutes against a run measured in hours — set
+        against silently keeping 32% of the US series.
 
         Raises `PipelineError` when the page rendered symbol rows but extraction got
         nothing out of them, or when the list could not be scrolled — both mean the
@@ -408,7 +529,7 @@ class TradingViewScraper(BaseScraper):
         collected_symbols = set()
         last_scroll_top = -1
         no_progress_count = 0
-        max_no_progress = 3
+        max_no_progress = self._SCROLL_MAX_NO_PROGRESS
         container_found = False
 
         while no_progress_count < max_no_progress:
@@ -436,7 +557,7 @@ class TradingViewScraper(BaseScraper):
                 no_progress_count = 0
                 last_scroll_top = current_scroll_top
 
-            time.sleep(0.3)
+            time.sleep(self._SCROLL_POLL_S)
 
         # ── Fail loudly rather than return a plausible-looking empty list ────────────
         if items_rendered and not collected_symbols:
@@ -493,12 +614,11 @@ class TradingViewScraper(BaseScraper):
         folder_path : str
             Parent directory; created if absent.
         """
-        # Hard cap on concurrent Chrome instances, the same semaphore the data phase
-        # takes. The thread pool (SCRAPER_MAX_WORKERS = 16) is deliberately WIDER than
-        # this cap: threads queue here instead of each opening a browser. Acquired
+        # Hard cap on concurrent Chrome instances, the same permit the data phase takes
+        # (`SCRAPER_MAX_CONCURRENT_BROWSERS`, which also sizes the thread pool). Acquired
         # BEFORE the driver is created and held until it quits — a permit taken after
         # `webdriver.Chrome()` would cap nothing.
-        with self._browser_semaphore:
+        with self._browser_slot():
             web_driver, _ = self._helper_initialize_web_driver_and_bs4_parser()
             try:
                 os.makedirs(folder_path, exist_ok=True)
@@ -1415,7 +1535,7 @@ class TradingViewScraper(BaseScraper):
         time.sleep(random.uniform(1, 5))
 
         # Hard cap on concurrent Chrome instances to avoid resource exhaustion
-        with self._browser_semaphore:
+        with self._browser_slot():
             web_driver, bs4_parser = self._helper_initialize_web_driver_and_bs4_parser()
 
             stop_event = threading.Event()

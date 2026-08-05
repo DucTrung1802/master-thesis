@@ -10,6 +10,28 @@
 > `_bootstrap`'s two-line `sys.path` insert INLINE, because the package can no longer be
 > imported until `src/` is on the path.
 >
+> ## ⚙️ ONE CONFIG FILE: `config.json` (2026-08-05)
+>
+> `assets_enabled.json` and `tv_full_refresh.yaml` are **gone**, folded into
+> [config.json](config.json) with three sections — and [enabled.py](enabled.py) is the
+> only thing that reads it:
+>
+> ```jsonc
+> {
+>   "assets":     { "raw/trading_view_data": true },              // which assets LOAD (all 73 listed)
+>   "partitions": { "raw/trading_view": { "economy": true } },    // which SUB-SOURCES exist
+>   "run":        { "skip_existing": false, "max_browsers": 4 }   // what the refresh job launches with
+> }
+> ```
+>
+> ⚠️ **The `run` block is the reason this mattered.** It used to live only in a YAML file
+> that the CLI read and **the UI never did**, so the same job launched with
+> `skip_existing: false` from a terminal and `true` from a button. One file, one answer.
+>
+> ⚠️ **A leftover `assets_enabled.json` or `tv_full_refresh.yaml` now RAISES** rather than
+> being ignored — a stale config that still looks live is this package's recurring
+> failure mode, not a hypothetical one.
+>
 > Handoff notes. **Status (2026-08-05): ✅ PHASE 5 IS DONE — THERE IS NO LONGER A SECOND
 > WAY TO RUN ANYTHING.** `src/main.py`, `DataPreprocessor.ingest_{bronze,silver,gold}_data`,
 > `_run_layer` and all 41 `data_quality_*` switch keys were **deleted on 2026-08-05**, and
@@ -29,7 +51,7 @@
 >
 > ```
 > src/orchestration/
->   definitions.py  resources.py  _bootstrap.py  assets_enabled.json
+>   definitions.py  resources.py  _bootstrap.py  enabled.py  config.json
 >   assets/         scrape · bronze · silver · gold · unified   ← the 73 assets
 >   preprocessor/   preprocessor.py + CONTEXT.md                ← the transform library
 > ```
@@ -432,6 +454,197 @@ writes there and it stays the record of what the underlying scrapers/ingests did
 memory `feedback-clean-app-log-before-run`. Dagster's own per-run logs are separate and
 live in `.dagster/`.
 
+### The economy scrape is 19 COUNTRIES now, not 5 (2026-08-05)
+
+Vietnam, USA, China, Japan and South Korea were joined by fourteen chosen for their
+direct effect on Vietnam — the FDI sources and supply chain (Taiwan, Singapore, Hong
+Kong), the export markets (Euro Area, Germany, Netherlands, United Kingdom), the ASEAN
+peer group (Thailand, Malaysia, Indonesia, Philippines) and three other trade partners
+(India, Australia, Russia). `switch_config.json` went **347 → 711 keys**; the links adder
+queues **209 tasks** (19 countries × 11 categories), verified by running it.
+
+⚠️ **`COUNTRY_CODE.get(country, "")` WAS A SILENT-WRONG-DATA BUG and is now
+`country_code()`, which raises.** The code is injected into the screener's localStorage,
+and an EMPTY string there is not an error — it is a valid state meaning *no country
+filter*. A country present in `switch_config.json` but missing from the map would have
+scraped the unfiltered global list into that country's folder, where every row looks like
+a successful scrape. That is exactly what the UK bug below did with a code that was
+merely WRONG rather than missing.
+
+| | series | | | series |
+|---|---|---|---|---|
+| Taiwan | 107 | | Thailand | 111 |
+| Singapore | 108 | | Malaysia | 113 |
+| Hong Kong | 93 | | Indonesia | 114 |
+| Euro Area | 126 | | Philippines | 103 |
+| Germany | 184 | | India | 127 |
+| Netherlands | 151 | | Australia | 183 |
+| United Kingdom | 209 | | Russia | 126 |
+
+**3,853 series across the 19** (2,035 for the original five — the USA alone is 1,462),
+against the 1,037 files the pre-fix runs had on disk.
+
+### ⚠️ Two link-scrape defects found and fixed on 2026-08-05 — both SILENT
+
+Both were found the same way: comparing what landed against TradingView's own
+symbol-search API, which is authoritative and costs no browser —
+
+```
+https://symbol-search.tradingview.com/symbol_search/v3/
+    ?text=&search_type=economic&country=<CC>&lang=en&domain=production
+    [&economic_category=<gdp|lbr|prce|hlth|mny|trd|gov|bsnss|cnsm|hse|txs>]
+```
+
+It returns `symbols_remaining`, so a country's or a leaf's true count is one request.
+**17 of 19 countries matched their count EXACTLY** (Australia 180/180, Germany 177/177,
+Singapore 105/105). The two that did not were both real bugs, and neither raised anything.
+
+**1. `minimize_window()` truncated every leaf to exactly 50 rows.** A minimized window
+has no layout, so TradingView renders its first page of 50 and the lazy loader never
+fires again — however far the container is scrolled. Only leaves with MORE than 50
+symbols were affected, and almost every leaf has fewer, which is why it survived: the USA
+was the only country with categories over 50 and it came back at **464 of 1,462**, with
+`health` 4/4 and `taxes` 10/10 complete beside `labor` 50/276 and `money` 50/320.
+
+> ⚠️ **The first fix was wrong and is worth recording.** The scroll loop gave up after
+> 3 idle iterations x 0.3 s = 0.9 s, which looked like too little patience for a network
+> page. Widening it to 4.8 s changed *nothing* — the run still produced exactly 50. Only
+> a DOM probe settled it: the container was correct, the scroll worked, and the rows
+> simply never arrived because nothing was visible. **Verified: same leaf, minimized 50
+> rows, sized window 276.** ⚠️ **Headless is NOT a substitute** — `--headless=new` also
+> stops at 50. The window has to be real and sized; `set_window_size(1400, 1000)`.
+> The occlusion flags (`--disable-backgrounding-occluded-windows` and friends) are there
+> for the same reason: over a run of hours the windows WILL end up behind something.
+
+**2. The United Kingdom scraped the whole world.** `Country.UNITED_KINGDOM` mapped to
+`gb`, and the screener does not reject an unknown country code — **it drops the filter**.
+So all 11 UK leaves returned a global list capped at 50: `united_kingdom/health` held
+Austrian, Australian, Hungarian, Israeli and Polish series. The correct code is **`uk`**,
+verified by probe (with `uk` that leaf returns `GBHB`, `GBHOSP` and nothing else).
+
+> ⚠️ **THE SCREENER AND THE SEARCH API DISAGREE, AND ONLY FOR THIS ONE COUNTRY.** The API
+> wants `country=GB` (209 series; `UK` returns 0) while the panel wants `uk`. So verifying
+> a code against the API proves the country EXISTS, not that the panel accepts it. The
+> check that catches both classes of bug is the row count: **a leaf at exactly 50 is
+> suspicious, and a country whose total does not match its `COUNTRY_CODE` comment is
+> either truncated or unfiltered.**
+
+Verified end to end through `_scrape_economy_links` (the asset's own path), not the probe:
+
+| leaf | before | after |
+|---|---|---|
+| `usa/labor` | 50 | **275** (API says 276; the collector de-duplicates) |
+| `united_kingdom/health` | 50, world | **2, both GB** |
+| `united_kingdom/money` | 50, world | **23, GB** |
+
+### The `trading_view_full_refresh` JOB — a button that means "trust nothing on disk"
+
+**The CLI form, which cannot be mis-clicked** — one asset class per command, run them in
+whatever order you like:
+
+```powershell
+$env:DAGSTER_HOME = "D:\GIT\master-thesis\.dagster"
+$cfg = '{\"ops\":{\"raw__trading_view_links\":{\"config\":{\"max_browsers\":4}},\"raw__trading_view_data\":{\"config\":{\"skip_existing\":false,\"max_browsers\":4}}}}'
+foreach ($c in "economy","forex","bonds","funds") {
+  dagster asset materialize -f src/orchestration/definitions.py `
+      --select "raw/trading_view_links,raw/trading_view_data" `
+      --partition $c --config-json $cfg
+}
+```
+
+⚠️ **The CLI has to repeat the config; the JOB does not.** `dagster asset materialize`
+builds the implicit asset job and never sees `trading_view_full_refresh`, so it cannot
+pick up the `run` block from `config.json` — which is the argument for launching the job
+instead. `-c src/orchestration/tv_full_refresh.yaml` used to serve this and is **gone**:
+that file was folded into `config.json` on 2026-08-05.
+
+Or in the UI:
+
+```
+dagster dev  →  Jobs  →  trading_view_full_refresh  →  Launchpad
+             →  pick ONE partition  →  Launch Run
+```
+
+⚠️ **`DAGSTER_HOME` MUST BE SET IN THE SHELL THAT STARTS `dagster dev`, and forgetting it
+is not a warning you can ignore.** Without it Dagster creates
+`.tmp_dagster_home_<random>/` and uses it as the whole instance — so
+`.dagster/dagster.yaml` is **not read**, `max_concurrent_runs: 1` is **not applied**, and
+a backfill launches every partition AT ONCE. Three such directories accumulated in the
+repo root before anyone noticed, one of them still holding runs stuck in `STARTED` from
+2026-07-31 because the process that owned them was killed. Run history in a temp home is
+also thrown away, which is why the UI can look like it has never run anything.
+
+⚠️ **"Materialize all" / a backfill over a partitioned asset takes EVERY partition** —
+`stocks` (777 tickers, ~10 h), `futures`, `indices` and the two that legitimately queue 0
+tasks included. It cannot be fixed in the JOB: `define_asset_job(partitions_def=<subset>)`
+is rejected — *"Partitioning is inferred from the selected assets"*. It is fixed in
+[config.json](config.json)'s `partitions` section instead, one key per sub-source — see
+*Turning things off*, level 3.
+
+Two assets (`raw/trading_view_links` then `raw/trading_view_data`, same partition, one
+run) carrying this config, so nothing has to be typed into the launchpad:
+
+```yaml
+ops:
+  raw__trading_view_links: {config: {max_browsers: 4}}
+  raw__trading_view_data:  {config: {skip_existing: false, max_browsers: 4}}
+```
+
+⚠️ **THE POINT OF THE JOB IS THE CONFIG, NOT THE SELECTION.** Materialising
+`raw/trading_view_data` from the asset graph runs it with its DEFAULTS —
+`skip_existing=True` — which fetches only symbols absent from disk and leaves every
+existing series at whatever date it already had. That default is right for "pick up
+what is new" and it has already produced one green, two-hour, mostly-stale forex run
+(see the table above). A job carries the override with it, so a full refresh is a
+button rather than a YAML snippet somebody has to remember.
+
+⚠️ **THE LINKS ARE IN THE JOB BECAUSE A STALE LINK CSV SILENTLY SHRINKS THE DATA RUN.**
+`_add_generic_link_data_tasks` reads only the NEWEST link CSV per leaf. Measured
+2026-08-05: **every `economy` leaf's newest file is a header-only casualty of the
+2026-07-31 breakage** (`trading_view_links_2026-07-31.csv`, 0 rows) except
+`vietnam/gdp` (16) and `japan/business` (32) — the two leaves re-run to verify that
+fix. So a data-only refresh of economy would have queued **48 symbols against the 1,037
+series on disk** and gone green. Links first, in the same run.
+
+⚠️ **ONE RUN IS ONE ASSET CLASS.** Launch the four partitions as a BACKFILL of this
+job; `max_concurrent_runs: 1` makes them queue, which is what keeps the browser cap
+honest (§2a).
+
+⚠️ **`skip_existing=False` DOES NOT DELETE THE OLD FILE.** The name carries today's date
+(`<SYM>_<start>_<today>.csv`), so a re-fetch lands BESIDE the previous one — forex was
+carrying 947 such twins before this run. The bronze ingests glob the whole folder and
+dedupe `keep="first"` in **glob order**, which sorts the older date first: **where an old
+and a new file disagree on a date's value, the STALE one wins.** "Overwrite" therefore
+means clearing the folder, and on 2026-08-05 the four folders were MOVED, not deleted:
+
+```
+raw_data/_archive/trading_view_data_{bonds,funds,forex,economy}_2026-08-05/
+   18 / 21 / 2,307 / 1,037 CSVs — 795 MB
+```
+
+Move them back if a re-scrape comes back short of what was there (which is exactly what
+the 2026-07-31 links breakage did to the whole layer).
+
+### ⚠️ Progress now reaches the log — `Progress [####----] 45.6% 1459/3199` (2026-08-05)
+
+`ThreadManager.execute()` logs one line per finished task:
+
+```
+Progress [#########-----------]  45.6%  1459/3199 | ok 1450 fail 9 | 4.5/min
+       | elapsed 5h22m | ETA 6h48m | last: data_economy_usa_uslabor
+```
+
+⚠️ **Dagster reports NOTHING until a step ends**, and a TradingView step is thousands of
+tasks over many hours inside one step — so before this the only way to tell a 7-hour run
+from a hung one was counting files in `raw_data/`. Both forms are deliberate: the
+percentage answers "are we nearly there", the counts answer "how many series did we
+actually get", and they diverge exactly when tasks are failing.
+
+⚠️ It also removed a misleading `wait(futures, timeout=120)`. That timeout cut nothing
+short — the `future.result()` after it blocks with no timeout, and the pool is joined by
+its `with` block regardless — so a run longer than 120 s simply stopped reporting.
+`as_completed` reports as they land.
+
 ### Turning things off
 
 There are three levels, and the first is almost always the right one.
@@ -447,18 +660,61 @@ in 1.13):
 --select "* and not group:cafef_filings"
 ```
 
-**3. Hard-disable it** — set it `false` in
-[assets_enabled.json](assets_enabled.json). No Python edit. It then vanishes from the
-UI, from `*`, and from every selection. Reserve this for "must never load in this repo".
+**3. Hard-disable it** — set it `false` under `assets` in [config.json](config.json). No
+Python edit. It then vanishes from the UI, from `*`, and from every selection. Reserve
+this for "must never load in this repo".
 
 ```jsonc
-"// raw/cafef_news": "HEAVY - ~2 h, ~405k rows over the full universe",
-"raw/cafef_news": false
+"assets": {
+    "// raw/cafef_news": "HEAVY - ~2 h, ~405k rows over the full universe",
+    "raw/cafef_news": false
+}
 ```
 
-All 73 keys are listed in the file as a menu, grouped by source, with `//` comment keys
+All 73 assets are listed in the file as a menu, grouped by the asset's own Dagster group
+(trading_view, cafef, cafef_index, cafef_filings, simplize, gics, bronze, silver, gold,
+unified), with `//` comment keys
 marking the expensive ones (same comment convention as `switch_config.json`).
 `true` or **absent** = loaded, so a newly added asset is on by default.
+
+**…and one SUB-SOURCE — the `partitions` section (2026-08-05).** Half the sources here
+are not assets: TradingView's nine classes, CafeF's 100 filing tickers and the three
+unified universes are PARTITIONS, and "turn off TradingView stocks" had no expression in
+this file at all. The only lever was typing the right `--partition` at launch — which is
+the lever that failed when a backfill took all 100 `cafef_pdfs` tickers at once.
+
+```jsonc
+"partitions": {
+    "raw/trading_view": {
+        "economy": true,
+        "stocks": false          // 777 tickers, ~10 h
+    }
+}
+```
+
+⚠️ **A disabled partition is REMOVED from the `PartitionsDefinition`**, which is stronger
+than not selecting it: it cannot be materialised, cannot be backfilled, is not in the UI,
+and `--partition stocks` fails with `DagsterUnknownPartitionError` before anything runs.
+
+⚠️ **THE KEY UNDER `partitions` IS THE SET'S OWNER, WHICH IS NOT ALWAYS AN ASSET.**
+Where several assets share one `PartitionsDefinition` OBJECT they must share its toggles:
+`raw/trading_view_data` cannot offer a class `raw/trading_view_links` does not, because
+the data step reads the link CSV that same partition wrote. Those sets are registered
+under a group name; sets owned by one asset keep that asset's key.
+
+| owner | partitions | shared by |
+|---|---|---|
+| `raw/trading_view` | the 9 asset classes | `trading_view_links` + `trading_view_data` |
+| `unified` | `VCB` / `ALL` / `BANK` | all four `pool__*` assets |
+| `raw/cafef_pdfs` | 100 `<EX>_<TICKER>` | itself |
+| `raw/cafef_financials` | `HOSE_VCB`, `HOSE_ACB` | itself |
+
+The loading moved out of `definitions.py` into [enabled.py](enabled.py), and that is not
+tidiness: a partition toggle has to be applied where the `PartitionsDefinition` is BUILT
+— inside `assets/scrape.py` and `assets/unified.py`, at import time — which is long
+before `definitions.py` has an asset list to filter. `definitions.py` keeps the
+validation pass, which can only run once every asset module has registered its
+partitions.
 
 Behaviour, all verified:
 
@@ -466,8 +722,12 @@ Behaviour, all verified:
 |---|---|
 | one key `false` | that asset not loaded (45 → 44); `//` comment keys ignored |
 | a key matching no asset | **raises**, listing the valid keys |
+| **`"raw/trading_view": {"bnods": false}`** (bad partition) | **raises**, listing that owner's valid partitions |
+| **a partition under the wrong owner** | **raises** — "not a partition set" |
+| **every partition of one owner `false`** | **raises** — zero partitions is unmaterialisable; disable the ASSET instead |
+| **`--partition stocks` when `@stocks` is false** | `DagsterUnknownPartitionError`, before any work |
 | malformed JSON | **raises** — never read as "disable everything" |
-| file absent | all 73 assets — absent means "no opinion", not "all off" |
+| file absent | all 73 assets, all partitions — absent means "no opinion", not "all off" |
 | file with a **BOM** | handled (`utf-8-sig`) |
 
 The last three are direct lessons from `switch_config.json`:
@@ -1295,12 +1555,12 @@ doubles them:
 
 | tag | limit | why |
 |---|---|---|
-| `resource: browser` | 1 | `SCRAPER_MAX_CONCURRENT_BROWSERS = 8` is an in-process semaphore — 4 processes is 32 Chrome instances, and 4× the global stagger against TradingView |
+| `resource: browser` | 1 | `SCRAPER_MAX_CONCURRENT_BROWSERS` (**4**) is an in-process semaphore — 4 processes is 16 Chrome instances, and 4× the global stagger against TradingView |
 | `resource: gpu` | 1 | OCR runs onnxruntime-gpu on a 4 GB RTX 3050; two partitions is VRAM exhaustion |
 
-**So a materialize opens at most 8 Chrome instances**, and only while a TradingView
-step runs — nothing else in the repo imports Selenium. The 8 is per PROCESS and the
-`browser` tag keeps exactly one browser step running, so the two multiply to 8, not 8×N.
+**So a materialize opens at most 4 Chrome instances**, and only while a TradingView
+step runs — nothing else in the repo imports Selenium. The 4 is per PROCESS and the
+`browser` tag keeps exactly one browser step running, so the two multiply to 4, not 4×N.
 
 ⚠️ **Fixed 2026-07-31: the links phase ignored the semaphore.**
 `_scrape_links_attempt` created its driver outside it, so the effective cap there was
@@ -1309,10 +1569,44 @@ table and `web_scraper/CONTEXT.md` both claimed. It now takes the permit before
 `webdriver.Chrome()` and holds it until `quit()`. Verified with a fake driver: 24 tasks
 (what the `stocks` links partition queues), 16 workers → **peak 8**.
 
-⚠️ **A multi-run backfill still escapes this.** `tag_concurrency_limits` is EXECUTOR
-config, i.e. per run. Backfilling the 9 TradingView partitions the default way launches
-9 runs, and `.dagster/dagster.yaml` is empty — 9 × 8 = 72 browsers. Use a single-run
-backfill, or give the instance a real concurrency pool, if you ever backfill TV.
+✅ **The multi-run backfill escape hatch is SHUT (2026-08-05).** `tag_concurrency_limits`
+is EXECUTOR config, i.e. per run — backfilling the 9 TradingView partitions the default
+way launches 9 runs, and `.dagster/dagster.yaml` used to be empty, so the real figure was
+9 × 4 = 36 browsers. That file now carries a `QueuedRunCoordinator` with
+**`max_concurrent_runs: 1`**, so runs queue and the browser budget is 4 whatever is
+launched. ⚠️ It is a GLOBAL, INSTANCE-level limit: two cheap DB assets no longer overlap
+across runs either (they still do inside one run, via the executor's `max_concurrent`).
+Raise it only for work with no browser in it.
+
+### The browser budget is ONE number, and it is a parameter
+
+`SCRAPER_MAX_CONCURRENT_BROWSERS` in [utils/constants.py](../utils/constants.py) —
+**default 4** — is the whole cap. Three ways to change it, in ascending precedence:
+
+```powershell
+# 1. the file            src/utils/constants.py
+# 2. the environment
+$env:SCRAPER_MAX_CONCURRENT_BROWSERS = "2"
+# 3. per run, in the launchpad or a YAML file
+ops:
+  raw__trading_view_data:
+    config:
+      max_browsers: 2
+```
+
+⚠️ **It sizes the THREAD POOL as well as the semaphore, and that is the fix, not a
+detail.** Every TradingView task opens a browser, so the two numbers can only ever
+disagree in one of two useless ways: a pool wider than the cap buys threads that block
+on a semaphore, and a pool narrower than the cap makes the cap unreachable. The second is
+what was actually shipped — `SCRAPER_MAX_CONCURRENT_BROWSERS = 1` in the code,
+`SCRAPER_MAX_WORKERS = 2` for the pool, and **8** in this file and in
+`web_scraper/CONTEXT.md`. The effective concurrency was 1.
+
+⚠️ **`_browser_slot()` replaced `with self._browser_semaphore:`** and counts live and
+peak browsers, so "at most N" is a number in `logs/app.log` and in the asset's
+`browsers_peak` metadata rather than a claim about a semaphore. It raises if a driver is
+ever created outside it. Verified with a fake driver: 40 tasks → **peak exactly 4**;
+with the env var at 2 → **peak exactly 2**.
 
 Everything else is `requests`-bound and safe to overlap — 4 assets × a 16-thread pool is
 ~64 in-flight requests, the concurrency the news scraper already runs at.

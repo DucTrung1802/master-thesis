@@ -29,7 +29,13 @@ import os
 import sys
 from pathlib import Path
 
-from dagster import Definitions, multiprocess_executor
+from dagster import (
+    AssetKey,
+    AssetSelection,
+    Definitions,
+    define_asset_job,
+    multiprocess_executor,
+)
 
 # ⚠️ THIS PRELUDE IS LOAD-BEARING AND MUST STAY ABOVE THE FIRST `orchestration` IMPORT.
 # `dagster ... -f src/orchestration/definitions.py` loads this file as a TOP-LEVEL module
@@ -46,15 +52,20 @@ from orchestration._bootstrap import bootstrap
 
 bootstrap()
 
+from utils.constants import SCRAPER_MAX_CONCURRENT_BROWSERS
+
+from orchestration import enabled
 from orchestration.assets import bronze, gold, scrape, silver, unified
 from orchestration.resources import PreprocessorResource, RepoLogger, SwitchConfig
 
-import json
-from pathlib import Path
-
-# ── Which assets are loaded — src/orchestration/assets_enabled.json ───────────
+# ── Which assets are loaded — src/orchestration/config.json ───────────────────
 # `false` there means NOT LOADED: gone from the UI, from `*`, and from every selection.
 # `true` or ABSENT means loaded, so a newly added asset is on by default.
+#
+# A key may also name ONE PARTITION — `"partitions": {"raw/trading_view": {"stocks": false}}` — which removes
+# it from the PartitionsDefinition itself, so it cannot be materialised, backfilled or
+# even seen. That is what makes a sub-source (a TradingView asset class, a CafeF filing
+# ticker, a unified universe) switchable without editing Python. See `enabled.py`.
 #
 # ⚠️ THIS IS NOT A RUN PLAN, and that is the difference from switch_config.json. The
 # ordinary way to not run something is to not select it; to skip one inside a bigger
@@ -69,65 +80,25 @@ from pathlib import Path
 # and shows the removed node as an unexecutable external asset, so `bronze/cafef_index_price`
 # still resolves (and still reads the folder from disk) with its `raw/` parent disabled.
 # To stop a chain, disable the DOWNSTREAM too.
-ENABLED_CONFIG = Path(__file__).resolve().parent / "assets_enabled.json"
-
-
-def _load_disabled() -> set[str]:
-    """Asset keys explicitly set to `false`.
-
-    ⚠️ FAILS LOUDLY ON A BAD FILE, ON PURPOSE. `SwitchHandler._load_config` swallows a
-    read error and returns `{}` — every switch false, `main.py` a complete no-op, one
-    ERROR line in a log nobody reads (see `preprocessor/CONTEXT.md` §5). The
-    equivalent slip here would silently DISABLE THE WHOLE PIPELINE, so a malformed file
-    raises instead. An ABSENT file is different and is fine: it means "no opinion", i.e.
-    everything enabled.
-
-    Read as `utf-8-sig`, because this file is hand-edited on Windows and PowerShell 5.1's
-    `Out-File -Encoding utf8` writes a BOM — the same trap that cost this repo a silent
-    no-op run.
-    """
-    if not ENABLED_CONFIG.exists():
-        return set()
-
-    try:
-        raw = json.loads(ENABLED_CONFIG.read_text(encoding="utf-8-sig"))
-    except Exception as e:
-        raise ValueError(
-            f"{ENABLED_CONFIG} is not valid JSON: {e}. Refusing to load — an unreadable "
-            f"config must never be read as 'disable everything'."
-        ) from e
-
-    if not isinstance(raw, dict):
-        raise ValueError(f"{ENABLED_CONFIG} must be a JSON object, got {type(raw).__name__}.")
-
-    # Keys beginning `//` are comments, matching switch_config.json's convention.
-    return {
-        key
-        for key, value in raw.items()
-        if not key.startswith("//") and value is False
-    }
-
-
+# ⚠️ THE LOADING LIVES IN `enabled.py`, NOT HERE, AND THAT IS NOT TIDINESS. A partition
+# toggle has to be applied where the `PartitionsDefinition` is BUILT — inside
+# `assets/scrape.py` and `assets/unified.py`, at import time — which is long before this
+# file has an asset list to filter. Both halves therefore read the same module, and this
+# file's remaining job is the validation pass, which can only run once every asset module
+# has registered its partitions.
 def _enabled(asset_defs):
-    """Drop anything disabled in the JSON, and fail loudly on a key that matches nothing."""
-    disabled = _load_disabled()
-    kept, dropped = [], set()
-    for a in asset_defs:
-        names = {k.to_user_string() for k in a.keys}
-        if names & disabled:
-            dropped |= names & disabled
-        else:
-            kept.append(a)
+    """Drop anything disabled in the JSON, and fail loudly on a key that matches nothing.
 
-    unknown = disabled - dropped
-    if unknown:
-        # A misspelled key would silently disable nothing — the exact failure mode
-        # switch_config.json's trailing-slash bug had, and worth a hard error here.
-        raise ValueError(
-            f"{ENABLED_CONFIG}: {sorted(unknown)} match no asset. Known keys: "
-            f"{sorted(k.to_user_string() for a in asset_defs for k in a.keys)}"
-        )
-    return kept
+    ⚠️ Validation is against the FULL asset list, before the drop — otherwise every
+    legitimately-disabled key would report itself as unknown.
+    """
+    all_keys = {k.to_user_string() for a in asset_defs for k in a.keys}
+    enabled.validate(all_keys)
+
+    disabled = enabled.disabled_assets()
+    return [
+        a for a in asset_defs if not ({k.to_user_string() for k in a.keys} & disabled)
+    ]
 
 
 # ── Executor ──────────────────────────────────────────────────────────────────
@@ -138,11 +109,12 @@ def _enabled(asset_defs):
 # Two limits exist because two resources are physical and are capped INSIDE a single
 # process, so a second process silently doubles them:
 #
-#   * `browser` (limit 1) — `SCRAPER_MAX_CONCURRENT_BROWSERS = 8` is an in-process
-#     semaphore. Four TradingView partitions in four processes is 32 Chrome instances,
-#     not 8, on a machine tuned for 8. It also multiplies the global 8-second
+#   * `browser` (limit 1) — `SCRAPER_MAX_CONCURRENT_BROWSERS` (4) is an in-process
+#     semaphore. Four TradingView partitions in four processes is 16 Chrome instances,
+#     not 4, on a machine tuned for 4. It also multiplies the global 8-second
 #     navigation stagger by four against TradingView, which is the thing the stagger
-#     exists to avoid.
+#     exists to avoid. ⚠️ This tag limit is per RUN; the multi-run escape hatch is shut
+#     by `max_concurrent_runs: 1` in `.dagster/dagster.yaml`, not here.
 #   * `gpu` (limit 1) — the OCR parse runs onnxruntime-gpu on a 4 GB RTX 3050. Two
 #     partitions is VRAM exhaustion, and `sentiment/CONTEXT.md` already records stale
 #     GPU processes fragmenting that card.
@@ -168,6 +140,62 @@ EXECUTOR = multiprocess_executor.configured(
     }
 )
 
+# ── Jobs — a selection PLUS its run config, so the UI needs no typing ─────────
+# ⚠️ THE POINT OF THIS JOB IS THE CONFIG, NOT THE SELECTION. Materialising
+# `raw/trading_view_data` from the asset graph runs it with its DEFAULTS —
+# `skip_existing=True` — which refreshes only symbols absent from disk and leaves every
+# existing series at whatever date it already had. That is the documented trap in
+# `CONTEXT.md` §5 and it has already produced a green, two-hour, mostly-stale forex run.
+# A job carries `skip_existing=False` with it, so a full refresh is a button rather than
+# a YAML snippet somebody has to remember to paste into the launchpad.
+#
+# Both TradingView assets are in the selection because THE LINKS ARE THE UNIVERSE and the
+# data adder reads only the NEWEST link CSV per leaf: if that file is stale — or is one of
+# the header-only casualties of the 2026-07-31 breakage, which is exactly what every
+# `economy` leaf still holds — the data step queues a fraction of the symbols and reports
+# success. Links first, same partition, same run.
+#
+# ⚠️ ONE RUN IS ONE ASSET CLASS. Launch the four partitions as a BACKFILL and keep
+# `max_concurrent_runs: 1` in `.dagster/dagster.yaml`: `max_browsers` is an in-process
+# semaphore, so N concurrent runs is 4N Chrome instances (§2a).
+TV_REFRESH_ASSETS = AssetSelection.assets(
+    AssetKey(["raw", "trading_view_links"]),
+    AssetKey(["raw", "trading_view_data"]),
+)
+
+# ⚠️ THE VALUES COME FROM config.json, NOT FROM LITERALS HERE. They used to live in
+# `tv_full_refresh.yaml`, which only the CLI ever read — so the UI launched this job with
+# the assets' own defaults (`skip_existing=True`, i.e. refresh nothing already on disk)
+# while the CLI launched it with `false`. Same job, same name, two behaviours.
+_RUN = enabled.run_config()
+_TV_SKIP_EXISTING = _RUN.get("skip_existing", False)
+_TV_MAX_BROWSERS = _RUN.get("max_browsers", SCRAPER_MAX_CONCURRENT_BROWSERS)
+
+_TV_JOB_CONFIG = {
+    "ops": {
+        "raw__trading_view_links": {"config": {"max_browsers": _TV_MAX_BROWSERS}},
+        "raw__trading_view_data": {
+            "config": {
+                "skip_existing": _TV_SKIP_EXISTING,
+                "max_browsers": _TV_MAX_BROWSERS,
+            }
+        },
+    }
+}
+
+trading_view_full_refresh = define_asset_job(
+    name="trading_view_full_refresh",
+    selection=TV_REFRESH_ASSETS,
+    description=(
+        "Re-scrape ONE TradingView asset class from scratch: links (the universe) then "
+        "every symbol's OHLCV, with skip_existing=False so nothing on disk is trusted. "
+        "Pick the partition — bonds / funds / forex / economy — and launch; the config "
+        "is baked in. Budget ~8-12 s per symbol at 4 browsers (the 8-second global "
+        "navigation gate is the floor, not the browser count)."
+    ),
+    config=_TV_JOB_CONFIG,
+)
+
 _repo_logger = RepoLogger()
 _switches = SwitchConfig()
 
@@ -181,6 +209,7 @@ defs = Definitions(
             *unified.assets,
         ]
     ),
+    jobs=[trading_view_full_refresh],
     resources={
         "repo_logger": _repo_logger,
         "switches": _switches,

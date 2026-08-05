@@ -653,13 +653,22 @@ Each registers its own `SOURCE_NAME` and writes its own folder under `raw_data/c
   (`window._exposed_chartWidgetCollection…`) via injected JS. A **two-layer OHLC
   detector** (structural slot-count + semantic OHLC invariants) decides OHLCV vs a
   single `value` series.
-- **Concurrency hardening:** `Semaphore(SCRAPER_MAX_CONCURRENT_BROWSERS=8)` caps
-  Chrome instances in **both** phases — `_scrape_data_trading_view_link_attempt`
-  and, since 2026-07-31, `_scrape_links_attempt`. ⚠️ The links path used to open a
-  driver *outside* the semaphore, so the real cap there was the 16-thread pool: 16
-  browsers, twice the documented number, on every links run. The permit is taken
-  before `webdriver.Chrome()` and held until `quit()`; a wider pool now only deepens
-  the queue. Verified with a fake driver: 24 tasks, 16 workers → **peak 8**.
+- **Concurrency hardening:** `_browser_slot()` — a `Semaphore(max_browsers)` plus a
+  live/peak counter — caps Chrome instances in **both** phases,
+  `_scrape_data_trading_view_link_attempt` and, since 2026-07-31,
+  `_scrape_links_attempt`. ⚠️ The links path used to open a driver *outside* the
+  semaphore, so the real cap there was the thread pool. The permit is taken before
+  `webdriver.Chrome()` and held until `quit()`, and `_browser_slot` **raises** if a
+  driver is ever born outside it.
+  > ⚠️ **The cap and the POOL are one number now (2026-08-05).**
+  > `TradingViewScraper(max_browsers=…)` defaults to
+  > `SCRAPER_MAX_CONCURRENT_BROWSERS` (**4**, and `os.getenv`-overridable) and sizes
+  > `ThreadManager(max_workers=…)` from the same value. It had to: the cap was 8 in
+  > the prose and 1 in `constants.py`, against a pool of `SCRAPER_MAX_WORKERS=2` — so
+  > the effective concurrency was **1**, and a wider cap alone could never have been
+  > reached. A pool wider than the cap buys only threads blocked on a semaphore; a
+  > pool narrower than it makes the documented cap fiction. Verified with a fake
+  > driver: 40 tasks → **peak exactly 4**, and **2** with the env var set to 2.
   A `_nav_time_lock` staggers navigations by
   `SCRAPER_NAV_STAGGER=8s`; random pre-acquire sleeps desync threads; a background
   `_dialog_remover_loop` thread kills pop-ups. Chrome runs with images+CSS disabled,
@@ -1302,11 +1311,12 @@ IS the run plan. Truncate `logs/app.log` first; it is the only record of what ra
     NB the `power` path alone previously yielded a *fractional* worker count
     (`cpu*power/100*0.4` → e.g. 2.4), so the pool ran ~2 threads regardless of the
     machine; the explicit `max_workers` is what makes the thread count real and
-    predictable. TradingView is still separately capped at
-    `SCRAPER_MAX_CONCURRENT_BROWSERS` (8) browsers by its own semaphore, so a wider
-    pool there only deepens the task queue, it does not open more Chrome instances.
-    (True of the DATA phase only until 2026-07-31 — the LINKS phase took no permit
-    and ran 16. Fixed; this paragraph now describes both.)
+    predictable. ⚠️ **TradingView is the exception since 2026-08-05: it does NOT take
+    `SCRAPER_MAX_WORKERS`.** Every task it runs opens a browser, so its pool is sized
+    to `max_browsers` (`SCRAPER_MAX_CONCURRENT_BROWSERS`, 4) and the two can no longer
+    disagree — which they did, at 2 workers against a cap of 1 documented as 8.
+    (The permit was taken in the DATA phase only until 2026-07-31 — the LINKS phase
+    took none and ran the whole pool. Fixed; this paragraph now describes both.)
     - Every scraper that overrides `__init__` (`CafeFScraper`, `CafeFPdfScraper`,
       `CafeFNewsScraper`) now takes `max_workers` and forwards it to `super().__init__`
       — omitting it there raised `TypeError: unexpected keyword argument 'max_workers'`

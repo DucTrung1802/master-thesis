@@ -63,6 +63,40 @@ from dagster import (
 )
 
 
+from orchestration._bootstrap import bootstrap
+
+bootstrap()
+
+import os
+
+from utils.constants import (
+    CAFEF_FINANCIALS_TICKERS,
+    CAFEF_PDF_TICKERS,
+    CAFEF_RAW_DATA_DIR,
+    GICS_RAW_DATA_DIR,
+    SCRAPER_MAX_CONCURRENT_BROWSERS,
+    SIMPLIZE_RAW_DATA_DIR,
+    TRADING_VIEW_RAW_DATA_DIR,
+)
+from web_scraper.cafef_financials import FinancialsBuilder
+from web_scraper.cafef_index_scraper import CafeFIndexScraper
+from web_scraper.cafef_news_scraper import CafeFNewsScraper
+from web_scraper.cafef_pdf_scraper import CafeFPdfScraper
+from web_scraper.cafef_scraper import CafeFScraper
+from web_scraper.gics_scraper import GicsScraper
+from web_scraper.simplize_scraper import SimplizeScraper
+from web_scraper.trading_view_scraper import TradingViewScraper
+
+from orchestration import enabled
+from orchestration.assets._common import landed, split_ticker_key, ticker_key
+from orchestration.resources import RepoLogger, SwitchConfig
+
+assets: List[Callable] = []
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Run config — the knobs a person turns per run, from the UI or a YAML file
+# ══════════════════════════════════════════════════════════════════════════════
 class FinancialsConfig(Config):
     """Run config for the statement parse, settable per-run from the UI.
 
@@ -76,7 +110,27 @@ class FinancialsConfig(Config):
     skip_existing: bool = True
 
 
-class TradingViewDataConfig(Config):
+class TradingViewLinksConfig(Config):
+    """Run config for the TradingView link scrape.
+
+    `max_browsers` is the HARD CAP on concurrent Chrome instances for this step. It
+    defaults to `SCRAPER_MAX_CONCURRENT_BROWSERS` in `utils/constants.py` (itself
+    overridable with the environment variable of the same name) and sizes the scraper's
+    thread pool as well as its semaphore, so the number here IS the number of browsers —
+    there is no second knob that can make it larger or smaller.
+
+    ```yaml
+    ops:
+      raw__trading_view_links:
+        config:
+          max_browsers: 4
+    ```
+    """
+
+    max_browsers: int = SCRAPER_MAX_CONCURRENT_BROWSERS
+
+
+class TradingViewDataConfig(TradingViewLinksConfig):
     """Run config for the TradingView OHLCV scrape, settable per-run from the UI.
 
     ⚠️ **`skip_existing=True` REFRESHES NOTHING THAT IS ALREADY ON DISK.** The check is
@@ -91,44 +145,22 @@ class TradingViewDataConfig(Config):
     FRESH DATA — then pass `skip_existing=False` and pay the full cost (~50 s per
     symbol, dominated by the 8-second global navigation gate).
 
+    ⚠️ `skip_existing=False` re-fetches a symbol into a NEW file — the name carries
+    today's date — and does NOT remove the old one. The bronze ingest globs the whole
+    folder and dedupes on (exchange, ticker, date), so the run is still correct, but
+    "overwrite what is on disk" means clearing the folder first.
+
     ```yaml
     ops:
       raw__trading_view_data:
         config:
           skip_existing: false
+          max_browsers: 4
     ```
     """
 
     skip_existing: bool = True
 
-
-from orchestration._bootstrap import bootstrap
-
-bootstrap()
-
-import os
-
-from utils.constants import (
-    CAFEF_FINANCIALS_TICKERS,
-    CAFEF_PDF_TICKERS,
-    CAFEF_RAW_DATA_DIR,
-    GICS_RAW_DATA_DIR,
-    SIMPLIZE_RAW_DATA_DIR,
-    TRADING_VIEW_RAW_DATA_DIR,
-)
-from web_scraper.cafef_financials import FinancialsBuilder
-from web_scraper.cafef_index_scraper import CafeFIndexScraper
-from web_scraper.cafef_news_scraper import CafeFNewsScraper
-from web_scraper.cafef_pdf_scraper import CafeFPdfScraper
-from web_scraper.cafef_scraper import CafeFScraper
-from web_scraper.gics_scraper import GicsScraper
-from web_scraper.simplize_scraper import SimplizeScraper
-from web_scraper.trading_view_scraper import TradingViewScraper
-
-from orchestration.assets._common import landed, split_ticker_key, ticker_key
-from orchestration.resources import RepoLogger, SwitchConfig
-
-assets: List[Callable] = []
 
 TV_LINKS = AssetKey(["raw", "trading_view_links"])
 
@@ -151,18 +183,32 @@ UNIVERSE = AssetDep(
 # read out of switch_config.json — 320 Dagster partitions would just re-encode that
 # JSON in a second place, and be unusable in the UI. Nine is the granularity a person
 # actually re-runs at ("redo forex").
+#
+# ⚠️ THE CLASSES ARE TOGGLEABLE INDIVIDUALLY, from `config.json`:
+#
+#     "partitions": { "raw/trading_view": { "stocks": false } }
+#
+# A class disabled there is REMOVED from this definition — unmaterialisable,
+# un-backfillable, absent from the UI — which is a stronger guarantee than "don't select
+# it" and the reason the key exists (see `enabled.py`). The toggle is registered under the
+# GROUP name `raw/trading_view` because BOTH assets share this object and must: the data
+# step reads the link CSV its own partition wrote, so a class offered by one and not the
+# other would be a broken edge.
 TV_ASSET_CLASSES = StaticPartitionsDefinition(
-    [
-        "stocks",
-        "funds",
-        "futures",
-        "forex",
-        "crypto",
-        "indices",
-        "bonds",
-        "economy",
-        "options",
-    ]
+    enabled.register(
+        "raw/trading_view",
+        [
+            "stocks",
+            "funds",
+            "futures",
+            "forex",
+            "crypto",
+            "indices",
+            "bonds",
+            "economy",
+            "options",
+        ],
+    )
 )
 
 # The two steps that are known no-ops, so `landed()` must not treat an empty folder as a
@@ -171,12 +217,21 @@ TV_ASSET_CLASSES = StaticPartitionsDefinition(
 TV_DATA_MAY_BE_EMPTY = {"crypto", "options"}
 
 
-def _tv(logger, switches: SwitchConfig, phase: str, asset_class: str):
+def _tv(
+    logger,
+    switches: SwitchConfig,
+    phase: str,
+    asset_class: str,
+    max_browsers: int = SCRAPER_MAX_CONCURRENT_BROWSERS,
+):
     """A TradingView scraper whose RUN-PLAN ancestors are forced on for `phase`.
 
     See `SwitchConfig.build_unblocked` — without this the committed
     `"web_scraper": false` would make every adder enumerate zero tasks and the asset
     would succeed having scraped nothing.
+
+    `max_browsers` caps concurrent Chrome instances AND sizes the thread pool, so it is
+    the whole browser budget of the step.
     """
     handler = switches.build_unblocked(
         logger,
@@ -185,7 +240,9 @@ def _tv(logger, switches: SwitchConfig, phase: str, asset_class: str):
         f"web_scraper/trading_view/{phase}",
         f"web_scraper/trading_view/{phase}/{asset_class}",
     )
-    return TradingViewScraper(logger=logger, switch_handler=handler, power=100)
+    return TradingViewScraper(
+        logger=logger, switch_handler=handler, power=100, max_browsers=max_browsers
+    )
 
 
 @asset(
@@ -206,20 +263,28 @@ def _tv(logger, switches: SwitchConfig, phase: str, asset_class: str):
     ),
 )
 def trading_view_links(
-    context: AssetExecutionContext, repo_logger: RepoLogger, switches: SwitchConfig
+    context: AssetExecutionContext,
+    repo_logger: RepoLogger,
+    switches: SwitchConfig,
+    config: TradingViewLinksConfig,
 ) -> MaterializeResult:
     asset_class = context.partition_key
     logger = repo_logger.build()
-    scraper = _tv(logger, switches, "links", asset_class)
+    scraper = _tv(logger, switches, "links", asset_class, config.max_browsers)
 
     adder = getattr(scraper, f"_add_{_ADDER_STEM[asset_class]}_links_tasks")
     scraper._thread_manager.remove_all_tasks()
     queued = adder()
-    context.log.info(f"{asset_class}: queued {queued} link task(s)")
+    context.log.info(
+        f"{asset_class}: queued {queued} link task(s) "
+        f"(max_browsers={config.max_browsers})"
+    )
     scraper._thread_manager.execute()
 
     meta = landed(f"{TRADING_VIEW_RAW_DATA_DIR}/links/{asset_class}")
     meta["tasks_queued"] = queued
+    meta["max_browsers"] = config.max_browsers
+    meta["browsers_peak"] = scraper._browsers_peak
     return MaterializeResult(metadata=meta)
 
 
@@ -292,14 +357,14 @@ def trading_view_data(
 ) -> MaterializeResult:
     asset_class = context.partition_key
     logger = repo_logger.build()
-    scraper = _tv(logger, switches, "data", asset_class)
+    scraper = _tv(logger, switches, "data", asset_class, config.max_browsers)
 
     adder = getattr(scraper, f"_add_{_ADDER_STEM[asset_class]}_data_tasks")
     scraper._thread_manager.remove_all_tasks()
     queued = adder(skip_existing=config.skip_existing)
     context.log.info(
         f"{asset_class}: queued {queued} data task(s) "
-        f"(skip_existing={config.skip_existing})"
+        f"(skip_existing={config.skip_existing}, max_browsers={config.max_browsers})"
     )
     scraper._thread_manager.execute()
 
@@ -308,6 +373,8 @@ def trading_view_data(
         require=asset_class not in TV_DATA_MAY_BE_EMPTY,
     )
     meta["tasks_queued"] = queued
+    meta["max_browsers"] = config.max_browsers
+    meta["browsers_peak"] = scraper._browsers_peak
     return MaterializeResult(metadata=meta)
 
 
@@ -429,11 +496,19 @@ assets.append(cafef_news)
 # ~2.4 h of OCR each. Today scoping them means editing CAFEF_PDF_TICKERS /
 # CAFEF_FINANCIALS_TICKERS in constants.py and reading logs/app.log to find out what
 # happened; as partitions, one ticker is one re-runnable unit with its own record.
+#
+# Each ticker is individually toggleable — `"raw/cafef_pdfs@HOSE_VCB": false` — and here
+# the owner name IS the asset key, because neither definition is shared.
 PDF_TICKERS = StaticPartitionsDefinition(
-    [ticker_key(e, s) for e, s in CAFEF_PDF_TICKERS]
+    enabled.register(
+        "raw/cafef_pdfs", [ticker_key(e, s) for e, s in CAFEF_PDF_TICKERS]
+    )
 )
 FINANCIALS_TICKERS = StaticPartitionsDefinition(
-    [ticker_key(e, s) for e, s in CAFEF_FINANCIALS_TICKERS]
+    enabled.register(
+        "raw/cafef_financials",
+        [ticker_key(e, s) for e, s in CAFEF_FINANCIALS_TICKERS],
+    )
 )
 
 

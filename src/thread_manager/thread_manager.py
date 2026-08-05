@@ -1,7 +1,8 @@
 # src\thread_manager\thread_manager.py
 
 import os
-from concurrent.futures import ThreadPoolExecutor, wait
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Set
 from logger.logger import Logger
 
@@ -122,6 +123,51 @@ class ThreadManager:
 
         return [make_callback(i) for i in range(num)]
 
+    @staticmethod
+    def _format_duration(seconds: float) -> str:
+        """`5h22m` / `47m10s` / `38s` — whichever unit pair a reader actually needs."""
+        seconds = int(max(0, seconds))
+        h, rem = divmod(seconds, 3600)
+        m, s = divmod(rem, 60)
+        if h:
+            return f"{h}h{m:02d}m"
+        if m:
+            return f"{m}m{s:02d}s"
+        return f"{s}s"
+
+    def _progress_line(
+        self,
+        done: int,
+        total: int,
+        failed: int,
+        started_at: float,
+        last_task: str,
+    ) -> str:
+        """One line per finished task: how far, how fast, how much longer.
+
+        A scrape runs for hours inside one Dagster step, and Dagster reports nothing
+        until the step ends — so `logs/app.log` is the only place progress can show up.
+        Both forms are here on purpose: the PERCENTAGE answers "are we nearly there",
+        the COUNTS answer "how many series did we actually get", and the two disagree in
+        the way that matters when tasks fail.
+        """
+        elapsed = time.monotonic() - started_at
+        pct = done / total * 100 if total else 100.0
+        rate = done / elapsed * 60 if elapsed > 0 else 0.0  # tasks per minute
+        eta = (total - done) / (done / elapsed) if done and done < total else 0
+
+        filled = int(round(pct / 5))  # 20-cell bar
+        bar = "#" * filled + "-" * (20 - filled)
+
+        return (
+            f"Progress [{bar}] {pct:5.1f}%  {done}/{total}"
+            f" | ok {done - failed} fail {failed}"
+            f" | {rate:.1f}/min"
+            f" | elapsed {self._format_duration(elapsed)}"
+            f" | ETA {self._format_duration(eta)}"
+            f" | last: {last_task}"
+        )
+
     def execute(self, final_callback: callable = None):
         successful_tasks = {}
         failed_tasks = {}
@@ -147,25 +193,44 @@ class ThreadManager:
             for task in ready_tasks:
                 self._task_list.remove(task)
 
+            # ⚠️ PROGRESS IS LOGGED AS TASKS LAND, NOT COLLECTED AT THE END. A scrape is
+            # thousands of tasks over hours inside ONE Dagster step, and Dagster reports
+            # nothing until that step finishes — so without this the only signal that a
+            # 7-hour run is alive was the file count in `raw_data/`.
+            #
+            # `as_completed` replaced `wait(futures, timeout=120)` + a second pass. That
+            # timeout never did anything: the subsequent `future.result()` blocks with no
+            # timeout of its own, and the `with` block joins the pool anyway, so a run
+            # longer than 120 s was not cut short — it just stopped reporting.
+            round_total = len(ready_tasks)
+            round_started = time.monotonic()
+            round_done = 0
+            round_failed = 0
+
             with ThreadPoolExecutor(max_workers=self._max_workers) as executor:
                 future_to_task = {
                     executor.submit(task.run): task for task in ready_tasks
                 }
 
-                futures = list(future_to_task.keys())
-                wait(futures, timeout=120)
-
-                for future in future_to_task:
+                for future in as_completed(future_to_task):
                     task = future_to_task[future]
                     try:
-                        result = future.result()
-                        successful_tasks[task.name] = result
-                        self._logger.log_info(
-                            f"Task '{task.name}' completed successfully."
-                        )
+                        successful_tasks[task.name] = future.result()
                     except Exception as e:
                         failed_tasks[task.name] = str(e)
+                        round_failed += 1
                         self._logger.log_error(f"Task '{task.name}' failed: {e}")
+
+                    round_done += 1
+                    self._logger.log_info(
+                        self._progress_line(
+                            round_done,
+                            round_total,
+                            round_failed,
+                            round_started,
+                            task.name,
+                        )
+                    )
 
         # Final callback runs once after all tasks
         if final_callback:

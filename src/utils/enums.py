@@ -1156,18 +1156,92 @@ TRADING_VIEW_SCRAPE_COUNTRIES: List[Country] = [
 # ──────────────────────────────────────────────────────────────────────────────
 
 # Maps Country enum → TradingView's internal country code stored in localStorage
+# TradingView country codes — ISO 3166-1 alpha-2, lowercase in localStorage.
+#
+# ⚠️ VERIFIED AGAINST TRADINGVIEW, NOT GUESSED (2026-08-05). Every code below was
+# confirmed to return economic series from the endpoint the screener itself calls:
+#
+#   https://symbol-search.tradingview.com/symbol_search/v3/
+#       ?text=&search_type=economic&country=<CC>&lang=en&domain=production
+#
+# The response carries `country`, `economic_category.id` (the same gdp/lbr/prce/... ids
+# as ECONOMY_CATEGORY_LS_VALUE) and `symbols_remaining`, so a country's series count is
+# checkable without opening a browser. The trailing comment on each line is TradingView's
+# OWN name for that country, taken from its series descriptions — note `eu` renders as
+# "Euro Area".
+#
+# ⚠️ **THE API IS NOT THE SCREENER, AND `uk` IS THE PROOF.** These codes go into
+# localStorage for the SCREENER PANEL; the search API above only tells you a country
+# exists and how many series it has. They agree for 18 of 19 countries and disagree for
+# the United Kingdom, where the API wants `GB` and the panel wants `uk` — and the panel
+# does not reject an unknown code, it silently drops the filter and lists the world.
+#
+# The cheap check on a whole run: a leaf whose row count is EXACTLY 50 is suspicious, and
+# a country whose total does not match its number below is either truncated or unfiltered.
+# 17 of 19 matched exactly on 2026-08-05; the two that did not were both real bugs.
 COUNTRY_CODE: Dict[Country, str] = {
-    Country.VIETNAM: "vn",
-    Country.USA: "us",
-    Country.UNITED_KINGDOM: "gb",
-    Country.GERMANY: "de",
-    Country.FRANCE: "fr",
-    Country.JAPAN: "jp",
-    Country.INDIA: "in",
-    Country.MAINLAND_CHINA: "cn",
-    Country.SOUTH_KOREA: "kr",
-    # extend as needed
+    Country.VIETNAM: "vn",  # Vietnam            91 series
+    # ── the four already scraped ─────────────────────────────────────────────
+    Country.USA: "us",  # United States        1,465
+    Country.MAINLAND_CHINA: "cn",  # China                  167
+    Country.JAPAN: "jp",  # Japan                  183
+    Country.SOUTH_KOREA: "kr",  # South Korea            142
+    # ── Vietnam's FDI sources and supply-chain partners ──────────────────────
+    Country.SINGAPORE: "sg",  # Singapore              108
+    Country.TAIWAN_CHINA: "tw",  # Taiwan                 107
+    Country.HONG_KONG_CHINA: "hk",  # Hong Kong               93
+    # ── export markets ───────────────────────────────────────────────────────
+    Country.EUROPEAN_UNION: "eu",  # Euro Area              126
+    Country.GERMANY: "de",  # Germany                184
+    Country.NETHERLANDS: "nl",  # Netherlands            151
+    # ⚠️ `uk`, NOT `gb`, AND THIS IS THE ONE CODE THAT IS NOT ISO 3166-1. Verified by
+    # probe 2026-08-05: with `gb` the panel ignores the filter entirely and lists the
+    # WORLD — `united_kingdom/health` came back with US, Hungarian, Israeli, Polish and
+    # Australian series — while `uk` returns `GBHB`, `GBHOSP` and nothing else. Note the
+    # symbol-search API is the opposite way round (`country=GB` → 209 series, `country=UK`
+    # → 0), so the screener and the API disagree, and the SCREENER is what we drive.
+    Country.UNITED_KINGDOM: "uk",  # United Kingdom         209
+    # ── ASEAN peers / regional cycle ─────────────────────────────────────────
+    Country.THAILAND: "th",  # Thailand               111
+    Country.MALAYSIA: "my",  # Malaysia               113
+    Country.INDONESIA: "id",  # Indonesia              114
+    Country.PHILIPPINES: "ph",  # Philippines            103
+    # ── other trade partners ─────────────────────────────────────────────────
+    Country.INDIA: "in",  # India                  127
+    Country.AUSTRALIA: "au",  # Australia              183
+    Country.RUSSIA: "ru",  # Russia                 126
+    Country.FRANCE: "fr",  # France
+    # ⚠️ The land borders are NOT here: TradingView has economic series for Cambodia
+    # (`kh`, 55) and Laos (`la`, 52), but `Country` has no member for either — this enum
+    # mirrors the country list TradingView's SCREENER offers, which is not the same set
+    # as its economics coverage. Adding them means adding the enum members first, and
+    # confirming the screener accepts the code rather than falling back to unfiltered.
 }
+
+
+def country_code(country: Country) -> str:
+    """TradingView's code for `country` — and it RAISES rather than defaulting.
+
+    ⚠️ THIS EXISTS BECAUSE THE OLD `COUNTRY_CODE.get(country, "")` WAS A
+    SILENT-WRONG-DATA BUG.
+    The code is injected into `tradingview.symboledit.selectedSearchSources`, and an
+    EMPTY string there is not "no country" in the sense of an error — it is a valid
+    screener state meaning NO COUNTRY FILTER. So a country present in `switch_config.json`
+    but missing from the map above would have scraped the unfiltered global list and
+    written it to `raw_data/trading_view/links/economy/<that country>/`, where every row
+    would look like a successful scrape of that country. Nothing downstream could tell.
+    """
+    try:
+        return COUNTRY_CODE[country]
+    except KeyError:
+        raise KeyError(
+            f"No TradingView country code for {country.name} ({country.value}). Add it to "
+            f"COUNTRY_CODE in utils/enums.py — verify the code first against "
+            f"https://symbol-search.tradingview.com/symbol_search/v3/"
+            f"?text=&search_type=economic&country=<CC>&lang=en&domain=production . "
+            f"Refusing to fall back to an empty code, which TradingView reads as "
+            f"'no country filter' and would silently scrape the world."
+        ) from None
 
 # localStorage key that stores the active asset-class tab
 _LS_FILTER_KEY = "tradingview.symboledit.filter"
@@ -1390,7 +1464,7 @@ def build_stock_link_scrape_actions(
     """Stocks: country × stock_type × sector  (used for common_stock)."""
     js = _build_ls_inject_js(
         asset_tab=_ASSET_LS_TAB[ScrapeMainType.STOCKS.value],
-        country_code=COUNTRY_CODE.get(country, ""),
+        country_code=country_code(country),
         filter_values={
             "stock-type-select": STOCK_TYPE_LS_VALUE[stock_type],
             "stock-sector-select": STOCK_SECTOR_LS_VALUE[sector],
@@ -1412,7 +1486,7 @@ def build_stock_no_sector_link_scrape_actions(
     """Stocks: country × stock_type only, no sector filter."""
     js = _build_ls_inject_js(
         asset_tab=_ASSET_LS_TAB[ScrapeMainType.STOCKS.value],
-        country_code=COUNTRY_CODE.get(country, ""),
+        country_code=country_code(country),
         filter_values={
             "stock-type-select": STOCK_TYPE_LS_VALUE[stock_type],
             "stock-sector-select": None,
@@ -1434,7 +1508,7 @@ def build_fund_link_scrape_actions(
     """Funds: country × fund_type."""
     js = _build_ls_inject_js(
         asset_tab=_ASSET_LS_TAB[ScrapeMainType.FUNDS.value],
-        country_code=COUNTRY_CODE.get(country, ""),
+        country_code=country_code(country),
         filter_values={
             "funds-type-select": FUND_TYPE_LS_VALUE[fund_type],
         },
@@ -1460,7 +1534,7 @@ def build_futures_link_scrape_actions(
     """
     js = _build_ls_inject_js(
         asset_tab=_ASSET_LS_TAB[ScrapeMainType.FUTURES.value],
-        country_code=COUNTRY_CODE.get(country, ""),
+        country_code=country_code(country),
         filter_values={
             "futures-category-select": FUTURE_CATEGORY_LS_VALUE[category],
         },
@@ -1533,7 +1607,7 @@ def build_indices_link_scrape_actions(
     """
     js = _build_ls_inject_js(
         asset_tab=_ASSET_LS_TAB[ScrapeMainType.INDICES.value],
-        country_code=COUNTRY_CODE.get(country, ""),
+        country_code=country_code(country),
         filter_values={},
     )
     return [
@@ -1555,7 +1629,7 @@ def build_bonds_link_scrape_actions(
     """
     js = _build_ls_inject_js(
         asset_tab=_ASSET_LS_TAB[ScrapeMainType.BONDS.value],
-        country_code=COUNTRY_CODE.get(country, ""),
+        country_code=country_code(country),
         filter_values={
             "bond-type-select": BONDS_TYPE_LS_VALUE[bonds_type],
         },
@@ -1574,7 +1648,7 @@ def build_economy_link_scrape_actions(
     """Economy: country × category (source left at default = all sources)."""
     js = _build_ls_inject_js(
         asset_tab=_ASSET_LS_TAB[ScrapeMainType.ECONOMY.value],
-        country_code=COUNTRY_CODE.get(country, ""),
+        country_code=country_code(country),
         filter_values={
             "economic-category-select": ECONOMY_CATEGORY_LS_VALUE[category],
         },
@@ -1592,7 +1666,7 @@ def build_options_link_scrape_actions(
     """Options: country only."""
     js = _build_ls_inject_js(
         asset_tab=_ASSET_LS_TAB[ScrapeMainType.OPTIONS.value],
-        country_code=COUNTRY_CODE.get(country, ""),
+        country_code=country_code(country),
         filter_values={},
     )
     return [
