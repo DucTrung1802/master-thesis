@@ -125,7 +125,7 @@ def _build_bronze_asset(
             f"→ bronze_schema.{', '.join(tables)}. "
             f"Wraps `DataPreprocessor.{ingest}`; PK (exchange, ticker, date) unless the "
             f"table is event-based. Replaces the switch leaf under "
-            f"`data_preprocessor/data_quality_bronze/`."
+            f"the deleted `data_quality_bronze` switch leaf."
         ),
     )
     def _bronze(

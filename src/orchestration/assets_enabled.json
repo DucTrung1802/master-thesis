@@ -122,13 +122,13 @@
     "// gold/news_daily_panel": "DAILY twin of the weekly panel - trailing 5/10-session news windows for rel5/rel10",
     "gold/news_daily_panel": true,
 
-    "// ---- unified: ONE ticker, cut into feature groups ----": "the schema is created by the asset",
-    "// unified_vcb/pool__basic": "every column of silver.stocks_basic for VCB, silver's own types",
-    "unified_vcb/pool__basic": true,
-    "// unified_vcb/pool__targets": "date + return_5day (forward 5-day simple return on the adjusted close)",
-    "unified_vcb/pool__targets": true,
-    "// unified_vcb/pool__ta": "HEAVY - ~920 technical columns from gold.stocks_ta",
-    "unified_vcb/pool__ta": true,
-    "// unified_vcb/pool__fa": "~204 fundamental columns from gold.stocks_financials_bank_fa",
-    "unified_vcb/pool__fa": true
+    "// ---- unified: ONE UNIVERSE per PARTITION, cut into feature groups ----": "PARTITIONED over VCB / ALL / BANK since 2026-08-05 - the key no longer carries the ticker. The schema is created by the asset. Run one universe with --partition VCB, or all three with a backfill.",
+    "// unified/pool__basic": "every column of silver.stocks_basic for the partition's universe, silver's own types",
+    "unified/pool__basic": true,
+    "// unified/pool__targets": "return_{5,10}day + return_rel_{5,10}day (minus the VNINDEX return over the same window)",
+    "unified/pool__targets": true,
+    "// unified/pool__ta": "HEAVY on ALL - ~920 technical columns from gold.stocks_ta",
+    "unified/pool__ta": true,
+    "// unified/pool__fa": "~204 fundamental columns from gold.stocks_financials_bank_fa - BANK TICKERS ONLY by construction",
+    "unified/pool__fa": true
 }

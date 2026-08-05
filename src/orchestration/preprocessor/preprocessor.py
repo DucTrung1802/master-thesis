@@ -3338,7 +3338,7 @@ class DataPreprocessor:
         `bronze.cafef_news`, one row per news `row_id`.
 
         The actual scoring is the `src/sentiment` module (a PhoBERT-based VN
-        sentiment model), imported here so `data_preprocessor` owns only the ETL:
+        sentiment model), imported here so this module owns only the ETL:
         read bronze → `score_news_frame` → save. The text handed to the model is the
         headline (always) plus, for `editorial` rows, a lead slice of the body
         (`build_scored_text`) — disclosures are short filing stubs whose headline is
@@ -5652,7 +5652,16 @@ class DataPreprocessor:
         # cross-section and whose contents are a single time series — the §9h failure
         # mode, arrived at silently. `"ALL"` is exempt only because it has no
         # predicate to be wrong about.
-        if predicate and series < 2:
+        #
+        # ⚠️ `universe and` WAS MISSING UNTIL 2026-08-05, AND IT MADE EVERY ORDINARY
+        # TICKER UNBUILDABLE. `_helper_unified_member_filter` returns
+        # `("ticker = %s", (ticker,))` for a real company — a perfectly ordinary
+        # predicate — so `if predicate and series < 2` fired on exactly the case it
+        # was written to allow, and `_ingest_unified_pool_basic("VCB")` raised
+        # "a sector schema is a CROSS-SECTION" about a schema that is one company on
+        # purpose. `universe` is what distinguishes a SENTINEL from a ticker, and it
+        # is the distinction this guard was always describing in prose.
+        if universe and predicate and series < 2:
             raise PipelineError(
                 f"{schema}.pool__basic holds {series} ticker(s) for {scope} — a "
                 f"sector schema is a CROSS-SECTION, and one company is not one. "
@@ -6030,34 +6039,47 @@ class DataPreprocessor:
             written = int(cur.fetchone()[0])
             cur.execute(f"SELECT COUNT(*) FROM {schema}.pool__basic")
             spine = int(cur.fetchone()[0])
-            # ⚠️ Symmetric EXCEPT, not a row count. Two tables can agree on how many
-            # rows they hold and disagree about WHICH — the same check
-            # `unified_vcb_pool_targets` makes, for the same reason.
+            # ⚠️ EXCEPT IN ONE DIRECTION ONLY — every pool row must be a spine row,
+            # but NOT every spine row needs a pool row (changed 2026-08-05).
+            #
+            # It was symmetric, on the reasoning that two tables can agree on how many
+            # rows they hold and disagree about WHICH. That half is kept: an orphaned
+            # pool row is still a hard error, because it cannot be joined to anything
+            # and its presence means the join key is wrong.
+            #
+            # The other half was FALSE FOR EVERY MULTI-TICKER UNIVERSE, and only ever
+            # looked right because the sole caller was one company. A feature pool is
+            # as wide as its SOURCE: `gold.stocks_financials_bank_fa` is built from the
+            # CafeF *bank* chart of accounts and holds VCB and ACB alone, so on
+            # `unified_schema_bank`'s 20-ticker spine it covers 8,265 of 53,921 rows
+            # and on `unified_schema_all` 8,265 of 2,388,368. Demanding equality there
+            # does not protect anything — it just makes the table unbuildable.
+            #
+            # Coverage is REPORTED instead of assumed, here and in the asset's
+            # metadata, so a pool that silently shrank is visible rather than fatal.
+            # Consumers LEFT JOIN a feature pool onto the spine.
             cur.execute(
                 f"SELECT COUNT(*) FROM ("
                 f"  SELECT date, exchange, ticker FROM {schema}.{pool}"
                 f"  EXCEPT SELECT date, exchange, ticker FROM {schema}.pool__basic"
-                f"  UNION ALL"
-                f"  SELECT date, exchange, ticker FROM {schema}.pool__basic"
-                f"  EXCEPT SELECT date, exchange, ticker FROM {schema}.{pool}"
                 f") d"
             )
-            unaligned = int(cur.fetchone()[0])
+            orphaned = int(cur.fetchone()[0])
 
         if written != available:
             raise PipelineError(
                 f"{schema}.{pool} wrote {written} rows against {available} joinable."
             )
-        if unaligned:
+        if orphaned:
             raise PipelineError(
-                f"{schema}.{pool} and pool__basic disagree on {unaligned} key(s). "
-                f"Every pool must sit on the spine's calendar or the join silently "
-                f"drops rows."
+                f"{schema}.{pool} has {orphaned} row(s) whose (date, exchange, ticker) "
+                f"is not in pool__basic. Every pool row must sit on the spine or it "
+                f"cannot be joined to anything."
             )
-        if written != spine:
-            raise PipelineError(
-                f"{schema}.{pool} has {written} rows against pool__basic's {spine}."
-            )
+        self._logger.log_info(
+            f"{schema}.{pool}: {written} rows covering "
+            f"{100.0 * written / max(spine, 1):.1f}% of pool__basic's {spine}."
+        )
         return written, len(columns)
 
     def _ingest_unified_pool_ta(self, ticker: str) -> None:

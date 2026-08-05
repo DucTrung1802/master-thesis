@@ -20,7 +20,7 @@ import os
 
 from dotenv import load_dotenv
 
-from data_preprocessor.data_preprocessor import DataPreprocessor
+from orchestration.preprocessor import DataPreprocessor
 from dtos.tabular_database_driver_dtos.postgre_sql_connection_dto import (
     PostgreSQLConnectionDto,
 )

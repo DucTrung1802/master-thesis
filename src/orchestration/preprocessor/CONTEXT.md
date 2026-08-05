@@ -1,18 +1,20 @@
-# Context — `src/data_preprocessor` (bronze → silver → gold ETL)
+# Context — `src/orchestration/preprocessor` (bronze → silver → gold ETL)
 
 > # 📚 THIS IS A LIBRARY. IT HAS NO ENTRY POINT.
 >
-> **[`src/orchestration/`](../orchestration/CONTEXT.md) is the only way to run
-> anything.** Point new work there; read this file for how a table is BUILT.
+> **[`src/orchestration/`](../CONTEXT.md) is the only way to run anything, and
+> this package now lives INSIDE it** (moved from `src/data_preprocessor` 2026-08-05). Point new work there; read this file for how a table is BUILT.
 >
 > ⚠️ **THE DIRECTORY MUST NOT BE MOVED OR DELETED, and since 2026-08-05 that matters
 > more, not less.** All 73 Dagster assets are thin wrappers over the `_ingest_*` methods
-> in [data_preprocessor.py](data_preprocessor.py) — `src/orchestration/resources.py:23`
-> imports `DataPreprocessor` directly, and every materialisation executes the transform
+> in [preprocessor.py](preprocessor.py) — `orchestration/resources.py`
+> imports `DataPreprocessor` from here, and every materialisation executes the transform
 > logic here. Deleting this package would leave 73 assets wrapping nothing: it would
 > delete the pipeline and keep the scheduling, which is exactly backwards. Making
 > orchestration self-contained means MOVING these ~6,200 lines into it — a real
-> refactor, not a `rm`.
+> refactor, not a `rm` — so the 2026-08-05 answer was to MOVE the package into
+> `src/orchestration/` rather than delete it. `src/data_preprocessor` is gone; its
+> contents are here.
 >
 > ### ✅ The run path was DELETED on 2026-08-05 (phase 5)
 >
@@ -65,7 +67,7 @@ raw_data/<source>/*.csv,*.xlsx           (produced by src/web_scraper)
                   {bonds,economy,stock_market}          WIDE, PK (date)
 ```
 
-- **One file, one class.** [data_preprocessor.py](data_preprocessor.py) holds the
+- **One file, one class.** [preprocessor.py](preprocessor.py) holds the
   whole ETL as `DataPreprocessor` (~1920 lines). The three public entry points
   (`ingest_bronze_data` / `ingest_silver_data` / `ingest_gold_data`) each
   connect, `CREATE DATABASE`/`CREATE SCHEMA` if needed, run the flag-gated

@@ -18,13 +18,31 @@
 > plan, and now it is the only one. Verify anything before acting on it: the code is the
 > source of truth.
 >
-> **[`src/data_preprocessor`](../data_preprocessor/CONTEXT.md) IS A LIBRARY, NOT A
-> RUNNER.** It holds every `_ingest_*` method and all the transform logic
-> (`resources.py:23` imports `DataPreprocessor`), so **the directory must not be moved
-> or deleted** — deleting it deletes the pipeline, not the scheduling. What was deleted
-> on 2026-08-05 is its RUN PATH: the three `ingest_*_data()` entry points, `_run_layer`,
-> and the `data_quality_*` switch keys. Read that file for how a table is BUILT; add new
-> pipeline steps as assets HERE.
+> ## ✅ `src/data_preprocessor` NO LONGER EXISTS (2026-08-05)
+>
+> It was **moved into this package** — `src/orchestration/preprocessor/` — and the old
+> directory deleted. Nothing about the code changed; what changed is that it now lives
+> inside the only thing that calls it. That was the whole distance between "orchestration
+> is a thin wrapper" and "orchestration is the pipeline": the package had exactly ONE
+> real importer (`resources.py`) plus a notebook, so removing it was a RELOCATION, not
+> the multi-week rewrite the 6,181-line count suggests.
+>
+> ```
+> src/orchestration/
+>   definitions.py  resources.py  _bootstrap.py  assets_enabled.json
+>   assets/         scrape · bronze · silver · gold · unified   ← the 73 assets
+>   preprocessor/   preprocessor.py + CONTEXT.md                ← the transform library
+> ```
+>
+> `from orchestration.preprocessor import DataPreprocessor`. Read
+> [preprocessor/CONTEXT.md](preprocessor/CONTEXT.md) for how a table is BUILT; add new
+> pipeline steps as assets in [assets/](assets/).
+>
+> ⚠️ **It is still a LIBRARY and still has no entry point.** The move did not turn it
+> into an orchestrator, and the assets did not absorb its logic — they still wrap it.
+> What is gone is the second *package*, not the separation of concerns, and that
+> separation is deliberate: an asset stays two or three lines, and the transform is
+> testable without Dagster.
 >
 > ⚠️ **`src/main.py` IS GONE** (deleted 2026-08-05, code at `f4bc4a2`). So is
 > `src/data_postprocessor/` — 652 lines only `main.py` imported, and the call was already
@@ -40,7 +58,7 @@
 > was taken against it.
 
 `main.py` was already a DAG, written as `if switch: call()`. The evidence is
-[data_preprocessor.py:3495-3525](../data_preprocessor/data_preprocessor.py#L3495-L3525),
+[preprocessor/preprocessor.py:3495-3525](preprocessor/preprocessor.py#L3495-L3525),
 a hand-written list of `(leaf_name, callable)` pairs iterated against the switch
 config, and [cafef_scraper.py:516-534](../web_scraper/cafef_scraper.py#L516-L534),
 the same shape for the scrapers. The dependency edges (TV links → CafeF/Simplize
@@ -120,7 +138,7 @@ raw/cafef_financials[t] ─► bronze/cafef_financials ─► silver/cafef_finan
 | `bronze` | **all 20 ingest leaves** (25 tables) | — |
 | `silver` | `economy` (long fact), `economy_series` (dimension), `bonds`/`funds`/`forex` (TradingView projections), `stock_market` (4 index tabs), `stocks_basic` (6 sources), `cafef_financials_bank` (quarterly), `stocks_basic_financials_bank` (as-of daily), `…_fa` (+26 indicators) | — |
 | `gold` | `economy` (wide, as-of), `bonds`/`funds`/`forex` (wide, unfilled), `stock_market` (wide, unfilled), `stocks` (price panel, no features), `stocks_ta` (+ the ~900-column TA block), `stocks_financials_bank_fa` (feature panel), `news_{weekly,daily}_panel` | — |
-| `unified_vcb` | `pool__basic` (one ticker, every column of `silver.stocks_basic`), `pool__targets` (`date` + `return_5day` + `return_10day`) | — |
+| `unified` | `pool__basic`, `pool__targets`, `pool__ta`, `pool__fa` | **3** — `VCB` / `BANK` / `ALL`, the universe |
 
 ### ⚠️ The edges, read out of the code (2026-07-31 correction)
 
@@ -403,7 +421,7 @@ dagster asset materialize -f src/orchestration/definitions.py --select "group:gi
 dagster asset materialize -f src/orchestration/definitions.py --select "group:bronze"   # 20 assets, ~9 min
 dagster asset materialize -f src/orchestration/definitions.py --select "group:silver"
 dagster asset materialize -f src/orchestration/definitions.py --select "group:gold"     # ⚠️ incl. stocks_ta: hours
-dagster asset materialize -f src/orchestration/definitions.py --select "group:unified_vcb"
+dagster asset materialize -f src/orchestration/definitions.py --select "group:unified" --partition VCB
 ```
 
 Or in the UI: select the graph and hit Materialize — Dagster walks the edges itself,
@@ -480,7 +498,7 @@ methods directly, so `--select` is the whole run plan. A leaf set `false` in the
 still materialises here, and that is intended (§3).
 
 **Expected output of C**, which doubles as the acceptance test — the four counts match
-`data_preprocessor/CONTEXT.md` §8 exactly:
+`preprocessor/CONTEXT.md` §8 exactly:
 
 ```
 index_price:        6 files, 24962 rows   →  bronze.cafef_index_price:        24962 rows
@@ -512,7 +530,7 @@ dagster asset materialize -f src/orchestration/definitions.py --select "group:br
 ```
 
 **20/20 green, ~9 minutes**, 10.6 M rows re-ingested. This run doubled as the acceptance
-test for the `symbol` → `ticker` refactor in `src/` (see `data_preprocessor/CONTEXT.md`
+test for the `symbol` → `ticker` refactor in `src/` (see `preprocessor/CONTEXT.md`
 §4-bronze): **22 of 25 tables reproduced their row count EXACTLY.** The three that moved
 were stale bronze catching up with raw data the scrapers had already written —
 `cafef_news` 5,599 → 405,320 (3 tickers → the full 777), `cafef_order_stats` 351,373 →
@@ -625,11 +643,11 @@ reachable only by calling a `DataPreprocessor` method through a `main.py` leaf:
 | `silver/cafef_{price,order_stats,foreign,prop_trading,insider_shareholder_transactions}` | 5 | `cafef_carry_ups` |
 | `silver/gics`, `silver/indices`, `silver/cafef_news_sentiment` | 3 | one leaf each |
 | `silver/cafef_financials` | **3** (the per-report bank statements) | half of `financials` |
-| `unified_vcb/pool__ta`, `unified_vcb/pool__fa` | 2 | **no leaf — notebook only** |
+| `unified/pool__ta`, `unified/pool__fa` | 2 | **no leaf — notebook only** |
 
 ```powershell
 dagster asset materialize -f src/orchestration/definitions.py --select "silver/cafef_price,silver/cafef_order_stats,silver/cafef_foreign,silver/cafef_prop_trading,silver/cafef_insider_shareholder_transactions,silver/gics,silver/indices,silver/cafef_financials"
-dagster asset materialize -f src/orchestration/definitions.py --select "unified_vcb/pool__ta,unified_vcb/pool__fa"
+dagster asset materialize -f src/orchestration/definitions.py --select "unified/pool__ta,unified/pool__fa" --partition VCB
 ```
 
 Measured: gics 163, indices 24,095, insider 13,607, prop_trading **64,139 → 73,810**,
@@ -882,7 +900,7 @@ free). Any future asset that touches a lazily-imported repo module is covered.
 The COPY writer assumes an empty table, so the second run died on the primary key —
 `duplicate key value violates unique constraint … Key (exchange, ticker, date)=(HOSE,
 VCB, 2009-06-30) already exists`. Re-materialising is the normal life of an asset, so
-"drop the gold table first", which is what `data_preprocessor/CONTEXT.md` §7 told a
+"drop the gold table first", which is what `preprocessor/CONTEXT.md` §7 told a
 human to do, was never going to survive contact with an orchestrator. **Fixed**:
 `_ingest_gold_table` drops the table itself, as late as possible so an earlier failure
 leaves the old one intact — the same thing `_ingest_gold_economy` and
@@ -1007,7 +1025,7 @@ is the point of the shared helper: `gold.stocks_ta` and
 `gold.stocks_financials_bank_fa` cannot drift into different feature sets while looking
 identical. `gold.stocks` has none of them by design — that is the split.
 
-### UNIFIED — the fourth layer, and the first scoped to ONE TICKER (2026-08-03)
+### UNIFIED — the fourth layer, PARTITIONED BY UNIVERSE (2026-08-03, partitioned 2026-08-05)
 
 `unified_schema_<ticker>` is not a fourth copy of the pipeline. It is one company's
 slice, cut into the **feature groups a model selects over**:
@@ -1019,7 +1037,7 @@ silver/stocks_basic ──► unified_vcb/pool__basic     4,235 × 38, PK (date,
 ```
 
 ```powershell
-dagster asset materialize -f src/orchestration/definitions.py --select "group:unified_vcb"
+dagster asset materialize -f src/orchestration/definitions.py --select "group:unified" --partition VCB
 ```
 
 | check | result |
@@ -1055,23 +1073,86 @@ and a name cannot be a bound parameter. `_helper_unified_schema` validates it ag
 would imply the other four `pool__*` tables are per-ticker assets too, and they are not
 assets at all — `train_test_creator/unified_schema_creator.ipynb` still builds them.
 
-#### ⚠️ `unified_schema_all` EXISTS AND IS NOT AN ASSET — 2026-08-04
+#### ✅ THE UNIVERSE IS A PARTITION NOW — 2026-08-05
 
-`DataPreprocessor.UNIFIED_UNIVERSE = "ALL"` handed to `_ingest_unified_pool_basic` /
-`_ingest_unified_pool_targets` builds **`unified_schema_all`**: the same two tables,
-the same 38 columns, the same `(date, exchange, ticker)` key, but **every** ticker —
-2,388,368 rows, 781 tickers, 2009-01-02 → 2026-07-08, in 57 s. It is what
-`feature_selection`'s cross-sectional study reads (see that package's CONTEXT §9).
+`unified_schema_all` and `unified_schema_bank` used to exist in the database and
+nowhere in the graph: built by calling the methods by hand, so
+`--select "group:unified" --partition VCB` rebuilt VCB and left 4.9 M rows stale. The comment on
+`UNIFIED_TICKER` said this became a partition "when the rest of the schema moves
+here". It has.
 
-**It was built by calling the two methods directly, so the asset graph does NOT
-describe it.** `dagster asset materialize --select "group:unified_vcb"` rebuilds VCB
-and leaves `unified_schema_all` untouched and stale. Rebuild it the same way it was
-built, or promote it: the natural shape is `UNIFIED_TICKER` becoming a
-`StaticPartitionsDefinition` over `{"VCB", "ALL", …}` with the asset key stopping
-carrying the ticker — which is the change the comment above has been waiting for.
-⚠️ The two asset bodies also assert `COUNT(DISTINCT ticker) = 1`, which is correct
-for VCB and would fail for `ALL`; that assertion has to move behind the same
-sentinel the methods use.
+```powershell
+dagster asset materialize -f src/orchestration/definitions.py --select "group:unified" --partition VCB
+dagster asset materialize -f src/orchestration/definitions.py --select "group:unified" --partition BANK
+dagster asset materialize -f src/orchestration/definitions.py --select "group:unified" --partition ALL
+```
+
+| partition | what it is | `pool__basic` |
+|---|---|---|
+| `VCB` | one company | 4,235 × 38 |
+| `BANK` | GICS `industry_code = 401010`, **20 tickers** | 53,921 × 38 |
+| `ALL` | every ticker silver holds, **781** | 2,388,368 × 38 |
+
+⚠️ **THE ASSET KEYS CHANGED: `unified_vcb/pool__x` → `unified/pool__x`**, and the group
+with them (`unified_vcb` → `unified`). Four assets × three partitions where there were
+two assets. Run history under the old keys does not carry over.
+
+⚠️ **`ALL` and `BANK` are SENTINELS, and the library already knew.**
+`UNIFIED_MEMBER_FILTERS` maps each to its `silver.stocks_basic` predicate (`None` for
+`ALL` — no predicate at all), so membership is DERIVED: `BANK` reads the GICS
+classification silver already carries, and a bank listing or being reclassified is
+picked up by a rebuild rather than by editing a list. Adding a universe is one entry
+in that dict plus one partition key.
+
+⚠️ **The single-company assertions are GATED, not deleted.**
+`COUNT(DISTINCT ticker) = 1` is right for `VCB` and flatly wrong for `ALL`, so each such
+check asks `_helper_unified_is_universe` first — the change this file previously
+flagged as the blocker. Its mirror is also asserted: a SENTINEL resolving to one series
+is a failure, because a schema whose name promises a cross-section and whose contents
+are one time series is the §9h failure mode arrived at silently.
+
+⚠️ **`pool__targets`' unlabelled tail is PER SERIES.** The old check was `tail == h`,
+which is only right on one company; on 781 tickers the correct figure is `h × tickers`.
+The two coincide at one ticker, which is exactly why the old check looked right.
+
+#### ⚠️ Two LIBRARY bugs the partitioning exposed, both pre-existing — 2026-08-05
+
+Neither was in the assets. Both had been invisible because the only caller was ever a
+single company.
+
+**1. `_ingest_unified_pool_basic` could not build ANY ordinary ticker.**
+
+```python
+predicate, params = self._helper_unified_member_filter(ticker)  # "VCB" → ("ticker = %s", ("VCB",))
+if predicate and series < 2:            # ← truthy for a real company too
+    raise PipelineError("... a sector schema is a CROSS-SECTION ...")
+```
+
+The guard exists for SECTOR sentinels, but it tests whether a predicate exists — and an
+ordinary ticker has one. So `_ingest_unified_pool_basic("VCB")` raised *"a sector schema
+is a CROSS-SECTION"* about a schema that is one company on purpose. Now
+`if universe and predicate and series < 2`, which is what its own docstring described in
+prose. ⚠️ This means `unified_schema_vcb.pool__basic` had been **unbuildable since the
+`BANK` sentinel landed**, and the "RUN_SUCCESS, 611 ms" recorded below predates it.
+
+**2. A feature pool had to match the spine KEY FOR KEY, which no multi-ticker universe
+can.** `_helper_unified_pool_from_source` used a symmetric `EXCEPT`. But a feature pool
+is as wide as its SOURCE, and `gold.stocks_financials_bank_fa` is built from the CafeF
+*bank* chart of accounts — **VCB and ACB alone**. So `pool__fa` disagreed with the spine
+on 45,656 keys on `BANK` and **2,380,103** on `ALL`, and `pool__ta` on 6,517 (those are
+`gold.stocks_ta` being the stale pre-rewrite table). Demanding equality did not protect
+anything; it made the tables unbuildable.
+
+**The check is now one-sided**: every pool row must be a spine row — an orphaned row
+cannot be joined to anything and is still a hard error — but a spine row needs no pool
+row. **Coverage is REPORTED instead**, by the builder and in each asset's
+`spine_coverage_pct` metadata, so a pool that silently shrank stays visible. Consumers
+LEFT JOIN a feature pool onto the spine.
+
+⚠️ **The relaxation keeps a check it would otherwise have lost**: on a SINGLE-COMPANY
+schema a pool must still cover the whole spine. The subset allowance is about a source
+covering fewer TICKERS than the universe — it is not a licence to lose days for a
+company the source does have.
 
 ⚠️ **THE REST OF THE SCHEMA WAS DROPPED ON 2026-08-03 AND NOTHING REBUILDS IT.**
 `unified_schema_vcb` held **140 objects — 113 tables and 27 views, 126 MB**: the five
@@ -1327,7 +1408,7 @@ Verified:
 `DatabaseExecutionStatus.ERROR` enum that no caller checks. They are left alone
 because the live write path does not use them — `_helper_save_pandas_table_to_database`
 builds its own SQL and **already re-raises** from its worker threads
-([data_preprocessor.py:529-531](../data_preprocessor/data_preprocessor.py#L529-L531))
+([preprocessor/preprocessor.py:529-531](preprocessor/preprocessor.py#L529-L531))
 — and because a failed `create_table` surfaces immediately as a failed insert anyway.
 
 ⚠️ **Expect red on the first wide run.** Turning on a bronze leaf whose scraper has
@@ -1349,7 +1430,7 @@ split naturally, which is an improvement), and per gold leaf (6).
 
 Bronze has **no cross-table dependency** — each ingest reads its own `raw_data/`
 folder — so those 20 are a flat layer. Silver and gold edges are already documented in
-[data_preprocessor/CONTEXT.md](../data_preprocessor/CONTEXT.md) §4 and can be
+[data_preprocessor/CONTEXT.md](preprocessor/CONTEXT.md) §4 and can be
 transcribed directly.
 
 Note `data_quality_unified` is a **dead switch** — no code reads it. Drop it.
@@ -1404,7 +1485,7 @@ alone, and there is now one.
 | 41 `data_quality_*` switch keys (+10 comments) | `switch_config.json` 398 → **347 keys** |
 | `src/data_postprocessor/` | 652 lines, imported only by `main.py`, call already commented out |
 
-`data_preprocessor.py` went 6,389 → 6,181 lines and is now **a library with no entry
+`preprocessor.py` went 6,389 → 6,181 lines and is now **a library with no entry
 point**: 61 `_ingest_*` methods, each called directly by the asset that wraps it.
 
 ⚠️ **THE PREREQUISITE WAS CLOSING THE TABLE GAP, and it was not small.** An audit of

@@ -77,7 +77,7 @@ def _load_disabled() -> set[str]:
 
     ⚠️ FAILS LOUDLY ON A BAD FILE, ON PURPOSE. `SwitchHandler._load_config` swallows a
     read error and returns `{}` — every switch false, `main.py` a complete no-op, one
-    ERROR line in a log nobody reads (see `data_preprocessor/CONTEXT.md` §5). The
+    ERROR line in a log nobody reads (see `preprocessor/CONTEXT.md` §5). The
     equivalent slip here would silently DISABLE THE WHOLE PIPELINE, so a malformed file
     raises instead. An ABSENT file is different and is fine: it means "no opinion", i.e.
     everything enabled.

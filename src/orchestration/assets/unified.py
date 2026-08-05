@@ -1,30 +1,49 @@
 # src\orchestration\assets\unified.py
-"""The UNIFIED layer — `silver_schema` → `unified_schema_<ticker>`.
+"""The UNIFIED layer — `silver_schema` / `gold_schema` → `unified_schema_<universe>`.
 
-The fourth layer, and the first one that is scoped to a SINGLE TICKER. Where bronze /
-silver / gold each hold the whole universe in one table, `unified_schema_vcb` holds one
-company cut into the FEATURE GROUPS a model consumes:
+The fourth layer, and the only PARTITIONED one in the database half of the pipeline.
+Where bronze / silver / gold each hold the whole market in one table, a unified schema
+holds ONE UNIVERSE cut into the FEATURE GROUPS a model selects over:
 
-    pool__basic      the price/flow panel            ← this module
-    pool__targets    the labels                      ← this module
-    pool__ta         the technical block
-    pool__macro      the macro series
-    pool__calendar   calendar features
+    pool__basic      the price/flow panel, every column of silver.stocks_basic
+    pool__targets    the labels — forward returns, absolute and index-relative
+    pool__ta         the ~920-column technical block
+    pool__fa         the ~200-column fundamental block
 
-The point of the split is feature SELECTION: a run can be scoped to one group, which is
-why `train_test_creator/unified_schema_creator.ipynb` (the only builder until now) also
-writes `<target>__lb<N>__<group>__<n>` tables holding each group's surviving columns.
+⚠️ **THE PARTITION IS THE UNIVERSE, and all four pools share it** (2026-08-05). Until
+then this module was hard-coded to `UNIFIED_TICKER = "VCB"` and the asset keys carried
+the ticker (`unified_vcb/pool__basic`), which meant `unified_schema_all` and
+`unified_schema_bank` — 4.9 M rows between them — existed in the database but were
+built by calling the methods by hand and appeared nowhere in the graph. The comment
+that used to sit on that constant said this became a partition "when the rest of the
+schema moves here". It has.
+
+    VCB    one company                            4,235 rows
+    ALL    every ticker silver holds              2,388,368 rows, 781 tickers
+    BANK   GICS industry_code 401010              53,921 rows, 20 tickers
+
+⚠️ **`ALL` and `BANK` are SENTINELS, not tickers**, and the library already knew it:
+`DataPreprocessor.UNIFIED_MEMBER_FILTERS` maps each to the `silver.stocks_basic`
+predicate that selects its members, `None` meaning no predicate at all. Membership is
+DERIVED — `BANK` reads the GICS classification silver already carries — so a bank
+listing or being reclassified is picked up by a rebuild rather than by editing a list.
+Adding a universe is one entry in that dict plus one partition key here.
+
+⚠️ **The single-company assertions are GATED, not deleted.** `COUNT(DISTINCT ticker) =
+1` is right for `VCB` and wrong for `ALL`, so every such check asks
+`_helper_unified_is_universe` first. That is the change CONTEXT flagged as the
+blocker to partitioning: an assertion that is correct for one partition and false for
+another has to know which it is looking at.
 
 ⚠️ **THE SCHEMA IS CREATED BY THE ASSET, not by hand.** `PreprocessorResource.session`
-already issues `CREATE SCHEMA IF NOT EXISTS` for whatever schema it is handed — the same
-preamble `ingest_bronze_data` runs — so naming `unified_schema_vcb` there is what brings
-the schema into existence. `_ingest_unified_pool_basic` also creates it, so the method is
-correct when called from a notebook or `main.py` with no Dagster around it.
+issues `CREATE SCHEMA IF NOT EXISTS` for whatever schema it is handed, so naming
+`unified_schema_<universe>` there is what brings it into existence.
 
-⚠️ **The ticker is an IDENTIFIER here, not a value.** It is interpolated into a schema
-NAME, which cannot be a bound parameter — `DataPreprocessor._helper_unified_schema`
-validates it against `UNIFIED_TICKER_PATTERN` and raises rather than interpolating
-anything else. `UNIFIED_TICKER` below is the one place this module names it.
+⚠️ **The universe is an IDENTIFIER here, not a value.** It is interpolated into a
+schema NAME, which cannot be a bound parameter — `_helper_unified_schema` validates it
+against `UNIFIED_TICKER_PATTERN` and raises rather than interpolating anything else.
+A Dagster partition key is exactly the "arrives from somewhere this class does not
+control" case that validation exists for.
 """
 
 from typing import Callable, List
@@ -34,6 +53,7 @@ from dagster import (
     AssetKey,
     MaterializeResult,
     MetadataValue,
+    StaticPartitionsDefinition,
     asset,
 )
 
@@ -43,18 +63,20 @@ bootstrap()
 
 from orchestration.resources import PreprocessorResource
 
-# The ticker this code location builds a unified schema for.
-#
-# ⚠️ Deliberately a CONSTANT and not a partition. A partition would suggest the other
-# `pool__*` tables are per-ticker assets too, and they are not assets at all yet — the
-# notebook still builds them. When the rest of the schema moves here, this becomes a
-# `StaticPartitionsDefinition` over the tickers actually wanted, and the asset key stops
-# carrying the ticker in its name.
-UNIFIED_TICKER = "VCB"
-UNIFIED_SCHEMA_NAME = f"unified_schema_{UNIFIED_TICKER.lower()}"
+# ⚠️ The two sentinels here must stay in step with
+# `DataPreprocessor.UNIFIED_MEMBER_FILTERS`; everything else is an ordinary ticker.
+# Kept as literals rather than read off the class because a partition set has to be
+# known at DEFINITION time, before any database connection exists.
+UNIFIED_PARTITIONS = StaticPartitionsDefinition(["VCB", "ALL", "BANK"])
 
 
-def _primary_key(cur, table: str) -> tuple:
+def _schema_of(universe: str) -> str:
+    """`unified_schema_vcb` for `VCB`. Mirrors `_helper_unified_schema`, which is what
+    actually validates the name — this is only for building SQL in the asset body."""
+    return f"unified_schema_{universe.lower()}"
+
+
+def _primary_key(cur, schema: str, table: str) -> tuple:
     """The table's primary key columns, IN INDEX ORDER.
 
     ⚠️ `information_schema.key_column_usage` reports `ordinal_position`, which for a
@@ -71,45 +93,65 @@ def _primary_key(cur, table: str) -> tuple:
            JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum = k.attnum
            WHERE i.indisprimary AND n.nspname = %s AND c.relname = %s
            ORDER BY k.ord""",
-        (UNIFIED_SCHEMA_NAME, table),
+        (schema, table),
     )
     return tuple(row[0] for row in cur.fetchall())
 
 
+def _member_count(prep, cur, universe: str) -> int:
+    """Rows of `silver.stocks_basic` this universe should produce.
+
+    Built from `_helper_unified_member_filter` rather than a hard-coded
+    `ticker = %s`, so it is the SAME predicate the builder used — a count derived
+    independently would only be checking this function against itself.
+    """
+    predicate, params = prep._helper_unified_member_filter(universe)
+    where = f"WHERE {predicate}" if predicate else ""
+    cur.execute(f"SELECT COUNT(*) FROM silver_schema.stocks_basic {where}", params)
+    return int(cur.fetchone()[0])
+
+
 @asset(
     name="pool__basic",
-    key_prefix=["unified_vcb"],
-    group_name="unified_vcb",
+    key_prefix=["unified"],
+    group_name="unified",
     compute_kind="postgres",
+    partitions_def=UNIFIED_PARTITIONS,
     deps=[AssetKey(["silver", "stocks_basic"])],
     description=(
-        f"silver.stocks_basic (ticker {UNIFIED_TICKER} only) → "
-        f"{UNIFIED_SCHEMA_NAME}.pool__basic: EVERY column of the silver table, with "
-        f"silver's own types, PK (date, exchange, ticker) — DataPreprocessor."
-        f"UNIFIED_PRIMARY_KEY, and the order is asserted. ⚠️ Built with CREATE TABLE "
-        f"AS, not a pandas round-trip: psycopg2 returns `numeric` as Decimal, which a "
-        f"DataFrame carries as dtype `object` and the writer maps to VARCHAR — a "
-        f"round-trip would silently turn every price column into TEXT. ⚠️ Creates the "
-        f"schema if absent and REPLACES the table; sibling pool__* tables are untouched."
+        "silver.stocks_basic (this partition's universe) → "
+        "unified_schema_<universe>.pool__basic: EVERY column of the silver table, with "
+        "silver's own types, PK (date, exchange, ticker) — DataPreprocessor."
+        "UNIFIED_PRIMARY_KEY, and the ORDER is asserted. ⚠️ Built with CREATE TABLE "
+        "AS, not a pandas round-trip: psycopg2 returns `numeric` as Decimal, which a "
+        "DataFrame carries as dtype `object` and the writer maps to VARCHAR — a "
+        "round-trip would silently turn every price column into TEXT. ⚠️ Creates the "
+        "schema if absent and REPLACES the table; sibling pool__* tables are untouched."
     ),
 )
-def unified_vcb_pool_basic(
+def unified_pool_basic(
     context: AssetExecutionContext, preprocessor: PreprocessorResource
 ) -> MaterializeResult:
+    universe = context.partition_key
+    schema = _schema_of(universe)
+
     # ⚠️ `session(schema=...)` is what CREATES the schema — see the module docstring.
-    with preprocessor.session(schema=UNIFIED_SCHEMA_NAME) as prep:
-        prep._ingest_unified_pool_basic(UNIFIED_TICKER)
+    with preprocessor.session(schema=schema) as prep:
+        prep._ingest_unified_pool_basic(universe)
+        is_universe = prep._helper_unified_is_universe(universe)
+        expected_key = tuple(prep.UNIFIED_PRIMARY_KEY)
 
         with prep._database_driver._cursor_ctx() as cur:
             cur.execute(
                 f"SELECT COUNT(*), COUNT(DISTINCT ticker), MIN(date), MAX(date) "
-                f"FROM {UNIFIED_SCHEMA_NAME}.pool__basic"
+                f"FROM {schema}.pool__basic"
             )
             rows, tickers, first, last = cur.fetchone()
+            rows, tickers = int(rows), int(tickers)
             cur.execute(
                 "SELECT COUNT(*) FROM information_schema.columns "
                 "WHERE table_schema = %s AND table_name = 'pool__basic'",
-                (UNIFIED_SCHEMA_NAME,),
+                (schema,),
             )
             columns = int(cur.fetchone()[0])
             cur.execute(
@@ -117,11 +159,7 @@ def unified_vcb_pool_basic(
                 "WHERE table_schema = 'silver_schema' AND table_name = 'stocks_basic'"
             )
             silver_columns = int(cur.fetchone()[0])
-            cur.execute(
-                "SELECT COUNT(*) FROM silver_schema.stocks_basic WHERE ticker = %s",
-                (UNIFIED_TICKER,),
-            )
-            silver_rows = int(cur.fetchone()[0])
+            silver_rows = _member_count(prep, cur, universe)
             # ⚠️ The column set is the ASSERTION, not a metric. "All columns of
             # silver.stocks_basic" is this asset's contract, and a CTAS that silently
             # dropped or gained one would still produce a plausible-looking table.
@@ -131,91 +169,100 @@ def unified_vcb_pool_basic(
                    EXCEPT
                    SELECT column_name FROM information_schema.columns
                    WHERE table_schema = %s AND table_name = 'pool__basic'""",
-                (UNIFIED_SCHEMA_NAME,),
+                (schema,),
             )
             missing = [r[0] for r in cur.fetchall()]
-            primary_key = _primary_key(cur, "pool__basic")
-            expected_key = tuple(prep.UNIFIED_PRIMARY_KEY)
+            primary_key = _primary_key(cur, schema, "pool__basic")
 
     # ⚠️ The key ORDER is asserted, not just its membership. `ADD PRIMARY KEY`
     # accepts any ordering of the same three columns, and only a leading `date`
     # lets the index serve the time-range scans every consumer here does.
     if primary_key != expected_key:
         raise ValueError(
-            f"{UNIFIED_SCHEMA_NAME}.pool__basic primary key is {primary_key}, "
-            f"expected {expected_key} — order is part of the contract."
+            f"{schema}.pool__basic primary key is {primary_key}, expected "
+            f"{expected_key} — order is part of the contract."
         )
     if missing:
         raise ValueError(
-            f"{UNIFIED_SCHEMA_NAME}.pool__basic is missing {len(missing)} column(s) of "
+            f"{schema}.pool__basic is missing {len(missing)} column(s) of "
             f"silver.stocks_basic: {sorted(missing)}"
         )
     if rows != silver_rows:
         raise ValueError(
-            f"{UNIFIED_SCHEMA_NAME}.pool__basic has {rows} rows but silver holds "
-            f"{silver_rows} for {UNIFIED_TICKER}."
+            f"{schema}.pool__basic has {rows} rows but silver holds {silver_rows} for "
+            f"universe {universe!r}."
         )
-    if tickers != 1:
+    # ⚠️ GATED, not dropped. One company is the contract for a ticker partition and
+    # flatly wrong for `ALL` — this is the assertion that had to learn which partition
+    # it was looking at before the module could be partitioned at all.
+    if not is_universe and tickers != 1:
         raise ValueError(
-            f"{UNIFIED_SCHEMA_NAME}.pool__basic holds {tickers} tickers — a unified "
+            f"{schema}.pool__basic holds {tickers} tickers — a single-company unified "
             f"schema is one company by definition."
+        )
+    if is_universe and tickers < 2:
+        raise ValueError(
+            f"{schema}.pool__basic holds {tickers} ticker(s), but {universe!r} names a "
+            f"SET of companies. A sentinel that resolves to one series means its "
+            f"member filter matched almost nothing."
         )
 
     context.log.info(
-        f"{UNIFIED_SCHEMA_NAME}.pool__basic: {rows} rows × {columns} columns "
+        f"{schema}.pool__basic: {rows} rows × {columns} columns, {tickers} ticker(s) "
         f"({first} → {last}), every column of silver.stocks_basic present"
     )
     return MaterializeResult(
         metadata={
-            "rows": int(rows),
+            "rows": rows,
             "columns": columns,
+            "tickers": tickers,
             "silver_columns": silver_columns,
-            "ticker": MetadataValue.text(UNIFIED_TICKER),
+            "universe": MetadataValue.text(universe),
             "primary_key": MetadataValue.text(", ".join(primary_key)),
             "date_range": MetadataValue.text(f"{first} → {last}"),
-            "table": MetadataValue.text(f"{UNIFIED_SCHEMA_NAME}.pool__basic"),
+            "table": MetadataValue.text(f"{schema}.pool__basic"),
         }
     )
 
 
 @asset(
     name="pool__targets",
-    key_prefix=["unified_vcb"],
-    group_name="unified_vcb",
+    key_prefix=["unified"],
+    group_name="unified",
     compute_kind="postgres",
-    deps=[AssetKey(["unified_vcb", "pool__basic"])],
+    partitions_def=UNIFIED_PARTITIONS,
+    deps=[AssetKey(["unified", "pool__basic"])],
     description=(
-        f"{UNIFIED_SCHEMA_NAME}.pool__basic → {UNIFIED_SCHEMA_NAME}.pool__targets: "
-        f"PK (date, exchange, ticker) — the same key as every other pool, so a join "
-        f"needs no special case — plus TWO COLUMNS PER HORIZON in "
-        f"DataPreprocessor.UNIFIED_TARGET_HORIZONS — `return_{{h}}day`, the forward "
-        f"simple return close[t+h]/close[t]-1 on the SPLIT-ADJUSTED close, and "
-        f"`return_rel_{{h}}day`, the same minus the VNINDEX return over the same "
-        f"window (gold_schema.stock_market.hose__vnindex__close_adjust). ⚠️ The "
-        f"relative target exists because a single stock's ABSOLUTE forward return is "
-        f"dominated by the market factor, which no company-level feature predicts; "
-        f"subtracting the index leaves the part a stock-specific feature could "
-        f"explain. ⚠️ It reads gold.stock_market, NOT the retired gold.indices the "
-        f"old notebook used. ⚠️ Sourced from pool__basic, not gold.stocks, so the "
-        f"features share one calendar by construction — the dropped version had 4,242 "
-        f"rows against pool__basic's 4,235 for exactly that reason. ⚠️ Each column's "
-        f"last h rows are NULL (their future does not exist yet) and are kept so the "
-        f"table still joins; the two horizons therefore have DIFFERENT usable ranges."
+        "pool__basic → pool__targets: PK (date, exchange, ticker) — the same key as "
+        "every other pool, so a join needs no special case — plus TWO COLUMNS PER "
+        "HORIZON in DataPreprocessor.UNIFIED_TARGET_HORIZONS: `return_{h}day`, the "
+        "forward simple return close[t+h]/close[t]-1 on the SPLIT-ADJUSTED close, and "
+        "`return_rel_{h}day`, the same minus the VNINDEX return over that window "
+        "(gold_schema.stock_market.hose__vnindex__close_adjust). ⚠️ The relative "
+        "target exists because a single stock's ABSOLUTE forward return is dominated "
+        "by the market factor, which no company-level feature predicts. ⚠️ Sourced "
+        "from pool__basic, not gold.stocks, so features and labels share one calendar "
+        "by construction. ⚠️ Each column's last h rows are NULL (their future does not "
+        "exist yet) and are KEPT so the table still joins."
     ),
 )
-def unified_vcb_pool_targets(
+def unified_pool_targets(
     context: AssetExecutionContext, preprocessor: PreprocessorResource
 ) -> MaterializeResult:
-    with preprocessor.session(schema=UNIFIED_SCHEMA_NAME) as prep:
-        prep._ingest_unified_pool_targets(UNIFIED_TICKER)
+    universe = context.partition_key
+    schema = _schema_of(universe)
+
+    with preprocessor.session(schema=schema) as prep:
+        prep._ingest_unified_pool_targets(universe)
+        is_universe = prep._helper_unified_is_universe(universe)
         horizons = tuple(prep.UNIFIED_TARGET_HORIZONS)
         target_cols = {h: f"return_{h}day" for h in horizons}
         relative_cols = {h: f"return_rel_{h}day" for h in horizons}
         # Keyed so absolute and relative never collide: `h` for absolute, `-h` for
         # the relative twin.
         all_targets = {**target_cols, **{-h: c for h, c in relative_cols.items()}}
-        prep_benchmark_table = prep.UNIFIED_BENCHMARK_TABLE
-        prep_benchmark_column = prep.UNIFIED_BENCHMARK_COLUMN
+        expected_key = tuple(prep.UNIFIED_PRIMARY_KEY)
+        benchmark = f"{prep.UNIFIED_BENCHMARK_TABLE}.{prep.UNIFIED_BENCHMARK_COLUMN}"
 
         with prep._database_driver._cursor_ctx() as cur:
             stats = {}
@@ -223,109 +270,105 @@ def unified_vcb_pool_targets(
                 cur.execute(
                     f"SELECT COUNT({target_col}), MIN({target_col}), "
                     f"       MAX({target_col}), AVG({target_col}) "
-                    f"FROM {UNIFIED_SCHEMA_NAME}.pool__targets"
+                    f"FROM {schema}.pool__targets"
                 )
                 stats[h] = cur.fetchone()
             cur.execute(
-                f"SELECT COUNT(*), MIN(date), MAX(date) "
-                f"FROM {UNIFIED_SCHEMA_NAME}.pool__targets"
+                f"SELECT COUNT(*), COUNT(DISTINCT ticker), MIN(date), MAX(date) "
+                f"FROM {schema}.pool__targets"
             )
-            rows, first, last = cur.fetchone()
+            rows, tickers, first, last = cur.fetchone()
+            rows, tickers = int(rows), int(tickers)
             cur.execute(
                 "SELECT column_name FROM information_schema.columns "
                 "WHERE table_schema = %s AND table_name = 'pool__targets' "
                 "ORDER BY ordinal_position",
-                (UNIFIED_SCHEMA_NAME,),
+                (schema,),
             )
             columns = [r[0] for r in cur.fetchall()]
-            cur.execute(
-                f"SELECT COUNT(*) FROM {UNIFIED_SCHEMA_NAME}.pool__basic"
-            )
+            cur.execute(f"SELECT COUNT(*) FROM {schema}.pool__basic")
             basic_rows = int(cur.fetchone()[0])
             # ⚠️ The join to the feature pools is the whole reason this table exists,
             # so it is checked rather than assumed: every target date must be a
             # pool__basic date and vice versa.
             cur.execute(
                 f"SELECT COUNT(*) FROM ("
-                f"  SELECT date FROM {UNIFIED_SCHEMA_NAME}.pool__targets"
-                f"  EXCEPT SELECT date FROM {UNIFIED_SCHEMA_NAME}.pool__basic"
+                f"  SELECT date FROM {schema}.pool__targets"
+                f"  EXCEPT SELECT date FROM {schema}.pool__basic"
                 f"  UNION ALL"
-                f"  SELECT date FROM {UNIFIED_SCHEMA_NAME}.pool__basic"
-                f"  EXCEPT SELECT date FROM {UNIFIED_SCHEMA_NAME}.pool__targets"
+                f"  SELECT date FROM {schema}.pool__basic"
+                f"  EXCEPT SELECT date FROM {schema}.pool__targets"
                 f") d"
             )
             unaligned = int(cur.fetchone()[0])
-            primary_key = _primary_key(cur, "pool__targets")
-            expected_key = tuple(prep.UNIFIED_PRIMARY_KEY)
+            primary_key = _primary_key(cur, schema, "pool__targets")
 
     if primary_key != expected_key:
         raise ValueError(
-            f"{UNIFIED_SCHEMA_NAME}.pool__targets primary key is {primary_key}, "
-            f"expected {expected_key} — order is part of the contract."
+            f"{schema}.pool__targets primary key is {primary_key}, expected "
+            f"{expected_key} — order is part of the contract."
         )
     expected = list(expected_key) + list(target_cols.values()) + list(
         relative_cols.values()
     )
     if columns != expected:
         raise ValueError(
-            f"{UNIFIED_SCHEMA_NAME}.pool__targets should hold exactly {expected}, "
-            f"got {columns}."
+            f"{schema}.pool__targets should hold exactly {expected}, got {columns}."
         )
     if unaligned:
         raise ValueError(
-            f"{UNIFIED_SCHEMA_NAME}.pool__targets and pool__basic disagree on "
-            f"{unaligned} date(s) — they must share one calendar to join on `date`."
+            f"{schema}.pool__targets and pool__basic disagree on {unaligned} date(s) — "
+            f"they must share one calendar to join."
         )
     if rows != basic_rows:
         raise ValueError(
-            f"{UNIFIED_SCHEMA_NAME}.pool__targets has {rows} rows against "
-            f"pool__basic's {basic_rows}."
+            f"{schema}.pool__targets has {rows} rows against pool__basic's "
+            f"{basic_rows}."
         )
-    # ⚠️ Asserted per horizon: each column's unlabelled tail must be exactly its OWN
-    # h. A shared check against the longest would let a hole in `return_5day` pass.
+    # ⚠️ The unlabelled tail is PER SERIES, so on a multi-ticker universe the total is
+    # h × the number of tickers — a single check against `h` would fail on `ALL` for a
+    # table that is perfectly correct. On one company the two are the same number,
+    # which is exactly why the old check looked right.
     for h, target_col in target_cols.items():
         tail = rows - int(stats[h][0])
-        if tail != h:
+        expected_tail = h * tickers
+        if tail != expected_tail:
             raise ValueError(
-                f"{UNIFIED_SCHEMA_NAME}.pool__targets.{target_col} has a {tail}-row "
-                f"unlabelled tail; exactly {h} were expected."
+                f"{schema}.pool__targets.{target_col} has a {tail}-row unlabelled "
+                f"tail; expected {expected_tail} ({h} per series × {tickers} "
+                f"series). More would mean NULL or zero closes putting silent holes "
+                f"in the labels."
             )
 
     context.log.info(
-        f"{UNIFIED_SCHEMA_NAME}.pool__targets: {rows} rows ({first} → {last}) — "
-        + "; ".join(
-            f"{col} {int(stats[key][0])} labelled + {rows - int(stats[key][0])} null, "
-            f"range {float(stats[key][1]):.4f} → {float(stats[key][2]):.4f}, "
-            f"mean {float(stats[key][3]):.5f}"
-            for key, col in all_targets.items()
-        )
+        f"{schema}.pool__targets: {rows} rows / {tickers} ticker(s) ({first} → {last})"
     )
-    metadata = {
-        "rows": int(rows),
+    metadata: dict = {
+        "rows": rows,
+        "tickers": tickers,
+        "universe": MetadataValue.text(universe),
         "horizons": MetadataValue.text(", ".join(str(h) for h in horizons)),
         "targets": MetadataValue.text(", ".join(expected[len(expected_key):])),
         "primary_key": MetadataValue.text(", ".join(primary_key)),
-        "benchmark": MetadataValue.text(
-            f"{prep_benchmark_table}.{prep_benchmark_column}"
-        ),
+        "benchmark": MetadataValue.text(benchmark),
         "date_range": MetadataValue.text(f"{first} → {last}"),
-        "table": MetadataValue.text(f"{UNIFIED_SCHEMA_NAME}.pool__targets"),
+        "table": MetadataValue.text(f"{schema}.pool__targets"),
     }
     for key, target_col in all_targets.items():
         labelled, lo, hi, mean = stats[key]
         metadata[f"{target_col}__labelled"] = int(labelled)
-        metadata[f"{target_col}__unlabelled_tail"] = int(rows - int(labelled))
-        metadata[f"{target_col}__min"] = MetadataValue.float(round(float(lo), 6))
-        metadata[f"{target_col}__max"] = MetadataValue.float(round(float(hi), 6))
-        metadata[f"{target_col}__mean"] = MetadataValue.float(round(float(mean), 6))
+        metadata[f"{target_col}__unlabelled_tail"] = rows - int(labelled)
+        if labelled:
+            metadata[f"{target_col}__min"] = MetadataValue.float(round(float(lo), 6))
+            metadata[f"{target_col}__max"] = MetadataValue.float(round(float(hi), 6))
+            metadata[f"{target_col}__mean"] = MetadataValue.float(round(float(mean), 6))
     return MaterializeResult(metadata=metadata)
 
 
 # ── The two FEATURE pools: pool__ta and pool__fa ─────────────────────────────────
 #
-# Both are one gold table sliced to this ticker and re-keyed onto `pool__basic`'s
-# calendar, so both take TWO deps: the gold source, and `pool__basic` for the
-# calendar they must land on.
+# Both are one gold table sliced to this universe and re-keyed onto `pool__basic`'s
+# calendar, so both take TWO deps: the gold source, and `pool__basic`.
 #
 # ⚠️ Neither existed as an asset until 2026-08-05 — `unified_schema_creator.ipynb`
 # built them, which is why the whole schema was lost when it was dropped on
@@ -335,8 +378,14 @@ def unified_vcb_pool_targets(
 # `gold.stocks_financials_bank_fa` IS the FA block merged onto the TA one — 906 of
 # its 1,150 columns are `gold.stocks_ta` columns — so `pool__fa` excludes the TA
 # names by INTERSECTION rather than a prefix guess. Without that the two pools would
-# be 906-way duplicates of each other and the correlation prune would spend its
-# entire budget rediscovering that.
+# be 906-way duplicates and the correlation prune would spend its whole budget
+# rediscovering that.
+#
+# ⚠️ `pool__fa` IS BANK-ONLY BY CONSTRUCTION. `gold.stocks_financials_bank_fa` is
+# built from the CafeF *bank* chart of accounts and holds VCB and ACB alone, so on
+# the `ALL` partition this pool covers a small fraction of the universe's tickers.
+# That is the source's shape, not a defect here — hence the row check below asserts
+# alignment with the pool it joins, never with `pool__basic`'s row count.
 #
 # (asset name, gold source asset, what it is)
 FEATURE_POOLS: list[tuple[str, str, str]] = [
@@ -355,7 +404,8 @@ FEATURE_POOLS: list[tuple[str, str, str]] = [
         "statement (29), share counts, eps/bvps/ttm_*, forward-filled to a DAILY "
         "grain. ⚠️ `publish_date` is the only thing stopping this being a time "
         "machine: a quarter is attached to a price day only once PUBLISHED, a median "
-        "54 days after the period ends.",
+        "54 days after the period ends. ⚠️ BANK TICKERS ONLY — the source is the "
+        "CafeF bank chart of accounts.",
     ),
 ]
 
@@ -363,95 +413,117 @@ FEATURE_POOLS: list[tuple[str, str, str]] = [
 def _build_unified_feature_pool(name: str, gold_source: str, what: str):
     @asset(
         name=name,
-        key_prefix=["unified_vcb"],
-        group_name="unified_vcb",
+        key_prefix=["unified"],
+        group_name="unified",
         compute_kind="postgres",
+        partitions_def=UNIFIED_PARTITIONS,
         deps=[
             AssetKey(["gold", gold_source]),
-            AssetKey(["unified_vcb", "pool__basic"]),
+            AssetKey(["unified", "pool__basic"]),
         ],
         description=(
-            f"gold.{gold_source} → {UNIFIED_SCHEMA_NAME}.{name}, PK "
+            f"gold.{gold_source} → unified_schema_<universe>.{name}, PK "
             f"(date, exchange, ticker), on pool__basic's calendar. {what}"
         ),
     )
     def _feature_pool(
         context: AssetExecutionContext, preprocessor: PreprocessorResource
     ) -> MaterializeResult:
-        with preprocessor.session(schema=UNIFIED_SCHEMA_NAME) as prep:
-            getattr(prep, f"_ingest_unified_{name.replace('__', '_')}")(UNIFIED_TICKER)
+        universe = context.partition_key
+        schema = _schema_of(universe)
+
+        with preprocessor.session(schema=schema) as prep:
+            getattr(prep, f"_ingest_unified_{name.replace('__', '_')}")(universe)
+            is_universe = prep._helper_unified_is_universe(universe)
             expected_key = tuple(prep.UNIFIED_PRIMARY_KEY)
 
             with prep._database_driver._cursor_ctx() as cur:
                 cur.execute(
-                    f"SELECT COUNT(*), MIN(date), MAX(date) "
-                    f"FROM {UNIFIED_SCHEMA_NAME}.{name}"
+                    f"SELECT COUNT(*), COUNT(DISTINCT ticker), MIN(date), MAX(date) "
+                    f"FROM {schema}.{name}"
                 )
-                rows, first, last = cur.fetchone()
-                rows = int(rows)
+                rows, tickers, first, last = cur.fetchone()
+                rows, tickers = int(rows), int(tickers)
                 cur.execute(
                     "SELECT COUNT(*) FROM information_schema.columns "
                     "WHERE table_schema = %s AND table_name = %s",
-                    (UNIFIED_SCHEMA_NAME, name),
+                    (schema, name),
                 )
                 columns = int(cur.fetchone()[0])
-                cur.execute(
-                    f"SELECT COUNT(*) FROM {UNIFIED_SCHEMA_NAME}.pool__basic"
-                )
+                cur.execute(f"SELECT COUNT(*) FROM {schema}.pool__basic")
                 basic_rows = int(cur.fetchone()[0])
-                # The pools are joined on the key by every downstream selection
-                # table, so a shared calendar is checked in BOTH directions rather
-                # than inferred from a matching row count.
+                # ⚠️ Checked in BOTH directions and ONE-SIDED on purpose: every row of
+                # this pool must correspond to a pool__basic row, but NOT the reverse.
+                # `pool__fa` legitimately covers a subset of tickers (bank chart of
+                # accounts), so requiring the reverse would fail a correct table.
                 cur.execute(
                     f"SELECT COUNT(*) FROM ("
-                    f"  SELECT date FROM {UNIFIED_SCHEMA_NAME}.{name}"
-                    f"  EXCEPT SELECT date FROM {UNIFIED_SCHEMA_NAME}.pool__basic"
-                    f"  UNION ALL"
-                    f"  SELECT date FROM {UNIFIED_SCHEMA_NAME}.pool__basic"
-                    f"  EXCEPT SELECT date FROM {UNIFIED_SCHEMA_NAME}.{name}"
+                    f"  SELECT date, exchange, ticker FROM {schema}.{name}"
+                    f"  EXCEPT"
+                    f"  SELECT date, exchange, ticker FROM {schema}.pool__basic"
                     f") d"
                 )
-                unaligned = int(cur.fetchone()[0])
-                cur.execute(
-                    f"SELECT COUNT(DISTINCT ticker) FROM {UNIFIED_SCHEMA_NAME}.{name}"
-                )
-                tickers = int(cur.fetchone()[0])
-                primary_key = _primary_key(cur, name)
+                orphaned = int(cur.fetchone()[0])
+                primary_key = _primary_key(cur, schema, name)
 
         if primary_key != expected_key:
             raise ValueError(
-                f"{UNIFIED_SCHEMA_NAME}.{name} primary key is {primary_key}, expected "
+                f"{schema}.{name} primary key is {primary_key}, expected "
                 f"{expected_key} — order is part of the contract."
             )
-        if unaligned:
+        if orphaned:
             raise ValueError(
-                f"{UNIFIED_SCHEMA_NAME}.{name} and pool__basic disagree on "
-                f"{unaligned} date(s) — every pool must share one calendar to join."
+                f"{schema}.{name} has {orphaned} row(s) whose (date, exchange, ticker) "
+                f"is not in pool__basic — every pool must sit on the spine's calendar "
+                f"to join."
             )
-        if rows != basic_rows:
+        if rows == 0:
             raise ValueError(
-                f"{UNIFIED_SCHEMA_NAME}.{name} has {rows} rows against pool__basic's "
-                f"{basic_rows}. A feature pool adds columns, never rows."
+                f"{schema}.{name} is EMPTY against pool__basic's {basic_rows} rows."
             )
-        if tickers != 1:
+        if rows > basic_rows:
             raise ValueError(
-                f"{UNIFIED_SCHEMA_NAME}.{name} holds {tickers} tickers; a "
-                f"single-company schema must hold exactly 1."
+                f"{schema}.{name} has {rows} rows against pool__basic's {basic_rows}. "
+                f"A feature pool adds columns, never rows."
+            )
+        if not is_universe and tickers != 1:
+            raise ValueError(
+                f"{schema}.{name} holds {tickers} tickers; a single-company schema "
+                f"must hold exactly 1."
+            )
+        # ⚠️ On a SINGLE-COMPANY schema the pool must still cover the whole spine.
+        # The subset allowance exists because a source covers fewer TICKERS than the
+        # universe; it is not a licence to lose days for a company the source has.
+        if not is_universe and rows != basic_rows:
+            raise ValueError(
+                f"{schema}.{name} has {rows} rows against pool__basic's {basic_rows}. "
+                f"On a one-company schema the source either covers that company or it "
+                f"does not — a partial calendar means days went missing."
             )
 
+        # ⚠️ COVERAGE IS REPORTED, NOT ASSERTED, and that is the 2026-08-05 decision.
+        # A feature pool is as wide as its SOURCE: `gold.stocks_financials_bank_fa`
+        # holds VCB and ACB alone, so `pool__fa` covers 15% of a BANK spine and 0.3%
+        # of ALL. Demanding equality made the table unbuildable rather than safe. The
+        # number goes in the metadata so a pool that silently shrank is VISIBLE.
+        coverage = 100.0 * rows / max(basic_rows, 1)
         context.log.info(
-            f"{UNIFIED_SCHEMA_NAME}.{name}: {rows} rows × {columns} columns "
-            f"({first} → {last})"
+            f"{schema}.{name}: {rows} rows × {columns} columns, {tickers} ticker(s) "
+            f"({first} → {last}) — {coverage:.1f}% of pool__basic's {basic_rows} rows"
         )
         return MaterializeResult(
             metadata={
                 "rows": rows,
                 "columns": columns,
                 "features": columns - len(expected_key),
+                "tickers": tickers,
+                "pool__basic_rows": basic_rows,
+                "spine_coverage_pct": MetadataValue.float(round(coverage, 2)),
+                "universe": MetadataValue.text(universe),
                 "primary_key": MetadataValue.text(", ".join(primary_key)),
                 "source": MetadataValue.text(f"gold_schema.{gold_source}"),
                 "date_range": MetadataValue.text(f"{first} → {last}"),
-                "table": MetadataValue.text(f"{UNIFIED_SCHEMA_NAME}.{name}"),
+                "table": MetadataValue.text(f"{schema}.{name}"),
             }
         )
 
@@ -464,7 +536,7 @@ feature_pool_assets: List[Callable] = [
 
 
 assets: List[Callable] = [
-    unified_vcb_pool_basic,
-    unified_vcb_pool_targets,
+    unified_pool_basic,
+    unified_pool_targets,
     *feature_pool_assets,
 ]
