@@ -1,32 +1,43 @@
 # Context — `src/data_preprocessor` (bronze → silver → gold ETL)
 
-> # 🗄️ ARCHIVED (2026-08-01) — this is no longer how the pipeline is RUN.
+> # 📚 THIS IS A LIBRARY. IT HAS NO ENTRY POINT.
 >
-> **[`src/orchestration/`](../orchestration/CONTEXT.md) is the entry point now.** Point
-> new work there, read this file for how a table is BUILT.
+> **[`src/orchestration/`](../orchestration/CONTEXT.md) is the only way to run
+> anything.** Point new work there; read this file for how a table is BUILT.
 >
-> ⚠️ **Archived does not mean unused, and the directory must not be moved or deleted.**
-> Every one of the 49 Dagster assets is a thin wrapper over an `_ingest_*` method in
-> [data_preprocessor.py](data_preprocessor.py) — `src/orchestration/resources.py:23` imports
-> `DataPreprocessor` directly. All of the transformation logic still lives here and is
-> still executed on every materialisation. What is archived is the way it is DRIVEN:
+> ⚠️ **THE DIRECTORY MUST NOT BE MOVED OR DELETED, and since 2026-08-05 that matters
+> more, not less.** All 73 Dagster assets are thin wrappers over the `_ingest_*` methods
+> in [data_preprocessor.py](data_preprocessor.py) — `src/orchestration/resources.py:23`
+> imports `DataPreprocessor` directly, and every materialisation executes the transform
+> logic here. Deleting this package would leave 73 assets wrapping nothing: it would
+> delete the pipeline and keep the scheduling, which is exactly backwards. Making
+> orchestration self-contained means MOVING these ~6,200 lines into it — a real
+> refactor, not a `rm`.
 >
-> | archived — do not add to it | live — still the implementation |
+> ### ✅ The run path was DELETED on 2026-08-05 (phase 5)
+>
+> | deleted | still here |
 > |---|---|
-> | `ingest_bronze_data()` / `ingest_silver_data()` / `ingest_gold_data()` — the three `main.py` entry points and their leaf lists | every `_ingest_bronze_*` / `_ingest_silver_*` / `_ingest_gold_*` method |
-> | the `data_preprocessor/data_quality_*` keys in `src/switch_config.json` as a RUN PLAN | every `_helper_*` (the toolkit, the transform layers, the TA battery) |
-> | `src/main.py` as the way to run a layer | the `PostgreSQLDriver` underneath |
+> | `ingest_bronze_data()` / `ingest_silver_data()` / `ingest_gold_data()` and their leaf lists | every `_ingest_bronze_*` / `_ingest_silver_*` / `_ingest_gold_*` / `_ingest_unified_*` method (61 of them) |
+> | `_run_layer()` — their shared body, which **deliberately did not raise** | every `_helper_*`: the toolkit, the clean/transform layers, the TA battery |
+> | the 41 `data_preprocessor/data_quality_*` keys in `src/switch_config.json` | the `PostgreSQLDriver` underneath |
+> | `src/main.py`, and `src/data_postprocessor/` with it | `switch_config.json`'s 347 TradingView PARAMETER keys |
 >
-> Selection in Dagster (`--select`) is the run plan; the switch leaves are dead weight
-> awaiting phase 5 of the migration. A leaf removed from a list below therefore stops
-> `main.py` building that table and says nothing about the assets — which is exactly how
-> gold `indices` was retired (§4-gold).
+> 6,389 → 6,181 lines. **Selection in Dagster (`--select`) is the run plan, and now it
+> is the only one.** There are no leaf lists left to edit, so "a leaf removed from a
+> list below" — the mechanism that retired gold `indices` in §4-gold — no longer exists;
+> retiring a table now means deleting its asset and its `_ingest_*` method together.
+>
+> ⚠️ **Tables below that describe a leaf list are HISTORY.** They still document what
+> each method builds and in what order, which is why they are kept, but the lists
+> themselves are gone from the code. Code at `f4bc4a2`.
 
 > Handoff notes for a new session. Describes the medallion ETL that turns the raw
 > CSV/xlsx written by `src/web_scraper` (under `raw_data/<source>/`) into three
 > PostgreSQL schemas — **bronze → silver → gold** — inside one database
 > (`DATABASE_MAIN_V2`). This is the stage *after* scraping. Verify anything before
-> acting on it — the code and `src/switch_config.json` are the sources of truth.
+> acting on it — the code is the source of truth (`src/switch_config.json` no longer
+> says anything about this package).
 
 ## 1. Big picture / pipeline
 

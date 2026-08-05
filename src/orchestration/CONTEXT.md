@@ -1,4 +1,4 @@
-# Context — `src/orchestration` (Dagster migration of `src/main.py`)
+# Context — `src/orchestration` (THE pipeline entry point)
 
 > # ▶️ THIS IS THE ENTRY POINT. Work happens here.
 >
@@ -10,28 +10,36 @@
 > `_bootstrap`'s two-line `sys.path` insert INLINE, because the package can no longer be
 > imported until `src/` is on the path.
 >
-> Handoff notes. **Status (2026-08-05): the LANDING layer and the whole BRONZE layer are
-> assets and have both been materialised green; silver has 11, gold 10, and there is now a
-> fifth layer — `unified` (2).** 62 assets. What is left is the rest of silver (~4
-> leaves) and the rest of the unified schema — see §4. Verify anything before acting on
-> it: the code is the source of truth.
+> Handoff notes. **Status (2026-08-05): ✅ PHASE 5 IS DONE — THERE IS NO LONGER A SECOND
+> WAY TO RUN ANYTHING.** `src/main.py`, `DataPreprocessor.ingest_{bronze,silver,gold}_data`,
+> `_run_layer` and all 41 `data_quality_*` switch keys were **deleted on 2026-08-05**, and
+> `src/data_postprocessor/` with them. **73 assets** (19 landing + 20 bronze + 20 silver +
+> 10 gold + 4 unified), every DB table in the four schemas covered. Selection IS the run
+> plan, and now it is the only one. Verify anything before acting on it: the code is the
+> source of truth.
 >
-> **[`src/data_preprocessor`](../data_preprocessor/CONTEXT.md) is ARCHIVED as of
-> 2026-08-01** — as a *way to run things*. It is still the implementation library every
-> asset wraps (`resources.py:23` imports `DataPreprocessor`, and all the transform logic
-> lives there), so the directory must not be moved or deleted; what is retired is
-> `main.py` + the three `ingest_*_data()` entry points + `switch_config.json` as a run
-> plan. **Selection is the run plan now.** Read that file for how a table is BUILT; add
-> new pipeline steps as assets HERE.
+> **[`src/data_preprocessor`](../data_preprocessor/CONTEXT.md) IS A LIBRARY, NOT A
+> RUNNER.** It holds every `_ingest_*` method and all the transform logic
+> (`resources.py:23` imports `DataPreprocessor`), so **the directory must not be moved
+> or deleted** — deleting it deletes the pipeline, not the scheduling. What was deleted
+> on 2026-08-05 is its RUN PATH: the three `ingest_*_data()` entry points, `_run_layer`,
+> and the `data_quality_*` switch keys. Read that file for how a table is BUILT; add new
+> pipeline steps as assets HERE.
 >
-> ⚠️ `src/main.py` still exists and still works — nothing was ripped out from under it.
-> But it is no longer maintained as a run path: two of its gold leaves (`stocks`,
-> `indices`) already fail or are gone (§"Gold housekeeping"), and nothing has been done
-> about it, because the assets are what run.
+> ⚠️ **`src/main.py` IS GONE** (deleted 2026-08-05, code at `f4bc4a2`). So is
+> `src/data_postprocessor/` — 652 lines only `main.py` imported, and the call was already
+> commented out; its job of joining macro and market columns into one frame is done by
+> `gold.economy`, `gold.stock_market` and the unified schema. `switch_config.json` is now
+> **347 keys, all of them TradingView PARAMETERS** — which countries and sectors to
+> scrape — and no longer says anything about what runs.
 
 ## 1. Why this is worth doing
 
-`main.py` is already a DAG, written as `if switch: call()`. The evidence is
+> **Historical, kept because it explains the shape of what is here.** `main.py` was a
+> DAG written as `if switch: call()`; it is gone now, but every design decision below
+> was taken against it.
+
+`main.py` was already a DAG, written as `if switch: call()`. The evidence is
 [data_preprocessor.py:3495-3525](../data_preprocessor/data_preprocessor.py#L3495-L3525),
 a hand-written list of `(leaf_name, callable)` pairs iterated against the switch
 config, and [cafef_scraper.py:516-534](../web_scraper/cafef_scraper.py#L516-L534),
@@ -55,10 +63,10 @@ PARTITIONS of two assets, not 320 assets. The remaining 61 map to ~55-65 assets.
 
 ## 2. What exists — LANDING + BRONZE complete, silver started (2026-08-01)
 
-**62 assets: 19 landing + 20 bronze + 11 silver + 10 gold + 2 unified.** Every scraper in
-`main.py` lands to `raw_data/` as an asset ([assets/scrape.py](assets/scrape.py)); every
+**73 assets: 19 landing + 20 bronze + 20 silver + 10 gold + 4 unified.** Every scraper
+lands to `raw_data/` as an asset ([assets/scrape.py](assets/scrape.py)); every
 bronze ingest leaf is an asset ([assets/bronze.py](assets/bronze.py), 20 leaves → 25
-tables); silver has eleven ([assets/silver.py](assets/silver.py)), gold ten
+tables); silver has twenty ([assets/silver.py](assets/silver.py)), gold ten
 ([assets/gold.py](assets/gold.py)) and the per-ticker unified schema two
 ([assets/unified.py](assets/unified.py)).
 They are separate modules on purpose: the
@@ -293,7 +301,7 @@ split across the two modules.
 
 | claim | how it was checked | result |
 |---|---|---|
-| the flat `src/` layout can be imported by Dagster | `dagster definitions validate` | passes, **62 assets** (19 landing + 20 bronze + 11 silver + 10 gold + 2 unified), all code locations OK |
+| the flat `src/` layout can be imported by Dagster | `dagster definitions validate` | passes, **73 assets** (19 landing + 20 bronze + 20 silver + 10 gold + 4 unified), all code locations OK |
 | partitions resolve | reading the definitions back | TV **9**, pdfs **100**, financials **2** (`HOSE_VCB`, `HOSE_ACB`) |
 | the index scrape assets run | `--select "group:cafef_index"` | 4/4 green |
 | the TradingView path works incl. `build_unblocked` | `--select "raw/trading_view_collected_links"` | green, rewrote `all_links_2026-06-26.csv` (313 KB) |
@@ -430,7 +438,7 @@ UI, from `*`, and from every selection. Reserve this for "must never load in thi
 "raw/cafef_news": false
 ```
 
-All 62 keys are listed in the file as a menu, grouped by source, with `//` comment keys
+All 73 keys are listed in the file as a menu, grouped by source, with `//` comment keys
 marking the expensive ones (same comment convention as `switch_config.json`).
 `true` or **absent** = loaded, so a newly added asset is on by default.
 
@@ -441,7 +449,7 @@ Behaviour, all verified:
 | one key `false` | that asset not loaded (45 → 44); `//` comment keys ignored |
 | a key matching no asset | **raises**, listing the valid keys |
 | malformed JSON | **raises** — never read as "disable everything" |
-| file absent | all 62 assets — absent means "no opinion", not "all off" |
+| file absent | all 73 assets — absent means "no opinion", not "all off" |
 | file with a **BOM** | handled (`utf-8-sig`) |
 
 The last three are direct lessons from `switch_config.json`:
@@ -483,7 +491,7 @@ RUN_SUCCESS
 ```
 
 **Sanity check without running anything:** `dagster definitions validate` (it should
-report 62 assets and "All code locations passed validation").
+report 73 assets and "All code locations passed validation").
 
 ### ✅ Phase 1a — the whole BRONZE layer, 20 assets (2026-08-01)
 
@@ -606,6 +614,46 @@ index starting on a different day (VNINDEX 2000-07, VN100-INDEX 2014-02).
 
 **DECIMAL, not REAL:** at 162 columns there is no row-size pressure, and `value_matched`
 reaches ~1e12 where REAL would lose thousands. Hence the exact round-trip above.
+
+### The carry-ups — 11 assets that closed the table gap (2026-08-05)
+
+The prerequisite for phase 5. Before this, **17 of 65 tables had no asset** and were
+reachable only by calling a `DataPreprocessor` method through a `main.py` leaf:
+
+| asset | tables | leaf it replaces |
+|---|---|---|
+| `silver/cafef_{price,order_stats,foreign,prop_trading,insider_shareholder_transactions}` | 5 | `cafef_carry_ups` |
+| `silver/gics`, `silver/indices`, `silver/cafef_news_sentiment` | 3 | one leaf each |
+| `silver/cafef_financials` | **3** (the per-report bank statements) | half of `financials` |
+| `unified_vcb/pool__ta`, `unified_vcb/pool__fa` | 2 | **no leaf — notebook only** |
+
+```powershell
+dagster asset materialize -f src/orchestration/definitions.py --select "silver/cafef_price,silver/cafef_order_stats,silver/cafef_foreign,silver/cafef_prop_trading,silver/cafef_insider_shareholder_transactions,silver/gics,silver/indices,silver/cafef_financials"
+dagster asset materialize -f src/orchestration/definitions.py --select "unified_vcb/pool__ta,unified_vcb/pool__fa"
+```
+
+Measured: gics 163, indices 24,095, insider 13,607, prop_trading **64,139 → 73,810**,
+foreign 1,772,666, order_stats **351,373 → 2,523,196**, price 2,388,368, financials
+3 × 152; `pool__fa` 4,235 × 207 and `pool__ta` 4,235 × 924, both on `pool__basic`'s
+calendar with `(date, exchange, ticker)` read back from `pg_index`.
+
+⚠️ **`silver.cafef_order_stats` is why this mattered.** It was 351,373 rows against a
+bronze table of 2,523,196 — a **86% shortfall**, stale since the layer-wide re-ingest
+grew bronze, and nothing re-ran it because the leaf was something a person had to
+remember. That is the failure mode an orchestrator exists to remove, and it was sitting
+in the database the whole time.
+
+⚠️ **A carry-up CLEANS as it goes** (drops rows null on the key or null throughout), so
+silver ≤ bronze and the row count is a **floor** check, not an equality like the
+`bonds`/`funds`/`forex` projections get. What IS hard-asserted is that the table came
+back non-empty — a clean pass that eats every row is a failure wearing the costume of a
+small table.
+
+⚠️ **THE BRONZE ASSET KEY IS NOT ALWAYS A BRONZE TABLE NAME**, and this asset found out
+the expensive way: `bronze/cafef_financials` is ONE asset writing SIX tables, and
+`bronze_schema.cafef_financials` does not exist. Reading the dep as a table name is how
+`silver/cafef_financials` failed its first run (`UndefinedTable`). The spec table now
+carries the dep and the row-count tables as separate fields.
 
 ### The BONDS / FUNDS / FOREX chains — three wide panels (2026-08-05)
 
@@ -1198,9 +1246,12 @@ return to sequential execution.
 ## 3. Design decisions, and why
 
 - **No pipeline logic lives here.** Every asset is a thin wrapper over a method that
-  already exists in `src/`. Delete `src/orchestration/` and nothing is lost but the
-  scheduling; `main.py` keeps working the whole time. This is what makes the
-  migration incremental rather than a rewrite.
+  already exists in `src/`. This is what made the migration incremental rather than a
+  rewrite. ⚠️ **The corollary is now load-bearing: `src/data_preprocessor` CANNOT be
+  deleted.** Since `main.py` went, this package is the only caller of those methods —
+  but it is still only the *caller*. Deleting `data_preprocessor` would leave 73 assets
+  wrapping nothing. Making orchestration self-contained means MOVING ~6,200 lines into
+  it, not removing a directory.
 - **Assets are generated from a spec table**, not copy-pasted — `TABS` in
   [assets/cafef_index.py](assets/cafef_index.py) is four rows and produces eight
   assets. At ~60 assets this is the difference between maintainable and not.
@@ -1339,11 +1390,41 @@ handed to it (which is how VCB lost its row when ACB was parsed alone).
 ⚠️ **Built is not run.** These two, plus `trading_view_data` and the full-universe CafeF
 tabs, have never been materialised end-to-end here — see the warning in §2.
 
-### 4.6 Phase 5 — retire the switch config's run-plan role
+### 4.6 ✅ Phase 5 — retire the second run path (DONE, 2026-08-05)
 
-Delete every leaf that only ever meant "run this". Keep only genuine parameters (the
-TradingView leaves). Until this happens there are two sources of truth, which is worse
-than either alone.
+Every leaf that only ever meant "run this" is deleted; only genuine parameters (the
+TradingView country/sector leaves) remain. Two sources of truth is worse than either
+alone, and there is now one.
+
+| deleted | was |
+|---|---|
+| `src/main.py` | the run plan: 8 `scraper.scrape()` calls + the 3 ingest entry points |
+| `DataPreprocessor.ingest_{bronze,silver,gold}_data` | hard-coded leaf lists, switch-gated |
+| `DataPreprocessor._run_layer` | their shared body — **deliberately did not raise**, so a failed table returned normally |
+| 41 `data_quality_*` switch keys (+10 comments) | `switch_config.json` 398 → **347 keys** |
+| `src/data_postprocessor/` | 652 lines, imported only by `main.py`, call already commented out |
+
+`data_preprocessor.py` went 6,389 → 6,181 lines and is now **a library with no entry
+point**: 61 `_ingest_*` methods, each called directly by the asset that wraps it.
+
+⚠️ **THE PREREQUISITE WAS CLOSING THE TABLE GAP, and it was not small.** An audit of
+what each side could build found **65 tables, 48 with an asset and 17 without** —
+9,513,514 rows reachable only by calling a method. Deleting the run path first would
+have orphaned every one of them. The 11 assets that closed it are in §"The carry-ups".
+The standing example: `silver.cafef_order_stats` sat at **351,373 rows against a bronze
+table of 2,523,196**, stale since the layer-wide re-ingest, because "remember to run the
+`cafef_carry_ups` leaf" was a person's job. Its new asset took it to 2,523,196.
+
+⚠️ **`switch_config.json` still exists and is still load-bearing** — 347 keys, all
+TradingView parameters (which countries, which sectors). `SwitchConfig.build_unblocked`
+still forces the run-plan ancestors true, because those ancestors are still in the tree
+above the parameter leaves. Deleting them is a separate, smaller cleanup.
+
+⚠️ **A THIRD writer survives: `train_test_creator/unified_schema_creator.ipynb`**
+imports `DataPreprocessor` directly. It still works — the library is intact — but a
+notebook that writes tables is not a run plan, and it is what built the unified pools
+that vanished in the 2026-08-03 drop. `pool__ta` and `pool__fa` are assets now; the
+`_all` and `_bank` universes are not (see §"unified_schema_all").
 
 ### Effort
 
@@ -1354,9 +1435,9 @@ than either alone.
 | 2 | cheap scrapers, ~13 assets | ✅ **done** |
 | 3 | TradingView + partitions | ✅ **done** (9 partitions, not 320 — see 4.4) |
 | 4 | pdfs/financials, ticker partitions | ✅ **built**, not yet run end-to-end |
-| 5 | retire switch config | half a day — started: `src/data_preprocessor` is archived as a RUN path (2026-08-01), the keys are still there |
+| 5 | retire switch config | ✅ **done 2026-08-05** — keys, entry points, `_run_layer`, `main.py` and `data_postprocessor` all deleted |
 
-`main.py` ends up empty and `switch_config.json` shrinks to ~320 parameter keys.
+✅ `main.py` is deleted and `switch_config.json` is down to **347 parameter keys**.
 
 **Where it actually stands (2026-08-05):** phases 0-4 are built; every landing and bronze
 asset has been materialised green, silver has 11 assets, gold 10, and a fifth `unified`
@@ -1364,13 +1445,11 @@ layer has 2. What remains is the rest of silver (~4 leaves), the three remaining
 `pool__*` groups of the unified schema, phase 5, and end-to-end runs of the four heavy
 assets.
 
-⚠️ **Phase 5 is now half-true in the documentation and not at all in the code.**
-`src/data_preprocessor/CONTEXT.md` carries an ARCHIVED banner and this file says
-selection is the run plan — but every `data_preprocessor/data_quality_*` key is still in
-`switch_config.json`, and `_run_layer` still consults them. Nothing reads them on the
-asset path (assets call `_ingest_*` directly), so they are inert rather than dangerous;
-finishing phase 5 means deleting the keys and the three entry points, which is a
-separate, mechanical change.
+✅ **Phase 5 is now true in the code, not just the documentation** (2026-08-05). The
+keys, the three entry points and `_run_layer` are deleted; `main.py` and
+`src/data_postprocessor/` are deleted. What remains of the original plan is the ~4
+silver leaves that were never separate tables and the two unified universes
+(`_all`, `_bank`) that still need a partitioned asset.
 
 ## 5. Gotchas
 
