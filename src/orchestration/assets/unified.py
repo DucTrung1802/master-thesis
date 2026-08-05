@@ -321,4 +321,150 @@ def unified_vcb_pool_targets(
     return MaterializeResult(metadata=metadata)
 
 
-assets: List[Callable] = [unified_vcb_pool_basic, unified_vcb_pool_targets]
+# ── The two FEATURE pools: pool__ta and pool__fa ─────────────────────────────────
+#
+# Both are one gold table sliced to this ticker and re-keyed onto `pool__basic`'s
+# calendar, so both take TWO deps: the gold source, and `pool__basic` for the
+# calendar they must land on.
+#
+# ⚠️ Neither existed as an asset until 2026-08-05 — `unified_schema_creator.ipynb`
+# built them, which is why the whole schema was lost when it was dropped on
+# 2026-08-03 and only `pool__basic` came back. A notebook is not a run plan.
+#
+# ⚠️ THE EXCLUSIONS ARE THE INTERESTING PART, and they live in the methods, not here.
+# `gold.stocks_financials_bank_fa` IS the FA block merged onto the TA one — 906 of
+# its 1,150 columns are `gold.stocks_ta` columns — so `pool__fa` excludes the TA
+# names by INTERSECTION rather than a prefix guess. Without that the two pools would
+# be 906-way duplicates of each other and the correlation prune would spend its
+# entire budget rediscovering that.
+#
+# (asset name, gold source asset, what it is)
+FEATURE_POOLS: list[tuple[str, str, str]] = [
+    (
+        "pool__ta",
+        "stocks_ta",
+        "~920 technical indicator columns — Bollinger/MACD/RSI/Hilbert families plus "
+        "their slopes, crossings and boolean flags. ⚠️ ~207 are BOOLEAN and "
+        "FeatureSelector._prepare excludes bool dtypes, so they are stored but not "
+        "scored until someone decides how to encode them.",
+    ),
+    (
+        "pool__fa",
+        "stocks_financials_bank_fa",
+        "~204 fundamental columns — balance sheet (93), cash flow (50), income "
+        "statement (29), share counts, eps/bvps/ttm_*, forward-filled to a DAILY "
+        "grain. ⚠️ `publish_date` is the only thing stopping this being a time "
+        "machine: a quarter is attached to a price day only once PUBLISHED, a median "
+        "54 days after the period ends.",
+    ),
+]
+
+
+def _build_unified_feature_pool(name: str, gold_source: str, what: str):
+    @asset(
+        name=name,
+        key_prefix=["unified_vcb"],
+        group_name="unified_vcb",
+        compute_kind="postgres",
+        deps=[
+            AssetKey(["gold", gold_source]),
+            AssetKey(["unified_vcb", "pool__basic"]),
+        ],
+        description=(
+            f"gold.{gold_source} → {UNIFIED_SCHEMA_NAME}.{name}, PK "
+            f"(date, exchange, ticker), on pool__basic's calendar. {what}"
+        ),
+    )
+    def _feature_pool(
+        context: AssetExecutionContext, preprocessor: PreprocessorResource
+    ) -> MaterializeResult:
+        with preprocessor.session(schema=UNIFIED_SCHEMA_NAME) as prep:
+            getattr(prep, f"_ingest_unified_{name.replace('__', '_')}")(UNIFIED_TICKER)
+            expected_key = tuple(prep.UNIFIED_PRIMARY_KEY)
+
+            with prep._database_driver._cursor_ctx() as cur:
+                cur.execute(
+                    f"SELECT COUNT(*), MIN(date), MAX(date) "
+                    f"FROM {UNIFIED_SCHEMA_NAME}.{name}"
+                )
+                rows, first, last = cur.fetchone()
+                rows = int(rows)
+                cur.execute(
+                    "SELECT COUNT(*) FROM information_schema.columns "
+                    "WHERE table_schema = %s AND table_name = %s",
+                    (UNIFIED_SCHEMA_NAME, name),
+                )
+                columns = int(cur.fetchone()[0])
+                cur.execute(
+                    f"SELECT COUNT(*) FROM {UNIFIED_SCHEMA_NAME}.pool__basic"
+                )
+                basic_rows = int(cur.fetchone()[0])
+                # The pools are joined on the key by every downstream selection
+                # table, so a shared calendar is checked in BOTH directions rather
+                # than inferred from a matching row count.
+                cur.execute(
+                    f"SELECT COUNT(*) FROM ("
+                    f"  SELECT date FROM {UNIFIED_SCHEMA_NAME}.{name}"
+                    f"  EXCEPT SELECT date FROM {UNIFIED_SCHEMA_NAME}.pool__basic"
+                    f"  UNION ALL"
+                    f"  SELECT date FROM {UNIFIED_SCHEMA_NAME}.pool__basic"
+                    f"  EXCEPT SELECT date FROM {UNIFIED_SCHEMA_NAME}.{name}"
+                    f") d"
+                )
+                unaligned = int(cur.fetchone()[0])
+                cur.execute(
+                    f"SELECT COUNT(DISTINCT ticker) FROM {UNIFIED_SCHEMA_NAME}.{name}"
+                )
+                tickers = int(cur.fetchone()[0])
+                primary_key = _primary_key(cur, name)
+
+        if primary_key != expected_key:
+            raise ValueError(
+                f"{UNIFIED_SCHEMA_NAME}.{name} primary key is {primary_key}, expected "
+                f"{expected_key} — order is part of the contract."
+            )
+        if unaligned:
+            raise ValueError(
+                f"{UNIFIED_SCHEMA_NAME}.{name} and pool__basic disagree on "
+                f"{unaligned} date(s) — every pool must share one calendar to join."
+            )
+        if rows != basic_rows:
+            raise ValueError(
+                f"{UNIFIED_SCHEMA_NAME}.{name} has {rows} rows against pool__basic's "
+                f"{basic_rows}. A feature pool adds columns, never rows."
+            )
+        if tickers != 1:
+            raise ValueError(
+                f"{UNIFIED_SCHEMA_NAME}.{name} holds {tickers} tickers; a "
+                f"single-company schema must hold exactly 1."
+            )
+
+        context.log.info(
+            f"{UNIFIED_SCHEMA_NAME}.{name}: {rows} rows × {columns} columns "
+            f"({first} → {last})"
+        )
+        return MaterializeResult(
+            metadata={
+                "rows": rows,
+                "columns": columns,
+                "features": columns - len(expected_key),
+                "primary_key": MetadataValue.text(", ".join(primary_key)),
+                "source": MetadataValue.text(f"gold_schema.{gold_source}"),
+                "date_range": MetadataValue.text(f"{first} → {last}"),
+                "table": MetadataValue.text(f"{UNIFIED_SCHEMA_NAME}.{name}"),
+            }
+        )
+
+    return _feature_pool
+
+
+feature_pool_assets: List[Callable] = [
+    _build_unified_feature_pool(*spec) for spec in FEATURE_POOLS
+]
+
+
+assets: List[Callable] = [
+    unified_vcb_pool_basic,
+    unified_vcb_pool_targets,
+    *feature_pool_assets,
+]

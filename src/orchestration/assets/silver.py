@@ -658,10 +658,153 @@ projection_assets: List[Callable] = [
 ]
 
 
+# ── The CARRY-UPS and the remaining single-source ingests ────────────────────────
+#
+# These nine close the last of the silver gap: before 2026-08-05 they were reachable
+# ONLY by calling a `DataPreprocessor` method (the `cafef_carry_ups`, `gics`,
+# `indices`, `news_sentiment` and `financials` leaves of `main.py`), so 9.5 M rows of
+# silver had no asset and would have been orphaned by retiring that run path.
+#
+# ⚠️ A carry-up is name-identical to its bronze source and CLEANS as it goes — it
+# drops rows null on the key or null in every column — so silver ≤ bronze, and the
+# row count is NOT an equality assertion the way a projection's is. What IS asserted
+# is that the table came back non-empty and did not somehow exceed its source.
+#
+# ⚠️ `silver.cafef_order_stats` is the standing example of why these needed assets.
+# It sat at 351,373 rows against a bronze table of 2,523,196 — stale since the
+# layer-wide re-ingest grew bronze, and nothing re-ran it because "re-run the
+# cafef_carry_ups leaf" was a thing a person had to remember.
+#
+# ⚠️ THE BRONZE **ASSET KEY** IS NOT ALWAYS A BRONZE **TABLE NAME**, which is why the
+# dep and the row-count source are two different fields. `bronze/cafef_financials` is
+# one asset writing SIX tables and there is no `bronze_schema.cafef_financials` at all;
+# reading the dep as a table name is exactly how this asset failed on its first run.
+#
+# (asset name, bronze dep ASSET, bronze TABLES to count, silver tables written, noun)
+CARRY_UPS: list[tuple[str, str, tuple[str, ...], tuple[str, ...], str]] = [
+    ("cafef_price", "cafef_price", ("cafef_price",), ("cafef_price",), "stock-days"),
+    ("cafef_order_stats", "cafef_order_stats", ("cafef_order_stats",),
+     ("cafef_order_stats",), "stock-days"),
+    ("cafef_foreign", "cafef_foreign", ("cafef_foreign",), ("cafef_foreign",),
+     "stock-days"),
+    ("cafef_prop_trading", "cafef_prop_trading", ("cafef_prop_trading",),
+     ("cafef_prop_trading",), "stock-days"),
+    (
+        "cafef_insider_shareholder_transactions",
+        "cafef_insider_shareholder_transactions",
+        ("cafef_insider_shareholder_transactions",),
+        ("cafef_insider_shareholder_transactions",),
+        "transactions",
+    ),
+    ("gics", "gics", ("gics",), ("gics",), "classifications"),
+    ("indices", "trading_view_indices", ("trading_view_indices",), ("indices",),
+     "index-days"),
+    (
+        # ONE method, THREE tables — the per-report statement carry-ups. It stays a
+        # single asset because it is a single method, and because the table LIST is
+        # discovered at run time (`_list_bronze_financial_statement_tables`): a new
+        # template adds tables without a code change here.
+        "cafef_financials",
+        "cafef_financials",
+        (
+            "cafef_financials_bank_balance_sheet",
+            "cafef_financials_bank_income_statement",
+            "cafef_financials_bank_cash_flow",
+        ),
+        (
+            "cafef_financials_bank_balance_sheet",
+            "cafef_financials_bank_income_statement",
+            "cafef_financials_bank_cash_flow",
+        ),
+        "quarters",
+    ),
+    ("cafef_news_sentiment", "cafef_news", ("cafef_news",),
+     ("cafef_news_sentiment",), "articles"),
+]
+
+
+def _build_silver_carry_up(
+    name: str,
+    bronze_dep: str,
+    bronze_tables: tuple,
+    tables: tuple,
+    noun: str,
+):
+    @asset(
+        name=name,
+        key_prefix=["silver"],
+        group_name="silver",
+        compute_kind="postgres",
+        deps=[AssetKey(["bronze", bronze_dep])],
+        description=(
+            f"bronze.{', bronze.'.join(bronze_tables)} → "
+            f"silver.{', silver.'.join(tables)}. Wraps "
+            f"`DataPreprocessor._ingest_silver_{name}`, which drops the old silver "
+            f"table first so a schema change re-materialises cleanly. ⚠️ A carry-up "
+            f"CLEANS (drops rows null on the key or null throughout), so silver ≤ "
+            f"bronze — the row count is a floor check, not an equality."
+        ),
+    )
+    def _carry_up(
+        context: AssetExecutionContext, preprocessor: PreprocessorResource
+    ) -> MaterializeResult:
+        with preprocessor.session(schema="silver_schema") as prep:
+            getattr(prep, f"_ingest_silver_{name}")()
+
+            counts: dict[str, int] = {}
+            with prep._database_driver._cursor_ctx() as cur:
+                for table in tables:
+                    cur.execute(f"SELECT COUNT(*) FROM silver_schema.{table}")
+                    counts[table] = int(cur.fetchone()[0])
+                bronze_rows = 0
+                for table in bronze_tables:
+                    cur.execute(f"SELECT COUNT(*) FROM bronze_schema.{table}")
+                    bronze_rows += int(cur.fetchone()[0])
+
+        total = sum(counts.values())
+        # An empty silver table after a successful ingest means the clean pass ate
+        # everything — which is a failure wearing the costume of a small table.
+        if total == 0:
+            raise ValueError(
+                f"silver.{name} is EMPTY after its ingest, against "
+                f"{bronze_rows} bronze rows. A carry-up that drops every row is a "
+                f"failed clean pass, not a small table."
+            )
+        if total > bronze_rows:
+            raise ValueError(
+                f"silver.{name} wrote {total} rows against "
+                f"{bronze_rows} in bronze.{', bronze.'.join(bronze_tables)}. A "
+                f"carry-up only ever drops rows, so it cannot exceed its source."
+            )
+        for table, rows in counts.items():
+            context.log.info(f"silver.{table}: {rows} rows")
+
+        metadata: dict = {
+            "rows": total,
+            "bronze_rows": bronze_rows,
+            "dropped_by_clean": bronze_rows - total,
+            noun: total,
+            "table": MetadataValue.text(
+                ", ".join(f"silver_schema.{t}" for t in tables)
+            ),
+        }
+        if len(tables) > 1:
+            metadata |= {f"rows: {t}": n for t, n in counts.items()}
+        return MaterializeResult(metadata=metadata)
+
+    return _carry_up
+
+
+carry_up_assets: List[Callable] = [
+    _build_silver_carry_up(*spec) for spec in CARRY_UPS
+]
+
+
 assets: List[Callable] = [
     silver_economy,
     silver_economy_series,
     *projection_assets,
+    *carry_up_assets,
     silver_stock_market,
     silver_stocks_basic,
     silver_cafef_financials_bank,
