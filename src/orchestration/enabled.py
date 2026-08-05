@@ -40,6 +40,11 @@ from typing import Any, Dict, Iterable, List, Sequence, Set
 
 CONFIG_PATH = Path(__file__).resolve().parent / "config.json"
 
+# The switch every group carries. `"enabled": false` gates the whole group off however
+# its children are set — the same rule `SwitchHandler.is_enabled` applies to
+# switch_config.json, where EVERY ancestor must be true.
+GROUP_GATE = "enabled"
+
 # The two files config.json replaced. They are checked for and REJECTED rather than
 # ignored: a stale config left in place, silently doing nothing, is the failure this
 # package keeps having (see switch_config.json's trailing-slash bug).
@@ -108,32 +113,66 @@ def config() -> Dict[str, Any]:
             f"Valid sections: assets, partitions, run."
         )
 
-    # ⚠️ COMMENTS ARE STRIPPED AT BOTH LEVELS. `partitions` is a dict of dicts, and a
-    # `// owner` comment's value is a STRING — descending into it without stripping first
-    # is an AttributeError at import time, which in Dagster reads as "code location
-    # failed to load" with the real cause four frames down.
+    # ⚠️ COMMENTS ARE STRIPPED AT BOTH LEVELS — `assets` and `partitions` are dicts OF
+    # dicts, and a `// name` comment's value is a STRING.
+    #
+    # ⚠️ SHAPE IS CHECKED BEFORE DESCENDING. Stripping inside a group before checking it
+    # IS a group turns `"cafef": false` — the obvious thing to write — into an
+    # AttributeError, which Dagster surfaces only as "code location failed to load".
+    sections = {
+        name: _strip_comments(raw.get(name, {})) for name in ("assets", "partitions")
+    }
+    for name, block in sections.items():
+        bad = {k: type(v).__name__ for k, v in block.items() if not isinstance(v, dict)}
+        if bad:
+            raise ValueError(
+                f"{CONFIG_PATH}: each entry under `{name}` must be an OBJECT, got "
+                f'{bad}. A group is `{{"{GROUP_GATE}": false, ...}}` — a bare `false` '
+                f"is not enough, because the group must still list its modules. (A note "
+                f"about a group belongs on a `// name` comment key.)"
+            )
+
     _CONFIG = {
-        "assets": _strip_comments(raw.get("assets", {})),
-        "partitions": {
-            owner: _strip_comments(keys)
-            for owner, keys in _strip_comments(raw.get("partitions", {})).items()
-        },
+        "assets": {g: _strip_comments(b) for g, b in sections["assets"].items()},
+        "partitions": {o: _strip_comments(b) for o, b in sections["partitions"].items()},
         "run": _strip_comments(raw.get("run", {})),
     }
 
-    bad = {o: type(k).__name__ for o, k in _CONFIG["partitions"].items() if not isinstance(k, dict)}
-    if bad:
+    ungated = [g for g, b in _CONFIG["assets"].items() if GROUP_GATE not in b]
+    if ungated:
         raise ValueError(
-            f"{CONFIG_PATH}: each entry under `partitions` must be an object of "
-            f"partition -> bool; got {bad}. (A note about an owner belongs on a "
-            f"`// owner` comment key.)"
+            f'{CONFIG_PATH}: asset group(s) {ungated} have no `"{GROUP_GATE}"` key. '
+            f"Every group carries its own gate, and its absence would silently read as "
+            f"OFF for the whole group."
         )
     return _CONFIG
 
 
-def disabled_assets() -> Set[str]:
-    """Asset keys explicitly set to `false`."""
-    return {k for k, v in config().get("assets", {}).items() if v is False}
+def enabled_assets() -> Set[str]:
+    """Every asset key that is switched ON — group gate AND its own value.
+
+    ⚠️ **ABSENT MEANS OFF (2026-08-05, was: absent means on).** The old default was
+    "true or absent = loaded", which is the friendly reading — a newly added asset works
+    without touching the config. It is also the reading under which a 777-ticker scrape
+    or a 2.4-hour OCR parse can join a run because nobody remembered to write a line
+    about it. The file now has to SAY yes: what is not listed, or listed under a group
+    whose gate is false, does not load.
+
+    ⚠️ **THE GROUP GATE IS THE HIERARCHY.** A group is an object holding `"enabled"` plus
+    its assets, and an asset needs BOTH. That keeps every module listed — the menu stays
+    the whole menu — while letting one line switch off a whole layer, and it is the rule
+    `switch_config.json` already uses: every ancestor must be true.
+    """
+    out: Set[str] = set()
+    for group, block in config().get("assets", {}).items():
+        if not block.get(GROUP_GATE, False):
+            continue
+        out |= {
+            key
+            for key, value in block.items()
+            if key != GROUP_GATE and value is True
+        }
+    return out
 
 
 def run_config() -> Dict[str, Any]:
@@ -152,8 +191,19 @@ def register(owner: str, keys: Sequence[str]) -> List[str]:
     is for, and the message says so.
     """
     KNOWN_PARTITIONS[owner] = list(keys)
-    switches = config().get("partitions", {}).get(owner, {})
-    kept = [k for k in keys if switches.get(k) is not False]
+    partitions = config().get("partitions", {})
+
+    # ⚠️ ABSENT MEANS OFF **INSIDE** A LISTED BLOCK, AND "NO OPINION" IF THE WHOLE BLOCK
+    # IS ABSENT — the one place the two defaults differ, and it is deliberate. A
+    # partition set nobody has configured (say `raw/cafef_pdfs`' 100 tickers) would
+    # otherwise resolve to ZERO partitions and raise below, at import time, for an asset
+    # that is very likely switched off anyway. Mention an owner and you own its list;
+    # say nothing and the asset keeps every partition it declared.
+    if owner not in partitions:
+        return list(keys)
+
+    switches = partitions[owner]
+    kept = [k for k in keys if switches.get(k) is True]
 
     if not kept:
         raise ValueError(
@@ -178,9 +228,25 @@ def validate(all_asset_keys: Iterable[str]) -> None:
     known_assets = set(all_asset_keys)
     problems: List[str] = []
 
-    for key in config().get("assets", {}):
-        if key not in known_assets:
-            problems.append(f"assets: '{key}' matches no asset")
+    listed: Set[str] = set()
+    for group, block in config().get("assets", {}).items():
+        for key in block:
+            if key == GROUP_GATE:
+                continue
+            listed.add(key)
+            if key not in known_assets:
+                problems.append(f"assets/{group}: '{key}' matches no asset")
+
+    # ⚠️ With absent = OFF, an asset missing from the file is SILENTLY off — which is the
+    # very failure this file raises about everywhere else. So completeness is enforced:
+    # add an asset to the graph and you must say yes or no to it here.
+    unlisted = known_assets - listed
+    if unlisted:
+        problems.append(
+            f"assets: {sorted(unlisted)} are not listed. Since absent now means OFF, an "
+            f"unlisted asset would vanish from the UI with nothing saying so — list it "
+            f"under its group with true or false."
+        )
 
     for owner, switches in config().get("partitions", {}).items():
         if owner not in KNOWN_PARTITIONS:

@@ -18,11 +18,34 @@
 >
 > ```jsonc
 > {
->   "assets":     { "raw/trading_view_data": true },              // which assets LOAD (all 73 listed)
->   "partitions": { "raw/trading_view": { "economy": true } },    // which SUB-SOURCES exist
->   "run":        { "skip_existing": false, "max_browsers": 4 }   // what the refresh job launches with
+>   "assets": {
+>     "trading_view": { "enabled": true,  "raw/trading_view_links": true,
+>                                         "raw/trading_view_data": false },
+>     "bronze":       { "enabled": false, "bronze/trading_view_economy": false, … }
+>   },
+>   "partitions": { "raw/trading_view": { "economy": true, "forex": false, … } },
+>   "run":        { "skip_existing": false, "max_browsers": 4 }
 > }
 > ```
+>
+> ⚠️ **ABSENT MEANS OFF, and every module must be LISTED (2026-08-05).** The old default
+> was the friendly one — absent = loaded — and it is also the default under which a
+> 777-ticker scrape or a 2.4-hour OCR parse joins a run because nobody wrote a line about
+> it. Nothing loads now unless the file says `true`. The obvious danger of that — an
+> asset missing from the file vanishing from the UI with nothing saying so — is closed by
+> the loader **raising** on any asset in the graph with no entry here. Adding an asset
+> forces a yes or no.
+>
+> ⚠️ **THE GROUP GATE IS THE HIERARCHY.** A module loads only if BOTH its group's
+> `enabled` and its own value are true, so one line switches off a whole layer while
+> every module stays visible — the same rule `switch_config.json` uses, where every
+> ancestor must be true. A bare `"cafef": false` is **rejected**: write
+> `{"enabled": false, …}` so the modules stay listed rather than disappearing.
+>
+> ⚠️ **One asymmetry, and it is deliberate.** Absent-inside-a-listed partition owner is
+> OFF; an owner mentioned NOWHERE is "no opinion" and keeps all its partitions. Without
+> that, `raw/cafef_pdfs`' 100 unlisted tickers would resolve to zero partitions and raise
+> at import time for an asset that is switched off anyway.
 >
 > ⚠️ **The `run` block is the reason this mattered.** It used to live only in a YAML file
 > that the CLI read and **the UI never did**, so the same job launched with
@@ -720,7 +743,11 @@ Behaviour, all verified:
 
 | case | result |
 |---|---|
-| one key `false` | that asset not loaded (45 → 44); `//` comment keys ignored |
+| one key `false` | that asset not loaded; `//` comment keys ignored |
+| **a group's `enabled: false`** | **every module under it off**, however each is set |
+| **an asset absent from the file** | **raises** — absent is OFF, so silence must not be how it happens |
+| **a bare `"cafef": false` instead of a group object** | **raises**, naming what to write instead |
+| **a group with no `enabled` key** | **raises** — its absence would read as OFF for the whole group |
 | a key matching no asset | **raises**, listing the valid keys |
 | **`"raw/trading_view": {"bnods": false}`** (bad partition) | **raises**, listing that owner's valid partitions |
 | **a partition under the wrong owner** | **raises** — "not a partition set" |

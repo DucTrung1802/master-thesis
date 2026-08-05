@@ -87,18 +87,21 @@ from orchestration.resources import PreprocessorResource, RepoLogger, SwitchConf
 # file's remaining job is the validation pass, which can only run once every asset module
 # has registered its partitions.
 def _enabled(asset_defs):
-    """Drop anything disabled in the JSON, and fail loudly on a key that matches nothing.
+    """Keep only what the JSON switches ON, and fail loudly on a key matching nothing.
 
-    ⚠️ Validation is against the FULL asset list, before the drop — otherwise every
+    ⚠️ **ABSENT IS OFF NOW.** This used to drop a deny-list and keep everything else; it
+    now keeps an allow-list. `enabled.validate` compensates for the danger that creates —
+    an asset missing from the file would otherwise vanish from the UI with nothing
+    saying so — by REQUIRING every asset to be listed, true or false.
+
+    ⚠️ Validation runs against the FULL asset list, before the filter, or every
     legitimately-disabled key would report itself as unknown.
     """
     all_keys = {k.to_user_string() for a in asset_defs for k in a.keys}
     enabled.validate(all_keys)
 
-    disabled = enabled.disabled_assets()
-    return [
-        a for a in asset_defs if not ({k.to_user_string() for k in a.keys} & disabled)
-    ]
+    on = enabled.enabled_assets()
+    return [a for a in asset_defs if {k.to_user_string() for k in a.keys} & on]
 
 
 # ── Executor ──────────────────────────────────────────────────────────────────
@@ -158,10 +161,16 @@ EXECUTOR = multiprocess_executor.configured(
 # ⚠️ ONE RUN IS ONE ASSET CLASS. Launch the four partitions as a BACKFILL and keep
 # `max_concurrent_runs: 1` in `.dagster/dagster.yaml`: `max_browsers` is an in-process
 # semaphore, so N concurrent runs is 4N Chrome instances (§2a).
-TV_REFRESH_ASSETS = AssetSelection.assets(
-    AssetKey(["raw", "trading_view_links"]),
-    AssetKey(["raw", "trading_view_data"]),
-)
+#
+# ⚠️ THE SELECTION IS BUILT FROM WHAT IS ACTUALLY LOADED, and that is not defensive
+# programming for its own sake: `AssetSelection.assets()` on a key no longer in the code
+# location fails the whole location, so hard-coding both assets would mean switching
+# `raw/trading_view_data` off in config.json takes the UI down with it. Since absent now
+# means OFF, that is a single edit away at all times.
+_TV_ASSETS = {
+    "raw/trading_view_links": AssetKey(["raw", "trading_view_links"]),
+    "raw/trading_view_data": AssetKey(["raw", "trading_view_data"]),
+}
 
 # ⚠️ THE VALUES COME FROM config.json, NOT FROM LITERALS HERE. They used to live in
 # `tv_full_refresh.yaml`, which only the CLI ever read — so the UI launched this job with
@@ -171,30 +180,39 @@ _RUN = enabled.run_config()
 _TV_SKIP_EXISTING = _RUN.get("skip_existing", False)
 _TV_MAX_BROWSERS = _RUN.get("max_browsers", SCRAPER_MAX_CONCURRENT_BROWSERS)
 
-_TV_JOB_CONFIG = {
-    "ops": {
-        "raw__trading_view_links": {"config": {"max_browsers": _TV_MAX_BROWSERS}},
-        "raw__trading_view_data": {
-            "config": {
-                "skip_existing": _TV_SKIP_EXISTING,
-                "max_browsers": _TV_MAX_BROWSERS,
-            }
-        },
-    }
+_TV_OP_CONFIG = {
+    "raw/trading_view_links": {"max_browsers": _TV_MAX_BROWSERS},
+    "raw/trading_view_data": {
+        "skip_existing": _TV_SKIP_EXISTING,
+        "max_browsers": _TV_MAX_BROWSERS,
+    },
 }
 
-trading_view_full_refresh = define_asset_job(
-    name="trading_view_full_refresh",
-    selection=TV_REFRESH_ASSETS,
-    description=(
-        "Re-scrape ONE TradingView asset class from scratch: links (the universe) then "
-        "every symbol's OHLCV, with skip_existing=False so nothing on disk is trusted. "
-        "Pick the partition — bonds / funds / forex / economy — and launch; the config "
-        "is baked in. Budget ~8-12 s per symbol at 4 browsers (the 8-second global "
-        "navigation gate is the floor, not the browser count)."
-    ),
-    config=_TV_JOB_CONFIG,
-)
+_TV_ON = [key for key in _TV_ASSETS if key in enabled.enabled_assets()]
+
+jobs = []
+if _TV_ON:
+    trading_view_full_refresh = define_asset_job(
+        name="trading_view_full_refresh",
+        selection=AssetSelection.assets(*(_TV_ASSETS[k] for k in _TV_ON)),
+        description=(
+            "Re-scrape ONE TradingView asset class from scratch: links (the universe) "
+            "then every symbol's OHLCV, with skip_existing=False so nothing on disk is "
+            "trusted. Pick the partition and launch; the config is baked in. Budget "
+            "~8-12 s per symbol at 4 browsers (the 8-second global navigation gate is "
+            "the floor, not the browser count). ⚠️ Covers whichever of the two "
+            f"TradingView assets config.json has switched on — currently {_TV_ON}."
+        ),
+        # Config for an op that is not in the run is an ERROR, so this is filtered the
+        # same way the selection is.
+        config={
+            "ops": {
+                key.replace("/", "__"): {"config": _TV_OP_CONFIG[key]}
+                for key in _TV_ON
+            }
+        },
+    )
+    jobs.append(trading_view_full_refresh)
 
 _repo_logger = RepoLogger()
 _switches = SwitchConfig()
@@ -209,7 +227,7 @@ defs = Definitions(
             *unified.assets,
         ]
     ),
-    jobs=[trading_view_full_refresh],
+    jobs=jobs,
     resources={
         "repo_logger": _repo_logger,
         "switches": _switches,
