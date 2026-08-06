@@ -543,7 +543,31 @@ writes there and it stays the record of what the underlying scrapers/ingests did
 memory `feedback-clean-app-log-before-run`. Dagster's own per-run logs are separate and
 live in `.dagster/`.
 
-### The economy scrape is 19 COUNTRIES now, not 5 (2026-08-05)
+### ✅ The economy scrape is COMPLETE — 3,851 series, 19/19 countries (2026-08-06)
+
+Both halves, links and data, verified against `raw_data/` file counts:
+
+| | links (the universe) | data (the series) |
+|---|---|---|
+| 19 countries, 209 leaves | **3,851** | **3,851 — 100%** |
+
+It took two runs and the gap between them is the lesson. The first (2026-08-05) was
+**data only and was interrupted**, leaving 1,459 of 3,847 on disk — 10 countries whole,
+Philippines at 46/100, and **8 countries including the USA never started** — while
+`landed()` went green because the folder was not empty. Nothing said so; the count had to
+be read off the disk. The second run was the `trading_view_full_refresh` JOB with
+`skip_existing: true`, which queued exactly **2,388** tasks (3,847 − 1,459) and finished
+the layer. Its links pass also picked up 4 more USA symbols, which is where 3,847 → 3,851
+came from.
+
+⚠️ **`landed()` cannot see a partial run and never could** — it answers "is this folder
+empty?", not "did this run produce everything?". For the record, the check that DOES
+answer it is one query per leaf against TradingView's own symbol-search API (§"Two
+link-scrape defects"); on 2026-08-06 that put **206 of 209 leaves exactly on the API's
+count**, the remaining three being USA `gdp`/`labor`/`money` short by 6 symbols total
+out of 3,853 — the tail of the lazy scroll on the three longest lists.
+
+### How it got to 19 COUNTRIES, from 5 (2026-08-05)
 
 Vietnam, USA, China, Japan and South Korea were joined by fourteen chosen for their
 direct effect on Vietnam — the FDI sources and supply chain (Taiwan, Singapore, Hong
@@ -764,7 +788,25 @@ All 73 assets are listed in the file as a menu, grouped by the asset's own Dagst
 (trading_view, cafef, cafef_index, cafef_filings, simplize, gics, bronze, silver, gold,
 unified), with `//` comment keys
 marking the expensive ones (same comment convention as `switch_config.json`).
-`true` or **absent** = loaded, so a newly added asset is on by default.
+**Absent = OFF and the loader raises on an unlisted asset** — the note that used to sit
+here said "`true` or absent = loaded", which was true until 2026-08-05 and is the exact
+default the change was made to remove.
+
+### ⚠️ Everything is ON as of 2026-08-06, and that is the intended resting state
+
+**All 73 assets and every partition are `true`.** The file spent 2026-08-05 with one
+group and one partition enabled, which is a fine way to keep a specific run honest and a
+bad way to leave a repo: the UI showed one asset, and "which module do I want today" had
+no answer without a config edit first. Level 1 is the lever — *selection is the run
+plan*, and what you do not select does not run.
+
+⚠️ **It re-arms the backfill footgun, so it is worth saying plainly.** With every
+partition live, `Materialize all` / `*` / a backfill over a partitioned asset takes
+**every** partition: `raw/cafef_pdfs` is 100 tickers at ~1-1.7 GB each,
+`raw/trading_view@stocks` is 777 tickers at ~10 h, `raw/cafef_financials` is ~2.4 h per
+ticker. **Materialise a group or a named asset, never the whole graph.** If one does run
+away, setting the partitions `false` here is still the only lever that stops it *before*
+any work starts — it removes them from the `PartitionsDefinition` entirely.
 
 **…and one SUB-SOURCE — the `partitions` section (2026-08-05).** Half the sources here
 are not assets: TradingView's nine classes, CafeF's 100 filing tickers and the three
