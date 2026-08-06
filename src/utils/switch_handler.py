@@ -36,10 +36,36 @@ class SwitchHandler:
       need no changes.
     """
 
-    def __init__(self, logger: Logger, config_path: str = "src/switch_config.json"):
+    def __init__(
+        self,
+        logger: Logger,
+        config_path: str | None = None,
+        switches: dict[str, bool] | None = None,
+    ):
+        """Build from an explicit `switches` dict, from a JSON file, or from neither.
+
+        ⚠️ **`switch_config.json` IS GONE (2026-08-06) AND THERE IS NO DEFAULT PATH.**
+        Its only live content was TradingView's parameter tree, which now lives in
+        `src/orchestration/config.json` under `parameters`; `orchestration.enabled`
+        synthesises the flat paths below and passes them in as `switches`. The other 19
+        keys were run-plan switches, and the run plan has been asset selection since
+        Phase 5.
+
+        The `config_path` branch is kept because the format is still perfectly good for
+        an ad-hoc file, but nothing in `src/` passes it any more. Passing NEITHER gives
+        an empty handler, which is the honest state for every scraper that takes a
+        `SwitchHandler` and never consults it (CafeF, Simplize, `DataPreprocessor`) —
+        and it does NOT log an error, because "no switches" is now the normal case
+        rather than a missing file.
+        """
         self._logger = logger
         self._config_path = config_path
-        self._switches: dict[str, bool] = self._load_config()
+        if switches is not None:
+            self._switches: dict[str, bool] = dict(switches)
+        elif config_path is not None:
+            self._switches = self._load_config()
+        else:
+            self._switches = {}
 
     # ──────────────────────────────────────────────────────────────────────────
     # Loading
@@ -61,7 +87,7 @@ class SwitchHandler:
 
             if not isinstance(data, dict):
                 self._logger.log_error(
-                    f"switch_config.json must be a flat JSON object, got {type(data).__name__}"
+                    f"{self._config_path} must be a flat JSON object, got {type(data).__name__}"
                 )
                 return {}
 
@@ -84,7 +110,7 @@ class SwitchHandler:
             return switches
 
         except json.JSONDecodeError as e:
-            self._logger.log_error(f"switch_config.json is not valid JSON: {e}")
+            self._logger.log_error(f"{self._config_path} is not valid JSON: {e}")
             return {}
         except Exception as e:
             self._logger.log_error(f"Failed to load switch config: {e}")
@@ -159,7 +185,18 @@ class SwitchHandler:
         return result
 
     def reload(self) -> None:
-        """Re-read the config file from disk (useful for long-running processes)."""
+        """Re-read the config file from disk (useful for long-running processes).
+
+        A no-op for a handler built from an explicit `switches` dict — there is no file
+        to re-read. It logs rather than raising: reloading is a convenience, and the
+        callers that use it must not care where the switches came from.
+        """
+        if self._config_path is None:
+            self._logger.log_info(
+                "SwitchHandler.reload(): built from an explicit switches dict, not a "
+                "file — nothing to re-read."
+            )
+            return
         self._switches = self._load_config()
 
     # ──────────────────────────────────────────────────────────────────────────

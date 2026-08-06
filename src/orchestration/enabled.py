@@ -45,10 +45,32 @@ CONFIG_PATH = Path(__file__).resolve().parent / "config.json"
 # switch_config.json, where EVERY ancestor must be true.
 GROUP_GATE = "enabled"
 
-# The two files config.json replaced. They are checked for and REJECTED rather than
-# ignored: a stale config left in place, silently doing nothing, is the failure this
-# package keeps having (see switch_config.json's trailing-slash bug).
-SUPERSEDED = ("assets_enabled.json", "tv_full_refresh.yaml")
+# The files config.json replaced, as paths RELATIVE TO THIS PACKAGE. They are checked
+# for and REJECTED rather than ignored: a stale config left in place, silently doing
+# nothing, is the failure this package keeps having (see switch_config.json's
+# trailing-slash bug).
+#
+# ⚠️ `../switch_config.json` sits one level UP, in `src/`, which is why these are
+# relative paths rather than bare names. It was folded in on 2026-08-06: its TradingView
+# parameter tree became the `parameters` section, and its other 19 keys were run-plan
+# switches that Phase 5 had already made dead.
+SUPERSEDED = (
+    "assets_enabled.json",
+    "tv_full_refresh.yaml",
+    "../switch_config.json",
+)
+
+# The nine TradingView asset classes, which are also `raw/trading_view`'s partition keys.
+# Named here so a typo under `parameters` raises instead of silently enumerating nothing.
+TV_ASSET_CLASSES = (
+    "stocks", "funds", "futures", "forex", "crypto",
+    "indices", "bonds", "economy", "options",
+)
+
+# The three phase prefixes the old flat paths carried. `collected_links` takes no
+# parameters (it walks the links folder) but is listed so `is_enabled` answers True for
+# it under the run-plan force.
+TV_PHASES = ("links", "data", "collected_links")
 
 # owner name -> its FULL partition key list, as the asset module declared it (before any
 # filtering). Populated at import time by `register()`; read by `validate()`.
@@ -80,12 +102,13 @@ def config() -> Dict[str, Any]:
         return _CONFIG
 
     for stale in SUPERSEDED:
-        path = CONFIG_PATH.parent / stale
+        path = (CONFIG_PATH.parent / stale).resolve()
         if path.exists():
             raise ValueError(
                 f"{path} still exists but is NO LONGER READ — its contents moved into "
-                f"{CONFIG_PATH.name} on 2026-08-05 (assets/partitions/run). Delete it "
-                f"rather than leaving a config file that looks live and is not."
+                f"{CONFIG_PATH.name} (assets/partitions/run on 2026-08-05, parameters "
+                f"on 2026-08-06). Delete it rather than leaving a config file that "
+                f"looks live and is not."
             )
 
     if not CONFIG_PATH.exists():
@@ -106,11 +129,11 @@ def config() -> Dict[str, Any]:
         )
 
     raw = _strip_comments(raw)
-    unknown = set(raw) - {"assets", "partitions", "run"}
+    unknown = set(raw) - {"assets", "partitions", "parameters", "run"}
     if unknown:
         raise ValueError(
             f"{CONFIG_PATH}: unknown top-level section(s) {sorted(unknown)}. "
-            f"Valid sections: assets, partitions, run."
+            f"Valid sections: assets, partitions, parameters, run."
         )
 
     # ⚠️ COMMENTS ARE STRIPPED AT BOTH LEVELS — `assets` and `partitions` are dicts OF
@@ -135,6 +158,10 @@ def config() -> Dict[str, Any]:
     _CONFIG = {
         "assets": {g: _strip_comments(b) for g, b in sections["assets"].items()},
         "partitions": {o: _strip_comments(b) for o, b in sections["partitions"].items()},
+        # ⚠️ NOT `_strip_comments`d shallowly like the others — `parameters` is a TREE up
+        # to four levels deep, so comments are stripped during the recursive walk in
+        # `_flatten_parameters` instead.
+        "parameters": raw.get("parameters", {}),
         "run": _strip_comments(raw.get("run", {})),
     }
 
@@ -178,6 +205,120 @@ def enabled_assets() -> Set[str]:
 def run_config() -> Dict[str, Any]:
     """The `run` section — what `trading_view_full_refresh` launches with."""
     return dict(config().get("run", {}))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# `parameters` — the TradingView scrape dimensions, ex-switch_config.json
+# ══════════════════════════════════════════════════════════════════════════════
+# ⚠️ THIS SECTION IS NOT A RUN PLAN, AND THAT DISTINCTION IS THE WHOLE REASON
+# switch_config.json WAS SO HARD TO KILL. That file mixed two things in one tree: the
+# run plan ("scrape TradingView at all") and the parameters ("which countries, which
+# sectors"). Dagster took over the first in Phase 5 — selection IS the run plan — but
+# the second had nowhere to go, so a dead file stayed alive for one live subtree, and
+# `build_unblocked` existed purely to force the dead half true so the live half could be
+# read. The parameters live here now and the file is gone.
+#
+# ⚠️ THE FLAT PATH FORMAT IS PRESERVED EXACTLY, ON PURPOSE. The fifteen
+# `get_enabled_paths(...)` call sites in `web_scraper/trading_view_scraper.py` index
+# their results positionally — `parts[4]` is the country, `parts[5]` the stock type,
+# `parts[6]` the sector — so this module rebuilds `web_scraper/trading_view/<phase>/…`
+# from the nested tree and hands it to an ordinary `SwitchHandler`. Re-shaping the
+# scraper to read a tree would have touched every adder for no gain; this package's
+# history is mostly widened refactors going wrong.
+
+
+def _flatten_parameters(node: Any, prefix: str, out: Dict[str, bool]) -> None:
+    """Walk the nested tree, writing `a/b/c -> bool` for every branch and leaf.
+
+    A value is either a BOOL (a leaf) or a DICT (a branch). Branches are written as
+    `True` because `SwitchHandler.is_enabled` requires every ancestor to be true and the
+    leaves are what actually gate; a whole subtree is switched off by writing `false`
+    where its dict would go, which lands here as an ordinary disabled leaf.
+    """
+    if isinstance(node, bool):
+        out[prefix] = node
+        return
+    if not isinstance(node, dict):
+        # ⚠️ Report the path the USER wrote, not the synthesized one. `prefix` here is
+        # already `web_scraper/trading_view/links/bonds`, and quoting that back at
+        # someone who wrote `"bonds": "yes"` names a path that appears nowhere in the
+        # file they are looking at.
+        authored = prefix.split("/", 3)[-1] if prefix.count("/") >= 3 else prefix
+        raise ValueError(
+            f"{CONFIG_PATH}: parameters/trading_view/{authored} must be a boolean (a "
+            f"leaf) or an object (a branch), got {type(node).__name__}."
+        )
+    out[prefix] = True
+    for key, child in node.items():
+        if key.startswith("//"):
+            continue
+        _flatten_parameters(child, f"{prefix}/{key}", out)
+
+
+def trading_view_switches() -> Dict[str, bool]:
+    """`parameters.trading_view` as the flat paths the scraper's adders expect.
+
+    The ONE tree is emitted under BOTH phase prefixes. switch_config.json carried two
+    trees — `.../links/…` and `.../data/…` — that were byte-identical at 326 keys each
+    and differed on exactly one value (`crypto`), which is how that drift got in. They
+    share one tree here for the same reason `raw/trading_view_links` and
+    `raw/trading_view_data` share one `PartitionsDefinition`: the data step reads the
+    link CSV its own leaf wrote, so they cannot legitimately disagree.
+
+    ⚠️ Run-plan ancestors are NOT forced here — see `trading_view_run_plan_switches`.
+    """
+    tv = config().get("parameters", {}).get("trading_view", {})
+    if not isinstance(tv, dict):
+        raise ValueError(
+            f"{CONFIG_PATH}: parameters/trading_view must be an object, got "
+            f"{type(tv).__name__}."
+        )
+
+    unknown = {k for k in tv if not k.startswith("//")} - set(TV_ASSET_CLASSES)
+    if unknown:
+        raise ValueError(
+            f"{CONFIG_PATH}: parameters/trading_view has unknown asset class(es) "
+            f"{sorted(unknown)}. Valid: {', '.join(TV_ASSET_CLASSES)}. (A typo here "
+            f"would enumerate nothing and the asset would fail on an empty folder — "
+            f"which is a slow way to learn about a spelling mistake.)"
+        )
+
+    out: Dict[str, bool] = {}
+    for phase in ("links", "data"):
+        for asset_class, node in tv.items():
+            if asset_class.startswith("//"):
+                continue
+            _flatten_parameters(
+                node, f"web_scraper/trading_view/{phase}/{asset_class}", out
+            )
+    return out
+
+
+def trading_view_run_plan_switches(phase: str) -> Dict[str, bool]:
+    """The parameter paths PLUS the run-plan ancestors `phase` needs, forced true.
+
+    This is what `SwitchConfig.build_trading_view` hands to the scraper, and it replaces
+    `build_unblocked`'s four forced prefixes.
+
+    ⚠️ THE ASSET-CLASS PREFIX IS DELIBERATELY *NOT* FORCED, WHICH CLOSES A REAL BUG.
+    `build_unblocked` forced `web_scraper/trading_view/<phase>/<asset_class>` true, and
+    for a class with no children in the tree that made the CLASS ITSELF a leaf — so
+    `get_enabled_paths` returned a 4-part path where the adder expected 5+ and
+    `_add_options_links_tasks` raised `IndexError` before queueing anything (partition
+    `options`, 2026-07-31; reachable only through Dagster, so main.py never hit it). The
+    class prefix now comes from the tree or not at all: a class the tree does not list
+    enumerates nothing, quietly and correctly. The guards in the crypto and options
+    adders stay as defence, but this path can no longer trip them.
+    """
+    if phase not in TV_PHASES:
+        raise ValueError(
+            f"Unknown TradingView phase {phase!r}. Valid: {', '.join(TV_PHASES)}."
+        )
+    switches = trading_view_switches()
+    switches["web_scraper"] = True
+    switches["web_scraper/trading_view"] = True
+    switches[f"web_scraper/trading_view/{phase}"] = True
+    return switches
 
 
 def register(owner: str, keys: Sequence[str]) -> List[str]:
@@ -227,6 +368,12 @@ def validate(all_asset_keys: Iterable[str]) -> None:
     """
     known_assets = set(all_asset_keys)
     problems: List[str] = []
+
+    # ⚠️ Force the `parameters` tree to be walked HERE, at definition-validation time.
+    # Its own checks (unknown asset class, a non-bool non-dict node) otherwise fire
+    # only when a TradingView asset actually runs — which for a typo'd country means
+    # discovering it after the browsers are up.
+    trading_view_switches()
 
     listed: Set[str] = set()
     for group, block in config().get("assets", {}).items():

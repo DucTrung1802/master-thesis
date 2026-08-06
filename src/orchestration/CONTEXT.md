@@ -10,11 +10,11 @@
 > `_bootstrap`'s two-line `sys.path` insert INLINE, because the package can no longer be
 > imported until `src/` is on the path.
 >
-> ## ⚙️ ONE CONFIG FILE: `config.json` (2026-08-05)
+> ## ⚙️ ONE CONFIG FILE: `config.json` (2026-08-05, completed 2026-08-06)
 >
-> `assets_enabled.json` and `tv_full_refresh.yaml` are **gone**, folded into
-> [config.json](config.json) with three sections — and [enabled.py](enabled.py) is the
-> only thing that reads it:
+> `assets_enabled.json`, `tv_full_refresh.yaml` **and `src/switch_config.json`** are all
+> **gone**, folded into [config.json](config.json) with four sections — and
+> [enabled.py](enabled.py) is the only thing that reads it:
 >
 > ```jsonc
 > {
@@ -24,9 +24,42 @@
 >     "bronze":       { "enabled": false, "bronze/trading_view_economy": false, … }
 >   },
 >   "partitions": { "raw/trading_view": { "economy": true, "forex": false, … } },
+>   "parameters": { "trading_view": { "economy": { "vietnam": { "gdp": true, … } } } },
 >   "run":        { "skip_existing": false, "max_browsers": 4 }
 > }
 > ```
+>
+> ## 🔚 `src/switch_config.json` IS DELETED (2026-08-06)
+>
+> **The last config file outside this package is gone**, and with it the last way to run
+> something the orchestrator could not see. Its 676 keys split cleanly in two:
+>
+> | what was in it | where it went |
+> |---|---|
+> | **654 TradingView parameter keys** — which countries, sectors, brokers, categories | the new **`parameters`** section, as **295 leaves** |
+> | 19 `cafef` / `cafef_index` / `simplize` / `gics` run-plan keys | **nothing** — dead since Phase 5 made selection the run plan |
+> | 3 `web_scraper/…` run-plan ancestors | **nothing** — `build_trading_view` forces them |
+>
+> ⚠️ **THE 654 WERE TWO IDENTICAL COPIES.** `…/links/…` and `…/data/…` held the same 326
+> keys and differed on exactly ONE value (`crypto`) — which is not a feature, it is the
+> drift you get from a tree that has to be edited twice. They are **one tree** now, for
+> the same reason the two assets share one `PartitionsDefinition`: the data step reads
+> the link CSV its own leaf wrote, so they cannot legitimately disagree.
+>
+> ⚠️ **The flat path format survives inside `enabled.py`, deliberately.** The fifteen
+> `get_enabled_paths` call sites in `trading_view_scraper.py` index positionally —
+> `parts[4]` is the country, `parts[6]` the sector — so `trading_view_switches()`
+> rebuilds `web_scraper/trading_view/<phase>/…` from the tree and hands it to an ordinary
+> `SwitchHandler`. **Not one line of the scraper changed.** Verified by golden test
+> against the deleted file: 17 of 19 (phase × asset class) selections **byte-identical**.
+>
+> ⚠️ **The two that differ are the bug being fixed — see `build_trading_view` below.**
+>
+> ⚠️ **A leftover `src/switch_config.json` now RAISES**, like the other two superseded
+> files. `SwitchHandler` has **no default path** any more: it takes an explicit
+> `switches` dict, an explicit file, or neither. "Neither" is what CafeF, Simplize and
+> `DataPreprocessor` get — they all require a handler in their constructor and **none of
+> them ever calls it**, which an empty handler states honestly.
 >
 > ⚠️ **ABSENT MEANS OFF, and every module must be LISTED (2026-08-05).** The old default
 > was the friendly one — absent = loaded — and it is also the default under which a
@@ -92,9 +125,10 @@
 > ⚠️ **`src/main.py` IS GONE** (deleted 2026-08-05, code at `f4bc4a2`). So is
 > `src/data_postprocessor/` — 652 lines only `main.py` imported, and the call was already
 > commented out; its job of joining macro and market columns into one frame is done by
-> `gold.economy`, `gold.stock_market` and the unified schema. `switch_config.json` is now
-> **347 keys, all of them TradingView PARAMETERS** — which countries and sectors to
-> scrape — and no longer says anything about what runs.
+> `gold.economy`, `gold.stock_market` and the unified schema. `switch_config.json` was
+> reduced to **TradingView PARAMETERS** here — which countries and sectors to scrape, and
+> nothing about what runs — and then **deleted outright on 2026-08-06**, its 295
+> parameter leaves moving into `config.json`'s `parameters` section.
 
 ## 1. Why this is worth doing
 
@@ -316,25 +350,57 @@ re-run cheap, so partitioning would only take that parallelism away.
 
 TradingView is partitioned by asset class (**9**), not by its 320 switch leaves — the
 leaves below an asset class (country / stock_type / sector) are *parameters* the
-scraper's own task adders read from `switch_config.json`. 320 partitions would
-re-encode that JSON in a second place and be unusable in the UI.
+scraper's own task adders read from `config.json`'s `parameters`. 295 partitions would
+re-encode that tree in a second place and be unusable in the UI.
 
-### ⚠️ `SwitchConfig.build_unblocked` — the one place switches still matter
+### ⚠️ `build_trading_view` — how the parameters reach the scraper (2026-08-06)
 
-`is_enabled` requires EVERY ancestor to be true, and the committed config has
-`"web_scraper": false` plus `".../links": false`. A TradingView asset would therefore
-enumerate zero countries and scrape nothing, **silently**, whatever Dagster was asked
-to do. `build_unblocked` forces the run-plan ancestors true and leaves the parameter
-leaves exactly as the JSON has them. Only TradingView and GICS need it — every other
-scraper is driven by calling its per-tab method directly, which consults no switch.
+`is_enabled` requires EVERY ancestor to be true, and the run-plan ancestors
+(`web_scraper`, `web_scraper/trading_view`, `web_scraper/trading_view/<phase>`) mean
+"run this stage" — which is Dagster's decision now, not a file's. `build_trading_view`
+forces exactly those three and takes every leaf below them from `parameters`.
 
-⚠️ **It has one edge, found 2026-07-31: forcing an ancestor true can make a LEAF true.**
-`crypto` and `options` have no children in `switch_config.json`, so
-`web_scraper/trading_view/links/options` is itself a leaf — forcing it hands the adder a
-4-part path where it expects 5, and `_add_options_links_tasks` had no guard:
-`trading_view_links` partition `options` raised `IndexError` before queueing a task.
-Guarded now (crypto always was). Both classes legitimately queue **0 tasks**, so those
-two partitions are `landed()`-red on an empty folder — neither has ever produced links.
+`build_unblocked` survives for **GICS only**: `GicsScraper.scrape` gates itself on
+`web_scraper/gics/structure`, so the asset forces that one path. It is force-only now,
+with no file underneath.
+
+> **Historical, and it is why the signature changed.** `build_unblocked` used to load
+> `switch_config.json` — whose committed state was `"web_scraper": false` plus
+> `".../links": false`, so without the forcing a TradingView asset enumerated zero
+> countries and scraped nothing, silently. That file is deleted; the forcing that
+> remains is three lines, not a workaround for a config fighting the orchestrator.
+
+⚠️ **THE OLD FORM FORCED A FOURTH PREFIX AND THAT WAS A BUG — fixed 2026-08-06.** It also
+forced `web_scraper/trading_view/<phase>/<asset_class>`, and for a class with **no
+children** that made the class itself a LEAF: `get_enabled_paths` returned a 4-part path
+where the adder indexes `parts[4]`, and `_add_options_links_tasks` raised `IndexError`
+before queueing anything (partition `options`, 2026-07-31 — reachable only through
+Dagster, so `main.py` never hit it). The class prefix is **no longer forced**: a class
+the tree does not list enumerates nothing, quietly and correctly. This is the one
+behavioural difference the golden test found, and it is the intended one —
+
+| selection | old | new |
+|---|---|---|
+| `links/options`, `data/options` | 1 path (the bare 4-part artefact) | **0** |
+| every other phase × class (17) | — | **byte-identical** |
+
+The guards in the `crypto` and `options` adders stay as defence, but this path can no
+longer trip them. `crypto` is still a real leaf (`"crypto": true`) and still returns its
+4-part path, so `Skipping incomplete crypto links path` remains the correct guard doing
+its job. Both classes legitimately queue **0 tasks**, so those two partitions are
+`landed()`-red on an empty folder — neither has ever produced links.
+
+**Verified after the move**, every adder through the asset's own `_tv()` path:
+
+| class | tasks queued | | class | tasks queued |
+|---|---|---|---|---|
+| stocks | 21 | | indices | 1 |
+| funds | 4 | | bonds | 2 |
+| futures | 10 | | economy | **209** |
+| forex | 47 | | crypto / options | 0 / 0 |
+
+and the data adder for economy: **2,388** at `skip_existing=True`, **3,847** at `False` —
+matching the 1,459 files on disk against the 3,847-series universe exactly.
 
 ### ⚠️ Every landing asset verifies what landed
 
@@ -403,8 +469,8 @@ failure the orchestrator can see.
 
 Two things this run did **not** prove and are still open:
 
-* `trading_view_links` partitions **`crypto` and `options` queue 0 tasks** (no children
-  in `switch_config.json`) and neither folder has ever existed, so `landed(require=True)`
+* `trading_view_links` partitions **`crypto` and `options` queue 0 tasks** (bare leaves
+  under `parameters`, no countries beneath them) and neither folder has ever existed, so `landed(require=True)`
   makes both **red with nothing wrong**. Either give them `require=False` like the DATA
   steps, or accept two permanently-red partitions.
 * A **0-link result is legitimate** for some leaves (`futures/vietnam/*`,
@@ -489,7 +555,7 @@ queues **209 tasks** (19 countries × 11 categories), verified by running it.
 ⚠️ **`COUNTRY_CODE.get(country, "")` WAS A SILENT-WRONG-DATA BUG and is now
 `country_code()`, which raises.** The code is injected into the screener's localStorage,
 and an EMPTY string there is not an error — it is a valid state meaning *no country
-filter*. A country present in `switch_config.json` but missing from the map would have
+filter*. A country present in the `parameters` tree but missing from the map would have
 scraped the unfiltered global list into that country's folder, where every row looks like
 a successful scrape. That is exactly what the UK bug below did with a code that was
 merely WRONG rather than missing.
@@ -749,6 +815,9 @@ Behaviour, all verified:
 | **a bare `"cafef": false` instead of a group object** | **raises**, naming what to write instead |
 | **a group with no `enabled` key** | **raises** — its absence would read as OFF for the whole group |
 | a key matching no asset | **raises**, listing the valid keys |
+| **an unknown asset class under `parameters`** | **raises** at definition-validation time, listing the nine |
+| **a `parameters` node that is neither bool nor object** | **raises**, quoting the path *as authored* |
+| **a resurrected `src/switch_config.json`** | **raises** — superseded, like the other two |
 | **`"raw/trading_view": {"bnods": false}`** (bad partition) | **raises**, listing that owner's valid partitions |
 | **a partition under the wrong owner** | **raises** — "not a partition set" |
 | **every partition of one owner `false`** | **raises** — zero partitions is unmaterialisable; disable the ASSET instead |
@@ -780,9 +849,10 @@ no-op in the first place.
 | `raw/cafef_index_price_raw+` | it and everything downstream |
 | `*` | everything in the code location |
 
-⚠️ **`switch_config.json` is NOT consulted.** Assets call the per-tab / per-table
-methods directly, so `--select` is the whole run plan. A leaf set `false` in the JSON
-still materialises here, and that is intended (§3).
+⚠️ **NO SWITCH FILE IS CONSULTED — there isn't one.** Assets call the per-tab /
+per-table methods directly, so `--select` is the whole run plan. `config.json`'s
+`parameters` narrows what a RUNNING TradingView asset enumerates; it can never veto a
+materialisation the way `switch_config.json` could (§3).
 
 **Expected output of C**, which doubles as the acceptance test — the four counts match
 `preprocessor/CONTEXT.md` §8 exactly:
@@ -1658,9 +1728,9 @@ return to sequential execution.
   [assets/cafef_index.py](assets/cafef_index.py) is four rows and produces eight
   assets. At ~60 assets this is the difference between maintainable and not.
 - **Assets call the per-tab method (`scrape_all_index_price`), never `scrape()`.**
-  `scrape()` re-consults the switch config, which would let `switch_config.json`
+  `scrape()` re-consults the switch config, which used to let `switch_config.json`
   silently veto a materialisation the user explicitly asked for. **Selection is
-  Dagster's job now.**
+  Dagster's job now**, and since 2026-08-06 there is no file left to veto with.
 - **`PreprocessorResource.session` has no `except` clause.** This is the point of the
   migration — see §4.1.
 - **The repo `Logger` is kept as-is.** It calls
@@ -1675,10 +1745,12 @@ return to sequential execution.
 - **`_bootstrap.py` sets `sys.path` and the CWD.** The repo's modules import each
   other flat (`from web_scraper.x import y`), which works today only because
   `python src/main.py` puts `src/` at `sys.path[0]`; `pytest.ini` solves the same
-  problem with `pythonpath = src`. The CWD matters just as much: `SwitchHandler`
-  defaults to the *relative* `src/switch_config.json`, `Logger` to a relative
-  `logs/app.log`, and the `*_RAW_DATA_DIR` constants are relative — and a wrong CWD
-  fails **quietly** (an unreadable switch config returns `{}`, i.e. every switch off).
+  problem with `pythonpath = src`. The CWD matters just as much: `Logger` writes a
+  relative `logs/app.log` and the `*_RAW_DATA_DIR` constants are relative — and a wrong
+  CWD fails **quietly**, with a scraper writing its CSVs somewhere else and the asset
+  still going green. (The worst case of this is gone: `SwitchHandler` used to default to
+  a relative `src/switch_config.json`, where a wrong CWD returned `{}` — every switch
+  off. `config.json` resolves from `__file__`.)
   > ⚠️ **Since the move into `src/`, that path entry is also what makes THIS package
   > importable** — so `definitions.py` cannot reach `_bootstrap` through an import and
   > repeats the insert inline instead. See §5 *Gotchas*.
@@ -1771,8 +1843,8 @@ aggregate — nothing reads `collected_links` at all. The real edge is
 
 `trading_view_links` / `trading_view_data` are partitioned by **asset class (9)**, not
 by the 320 `(asset_class, country, type, sector)` switch leaves as this plan proposed.
-320 partitions would re-encode `switch_config.json` in a second place and be unusable in
-the UI; the sub-leaves stay in the JSON as *parameters* that each scraper's own task
+295 partitions would re-encode the parameter tree in a second place and be unusable in
+the UI; the sub-leaves stay in `config.json` as *parameters* that each scraper's own task
 adder reads. `trading_view_collected_links` sits between them, unpartitioned.
 
 ⚠️ **The "keep TV in-process" instruction was superseded.** The executor IS multiprocess
@@ -1817,10 +1889,11 @@ The standing example: `silver.cafef_order_stats` sat at **351,373 rows against a
 table of 2,523,196**, stale since the layer-wide re-ingest, because "remember to run the
 `cafef_carry_ups` leaf" was a person's job. Its new asset took it to 2,523,196.
 
-⚠️ **`switch_config.json` still exists and is still load-bearing** — 347 keys, all
-TradingView parameters (which countries, which sectors). `SwitchConfig.build_unblocked`
-still forces the run-plan ancestors true, because those ancestors are still in the tree
-above the parameter leaves. Deleting them is a separate, smaller cleanup.
+✅ **`switch_config.json` IS DELETED (2026-08-06)** — the "separate, smaller cleanup"
+this section used to defer. Its TradingView parameters are `config.json`'s `parameters`
+section (295 leaves, one tree instead of two identical ones); its other 22 keys were
+run-plan ancestors this phase had already made dead. `build_unblocked` no longer reads a
+file and survives for GICS alone. See §`build_trading_view`.
 
 ⚠️ **A THIRD writer survives: `train_test_creator/unified_schema_creator.ipynb`**
 imports `DataPreprocessor` directly. It still works — the library is intact — but a
@@ -1839,7 +1912,8 @@ that vanished in the 2026-08-03 drop. `pool__ta` and `pool__fa` are assets now; 
 | 4 | pdfs/financials, ticker partitions | ✅ **built**, not yet run end-to-end |
 | 5 | retire switch config | ✅ **done 2026-08-05** — keys, entry points, `_run_layer`, `main.py` and `data_postprocessor` all deleted |
 
-✅ `main.py` is deleted and `switch_config.json` is down to **347 parameter keys**.
+✅ `main.py` is deleted, and `switch_config.json` — down to 347 parameter keys here —
+was itself deleted on 2026-08-06, its parameters folded into `config.json`.
 
 **Where it actually stands (2026-08-05):** phases 0-4 are built; every landing and bronze
 asset has been materialised green, silver has 11 assets, gold 10, and a fifth `unified`
@@ -1876,8 +1950,8 @@ silver leaves that were never separate tables and the two unified universes
     `orchestration/__init__.py` calls `bootstrap()` and the package import already
     required `src/` to be reachable.
   - `working_directory` in `workspace.yaml` stays the **repo root**, not `src/`: it is
-    the CWD that the relative `raw_data/`, `logs/app.log` and `src/switch_config.json`
-    paths resolve against.
+    the CWD that the relative `raw_data/` and `logs/app.log` paths resolve against.
+    (`config.json` is resolved from `__file__` and does not care.)
 - **Dagster loads `.env` itself** on startup (confirmed: it reported loading
   `POSTGRES_*`), so the `load_dotenv()` calls in the repo are belt-and-braces here.
   Do NOT rely on that for scripts run outside Dagster.

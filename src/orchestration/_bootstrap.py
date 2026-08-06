@@ -16,13 +16,17 @@ Two things every Dagster process here needs, and neither is Dagster's job:
    inline before its first import. Every OTHER module here is reached through the
    package and needs nothing.
 
-2. **cwd = repo root.** `SwitchHandler` defaults to the RELATIVE path
-   `src/switch_config.json`, `Logger` writes a relative `logs/app.log`, and the
-   `*_RAW_DATA_DIR` constants are relative too — so every one of them resolves
-   against the working directory. Dagster's daemon/webserver do not guarantee one,
-   and a wrong cwd fails quietly (an unreadable switch config returns `{}`, i.e.
-   every switch false). Setting it once here is cheaper than making every consumer
-   absolute.
+2. **cwd = repo root.** `Logger` writes a relative `logs/app.log` and the
+   `*_RAW_DATA_DIR` constants are relative too, so both resolve against the working
+   directory. Dagster's daemon/webserver do not guarantee one, and a wrong cwd fails
+   QUIETLY — a scraper writes its CSVs under some other directory and the asset still
+   goes green. Setting it once here is cheaper than making every consumer absolute.
+
+   ⚠️ One item left this list on 2026-08-06: `SwitchHandler` used to default to the
+   relative `src/switch_config.json`, and a wrong cwd made it unreadable, which
+   returned `{}` — every switch false, every TradingView adder queueing nothing. That
+   file is gone and `config.json` is resolved from `__file__`, so the configuration
+   half of this hazard is closed; the output half above is not.
 
 Import this before ANY repo module. `orchestration/__init__.py` does that, so
 importing anything under `orchestration` is enough.

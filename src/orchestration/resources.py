@@ -20,6 +20,7 @@ import os
 
 from dotenv import load_dotenv
 
+from orchestration import enabled
 from orchestration.preprocessor import DataPreprocessor
 from dtos.tabular_database_driver_dtos.postgre_sql_connection_dto import (
     PostgreSQLConnectionDto,
@@ -49,41 +50,60 @@ class RepoLogger(ConfigurableResource):
 
 
 class SwitchConfig(ConfigurableResource):
-    """The existing `SwitchHandler`.
+    """A `SwitchHandler`, now built from `config.json` rather than a file of its own.
 
-    ⚠️ Under Dagster this is NO LONGER the run plan — asset selection is. It is still
-    needed because `DataPreprocessor.__init__` requires one, and because a few
-    scrapers read genuine PARAMETERS out of it (TradingView's enabled
-    country/sector leaves). Assets therefore call the per-tab methods
-    (`scrape_all_index_price`) directly rather than the switch-gated `scrape()`,
-    so a materialisation runs regardless of what the JSON says.
+    ⚠️ **`src/switch_config.json` WAS DELETED ON 2026-08-06** and `enabled.py` raises if
+    it reappears. Its only live content was TradingView's parameter tree — which
+    countries, sectors, brokers and categories each asset class enumerates — and that is
+    the `parameters` section of [config.json](config.json) now. The other 19 keys were
+    run-plan switches, dead since Phase 5 made asset selection the run plan.
+
+    ⚠️ Under Dagster this resource is NOT the run plan. It survives for two reasons and
+    they are unequal: TradingView's adders genuinely read parameters out of it, and
+    `DataPreprocessor.__init__` plus six scrapers merely REQUIRE one in their
+    constructor without ever calling it. The second group gets `build()`, which is an
+    empty handler and honestly so.
     """
 
-    config_path: str = "src/switch_config.json"
-
     def build(self, logger: Logger) -> SwitchHandler:
-        return SwitchHandler(logger=logger, config_path=self.config_path)
+        """An EMPTY handler, for the callers that take one and never consult it.
+
+        CafeF, CafeF-index, Simplize, the PDF/news/financials scrapers and
+        `DataPreprocessor` all accept a `SwitchHandler` and none of them calls
+        `is_enabled` on a path that matters — the assets drive their per-tab methods
+        directly. Handing them an empty handler rather than a loaded one makes that
+        visible instead of implying a dependency none of them has.
+        """
+        return SwitchHandler(logger=logger)
+
+    def build_trading_view(self, logger: Logger, phase: str) -> SwitchHandler:
+        """The handler the TradingView adders read: `parameters` + this phase forced on.
+
+        Replaces `build_unblocked` for TradingView. The parameter leaves come from
+        `config.json`; the three run-plan ancestors (`web_scraper`,
+        `web_scraper/trading_view`, `web_scraper/trading_view/<phase>`) are forced true
+        because they mean "run this stage", which is Dagster's decision now and not a
+        JSON file's. See `enabled.trading_view_run_plan_switches` for why the ASSET
+        CLASS prefix is pointedly not forced with them.
+        """
+        return SwitchHandler(
+            logger=logger, switches=enabled.trading_view_run_plan_switches(phase)
+        )
 
     def build_unblocked(self, logger: Logger, *prefixes: str) -> SwitchHandler:
-        """A handler with the given RUN-PLAN prefixes forced true, leaving everything
-        below them exactly as the JSON has it.
+        """An empty handler with `prefixes` forced true. GICS only.
 
-        ⚠️ NEEDED BECAUSE THE TWO ROLES ARE ENTANGLED IN ONE TREE. `is_enabled` requires
-        EVERY ancestor to be true, and the committed config has `"web_scraper": false`
-        plus `".../links": false` — so a TradingView asset would enumerate zero
-        countries/sectors and scrape nothing, silently, no matter what the user selected
-        in Dagster. Those ancestors mean "run this stage", which is now Dagster's
-        decision; the leaves below (which countries, which sectors) are PARAMETERS and
-        must keep coming from the JSON.
+        `GicsScraper.scrape` gates itself on `web_scraper/gics/structure`, so the asset
+        has to force that path on — the switch means "run this stage" and Dagster has
+        already decided that by selecting the asset. This is the last caller: with the
+        TradingView assets moved to `build_trading_view`, nothing else needs it.
 
-        Only the TradingView assets need this — every other scraper is driven by calling
-        its per-tab method directly, which consults no switch at all. Phase 5 of the
-        migration deletes the run-plan keys and this method with them.
+        ⚠️ It is force-ONLY now, with no file underneath, so it cannot resurrect the
+        `IndexError` described in `enabled.trading_view_run_plan_switches` — forcing a
+        prefix true can only make it a leaf if something reads leaves below it, and GICS
+        reads none.
         """
-        handler = SwitchHandler(logger=logger, config_path=self.config_path)
-        for prefix in prefixes:
-            handler._switches[prefix] = True
-        return handler
+        return SwitchHandler(logger=logger, switches={p: True for p in prefixes})
 
 
 class PreprocessorResource(ConfigurableResource):

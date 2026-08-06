@@ -178,11 +178,11 @@ UNIVERSE = AssetDep(
 # ══════════════════════════════════════════════════════════════════════════════
 # TradingView — the universe, then the OHLCV
 # ══════════════════════════════════════════════════════════════════════════════
-# PARTITIONED BY ASSET CLASS, not by the 320 switch leaves. The leaves below an asset
-# class (country / stock_type / sector) are PARAMETERS the scraper's own task adders
-# read out of switch_config.json — 320 Dagster partitions would just re-encode that
-# JSON in a second place, and be unusable in the UI. Nine is the granularity a person
-# actually re-runs at ("redo forex").
+# PARTITIONED BY ASSET CLASS, not by the 295 parameter leaves. The leaves below an asset
+# class (country / stock_type / sector) are PARAMETERS the scraper's own task adders read
+# out of `config.json`'s `parameters` section — 295 Dagster partitions would just
+# re-encode that tree in a second place, and be unusable in the UI. Nine is the
+# granularity a person actually re-runs at ("redo forex").
 #
 # ⚠️ THE CLASSES ARE TOGGLEABLE INDIVIDUALLY, from `config.json`:
 #
@@ -224,22 +224,22 @@ def _tv(
     asset_class: str,
     max_browsers: int = SCRAPER_MAX_CONCURRENT_BROWSERS,
 ):
-    """A TradingView scraper whose RUN-PLAN ancestors are forced on for `phase`.
+    """A TradingView scraper carrying `config.json`'s parameters for `phase`.
 
-    See `SwitchConfig.build_unblocked` — without this the committed
-    `"web_scraper": false` would make every adder enumerate zero tasks and the asset
-    would succeed having scraped nothing.
+    See `SwitchConfig.build_trading_view`. The dimension leaves (countries, sectors,
+    brokers, categories) come from the `parameters` section; the run-plan ancestors are
+    forced true because Dagster decided those by selecting the asset.
+
+    ⚠️ `asset_class` is no longer passed to the handler and that is the fix, not an
+    omission — forcing the class prefix true is what made `options` a leaf and raised
+    `IndexError` in its adder. The class is now enumerated only if `parameters` lists
+    it. It stays in this signature because the caller reads better for it and the
+    partition key is the natural thing to log.
 
     `max_browsers` caps concurrent Chrome instances AND sizes the thread pool, so it is
     the whole browser budget of the step.
     """
-    handler = switches.build_unblocked(
-        logger,
-        "web_scraper",
-        "web_scraper/trading_view",
-        f"web_scraper/trading_view/{phase}",
-        f"web_scraper/trading_view/{phase}/{asset_class}",
-    )
+    handler = switches.build_trading_view(logger, phase)
     return TradingViewScraper(
         logger=logger, switch_handler=handler, power=100, max_browsers=max_browsers
     )
@@ -258,7 +258,7 @@ def _tv(
     description=(
         "Symbol links per (country, type, sector) leaf → "
         "raw_data/trading_view/links/<asset>/…  One partition per asset class; the "
-        "dimension leaves come from switch_config.json. Replaces "
+        "dimension leaves come from config.json's `parameters` section. Replaces "
         "`web_scraper/trading_view/links/<asset>`."
     ),
 )

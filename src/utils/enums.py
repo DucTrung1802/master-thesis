@@ -1226,7 +1226,8 @@ def country_code(country: Country) -> str:
     SILENT-WRONG-DATA BUG.
     The code is injected into `tradingview.symboledit.selectedSearchSources`, and an
     EMPTY string there is not "no country" in the sense of an error — it is a valid
-    screener state meaning NO COUNTRY FILTER. So a country present in `switch_config.json`
+    screener state meaning NO COUNTRY FILTER. So a country present in the `parameters`
+    section of `src/orchestration/config.json` (until 2026-08-06, `switch_config.json`)
     but missing from the map above would have scraped the unfiltered global list and
     written it to `raw_data/trading_view/links/economy/<that country>/`, where every row
     would look like a successful scrape of that country. Nothing downstream could tell.
