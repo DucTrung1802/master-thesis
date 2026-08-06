@@ -5664,6 +5664,210 @@ class DataPreprocessor:
                 f"{self.UNIFIED_PRIMARY_KEY} — column ORDER is part of the contract."
             )
 
+    # Gold keeps one macro panel per country because all 19 panels together exceed
+    # PostgreSQL's 1,600-column limit.  Unified preserves that storage shape: one
+    # `pool__economy_<country>` table per gold panel, all on the same stock-date spine.
+    # A single combined `pool__economy` table would recreate the 3,784-column failure
+    # that made gold split its panel in the first place.
+    UNIFIED_ECONOMY_SOURCE_PREFIX = "economy_"
+    UNIFIED_ECONOMY_POOL_PREFIX = "pool__economy_"
+
+    def _ingest_unified_pool_economy(self, ticker: str) -> List[dict]:
+        """All `gold.economy_<country>` panels → matching unified economy pools.
+
+        Each target is `pool__economy_<country>`, keyed `(date, exchange, ticker)` on
+        `pool__basic`'s calendar.  Gold already applied the publication lag, as-of carry
+        and staleness cap, so values are copied as-is rather than forward-filled again.
+        Returns one metadata dict per country panel.
+        """
+        schema = self._helper_unified_schema(ticker)
+        if not self._helper_column_types(schema, "pool__basic"):
+            raise MissingSourceDataError(
+                f"`{schema}.pool__basic` does not exist — build it first; it is the "
+                "calendar spine for every unified feature pool."
+            )
+
+        with self._database_driver._cursor_ctx() as cur:
+            cur.execute(
+                "SELECT table_name FROM information_schema.tables "
+                "WHERE table_schema = %s AND table_type = 'BASE TABLE' "
+                "AND LEFT(table_name, CHAR_LENGTH(%s)) = %s ORDER BY table_name",
+                (
+                    GOLD_SCHEMA,
+                    self.UNIFIED_ECONOMY_SOURCE_PREFIX,
+                    self.UNIFIED_ECONOMY_SOURCE_PREFIX,
+                ),
+            )
+            source_tables = [str(row[0]) for row in cur.fetchall()]
+            cur.execute(f"SELECT COUNT(*) FROM {schema}.pool__basic")
+            spine_rows = int(cur.fetchone()[0])
+
+        if not source_tables:
+            raise MissingSourceDataError(
+                f"`{GOLD_SCHEMA}.economy_<country>` panels do not exist — build gold "
+                "`economy` first."
+            )
+        if not spine_rows:
+            raise MissingSourceDataError(
+                f"`{schema}.pool__basic` is empty, so the economy pools would have no "
+                "calendar to join."
+            )
+
+        # Fully preflight every source before replacing any target. This catches a
+        # missing, empty, widened, or calendar-drifted gold panel without leaving a
+        # half-refreshed collection of unified economy tables behind.
+        plans: List[dict] = []
+        reference_source = None
+        for source_table in source_tables:
+            if not source_table.startswith(self.UNIFIED_ECONOMY_SOURCE_PREFIX):
+                raise PipelineError(
+                    f"Unexpected gold economy table {source_table!r}; expected names "
+                    f"starting with {self.UNIFIED_ECONOMY_SOURCE_PREFIX!r}."
+                )
+            country = source_table.removeprefix(self.UNIFIED_ECONOMY_SOURCE_PREFIX)
+            if not self.UNIFIED_TICKER_PATTERN.match(country):
+                raise PipelineError(
+                    f"Gold economy table {source_table!r} has an unsafe country suffix "
+                    f"{country!r}; it cannot safely name a unified pool."
+                )
+
+            source = f"{GOLD_SCHEMA}.{source_table}"
+            source_types = self._helper_column_types(GOLD_SCHEMA, source_table)
+            if "date" not in source_types:
+                raise MissingSourceDataError(
+                    f"`{source}` has no `date` column, so it cannot join the unified "
+                    "trading-day spine."
+                )
+            macro_columns = [column for column in source_types if column != "date"]
+            if not macro_columns:
+                raise MissingSourceDataError(f"`{source}` contains no macro columns.")
+            duplicate_keys = set(macro_columns) & set(self.UNIFIED_PRIMARY_KEY)
+            if duplicate_keys:
+                raise PipelineError(
+                    f"`{source}` reuses unified key column(s) {sorted(duplicate_keys)}. "
+                    "A macro panel may contribute only feature columns beside `date`."
+                )
+
+            with self._database_driver._cursor_ctx() as cur:
+                cur.execute(f"SELECT COUNT(*), COUNT(DISTINCT date) FROM {source}")
+                source_rows, source_dates = (int(value) for value in cur.fetchone())
+                if not source_rows:
+                    raise MissingSourceDataError(f"`{source}` is empty.")
+                if source_rows != source_dates:
+                    raise PipelineError(
+                        f"`{source}` has {source_rows} rows over {source_dates} dates. "
+                        "It must be one row per date before joining a unified pool."
+                    )
+                if reference_source:
+                    cur.execute(
+                        f"SELECT COUNT(*) FROM ("
+                        f"  (SELECT date FROM {source} EXCEPT SELECT date FROM {reference_source}) "
+                        f"  UNION ALL "
+                        f"  (SELECT date FROM {reference_source} EXCEPT SELECT date FROM {source})"
+                        f") calendar_drift"
+                    )
+                    calendar_drift = int(cur.fetchone()[0])
+                    if calendar_drift:
+                        raise PipelineError(
+                            f"`{source}` disagrees with `{reference_source}` on "
+                            f"{calendar_drift} calendar date(s). Gold economy panels must "
+                            "share one calendar before unified pools can be comparable."
+                        )
+                else:
+                    reference_source = source
+
+                cur.execute(
+                    f"SELECT COUNT(*) FROM {schema}.pool__basic b "
+                    f"JOIN {source} e ON e.date = b.date"
+                )
+                matched_rows = int(cur.fetchone()[0])
+                if not matched_rows:
+                    raise MissingSourceDataError(
+                        f"`{source}` shares no dates with `{schema}.pool__basic`."
+                    )
+
+            plans.append(
+                {
+                    "source": source,
+                    "source_table": source_table,
+                    "table": f"{self.UNIFIED_ECONOMY_POOL_PREFIX}{country}",
+                    "macro_columns": macro_columns,
+                }
+            )
+
+        self._logger.log_info(
+            f"Ingesting {len(plans)} unified economy pools in {schema} from "
+            f"{GOLD_SCHEMA}.economy_<country>..."
+        )
+        panels: List[dict] = []
+        for plan in plans:
+            source = plan["source"]
+            table = plan["table"]
+            macro_columns = plan["macro_columns"]
+            selected_macro_columns = ", ".join(
+                f"e.{column}" for column in macro_columns
+            )
+            any_value = " OR ".join(
+                f"{column} IS NOT NULL" for column in macro_columns
+            )
+
+            with self._database_driver._cursor_ctx() as cur:
+                # Drop only after every source has passed preflight. Each rebuild is
+                # scoped to its own table, leaving unrelated unified pools untouched.
+                cur.execute(f"DROP TABLE IF EXISTS {schema}.{table}")
+                cur.execute(
+                    f"CREATE TABLE {schema}.{table} AS "
+                    f"SELECT b.date, b.exchange, b.ticker, {selected_macro_columns} "
+                    f"FROM {schema}.pool__basic b "
+                    f"LEFT JOIN {source} e ON e.date = b.date"
+                )
+                self._helper_unified_primary_key(cur, schema, table)
+                cur.execute(f"SELECT COUNT(*) FROM {schema}.{table}")
+                written = int(cur.fetchone()[0])
+                cur.execute(f"SELECT COUNT(*) FROM {schema}.{table} WHERE {any_value}")
+                populated_rows = int(cur.fetchone()[0])
+                cur.execute(
+                    f"SELECT COUNT(*) FROM ("
+                    f"  (SELECT date, exchange, ticker FROM {schema}.{table} "
+                    f"   EXCEPT SELECT date, exchange, ticker FROM {schema}.pool__basic) "
+                    f"  UNION ALL "
+                    f"  (SELECT date, exchange, ticker FROM {schema}.pool__basic "
+                    f"   EXCEPT SELECT date, exchange, ticker FROM {schema}.{table})"
+                    f") unaligned"
+                )
+                unaligned = int(cur.fetchone()[0])
+
+            if written != spine_rows:
+                raise PipelineError(
+                    f"{schema}.{table} wrote {written} rows against pool__basic's "
+                    f"{spine_rows}. A macro pool adds columns, never rows."
+                )
+            if unaligned:
+                raise PipelineError(
+                    f"{schema}.{table} disagrees with pool__basic on {unaligned} "
+                    "unified key(s). Every pool must share the spine exactly."
+                )
+            if not populated_rows:
+                raise MissingSourceDataError(
+                    f"{schema}.{table} has no populated macro value on pool__basic's "
+                    "calendar."
+                )
+            panels.append(
+                {
+                    "source": source,
+                    "table": table,
+                    "rows": written,
+                    "features": len(macro_columns),
+                    "populated_rows": populated_rows,
+                }
+            )
+
+        self._logger.log_info(
+            f"{schema}.pool__economy_*: {len(panels)} country panels, "
+            f"{sum(panel['features'] for panel in panels)} macro series total."
+        )
+        return panels
+
     def _ingest_unified_pool_basic(self, ticker: str) -> None:
         """`silver.stocks_basic` (one ticker) → `unified_schema_<ticker>.pool__basic`.
 

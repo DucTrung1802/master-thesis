@@ -7,10 +7,11 @@ holds ONE UNIVERSE cut into the FEATURE GROUPS a model selects over:
 
     pool__basic      the price/flow panel, every column of silver.stocks_basic
     pool__targets    the labels — forward returns, absolute and index-relative
+    pool__economy    all country macro panels, already causal in gold
     pool__ta         the ~920-column technical block
     pool__fa         the ~200-column fundamental block
 
-⚠️ **THE PARTITION IS THE UNIVERSE, and all four pools share it** (2026-08-05). Until
+⚠️ **THE PARTITION IS THE UNIVERSE, and all five pools share it** (2026-08-05). Until
 then this module was hard-coded to `UNIFIED_TICKER = "VCB"` and the asset keys carried
 the ticker (`unified_vcb/pool__basic`), which meant `unified_schema_all` and
 `unified_schema_bank` — 4.9 M rows between them — existed in the database but were
@@ -373,6 +374,90 @@ def unified_pool_targets(
     return MaterializeResult(metadata=metadata)
 
 
+@asset(
+    name="pool__economy",
+    key_prefix=["unified"],
+    group_name="unified",
+    compute_kind="postgres",
+    partitions_def=UNIFIED_PARTITIONS,
+    deps=[
+        AssetKey(["gold", "economy"]),
+        AssetKey(["unified", "pool__basic"]),
+    ],
+    description=(
+        "gold.economy_<country> → unified_schema_<universe>.pool__economy_<country>: "
+        "one table per country, each on pool__basic's (date, exchange, ticker) spine. "
+        "A single combined pool would exceed PostgreSQL's 1,600-column limit, so this "
+        "asset preserves gold's 19-panel storage shape. It does NOT forward-fill a "
+        "second time: gold owns publication lags and staleness caps."
+    ),
+)
+def unified_pool_economy(
+    context: AssetExecutionContext, preprocessor: PreprocessorResource
+) -> MaterializeResult:
+    universe = context.partition_key
+    schema = _schema_of(universe)
+
+    with preprocessor.session(schema=schema) as prep:
+        panels = prep._ingest_unified_pool_economy(universe)
+        expected_key = tuple(prep.UNIFIED_PRIMARY_KEY)
+
+        with prep._database_driver._cursor_ctx() as cur:
+            cur.execute(
+                "SELECT table_name FROM information_schema.tables "
+                "WHERE table_schema = %s AND table_type = 'BASE TABLE' "
+                "AND LEFT(table_name, CHAR_LENGTH(%s)) = %s ORDER BY table_name",
+                (schema, "pool__economy_", "pool__economy_"),
+            )
+            actual_tables = [str(row[0]) for row in cur.fetchall()]
+            cur.execute(f"SELECT COUNT(*) FROM {schema}.pool__basic")
+            basic_rows = int(cur.fetchone()[0])
+            for panel in panels:
+                table = panel["table"]
+                cur.execute(f"SELECT COUNT(*) FROM {schema}.{table}")
+                rows = int(cur.fetchone()[0])
+                if rows != basic_rows:
+                    raise ValueError(
+                        f"{schema}.{table} has {rows} rows against pool__basic's "
+                        f"{basic_rows}. A macro pool adds columns, never rows."
+                    )
+                primary_key = _primary_key(cur, schema, table)
+                if primary_key != expected_key:
+                    raise ValueError(
+                        f"{schema}.{table} primary key is {primary_key}, expected "
+                        f"{expected_key} — order is part of the contract."
+                    )
+
+    expected_tables = sorted(panel["table"] for panel in panels)
+    if actual_tables != expected_tables:
+        raise ValueError(
+            f"{schema}.pool__economy_* tables are {actual_tables}, expected "
+            f"{expected_tables}. A stale or missing country panel is not a complete "
+            "macro pool."
+        )
+    total_features = sum(panel["features"] for panel in panels)
+    populated_rows = sum(panel["populated_rows"] for panel in panels)
+    total_rows = len(panels) * basic_rows
+    coverage = 100.0 * populated_rows / max(total_rows, 1)
+    context.log.info(
+        f"{schema}.pool__economy_*: {len(panels)} country panels, {total_features} "
+        f"macro series total; {coverage:.1f}% panel-row coverage on pool__basic's spine"
+    )
+    return MaterializeResult(
+        metadata={
+            "country_panels": len(panels),
+            "rows_per_panel": basic_rows,
+            "features_total": total_features,
+            "populated_panel_rows": populated_rows,
+            "panel_row_coverage_pct": MetadataValue.float(round(coverage, 2)),
+            "universe": MetadataValue.text(universe),
+            "primary_key": MetadataValue.text(", ".join(expected_key)),
+            "source": MetadataValue.text("gold_schema.economy_<country>"),
+            "tables": MetadataValue.text(", ".join(expected_tables)),
+        }
+    )
+
+
 # ── The two FEATURE pools: pool__ta and pool__fa ─────────────────────────────────
 #
 # Both are one gold table sliced to this universe and re-keyed onto `pool__basic`'s
@@ -546,5 +631,6 @@ feature_pool_assets: List[Callable] = [
 assets: List[Callable] = [
     unified_pool_basic,
     unified_pool_targets,
+    unified_pool_economy,
     *feature_pool_assets,
 ]

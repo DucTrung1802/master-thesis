@@ -105,8 +105,8 @@
 > Handoff notes. **Status (2026-08-05): ✅ PHASE 5 IS DONE — THERE IS NO LONGER A SECOND
 > WAY TO RUN ANYTHING.** `src/main.py`, `DataPreprocessor.ingest_{bronze,silver,gold}_data`,
 > `_run_layer` and all 41 `data_quality_*` switch keys were **deleted on 2026-08-05**, and
-> `src/data_postprocessor/` with them. **73 assets** (19 landing + 20 bronze + 20 silver +
-> 10 gold + 4 unified), every DB table in the four schemas covered. Selection IS the run
+> `src/data_postprocessor/` with them. **74 assets** (19 landing + 20 bronze + 20 silver +
+> 10 gold + 5 unified), every DB table in the four schemas covered. Selection IS the run
 > plan, and now it is the only one. Verify anything before acting on it: the code is the
 > source of truth.
 >
@@ -122,7 +122,7 @@
 > ```
 > src/orchestration/
 >   definitions.py  resources.py  _bootstrap.py  enabled.py  config.json
->   assets/         scrape · bronze · silver · gold · unified   ← the 73 assets
+>   assets/         scrape · bronze · silver · gold · unified   ← the 74 assets
 >   preprocessor/   preprocessor.py + CONTEXT.md                ← the transform library
 > ```
 >
@@ -174,7 +174,7 @@ PARTITIONS of two assets, not 320 assets. The remaining 61 map to ~55-65 assets.
 
 ## 2. What exists — LANDING + BRONZE complete, silver started (2026-08-01)
 
-**73 assets: 19 landing + 20 bronze + 20 silver + 10 gold + 4 unified.** Every scraper
+**74 assets: 19 landing + 20 bronze + 20 silver + 10 gold + 5 unified.** Every scraper
 lands to `raw_data/` as an asset ([assets/scrape.py](assets/scrape.py)); every
 bronze ingest leaf is an asset ([assets/bronze.py](assets/bronze.py), 20 leaves → 25
 tables); silver has twenty ([assets/silver.py](assets/silver.py)), gold ten
@@ -231,7 +231,7 @@ raw/cafef_financials[t] ─► bronze/cafef_financials ─► silver/cafef_finan
 | `bronze` | **all 20 ingest leaves** (25 tables) | — |
 | `silver` | `economy` (long fact), `economy_series` (dimension), `bonds`/`funds`/`forex` (TradingView projections), `stock_market` (4 index tabs), `stocks_basic` (6 sources), `cafef_financials_bank` (quarterly), `stocks_basic_financials_bank` (as-of daily), `…_fa` (+26 indicators) | — |
 | `gold` | `economy` (wide, as-of), `bonds`/`funds`/`forex` (wide, unfilled), `stock_market` (wide, unfilled), `stocks` (price panel, no features), `stocks_ta` (+ the ~900-column TA block), `stocks_financials_bank_fa` (feature panel), `news_{weekly,daily}_panel` | — |
-| `unified` | `pool__basic`, `pool__targets`, `pool__ta`, `pool__fa` | **3** — `VCB` / `BANK` / `ALL`, the universe |
+| `unified` | `pool__basic`, `pool__targets`, `pool__economy` (19 country tables), `pool__ta`, `pool__fa` | **3** — `VCB` / `BANK` / `ALL`, the universe |
 
 ### ⚠️ The edges, read out of the code (2026-07-31 correction)
 
@@ -444,7 +444,7 @@ split across the two modules.
 
 | claim | how it was checked | result |
 |---|---|---|
-| the flat `src/` layout can be imported by Dagster | `dagster definitions validate` | passes, **73 assets** (19 landing + 20 bronze + 20 silver + 10 gold + 4 unified), all code locations OK |
+| the flat `src/` layout can be imported by Dagster | `dagster definitions validate` | passes, **74 assets** (19 landing + 20 bronze + 20 silver + 10 gold + 5 unified), all code locations OK |
 | partitions resolve | reading the definitions back | TV **9**, pdfs **100**, financials **2** (`HOSE_VCB`, `HOSE_ACB`) |
 | the index scrape assets run | `--select "group:cafef_index"` | 4/4 green |
 | the TradingView path works incl. `build_unblocked` | `--select "raw/trading_view_collected_links"` | green, rewrote `all_links_2026-06-26.csv` (313 KB) |
@@ -829,7 +829,7 @@ this for "must never load in this repo".
 }
 ```
 
-All 73 assets are listed in the file as a menu, grouped by the asset's own Dagster group
+All 74 assets are listed in the file as a menu, grouped by the asset's own Dagster group
 (trading_view, cafef, cafef_index, cafef_filings, simplize, gics, bronze, silver, gold,
 unified), with `//` comment keys
 marking the expensive ones (same comment convention as `switch_config.json`).
@@ -839,7 +839,7 @@ default the change was made to remove.
 
 ### ⚠️ Everything is ON as of 2026-08-06, and that is the intended resting state
 
-**All 73 assets and every partition are `true`.** The file spent 2026-08-05 with one
+**All 74 assets and every partition are `true`.** The file spent 2026-08-05 with one
 group and one partition enabled, which is a fine way to keep a specific run honest and a
 bad way to leave a repo: the UI showed one asset, and "which module do I want today" had
 no answer without a config edit first. Level 1 is the lever — *selection is the run
@@ -910,7 +910,7 @@ Behaviour, all verified:
 | **every partition of one owner `false`** | **raises** — zero partitions is unmaterialisable; disable the ASSET instead |
 | **`--partition stocks` when `@stocks` is false** | `DagsterUnknownPartitionError`, before any work |
 | malformed JSON | **raises** — never read as "disable everything" |
-| file absent | all 73 assets, all partitions — absent means "no opinion", not "all off" |
+| file absent | all 74 assets, all partitions — absent means "no opinion", not "all off" |
 | file with a **BOM** | handled (`utf-8-sig`) |
 
 The last three are direct lessons from `switch_config.json`:
@@ -953,7 +953,7 @@ RUN_SUCCESS
 ```
 
 **Sanity check without running anything:** `dagster definitions validate` (it should
-report 73 assets and "All code locations passed validation").
+report 74 assets and "All code locations passed validation").
 
 ### ✅ Phase 1a — the whole BRONZE layer, 20 assets (2026-08-01)
 
@@ -1528,6 +1528,7 @@ slice, cut into the **feature groups a model selects over**:
 ```
 silver/stocks_basic ──► unified_vcb/pool__basic     4,235 × 38, PK (date, exchange, ticker)
                               └──► unified_vcb/pool__targets   4,235 × 7, PK (date, exchange, ticker)
+gold/economy_<country> ──► unified_vcb/pool__economy_<country> ×19, PK (date, exchange, ticker)
                         pool__ta / pool__macro / pool__calendar   ⚠️ NOT ASSETS YET
 ```
 
@@ -1550,6 +1551,13 @@ dagster asset materialize -f src/orchestration/definitions.py --select "group:un
 `ingest_bronze_data` runs — so naming `unified_schema_vcb` there is what brings it into
 existence. `_ingest_unified_pool_basic` creates it too, so the method is still correct
 from a notebook or `main.py`.
+
+✅ **`pool__economy` is a Dagster asset (2026-08-07).** It materialises all nineteen
+`pool__economy_<country>` tables from the matching causal, as-of-filled
+`gold.economy_<country>` panels on `pool__basic`'s trading-day spine. A single table
+would recreate the 3,784-column panel gold split to remain under PostgreSQL's 1,600-column
+limit. Each table carries the same `(date, exchange, ticker)` primary key and deliberately
+does not forward-fill again: publication lag and staleness are gold's contract.
 
 ⚠️ **`CREATE TABLE AS`, not a pandas round-trip, and that is type fidelity not taste.**
 psycopg2 returns a PostgreSQL `numeric` as a Python `Decimal`, which lands in a DataFrame
@@ -1589,7 +1597,7 @@ dagster asset materialize -f src/orchestration/definitions.py --select "group:un
 | `ALL` | every ticker silver holds, **781** | 2,388,368 × 38 |
 
 ⚠️ **THE ASSET KEYS CHANGED: `unified_vcb/pool__x` → `unified/pool__x`**, and the group
-with them (`unified_vcb` → `unified`). Four assets × three partitions where there were
+with them (`unified_vcb` → `unified`). Five assets × three partitions where there were
 two assets. Run history under the old keys does not carry over.
 
 ⚠️ **`ALL` and `BANK` are SENTINELS, and the library already knew.**
@@ -1859,7 +1867,7 @@ return to sequential execution.
   already exists in `src/`. This is what made the migration incremental rather than a
   rewrite. ⚠️ **The corollary is now load-bearing: `src/data_preprocessor` CANNOT be
   deleted.** Since `main.py` went, this package is the only caller of those methods —
-  but it is still only the *caller*. Deleting `data_preprocessor` would leave 73 assets
+  but it is still only the *caller*. Deleting `data_preprocessor` would leave 74 assets
   wrapping nothing. Making orchestration self-contained means MOVING ~6,200 lines into
   it, not removing a directory.
 - **Assets are generated from a spec table**, not copy-pasted — `TABS` in
