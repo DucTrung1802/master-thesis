@@ -29,6 +29,20 @@
 > }
 > ```
 >
+> ## 🌏 THE ECONOMY CHAIN IS COMPLETE AT 19 COUNTRIES (2026-08-06)
+>
+> **All four stages, end to end: scrape → bronze → silver → gold.** The scrape had been
+> complete since earlier that day; **the three database layers were still holding the
+> 5-country universe from 2026-08-01** and nothing said so — see §*…AND THE DATABASE
+> LAYERS DID NOT NOTICE FOR A DAY*. Rebuilt: **1,877,742 rows / 3,784 series / 19
+> countries**, identical at bronze, silver and gold.
+>
+> ⚠️ **`gold.economy` is now NINETEEN TABLES, `gold.economy_<country>`** — 3,852 columns
+> is over PostgreSQL's 1,600 limit. They share one calendar (6,939 rows each) and keep
+> globally unique column names, so joining them on `date` rebuilds the single panel.
+> The old 5-country `gold.economy` was **dropped** the same day, after checking that all
+> 1,034 of its series appear in the nineteen (they do — 0 missing).
+>
 > ## 🔚 `src/switch_config.json` IS DELETED (2026-08-06)
 >
 > **The last config file outside this package is gone**, and with it the last way to run
@@ -186,8 +200,8 @@ gics_structure                                                 (no TradingView d
 ── and every landing asset feeds the bronze table whose folder it writes ──
 
 raw/trading_view_data[economy] ─► bronze/trading_view_economy ─┬─► silver/economy ──────┐
-                                                               │                        ├─► gold/economy
-                                                               └─► silver/economy_series┘   (wide, as-of)
+                                                               │                        ├─► gold/economy_<country>
+                                                               └─► silver/economy_series┘   (wide, as-of, ×19)
 
 raw/trading_view_data[c]       ─► bronze/trading_view_<c>   ─► silver/<c>   ─► gold/<c>
    for c in {bonds, funds, forex}                               (long)          (wide, unfilled)
@@ -567,6 +581,37 @@ link-scrape defects"); on 2026-08-06 that put **206 of 209 leaves exactly on the
 count**, the remaining three being USA `gdp`/`labor`/`money` short by 6 symbols total
 out of 3,853 — the tail of the lazy scroll on the three longest lists.
 
+#### ⚠️ …AND THE DATABASE LAYERS DID NOT NOTICE FOR A DAY (found + fixed 2026-08-06)
+
+**"The scrape is complete" was true and meant less than it looks.** On 2026-08-06 the
+disk held 3,851 series across 19 countries and **bronze held 1,034 across 5** — the
+2026-08-01 state, untouched by either the 19-country expansion or the two silent
+link-scrape fixes. Fourteen countries were absent from `bronze.trading_view_economy`
+entirely, and the USA sat at **461 of 1,460**, i.e. bronze predated even the
+`minimize_window` 50-row truncation fix. Silver and gold inherited all of it.
+
+Nothing was broken and nothing raised. `landed()` was green because the folders are
+full; every asset that ran, ran fine; and this file's own tables said *579,459 rows /
+1,034 series*, which was accurate — for the table, not for the data on disk. **A scrape
+and its ingests are separate assets, so "re-scraped" never implies "re-ingested."**
+
+| | disk | bronze/silver/gold, before | after the rebuild |
+|---|---|---|---|
+| countries | 19 | **5** | **19** |
+| series | 3,851 | **1,034** | **3,784** |
+| `silver.economy` rows | — | 579,459 | **1,877,742** |
+
+⚠️ **3,784, not 3,851, and the difference is data not loss.** 105 of the CSVs on disk
+are **header-only** — the legitimately-empty leaves this file already documents
+(`futures/vietnam/*`, `bonds/vietnam/corporate`, `economy/*/health`), which is why "0
+rows" can never be the failure test on its own. Bronze, silver and gold all agree on
+3,784 exactly.
+
+⚠️ **The check that would have caught this is one query, and it is not `landed()`:**
+compare `COUNT(DISTINCT ticker)` in bronze against the file count in
+`raw_data/trading_view/data/<class>/`. Same shape as the per-series max-date check §5
+*Gotchas* prescribes for freshness — the folder is never the answer, the table is.
+
 ### How it got to 19 COUNTRIES, from 5 (2026-08-05)
 
 Vietnam, USA, China, Japan and South Korea were joined by fourteen chosen for their
@@ -936,27 +981,76 @@ were stale bronze catching up with raw data the scrapers had already written —
 2,523,196, `cafef_prop_trading` 64,139 → 73,810 — and each now equals its raw folder
 row-for-row.
 
-### SILVER + GOLD — the economy chain (2026-08-01)
+### SILVER + GOLD — the economy chain (2026-08-01, rebuilt at 19 countries 2026-08-06)
 
 Three assets, and the split between them is the whole point:
 
 ```
-bronze/trading_view_economy
-   ├─► silver/economy          LONG fact, PK (exchange, ticker, date), 579,459 rows, 0 nulls
-   └─► silver/economy_series   DIMENSION, PK (exchange, ticker), 1,034 rows + derived frequency
+bronze/trading_view_economy      1,877,742 rows, 3,784 series, 19 countries
+   ├─► silver/economy          LONG fact, PK (exchange, ticker, date), 1,877,742 rows, 0 nulls
+   └─► silver/economy_series   DIMENSION, PK (exchange, ticker), 3,784 rows + derived frequency
             └──────┬──────────►
-   silver/economy ─┴─► gold/economy   WIDE, 1 row per BUSINESS DAY, 1,034 columns
+   silver/economy ─┴─► gold/economy_<country>   WIDE, 1 row per BUSINESS DAY, ×19
 ```
 
 ```powershell
 dagster asset materialize -f src/orchestration/definitions.py --select "group:silver,group:gold"
 ```
 
-| asset | result |
-|---|---|
-| `silver/economy` | 579,459 rows / 1,034 series — **exactly the bronze row count**, 0 nulls, 17.6 s |
-| `silver/economy_series` | 1,034 series: 500 monthly, 226 quarterly, 206 annual, 66 daily, 32 weekly, 4 irregular, 3.8 s |
-| `gold/economy` | **6,935 business days × 1,034 series, 88.6% filled** (long form is 5.8% of that grid), 13.1 s |
+| asset | result (2026-08-06) | was (2026-08-01, 5 countries) |
+|---|---|---|
+| `silver/economy` | **1,877,742 rows / 3,784 series** — exactly the bronze row count, 0 nulls | 579,459 / 1,034 |
+| `silver/economy_series` | **3,784 series** | 1,034 |
+| `gold/economy_<country>` | **19 tables × 6,939 business days**, 3,784 series total, 73-93% filled | one table, 6,935 × 1,034 |
+
+### ⚠️ `gold.economy` IS NINETEEN TABLES — a hard limit, not a preference (2026-08-06)
+
+The 19-country expansion asked the wide panel for **3,852 columns**. PostgreSQL's
+maximum is **1,600**, and at REAL a 3,851-value row is **15,404 bytes** against a
+usable width of ~8,160. **Both ceilings, at once** — and the lever `gold.forex` pulled
+at 328 series (carry one measure instead of 13) was already spent here, because economy
+has only ever carried `value`. So the table splits on `country`, the one key that
+divides the series set cleanly.
+
+```
+gold_schema.economy_usa               1,438 series   ← 1,439 of 1,600 columns
+gold_schema.economy_united_kingdom      182
+…17 more…
+gold_schema.economy_vietnam              88
+                                      ─────
+                                      3,784 = silver.economy_series exactly
+```
+
+⚠️ **TWO CHOICES KEEP THIS A STORAGE DETAIL RATHER THAN A SHAPE CHANGE**, and without
+either one it would be a downgrade:
+
+1. **ONE SHARED BUSINESS-DAY CALENDAR**, computed before the split, so all 19 tables
+   have an identical `date` index — **6,939 rows each, verified**. Joining them is an
+   inner join on one key, not an outer join across 19 ranges. `gold_economy` **asserts
+   this**: nineteen tables that disagree on their calendar cannot be rejoined, and the
+   disagreement would be invisible table by table.
+2. **THE COLUMN NAMES ARE UNCHANGED and still lead with the country**
+   (`vietnam__economy__gdp__economics__vngdpyy`). They stay globally unique, so joining
+   all 19 on `date` reproduces exactly the panel this used to be, plus the fourteen
+   countries it never had. Dropping the now-redundant country prefix would have saved 9
+   characters and made `gdp__economics__usgdp` collide with its Vietnamese namesake the
+   first time anyone joined two panels. The longest name measures **57 bytes** against
+   the 63-byte identifier limit, so nothing had to be shortened.
+
+⚠️ **THE CEILING IS NOW CHECKED IN CODE, BEFORE THE WRITE.**
+`_helper_gold_economy_country_panel` raises if a country needs more than
+`PG_MAX_COLUMNS`, naming the country and the remedy (split by `category` next). The
+width of this table **is a function of the data** — that is exactly how the single-table
+version broke — so the next time it happens it fails named, not as a bare `tables can
+have at most 1600 columns` from the driver halfway through a layer build. **The USA is
+the one to watch: 1,439 of 1,600.**
+
+✅ **THE PRE-SPLIT `gold.economy` WAS DROPPED (2026-08-06)** — 6,935 × 1,035, ending
+2026-07-31, the five-country universe. **Checked before dropping, not assumed:** all
+**1,034 of its series appear among the 3,784** in the nineteen panels (0 missing) and
+its date range is covered, so it was a strict subset and nothing was lost. A stale table
+that still looks live is this package's recurring failure mode, which is why it went
+rather than staying as a "just in case".
 
 ⚠️ **The wide panel is in GOLD, not silver, and that is a layering decision made on
 measurements.** As silver it was 5.8% filled — but the nulls cost ~1 bit each, so the
@@ -1384,12 +1478,14 @@ write nothing.
 
 ### Gold housekeeping — what the schema holds, and what it is allowed to hold
 
-**Ten tables**, and every one of them is something the code can still build — the
-schema and the pipeline agree, which is the point of the housekeeping.
+**Twenty-eight tables — nine plus the nineteen economy panels** — and every one of them
+is something the code can still build. The schema and the pipeline agree, which is the
+point of the housekeeping.
 
 | table | shape | built by | state |
 |---|---|---|---|
-| `economy` | 6,935 × 1,035 | **asset** + leaf | current (wide, as-of filled) |
+| `economy_<country>` ×19 | 6,939 × (89…1,439) | **asset** | current — wide, as-of filled, 3,784 series (2026-08-06) |
+| ~~`economy`~~ | ~~6,935 × 1,035~~ | — | **SUPERSEDED + DROPPED 2026-08-06** — the 5-country panel; every series of it is in the nineteen |
 | `stock_market` | 6,339 × 163 | **asset** only | current (wide, unfilled) |
 | `stocks` | 2,388,368 × 42 | **asset** + leaf | current — the price panel, no features (2026-08-03) |
 | `stocks_ta` | 2,678,167 × 935 | **asset** only | ⚠️ the RENAME of the old `stocks`; the builder is current, the TABLE is not |

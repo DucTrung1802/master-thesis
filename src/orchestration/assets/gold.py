@@ -44,7 +44,17 @@ allowed to make them:
 * **staleness cap** — but bounded per frequency, so a series that stopped reporting in
   2010 does not read as live data in 2026.
 
-⚠️ **`gold.economy` used to be something else** — the generic `_ingest_gold_table`
+⚠️ **`gold.economy` IS NOW NINETEEN TABLES, `gold.economy_<country>`** (2026-08-06), and
+the reason is a hard limit rather than a preference: the scrape went from 5 countries to
+19, i.e. 1,034 series to 3,851, and one column per series is 3,852 columns against
+PostgreSQL's maximum of 1,600 (and a 15,404-byte REAL row against a ~8,160-byte usable
+width). Every panel shares ONE business-day calendar and keeps the country in its column
+names, so joining the nineteen on `date` rebuilds exactly the single panel — that
+equivalence is what makes the split a storage detail rather than a shape change. The
+asset asserts the shared calendar; `_helper_gold_economy_country_panel` asserts the
+column ceiling per country, so outgrowing it fails named instead of as a driver error.
+
+⚠️ **`gold.economy` used to be something else again** — the generic `_ingest_gold_table`
 output, i.e. the LONG grain with per-series TA features (579,459 x 16: returns,
 volatility, rolling stats), with this panel beside it as `gold.economy_panel`. Two gold
 tables for one asset is one too many, so the wide panel took the name (2026-08-01).
@@ -84,11 +94,13 @@ from orchestration.resources import PreprocessorResource
         AssetKey(["silver", "economy_series"]),
     ],
     description=(
-        "silver.economy + silver.economy_series → gold.economy: ONE ROW PER "
-        "BUSINESS DAY (PK `date`), one column per series named "
-        "`{country}__{scrape_main_type}__{category}__{exchange}__{ticker}`. As-of "
-        "filled with a per-frequency publication lag and staleness cap. Columns are "
-        "REAL, not DOUBLE — 1,034 float8 would exceed PostgreSQL's ~8 kB row limit."
+        "silver.economy + silver.economy_series → gold.economy_<country>: ONE TABLE "
+        "PER COUNTRY, one row per BUSINESS DAY (PK `date`), one column per series "
+        "named `{country}__{scrape_main_type}__{category}__{exchange}__{ticker}`. "
+        "As-of filled with a per-frequency publication lag and staleness cap. "
+        "⚠️ It is 19 tables because 3,851 series is 3,852 columns against "
+        "PostgreSQL's hard limit of 1,600. All share ONE calendar and keep globally "
+        "unique column names, so joining them on `date` rebuilds the single panel."
     ),
 )
 def gold_economy(
@@ -98,29 +110,65 @@ def gold_economy(
         prep._ingest_gold_economy()
 
         with prep._database_driver._cursor_ctx() as cur:
-            cur.execute("SELECT COUNT(*) FROM gold_schema.economy")
-            rows = int(cur.fetchone()[0])
+            # `economy\_%` deliberately excludes the pre-split `economy` table: it is
+            # not written any more, and counting it here would inflate the totals with
+            # a stale five-country panel.
             cur.execute(
-                "SELECT COUNT(*) FROM information_schema.columns "
-                "WHERE table_schema = 'gold_schema' AND table_name = 'economy'"
+                "SELECT t.table_name, "
+                "  (SELECT COUNT(*) FROM information_schema.columns c "
+                "   WHERE c.table_schema = t.table_schema "
+                "     AND c.table_name = t.table_name) "
+                "FROM information_schema.tables t "
+                r"WHERE t.table_schema = 'gold_schema' AND t.table_name LIKE 'economy\_%' "
+                "ORDER BY 2 DESC"
             )
-            columns = int(cur.fetchone()[0])
-            cur.execute("SELECT MIN(date), MAX(date) FROM gold_schema.economy")
+            panels = [(name, int(cols) - 1) for name, cols in cur.fetchall()]
+            if not panels:
+                raise RuntimeError(
+                    "gold economy wrote no economy_<country> table. Expected one per "
+                    "country in silver.economy."
+                )
+
+            rows_by_table = {}
+            for name, _series in panels:
+                cur.execute(f'SELECT COUNT(*) FROM gold_schema."{name}"')
+                rows_by_table[name] = int(cur.fetchone()[0])
+
+            widest = panels[0][0]
+            cur.execute(f'SELECT MIN(date), MAX(date) FROM gold_schema."{widest}"')
             first, last = cur.fetchone()
             cur.execute("SELECT COUNT(*) FROM silver_schema.economy")
             silver_rows = int(cur.fetchone()[0])
 
+    # ⚠️ THE SHARED CALENDAR IS THE WHOLE POINT OF THE SPLIT, so it is asserted rather
+    # than assumed. Nineteen tables that disagree on their date index cannot be joined
+    # back into one panel, and the disagreement would be invisible per table.
+    distinct_rows = set(rows_by_table.values())
+    if len(distinct_rows) != 1:
+        raise RuntimeError(
+            f"gold economy panels disagree on their calendar: {sorted(distinct_rows)} "
+            f"row counts across {len(panels)} tables. They are reindexed onto one "
+            f"business-day range, so this must be a single number. Per table: "
+            f"{rows_by_table}"
+        )
+
+    rows = distinct_rows.pop()
+    total_series = sum(series for _name, series in panels)
     context.log.info(
-        f"gold.economy: {rows} business days × {columns - 1} series "
-        f"(silver.economy holds {silver_rows} observations)"
+        f"gold.economy_*: {len(panels)} country panels, {rows} business days each, "
+        f"{total_series} series total (silver.economy holds {silver_rows} observations)"
     )
     return MaterializeResult(
         metadata={
-            "rows": rows,
-            "series": columns - 1,
+            "panels": len(panels),
+            "rows_per_panel": rows,
+            "series_total": total_series,
+            "widest_panel": MetadataValue.text(f"{widest} ({panels[0][1]} series)"),
             "silver_observations": silver_rows,
             "date_range": MetadataValue.text(f"{first} → {last}"),
-            "table": MetadataValue.text("gold_schema.economy"),
+            "tables": MetadataValue.text(
+                ", ".join(f"{n} ({s})" for n, s in sorted(panels))
+            ),
         }
     )
 

@@ -3935,6 +3935,33 @@ class DataPreprocessor:
     )
     ECONOMY_PANEL_NAME_SEP = "__"
 
+    # ── gold.economy is NINETEEN TABLES, one per country (2026-08-06) ────────────
+    #
+    # `gold_schema.economy_<country>`, all on ONE shared business-day calendar and
+    # carrying the SAME column names the single table used.
+    #
+    # ⚠️ IT IS SPLIT BECAUSE 3,851 SERIES CANNOT BE 3,852 COLUMNS. The economy scrape
+    # went from 5 countries to 19 on 2026-08-06 and the wide panel broke BOTH of
+    # PostgreSQL's ceilings at once: 3,852 columns against a hard limit of 1,600, and
+    # a REAL-typed row of 15,404 bytes against a ~8,160-byte usable row width. The
+    # lever `gold.forex` pulled at 328 series — carry one measure instead of 13 — was
+    # already spent here, because economy has only ever carried `value`.
+    #
+    # ⚠️ THE SHARED CALENDAR AND THE UNCHANGED COLUMN NAMES ARE WHAT KEEP THIS FROM
+    # BEING A DOWNGRADE. Every table has an identical `date` index, and the column
+    # name still LEADS WITH THE COUNTRY, so the names stay globally unique and
+    # joining all nineteen on `date` reproduces exactly the panel this used to be —
+    # plus the fourteen countries it never had. Per-country calendars would have made
+    # that an outer join across nineteen different date ranges, and dropping the now
+    # redundant country prefix would have made `gdp__economics__usgdp` collide with
+    # its Vietnamese namesake the moment anyone joined two of them.
+    GOLD_ECONOMY_TABLE_PREFIX = "economy_"
+
+    # PostgreSQL's hard ceiling: a table cannot be created with more columns than this,
+    # whatever the types. For a wide REAL panel the ~8,160-byte usable ROW width bites
+    # at 2,040 columns, so staying under this is necessary but not sufficient.
+    PG_MAX_COLUMNS = 1600
+
     # PostgreSQL truncates identifiers over 63 BYTES silently, and two names that
     # truncate alike collide. Today's longest is 57, but the vocabulary allows
     # 14 + 7 + 10 + 9 + 20 + 8 separators = 68 - the longest ticker simply does not
@@ -4015,10 +4042,26 @@ class DataPreprocessor:
         return names
 
     def _ingest_gold_economy(self) -> None:
-        """`silver.economy` + `silver.economy_series` -> `gold.economy`:
-        **one row per business day**, one column per series, AS-OF filled.
+        """`silver.economy` + `silver.economy_series` -> `gold.economy_<country>`:
+        **one table per country**, one row per business day, one column per series,
+        AS-OF filled.
 
-        ⚠️ **THIS IS THE ONLY GOLD ECONOMY TABLE.** Until 2026-08-01 `gold.economy` was
+        ⚠️ **NINETEEN TABLES SINCE 2026-08-06, AND THE REASON IS A HARD LIMIT, NOT A
+        PREFERENCE.** This was one `gold.economy` table while the scrape covered five
+        countries and 1,034 series. The 19-country expansion took it to 3,851 series,
+        i.e. 3,852 columns against PostgreSQL's hard maximum of 1,600 — and, at REAL,
+        a 15,404-byte row against a usable width of ~8,160. Both ceilings, at once.
+        See `GOLD_ECONOMY_TABLE_PREFIX` for why the calendar is shared and the column
+        names still carry the country.
+
+        ⚠️ **THE OLD SINGLE `gold.economy` IS NOT WRITTEN ANY MORE, AND THIS METHOD DOES
+        NOT DROP IT.** The pre-split table — five countries, 1,034 series, a strict
+        subset of what the nineteen now hold — was dropped by hand on 2026-08-06. A
+        rebuild will not recreate it. If it reappears, something is calling the
+        pre-split code path; drop it deliberately rather than leaving a stale table that
+        still looks live.
+
+        ⚠️ Until 2026-08-01 `gold.economy` was
         the generic `_ingest_gold_table("economy")` output instead — the LONG grain with
         per-series TA features (579,459 rows x 16 columns: returns, volatility, rolling
         stats), and the wide panel lived beside it as `gold.economy_panel`. Two gold
@@ -4117,11 +4160,6 @@ class DataPreprocessor:
         # A lag can push two observations of one series onto the same day; the later
         # REFERENCE period wins, which is what a reader on that day would see.
         df = df.sort_values(["series", "available_from", "date"])
-        expected_cells = df.groupby(["series", "available_from"], sort=False).ngroups
-
-        wide = df.pivot_table(
-            index="available_from", columns="series", values="value", aggfunc="last"
-        )
 
         # ⚠️ THE PANEL STOPS AT TODAY. 47 series carry projections with reference dates
         # out to 2036; on a business-day calendar those became 2,685 rows that were 2.3%
@@ -4129,19 +4167,98 @@ class DataPreprocessor:
         # look-ahead join possible. Projections stay in bronze and silver, where they are
         # raw data; the MODEL panel is "what was knowable by then", so it ends now.
         last_day = pd.offsets.BusinessDay().rollback(pd.Timestamp.today().normalize())
-        calendar = pd.bdate_range(wide.index.min(), last_day, name="date")
+
+        # ⚠️ ONE CALENDAR FOR EVERY COUNTRY, COMPUTED BEFORE THE SPLIT. Reindexing each
+        # panel onto this same range is what makes the nineteen tables joinable on
+        # `date` alone — see GOLD_ECONOMY_TABLE_PREFIX.
+        calendar = pd.bdate_range(df["available_from"].min(), last_day, name="date")
+
+        # Per-frequency staleness cap, so the carry cannot outlive the series. Built
+        # once over the whole dimension; each panel takes the columns it holds.
+        staleness = (
+            dim.assign(series=self._build_economy_panel_columns(dim))
+            .set_index("series")["frequency"]
+            .map(self.ECONOMY_MAX_STALENESS_BDAYS)
+            .fillna(45)
+            .astype(int)
+        )
+
+        countries = sorted(df["country"].dropna().unique())
+        if not countries:
+            raise PipelineError(
+                f"{SILVER_SCHEMA}.economy carries no country, so the per-country "
+                f"panels cannot be named. Re-run the silver economy series dimension."
+            )
+
+        totals = {"series": 0, "raw": 0, "filled": 0}
+        for country in countries:
+            written = self._helper_gold_economy_country_panel(
+                df[df["country"] == country],
+                country=country,
+                calendar=calendar,
+                last_day=last_day,
+                staleness=staleness,
+            )
+            for key in totals:
+                totals[key] += written[key]
+
+        self._logger.log_info(
+            f"gold economy: {len(countries)} country panel(s), {totals['series']} "
+            f"series total on {len(calendar)} business days - {totals['raw']} "
+            f"observations visible after the publication lag, {totals['filled']} cells "
+            f"after the as-of carry."
+        )
+
+    def _helper_gold_economy_country_panel(
+        self,
+        df: pd.DataFrame,
+        country: str,
+        calendar: pd.DatetimeIndex,
+        last_day: pd.Timestamp,
+        staleness: pd.Series,
+    ) -> dict:
+        """Pivot ONE country's rows into `gold.economy_<country>` and write it.
+
+        `df` arrives already merged with the dimension, named, lagged and sorted by
+        `_ingest_gold_economy`; this is only the part that has to happen per table.
+        Returns the counts that method sums into its summary line.
+        """
+        table = f"{self.GOLD_ECONOMY_TABLE_PREFIX}{self._sanitize_identifier(country)}"
+
+        expected_cells = df.groupby(["series", "available_from"], sort=False).ngroups
+        wide = df.pivot_table(
+            index="available_from", columns="series", values="value", aggfunc="last"
+        )
+
+        # ⚠️ CHECK THE CEILING HERE, BEFORE WRITING. This table is one column per
+        # series, so ITS WIDTH IS A FUNCTION OF THE DATA — which is precisely how the
+        # single-table version broke when the scrape went 5 countries -> 19 and asked
+        # for 3,852 columns. A country that outgrows the limit has to fail here, named
+        # and with the remedy attached, rather than as a bare `tables can have at most
+        # 1600 columns` from the driver halfway through a layer build. The USA is the
+        # one to watch: it is already 1,461 of the 1,600.
+        if len(wide.columns) + 1 > self.PG_MAX_COLUMNS:
+            raise PipelineError(
+                f"{GOLD_SCHEMA}.{table} needs {len(wide.columns) + 1} columns (date + "
+                f"{len(wide.columns)} series) and PostgreSQL allows "
+                f"{self.PG_MAX_COLUMNS}. Split this country further — by `category`, "
+                f"the next natural key — or carry it long."
+            )
+
         wide = wide.reindex(calendar)
 
         # Every observation the lag made visible on or before `last_day` must survive the
         # reindex. This is the invariant the weekend bug broke, so it is checked, not
         # assumed.
-        expected_in_range = df.loc[
-            df["available_from"] <= last_day, ["series", "available_from"]
-        ].drop_duplicates().shape[0]
+        expected_in_range = (
+            df.loc[df["available_from"] <= last_day, ["series", "available_from"]]
+            .drop_duplicates()
+            .shape[0]
+        )
         landed = int(wide.notna().sum().sum())
         if landed != expected_in_range:
             raise PipelineError(
-                f"gold.economy lost {expected_in_range - landed} observation(s) "
+                f"{GOLD_SCHEMA}.{table} lost {expected_in_range - landed} observation(s) "
                 f"in the reindex: {expected_in_range} distinct (series, available_from) "
                 f"pairs fall on or before {last_day.date()}, but only {landed} cells "
                 f"landed. An availability date that is not a business day is the usual "
@@ -4150,19 +4267,11 @@ class DataPreprocessor:
         dropped_future = expected_cells - expected_in_range
         if dropped_future:
             self._logger.log_info(
-                f"gold economy: {dropped_future} observation(s) have an availability "
+                f"gold.{table}: {dropped_future} observation(s) have an availability "
                 f"date after {last_day.date()} (projections) and are not in the panel; "
-                f"they remain in silver.economy."
+                f"they remain in {SILVER_SCHEMA}.economy."
             )
 
-        # Per-frequency staleness cap, so the carry cannot outlive the series.
-        staleness = (
-            dim.assign(series=self._build_economy_panel_columns(dim))
-            .set_index("series")["frequency"]
-            .map(self.ECONOMY_MAX_STALENESS_BDAYS)
-            .fillna(45)
-            .astype(int)
-        )
         raw_cells = int(wide.notna().sum().sum())
         for limit, cols in staleness.groupby(staleness):
             present = [c for c in cols.index if c in wide.columns]
@@ -4176,10 +4285,11 @@ class DataPreprocessor:
         filled = int(wide.drop(columns=["date"]).notna().sum().sum())
         cells = len(wide) * (len(wide.columns) - 1)
         self._logger.log_info(
-            f"gold economy: {len(wide)} business days x {len(wide.columns) - 1} series "
-            f"- {raw_cells} observations visible after the publication lag, "
-            f"{filled} cells after the as-of carry ({100.0 * filled / max(cells, 1):.1f}% "
-            f"filled, from {100.0 * raw_cells / max(cells, 1):.1f}%)."
+            f"gold.{table}: {len(wide)} business days x {len(wide.columns) - 1} series "
+            f"- {raw_cells} observations visible after the publication lag, {filled} "
+            f"cells after the as-of carry "
+            f"({100.0 * filled / max(cells, 1):.1f}% filled, from "
+            f"{100.0 * raw_cells / max(cells, 1):.1f}%)."
         )
 
         overrides: dict[str, str] = {"date": DataType.DATE()}
@@ -4187,15 +4297,21 @@ class DataPreprocessor:
             if col != "date":
                 overrides[col] = "REAL"
 
-        self._database_driver.drop_table(GOLD_SCHEMA, "economy")
+        self._database_driver.drop_table(GOLD_SCHEMA, table)
         self._helper_save_pandas_table_to_database(
             schema_name=GOLD_SCHEMA,
-            table_name="economy",
+            table_name=table,
             primary_keys=["date"],
             df=wide,
             dtype_overrides=overrides,
             use_copy=True,
         )
+        return {
+            "table": table,
+            "series": len(wide.columns) - 1,
+            "raw": raw_cells,
+            "filled": filled,
+        }
 
     # ── gold.stock_market — the WIDE index panel ─────────────────────────────────
     #
