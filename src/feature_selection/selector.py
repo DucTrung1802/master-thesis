@@ -284,6 +284,13 @@ class FeatureSelector:
         exclude: columns that are never candidates (identity, other targets).
             Non-numeric and constant columns are excluded automatically.
         max_features: cap on the pre-prune top-N carried into the correlation prune.
+            ⚠️ **`None` (the default) means no cap, and that is the honest setting.**
+            A fixed cap is the same number on a 27-channel pool and a 1,458-channel
+            one; §9i and §13c both measured all channels beating the pruned 12 in
+            every fold. It also TRUNCATES `dropped_for` — everything below the break
+            is written out as `kept=False` with no reason, so a report cannot tell
+            "redundant" from "never examined". Set an integer only to reproduce an
+            older run; `selection_cut.suitable` derives the count from the data.
         corr_threshold: absolute Spearman above which the lower-ranked of a pair is
             dropped as redundant.
         horizon: the target's forward horizon in rows — sets the CV purge gap.
@@ -307,7 +314,7 @@ class FeatureSelector:
         target: str,
         date_col: str = "date",
         exclude: Sequence[str] = (),
-        max_features: int = 20,
+        max_features: Optional[int] = None,
         corr_threshold: float = 0.9,
         horizon: int = 5,
         n_splits: int = 5,
@@ -698,7 +705,10 @@ class FeatureSelector:
                 kept.append(feature)
             else:
                 dropped[feature] = clash
-            if len(kept) >= self.max_features:
+            # ⚠️ Uncapped by default. Stopping early leaves every channel below the
+            # break indistinguishable from one examined and kept nothing — see the
+            # class docstring, and `selection_cut` for what decides the count now.
+            if self.max_features is not None and len(kept) >= self.max_features:
                 break
         return kept, dropped
 

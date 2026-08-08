@@ -18,12 +18,17 @@ configuration it was never computed for. Merging is the NEXT module's job, done
 knowingly, against the `run_id`, `target`, `lookback_d`, `grain` and `evidence` each
 file carries for that purpose.
 
-## The two filters, in order
+## The three filters, in order
 
-**1. `kept` — the run's own selection.** The ensemble ranked every channel, the
-correlation prune dropped anything at |ρ| ≥ 0.9 against a better-ranked twin, and
-`max_features` capped what survived. `kept=True` IS "the strongest features"; nothing
-is re-ranked here.
+**1. The cut — how many channels this run supports** ([selection_cut.py](selection_cut.py)).
+⚠️ **This used to be the run's own `kept` column, which meant `max_features=12`** —
+one number applied to a 27-channel pool and to a 1,458-channel one alike, and §9i and
+§13c both measured all channels beating the pruned 12 in every fold. It is now
+measured per run: a channel is a candidate if its cross-method agreement beats a
+shuffled-methods null (BH at `fdr_q`) **or** it sits before the knee of some single
+method's own score curve, and the survivors of an UNCAPPED |ρ| ≥ 0.9 prune are the
+list. **10-236 channels per run, median 40, 952 rows over 20 runs** — against 12
+everywhere before, on pools ranging from 27 channels to 1,458.
 
 **2. Ties on the ensemble score, broken by `permutation`.** The ensemble is a mean
 RANK over six methods, so exact ties are common — `volume_negotiated` and
@@ -32,16 +37,25 @@ only ranker measured OUT OF SAMPLE and is the one to believe when the methods
 disagree, so it breaks the tie; |ρ| against the target breaks a tie in that. The
 loser is dropped and named in `beat_in_tie`, never silently.
 
+**3. Nothing is re-ranked.** The ensemble order is the run's own; the cut decides
+where to stop reading it, not what it says.
+
 ## ⚠️ What a row does NOT mean
 
-**No run in the archive is a clean pass.** 18 of 22 computed no null at all; of the
-four that did, `pool__fa` scored BELOW its null's mean (z = −0.25), `bank` sat on it
-(z = +0.11), and `pool__ta` cleared its p95 bar but one shuffled draw of twenty still
-beat it (CONTEXT §12). CONTEXT §6b measured a positive out-of-sample IC on SHUFFLED
-LABELS, so a high rank in a run with `"null": null` is not evidence — it is an
-internally consistent description of noise, and §11c says so about a ranking of this
-exact shape. `evidence` carries that verdict on every row; `no_null` is the honest
-majority value.
+**No run in the archive is a clean pass.** Nineteen of the twenty computed no null at
+all, and the twentieth — `bank` — sat on its null's mean (z = +0.11, CONTEXT §13).
+CONTEXT §6b measured a positive out-of-sample IC on SHUFFLED LABELS, so a high rank in
+a run with `"null": null` is not evidence — it is an internally consistent description
+of noise, and §11c says so about a ranking of this exact shape. `evidence` carries that
+verdict on every row; `no_null` is the honest majority value.
+
+⚠️ **The two columns answer different questions and neither substitutes for the
+other.** `evidence` is the RUN's verdict against shuffled LABELS — does this pool
+predict this target at all. `kept_by` is the CHANNEL's verdict against shuffled
+METHODS — does this channel stand out within the run. A row can read
+`kept_by=consensus` and `evidence=no_null`, which means the six rankers agree about a
+channel in a run that was never shown to beat noise. Twelve of the 952 rows are
+`consensus`; all 952 sit in runs with no label null.
 
 ⚠️ **And the archive does not agree with itself.** Nineteen runs contain the same 27
 `pool__basic` channels; the most repeatedly kept one survives 9 of those 19 selections
@@ -51,13 +65,15 @@ majority value.
 import json
 import os
 import sys
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import pandas as pd
 
+from feature_selection import selection_cut
 from feature_selection.report import DEFAULT_REPORT_ROOT
 
 OUTSTANDING_FILENAME = "outstanding.csv"
+CORRELATION_FILENAME = "channel_correlation.csv"
 
 # A channel carries no note of where it came from, but the pools are DISJOINT (verified
 # across the archive: basic ∩ fa = basic ∩ ta = fa ∩ ta = ∅) and the economy columns are
@@ -76,7 +92,8 @@ POOL_BASIC_CHANNELS = frozenset({
 COLUMNS = [
     "outstanding_rank", "channel", "schema", "source_table", "grain",
     "ensemble", "permutation", "spearman_vs_target", "best_stat",
-    "tie_group_size", "beat_in_tie", "absorbed_as_redundant",
+    "kept_by", "consensus_p", "tie_group_size", "beat_in_tie",
+    "absorbed_as_redundant", "n_candidates",
     "run_id", "target", "horizon_h", "lookback_d", "evidence",
 ]
 
@@ -136,30 +153,47 @@ def break_ties(kept: pd.DataFrame) -> pd.DataFrame:
         winner["beat_in_tie"] = "; ".join(group["channel"].iloc[1:])
         rows.append(winner)
     out = pd.DataFrame(rows).drop(columns=["_abs_rho"])
-    return out.sort_values("rank").reset_index(drop=True)
+    return out.sort_values("ensemble").reset_index(drop=True)
 
 
-def _absorbed(full: pd.DataFrame) -> Dict[str, str]:
-    """channel → the redundant channels the |ρ| ≥ 0.9 prune folded into it."""
-    dropped = full[full["dropped_for"].notna() & (full["dropped_for"] != "")]
-    return {
-        winner: "; ".join(sorted(group["channel"]))
-        for winner, group in dropped.groupby("dropped_for")
-    }
+def _correlation_loader(folder: str):
+    """Read only the candidate channels' submatrix out of the archived N×N.
+
+    ⚠️ `channel_correlation.csv` is **40 MB** on `basic+economy_usa` and 16.5 MB on
+    `ta` (§10b) — it is the full pairwise matrix the prune used, and `p` runs to the
+    thousands. `usecols` turns that into the few hundred columns the candidate set
+    needs. Returns `None` when the file is absent, which skips the prune rather than
+    failing: an older run folder is still readable, just with a looser count.
+    """
+    path = os.path.join(folder, CORRELATION_FILENAME)
+
+    def load(channels: List[str]) -> Optional[pd.DataFrame]:
+        if not os.path.exists(path):
+            return None
+        frame = pd.read_csv(path, index_col=0, usecols=["channel", *channels])
+        return frame.loc[channels]
+
+    return load
 
 
-def build_one(folder: str) -> pd.DataFrame:
-    """One run folder → its `outstanding` table. Does not write."""
+def build_one(folder: str, **cut_kwargs) -> pd.DataFrame:
+    """One run folder → its `outstanding` table. Does not write.
+
+    `cut_kwargs` go to `selection_cut.suitable` — `fdr_q`, `corr_threshold`, `seed`.
+    """
     meta = json.load(open(os.path.join(folder, "metadata.json"), encoding="utf-8"))
     full = pd.read_csv(os.path.join(folder, "feature_importance.csv"))
     tables = meta["input"]["tables"]
 
-    out = break_ties(full[full["kept"]].copy())
+    out = break_ties(
+        selection_cut.suitable(
+            full, corr_loader=_correlation_loader(folder), **cut_kwargs
+        )
+    )
     out["schema"] = meta["input"]["schema"]
     out["source_table"] = [source_table(c, tables) for c in out["channel"]]
     out["grain"] = _grain(meta)
     out["best_stat"] = out.get("best_stat__permutation")
-    out["absorbed_as_redundant"] = out["channel"].map(_absorbed(full)).fillna("")
     out["run_id"] = meta["run_id"]
     out["target"] = meta["target"]["name"]
     out["horizon_h"] = meta["setup"]["horizon_h"]
@@ -169,14 +203,16 @@ def build_one(folder: str) -> pd.DataFrame:
     return out[COLUMNS]
 
 
-def main(root: str = DEFAULT_REPORT_ROOT, write: bool = True) -> Dict[str, pd.DataFrame]:
+def main(
+    root: str = DEFAULT_REPORT_ROOT, write: bool = True, **cut_kwargs
+) -> Dict[str, pd.DataFrame]:
     """Write one `outstanding.csv` into every run folder under `root`."""
     built: Dict[str, pd.DataFrame] = {}
     for name in sorted(os.listdir(root)):
         folder = os.path.join(root, name)
         if not os.path.exists(os.path.join(folder, "metadata.json")):
             continue
-        table = build_one(folder)
+        table = build_one(folder, **cut_kwargs)
         if write:
             table.to_csv(os.path.join(folder, OUTSTANDING_FILENAME), index=False)
         built[name] = table
@@ -187,8 +223,10 @@ if __name__ == "__main__":
     results = main(write="--dry-run" not in sys.argv)
     for run, table in results.items():
         unknown = int((table["source_table"] == "unknown").sum())
+        consensus = int(table["kept_by"].str.contains("consensus").sum())
         print(
-            f"{len(table):>3} channels  {table['evidence'].iloc[0]:<22}"
+            f"{len(table):>4} channels  {consensus:>2} consensus  "
+            f"{table['evidence'].iloc[0]:<22}"
             f"{'  ⚠️ %d unknown' % unknown if unknown else '':<16}{run}"
         )
     print(f"\n{len(results)} runs, {sum(len(t) for t in results.values())} rows written")

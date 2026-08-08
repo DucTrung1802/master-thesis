@@ -116,6 +116,8 @@
 | [plots.py](plots.py) | the figures — one theme, one palette, applied by the job each colour does |
 | **[report.py](report.py)** | **one run → one self-describing folder** — CSVs, PNGs and a `metadata.json` that records what may be compared with what (§10) |
 | **[outstanding.py](outstanding.py)** | **one run → its final feature list** — kept channels only, ties broken, each mapped back to the pool table it must be read from (§14) |
+| **[selection_cut.py](selection_cut.py)** | **how many channels a run supports** — a shuffled-methods null + a per-method knee, replacing `max_features=12` (§14c) |
+| [test_selection_cut.py](test_selection_cut.py) | **13 tests, no database, ~15 s** — one per way the cut could manufacture a list |
 | **[test_cross_sectional.py](test_cross_sectional.py)** | **13 tests, no database, ~2 min** — one per way of faking a cross-sectional result |
 
 ⚠️ **`cross_sectional.py` re-implements NO ranker.** `CrossSectionalSelector`
@@ -1538,15 +1540,15 @@ actually chose, and writes the result **into that run's own folder**:
 reports/feature_selection/<run>/outstanding.csv   ⭐ the deliverable, 20 of them
 ```
 
-`python -m feature_selection.outstanding` rebuilds all of them in about a second;
-`--dry-run` prints without writing. **10-12 channels per run, 230 rows over 20 runs**
-(2026-08-09: the two `d=1` runs, `pool__fa` and `pool__ta`, were removed — the study
-keeps only `d=20, h=5`).
+`python -m feature_selection.outstanding` rebuilds all of them in about a minute;
+`--dry-run` prints without writing. **10-236 channels per run, median 40, 952 rows
+over 20 runs** (2026-08-09: the two `d=1` runs, `pool__fa` and `pool__ta`, were
+removed — the study keeps only `d=20, h=5`).
 
-Two filters, in order: **`kept` only** (the run's own ensemble + |ρ| ≥ 0.9 prune +
-`max_features` — nothing is re-ranked); and **ties on the ensemble mean rank broken
-by `permutation`**, the only out-of-sample ranker (§4), then by |ρ| vs the target.
-The tie loser is named in `beat_in_tie` and the prune's victims in
+Three filters, in order: **the per-run cut** (§14c — replaced `max_features=12` on
+2026-08-09); **an uncapped |ρ| ≥ 0.9 prune**; and **ties on the ensemble mean rank
+broken by `permutation`**, the only out-of-sample ranker (§4), then by |ρ| vs the
+target. The tie loser is named in `beat_in_tie` and the prune's victims in
 `absorbed_as_redundant`, so nothing leaves the shortlist unrecorded.
 
 ⚠️ **THERE IS NO COMBINED FILE, AND THAT IS THE DESIGN.** The 22 runs are not one
@@ -1615,3 +1617,63 @@ these files come from runs that never computed a null.**
 assemble for the next stage; it does not say they predict anything. **The cheapest
 missing run is a null on the four repeat-selected `pool__basic` channels of §14a** —
 27-channel pool, one ticker, and §12c prices a full pass at ~5 min.
+
+### 14c. ⚠️ THE COUNT IS NOW MEASURED PER RUN — `max_features=12` is gone (2026-08-09)
+
+[selection_cut.py](selection_cut.py). **Twelve was chosen for a 27-channel
+single-ticker pool and then applied to a 1,458-channel one.** §9i and §13c had already
+measured what that costs — at 780 names and in the bank sector, *all* channels beat the
+pruned 12 in *every* fold. It also truncated the record: `_prune` **broke** at the cap,
+so every channel below it carries `kept=False` with an empty `dropped_for` and
+"redundant" is indistinguishable from "never examined".
+
+| | before | after |
+|---|---|---|
+| channels per run | **12, every run** | **10-236, median 40** |
+| rows over 20 runs | 230 | **952** |
+| `pool__basic` (p=27) | 12 | 10 |
+| `basic+economy_usa` (p=1,458) | 12 | **236** |
+| `dropped_for` | truncated at the break | complete |
+
+**Two tiers, unioned, then the uncapped prune.** Nothing is re-fitted and no database
+is touched — the archived `feature_importance.csv` and `channel_correlation.csv`
+determine every number, and the rebuilt method ranks reproduce the stored `ensemble`
+to **2.8e-14** across all 20 runs.
+
+**1. CONSENSUS — the ensemble beats a shuffled-METHODS null.** Permute each method's
+rank column independently, keeping every marginal exactly (ties, and a dead method's
+constant, survive) and destroying only cross-method agreement. Benjamini-Hochberg at
+`fdr_q=0.10`.
+
+⚠️ **The independence assumption was measured, not assumed: mean pairwise Spearman
+between the six rank columns is +0.071** across the archive (−0.063 to +0.193). That
+is also a finding — **the six rankers agree barely more than chance**, which is §14a's
+cross-run instability seen *inside* a single run.
+
+⚠️ **This tier keeps 12 rows out of 952** and none at all on `pool__basic`. Correct
+for the question it asks, useless as a fetch list on its own.
+
+**2. SPECIALIST — the top of some single method's own score curve.** A mean rank
+buries a channel one method is certain about and five have no opinion on;
+`aggregate_to_channels` already rejects that logic across stats (§1a) and the same
+argument holds across methods. Per live method, sort its normalised scores descending
+and cut at the **knee**.
+
+⚠️ **The knee works on SCORES and is meaningless on RANKS.** Measured: a knee on the
+`ensemble` column keeps 92 of 113 and **1,313 of 1,458** — a mean of ranks is
+near-uniform by construction and has no bend, the same flatness §10c.1 fixed in the
+ranking chart. A per-method score curve is long-tailed and bends sharply: "≥ 0.9 of
+the best on some method" holds for **5-9 channels whether `p` is 27 or 1,458.**
+
+⚠️ **At `p = 27` the specialist tier degenerates** — six knees cover 18 of 27
+channels, so the rule reduces to "the whole non-redundant pool". That is the honest
+answer at that width (§9h: a 27-channel single-ticker run resolves nothing) and
+`cut_report()["specialist_share"]` reports it as a number so it is not read as a
+selection.
+
+⚠️ **`kept_by` and `evidence` are different verdicts.** `kept_by` is the channel
+against shuffled *methods*; `evidence` is the run against shuffled *labels*. All 952
+rows still sit in runs that failed or never computed the second one.
+
+⚠️ **`FeatureSelector(max_features=...)` now defaults to `None`** — uncapped. Pass an
+integer only to reproduce an archived run.
