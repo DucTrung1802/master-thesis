@@ -97,9 +97,13 @@ ocr_env9/Lib/
 # experiment_10 news_result.py embedding / frame cache (hundreds of MB)
 experiment/experiment_10/_cache/
 
-# Feature-selection run folders — reproducible from the notebook and ~1.2 MB each,
-# so they accumulate fast. `report.write_report()` writes one per run.
-reports/feature_selection/*/
-# but ONE prototype run is force-added as the reference for what the contract looks
-# like (metadata.json, the CSVs and the figures). A tracked file overrides this rule,
-# so re-running the notebook never re-adds a new folder by accident.
+# Feature-selection run folders are NOT ignored — every run is committed on purpose
+# (2026-08-09). The old `reports/feature_selection/*/` rule was dropped because it
+# silently hid each new run until someone remembered `git add -f`, and the archive is
+# the evidence behind CONTEXT §6-§14.
+#
+# ⚠️ They are not small. The archive is ~120 MB across 22 runs, and `channel_correlation.csv`
+# alone reached 40.0 MB on a 1,458-channel pool — it is the full N×N pairwise matrix.
+# Before committing a new WIDE-pool run, check that one file: the deliverables are
+# `feature_importance.csv` and `outstanding.csv`, and `dropped_for` already records
+# what each channel was pruned into.

@@ -1,0 +1,11 @@
+outstanding_rank,channel,schema,source_table,grain,ensemble,permutation,spearman_vs_target,best_stat,tie_group_size,beat_in_tie,absorbed_as_redundant,run_id,target,horizon_h,lookback_d,evidence
+1,value_negotiated,unified_schema_bank,pool__basic,date+ticker,6.0,0.4764713825094906,0.0027248712404449,min,1,,,2026-08-05_004241__bank__basic__cs_rank_5day,cs_rank_5day,5,20,failed_null
+2,close_adjust,unified_schema_bank,pool__basic,date+ticker,6.166666666666667,1.0,-0.0095541223754819,last,2,sell_order_vol,,2026-08-05_004241__bank__basic__cs_rank_5day,cs_rank_5day,5,20,failed_null
+3,avg_vol_per_sell_order,unified_schema_bank,pool__basic,date+ticker,7.5,0.2399552945629241,-0.0032872308379959,sd,1,,,2026-08-05_004241__bank__basic__cs_rank_5day,cs_rank_5day,5,20,failed_null
+4,volume_negotiated,unified_schema_bank,pool__basic,date+ticker,8.0,0.461323404833022,0.0051547011386865,sd,1,,,2026-08-05_004241__bank__basic__cs_rank_5day,cs_rank_5day,5,20,failed_null
+5,avg_vol_per_buy_order,unified_schema_bank,pool__basic,date+ticker,8.666666666666666,0.2629826298216461,0.033963765588877,slope,2,prop_sell_vol,,2026-08-05_004241__bank__basic__cs_rank_5day,cs_rank_5day,5,20,failed_null
+6,n_buy_orders,unified_schema_bank,pool__basic,date+ticker,8.833333333333334,0.3498584345670967,-0.0101374829896264,mean,1,,,2026-08-05_004241__bank__basic__cs_rank_5day,cs_rank_5day,5,20,failed_null
+7,value_matched,unified_schema_bank,pool__basic,date+ticker,9.5,0.1956473961205463,0.009067730216353,min,1,,,2026-08-05_004241__bank__basic__cs_rank_5day,cs_rank_5day,5,20,failed_null
+8,close_raw,unified_schema_bank,pool__basic,date+ticker,10.166666666666666,0.1085199148732875,0.0114785450855095,last,1,,high,2026-08-05_004241__bank__basic__cs_rank_5day,cs_rank_5day,5,20,failed_null
+9,prop_buy_vol,unified_schema_bank,pool__basic,date+ticker,11.166666666666666,0.336534823045567,0.0256208406825596,sd,1,,,2026-08-05_004241__bank__basic__cs_rank_5day,cs_rank_5day,5,20,failed_null
+10,foreign_net_value,unified_schema_bank,pool__basic,date+ticker,12.666666666666666,0.1576936102073723,-0.0226694828666407,slope,1,,,2026-08-05_004241__bank__basic__cs_rank_5day,cs_rank_5day,5,20,failed_null

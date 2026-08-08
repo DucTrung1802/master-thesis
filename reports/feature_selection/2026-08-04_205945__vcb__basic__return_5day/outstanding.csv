@@ -1,0 +1,12 @@
+outstanding_rank,channel,schema,source_table,grain,ensemble,permutation,spearman_vs_target,best_stat,tie_group_size,beat_in_tie,absorbed_as_redundant,run_id,target,horizon_h,lookback_d,evidence
+1,volume_negotiated,unified_schema_vcb,pool__basic,date,8.666666666666666,1.0,-0.0064487089278789,slope,2,foreign_own,,2026-08-04_205945__vcb__basic__return_5day,return_5day,5,20,no_null
+2,close_adjust,unified_schema_vcb,pool__basic,date,9.166666666666666,0.0,-0.0222650637336133,last,1,,,2026-08-04_205945__vcb__basic__return_5day,return_5day,5,20,no_null
+3,open,unified_schema_vcb,pool__basic,date,9.333333333333334,0.3977025626372985,-0.0269152343171812,sd,1,,close_raw; high; low,2026-08-04_205945__vcb__basic__return_5day,return_5day,5,20,no_null
+4,buy_order_vol,unified_schema_vcb,pool__basic,date,9.5,0.3126935746127505,-0.005646932603923,slope,1,,sell_order_vol; volume_matched,2026-08-04_205945__vcb__basic__return_5day,return_5day,5,20,no_null
+5,foreign_room_left,unified_schema_vcb,pool__basic,date,10.0,0.0874245718583396,-0.0399805413306038,sd,1,,,2026-08-04_205945__vcb__basic__return_5day,return_5day,5,20,no_null
+6,n_sell_orders,unified_schema_vcb,pool__basic,date,10.333333333333334,0.0667363190743699,-0.0136615157196573,last,1,,n_buy_orders; value_matched,2026-08-04_205945__vcb__basic__return_5day,return_5day,5,20,no_null
+7,value_negotiated,unified_schema_vcb,pool__basic,date,10.666666666666666,0.2239110482551776,-0.0079601783607783,slope,1,,,2026-08-04_205945__vcb__basic__return_5day,return_5day,5,20,no_null
+8,foreign_sell_value,unified_schema_vcb,pool__basic,date,10.833333333333334,0.1687297816808781,-0.0850600641488584,slope,1,,,2026-08-04_205945__vcb__basic__return_5day,return_5day,5,20,no_null
+9,avg_vol_per_buy_order,unified_schema_vcb,pool__basic,date,12.333333333333334,0.1647989487393419,0.0099299155656563,sd,1,,,2026-08-04_205945__vcb__basic__return_5day,return_5day,5,20,no_null
+10,foreign_net_volume,unified_schema_vcb,pool__basic,date,13.333333333333334,0.1144601050614317,0.051813956950827,slope,1,,,2026-08-04_205945__vcb__basic__return_5day,return_5day,5,20,no_null
+11,prop_buy_vol,unified_schema_vcb,pool__basic,date,13.5,0.0016988152032955,-0.0917066788505508,sd,1,,,2026-08-04_205945__vcb__basic__return_5day,return_5day,5,20,no_null

@@ -115,6 +115,7 @@
 | [gpu.py](gpu.py) | the CUDA paths, the size heuristic, and which steps have no GPU path |
 | [plots.py](plots.py) | the figures — one theme, one palette, applied by the job each colour does |
 | **[report.py](report.py)** | **one run → one self-describing folder** — CSVs, PNGs and a `metadata.json` that records what may be compared with what (§10) |
+| **[outstanding.py](outstanding.py)** | **one run → its final feature list** — kept channels only, ties broken, each mapped back to the pool table it must be read from (§14) |
 | **[test_cross_sectional.py](test_cross_sectional.py)** | **13 tests, no database, ~2 min** — one per way of faking a cross-sectional result |
 
 ⚠️ **`cross_sectional.py` re-implements NO ranker.** `CrossSectionalSelector`
@@ -1522,3 +1523,85 @@ shuffled labels. §9j found a large effect at 301 names using the same 27 channe
 4. ⚠️ **Not more features.** §11 and §12 both widened the pool on an unresolvable
    panel and both raised their own bar. The constraint here is `N` and dispersion,
    and neither `pool__ta` nor `pool__fa` supplies either.
+
+## 14. ⚠️ `outstanding.csv` (2026-08-09) — one final feature list PER RUN
+
+[outstanding.py](outstanding.py) reduces each archived run to the channels it
+actually chose, and writes the result **into that run's own folder**:
+
+```
+reports/feature_selection/<run>/outstanding.csv   ⭐ the deliverable, 22 of them
+```
+
+`python -m feature_selection.outstanding` rebuilds all of them in about a second;
+`--dry-run` prints without writing. **10-12 channels per run, 252 rows over 22 runs.**
+
+Two filters, in order: **`kept` only** (the run's own ensemble + |ρ| ≥ 0.9 prune +
+`max_features` — nothing is re-ranked); and **ties on the ensemble mean rank broken
+by `permutation`**, the only out-of-sample ranker (§4), then by |ρ| vs the target.
+The tie loser is named in `beat_in_tie` and the prune's victims in
+`absorbed_as_redundant`, so nothing leaves the shortlist unrecorded.
+
+⚠️ **THERE IS NO COMBINED FILE, AND THAT IS THE DESIGN.** The 22 runs are not one
+experiment — different pools, two targets, two grains, and §8 is a list of ways two
+runs look comparable and are not. A single merged shortlist is precisely the artefact
+that gets quoted against a configuration it was never computed for. Every file
+therefore carries `run_id`, `target`, `horizon_h`, `lookback_d`, `grain` and
+`evidence`, so the next module merges **knowingly**, on those columns.
+
+⚠️ **`grain` is the column that decides whether a file can be concatenated at all.**
+`date` for the 21 single-ticker runs; **`date+ticker` for the bank run**, which is
+cross-sectional — 20 banks on one Tuesday are 20 rows, so folding it into a
+date-indexed table collapses the dimension the run was about (§13).
+
+⚠️ **The source table is derived, not looked up.** The pools are disjoint (verified:
+`basic ∩ fa = basic ∩ ta = fa ∩ ta = ∅`) and economy columns self-identify by a
+`<country>__economy__` prefix, so a channel maps to its `pool__*` **from the archive
+alone, with no database connection** — 0 `unknown` across all 252 rows. An
+unrecognised channel becomes `unknown` rather than a guess: a wrong table fails
+loudly when read, a silent wrong guess would not.
+
+⚠️ **`best_stat` is guidance, not a column to fetch.** It names which of
+`last/mean/slope/sd/min/max` carried the channel; the RAW column is what gets read
+and `windows.window_design` computes the statistics downstream (§1a).
+
+### 14a. ⚠️ WHAT COMPARING THE FILES SHOWS — 221 OF 225 CHANNELS APPEAR ONCE
+
+Union the 21 `date`-grain files and the instability is unmissable, which is the
+second reason not to ship the union as the deliverable. **Nineteen of them contain
+`pool__basic`** (the `fa` and `ta` runs do not) **and all
+nineteen saw the SAME 27 channels**, ranked by the same six methods on the same
+folds; they differ only in which `pool__economy_<country>` block was joined
+alongside. A stable signal would return the same names. It does not:
+
+| channel | kept by | of | best rank |
+|---|---|---|---|
+| `foreign_own` | **9** | 19 | 6 |
+| `volume_negotiated` | **6** | 19 | 1 |
+| `close_adjust` | **4** | 19 | 2 |
+| `foreign_sell_value` | **2** | 19 | 7 |
+
+⚠️ **The most repeatedly chosen channel in the archive survived 9 of 19 chances, and
+no other reached 7.** Adding an unrelated block of macro columns reshuffles which of
+the 27 price/flow channels ranks top. §6b said a selection on shuffled labels is
+internally consistent; this says the selection is not even consistent **with itself**
+across runs sharing the same features and the same target.
+
+⚠️ **`foreign_own` tops that table and §9e ranked it LAST of 27** on the VN100
+cross-section. Different studies need not agree — but nothing here lets either
+ordering be quoted as *the* ordering.
+
+### 14b. ⚠️ `evidence` — what a row in one of these files is worth
+
+Every row carries the null verdict of the run that produced it:
+
+| evidence | runs | rows | is |
+|---|---|---|---|
+| `no_null` | **19** | 220 | **no bar was computed at all** — §10 records an absent null as absent, never as a pass |
+| `failed_null` | 2 | 20 | inside what shuffled labels produce — `pool__fa` z = −0.25 (below its null's MEAN), `bank` z = +0.11 |
+| `cleared_p95_not_a_pass` | 1 | 12 | `pool__ta` beat its p95 bar, but 1 shuffled draw of 20 still beat it (§12) |
+
+⚠️ **`outstanding.csv` is a FETCH LIST, not a green light.** It says which columns to
+assemble for the next stage; it does not say they predict anything. **The cheapest
+missing run is a null on the four repeat-selected `pool__basic` channels of §14a** —
+27-channel pool, one ticker, and §12c prices a full pass at ~5 min.
