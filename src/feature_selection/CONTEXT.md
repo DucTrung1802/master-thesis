@@ -1172,7 +1172,9 @@ do not eyeball the result.
 
 `unified_schema_vcb.pool__fa ⋈ pool__targets`, `return_5day`, `d=1, h=5`, 162
 channels, 20-draw block-shuffled null, holdout `2024-06-01` with a control.
-Report: `reports/feature_selection/2026-08-04_213330__vcb__fa__return_5day`.
+⚠️ **Report folder REMOVED 2026-08-09** — the study now keeps only `d=20, h=5` runs.
+The finding below stands as written; the artefacts are recoverable from commit
+`5813342` (`git show 5813342 -- reports/feature_selection/2026-08-04_213330__vcb__fa__return_5day`).
 
 | | observed | null mean | null sd | **p95 BAR** | null max | **z** | p | clears |
 |---|---|---|---|---|---|---|---|---|
@@ -1282,7 +1284,9 @@ events, and neither adds any.
 channels**, `device="cpu"`, `max_features=12`, `permutation_repeats=10`, 20-draw
 block-shuffled null, holdout `2024-06-01` with a control. Every knob matched to §11
 so the two pools are the same procedure on different columns.
-Report: `reports/feature_selection/2026-08-04_235010__vcb__ta__return_5day`.
+⚠️ **Report folder REMOVED 2026-08-09** — the study now keeps only `d=20, h=5` runs,
+and §12c explains that this run is `lookback=1` by nature rather than by economy. The
+finding below stands as written; the artefacts are recoverable from commit `5813342`.
 
 | | observed | null mean | null sd | **p95 BAR** | null max | **z** | p | clears |
 |---|---|---|---|---|---|---|---|---|
@@ -1410,7 +1414,8 @@ judges is a different procedure.
 `cs_rank` features, 27 channels, 20-draw `date_block` null, holdout `2024-06-01`
 with a control. **The §9c protocol with one thing changed: the universe is a GICS
 SECTOR instead of an index.**
-Report: `reports/feature_selection/2026-08-05_004241__bank__basic__cs_rank_5day`.
+Report: `reports/feature_selection/2026-08-05_004241__bank__basic__cs_rank_5day`
+→ `unified_schema_bank.rank_5day__final__d20_h5` (`final_features/CONTEXT.md`).
 
 | | observed | null mean | null sd | **p95 BAR** | null max | **z** | p | clears |
 |---|---|---|---|---|---|---|---|---|
@@ -1530,11 +1535,13 @@ shuffled labels. §9j found a large effect at 301 names using the same 27 channe
 actually chose, and writes the result **into that run's own folder**:
 
 ```
-reports/feature_selection/<run>/outstanding.csv   ⭐ the deliverable, 22 of them
+reports/feature_selection/<run>/outstanding.csv   ⭐ the deliverable, 20 of them
 ```
 
 `python -m feature_selection.outstanding` rebuilds all of them in about a second;
-`--dry-run` prints without writing. **10-12 channels per run, 252 rows over 22 runs.**
+`--dry-run` prints without writing. **10-12 channels per run, 230 rows over 20 runs**
+(2026-08-09: the two `d=1` runs, `pool__fa` and `pool__ta`, were removed — the study
+keeps only `d=20, h=5`).
 
 Two filters, in order: **`kept` only** (the run's own ensemble + |ρ| ≥ 0.9 prune +
 `max_features` — nothing is re-ranked); and **ties on the ensemble mean rank broken
@@ -1565,12 +1572,11 @@ loudly when read, a silent wrong guess would not.
 `last/mean/slope/sd/min/max` carried the channel; the RAW column is what gets read
 and `windows.window_design` computes the statistics downstream (§1a).
 
-### 14a. ⚠️ WHAT COMPARING THE FILES SHOWS — 221 OF 225 CHANNELS APPEAR ONCE
+### 14a. ⚠️ WHAT COMPARING THE FILES SHOWS — 199 OF 203 CHANNELS APPEAR ONCE
 
-Union the 21 `date`-grain files and the instability is unmissable, which is the
-second reason not to ship the union as the deliverable. **Nineteen of them contain
-`pool__basic`** (the `fa` and `ta` runs do not) **and all
-nineteen saw the SAME 27 channels**, ranked by the same six methods on the same
+Union the 19 `date`-grain files and the instability is unmissable, which is the
+second reason not to ship the union as the deliverable. **All nineteen contain
+`pool__basic` and all nineteen saw the SAME 27 channels**, ranked by the same six methods on the same
 folds; they differ only in which `pool__economy_<country>` block was joined
 alongside. A stable signal would return the same names. It does not:
 
@@ -1598,8 +1604,12 @@ Every row carries the null verdict of the run that produced it:
 | evidence | runs | rows | is |
 |---|---|---|---|
 | `no_null` | **19** | 220 | **no bar was computed at all** — §10 records an absent null as absent, never as a pass |
-| `failed_null` | 2 | 20 | inside what shuffled labels produce — `pool__fa` z = −0.25 (below its null's MEAN), `bank` z = +0.11 |
-| `cleared_p95_not_a_pass` | 1 | 12 | `pool__ta` beat its p95 bar, but 1 shuffled draw of 20 still beat it (§12) |
+| `failed_null` | 1 | 10 | inside what shuffled labels produce — `bank`, z = +0.11 (§13) |
+
+⚠️ **Since the `d=1` runs were removed, NOT ONE surviving run clears anything.**
+`pool__ta` was the only `cleared_p95_not_a_pass` in the archive and it is gone; what
+remains is 19 runs with no bar and 1 that failed its own. **220 of the 230 rows in
+these files come from runs that never computed a null.**
 
 ⚠️ **`outstanding.csv` is a FETCH LIST, not a green light.** It says which columns to
 assemble for the next stage; it does not say they predict anything. **The cheapest

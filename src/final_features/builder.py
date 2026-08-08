@@ -14,8 +14,10 @@ the artefact `feature_selection/CONTEXT.md` §8 is a list of — two runs that l
 comparable and are not.
 
     unified_schema_vcb  / return_5day  / d=20 h=5   ← 19 runs (basic + each economy block)
-    unified_schema_vcb  / return_5day  / d=1  h=5   ← 2 runs (pool__fa, pool__ta)
     unified_schema_bank / cs_rank_5day / d=20 h=5   ← 1 run
+
+⚠️ The study keeps only `d=20, h=5` as of 2026-08-09; a `d=1` group existed and was
+removed with its two runs.
 
 **Same schema in, same schema out.** `unified_schema_vcb`'s runs produce a table in
 `unified_schema_vcb`. Nothing crosses schemas — a VCB feature and a BANK feature are
@@ -25,10 +27,16 @@ not the same column even when they share a name.
 
     <target>__final__d<lookback>_h<horizon>          e.g. return_5day__final__d20_h5
 
-⚠️ **The setup is IN the name, not only in the grouping.** Two of the three groups
-above share a schema AND a target and differ only in `lookback_d`; a bare
-`return_5day__final` would have to hold both or silently lose one. If two groups ever
-collide on a name anyway, `plan_from_reports` raises rather than picking a winner.
+⚠️ **A `cs_` target prefix is dropped**: `cs_rank_5day` → `rank_5day__final__d20_h5`.
+The `cs_` says "cross-sectional", which is what the SCHEMA already says. See
+`table_name`.
+
+⚠️ **The setup is IN the name, not only in the grouping.** Two groups used to share a
+schema AND a target and differ only in `lookback_d`; a bare `return_5day__final` would
+have had to hold both or silently lose one. The discriminator stays even now that one
+setup survives — a second is one run away, and a rename is worse than a long name. If
+two groups ever collide on a name, `plan_from_reports` raises rather than picking a
+winner.
 
 ## ⚠️ CREATE TABLE AS, never a pandas round-trip
 
@@ -52,8 +60,9 @@ reader re-ranks. The `target` column of the plan still records what was selected
 
 ## ⚠️ What this does NOT assert
 
-That the features are worth having. 19 of the 22 runs computed no null at all, and no
-run in the archive is a clean pass (`feature_selection/CONTEXT.md` §14b). Every table
+That the features are worth having. 19 of the 20 runs computed no null at all and the
+twentieth failed its own, so **no surviving run in the archive clears anything**
+(`feature_selection/CONTEXT.md` §14b). Every table
 gets a `COMMENT` naming its source runs and their `evidence`, so the provenance
 travels with the data — but a row in one of these tables is a channel some run ranked
 highly, nothing more.
@@ -91,6 +100,10 @@ IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 # How a `None` setup value is carried through `groupby`, which drops None keys.
 NOT_SET = "not_set"
 
+# The marker a cross-sectional target carries. Dropped from the TABLE name — the
+# schema already names the cross-section. See `table_name`.
+CS_PREFIX = "cs_"
+
 # PostgreSQL truncates identifiers past this silently, which would collide two tables
 # into one. Checked rather than trusted.
 MAX_IDENTIFIER_BYTES = 63
@@ -108,8 +121,20 @@ def _identifier(name: str, what: str) -> str:
 
 
 def table_name(target: str, lookback: int, horizon: int) -> str:
-    """`<target>__final__d<lookback>_h<horizon>`."""
-    return _identifier(f"{target}__final__d{int(lookback)}_h{int(horizon)}", "table name")
+    """`<target>__final__d<lookback>_h<horizon>`, with a `cs_` target prefix dropped.
+
+    ⚠️ **`cs_rank_5day` names its table `rank_5day__final__*`.** The `cs_` marks a
+    CROSS-SECTIONAL target, and a cross-section is a set of tickers — which is what the
+    SCHEMA already says. `unified_schema_bank.cs_rank_5day__final__*` states "ranked
+    across a cross-section" twice and names neither one; `unified_schema_bank.rank_5day
+    __final__*` reads as "the 5-day rank, across the banks", which is the fact.
+
+    ⚠️ This cannot collide a cross-sectional table with a time-series one: the stems
+    differ (`rank_5day` vs `return_5day`), and `plan_from_reports` raises on any name
+    two setups both want.
+    """
+    stem = target[len(CS_PREFIX):] if target.startswith(CS_PREFIX) else target
+    return _identifier(f"{stem}__final__d{int(lookback)}_h{int(horizon)}", "table name")
 
 
 @dataclass
