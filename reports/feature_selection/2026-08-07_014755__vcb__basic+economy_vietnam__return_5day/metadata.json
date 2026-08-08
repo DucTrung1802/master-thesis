@@ -1,0 +1,237 @@
+{
+  "report_schema_version": "1.0",
+  "generated_at": "2026-08-06T18:47:58.728681+00:00",
+  "git_commit": "1eae672+dirty",
+  "environment": {
+    "python": "3.12.10",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "numpy": "2.2.6",
+    "pandas": "2.3.3",
+    "scipy": "1.17.1",
+    "sklearn": "1.7.2",
+    "xgboost": "2.1.1",
+    "matplotlib": "3.10.8"
+  },
+  "input": {
+    "database": "database_main_v2",
+    "schema": "unified_schema_vcb",
+    "tables": [
+      "pool__basic",
+      "pool__economy_vietnam",
+      "pool__targets"
+    ],
+    "join_log": [
+      {
+        "table": "pool__economy_vietnam",
+        "join_keys": "date, exchange, ticker",
+        "how": "inner",
+        "rows_before": 4235,
+        "rows_after": 4235,
+        "columns_added": 88,
+        "duplicate_columns_dropped": ""
+      },
+      {
+        "table": "pool__targets",
+        "join_keys": "date, exchange, ticker",
+        "how": "inner",
+        "rows_before": 4235,
+        "rows_after": 4235,
+        "columns_added": 4,
+        "duplicate_columns_dropped": ""
+      }
+    ],
+    "panel_rows": 4235,
+    "panel_columns": 130,
+    "first_date": "2009-06-30",
+    "last_date": "2026-06-25",
+    "sessions": 4235,
+    "tickers": 1
+  },
+  "target": {
+    "name": "return_5day",
+    "horizon_days": 5,
+    "definition": "forward 5-session return on close_adjust",
+    "labelled_rows": 4230,
+    "unlabelled_rows": 5,
+    "mean": 0.0031904034424771826,
+    "sd": 0.042945842166406574,
+    "min": -0.1875968992248062,
+    "max": 0.2914485165794066
+  },
+  "setup": {
+    "target": "return_5day",
+    "horizon_h": 5,
+    "lookback_d": 20,
+    "normalize": "none",
+    "purge_gap_rows": 24,
+    "window_stats": "last, mean, slope, sd, min, max",
+    "dropped_by_normalize": 1,
+    "dev_samples": 4211,
+    "holdout_start": "—",
+    "holdout_rows": 0,
+    "purged_at_boundary": 0,
+    "channels": 113,
+    "design_columns": 677,
+    "kept": 12,
+    "device": "cpu",
+    "max_features": 12,
+    "corr_threshold": 0.9,
+    "n_splits": 5,
+    "min_train": 500,
+    "random_state": 42,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "permutation_repeats": 10,
+    "device_preference": "cpu",
+    "selector_class": "FeatureSelector",
+    "panel_col": null,
+    "feature_normalize": null
+  },
+  "results": {
+    "n_channels": 113,
+    "n_kept": 12,
+    "kept": [
+      "vietnam__economy__trade__economics__vnexp",
+      "vietnam__economy__prices__economics__vnep",
+      "vietnam__economy__gdp__economics__vngdpa",
+      "vietnam__economy__money__economics__vnm1",
+      "vietnam__economy__prices__economics__vncirmm",
+      "foreign_own",
+      "foreign_sell_value",
+      "vietnam__economy__prices__economics__vncpit",
+      "vietnam__economy__prices__economics__vncir",
+      "vietnam__economy__trade__economics__vnbot",
+      "volume_negotiated",
+      "vietnam__economy__prices__economics__vnirmm"
+    ],
+    "dropped_constant": [
+      "vietnam__economy__business__economics__vncorr",
+      "vietnam__economy__taxes__economics__vnstr"
+    ],
+    "dropped_correlated": {
+      "close_adjust": "vietnam__economy__trade__economics__vnexp",
+      "vietnam__economy__money__economics__vnfer": "vietnam__economy__trade__economics__vnexp",
+      "vietnam__economy__labor__economics__vnwm": "vietnam__economy__trade__economics__vnexp",
+      "vietnam__economy__prices__economics__vnipri": "vietnam__economy__prices__economics__vnep"
+    },
+    "dead_methods": [],
+    "top_10_by_ensemble": [
+      "vietnam__economy__trade__economics__vnexp",
+      "vietnam__economy__prices__economics__vnep",
+      "close_adjust",
+      "vietnam__economy__gdp__economics__vngdpa",
+      "vietnam__economy__money__economics__vnfer",
+      "vietnam__economy__money__economics__vnm1",
+      "vietnam__economy__prices__economics__vncirmm",
+      "foreign_own",
+      "vietnam__economy__labor__economics__vnwm",
+      "foreign_sell_value"
+    ],
+    "timings_seconds": {
+      "window design (cpu)": 0.64,
+      "spearman vs target (cpu)": 0.38,
+      "mutual_info (cpu)": 45.94,
+      "xgb gain + shap (cpu)": 8.93,
+      "lasso (cpu)": 36.83,
+      "permutation (cpu)": 103.62,
+      "channel corr matrix (cpu)": 0.06,
+      "stability (cpu)": 11.18,
+      "validation (cpu)": 13.46
+    },
+    "ic_summary": {
+      "folds": 5.0,
+      "ic_mean": 0.025338208876488903,
+      "ic_trend_per_fold": 0.009435789436590554,
+      "ic_min": -0.070666876082562,
+      "ic_max": 0.14698081871829297,
+      "ic_fold_sd": 0.08891665232659748,
+      "hit_rate": 0.4909204745126624,
+      "n_test_rows": 737.0,
+      "n_eff_per_fold": 147.4,
+      "se_ic_per_fold": 0.0826
+    },
+    "ic_summary_all_channels": {
+      "folds": 5.0,
+      "ic_mean": 0.02359178088011204,
+      "ic_trend_per_fold": -0.019511457419442803,
+      "ic_min": -0.07048799724703066,
+      "ic_max": 0.11586979493119079,
+      "ic_fold_sd": 0.08498705836203162,
+      "hit_rate": 0.47818222211613853,
+      "n_test_rows": 737.0,
+      "n_eff_per_fold": 147.4,
+      "se_ic_per_fold": 0.0826
+    }
+  },
+  "null": null,
+  "holdout": null,
+  "notes": "",
+  "run_id": "2026-08-07_014755__vcb__basic+economy_vietnam__return_5day",
+  "artifacts": [
+    {
+      "file": "feature_importance.csv",
+      "bytes": 22861
+    },
+    {
+      "file": "design_scores.csv",
+      "bytes": 81073
+    },
+    {
+      "file": "validation.csv",
+      "bytes": 1084
+    },
+    {
+      "file": "target_correlation.csv",
+      "bytes": 6620
+    },
+    {
+      "file": "channel_correlation.csv",
+      "bytes": 256344
+    },
+    {
+      "file": "stability.csv",
+      "bytes": 7030
+    },
+    {
+      "file": "coverage.csv",
+      "bytes": 5687
+    },
+    {
+      "file": "figures/01_ensemble_ranking.png",
+      "bytes": 228931
+    },
+    {
+      "file": "figures/02_method_heatmap.png",
+      "bytes": 354822
+    },
+    {
+      "file": "figures/03_target_correlation.png",
+      "bytes": 209779
+    },
+    {
+      "file": "figures/04_channel_correlation.png",
+      "bytes": 432332
+    },
+    {
+      "file": "figures/05_stat_profile.png",
+      "bytes": 234347
+    },
+    {
+      "file": "figures/06_validation.png",
+      "bytes": 42038
+    },
+    {
+      "file": "figures/07_stability.png",
+      "bytes": 269432
+    },
+    {
+      "file": "figures/08_coverage.png",
+      "bytes": 377452
+    },
+    {
+      "file": "figures/09_target_distribution.png",
+      "bytes": 40891
+    }
+  ],
+  "report_seconds": 3.54
+}

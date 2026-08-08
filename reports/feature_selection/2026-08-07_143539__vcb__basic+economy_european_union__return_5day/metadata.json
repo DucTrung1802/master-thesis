@@ -1,0 +1,234 @@
+{
+  "report_schema_version": "1.0",
+  "generated_at": "2026-08-07T07:35:43.420946+00:00",
+  "git_commit": "1eae672+dirty",
+  "environment": {
+    "python": "3.12.10",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "numpy": "2.2.6",
+    "pandas": "2.3.3",
+    "scipy": "1.17.1",
+    "sklearn": "1.7.2",
+    "xgboost": "2.1.1",
+    "matplotlib": "3.10.8"
+  },
+  "input": {
+    "database": "database_main_v2",
+    "schema": "unified_schema_vcb",
+    "tables": [
+      "pool__basic",
+      "pool__economy_european_union",
+      "pool__targets"
+    ],
+    "join_log": [
+      {
+        "table": "pool__economy_european_union",
+        "join_keys": "date, exchange, ticker",
+        "how": "inner",
+        "rows_before": 4235,
+        "rows_after": 4235,
+        "columns_added": 126,
+        "duplicate_columns_dropped": ""
+      },
+      {
+        "table": "pool__targets",
+        "join_keys": "date, exchange, ticker",
+        "how": "inner",
+        "rows_before": 4235,
+        "rows_after": 4235,
+        "columns_added": 4,
+        "duplicate_columns_dropped": ""
+      }
+    ],
+    "panel_rows": 4235,
+    "panel_columns": 168,
+    "first_date": "2009-06-30",
+    "last_date": "2026-06-25",
+    "sessions": 4235,
+    "tickers": 1
+  },
+  "target": {
+    "name": "return_5day",
+    "horizon_days": 5,
+    "definition": "forward 5-session return on close_adjust",
+    "labelled_rows": 4230,
+    "unlabelled_rows": 5,
+    "mean": 0.0031904034424771826,
+    "sd": 0.042945842166406574,
+    "min": -0.1875968992248062,
+    "max": 0.2914485165794066
+  },
+  "setup": {
+    "target": "return_5day",
+    "horizon_h": 5,
+    "lookback_d": 20,
+    "normalize": "none",
+    "purge_gap_rows": 24,
+    "window_stats": "last, mean, slope, sd, min, max",
+    "dropped_by_normalize": 1,
+    "dev_samples": 4211,
+    "holdout_start": "—",
+    "holdout_rows": 0,
+    "purged_at_boundary": 0,
+    "channels": 153,
+    "design_columns": 917,
+    "kept": 12,
+    "device": "cpu",
+    "max_features": 12,
+    "corr_threshold": 0.9,
+    "n_splits": 5,
+    "min_train": 500,
+    "random_state": 42,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "permutation_repeats": 10,
+    "device_preference": "cpu",
+    "selector_class": "FeatureSelector",
+    "panel_col": null,
+    "feature_normalize": null
+  },
+  "results": {
+    "n_channels": 153,
+    "n_kept": 12,
+    "kept": [
+      "european_union__economy__labor__economics__eunwg",
+      "european_union__economy__consumer__economics__eups",
+      "european_union__economy__trade__economics__eucf",
+      "european_union__economy__consumer__economics__euccr",
+      "european_union__economy__trade__economics__euexp",
+      "european_union__economy__trade__economics__eungir",
+      "european_union__economy__trade__economics__eubot",
+      "foreign_own",
+      "european_union__economy__prices__fred__dcoilbrenteu",
+      "european_union__economy__trade__economics__eungi",
+      "european_union__economy__business__economics__euesi",
+      "low"
+    ],
+    "dropped_constant": [],
+    "dropped_correlated": {
+      "european_union__economy__consumer__economics__eudpi": "european_union__economy__consumer__economics__euccr",
+      "european_union__economy__money__economics__eufer": "european_union__economy__consumer__economics__euccr",
+      "european_union__economy__prices__fred__cp0000ez19m086nest": "european_union__economy__consumer__economics__euccr",
+      "close_adjust": "european_union__economy__consumer__economics__euccr"
+    },
+    "dead_methods": [],
+    "top_10_by_ensemble": [
+      "european_union__economy__labor__economics__eunwg",
+      "european_union__economy__consumer__economics__eups",
+      "european_union__economy__trade__economics__eucf",
+      "european_union__economy__consumer__economics__euccr",
+      "european_union__economy__consumer__economics__eudpi",
+      "european_union__economy__money__economics__eufer",
+      "european_union__economy__trade__economics__euexp",
+      "european_union__economy__prices__fred__cp0000ez19m086nest",
+      "close_adjust",
+      "european_union__economy__trade__economics__eungir"
+    ],
+    "timings_seconds": {
+      "window design (cpu)": 0.9,
+      "spearman vs target (cpu)": 0.48,
+      "mutual_info (cpu)": 20.0,
+      "xgb gain + shap (cpu)": 6.41,
+      "lasso (cpu)": 53.49,
+      "permutation (cpu)": 153.19,
+      "channel corr matrix (cpu)": 0.07,
+      "stability (cpu)": 18.74,
+      "validation (cpu)": 19.05
+    },
+    "ic_summary": {
+      "folds": 5.0,
+      "ic_mean": 0.05915678961224964,
+      "ic_trend_per_fold": -0.04270503183939104,
+      "ic_min": -0.0612705963442045,
+      "ic_max": 0.13416965234298073,
+      "ic_fold_sd": 0.07333604353867695,
+      "hit_rate": 0.4792750480590038,
+      "n_test_rows": 737.0,
+      "n_eff_per_fold": 147.4,
+      "se_ic_per_fold": 0.0826
+    },
+    "ic_summary_all_channels": {
+      "folds": 5.0,
+      "ic_mean": 0.03591370334752335,
+      "ic_trend_per_fold": -0.016635551152904337,
+      "ic_min": -0.007563304868639808,
+      "ic_max": 0.07717465039464283,
+      "ic_fold_sd": 0.036519401239762266,
+      "hit_rate": 0.478711743288723,
+      "n_test_rows": 737.0,
+      "n_eff_per_fold": 147.4,
+      "se_ic_per_fold": 0.0826
+    }
+  },
+  "null": null,
+  "holdout": null,
+  "notes": "",
+  "run_id": "2026-08-07_143539__vcb__basic+economy_european_union__return_5day",
+  "artifacts": [
+    {
+      "file": "feature_importance.csv",
+      "bytes": 33118
+    },
+    {
+      "file": "design_scores.csv",
+      "bytes": 119263
+    },
+    {
+      "file": "validation.csv",
+      "bytes": 1083
+    },
+    {
+      "file": "target_correlation.csv",
+      "bytes": 10194
+    },
+    {
+      "file": "channel_correlation.csv",
+      "bytes": 471904
+    },
+    {
+      "file": "stability.csv",
+      "bytes": 11037
+    },
+    {
+      "file": "coverage.csv",
+      "bytes": 8254
+    },
+    {
+      "file": "figures/01_ensemble_ranking.png",
+      "bytes": 254948
+    },
+    {
+      "file": "figures/02_method_heatmap.png",
+      "bytes": 385688
+    },
+    {
+      "file": "figures/03_target_correlation.png",
+      "bytes": 242532
+    },
+    {
+      "file": "figures/04_channel_correlation.png",
+      "bytes": 509043
+    },
+    {
+      "file": "figures/05_stat_profile.png",
+      "bytes": 248875
+    },
+    {
+      "file": "figures/06_validation.png",
+      "bytes": 43006
+    },
+    {
+      "file": "figures/07_stability.png",
+      "bytes": 295854
+    },
+    {
+      "file": "figures/08_coverage.png",
+      "bytes": 298053
+    },
+    {
+      "file": "figures/09_target_distribution.png",
+      "bytes": 40891
+    }
+  ],
+  "report_seconds": 3.71
+}

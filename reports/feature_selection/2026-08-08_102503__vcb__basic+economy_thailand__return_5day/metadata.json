@@ -1,0 +1,235 @@
+{
+  "report_schema_version": "1.0",
+  "generated_at": "2026-08-08T03:25:09.574684+00:00",
+  "git_commit": "1eae672+dirty",
+  "environment": {
+    "python": "3.12.10",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "numpy": "2.2.6",
+    "pandas": "2.3.3",
+    "scipy": "1.17.1",
+    "sklearn": "1.7.2",
+    "xgboost": "2.1.1",
+    "matplotlib": "3.10.8"
+  },
+  "input": {
+    "database": "database_main_v2",
+    "schema": "unified_schema_vcb",
+    "tables": [
+      "pool__basic",
+      "pool__economy_thailand",
+      "pool__targets"
+    ],
+    "join_log": [
+      {
+        "table": "pool__economy_thailand",
+        "join_keys": "date, exchange, ticker",
+        "how": "inner",
+        "rows_before": 4235,
+        "rows_after": 4235,
+        "columns_added": 109,
+        "duplicate_columns_dropped": ""
+      },
+      {
+        "table": "pool__targets",
+        "join_keys": "date, exchange, ticker",
+        "how": "inner",
+        "rows_before": 4235,
+        "rows_after": 4235,
+        "columns_added": 4,
+        "duplicate_columns_dropped": ""
+      }
+    ],
+    "panel_rows": 4235,
+    "panel_columns": 151,
+    "first_date": "2009-06-30",
+    "last_date": "2026-06-25",
+    "sessions": 4235,
+    "tickers": 1
+  },
+  "target": {
+    "name": "return_5day",
+    "horizon_days": 5,
+    "definition": "forward 5-session return on close_adjust",
+    "labelled_rows": 4230,
+    "unlabelled_rows": 5,
+    "mean": 0.0031904034424771826,
+    "sd": 0.042945842166406574,
+    "min": -0.1875968992248062,
+    "max": 0.2914485165794066
+  },
+  "setup": {
+    "target": "return_5day",
+    "horizon_h": 5,
+    "lookback_d": 20,
+    "normalize": "none",
+    "purge_gap_rows": 24,
+    "window_stats": "last, mean, slope, sd, min, max",
+    "dropped_by_normalize": 1,
+    "dev_samples": 4211,
+    "holdout_start": "—",
+    "holdout_rows": 0,
+    "purged_at_boundary": 0,
+    "channels": 133,
+    "design_columns": 797,
+    "kept": 12,
+    "device": "cpu",
+    "max_features": 12,
+    "corr_threshold": 0.9,
+    "n_splits": 5,
+    "min_train": 500,
+    "random_state": 42,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "permutation_repeats": 10,
+    "device_preference": "cpu",
+    "selector_class": "FeatureSelector",
+    "panel_col": null,
+    "feature_normalize": null
+  },
+  "results": {
+    "n_channels": 133,
+    "n_kept": 12,
+    "kept": [
+      "thailand__economy__government__economics__thgr",
+      "thailand__economy__trade__economics__thexpyy",
+      "thailand__economy__business__economics__thpin",
+      "thailand__economy__housing__economics__thrpp",
+      "thailand__economy__gdp__economics__thgdpcp",
+      "thailand__economy__consumer__economics__thrsyy",
+      "thailand__economy__trade__economics__thimpyy",
+      "thailand__economy__government__economics__thgbv",
+      "thailand__economy__trade__economics__thimp",
+      "thailand__economy__trade__economics__threm",
+      "thailand__economy__business__economics__thbcoi",
+      "thailand__economy__money__economics__thinbr"
+    ],
+    "dropped_constant": [
+      "thailand__economy__business__economics__thcorr",
+      "thailand__economy__taxes__economics__thstr",
+      "thailand__economy__taxes__economics__thwtr"
+    ],
+    "dropped_correlated": {
+      "close_adjust": "thailand__economy__gdp__economics__thgdpcp"
+    },
+    "dead_methods": [],
+    "top_10_by_ensemble": [
+      "thailand__economy__government__economics__thgr",
+      "thailand__economy__trade__economics__thexpyy",
+      "thailand__economy__business__economics__thpin",
+      "thailand__economy__housing__economics__thrpp",
+      "thailand__economy__gdp__economics__thgdpcp",
+      "thailand__economy__consumer__economics__thrsyy",
+      "close_adjust",
+      "thailand__economy__trade__economics__thimpyy",
+      "thailand__economy__government__economics__thgbv",
+      "thailand__economy__trade__economics__thimp"
+    ],
+    "timings_seconds": {
+      "window design (cpu)": 0.55,
+      "spearman vs target (cpu)": 0.35,
+      "mutual_info (cpu)": 16.57,
+      "xgb gain + shap (cpu)": 23.77,
+      "lasso (cpu)": 41.54,
+      "permutation (cpu)": 199.93,
+      "channel corr matrix (cpu)": 0.08,
+      "stability (cpu)": 20.22,
+      "validation (cpu)": 22.14
+    },
+    "ic_summary": {
+      "folds": 5.0,
+      "ic_mean": 0.03248478819590009,
+      "ic_trend_per_fold": -0.0008016997014931457,
+      "ic_min": -0.03459367287101849,
+      "ic_max": 0.13454363690791438,
+      "ic_fold_sd": 0.06334784205500663,
+      "hit_rate": 0.48903483566299394,
+      "n_test_rows": 737.0,
+      "n_eff_per_fold": 147.4,
+      "se_ic_per_fold": 0.0826
+    },
+    "ic_summary_all_channels": {
+      "folds": 5.0,
+      "ic_mean": 0.060699444115301274,
+      "ic_trend_per_fold": -0.010008053183621855,
+      "ic_min": 0.002056741505712623,
+      "ic_max": 0.12094852881637772,
+      "ic_fold_sd": 0.05728142019502066,
+      "hit_rate": 0.5004162359563971,
+      "n_test_rows": 737.0,
+      "n_eff_per_fold": 147.4,
+      "se_ic_per_fold": 0.0826
+    }
+  },
+  "null": null,
+  "holdout": null,
+  "notes": "",
+  "run_id": "2026-08-08_102503__vcb__basic+economy_thailand__return_5day",
+  "artifacts": [
+    {
+      "file": "feature_importance.csv",
+      "bytes": 27959
+    },
+    {
+      "file": "design_scores.csv",
+      "bytes": 100524
+    },
+    {
+      "file": "validation.csv",
+      "bytes": 1095
+    },
+    {
+      "file": "target_correlation.csv",
+      "bytes": 8059
+    },
+    {
+      "file": "channel_correlation.csv",
+      "bytes": 360418
+    },
+    {
+      "file": "stability.csv",
+      "bytes": 8677
+    },
+    {
+      "file": "coverage.csv",
+      "bytes": 6546
+    },
+    {
+      "file": "figures/01_ensemble_ranking.png",
+      "bytes": 252750
+    },
+    {
+      "file": "figures/02_method_heatmap.png",
+      "bytes": 379216
+    },
+    {
+      "file": "figures/03_target_correlation.png",
+      "bytes": 214686
+    },
+    {
+      "file": "figures/04_channel_correlation.png",
+      "bytes": 458212
+    },
+    {
+      "file": "figures/05_stat_profile.png",
+      "bytes": 247844
+    },
+    {
+      "file": "figures/06_validation.png",
+      "bytes": 47960
+    },
+    {
+      "file": "figures/07_stability.png",
+      "bytes": 296454
+    },
+    {
+      "file": "figures/08_coverage.png",
+      "bytes": 249781
+    },
+    {
+      "file": "figures/09_target_distribution.png",
+      "bytes": 40891
+    }
+  ],
+  "report_seconds": 6.63
+}

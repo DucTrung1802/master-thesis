@@ -1,0 +1,237 @@
+{
+  "report_schema_version": "1.0",
+  "generated_at": "2026-08-07T17:18:09.396197+00:00",
+  "git_commit": "1eae672+dirty",
+  "environment": {
+    "python": "3.12.10",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "numpy": "2.2.6",
+    "pandas": "2.3.3",
+    "scipy": "1.17.1",
+    "sklearn": "1.7.2",
+    "xgboost": "2.1.1",
+    "matplotlib": "3.10.8"
+  },
+  "input": {
+    "database": "database_main_v2",
+    "schema": "unified_schema_vcb",
+    "tables": [
+      "pool__basic",
+      "pool__economy_netherlands",
+      "pool__targets"
+    ],
+    "join_log": [
+      {
+        "table": "pool__economy_netherlands",
+        "join_keys": "date, exchange, ticker",
+        "how": "inner",
+        "rows_before": 4235,
+        "rows_after": 4235,
+        "columns_added": 137,
+        "duplicate_columns_dropped": ""
+      },
+      {
+        "table": "pool__targets",
+        "join_keys": "date, exchange, ticker",
+        "how": "inner",
+        "rows_before": 4235,
+        "rows_after": 4235,
+        "columns_added": 4,
+        "duplicate_columns_dropped": ""
+      }
+    ],
+    "panel_rows": 4235,
+    "panel_columns": 179,
+    "first_date": "2009-06-30",
+    "last_date": "2026-06-25",
+    "sessions": 4235,
+    "tickers": 1
+  },
+  "target": {
+    "name": "return_5day",
+    "horizon_days": 5,
+    "definition": "forward 5-session return on close_adjust",
+    "labelled_rows": 4230,
+    "unlabelled_rows": 5,
+    "mean": 0.0031904034424771826,
+    "sd": 0.042945842166406574,
+    "min": -0.1875968992248062,
+    "max": 0.2914485165794066
+  },
+  "setup": {
+    "target": "return_5day",
+    "horizon_h": 5,
+    "lookback_d": 20,
+    "normalize": "none",
+    "purge_gap_rows": 24,
+    "window_stats": "last, mean, slope, sd, min, max",
+    "dropped_by_normalize": 1,
+    "dev_samples": 4211,
+    "holdout_start": "—",
+    "holdout_rows": 0,
+    "purged_at_boundary": 0,
+    "channels": 161,
+    "design_columns": 965,
+    "kept": 12,
+    "device": "cpu",
+    "max_features": 12,
+    "corr_threshold": 0.9,
+    "n_splits": 5,
+    "min_train": 500,
+    "random_state": 42,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "permutation_repeats": 10,
+    "device_preference": "cpu",
+    "selector_class": "FeatureSelector",
+    "panel_col": null,
+    "feature_normalize": null
+  },
+  "results": {
+    "n_channels": 161,
+    "n_kept": 12,
+    "kept": [
+      "netherlands__economy__trade__economics__nlngi",
+      "netherlands__economy__trade__economics__nlexp",
+      "netherlands__economy__money__economics__nlfer",
+      "netherlands__economy__consumer__economics__nlblr",
+      "netherlands__economy__labor__economics__nlwm",
+      "netherlands__economy__business__economics__nlcar",
+      "netherlands__economy__labor__economics__nllc",
+      "netherlands__economy__housing__economics__nlbp",
+      "netherlands__economy__business__economics__nlcorpi",
+      "netherlands__economy__trade__economics__nledtgdp",
+      "netherlands__economy__labor__economics__nlwg",
+      "netherlands__economy__trade__economics__nlwes"
+    ],
+    "dropped_constant": [
+      "netherlands__economy__business__economics__nlcorr",
+      "netherlands__economy__taxes__economics__nlwtr",
+      "netherlands__economy__trade__economics__nlgres"
+    ],
+    "dropped_correlated": {
+      "netherlands__economy__trade__economics__nlimp": "netherlands__economy__trade__economics__nlexp",
+      "close_adjust": "netherlands__economy__trade__economics__nlexp",
+      "netherlands__economy__trade__economics__nlbot": "netherlands__economy__trade__economics__nlexp"
+    },
+    "dead_methods": [],
+    "top_10_by_ensemble": [
+      "netherlands__economy__trade__economics__nlngi",
+      "netherlands__economy__trade__economics__nlexp",
+      "netherlands__economy__money__economics__nlfer",
+      "netherlands__economy__consumer__economics__nlblr",
+      "netherlands__economy__trade__economics__nlimp",
+      "netherlands__economy__labor__economics__nlwm",
+      "close_adjust",
+      "netherlands__economy__business__economics__nlcar",
+      "netherlands__economy__labor__economics__nllc",
+      "netherlands__economy__housing__economics__nlbp"
+    ],
+    "timings_seconds": {
+      "window design (cpu)": 0.62,
+      "spearman vs target (cpu)": 0.43,
+      "mutual_info (cpu)": 11.77,
+      "xgb gain + shap (cpu)": 5.19,
+      "lasso (cpu)": 66.25,
+      "permutation (cpu)": 167.61,
+      "channel corr matrix (cpu)": 0.06,
+      "stability (cpu)": 20.19,
+      "validation (cpu)": 20.15
+    },
+    "ic_summary": {
+      "folds": 5.0,
+      "ic_mean": 0.054947298710817785,
+      "ic_trend_per_fold": 0.017068788576035478,
+      "ic_min": 0.016362100308649596,
+      "ic_max": 0.10965238709038355,
+      "ic_fold_sd": 0.045206811866821225,
+      "hit_rate": 0.497728971087483,
+      "n_test_rows": 737.0,
+      "n_eff_per_fold": 147.4,
+      "se_ic_per_fold": 0.0826
+    },
+    "ic_summary_all_channels": {
+      "folds": 5.0,
+      "ic_mean": 0.01925213090200238,
+      "ic_trend_per_fold": -0.03600539157802325,
+      "ic_min": -0.07274330754338915,
+      "ic_max": 0.11879579524814766,
+      "ic_fold_sd": 0.08238195168008344,
+      "hit_rate": 0.46407463237386687,
+      "n_test_rows": 737.0,
+      "n_eff_per_fold": 147.4,
+      "se_ic_per_fold": 0.0826
+    }
+  },
+  "null": null,
+  "holdout": null,
+  "notes": "",
+  "run_id": "2026-08-08_001806__vcb__basic+economy_netherlands__return_5day",
+  "artifacts": [
+    {
+      "file": "feature_importance.csv",
+      "bytes": 34090
+    },
+    {
+      "file": "design_scores.csv",
+      "bytes": 121589
+    },
+    {
+      "file": "validation.csv",
+      "bytes": 1093
+    },
+    {
+      "file": "target_correlation.csv",
+      "bytes": 10341
+    },
+    {
+      "file": "channel_correlation.csv",
+      "bytes": 520182
+    },
+    {
+      "file": "stability.csv",
+      "bytes": 11225
+    },
+    {
+      "file": "coverage.csv",
+      "bytes": 8403
+    },
+    {
+      "file": "figures/01_ensemble_ranking.png",
+      "bytes": 263177
+    },
+    {
+      "file": "figures/02_method_heatmap.png",
+      "bytes": 389180
+    },
+    {
+      "file": "figures/03_target_correlation.png",
+      "bytes": 224174
+    },
+    {
+      "file": "figures/04_channel_correlation.png",
+      "bytes": 500156
+    },
+    {
+      "file": "figures/05_stat_profile.png",
+      "bytes": 253868
+    },
+    {
+      "file": "figures/06_validation.png",
+      "bytes": 42775
+    },
+    {
+      "file": "figures/07_stability.png",
+      "bytes": 304478
+    },
+    {
+      "file": "figures/08_coverage.png",
+      "bytes": 284894
+    },
+    {
+      "file": "figures/09_target_distribution.png",
+      "bytes": 40891
+    }
+  ],
+  "report_seconds": 3.28
+}

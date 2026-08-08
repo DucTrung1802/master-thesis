@@ -1,0 +1,289 @@
+{
+  "report_schema_version": "1.0",
+  "generated_at": "2026-08-04T16:50:10.849490+00:00",
+  "git_commit": "ba495b3",
+  "environment": {
+    "python": "3.12.10",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "numpy": "2.2.6",
+    "pandas": "2.3.3",
+    "scipy": "1.17.1",
+    "sklearn": "1.7.2",
+    "xgboost": "2.1.1",
+    "matplotlib": "3.10.8"
+  },
+  "input": {
+    "database": "database_main_v2",
+    "schema": "unified_schema_vcb",
+    "tables": [
+      "pool__ta",
+      "pool__targets"
+    ],
+    "join_log": [
+      {
+        "table": "pool__targets",
+        "join_keys": "date, exchange, ticker",
+        "how": "inner",
+        "rows_before": 4235,
+        "rows_after": 4235,
+        "columns_added": 4,
+        "duplicate_columns_dropped": ""
+      }
+    ],
+    "panel_rows": 4235,
+    "panel_columns": 928,
+    "first_date": "2009-06-30",
+    "last_date": "2026-06-25",
+    "sessions": 4235,
+    "tickers": 1
+  },
+  "target": {
+    "name": "return_5day",
+    "horizon_days": 5,
+    "definition": "forward 5-session return on close_adjust",
+    "labelled_rows": 4230,
+    "unlabelled_rows": 5,
+    "mean": 0.0031904034424771826,
+    "sd": 0.042945842166406574,
+    "min": -0.1875968992248062,
+    "max": 0.2914485165794066
+  },
+  "setup": {
+    "target": "return_5day",
+    "horizon_h": 5,
+    "lookback_d": 1,
+    "normalize": "none",
+    "purge_gap_rows": 5,
+    "window_stats": "last",
+    "dropped_by_normalize": 0,
+    "dev_samples": 4230,
+    "holdout_start": "—",
+    "holdout_rows": 0,
+    "purged_at_boundary": 0,
+    "channels": 918,
+    "design_columns": 918,
+    "kept": 12,
+    "device": "cpu",
+    "max_features": 12,
+    "corr_threshold": 0.9,
+    "n_splits": 5,
+    "min_train": 500,
+    "random_state": 42,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "permutation_repeats": 10,
+    "device_preference": "cpu",
+    "selector_class": "FeatureSelector",
+    "panel_col": null,
+    "feature_normalize": null
+  },
+  "results": {
+    "n_channels": 918,
+    "n_kept": 12,
+    "kept": [
+      "close_ema_50_100_dist",
+      "close_ema_100_200_dist",
+      "close_kama_50_200_dist",
+      "close_kama_50_100_dist",
+      "close_dema_100_200_dist_pct",
+      "close_kama_200_slope",
+      "close_sma_100_slope",
+      "ht_dcperiod_signal_10",
+      "close_kama_100_200_dist",
+      "close_sma_100_200_dist",
+      "close_dema_50_200_dist_pct",
+      "close_sma_200_slope"
+    ],
+    "dropped_constant": [
+      "ad_gt_0",
+      "ht_trendmode_valid"
+    ],
+    "dropped_correlated": {
+      "close_ema_50_200_dist": "close_ema_50_100_dist",
+      "close_dema_100_200_dist": "close_dema_100_200_dist_pct",
+      "close_sma_100_dist": "close_kama_200_slope"
+    },
+    "dead_methods": [
+      "lasso"
+    ],
+    "top_10_by_ensemble": [
+      "close_ema_50_100_dist",
+      "close_ema_50_200_dist",
+      "close_ema_100_200_dist",
+      "close_kama_50_200_dist",
+      "close_kama_50_100_dist",
+      "close_dema_100_200_dist_pct",
+      "close_kama_200_slope",
+      "close_sma_100_slope",
+      "ht_dcperiod_signal_10",
+      "close_kama_100_200_dist"
+    ],
+    "timings_seconds": {
+      "window design (cpu)": 0.13,
+      "spearman vs target (cpu)": 0.57,
+      "mutual_info (cpu)": 13.25,
+      "xgb gain + shap (cpu)": 7.24,
+      "lasso (cpu)": 82.07,
+      "permutation (cpu)": 191.46,
+      "channel corr matrix (cpu)": 0.63,
+      "stability (cpu)": 27.08,
+      "validation (cpu)": 28.52
+    },
+    "ic_summary": {
+      "folds": 5.0,
+      "ic_mean": 0.1121095155597522,
+      "ic_trend_per_fold": 0.016516302785622022,
+      "ic_min": -0.00914735566629754,
+      "ic_max": 0.17858510445203568,
+      "ic_fold_sd": 0.0754453264830066,
+      "hit_rate": 0.5159731543624162,
+      "n_test_rows": 745.0,
+      "n_eff_per_fold": 149.0,
+      "se_ic_per_fold": 0.0822
+    },
+    "ic_summary_all_channels": {
+      "folds": 5.0,
+      "ic_mean": 0.08712705834704837,
+      "ic_trend_per_fold": -0.002446674374608325,
+      "ic_min": 0.04316307826744775,
+      "ic_max": 0.14357773072124316,
+      "ic_fold_sd": 0.041899428392308334,
+      "hit_rate": 0.4942281879194631,
+      "n_test_rows": 745.0,
+      "n_eff_per_fold": 149.0,
+      "se_ic_per_fold": 0.0822
+    }
+  },
+  "null": {
+    "label": "unified_schema_vcb / pool__ta / return_5day",
+    "observed_ic": 0.1121,
+    "null_mean": 0.0249,
+    "null_sd": 0.0346,
+    "null_p95_BAR": 0.0754,
+    "null_max": 0.1189,
+    "p_value": 0.0476,
+    "z_vs_null": 2.52,
+    "clears_bar": true,
+    "draws": 20,
+    "failed_draws": 0
+  },
+  "holdout": [
+    {
+      "feature_set": "selected",
+      "labels": "real",
+      "n_channels": 12,
+      "n_train": 3719,
+      "n_holdout": 506,
+      "n_eff_holdout": 101.2,
+      "ic": 0.17318932055278657,
+      "hit_rate": 0.4901185770750988
+    },
+    {
+      "feature_set": "selected",
+      "labels": "shuffled control",
+      "n_channels": 12,
+      "n_train": 3719,
+      "n_holdout": 506,
+      "n_eff_holdout": 101.2,
+      "ic": 0.06122978245103505,
+      "hit_rate": 0.49209486166007904
+    },
+    {
+      "feature_set": "all channels",
+      "labels": "real",
+      "n_channels": 918,
+      "n_train": 3719,
+      "n_holdout": 506,
+      "n_eff_holdout": 101.2,
+      "ic": 0.20854555622891371,
+      "hit_rate": 0.5039525691699605
+    },
+    {
+      "feature_set": "all channels",
+      "labels": "shuffled control",
+      "n_channels": 918,
+      "n_train": 3719,
+      "n_holdout": 506,
+      "n_eff_holdout": 101.2,
+      "ic": 0.10756268340945133,
+      "hit_rate": 0.4901185770750988
+    }
+  ],
+  "notes": "Feature selection over the TECHNICAL pool, run to sit beside the pool__fa run (CONTEXT §11) and the pool__basic run (§6b): same ticker, same target, same horizon, same folds, same device, same max_features. lookback=1 BY DESIGN, not for cost: a technical indicator already IS a window statistic over the price (sma_200 is a 200-day mean, macd a difference of two EMAs, bb_20_bandwidth a rolling sd), so wrapping a 20-day last/mean/slope/sd/min/max window around 922 of them computes windows of windows and multiplies the design matrix by six for no new information — the same reasoning §11 applied to pool__fa for a different reason. ⚠️ THE 207 BOOLEAN COLUMNS ARE CAST TO 0/1 AND SCORED. `FeatureSelector._prepare` drops bool dtypes, so a naive run would have silently scored 717 of the 921 indicators (CONTEXT §7a). The flag columns (rsi_14_gt_70, macd_..._cross_above, close_bb_20_above_upper, …) are real signals and are included; 2 of them are constant and were dropped as such. `ht_dcphase_quadrant` (VARCHAR) is excluded. 40 channels have coverage below 0.9 — the warm-up NaNs of the long moving averages — imputed with the TRAIN median inside every fold.",
+  "run_id": "2026-08-04_235010__vcb__ta__return_5day",
+  "artifacts": [
+    {
+      "file": "feature_importance.csv",
+      "bytes": 161564
+    },
+    {
+      "file": "design_scores.csv",
+      "bytes": 96715
+    },
+    {
+      "file": "validation.csv",
+      "bytes": 1077
+    },
+    {
+      "file": "target_correlation.csv",
+      "bytes": 38970
+    },
+    {
+      "file": "channel_correlation.csv",
+      "bytes": 17263685
+    },
+    {
+      "file": "stability.csv",
+      "bytes": 46365
+    },
+    {
+      "file": "coverage.csv",
+      "bytes": 31809
+    },
+    {
+      "file": "holdout.csv",
+      "bytes": 398
+    },
+    {
+      "file": "null_draws.csv",
+      "bytes": 497
+    },
+    {
+      "file": "figures/01_ensemble_ranking.png",
+      "bytes": 173334
+    },
+    {
+      "file": "figures/02_method_heatmap.png",
+      "bytes": 296995
+    },
+    {
+      "file": "figures/03_target_correlation.png",
+      "bytes": 162369
+    },
+    {
+      "file": "figures/04_channel_correlation.png",
+      "bytes": 353166
+    },
+    {
+      "file": "figures/06_validation.png",
+      "bytes": 42849
+    },
+    {
+      "file": "figures/07_stability.png",
+      "bytes": 229021
+    },
+    {
+      "file": "figures/08_coverage.png",
+      "bytes": 2299269
+    },
+    {
+      "file": "figures/09_target_distribution.png",
+      "bytes": 40891
+    },
+    {
+      "file": "figures/10_null.png",
+      "bytes": 56281
+    }
+  ],
+  "report_seconds": 13.61
+}

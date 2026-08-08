@@ -9,7 +9,11 @@ what it may be compared against.**
     report = write_report(result, selector=selector, panel=panel,
                           schema="unified_schema_vcb",
                           tables=["pool__basic", "pool__targets"])
-    report.path          # reports/feature_selection/2026-08-04__vcb__return_5day__<id>
+    report.path          # reports/feature_selection/2026-08-04_205945__vcb__basic__return_5day
+
+The folder name is `<date>_<HHMMSS>__<ticker>__<pools>__<target>`: the INPUT, then
+the TARGET. `pool__targets` is not named — it is where the label comes from, and the
+label is already the last segment.
 
 ## ⚠️ Why the metadata is this long
 
@@ -137,6 +141,50 @@ def _json_safe(value):
 def _slug(text: str) -> str:
     keep = [c if c.isalnum() else "_" for c in str(text).lower()]
     return "".join(keep).strip("_")[:40] or "run"
+
+
+# The label pool is where the TARGET comes from, so it is not an input and naming it
+# in the folder would say the same thing twice.
+LABEL_TABLES = ("pool__targets",)
+
+# The pool segment is the only unbounded part of a run id — `pool__economy_*` names
+# alone run to 30 characters and a run can join several. Windows still enforces a
+# 260-character path by default and a report writes `figures/09_target_distribution.png`
+# underneath this folder, so the segment is capped rather than left to the caller.
+MAX_POOL_SEGMENT = 60
+
+
+def default_run_id(
+    schema: str, tables: Sequence[str], target: str, stamp: Optional[datetime] = None
+) -> str:
+    """`<date>_<HHMMSS>__<ticker>__<pools>__<target>` — the INPUT, then the TARGET.
+
+    A folder name is the only part of a report anyone reads without opening it, so it
+    carries the two things that decide whether two runs may be compared at all: what
+    went in and what was predicted. ⚠️ It is a LABEL, not the record — `metadata.json`
+    holds the full schema, the untruncated table list, and the 27 knobs that a name
+    cannot fit (§10).
+
+    Redundant prefixes are stripped because every folder here would otherwise carry
+    them: `unified_schema_vcb` → `vcb`, `pool__basic` → `basic`. `pool__targets` is
+    dropped outright — it is the label source, and the target is already named.
+
+        >>> default_run_id("unified_schema_vcb",
+        ...                ["pool__basic", "pool__ta", "pool__targets"], "return_5day")
+        '2026-08-09_143012__vcb__basic+ta__return_5day'
+    """
+    stamp = stamp or datetime.now()
+    ticker = _slug(str(schema).replace("unified_schema_", "", 1) or "panel")
+
+    inputs = [t for t in tables if t not in LABEL_TABLES]
+    pools = [_slug(str(t).replace("pool__", "", 1)) for t in (inputs or tables)]
+    segment = "+".join(p for p in pools if p) or "pool"
+    if len(segment) > MAX_POOL_SEGMENT:
+        segment = segment[:MAX_POOL_SEGMENT].rstrip("+_") + "_etc"
+
+    return (
+        f"{stamp:%Y-%m-%d_%H%M%S}__{ticker}__{segment}__{_slug(target)}"
+    )
 
 
 @dataclass
@@ -562,7 +610,9 @@ def write_report(
             recorded as "no null was computed", not as a pass.
         holdout: `selector.score_holdout(result)` output, if it was run.
         universe: the tickers a cross-sectional run covered.
-        run_id: defaults to `<date>__<schema>__<target>__<HHMMSS>`.
+        run_id: defaults to `default_run_id(schema, tables, result.target)` —
+            `<date>_<HHMMSS>__<ticker>__<pools>__<target>`, so the folder name says
+            what went IN and what was predicted without opening `metadata.json`.
 
     Returns:
         A `Report` naming the folder and carrying the metadata dict.
@@ -572,8 +622,7 @@ def write_report(
         panel = getattr(selector, "panel", None)
 
     if run_id is None:
-        stamp = datetime.now().strftime("%Y-%m-%d__%H%M%S")
-        run_id = f"{stamp[:10]}__{_slug(schema or 'panel')}__{_slug(result.target)}__{stamp[-6:]}"
+        run_id = default_run_id(schema, tables, result.target)
     path = os.path.join(root, run_id)
     figures_dir = os.path.join(path, "figures")
     os.makedirs(path, exist_ok=True)

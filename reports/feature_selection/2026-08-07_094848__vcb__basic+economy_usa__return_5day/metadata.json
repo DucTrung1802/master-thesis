@@ -1,0 +1,244 @@
+{
+  "report_schema_version": "1.0",
+  "generated_at": "2026-08-07T02:48:54.248108+00:00",
+  "git_commit": "1eae672+dirty",
+  "environment": {
+    "python": "3.12.10",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "numpy": "2.2.6",
+    "pandas": "2.3.3",
+    "scipy": "1.17.1",
+    "sklearn": "1.7.2",
+    "xgboost": "2.1.1",
+    "matplotlib": "3.10.8"
+  },
+  "input": {
+    "database": "database_main_v2",
+    "schema": "unified_schema_vcb",
+    "tables": [
+      "pool__basic",
+      "pool__economy_usa",
+      "pool__targets"
+    ],
+    "join_log": [
+      {
+        "table": "pool__economy_usa",
+        "join_keys": "date, exchange, ticker",
+        "how": "inner",
+        "rows_before": 4235,
+        "rows_after": 4235,
+        "columns_added": 1438,
+        "duplicate_columns_dropped": ""
+      },
+      {
+        "table": "pool__targets",
+        "join_keys": "date, exchange, ticker",
+        "how": "inner",
+        "rows_before": 4235,
+        "rows_after": 4235,
+        "columns_added": 4,
+        "duplicate_columns_dropped": ""
+      }
+    ],
+    "panel_rows": 4235,
+    "panel_columns": 1480,
+    "first_date": "2009-06-30",
+    "last_date": "2026-06-25",
+    "sessions": 4235,
+    "tickers": 1
+  },
+  "target": {
+    "name": "return_5day",
+    "horizon_days": 5,
+    "definition": "forward 5-session return on close_adjust",
+    "labelled_rows": 4230,
+    "unlabelled_rows": 5,
+    "mean": 0.0031904034424771826,
+    "sd": 0.042945842166406574,
+    "min": -0.1875968992248062,
+    "max": 0.2914485165794066
+  },
+  "setup": {
+    "target": "return_5day",
+    "horizon_h": 5,
+    "lookback_d": 20,
+    "normalize": "none",
+    "purge_gap_rows": 24,
+    "window_stats": "last, mean, slope, sd, min, max",
+    "dropped_by_normalize": 1,
+    "dev_samples": 4211,
+    "holdout_start": "—",
+    "holdout_rows": 0,
+    "purged_at_boundary": 0,
+    "channels": 1458,
+    "design_columns": 8747,
+    "kept": 12,
+    "device": "cpu",
+    "max_features": 12,
+    "corr_threshold": 0.9,
+    "n_splits": 5,
+    "min_train": 500,
+    "random_state": 42,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "permutation_repeats": 10,
+    "device_preference": "cpu",
+    "selector_class": "FeatureSelector",
+    "panel_col": null,
+    "feature_normalize": null
+  },
+  "results": {
+    "n_channels": 1458,
+    "n_kept": 12,
+    "kept": [
+      "usa__economy__government__fred__fyoint",
+      "usa__economy__money__economics__usfbi",
+      "usa__economy__trade__fred__expjp",
+      "usa__economy__business__economics__uscor",
+      "usa__economy__prices__fred__will5000ind",
+      "usa__economy__housing__fred__boaaahorusq156n",
+      "usa__economy__business__fred__ltotalnsa",
+      "usa__economy__prices__fred__wpusi019011",
+      "usa__economy__gdp__fred__a191rl1q225sbea",
+      "usa__economy__business__fred__truckd11",
+      "usa__economy__prices__fred__wpu0851",
+      "usa__economy__housing__economics__ushor"
+    ],
+    "dropped_constant": [
+      "usa__economy__business__economics__uscorr",
+      "usa__economy__money__fred__wgcal",
+      "usa__economy__taxes__economics__usssr",
+      "usa__economy__taxes__economics__usssrc",
+      "usa__economy__taxes__economics__usssre",
+      "usa__economy__taxes__economics__usstr",
+      "usa__economy__taxes__economics__uswtr"
+    ],
+    "dropped_correlated": {
+      "usa__economy__government__fred__fygfd": "usa__economy__government__fred__fyoint",
+      "usa__economy__government__fred__mvmtd027mnfrbdal": "usa__economy__government__fred__fyoint",
+      "usa__economy__consumer__fred__pcend": "usa__economy__government__fred__fyoint",
+      "usa__economy__labor__fred__ceu0500000003": "usa__economy__government__fred__fyoint",
+      "usa__economy__business__fred__cprofit": "usa__economy__prices__fred__will5000ind",
+      "usa__economy__housing__fred__mnsthpi": "usa__economy__government__fred__fyoint"
+    },
+    "dead_methods": [],
+    "top_10_by_ensemble": [
+      "usa__economy__government__fred__fyoint",
+      "usa__economy__money__economics__usfbi",
+      "usa__economy__government__fred__fygfd",
+      "usa__economy__trade__fred__expjp",
+      "usa__economy__government__fred__mvmtd027mnfrbdal",
+      "usa__economy__business__economics__uscor",
+      "usa__economy__prices__fred__will5000ind",
+      "usa__economy__housing__fred__boaaahorusq156n",
+      "usa__economy__business__fred__ltotalnsa",
+      "usa__economy__consumer__fred__pcend"
+    ],
+    "timings_seconds": {
+      "window design (cpu)": 9.28,
+      "spearman vs target (cpu)": 20.44,
+      "mutual_info (cpu)": 41.79,
+      "xgb gain + shap (cpu)": 62.08,
+      "lasso (cpu)": 12901.07,
+      "permutation (cpu)": 12255.01,
+      "channel corr matrix (cpu)": 0.8,
+      "stability (cpu)": 197.23,
+      "validation (cpu)": 216.73
+    },
+    "ic_summary": {
+      "folds": 5.0,
+      "ic_mean": 0.1448140518553863,
+      "ic_trend_per_fold": -0.007918988403646228,
+      "ic_min": 0.08331767867931635,
+      "ic_max": 0.21008188254638724,
+      "ic_fold_sd": 0.04648284977707366,
+      "hit_rate": 0.5210220272729108,
+      "n_test_rows": 737.0,
+      "n_eff_per_fold": 147.4,
+      "se_ic_per_fold": 0.0826
+    },
+    "ic_summary_all_channels": {
+      "folds": 5.0,
+      "ic_mean": 0.009953799707145126,
+      "ic_trend_per_fold": 0.009771252192987485,
+      "ic_min": -0.08350775894606793,
+      "ic_max": 0.0608014060697874,
+      "ic_fold_sd": 0.056799776470245235,
+      "hit_rate": 0.4830477946104145,
+      "n_test_rows": 737.0,
+      "n_eff_per_fold": 147.4,
+      "se_ic_per_fold": 0.0826
+    }
+  },
+  "null": null,
+  "holdout": null,
+  "notes": "",
+  "run_id": "2026-08-07_094848__vcb__basic+economy_usa__return_5day",
+  "artifacts": [
+    {
+      "file": "feature_importance.csv",
+      "bytes": 282934
+    },
+    {
+      "file": "design_scores.csv",
+      "bytes": 944574
+    },
+    {
+      "file": "validation.csv",
+      "bytes": 1095
+    },
+    {
+      "file": "target_correlation.csv",
+      "bytes": 87939
+    },
+    {
+      "file": "channel_correlation.csv",
+      "bytes": 41964671
+    },
+    {
+      "file": "stability.csv",
+      "bytes": 100656
+    },
+    {
+      "file": "coverage.csv",
+      "bytes": 67800
+    },
+    {
+      "file": "figures/01_ensemble_ranking.png",
+      "bytes": 246862
+    },
+    {
+      "file": "figures/02_method_heatmap.png",
+      "bytes": 371088
+    },
+    {
+      "file": "figures/03_target_correlation.png",
+      "bytes": 212977
+    },
+    {
+      "file": "figures/04_channel_correlation.png",
+      "bytes": 506159
+    },
+    {
+      "file": "figures/05_stat_profile.png",
+      "bytes": 211025
+    },
+    {
+      "file": "figures/06_validation.png",
+      "bytes": 44330
+    },
+    {
+      "file": "figures/07_stability.png",
+      "bytes": 315967
+    },
+    {
+      "file": "figures/08_coverage.png",
+      "bytes": 1860347
+    },
+    {
+      "file": "figures/09_target_distribution.png",
+      "bytes": 40891
+    }
+  ],
+  "report_seconds": 6.33
+}

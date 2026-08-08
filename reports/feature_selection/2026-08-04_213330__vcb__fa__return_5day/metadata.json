@@ -1,0 +1,314 @@
+{
+  "report_schema_version": "1.0",
+  "generated_at": "2026-08-04T14:33:30.373996+00:00",
+  "git_commit": "9ff2ac5",
+  "environment": {
+    "python": "3.12.10",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "numpy": "2.2.6",
+    "pandas": "2.3.3",
+    "scipy": "1.17.1",
+    "sklearn": "1.7.2",
+    "xgboost": "2.1.1",
+    "matplotlib": "3.10.8"
+  },
+  "input": {
+    "database": "database_main_v2",
+    "schema": "unified_schema_vcb",
+    "tables": [
+      "pool__fa",
+      "pool__targets"
+    ],
+    "join_log": [
+      {
+        "table": "pool__targets",
+        "join_keys": "date, exchange, ticker",
+        "how": "inner",
+        "rows_before": 4235,
+        "rows_after": 4235,
+        "columns_added": 4,
+        "duplicate_columns_dropped": ""
+      }
+    ],
+    "panel_rows": 4235,
+    "panel_columns": 211,
+    "first_date": "2009-06-30",
+    "last_date": "2026-06-25",
+    "sessions": 4235,
+    "tickers": 1
+  },
+  "target": {
+    "name": "return_5day",
+    "horizon_days": 5,
+    "definition": "forward 5-session return on close_adjust",
+    "labelled_rows": 4230,
+    "unlabelled_rows": 5,
+    "mean": 0.0031904034424771826,
+    "sd": 0.042945842166406574,
+    "min": -0.1875968992248062,
+    "max": 0.2914485165794066
+  },
+  "setup": {
+    "target": "return_5day",
+    "horizon_h": 5,
+    "lookback_d": 1,
+    "normalize": "none",
+    "purge_gap_rows": 5,
+    "window_stats": "last",
+    "dropped_by_normalize": 0,
+    "dev_samples": 4230,
+    "holdout_start": "—",
+    "holdout_rows": 0,
+    "purged_at_boundary": 0,
+    "channels": 162,
+    "design_columns": 162,
+    "kept": 12,
+    "device": "cpu",
+    "max_features": 12,
+    "corr_threshold": 0.9,
+    "n_splits": 5,
+    "min_train": 500,
+    "random_state": 42,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "permutation_repeats": 10,
+    "device_preference": "cpu",
+    "selector_class": "FeatureSelector",
+    "panel_col": null,
+    "feature_normalize": null
+  },
+  "results": {
+    "n_channels": 162,
+    "n_kept": 12,
+    "kept": [
+      "balance_sheet_iv_chung_khoan_kinh_doanh",
+      "equity_growth_yoy",
+      "balance_sheet_iii_2_cho_vay_cac_tctd_khac",
+      "income_statement_ii_lai_lo_thuan_tu_hoat_dong_dich_vu",
+      "balance_sheet_vii_1_cac_khoan_lai_phi_phai_tra",
+      "balance_sheet_ix_2_von_gop_lien_doanh",
+      "balance_sheet_xii_1_cac_khoan_phai_thu",
+      "balance_sheet_viii_chung_khoan_dau_tu",
+      "cash_flow_hdkd_6_tien_thu_cac_khoan_no_da_duoc_xu_ly_xoa_bu_dap",
+      "deposits_to_assets",
+      "balance_sheet_viii_2_chung_khoan_dau_tu_giu_den_ngay_dao_han",
+      "cash_flow_hdkd_21_tang_giam_khac_ve_cong_no_hoat_dong"
+    ],
+    "dropped_constant": [
+      "balance_sheet_i_2_giao_dich_ban_va_mua_lai_trai_phieu_chinh_phu",
+      "balance_sheet_n2_cam_ket_giao_dich_tuong_lai",
+      "balance_sheet_n3_cam_ket_cho_vay_khong_huy_ngang",
+      "balance_sheet_n4_cam_ket_trong_nghiep_vu_l_c",
+      "balance_sheet_vii_1_mua_no",
+      "balance_sheet_vii_2_du_phong_rui_ro_hoat_dong_mua_no",
+      "balance_sheet_vii_hoat_dong_mua_no",
+      "balance_sheet_viii_1_c_von_dau_tu_xay_dung_co_ban_mua_sam_tai_s",
+      "balance_sheet_viii_1_d_co_phieu_quy",
+      "balance_sheet_viii_5_b_loi_nhuan_luy_ke_nam_truoc",
+      "balance_sheet_xi_a_nguyen_gia_bdsdt",
+      "balance_sheet_xi_b_hao_mon_bdsdt",
+      "balance_sheet_xii_4_trong_do_loi_the_thuong_mai",
+      "cash_flow_hddt_mua_sam_bat_dong_san_dau_tu",
+      "cash_flow_hddt_tien_chi_ra_do_ban_thanh_ly_bat_dong_san_dau_tu",
+      "cash_flow_hddt_tien_thu_tu_ban_thanh_ly_bat_dong_san_dau_tu",
+      "cash_flow_hdkd_11_tang_giam_cac_cong_cu_tc_phai_sinh_va_cac_tai",
+      "cash_flow_hdkd_20_tang_giam_cac_cong_cu_tc_phai_sinh_va_cac_kho",
+      "cash_flow_hdkd_5_lai_lo_tu_hoat_dong_khac",
+      "cash_flow_hdtc_2_tien_thu_tu_phat_hanh_giay_to_co_gia_dai_han_c",
+      "cash_flow_hdtc_3_tien_chi_thanh_toan_giay_to_co_gia_dai_han_co_",
+      "cash_flow_hdtc_5_tien_chi_ra_mua_co_phieu_quy",
+      "cash_flow_hdtc_6_tien_thu_duoc_do_ban_co_phieu_quy",
+      "cost_to_income",
+      "income_statement_tong_thu_nhap_hoat_dong",
+      "net_profit_margin",
+      "opincome_growth_yoy",
+      "pretax_margin",
+      "ps_ttm",
+      "ttm_op_income"
+    ],
+    "dropped_correlated": {
+      "balance_sheet_iv_1_chung_khoan_kinh_doanh": "balance_sheet_iv_chung_khoan_kinh_doanh",
+      "balance_sheet_n5_bao_lanh_khac": "balance_sheet_vii_1_cac_khoan_lai_phi_phai_tra"
+    },
+    "dead_methods": [],
+    "top_10_by_ensemble": [
+      "balance_sheet_iv_chung_khoan_kinh_doanh",
+      "balance_sheet_iv_1_chung_khoan_kinh_doanh",
+      "equity_growth_yoy",
+      "balance_sheet_iii_2_cho_vay_cac_tctd_khac",
+      "income_statement_ii_lai_lo_thuan_tu_hoat_dong_dich_vu",
+      "balance_sheet_vii_1_cac_khoan_lai_phi_phai_tra",
+      "balance_sheet_ix_2_von_gop_lien_doanh",
+      "balance_sheet_xii_1_cac_khoan_phai_thu",
+      "balance_sheet_viii_chung_khoan_dau_tu",
+      "cash_flow_hdkd_6_tien_thu_cac_khoan_no_da_duoc_xu_ly_xoa_bu_dap"
+    ],
+    "timings_seconds": {
+      "window design (cpu)": 0.01,
+      "spearman vs target (cpu)": 0.04,
+      "mutual_info (cpu)": 8.18,
+      "xgb gain + shap (cpu)": 0.73,
+      "lasso (cpu)": 0.69,
+      "permutation (cpu)": 9.65,
+      "channel corr matrix (cpu)": 0.04,
+      "stability (cpu)": 2.37,
+      "validation (cpu)": 2.55
+    },
+    "ic_summary": {
+      "folds": 5.0,
+      "ic_mean": 0.015662127502211798,
+      "ic_trend_per_fold": -0.017061748762123154,
+      "ic_min": -0.08356515455415109,
+      "ic_max": 0.094425953550391,
+      "ic_fold_sd": 0.06597110293915837,
+      "hit_rate": 0.4679194630872483,
+      "n_test_rows": 745.0,
+      "n_eff_per_fold": 149.0,
+      "se_ic_per_fold": 0.0822
+    },
+    "ic_summary_all_channels": {
+      "folds": 5.0,
+      "ic_mean": 0.0710119891893198,
+      "ic_trend_per_fold": -0.02091112768395823,
+      "ic_min": 0.0168308200190003,
+      "ic_max": 0.1409427270518851,
+      "ic_fold_sd": 0.04741000590901402,
+      "hit_rate": 0.47516778523489933,
+      "n_test_rows": 745.0,
+      "n_eff_per_fold": 149.0,
+      "se_ic_per_fold": 0.0822
+    }
+  },
+  "null": {
+    "label": "unified_schema_vcb / pool__fa / return_5day",
+    "observed_ic": 0.0157,
+    "null_mean": 0.0242,
+    "null_sd": 0.0337,
+    "null_p95_BAR": 0.074,
+    "null_max": 0.0896,
+    "p_value": 0.619,
+    "z_vs_null": -0.25,
+    "clears_bar": false,
+    "draws": 20,
+    "failed_draws": 0
+  },
+  "holdout": [
+    {
+      "feature_set": "selected",
+      "labels": "real",
+      "n_channels": 12,
+      "n_train": 3719,
+      "n_holdout": 506,
+      "n_eff_holdout": 101.2,
+      "ic": 0.023178773386802045,
+      "hit_rate": 0.5276679841897233
+    },
+    {
+      "feature_set": "selected",
+      "labels": "shuffled control",
+      "n_channels": 12,
+      "n_train": 3719,
+      "n_holdout": 506,
+      "n_eff_holdout": 101.2,
+      "ic": 0.032164640698817505,
+      "hit_rate": 0.4426877470355731
+    },
+    {
+      "feature_set": "all channels",
+      "labels": "real",
+      "n_channels": 162,
+      "n_train": 3719,
+      "n_holdout": 506,
+      "n_eff_holdout": 101.2,
+      "ic": -0.01112123073201925,
+      "hit_rate": 0.5276679841897233
+    },
+    {
+      "feature_set": "all channels",
+      "labels": "shuffled control",
+      "n_channels": 162,
+      "n_train": 3719,
+      "n_holdout": 506,
+      "n_eff_holdout": 101.2,
+      "ic": -0.04475107452468619,
+      "hit_rate": 0.44861660079051385
+    }
+  ],
+  "notes": "Feature selection over the FUNDAMENTAL pool. lookback=1 because a fundamental is a step function: pool__fa changes value on 69 publish days out of 4,230 sessions (~1 in 64), so window statistics collapse. `year`/`quarter` and the *_template/_period/_source metadata are excluded — `year` is not a proxy for the era, it IS the era. See CONTEXT §7a and §11.",
+  "run_id": "2026-08-04_213330__vcb__fa__return_5day",
+  "artifacts": [
+    {
+      "file": "feature_importance.csv",
+      "bytes": 34082
+    },
+    {
+      "file": "design_scores.csv",
+      "bytes": 22593
+    },
+    {
+      "file": "validation.csv",
+      "bytes": 1084
+    },
+    {
+      "file": "target_correlation.csv",
+      "bytes": 10774
+    },
+    {
+      "file": "channel_correlation.csv",
+      "bytes": 494133
+    },
+    {
+      "file": "stability.csv",
+      "bytes": 11657
+    },
+    {
+      "file": "coverage.csv",
+      "bytes": 11786
+    },
+    {
+      "file": "holdout.csv",
+      "bytes": 402
+    },
+    {
+      "file": "null_draws.csv",
+      "bytes": 495
+    },
+    {
+      "file": "figures/01_ensemble_ranking.png",
+      "bytes": 224106
+    },
+    {
+      "file": "figures/02_method_heatmap.png",
+      "bytes": 345246
+    },
+    {
+      "file": "figures/03_target_correlation.png",
+      "bytes": 259244
+    },
+    {
+      "file": "figures/04_channel_correlation.png",
+      "bytes": 550537
+    },
+    {
+      "file": "figures/06_validation.png",
+      "bytes": 43330
+    },
+    {
+      "file": "figures/07_stability.png",
+      "bytes": 263985
+    },
+    {
+      "file": "figures/08_coverage.png",
+      "bytes": 1108211
+    },
+    {
+      "file": "figures/09_target_distribution.png",
+      "bytes": 40891
+    },
+    {
+      "file": "figures/10_null.png",
+      "bytes": 51578
+    }
+  ],
+  "report_seconds": 4.15
+}

@@ -75,18 +75,24 @@
 > But the observed IC fell while the bar did not move, so §13d offers a second
 > reading worth testing: **a sector CO-MOVES, so there is less to rank.**
 >
-> **Four notebooks. Read the fourth one, then the third.**
+> ## ⚠️ ONE NOTEBOOK IS MEANT TO BE RUN. THE OTHER FOUR ARE WRITE-UPS.
 >
-> | notebook | one sample is | for |
+> **[RUN__feature_importance_report.ipynb](RUN__feature_importance_report.ipynb)** —
+> the `RUN__` prefix is the whole point of the name. Set the parameter cell, Run All,
+> get an archived run folder. §10.
+>
+> The four `study_*` notebooks are finished experiments kept for the record. They are
+> the evidence behind everything above; **re-running one reproduces a result that is
+> already written down here**, and none of them writes an archived report.
+>
+> | study notebook | one sample is | established |
 > |---|---|---|
-> | [feature_selection.ipynb](feature_selection.ipynb) | one row → `y_N` | a per-row model. `lookback=1` |
-> | [windowed_selection.ipynb](windowed_selection.ipynb) | a `(d, n)` window → `y_N` | **a sequence model.** `d=20`, `h ∈ {5, 10}` |
-> | [evaluation_study.ipynb](evaluation_study.ipynb) | — | **whether either result is real.** It is not: §6b-6d |
-> | **[cross_sectional_selection.ipynb](cross_sectional_selection.ipynb)** | a `(d, n)` window → **`y` = the stock's RANK on day `N`** | **the one that works.** §9 |
+> | [study_1__vcb_unwindowed.ipynb](study_1__vcb_unwindowed.ipynb) | one row → `y_N` | a per-row model. `lookback=1`. §6 |
+> | [study_2__vcb_windowed.ipynb](study_2__vcb_windowed.ipynb) | a `(d, n)` window → `y_N` | **a sequence model.** `d=20`, `h ∈ {5, 10}`. §6a |
+> | [study_3__null_and_holdout.ipynb](study_3__null_and_holdout.ipynb) | — | **whether either result is real.** It is not: §6b-6d |
+> | **[study_4__cross_sectional.ipynb](study_4__cross_sectional.ipynb)** | a `(d, n)` window → **`y` = the stock's RANK on day `N`** | **the one that works.** §9 |
 >
-> Plus one that is not a study:
-> **[feature_importance_report.ipynb](feature_importance_report.ipynb)** — set the
-> parameters, Run All, get an archived run folder. §10.
+> **Read study 4, then study 3.**
 >
 > ⚠️ **The first two both produce a positive out-of-sample IC. So does the same
 > pipeline run on shuffled labels.** The third notebook is what tells them apart, and
@@ -433,7 +439,7 @@ market factor being removed — visible before any model is fitted.
 targets — every one inside what shuffled labels produce. Hit rates are 0.48-0.50
 throughout.
 
-> The table above is the **20-draw** run. `evaluation_study.ipynb` re-runs the same
+> The table above is the **20-draw** run. `study_3__null_and_holdout.ipynb` re-runs the same
 > grid at `N_NULL = 10` to keep its execution under ~20 minutes, so its bars differ
 > in the third decimal. The verdict is identical in every cell — which is itself the
 > point: the result is not close enough to the bar for draw count to matter.
@@ -1003,12 +1009,12 @@ because draw 10 crashed.
 
 ## 10. THE REPORT PIPELINE — one run in, one self-describing folder out
 
-[report.py](report.py) + [feature_importance_report.ipynb](feature_importance_report.ipynb).
+[report.py](report.py) + [RUN__feature_importance_report.ipynb](RUN__feature_importance_report.ipynb).
 Set the parameters, Run All, get an archived run. This is the operational half of
 the package; §6 and §9 are the studies.
 
 ```
-reports/feature_selection/<date>__<schema>__<target>__<HHMMSS>/
+reports/feature_selection/<date>_<HHMMSS>__<ticker>__<pools>__<target>/
   metadata.json            what was run, on what, with which knobs, what came out
   README.md                the same, for a human, in ~40 lines
   feature_importance.csv   ⭐ the deliverable — 18 columns, see below
@@ -1021,6 +1027,34 @@ reports/feature_selection/<date>__<schema>__<target>__<HHMMSS>/
   figures/01..10 *.png     ranking, method heatmap, correlations, stat profile,
                            validation, stability, coverage, target dist, null
 ```
+
+### 10a. ⚠️ The folder name carries the INPUT and the TARGET — renamed 2026-08-09
+
+`report.default_run_id` builds `<date>_<HHMMSS>__<ticker>__<pools>__<target>`:
+
+```
+2026-08-08_103654__vcb__basic+economy_united_kingdom__return_5day
+                    ─┬─  ────────────┬────────────────  ─────┬─────
+                  schema        the INPUT pools        the TARGET
+```
+
+`unified_schema_` and `pool__` are stripped — every folder here would carry them —
+and **`pool__targets` is never named**, because it is where the label comes from and
+the label is already the last segment.
+
+⚠️ **The old scheme was `<date>__<schema>__<target>__<HHMMSS>` and it hid the input.**
+Eighteen of the twenty-two archived runs are VCB / `return_5day` differing only in
+which `pool__economy_<country>` was joined — under the old names all eighteen read
+`2026-08-0X__unified_schema_vcb__return_5day__<HHMMSS>` and were separable only by
+opening `metadata.json`. The whole argument of §8 is that two runs can look
+comparable and not be; a folder name that omits the input is that failure mode
+built into the filesystem.
+
+⚠️ **The name is a LABEL, not the record.** The pool segment is capped at 60
+characters (`MAX_POOL_SEGMENT`, then `_etc`) because Windows still enforces a
+260-character path and `figures/09_target_distribution.png` lives underneath.
+`metadata.json` holds the untruncated table list, the full schema and the 27 knobs
+a folder name cannot fit.
 
 `feature_importance.csv` is one row per CHANNEL, ensemble-sorted, carrying `rank`,
 `ensemble`, `kept`, `dropped_for`, **all six method scores**, `spearman_vs_target`
@@ -1053,7 +1087,7 @@ before any number leaves the machine. Same for `RUN_HOLDOUT`.
 a filesystem path the caller picks. And nothing is re-run: every artefact is read
 off an existing `SelectionResult`, so a report costs ~2 s.
 
-### 10a. The VCB prototype (2026-08-04) — checked in as the reference
+### 10b. The VCB prototype (2026-08-04) — checked in as the reference
 
 `unified_schema_vcb.pool__basic ⋈ pool__targets`, `return_5day`, `d=20, h=5`,
 executed end-to-end via `nbconvert`: **17 code cells, 0 errors, 18 artefacts,
@@ -1076,12 +1110,21 @@ exactly the situation the `"null": null` field and the README's bold warning exi
 for — and the prototype is more useful as the reference precisely because it shows
 what an unverified run looks like.
 
-⚠️ **`reports/feature_selection/*/` is gitignored** — ~1 MB per run accumulates
-fast. This one folder is force-added as the reference for the layout; a tracked file
-overrides the ignore rule, so re-running the notebook never adds a folder by
-accident.
+⚠️ **`reports/feature_selection/*/` is still gitignored, but ALL 22 archived runs
+were force-added on 2026-08-09** — the whole archive is now in history, not just this
+prototype. **A tracked file overrides the ignore rule**, so those 22 keep updating
+normally while a NEW run still has to be force-added on purpose.
 
-### 10b. ⚠️ The figure specs — and the three faults the first version shipped
+⚠️ **And "~1 MB per run" was wrong by two orders of magnitude on the wide pools.**
+The archive is **119.9 MB across 404 files** — 70 MB CSV, 50 MB PNG — and two files
+carry half of it: `channel_correlation.csv` is **40.0 MB** for
+`basic+economy_usa` and **16.5 MB** for `ta`, because it is the full N×N pairwise
+matrix the redundancy prune used and N runs to the thousands on a wide pool. Every
+other folder is 0.6-3.6 MB. **Before force-adding a new wide-pool run, look at that
+one file** — the deliverable is `feature_importance.csv`, and `dropped_for` already
+names what each channel was pruned into.
+
+### 10c. ⚠️ The figure specs — and the three faults the first version shipped
 
 [plots.py](plots.py) was rewritten 2026-08-04 after rendering the prototype and
 looking at it. The palette was never the problem — it was **computed, not
@@ -1128,7 +1171,7 @@ do not eyeball the result.
 
 `unified_schema_vcb.pool__fa ⋈ pool__targets`, `return_5day`, `d=1, h=5`, 162
 channels, 20-draw block-shuffled null, holdout `2024-06-01` with a control.
-Report: `reports/feature_selection/2026-08-04__unified_schema_vcb__pool_fa__return_5day`.
+Report: `reports/feature_selection/2026-08-04_213330__vcb__fa__return_5day`.
 
 | | observed | null mean | null sd | **p95 BAR** | null max | **z** | p | clears |
 |---|---|---|---|---|---|---|---|---|
@@ -1238,7 +1281,7 @@ events, and neither adds any.
 channels**, `device="cpu"`, `max_features=12`, `permutation_repeats=10`, 20-draw
 block-shuffled null, holdout `2024-06-01` with a control. Every knob matched to §11
 so the two pools are the same procedure on different columns.
-Report: `reports/feature_selection/2026-08-04__unified_schema_vcb__pool_ta__return_5day`.
+Report: `reports/feature_selection/2026-08-04_235010__vcb__ta__return_5day`.
 
 | | observed | null mean | null sd | **p95 BAR** | null max | **z** | p | clears |
 |---|---|---|---|---|---|---|---|---|
@@ -1366,7 +1409,7 @@ judges is a different procedure.
 `cs_rank` features, 27 channels, 20-draw `date_block` null, holdout `2024-06-01`
 with a control. **The §9c protocol with one thing changed: the universe is a GICS
 SECTOR instead of an index.**
-Report: `reports/feature_selection/2026-08-05__unified_schema_bank__pool_basic__cs_rank_5day`.
+Report: `reports/feature_selection/2026-08-05_004241__bank__basic__cs_rank_5day`.
 
 | | observed | null mean | null sd | **p95 BAR** | null max | **z** | p | clears |
 |---|---|---|---|---|---|---|---|---|

@@ -1,0 +1,237 @@
+{
+  "report_schema_version": "1.0",
+  "generated_at": "2026-08-07T10:24:20.981305+00:00",
+  "git_commit": "1eae672+dirty",
+  "environment": {
+    "python": "3.12.10",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "numpy": "2.2.6",
+    "pandas": "2.3.3",
+    "scipy": "1.17.1",
+    "sklearn": "1.7.2",
+    "xgboost": "2.1.1",
+    "matplotlib": "3.10.8"
+  },
+  "input": {
+    "database": "database_main_v2",
+    "schema": "unified_schema_vcb",
+    "tables": [
+      "pool__basic",
+      "pool__economy_hong_kong_china",
+      "pool__targets"
+    ],
+    "join_log": [
+      {
+        "table": "pool__economy_hong_kong_china",
+        "join_keys": "date, exchange, ticker",
+        "how": "inner",
+        "rows_before": 4235,
+        "rows_after": 4235,
+        "columns_added": 92,
+        "duplicate_columns_dropped": ""
+      },
+      {
+        "table": "pool__targets",
+        "join_keys": "date, exchange, ticker",
+        "how": "inner",
+        "rows_before": 4235,
+        "rows_after": 4235,
+        "columns_added": 4,
+        "duplicate_columns_dropped": ""
+      }
+    ],
+    "panel_rows": 4235,
+    "panel_columns": 134,
+    "first_date": "2009-06-30",
+    "last_date": "2026-06-25",
+    "sessions": 4235,
+    "tickers": 1
+  },
+  "target": {
+    "name": "return_5day",
+    "horizon_days": 5,
+    "definition": "forward 5-session return on close_adjust",
+    "labelled_rows": 4230,
+    "unlabelled_rows": 5,
+    "mean": 0.0031904034424771826,
+    "sd": 0.042945842166406574,
+    "min": -0.1875968992248062,
+    "max": 0.2914485165794066
+  },
+  "setup": {
+    "target": "return_5day",
+    "horizon_h": 5,
+    "lookback_d": 20,
+    "normalize": "none",
+    "purge_gap_rows": 24,
+    "window_stats": "last, mean, slope, sd, min, max",
+    "dropped_by_normalize": 1,
+    "dev_samples": 4211,
+    "holdout_start": "—",
+    "holdout_rows": 0,
+    "purged_at_boundary": 0,
+    "channels": 115,
+    "design_columns": 689,
+    "kept": 12,
+    "device": "cpu",
+    "max_features": 12,
+    "corr_threshold": 0.9,
+    "n_splits": 5,
+    "min_train": 500,
+    "random_state": 42,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "permutation_repeats": 10,
+    "device_preference": "cpu",
+    "selector_class": "FeatureSelector",
+    "panel_col": null,
+    "feature_normalize": null
+  },
+  "results": {
+    "n_channels": 115,
+    "n_kept": 12,
+    "kept": [
+      "hong_kong_china__economy__money__economics__hkfer",
+      "hong_kong_china__economy__prices__economics__hkep",
+      "hong_kong_china__economy__gdp__economics__hkgdpu",
+      "hong_kong_china__economy__housing__economics__hkrpp",
+      "hong_kong_china__economy__trade__economics__hkimp",
+      "hong_kong_china__economy__consumer__economics__hkrsyy",
+      "hong_kong_china__economy__government__economics__hkfe",
+      "hong_kong_china__economy__prices__economics__hkiryy",
+      "hong_kong_china__economy__labor__economics__hkemp",
+      "volume_negotiated",
+      "hong_kong_china__economy__trade__economics__hkbot",
+      "hong_kong_china__economy__business__economics__hkic"
+    ],
+    "dropped_constant": [
+      "hong_kong_china__economy__business__economics__hkcorr",
+      "hong_kong_china__economy__taxes__economics__hkctr",
+      "hong_kong_china__economy__taxes__economics__hkwtr",
+      "hong_kong_china__economy__trade__economics__hkgres"
+    ],
+    "dropped_correlated": {
+      "close_adjust": "hong_kong_china__economy__prices__economics__hkep",
+      "hong_kong_china__economy__prices__economics__hkcpit": "hong_kong_china__economy__prices__economics__hkep"
+    },
+    "dead_methods": [],
+    "top_10_by_ensemble": [
+      "hong_kong_china__economy__money__economics__hkfer",
+      "hong_kong_china__economy__prices__economics__hkep",
+      "hong_kong_china__economy__gdp__economics__hkgdpu",
+      "hong_kong_china__economy__housing__economics__hkrpp",
+      "hong_kong_china__economy__trade__economics__hkimp",
+      "hong_kong_china__economy__consumer__economics__hkrsyy",
+      "hong_kong_china__economy__government__economics__hkfe",
+      "close_adjust",
+      "hong_kong_china__economy__prices__economics__hkiryy",
+      "hong_kong_china__economy__prices__economics__hkcpit"
+    ],
+    "timings_seconds": {
+      "window design (cpu)": 0.67,
+      "spearman vs target (cpu)": 0.35,
+      "mutual_info (cpu)": 18.18,
+      "xgb gain + shap (cpu)": 5.78,
+      "lasso (cpu)": 40.5,
+      "permutation (cpu)": 100.44,
+      "channel corr matrix (cpu)": 0.04,
+      "stability (cpu)": 11.56,
+      "validation (cpu)": 13.04
+    },
+    "ic_summary": {
+      "folds": 5.0,
+      "ic_mean": 0.07110136368987276,
+      "ic_trend_per_fold": 0.010822394826816288,
+      "ic_min": 0.017776813056406503,
+      "ic_max": 0.12861768274815258,
+      "ic_fold_sd": 0.04400112716915016,
+      "hit_rate": 0.49172724151416614,
+      "n_test_rows": 737.0,
+      "n_eff_per_fold": 147.4,
+      "se_ic_per_fold": 0.0826
+    },
+    "ic_summary_all_channels": {
+      "folds": 5.0,
+      "ic_mean": -0.0021029728542668173,
+      "ic_trend_per_fold": -0.006138941879839355,
+      "ic_min": -0.09427424975827926,
+      "ic_max": 0.09400471940657296,
+      "ic_fold_sd": 0.07185462886377825,
+      "hit_rate": 0.4705757716522566,
+      "n_test_rows": 737.0,
+      "n_eff_per_fold": 147.4,
+      "se_ic_per_fold": 0.0826
+    }
+  },
+  "null": null,
+  "holdout": null,
+  "notes": "",
+  "run_id": "2026-08-07_172418__vcb__basic+economy_hong_kong_china__return_5day",
+  "artifacts": [
+    {
+      "file": "feature_importance.csv",
+      "bytes": 24653
+    },
+    {
+      "file": "design_scores.csv",
+      "bytes": 89717
+    },
+    {
+      "file": "validation.csv",
+      "bytes": 1095
+    },
+    {
+      "file": "target_correlation.csv",
+      "bytes": 7445
+    },
+    {
+      "file": "channel_correlation.csv",
+      "bytes": 269498
+    },
+    {
+      "file": "stability.csv",
+      "bytes": 7908
+    },
+    {
+      "file": "coverage.csv",
+      "bytes": 6141
+    },
+    {
+      "file": "figures/01_ensemble_ranking.png",
+      "bytes": 264438
+    },
+    {
+      "file": "figures/02_method_heatmap.png",
+      "bytes": 397629
+    },
+    {
+      "file": "figures/03_target_correlation.png",
+      "bytes": 228150
+    },
+    {
+      "file": "figures/04_channel_correlation.png",
+      "bytes": 513416
+    },
+    {
+      "file": "figures/05_stat_profile.png",
+      "bytes": 253666
+    },
+    {
+      "file": "figures/06_validation.png",
+      "bytes": 42911
+    },
+    {
+      "file": "figures/07_stability.png",
+      "bytes": 303662
+    },
+    {
+      "file": "figures/08_coverage.png",
+      "bytes": 172685
+    },
+    {
+      "file": "figures/09_target_distribution.png",
+      "bytes": 40891
+    }
+  ],
+  "report_seconds": 3.18
+}

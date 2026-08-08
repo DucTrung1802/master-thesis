@@ -1,0 +1,235 @@
+{
+  "report_schema_version": "1.0",
+  "generated_at": "2026-08-07T12:31:43.435703+00:00",
+  "git_commit": "1eae672+dirty",
+  "environment": {
+    "python": "3.12.10",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "numpy": "2.2.6",
+    "pandas": "2.3.3",
+    "scipy": "1.17.1",
+    "sklearn": "1.7.2",
+    "xgboost": "2.1.1",
+    "matplotlib": "3.10.8"
+  },
+  "input": {
+    "database": "database_main_v2",
+    "schema": "unified_schema_vcb",
+    "tables": [
+      "pool__basic",
+      "pool__economy_indonesia",
+      "pool__targets"
+    ],
+    "join_log": [
+      {
+        "table": "pool__economy_indonesia",
+        "join_keys": "date, exchange, ticker",
+        "how": "inner",
+        "rows_before": 4235,
+        "rows_after": 4235,
+        "columns_added": 105,
+        "duplicate_columns_dropped": ""
+      },
+      {
+        "table": "pool__targets",
+        "join_keys": "date, exchange, ticker",
+        "how": "inner",
+        "rows_before": 4235,
+        "rows_after": 4235,
+        "columns_added": 4,
+        "duplicate_columns_dropped": ""
+      }
+    ],
+    "panel_rows": 4235,
+    "panel_columns": 147,
+    "first_date": "2009-06-30",
+    "last_date": "2026-06-25",
+    "sessions": 4235,
+    "tickers": 1
+  },
+  "target": {
+    "name": "return_5day",
+    "horizon_days": 5,
+    "definition": "forward 5-session return on close_adjust",
+    "labelled_rows": 4230,
+    "unlabelled_rows": 5,
+    "mean": 0.0031904034424771826,
+    "sd": 0.042945842166406574,
+    "min": -0.1875968992248062,
+    "max": 0.2914485165794066
+  },
+  "setup": {
+    "target": "return_5day",
+    "horizon_h": 5,
+    "lookback_d": 20,
+    "normalize": "none",
+    "purge_gap_rows": 24,
+    "window_stats": "last, mean, slope, sd, min, max",
+    "dropped_by_normalize": 1,
+    "dev_samples": 4211,
+    "holdout_start": "—",
+    "holdout_rows": 0,
+    "purged_at_boundary": 0,
+    "channels": 131,
+    "design_columns": 785,
+    "kept": 12,
+    "device": "cpu",
+    "max_features": 12,
+    "corr_threshold": 0.9,
+    "n_splits": 5,
+    "min_train": 500,
+    "random_state": 42,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "permutation_repeats": 10,
+    "device_preference": "cpu",
+    "selector_class": "FeatureSelector",
+    "panel_col": null,
+    "feature_normalize": null
+  },
+  "results": {
+    "n_channels": 131,
+    "n_kept": 12,
+    "kept": [
+      "indonesia__economy__consumer__economics__idrsmm",
+      "indonesia__economy__prices__economics__idirmm",
+      "indonesia__economy__money__economics__idfer",
+      "indonesia__economy__trade__economics__idcop",
+      "indonesia__economy__prices__economics__idfi",
+      "indonesia__economy__prices__economics__idcpit",
+      "indonesia__economy__money__economics__iddir",
+      "indonesia__economy__trade__economics__idimp",
+      "indonesia__economy__consumer__economics__idcci",
+      "foreign_sell_volume",
+      "indonesia__economy__business__economics__idcu",
+      "volume_negotiated"
+    ],
+    "dropped_constant": [
+      "indonesia__economy__business__economics__idcorr"
+    ],
+    "dropped_correlated": {
+      "close_adjust": "indonesia__economy__trade__economics__idcop",
+      "indonesia__economy__trade__economics__idexp": "indonesia__economy__trade__economics__idimp",
+      "indonesia__economy__money__economics__idm0": "indonesia__economy__money__economics__idfer"
+    },
+    "dead_methods": [],
+    "top_10_by_ensemble": [
+      "indonesia__economy__consumer__economics__idrsmm",
+      "indonesia__economy__prices__economics__idirmm",
+      "indonesia__economy__money__economics__idfer",
+      "indonesia__economy__trade__economics__idcop",
+      "indonesia__economy__prices__economics__idfi",
+      "close_adjust",
+      "indonesia__economy__prices__economics__idcpit",
+      "indonesia__economy__money__economics__iddir",
+      "indonesia__economy__trade__economics__idimp",
+      "indonesia__economy__trade__economics__idexp"
+    ],
+    "timings_seconds": {
+      "window design (cpu)": 0.73,
+      "spearman vs target (cpu)": 0.42,
+      "mutual_info (cpu)": 21.13,
+      "xgb gain + shap (cpu)": 4.57,
+      "lasso (cpu)": 40.37,
+      "permutation (cpu)": 120.29,
+      "channel corr matrix (cpu)": 0.04,
+      "stability (cpu)": 14.21,
+      "validation (cpu)": 14.33
+    },
+    "ic_summary": {
+      "folds": 5.0,
+      "ic_mean": 0.08914567007199745,
+      "ic_trend_per_fold": 0.04788868569676822,
+      "ic_min": -0.005165199929948616,
+      "ic_max": 0.2013413140514003,
+      "ic_fold_sd": 0.09150089611567923,
+      "hit_rate": 0.5164300284773696,
+      "n_test_rows": 737.0,
+      "n_eff_per_fold": 147.4,
+      "se_ic_per_fold": 0.0826
+    },
+    "ic_summary_all_channels": {
+      "folds": 5.0,
+      "ic_mean": 0.04755204402627056,
+      "ic_trend_per_fold": -0.0013387053204784423,
+      "ic_min": 0.021754092760631866,
+      "ic_max": 0.06616334067204133,
+      "ic_fold_sd": 0.019241325264870584,
+      "hit_rate": 0.46191027884320557,
+      "n_test_rows": 737.0,
+      "n_eff_per_fold": 147.4,
+      "se_ic_per_fold": 0.0826
+    }
+  },
+  "null": null,
+  "holdout": null,
+  "notes": "",
+  "run_id": "2026-08-07_193140__vcb__basic+economy_indonesia__return_5day",
+  "artifacts": [
+    {
+      "file": "feature_importance.csv",
+      "bytes": 27100
+    },
+    {
+      "file": "design_scores.csv",
+      "bytes": 97043
+    },
+    {
+      "file": "validation.csv",
+      "bytes": 1090
+    },
+    {
+      "file": "target_correlation.csv",
+      "bytes": 8029
+    },
+    {
+      "file": "channel_correlation.csv",
+      "bytes": 345232
+    },
+    {
+      "file": "stability.csv",
+      "bytes": 8633
+    },
+    {
+      "file": "coverage.csv",
+      "bytes": 6592
+    },
+    {
+      "file": "figures/01_ensemble_ranking.png",
+      "bytes": 245005
+    },
+    {
+      "file": "figures/02_method_heatmap.png",
+      "bytes": 371510
+    },
+    {
+      "file": "figures/03_target_correlation.png",
+      "bytes": 216609
+    },
+    {
+      "file": "figures/04_channel_correlation.png",
+      "bytes": 471090
+    },
+    {
+      "file": "figures/05_stat_profile.png",
+      "bytes": 240670
+    },
+    {
+      "file": "figures/06_validation.png",
+      "bytes": 42548
+    },
+    {
+      "file": "figures/07_stability.png",
+      "bytes": 284770
+    },
+    {
+      "file": "figures/08_coverage.png",
+      "bytes": 314330
+    },
+    {
+      "file": "figures/09_target_distribution.png",
+      "bytes": 40891
+    }
+  ],
+  "report_seconds": 3.26
+}
