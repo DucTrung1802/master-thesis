@@ -162,6 +162,40 @@ class TradingViewDataConfig(TradingViewLinksConfig):
     skip_existing: bool = True
 
 
+class CafeFTabConfig(Config):
+    """Run config for the five per-stock CafeF tabs, settable per-run from the UI.
+
+    ⚠️ **`skip_existing=True` FETCHES NOTHING THAT IS ALREADY ON DISK**, and all five
+    folders already hold ~781 CSVs. `_scrape_tab` returns at the `os.path.exists` check
+    before a single request goes out, so a run over the whole universe finishes in
+    seconds, reports success, and leaves every series at whatever last date it had.
+    `landed()` cannot see that — it asks "is this folder empty?", not "did THIS run
+    fetch anything" (CLAUDE.md §5 rule 10). Pass `skip_existing: false` whenever the
+    point of the run is FRESH DATA.
+
+    ⚠️ Unlike `raw/trading_view_data`, a re-fetch here OVERWRITES in place: the filename
+    is `<EXCHANGE>_<SYMBOL>.csv` with no date stamp, written to a `.tmp` and atomically
+    renamed. So there is no folder to clear first and no duplicate for bronze to dedupe.
+
+    `tickers` narrows the run to named symbols — `["VCB"]` or `["HOSE_VCB"]`, both
+    case-insensitive; empty means the whole universe. This is what makes a single-name
+    refresh affordable: 1 ticker × 4 tabs instead of 781. ⚠️ A name matching nothing
+    RAISES rather than queueing zero tasks (`get_stock_symbols`).
+
+    ```yaml
+    ops:
+      raw__cafef_price:
+        config:
+          skip_existing: false
+          tickers: ["HOSE_VCB"]
+    ```
+    """
+
+    skip_existing: bool = True
+    exchanges: List[str] = []
+    tickers: List[str] = []
+
+
 TV_LINKS = AssetKey(["raw", "trading_view_links"])
 
 # ⚠️ THE UNIVERSE IS ONE PARTITION, NOT THE WHOLE ASSET. `get_stock_symbols()` globs
@@ -406,14 +440,30 @@ def _build_cafef_tab_asset(tab: str, method: str, folder: str, what: str):
         description=f"CafeF {what} → raw_data/cafef/{folder}/. Replaces `web_scraper/cafef/{tab}`.",
     )
     def _scrape(
-        context: AssetExecutionContext, repo_logger: RepoLogger, switches: SwitchConfig
+        context: AssetExecutionContext,
+        config: CafeFTabConfig,
+        repo_logger: RepoLogger,
+        switches: SwitchConfig,
     ) -> MaterializeResult:
         logger = repo_logger.build()
         scraper = CafeFScraper(logger=logger, switch_handler=switches.build(logger))
         # The per-tab batch method, never `scrape()` — that re-reads the switch config
         # and would let the JSON veto a materialisation Dagster was asked for.
-        getattr(scraper, method)()
-        return MaterializeResult(metadata=landed(f"{CAFEF_RAW_DATA_DIR}/{folder}"))
+        getattr(scraper, method)(
+            skip_existing=config.skip_existing,
+            exchanges=tuple(config.exchanges) or None,
+            tickers=tuple(config.tickers) or None,
+        )
+        # ⚠️ `landed()` answers "is this folder non-empty", which a 781-file folder
+        # satisfies whether or not THIS run fetched anything. The scope is reported
+        # beside it so the metadata says what was actually asked for.
+        return MaterializeResult(
+            metadata={
+                **landed(f"{CAFEF_RAW_DATA_DIR}/{folder}"),
+                "skip_existing": config.skip_existing,
+                "scope": ", ".join(config.tickers) or "whole universe",
+            }
+        )
 
     return _scrape
 

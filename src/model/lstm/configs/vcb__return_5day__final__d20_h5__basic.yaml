@@ -1,0 +1,56 @@
+# LSTM on the pool__basic-only feature table — the prototype end-to-end chain.
+#
+# The dataset is REFERENCED by folder name under src/train_test_set/, built by
+#   python -m train_test_creator --table return_5day__final__d20_h5__basic --save
+# from unified_schema_vcb.return_5day__final__d20_h5__basic, which final_features built
+# from ONE feature-selection run over pool__basic alone:
+#   reports/feature_selection_basic/2026-08-10_034947__vcb__basic__return_5day
+#
+# WARNING: `lookback` and `n_features` below are ASSERTIONS, not settings. train.py
+# raises if the dataset disagrees with them — the dataset is the authority, and a
+# config that quietly wins that argument trains a d=20 architecture on d=5 windows.
+#
+# WARNING: 4 features, not 724. This is the whole point of the scoped build — the wide
+# table hands an LSTM 724 channels on 2,918 training windows and the STL-1 rebuild
+# measured what that costs (test IC -0.011 -> -0.072). The capacity below is reduced to
+# match: a 2x128 stack on 4 channels is ~276k parameters against 11,756 training values.
+
+run_name: lstm__vcb__return_5day__final__d20_h5__basic
+dataset: vcb__return_5day__final__d20_h5__basic__tr70_val15_test15__std
+task: regression
+
+# Asserted against the dataset's metadata.json at load time.
+lookback: 20
+# 4 of 6 shortlisted channels; 2 dropped for zero train-slice coverage (both prop_*,
+# selected at 0.206 coverage — issue COV-1, reproduced on a 6-channel shortlist).
+n_features: 4
+
+# Pinned so the run is verifiable. `train_test_creator` writes this; if the dataset is
+# ever rebuilt, load_dataset raises here rather than training on different tensors.
+dataset_hash: 08c7a0498ab2c934
+
+model:
+  type: LSTM
+  # ⚠️ 32x1, not 128x2. Four input channels do not justify 276k parameters, and the
+  # comparison this prototype exists to make is "does the narrow pool do better than the
+  # wide one" — which a model sized for the wide one would confound.
+  hidden_size: 32
+  num_layers: 1
+  dropout: 0.1
+
+train:
+  batch_size: 64
+  lr: 0.001
+  weight_decay: 0.00001
+  max_epochs: 150
+  patience: 20
+  grad_clip: 1.0
+  lr_factor: 0.5
+  lr_patience: 5
+  log_every: 10
+
+# Draws in result_evaluator's block-shuffled null. 200 resolves p to ~0.005.
+null_draws: 200
+
+seed: 42
+device: auto

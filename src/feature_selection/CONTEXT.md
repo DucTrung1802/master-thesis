@@ -85,6 +85,34 @@
 > the `RUN__` prefix is the whole point of the name. Set the parameter cell, Run All,
 > get an archived run folder. §10.
 >
+> **[run.py](run.py) is the same thing as a command** (added 2026-08-10):
+>
+> ```
+> python -m feature_selection.run --pools pool__basic --null-draws 20 \
+>                                 --root reports/feature_selection_basic
+> ```
+>
+> It re-implements nothing — same `FeatureSelector`, same
+> `evaluation.null_distribution`, same `report.write_report`, and it writes the
+> `outstanding.csv` before returning. Two differences from the notebook, both
+> deliberate:
+>
+> 1. ⚠️ **`--null-draws` defaults to 20, where `RUN_NULL` defaults to `False`.** A
+>    scripted run has no human at the keyboard to read the "no bar was computed"
+>    warning, and `evidence=no_null` then travels into the table `COMMENT`, the dataset
+>    `metadata.json` and the run `lineage`. `--null-draws 0` still records the absence
+>    as an absence.
+> 2. ⚠️ **`--root` exists because `final_features` groups on
+>    `(schema, target, setup)`** — a key with no term for *which pools*. A new
+>    `pool__basic` run archived into the default root joins the 19 runs behind
+>    `return_5day__final__d20_h5` and silently widens that table. See
+>    `final_features/CONTEXT.md` §0.
+>
+> ⚠️ **The wide pools stay manual regardless.** This makes the CHEAP case scriptable —
+> 27 channels is minutes. `basic+economy_usa` spends 12,255 s on `permutation` per pass
+> at 1,458 channels, so one 20-draw null there is ~68 CPU-hours (issue **EVD-1**), and a
+> CLI does not change that arithmetic.
+>
 > The four `study_*` notebooks are finished experiments kept for the record. They are
 > the evidence behind everything above; **re-running one reproduces a result that is
 > already written down here**, and none of them writes an archived report.
@@ -1182,6 +1210,57 @@ matrix the redundancy prune used and N runs to the thousands on a wide pool. Eve
 other folder is 0.6-3.6 MB. **Before force-adding a new wide-pool run, look at that
 one file** — the deliverable is `feature_importance.csv`, and `dropped_for` already
 names what each channel was pruned into.
+
+### 10d. ⚠️ THE THIRD MEASUREMENT OF `pool__basic` (2026-08-10) — it CLEARS, and that is not a pass
+
+Run headlessly by `python -m feature_selection.run` into its own root
+(`reports/feature_selection_basic/2026-08-10_034947__vcb__basic__return_5day`), on the
+panel re-scraped the same day: **4,266 rows to 2026-08-07**, against 4,235 to 2026-06-25
+for the two runs below it.
+
+| measurement | rows | cut | observed | null mean | null sd | **p95 BAR** | **null MAX** | **z** | p | verdict |
+|---|---|---|---|---|---|---|---|---|---|---|
+| §6b, study grid | 4,235 | `max_features=12` | +0.0559 | +0.0167 | 0.0252 | +0.0556 | **+0.0606 — above observed** | +1.56 | 0.050 | ❌ |
+| §10b, prototype | 4,235 | `max_features=12` | +0.0636 | +0.0041 | 0.0407 | +0.0838 | **+0.1026 — above observed** | +1.46 | 0.095 | ❌ |
+| **§10d, this run** | **4,266** | **measured (14 kept)** | **+0.0783** | **+0.0013** | 0.0358 | **+0.0562** | **+0.0648 — BELOW observed** | **+2.15** | **0.0476** | ⚠️ **clears p95** |
+
+⚠️ **This is the first `pool__basic` run where no shuffled draw beat the real data**, and
+it is why the other two failed: their null MAX exceeded their observed (§5 rule 3), and
+this one's does not. `outstanding.csv` records it as **`evidence=cleared_p95_not_a_pass`**
+— the archive's own vocabulary, and the right reading. Four reasons not to promote it:
+
+1. ⚠️ **`p = 0.0476` is the `1/(n+1)` FLOOR, not a measurement.** Zero of 20 draws
+   reached the observed, so the p-value is pinned at 1/21 and 20 draws cannot tell
+   `p = 0.05` from `p = 0.001`. The z is the number to quote — the same argument §9d
+   makes for the cross-section, where it supports a z of +6.09 rather than +2.15.
+2. ⚠️ **The null is fat-tailed and the p95 is being SET by the tail rather than
+   measured.** The 20 draws run −0.0705 … +0.0648 with a mean of +0.0013; two of them
+   (+0.0648, +0.0557) sit near the bar and the other eighteen are nowhere near it. §10b
+   made exactly this argument about the same pool, and its bar (+0.0838) and this one
+   (+0.0562) differ by 49% on the same data and the same 27 candidates.
+3. ⚠️ **It is a DIFFERENT PROCEDURE from the two rows above it**, so the table is three
+   measurements, not one repeated three times: 31 more sessions, and the measured cut
+   (14 kept) in place of the flat `max_features=12`. §8 requires a bar per configuration
+   and this run has its own — the observed and its null share `build()` in
+   [run.py](run.py), so the comparison is internally valid. It is the comparison ACROSS
+   rows that is not.
+4. ⚠️ **AND THE MODEL TRAINED ON IT SHOWS NO SKILL.** `lstm__vcb__return_5day__final__
+   d20_h5__basic__20260810-035257`: test IC **−0.0345** against a bar of +0.1348
+   (p = 0.73), hit rate 0.486 — below a coin, the §6b signature. A selection that clears
+   its own bar and a model that does not clear its own is the whole reason both bars
+   exist. **`z = +2.15` at the selection stage bought nothing downstream.**
+
+⚠️ **For scale: `pool__ta` cleared at `z = +2.52` (§12) and is likewise not a pass.**
+Clearing a 20-draw p95 on a single ticker is the weakest positive result this package
+can produce, and §2's verdict is unchanged by it.
+
+⚠️ **The 6 shortlisted channels are not the 12 of §10b.** `sell_order_vol`,
+`volume_negotiated`, `close_adjust`, `foreign_sell_value`, `prop_buy_val`,
+`prop_sell_val` — and **three carry `PARTIAL` coverage flags**, two of them at **0.206**
+(issue **COV-1**, reproduced on a six-row shortlist). `train_test_creator` then drops
+both `prop_*` for zero TRAIN-slice coverage, so the model sees **4** channels. A cut
+that spends a third of its shortlist on columns that do not exist across training is the
+defect COV-1 describes, at a scale small enough to read in one table.
 
 ### 10c. ⚠️ The figure specs — and the three faults the first version shipped
 

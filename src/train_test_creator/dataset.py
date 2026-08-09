@@ -90,8 +90,17 @@ from feature_selection.unified_reader import KEY_COLS, UnifiedSchemaReader
 
 # The tables `final_features` builds. ⚠️ `d` and `h` are parsed OUT of this, never
 # passed alongside it — see the module docstring.
+#
+# ⚠️ The trailing `__<scope>` is OPTIONAL and names the FEATURE BLOCK, not the setup:
+# `return_5day__final__d20_h5__basic` is the same target at the same `d` and `h` as
+# `return_5day__final__d20_h5`, built from `pool__basic` alone rather than from the
+# archive's union of 19 shortlists (`final_features.builder.table_name`). It changes
+# nothing this module does — the channels are whatever columns the table has — but
+# without it the two builds collide on one name and the narrower one can only be
+# created by DROPPING the wider (issue STL-1's domino).
 FINAL_TABLE = re.compile(
-    r"^(?P<target>[a-z][a-z0-9_]*?)__final__d(?P<lookback>\d+)_h(?P<horizon>\d+)$"
+    r"^(?P<target>[a-z][a-z0-9_]*?)__final__d(?P<lookback>\d+)_h(?P<horizon>\d+)"
+    r"(?:__(?P<scope>[a-z][a-z0-9_]*))?$"
 )
 
 # The six tensors `model/common/data.py` loads by name, plus what it optionally
@@ -843,6 +852,18 @@ class TrainTestCreator:
 
 def main(argv: Optional[Sequence[str]] = None) -> WindowedDataset:
     argv = list(sys.argv[1:] if argv is None else argv)
+
+    # ⚠️ **THIS FUNCTION PRINTS `⚠️`, AND A WINDOWS CONSOLE IS cp1252, WHICH HAS NO
+    # CODE POINT FOR IT.** Measured 2026-08-10: `python -m train_test_creator` died with
+    # `UnicodeEncodeError` at the `dropped_columns` loop — after doing all the work, and
+    # only on a table where a channel WAS dropped. The notebook never showed it because
+    # a notebook's stdout is UTF-8, so the CLI path was the only one that could fail and
+    # the branch needs a drop to reach. `errors="replace"` degrades a glyph the console
+    # cannot show to `?` instead of discarding a completed build (CLAUDE.md §5 rules 18
+    # and 20). The warnings keep their marker for every stream that can render it.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="replace")
 
     def option(flag: str, default: str) -> str:
         return argv[argv.index(flag) + 1] if flag in argv else default

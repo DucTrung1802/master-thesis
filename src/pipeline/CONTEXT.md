@@ -10,13 +10,16 @@
 ```
 python -m pipeline                      # what exists, what is stale — writes nothing
 python -m pipeline --apply              # run every stage that is not ready
+python -m pipeline --apply --rescrape   # ⚠️ and re-fetch from the network first
 python -m pipeline --only model --apply # force one stage
 python -m pipeline --ticker bank --table rank_5day__final__d20_h5
 ```
 
-## 1. The chain
+## 1. The chain — SIX stages as of 2026-08-10
 
 ```
+raw_data/ → bronze → silver → unified_schema_<t>.pool__*   data   ⚠️ NEW, ⚠️ the network
+        ↓
 reports/feature_selection/<run>/outstanding.csv        feature_selection
         ↓
 unified_schema_<t>.<target>__final__d<d>_h<h>          final_features   ⚠️ writes the DB
@@ -27,6 +30,42 @@ src/model/runs/<run_id>/                               model.lstm
         ↓
 results/metrics.json + runs/index.csv                  result_evaluator
 ```
+
+### 1a. ⚠️ The `data` stage, and the two rules it is built out of
+
+The chain used to start at `selection` and treat the unified pools as given. It now
+starts at the network, because "end to end" that begins after the data is already
+correct is not end to end. Two of the standing rules are the whole design:
+
+**Its status is a DATE, never a green asset** (CLAUDE.md §5 rule 10). `landed()` asks
+"is this folder empty?", and with `skip_existing=True` a CafeF scrape returns at an
+`os.path.exists` check before one request goes out — green, fast, every series left
+where it was. So `status_data` reads `MAX(date)` from `pool__basic` and compares it with
+the newest `date` in the raw CafeF price CSV for that ticker. **On the first run of this
+stage that comparison fired immediately**: raw reached `2026-08-07` while the table
+stopped at `2026-06-25`.
+
+**It always re-ingests, even when it does not re-scrape** (rule 11). A scrape and its
+ingests are separate assets, so "re-scraped" never implies "re-ingested" — bronze once
+sat a full day behind a completed scrape with nothing raising. `apply_data` therefore
+runs the bronze → silver → unified half unconditionally and the network half only under
+`--rescrape`.
+
+⚠️ **The asset list is EXPLICIT, and `+unified/pool__targets` would have been wrong.**
+An upstream selection resolves to the whole landing layer, including
+`raw/trading_view_data@stocks` (777 tickers, ~10 h) and `raw/cafef_financials` (~2.4 h
+per ticker) — neither of which `pool__basic` reads. `DATA_SCRAPE_ASSETS` is exactly
+`silver.stocks_basic`'s six sources (`orchestration/assets/silver.py::STOCKS_BASIC_SOURCES`)
+and stops there.
+
+⚠️ **`--rescrape` is scoped to `--ticker` and is honest about it.** The four CafeF tab
+assets now take a `CafeFTabConfig`, so the stage passes `skip_existing=False` (or the
+fetch does not happen at all) together with `tickers=[<TICKER>]` (or it costs 781 names
+instead of one). A ticker matching nothing **raises** rather than queueing zero tasks.
+
+⚠️ **`apply_selection` used to call `outstanding.main([])`** — passing `[]` as the report
+ROOT. It never fired because the selection stage is always `ready`, so `--apply` skipped
+it. Fixed while threading `--root` through.
 
 Every stage is `python -m <package>`, dry-run by default, `--apply`/`--save` to write.
 That uniformity is most of what "end to end" means here — before this, two stages were
@@ -92,6 +131,55 @@ channel — the chain stayed green through the 2026-08-09 EVD-1 measurement whil
 stored provenance sentence went stale. Green means the five stages agree, and that is
 all it has ever meant.
 
+## 5d. The `--scope basic` prototype chain, run end to end 2026-08-10
+
+The first run of all six stages from the network to a scored metric. One ticker, one
+pool, one command per stage.
+
+| stage | what it did | cost |
+|---|---|---|
+| `data` | VCB re-fetched with `skip_existing=False`, then bronze ×6 → silver → unified | scrape **3m24s**, bronze ~5m, silver **6m54s**, unified 1.1s |
+| `selection` | `pool__basic` alone, `d=20 h=5`, **20-draw null** | **6m31s** |
+| `final_features` | `return_5day__final__d20_h5__basic`, 4,266 × 10 | seconds |
+| `train_test_creator` | 2,939 / 615 / 640 × 20 × **4** | seconds |
+| `model` | LSTM 1×32, **4,961 parameters**, early stop @30, best epoch 10 | ~1 min |
+| `result_evaluator` | 30/30 runs scored | ~2 min |
+
+**The panel moved**: `pool__basic` went 4,235 rows / 2026-06-25 → **4,266 / 2026-08-07**.
+
+| | selection IC | selection bar | test IC | test bar | test R² | hit rate |
+|---|---|---|---|---|---|---|
+| **basic, 4 channels** | +0.0783 | +0.0562 ⚠️ **clears, z=+2.15** | **−0.0345** | +0.1348 ❌ (p 0.73) | **−0.059** | 0.486 |
+| *wide, 724 channels* | — | — | −0.0721 | +0.118 ❌ (p 0.88) | −0.90 | 0.491 |
+
+⚠️ **The narrow chain is LESS BAD, and that is the STL-1 argument arriving from the other
+direction.** `R²` goes −0.90 → −0.059 and test IC −0.072 → −0.034 on the same ticker,
+target and split ratios. Handing an LSTM 724 channels on 2,918 windows was the
+explanation offered for the wide result; cutting to 4 channels and 4,961 parameters
+removes most of the damage. **Neither shows skill** — both sit inside their own null, and
+"less negative" is not a result.
+
+⚠️ **The selection cleared its bar and the model did not clear its own.** `z = +2.15` at
+the selection stage bought nothing downstream. That is the two bars doing their job, and
+it is the single most useful thing this prototype measured — see
+`feature_selection/CONTEXT.md` §10d for why `z = +2.15` on 20 draws is weak anyway.
+
+⚠️ **Four defects surfaced by running it, all fixed, all instances of documented rules:**
+
+| what | why it survived until now |
+|---|---|
+| `apply_selection` passed `[]` as the report ROOT | the selection stage is always `ready`, so `--apply` never reached it |
+| `status_model` matched runs by bare PREFIX | no two configs shared a prefix until `…__d20_h5` and `…__d20_h5__basic` both existed — the wide config then reported **2 runs** and named the basic one as its latest |
+| `train_test_creator`'s CLI died on `UnicodeEncodeError` | it prints `⚠️` per dropped channel; the notebook's stdout is UTF-8 and the CLI's is cp1252, so only the CLI could fail and only when a channel WAS dropped (§5 rule 18) |
+| `status_data` called an EMPTY table current | `"2026-08-07" > "none"` is False — the placeholder sorts above every digit |
+
+⚠️ **And one that is not fixed, because it is a decision**: materialising
+`unified/pool__basic` + `pool__targets` alone left **21 sibling pools on the old
+calendar**. Harmless for `--scope basic`, and a rebuild of the 750-channel table would
+INNER-join straight back down to 2026-06-25 while looking unchanged. `status_data`
+reports it as a `pools_behind` count rather than failing, because failing would make
+`--apply` re-materialise `pool__ta` for a chain that never reads it.
+
 ## 5. State today (2026-08-09)
 
 | stage | VCB chain | BANK chain |
@@ -114,6 +202,40 @@ still read `4,235 × 207` and `× 202`, the widths from before the measured cut 
 `max_features=12`. The table is now 750 channels and the dataset keeps **724** of them
 (26 dropped as constant across the train slice, `train_test_creator/CONTEXT.md` §5).
 Both fingerprints currently match their shortlists, so nothing in the chain is stale.
+
+## 5c. ⚠️ `--root` and `--scope` — running a NARROWER experiment without breaking the wide one
+
+`final_features.plan_from_reports` groups every run under one root by
+`(schema, target, setup)`, and **that key has no term for "which pools"**. So a
+`pool__basic`-only run at `d=20, h=5` is the same group as the 19 runs behind
+`return_5day__final__d20_h5`: archiving it into the default root silently widens that
+table's channel set, moves its fingerprint, and makes every dataset and run below it
+stale — the STL-1 domino, for a run that was meant to be a separate experiment.
+
+Two flags keep them apart, and both are needed:
+
+| flag | decides | without it |
+|---|---|---|
+| `--root` | which runs are in the group at all | the new run joins the archive's union |
+| `--scope` | the table's name suffix | both builds want `return_5day__final__d20_h5`, and the narrow one can only be built with `--replace`, which DROPS the wide one |
+
+```powershell
+python -m feature_selection.run --pools pool__basic --null-draws 20 `
+    --root reports/feature_selection_basic
+python -m pipeline --apply `
+    --root reports/feature_selection_basic --scope basic `
+    --table return_5day__final__d20_h5__basic `
+    --config vcb__return_5day__final__d20_h5__basic.yaml
+```
+
+⚠️ **A scoped root needs its own `.gitignore` negation.** `!reports/feature_selection/**`
+does not match `reports/feature_selection_basic/`, so its CSVs fall straight back into
+the blanket `*.csv` — the same trap as issue GIT-1, one path over.
+
+⚠️ **`--scope` is not part of the grouping key and must not become one.** It is chosen
+per build, beside the `--root` that already decided which runs are in scope. Making it a
+setup key would put "which pools" into a fingerprint that is deliberately over
+`(source_table, channel)`.
 
 ## 6. Adding a stage or a second target
 

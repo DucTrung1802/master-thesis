@@ -111,6 +111,15 @@ experiment/experiment_10/_cache/
 !reports/feature_selection/
 !reports/feature_selection/**
 #
+# ⚠️ A SCOPED report root is a SEPARATE path and needs its own negation. `final_features`
+# groups every run under one root by (schema, target, setup) — which has no term for
+# "which pools" — so a narrow experiment has to live under its own root or it silently
+# widens the archive's table (`final_features.builder.table_name`). That root is then a
+# new path the two rules above do not match, and its CSVs fall straight back into the
+# blanket `*.csv`. Add one pair per scope; `_basic` is `pool__basic` alone.
+!reports/feature_selection_basic/
+!reports/feature_selection_basic/**
+#
 # ⚠️ They are not small. The archive is ~120 MB across 22 runs, and `channel_correlation.csv`
 # alone reached 40.0 MB on a 1,458-channel pool — it is the full N×N pairwise matrix.
 # Before committing a new WIDE-pool run, check that one file: the deliverables are

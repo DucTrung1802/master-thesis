@@ -484,11 +484,25 @@ class CafeFScraper(BaseScraper):
     # Stock universe + batch driver
     # ──────────────────────────────────────────────────────────────────────
 
-    def get_stock_symbols(self, exchanges: Tuple[str, ...] = None) -> List[Tuple[str, str]]:
+    def get_stock_symbols(
+        self,
+        exchanges: Tuple[str, ...] = None,
+        tickers: Tuple[str, ...] = None,
+    ) -> List[Tuple[str, str]]:
         """Derive the (exchange, symbol) universe from the TradingView stock link CSVs,
         restricted to the given exchanges (default: all three VN exchanges — HOSE, HNX,
-        UPCOM). Pass e.g. exchanges=("HOSE",) to scope to a single exchange."""
+        UPCOM). Pass e.g. exchanges=("HOSE",) to scope to a single exchange.
+
+        `tickers` narrows further to named symbols — `("VCB",)` or `("HOSE_VCB",)`, both
+        case-insensitive. ⚠️ **A ticker that matches nothing RAISES.** The universe is
+        read off link CSVs that may be stale or header-only, so a typo'd or delisted
+        symbol would otherwise queue zero tasks and let the asset land green having
+        scraped nothing — the same failure `landed()` cannot see (CLAUDE.md §5 rule 10).
+        """
         wanted = {e.upper() for e in (exchanges or self.VN_EXCHANGES)}
+        # Accept both `VCB` and `HOSE_VCB`; the latter is `_common.ticker_key`'s form,
+        # which is what the Dagster partitions and the raw filenames use.
+        named = {t.upper() for t in tickers} if tickers else None
         links_dir = os.path.join(TRADING_VIEW_RAW_DATA_DIR, "links", "stocks")
         seen, out = set(), []
         for path in glob.glob(os.path.join(links_dir, "**", "*.csv"), recursive=True):
@@ -501,15 +515,33 @@ class CafeFScraper(BaseScraper):
                     exchange, ticker = sym.split(":", 1)
                     if exchange.upper() not in wanted:
                         continue
+                    if named is not None and not (
+                        ticker.upper() in named
+                        or f"{exchange.upper()}_{ticker.upper()}" in named
+                    ):
+                        continue
                     if (exchange, ticker) not in seen:
                         seen.add((exchange, ticker))
                         out.append((exchange, ticker))
+        if named is not None:
+            matched = {t.upper() for _, t in out} | {
+                f"{e.upper()}_{t.upper()}" for e, t in out
+            }
+            missing = sorted(named - matched)
+            if missing:
+                raise ValueError(
+                    f"CafeF: tickers {missing} match no symbol in "
+                    f"{links_dir} for exchanges {sorted(wanted)}. Scrape "
+                    f"raw/trading_view_links partition `stocks` first, or fix the name — "
+                    f"queueing zero tasks would land this asset green with no data."
+                )
         by_exchange = {}
         for exchange, _ in out:
             by_exchange[exchange] = by_exchange.get(exchange, 0) + 1
         self._logger.log_info(
             f"CafeF: {len(out)} stock symbols across {sorted(wanted)} "
-            f"from TradingView links ({by_exchange})."
+            f"from TradingView links ({by_exchange})"
+            + (f", narrowed to {sorted(named)}." if named else ".")
         )
         return sorted(out)
 
@@ -534,9 +566,10 @@ class CafeFScraper(BaseScraper):
             self.scrape_all_insider_txn(exchanges=exchanges)
 
     def _scrape_all(self, label: str, scrape_fn, skip_existing: bool,
-                    exchanges: Tuple[str, ...] = None) -> None:
+                    exchanges: Tuple[str, ...] = None,
+                    tickers: Tuple[str, ...] = None) -> None:
         """Queue one per-stock task per symbol over the exchange universe and run them."""
-        symbols = self.get_stock_symbols(exchanges)
+        symbols = self.get_stock_symbols(exchanges, tickers)
         self._thread_manager.remove_all_tasks()
         for exchange, symbol in symbols:
             self._thread_manager.add_task(
@@ -545,22 +578,27 @@ class CafeFScraper(BaseScraper):
             )
         self._logger.log_info(
             f"CafeF: executing {self._thread_manager.get_current_number_of_task()} "
-            f"{label} scraping tasks."
+            f"{label} scraping tasks (skip_existing={skip_existing})."
         )
         self._thread_manager.execute()
         self._logger.log_info(f"CafeF: finished scraping all {label}.")
 
-    def scrape_all_price(self, skip_existing: bool = True, exchanges: Tuple[str, ...] = None) -> None:
-        self._scrape_all("price", self.scrape_price, skip_existing, exchanges)
+    def scrape_all_price(self, skip_existing: bool = True, exchanges: Tuple[str, ...] = None,
+                         tickers: Tuple[str, ...] = None) -> None:
+        self._scrape_all("price", self.scrape_price, skip_existing, exchanges, tickers)
 
-    def scrape_all_foreign(self, skip_existing: bool = True, exchanges: Tuple[str, ...] = None) -> None:
-        self._scrape_all("foreign", self.scrape_foreign, skip_existing, exchanges)
+    def scrape_all_foreign(self, skip_existing: bool = True, exchanges: Tuple[str, ...] = None,
+                           tickers: Tuple[str, ...] = None) -> None:
+        self._scrape_all("foreign", self.scrape_foreign, skip_existing, exchanges, tickers)
 
-    def scrape_all_order_stats(self, skip_existing: bool = True, exchanges: Tuple[str, ...] = None) -> None:
-        self._scrape_all("order_stats", self.scrape_order_stats, skip_existing, exchanges)
+    def scrape_all_order_stats(self, skip_existing: bool = True, exchanges: Tuple[str, ...] = None,
+                               tickers: Tuple[str, ...] = None) -> None:
+        self._scrape_all("order_stats", self.scrape_order_stats, skip_existing, exchanges, tickers)
 
-    def scrape_all_prop_trading(self, skip_existing: bool = True, exchanges: Tuple[str, ...] = None) -> None:
-        self._scrape_all("prop_trading", self.scrape_prop_trading, skip_existing, exchanges)
+    def scrape_all_prop_trading(self, skip_existing: bool = True, exchanges: Tuple[str, ...] = None,
+                                tickers: Tuple[str, ...] = None) -> None:
+        self._scrape_all("prop_trading", self.scrape_prop_trading, skip_existing, exchanges, tickers)
 
-    def scrape_all_insider_txn(self, skip_existing: bool = True, exchanges: Tuple[str, ...] = None) -> None:
-        self._scrape_all("insider_txn", self.scrape_insider_txn, skip_existing, exchanges)
+    def scrape_all_insider_txn(self, skip_existing: bool = True, exchanges: Tuple[str, ...] = None,
+                               tickers: Tuple[str, ...] = None) -> None:
+        self._scrape_all("insider_txn", self.scrape_insider_txn, skip_existing, exchanges, tickers)

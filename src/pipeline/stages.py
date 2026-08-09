@@ -54,6 +54,7 @@ each other, not that the result means anything.
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 from dataclasses import dataclass, field
@@ -64,11 +65,45 @@ import pandas as pd
 _SRC = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _REPO = os.path.dirname(_SRC)
 
-# The one dataset and config the chain is wired for today. Both are arguments rather
-# than constants everywhere below, so a second target is a flag and not an edit.
+# The one dataset and config the chain is wired for today. All of these are arguments
+# rather than constants everywhere below, so a second target is a flag and not an edit.
 DEFAULT_TICKER = "vcb"
 DEFAULT_TABLE = "return_5day__final__d20_h5"
 DEFAULT_CONFIG = "vcb__return_5day__final__d20_h5.yaml"
+DEFAULT_ROOT = None  # None → feature_selection.report.DEFAULT_REPORT_ROOT
+DEFAULT_SCOPE = None  # None → the table name carries no feature-block suffix
+
+# ── The data stage ────────────────────────────────────────────────────────────
+# The Dagster assets that stand between the network and `unified_schema_<t>.pool__*`.
+# ⚠️ NOT a `+unified/pool__targets` upstream selection: that resolves to the whole
+# landing layer, including `raw/trading_view_data@stocks` (777 tickers, ~10 h) and
+# `raw/cafef_financials` (~2.4 h per ticker), neither of which `pool__basic` reads.
+# These six raw assets are exactly `silver.stocks_basic`'s sources
+# (`orchestration/assets/silver.py::STOCKS_BASIC_SOURCES`) and nothing else.
+DATA_SCRAPE_ASSETS = (
+    "raw/cafef_price",
+    "raw/cafef_order_stats",
+    "raw/cafef_foreign",
+    "raw/cafef_prop_trading",
+    "raw/simplize_industry",
+    "raw/gics_structure",
+)
+DATA_INGEST_ASSETS = (
+    "bronze/cafef_price",
+    "bronze/cafef_order_stats",
+    "bronze/cafef_foreign",
+    "bronze/cafef_prop_trading",
+    "bronze/simplize_industry",
+    "bronze/gics",
+    "silver/stocks_basic",
+)
+DATA_UNIFIED_ASSETS = ("unified/pool__basic", "unified/pool__targets")
+
+# The four CafeF tabs take a per-run config; the other two take none. Only these are
+# given `skip_existing: false` and a ticker scope.
+DATA_SCOPED_ASSETS = DATA_SCRAPE_ASSETS[:4]
+
+DEFINITIONS = os.path.join(_SRC, "orchestration", "definitions.py")
 
 
 @dataclass
@@ -104,6 +139,194 @@ class Stage:
     manual: bool = False
 
 
+# ----------------------------------------------------------------------- 0. data
+
+
+def status_data(ticker: str = DEFAULT_TICKER) -> StageState:
+    """How fresh is the unified layer — measured as a DATE, never as a green asset.
+
+    ⚠️ **A green asset is not evidence of fresh data** (CLAUDE.md §5 rule 10). `landed()`
+    answers "is this folder empty?", and with `skip_existing=True` a scrape returns at an
+    `os.path.exists` check before a single request goes out — green, fast, and every
+    series left at whatever date it had. So this stage reports the only thing that cannot
+    be faked: **the max `date` in the pool tables, against the max date on disk in the raw
+    CSVs that feed them.**
+
+    ⚠️ It also compares the two, because a scrape and its ingests are separate assets and
+    "re-scraped" never implies "re-ingested" (rule 11). Bronze once sat a full day behind
+    a completed scrape with nothing raising. A raw file newer than the table is the exact
+    signature of that, and it is what makes this stage `ready=False`.
+    """
+    import csv
+    import glob
+
+    from feature_selection.unified_reader import UnifiedSchemaReader
+    from utils.constants import CAFEF_RAW_DATA_DIR
+
+    counts: Dict[str, int] = {}
+    try:
+        with UnifiedSchemaReader(ticker) as reader:
+            present = set(reader.tables())
+            missing = [t for t in ("pool__basic", "pool__targets") if t not in present]
+            if missing:
+                return StageState(
+                    "data",
+                    False,
+                    f"MISSING {missing} in {reader.schema}",
+                    reader.schema,
+                )
+            with reader.driver._cursor_ctx() as cur:
+                cur.execute(f"SELECT MAX(date), COUNT(*) FROM {reader.schema}.pool__basic")
+                table_date, rows = cur.fetchone()
+                counts["rows"] = int(rows)
+                # ⚠️ THE OTHER POOLS DO NOT MOVE WITH THIS ONE, and nothing else looks.
+                # `unified/pool__basic` and `pool__targets` are two assets of five;
+                # materialising them alone leaves `pool__ta`, `pool__fa` and the 19
+                # `pool__economy_*` on the OLD calendar. Measured 2026-08-10: basic and
+                # targets reached 2026-08-07 while the other 21 stayed at 2026-06-25.
+                # That is harmless for a `pool__basic`-only build, and it is NOT
+                # harmless for a wide one — `final_features` joins INNER across pools,
+                # so a rebuild would silently truncate back to the laggard's calendar
+                # and the table would look unchanged.
+                behind_pools = [
+                    name
+                    for name in sorted(present)
+                    if name.startswith("pool__")
+                    and name not in ("pool__basic", "pool__targets")
+                ]
+                stale_pools = []
+                for name in behind_pools:
+                    cur.execute(f"SELECT MAX(date) FROM {reader.schema}.{name}")
+                    other = cur.fetchone()[0]
+                    if other is not None and table_date is not None and other < table_date:
+                        stale_pools.append(name)
+                counts["pools_behind"] = len(stale_pools)
+    except Exception as error:  # noqa: BLE001 — a dead database is a stage state
+        return StageState("data", False, f"{type(error).__name__}: {error}")
+
+    # The newest session in the raw price CSV for this ticker. `pool__basic` cannot be
+    # fresher than its own source, so this is the bar the table has to meet.
+    # ⚠️ Anchored to the REPO, not the CWD: `CAFEF_RAW_DATA_DIR` is a relative path, so
+    # calling this from `src/` (which the stage runner does) silently globs nothing and
+    # the check reports "no raw CSV to compare against" instead of comparing.
+    raw_date = None
+    pattern = os.path.join(_REPO, CAFEF_RAW_DATA_DIR, "price", f"*_{ticker.upper()}.csv")
+    for path in glob.glob(pattern):
+        with open(path, "r", encoding="utf-8") as handle:
+            dates = [row["date"] for row in csv.DictReader(handle) if row.get("date")]
+        if dates:
+            newest = max(dates)
+            raw_date = newest if raw_date is None else max(raw_date, newest)
+
+    stamp = table_date.isoformat() if table_date else "none"
+    if raw_date is None:
+        return StageState(
+            "data",
+            ready=True,
+            detail=f"pool__basic to {stamp}; no raw CSV at {pattern} to check it against",
+            output=f"unified_schema_{ticker}.pool__basic",
+            counts=counts,
+        )
+    # ⚠️ An EMPTY table is stale, not current. Comparing `raw_date > stamp` as strings
+    # is correct for two ISO dates and silently wrong when `table_date` is None: the
+    # placeholder sorts above every date beginning with a digit, so `"2026-08-07" >
+    # "none"` is False and a table with no rows would report itself up to date.
+    behind = table_date is None or raw_date > stamp
+    # ⚠️ A skewed sibling pool does NOT make this stage `not ready`, deliberately. The
+    # stage's contract is `pool__basic` + `pool__targets`, which is what everything
+    # below it reads on the `--scope basic` path; failing here would make `--apply`
+    # re-materialise `pool__ta` (hours, ~11 GB upstream) to satisfy a chain that never
+    # reads it. It is REPORTED so a wide build is a decision rather than a surprise.
+    skew = (
+        f" WARNING: {counts.get('pools_behind', 0)} sibling pool(s) still on an older "
+        f"calendar - a wide rebuild would INNER-join back down to theirs"
+        if counts.get("pools_behind")
+        else ""
+    )
+    return StageState(
+        "data",
+        ready=not behind,
+        # ⚠️ ASCII only. This prints to a cp1252 console on Windows (§5 rule 18).
+        detail=(
+            f"STALE - raw CafeF price reaches {raw_date}, pool__basic stops at {stamp}; "
+            f"the scrape ran and the ingest did not"
+            if behind
+            else f"current - pool__basic to {stamp}, matching the raw CSV.{skew}"
+        ),
+        output=f"unified_schema_{ticker}.pool__basic",
+        counts=counts,
+    )
+
+
+def _dagster(select: str, config: Optional[Dict] = None, partition: str = None) -> None:
+    """One `dagster asset materialize`, as a subprocess with an absolute DAGSTER_HOME.
+
+    ⚠️ `DAGSTER_HOME` MUST be set and MUST be absolute, or Dagster invents a temporary
+    home per run and the four `.tmp_dagster_home_*` directories in the repo root are what
+    that looks like when it happens.
+
+    ⚠️ Run config is passed as a FILE, not `--config-json`. PowerShell 5.1 strips the
+    double quotes out of a native command's arguments, so a JSON string arrives as
+    `{ops:{...}}` and fails to parse — measured, not guessed.
+    """
+    import json
+    import tempfile
+
+    env = dict(os.environ, DAGSTER_HOME=os.path.join(_REPO, ".dagster"))
+    command = [
+        sys.executable, "-m", "dagster", "asset", "materialize",
+        "-f", DEFINITIONS, "--select", select,
+    ]
+    if partition:
+        command += ["--partition", partition]
+
+    handle = None
+    try:
+        if config:
+            handle = tempfile.NamedTemporaryFile(
+                "w", suffix=".json", delete=False, encoding="utf-8"
+            )
+            json.dump(config, handle)
+            handle.close()
+            command += ["--config", handle.name]
+        print(f"  $ dagster asset materialize --select {select}"
+              + (f" --partition {partition}" if partition else ""))
+        subprocess.run(command, env=env, cwd=_REPO, check=True)
+    finally:
+        if handle is not None:
+            os.unlink(handle.name)
+
+
+def apply_data(ticker: str = DEFAULT_TICKER, rescrape: bool = False) -> None:
+    """Materialise the data layer: optionally re-scrape, then always re-ingest.
+
+    ⚠️ **`rescrape=False` by default and that is not timidity** — it is the same
+    reasoning as `--replace` on `final_features`. The scrape hits the network on someone
+    else's servers; the ingest is local and idempotent. `--rescrape` asks for the first
+    explicitly, and when it is asked for it is asked for HONESTLY: `skip_existing=False`,
+    so the fetch actually happens, scoped to `--ticker` so it costs one name rather than
+    781 (`orchestration/assets/scrape.py::CafeFTabConfig`).
+    """
+    if rescrape:
+        config = {
+            "ops": {
+                asset.replace("/", "__"): {
+                    "config": {
+                        "skip_existing": False,
+                        "tickers": [ticker.upper()],
+                    }
+                }
+                for asset in DATA_SCOPED_ASSETS
+            }
+        }
+        _dagster(",".join(DATA_SCRAPE_ASSETS), config=config)
+    # ⚠️ Always run, even when the scrape was skipped — a scrape and its ingests are
+    # separate assets, so the table can be behind raw_data/ for reasons this run had
+    # nothing to do with (CLAUDE.md §5 rule 11).
+    _dagster(",".join(DATA_INGEST_ASSETS))
+    _dagster(",".join(DATA_UNIFIED_ASSETS), partition=ticker.upper())
+
+
 # ------------------------------------------------------------------- 1. selection
 
 
@@ -113,10 +336,10 @@ def _report_root() -> str:
     return DEFAULT_REPORT_ROOT
 
 
-def status_selection() -> StageState:
+def status_selection(root: Optional[str] = DEFAULT_ROOT) -> StageState:
     from feature_selection.outstanding import OUTSTANDING_FILENAME
 
-    root = _report_root()
+    root = root or _report_root()
     if not os.path.isdir(root):
         return StageState("selection", False, f"{root} does not exist", root)
     runs = [
@@ -138,16 +361,21 @@ def status_selection() -> StageState:
     )
 
 
-def apply_selection() -> None:
+def apply_selection(root: Optional[str] = DEFAULT_ROOT) -> None:
     from feature_selection import outstanding
 
-    outstanding.main([])
+    outstanding.main(root=root or _report_root())
 
 
 # --------------------------------------------------------------- 2. final_features
 
 
-def status_final_features(ticker: str = DEFAULT_TICKER, table: str = DEFAULT_TABLE):
+def status_final_features(
+    ticker: str = DEFAULT_TICKER,
+    table: str = DEFAULT_TABLE,
+    root: Optional[str] = DEFAULT_ROOT,
+    scope: Optional[str] = DEFAULT_SCOPE,
+):
     """Does the table exist — AND does it still match the shortlists it came from?
 
     ⚠️ **"Exists" was the only check this made until 2026-08-09, and that is issue
@@ -175,8 +403,9 @@ def status_final_features(ticker: str = DEFAULT_TICKER, table: str = DEFAULT_TAB
                     )
                     row = cur.fetchone()
                     comment = row[0] if row and row[0] else ""
+        plans = plan_from_reports(root or _report_root(), scope)
         wanted = next(
-            (p for p in plan_from_reports() if p.schema.endswith(ticker) and p.table == table),
+            (p for p in plans if p.schema.endswith(ticker) and p.table == table),
             None,
         )
     except Exception as error:  # noqa: BLE001 — a dead database is a stage state
@@ -217,13 +446,15 @@ def status_final_features(ticker: str = DEFAULT_TICKER, table: str = DEFAULT_TAB
     )
 
 
-def apply_final_features() -> None:
+def apply_final_features(
+    root: Optional[str] = DEFAULT_ROOT, scope: Optional[str] = DEFAULT_SCOPE
+) -> None:
     from final_features.builder import build_all
 
     # ⚠️ `replace=False`. Rebuilding a table silently would invalidate every dataset
     # hash downstream; `final_features/CONTEXT.md` §7 makes the same argument. Pass
     # --replace to that module directly when the rebuild is intended.
-    build_all(apply=True, replace=False)
+    build_all(root=root or _report_root(), apply=True, replace=False, scope=scope)
 
 
 # ----------------------------------------------------------- 3. train_test_creator
@@ -281,10 +512,18 @@ def status_model(config: str = DEFAULT_CONFIG):
     if not os.path.exists(path):
         return StageState("model", False, f"no config at {path}", path)
     cfg = load_config(path)
+    # ⚠️ **A BARE PREFIX MATCH ATTRIBUTES ANOTHER CONFIG'S RUNS TO THIS ONE.** A run
+    # folder is `<run_name>__<YYYYmmdd-HHMMSS>`, and `startswith(run_name + "__")` also
+    # matches `<run_name>__<anything>__<stamp>` — so the moment a scoped config named
+    # `lstm__vcb__return_5day__final__d20_h5__basic` existed, the WIDE config
+    # `lstm__vcb__return_5day__final__d20_h5` reported "2 run(s)" and named the basic
+    # run as its own latest. Measured 2026-08-10. Anchoring on the timestamp is what
+    # makes the two configs' run sets disjoint.
+    stamp = re.compile(re.escape(cfg["run_name"]) + r"__\d{8}-\d{6}$")
     matches = [
         name
         for name in sorted(os.listdir(RUNS_DIR))
-        if name.startswith(cfg["run_name"] + "__")
+        if stamp.match(name)
     ] if os.path.isdir(RUNS_DIR) else []
     return StageState(
         "model",
@@ -336,22 +575,34 @@ def stages(
     ticker: str = DEFAULT_TICKER,
     table: str = DEFAULT_TABLE,
     config: str = DEFAULT_CONFIG,
+    root: Optional[str] = DEFAULT_ROOT,
+    scope: Optional[str] = DEFAULT_SCOPE,
+    rescrape: bool = False,
 ) -> List[Stage]:
     return [
         Stage(
+            "data",
+            "scrape → bronze → silver → unified_schema_<t>.pool__{basic,targets}",
+            lambda: status_data(ticker),
+            lambda: apply_data(ticker, rescrape),
+        ),
+        Stage(
             "selection",
             "refresh outstanding.csv from the archived feature-selection runs",
-            status_selection,
-            apply_selection,
+            lambda: status_selection(root),
+            lambda: apply_selection(root),
             # ⚠️ The RUNS themselves are manual — hours of GPU and a judgement about
-            # which pools to join. This only rebuilds the shortlists.
+            # which pools to join for the WIDE pools. This only rebuilds the shortlists.
+            # `python -m feature_selection.run` is the scriptable entry point, and the
+            # cheap case (`pool__basic`, 27 channels) is minutes rather than the ~68
+            # CPU-hours one wide-pool null costs (issue EVD-1).
             manual=True,
         ),
         Stage(
             "final_features",
             "materialise <target>__final__d<d>_h<h> from every shortlist",
-            lambda: status_final_features(ticker, table),
-            apply_final_features,
+            lambda: status_final_features(ticker, table, root, scope),
+            lambda: apply_final_features(root, scope),
         ),
         Stage(
             "train_test_creator",

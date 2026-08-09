@@ -180,6 +180,22 @@ one-ticker table the two are identical — and windows are stacked **per (exchan
 ticker)** before being concatenated in date order. A single global stride would build
 windows whose first days belong to one company and last days to another.
 
+### 7c. The table name may carry a `__<scope>` suffix (2026-08-10)
+
+`FINAL_TABLE` now accepts an optional trailing segment:
+`return_5day__final__d20_h5__basic` parses to exactly the same `("return_5day", 20, 5)`
+as the unsuffixed table. The suffix names the **feature block** a table was built from —
+`pool__basic` alone, rather than the archive's union of 19 shortlists — and it exists
+because `final_features` groups on `(schema, target, setup)`, a key with no term for
+*which pools* (`final_features/CONTEXT.md` §0). Without it the narrow build and the wide
+build collide on one name and the narrow one can only be created by DROPPING the wide.
+
+⚠️ **Nothing in this module branches on it.** `d` and `h` still come from the same place,
+the channels are still whatever columns the table has, and `resolve_target` still reads
+the stored target off the table rather than off the name (§7b). The scope is a label on
+the input, and `dataset_name` carries the whole table name verbatim, so the dataset
+folder states which one it read.
+
 ### ⚠️ 7b. The target column is resolved against the TABLE, not the name
 
 `rank_5day__final__d20_h5` **stores `return_5day`**: a rank's value for a stock-date

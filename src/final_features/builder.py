@@ -4,6 +4,7 @@
     python -m final_features                 # print the plan and the DDL, write nothing
     python -m final_features --apply         # create the tables
     python -m final_features --apply --replace   # ⚠️ drop an existing table first
+    python -m final_features --apply --root reports/feature_selection_basic --scope basic
 
 ## The grouping rule
 
@@ -172,8 +173,10 @@ def fingerprint_of_comment(comment: Optional[str]) -> Optional[str]:
     return match["digest"] if match else None
 
 
-def table_name(target: str, lookback: int, horizon: int) -> str:
-    """`<target>__final__d<lookback>_h<horizon>`, with a `cs_` target prefix dropped.
+def table_name(
+    target: str, lookback: int, horizon: int, scope: Optional[str] = None
+) -> str:
+    """`<target>__final__d<lookback>_h<horizon>[__<scope>]`, minus any `cs_` prefix.
 
     ⚠️ **`cs_rank_5day` names its table `rank_5day__final__*`.** The `cs_` marks a
     CROSS-SECTIONAL target, and a cross-section is a set of tickers — which is what the
@@ -184,9 +187,29 @@ def table_name(target: str, lookback: int, horizon: int) -> str:
     ⚠️ This cannot collide a cross-sectional table with a time-series one: the stems
     differ (`rank_5day` vs `return_5day`), and `plan_from_reports` raises on any name
     two setups both want.
+
+    ## ⚠️ `scope` names the FEATURE BLOCK, and it exists because the setup does not
+
+    Two runs over *different pools* at the same target and the same knobs are the same
+    `(schema, target, setup)` and so want the same table — `pool__basic` alone and
+    `pool__basic + 19 macro blocks` both resolve to `return_5day__final__d20_h5`. That
+    is correct for the archive, where 19 runs sharding one candidate set are deliberately
+    UNIONED into one table (§6). It is wrong when the narrower pool is the experiment:
+    building it into the same name means `--replace`, which drops the wide table, moves
+    every dataset hash below it and orphans the runs that referenced them (§7).
+
+    So a scoped build gets its own name. `scope` is a bare identifier describing the
+    block — `basic`, `ta`, `fa` — and is NOT part of the grouping key: it is chosen per
+    build, alongside the `--root` that decides which runs are in scope at all. A build
+    with no `--scope` behaves exactly as before.
     """
     stem = target[len(CS_PREFIX):] if target.startswith(CS_PREFIX) else target
-    return _identifier(f"{stem}__final__d{int(lookback)}_h{int(horizon)}", "table name")
+    name = f"{stem}__final__d{int(lookback)}_h{int(horizon)}"
+    if scope:
+        # Validated separately so the error names the SCOPE rather than the whole
+        # table it was interpolated into.
+        name = f"{name}__{_identifier(scope, 'scope')}"
+    return _identifier(name, "table name")
 
 
 @dataclass
@@ -325,8 +348,17 @@ def _stored_target(target: str, available: Sequence[str], horizon: int) -> Optio
     )
 
 
-def plan_from_reports(root: str = DEFAULT_REPORT_ROOT) -> List[FinalTablePlan]:
-    """Group every run's `outstanding.csv` into one plan per (schema, target, setup)."""
+def plan_from_reports(
+    root: str = DEFAULT_REPORT_ROOT, scope: Optional[str] = None
+) -> List[FinalTablePlan]:
+    """Group every run's `outstanding.csv` into one plan per (schema, target, setup).
+
+    ⚠️ **`root` decides which runs exist as far as this function is concerned**, and
+    that is the whole mechanism for building a narrower table: the grouping key has no
+    term for "which pools", so two runs over different feature blocks at the same target
+    and knobs are one group. Keeping a scoped run under its own root is what keeps it
+    out of the archive's union (`table_name`). `scope` then names the table it builds.
+    """
     rows = _read_outstanding(root)
     for column in ("channel", "source_table", "schema"):
         for value in rows[column].unique():
@@ -347,7 +379,9 @@ def plan_from_reports(root: str = DEFAULT_REPORT_ROOT) -> List[FinalTablePlan]:
         plans.append(
             FinalTablePlan(
                 schema=setup["schema"],
-                table=table_name(setup["target"], setup["lookback_d"], setup["horizon_h"]),
+                table=table_name(
+                    setup["target"], setup["lookback_d"], setup["horizon_h"], scope
+                ),
                 target=setup["target"],
                 stored_target=None,  # resolved in build_all, which can see the database
                 setup={k: setup.get(k) for k in SETUP_KEYS},
@@ -415,10 +449,13 @@ def _alias(table: str) -> str:
 
 
 def build_all(
-    root: str = DEFAULT_REPORT_ROOT, apply: bool = False, replace: bool = False
+    root: str = DEFAULT_REPORT_ROOT,
+    apply: bool = False,
+    replace: bool = False,
+    scope: Optional[str] = None,
 ) -> pd.DataFrame:
     """Plan every table and, with `apply=True`, create it. Returns one row per plan."""
-    plans = plan_from_reports(root)
+    plans = plan_from_reports(root, scope)
     results = []
 
     by_schema: Dict[str, List[FinalTablePlan]] = {}
@@ -507,12 +544,25 @@ def build_all(
     return pd.DataFrame(results)
 
 
+def _flag_value(argv: Sequence[str], flag: str) -> Optional[str]:
+    """`--flag value` or `--flag=value`, or None. Kept tiny and local — this module's
+    CLI is three flags and an argparse would be more machinery than the whole main."""
+    for i, token in enumerate(argv):
+        if token == flag and i + 1 < len(argv):
+            return argv[i + 1]
+        if token.startswith(f"{flag}="):
+            return token.split("=", 1)[1]
+    return None
+
+
 def main(argv: Optional[Sequence[str]] = None) -> pd.DataFrame:
     argv = list(sys.argv[1:] if argv is None else argv)
     apply = "--apply" in argv
     replace = "--replace" in argv
+    root = _flag_value(argv, "--root") or DEFAULT_REPORT_ROOT
+    scope = _flag_value(argv, "--scope")
 
-    plans = plan_from_reports()
+    plans = plan_from_reports(root, scope)
     for plan in plans:
         print(f"\n{'=' * 78}\n{plan.schema}.{plan.table}")
         print(f"  target   {plan.target}")
@@ -522,7 +572,7 @@ def main(argv: Optional[Sequence[str]] = None) -> pd.DataFrame:
         for table in plan.source_tables:
             print(f"      {len(plan.columns_by_table[table]):>3}  {table}")
 
-    result = build_all(apply=apply, replace=replace)
+    result = build_all(root=root, apply=apply, replace=replace, scope=scope)
     print(f"\n{'=' * 78}")
     pd.set_option("display.width", 200)
     print(result.to_string(index=False))

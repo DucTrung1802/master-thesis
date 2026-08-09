@@ -111,10 +111,12 @@ unified_schema_<universe>      5 assets × 3 partitions  pool__basic / __targets
                               partitions: VCB | BANK | ALL
 ```
 
-### 3b. Model — five stages, each `python -m <pkg>`, dry-run by default
+### 3b. Model — SIX stages, each `python -m <pkg>`, dry-run by default
 
 ```
-reports/feature_selection/<run>/outstanding.csv   feature_selection  ⚠️ MANUAL (hours of GPU)
+raw_data/ → bronze → silver → unified pool__*     data               ⚠️ NEW 2026-08-10, ⚠️ the network
+   ▼  python -m feature_selection.run --pools pool__basic --null-draws 20
+reports/feature_selection/<run>/outstanding.csv   feature_selection  ⚠️ MANUAL for the WIDE pools
    ▼  python -m final_features --apply
 unified_schema_<t>.<target>__final__d<d>_h<h>     final_features     ⚠️ the ONE stage that writes the DB
    ▼  python -m train_test_creator --save
@@ -128,6 +130,19 @@ results/metrics.json + runs/index.csv             result_evaluator    scored vs 
 `python -m pipeline` prints which stage is stale and runs the stale ones. **It passes no
 data between stages** — each already reads the previous one's output; the module only
 *checks* that what the next stage will read exists and agrees.
+
+⚠️ **The `data` stage's status is a DATE, never a green asset** (§5 rule 10). It compares
+`MAX(date)` in `pool__basic` against the newest date in the raw CafeF CSV, and on its
+first run that caught a real 31-session gap. `--rescrape` is opt-in and is scoped to
+`--ticker` with `skip_existing=False` — without both, a "re-scrape" either costs 781
+tickers or fetches nothing.
+
+⚠️ **`--root` + `--scope` run a NARROWER experiment without dropping the wider table.**
+`final_features` groups on `(schema, target, setup)`, a key with **no term for which
+pools** — so a `pool__basic`-only run archived into the default root silently widens
+`return_5day__final__d20_h5` and triggers the STL-1 domino. `--root` keeps the run out of
+that group; `--scope basic` names its table `…__d20_h5__basic`. Both are needed.
+`src/pipeline/CONTEXT.md` §5c.
 
 ⚠️ **`d` and `h` come from the source TABLE NAME**, never a parameter. They flow
 `return_5day__final__d20_h5` → dataset `metadata.json` → asserted against the model config.
@@ -275,6 +290,32 @@ Now dead — the notebooks that used them are gone. Harmless, unreferenced, left
 because this was a folder cleanup and not a code change.
 
 ---
+
+### 5c. The `pool__basic` prototype chain — run end to end 2026-08-10
+
+Six stages, network to scored metric, one ticker, one pool. `pool__basic` re-scraped
+(`skip_existing=False`, VCB only, 3m24s) and rebuilt to **4,266 rows / 2026-08-07**, from
+4,235 / 2026-06-25.
+
+| | selection IC | selection bar | test IC | test bar | test R² |
+|---|---|---|---|---|---|
+| **basic — 6 shortlisted, 4 channels** | +0.0783 | +0.0562 ⚠️ **clears, z = +2.15** | **−0.0345** | +0.1348 ❌ (p 0.73) | **−0.059** |
+| *wide — 750 shortlisted, 724 channels* | — | — | −0.0721 | +0.118 ❌ (p 0.88) | −0.90 |
+
+⚠️ **The selection cleared its bar; the model did not clear its own.** `z = +2.15` bought
+nothing downstream — which is the two bars working, and the most useful thing the run
+measured. `feature_selection/CONTEXT.md` §10d has why `z = +2.15` on 20 draws is weak in
+its own right: `p = 0.0476` is the `1/(n+1)` floor, the null is fat-tailed, and this is
+the **third** measurement of this pool (§6b `z = +1.56` ❌, §10b `z = +1.46` ❌) under a
+third procedure.
+
+⚠️ **The narrow chain is LESS BAD, and it is the STL-1 argument from the other side.**
+R² −0.90 → −0.059 on the same ticker, target and splits, at 4,961 parameters instead of
+~276k. **Neither shows skill**; "less negative" is not a result.
+
+⚠️ **Re-materialising two pools left 21 siblings on the OLD calendar.** Harmless for a
+`pool__basic` build; a rebuild of the 750-channel table would INNER-join back down to
+2026-06-25 **and look unchanged**. `status_data` reports it as `pools_behind`.
 
 ## 6. State today (2026-08-09/10)
 

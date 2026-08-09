@@ -1,11 +1,29 @@
 # src\pipeline\__main__.py
-"""`python -m pipeline [--apply] [--from STAGE] [--only STAGE] [--ticker T] [--table T]`."""
+"""`python -m pipeline [--apply] [--from STAGE] [--only STAGE] [--ticker T] [--table T]`.
+
+    python -m pipeline                          # what is stale; writes nothing
+    python -m pipeline --apply                  # run the stale stages
+    python -m pipeline --apply --rescrape       # ⚠️ and re-fetch from the network first
+
+    # the pool__basic prototype — its own report root, its own scoped table
+    python -m pipeline --apply \
+        --root reports/feature_selection_basic --scope basic \
+        --table return_5day__final__d20_h5__basic \
+        --config vcb__return_5day__final__d20_h5__basic.yaml
+"""
 
 import sys
 
 import pandas as pd
 
-from pipeline.stages import DEFAULT_CONFIG, DEFAULT_TABLE, DEFAULT_TICKER, run
+from pipeline.stages import (
+    DEFAULT_CONFIG,
+    DEFAULT_ROOT,
+    DEFAULT_SCOPE,
+    DEFAULT_TABLE,
+    DEFAULT_TICKER,
+    run,
+)
 
 
 def main(argv=None):
@@ -24,6 +42,11 @@ def main(argv=None):
         ticker=option("--ticker", DEFAULT_TICKER),
         table=option("--table", DEFAULT_TABLE),
         config=option("--config", DEFAULT_CONFIG),
+        root=option("--root", DEFAULT_ROOT),
+        scope=option("--scope", DEFAULT_SCOPE),
+        # ⚠️ Off unless asked. The scrape hits someone else's servers; every stage
+        # below it is local and idempotent. See `stages.apply_data`.
+        rescrape="--rescrape" in argv,
     )
     print(f"\n{'=' * 78}")
     print(frame.to_string(index=False))

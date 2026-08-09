@@ -17,7 +17,29 @@
 python -m final_features                     # print the plan, touch nothing
 python -m final_features --apply             # create the tables
 python -m final_features --apply --replace   # ⚠️ DROP an existing table first
+python -m final_features --apply --root reports/feature_selection_basic --scope basic
 ```
+
+## 0. ⚠️ `--root` and `--scope` — the grouping key has no term for "which pools"
+
+Added 2026-08-10. §2's rule is one table per `(schema, target, setup)`, and **none of
+those three says which feature blocks a run ranked**. That is correct for the archive,
+where 19 runs sharding one candidate set are deliberately UNIONED (§6). It is wrong the
+moment a narrower pool is the experiment: a `pool__basic`-only run at `d=20, h=5` lands
+in the same group as those 19 and wants the same table name, so building it means
+`--replace`, which drops the 750-channel table, changes every dataset hash below it and
+orphans the runs that referenced them (§7).
+
+- **`--root`** decides which runs exist as far as `plan_from_reports` is concerned. A
+  scoped run archived under its own root cannot join the archive's group.
+- **`--scope`** appends `__<scope>` to the table name — `return_5day__final__d20_h5__basic`.
+  `train_test_creator.FINAL_TABLE` parses it and ignores it: `d` and `h` still come from
+  the same place, and the scope names the feature BLOCK, not the setup.
+
+⚠️ **`--scope` is deliberately NOT a `SETUP_KEY`.** It is chosen per build, beside the
+`--root` that already decided the group. Putting it in the grouping key would encode
+"which pools" into a fingerprint that is over `(source_table, channel)` by design — and
+the fingerprint would then stop being a statement about the channel SET.
 
 ## 1. What it built (2026-08-09)
 
