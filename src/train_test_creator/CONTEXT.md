@@ -21,15 +21,21 @@ python -m pytest train_test_creator/test_dataset.py -q
 
 | split | samples | shape | first label | last label |
 |---|---|---|---|---|
-| train | 2,918 | `(2918, 20, 202)` | 2009-07-27 | 2021-04-05 |
-| val | 610 | `(610, 20, 202)` | 2021-05-13 | 2023-10-17 |
-| test | 635 | `(635, 20, 202)` | 2023-11-21 | 2026-06-18 |
+| train | 2,918 | `(2918, 20, 724)` | 2009-07-27 | 2021-04-05 |
+| val | 610 | `(610, 20, 724)` | 2021-05-13 | 2023-10-17 |
+| test | 635 | `(635, 20, 724)` | 2023-11-21 | 2026-06-18 |
 
 4,235 rows read, 5 dropped as the unlabelled tail (`h=5` sessions with no complete
 forward window), 4,230 labelled. Of the 4,211 windows those rows can form, **4,163
 survive and 48 are purged** — 24 at each boundary, which is §3.
 
-203 channels in the table, **202 kept and 1 dropped** (§5).
+**750 channels in the table, 724 kept and 26 dropped** (§5). Of the kept, 721 are
+standardised and 3 are bounded. Dataset hash `686ff164619b29d9`.
+
+⚠️ **These widths are post-STL-1 and this section read `202` of `203` until
+2026-08-09.** The table grew from 203 channels to 750 when the measured cut replaced
+`max_features=12` upstream (`feature_selection/CONTEXT.md` §14c) — so the screen now
+drops 26 channels rather than 1, and every shape here is 3.6× wider.
 
 ## 2. Why the old notebook could not be patched
 
@@ -88,10 +94,11 @@ first **future** observation, and on this table that is not a rounding error:
 
 | | channels | worst |
 |---|---|---|
-| have a leading gap | 38 of 203 | `prop_buy_vol`, 3,382 of 4,230 rows |
+| incomplete coverage | **199 of 750** | `germany__…__deelpc`, coverage **0.024** |
+| **zero coverage in TRAIN** | **26 of 750** | all 26 are dropped by §5 |
 
-Under `bfill`, 80% of `prop_buy_vol` — the entire training set — would be a value
-first observed in 2023.
+`prop_buy_vol` remains the clearest case: 3,382 of 4,230 rows missing, so under `bfill`
+80% of it — the entire training set — would be a value first observed in 2023.
 
 So the rule is **the median of the train slice**, matching
 `FeatureSelector._impute` line for line, including its `fillna(0.0)` for a column that
@@ -106,11 +113,18 @@ scaler would put val-adjacent rows into the very statistics the purge exists to 
 out. On this dataset that is 2,937 rows ending 2021-04-05, not 2,961 ending
 2021-05-12.
 
-## 5. ⚠️ `prop_buy_vol` is dropped, and that is a finding not a cleanup
+## 5. ⚠️ 26 channels are dropped, and that is a finding not a cleanup
 
-It has **zero coverage across the whole train slice** and 20% overall — empty until
-2023, live afterwards. Imputed, it is a constant through training and a varying signal
-at test: the model cannot fit a response to it and is handed one anyway.
+Each has **zero coverage across the whole train slice** — empty until partway through
+the sample, live afterwards. Imputed, such a channel is a constant through training and
+a varying signal at test: the model cannot fit a response to it and is handed one
+anyway.
+
+⚠️ **It was 1 channel at 203 and it is 26 at 750** (post-STL-1). The set is **all four
+`prop_*` channels** — `prop_buy_vol`, `prop_buy_val`, `prop_sell_vol`, `prop_sell_val`
+— plus 22 macro series that begin after the train cut, the worst reaching only 2.4%
+coverage overall. `prop_buy_vol` is still the clearest case: zero in train, 20%
+overall, empty until 2023.
 
 `on_untrainable="drop"` (default) removes it and records the reason in
 `metadata.json`; `"keep"` and `"raise"` are there for when that is not wanted. The
@@ -122,25 +136,31 @@ A run that ranks a channel highly on the full panel can be ranking it on the 20%
 history where it exists. `coverage.csv` ships beside the tensors so this is checkable
 per channel rather than discovered once.
 
-## 6. ⚠️ Scaling is train-fit, and 48 channels leave the train range anyway
+## 6. ⚠️ Scaling is train-fit, and 126 channels leave the train range anyway
 
 `StandardScaler` on the continuous columns, fit on the train slice of §4 only, applied
 to all three splits. Bounded columns — `_sin`/`_cos` and 0/1 flags — are passed
-through unscaled. **On this table that finds zero columns**: no datetime channel was
-selected. The classifier stays because the next table may select one.
+through unscaled. **On this table that finds 3**: `usa__economy__business__fred__usrec`,
+`usrecd` and `usrecm`, the US recession indicator as 0/1. (At 203 channels it found
+zero, which is why the classifier exists.)
 
 The panel is non-stationary by construction, so a train-fitted scaler necessarily puts
 part of the test set outside the range the model saw. `drift.csv` measures how much:
 
-| | count |
-|---|---|
-| scaled channels | 202 |
-| >1% of TEST beyond 5 train-sigmas | **48** |
-| **100%** of TEST beyond 5 train-sigmas | **4** |
+| | at 203 channels | **now, at 750** |
+|---|---|---|
+| scaled channels | 202 | **721** |
+| >1% of TEST beyond 5 train-sigmas | 48 | **126** |
+| **100%** of TEST beyond 5 train-sigmas | 4 | **18** |
 
-The four are `russia__…__rugdppa`, `netherlands__…__nlfer`,
-`united_kingdom__…__gbmr` and `netherlands__…__nledtgdp`, with test means of +9 to
-+13 sigma. These are macro **level** series that trend monotonically; standardising
+⚠️ **The STL-1 rebuild made this worse in both absolute and relative terms** — 17.5% of
+channels now drift past 1% against 23.8% before, but the count fully outside more than
+quadrupled, and the tail got far more extreme. The old worst four sat at +9 to +13
+sigma; the current worst two are
+`european_union__economy__money__economics__euestr` at **+885 sigma** and
+`usa__economy__money__fred__resppllopnww` at **−282**, with
+`united_kingdom__…__gbmr` (+12.6) and `european_union__…__euppi` (+12.4) behind them.
+These are macro **level** series that trend monotonically; standardising
 them maps the test period to a region the training set never occupied. This is
 reported, not filtered — `feature_selection/CONTEXT.md` makes the same argument about
 raw levels in a window, and the fix belongs upstream (a differenced channel) rather
@@ -188,14 +208,15 @@ what was read; `target.derived` flags when the two differ.
 ⚠️ **The same rule detects a STALE table.** A column that is in no current shortlist
 and is not a label means the table predates the last
 `python -m feature_selection.outstanding`. That is reported, not raised — the table is
-still readable. **On VCB it fires on 26 columns** (issue **STL-1**): the shortlists
-were regenerated when `selection_cut` replaced `max_features=12` with a measured cut,
-and today's union is 750 channels against the table's 203.
+still readable. **It fired on 26 VCB columns until the STL-1 rebuild** (2026-08-09),
+when the shortlists were regenerated after `selection_cut` replaced `max_features=12`
+with a measured cut and the table went 203 → 750 channels. **It now fires on none**,
+and `python -m pipeline` confirms the fingerprint matches on both tables.
 
 | | rows | tickers | samples (train/val/test) | features |
 |---|---|---|---|---|
-| `unified_schema_vcb.return_5day__final__d20_h5` | 4,235 | 1 | 2,918 / 610 / 635 | 202 |
-| `unified_schema_bank.rank_5day__final__d20_h5` | 53,921 | 20 | 26,964 / 12,524 / 13,028 | 9 |
+| `unified_schema_vcb.return_5day__final__d20_h5` | 4,235 | 1 | 2,918 / 610 / 635 | **724** of 750 |
+| `unified_schema_bank.rank_5day__final__d20_h5` | 53,921 | 20 | 26,964 / 12,524 / 13,028 | **13** of 14 |
 
 ⚠️ **The bank panel is ragged and stays that way** — 13,028 of 13,060 test cells are
 populated (99.8%). Nothing is filled to make it rectangular; the missing cells are
@@ -225,7 +246,7 @@ every run's `lineage`, so the provenance travels one more hop.
 `feature_scaler.pkl`, `target_scaler.pkl` and `metadata.json` **by name**, and hashes
 the six tensors. Renaming one returns `None` there instead of raising here, so the
 names are fixed. Verified: `load_dataset` reads this dataset unchanged
-(hash `6f657cd4ea02ae5a`, `n_features=202`, `lookback=20`).
+(hash `686ff164619b29d9`, `n_features=724`, `lookback=20`).
 
 Written beside them, and ignored by the loader: `tickers_*.npy` (which name each
 sample belongs to), `coverage.csv` (§5) and `drift.csv` (§6).
@@ -243,8 +264,8 @@ fresh tensors passes every check it makes.
 ## 9. ⚠️ What this stage does NOT assert
 
 That the features are worth having. All 19 source runs of this table computed **no
-null** (`feature_selection/CONTEXT.md` §14b), and 199 of the 203 channels were chosen
-by exactly one run (`final_features/CONTEXT.md` §6) — the table is a union of unstable
+null** (`feature_selection/CONTEXT.md` §14b), and 725 of the 750 channels were chosen
+by exactly one run (`final_features/CONTEXT.md` §6) — the table is a union of disjoint
 shortlists, not a consensus. `metadata.json` carries the source table's `COMMENT`
 verbatim so the provenance travels one more hop with the data. This module reshapes
 those channels. It does not vouch for them.

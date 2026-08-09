@@ -139,7 +139,7 @@ dataset: vcb__return_5day__final__d20_h5__tr70_val15_test15__std
 task: regression                                    # regression | classification
 
 lookback: 20        # ⚠️ ASSERTIONS, not settings — the dataset is the authority
-n_features: 202
+n_features: 724     # 724 on the VCB dataset, 13 on the bank one
 
 model:   {type: LSTM, hidden_size: 128, num_layers: 2, dropout: 0.2}
 train:   {batch_size: 64, lr: 0.001, weight_decay: 0.00001,

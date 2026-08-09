@@ -1589,7 +1589,8 @@ date-indexed table collapses the dimension the run was about (§13).
 ⚠️ **The source table is derived, not looked up.** The pools are disjoint (verified:
 `basic ∩ fa = basic ∩ ta = fa ∩ ta = ∅`) and economy columns self-identify by a
 `<country>__economy__` prefix, so a channel maps to its `pool__*` **from the archive
-alone, with no database connection** — 0 `unknown` across all 252 rows. An
+alone, with no database connection** — 0 `unknown` across all 952 rows, mapping onto
+19 distinct `pool__*` tables. An
 unrecognised channel becomes `unknown` rather than a guess: a wrong table fails
 loudly when read, a silent wrong guess would not.
 
@@ -1597,26 +1598,43 @@ loudly when read, a silent wrong guess would not.
 `last/mean/slope/sd/min/max` carried the channel; the RAW column is what gets read
 and `windows.window_design` computes the statistics downstream (§1a).
 
-### 14a. ⚠️ WHAT COMPARING THE FILES SHOWS — 199 OF 203 CHANNELS APPEAR ONCE
+### 14a. ⚠️ WHAT COMPARING THE FILES SHOWS — THE INSTABILITY IS IN THE *ORDERING*, NOT THE MEMBERSHIP
 
-Union the 19 `date`-grain files and the instability is unmissable, which is the
-second reason not to ship the union as the deliverable. **All nineteen contain
-`pool__basic` and all nineteen saw the SAME 27 channels**, ranked by the same six methods on the same
-folds; they differ only in which `pool__economy_<country>` block was joined
-alongside. A stable signal would return the same names. It does not:
+Union the 19 `date`-grain files. **All nineteen contain `pool__basic` and all nineteen
+saw the SAME 27 channels**, ranked by the same six methods on the same folds; they
+differ only in which `pool__economy_<country>` block was joined alongside. A stable
+signal would return the same names.
 
-| channel | kept by | of | best rank |
+⚠️ **THIS SECTION REVERSED WHEN `max_features=12` WENT (2026-08-09), AND THE REVERSAL
+IS THE FINDING.** It used to read "199 of 203 channels appear once" and cite
+`foreign_own` surviving 9 of 19 chances as proof the selection was not consistent with
+itself. Both numbers were measured on shortlists **truncated to 12**. At the measured
+cut the shortlists are 10-236 long, and the same comparison gives the opposite
+impression — so the two have to be read side by side, at **matched length**:
+
+| | union | appear once | top repeat-selected |
 |---|---|---|---|
-| `foreign_own` | **9** | 19 | 6 |
-| `volume_negotiated` | **6** | 19 | 1 |
-| `close_adjust` | **4** | 19 | 2 |
-| `foreign_sell_value` | **2** | 19 | 7 |
+| **top 12 of each run** (the old cap) | 204 | **198** | `foreign_own` **11**/19, `volume_negotiated` 7, `close_adjust` 4, `foreign_sell_value` 2 |
+| **full shortlist** (10-236, median 40) | 750 | **725** | `volume_negotiated` **19**/19, `avg_vol_per_buy_order` 18, `avg_vol_per_sell_order` 18, `foreign_own` 17, `prop_buy_val` 17 |
 
-⚠️ **The most repeatedly chosen channel in the archive survived 9 of 19 chances, and
-no other reached 7.** Adding an unrelated block of macro columns reshuffles which of
-the 27 price/flow channels ranks top. §6b said a selection on shuffled labels is
-internally consistent; this says the selection is not even consistent **with itself**
-across runs sharing the same features and the same target.
+⚠️ **At matched length the original finding stands, and it is the one to quote.**
+Compare the top 12 and no channel survives more than 11 of 19 chances — adding an
+unrelated block of macro columns reshuffles which of the 27 price/flow channels ranks
+top. §6b said a selection on shuffled labels is internally consistent; this says the
+selection is not even consistent **with itself** across runs sharing the same features
+and the same target.
+
+⚠️ **At full length the `pool__basic` core is nearly always PRESENT, and that is a
+weaker claim than it looks.** `volume_negotiated` appears in all 19 and four more in
+17-18 — but a shortlist of 40-236 has far more room than one of 12, so this measures
+*presence in a longer list*, not *agreement on an ordering*. All 27 basic channels
+reach the union; only 2 of them appear just once. **Membership stabilised because the
+cut got wider, not because the runs started agreeing.**
+
+⚠️ **The 725 singletons are mostly ARITHMETIC, not disagreement** — 723 of them are
+economy channels, and each `pool__economy_<country>` block is a candidate in exactly
+one run, so it *cannot* be chosen twice. `final_features/CONTEXT.md` §6 makes the same
+point about the table this union builds.
 
 ⚠️ **`foreign_own` tops that table and §9e ranked it LAST of 27** on the VN100
 cross-section. Different studies need not agree — but nothing here lets either
@@ -1628,18 +1646,23 @@ Every row carries the null verdict of the run that produced it:
 
 | evidence | runs | rows | is |
 |---|---|---|---|
-| `no_null` | **19** | 220 | **no bar was computed at all** — §10 records an absent null as absent, never as a pass |
-| `failed_null` | 1 | 10 | inside what shuffled labels produce — `bank`, z = +0.11 (§13) |
+| `no_null` | **19** | **938** | **no bar was computed at all** — §10 records an absent null as absent, never as a pass |
+| `failed_null` | 1 | **14** | inside what shuffled labels produce — `bank`, z = +0.11 (§13) |
 
 ⚠️ **Since the `d=1` runs were removed, NOT ONE surviving run clears anything.**
 `pool__ta` was the only `cleared_p95_not_a_pass` in the archive and it is gone; what
-remains is 19 runs with no bar and 1 that failed its own. **220 of the 230 rows in
-these files come from runs that never computed a null.**
+remains is 19 runs with no bar and 1 that failed its own. **938 of the 952 rows in
+these files come from runs that never computed a null.** (Row counts are per §14c's
+measured cut; before it they were 220 of 230 at a flat 12 channels per run.)
 
 ⚠️ **`outstanding.csv` is a FETCH LIST, not a green light.** It says which columns to
 assemble for the next stage; it does not say they predict anything. **The cheapest
-missing run is a null on the four repeat-selected `pool__basic` channels of §14a** —
-27-channel pool, one ticker, and §12c prices a full pass at ~5 min.
+missing run is a null on the bare `pool__basic` run** (`2026-08-04_205945__vcb__basic__return_5day`)
+— 27 channels, one ticker, and its own `metadata.json` prices `permutation` at
+**9.94 s** per pass, so 20 draws is ~10 minutes. §6b already measured that
+configuration at z = +1.56, so this buys a *known* `failed_null` in place of an
+unknown, not a pass. It changes no channel and no fingerprint, so nothing downstream
+goes stale.
 
 ### 14c. ⚠️ THE COUNT IS NOW MEASURED PER RUN — `max_features=12` is gone (2026-08-09)
 

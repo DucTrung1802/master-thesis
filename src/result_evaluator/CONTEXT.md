@@ -172,22 +172,33 @@ up/down label and a classifier's `y_true` *is* that — so those stay comparable
 regressor's. `return_source` records which path ran; the current board reads
 `unavailable (no schema recorded)` on all 18 classification rows.
 
-## 6. What it says today (2026-08-09, 30 runs)
+## 6. What it says today (2026-08-09, 29 runs)
 
 | | |
 |---|---|
-| runs scored | 30 (3 new, 27 historical with no metadata) |
-| split-metrics clearing a block-shuffled bar | **9** — none of them new |
+| runs scored | **29** (2 new, 27 historical with no metadata) |
+| split-metrics clearing a block-shuffled bar | **6** — none of them new |
 
 | new run | grain | test `ic` (bar) | test `dir_auc` (bar) | verdict |
 |---|---|---|---|---|
-| `lstm__vcb__return_5day__final__d20_h5` | series | −0.0112 (+0.1133) | 0.479 (0.557) | **no skill** |
-| `lstm__bank__rank_5day__final__d20_h5` | panel | +0.0013 (+0.0285) | 0.512 (0.522) | **no skill** |
+| `lstm__vcb__return_5day__final__d20_h5` | series | **−0.0721** (+0.1180) | 0.463 (0.561) | **no skill** |
+| `lstm__bank__rank_5day__final__d20_h5` | panel | **−0.0209** (+0.0158) | 0.495 (0.512) | **no skill** |
 
-Both stop at **best epoch 1** — never improving on their initialisation, train loss
-falling while val rose. The VCB run's predicted series has **0.20× the standard
-deviation of the realised one**. Visible in `figures_test.png` before any metric is
-read.
+⚠️ **These are the post-STL-1 numbers and they are WORSE than the ones this section
+carried until 2026-08-09** (`−0.0112` and `+0.0013`). Rebuilding the VCB table from the
+measured cut took it from 203 channels to 750, the dataset from 202 features to 724,
+and the test IC from −0.011 to **−0.072** with R² from −0.08 to **−0.90** — the
+expected consequence of handing an LSTM 724 channels on 2,918 training windows
+(issue **STL-1**, and see `train_test_creator/CONTEXT.md` §6 for the drift that came
+with them). Both test ICs are now negative.
+
+Three run folders were removed in the same pass (issue **DUP-1**), which is why the
+board went 30 → 29.
+
+The bank run stops at **best epoch 1** — never improving on its initialisation; the VCB
+run reaches epoch 7 and still lands here. The VCB run's predicted series has **0.20× the
+standard deviation of the realised one**. Visible in `figures_test.png` before any
+metric is read.
 
 ⚠️ The bank run is the more interesting negative: 20 tickers, 26,964 training windows
 and a cross-sectional reading — the direction `model/CONTEXT.md` §11 identified as the
@@ -199,11 +210,14 @@ This reproduces `model/CONTEXT.md` §10–§11 on a completely rebuilt pipeline:
 selected channels, a purged split, a corrected null and a panel-aware reading did not
 change the answer.
 
-The 9 that do clear are the `probability_gain_5pct_5day` runs at lb1/lb15/lb25 and the
-`return_5day` runs at lb1/lb2 — and §11 of `model/CONTEXT.md` already recorded why the
-first group is not trustworthy (val and test ROC-AUC are decorrelated across
-lookbacks, so the apparent test edge is not selected-for and does not reproduce).
-Every one of them also reads `return_source = label`.
+The **6** clearing split-metrics belong to **5 runs**: the
+`probability_gain_5pct_5day` runs at lb1/lb15/lb25 (`dir_auc` only) and the
+`return_5day` runs at lb1 (`ic`) and lb2 (**both** `ic` and `dir_auc`) — and §11 of
+`model/CONTEXT.md` already recorded why the first group is not trustworthy (val and
+test ROC-AUC are decorrelated across lookbacks, so the apparent test edge is not
+selected-for and does not reproduce). **Not one of them is a current run**, and none
+reads a return from `pool__targets`: the two `return_5day` runs read
+`return_source = y_true`, the three classifiers `unavailable (no schema recorded)`.
 
 ## 7. Files
 
