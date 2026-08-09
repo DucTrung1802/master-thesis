@@ -1,5 +1,9 @@
 # Context — `src/feature_selection`
 
+> 🗺️ **Project hub: [CLAUDE.md](../../CLAUDE.md)** — the whole project in ~5k tokens
+> (verdict, chain, standing rules, routing). Read that first; this file is the depth
+> behind one stage.
+
 > Ranks every feature of a `unified_schema_*` pool against one target, and refuses to
 > report the ranking until it has beaten the same pipeline run on shuffled labels.
 > Built 2026-08-03 against one ticker; extended 2026-08-04 to the cross-section.

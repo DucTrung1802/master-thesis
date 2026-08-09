@@ -1,5 +1,9 @@
 # Context — `src/pipeline`
 
+> 🗺️ **Project hub: [CLAUDE.md](../../CLAUDE.md)** — the whole project in ~5k tokens
+> (verdict, chain, standing rules, routing). Read that first; this file is the depth
+> behind one stage.
+
 > The five stages as one chain, and the one question none of them could answer:
 > **which stage is stale?** Built 2026-08-09.
 

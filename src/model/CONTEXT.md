@@ -1,5 +1,9 @@
 # Context — `src/model` (referenced dataset → scored run)
 
+> 🗺️ **Project hub: [CLAUDE.md](../../CLAUDE.md)** — the whole project in ~5k tokens
+> (verdict, chain, standing rules, routing). Read that first; this file is the depth
+> behind one stage.
+
 > Handoff notes for a new session. **Rebuilt 2026-08-09** — §1–§7, §9 and §12 describe
 > the current pipeline; §10–§11 are the research log and are unchanged. Verify anything
 > before acting on it — the DB, `src/train_test_set/`, and

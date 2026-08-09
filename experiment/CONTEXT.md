@@ -1,5 +1,9 @@
 # Experiments Context — Signal discovery → tradability → point-in-time data (VCB/VN30)
 
+> 🗺️ **Project hub: [CLAUDE.md](../CLAUDE.md)** — the whole project in ~5k tokens
+> (verdict, chain, standing rules, routing). Read that first; this file is the depth
+> behind the nine exploratory experiments.
+
 Single-document summary of **all methods and all results** across the nine
 experiments:
 
@@ -516,8 +520,13 @@ the bank sub-item lines, never an OCR failure. All 24 income statements and all 
 reconcile. The residual `differ` is again schema mapping (a value on an adjacent sub-line) and
 CafeF vintage (the tabs store 0 where the filing reports a figure), not misread digits.
 
-Environments are separate venvs (`ocr_env8` = paddlepaddle/paddleocr, `ocr_env9` =
+Environments were separate venvs (`ocr_env8` = paddlepaddle/paddleocr, `ocr_env9` =
 onnxruntime; both `--system-site-packages`, both gitignored) — the two stacks cannot share one.
+⚠️ **BOTH VENVS WERE DELETED ON 2026-08-10** (1.9 GB) — these experiments are finished and
+their verdict is recorded above, so re-running either one first needs a rebuild:
+`python -m venv --system-site-packages ocr_env8` (or `9`) from the repo root, then the
+`pip install` line in that experiment's own README. **The production parser is unaffected**
+— it runs `CAFEF_OCR_ENGINE=onnx` inside `mt_env`, not from these.
 The OCR read is cached per engine+file+DPI (`out/ocr_cache.json`, `out_batch/cache/`), so the
 scoring re-runs in a second instead of re-reading the pages; the OCR time is cached with it, so
 the speed number survives a re-score.

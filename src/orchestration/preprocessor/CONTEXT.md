@@ -1,5 +1,9 @@
 # Context — `src/orchestration/preprocessor` (bronze → silver → gold ETL)
 
+> 🗺️ **Project hub: [CLAUDE.md](../../../CLAUDE.md)** — the whole project in ~5k tokens
+> (verdict, chain, standing rules, routing). Read that first; this file is the depth
+> behind one stage.
+
 > # 📚 THIS IS A LIBRARY. IT HAS NO ENTRY POINT.
 >
 > **[`src/orchestration/`](../CONTEXT.md) is the only way to run anything, and
@@ -1048,66 +1052,61 @@ no other column affected (`close_raw` has no negatives). **Fix it in silver**; u
 then `feature_selection.cross_sectional.read_universe_panel` excludes `VNX` by
 default and says why.
 
-## 5. How it's driven — SwitchHandler + `src/switch_config.json`
+## 5. How it's driven — ⚠️ REWRITTEN 2026-08-10: the run plan is `--select`
 
-**HOW TO RUN ANYTHING HERE: edit two lines of `src/switch_config.json`, then
-`python src\main.py` from the repo root.** There is no per-module runner and no CLI
-flag; `main.py` calls all three entry points unconditionally and every ingest inside
-them is switch-gated, so the config IS the run plan. Truncate `logs/app.log` first —
-that log is the only record of what actually ran.
+**HOW TO RUN ANYTHING HERE:**
 
-```jsonc
-// re-ingest ONLY the CafeF financial statements (~1 s), touching nothing else
-"data_preprocessor/data_quality_bronze": true,
-"data_preprocessor/data_quality_bronze/cafef_financials": true,
+```powershell
+dagster asset materialize -f src/orchestration/definitions.py --select "bronze/cafef_financials"
+dagster asset materialize -f src/orchestration/definitions.py --select "group:bronze"   # 20 assets, ~9 min
+dagster asset materialize -f src/orchestration/definitions.py --select "+gold/stocks_financials_bank_fa"
 ```
 
-- `SwitchHandler` reads a **flat JSON of slash-path → bool**; a path is enabled only
-  when **every ancestor is explicitly true**, so a master flag off disables its whole
-  subtree without touching the leaves. The three entry points each gate on
-  `data_preprocessor/data_quality_{bronze|silver|gold}` and then on a per-table leaf.
-  Keys beginning `//` are comments and are ignored — the heavy leaves carry one giving
-  their cost, so you can read the price of a run before starting it.
-- ⚠️ **The config is read as `utf-8-sig`, and a branch key must NOT end in `/`.** Two
-  ways this file silently does nothing, both hit in practice:
-  - a **BOM** (PowerShell 5.1's `Out-File -Encoding utf8` writes one, as do several
-    Windows editors) used to throw inside `_load_config`, which swallows the error and
-    returns `{}` — *every* switch false, `main.py` running to completion doing nothing,
-    one ERROR line in the log as the only clue. Fixed 2026-07-30 by reading `utf-8-sig`;
-    a malformed-JSON typo still fails the same quiet way, so check that log line
-    (`Switch config loaded: N switches (M enabled)`) when a run does nothing.
-  - `"web_scraper/cafef/"` (trailing slash) never matches, because `is_enabled` looks
-    up the prefix `web_scraper/cafef`. That typo made the whole CafeF + Simplize
-    scraper branch unreachable until 2026-07-30.
-- **⚠️ BRONZE IS ONE LEAF PER SOURCE TABLE** (since 2026-07-30) — `trading_view_stocks`,
-  `cafef_{price,foreign,order_stats,prop_trading,insider_txn,news,financials}`,
-  `cafef_index_{price,foreign,order_stats,prop_trading}`,
-  `simplize_{stocks,industry}`, `gics`. The **single `.../bronze/stocks` leaf is GONE**:
-  it fired all ten ingests, so re-reading the financials CSVs (~1 s) also meant
-  re-reading 2.4 M CafeF price rows and 2.7 M Simplize rows. Bronze has **no
-  cross-table dependency** — each ingest reads its own `raw_data/` folder and writes its
-  own table — so **any subset is a valid run**; the order in `bronze_ingests` is
-  convention only (universe → daily → event → reference). All ship `false`: opt in.
-- **Silver leaves** are `bonds`/`economy`/`forex`/`funds`/`indices`/`gics`/
-  `cafef_carry_ups`/`stocks_basic`/`financials`/`stocks_financials`/`news_sentiment`.
-  The old `.../silver/stocks` leaf was **split in two** on 2026-07-30: `cafef_carry_ups`
-  (the five one-to-one bronze→silver lifts) and `stocks_basic` (the four-way join).
-  They are not each other's inputs — `stocks_basic` joins the **bronze** tables directly —
-  so rebuilding the 2.4 M-row panel to refresh a carry-up was pure cost.
-- `gics` is a **bronze + silver** leaf (`.../bronze/gics`, `.../silver/gics`) — the
-  silver copy is a straight reference-table carry-up; there is still no `gics` gold
-  table. `bronze.gics` also feeds `silver.stocks_basic`'s GICS tree (via
-  `_helper_build_gics_classification`) regardless of the silver `gics` leaf.
-- The silver-only leaf `.../silver/stocks_financials` (added 2026-07-21) gates **two
-  chained ingests in order**: `_ingest_silver_stocks_basic_financials_bank` (the raw
-  price×financials as-of join → `stocks_basic_financials_bank`) then
-  `_ingest_silver_stocks_basic_financials_bank_fa` (that table + the indicator catalog →
-  `stocks_basic_financials_bank_fa`). It reads `silver.stocks_basic` +
-  `silver.cafef_financials_bank`, so it runs after both — but note `stocks_basic` is
-  itself under the separate `.../silver/stocks_basic` leaf, so if you flip
-  `stocks_financials` on while that is off it reuses whatever is already materialised.
-- **Order matters:** silver reads bronze tables; gold reads silver tables. Run the
-  layers in bronze → silver → gold order (main.py does). Within bronze, order is free.
+Every `_ingest_*` method in this file has exactly one asset wrapping it. Truncate
+`logs/app.log` first; it is still the record of what the ingest itself did.
+
+> ### ⚠️ THIS SECTION WAS 60 LINES OF DELETED-FILE ADVICE
+>
+> It opened: *"HOW TO RUN ANYTHING HERE: edit two lines of `src/switch_config.json`,
+> then `python src\main.py` from the repo root"*, and then documented the 41
+> `data_preprocessor/data_quality_{bronze,silver,gold}/<leaf>` keys, the BOM trap, the
+> trailing-slash trap, and which leaf gated which ingest.
+>
+> **All of it is gone** — the 41 keys, the three entry points, `_run_layer`, `main.py`
+> and `switch_config.json` itself, deleted 2026-08-05/06 (phase 5). The banner at the
+> top of this file has said the run path was deleted since then; this section did not,
+> and stayed readable as live instructions. It is not.
+>
+> ⚠️ **The BOM and trailing-slash traps still apply to `orchestration/config.json`** and
+> are recorded there — that file is read `utf-8-sig`, and a malformed one **raises**
+> rather than being read as "disable everything", which is exactly the failure this
+> section used to warn about.
+
+### 5a. What survived the deletion — the DEPENDENCY facts, now declared as asset edges
+
+The leaf lists are gone; the reasons they were shaped that way are properties of the
+data and still hold:
+
+- **Bronze has NO cross-table dependency** — each ingest reads its own `raw_data/`
+  folder and writes its own table, so **any subset is a valid run** and the layer is
+  flat. This is why there are 20 independent bronze assets and not one.
+  - ⚠️ It is also why the old single `.../bronze/stocks` leaf was wrong: it fired all
+    ten ingests, so re-reading the financials CSVs (~1 s) also re-read 2.4 M CafeF price
+    rows and 2.7 M Simplize rows.
+- **Silver reads bronze; gold reads silver.** The order is now an edge Dagster walks,
+  not something a human runs in sequence.
+- **`cafef_carry_ups` vs `stocks_basic` are NOT each other's inputs** — `stocks_basic`
+  joins the **bronze** tables directly, so rebuilding the 2.4 M-row panel to refresh a
+  carry-up was pure cost. They are separate assets for that reason.
+- **`silver.stocks_financials` is two chained ingests in order**:
+  `_ingest_silver_stocks_basic_financials_bank` (price × financials as-of join) then
+  `_ingest_silver_stocks_basic_financials_bank_fa` (+ the indicator catalog). Both read
+  `silver.stocks_basic` and `silver.cafef_financials_bank`, so both run after them —
+  now enforced, where the old leaf let you run it against whatever was already
+  materialised.
+- **`gics` is a bronze + silver pair**; the silver copy is a straight reference carry-up
+  and there is still no `gics` gold table. `bronze.gics` feeds `silver.stocks_basic`'s
+  GICS tree via `_helper_build_gics_classification` either way.
 
 ## 6. Shared infra it depends on (outside this dir)
 

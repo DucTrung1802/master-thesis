@@ -1,5 +1,9 @@
 # Context — `src/sentiment` (news sentiment + does it predict price?)
 
+> 🗺️ **Project hub: [CLAUDE.md](../../CLAUDE.md)** — the whole project in ~5k tokens
+> (verdict, chain, standing rules, routing). Read that first; this file is the depth
+> behind one stage.
+
 > Handoff notes for a new session. This module scores Vietnamese company news for
 > sentiment and tests, rigorously, whether that sentiment predicts short-horizon price
 > movement. **The headline finding is a well-evidenced NEGATIVE result** (see §6): news

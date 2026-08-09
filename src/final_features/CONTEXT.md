@@ -1,5 +1,9 @@
 # Context — `src/final_features`
 
+> 🗺️ **Project hub: [CLAUDE.md](../../CLAUDE.md)** — the whole project in ~5k tokens
+> (verdict, chain, standing rules, routing). Read that first; this file is the depth
+> behind one stage.
+
 > Collects every run's `outstanding.csv` and materialises **one `<target>__final__*`
 > table per (schema, target, setup)**. Built 2026-08-09.
 >

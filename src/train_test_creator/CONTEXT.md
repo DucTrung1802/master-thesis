@@ -1,5 +1,9 @@
 # Context — `src/train_test_creator`
 
+> 🗺️ **Project hub: [CLAUDE.md](../../CLAUDE.md)** — the whole project in ~5k tokens
+> (verdict, chain, standing rules, routing). Read that first; this file is the depth
+> behind one stage.
+
 > Reads **`unified_schema_vcb.return_5day__final__d20_h5`** and writes windowed
 > train/val/test tensors under `src/train_test_set/`. Rebuilt 2026-08-09.
 >

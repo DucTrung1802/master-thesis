@@ -1,5 +1,14 @@
 # Experiment 10 — Literature: sentiment / text as an external factor
 
+> 🗺️ **Project hub: [CLAUDE.md](../../CLAUDE.md)** — the whole project in ~5k tokens
+> (verdict, chain, standing rules, routing). Read that first.
+>
+> ⚠️ **This file is 3,185 lines / ~36k tokens — the largest in the repo.** The distillate
+> is **§"Combined reading — where the twenty-three papers leave the thesis"** (line ~2880),
+> which is ~190 lines and carries the thesis-relevant conclusions of all 23 papers. Read
+> that alone unless you need a specific paper; the per-paper sections above it are the
+> evidence behind it.
+
 Unlike experiments 1–9, this folder holds **papers, not code**. It is the reading
 file for the one orthogonal-data lever the thesis has *not* built: **text**
 (news, social media) as a predictor, which experiment_3's conclusion — *"the

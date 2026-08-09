@@ -1,5 +1,9 @@
 # Context — `src/orchestration` (THE pipeline entry point)
 
+> 🗺️ **Project hub: [CLAUDE.md](../../CLAUDE.md)** — the whole project in ~5k tokens
+> (verdict, chain, standing rules, routing). Read that first; this file is the depth
+> behind one stage.
+
 > # ▶️ THIS IS THE ENTRY POINT. Work happens here.
 >
 > **📁 Moved 2026-08-01: this package lives under `src/`, not at the repo root.** It is a
@@ -780,8 +784,18 @@ raw_data/_archive/trading_view_data_{bonds,funds,forex,economy}_2026-08-05/
    18 / 21 / 2,307 / 1,037 CSVs — 795 MB
 ```
 
-Move them back if a re-scrape comes back short of what was there (which is exactly what
-the 2026-07-31 links breakage did to the whole layer).
+⚠️ **THAT ARCHIVE WAS DELETED ON 2026-08-10 AND THERE IS NO LONGER A RESTORE PATH.** This
+paragraph used to read *"move them back if a re-scrape comes back short of what was
+there"*, which is exactly what the 2026-07-31 links breakage did to the whole layer. The
+folder is gone (803 MB reclaimed), so **if a re-scrape now comes back short, the only way
+back is another scrape** — budget ~2 h for forex alone. The decision was taken against a
+verified-complete current state: 3,851 series / 19 of 19 countries on disk, with bronze,
+silver and gold all agreeing at 3,784.
+
+**The rule the archive existed to serve is unchanged, and matters more now:** clearing a
+folder before a `skip_existing=False` re-fetch is still the only way to make "overwrite"
+mean overwrite. **Move the folder aside rather than deleting it**, and keep it until the
+rebuilt layer has been counted.
 
 ### ⚠️ Progress now reaches the log — `Progress [####----] 45.6% 1459/3199` (2026-08-05)
 
@@ -2117,5 +2131,7 @@ silver leaves that were never separate tables and the two unified universes
   `skip_existing` will not refresh them.)
 - **The OCR venvs (`ocr_env8`/`ocr_env9`) are irrelevant here** — the production
   financials parse runs in `mt_env` with `CAFEF_OCR_ENGINE=onnx` against the
-  `onnxruntime-gpu` already installed there. Only the experiments need those venvs, and
-  they stay outside Dagster.
+  `onnxruntime-gpu` already installed there. Only the experiments needed those venvs, and
+  they stayed outside Dagster. ⚠️ **Both were DELETED on 2026-08-10** (1.9 GB); nothing in
+  `src/` is affected, but re-running experiment 8 or 9 now needs a venv rebuild — the
+  recipe is in each experiment's own README.

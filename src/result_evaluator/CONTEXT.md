@@ -1,5 +1,9 @@
 # Context — `src/result_evaluator`
 
+> 🗺️ **Project hub: [CLAUDE.md](../../CLAUDE.md)** — the whole project in ~5k tokens
+> (verdict, chain, standing rules, routing). Read that first; this file is the depth
+> behind one stage.
+
 > Scores a finished run **whatever produced it**, against a block-shuffled null.
 > Built 2026-08-09. The folder existed and was empty.
 

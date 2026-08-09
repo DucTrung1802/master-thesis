@@ -1,53 +1,80 @@
 # Context — `src/web_scraper` (raw-data acquisition layer)
 
+> 🗺️ **Project hub: [CLAUDE.md](../../CLAUDE.md)** — the whole project in ~5k tokens
+> (verdict, chain, standing rules, routing). Read that first; this file is the depth
+> behind one stage.
+
 > Handoff notes for a new session. Describes the web-scraping subsystem: how the
 > data sources are structured, what each pulls, how they are driven, and where
 > output lands. This is the **bronze-input** stage — it writes CSV/xlsx/PDF under
-> `raw_data/<source>/`, which `src/data_preprocessor` then ingests into
-> `bronze_schema`. Verify anything before acting on it — the code and
-> `src/switch_config.json` are the sources of truth.
+> `raw_data/<source>/`, which `orchestration/preprocessor` then ingests into
+> `bronze_schema`. Verify anything before acting on it — the code is the source of
+> truth.
+>
+> ## ⚠️ THE DRIVER CHANGED — `main.py` AND `switch_config.json` ARE DELETED
+>
+> **Nothing here is run by editing a config file any more.** `src/main.py` and
+> `src/switch_config.json` were deleted on 2026-08-05/06 (orchestration phase 5), and
+> so was `src/data_preprocessor` — its contents moved to
+> [`src/orchestration/preprocessor/`](../orchestration/preprocessor/CONTEXT.md).
+> **Every scraper is now a Dagster asset and `--select` is the run plan**; see
+> [`src/orchestration/CONTEXT.md`](../orchestration/CONTEXT.md).
+>
+> **Not one line of the scrapers changed**, which is why the rest of this file is still
+> accurate. What changed is who calls them. The two places that described the old
+> driver are marked as history: the diagram below, and §5.
 
 ## 1. Big picture / pipeline
 
 ```
-src/switch_config.json  ──(feature flags)──┐
-                                            ▼
-src/main.py  ──►  TradingViewScraper.scrape()   ← universe authority (link CSVs)
+dagster asset materialize -f src/orchestration/definitions.py --select "…"
+                       │
+                       ▼   (19 landing assets, assets/scrape.py)
+                  TradingViewScraper            ← universe authority (link CSVs)
                        │                            + OHLCV per symbol (Selenium)
                        ▼
-                  CafeFScraper.scrape()         ← per-stock fields TV lacks (requests)
-                  CafeFIndexScraper.scrape()    ← the same 4 tabs for the 6 MARKET INDICES
+                  CafeFScraper                  ← per-stock fields TV lacks (requests)
+                  CafeFIndexScraper             ← the same 4 tabs for the 6 MARKET INDICES
                                                    (requests; needs no TV links)
-                  CafeFNewsScraper.scrape()     ← company-news / disclosure feed (requests)
-                  CafeFPdfScraper.scrape()      ← the filing PDFs (requests)
+                  CafeFNewsScraper              ← company-news / disclosure feed (requests)
+                  CafeFPdfScraper               ← the filing PDFs (requests)
                   FinancialsBuilder.build_all() ← OCRs those PDFs → statement CSVs (LOCAL,
                                                    no network; must follow the line above)
-                  SimplizeScraper.scrape()      ← validated daily-panel backbone (requests)
-                  GicsScraper.scrape()          ← MSCI GICS taxonomy (independent)
+                  SimplizeScraper               ← validated daily-panel backbone (requests)
+                  GicsScraper                   ← MSCI GICS taxonomy (independent)
                        │
                        ▼
                   raw_data/<source>/...  (CSV + PDFs + the raw GICS .xlsx)
                        │
                        ▼
-             src/data_preprocessor → bronze_schema (see its own ingest code)
+             orchestration/preprocessor → bronze_schema
 ```
+
+> **Historical, and it is why the ordering below is worth keeping.** This diagram used
+> to read `src/switch_config.json ──(feature flags)──► src/main.py ──► …scrape()`, with
+> the note that the committed config had `"web_scraper": false` so the whole stage was
+> OFF by default. Both files are gone; the dependency ORDER they enforced by hand is now
+> declared as asset edges, and Dagster walks it.
 
 - **TradingView is the universe authority.** CafeF and Simplize both derive their
   `(exchange, symbol)` list from the TradingView **stock link CSVs**
   (`get_stock_symbols()` reads `raw_data/trading_view/links/stocks/**/*.csv`),
-  so TV must run first; the other two enrich the same universe. `main.py` runs
-  them in that order deliberately.
+  so TV must run first; the other two enrich the same universe. ⚠️ **This is now a
+  declared Dagster edge on the `stocks` PARTITION only**
+  (`SpecificPartitionsPartitionMapping(["stocks"])`) — CafeF and Simplize do not need
+  the other eight asset classes. `orchestration/CONTEXT.md` §2 has the full audit,
+  including three edges the prose here originally got wrong.
   - **`CafeFIndexScraper` is the exception — it needs no links at all.** An index has
     no TradingView link CSV, so its universe is a fixed six-entry list on the class
     (`INDEXES`). It can therefore run standalone, before TV has ever been run.
+  - **`CafeFPdfScraper` is the other exception** — alone among the CafeF scrapers it
+    never calls `get_stock_symbols()`; its universe is `vn100.csv`.
 - **Each source writes one CSV per stock** (except GICS = one taxonomy CSV, and
   TV links = one CSV per filter leaf). All writers use **temp-file + atomic
   `os.replace`** so an interrupted run never leaves a partial file that
   `skip_existing` would treat as complete.
-- Everything is **flag-gated** by `SwitchHandler` reading `src/switch_config.json`
-  (see §5). Note the top-level `"web_scraper": false` in the committed config — the
-  whole scraper stage is currently OFF by default; individual asset-class subtrees
-  are pre-wired to `true` for when it is turned on.
+- **What each scraper ENUMERATES is still a flag tree**, and that part survives — see
+  §5. What is gone is the tree deciding whether the stage RUNS.
 
 ### What is under `raw_data/cafef/` and what writes it
 
@@ -1235,21 +1262,49 @@ Matches the bronze-source decision (memory `project-bronze-source-per-field`):
   (`prop_trading/`), and insider/major-shareholder transactions (`insider_txn/`); see
   §3. These are orthogonal signals worth noting for modelling (cf. `src/model/CONTEXT.md`).
 
-## 5. How it's driven — SwitchHandler + `src/switch_config.json`
+## 5. How it's driven — ⚠️ REWRITTEN 2026-08-10: the run plan is `--select`
 
-**HOW TO RUN ANYTHING HERE: edit `src/switch_config.json`, then `python src\main.py`
-from the repo root.** There is no per-scraper runner and no CLI flag — `main.py` calls
-every scraper unconditionally and each one no-ops unless its leaf is on, so the config
-IS the run plan. Truncate `logs/app.log` first; it is the only record of what ran.
+**HOW TO RUN ANYTHING HERE:**
 
-```jsonc
-// re-parse the financial statements from the PDF archive already on disk
-"web_scraper": true,
-"web_scraper/cafef": true,
-"web_scraper/cafef/financials": true,     // ~2.4 h PER TICKER — read §3a first
+```powershell
+dagster asset materialize -f src/orchestration/definitions.py --select "group:cafef"
+dagster asset materialize -f src/orchestration/definitions.py `
+    --select "raw/cafef_financials" --partition "HOSE_VCB"     # ~2.4 h — read §3a first
 ```
 
-- `SwitchHandler` (`src/utils/switch_handler.py`) reads a **flat JSON of
+Truncate `logs/app.log` first; it is still the record of what the scraper itself did
+(Dagster's own per-run logs are separate, in `.dagster/`).
+
+> ### ⚠️ THIS SECTION USED TO SAY SOMETHING ELSE, AND IT WAS DELETED-FILE ADVICE
+>
+> It opened: *"HOW TO RUN ANYTHING HERE: edit `src/switch_config.json`, then
+> `python src\main.py` from the repo root. There is no per-scraper runner and no CLI
+> flag — `main.py` calls every scraper unconditionally and each one no-ops unless its
+> leaf is on, so the config IS the run plan."*
+>
+> **Every file in that sentence is gone** — `main.py` deleted 2026-08-05,
+> `switch_config.json` deleted 2026-08-06. Following it would have edited a file that
+> does not exist and run a script that does not exist. Kept here as history because it
+> explains the shape of the flag tree below, which DOES survive.
+
+### 5a. The flag tree survives — as PARAMETERS, not as a run plan
+
+The distinction is the whole point: the tree no longer decides **whether** a scrape
+runs (that is `--select`), only **what a running scrape enumerates** — which countries,
+sectors and categories. Its 295 leaves live in
+[`orchestration/config.json`](../orchestration/config.json)'s `parameters` section, and
+`orchestration/enabled.py::trading_view_switches()` rebuilds the flat
+`web_scraper/trading_view/<phase>/…` paths from it and hands them to an ordinary
+`SwitchHandler`. **Not one line of the scrapers changed** — the fifteen
+`get_enabled_paths` call sites in `trading_view_scraper.py` still index positionally
+(`parts[4]` is the country, `parts[6]` the sector). Verified by golden test against the
+deleted file: 17 of 19 (phase × asset class) selections byte-identical.
+
+- ⚠️ **`SwitchHandler` has NO DEFAULT PATH any more.** It takes an explicit `switches`
+  dict, an explicit file, or neither. "Neither" is what CafeF, Simplize and
+  `DataPreprocessor` get — they all require a handler in their constructor and none of
+  them ever calls it. **A resurrected `src/switch_config.json` now RAISES.**
+- The format it reads is unchanged: a **flat JSON of
   slash-path → bool**. A path is enabled only when **every prefix is explicitly
   true** (disabling a parent disables the whole subtree); missing key = false; keys
   starting `//` are inline comments.
