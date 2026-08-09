@@ -1,60 +1,69 @@
-# Context — `src/model` (dataset creation → model training)
+# Context — `src/model` (referenced dataset → scored run)
 
-> Handoff notes for a new session. Describes how datasets and model training runs
-> are produced under `src/model`. Verify anything before acting on it — the DB,
-> `src/train_test_set/`, and `src/model/runs/index.csv` are the sources of truth.
+> Handoff notes for a new session. **Rebuilt 2026-08-09** — §1–§7, §9 and §12 describe
+> the current pipeline; §10–§11 are the research log and are unchanged. Verify anything
+> before acting on it — the DB, `src/train_test_set/`, and
+> `src/model/runs/index.csv` are the sources of truth.
 
 ## 1. Big picture / pipeline
 
 ```
-unified_schema_<ticker>.<target>__lb<L>__final     ← a VIEW of pre-selected features
-   │   (built upstream by src/train_test_creator/unified_schema_creator.ipynb)
-   │
-   │   src/train_test_creator/train_test_creator.ipynb
-   │   (clean → chronological split → scale train-fit → sliding windows → save)
-   ▼
-src/train_test_set/<dataset_name>/                 ← X/y .npy tensors + scalers + dates + metadata
-   │
-   │   a model notebook REFERENCES the dataset by name + content hash (never clones it)
-   ▼
-src/model/<model>/  (config-driven notebook)  →  src/model/runs/<run_id>/
-                                                  (config, checkpoints, TensorBoard, metrics)
+reports/feature_selection/<run>/outstanding.csv        feature_selection  (manual runs)
+   ▼   python -m final_features --apply
+unified_schema_<t>.<target>__final__d<d>_h<h>          ⚠️ the one stage that writes the DB
+   ▼   python -m train_test_creator --save
+src/train_test_set/<dataset>/                          X/y tensors + scalers + metadata
+   ▼   python -m model.lstm --config <cfg>             ← THIS package
+src/model/runs/<run_id>/                               config, checkpoints, TB, predictions
+   ▼   python -m result_evaluator
+results/metrics.json + runs/index.csv                  scored against a shuffled-label null
 ```
 
-- **Upstream** (feature selection + the `__final` view) is documented in
-  `src/train_test_creator/CONTEXT.md`. This file starts from the view onward.
-- **One sample** = a `(LOOKBACK_DAY, n_features)` window of all view features
-  ending on day *t*; **label** = `target` at day *t* (for `return_5day`, the
-  5-day-ahead return `close[t+5]/close[t] − 1`).
-- **DB**: PostgreSQL `database_main_v2`, schema `unified_schema_<ticker>` (e.g.
-  `unified_schema_vcb`). Creds in repo `.env` (`POSTGRES_*`).
+`python -m pipeline` prints the state of all five and runs the stale ones —
+`src/pipeline/CONTEXT.md` is the chain-level document. Each stage's own CONTEXT.md
+covers its internals.
+
+- **One sample** = a `(d, n_features)` window ending on day *t*; **label** = the target
+  at day *t* (for `return_5day`, `close[t+5]/close[t] − 1`).
+- ⚠️ **`d` and `h` come from the source TABLE NAME**, never from a parameter. They flow
+  `return_5day__final__d20_h5` → dataset `metadata.json` → asserted against the config.
+- **DB**: PostgreSQL `database_main_v2`, schema `unified_schema_<ticker>`. Creds in the
+  repo `.env` (`POSTGRES_*`).
 
 ## 2. Directory layout
 
 ```
 src/model/
 ├── CONTEXT.md            ← this file
+├── __init__.py           makes `model` importable as a package (python -m model.lstm)
 ├── common/               ← shared framework lib (used by every model)
 │   ├── data.py           load_dataset (reference + hash), Dataset dataclass
 │   ├── run_dir.py        RunDir: immutable run folder, config/metadata, git sha, env
 │   ├── trainer.py        Trainer (train loop, early stop, TensorBoard, checkpoints),
 │   │                     TrainConfig, set_seed, resolve_device, to_loaders;
-│   │                     criterion is configurable (default MSE; BCE for classifiers)
-│   ├── metrics.py        regression_metrics + classification_metrics (both share the
-│   │                     dir_accuracy/dir_auc keys so reg vs clf compare directly)
-│   └── registry.py       append_run → runs/index.csv leaderboard (has a `task` col)
+│   │                     criterion is configurable (MSE / BCEWithLogits)
+│   ├── metrics.py        ⚠️ a SHIM over result_evaluator.metrics — kept only so the two
+│   │                     legacy notebooks still run. No metric is defined here.
+│   └── registry.py       append_run → runs/index.csv; MIGRATES the header when the
+│                         column set grows, instead of misaligning rows under it
 ├── lstm/                 ← ONE model = code only (no run outputs live here)
 │   ├── model.py          LSTMRegressor + build_model + arch_dict (last Linear → scalar;
-│   │                     that scalar is the return for regression / the logit for a clf)
-│   ├── configs/          return_5day_lb{1,2,3,5,10,15,20,25,30}.yaml
-│   │                     direction_5day_lb20.yaml (classification; task: classification)
-│   ├── lstm_return_5day.ipynb      regression notebook (MSE, regression_metrics)
-│   └── lstm_direction_5day.ipynb   classification notebook (BCEWithLogitsLoss, sigmoid
-│                                    eval, classification_metrics, ROC plot)
+│   │                     the return for regression / the logit for a classifier)
+│   ├── train.py          config → run folder → trained model → scored result
+│   ├── configs/          vcb__return_5day__final__d20_h5.yaml  ← the current one
+│   │                     return_5day_lb*.yaml, direction_5day_lb*.yaml  ← legacy sweeps
+│   ├── RUN__lstm.ipynb            the notebook meant to be run (calls train.py)
+│   ├── lstm_return_5day.ipynb     legacy; reads the pre-2026-08-09 dataset names
+│   └── lstm_direction_5day.ipynb  legacy; same
 └── runs/                 ← ALL runs from ALL models AND tasks (shared)
     ├── index.csv         cross-run leaderboard (TRACKED in git)
-    └── <run_id>/         one immutable run (git-IGNORED: see .gitignore src/model/runs/*/)
+    └── <run_id>/         one immutable run (git-IGNORED: .gitignore src/model/runs/*/)
 ```
+
+⚠️ **`runs/*/` being git-ignored has a consequence worth knowing before you rely on a
+run**: 27 of the 28 folders in a fresh checkout hold only `results/` and `logs/` —
+no `metadata.json`, no checkpoints. `result_evaluator` is built to score them anyway
+(its CONTEXT §1); nothing else can.
 
 ## 3. The run folder (`src/model/runs/<run_id>/`)
 
@@ -76,92 +85,96 @@ logs/
 **Data is referenced, not cloned** — the run stores only `dataset_name` +
 `dataset_hash` in `metadata.json`; the tensors stay in `src/train_test_set/`.
 
-## 4. Create a dataset — `src/train_test_creator/train_test_creator.ipynb`
+## 4. Create a dataset — `python -m train_test_creator --save`
 
-Set the params cell and Run All (or run headless with nbconvert). Key params:
+`src/train_test_creator/CONTEXT.md` is the full document. What matters here:
 
-- `TICKER = "vcb"`, `TARGET = "return_5day"`, `LOOKBACK_DAY = <L>`
-- `LOOKBACK_DAY` **must match** the view's lb — it both picks the source view
-  (`<TARGET>__lb<L>__final`) and sets the window length.
-- Split: chronological `TRAIN_RATIO=0.70`, `VAL_RATIO=0.15` (test = rest).
-- `SCALE_TARGET=True` (StandardScaler, saved for inverse-transform).
+- The dataset folder **names its input**:
+  `vcb__return_5day__final__d20_h5__tr70_val15_test15__std`.
+- ⚠️ `d` and `h` are parsed from the source table's name, never passed in.
+- ⚠️ **The splits are purged by `d + h - 1` = 24 samples** at each boundary —
+  `feature_selection.PurgedWalkForward.gap`, the same purge the channels were selected
+  under. The pre-2026-08-09 notebook had none: it started each split `d-1` rows early
+  and let train labels reach `h` days into the val window.
+- ⚠️ Imputation is the **train-slice median**, matching `FeatureSelector._impute`. The
+  old `ffill().bfill()` filled leading gaps with future values (3,382 of 4,230 rows on
+  one channel).
+- `metadata.json` carries the source table's `COMMENT`, the purge gap, the dropped
+  channels and a drift summary. `train.py` reads all of it into the run's `lineage`.
 
-Output → `src/train_test_set/<ticker>_<target>_lb<L>_h5_final_tr70_val15_test15_std/`
-containing `X/y_{train,val,test}.npy`, `dates_{train,val,test}.npy` (per-window
-label date = window's last day), `feature_scaler.pkl`, `target_scaler.pkl`,
-`metadata.json`.
+> `train_test_set/` is git-ignored (`*.npy` + the dir).
 
-**Leak-free windowing**: features scaled with **train-only** statistics; val/test
-windows start `LOOKBACK_DAY−1` rows early so their first window is complete
-without borrowing label rows across splits; labels only look forward.
+## 5. Train a model — `python -m model.lstm`
 
-Headless: `cd src/train_test_creator && python -m nbconvert --to notebook
---execute --inplace train_test_creator.ipynb` (uses the `mt_env` env).
+```
+python -m model.lstm                                       # the default config
+python -m model.lstm --config configs/<name>.yaml
+python -m model.lstm --config <path> --dry-run             # print the plan only
+```
 
-> The `train_test_set/` folder is git-ignored (`*.npy` + the dir). `LOOKBACK_DAY`
-> is a manual param — during a lookback sweep it is edited per run and left
-> **uncommitted** (transient), so the committed notebook default is not churned.
+`RUN__lstm.ipynb` is the same thing with figures — it calls the same `train()`, so a
+sweep is a shell loop rather than nine edited copies of a notebook.
 
-## 5. Train a model — `src/model/lstm/lstm_return_5day.ipynb`
+`train()` does: `load_dataset` → `_verify` → `RunDir.create` → `Trainer.fit` →
+write `predictions_{val,test}.csv` → `result_evaluator.evaluate_run` → `append_run`.
 
-Config-driven and thin (≈ load config → `RunDir.create` → `load_dataset` →
-build model → `Trainer.fit` → evaluate → save + registry). To run:
+⚠️ **`_verify` raises, it does not warn.** A config whose `lookback`/`n_features`
+disagree with the dataset, or a classification task on a dataset that has a target
+scaler, stops there. Training a `d=20` architecture on `d=5` windows produces a run
+that looks finished, lands in `index.csv` beside comparable runs, and is not one.
 
-1. Pick/edit a config in `lstm/configs/` (see §6 for the schema).
-2. Interactive: set `CONFIG_PATH` (top of notebook, or the `CONFIG_PATH` env var;
-   default `configs/return_5day_lb20.yaml`) and **Run All**.
-3. Headless for config `X`:
-   ```
-   cd src/model/lstm
-   CONFIG_PATH=configs/return_5day_lb<L>.yaml \
-     python -m nbconvert --to notebook --execute \
-     --output <scratch>/executed.ipynb lstm_return_5day.ipynb
-   ```
-   Use `--output <scratch>` (not `--inplace`) to keep the committed notebook
-   clean; the run folder + `index.csv` row are written as side effects.
+⚠️ **No metric is computed here.** `evaluate_run` reads the prediction files, so
+`python -m result_evaluator --rescore` can add or correct a metric across every past
+run without a GPU — see `result_evaluator/CONTEXT.md` §1.
 
-Runs go to the shared `src/model/runs/` (`RUNS_DIR = ../runs`). GPU is auto
-(`device: auto`). Compare runs: `tensorboard --logdir src/model/runs` (HPARAMS
-tab = config vs metrics), or open `src/model/runs/index.csv`.
+Runs go to the shared `src/model/runs/`. GPU is auto (`device: auto`). Compare:
+`tensorboard --logdir src/model/runs`, `src/model/runs/index.csv`, or
+`python -m result_evaluator`.
 
-## 6. Config schema (`lstm/configs/<target>_lb<L>.yaml`)
+## 6. Config schema
 
 ```yaml
-run_name: lstm__return_5day__lb20__final          # <model>__<target>__lb<L>__final
-dataset: vcb_return_5day_lb20_h5_final_tr70_val15_test15_std   # folder under src/train_test_set/
+run_name: lstm__vcb__return_5day__final__d20_h5     # <model>__<ticker>__<target>__<setup>
+dataset: vcb__return_5day__final__d20_h5__tr70_val15_test15__std
+task: regression                                    # regression | classification
+
+lookback: 20        # ⚠️ ASSERTIONS, not settings — the dataset is the authority
+n_features: 202
+
 model:   {type: LSTM, hidden_size: 128, num_layers: 2, dropout: 0.2}
 train:   {batch_size: 64, lr: 0.001, weight_decay: 0.00001,
           max_epochs: 150, patience: 20, grad_clip: 1.0,
           lr_factor: 0.5, lr_patience: 5, log_every: 10}
+null_draws: 200     # draws in result_evaluator's block-shuffled null
 seed: 42
-device: auto                                       # auto | cuda | cpu
+device: auto        # auto | cuda | cpu
 ```
 
-## 7. End-to-end recipe: new `(target, lookback)`
+## 7. End-to-end recipe: a new `(target, setup)`
 
-1. **Selection tables + view** (upstream, DB) — for each group build
-   `<target>__lb<L>__<group>__<n>`, then the `<target>__lb<L>__final` VIEW.
-   Use `src/train_test_creator/unified_schema_creator.ipynb`
-   (`build_selected_table(group, target, max_features, lookback=L, tree_only=?)`
-   then `build_final_view(target, L)`). Groups: `calendar`, `basic`, `macro`,
-   `ta`. **Use `tree_only=True` (GPU) for wide pools** — always `ta`, and
-   `macro` at `L ≳ 25` (see §8).
-2. **Dataset** — set `LOOKBACK_DAY=L` in `train_test_creator.ipynb`, run → dataset
-   folder (§4).
-3. **Config** — copy an existing `lstm/configs/return_5day_lb*.yaml`, set
-   `run_name`, `dataset`, lookback.
-4. **Train** — run the LSTM notebook with that `CONFIG_PATH` (§5).
-5. **Result** — new `src/model/runs/<run_id>/` + a row in `index.csv`.
+1. **Selection** — run `feature_selection/RUN__feature_importance_report.ipynb` for
+   each pool combination. ⚠️ Manual: hours of GPU and a judgement about which pools to
+   join. Then `python -m feature_selection.outstanding` to refresh the shortlists.
+2. **Table** — `python -m final_features` to see the plan, `--apply` to build
+   `<target>__final__d<d>_h<h>`. One table per (schema, target, setup).
+3. **Dataset** — `python -m train_test_creator --ticker <t> --table <table> --save`.
+4. **Config** — copy `configs/vcb__return_5day__final__d20_h5.yaml`; set `run_name`,
+   `dataset`, `lookback`, `n_features`, and `task` if it is a classifier.
+5. **Train** — `python -m model.lstm --config configs/<name>.yaml`.
+6. **Score** — happens automatically; `python -m result_evaluator` for the board.
 
-New target (e.g. `return_rel_5day`): same steps, just change `TARGET`/`target`
-throughout (the pool + `pool__targets` column already exist upstream).
+Or `python -m pipeline --apply`, which does 2–6 and skips whatever is already there.
 
-New model (e.g. GRU/Transformer/TCN): create `src/model/<name>/` with a
-`model.py` (an `nn.Module` mapping `(batch, lookback, n_features) → (batch,)`,
-plus `build_model`/`arch_dict`), a `configs/`, and a notebook copying
-`lstm_return_5day.ipynb`. Everything in `common/` is reused unchanged (the
-`Trainer` is model-agnostic). Prefix `run_name` with the model so runs stay
-distinct in the shared `runs/` + `index.csv`.
+⚠️ **A binary target must be built with `scale_target=False`** — never standardise a
+0/1 label. `_verify` raises if a classification config points at a dataset that has a
+target scaler.
+
+**New model** (GRU/Transformer/TCN): create `src/model/<name>/` with a `model.py` (an
+`nn.Module` mapping `(batch, d, n) → (batch,)`, plus `build_model`/`arch_dict`), a
+`configs/`, and a `train.py` copying `lstm/train.py`. Everything in `common/` and all
+of `result_evaluator` is reused unchanged — the `Trainer` is model-agnostic and the
+core metric block reads a score, not an architecture. Prefix `run_name` with the model
+so runs stay distinct in the shared `runs/` and `index.csv`.
 
 ## 8. GPU & performance (RTX 3050 Laptop, 4 GB, CUDA 12.7)
 
@@ -176,43 +189,39 @@ distinct in the shared `runs/` + `index.csv`.
   pools (`basic`/`calendar`) always full ensemble. `max_features` does NOT change
   fit cost (the fit is on all `n_features × lookback` columns).
 
-## 9. Metrics (`common/metrics.regression_metrics`)
+## 9. Metrics — see `result_evaluator/CONTEXT.md`
 
-Computed on the **original return scale** (predictions are inverse-transformed
-before scoring), for `val` and `test`, into `results/metrics.json` and
-`index.csv`:
+⚠️ **No metric is defined in this package any more.** `common/metrics.py` is a shim
+kept so the two legacy notebooks still run; the definitions live in
+`result_evaluator/metrics.py`, and `train.py` calls `evaluate_run`.
 
-- `RMSE`, `MAE`, `r2`
-- `RMSE_zero_baseline` — error of always predicting 0; **the bar to beat** for any
-  absolute-return edge (`beats_zero_baseline` flag)
-- `dir_accuracy` — sign hit-rate at the 0 threshold
-- `dir_auc` — ROC-AUC ranking up-days vs down-days using the predicted return as
-  the score (threshold-free direction skill; 0.5 = none)
-- `spearman_ic` — rank correlation of predictions vs outcomes
-- `hit_rate_pos` — precision of the "predict up" calls
+The short version. Every model type reports the **same four core metrics**, computed
+from `(per-sample score, realised forward return)` and nothing else — which is exactly
+what lets a regressor, a classifier and a ranker share one leaderboard:
 
-Metrics are **re-computable from `predictions_{val,test}.csv` without retraining**
-(that is how `dir_auc` was backfilled across all runs).
+| | question |
+|---|---|
+| `ic` (Spearman) | does a higher score mean a higher return? |
+| `dir_auc` | does a higher score mean *up* more often? |
+| `dir_accuracy` | hit rate at the score's own median |
+| `long_short` | what does the top quintile minus the bottom pay, in return units? |
 
-**Classification** (`classification_metrics`, for binary targets like `direction_5day`):
-scored on the predicted probability `P(up) = sigmoid(logit)` (`predictions_*.csv` has
-`y_true`,`y_prob`), for `val`/`test`:
+Each of `ic` and `dir_auc` carries `_p`, `_bar` and `_clears` from **200
+block-shuffled draws** (block = `d + h`, so the label's autocorrelation survives).
+Task extras are additive: `RMSE`/`RMSE_zero_baseline`/`r2` for regression,
+`log_loss`/`brier`/`pr_auc`/`base_rate` for classification.
 
-- `dir_accuracy` — accuracy at 0.5 (SAME index.csv column the regressor fills from the
-  sign of its predicted return, so classifier vs regressor compare directly)
-- `majority_baseline_acc` — accuracy of always predicting the majority class; the bar to
-  beat (`beats_majority` flag). `base_rate` = share of up-days
-- `dir_auc` — ROC-AUC of `P(up)` (threshold-free skill; comparable to the regressor's)
-- `pr_auc`, `precision`/`recall`/`f1` (at 0.5), `log_loss`, `brier`
+⚠️ That null does **not** price in feature selection, architecture search or early
+stopping — it cannot, because it sees a finished prediction vector. **A run that fails
+it is dead; a run that clears it is not yet alive.**
 
-**Adding a classification target** (already wired for `direction_5day`,
-`probability_gain_5pct_5day`): build the `__final` view (§7), build the dataset with
-**`SCALE_TARGET=False`** (a 0/1 label is never scaled → `target_scaler=None`), copy
-`configs/direction_5day_lb20.yaml` (set `task: classification`), and run
-`lstm_direction_5day.ipynb` (it passes `criterion=nn.BCEWithLogitsLoss()` to the
-otherwise-identical `Trainer`; the model emits a logit — no model change needed).
-The `index.csv` header is a superset over both tasks (`task` col disambiguates;
-`best_val_loss` = MSE for regression / BCE for a classifier).
+⚠️ `n_eff = n/h` is reported beside `n`: 635 overlapping test samples carry about 127
+independent observations, and that figure is itself optimistic.
+
+Metrics remain **re-computable from `predictions_{val,test}.csv` without retraining** —
+`python -m result_evaluator --rescore`. That is how `dir_auc` was backfilled across all
+runs once, and how a p-value bug was corrected across all 28 during the 2026-08-09
+rebuild (`result_evaluator/CONTEXT.md` §3a).
 
 ## 10. Current state (as of this handoff)
 
@@ -317,21 +326,33 @@ no sentiment, no intraday/tick, no point-in-time index membership in the DB.
 
 - **`src/model/runs/*/` is git-ignored** (checkpoints/TB/plots — reproducible);
   only `runs/index.csv` is tracked (`.gitignore`: `src/model/runs/*/` +
-  `!src/model/runs/index.csv`).
-- **Dataset is referenced by name + hash**; if you rebuild a dataset the hash
-  changes and `load_dataset(expected_hash=...)` will flag a mismatch.
+  `!src/model/runs/index.csv`). ⚠️ In practice that means a fresh checkout has 27
+  runs with **no `metadata.json`** — `result_evaluator` infers what it needs and
+  records that it inferred it; nothing else can read them.
+- **Dataset is referenced by name + hash**; rebuilding a dataset changes the hash and
+  `load_dataset(expected_hash=...)` flags the mismatch. That is the intended
+  behaviour, not a nuisance — a run whose data moved under it is not reproducible.
+- **`index.csv`'s header is migrated, not assumed.** `csv.DictWriter` writes fields in
+  the code's column order; appending under a header with a *different* order silently
+  misaligns every new row. `append_run` compares the two and rewrites the file with
+  the union when they differ — which is what happened when the core metric block
+  replaced `val_RMSE`/`test_spearman_ic` on 2026-08-09.
 - **`driver.select` swallows exceptions** and returns an empty DataFrame — a bad
-  view/column silently yields 0 rows.
-- **SQL `LIKE '_'` is a single-char wildcard**: discovering `<target>__lb2__%`
-  tables also matched `lb20` (duplicate columns → `CREATE VIEW` error). Fixed in
-  `unified_schema_creator.build_final_view` by filtering with Python
-  `startswith(prefix)`. Watch for this in any table-name discovery.
-- **Batch helper scripts are ephemeral** (they lived in the session scratchpad,
-  not the repo): one looped `build_selected_table`+`build_final_view` over
-  lookbacks; one replicated `train_test_creator`'s dataset stage to build several
-  datasets without editing the notebook per lookback; one backfilled metrics from
-  predictions. The **committed notebooks are the source of truth** — recreate a
-  script from them if you need batch runs.
+  table/column silently yields 0 rows. `UnifiedSchemaReader.read` raises on empty
+  instead; prefer it.
+- **SQL `LIKE '_'` is a single-char wildcard**: `'pool__%'` also matches `poolXX`.
+  `UnifiedSchemaReader.tables` filters in Python for this reason. Watch for it in any
+  table-name discovery.
+- **Batch runs are a shell loop now, not an ephemeral script.** `train.py` and every
+  other stage have a `python -m` entry point, so a sweep is
+  `for c in configs/*.yaml; do python -m model.lstm --config $c; done`. The pre-rebuild
+  note about scratchpad helper scripts no longer applies.
+- **The legacy notebooks** (`lstm_return_5day.ipynb`, `lstm_direction_5day.ipynb`)
+  and the 27 legacy configs still **work** — all 33 pre-2026-08-09 dataset folders are
+  on disk and every config resolves. ⚠️ But they write runs scored by the OLD path
+  (metrics computed in-notebook, no null), so a run produced that way lands in
+  `index.csv` with the core columns blank until `python -m result_evaluator --rescore`
+  fills them. `RUN__lstm.ipynb` + `train.py` is the path that scores as it goes.
 - The `mt_env` virtualenv is the interpreter for all notebooks/scripts
   (`d:/GIT/master-thesis/mt_env`).
 - **Ephemeral scripts must load `.env` by explicit path**: they live in the session

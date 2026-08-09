@@ -68,6 +68,7 @@ travels with the data — but a row in one of these tables is a channel some run
 highly, nothing more.
 """
 
+import hashlib
 import json
 import os
 import re
@@ -88,8 +89,32 @@ TARGETS_TABLE = "pool__targets"
 # difference in any of them means the two runs are not the same experiment and their
 # chosen channels do not belong in one table.
 SETUP_KEYS: Tuple[str, ...] = (
-    "lookback_d", "horizon_h", "normalize", "feature_normalize", "max_features",
+    "lookback_d", "horizon_h", "normalize", "feature_normalize",
     "corr_threshold", "n_splits", "min_train", "random_state", "selector_class",
+)
+
+# ⚠️ **`max_features` was REMOVED from `SETUP_KEYS` on 2026-08-09** (issue STL-1).
+# It is still `12` in every run's `metadata.json`, and it has not determined a
+# shortlist since `selection_cut` replaced the fixed cap with a per-run measured cut —
+# the same runs now keep between 10 and 236 channels. Grouping and naming on it was
+# recording a number that is no longer true of anything. The parameters that DO
+# determine the cut are stamped into `outstanding.csv` by
+# `feature_selection.outstanding` and are read from there:
+CUT_KEYS: Tuple[str, ...] = ("cut_fdr_q", "cut_corr_threshold")
+
+# Setup keys read from `outstanding.csv` rather than from `metadata.json`, because
+# they describe the CUT (which rebuilt the shortlist) and not the selector run.
+SETUP_FROM_SHORTLIST: Tuple[str, ...] = CUT_KEYS
+
+# How many hex characters of the shortlist digest go into the table COMMENT. 12 is
+# ~48 bits — far past collision risk for a few dozen tables, and short enough to read.
+FINGERPRINT_CHARS = 12
+
+# The sentence the fingerprint is written in, and the pattern that reads it back.
+FINGERPRINT_LABEL = "Shortlist fingerprint"
+FINGERPRINT_RE = re.compile(
+    rf"{FINGERPRINT_LABEL}: (?P<digest>[0-9a-f]{{{FINGERPRINT_CHARS}}}) "
+    r"over (?P<n>\d+) channel"
 )
 
 # Anything interpolated into SQL as an identifier is matched against this first —
@@ -118,6 +143,33 @@ def _identifier(name: str, what: str) -> str:
             f"past {MAX_IDENTIFIER_BYTES} and two truncated names can collide."
         )
     return name
+
+
+def fingerprint(columns_by_table: Dict[str, List[str]]) -> str:
+    """A digest of the exact `(source_table, channel)` SET a table was built from.
+
+    ⚠️ **This is the only thing that can tell a stale table from a current one.**
+    `pipeline.status_final_features` used to report a stage "ready" whenever the table
+    EXISTED, and that is how the VCB table drifted 26 columns away from its own
+    shortlists without anything noticing (issue STL-1). A parameter cannot do this job:
+    the cut is measured per run, so the same knobs on a re-run archive can legitimately
+    produce a different set. The set itself is the fact.
+
+    Sorted before hashing, so the digest is a property of the SET and not of the order
+    `groupby` happened to return it in.
+    """
+    payload = "\n".join(
+        f"{table}:{channel}"
+        for table in sorted(columns_by_table)
+        for channel in sorted(columns_by_table[table])
+    )
+    return hashlib.sha256(payload.encode()).hexdigest()[:FINGERPRINT_CHARS]
+
+
+def fingerprint_of_comment(comment: Optional[str]) -> Optional[str]:
+    """The digest a live table records, or None if it predates fingerprinting."""
+    match = FINGERPRINT_RE.search(comment or "")
+    return match["digest"] if match else None
 
 
 def table_name(target: str, lookback: int, horizon: int) -> str:
@@ -155,6 +207,11 @@ class FinalTablePlan:
         return sum(len(c) for c in self.columns_by_table.values())
 
     @property
+    def fingerprint(self) -> str:
+        """The digest of this plan's exact channel set. See `fingerprint`."""
+        return fingerprint(self.columns_by_table)
+
+    @property
     def source_tables(self) -> List[str]:
         return sorted(self.columns_by_table)
 
@@ -190,6 +247,10 @@ class FinalTablePlan:
             f"Final feature table built by final_features from {len(self.runs)} "
             f"feature-selection run(s) sharing target={self.target!r} and setup "
             f"[{setup}]. "
+            # ⚠️ The fingerprint is what lets a later `status` call tell whether the
+            # shortlists still describe this table. Without it, "the table exists" was
+            # the only check anything made — see `fingerprint`.
+            f"{FINGERPRINT_LABEL}: {self.fingerprint} over {self.n_features} channels. "
             f"{self.n_features} channels from {len(self.columns_by_table)} pool(s). "
             f"Run evidence: {evidence}.{note} Source runs: "
             f"{'; '.join(sorted(self.runs))}"
@@ -218,10 +279,21 @@ def _read_outstanding(root: str) -> pd.DataFrame:
             continue
         frame = pd.read_csv(path)
         setup = json.load(open(meta_path, encoding="utf-8"))["setup"]
+        # ⚠️ `CUT_KEYS` describe the cut and are stamped into `outstanding.csv` by
+        # `feature_selection.outstanding`; they are NOT in `metadata.json`, which
+        # records the selector run. A shortlist written before they existed is
+        # rejected rather than silently grouped with one that has them.
+        missing_cut = [k for k in SETUP_FROM_SHORTLIST if k not in frame.columns]
+        if missing_cut:
+            raise ValueError(
+                f"{name}/{OUTSTANDING_FILENAME} is missing {missing_cut} — it "
+                f"predates the cut parameters. Re-run "
+                f"`python -m feature_selection.outstanding`."
+            )
         missing = [k for k in SETUP_KEYS if k not in setup]
         if missing:
             raise ValueError(f"{name}/metadata.json setup is missing {missing}.")
-        for key in SETUP_KEYS:
+        for key in (k for k in SETUP_KEYS if k not in SETUP_FROM_SHORTLIST):
             # None is a real value here (`feature_normalize` on a non-cross-sectional
             # run), and `groupby` DROPS None keys even with dropna=False on some
             # pandas versions — so it is stringified into a stable sentinel. ASCII,

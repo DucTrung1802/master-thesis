@@ -95,6 +95,12 @@ COLUMNS = [
     "kept_by", "consensus_p", "tie_group_size", "beat_in_tie",
     "absorbed_as_redundant", "n_candidates",
     "run_id", "target", "horizon_h", "lookback_d", "evidence",
+    # ⚠️ The parameters the CUT actually ran with, stamped into the deliverable.
+    # Without them the shortlist does not say what produced it, and a consumer is
+    # left reading `setup.max_features` from `metadata.json` — which describes the
+    # SELECTOR's old cap and has not determined this file since `selection_cut`
+    # replaced it. `final_features.SETUP_KEYS` reads these two instead.
+    "cut_fdr_q", "cut_corr_threshold",
 ]
 
 
@@ -199,6 +205,10 @@ def build_one(folder: str, **cut_kwargs) -> pd.DataFrame:
     out["horizon_h"] = meta["setup"]["horizon_h"]
     out["lookback_d"] = meta["setup"]["lookback_d"]
     out["evidence"] = _evidence(meta)
+    out["cut_fdr_q"] = cut_kwargs.get("fdr_q", selection_cut.DEFAULT_FDR_Q)
+    out["cut_corr_threshold"] = cut_kwargs.get(
+        "corr_threshold", selection_cut.DEFAULT_CORR_THRESHOLD
+    )
     out["outstanding_rank"] = range(1, len(out) + 1)
     return out[COLUMNS]
 

@@ -122,7 +122,11 @@ def load_dataset(dataset: str, expected_hash: Optional[str] = None) -> Dataset:
     meta = {}
     meta_p = os.path.join(d, "metadata.json")
     if os.path.exists(meta_p):
-        with open(meta_p) as f:
+        # ⚠️ encoding is explicit: `open()` defaults to cp1252 on Windows, and a
+        # metadata.json holding a non-ASCII byte — the ⚠️ in a provenance comment
+        # copied from the source table's COMMENT — raises UnicodeDecodeError there.
+        # Every other metadata.json reader in the repo already passes utf-8.
+        with open(meta_p, encoding="utf-8") as f:
             meta = json.load(f)
 
     fs_p = os.path.join(d, "feature_scaler.pkl")

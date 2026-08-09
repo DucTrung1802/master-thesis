@@ -117,6 +117,29 @@
 | **[report.py](report.py)** | **one run → one self-describing folder** — CSVs, PNGs and a `metadata.json` that records what may be compared with what (§10) |
 | **[outstanding.py](outstanding.py)** | **one run → its final feature list** — kept channels only, ties broken, each mapped back to the pool table it must be read from (§14) |
 | **[selection_cut.py](selection_cut.py)** | **how many channels a run supports** — a shuffled-methods null + a per-method knee, replacing `max_features=12` (§14c) |
+
+### Downstream of here
+
+```
+THIS  →  final_features  →  train_test_creator  →  model.lstm  →  result_evaluator
+```
+
+`python -m pipeline` prints the state of all five and runs the stale ones
+(`src/pipeline/CONTEXT.md`). ⚠️ **The runs in this package stay MANUAL** — a selection
+is hours of GPU and a judgement about which pools to join, so the pipeline only
+refreshes `outstanding.csv` from the runs that already exist.
+
+Three things here are reused verbatim downstream rather than reimplemented:
+`evaluation.block_shuffle` and `evaluation.effective_sample` are what
+`result_evaluator` builds its null and its `n_eff` from; `plots.py`'s theme is the
+only palette in the repo and `result_evaluator/plots.py` imports it; and
+`PurgedWalkForward.gap` (`d + h - 1`) is the purge `train_test_creator` applies at
+each split boundary, so the CV here and the split there agree about what a leak is.
+
+⚠️ **§14b's "no surviving run clears anything" propagates all the way down.** It is
+copied into the table `COMMENT` by `final_features`, into the dataset's
+`metadata.json` by `train_test_creator`, and into each run's `lineage` by
+`model/lstm/train.py`.
 | [test_selection_cut.py](test_selection_cut.py) | **13 tests, no database, ~15 s** — one per way the cut could manufacture a list |
 | **[test_cross_sectional.py](test_cross_sectional.py)** | **13 tests, no database, ~2 min** — one per way of faking a cross-sectional result |
 

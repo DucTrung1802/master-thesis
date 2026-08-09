@@ -1,39 +1,82 @@
-"""Append-only run registry: one row per run in `<runs_dir>/index.csv` for quick
-cross-run comparison (open in Data Wrangler / sort by test RMSE or IC)."""
+"""Append-only run registry: one row per run in `<runs_dir>/index.csv`.
+
+One shared leaderboard for every model AND task. The **core** columns
+(`*_ic`, `*_dir_auc`, `*_hit_rate`, `*_long_short`) are filled by every task,
+because `result_evaluator.metrics` computes them from `(score, realised return)` and
+nothing else — so a regressor and a classifier are directly comparable on them.
+Task-specific columns (`test_RMSE*`, `test_pr_auc`, `test_base_rate`) are blank for
+the other task.
+
+⚠️ **The `*_clears` and `*_p` columns are the ones that matter.** A run at the top of
+the board on `test_ic` whose `test_ic_clears` is False is the best-ranked noise, not
+the best model. See `result_evaluator/metrics.py`.
+
+⚠️ **The header is MIGRATED, never assumed.** `csv.DictWriter` writes fields in
+`_COLUMNS` order; appending to a file whose header is a different order writes rows
+that misalign with their own header, silently. `append_run` compares the two and
+rewrites the file with the union when they differ, so an index built before a metric
+existed keeps all its rows and gains a blank column.
+"""
 
 from __future__ import annotations
 
 import csv
 import os
+from typing import List
 
-# One shared leaderboard for every model AND task (regression + classification).
-# `task` disambiguates; `best_val_loss` is MSE for regression / BCE for a classifier.
-# The direction-skill columns `*_dir_accuracy` / `*_dir_auc` are filled by BOTH tasks
-# (regressor: sign of predicted return; classifier: P(up)) so they compare directly.
-# Regression-only columns (RMSE*, spearman_ic, beats_zero_baseline) and
-# classification-only columns (pr_auc, f1, log_loss, base_rate, beats_majority) are
-# blank for the other task.
 _COLUMNS = [
     "run_id", "created_at", "dataset_name", "dataset_hash", "model_type", "task",
     "lookback", "n_features", "best_epoch", "best_val_loss",
-    "val_RMSE", "val_dir_accuracy", "val_dir_auc", "val_spearman_ic",
-    "test_RMSE", "test_RMSE_zero_baseline", "test_dir_accuracy", "test_dir_auc",
-    "test_spearman_ic", "test_beats_zero_baseline",
-    "val_pr_auc", "val_f1", "test_pr_auc", "test_f1",
-    "test_log_loss", "test_base_rate", "test_beats_majority",
+    # --- the core block, filled by every task ---------------------------------
+    "val_ic", "val_dir_auc", "val_long_short",
+    "test_n", "test_n_eff",
+    "test_ic", "test_ic_p", "test_ic_clears",
+    "test_dir_auc", "test_dir_auc_p", "test_dir_auc_clears",
+    "test_hit_rate", "test_long_short",
+    # --- regression extras -----------------------------------------------------
+    "test_RMSE", "test_RMSE_zero_baseline", "test_beats_zero_baseline",
+    # --- classification extras -------------------------------------------------
+    "test_pr_auc", "test_base_rate", "test_beats_majority",
     "git_sha", "run_dir",
 ]
 
 
+def _existing_header(path: str) -> List[str]:
+    with open(path, newline="", encoding="utf-8") as handle:
+        return next(csv.reader(handle), [])
+
+
+def _migrate(path: str, header: List[str]) -> List[str]:
+    """Rewrite `index.csv` under `header + new columns`, keeping every existing row."""
+    with open(path, newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+    merged = header + [c for c in _COLUMNS if c not in header]
+    with open(path, "w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=merged, extrasaction="ignore")
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({k: row.get(k, "") for k in merged})
+    return merged
+
+
 def append_run(runs_dir: str, row: dict) -> str:
-    """Append `row` (any subset of _COLUMNS) to runs_dir/index.csv, creating the
-    header on first write. Returns the index path."""
+    """Append `row` (any subset of the header) to `runs_dir/index.csv`.
+
+    Creates the header on first write; migrates it when `_COLUMNS` has grown.
+    """
     os.makedirs(runs_dir, exist_ok=True)
     path = os.path.join(runs_dir, "index.csv")
-    exists = os.path.exists(path)
-    with open(path, "a", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=_COLUMNS, extrasaction="ignore")
-        if not exists:
-            w.writeheader()
-        w.writerow({k: row.get(k, "") for k in _COLUMNS})
+
+    if not os.path.exists(path):
+        fields = list(_COLUMNS)
+        with open(path, "w", newline="", encoding="utf-8") as handle:
+            csv.DictWriter(handle, fieldnames=fields).writeheader()
+    else:
+        fields = _existing_header(path)
+        if any(column not in fields for column in _COLUMNS):
+            fields = _migrate(path, fields)
+
+    with open(path, "a", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
+        writer.writerow({k: row.get(k, "") for k in fields})
     return path

@@ -1,0 +1,268 @@
+# Context — `src/train_test_creator`
+
+> Reads **`unified_schema_vcb.return_5day__final__d20_h5`** and writes windowed
+> train/val/test tensors under `src/train_test_set/`. Rebuilt 2026-08-09.
+>
+> This is the stage between `final_features` (which writes the table) and `model`
+> (which reads the tensors). It **selects nothing, tunes nothing and joins nothing** —
+> the table already holds exactly the channels chosen upstream, so all that is left is
+> *split → impute → scale → window → save*.
+
+```
+python -m train_test_creator                     # print the plan, write nothing
+python -m train_test_creator --save              # write the dataset folder
+python -m train_test_creator --save --replace    # ⚠️ overwrite an existing one
+python -m pytest train_test_creator/test_dataset.py -q
+```
+
+## 1. What it built (2026-08-09)
+
+`vcb__return_5day__final__d20_h5__tr70_val15_test15__std`
+
+| split | samples | shape | first label | last label |
+|---|---|---|---|---|
+| train | 2,918 | `(2918, 20, 202)` | 2009-07-27 | 2021-04-05 |
+| val | 610 | `(610, 20, 202)` | 2021-05-13 | 2023-10-17 |
+| test | 635 | `(635, 20, 202)` | 2023-11-21 | 2026-06-18 |
+
+4,235 rows read, 5 dropped as the unlabelled tail (`h=5` sessions with no complete
+forward window), 4,230 labelled. Of the 4,211 windows those rows can form, **4,163
+survive and 48 are purged** — 24 at each boundary, which is §3.
+
+203 channels in the table, **202 kept and 1 dropped** (§5).
+
+## 2. Why the old notebook could not be patched
+
+⚠️ **`train_test_creator.ipynb` was deleted 2026-08-09** and is recoverable from
+commit `d2f9771`. It read a VIEW called `<target>__lb<L>__final` that
+`unified_schema_creator.ipynb` used to build. **That view does not exist any more** —
+selection moved to `feature_selection` and its result is materialised by
+`final_features` as `<target>__final__d<d>_h<h>`. The notebook was also carrying two
+dead cells (7–10) that referenced an undefined `VOLUME_COL` and `add_*` imports that
+were never made, and cell 12 silently recomputed the `df_clean` that cells 8–10 had
+just built — so the TA-tuning half had no effect even when the view existed.
+
+Four things follow from reading the new table, and each is a behaviour change:
+
+| | old notebook | now |
+|---|---|---|
+| `d`, `h` | free parameters (`LOOKBACK_DAY = 5` against an `lb20` view) | **parsed from the table name** |
+| read | `driver.select` | `UnifiedSchemaReader.read` (typed) |
+| selection | XGBoost gain + SHAP + permutation, re-run here | **upstream only** |
+| split | `d-1` rows of overlap, no purge | **purged by `d + h - 1`** |
+
+## 3. ⚠️ The purge — the substantive fix
+
+Sample `i` reads rows `[i-d+1, i]` and carries the label for `[i, i+h]`. For a train
+sample at `i` to share nothing with a val sample at `j`:
+
+```
+i + h < j - d + 1     ⟹     j - i > d + h - 1
+```
+
+so **24 samples**, not 5, are dropped from the end of train and the end of val. That
+is exactly `feature_selection.PurgedWalkForward.gap` — the same purge the channels
+were *selected* under, so the split here and the CV upstream agree about what a leak
+is. Verified on the real table: the last train label period ends at row 2941 and the
+first val window opens at row 2942.
+
+The old notebook instead started each split `d-1` rows early and justified it in a
+docstring: *"no leakage — features are scaled with train-only statistics, targets only
+look forward"*. **Both halves of that are true and neither is the issue.** The leak is
+the train LABEL that reaches `h` days into the val window; scaling has nothing to do
+with it, and "targets only look forward" is the reason there is a leak, not the reason
+there is not.
+
+⚠️ **Windows still warm up across the boundary** — a val window may read train ROWS.
+That is not leakage: those rows are the past and a live model would have them. Only
+labels are purged. This is also why val loses no `d-1` warmup samples.
+
+⚠️ **`--no-purge` exists and is for comparison only.** It reproduces the old
+behaviour so the cost of the leak can be measured; a result must not be produced with
+it.
+
+## 4. ⚠️ Imputation is the TRAIN median, never `ffill().bfill()`
+
+The old notebook forward- then back-filled. `bfill` fills a **leading** gap with the
+first **future** observation, and on this table that is not a rounding error:
+
+| | channels | worst |
+|---|---|---|
+| have a leading gap | 38 of 203 | `prop_buy_vol`, 3,382 of 4,230 rows |
+
+Under `bfill`, 80% of `prop_buy_vol` — the entire training set — would be a value
+first observed in 2023.
+
+So the rule is **the median of the train slice**, matching
+`FeatureSelector._impute` line for line, including its `fillna(0.0)` for a column that
+is NaN throughout. That is the imputation the ranking which chose these channels was
+computed under; using a different one here would mean the model sees a column the
+selector never scored.
+
+⚠️ **The "train slice" is not `date < val_start_date`.** It is the rows carried by a
+train SAMPLE — everything up to the last train label, i.e. the cut *minus the purge
+gap*. The purged tail belongs to no train sample, so letting it into a median or a
+scaler would put val-adjacent rows into the very statistics the purge exists to keep
+out. On this dataset that is 2,937 rows ending 2021-04-05, not 2,961 ending
+2021-05-12.
+
+## 5. ⚠️ `prop_buy_vol` is dropped, and that is a finding not a cleanup
+
+It has **zero coverage across the whole train slice** and 20% overall — empty until
+2023, live afterwards. Imputed, it is a constant through training and a varying signal
+at test: the model cannot fit a response to it and is handed one anyway.
+
+`on_untrainable="drop"` (default) removes it and records the reason in
+`metadata.json`; `"keep"` and `"raise"` are there for when that is not wanted. The
+same test catches a channel that is constant in train for any other reason
+(`train_nunique <= 1`).
+
+⚠️ It was **selected by a feature-selection run**, which is the part worth noticing.
+A run that ranks a channel highly on the full panel can be ranking it on the 20% of
+history where it exists. `coverage.csv` ships beside the tensors so this is checkable
+per channel rather than discovered once.
+
+## 6. ⚠️ Scaling is train-fit, and 48 channels leave the train range anyway
+
+`StandardScaler` on the continuous columns, fit on the train slice of §4 only, applied
+to all three splits. Bounded columns — `_sin`/`_cos` and 0/1 flags — are passed
+through unscaled. **On this table that finds zero columns**: no datetime channel was
+selected. The classifier stays because the next table may select one.
+
+The panel is non-stationary by construction, so a train-fitted scaler necessarily puts
+part of the test set outside the range the model saw. `drift.csv` measures how much:
+
+| | count |
+|---|---|
+| scaled channels | 202 |
+| >1% of TEST beyond 5 train-sigmas | **48** |
+| **100%** of TEST beyond 5 train-sigmas | **4** |
+
+The four are `russia__…__rugdppa`, `netherlands__…__nlfer`,
+`united_kingdom__…__gbmr` and `netherlands__…__nledtgdp`, with test means of +9 to
++13 sigma. These are macro **level** series that trend monotonically; standardising
+them maps the test period to a region the training set never occupied. This is
+reported, not filtered — `feature_selection/CONTEXT.md` makes the same argument about
+raw levels in a window, and the fix belongs upstream (a differenced channel) rather
+than in a silent drop here.
+
+## 7. The split is cut on DATES, and windows are built per TICKER
+
+⚠️ A row-index cut works only because the VCB table has one ticker. On
+`unified_schema_bank.rank_5day__final__d20_h5` (20 tickers, 53,921 rows) it would put
+the same date in train for one ticker and in val for another, and the two would then
+share a label period across the boundary. So the cut is on the **date axis** — on a
+one-ticker table the two are identical — and windows are stacked **per (exchange,
+ticker)** before being concatenated in date order. A single global stride would build
+windows whose first days belong to one company and last days to another.
+
+### ⚠️ 7b. The target column is resolved against the TABLE, not the name
+
+`rank_5day__final__d20_h5` **stores `return_5day`**: a rank's value for a stock-date
+depends on which other names are in the panel, so `final_features` refuses to freeze
+one into a table (`final_features/CONTEXT.md` §5). Reading the name and demanding that
+column made the entire bank schema unreachable — the table was fine, the reader was
+wrong (issue **BNK-1**, fixed 2026-08-09).
+
+⚠️ **There is no `return_{h}day` fallback, and the table's NAME is not consulted.**
+The first fix built the column name from the horizon whenever the name's target was
+absent — which duplicated `final_features.builder._stored_target` in a second place
+that could drift from it. Two records already answer this exactly:
+
+| record | says |
+|---|---|
+| `reports/feature_selection/*/outstanding.csv` | every **channel** the table was built from |
+| `pool__targets` | every **label** the schema has |
+
+So the stored target is *the one column that is neither a key, nor a channel, nor
+absent from `pool__targets`*. Exactly one on both current tables; `resolve_target`
+raises rather than choosing when it is not.
+
+⚠️ **`outstanding.csv`'s own `target` column is NOT the stored column and cannot be.**
+It reads `cs_rank_5day` for the bank runs — a rank is computed within a date across a
+chosen universe and is deliberately never stored. That value is what the channels were
+*selected for*, so it is read from there into `target.selected_for` (better than
+rebuilding it from the table name, which drops the `cs_` prefix). `target.column` is
+what was read; `target.derived` flags when the two differ.
+
+⚠️ **The same rule detects a STALE table.** A column that is in no current shortlist
+and is not a label means the table predates the last
+`python -m feature_selection.outstanding`. That is reported, not raised — the table is
+still readable. **On VCB it fires on 26 columns** (issue **STL-1**): the shortlists
+were regenerated when `selection_cut` replaced `max_features=12` with a measured cut,
+and today's union is 750 channels against the table's 203.
+
+| | rows | tickers | samples (train/val/test) | features |
+|---|---|---|---|---|
+| `unified_schema_vcb.return_5day__final__d20_h5` | 4,235 | 1 | 2,918 / 610 / 635 | 202 |
+| `unified_schema_bank.rank_5day__final__d20_h5` | 53,921 | 20 | 26,964 / 12,524 / 13,028 | 9 |
+
+⚠️ **The bank panel is ragged and stays that way** — 13,028 of 13,060 test cells are
+populated (99.8%). Nothing is filled to make it rectangular; the missing cells are
+carried as NaN into `result_evaluator`, which masks them per date.
+
+⚠️ **`tickers_*.npy` is written with an explicit unicode dtype.** `.astype(str)` on a
+pandas column gives dtype `object`, `np.save` then writes a *pickled* array, and every
+reader in the repo uses `allow_pickle=False` — the file would exist and be unreadable,
+which is precisely how a 20-ticker panel gets silently scored as one series. Pinned by
+`test_the_ticker_array_is_unicode_not_object`.
+
+## 7a. Where this sits in the chain
+
+```
+final_features  →  THIS  →  model.lstm  →  result_evaluator
+```
+
+`python -m pipeline` prints the state of all five stages and runs the stale ones; see
+`src/pipeline/CONTEXT.md`. Downstream, `model/lstm/train.py` **asserts** its config
+against the `metadata.json` written here — `lookback`, `n_features` and (for a
+classifier) the absence of a target scaler — and copies §1's source `COMMENT` into
+every run's `lineage`, so the provenance travels one more hop.
+
+## 8. The output folder is a contract with `model/`
+
+`model/common/data.py` loads `X_/y_{train,val,test}.npy`, `dates_*.npy`,
+`feature_scaler.pkl`, `target_scaler.pkl` and `metadata.json` **by name**, and hashes
+the six tensors. Renaming one returns `None` there instead of raising here, so the
+names are fixed. Verified: `load_dataset` reads this dataset unchanged
+(hash `6f657cd4ea02ae5a`, `n_features=202`, `lookback=20`).
+
+Written beside them, and ignored by the loader: `tickers_*.npy` (which name each
+sample belongs to), `coverage.csv` (§5) and `drift.csv` (§6).
+
+⚠️ **The folder names its INPUT.** `vcb__return_5day__final__d20_h5__tr70_val15_test15
+__std` contains the source table verbatim. The old scheme
+(`vcb_return_5day_lb20_h5_final_...`) rebuilt a table name out of parts and so could
+describe a table that was never read — the same argument as the report-folder rename
+in `feature_selection` (commit `9f8f5b0`).
+
+⚠️ **`save` refuses to overwrite without `replace=True`.** A half-rewritten folder
+still loads: the model stage hashes the tensors, so a stale `metadata.json` beside
+fresh tensors passes every check it makes.
+
+## 9. ⚠️ What this stage does NOT assert
+
+That the features are worth having. All 19 source runs of this table computed **no
+null** (`feature_selection/CONTEXT.md` §14b), and 199 of the 203 channels were chosen
+by exactly one run (`final_features/CONTEXT.md` §6) — the table is a union of unstable
+shortlists, not a consensus. `metadata.json` carries the source table's `COMMENT`
+verbatim so the provenance travels one more hop with the data. This module reshapes
+those channels. It does not vouch for them.
+
+## 10. Files
+
+```
+dataset.py        the whole pipeline — one module, because there is no branch in it
+test_dataset.py   11 tests, no database, ~6 s
+RUN__train_test_creator.ipynb   the notebook meant to be run
+```
+
+One other file, `model/common/data.py`, changed with this rebuild: it opened
+`metadata.json` with a bare `open()`, which is cp1252 on Windows, and the provenance
+`COMMENT` copied from the source table carries a `⚠️`. Every other `metadata.json`
+reader in the repo already passed `encoding="utf-8"`; now this one does too.
+
+`unified_schema_creator.ipynb` is still in this folder. It is the **superseded**
+builder of the old `unified_schema_*` layer — that job belongs to
+`orchestration/assets/unified.py` now, and the `<target>__lb<L>__final` views it made
+are gone. It is kept for the record and nothing imports it.

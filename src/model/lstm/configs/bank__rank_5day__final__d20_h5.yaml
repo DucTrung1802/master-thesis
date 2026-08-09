@@ -1,0 +1,46 @@
+# LSTM on the BANK panel — 20 tickers, one model over all of them.
+#
+# Dataset built by
+#   python -m train_test_creator --ticker bank --table rank_5day__final__d20_h5 --save
+# from unified_schema_bank.rank_5day__final__d20_h5.
+#
+# WARNING: the table is named for `rank_5day` but STORES `return_5day` — a rank's
+# value depends on which other names are in the panel, so final_features refuses to
+# freeze one into a table (final_features/CONTEXT.md §5). This run therefore predicts
+# the ABSOLUTE 5-day return of each bank; the cross-sectional reading comes from
+# result_evaluator, which scores per date and averages.
+#
+# WARNING: `lookback` and `n_features` are ASSERTIONS. train.py raises if the dataset
+# disagrees.
+
+run_name: lstm__bank__rank_5day__final__d20_h5
+dataset: bank__rank_5day__final__d20_h5__tr70_val15_test15__std
+task: regression
+
+lookback: 20
+# 13 of 14 selected channels; 1 dropped for zero train-slice coverage.
+n_features: 13
+
+model:
+  type: LSTM
+  hidden_size: 128
+  num_layers: 2
+  dropout: 0.2
+
+train:
+  # 26,964 train windows against 2,918 for VCB — nine times the data on a tenth of
+  # the features, so a larger batch and the same schedule.
+  batch_size: 256
+  lr: 0.001
+  weight_decay: 0.00001
+  max_epochs: 150
+  patience: 20
+  grad_clip: 1.0
+  lr_factor: 0.5
+  lr_patience: 5
+  log_every: 10
+
+null_draws: 200
+
+seed: 42
+device: auto

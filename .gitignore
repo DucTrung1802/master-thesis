@@ -102,6 +102,15 @@ experiment/experiment_10/_cache/
 # silently hid each new run until someone remembered `git add -f`, and the archive is
 # the evidence behind CONTEXT §6-§14.
 #
+# ⚠️ Dropping that rule was NOT enough, and the 384 files already in the index hid it:
+# a tracked file ignores .gitignore, so the archive looked committed while a NEW run's
+# `outstanding.csv` and `feature_importance.csv` were still caught by the blanket
+# `*.csv` (line 50) and any `*.txt` by line 74. These negations must come AFTER both —
+# the last matching rule wins — and they re-include the whole tree, so `figures/*.png`,
+# `metadata.json` and `README.md` stay covered too.
+!reports/feature_selection/
+!reports/feature_selection/**
+#
 # ⚠️ They are not small. The archive is ~120 MB across 22 runs, and `channel_correlation.csv`
 # alone reached 40.0 MB on a 1,458-channel pool — it is the full N×N pairwise matrix.
 # Before committing a new WIDE-pool run, check that one file: the deliverables are

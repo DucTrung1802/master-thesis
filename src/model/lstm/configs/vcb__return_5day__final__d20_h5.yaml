@@ -1,0 +1,42 @@
+# LSTM on the final feature table — one file fully describes one run.
+#
+# The dataset is REFERENCED by folder name under src/train_test_set/, built by
+#   python -m train_test_creator --save
+# from unified_schema_vcb.return_5day__final__d20_h5, which final_features built from
+# 19 feature-selection runs.
+#
+# WARNING: `lookback` and `n_features` below are ASSERTIONS, not settings. train.py
+# raises if the dataset disagrees with them — the dataset is the authority, and a
+# config that quietly wins that argument trains a d=20 architecture on d=5 windows.
+
+run_name: lstm__vcb__return_5day__final__d20_h5
+dataset: vcb__return_5day__final__d20_h5__tr70_val15_test15__std
+task: regression
+
+# Asserted against the dataset's metadata.json at load time.
+lookback: 20
+# 724 of 750 selected channels; 26 dropped for zero train-slice coverage.
+n_features: 724
+
+model:
+  type: LSTM
+  hidden_size: 128
+  num_layers: 2
+  dropout: 0.2
+
+train:
+  batch_size: 64
+  lr: 0.001
+  weight_decay: 0.00001
+  max_epochs: 150
+  patience: 20
+  grad_clip: 1.0
+  lr_factor: 0.5
+  lr_patience: 5
+  log_every: 10
+
+# Draws in result_evaluator's block-shuffled null. 200 resolves p to ~0.005.
+null_draws: 200
+
+seed: 42
+device: auto
