@@ -263,10 +263,15 @@ fresh tensors passes every check it makes.
 
 ## 9. ⚠️ What this stage does NOT assert
 
-That the features are worth having. All 19 source runs of this table computed **no
-null** (`feature_selection/CONTEXT.md` §14b), and 725 of the 750 channels were chosen
-by exactly one run (`final_features/CONTEXT.md` §6) — the table is a union of disjoint
-shortlists, not a consensus. `metadata.json` carries the source table's `COMMENT`
+That the features are worth having. **18 of this table's 19 source runs computed no
+null, and the 19th failed its own** (`feature_selection/CONTEXT.md` §14b), and 725 of
+the 750 channels were chosen by exactly one run (`final_features/CONTEXT.md` §6) — the
+table is a union of disjoint shortlists, not a consensus.
+
+⚠️ **This dataset's `metadata.json` still says "runs that computed no null", which is
+now imprecise and is deliberately NOT hand-edited.** It was written when the dataset
+was built; its claim that *no bar was cleared* remains true, and editing a built
+dataset's metadata in place is how a folder stops describing its own tensors. `metadata.json` carries the source table's `COMMENT`
 verbatim so the provenance travels one more hop with the data. This module reshapes
 those channels. It does not vouch for them.
 

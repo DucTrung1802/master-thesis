@@ -1,6 +1,6 @@
 # Feature-importance run — `return_5day`
 
-*Generated 2026-08-04T13:59:47.127732+00:00 at commit `7ab2488+dirty`.*
+*Generated 2026-08-09T16:13:55.551392+00:00 at commit `93fcb967+dirty`.*
 
 ## Input
 
@@ -50,7 +50,8 @@
 
 ## The bar
 
-- ⚠️ **NO NULL WAS COMPUTED FOR THIS RUN.** A positive IC is not a result on its own — see `CONTEXT.md` §6b and §8. Treat the ranking below as descriptive until a shuffled-label null has been run for *this* configuration.
+- observed **+0.0636** against a p95 bar of **+0.0838** (20 draws) — **DOES NOT CLEAR**
+- null mean +0.0041, sd 0.0407, max +0.1026; z = **+1.46**, p = 0.0952
 
 ## Files
 
@@ -61,6 +62,7 @@
 - `channel_correlation.csv`
 - `stability.csv`
 - `coverage.csv`
+- `null_draws.csv`
 - `figures/01_ensemble_ranking.png`
 - `figures/02_method_heatmap.png`
 - `figures/03_target_correlation.png`
@@ -70,4 +72,9 @@
 - `figures/07_stability.png`
 - `figures/08_coverage.png`
 - `figures/09_target_distribution.png`
+- `figures/10_null.png`
 - `metadata.json`
+
+## Notes
+
+Null added 2026-08-09 (issue EVD-1). The 2026-08-04 run recorded no bar; the selection was reproduced bit-identically and the 20-draw block-shuffled null it never had was computed at the same knobs.

@@ -1127,14 +1127,43 @@ executed end-to-end via `nbconvert`: **17 code cells, 0 errors, 18 artefacts,
 | top 5 | `volume_negotiated`, `foreign_own`, `close_adjust`, `open`, `buy_order_vol` |
 | IC — selected / all | **+0.0636** / +0.0427, trend −0.0070 / −0.0370 |
 | hit rate | **0.492** |
-| null | **not computed** — `RUN_NULL=False` |
+| null | ✅ **computed 2026-08-09 — and it FAILS** (below) |
 
-⚠️ **Read that IC against §6b, not on its own.** +0.0636 with a hit rate BELOW 0.5
-is the same shape §6b measured and could not distinguish from shuffled labels; the
-run is checked in to demonstrate the *contract*, not to make a claim. This is
-exactly the situation the `"null": null` field and the README's bold warning exist
-for — and the prototype is more useful as the reference precisely because it shows
-what an unverified run looks like.
+### ⚠️ Its null, added 2026-08-09 (issue **EVD-1**) — `z = +1.46`, ❌
+
+| | observed | null mean | null sd | **p95 BAR** | null MAX | **z** | p | clears |
+|---|---|---|---|---|---|---|---|---|
+| **prototype, 27 ch** | **+0.0636** | **+0.0041** | 0.0407 | **+0.0838** | **+0.1026** | **+1.46** | 0.095 | ❌ |
+| *§6b, same pool, study grid* | +0.0559 | +0.0167 | 0.0252 | +0.0556 | +0.0606 | +1.56 | 0.05 | ❌ |
+
+**Two of twenty shuffled-label draws beat the real data** (+0.1026 and +0.0828 against
+the observed +0.0636), and the observed sits well under its own p95 bar. §6b's verdict
+for this pool now has a second, independent measurement behind it at a nearly identical
+z — reached from a different run, a different null seed and a different null mean.
+
+⚠️ **The bar here (+0.0838) is HALF AGAIN §6b's (+0.0556), and the null mean is 4×
+LOWER (+0.0041 vs +0.0167).** Same pool, same ticker, same `d=20, h=5`. The draws are
+fat-tailed — four below −0.03, then +0.083 and +0.103 — so at 20 draws the p95 is
+being set by the tail rather than measured. This is §12's "low-mean, fat-tailed"
+shape on 27 channels instead of 918, and it is the direct argument for why **a
+20-draw bar is not a precise number**; the z, which uses the whole distribution, is
+stable across the two runs where the p95 is not.
+
+⚠️ **The prototype was checked in to demonstrate the CONTRACT, and it still does —
+it now demonstrates the other half of it.** It used to be the reference for what an
+*unverified* run looks like (`"null": null`). It is now the reference for a run that
+computed its bar and did not clear it, which is the more useful artefact: `evidence`
+in its `outstanding.csv` reads `failed_null`, not `no_null`.
+
+⚠️ **Reproduced bit-identically before the null was trusted.** The 2026-08-04 result
+was re-derived at the archived knobs (**`max_features=12`, which is no longer the
+default** — §14c) and matched to `0.00e+00` on `ic_mean`, on the kept set, and on the
+`ensemble` column across all 27 channels. That mattered because §9d forbids judging a
+number with a bar computed from a different procedure — and because the `ensemble`
+column is what `outstanding.csv` and the STL-1 fingerprint derive from, so an exact
+match is also the proof that nothing downstream moved. Verified after the write:
+only `evidence` changed in the shortlist, and `final_features` still reports
+`fingerprint 505fbe21a1f0 matches`.
 
 ⚠️ **`reports/feature_selection/*/` is still gitignored, but ALL 22 archived runs
 were force-added on 2026-08-09** — the whole archive is now in history, not just this
@@ -1646,23 +1675,35 @@ Every row carries the null verdict of the run that produced it:
 
 | evidence | runs | rows | is |
 |---|---|---|---|
-| `no_null` | **19** | **938** | **no bar was computed at all** — §10 records an absent null as absent, never as a pass |
-| `failed_null` | 1 | **14** | inside what shuffled labels produce — `bank`, z = +0.11 (§13) |
+| `no_null` | **18** | **928** | **no bar was computed at all** — §10 records an absent null as absent, never as a pass |
+| `failed_null` | **2** | **24** | inside what shuffled labels produce — `bank` z = +0.11 (§13), `pool__basic` z = +1.46 (§10b) |
 
 ⚠️ **Since the `d=1` runs were removed, NOT ONE surviving run clears anything.**
 `pool__ta` was the only `cleared_p95_not_a_pass` in the archive and it is gone; what
-remains is 19 runs with no bar and 1 that failed its own. **938 of the 952 rows in
+remains is 18 runs with no bar and 2 that failed their own. **928 of the 952 rows in
 these files come from runs that never computed a null.** (Row counts are per §14c's
 measured cut; before it they were 220 of 230 at a flat 12 channels per run.)
 
+⚠️ **One run moved from `no_null` to `failed_null` on 2026-08-09**, and the
+distinction is the whole point of the column: `no_null` is an *unknown*, `failed_null`
+is a *measurement*. The archive is no better than it was — it is better **described**.
+
 ⚠️ **`outstanding.csv` is a FETCH LIST, not a green light.** It says which columns to
 assemble for the next stage; it does not say they predict anything. **The cheapest
-missing run is a null on the bare `pool__basic` run** (`2026-08-04_205945__vcb__basic__return_5day`)
-— 27 channels, one ticker, and its own `metadata.json` prices `permutation` at
-**9.94 s** per pass, so 20 draws is ~10 minutes. §6b already measured that
-configuration at z = +1.56, so this buys a *known* `failed_null` in place of an
-unknown, not a pass. It changes no channel and no fingerprint, so nothing downstream
-goes stale.
+missing null has now been RUN** (2026-08-09): the bare `pool__basic` run,
+`2026-08-04_205945__vcb__basic__return_5day`, 27 channels, one ticker — **456 s
+end-to-end for reproduction plus 20 draws**, and it failed at `z = +1.46` (§10b). It
+changed no channel and no fingerprint, exactly as predicted, so nothing downstream
+went stale.
+
+⚠️ **The 18 remaining `no_null` runs are NOT in that price class.** Each is
+`pool__basic + one pool__economy_<country>`, and `basic+economy_usa` alone spent
+**12,255 s on `permutation` in a single pass** (its own `metadata.json`) at 1,458
+channels — so one 20-draw null there is ~68 CPU-hours, and all 18 is over 1,000. That
+is the substance of issue **EVD-1**: the gap is not neglect, it is arithmetic. §12c's
+levers (`permutation_repeats` 10 → 3, CUDA above `AUTO_CUDA_MIN_FEATURES`, 10 draws)
+are what would make even one of them affordable, and §8's rule then requires the
+*observed* to be re-run at those same settings.
 
 ### 14c. ⚠️ THE COUNT IS NOW MEASURED PER RUN — `max_features=12` is gone (2026-08-09)
 

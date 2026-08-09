@@ -70,10 +70,16 @@ entry point and it stays manual (`Stage.manual = True`). This stage only refresh
 
 **Vouch for anything.** A green pipeline means the five stages agree with each other.
 It says nothing about whether the features are worth having, and the answer to that is
-recorded at every level: 19 of 19 source runs computed no null
-(`feature_selection/CONTEXT.md` §14b), 725 of 750 channels were chosen by exactly one
-run (`final_features/CONTEXT.md` §6), and the run trained on them shows **no skill on
-either split** (`result_evaluator/CONTEXT.md` §6).
+recorded at every level: **18 of 19 source runs computed no null and the 19th failed
+its own** (`feature_selection/CONTEXT.md` §14b), 725 of 750 channels were chosen by
+exactly one run (`final_features/CONTEXT.md` §6), and the run trained on them shows
+**no skill on either split** (`result_evaluator/CONTEXT.md` §6).
+
+⚠️ **`status()` cannot see any of that.** It compares fingerprints over
+`(source_table, channel)`, so a run gaining a null moves its `evidence` and no
+channel — the chain stayed green through the 2026-08-09 EVD-1 measurement while the
+stored provenance sentence went stale. Green means the five stages agree, and that is
+all it has ever meant.
 
 ## 5. State today (2026-08-09)
 

@@ -151,16 +151,32 @@ anything. The parameters that DO determine the cut (`cut_fdr_q`,
 Every table carries a `COMMENT ON TABLE` naming the source runs, the setup and the
 **`evidence`** of each run. On the largest table that reads:
 
-> Run evidence: `no_null=19`. ⚠️ evidence=no_null means no bar was computed for that
-> run — a ranking without a null is descriptive, not evidence.
+> Run evidence: `failed_null=1, no_null=18`. ⚠️ evidence=no_null means no bar was
+> computed for that run — a ranking without a null is descriptive, not evidence.
 
-⚠️ **All 750 features in the VCB table come from runs that computed NO NULL**, and
-the bank table's one run **failed** its own — so **not one surviving run in the archive
-clears anything** (`feature_selection/CONTEXT.md` §14b) — 19 with no bar, 1 that failed its
-own. A row in one of these tables is a channel some run ranked highly. **That is all
-it is.** §10 of the feature-selection context records an absent null as absent and
-never as a pass; this propagates the same rule into the database rather than letting a
-table name imply a verdict.
+⚠️ **18 of the VCB table's 19 source runs computed NO NULL, and the 19th FAILED its
+own** (`pool__basic`, z = +1.46, measured 2026-08-09 — `feature_selection/CONTEXT.md`
+§10b). The bank table's single run also failed. So **not one surviving run in the
+archive clears anything** — 18 with no bar, 2 that failed their own. A row in one of
+these tables is a channel some run ranked highly. **That is all it is.** §10 of the
+feature-selection context records an absent null as absent and never as a pass; this
+propagates the same rule into the database rather than letting a table name imply a
+verdict.
+
+⚠️ **That tally changed WITHOUT the table changing, and no check would have caught
+it.** The fingerprint is over `(source_table, channel)` — adding a null to a run moves
+its `evidence` and not one channel, so `status_final_features` still read `current`
+while the stored sentence said `no_null=19`. The `COMMENT` was refreshed in place with
+`COMMENT ON TABLE`, using `plan.comment()` so the text cannot drift from what a
+rebuild would write. **Rebuilding to correct a sentence would have been wrong** — it
+drops the table, changes every dataset hash below it and orphans the runs that
+referenced them (§7).
+
+⚠️ **A regenerated comment is NOT safe to write blindly.** `plan_from_reports()`
+leaves `target_derived=False` — only `build_all` can see the database and set it — so
+regenerating the BANK table's comment silently **drops the `cs_rank_5day` is-not-stored
+warning** of §5. The refresh therefore writes only when the evidence tally is the sole
+difference, and refuses otherwise.
 
 ⚠️ **And the selections do not agree — but read that carefully.** 725 of the 750
 channels were chosen by exactly one run, and only 25 by more than one. That looks like

@@ -1,7 +1,7 @@
 {
   "report_schema_version": "1.0",
-  "generated_at": "2026-08-04T13:59:47.127732+00:00",
-  "git_commit": "7ab2488+dirty",
+  "generated_at": "2026-08-09T16:13:55.551392+00:00",
+  "git_commit": "93fcb967+dirty",
   "environment": {
     "python": "3.12.10",
     "platform": "Windows-11-10.0.26200-SP0",
@@ -118,15 +118,15 @@
       "n_sell_orders"
     ],
     "timings_seconds": {
-      "window design (cpu)": 0.11,
-      "spearman vs target (cpu)": 0.05,
-      "mutual_info (cpu)": 8.35,
-      "xgb gain + shap (cpu)": 0.94,
-      "lasso (cpu)": 1.24,
-      "permutation (cpu)": 9.94,
+      "window design (cpu)": 0.12,
+      "spearman vs target (cpu)": 0.06,
+      "mutual_info (cpu)": 11.13,
+      "xgb gain + shap (cpu)": 1.45,
+      "lasso (cpu)": 2.28,
+      "permutation (cpu)": 12.61,
       "channel corr matrix (cpu)": 0.01,
-      "stability (cpu)": 3.64,
-      "validation (cpu)": 5.36
+      "stability (cpu)": 4.78,
+      "validation (cpu)": 7.74
     },
     "ic_summary": {
       "folds": 5.0,
@@ -153,9 +153,21 @@
       "se_ic_per_fold": 0.0826
     }
   },
-  "null": null,
+  "null": {
+    "label": "unified_schema_vcb / return_5day",
+    "observed_ic": 0.0636,
+    "null_mean": 0.0041,
+    "null_sd": 0.0407,
+    "null_p95_BAR": 0.0838,
+    "null_max": 0.1026,
+    "p_value": 0.0952,
+    "z_vs_null": 1.46,
+    "clears_bar": false,
+    "draws": 20,
+    "failed_draws": 0
+  },
   "holdout": null,
-  "notes": "",
+  "notes": "Null added 2026-08-09 (issue EVD-1). The 2026-08-04 run recorded no bar; the selection was reproduced bit-identically and the 20-draw block-shuffled null it never had was computed at the same knobs.",
   "run_id": "2026-08-04_205945__vcb__basic__return_5day",
   "artifacts": [
     {
@@ -185,6 +197,10 @@
     {
       "file": "coverage.csv",
       "bytes": 822
+    },
+    {
+      "file": "null_draws.csv",
+      "bytes": 498
     },
     {
       "file": "figures/01_ensemble_ranking.png",
@@ -221,7 +237,11 @@
     {
       "file": "figures/09_target_distribution.png",
       "bytes": 40891
+    },
+    {
+      "file": "figures/10_null.png",
+      "bytes": 52632
     }
   ],
-  "report_seconds": 2.1
+  "report_seconds": 5.13
 }
