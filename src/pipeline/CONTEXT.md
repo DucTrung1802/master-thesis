@@ -68,6 +68,13 @@ which pools to join — `feature_selection/RUN__feature_importance_report.ipynb`
 entry point and it stays manual (`Stage.manual = True`). This stage only refreshes
 `outstanding.csv` from the runs that already exist.
 
+⚠️ **`Stage.manual` was set and never read until 2026-08-09** (issue **PIP-1**): the
+plan decided "MANUAL" from `stage.apply is None`, and the selection stage *has* an
+apply, so the flag did nothing and the plan printed a bare `ran`. A reader could
+reasonably take `--apply` for a cold rebuild. The plan now carries a **`manual`
+column**, a manual stage's apply reports **`ran (refresh only)`**, and a manual stage
+that is not ready reports **`MANUAL — cannot be produced here`**.
+
 **Vouch for anything.** A green pipeline means the five stages agree with each other.
 It says nothing about whether the features are worth having, and the answer to that is
 recorded at every level: **18 of 19 source runs computed no null and the 19th failed

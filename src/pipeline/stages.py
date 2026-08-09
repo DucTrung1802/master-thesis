@@ -97,6 +97,10 @@ class Stage:
     describe: str
     status: Callable[[], StageState]
     apply: Optional[Callable[[], None]] = None
+    # ⚠️ `manual` means this stage's INPUT cannot be produced here, even though
+    # `apply` exists and does something useful. The selection stage refreshes
+    # shortlists from archived runs; it cannot perform a run. Reported in the plan
+    # so `--apply` is never mistaken for a cold rebuild (issue PIP-1).
     manual: bool = False
 
 
@@ -413,14 +417,21 @@ def run(
                 print(f"\n{'=' * 78}\n▶ {stage.name}  —  {stage.describe}\n")
                 stage.apply()
                 state = stage.status()
-                action = "ran"
+                # ⚠️ A manual stage's `apply` refreshes what already exists; it
+                # cannot create the input from nothing, and saying plain "ran"
+                # invites reading `--apply` as a cold rebuild (PIP-1).
+                action = "ran (refresh only)" if stage.manual else "ran"
         elif chosen:
-            action = "would run" if not state.ready else "up to date"
+            if stage.manual and not state.ready:
+                action = "MANUAL — cannot be produced here"
+            else:
+                action = "would run" if not state.ready else "up to date"
         row = state.row()
         row["action"] = action
+        row["manual"] = stage.manual
         rows.append(row)
 
     frame = pd.DataFrame(rows)
-    lead = ["stage", "ready", "action", "detail", "output"]
+    lead = ["stage", "ready", "manual", "action", "detail", "output"]
     frame = frame[lead + [c for c in frame.columns if c not in lead]]
     return frame

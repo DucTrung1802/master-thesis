@@ -5,21 +5,21 @@ Stable codes for the
 chain. **Codes are permanent**: a resolved issue keeps its code and its row, never
 renumbered and never reused, so an old message that says "BNK-1" still resolves.
 
-## Open (6)
+## Open (5)
 
 | code | severity | issue | lives in |
 |---|---|---|---|
 | **EVD-1** | substantive | Nothing upstream ever cleared a null. **Partly measured 2026-08-09**: the bare `pool__basic` run was reproduced bit-identically and given the 20-draw null it never had — it **fails at `z = +1.46`** (§10b), so the archive now reads `no_null=18, failed_null=2` instead of `no_null=19, failed_null=1`. The remaining 18 are not in that price class: `basic+economy_usa` alone spends **12,255 s on `permutation` per pass** at 1,458 channels, so one 20-draw null is ~68 CPU-hours and all 18 is over 1,000. **Still not fixable downstream** — everything below inherits it. Next lever is §12c (`permutation_repeats` 10→3, CUDA, 10 draws), with the observed re-run at the same settings per §8. | `feature_selection/CONTEXT.md` §14b, §10b |
 | **NUL-1** | substantive | The evaluator's null shuffles outcomes against a *finished* score vector, so it prices in nothing about feature selection, architecture search or early stopping. It can kill a run, never confirm one. Structural — the evaluator cannot re-run the selection. | `result_evaluator/metrics.py` §3b |
 | **DRF-1** | substantive | **Worse after the STL-1 rebuild**: 126 of 721 VCB channels put >1% of the test set beyond 5 train-sigmas and **18 put 100% of it there** (was 48 and 4 at 203 channels). The tail is also far more extreme than the old "+9 to +13 sigma" — `european_union__…__euestr` sits at **+885 sigma** and `usa__…__resppllopnww` at **−282**. Monotone macro levels. Reported in `drift.csv`, acted on by nothing. The fix belongs upstream — differenced channels, not a silent drop here. | `train_test_creator` → `drift.csv` |
-| **COV-1** | substantive | Channels were *selected* despite zero coverage across the whole train slice. **Wider than first recorded: 26 on the VCB table, not 1** — all four `prop_*` channels (`prop_buy_vol`, `prop_buy_val`, `prop_sell_vol`, `prop_sell_val`) plus 22 macro series that begin after the train cut, the worst at 2.4% coverage overall. The bank table has 1 (`prop_buy_vol`). The drop in `train_test_creator` is a workaround; the defect is that the selection ranked them highly on the fraction of history where they exist. | `train_test_creator/dataset.py::_screen` |
+| **COV-1** | substantive | Channels were *selected* despite barely existing. **Far wider than first recorded**: 26 on the VCB table have zero TRAIN coverage (all four `prop_*` plus 22 late-starting macro series), and across the archive **248 of 952 shortlisted rows — 26% — sit below 0.95 coverage**, the worst at **0.024**. **Partly addressed 2026-08-09**: `outstanding.csv` now carries `coverage` + a `PARTIAL` flag (§14d), so the fetch list states the risk instead of a later stage discovering it. It **flags, it does not filter** — the archive cannot see where the train/test cut falls, and dropping 248 rows would change the fingerprint set and trigger the STL-1 domino. The defect itself is unchanged: the selection still ranks these channels on the fraction of history where they exist. | `train_test_creator/dataset.py::_screen`, `feature_selection/outstanding.py` |
 | **RPR-1** | reproducibility | `src/train_test_set/` and `src/model/runs/*/` are git-ignored (they are large). A fresh clone has no datasets and 27 runs stripped to `results/`. Most project history is re-derivable, not reproducible. A design trade-off, not a bug — recorded so it is a choice rather than a surprise. | `.gitignore` |
-| **PIP-1** | smaller | Feature selection is manual by design (GPU-hours + a judgement about which pools to join), so `python -m pipeline --apply` cannot do a cold rebuild from nothing. | `pipeline/stages.py` |
 
-## Resolved (17)
+## Resolved (18)
 
 | code | issue and fix | pinned by |
 |---|---|---|
+| ~~**PIP-1**~~ | Feature selection is manual by design, so `--apply` cannot cold-rebuild — but **`Stage.manual` was set and never read**. The plan decided "MANUAL" from `stage.apply is None`, and the selection stage *has* an apply (it refreshes shortlists), so the flag was dead and the plan printed a bare `ran`. The design is unchanged; it is now **stated**: a `manual` column in the plan, `ran (refresh only)` when a manual stage applies, and `MANUAL — cannot be produced here` when one is not ready. | `python -m pipeline` → `manual` column reads `True` on `selection` only |
 | ~~**STL-1**~~ | The VCB table had drifted 26 columns from its own shortlists and nothing noticed, because "the table exists" was the only check. Now every table's `COMMENT` carries a **fingerprint** — a sha256 over its sorted `(source_table, channel)` set — and `status_final_features` compares it against what the current reports would produce. `max_features` was dropped from `SETUP_KEYS` (it said `12` while runs kept 10–236) and the real cut parameters are stamped into `outstanding.csv`. Both tables dropped and rebuilt: **VCB 203 → 750 channels**, bank 10 → 14. | `status_final_features` → `current — fingerprint 505fbe21a1f0 matches` |
 | ~~**CMP-1**~~ | Classifier core metrics were measured against the 0/1 label. The old fallback *could not* have worked — a classification dataset's `y_test` **is** the label, so `load_dataset` returned the thing it was called to replace, silently. Now read from **`pool__targets`** on `(date, ticker)`; when no schema is recorded, `ic` and `long_short` are **NaN** rather than a number in the wrong units, while `dir_auc`/`hit_rate` survive (they need only the up/down label). | all 18 classification rows: `ic` NaN, `dir_auc` present, `return_source = unavailable (no schema recorded)` |
 | ~~**BNK-1**~~ | The bank table could not enter the pipeline: the reader trusted the table NAME for the target. Whole chain now runs — 26,964 / 12,524 / 13,028 windows, **no skill on either split**. | `test_a_rank_table_reads_the_column_it_actually_stores` |
@@ -44,7 +44,15 @@ No blocking issues remain. The four substantive ones are all upstream of the cod
 **EVD-1** and **NUL-1** are about what a null can prove, **DRF-1** and **COV-1** are
 defects in the *selection*, not in the stages that consume it.
 
-⚠️ Note what none of the 17 fixes changed: **every run in the archive still sits
+⚠️ **What is left open is what is EXPENSIVE or STRUCTURAL, not what is unknown.**
+The 2026-08-09 pass took every cheap thing: EVD-1's one affordable null was measured
+(it failed, `z = +1.46`), COV-1's true extent was measured and stamped into the
+deliverable (248 of 952 rows), and PIP-1 turned out to be dead code and closed. The
+remainder is priced: EVD-1's other 18 nulls are 1,000+ CPU-hours, NUL-1 cannot be
+fixed by an evaluator that does not re-run the selection, DRF-1 needs differenced
+channels upstream, and RPR-1 is a deliberate trade-off.
+
+⚠️ Note what none of the 18 fixes changed: **every run in the archive still sits
 inside its own null.** The STL-1 rebuild made the VCB result worse, not better —
 `test ic −0.011 → −0.072`, `r2 −0.08 → −0.90` — which is the expected consequence of
 handing an LSTM 724 channels instead of 202 on 2,918 training windows.

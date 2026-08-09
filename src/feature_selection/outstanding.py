@@ -95,6 +95,15 @@ COLUMNS = [
     "kept_by", "consensus_p", "tie_group_size", "beat_in_tie",
     "absorbed_as_redundant", "n_candidates",
     "run_id", "target", "horizon_h", "lookback_d", "evidence",
+    # ⚠️ How much of the sample the channel actually EXISTS for (issue COV-1).
+    # `prop_buy_vol` was shortlisted at 0.20 coverage — empty until 2023 — and the
+    # ranking that chose it was computed on the fifth of history where it exists.
+    # `train_test_creator` then drops it as untrainable, which is a workaround at the
+    # wrong end: by then the channel has already displaced another from the list.
+    # This does NOT filter — the archive cannot see where a downstream train/test cut
+    # will fall, so a coverage of 0.20 is a WARNING, not a verdict. It is carried so
+    # the fetch list states the risk instead of a later stage discovering it.
+    "coverage", "coverage_flag",
     # ⚠️ The parameters the CUT actually ran with, stamped into the deliverable.
     # Without them the shortlist does not say what produced it, and a consumer is
     # left reading `setup.max_features` from `metadata.json` — which describes the
@@ -102,6 +111,12 @@ COLUMNS = [
     # replaced it. `final_features.SETUP_KEYS` reads these two instead.
     "cut_fdr_q", "cut_corr_threshold",
 ]
+
+# Below this share of non-null rows a channel is flagged. 0.95 is deliberately
+# generous: it catches `prop_*` (0.20) and the late-starting macro series without
+# flagging the ordinary ragged head of a price channel.
+COVERAGE_FLOOR = 0.95
+COVERAGE_FILENAME = "coverage.csv"
 
 
 def source_table(channel: str, tables: List[str]) -> str:
@@ -182,6 +197,21 @@ def _correlation_loader(folder: str):
     return load
 
 
+def _coverage_loader(folder: str) -> Dict[str, float]:
+    """`channel -> non-null share`, from the run's own `coverage.csv`.
+
+    Returns `{}` when the file is absent, which leaves `coverage` NaN and the flag
+    empty rather than failing — an older run folder stays readable, and a missing
+    measurement is recorded as missing instead of as "fine" (the same rule §10 applies
+    to an absent null).
+    """
+    path = os.path.join(folder, COVERAGE_FILENAME)
+    if not os.path.exists(path):
+        return {}
+    frame = pd.read_csv(path)
+    return dict(zip(frame["channel"], frame["coverage"].astype(float)))
+
+
 def build_one(folder: str, **cut_kwargs) -> pd.DataFrame:
     """One run folder → its `outstanding` table. Does not write.
 
@@ -205,6 +235,12 @@ def build_one(folder: str, **cut_kwargs) -> pd.DataFrame:
     out["horizon_h"] = meta["setup"]["horizon_h"]
     out["lookback_d"] = meta["setup"]["lookback_d"]
     out["evidence"] = _evidence(meta)
+    cov = _coverage_loader(folder)
+    out["coverage"] = [cov.get(c, float("nan")) for c in out["channel"]]
+    out["coverage_flag"] = [
+        "" if pd.isna(v) else ("PARTIAL" if v < COVERAGE_FLOOR else "")
+        for v in out["coverage"]
+    ]
     out["cut_fdr_q"] = cut_kwargs.get("fdr_q", selection_cut.DEFAULT_FDR_Q)
     out["cut_corr_threshold"] = cut_kwargs.get(
         "corr_threshold", selection_cut.DEFAULT_CORR_THRESHOLD

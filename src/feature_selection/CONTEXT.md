@@ -1627,6 +1627,37 @@ loudly when read, a silent wrong guess would not.
 `last/mean/slope/sd/min/max` carried the channel; the RAW column is what gets read
 and `windows.window_design` computes the statistics downstream (§1a).
 
+### 14d. ⚠️ `coverage` / `coverage_flag` — 26 % OF THE SHORTLIST BARELY EXISTS (2026-08-09)
+
+Added for issue **COV-1**. Each row now carries the channel's non-null share, read
+from the run's own `coverage.csv`, and a `PARTIAL` flag below `COVERAGE_FLOOR = 0.95`.
+
+| | rows |
+|---|---|
+| shortlisted, full coverage | 704 |
+| **shortlisted, `PARTIAL`** | **248 of 952 — 26 %** |
+
+⚠️ **The worst shortlisted channel exists for 2.4 % of the sample.**
+`germany__…__deelpc` at **0.024**, then a wall of macro series at 0.031-0.036, and
+`prop_buy_vol` at 0.20. These were ranked highly *on the fraction of history where
+they exist* — the ranking is computed over the whole panel, so a channel present only
+after 2023 is scored against a target it can only see the tail of.
+
+⚠️ **This FLAGS, it does not filter, and the distinction is the honest part.** The
+archive cannot see where a downstream train/test cut will fall, so it cannot know
+whether a coverage of 0.20 means "untrainable" or merely "ragged" — that depends on
+the split, which `train_test_creator` chooses. A coverage of 0.20 is therefore a
+**warning**, not a verdict. `train_test_creator`'s `on_untrainable="drop"` remains the
+thing that acts, on the 26 channels whose train-slice coverage is actually zero.
+
+⚠️ **Adding a COLUMN cannot make a table stale, and that is why this was safe.** The
+STL-1 fingerprint is a digest of the `(source_table, channel)` SET
+(`final_features.fingerprint`), so two new columns leave it untouched — verified
+across all 20 runs after the rebuild, and `final_features` still reports
+`505fbe21a1f0 matches`. **Filtering on the flag would NOT have been safe**: dropping
+248 rows changes the set, and that is the full STL-1 domino (§7 of
+`final_features/CONTEXT.md`).
+
 ### 14a. ⚠️ WHAT COMPARING THE FILES SHOWS — THE INSTABILITY IS IN THE *ORDERING*, NOT THE MEMBERSHIP
 
 Union the 19 `date`-grain files. **All nineteen contain `pool__basic` and all nineteen
