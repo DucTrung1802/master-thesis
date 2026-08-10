@@ -633,8 +633,10 @@ def write_report(
     # scan the repo-level root and correctly reported that no run existed. The same string
     # from `python -m feature_selection.run` at the repo root had always worked, which is
     # why this survived 22 runs: the bug is in the CWD, not the path.
+    # `normpath` because the notebook writes a POSIX-style relative root and this path is
+    # RECORDED — a mixed `...\reports/feature_selection` would land in `metadata.json`.
     if not os.path.isabs(root):
-        root = os.path.join(REPO_ROOT, root)
+        root = os.path.normpath(os.path.join(REPO_ROOT, root))
     path = os.path.join(root, run_id)
     figures_dir = os.path.join(path, "figures")
     os.makedirs(path, exist_ok=True)
