@@ -5,9 +5,9 @@
     python -m pipeline --apply                  # run the stale stages
     python -m pipeline --apply --rescrape       # ⚠️ and re-fetch from the network first
 
-    # the pool__basic prototype — its own report root, its own scoped table
+    # the pool__basic prototype — one shared report root, its own scoped table
     python -m pipeline --apply \
-        --root reports/feature_selection_basic --scope basic \
+        --scope basic \
         --table return_5day__final__d20_h5__basic \
         --config vcb__return_5day__final__d20_h5__basic.yaml
 """

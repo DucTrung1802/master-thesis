@@ -229,18 +229,26 @@ Two flags keep them apart, and both are needed:
 | `--root` | which runs are in the group at all | the new run joins the archive's union |
 | `--scope` | the table's name suffix | both builds want `return_5day__final__d20_h5`, and the narrow one can only be built with `--replace`, which DROPS the wide one |
 
+⚠️ **SINCE 2026-08-10 ONLY ONE OF THE TWO IS STILL DOING WORK.** The `_basic`,
+`_economy` and `_superseded` roots were merged into `reports/feature_selection/` and all
+22 archived runs were deleted, so there is one root, every entry point seeds at 18, and
+`--root` separates nothing unless a run is deliberately quarantined into a new path.
+**`--scope` now carries the separation alone** — a `pool__basic` run and a
+`basic+economy_<country>` run in this root are ONE group and get unioned into one table
+if neither build names its block.
+
 ```powershell
-python -m feature_selection.run --pools pool__basic --null-draws 20 `
-    --root reports/feature_selection_basic
-python -m pipeline --apply `
-    --root reports/feature_selection_basic --scope basic `
+python -m feature_selection.run --pools pool__basic --null-draws 20
+python -m pipeline --apply --scope basic `
     --table return_5day__final__d20_h5__basic `
     --config vcb__return_5day__final__d20_h5__basic.yaml
 ```
 
-⚠️ **A scoped root needs its own `.gitignore` negation.** `!reports/feature_selection/**`
-does not match `reports/feature_selection_basic/`, so its CSVs fall straight back into
-the blanket `*.csv` — the same trap as issue GIT-1, one path over.
+⚠️ **A scoped root needs its own `.gitignore` negation** — the reason the merge above
+also shrank `.gitignore`. `!reports/feature_selection/**` did not match
+`reports/feature_selection_basic/`, so that root's CSVs fell straight back into the
+blanket `*.csv` — the same trap as issue GIT-1, one path over. Any NEW root outside
+`reports/feature_selection/` re-opens it and needs its own pair.
 
 ⚠️ **`--scope` is not part of the grouping key and must not become one.** It is chosen
 per build, beside the `--root` that already decided which runs are in scope. Making it a

@@ -88,8 +88,7 @@
 > **[run.py](run.py) is the same thing as a command** (added 2026-08-10):
 >
 > ```
-> python -m feature_selection.run --pools pool__basic --null-draws 20 \
->                                 --root reports/feature_selection_basic
+> python -m feature_selection.run --pools pool__basic --null-draws 20
 > ```
 >
 > It re-implements nothing — same `FeatureSelector`, same
@@ -104,9 +103,16 @@
 >    as an absence.
 > 2. ⚠️ **`--root` exists because `final_features` groups on
 >    `(schema, target, setup)`** — a key with no term for *which pools*. A new
->    `pool__basic` run archived into the default root joins the 19 runs behind
+>    `pool__basic` run archived beside a country run joins it behind
 >    `return_5day__final__d20_h5` and silently widens that table. See
 >    `final_features/CONTEXT.md` §0.
+>
+>    ⚠️ **`--root` no longer separates anything by default (2026-08-10).** The three
+>    extra roots (`_basic`, `_economy`, `_superseded`) were merged into
+>    `reports/feature_selection/` and all 22 archived runs were deleted, so every run
+>    now lands in ONE root at seed 18 — i.e. in one group. **`--scope` is what keeps a
+>    narrow build off the wide table now**; `--root` is still there for when a run must
+>    be quarantined, but nothing points at a second root any more.
 >
 > ⚠️ **The wide pools stay manual regardless.** This makes the CHEAP case scriptable —
 > 27 channels is minutes. `basic+economy_usa` spends 12,255 s on `permutation` per pass
@@ -1198,14 +1204,18 @@ match is also the proof that nothing downstream moved. Verified after the write:
 only `evidence` changed in the shortlist, and `final_features` still reports
 `fingerprint 505fbe21a1f0 matches`.
 
-⚠️ **`reports/feature_selection/*/` is still gitignored, but ALL 22 archived runs
-were force-added on 2026-08-09** — the whole archive is now in history, not just this
-prototype. **A tracked file overrides the ignore rule**, so those 22 keep updating
-normally while a NEW run still has to be force-added on purpose.
+⚠️ **THE ARCHIVE WAS DELETED ON 2026-08-10 AND EVERY RUN PATH BELOW IS NOW A HISTORY
+REFERENCE.** All 22 runs were force-added on 2026-08-09, so the whole archive is in git
+and nothing is lost — `git checkout 884bae0e -- reports/` brings it back. What changed is
+on disk: the four roots (`feature_selection`, `_basic`, `_economy`, `_superseded`) were
+merged into **one**, `reports/feature_selection/`, and emptied of runs so the study
+restarts from `vcb__basic__return_5day`. **The numbers in §6-§14 stand as measurements;
+their folders do not stand as files.** `.gitignore` still negates the one root, so a new
+run commits normally without a force-add.
 
 ⚠️ **And "~1 MB per run" was wrong by two orders of magnitude on the wide pools.**
-The archive is **119.9 MB across 404 files** — 70 MB CSV, 50 MB PNG — and two files
-carry half of it: `channel_correlation.csv` is **40.0 MB** for
+The deleted archive was **119.9 MB across 404 files** — 70 MB CSV, 50 MB PNG — and two
+files carried half of it: `channel_correlation.csv` was **40.0 MB** for
 `basic+economy_usa` and **16.5 MB** for `ta`, because it is the full N×N pairwise
 matrix the redundancy prune used and N runs to the thousands on a wide pool. Every
 other folder is 0.6-3.6 MB. **Before force-adding a new wide-pool run, look at that
@@ -1890,11 +1900,12 @@ exist to hold (CLAUDE.md §8). **`test_cross_sectional.py` passes `max_features=
 purpose** — it exercises the optional cap, and `test_selection_cut.py` exercises the
 `dropped_for` truncation the cap used to cause. Neither is a default.
 
-⚠️ **The first archived runs with `"max_features": null` are the two under
-`reports/feature_selection_basic/` (2026-08-10)** — `vcb__basic` (27 ch → 14 kept, null
-z = +2.15, clears) and `bank__basic__cs_rank_5day` (27 ch → 14 kept, null z = −1.71,
-fails). Every run under `reports/feature_selection/` predates the change and records
-`12`; that number described their `kept` column and never their `outstanding.csv`.
+⚠️ **The first archived runs with `"max_features": null` were the two under the
+then-separate `reports/feature_selection_basic/` (2026-08-10)** — `vcb__basic` (27 ch →
+14 kept, null z = +2.15, clears) and `bank__basic__cs_rank_5day` (27 ch → 14 kept, null
+z = −1.71, fails). The 20 runs before them predate the change and record `12`; that
+number described their `kept` column and never their `outstanding.csv`. All 22 were
+deleted with the root merge later that day (§10b) and survive only in git.
 
 ---
 
@@ -2030,7 +2041,9 @@ dagster asset materialize -f src/orchestration/definitions.py `
 Config knobs (`EconomySelectionConfig`): `universe` (default `VCB`), `target`
 (`return_5day`), `lookback`/`horizon` (20/5), `null_draws` (**20**), `device` (**`auto`** — GPU once
 the pool is wide enough; ⚠️ part of the SETUP, not a speed knob, see §16e),
-`stability`, `holdout_start`, `root`, `budget_minutes` (240), `notes`.
+`stability`, `holdout_start`, `root` (**`reports/feature_selection` since 2026-08-10** —
+it was `reports/feature_selection_economy` until the four roots were merged into one),
+`budget_minutes` (240), `notes`.
 **`max_features` is not offered** — the measured cut is the only width rule (§14c).
 
 ⚠️ **The op name in config is `analysis__feature_selection_economy`** — the asset key
@@ -2050,8 +2063,12 @@ python -m pipeline                           # what is now stale downstream; wri
 ⚠️ **Do NOT let a country sweep widen the default `final_features` group.**
 `plan_from_reports` keys on `(schema, target, setup)` with **no term for which pools**,
 so 19 new `d20_h5` runs land in the same group as everything else and silently widen
-`return_5day__final__d20_h5`. Use `--root` and `--scope` (`pipeline/CONTEXT.md` §5c), or
-set `root` in the asset config so the sweep archives somewhere of its own.
+`return_5day__final__d20_h5`. ⚠️ **The sweep no longer archives somewhere of its own** —
+since the 2026-08-10 root merge the asset's `root` default IS `reports/feature_selection`,
+the same root a `pool__basic` run uses, at the same seed 18. **`--scope` is the whole
+defence now** (`--scope basic` for the narrow build, `--scope economy_<country>` for a
+country one, `pipeline/CONTEXT.md` §5c); set `root` in the asset config only to quarantine
+a run deliberately, and give any new root its own `.gitignore` pair.
 
 ### 15b. ⚠️ GUARD 1 — the country pool must share `pool__basic`'s calendar
 

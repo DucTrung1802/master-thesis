@@ -111,31 +111,22 @@ experiment/experiment_10/_cache/
 !reports/feature_selection/
 !reports/feature_selection/**
 #
-# ⚠️ A SCOPED report root is a SEPARATE path and needs its own negation. `final_features`
-# groups every run under one root by (schema, target, setup) — which has no term for
-# "which pools" — so a narrow experiment has to live under its own root or it silently
-# widens the archive's table (`final_features.builder.table_name`). That root is then a
-# new path the two rules above do not match, and its CSVs fall straight back into the
-# blanket `*.csv`. Add one pair per scope; `_basic` is `pool__basic` alone.
-!reports/feature_selection_basic/
-!reports/feature_selection_basic/**
+# ⚠️ ONE ROOT, and only one, since 2026-08-10. `reports/feature_selection_basic/`,
+# `_economy/` and `_superseded/` were three MORE paths these two rules did not match,
+# each needing its own negation pair or its CSVs fell straight back into the blanket
+# `*.csv`. They were merged into the single root above and all 22 archived runs were
+# deleted, so the pair above is again the whole rule.
 #
-# `_economy` is the COUNTRY SWEEP — `pool__basic + pool__economy_<country>`, and the
-# default root of `analysis/feature_selection_economy`. It needs its own root for a
-# second reason beyond the scoping one above: the sweep runs at `random_state=18`
-# while every run under `reports/feature_selection/` is 42, and `random_state` IS a
-# SETUP_KEY — so both wanted the name `return_5day__final__d20_h5` and
-# `final_features` refused to plan at all until they were separated.
-!reports/feature_selection_economy/
-!reports/feature_selection_economy/**
+# ⚠️ What those roots bought is now bought by `--scope`, and it is NOT automatic.
+# `final_features` groups every run under one root by (schema, target, setup) — a key
+# with no term for "which pools" — and every entry point now seeds at 18, so a
+# `pool__basic` run and a `basic+economy_<country>` run in this root are ONE group and
+# are UNIONED into `return_5day__final__d20_h5`. Name the feature block per build
+# (`--scope basic`, `--scope economy_japan`) or accept that union on purpose. If a run
+# is ever REDONE, delete or move the superseded folder out of `reports/` — it would
+# otherwise be counted as a second contribution to its replacement's table.
 #
-# `_superseded` is read by NO stage — it is where a redone run goes so that it stops
-# being unioned into the table its replacement builds. Tracked because the runs in it
-# are evidence (see its README), ignored by every root.
-!reports/feature_selection_superseded/
-!reports/feature_selection_superseded/**
-#
-# ⚠️ They are not small. The archive is ~120 MB across 22 runs, and `channel_correlation.csv`
+# ⚠️ They are not small. The deleted archive was ~107 MB across 22 runs, and `channel_correlation.csv`
 # alone reached 40.0 MB on a 1,458-channel pool — it is the full N×N pairwise matrix.
 # Before committing a new WIDE-pool run, check that one file: the deliverables are
 # `feature_importance.csv` and `outstanding.csv`, and `dropped_for` already records

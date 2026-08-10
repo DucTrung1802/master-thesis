@@ -4,7 +4,7 @@
     python -m final_features                 # print the plan and the DDL, write nothing
     python -m final_features --apply         # create the tables
     python -m final_features --apply --replace   # ⚠️ drop an existing table first
-    python -m final_features --apply --root reports/feature_selection_basic --scope basic
+    python -m final_features --apply --scope basic   # root: reports/feature_selection
 
 ## The grouping rule
 
@@ -202,6 +202,13 @@ def table_name(
     block — `basic`, `ta`, `fa` — and is NOT part of the grouping key: it is chosen per
     build, alongside the `--root` that decides which runs are in scope at all. A build
     with no `--scope` behaves exactly as before.
+
+    ⚠️ **`scope` CARRIES THE SEPARATION ALONE SINCE 2026-08-10.** The `_basic` and
+    `_economy` roots were merged into `reports/feature_selection/` and every archived
+    run dropped, so `--root` no longer partitions anything by default: a `pool__basic`
+    run and a `basic+economy_<country>` run now land in one root at one seed and are
+    UNIONED. Name each build's block (`--scope basic`, `--scope economy_japan`) or
+    accept that union deliberately.
     """
     stem = target[len(CS_PREFIX):] if target.startswith(CS_PREFIX) else target
     name = f"{stem}__final__d{int(lookback)}_h{int(horizon)}"
@@ -504,7 +511,8 @@ def build_all(
                 if apply:
                     # ⚠️ **A TABLE THAT IS ALREADY CURRENT IS SKIPPED, NOT AN ERROR.**
                     # A root holding several runs produces several plans, and the moment
-                    # a second experiment joined `reports/feature_selection_basic/` a
+                    # a second experiment joined the narrow root (then
+                    # `reports/feature_selection_basic/`, merged away 2026-08-10) a
                     # plain `--apply` raised on the FIRST table — which was finished and
                     # correct — before reaching the new one. That made the flag unusable
                     # for adding a table to an existing root. "Current" means the live

@@ -4,7 +4,7 @@
     python -m feature_selection.run --pools pool__basic --null-draws 20
     python -m feature_selection.run --ticker VCB --pools pool__basic,pool__ta \
                                     --target return_5day --lookback 20 --horizon 5
-    python -m feature_selection.run --pools pool__basic --root reports/feature_selection_basic
+    python -m feature_selection.run --pools pool__basic   # → reports/feature_selection/
 
 `RUN__feature_importance_report.ipynb` remains the interactive entry point and this
 module reproduces it exactly — same `FeatureSelector`, same `evaluation.null_distribution`,
@@ -116,12 +116,18 @@ def run_selection(
     `max_features=12` has not determined a shortlist since issue STL-1 and was removed
     from the last live default (`RUN__feature_importance_report.ipynb`) on 2026-08-10.
 
-    ⚠️ **The 20 runs under `reports/feature_selection/` still RECORD `max_features: 12`
-    in their `metadata.json` and that number described their `kept` column, not their
-    shortlist.** Their `outstanding.csv` was regenerated under the measured cut and holds
-    10–236 channels. The two runs under `reports/feature_selection_basic/` (2026-08-10)
-    are the first archived uncapped ones and record `null`. Read the width off
-    `outstanding.csv`, never off `setup.max_features`.
+    ⚠️ **Read the width off `outstanding.csv`, never off `setup.max_features`.** The 20
+    pre-2026-08-10 runs RECORDED `max_features: 12` in their `metadata.json` while that
+    number described their `kept` column and not their shortlist, which the measured cut
+    had already regenerated at 10–236 channels. Those runs were deleted with the archive
+    on 2026-08-10 (see the root note below); the rule outlives them because a
+    `metadata.json` still records the knob and not the outcome.
+
+    ⚠️ **ONE ROOT, `reports/feature_selection/`, since 2026-08-10** — the `_basic`,
+    `_economy` and `_superseded` roots were merged into it and every archived run was
+    dropped. A root is a GROUP for `final_features`, so two runs that share
+    `(schema, target, setup)` under it are unioned into ONE table: separate a narrow
+    build from a country build with `--scope`, not with a second root.
     """
     pools = list(pools)
     if TARGETS_TABLE not in pools:

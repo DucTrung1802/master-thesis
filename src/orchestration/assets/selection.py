@@ -191,12 +191,14 @@ class EconomySelectionConfig(Config):
     )
     holdout_start: Optional[str] = Field(default=None, description="e.g. 2024-06-01")
     root: str = Field(
-        default="reports/feature_selection_economy",
-        description="report root. ⚠️ NOT the default reports/feature_selection: a "
+        default="reports/feature_selection",
+        description="report root — ONE root for every selection since 2026-08-10. ⚠️ A "
         "root is a GROUP for final_features, which keys on (schema, target, setup) "
-        "with no term for which pools. Seed 18 against the archive's 42 made those "
-        "two DIFFERENT setups wanting ONE table name, and final_features raised. "
-        "Keep the sweep in its own root — pipeline/CONTEXT.md §5c.",
+        "with no term for which pools: a basic run and a country run now share a root "
+        "AND (seed 18 everywhere) a setup, so final_features UNIONS them into one "
+        "table unless each build names its own feature block with --scope. Pass "
+        "--scope economy_<country> when building from a sweep run — "
+        "pipeline/CONTEXT.md §5c.",
     )
     budget_minutes: float = Field(
         default=240.0,

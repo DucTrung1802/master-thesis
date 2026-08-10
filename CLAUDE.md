@@ -408,7 +408,7 @@ R² −0.90 → −0.059 on the same ticker, target and splits, at 4,961 paramet
 
 | stage | VCB chain | BANK chain |
 |---|---|---|
-| selection | 20/20 archived runs carry `outstanding.csv` | (shared) |
+| selection | ⚠️ **EMPTY — all 22 runs deleted 2026-08-10** (see below) | (shared) |
 | `final_features` | `return_5day__final__d20_h5` — 4,235 × 754 (750 ch), `505fbe21a1f0` | `rank_5day__final__d20_h5` — 53,921 × 18 (14 ch), `f5615a68f556` |
 | `train_test_creator` | 2,918 / 610 / 635 × 20 × **724** | 26,964 / 12,524 / 13,028 × 20 × 13 |
 | `model` | best epoch **7** | best epoch **1** (never beat its init) |
@@ -437,10 +437,26 @@ Replacing `max_features=12` with a measured per-run cut took the table 203 → 7
 and the dataset 202 → 724 features; test IC went −0.011 → −0.072. Handing an LSTM 724
 channels on 2,918 training windows is the whole explanation.
 
-⚠️ **Not one surviving selection run clears anything** — 18 computed no null, 2 failed
-their own. Everything downstream inherits that, and the provenance sentence travels
-verbatim from the table `COMMENT` into the dataset `metadata.json` into every run's
-`lineage`.
+⚠️ **THE REPORT ROOTS WERE MERGED AND THE ARCHIVE DROPPED (2026-08-10).** There is now
+**one** folder, `reports/feature_selection/`, holding **no runs** —
+`feature_selection_basic`, `_economy` and `_superseded` are gone as paths, and all 22
+archived runs with them. Nothing is lost: they were force-added on 2026-08-09, so
+`git checkout 884bae0e -- reports/` restores the whole archive. Consequences to hold:
+
+- **`python -m pipeline` now reports `selection` as not ready**, and every stage below it
+  has no live shortlist to check against. The study restarts at
+  `vcb__basic__return_5day`, then the country sweep.
+- ⚠️ **`--scope` is now the ONLY thing keeping two experiments off one table name.** A
+  root is a `final_features` GROUP over `(schema, target, setup)` — no term for *which
+  pools* — and every entry point seeds at 18, so a `pool__basic` run and a
+  `basic+economy_<country>` run in this root are ONE group and get unioned into
+  `return_5day__final__d20_h5`. Build with `--scope basic` / `--scope economy_<country>`.
+- **The numbers in §2, §5c, §5d and the tables above stand as measurements**; their run
+  folders no longer stand as files. Any claim quoting a run path is a history reference.
+
+⚠️ **Not one of those runs cleared anything** — 18 computed no null, 2 failed their own.
+Everything downstream inherited that, and the provenance sentence travels verbatim from
+the table `COMMENT` into the dataset `metadata.json` into every run's `lineage`.
 
 **Open issues live in [ISSUES.md](ISSUES.md)** (5 open, 18 resolved, codes permanent).
 Short version: `EVD-1` the missing nulls are ~1,000 CPU-hours, `NUL-1` the evaluator's null

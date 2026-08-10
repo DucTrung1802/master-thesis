@@ -293,11 +293,12 @@ class TrainTestCreator:
         self.scaler_tag = "std"
         # ⚠️ **WHICH REPORT ROOT THE TABLE WAS BUILT FROM.** `selection()` reads the
         # shortlists to learn what is a channel and what the channels were selected
-        # FOR, and a SCOPED table (`--root reports/feature_selection_basic --scope
-        # basic`) was built from shortlists that do not live in the default archive.
-        # Reading the default root then reports every one of that table's own channels
-        # as "in no current shortlist" — measured on the bank basic table, which came
-        # back with 6 false STALE columns immediately after being built from them.
+        # FOR, and a SCOPED table (`--scope basic`) was built from a shortlist that
+        # need not live in the root this reads. Reading the wrong root reports every
+        # one of that table's own channels as "in no current shortlist" — measured on
+        # the bank basic table, which came back with 6 false STALE columns immediately
+        # after being built from them, back when the narrow runs lived in a root of
+        # their own (`reports/feature_selection_basic/`, merged away 2026-08-10).
         self.report_root = report_root or DEFAULT_REPORT_ROOT
         # The column actually read. Resolved in `read()` against the table, because
         # a rank target names a table that stores what it is ranked FROM.

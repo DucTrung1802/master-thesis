@@ -2143,7 +2143,11 @@ silver leaves that were never separate tables and the two unified universes
 [assets/selection.py](assets/selection.py), **one asset**:
 `analysis/feature_selection_economy`, partitioned by **COUNTRY (19 keys)**. It runs
 `feature_selection.run.run_selection` over `pool__basic + pool__economy_<country>` and
-archives a folder under `reports/`.
+archives a folder under `reports/feature_selection/` — ⚠️ **the SINGLE report root since
+2026-08-10**, where the config default was `reports/feature_selection_economy` before the
+four roots were merged. It shares that root, and its seed 18, with every hand-run
+selection, so `final_features` groups a country run WITH a `pool__basic` run unless each
+build passes `--scope` (`feature_selection/CONTEXT.md` §15a-after).
 
 ⚠️ **It is the only asset in this code location that writes no database table.**
 `feature_selection` is read-only by package design (CLAUDE.md §8) and `final_features`

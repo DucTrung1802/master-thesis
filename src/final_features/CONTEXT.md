@@ -17,7 +17,7 @@
 python -m final_features                     # print the plan, touch nothing
 python -m final_features --apply             # create the tables
 python -m final_features --apply --replace   # ⚠️ DROP an existing table first
-python -m final_features --apply --root reports/feature_selection_basic --scope basic
+python -m final_features --apply --scope basic   # root: reports/feature_selection
 ```
 
 ## 0. ⚠️ `--root` and `--scope` — the grouping key has no term for "which pools"
@@ -31,7 +31,11 @@ in the same group as those 19 and wants the same table name, so building it mean
 orphans the runs that referenced them (§7).
 
 - **`--root`** decides which runs exist as far as `plan_from_reports` is concerned. A
-  scoped run archived under its own root cannot join the archive's group.
+  scoped run archived under its own root cannot join the archive's group. ⚠️ **It is no
+  longer separating anything by default (2026-08-10)**: the `_basic`, `_economy` and
+  `_superseded` roots were merged into `reports/feature_selection/` and all 22 archived
+  runs deleted, so every run lands in one root at one seed and `--scope` is the only
+  thing left keeping two experiments off one table name.
 - **`--scope`** appends `__<scope>` to the table name — `return_5day__final__d20_h5__basic`.
   `train_test_creator.FINAL_TABLE` parses it and ignores it: `d` and `h` still come from
   the same place, and the scope names the feature BLOCK, not the setup.
@@ -165,11 +169,11 @@ knobs on a re-run archive can legitimately produce a different set. Only the set
 the fact.
 
 ⚠️ **`max_features` was REMOVED from `SETUP_KEYS` (2026-08-09) and from the last live
-default on 2026-08-10.** It is `12` in the 20 `metadata.json` files under
-`reports/feature_selection/` and `null` in the two under
-`reports/feature_selection_basic/`, and in NEITHER case did it determine the
+default on 2026-08-10.** It was `12` in the 20 pre-2026-08-10 `metadata.json` files and
+`null` in the two uncapped ones, and in NEITHER case did it determine the
 shortlist — `selection_cut` replaced the fixed cap with a measured one and those same
-runs keep 10 to 236 channels. Grouping and naming on it recorded a number that was no
+runs kept 10 to 236 channels. (All 22 were deleted with the root merge later that day;
+the rule stands for the runs that replace them.) Grouping and naming on it recorded a number that was no
 longer true of anything. The parameters that DO determine the cut (`cut_fdr_q`,
 `cut_corr_threshold`) are stamped into `outstanding.csv` by
 `feature_selection.outstanding` and read from there.

@@ -5,6 +5,10 @@
 # from unified_schema_vcb.return_5day__final__d20_h5__basic, which final_features built
 # from ONE feature-selection run over pool__basic alone:
 #   reports/feature_selection_basic/2026-08-10_034947__vcb__basic__return_5day
+# WARNING: that run no longer exists on disk. The four report roots were merged into
+# reports/feature_selection/ on 2026-08-10 and every archived run was deleted (git
+# checkout 884bae0e -- reports/ to read it). Rebuilding this config's table means a NEW
+# vcb__basic run into the single root, built with --scope basic.
 #
 # WARNING: `lookback` and `n_features` below are ASSERTIONS, not settings. train.py
 # raises if the dataset disagrees with them — the dataset is the authority, and a
