@@ -60,6 +60,7 @@ from model.common.trainer import (
 )
 from result_evaluator import metrics as M
 from result_evaluator.evaluator import evaluate_run
+from result_evaluator.index import index_row
 
 _SRC = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -76,6 +77,24 @@ CRITERIA = {
 }
 
 
+def _console_safe() -> None:
+    """Let stdout survive the `⚠️` this package prints.
+
+    ⚠️ **`result_evaluator.metrics.verdict` puts a `⚠️` in its CLEARING branch and
+    nowhere else**, and a Windows console is cp1252, which has no code point for U+26A0.
+    So the only path that could raise `UnicodeEncodeError` was the one that reports a
+    positive result — and it had never fired, because no run had ever cleared a bar.
+    The first one that did (`baseline_ar`, `dir_auc_clears=True`, 2026-08-10) crashed
+    the process *after* `append_run`, i.e. after the run was already recorded.
+
+    `errors="replace"` degrades the glyph rather than the run. Same fix as
+    `train_test_creator.dataset.main` (CLAUDE.md §5 rules 18 and 20).
+    """
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="replace")
+
+
 def load_config(path: str) -> Dict:
     with open(path, encoding="utf-8") as handle:
         config = yaml.safe_load(handle)
@@ -85,6 +104,24 @@ def load_config(path: str) -> Dict:
     config.setdefault("task", M.REGRESSION)
     if config["task"] not in M.TASKS:
         raise ValueError(f"task must be one of {M.TASKS}, got {config['task']!r}")
+
+    # ⚠️ **THE FILENAME MUST BE THE `run_name`.** Two names for one run is how a config
+    # ends up describing a different run than the folder it produces, and it is how
+    # issue **CFG-1** happened: config files live in per-model directories, so a bare
+    # `--config` name is resolved across `model/*/configs/` — and two packages held the
+    # same filename while their `run_name`s differed by the model prefix. Enforcing
+    # `basename == run_name` makes the collision impossible rather than detectable,
+    # because `run_name` starts with the model by convention (§RUN STANDARD).
+    stem = os.path.splitext(os.path.basename(path))[0]
+    # `_legacy/` is exempt: those 27 configs predate the convention, their datasets no
+    # longer exist (issue RPR-1), and renaming dead files would be churn. They are
+    # quarantined by directory, which is the record that they are not current.
+    if stem != config["run_name"] and "_legacy" not in path.replace("\\", "/").split("/"):
+        raise ValueError(
+            f"config filename {stem!r} != run_name {config['run_name']!r}. A run has "
+            f"ONE name: rename the file to {config['run_name']}.yaml. See "
+            f"model/CONTEXT.md §RUN STANDARD."
+        )
     return config
 
 
@@ -167,6 +204,7 @@ def train(
             ⚠️ It is passed rather than read from `config["model"]["type"]` so the
             registry cannot be changed by editing a YAML.
     """
+    _console_safe()
     dataset = load_dataset(config["dataset"], expected_hash=config.get("dataset_hash"))
     lineage = _verify(config, dataset)
     task = config["task"]
@@ -208,7 +246,7 @@ def train(
         os.path.join(run.results_dir, "loss_history.csv"), index_label="epoch"
     )
 
-    _write_predictions(trainer, dataset, loaders, run, task)
+    _write_predictions(lambda s: trainer.predict(loaders[s]), dataset, run, task)
 
     run.update_metadata(
         model={"type": model_type, **arch["kwargs"], "n_params": int(n_params)},
@@ -254,15 +292,152 @@ def train(
     return run.dir, table
 
 
-def _write_predictions(trainer, dataset, loaders, run, task) -> None:
+def train_estimator(
+    config: Dict,
+    model_module,
+    model_type: str,
+    runs_dir: str = RUNS_DIR,
+    dry_run: bool = False,
+):
+    """`train()` for a model that has no epochs — a closed form, a fit, or a constant.
+
+    Same contract as `train()`: same `_verify`, the same `predictions_*.csv`, the same
+    `evaluate_run`, the same `index.csv` row. **The only thing that differs is that
+    there is no training LOOP** — no optimiser, no early stopping, no checkpoints, no
+    TensorBoard. A ridge, an AR(p) and a constant predictor are one `.fit()` call.
+
+    ⚠️ **This exists so the baselines are scored by the SAME code as the networks.** A
+    baseline computed in a notebook, or with its own metric block, cannot be put beside
+    an LSTM row and read — which is the entire reason `result_evaluator` is a separate
+    package. The zero-baseline in particular is already reported *inside* every run as
+    `RMSE_zero_baseline`, and both networks lose to it; making it a run of its own is
+    what lets it be compared on `ic`, `dir_auc` and `hit_rate` too.
+
+    `model_module` must expose `build_model(n_features, lookback, **kwargs)` returning
+    an object with `.fit(X, y)` and `.predict(X)` over `(n, lookback, n_features)`
+    float arrays, plus `arch_dict(...)`.
+
+    ⚠️ `best_epoch` and `best_val_loss` are recorded as 0 and the TRAIN MSE. They are
+    not epochs; the columns exist because the schema is shared, and leaving them blank
+    would read as "not measured" rather than "not applicable".
+    """
+    _console_safe()
+    dataset = load_dataset(config["dataset"], expected_hash=config.get("dataset_hash"))
+    lineage = _verify(config, dataset)
+    task = config["task"]
+    horizon = _horizon(lineage, config)
+
+    if task != M.REGRESSION:
+        raise ValueError(
+            f"{model_type} is regression-only; got task={task!r}. A classifier "
+            f"baseline needs its own predict_proba path and a `y_prob` column."
+        )
+
+    print(f"{'=' * 78}")
+    print(f"run       {config['run_name']}   task={task}   model={model_type}")
+    print(f"dataset   {dataset.name}  ({dataset.hash})")
+    print(f"source    {lineage['schema']}.{lineage['table']}")
+    print(f"window    d={dataset.lookback}  h={horizon}  features={dataset.n_features}")
+    print(f"samples   train {len(dataset.y_train)} | val {len(dataset.y_val)} "
+          f"| test {len(dataset.y_test)}")
+    if dry_run:
+        print("\ndry run — nothing fitted, nothing written")
+        return None, None
+
+    set_seed(config.get("seed", 42))
+    run = RunDir.create(base_dir=runs_dir, run_name=config["run_name"], config=config)
+    run.update_metadata(dataset=dataset.reference(), device="cpu", lineage=lineage)
+
+    spec = model_spec(config)
+    arch = model_module.arch_dict(
+        n_features=dataset.n_features, lookback=dataset.lookback, **spec
+    )
+    estimator = model_module.build_model(**arch["kwargs"])
+    # ⚠️ An estimator that must express a value in the ORIGINAL target units needs the
+    # scaler, because everything here works in the scaled space and
+    # `_write_predictions` inverts on the way out. `baseline.ZeroPredictor` is the case:
+    # emitting 0.0 would inverse-transform to the train MEAN return, not to zero.
+    if getattr(estimator, "needs_dataset", False):
+        estimator.set_dataset(dataset)
+
+    X_train = np.asarray(dataset.X_train, dtype=float)
+    y_train = np.asarray(dataset.y_train, dtype=float).ravel()
+    estimator.fit(X_train, y_train)
+    n_params = int(getattr(estimator, "n_params", 0))
+    print(f"device    cpu   parameters {n_params:,}")
+
+    def predict(split: str) -> np.ndarray:
+        X = np.asarray(getattr(dataset, f"X_{split}"), dtype=float)
+        return np.asarray(estimator.predict(X), dtype=float).ravel()
+
+    train_mse = float(np.mean((estimator.predict(X_train) - y_train) ** 2))
+    _write_predictions(predict, dataset, run, task)
+
+    run.update_metadata(
+        model={"type": model_type, **arch["kwargs"], "n_params": n_params},
+        training={
+            # ⚠️ Not epochs. See the docstring — the schema is shared with the torch
+            # path and a blank would read as "not measured".
+            "best_epoch": 0,
+            "best_val_loss": train_mse,
+            "criterion": "closed-form / single fit (no training loop)",
+            "fitted_on": "train split only",
+        },
+    )
+
+    table = evaluate_run(run.dir, draws=config.get("null_draws", M.NULL_DRAWS))
+    scored = {split: table.loc[split].to_dict() for split in table.index}
+    run.update_metadata(metrics=scored)
+    append_run(runs_dir, _registry_row(run, dataset, task, model_type, scored))
+
+    print(f"\n{table.to_string()}")
+    for split in table.index:
+        print(f"\n{split}: {M.verdict(table.loc[split].to_dict())}")
+    print(f"\nrun folder {run.dir}")
+    return run.dir, table
+
+
+def run_estimator_cli(
+    model_module,
+    model_type: str,
+    config_dir: str,
+    default_config: str,
+    argv: Optional[Sequence[str]] = None,
+):
+    """`run_cli` for the estimator path."""
+    argv = list(sys.argv[1:] if argv is None else argv)
+    path = argv[argv.index("--config") + 1] if "--config" in argv else default_config
+    if not os.path.isabs(path) and not os.path.exists(path):
+        path = os.path.join(config_dir, os.path.basename(path))
+    config = load_config(path)
+    return train_estimator(
+        config,
+        model_module=model_module,
+        # ⚠️ The baseline package holds several estimators, so the type is read from
+        # the config's `kind` when the caller does not pin one. Unlike an architecture,
+        # `kind` genuinely selects the model, so it belongs in the YAML.
+        model_type=model_type or str(config["model"].get("kind", "")).upper(),
+        dry_run="--dry-run" in argv,
+    )
+
+
+def _write_predictions(predict, dataset, run, task) -> None:
     """`results/predictions_<split>.csv` — the file `result_evaluator` reads.
 
     ⚠️ Regression predictions are inverse-transformed to the RETURN scale first.
     Scoring on the standardised target would make RMSE depend on the train slice's own
     variance and stop two datasets being comparable.
+
+    Args:
+        predict: `split -> np.ndarray` of raw model output, in the SCALED target space.
+            ⚠️ A callable rather than a `Trainer`, so the torch path and the estimator
+            path (`train_estimator`) write byte-identical files. This is the function
+            whose two behaviours — the inverse transform above, and the `ticker` column
+            below — decide whether two runs are comparable at all, so there is exactly
+            one of it.
     """
     for split in ("val", "test"):
-        raw = trainer.predict(loaders[split])
+        raw = predict(split)
         y_scaled = getattr(dataset, f"y_{split}")
         dates = getattr(dataset, f"dates_{split}")
         if task == M.CLASSIFICATION:
@@ -309,46 +484,20 @@ def _split_tickers(dataset, split: str):
 
 
 def _registry_row(run, dataset, task, model_type: str, scored: Dict[str, Dict]) -> Dict:
-    """One `index.csv` row. Core metrics fill the same columns for every task."""
-    val, test = scored.get("val", {}), scored.get("test", {})
+    """One `index.csv` row, built by the SAME function `--rebuild-index` uses.
 
-    def number(source: Dict, key: str, digits: int = 4):
-        value = source.get(key)
-        return round(float(value), digits) if isinstance(value, (int, float)) else ""
-
-    return {
-        "run_id": run.run_id,
-        "created_at": run.metadata["created_at"],
-        "dataset_name": dataset.name,
-        "dataset_hash": dataset.hash,
-        "model_type": model_type,
-        "task": task,
-        "lookback": dataset.lookback,
-        "n_features": dataset.n_features,
-        "best_epoch": run.metadata["training"]["best_epoch"],
-        "best_val_loss": round(run.metadata["training"]["best_val_loss"], 6),
-        "val_ic": number(val, "ic"),
-        "val_dir_auc": number(val, "dir_auc"),
-        "val_long_short": number(val, "long_short", 6),
-        "test_n": test.get("n", ""),
-        "test_n_eff": test.get("n_eff", ""),
-        "test_ic": number(test, "ic"),
-        "test_ic_p": number(test, "ic_p"),
-        "test_ic_clears": test.get("ic_clears", ""),
-        "test_dir_auc": number(test, "dir_auc"),
-        "test_dir_auc_p": number(test, "dir_auc_p"),
-        "test_dir_auc_clears": test.get("dir_auc_clears", ""),
-        "test_hit_rate": number(test, "hit_rate"),
-        "test_long_short": number(test, "long_short", 6),
-        "test_RMSE": number(test, "RMSE", 6),
-        "test_RMSE_zero_baseline": number(test, "RMSE_zero_baseline", 6),
-        "test_beats_zero_baseline": test.get("beats_zero_baseline", ""),
-        "test_pr_auc": number(test, "pr_auc"),
-        "test_base_rate": number(test, "base_rate"),
-        "test_beats_majority": test.get("beats_majority", ""),
-        "git_sha": run.metadata["git_sha"],
-        "run_dir": os.path.relpath(run.dir, _SRC).replace("\\", "/"),
-    }
+    ⚠️ This used to construct the dict here, and `result_evaluator.rebuild_index`
+    constructed a different one — two writers, one file, two schemas. Both now go
+    through `result_evaluator.index.index_row`, so a rebuilt leaderboard is the same
+    shape as an appended one.
+    """
+    return index_row(
+        run_id=run.run_id,
+        scored=scored,
+        meta=run.metadata,
+        run_dir=os.path.relpath(run.dir, _SRC),
+        verdict=M.verdict(scored.get("test", {})) if scored.get("test") else "",
+    )
 
 
 def run_cli(

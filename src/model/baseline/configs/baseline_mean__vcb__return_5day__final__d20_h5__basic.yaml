@@ -1,0 +1,29 @@
+# Tier-1 baseline: the TRAIN mean of the scaled target - one parameter
+#
+# Fitted on the TRAIN split only, scored by the SAME code as the LSTM and the CNN
+# (model/common/engine.py estimator path), against the same 200-draw block-shuffled
+# null. That is the point: a baseline computed anywhere else could not be put beside a
+# network row and read.
+#
+# WARNING: `lookback` and `n_features` are ASSERTIONS, not settings - the dataset is
+# the authority. WARNING: the filename must equal `run_name` (model/CONTEXT.md
+# RUN STANDARD); load_config raises otherwise.
+
+run_name: baseline_mean__vcb__return_5day__final__d20_h5__basic
+dataset: vcb__return_5day__final__d20_h5__basic__tr70_val15_test15__std
+task: regression
+
+lookback: 20
+n_features: 4
+dataset_hash: 08c7a0498ab2c934
+
+model:
+  type: BASELINE
+  kind: mean
+
+# No `train:` block - there is no training loop. Draws in result_evaluator's
+# block-shuffled null, identical to every other run on this dataset.
+null_draws: 200
+
+seed: 42
+device: cpu

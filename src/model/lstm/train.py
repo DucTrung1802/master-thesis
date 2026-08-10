@@ -37,7 +37,7 @@ from model.lstm import model as lstm_model
 _HERE = os.path.dirname(os.path.abspath(__file__))
 
 CONFIG_DIR = os.path.join(_HERE, "configs")
-DEFAULT_CONFIG = os.path.join(CONFIG_DIR, "vcb__return_5day__final__d20_h5.yaml")
+DEFAULT_CONFIG = os.path.join(CONFIG_DIR, "lstm__vcb__return_5day__final__d20_h5.yaml")
 
 # What lands in `index.csv`'s `model_type` and in the run's `metadata.json`.
 MODEL_TYPE = "LSTM"

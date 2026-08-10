@@ -297,17 +297,32 @@ Six stages, network to scored metric, one ticker, one pool. `pool__basic` re-scr
 (`skip_existing=False`, VCB only, 3m24s) and rebuilt to **4,266 rows / 2026-08-07**, from
 4,235 / 2026-06-25.
 
-| | selection IC | selection bar | test IC | test bar | test R² |
-|---|---|---|---|---|---|
-| **basic, 4 ch — LSTM** (4,961 params) | +0.0783 | +0.0562 ⚠️ **clears, z = +2.15** | **−0.0345** | +0.1348 ❌ (p 0.73) | **−0.059** |
-| **basic, 4 ch — CNN** (3,745 params) | *(same selection)* | *(same)* | **−0.0332** | +0.1107 ❌ (p 0.66) | −0.008 |
-| *wide, 724 ch — LSTM* (~276k params) | — | — | −0.0721 | +0.118 ❌ (p 0.88) | −0.90 |
+**Seven models, 0 to 4,961 parameters, on the identical dataset/splits/null:**
 
-⚠️ **A CNN reaches the same answer as the LSTM** (−0.0332 vs −0.0345) from a different
-inductive bias, at `best_epoch 2` — the §10 "never learns past init" signature. Two
-architectures converging is a statement about the data; it is also **two draws at one
-question**, and the evaluator's null prices in neither the architecture choice nor the
-selection (**NUL-1**). `model/CONTEXT.md` §13.
+| model | params | test IC | test bar | test R² | RMSE |
+|---|---|---|---|---|---|
+| `BASELINE_ZERO` | **0** | — (constant) | — | −0.001 | **0.03721** ← the floor |
+| `BASELINE_AR` | 6 | +0.0557 | +0.0585 ❌ | −0.002 | 0.03723 |
+| **`BASELINE_RIDGE_STATS`** | **25** | **+0.1005** | +0.1247 ❌ | **−5.19** | 0.09252 |
+| `BASELINE_RIDGE_FLAT` | 81 | −0.0397 | +0.0785 ❌ | −3.26 | 0.07677 |
+| `CNN` | 3,745 | −0.0332 | +0.1107 ❌ | −0.008 | 0.03734 |
+| `LSTM` | 4,961 | −0.0345 | +0.1348 ❌ | −0.059 | 0.03826 |
+| *wide, 724 ch — LSTM* | ~276k | −0.0721 | +0.118 ❌ | −0.90 | — |
+
+⚠️ **THE SMALLEST FITTED MODELS ARE THE ONLY ONES WITH A POSITIVE TEST IC**, and a
+25-parameter ridge beats both networks by 3×. That is §6d's capacity argument measured:
+`n_eff` is **588** (label overlap) / **122** (window overlap) on 2,939 train windows.
+
+⚠️ **Nothing beats the zero predictor on RMSE**, including the best-IC model — ridge
+posts `R² = −5.19`. Ranking and calibration are separate questions here.
+
+⚠️ **One run clears one bar and it is noise**: `BASELINE_AR`'s `dir_auc` at p = 0.040,
+by 0.0011, from **7 runs × 2 nulled metrics = 14 tests** where ~0.7 false positives are
+expected. Recorded, not promoted. `model/CONTEXT.md` §14.
+
+⚠️ **Nothing here changes §2 and everything strengthens it.** Four model families
+spanning 0 to 276k parameters all land inside their own nulls. A linear model reaching
+the LSTM's answer is a stronger statement about the data than another network doing so.
 
 ⚠️ **The selection cleared its bar; the model did not clear its own.** `z = +2.15` bought
 nothing downstream — which is the two bars working, and the most useful thing the run

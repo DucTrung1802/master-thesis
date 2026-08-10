@@ -424,12 +424,43 @@ def rebuild_index(runs_dir: str = DEFAULT_RUNS_DIR, draws: int = M.NULL_DRAWS) -
     Every run is scoreable from its `predictions_*.csv`, so the honest form of the file
     is one produced in a single pass from a single definition.
 
+    ⚠️ **It writes `index.INDEX_COLUMNS`, the SAME schema `append_run` writes**
+    (2026-08-10). It used to write the `leaderboard()` shape instead — `model`/`ic`/
+    `dir_auc`, test split only — so running `--rebuild-index` silently replaced the
+    leaderboard's schema with a different one under the same filename, and a reader
+    written against a trained run's row broke against a rebuilt one. `leaderboard()`
+    keeps its own shape: it is a VIEW for reading, not the file.
+
     ⚠️ Rewrites the file. The run FOLDERS are untouched and are the source of truth,
     so this is recoverable by running it again.
     """
-    board = leaderboard(runs_dir, rescore=True, draws=draws)
+    from result_evaluator.index import INDEX_COLUMNS, index_row
+
+    rows = []
+    for folder in run_folders(runs_dir):
+        meta = run_metadata(folder)
+        run_id = meta.get("run_id", os.path.basename(folder))
+        try:
+            table = evaluate_run(folder, write=True, draws=draws)
+        except Exception as error:  # noqa: BLE001 — a broken run is reported, not hidden
+            rows.append({"run_id": run_id, "verdict": f"ERROR: {error}"})
+            continue
+        scored = {split: table.loc[split].to_dict() for split in table.index}
+        rows.append(
+            index_row(
+                run_id=run_id,
+                scored=scored,
+                meta=meta,
+                run_dir=os.path.relpath(folder, os.path.dirname(runs_dir)),
+                verdict=M.verdict(scored["test"]) if "test" in scored else "",
+            )
+        )
+
     path = os.path.join(runs_dir, "index.csv")
-    board.to_csv(path, index=False)
+    frame = pd.DataFrame(rows, columns=INDEX_COLUMNS)
+    if "test_ic" in frame.columns:
+        frame = frame.sort_values("test_ic", ascending=False, na_position="last")
+    frame.to_csv(path, index=False)
     return path
 
 

@@ -69,7 +69,7 @@ _REPO = os.path.dirname(_SRC)
 # rather than constants everywhere below, so a second target is a flag and not an edit.
 DEFAULT_TICKER = "vcb"
 DEFAULT_TABLE = "return_5day__final__d20_h5"
-DEFAULT_CONFIG = "vcb__return_5day__final__d20_h5.yaml"
+DEFAULT_CONFIG = "lstm__vcb__return_5day__final__d20_h5.yaml"
 DEFAULT_ROOT = None  # None → feature_selection.report.DEFAULT_REPORT_ROOT
 DEFAULT_SCOPE = None  # None → the table name carries no feature-block suffix
 

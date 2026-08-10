@@ -11,8 +11,17 @@ the other task.
 the board on `test_ic` whose `test_ic_clears` is False is the best-ranked noise, not
 the best model. See `result_evaluator/metrics.py`.
 
+⚠️ **THE SCHEMA IS NOT DEFINED HERE ANY MORE** (2026-08-10). It is
+`result_evaluator.index.INDEX_COLUMNS`, because this module and
+`result_evaluator.rebuild_index` are two writers of one file and they used to disagree:
+appending wrote `model_type`/`val_ic`/`test_ic`, rebuilding wrote `model`/`ic`/`dir_auc`
+and the test split only. `--rebuild-index` therefore silently replaced the leaderboard's
+schema. Issue **IDX-1** fixed two metric ERAS inside the file; keeping the column list
+in one module is what stops the two writers recreating them. The import runs
+`model → result_evaluator`, the direction it already ran.
+
 ⚠️ **The header is MIGRATED, never assumed.** `csv.DictWriter` writes fields in
-`_COLUMNS` order; appending to a file whose header is a different order writes rows
+`INDEX_COLUMNS` order; appending to a file whose header is a different order writes rows
 that misalign with their own header, silently. `append_run` compares the two and
 rewrites the file with the union when they differ, so an index built before a metric
 existed keeps all its rows and gains a blank column.
@@ -24,21 +33,10 @@ import csv
 import os
 from typing import List
 
-_COLUMNS = [
-    "run_id", "created_at", "dataset_name", "dataset_hash", "model_type", "task",
-    "lookback", "n_features", "best_epoch", "best_val_loss",
-    # --- the core block, filled by every task ---------------------------------
-    "val_ic", "val_dir_auc", "val_long_short",
-    "test_n", "test_n_eff",
-    "test_ic", "test_ic_p", "test_ic_clears",
-    "test_dir_auc", "test_dir_auc_p", "test_dir_auc_clears",
-    "test_hit_rate", "test_long_short",
-    # --- regression extras -----------------------------------------------------
-    "test_RMSE", "test_RMSE_zero_baseline", "test_beats_zero_baseline",
-    # --- classification extras -------------------------------------------------
-    "test_pr_auc", "test_base_rate", "test_beats_majority",
-    "git_sha", "run_dir",
-]
+from result_evaluator.index import INDEX_COLUMNS
+
+# Kept as a module-level alias so existing readers of `registry._COLUMNS` still work.
+_COLUMNS = INDEX_COLUMNS
 
 
 def _existing_header(path: str) -> List[str]:
@@ -62,7 +60,7 @@ def _migrate(path: str, header: List[str]) -> List[str]:
 def append_run(runs_dir: str, row: dict) -> str:
     """Append `row` (any subset of the header) to `runs_dir/index.csv`.
 
-    Creates the header on first write; migrates it when `_COLUMNS` has grown.
+    Creates the header on first write; migrates it when `INDEX_COLUMNS` has grown.
     """
     os.makedirs(runs_dir, exist_ok=True)
     path = os.path.join(runs_dir, "index.csv")

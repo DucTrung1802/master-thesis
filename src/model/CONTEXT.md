@@ -34,6 +34,77 @@ covers its internals.
 - **DB**: PostgreSQL `database_main_v2`, schema `unified_schema_<ticker>`. Creds in the
   repo `.env` (`POSTGRES_*`).
 
+## 1a. ⚠️ RUN STANDARD — naming, input, output (2026-08-10)
+
+Every run on the shared leaderboard obeys this. It is **checked, not documented**:
+`engine.load_config` raises on a config whose filename is not its `run_name`.
+
+### Naming — one name, four places
+
+```
+run_name  = <model>__<universe>__<target>__final__d<d>_h<h>[__<scope>]
+run_id    = <run_name>__<YYYYmmdd-HHMMSS>          the run FOLDER
+config    = <run_name>.yaml                        ⚠️ enforced by load_config
+model_type= <MODEL>                                index.csv, set by the binding
+```
+
+| segment | is | examples |
+|---|---|---|
+| `<model>` | the package under `src/model/` | `lstm`, `cnn`, `baseline_ridge_stats` |
+| `<universe>` | the `unified_schema_<t>` the table came from | `vcb`, `bank`, `all` |
+| `<target>` | the label | `return_5day`, `rank_5day` |
+| `d`,`h` | ⚠️ **parsed from the source TABLE NAME**, never chosen | `d20_h5` |
+| `<scope>` | the feature BLOCK; absent = the archive's union | `basic`, `ta`, `fa` |
+
+⚠️ **The filename must equal `run_name`, and that is load-bearing rather than tidy.**
+Configs live in per-model directories and `pipeline._config_path` resolves a bare
+`--config` name across `model/*/configs/` — so two packages holding one filename is
+ambiguous. Since `run_name` starts with the model, `filename == run_name` makes the
+collision *impossible* instead of merely detectable. That is issue **CFG-1**, which
+happened. `_legacy/` is exempt by directory.
+
+⚠️ **`model_type` is passed by the binding, never read from `config["model"]["type"]`.**
+The YAML field is a label a person edits; the shared leaderboard's key should not be.
+
+### Input — one shape, one source
+
+```
+src/train_test_set/<universe>__<table>__tr70_val15_test15__std/
+    X_{train,val,test}.npy    (n, d, n_features) float, STANDARDISED on the train slice
+    y_{train,val,test}.npy    (n,)  SCALED for regression, raw 0/1 for classification
+    dates_{split}.npy         (n,)  the label date
+    tickers_{split}.npy       (n,)  ⚠️ present only on a PANEL
+    feature_scaler.pkl  target_scaler.pkl  metadata.json
+```
+
+A model is any callable over `(n, d, n_features) → (n,)`. Nothing else is passed in:
+no dates, no ticker, no raw table. ⚠️ `lookback` and `n_features` in a config are
+**assertions**, and `_verify` raises — the dataset is the authority.
+
+### Output — one contract, one scorer
+
+```
+src/model/runs/<run_id>/
+    config.yaml  metadata.json  model/  tensorboard/  logs/
+    results/predictions_{val,test}.csv    ← the ONLY file result_evaluator reads
+            metrics.json  metrics.csv  loss_history.csv  verdict.txt
+```
+
+`predictions_*.csv` is `date[,ticker],y_true,y_pred` for regression and
+`date[,ticker],y_true,y_prob` for classification. Two properties are load-bearing:
+
+1. ⚠️ **`y_pred` is in RETURN units, not scaled units.** Scoring the standardised
+   target would make RMSE depend on the train slice's variance and stop two datasets
+   being comparable.
+2. ⚠️ **The `ticker` column is what declares a PANEL.** Without it an N-ticker run is
+   scored as one series — `n_eff` counts 20 banks on a date as 20 observations rather
+   than one (issue **PNL-1**). It is written from the dataset, never from a config flag.
+
+**Every run is scored by `result_evaluator`, never by the training code**, and lands in
+`src/model/runs/index.csv` through `result_evaluator.index.index_row` — one schema for
+the training path and the `--rebuild-index` path alike. That is why a constant, a ridge,
+an LSTM and a CNN can be read off the same table.
+
 ## 2. Directory layout
 
 ```
@@ -70,10 +141,21 @@ src/model/
 │   ├── model.py          CNNRegressor — Conv1d over the TIME axis + global avg pool
 │   ├── train.py          the CNN binding, same shape as lstm/train.py
 │   └── configs/          cnn__vcb__return_5day__final__d20_h5__basic.yaml
+├── baseline/             ← Tier-1 baselines, added 2026-08-10 (§14). NOT torch.
+│   ├── model.py          zero | mean | ridge_stats | ridge_flat | ar — 0 to 81 params
+│   ├── train.py          binding onto engine.train_estimator (no training LOOP)
+│   └── configs/          one per kind, baseline_<kind>__vcb__…__basic.yaml
 └── runs/                 ← ALL runs from ALL models AND tasks (shared)
     ├── index.csv         cross-run leaderboard (TRACKED in git)
     └── <run_id>/         one immutable run (git-IGNORED: .gitignore src/model/runs/*/)
 ```
+
+⚠️ **`runs/` was cleared to today's work on 2026-08-10.** The 29 pre-existing folders —
+the 27-run lookback sweep of §10 plus the 2026-08-09 wide-VCB and BANK-panel runs — were
+**deleted on request**. They were git-ignored, so they are not recoverable: their METRICS
+survive as text in §10, in `CLAUDE.md` §2a and in `index.csv`'s git history, but no run
+among them can ever be rescored or re-verified again. §10's research log is now a
+citation without its evidence, and should be read that way.
 
 ⚠️ **A config filename must be UNIQUE ACROSS model packages.** `pipeline._config_path`
 resolves a bare `--config` name by globbing `model/*/configs/`, so two packages holding
@@ -424,8 +506,72 @@ evaluator's null prices in neither the architecture choice nor the feature selec
 would have been a second attempt, not a discovery. **A run that fails the null is dead;
 a run that clears it is not yet alive.**
 
+## 14. ⚠️ TIER 1 — THE BASELINES, AND THEY BEAT BOTH NETWORKS (2026-08-10)
+
+Five estimators over the same dataset, same splits, same purge, same 200-draw null,
+scored by the same code. `index.csv` had held **31 runs and not one linear model or
+constant** — the study went straight to sequence models. This is the missing rung.
+
+| model | params | test IC | bar | p | clears | dir_auc | bar | p | clears | RMSE | R² |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `BASELINE_ZERO` | **0** | — | — | — | — | 0.5000 | 0.5000 | 0.995 | ❌ | **0.03721** | −0.001 |
+| `BASELINE_MEAN` | 1 | — | — | — | — | 0.5000 | 0.5000 | 0.995 | ❌ | 0.03727 | −0.005 |
+| `BASELINE_AR` | 6 | +0.0557 | +0.0585 | 0.070 | ❌ | **0.5258** | 0.5247 | **0.040** | ⚠️ **✅** | 0.03723 | −0.002 |
+| **`BASELINE_RIDGE_STATS`** | **25** | **+0.1005** | +0.1247 | 0.095 | ❌ | 0.5329 | 0.5592 | 0.194 | ❌ | 0.09252 | **−5.19** |
+| `BASELINE_RIDGE_FLAT` | 81 | −0.0397 | +0.0785 | 0.577 | ❌ | 0.4746 | 0.5440 | 0.597 | ❌ | 0.07677 | −3.26 |
+| `CNN` | 3,745 | −0.0332 | +0.1107 | 0.657 | ❌ | 0.4912 | 0.5544 | 0.567 | ❌ | 0.03734 | −0.008 |
+| `LSTM` | 4,961 | −0.0345 | +0.1348 | 0.726 | ❌ | 0.4743 | 0.5685 | 0.816 | ❌ | 0.03826 | −0.059 |
+
+**Three findings, and the first is the one that matters.**
+
+⚠️ **1. A 25-PARAMETER RIDGE HAS THE BEST TEST IC ON THE BOARD — `+0.1005`, three times
+either network, both of which are NEGATIVE.** The two smallest fitted models (25 and 6
+parameters) are the only ones with a positive test IC at all. That is §6d's capacity
+argument measured directly: train carries 2,939 windows but `n_eff` is **588** on label
+overlap and **122** on window overlap, and a 4,961-parameter model on 122 independent
+observations is not underfitting.
+
+⚠️ **2. NOTHING BEATS THE ZERO PREDICTOR ON RMSE, INCLUDING THE MODEL WITH THE BEST
+IC.** `ridge_stats` posts `RMSE 0.0925` against zero's `0.0372` and **`R² = −5.19`** —
+it ranks well and its magnitudes are wrong by a factor of 2.5. `beats_zero_baseline` is
+False for all seven. Rank and calibration are separate questions and this dataset
+separates them.
+
+⚠️ **3. `BASELINE_AR` CLEARS ITS `dir_auc` BAR — AND IT IS ALMOST CERTAINLY NOISE.**
+0.5258 against a bar of 0.5247 at `p = 0.040`, from a 6-parameter autoregression on
+`close_adjust`'s own last five values. **Seven runs × two nulled metrics is 14 tests**;
+at a 95th-percentile bar, ~0.7 false positives are expected and exactly one appeared, in
+the most trivial model, by 0.0011. `NULL_DRAWS = 200` prices in none of that. This is
+what a multiple-comparison artefact looks like, and it is recorded rather than promoted.
+
+⚠️ **`BASELINE_ZERO` and `BASELINE_MEAN` have NO IC, and that is correct.** A constant
+prediction has zero variance, so Spearman is undefined. Their value is `RMSE`, and it is
+the reference every other row is read against.
+
+⚠️ **The train MEAN return is a worse forecast than zero** (`RMSE 0.03727` vs
+`0.03721`). Small, but it is why `zero` had to be built to emit a genuine zero return
+rather than 0 in the scaled space — see §12.
+
+**What this changes about §10's verdict: nothing, and it strengthens it.** Seven models
+spanning 0 to 4,961 parameters and four model families all land inside their own nulls.
+A linear model reaching the same answer as an LSTM is a far stronger statement about the
+data than another network reaching it.
+
 ## 12. Gotchas
 
+- ⚠️ **A baseline in the SCALED space is not the baseline you meant.** Every estimator
+  returns a scaled target and `engine._write_predictions` inverts it on the way out, so
+  a `ZeroPredictor` emitting `0.0` produces the **train mean return**, not zero. It
+  shipped that way and was caught only because its `RMSE` (0.03726) disagreed in the
+  fourth decimal with the `RMSE_zero_baseline` column (0.037212) it should have equalled
+  exactly. It now asks the target scaler which scaled value maps to a zero return.
+  **The two numbers being identical is the standing self-check.**
+- ⚠️ **`metrics.verdict` puts a `⚠️` in its CLEARING branch and nowhere else**, and a
+  Windows console is cp1252. So the only path that could raise `UnicodeEncodeError` was
+  the one reporting a POSITIVE result, and it had never fired because no run had ever
+  cleared. The first that did (`baseline_ar`) crashed the process *after* `append_run` —
+  the run was recorded, the report was not. `engine._console_safe` now reconfigures both
+  streams with `errors="replace"`.
 - **`src/model/runs/*/` is git-ignored** (checkpoints/TB/plots — reproducible);
   only `runs/index.csv` is tracked (`.gitignore`: `src/model/runs/*/` +
   `!src/model/runs/index.csv`). ⚠️ In practice that means a fresh checkout has 27
