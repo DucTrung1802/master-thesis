@@ -500,9 +500,55 @@ def apply_dataset(ticker: str = DEFAULT_TICKER, table: str = DEFAULT_TABLE) -> N
 
 
 def _config_path(config: str = DEFAULT_CONFIG) -> str:
+    """Resolve a config NAME against every model package's `configs/`.
+
+    ⚠️ **This used to look only in `model/lstm/configs/`**, which made `--config` a
+    flag that silently could not reach a second architecture — `python -m pipeline
+    --config cnn__…yaml` reported `no config at …/lstm/configs/cnn__…yaml`. The stage
+    is about "train one config into a run folder", and which package owns that config
+    is not the pipeline's business. First match wins; an absolute or already-existing
+    path is used as given.
+    """
+    if os.path.isabs(config) or os.path.exists(config):
+        return config
+    import glob
+
+    matches = sorted(glob.glob(os.path.join(_SRC, "model", "*", "configs", config)))
+    # ⚠️ **AMBIGUITY RAISES; it does not resolve alphabetically.** Config directories are
+    # per-model, so a bare filename can exist in several of them — and it did: a CNN
+    # config named `vcb__return_5day__final__d20_h5__basic.yaml` sat beside an LSTM one
+    # of the same name, `sorted()` put `cnn` first, and the LSTM config became
+    # unreachable through this function while still resolving through
+    # `model.lstm.train.CONFIG_DIR`. Two ways to name one file that disagree is the
+    # STL-1 shape. Prefix the config with its model, as `run_name` already is.
+    if len(matches) > 1:
+        raise ValueError(
+            f"config {config!r} exists in {len(matches)} model packages "
+            f"({[os.path.relpath(m, _SRC) for m in matches]}) — a bare name cannot "
+            f"choose between them. Prefix it with the model, or pass a full path."
+        )
+    if matches:
+        return matches[0]
+    # Fall back to the LSTM directory so the error message names a concrete path
+    # rather than an empty search.
     from model.lstm.train import CONFIG_DIR
 
-    return config if os.path.isabs(config) else os.path.join(CONFIG_DIR, config)
+    return os.path.join(CONFIG_DIR, config)
+
+
+def _model_train(config_path: str):
+    """The `train` bound to whichever model package owns `config_path`.
+
+    ⚠️ Dispatched on the config's LOCATION, not on `config["model"]["type"]`. The type
+    field is a label a person edits; the directory is where the module that can build
+    the architecture actually lives, and `engine.train` takes the model module itself.
+    """
+    package = os.path.basename(os.path.dirname(os.path.dirname(config_path)))
+    if package == "cnn":
+        from model.cnn.train import train
+    else:
+        from model.lstm.train import train
+    return train
 
 
 def status_model(config: str = DEFAULT_CONFIG):
@@ -536,9 +582,10 @@ def status_model(config: str = DEFAULT_CONFIG):
 
 
 def apply_model(config: str = DEFAULT_CONFIG) -> None:
-    from model.lstm.train import load_config, train
+    from model.common.engine import load_config
 
-    train(load_config(_config_path(config)))
+    path = _config_path(config)
+    _model_train(path)(load_config(path))
 
 
 # ------------------------------------------------------------------ 5. evaluation

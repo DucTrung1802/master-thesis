@@ -23,7 +23,7 @@ to prove, which is mostly negative and deliberately so.
 | database | PostgreSQL `database_main_v2`, schemas `bronze_schema` / `silver_schema` / `gold_schema` / `unified_schema_<universe>`. Creds in repo `.env` (`POSTGRES_*`) |
 | orchestrator | **Dagster, 74 assets** — `src/orchestration/` is THE entry point |
 | universe | 781 VN tickers (HOSE/HNX/UPCOM); VCB is the single-name focus, VN30/VN100/LIQUID301/ALL/BANK the cross-sections |
-| model | LSTM (2×128, ~276k params) + the five-stage chain in §3b |
+| model | LSTM (2×128, ~276k params) and **CNN** (`Conv1d` over time) + the chain in §3b. `model/common/engine.py` is the shared engine — a model package is a `model.py` + a ~30-line binding, **never a copy of `train.py`** |
 | interpreter | `mt_env` venv (`d:/GIT/master-thesis/mt_env`), Python 3.12.10, Windows, RTX 3050 4 GB |
 
 ---
@@ -121,8 +121,8 @@ reports/feature_selection/<run>/outstanding.csv   feature_selection  ⚠️ MANU
 unified_schema_<t>.<target>__final__d<d>_h<h>     final_features     ⚠️ the ONE stage that writes the DB
    ▼  python -m train_test_creator --save
 src/train_test_set/<dataset>/                     train_test_creator  X/y tensors + scalers + metadata
-   ▼  python -m model.lstm --config <cfg>
-src/model/runs/<run_id>/                          model.lstm          config, checkpoints, predictions
+   ▼  python -m model.lstm --config <cfg>   |   python -m model.cnn --config <cfg>
+src/model/runs/<run_id>/                          model.<arch>        config, checkpoints, predictions
    ▼  python -m result_evaluator
 results/metrics.json + runs/index.csv             result_evaluator    scored vs a block-shuffled null
 ```
@@ -299,8 +299,15 @@ Six stages, network to scored metric, one ticker, one pool. `pool__basic` re-scr
 
 | | selection IC | selection bar | test IC | test bar | test R² |
 |---|---|---|---|---|---|
-| **basic — 6 shortlisted, 4 channels** | +0.0783 | +0.0562 ⚠️ **clears, z = +2.15** | **−0.0345** | +0.1348 ❌ (p 0.73) | **−0.059** |
-| *wide — 750 shortlisted, 724 channels* | — | — | −0.0721 | +0.118 ❌ (p 0.88) | −0.90 |
+| **basic, 4 ch — LSTM** (4,961 params) | +0.0783 | +0.0562 ⚠️ **clears, z = +2.15** | **−0.0345** | +0.1348 ❌ (p 0.73) | **−0.059** |
+| **basic, 4 ch — CNN** (3,745 params) | *(same selection)* | *(same)* | **−0.0332** | +0.1107 ❌ (p 0.66) | −0.008 |
+| *wide, 724 ch — LSTM* (~276k params) | — | — | −0.0721 | +0.118 ❌ (p 0.88) | −0.90 |
+
+⚠️ **A CNN reaches the same answer as the LSTM** (−0.0332 vs −0.0345) from a different
+inductive bias, at `best_epoch 2` — the §10 "never learns past init" signature. Two
+architectures converging is a statement about the data; it is also **two draws at one
+question**, and the evaluator's null prices in neither the architecture choice nor the
+selection (**NUL-1**). `model/CONTEXT.md` §13.
 
 ⚠️ **The selection cleared its bar; the model did not clear its own.** `z = +2.15` bought
 nothing downstream — which is the two bars working, and the most useful thing the run

@@ -46,6 +46,10 @@ src/model/
 │   ├── trainer.py        Trainer (train loop, early stop, TensorBoard, checkpoints),
 │   │                     TrainConfig, set_seed, resolve_device, to_loaders;
 │   │                     criterion is configurable (MSE / BCEWithLogits)
+│   ├── engine.py         ⭐ THE TRAINING ENGINE, model-agnostic (2026-08-10): config →
+│   │                     run folder → trained model → scored result. _verify, the
+│   │                     prediction writer, the lineage block, evaluate_run and the
+│   │                     registry row live here ONCE and are shared by every model
 │   ├── metrics.py        ⚠️ a SHIM over result_evaluator.metrics — kept only so the two
 │   │                     legacy notebooks still run. No metric is defined here.
 │   └── registry.py       append_run → runs/index.csv; MIGRATES the header when the
@@ -53,16 +57,33 @@ src/model/
 ├── lstm/                 ← ONE model = code only (no run outputs live here)
 │   ├── model.py          LSTMRegressor + build_model + arch_dict (last Linear → scalar;
 │   │                     the return for regression / the logit for a classifier)
-│   ├── train.py          config → run folder → trained model → scored result
-│   ├── configs/          vcb__return_5day__final__d20_h5.yaml  ← the current one
-│   │                     return_5day_lb*.yaml, direction_5day_lb*.yaml  ← legacy sweeps
+│   ├── train.py          the LSTM BINDING — names the model module, the model_type
+│   │                     string and its configs/. No training logic (see common/engine)
+│   ├── configs/          vcb__return_5day__final__d20_h5.yaml         ← the wide chain
+│   │                     vcb__return_5day__final__d20_h5__basic.yaml  ← the basic chain
+│   │                     bank__rank_5day__final__d20_h5.yaml          ← the panel chain
+│   │                     _legacy/  27 pre-2026-08-09 sweep configs
 │   ├── RUN__lstm.ipynb            the notebook meant to be run (calls train.py)
 │   ├── lstm_return_5day.ipynb     legacy; reads the pre-2026-08-09 dataset names
 │   └── lstm_direction_5day.ipynb  legacy; same
+├── cnn/                  ← second architecture, added 2026-08-10 (§13)
+│   ├── model.py          CNNRegressor — Conv1d over the TIME axis + global avg pool
+│   ├── train.py          the CNN binding, same shape as lstm/train.py
+│   └── configs/          cnn__vcb__return_5day__final__d20_h5__basic.yaml
 └── runs/                 ← ALL runs from ALL models AND tasks (shared)
     ├── index.csv         cross-run leaderboard (TRACKED in git)
     └── <run_id>/         one immutable run (git-IGNORED: .gitignore src/model/runs/*/)
 ```
+
+⚠️ **A config filename must be UNIQUE ACROSS model packages.** `pipeline._config_path`
+resolves a bare `--config` name by globbing `model/*/configs/`, so two packages holding
+the same filename is ambiguous — and it happened on the first try: a CNN config named
+`vcb__return_5day__final__d20_h5__basic.yaml` sat beside the LSTM one, `sorted()` put
+`cnn` first, and the LSTM config became unreachable through that function while still
+resolving through `model.lstm.train.CONFIG_DIR`. Two ways to name one file that
+disagree is the STL-1 shape. `_config_path` now **raises** on ambiguity instead of
+resolving alphabetically, and a config is prefixed with its model — as `run_name`
+already is.
 
 ⚠️ **`runs/*/` being git-ignored has a consequence worth knowing before you rely on a
 run**: 27 of the 28 folders in a fresh checkout hold only `results/` and `logs/` —
@@ -114,6 +135,7 @@ logs/
 python -m model.lstm                                       # the default config
 python -m model.lstm --config configs/<name>.yaml
 python -m model.lstm --config <path> --dry-run             # print the plan only
+python -m model.cnn  --config cnn__vcb__return_5day__final__d20_h5__basic.yaml
 ```
 
 `RUN__lstm.ipynb` is the same thing with figures — it calls the same `train()`, so a
@@ -146,6 +168,7 @@ lookback: 20        # ⚠️ ASSERTIONS, not settings — the dataset is the aut
 n_features: 724     # 724 on the VCB dataset, 13 on the bank one
 
 model:   {type: LSTM, hidden_size: 128, num_layers: 2, dropout: 0.2}
+#        {type: CNN, channels: 32, kernel_size: 3, num_layers: 2, dropout: 0.1}
 train:   {batch_size: 64, lr: 0.001, weight_decay: 0.00001,
           max_epochs: 150, patience: 20, grad_clip: 1.0,
           lr_factor: 0.5, lr_patience: 5, log_every: 10}
@@ -153,6 +176,10 @@ null_draws: 200     # draws in result_evaluator's block-shuffled null
 seed: 42
 device: auto        # auto | cuda | cpu
 ```
+
+⚠️ **The `model:` block minus `type` IS the `arch_dict` kwargs** (`engine.model_spec`),
+so each model owns its own knobs and no module has to ignore another's. `type` is the
+label; the *binding* decides which module builds the architecture.
 
 ## 7. End-to-end recipe: a new `(target, setup)`
 
@@ -173,12 +200,43 @@ Or `python -m pipeline --apply`, which does 2–6 and skips whatever is already 
 0/1 label. `_verify` raises if a classification config points at a dataset that has a
 target scaler.
 
-**New model** (GRU/Transformer/TCN): create `src/model/<name>/` with a `model.py` (an
-`nn.Module` mapping `(batch, d, n) → (batch,)`, plus `build_model`/`arch_dict`), a
-`configs/`, and a `train.py` copying `lstm/train.py`. Everything in `common/` and all
-of `result_evaluator` is reused unchanged — the `Trainer` is model-agnostic and the
-core metric block reads a score, not an architecture. Prefix `run_name` with the model
-so runs stay distinct in the shared `runs/` and `index.csv`.
+**New model** (GRU/Transformer/TCN): create `src/model/<name>/` with
+
+1. **`model.py`** — an `nn.Module` mapping `(batch, d, n) → (batch,)`, plus
+   `build_model(n_features, **kwargs)` and `arch_dict(n_features, **kwargs)`. The
+   `arch_dict` kwargs are exactly the `model:` block of a config minus `type`, which is
+   how a CNN config carries `channels`/`kernel_size` while an LSTM config carries
+   `hidden_size`/`num_layers` without either module knowing about the other.
+2. **`train.py`** — a ~30-line binding: `engine.train(config, model_module=…,
+   model_type=…)` and `engine.run_cli(…)`. Copy `cnn/train.py`.
+3. **`configs/`** — ⚠️ filenames prefixed with the model (see §2).
+4. **`__main__.py`** — `from model.<name>.train import main`.
+
+⚠️ **DO NOT COPY `lstm/train.py`. That was this section's advice until 2026-08-10 and
+it was wrong.** The file was 346 lines of which **eight** were model-specific — the
+import, the `arch_dict` call, and the string `"LSTM"` twice. Copying it would duplicate
+`_verify`, `_write_predictions`, the lineage block and `_registry_row` per model, which
+is the shape of issue **TGT-1** (one rule implemented "in a second place that could
+drift from it"). They now live in **`common/engine.py`**, once.
+
+⚠️ **`_write_predictions` is the part that had to stop being copyable.** Two of its
+behaviours are load-bearing and neither is visible from a call site: regression
+predictions are inverse-transformed to the RETURN scale (scoring the standardised target
+makes RMSE depend on the train slice's variance, so two datasets stop being comparable),
+and a missing `ticker` column makes an N-ticker panel score as one series — `n_eff`
+counting 20 banks on a date as 20 observations is issue **PNL-1**. A per-model copy that
+drifted on either would produce a run that looks finished and is not comparable to the
+runs beside it. **Two model types now land in `index.csv` scored by identical code,
+which is the only reason their rows may be read against each other.**
+
+Everything in `common/` and all of `result_evaluator` is reused unchanged — the
+`Trainer` is model-agnostic and the core metric block reads a score, not an
+architecture. Prefix `run_name` with the model so runs stay distinct in the shared
+`runs/` and `index.csv`.
+
+⚠️ **`model_type` is passed by the binding, not read from `config["model"]["type"]`.**
+The YAML field is a label a person edits; what lands in the shared leaderboard should
+not be changeable that way.
 
 ## 8. GPU & performance (RTX 3050 Laptop, 4 GB, CUDA 12.7)
 
@@ -326,6 +384,46 @@ no sentiment, no intraday/tick, no point-in-time index membership in the DB.
 5. **Intraday / order-book (Level-2) for VCB** — sub-daily ticks + bid/ask depth → order-book
    imbalance, spread, and the genuine single-name microstructure edge. Real-time feed, heavy storage.
 
+## 13. The `pool__basic` prototype — two architectures, same answer (2026-08-10)
+
+Both trained on `vcb__return_5day__final__d20_h5__basic__tr70_val15_test15__std`
+(2,939 / 615 / 640 × 20 × **4**, hash `08c7a0498ab2c934`), from the chain in
+`pipeline/CONTEXT.md` §5d. **Same dataset, splits, purge, seed and a byte-identical
+`train:` block — only the `model:` block differs**, so any gap is architecture.
+
+| | LSTM | CNN |
+|---|---|---|
+| architecture | 1×32, last timestep | 2× `Conv1d(32, k=3)` over TIME + global avg pool |
+| parameters | 4,961 | **3,745** |
+| best epoch | 10 (of 30) | **2** (of 22) |
+| best val loss | 0.6113 | 0.6073 |
+| **test IC** | **−0.0345** | **−0.0332** |
+| test IC bar / p | +0.1348 / 0.726 | +0.1107 / 0.657 |
+| test dir_auc (bar) | 0.4743 (0.5685) | 0.4912 (0.5544) |
+| test hit_rate | 0.4859 | 0.5078 |
+| test RMSE / zero-baseline | 0.0383 / 0.0372 ❌ | 0.0373 / 0.0372 ❌ |
+| test R² | −0.0585 | **−0.0081** |
+
+**Verdict on all four splits: NO SKILL DEMONSTRATED.** Both test ICs are negative, both
+sit deep inside their own null, and both lose to predicting a flat zero.
+
+⚠️ **The CNN's `best_epoch 2` is the tell.** It stopped improving on validation almost
+immediately; the other twenty epochs were early-stopping patience. That is the §10
+`direction_5day` signature — "most runs stop at best epoch 1, never learn past init" —
+now reproduced on a regression target with a different architecture.
+
+⚠️ **Two architectures with different inductive biases converging on ≈ −0.033 is a
+statement about the DATA, not about either model.** The LSTM consumes the window
+sequentially and predicts from the last hidden state; the CNN learns width-3 shape
+detectors and averages them over the window. They disagree about almost everything
+except the answer.
+
+⚠️ **AND TWO ARCHITECTURES ON ONE DATASET IS TWO DRAWS AT THE SAME QUESTION.** The
+evaluator's null prices in neither the architecture choice nor the feature selection
+(issue **NUL-1**) — it sees a finished prediction vector. Had one of them cleared, that
+would have been a second attempt, not a discovery. **A run that fails the null is dead;
+a run that clears it is not yet alive.**
+
 ## 12. Gotchas
 
 - **`src/model/runs/*/` is git-ignored** (checkpoints/TB/plots — reproducible);
@@ -351,9 +449,18 @@ no sentiment, no intraday/tick, no point-in-time index membership in the DB.
   other stage have a `python -m` entry point, so a sweep is
   `for c in configs/*.yaml; do python -m model.lstm --config $c; done`. The pre-rebuild
   note about scratchpad helper scripts no longer applies.
+- ⚠️ **`src/train_test_set/` HOLDS ONE DATASET** (checked 2026-08-10):
+  `vcb__return_5day__final__d20_h5__basic__…`, built by the prototype chain. This
+  section claimed "all 33 pre-2026-08-09 dataset folders are on disk and every config
+  resolves" — **that has not been true since before 2026-08-09**. The folder is
+  git-ignored (issue **RPR-1**), so a fresh checkout has none at all. Consequences: the
+  27 legacy configs and the two legacy notebooks reference datasets that must be
+  **rebuilt** with `python -m train_test_creator --save` before they run, and every past
+  run's `dataset_hash` is currently unverifiable. **31 run folders DO survive** under
+  `src/model/runs/`, and `result_evaluator --rescore` reads them from
+  `predictions_*.csv` without any dataset.
 - **The legacy notebooks** (`lstm_return_5day.ipynb`, `lstm_direction_5day.ipynb`)
-  and the 27 legacy configs still **work** — all 33 pre-2026-08-09 dataset folders are
-  on disk and every config resolves. ⚠️ But they write runs scored by the OLD path
+  and the 27 legacy configs still **resolve**. ⚠️ But they write runs scored by the OLD path
   (metrics computed in-notebook, no null), so a run produced that way lands in
   `index.csv` with the core columns blank until `python -m result_evaluator --rescore`
   fills them. `RUN__lstm.ipynb` + `train.py` is the path that scores as it goes.

@@ -144,13 +144,22 @@ pool, one command per stage.
 | `train_test_creator` | 2,939 / 615 / 640 × 20 × **4** | seconds |
 | `model` | LSTM 1×32, **4,961 parameters**, early stop @30, best epoch 10 | ~1 min |
 | `result_evaluator` | 30/30 runs scored | ~2 min |
+| *(then)* `model` again | **CNN** 2×`Conv1d(32,k=3)`, **3,745 parameters**, best epoch **2** | ~1 min |
 
 **The panel moved**: `pool__basic` went 4,235 rows / 2026-06-25 → **4,266 / 2026-08-07**.
 
 | | selection IC | selection bar | test IC | test bar | test R² | hit rate |
 |---|---|---|---|---|---|---|
-| **basic, 4 channels** | +0.0783 | +0.0562 ⚠️ **clears, z=+2.15** | **−0.0345** | +0.1348 ❌ (p 0.73) | **−0.059** | 0.486 |
-| *wide, 724 channels* | — | — | −0.0721 | +0.118 ❌ (p 0.88) | −0.90 | 0.491 |
+| **basic, 4 ch — LSTM** | +0.0783 | +0.0562 ⚠️ **clears, z=+2.15** | **−0.0345** | +0.1348 ❌ (p 0.73) | **−0.059** | 0.486 |
+| **basic, 4 ch — CNN** | *(same selection)* | *(same)* | **−0.0332** | +0.1107 ❌ (p 0.66) | −0.008 | 0.508 |
+| *wide, 724 channels — LSTM* | — | — | −0.0721 | +0.118 ❌ (p 0.88) | −0.90 | 0.491 |
+
+⚠️ **A second architecture on the same dataset reaches the same answer** (−0.0332 vs
+−0.0345) from a different inductive bias — sequential last-state against width-3 shape
+detectors averaged over the window. That is a statement about the data. It is also
+**two draws at one question**: the evaluator's null prices in neither the architecture
+choice nor the selection (**NUL-1**), so had either cleared it would have been a second
+attempt rather than a discovery. `model/CONTEXT.md` §13.
 
 ⚠️ **The narrow chain is LESS BAD, and that is the STL-1 argument arriving from the other
 direction.** `R²` goes −0.90 → −0.059 and test IC −0.072 → −0.034 on the same ticker,
@@ -172,6 +181,7 @@ it is the single most useful thing this prototype measured — see
 | `status_model` matched runs by bare PREFIX | no two configs shared a prefix until `…__d20_h5` and `…__d20_h5__basic` both existed — the wide config then reported **2 runs** and named the basic one as its latest |
 | `train_test_creator`'s CLI died on `UnicodeEncodeError` | it prints `⚠️` per dropped channel; the notebook's stdout is UTF-8 and the CLI's is cp1252, so only the CLI could fail and only when a channel WAS dropped (§5 rule 18) |
 | `status_data` called an EMPTY table current | `"2026-08-07" > "none"` is False — the placeholder sorts above every digit |
+| `_config_path` looked only in `model/lstm/configs/` | there was one model package, so `--config` could not reach a second architecture at all. It now globs `model/*/configs/` and **raises on an ambiguous name** rather than resolving alphabetically — which it did once, shadowing the LSTM's basic config behind the CNN's identically-named one |
 
 ⚠️ **And one that is not fixed, because it is a decision**: materialising
 `unified/pool__basic` + `pool__targets` alone left **21 sibling pools on the old

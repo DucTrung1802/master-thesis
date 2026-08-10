@@ -1,0 +1,58 @@
+# 1-D CNN on the pool__basic-only feature table — the second architecture on the
+# prototype chain, run against the LSTM as a like-for-like comparison.
+#
+# Same dataset, same splits, same purge, same seed, same TRAINING block as
+# model/lstm/configs/vcb__return_5day__final__d20_h5__basic.yaml. The ONLY difference
+# is the `model:` block, so a difference in the result is attributable to the
+# architecture and not to the optimiser, the batch size or the early-stopping rule.
+#
+# WARNING: `lookback` and `n_features` below are ASSERTIONS, not settings. train.py
+# raises if the dataset disagrees with them — the dataset is the authority.
+#
+# WARNING: a run that clears its null here is not a discovery, it is a second draw.
+# Two architectures on one dataset is two attempts at the same question, and
+# result_evaluator's null prices in NEITHER the architecture search NOR the feature
+# selection (issue NUL-1). It can kill a run; it cannot confirm one.
+
+run_name: cnn__vcb__return_5day__final__d20_h5__basic
+dataset: vcb__return_5day__final__d20_h5__basic__tr70_val15_test15__std
+task: regression
+
+# Asserted against the dataset's metadata.json at load time.
+lookback: 20
+# 4 of 6 shortlisted channels; 2 dropped for zero train-slice coverage (both prop_*,
+# selected at 0.206 coverage — issue COV-1).
+n_features: 4
+
+# Pinned so the run is verifiable. If the dataset is ever rebuilt, load_dataset raises
+# here rather than training on different tensors.
+dataset_hash: 08c7a0498ab2c934
+
+model:
+  type: CNN
+  # Basic setup: two conv blocks over the TIME axis, width 32, kernel 3.
+  # 3,745 parameters (measured), against the LSTM's 4,961 — deliberately the same
+  # order. A like-for-like comparison needs comparable capacity, not a bigger model
+  # on the same 2,939 training windows.
+  channels: 32
+  kernel_size: 3
+  num_layers: 2
+  dropout: 0.1
+
+# Byte-identical to the LSTM config's train block. Do not tune one without the other.
+train:
+  batch_size: 64
+  lr: 0.001
+  weight_decay: 0.00001
+  max_epochs: 150
+  patience: 20
+  grad_clip: 1.0
+  lr_factor: 0.5
+  lr_patience: 5
+  log_every: 10
+
+# Draws in result_evaluator's block-shuffled null. 200 resolves p to ~0.005.
+null_draws: 200
+
+seed: 42
+device: auto
