@@ -425,14 +425,20 @@ is structurally weak, `DRF-1` 18 channels put 100% of test beyond 5 train-sigmas
 | [src/feature_selection/CONTEXT.md](src/feature_selection/CONTEXT.md) | 22k | running or reading a selection, or quoting any IC / null / bar number |
 | [src/final_features/CONTEXT.md](src/final_features/CONTEXT.md) | 3k | building or rebuilding a `__final__` table |
 | [src/train_test_creator/CONTEXT.md](src/train_test_creator/CONTEXT.md) | 3k | building a dataset, or asking about the purge/impute/scale/window steps |
-| [src/model/CONTEXT.md](src/model/CONTEXT.md) | 4k | training, adding a model type, or reading the research log (§10–§11) |
-| [src/result_evaluator/CONTEXT.md](src/result_evaluator/CONTEXT.md) | 3k | scoring, the metric set, or panel-vs-series grain |
-| [src/pipeline/CONTEXT.md](src/pipeline/CONTEXT.md) | 1.5k | the five-stage chain, staleness, adding a stage or a second target |
+| **[src/model/CONTEXT.md](src/model/CONTEXT.md)** | **9k** | training, adding a model type, or quoting any run's numbers. **§1a is the RUN STANDARD** (naming/input/output, enforced); §7 the new-model recipe; **§13–§16 are today's results** — CNN, Tier 1, Tier 2, the bank panel; §10–§11 the older research log ⚠️ now a citation without its evidence (RPR-1) |
+| [src/result_evaluator/CONTEXT.md](src/result_evaluator/CONTEXT.md) | 3k | scoring, the metric set, or panel-vs-series grain. ⚠️ **STALE — it predates `index.py`, the `rebuild_index` schema change and issue NUL-3.** Nothing in it is false; it is silent about all three |
+| [src/pipeline/CONTEXT.md](src/pipeline/CONTEXT.md) | **3.5k** | the **six**-stage chain, staleness, `--root`/`--scope`, `--rescrape`, adding a stage or a second target |
 | [src/sentiment/CONTEXT.md](src/sentiment/CONTEXT.md) | 2.5k | anything news/text/PhoBERT |
 | [experiment/CONTEXT.md](experiment/CONTEXT.md) | 7k | the 9 exploratory experiments — signal discovery, tradability, point-in-time data, VN OCR |
 | [experiment/experiment_10/CONTEXT.md](experiment/experiment_10/CONTEXT.md) | 36k | writing the literature chapter. **§"Combined reading" (line 2877) is the distillate** — read that alone unless you need a specific paper |
 
-Other roots: [ISSUES.md](ISSUES.md) (issue register), `THESIS_PROGRESS_2026*.md` /
+⚠️ **[ISSUES.md](ISSUES.md) (~4k) is the second file to open, not an afterthought.** Seven
+open issues, and three of them change how a number may be read: **NUL-3** (the panel null
+is not label-neutral — on a panel quote the daily-IC t-stat, never `ic_clears`), **NUL-1**
+(no null here prices in selection or architecture search), **RPR-1** (29 run folders were
+deleted 2026-08-10 and are unrecoverable).
+
+Other roots: `THESIS_PROGRESS_2026*.md` /
 `THESIS_SUMMARY_2026_VI.md` (deliverable write-ups), `feature_groups.md`,
 `vn30.csv` / `vn100.csv` (index membership — ⚠️ current, not point-in-time).
 
