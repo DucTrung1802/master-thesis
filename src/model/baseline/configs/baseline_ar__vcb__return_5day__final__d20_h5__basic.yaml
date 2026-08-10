@@ -22,7 +22,7 @@ model:
   kind: ar
   alpha: 1.0
   order: 5
-  target_channel: 0
+  target_channel: close_adjust
 
 # No `train:` block - there is no training loop. Draws in result_evaluator's
 # block-shuffled null, identical to every other run on this dataset.

@@ -156,27 +156,57 @@ class ARPredictor(_Base):
     """Ridge on the TARGET CHANNEL's own last `p` values — no other feature.
 
     ⚠️ The window holds features, not the label's own history, so "AR" here means
-    autoregression on `target_channel`'s last `p` observations. `close_adjust` is
-    index 0 of this dataset's four channels and is the price level the return is
-    computed from, which makes it the honest stand-in. If it matches the feature
-    models, the features are decoration.
+    autoregression on `target_channel`'s last `p` observations. `close_adjust` is the
+    price level the return is computed from, which makes it the honest stand-in. If it
+    matches the feature models, the features are decoration.
+
+    ⚠️ **`target_channel` should be a NAME, not an index.** An index is positional in
+    the dataset's `feature_columns`, and those differ per table — `close_adjust` is
+    index 0 on the VCB `basic` dataset and need not be on any other. A config that
+    pinned `0` would keep running against a different table and silently
+    autoregress on whatever column happened to land first. A name is resolved against
+    `metadata.json`'s `feature_columns` and **raises** when absent.
     """
 
+    needs_dataset = True
+
     def __init__(self, n_features: int, lookback: int, order: int = 5,
-                 target_channel: int = 0, alpha: float = 1.0):
+                 target_channel="close_adjust", alpha: float = 1.0):
         if not 1 <= order <= lookback:
             raise ValueError(f"order must be in 1..{lookback}, got {order}")
-        if not 0 <= target_channel < n_features:
-            raise ValueError(
-                f"target_channel {target_channel} outside 0..{n_features - 1}"
-            )
+        self.n_features = int(n_features)
         self.order = int(order)
-        self.target_channel = int(target_channel)
+        self.target_channel = target_channel
         self.alpha = float(alpha)
         self.n_params = self.order + 1
+        self.channel_index_ = None
+        if isinstance(target_channel, int):
+            if not 0 <= target_channel < n_features:
+                raise ValueError(
+                    f"target_channel {target_channel} outside 0..{n_features - 1}"
+                )
+            self.channel_index_ = target_channel
+
+    def set_dataset(self, dataset) -> None:
+        if self.channel_index_ is not None:
+            return
+        columns = list(((dataset.meta or {}).get("features") or {}).get(
+            "feature_columns", []
+        ))
+        if self.target_channel not in columns:
+            raise ValueError(
+                f"target_channel {self.target_channel!r} is not a feature of "
+                f"{dataset.name}; it has {columns}. An AR baseline on the wrong "
+                f"column is not a baseline."
+            )
+        self.channel_index_ = columns.index(self.target_channel)
 
     def _design(self, X: np.ndarray) -> np.ndarray:
-        return X[:, -self.order:, self.target_channel]
+        if self.channel_index_ is None:
+            raise RuntimeError(
+                "target_channel was never resolved — set_dataset must run before fit."
+            )
+        return X[:, -self.order:, self.channel_index_]
 
     def fit(self, X, y):
         from sklearn.linear_model import Ridge

@@ -50,9 +50,11 @@ from typing import List, Optional, Sequence
 
 import pandas as pd
 
+from feature_selection import cross_sectional as cs
 from feature_selection import evaluation, outstanding, report, windows
+from feature_selection.cross_sectional import CrossSectionalSelector, read_universe_panel
 from feature_selection.selector import FeatureSelector
-from feature_selection.unified_reader import UnifiedSchemaReader
+from feature_selection.unified_reader import UnifiedSchemaReader, unified_schema_name
 
 # ⚠️ Identity and taxonomy columns are never candidates. On a single-ticker panel they
 # are constant and would be dropped anyway; naming them keeps that a decision rather
@@ -104,6 +106,8 @@ def run_selection(
     root: str = report.DEFAULT_REPORT_ROOT,
     notes: str = "",
     top: int = 30,
+    feature_normalize: str = "cs_rank",
+    min_ic_width: int = 5,
 ):
     """Read the panel, rank it, measure the bar, and archive one run folder.
 
@@ -116,30 +120,77 @@ def run_selection(
     if TARGETS_TABLE not in pools:
         pools = pools + [TARGETS_TABLE]
 
-    started = time.time()
-    with UnifiedSchemaReader(ticker) as reader:
-        panel = reader.join(pools)
-        join_log = reader.join_log
-        schema_name, database = reader.schema, reader.database
+    # ⚠️ **THE TARGET DECIDES THE PROCEDURE, not a flag.** A `cs_` prefix marks a
+    # CROSS-SECTIONAL target — a rank within a date across the schema's universe — and
+    # that changes the panel reader, the selector, the CV (sessions, not rows) and the
+    # null (whole dates, not rows). Inferring it from the target name is what stops a
+    # 20-ticker panel being run through the single-series path, which would pool
+    # cross-sectional with time-series variation and count 20 banks on a date as 20
+    # observations (issue **PNL-1**, at the selection stage instead of the scoring one).
+    cross = target.startswith("cs_")
 
+    started = time.time()
+    if cross:
+        # `read_universe_panel` joins `pool__basic ⋈ pool__targets` in SQL and adds the
+        # `cs_rank_{h}day` columns. ⚠️ It reads those two pools ONLY, so a
+        # cross-sectional run is `pool__basic`-scoped by construction; `--pools` is
+        # accepted and recorded but cannot widen it.
+        if set(pools) - {"pool__basic", TARGETS_TABLE}:
+            raise ValueError(
+                f"a cross-sectional target reads pool__basic ⋈ {TARGETS_TABLE} only; "
+                f"got pools={pools}. Widening needs read_universe_panel to join more."
+            )
+        panel = read_universe_panel(
+            horizons=(horizon,), min_width=min_ic_width, schema_ticker=ticker
+        )
+        schema_name = unified_schema_name(ticker)
+        with UnifiedSchemaReader(ticker) as reader:
+            database = reader.database
+        join_log = [
+            {
+                "table": TARGETS_TABLE,
+                "join_keys": "date, exchange, ticker",
+                "how": "inner",
+                "note": "read_universe_panel, server-side; cs_rank_* derived after",
+            }
+        ]
+    else:
+        with UnifiedSchemaReader(ticker) as reader:
+            panel = reader.join(pools)
+            join_log = reader.join_log
+            schema_name, database = reader.schema, reader.database
+
+    n_tickers = panel["ticker"].nunique() if "ticker" in panel.columns else 1
     print(
         f"{schema_name}: {panel.shape[0]:,} rows x {panel.shape[1]} columns "
-        f"({panel['date'].min():%Y-%m-%d} -> {panel['date'].max():%Y-%m-%d})"
+        f"({panel['date'].min():%Y-%m-%d} -> {panel['date'].max():%Y-%m-%d}), "
+        f"{n_tickers} ticker(s), grain={'panel' if cross else 'series'}"
     )
     if target not in panel.columns:
         raise ValueError(f"target {target!r} is not in the joined panel.")
+    if cross and n_tickers < 2:
+        raise ValueError(
+            f"target {target!r} is cross-sectional but the panel holds {n_tickers} "
+            f"ticker(s). A rank within a date needs a cross-section to rank across."
+        )
 
     exclude = IDENTITY + [c for c in ALL_TARGETS if c != target]
 
     def build(frame: pd.DataFrame, holdout: Optional[str]) -> FeatureSelector:
-        """One `FeatureSelector`, built the same way for the run and for every draw.
+        """One selector, built the same way for the run and for every draw.
 
         ⚠️ The null must be the SAME procedure as the thing it judges, or the bar is
         measuring a different pipeline (CONTEXT §9d). The only differences permitted
         are `stability` (a diagnostic, not part of the score) and the holdout, which
         the draws do not score.
+
+        ⚠️ `CrossSectionalSelector` RE-IMPLEMENTS NO RANKER — it overrides six hooks on
+        `FeatureSelector` and inherits the six rankers, the ensemble, the correlation
+        prune and the holdout protocol unchanged. That is deliberate: the two studies
+        have to be the same procedure on differently-shaped panels, or §9's numbers
+        cannot be set beside §6's.
         """
-        return FeatureSelector(
+        common = dict(
             panel=frame,
             target=target,
             exclude=exclude,
@@ -155,6 +206,14 @@ def run_selection(
             random_state=random_state,
             holdout_start=holdout,
         )
+        if cross:
+            # ⚠️ `min_train` and `n_splits` count SESSIONS here, not rows.
+            return CrossSectionalSelector(
+                feature_normalize=feature_normalize,
+                min_ic_width=min_ic_width,
+                **common,
+            )
+        return FeatureSelector(**common)
 
     selector = build(panel, holdout_start)
     result = selector.run(stability=stability)
@@ -174,7 +233,7 @@ def run_selection(
     null = None
     if null_draws > 0:
         print(f"null: {null_draws} block-shuffled draws, selection re-run inside each...")
-        null = evaluation.null_distribution(
+        common = dict(
             panel=panel,
             target=target,
             factory=lambda frame: build(frame, None).run(stability=False),
@@ -185,6 +244,29 @@ def run_selection(
             seed=NULL_SEED,
             label=f"{schema_name} / {target}",
         )
+        # ⚠️ **A PANEL NEEDS A PANEL-AWARE SHUFFLE.** `evaluation.block_shuffle` permutes
+        # ROWS, which on an N × T panel tears each date's cross-section apart and
+        # destroys the very structure the target is computed within — the null then
+        # measures a different procedure and comes out far too easy.
+        # `cross_sectional_null`'s `date_block` mode pivots the label to `date × ticker`
+        # and permutes blocks of DATES, so each stock keeps its own labels and the
+        # autocorrelation survives (§9d). It is also the conservative choice: on a
+        # ragged panel a draw loses rows, which biases toward a false positive.
+        try:
+            null = (cs.cross_sectional_null if cross else evaluation.null_distribution)(
+                **common
+            )
+        except Exception as error:  # noqa: BLE001 — see below
+            # ⚠️ **A FAILED NULL MUST NOT DISCARD THE OBSERVED RUN.** The report is
+            # written after the null because it embeds it, so anything raising here
+            # threw away a completed selection — measured twice on 2026-08-10, once on
+            # a `KeyError` in a summary f-string and once on a wrong function name, each
+            # costing the whole run. The selection is the expensive artefact; the null
+            # is an addition to it. An absent null is recorded as ABSENT, which is the
+            # rule §10 already states — `evidence=no_null`, never an implied pass.
+            print(f"WARNING: the null FAILED and was not computed: {error}")
+            print("WARNING: the report will record evidence=no_null. Re-run the null.")
+            null = None
     else:
         print("WARNING: --null-draws 0: this run will record that NO bar was computed.")
 
@@ -291,6 +373,19 @@ def main(argv: Optional[Sequence[str]] = None):
     )
     parser.add_argument("--notes", default="")
     parser.add_argument("--top", type=int, default=30, help="channels per figure")
+    # Cross-sectional only; ignored when the target has no `cs_` prefix.
+    parser.add_argument(
+        "--feature-normalize",
+        default="cs_rank",
+        choices=["none", "cs_rank"],
+        help="cross-sectional runs only: rank features within each date, or not",
+    )
+    parser.add_argument(
+        "--min-ic-width",
+        type=int,
+        default=5,
+        help="cross-sectional runs only: dates narrower than this contribute no IC",
+    )
     args = parser.parse_args(list(sys.argv[1:] if argv is None else argv))
 
     return run_selection(
@@ -312,6 +407,8 @@ def main(argv: Optional[Sequence[str]] = None):
         root=args.root,
         notes=args.notes,
         top=args.top,
+        feature_normalize=args.feature_normalize,
+        min_ic_width=args.min_ic_width,
     )
 
 

@@ -497,13 +497,38 @@ def build_all(
                     "created": False,
                     "rows": None,
                     "columns": None,
+                    # Set when an existing table is left alone because it is current.
+                    "skipped": "",
                 }
 
                 if apply:
+                    # ⚠️ **A TABLE THAT IS ALREADY CURRENT IS SKIPPED, NOT AN ERROR.**
+                    # A root holding several runs produces several plans, and the moment
+                    # a second experiment joined `reports/feature_selection_basic/` a
+                    # plain `--apply` raised on the FIRST table — which was finished and
+                    # correct — before reaching the new one. That made the flag unusable
+                    # for adding a table to an existing root. "Current" means the live
+                    # table's stored fingerprint equals what this plan would build, the
+                    # same test `pipeline.status_final_features` makes (issue STL-1); a
+                    # table that exists and does NOT match is still a hard error, because
+                    # rebuilding it drops it and orphans every dataset below (§7).
                     if plan.table in existing and not replace:
+                        with reader.driver._cursor_ctx() as cur:
+                            cur.execute(
+                                "SELECT obj_description(%s::regclass)",
+                                (f"{schema}.{plan.table}",),
+                            )
+                            found = cur.fetchone()
+                        stored = fingerprint_of_comment(found[0] if found else "")
+                        if stored == plan.fingerprint:
+                            row["skipped"] = "current — fingerprint matches"
+                            results.append(row)
+                            continue
                         raise ValueError(
-                            f"{schema}.{plan.table} already exists. Pass --replace to "
-                            f"drop and rebuild it — this DESTROYS the existing table."
+                            f"{schema}.{plan.table} already exists and its fingerprint "
+                            f"{stored} != this plan's {plan.fingerprint}. Pass --replace "
+                            f"to drop and rebuild it — this DESTROYS the existing table "
+                            f"and every dataset hash below it."
                         )
                     with reader.driver._cursor_ctx() as cur:
                         if plan.table in existing and replace:

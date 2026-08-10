@@ -1,0 +1,27 @@
+# Tier-1 baseline: the constant 0 return - the incumbent every run reports itself against
+#
+# Fitted on the TRAIN split only, scored by the SAME code as every other model
+# (model/common/engine.py estimator path), against the same 200-draw block-shuffled
+# null. WARNING: this dataset is a PANEL - result_evaluator detects the ticker column
+# and scores per DATE, so n_eff is n_dates/h, not n_rows/h (issue PNL-1).
+#
+# WARNING: `lookback` and `n_features` are ASSERTIONS, not settings. WARNING: the
+# filename must equal `run_name` (model/CONTEXT.md RUN STANDARD).
+
+run_name: baseline_zero__bank__rank_5day__final__d20_h5__basic
+dataset: bank__rank_5day__final__d20_h5__basic__tr70_val15_test15__std
+task: regression
+
+lookback: 20
+n_features: 10
+dataset_hash: 47eb7133b9349762
+
+model:
+  type: BASELINE
+  kind: zero
+
+# No `train:` block - there is no training loop.
+null_draws: 200
+
+seed: 42
+device: cpu

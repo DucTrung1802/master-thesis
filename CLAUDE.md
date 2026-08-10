@@ -52,6 +52,7 @@ observed IC barely moves; the noise floor collapses.**
 |---|---|---|---|---|---|---|
 | VCB | 1 | ~1.0 | +0.0559 | +0.0556 | +1.56 | ❌ |
 | BANK (GICS 401010) | 20 | 0.244 | +0.0087 | +0.0249 | +0.11 | ❌ |
+| **BANK re-measured 2026-08-10** | **20** | **0.230–0.280** | **−0.0106** | **+0.0216** | **−1.71** | ❌ **below its null's MEAN** |
 | VN30 | 30 | 0.205 | +0.0233 | +0.0248 | +1.42 | ❌ |
 | **VN100** | **100** | 0.130 | +0.0289 | +0.0117 | **+6.09** | ✅ |
 | **LIQUID301** | **301** | — | +0.0768 | +0.0245 | **+18.45** | ✅ |
@@ -332,6 +333,27 @@ on the same design a 25-parameter ridge does best on. `model/CONTEXT.md` §14–
 
 ⚠️ **Nothing here changes §2 and everything strengthens it.** Six model families
 spanning 0 to 276k parameters all land inside their own nulls.
+
+### 5d. The BANK panel, re-scraped and re-run 2026-08-10
+
+All 20 banks refreshed to 2026-08-07 (`pool__basic` 53,921 → **54,528 rows**), so the
+panel has one uniform as-of date. Dataset **27,348 / 12,629 / 13,135 × 20 × 10**, scored
+at **panel grain** — `n_eff = n_dates/h` = **131.6**, which is FEWER independent
+observations than VCB's 128-per-640-rows, not more.
+
+**Selection: `z = −1.71`, observed −0.0106 BELOW its null's mean of +0.0052.** Decisive
+fail, and §13d's reading stands — a sector co-moves, so there is less to rank.
+
+| baseline | params | daily-IC t | evaluator says |
+|---|---|---|---|
+| `BASELINE_AR` | 6 | **+0.23** | ⚠️ "clears" `ic` at p=0.005, **against a NEGATIVE bar** |
+| `BASELINE_RIDGE_STATS` | 61 | **+1.15** | ❌ fails (p=0.254) — the highest t on the panel |
+| `BASELINE_RIDGE_FLAT` | 201 | +0.77 | ❌ fails |
+
+⚠️ **NEW ISSUE NUL-3: the evaluator's panel null is not label-neutral.** Its centre moved
+with the MODEL (−0.0171 / +0.0076 / +0.0109) and it got both ends wrong — manufacturing a
+clear for the weakest model and failing the strongest. **On a panel, quote the daily-IC
+t-stat, not `ic_clears`.** `model/CONTEXT.md` §16.
 
 ⚠️ **The selection cleared its bar; the model did not clear its own.** `z = +2.15` bought
 nothing downstream — which is the two bars working, and the most useful thing the run

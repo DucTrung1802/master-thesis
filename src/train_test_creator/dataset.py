@@ -268,6 +268,7 @@ class TrainTestCreator:
         scale_target: bool = True,
         on_untrainable: str = "drop",
         purge: bool = True,
+        report_root: Optional[str] = None,
         output_root: str = DEFAULT_OUTPUT_ROOT,
     ):
         if not 0 < train_ratio < 1 or not 0 < val_ratio < 1:
@@ -290,6 +291,14 @@ class TrainTestCreator:
         self.purge = purge
         self.output_root = output_root
         self.scaler_tag = "std"
+        # ⚠️ **WHICH REPORT ROOT THE TABLE WAS BUILT FROM.** `selection()` reads the
+        # shortlists to learn what is a channel and what the channels were selected
+        # FOR, and a SCOPED table (`--root reports/feature_selection_basic --scope
+        # basic`) was built from shortlists that do not live in the default archive.
+        # Reading the default root then reports every one of that table's own channels
+        # as "in no current shortlist" — measured on the bank basic table, which came
+        # back with 6 false STALE columns immediately after being built from them.
+        self.report_root = report_root or DEFAULT_REPORT_ROOT
         # The column actually read. Resolved in `read()` against the table, because
         # a rank target names a table that stores what it is ranked FROM.
         self.stored_target = self.target
@@ -331,12 +340,13 @@ class TrainTestCreator:
 
     # -------------------------------------------------------------------- read
 
-    def selection(self, root: str = DEFAULT_REPORT_ROOT) -> pd.DataFrame:
+    def selection(self, root: Optional[str] = None) -> pd.DataFrame:
         """Every `outstanding.csv` row for this schema at this `(d, h)`.
 
         ⚠️ The shortlists are the record of what the table was built FROM, so they are
         read rather than guessed at. `final_features` groups on the same three keys.
         """
+        root = root or self.report_root
         frames = []
         for name in sorted(os.listdir(root)):
             path = os.path.join(root, name, OUTSTANDING_FILENAME)
@@ -874,6 +884,9 @@ def main(argv: Optional[Sequence[str]] = None) -> WindowedDataset:
         train_ratio=float(option("--train", "0.70")),
         val_ratio=float(option("--val", "0.15")),
         purge="--no-purge" not in argv,
+        # ⚠️ Must match the `--root` the table was BUILT with, or every one of its own
+        # channels reports as "in no current shortlist". See `TrainTestCreator.__init__`.
+        report_root=option("--root", None),
     )
 
     print(f"{'=' * 78}\n{creator.schema_table}")

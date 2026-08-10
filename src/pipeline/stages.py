@@ -460,10 +460,11 @@ def apply_final_features(
 # ----------------------------------------------------------- 3. train_test_creator
 
 
-def status_dataset(ticker: str = DEFAULT_TICKER, table: str = DEFAULT_TABLE):
+def status_dataset(ticker: str = DEFAULT_TICKER, table: str = DEFAULT_TABLE,
+                   root: Optional[str] = DEFAULT_ROOT):
     from train_test_creator.dataset import TrainTestCreator
 
-    creator = TrainTestCreator(ticker=ticker, table=table)
+    creator = TrainTestCreator(ticker=ticker, table=table, report_root=root)
     directory = creator.output_dir()
     tensors = ["X_train.npy", "y_train.npy", "X_test.npy", "y_test.npy"]
     present = os.path.isdir(directory) and all(
@@ -489,10 +490,11 @@ def status_dataset(ticker: str = DEFAULT_TICKER, table: str = DEFAULT_TABLE):
     )
 
 
-def apply_dataset(ticker: str = DEFAULT_TICKER, table: str = DEFAULT_TABLE) -> None:
+def apply_dataset(ticker: str = DEFAULT_TICKER, table: str = DEFAULT_TABLE,
+                  root: Optional[str] = DEFAULT_ROOT) -> None:
     from train_test_creator.dataset import TrainTestCreator
 
-    creator = TrainTestCreator(ticker=ticker, table=table)
+    creator = TrainTestCreator(ticker=ticker, table=table, report_root=root)
     creator.save(creator.build(), replace=True)
 
 
@@ -659,8 +661,8 @@ def stages(
         Stage(
             "train_test_creator",
             "purge, impute, scale and window the table into tensors",
-            lambda: status_dataset(ticker, table),
-            lambda: apply_dataset(ticker, table),
+            lambda: status_dataset(ticker, table, root),
+            lambda: apply_dataset(ticker, table, root),
         ),
         Stage(
             "model",

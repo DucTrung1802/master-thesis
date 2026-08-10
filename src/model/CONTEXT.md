@@ -639,6 +639,59 @@ closest thing on the leaderboard to the selection's own `+0.0783`, reached
 independently, and it is the strongest single number any model here has produced.
 **It is still 0.64 window-SE from zero, and it still cannot predict a magnitude.**
 
+## 16. ⚠️ THE BANK PANEL — TIER 1 AT PANEL GRAIN, AND A NULL THAT LIES (2026-08-10)
+
+The data was extended to `unified_schema_bank` — all **20 banks re-scraped** to
+2026-08-07, so the panel has one uniform as-of date instead of VCB running 31 sessions
+ahead of the other 19. `pool__basic` went **53,921 → 54,528 rows**.
+
+| | VCB (series) | **BANK (panel)** |
+|---|---|---|
+| dataset | 2,939 / 615 / 640 × 20 × **4** | **27,348 / 12,629 / 13,135 × 20 × 10** |
+| test rows / dates / tickers | 640 / — / 1 | 13,135 / **658** / **20** |
+| `n_eff` | 128 (`n/h`) | **131.6** (`n_dates/h`) |
+| selection | +0.0783 vs bar +0.0562, **z = +2.15** | **−0.0106** vs bar +0.0216, **z = −1.71** ❌ |
+
+⚠️ **THE SELECTION FAILED DECISIVELY, AND ITS OBSERVED IC IS BELOW ITS NULL'S MEAN**
+(−0.0106 against +0.0052) — the same signature `pool__fa` showed at z = −0.25. Twenty
+names is far below the ~100 the width ladder puts the threshold at, and §13d's reading
+stands: **a sector CO-MOVES, so there is less to rank.**
+
+### 16a. The five baselines, and why `ic_clears` must be ignored here
+
+| model | params | test IC | evaluator bar | p | `clears` | **daily-IC t** | days + |
+|---|---|---|---|---|---|---|---|
+| `BASELINE_ZERO` | 0 | — | — | — | — | — | — |
+| `BASELINE_MEAN` | 1 | — | — | — | — | — | — |
+| `BASELINE_AR` | 6 | +0.0056 | **−0.0059** | 0.005 | ⚠️ **YES** | **+0.23** | 51.4% |
+| `BASELINE_RIDGE_STATS` | 61 | **+0.0230** | +0.0383 | 0.254 | ❌ | **+1.15** | 54.6% |
+| `BASELINE_RIDGE_FLAT` | 201 | +0.0156 | +0.0307 | 0.249 | ❌ | +0.77 | 53.6% |
+
+⚠️ **THE EVALUATOR'S PANEL NULL GOT BOTH ENDS WRONG** (issue **NUL-3**). It reported
+`BASELINE_AR` as clearing `ic` **against a NEGATIVE p95 bar of −0.0059**, at `p = 0.005`
+— for a model whose honest daily-IC t-stat is **+0.23**. And it FAILED
+`BASELINE_RIDGE_STATS`, the highest t on the panel. The null's centre moved with the
+MODEL — −0.0171 for AR, +0.0076 for ridge_flat, +0.0109 for ridge_stats — which a
+label-shuffle against a fixed score vector must not do. AR predicts from `close_adjust`,
+a price LEVEL that is near-static per ticker, so its score is close to "which bank is
+this" and the shuffle interacts with it.
+
+**On a panel, quote the daily-IC t-stat. Nothing here reaches |t| = 1.2.**
+
+⚠️ **`sqrt(n_days)` IS THE WRONG DENOMINATOR AND IT NEARLY DOUBLES EVERY t.** At `h=5`
+consecutive daily ICs share four of their five label days, so the independent count is
+`n_dates/h` = **131.6**, not 658 (§5 rule 7). Computed naively, `ridge_stats` reads
+**t = +2.56**; correctly, **+1.15**. The first number was on screen before the second.
+
+⚠️ **The daily-IC sd cross-checks the width ladder.** 0.230–0.280 measured here against
+§13's **0.244** for the same 20-name universe, and `1/√N` predicts ~0.22 from VN100's
+0.130. The panel is behaving exactly as the ladder says; there is simply nothing to rank.
+
+⚠️ **`close_adjust` is index 2 on this dataset, not 0.** The VCB `ar` config pinned
+`target_channel: 0`; had that carried over, the bank AR baseline would have silently
+autoregressed on `avg_vol_per_buy_order`. `ARPredictor` now resolves by NAME and raises
+on an unknown one.
+
 ## 12. Gotchas
 
 - ⚠️ **A baseline in the SCALED space is not the baseline you meant.** Every estimator
