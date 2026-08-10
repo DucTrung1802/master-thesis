@@ -109,8 +109,8 @@
 > Handoff notes. **Status (2026-08-05): ✅ PHASE 5 IS DONE — THERE IS NO LONGER A SECOND
 > WAY TO RUN ANYTHING.** `src/main.py`, `DataPreprocessor.ingest_{bronze,silver,gold}_data`,
 > `_run_layer` and all 41 `data_quality_*` switch keys were **deleted on 2026-08-05**, and
-> `src/data_postprocessor/` with them. **74 assets** (19 landing + 20 bronze + 20 silver +
-> 10 gold + 5 unified), every DB table in the four schemas covered. Selection IS the run
+> `src/data_postprocessor/` with them. **75 assets** (19 landing + 20 bronze + 20 silver +
+> 10 gold + 5 unified + 1 analysis), every DB table in the four schemas covered. Selection IS the run
 > plan, and now it is the only one. Verify anything before acting on it: the code is the
 > source of truth.
 >
@@ -126,7 +126,7 @@
 > ```
 > src/orchestration/
 >   definitions.py  resources.py  _bootstrap.py  enabled.py  config.json
->   assets/         scrape · bronze · silver · gold · unified   ← the 74 assets
+>   assets/         scrape · bronze · silver · gold · unified · selection  ← the 75 assets
 >   preprocessor/   preprocessor.py + CONTEXT.md                ← the transform library
 > ```
 >
@@ -178,7 +178,7 @@ PARTITIONS of two assets, not 320 assets. The remaining 61 map to ~55-65 assets.
 
 ## 2. What exists — LANDING + BRONZE complete, silver started (2026-08-01)
 
-**74 assets: 19 landing + 20 bronze + 20 silver + 10 gold + 5 unified.** Every scraper
+**75 assets: 19 landing + 20 bronze + 20 silver + 10 gold + 5 unified + 1 analysis.** Every scraper
 lands to `raw_data/` as an asset ([assets/scrape.py](assets/scrape.py)); every
 bronze ingest leaf is an asset ([assets/bronze.py](assets/bronze.py), 20 leaves → 25
 tables); silver has twenty ([assets/silver.py](assets/silver.py)), gold ten
@@ -448,7 +448,7 @@ split across the two modules.
 
 | claim | how it was checked | result |
 |---|---|---|
-| the flat `src/` layout can be imported by Dagster | `dagster definitions validate` | passes, **74 assets** (19 landing + 20 bronze + 20 silver + 10 gold + 5 unified), all code locations OK |
+| the flat `src/` layout can be imported by Dagster | `dagster definitions validate` | passes, **75 assets** (19 landing + 20 bronze + 20 silver + 10 gold + 5 unified + 1 analysis), all code locations OK |
 | partitions resolve | reading the definitions back | TV **9**, pdfs **100**, financials **2** (`HOSE_VCB`, `HOSE_ACB`) |
 | the index scrape assets run | `--select "group:cafef_index"` | 4/4 green |
 | the TradingView path works incl. `build_unblocked` | `--select "raw/trading_view_collected_links"` | green, rewrote `all_links_2026-06-26.csv` (313 KB) |
@@ -843,7 +843,7 @@ this for "must never load in this repo".
 }
 ```
 
-All 74 assets are listed in the file as a menu, grouped by the asset's own Dagster group
+All 75 assets are listed in the file as a menu, grouped by the asset's own Dagster group
 (trading_view, cafef, cafef_index, cafef_filings, simplize, gics, bronze, silver, gold,
 unified), with `//` comment keys
 marking the expensive ones (same comment convention as `switch_config.json`).
@@ -853,7 +853,7 @@ default the change was made to remove.
 
 ### ⚠️ Everything is ON as of 2026-08-06, and that is the intended resting state
 
-**All 74 assets and every partition are `true`.** The file spent 2026-08-05 with one
+**All 75 assets and every partition are `true`.** The file spent 2026-08-05 with one
 group and one partition enabled, which is a fine way to keep a specific run honest and a
 bad way to leave a repo: the UI showed one asset, and "which module do I want today" had
 no answer without a config edit first. Level 1 is the lever — *selection is the run
@@ -924,7 +924,7 @@ Behaviour, all verified:
 | **every partition of one owner `false`** | **raises** — zero partitions is unmaterialisable; disable the ASSET instead |
 | **`--partition stocks` when `@stocks` is false** | `DagsterUnknownPartitionError`, before any work |
 | malformed JSON | **raises** — never read as "disable everything" |
-| file absent | all 74 assets, all partitions — absent means "no opinion", not "all off" |
+| file absent | all 75 assets, all partitions — absent means "no opinion", not "all off" |
 | file with a **BOM** | handled (`utf-8-sig`) |
 
 The last three are direct lessons from `switch_config.json`:
@@ -967,7 +967,7 @@ RUN_SUCCESS
 ```
 
 **Sanity check without running anything:** `dagster definitions validate` (it should
-report 74 assets and "All code locations passed validation").
+report 75 assets and "All code locations passed validation").
 
 ### ✅ Phase 1a — the whole BRONZE layer, 20 assets (2026-08-01)
 
@@ -1881,7 +1881,7 @@ return to sequential execution.
   already exists in `src/`. This is what made the migration incremental rather than a
   rewrite. ⚠️ **The corollary is now load-bearing: `src/data_preprocessor` CANNOT be
   deleted.** Since `main.py` went, this package is the only caller of those methods —
-  but it is still only the *caller*. Deleting `data_preprocessor` would leave 74 assets
+  but it is still only the *caller*. Deleting `data_preprocessor` would leave 75 assets
   wrapping nothing. Making orchestration self-contained means MOVING ~6,200 lines into
   it, not removing a directory.
 - **Assets are generated from a spec table**, not copy-pasted — `TABS` in
@@ -2135,3 +2135,38 @@ silver leaves that were never separate tables and the two unified universes
   they stayed outside Dagster. ⚠️ **Both were DELETED on 2026-08-10** (1.9 GB); nothing in
   `src/` is affected, but re-running experiment 8 or 9 now needs a venv rebuild — the
   recipe is in each experiment's own README.
+
+---
+
+## The `analysis` group — the fifth layer writes no table (2026-08-10)
+
+[assets/selection.py](assets/selection.py), **one asset**:
+`analysis/feature_selection_economy`, partitioned by **COUNTRY (19 keys)**. It runs
+`feature_selection.run.run_selection` over `pool__basic + pool__economy_<country>` and
+archives a folder under `reports/`.
+
+⚠️ **It is the only asset in this code location that writes no database table.**
+`feature_selection` is read-only by package design (CLAUDE.md §8) and `final_features`
+is the one stage that writes, so the "output" this asset is checked against is a run
+folder on disk. Nothing about the Dagster graph changes: it still declares its upstreams
+(`unified/pool__basic`, `pool__targets`, `pool__economy`) and still fails the run when it
+fails.
+
+⚠️ **THE PARTITION KEYS ARE DERIVED, NOT DECLARED.** They come from
+`parameters.trading_view.economy` — the same tree that decides which countries get
+scraped — so a country enabled for the scrape is a country you can select over, and the
+two cannot drift. That is why the partition owner is deliberately absent from the
+`partitions` section: listing it would be the second hard-coded copy `enabled.py` exists
+to prevent. (`raw/cafef_pdfs` is absent for the related reason: 100 lines of `true`
+bury the settings that matter.)
+
+⚠️ **Two guards, both of which fire on real conditions rather than hypotheses.** The
+country pool must share `pool__basic`'s calendar — an INNER join makes a stale macro pool
+silently truncate the study window, and on 2026-08-10 all 19 VCB economy pools were 31
+sessions behind. And the cost estimate must fit `budget_minutes` — the curve is fitted to
+this repo's own archived timings and is quadratic in channels, so `usa` at 1,458 channels
+is 7.2 h with no null and 6.3 days at the default 20 draws.
+
+**The depth, the config knobs and the exact commands are
+[feature_selection/CONTEXT.md §15](../feature_selection/CONTEXT.md).** Do not duplicate
+them here; this section exists so the group is discoverable from the orchestration side.

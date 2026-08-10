@@ -1878,3 +1878,228 @@ rows still sit in runs that failed or never computed the second one.
 
 ⚠️ **`FeatureSelector(max_features=...)` now defaults to `None`** — uncapped. Pass an
 integer only to reproduce an archived run.
+
+⚠️ **THE LAST LIVE `12` WENT ON 2026-08-10.** `run_selection`, the `--max-features` CLI
+flag and `FeatureSelector` had all defaulted to `None` since STL-1, but
+`RUN__feature_importance_report.ipynb` still opened with `MAX_FEATURES = 12` — the one
+path where re-running the notebook would silently re-impose the cap. It is `None` now.
+The four `study_*.ipynb` notebooks keep theirs (12, 12, 12, 15): they are finished
+write-ups of runs that WERE capped, and editing them would falsify the record they
+exist to hold (CLAUDE.md §8). **`test_cross_sectional.py` passes `max_features=2` on
+purpose** — it exercises the optional cap, and `test_selection_cut.py` exercises the
+`dropped_for` truncation the cap used to cause. Neither is a default.
+
+⚠️ **The first archived runs with `"max_features": null` are the two under
+`reports/feature_selection_basic/` (2026-08-10)** — `vcb__basic` (27 ch → 14 kept, null
+z = +2.15, clears) and `bank__basic__cs_rank_5day` (27 ch → 14 kept, null z = −1.71,
+fails). Every run under `reports/feature_selection/` predates the change and records
+`12`; that number described their `kept` column and never their `outstanding.csv`.
+
+---
+
+## 15. ⚠️ RUNNING THE COUNTRY SWEEP FROM DAGSTER (2026-08-10)
+
+`analysis/feature_selection_economy` — `src/orchestration/assets/selection.py`, **one
+asset partitioned by COUNTRY (19 keys)**. It runs `run_selection` on `pool__basic +
+pool__economy_<country>` and archives a run folder. It is the only asset in the code
+location that **writes no database table**: this package is read-only by design, so the
+output is `reports/feature_selection/<run_id>/` and `final_features` reads it later.
+
+**This exists because the 18 hand-launched country runs record what launching by hand
+costs.** `taiwan_china` was never run at all; all 18 used `--null-draws 0` so all 18
+carry `evidence=no_null`; and all 18 read pools that had fallen 31 sessions behind
+`pool__basic` with nothing raising. A partition set, a default and an assertion.
+
+### 15a. ▶️ STEP BY STEP IN THE UI (Dagster 1.13.15, `localhost:3000`)
+
+**Start it.** One shell, and `DAGSTER_HOME` **must be absolute and must be set** or the
+UI comes up against a throwaway temp instance with none of your run history:
+
+```powershell
+.\mt_env\Scripts\Activate.ps1
+$env:DAGSTER_HOME = "D:\GIT\master-thesis\.dagster"
+Clear-Content logs\app.log
+dagster dev                                  # then open http://localhost:3000
+```
+
+---
+
+**STEP 1 — refresh the macro pools. ⚠️ Do not skip this; every country partition
+raises until you do.**
+
+1. **Assets** in the top nav → search box → type `pool__economy`.
+2. Click **`unified/pool__economy`** to open the asset page.
+3. **Materialize** (top right). Because the asset is partitioned, a dialog opens.
+4. Choose partition **`VCB`** — a single partition, not the whole set.
+5. **Launch**. Seconds to a couple of minutes on VCB; it rewrites all 19 country tables
+   in one go.
+
+⚠️ **One asset, nineteen tables, one calendar.** You do not pick a country here — the
+pool asset moves all 19 together, which is exactly why step 2's guard can be a simple
+equality check. If you also want `BANK`, run it as a second materialization on the
+`BANK` partition; `ALL` is 2.4 M rows × 19 panels and is a different order of work.
+
+---
+
+**STEP 2 — one country, to prove the chain.**
+
+1. **Assets** → search `feature_selection_economy`.
+2. Click **`analysis/feature_selection_economy`**. The asset page shows a **19-box
+   partition strip** — every country grey/missing on a first run.
+3. **Materialize** → in the dialog pick **one** partition, e.g. `vietnam`.
+4. **Launch**. Watch it in **Runs**; the step logs print the panel shape, the estimate,
+   then the selection's own progress.
+5. When it finishes, open the run and read the **materialization metadata** on the asset
+   — `evidence`, `ic_mean`, `kept`, `kept_economy`, `report_path`, `actual_minutes`.
+
+⚠️ **Read `evidence`, not `ic_mean`.** It is written as a sentence for the reason §8
+gives: `no_null` prints as *"NO bar was computed; this is an unknown, not a pass"*, and
+a run whose null MAX reached the observed value says so in the same string. An `ic_mean`
+on its own is descriptive and this repo does not treat it as a result.
+
+---
+
+**STEP 3 — the sweep, as a backfill.**
+
+1. Same asset page → **Materialize**.
+2. In the partition dialog select **all** (or shift-click a range).
+3. Dagster switches the dialog to a **backfill** — confirm and launch.
+4. Follow it under **Overview → Backfills**, which lists one run per partition.
+
+⚠️ **THE BACKFILL RUNS ONE PARTITION AT A TIME, AND THAT IS A DELIBERATE SETTING.**
+`.dagster/dagster.yaml` sets `max_concurrent_runs: 1` on the `QueuedRunCoordinator` —
+written to stop a scrape backfill launching 16 Chrome instances. So budget **~15 h of
+wall clock for the 18 non-`usa` countries at 20 draws**, serialized. Raising it is
+defensible for THIS asset (there is no browser in it) but the setting is **global** and
+would apply to the next scrape backfill too, so change it back afterwards.
+
+⚠️ **`usa` WILL FAIL IN THE BACKFILL, ON PURPOSE, AND THE OTHER 18 CARRY ON.** A backfill
+launches every partition with the asset's DEFAULT config — there is no per-partition
+config box — so `usa` hits `budget_minutes=240` with an estimate of ~9,100 min and raises
+before doing any work. One red box in the strip is the correct outcome; see step 4.
+
+---
+
+**STEP 4 — `usa`, which needs a decision rather than a default.**
+
+1. Asset page → **Materialize**, pick `usa` alone.
+2. In the dialog, open the **config / launchpad** view (the option to edit run config
+   before launching) and paste **YAML** — the UI takes YAML, not the JSON the CLI takes:
+
+```yaml
+ops:
+  analysis__feature_selection_economy:
+    config:
+      null_draws: 0          # 7.2 h. At 20 draws this is 6.3 DAYS.
+      budget_minutes: 600
+```
+
+3. **Launch**.
+
+⚠️ **`null_draws: 0` buys the run and gives up the evidence.** It archives
+`evidence=no_null` — the same unknown all 18 hand-launched runs carry — so it answers
+"what does the selector pick on 1,458 channels" and nothing about whether that means
+anything. If you want `usa` with a bar, the honest options are fewer draws with the
+`1/(n+1)` p-floor stated (§10d), or leaving `usa` out of the sweep and saying so.
+
+---
+
+### 15a-cli. The same four steps from PowerShell
+
+```powershell
+.\mt_env\Scripts\Activate.ps1
+$env:DAGSTER_HOME = "D:\GIT\master-thesis\.dagster"
+
+# 1. ⚠️ THE POOLS FIRST — see 15b. Without this every partition raises.
+dagster asset materialize -f src/orchestration/definitions.py `
+  --select "unified/pool__economy" --partition VCB
+
+# 2. one country, defaults (20-draw null)
+dagster asset materialize -f src/orchestration/definitions.py `
+  --select "analysis/feature_selection_economy" --partition vietnam
+
+# 3. the sweep — no `--partition` loop is needed from the UI; from here, one call each.
+
+# 4. usa. ⚠️ The CLI takes JSON here; the UI launchpad takes YAML. Same keys.
+dagster asset materialize -f src/orchestration/definitions.py `
+  --select "analysis/feature_selection_economy" --partition usa `
+  --config-json '{"ops":{"analysis__feature_selection_economy":{"config":{"null_draws":0,"budget_minutes":600}}}}'
+```
+
+Config knobs (`EconomySelectionConfig`): `universe` (default `VCB`), `target`
+(`return_5day`), `lookback`/`horizon` (20/5), `null_draws` (**20**), `device`,
+`stability`, `holdout_start`, `root`, `budget_minutes` (240), `notes`.
+**`max_features` is not offered** — the measured cut is the only width rule (§14c).
+
+⚠️ **The op name in config is `analysis__feature_selection_economy`** — the asset key
+with `/` replaced by `__`. Config addressed to an op that is not in the run is an ERROR
+in Dagster, so a typo here fails the launch rather than being ignored.
+
+### 15a-after. When the sweep finishes
+
+`run_selection` already writes each run's `outstanding.csv`, so there is no second
+command to remember. To see the sweep as one table:
+
+```powershell
+python -m feature_selection.outstanding      # re-derives every shortlist under the root
+python -m pipeline                           # what is now stale downstream; writes nothing
+```
+
+⚠️ **Do NOT let a country sweep widen the default `final_features` group.**
+`plan_from_reports` keys on `(schema, target, setup)` with **no term for which pools**,
+so 19 new `d20_h5` runs land in the same group as everything else and silently widen
+`return_5day__final__d20_h5`. Use `--root` and `--scope` (`pipeline/CONTEXT.md` §5c), or
+set `root` in the asset config so the sweep archives somewhere of its own.
+
+### 15b. ⚠️ GUARD 1 — the country pool must share `pool__basic`'s calendar
+
+`UnifiedSchemaReader.join` is an INNER join, so a stale `pool__economy_<country>` does
+not fail: it **truncates the panel to its own last date** and the run reports the
+smaller row count as if it were the universe. Nothing in the archived folder can reveal
+this afterwards. Measured on the day the asset was written:
+
+```
+unified_schema_vcb.pool__economy_vietnam covers 2009-06-30..2026-06-25 (4,235 rows)
+but unified_schema_vcb.pool__basic       covers 2009-06-30..2026-08-07 (4,266).
+```
+
+That is a real 31-session silent truncation waiting for anyone who ran a country
+selection that day, and it is the reason step 1 above is step 1. **Re-materialising two
+pools leaves the other 21 siblings behind** (CLAUDE.md §5d) — `pool__economy` moves all
+19 countries in one asset, so materialise the asset, not a country.
+
+### 15c. ⚠️ GUARD 2 — the cost is quadratic in channels and linear in draws
+
+Fitted to this package's own archived `timings_seconds`: `united_kingdom` at 207
+channels took 8.7 min and `usa` at 1,458 took **428.4 min**, and
+`(1458/207)^k = 428.4/8.7` gives **k = 2.00**. So `minutes ≈ (channels/207)² × 8.7`,
+times `(1 + null_draws)` because a null re-runs the entire selection per draw. `lasso`
+and `permutation` are **98 %** of the `usa` run and neither has a GPU path.
+
+| | channels | no null | **20 draws** |
+|---|---|---|---|
+| `vietnam` | 113 | 3.7 min | 0.9 h |
+| `united_kingdom` | 207 | 8.7 min | 3.9 h |
+| **`usa`** | **1,458** | **7.2 h** | **⚠️ 6.3 days** |
+
+`budget_minutes=240` admits every country except `usa` with a full 20-draw null and
+raises on `usa`. ⚠️ **That raise is the feature.** Raise the budget for that one
+partition, or drop its draws — do not raise the default, which would restore exactly
+the "launch it and find out" the 428-minute run already paid for.
+
+### 15d. ⚠️ What the asset refuses, and what it still cannot tell you
+
+* **A `cs_` target raises.** `run_selection` takes the cross-sectional path on any `cs_`
+  target and that path reads `pool__basic ⋈ pool__targets` ONLY — the run would succeed
+  and the partition key would have had **no effect on it whatsoever**. Cross-sectional
+  work goes through `python -m feature_selection.run` on `pool__basic`.
+* **A missing or disabled universe raises** before any query.
+* ⚠️ **The asset reports `evidence`, never `clears_bar` alone.** `no_null` is printed as
+  *"NO bar was computed; this is an unknown, not a pass"*, and a run whose null MAX
+  reached the observed value is flagged in the same string (§8, CLAUDE.md §5 rules 2–3).
+* ⚠️ **NUL-1 IS NOT FIXED BY RUNNING 19 OF THESE.** Each partition's null prices in that
+  partition's own selection and nothing else. Nineteen countries is a search over
+  nineteen, and the archived sweep's best result — `usa`, IC +0.1448 — is also its
+  widest search at **8,747 design columns on 4,211 dev samples**. A per-run bar does not
+  make a max-over-19 legitimate; that needs a bar over the sweep, which nothing here
+  computes.

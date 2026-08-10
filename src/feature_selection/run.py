@@ -111,10 +111,17 @@ def run_selection(
 ):
     """Read the panel, rank it, measure the bar, and archive one run folder.
 
-    Returns the `report.write_report` result. `max_features=None` is the CURRENT default
-    and means the per-run measured cut (`selection_cut`) decides the width — the flat
-    `max_features=12` that every archived `metadata.json` still records has not
-    determined a shortlist since issue STL-1.
+    Returns the `report.write_report` result. `max_features=None` is the ONLY default
+    now and means the per-run measured cut (`selection_cut`) decides the width. The flat
+    `max_features=12` has not determined a shortlist since issue STL-1 and was removed
+    from the last live default (`RUN__feature_importance_report.ipynb`) on 2026-08-10.
+
+    ⚠️ **The 20 runs under `reports/feature_selection/` still RECORD `max_features: 12`
+    in their `metadata.json` and that number described their `kept` column, not their
+    shortlist.** Their `outstanding.csv` was regenerated under the measured cut and holds
+    10–236 channels. The two runs under `reports/feature_selection_basic/` (2026-08-10)
+    are the first archived uncapped ones and record `null`. Read the width off
+    `outstanding.csv`, never off `setup.max_features`.
     """
     pools = list(pools)
     if TARGETS_TABLE not in pools:

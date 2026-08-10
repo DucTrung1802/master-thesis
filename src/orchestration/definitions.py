@@ -21,6 +21,11 @@ Five layers, kept in separate modules on purpose:
   * `assets/unified.py` — `silver_schema` → `unified_schema_<ticker>` (2): ONE ticker,
                           cut into the feature groups a model selects over. The first
                           layer scoped to a single company rather than the universe.
+  * `assets/selection.py` — `unified_schema_<u>` → `reports/` (1, partitioned by
+                          COUNTRY): the feature selection over `pool__basic +
+                          pool__economy_<country>`. ⚠️ The only asset here that writes
+                          NO database table — `feature_selection` is read-only by
+                          package design, so its output is a run folder on disk.
 
 `src/main.py` is untouched and still runs the whole pipeline the old way.
 """
@@ -55,7 +60,7 @@ bootstrap()
 from utils.constants import SCRAPER_MAX_CONCURRENT_BROWSERS
 
 from orchestration import enabled
-from orchestration.assets import bronze, gold, scrape, silver, unified
+from orchestration.assets import bronze, gold, scrape, selection, silver, unified
 from orchestration.resources import PreprocessorResource, RepoLogger, SwitchConfig
 
 # ── Which assets are loaded — src/orchestration/config.json ───────────────────
@@ -225,6 +230,7 @@ defs = Definitions(
             *silver.assets,
             *gold.assets,
             *unified.assets,
+            *selection.assets,
         ]
     ),
     jobs=jobs,

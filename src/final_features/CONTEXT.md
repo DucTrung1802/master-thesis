@@ -164,11 +164,13 @@ STL-1). A *parameter* cannot do this job: the cut is measured per run, so the sa
 knobs on a re-run archive can legitimately produce a different set. Only the set is
 the fact.
 
-⚠️ **`max_features` was REMOVED from `SETUP_KEYS` (2026-08-09).** It is still `12` in
-every `metadata.json` and has not determined a shortlist since `selection_cut`
-replaced the fixed cap with a measured one — the same runs now keep 10 to 236
-channels. Grouping and naming on it recorded a number that was no longer true of
-anything. The parameters that DO determine the cut (`cut_fdr_q`,
+⚠️ **`max_features` was REMOVED from `SETUP_KEYS` (2026-08-09) and from the last live
+default on 2026-08-10.** It is `12` in the 20 `metadata.json` files under
+`reports/feature_selection/` and `null` in the two under
+`reports/feature_selection_basic/`, and in NEITHER case did it determine the
+shortlist — `selection_cut` replaced the fixed cap with a measured one and those same
+runs keep 10 to 236 channels. Grouping and naming on it recorded a number that was no
+longer true of anything. The parameters that DO determine the cut (`cut_fdr_q`,
 `cut_corr_threshold`) are stamped into `outstanding.csv` by
 `feature_selection.outstanding` and read from there.
 

@@ -21,7 +21,7 @@ to prove, which is mostly negative and deliberately so.
 | | |
 |---|---|
 | database | PostgreSQL `database_main_v2`, schemas `bronze_schema` / `silver_schema` / `gold_schema` / `unified_schema_<universe>`. Creds in repo `.env` (`POSTGRES_*`) |
-| orchestrator | **Dagster, 74 assets** — `src/orchestration/` is THE entry point |
+| orchestrator | **Dagster, 75 assets** — `src/orchestration/` is THE entry point |
 | universe | 781 VN tickers (HOSE/HNX/UPCOM); VCB is the single-name focus, VN30/VN100/LIQUID301/ALL/BANK the cross-sections |
 | model | LSTM (2×128, ~276k params) and **CNN** (`Conv1d` over time) + the chain in §3b. `model/common/engine.py` is the shared engine — a model package is a `model.py` + a ~30-line binding, **never a copy of `train.py`** |
 | interpreter | `mt_env` venv (`d:/GIT/master-thesis/mt_env`), Python 3.12.10, Windows, RTX 3050 4 GB |
@@ -92,7 +92,7 @@ Three things this ladder means:
 
 ## 3. The pipeline, end to end
 
-### 3a. Data — Dagster, 74 assets, `src/orchestration/`
+### 3a. Data — Dagster, 75 assets, `src/orchestration/`
 
 ```
 raw_data/<source>/            19 landing assets   scrapers: TradingView (universe+OHLCV,
@@ -110,7 +110,18 @@ gold_schema                   10 assets                 + features (TA battery ~
 unified_schema_<universe>      5 assets × 3 partitions  pool__basic / __targets /
                                                         __economy_<country>×19 / __ta / __fa
                               partitions: VCB | BANK | ALL
+      ▼
+reports/feature_selection/     1 asset × 19 partitions   analysis/feature_selection_economy
+                              partitions: the 19 countries — ⚠️ writes NO table
 ```
+
+⚠️ **The 75th asset writes no database table.** `analysis/feature_selection_economy`
+(2026-08-10) runs the selection over `pool__basic + pool__economy_<country>` and
+archives a run folder; `feature_selection` is read-only by design. It defaults to a
+**20-draw null** (the 18 hand-launched country runs all used 0) and **raises** both when
+the country pool is behind `pool__basic`'s calendar and when its fitted cost estimate
+exceeds `budget_minutes` — `usa` is 1,458 channels, 7.2 h with no null and **6.3 days**
+at 20 draws. `feature_selection/CONTEXT.md` §15.
 
 ### 3b. Model — SIX stages, each `python -m <pkg>`, dry-run by default
 
@@ -163,7 +174,7 @@ dagster dev                                             # UI at localhost:3000
 dagster asset materialize -f src/orchestration/definitions.py --select "group:bronze"
 dagster asset materialize -f src/orchestration/definitions.py --select "+bronze/trading_view_economy"
 dagster asset materialize -f src/orchestration/definitions.py --select "group:unified" --partition VCB
-dagster definitions validate                            # sanity check: 74 assets, no run
+dagster definitions validate                            # sanity check: 75 assets, no run
 
 # --- model chain ---
 python -m pipeline                                      # what's stale; writes nothing
@@ -172,7 +183,18 @@ python -m pipeline --ticker bank --table rank_5day__final__d20_h5 \
                    --config bank__rank_5day__final__d20_h5.yaml
 python -m result_evaluator                              # the leaderboard
 python -m result_evaluator --rescore                    # recompute every metric, no GPU
+
+# --- the country feature-selection sweep (Dagster, 19 partitions) ---
+# ⚠️ THE POOLS FIRST — the economy pools lag pool__basic and the join is INNER.
+dagster asset materialize -f src/orchestration/definitions.py `
+  --select "unified/pool__economy" --partition VCB
+dagster asset materialize -f src/orchestration/definitions.py `
+  --select "analysis/feature_selection_economy" --partition vietnam
 ```
+
+⚠️ **`usa` raises at the default budget and is meant to.** 1,458 channels is 7.2 h with
+no null and 6.3 days at 20 draws; override `budget_minutes` for that ONE partition
+rather than lowering the default. `feature_selection/CONTEXT.md` §15c.
 
 ⚠️ **NEVER `Materialize all` / `*` / a bare backfill.** With every partition live that
 takes `raw/cafef_pdfs` (100 tickers × ~1-1.7 GB), `raw/trading_view@stocks` (777 tickers,
@@ -422,7 +444,7 @@ is structurally weak, `DRF-1` 18 channels put 100% of test beyond 5 train-sigmas
 | [src/orchestration/CONTEXT.md](src/orchestration/CONTEXT.md) | 25k | touching Dagster, `config.json`, any asset, any bronze/silver/gold table, the browser budget, or a scrape |
 | [src/orchestration/preprocessor/CONTEXT.md](src/orchestration/preprocessor/CONTEXT.md) | 17k | changing HOW a table is built — the `_ingest_*` / `_helper_*` transform library the assets wrap |
 | [src/web_scraper/CONTEXT.md](src/web_scraper/CONTEXT.md) | 22k | touching a scraper, the PDF/OCR statement parser, or `raw_data/` layout |
-| [src/feature_selection/CONTEXT.md](src/feature_selection/CONTEXT.md) | 22k | running or reading a selection, or quoting any IC / null / bar number |
+| [src/feature_selection/CONTEXT.md](src/feature_selection/CONTEXT.md) | 25k | running or reading a selection, or quoting any IC / null / bar number. **§15a is the STEP-BY-STEP UI GUIDE** for the country sweep (§15a-cli is the same in PowerShell); §15b-§15d the two guards and the cost table; §14c is the measured cut that replaced `max_features=12` |
 | [src/final_features/CONTEXT.md](src/final_features/CONTEXT.md) | 3k | building or rebuilding a `__final__` table |
 | [src/train_test_creator/CONTEXT.md](src/train_test_creator/CONTEXT.md) | 3k | building a dataset, or asking about the purge/impute/scale/window steps |
 | **[src/model/CONTEXT.md](src/model/CONTEXT.md)** | **9k** | training, adding a model type, or quoting any run's numbers. **§1a is the RUN STANDARD** (naming/input/output, enforced); §7 the new-model recipe; **§13–§16 are today's results** — CNN, Tier 1, Tier 2, the bank panel; §10–§11 the older research log ⚠️ now a citation without its evidence (RPR-1) |

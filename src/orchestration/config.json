@@ -165,6 +165,13 @@
             "unified/pool__fa": true,
             "// unified/pool__economy": "All 19 gold.economy_<country> macro panels on pool__basic's trading-day spine; one unified pool table per country because the combined 3,784-series panel exceeds PostgreSQL's 1,600-column limit",
             "unified/pool__economy": true
+        },
+        "// ---- analysis ----": "ANALYSIS - unified_schema_<universe> -> reports/. The only group here that writes NO database table: feature_selection is read-only by package design, so its output is a run folder on disk that final_features later reads.",
+        "analysis": {
+            "// enabled": "ON. One asset, partitioned by COUNTRY (19 keys, read from parameters/trading_view/economy).",
+            "enabled": true,
+            "// analysis/feature_selection_economy": "One feature selection over pool__basic + pool__economy_<country>. Defaults to a 20-draw null and REFUSES to start if the country pool is behind pool__basic's calendar or if the fitted cost estimate exceeds budget_minutes. usa is ~1,458 channels and raises at the default budget - that is deliberate, see feature_selection/CONTEXT.md 14d.",
+            "analysis/feature_selection_economy": true
         }
     },
     "partitions": {
@@ -200,7 +207,8 @@
             "ALL": true,
             "BANK": true
         },
-        "// raw/cafef_pdfs": "100 ticker partitions from vn100.csv, NOT listed here - absent means enabled, and 100 lines of `true` would bury the settings that matter. Disable one with \"raw/cafef_pdfs\": {\"HOSE_VCB\": false}."
+        "// raw/cafef_pdfs": "100 ticker partitions from vn100.csv, NOT listed here - absent means enabled, and 100 lines of `true` would bury the settings that matter. Disable one with \"raw/cafef_pdfs\": {\"HOSE_VCB\": false}.",
+        "// analysis/feature_selection_economy": "19 COUNTRY partitions, NOT listed here for the same reason as raw/cafef_pdfs - and because the list is DERIVED from parameters/trading_view/economy, so listing it again is the drift enabled.py exists to stop. A country enabled for the scrape is a country you can select over. Disable one with \"analysis/feature_selection_economy\": {\"usa\": false} - but note that usa already refuses to run at the default budget_minutes, which is the guard you want rather than making it invisible."
     },
     "parameters": {
         "// WHAT THIS IS": "The TradingView SCRAPE PARAMETERS - which countries, sectors, brokers and categories each asset class enumerates. Moved here from src/switch_config.json on 2026-08-06; that file is DELETED and enabled.py raises if it comes back.",
