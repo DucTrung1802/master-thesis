@@ -543,12 +543,17 @@ def _model_train(config_path: str):
     field is a label a person edits; the directory is where the module that can build
     the architecture actually lives, and `engine.train` takes the model module itself.
     """
+    import importlib
+
     package = os.path.basename(os.path.dirname(os.path.dirname(config_path)))
-    if package == "cnn":
-        from model.cnn.train import train
-    else:
-        from model.lstm.train import train
-    return train
+    try:
+        module = importlib.import_module(f"model.{package}.train")
+    except ImportError as error:
+        raise ValueError(
+            f"config {config_path} sits under model/{package}/configs but "
+            f"model.{package}.train does not import: {error}"
+        ) from error
+    return module.train
 
 
 def status_model(config: str = DEFAULT_CONFIG):

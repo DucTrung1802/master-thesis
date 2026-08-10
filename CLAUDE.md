@@ -297,32 +297,41 @@ Six stages, network to scored metric, one ticker, one pool. `pool__basic` re-scr
 (`skip_existing=False`, VCB only, 3m24s) and rebuilt to **4,266 rows / 2026-08-07**, from
 4,235 / 2026-06-25.
 
-**Seven models, 0 to 4,961 parameters, on the identical dataset/splits/null:**
+**ELEVEN models, 0 to 4,961 parameters, identical dataset / splits / purge / null:**
 
-| model | params | test IC | test bar | test R² | RMSE |
-|---|---|---|---|---|---|
-| `BASELINE_ZERO` | **0** | — (constant) | — | −0.001 | **0.03721** ← the floor |
-| `BASELINE_AR` | 6 | +0.0557 | +0.0585 ❌ | −0.002 | 0.03723 |
-| **`BASELINE_RIDGE_STATS`** | **25** | **+0.1005** | +0.1247 ❌ | **−5.19** | 0.09252 |
-| `BASELINE_RIDGE_FLAT` | 81 | −0.0397 | +0.0785 ❌ | −3.26 | 0.07677 |
-| `CNN` | 3,745 | −0.0332 | +0.1107 ❌ | −0.008 | 0.03734 |
-| `LSTM` | 4,961 | −0.0345 | +0.1348 ❌ | −0.059 | 0.03826 |
-| *wide, 724 ch — LSTM* | ~276k | −0.0721 | +0.118 ❌ | −0.90 | — |
+| model | params | test IC | test bar | p | R² | RMSE |
+|---|---|---|---|---|---|---|
+| `BASELINE_ZERO` | **0** | — (constant) | — | — | −0.001 | **0.03721** ← the floor |
+| `BASELINE_AR` | 6 | +0.0557 | +0.0585 ❌ | 0.070 | −0.002 | 0.03723 |
+| `BASELINE_RIDGE_STATS` | 25 | +0.1005 | +0.1247 ❌ | 0.095 | −5.19 | 0.09252 |
+| `BASELINE_RIDGE_FLAT` | 81 | −0.0397 | +0.0785 ❌ | 0.577 | −3.26 | 0.07677 |
+| `MLP` | 257 | **−0.1001** | +0.0908 ❌ | 0.910 | −5.87 | 0.09751 |
+| `LSTM` (h=8) | 473 | **+0.0346** | +0.0956 ❌ | 0.249 | −0.111 | 0.03920 |
+| `GRU` | 1,105 | −0.0766 | +0.0786 ❌ | 0.726 | −0.031 | 0.03776 |
+| **`GBT`** | 1,319 | **+0.1263** | +0.1121 ⚠️ **✅** | **0.035** | −2.11 | 0.06562 |
+| `CNN` | 3,745 | −0.0332 | +0.1107 ❌ | 0.657 | −0.008 | 0.03734 |
+| `LSTM` (h=32) | 4,961 | −0.0345 | +0.1348 ❌ | 0.726 | −0.059 | 0.03826 |
+| *wide, 724 ch — LSTM* | ~276k | −0.0721 | +0.118 ❌ | 0.88 | −0.90 | — |
 
-⚠️ **THE SMALLEST FITTED MODELS ARE THE ONLY ONES WITH A POSITIVE TEST IC**, and a
-25-parameter ridge beats both networks by 3×. That is §6d's capacity argument measured:
-`n_eff` is **588** (label overlap) / **122** (window overlap) on 2,939 train windows.
+⚠️ **THE WHOLE SPREAD IS ONE ERROR BAR.** IC ranges −0.100 … +0.126 over 9 scored
+models — a span of 0.227 against `SE(IC) = 0.197` at `n_eff = 26.7` (window overlap) and
+0.089 at `n_eff = 128` (label overlap). The largest |t| on the board is **+1.42**.
+Ranking these architectures is reading noise.
 
-⚠️ **Nothing beats the zero predictor on RMSE**, including the best-IC model — ridge
-posts `R² = −5.19`. Ranking and calibration are separate questions here.
+⚠️ **Two runs clear a bar; expectation was 1.1.** `GBT` on `ic` (p = 0.035) and
+`BASELINE_AR` on `dir_auc` (p = 0.040), from **11 runs × 2 nulled metrics = 22 tests**.
+The null prices in no architecture search (**NUL-1**) and the sweep *is* one.
 
-⚠️ **One run clears one bar and it is noise**: `BASELINE_AR`'s `dir_auc` at p = 0.040,
-by 0.0011, from **7 runs × 2 nulled metrics = 14 tests** where ~0.7 false positives are
-expected. Recorded, not promoted. `model/CONTEXT.md` §14.
+⚠️ **NOT ONE OF ELEVEN BEATS THE ZERO PREDICTOR ON RMSE**, and the models that rank
+best are the ones whose magnitudes are most wrong — `GBT` R² = −2.11, `ridge_stats`
+−5.19. Ranking and calibration are separate questions here.
 
-⚠️ **Nothing here changes §2 and everything strengthens it.** Four model families
-spanning 0 to 276k parameters all land inside their own nulls. A linear model reaching
-the LSTM's answer is a stronger statement about the data than another network doing so.
+⚠️ **Capacity is real but not the whole story.** The LSTM *flips sign* on capacity alone
+(h=32 → −0.0345, h=8 → **+0.0346**), yet the 257-parameter MLP is the worst on the board
+on the same design a 25-parameter ridge does best on. `model/CONTEXT.md` §14–§15.
+
+⚠️ **Nothing here changes §2 and everything strengthens it.** Six model families
+spanning 0 to 276k parameters all land inside their own nulls.
 
 ⚠️ **The selection cleared its bar; the model did not clear its own.** `z = +2.15` bought
 nothing downstream — which is the two bars working, and the most useful thing the run

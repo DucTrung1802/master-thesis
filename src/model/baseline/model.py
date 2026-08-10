@@ -45,37 +45,12 @@ from __future__ import annotations
 
 import numpy as np
 
-# The six statistics `feature_selection.windows.window_design` reduces a channel to.
-# ⚠️ Kept in this order and with these definitions so a `ridge_stats` coefficient can be
-# read against `feature_importance.csv`'s `best_stat` column, which names the same six.
-WINDOW_STATS = ("last", "mean", "slope", "sd", "min", "max")
+# ⚠️ Shared with `model/gbt` and `model/mlp`, and matching
+# `feature_selection.windows.window_design` — a model reducing the window differently
+# would be fed a design the ranking never scored. See `model/common/features.py`.
+from model.common.features import WINDOW_STATS, window_statistics
 
 KINDS = ("zero", "mean", "ridge_stats", "ridge_flat", "ar")
-
-
-def window_statistics(X: np.ndarray) -> np.ndarray:
-    """`(n, d, f)` → `(n, f*6)`: last, mean, slope, sd, min, max per channel.
-
-    `slope` is the least-squares gradient over the window, computed in closed form
-    against a fixed time index — the same reduction the feature selection ranked these
-    channels under, so the design matrix here is the one those rankings describe.
-    """
-    n, d, f = X.shape
-    t = np.arange(d, dtype=float)
-    t_centred = t - t.mean()
-    denom = float((t_centred ** 2).sum()) or 1.0
-    slope = np.tensordot(X - X.mean(axis=1, keepdims=True), t_centred, axes=([1], [0])) / denom
-    return np.concatenate(
-        [
-            X[:, -1, :],
-            X.mean(axis=1),
-            slope,
-            X.std(axis=1),
-            X.min(axis=1),
-            X.max(axis=1),
-        ],
-        axis=1,
-    )
 
 
 class _Base:

@@ -117,6 +117,9 @@ src/model/
 │   ├── trainer.py        Trainer (train loop, early stop, TensorBoard, checkpoints),
 │   │                     TrainConfig, set_seed, resolve_device, to_loaders;
 │   │                     criterion is configurable (MSE / BCEWithLogits)
+│   ├── features.py       window → vector reductions (the six stats), shared by every
+│   │                     model that cannot eat a sequence: baseline, gbt, mlp
+│   ├── test_features.py  6 tests pinning the numpy and torch reductions to agree
 │   ├── engine.py         ⭐ THE TRAINING ENGINE, model-agnostic (2026-08-10): config →
 │   │                     run folder → trained model → scored result. _verify, the
 │   │                     prediction writer, the lineage block, evaluate_run and the
@@ -145,6 +148,12 @@ src/model/
 │   ├── model.py          zero | mean | ridge_stats | ridge_flat | ar — 0 to 81 params
 │   ├── train.py          binding onto engine.train_estimator (no training LOOP)
 │   └── configs/          one per kind, baseline_<kind>__vcb__…__basic.yaml
+├── gbt/                  ← Tier 2 (§15). XGBoost on the window statistics — the
+│   │                     estimator feature_selection already ranks with. NOT torch.
+├── mlp/                  ← Tier 2. One hidden layer over the same 24-column design.
+│   │                     ⚠️ holds a TORCH copy of window_statistics — pinned by
+│   │                     common/test_features.py, see §12
+├── gru/                  ← Tier 2. Three gates to the LSTM's four.
 └── runs/                 ← ALL runs from ALL models AND tasks (shared)
     ├── index.csv         cross-run leaderboard (TRACKED in git)
     └── <run_id>/         one immutable run (git-IGNORED: .gitignore src/model/runs/*/)
@@ -556,6 +565,79 @@ rather than 0 in the scaled space — see §12.
 spanning 0 to 4,961 parameters and four model families all land inside their own nulls.
 A linear model reaching the same answer as an LSTM is a far stronger statement about the
 data than another network reaching it.
+
+## 15. ⚠️ TIER 2 — ELEVEN MODELS, AND THE WHOLE SPREAD IS ONE ERROR BAR (2026-08-10)
+
+Four more models on the identical dataset, splits, purge and 200-draw null. The board,
+ordered by capacity:
+
+| model | params | best ep | test IC | bar | p | clears | dir_auc | bar | p | clears | RMSE | R² |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `BASELINE_ZERO` | **0** | — | — | — | — | — | 0.5000 | 0.5000 | 0.995 | ❌ | **0.03721** | −0.001 |
+| `BASELINE_MEAN` | 1 | — | — | — | — | — | 0.5000 | 0.5000 | 0.995 | ❌ | 0.03727 | −0.005 |
+| `BASELINE_AR` | 6 | — | +0.0557 | +0.0585 | 0.070 | ❌ | 0.5258 | 0.5247 | **0.040** | ⚠️ ✅ | 0.03723 | −0.002 |
+| `BASELINE_RIDGE_STATS` | 25 | — | +0.1005 | +0.1247 | 0.095 | ❌ | 0.5329 | 0.5592 | 0.194 | ❌ | 0.09252 | −5.19 |
+| `BASELINE_RIDGE_FLAT` | 81 | — | −0.0397 | +0.0785 | 0.577 | ❌ | 0.4746 | 0.5440 | 0.597 | ❌ | 0.07677 | −3.26 |
+| **`MLP`** | 257 | 3 | **−0.1001** | +0.0908 | 0.910 | ❌ | 0.4613 | 0.5422 | 0.776 | ❌ | 0.09751 | −5.87 |
+| **`LSTM` (h=8)** | 473 | 41 | **+0.0346** | +0.0956 | 0.249 | ❌ | 0.4888 | 0.5450 | 0.597 | ❌ | 0.03920 | −0.111 |
+| **`GRU`** | 1,105 | 10 | −0.0766 | +0.0786 | 0.726 | ❌ | 0.4463 | 0.5393 | 0.791 | ❌ | 0.03776 | −0.031 |
+| **`GBT`** | 1,319† | — | **+0.1263** | +0.1121 | **0.035** | ⚠️ **✅** | 0.5246 | 0.5593 | 0.244 | ❌ | 0.06562 | −2.11 |
+| `CNN` | 3,745 | 2 | −0.0332 | +0.1107 | 0.657 | ❌ | 0.4912 | 0.5544 | 0.567 | ❌ | 0.03734 | −0.008 |
+| `LSTM` (h=32) | 4,961 | 10 | −0.0345 | +0.1348 | 0.726 | ❌ | 0.4743 | 0.5685 | 0.816 | ❌ | 0.03826 | −0.059 |
+
+† decision NODES, not weights — a boosted ensemble has none. See `gbt/model.py`.
+
+### ⚠️ 15a. The finding: the spread IS the error bar
+
+| | |
+|---|---|
+| IC range over 9 scored models | **−0.1001 … +0.1263**, a span of 0.227 |
+| SE(IC) at `n_eff = 128` (label overlap) | **0.089** |
+| SE(IC) at `n_eff = 26.7` (window overlap) | **0.197** |
+| largest \|t\| on the board (`GBT`) | **+1.42** / **+0.64** |
+
+**Every model on this board is within 1.5 standard errors of zero, and the entire
+eleven-model spread is barely wider than ONE window-overlap standard error.** Ranking
+these architectures is reading noise. That is the same arithmetic
+`feature_selection/CONTEXT.md` §6d gives from the other direction: separating an IC of
+0.05 from zero needs ~1,500 independent observations and the test split carries 27.
+
+### ⚠️ 15b. Two runs clear a bar. Expectation was 1.1.
+
+`BASELINE_AR` on `dir_auc` (p = 0.040) and `GBT` on `ic` (p = 0.035). **Eleven runs × two
+nulled metrics = 22 tests; at a 95th-percentile bar ~1.1 false positives are expected and
+2 appeared.** Neither survives as evidence: the null prices in no architecture search
+(**NUL-1**), and the sweep IS an architecture search. Recorded, not promoted.
+
+### ⚠️ 15c. Capacity is real but it is not the whole story
+
+**The LSTM flipped sign on capacity alone**: `h=32` (4,961 params) scores **−0.0345**,
+`h=8` (473 params) scores **+0.0346**, same family, same data, same everything else. It
+also trained far longer before stopping (best epoch 41 against 10) — a smaller model on
+122 independent observations has something to learn for longer.
+
+**But smaller is not simply better**, and the `MLP` is the counterexample: 257 parameters
+and the **worst IC on the board** (−0.1001), on the same 24-column design that the
+25-parameter ridge scores +0.1005 on. Family, design and capacity all move the number by
+about one error bar each, which is what "no signal" looks like from the inside.
+
+### ⚠️ 15d. Ranking and calibration disagree, hard
+
+The three models with the best IC — `GBT` (+0.126), `ridge_stats` (+0.101), `AR`
+(+0.056) — post RMSEs of **0.0656, 0.0925 and 0.0372** against the zero predictor's
+**0.03721**. `GBT`'s R² is **−2.11**, `ridge_stats`'s is **−5.19**. **Not one of eleven
+models beats the zero predictor on RMSE.** The models that rank best are the ones whose
+magnitudes are most wrong; the models with sane magnitudes (`CNN`, `GRU`, both LSTMs)
+rank at or below zero.
+
+### 15e. What Tier 2 was for, and what it settled
+
+`GBT` was the highest-value run in the tier because **it is the estimator
+`feature_selection` has been ranking with all along** — `xgb_gain`, `xgb_shap` and
+`permutation` are XGBoost fits on this same design. Its `+0.1263` is therefore the
+closest thing on the leaderboard to the selection's own `+0.0783`, reached
+independently, and it is the strongest single number any model here has produced.
+**It is still 0.64 window-SE from zero, and it still cannot predict a magnitude.**
 
 ## 12. Gotchas
 

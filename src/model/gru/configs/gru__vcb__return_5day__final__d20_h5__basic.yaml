@@ -1,0 +1,39 @@
+# Tier 2: GRU - three gates to an LSTM's four, ~25% fewer parameters at the same
+# width. A third point on the capacity ladder, next to the LSTM it neighbours.
+#
+# WARNING: `lookback` and `n_features` are ASSERTIONS, not settings - the dataset is the
+# authority and _verify raises on a mismatch. WARNING: the filename must equal
+# `run_name` (model/CONTEXT.md RUN STANDARD); load_config raises otherwise.
+
+run_name: gru__vcb__return_5day__final__d20_h5__basic
+dataset: vcb__return_5day__final__d20_h5__basic__tr70_val15_test15__std
+task: regression
+
+lookback: 20
+n_features: 4
+dataset_hash: 08c7a0498ab2c934
+
+model:
+  type: GRU
+  hidden_size: 16
+  num_layers: 1
+  dropout: 0.1
+
+# Byte-identical to every other torch run on this dataset. Only `model:` differs, so a
+# difference in the result is attributable to the architecture.
+train:
+  batch_size: 64
+  lr: 0.001
+  weight_decay: 0.00001
+  max_epochs: 150
+  patience: 20
+  grad_clip: 1.0
+  lr_factor: 0.5
+  lr_patience: 5
+  log_every: 10
+
+# Draws in result_evaluator's block-shuffled null, identical to every other run here.
+null_draws: 200
+
+seed: 42
+device: auto

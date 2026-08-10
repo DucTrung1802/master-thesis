@@ -1,0 +1,33 @@
+# Tier 2: gradient-boosted trees on the six window statistics per channel.
+# This is the estimator feature_selection has been ranking with (xgb_gain/xgb_shap/
+# permutation) - now scored as a RUN, against the same null, in the same table.
+# Shallow on purpose: n_eff is 588 (label overlap) / 122 (window overlap).
+#
+# WARNING: `lookback` and `n_features` are ASSERTIONS, not settings - the dataset is the
+# authority and _verify raises on a mismatch. WARNING: the filename must equal
+# `run_name` (model/CONTEXT.md RUN STANDARD); load_config raises otherwise.
+
+run_name: gbt__vcb__return_5day__final__d20_h5__basic
+dataset: vcb__return_5day__final__d20_h5__basic__tr70_val15_test15__std
+task: regression
+
+lookback: 20
+n_features: 4
+dataset_hash: 08c7a0498ab2c934
+
+model:
+  type: GBT
+  max_depth: 3
+  n_estimators: 200
+  learning_rate: 0.05
+  subsample: 0.8
+  colsample_bytree: 0.8
+  min_child_weight: 5.0
+  reg_lambda: 1.0
+  random_state: 42
+
+# Draws in result_evaluator's block-shuffled null, identical to every other run here.
+null_draws: 200
+
+seed: 42
+device: cpu
