@@ -24,21 +24,24 @@ date and the run reports the smaller row count as if it were the universe. Measu
 economy pools stayed at 2026-06-25, so any run launched that day would have quietly
 studied a panel ending six weeks early. `_assert_same_calendar` raises instead.
 
-⚠️ **2. THE COST IS QUADRATIC IN CHANNELS AND LINEAR IN NULL DRAWS.** From the archive's
-own `timings_seconds`, wall clock ≈ `(channels / 207)² × 8.7 min`, which reproduces
-`usa` (1,458 ch) at **428 min** and `vietnam` (113 ch) at 3.7 min. `lasso` and
-`permutation` are 98% of the `usa` run and neither has a GPU path. A null re-runs the
-whole selection per draw, so the estimate is multiplied by `1 + null_draws`:
+⚠️ **2. THE COST IS QUADRATIC IN CHANNELS AND LINEAR IN NULL DRAWS.** A null re-runs the
+whole selection per draw, so one run's estimate is multiplied by `1 + null_draws`, and
+the per-run cost grows with the square of the channel count. `estimated_minutes` and
+`budget_minutes` turn that into a raise rather than a discovery — the default budget of
+240 minutes stops `usa` and admits everything else, which is the correct place for a
+human decision rather than a number to raise until it stops complaining.
 
-    country          channels   no null   × 20 draws
-    vietnam               113    3.7 min      1.3 h
-    united_kingdom        207    8.7 min      3.0 h
-    usa                 1,458    428 min    **6.2 days**
-
-`ESTIMATED_MINUTES_PER_207CH` and `budget_minutes` turn that into a raise rather than a
-discovery. The default budget of 240 minutes admits 18 countries with a full 20-draw null
-and stops `usa`, which is the correct place for a human decision — not a number to raise
-until it stops complaining.
+⚠️ **THE CONSTANTS WERE RE-ANCHORED ON 2026-08-10 AND THE CURVE'S FAR END IS NOW AN
+EXTRAPOLATION.** The original fit came from the archive's own `timings_seconds`
+(`vietnam` 113 ch → 3.7 min, `usa` 1,458 ch → 428 min), which gave the exponent 2.00
+almost exactly — but **every one of those runs was `device="cpu"`**, and the GPU
+conversion (`feature_selection/CONTEXT.md` §16) cut the same `vietnam` selection to
+**1.1 min**. The reference point below is that measured GPU number. The EXPONENT is
+still the CPU-era one and has **not** been re-fitted on a GPU run at width, because
+that measurement needs a real `usa` run and nobody has done one — so the wide end is
+expected to be **conservative** (§16c makes `lasso` 3.1× faster at 8,747 columns and
+argues the real-data gain is larger still). Conservative is the right direction for a
+guard: it over-estimates, so it raises early rather than committing six days.
 
 ## What this asset deliberately does NOT do
 
@@ -108,15 +111,26 @@ ECONOMY_PARTITIONS = StaticPartitionsDefinition(
     enabled.register("analysis/feature_selection_economy", ECONOMY_COUNTRIES)
 )
 
-# ── The cost model, fitted to the archive's own timings ─────────────────────────
+# ── The cost model ──────────────────────────────────────────────────────────────
 #
-# `united_kingdom` at 207 channels took 8.7 min; `usa` at 1,458 took 428.4. Solving
-# `(1458/207)**k = 428.4/8.7` gives k = 2.00, so the exponent is not a guess — it is what
-# two measured runs three orders of magnitude apart actually imply. Re-fit these two
-# numbers if the selector's method set changes; `lasso` and `permutation` are 98% of the
-# wide-run cost and either one becoming GPU-capable would invalidate the fit entirely.
-ESTIMATED_MINUTES_PER_207CH = 8.7
-COST_REFERENCE_CHANNELS = 207
+# ⚠️ TWO NUMBERS FROM TWO DIFFERENT SOURCES, and the difference is the point.
+#
+# The EXPONENT is from the CPU-era archive: `united_kingdom` at 207 channels took
+# 8.7 min and `usa` at 1,458 took 428.4, and `(1458/207)**k = 428.4/8.7` gives
+# k = 2.00 — not a guess, but what two measured runs an order of magnitude apart imply.
+#
+# The REFERENCE POINT is a fresh measurement: the same `basic+economy_vietnam`
+# selection that took 3.7 min on the CPU takes **1.1 min** after the GPU conversion
+# (feature_selection/CONTEXT.md §16). Anchoring on the old 8.7 would over-estimate
+# every partition by ~3.3x.
+#
+# ⚠️ The exponent has NOT been re-fitted on a GPU run at width — that needs a real
+# `usa` run and none exists. §16c measured `lasso` at 3.1x faster at 8,747 columns and
+# argues the real-data gain is larger, so this curve should now be CONSERVATIVE at the
+# wide end. For a guard whose job is to refuse before committing days, erring high is
+# the right direction; re-fit it once a wide GPU run has actually been timed.
+ESTIMATED_MINUTES_AT_REFERENCE = 1.1
+COST_REFERENCE_CHANNELS = 113
 COST_EXPONENT = 2.0
 
 # `pool__basic` contributes this many channels on top of the country's macro series. It
@@ -126,8 +140,8 @@ BASIC_CHANNELS = 27
 
 
 def estimated_minutes(channels: int, null_draws: int) -> float:
-    """Wall clock for one run, from the archive's fitted `channels² × draws` curve."""
-    base = ESTIMATED_MINUTES_PER_207CH * (
+    """Wall clock for one run, on the `channels² × draws` curve above."""
+    base = ESTIMATED_MINUTES_AT_REFERENCE * (
         max(channels, 1) / COST_REFERENCE_CHANNELS
     ) ** COST_EXPONENT
     return base * (1 + max(null_draws, 0))
@@ -157,8 +171,18 @@ class EconomySelectionConfig(Config):
     corr_threshold: float = Field(default=0.9)
     n_splits: int = Field(default=5)
     min_train: int = Field(default=500)
-    device: str = Field(default="cpu", description="part of the setup; cpu | cuda | auto")
-    random_state: int = Field(default=42)
+    device: str = Field(
+        default="cuda",
+        description="cuda | cpu | auto. Default cuda = EVERY ranker on the GPU. "
+        "auto keeps narrow pools on the host and left 14 of 19 countries on the "
+        "CPU. Part of the SETUP, not a performance knob - the tree methods "
+        "resample differently per device (gpu.py section 1).",
+    )
+    random_state: int = Field(
+        default=18,
+        description="the SELECTOR's seed. Part of the setup; a run is bit-reproducible "
+        "at a fixed (seed, device) - see feature_selection/CONTEXT.md section 16f.",
+    )
     stability: bool = Field(default=True, description="per-fold SHAP ranking; cheap")
     null_draws: int = Field(
         default=20,
@@ -166,11 +190,13 @@ class EconomySelectionConfig(Config):
         "UNKNOWN and not a pass.",
     )
     holdout_start: Optional[str] = Field(default=None, description="e.g. 2024-06-01")
-    root: Optional[str] = Field(
-        default=None,
-        description="report root. None = reports/feature_selection. ⚠️ A root is a "
-        "GROUP for final_features, which keys on (schema, target, setup) with no term "
-        "for which pools — see pipeline/CONTEXT.md §5c.",
+    root: str = Field(
+        default="reports/feature_selection_economy",
+        description="report root. ⚠️ NOT the default reports/feature_selection: a "
+        "root is a GROUP for final_features, which keys on (schema, target, setup) "
+        "with no term for which pools. Seed 18 against the archive's 42 made those "
+        "two DIFFERENT setups wanting ONE table name, and final_features raised. "
+        "Keep the sweep in its own root — pipeline/CONTEXT.md §5c.",
     )
     budget_minutes: float = Field(
         default=240.0,
@@ -291,10 +317,13 @@ def feature_selection_economy(
         raise ValueError(
             f"estimated {minutes:.0f} min ({minutes / 60:.1f} h) for {country} at "
             f"~{channels} channels x {config.null_draws} null draws, over the "
-            f"{config.budget_minutes:.0f} min budget. The curve is fitted to this "
-            f"repo's own archive and is quadratic in channels (usa: 1,458 channels, "
-            f"428 min with NO null). Either drop null_draws, or raise budget_minutes "
-            f"deliberately for this one partition — do not raise the default."
+            f"{config.budget_minutes:.0f} min budget. The curve is quadratic in "
+            f"channels, anchored on a measured post-GPU run "
+            f"({COST_REFERENCE_CHANNELS} channels, "
+            f"{ESTIMATED_MINUTES_AT_REFERENCE} min with no null) — so usa's ~1,458 "
+            f"channels are hours, not minutes, whatever the device. Either drop "
+            f"null_draws, or raise budget_minutes deliberately for this one "
+            f"partition — do not raise the default."
         )
 
     # ⚠️ IMPORTED HERE, NOT AT MODULE LEVEL. `feature_selection.run` pulls in xgboost,
@@ -320,7 +349,7 @@ def feature_selection_economy(
         null_draws=config.null_draws,
         holdout_start=config.holdout_start,
         notes=config.notes or f"dagster analysis/feature_selection_economy/{country}",
-        **({"root": config.root} if config.root else {}),
+        root=config.root,
     )
     elapsed = (time.time() - started) / 60.0
 

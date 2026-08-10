@@ -144,7 +144,8 @@
 | [selector.py](selector.py) | six rankers → ensemble → correlation prune → purged walk-forward → holdout |
 | **[cross_sectional.py](cross_sectional.py)** | **N × T panels** — per-date target, per-date IC, date-grouped CV, panel-aware null |
 | [evaluation.py](evaluation.py) | **the BAR** — the shuffled-label null, `n_eff`, and the IC summary that reports trend |
-| [gpu.py](gpu.py) | the CUDA paths, the size heuristic, and which steps have no GPU path |
+| [gpu.py](gpu.py) | the CUDA paths, the size heuristic, the batched permutation loop, and which step is on the host **by measurement** (§16) |
+| **[gpu_rankers.py](gpu_rankers.py)** | **the two rankers sklearn defines, reimplemented for the GPU** — a FISTA `LassoCV` and a Kraskov `mutual_info`. Different in kind from `gpu.py`, so each owes a comparison against the original (§16) |
 | [plots.py](plots.py) | the figures — one theme, one palette, applied by the job each colour does |
 | **[report.py](report.py)** | **one run → one self-describing folder** — CSVs, PNGs and a `metadata.json` that records what may be compared with what (§10) |
 | **[outstanding.py](outstanding.py)** | **one run → its final feature list** — kept channels only, ties broken, each mapped back to the pool table it must be read from (§14) |
@@ -2027,7 +2028,8 @@ dagster asset materialize -f src/orchestration/definitions.py `
 ```
 
 Config knobs (`EconomySelectionConfig`): `universe` (default `VCB`), `target`
-(`return_5day`), `lookback`/`horizon` (20/5), `null_draws` (**20**), `device`,
+(`return_5day`), `lookback`/`horizon` (20/5), `null_draws` (**20**), `device` (**`auto`** — GPU once
+the pool is wide enough; ⚠️ part of the SETUP, not a speed knob, see §16e),
 `stability`, `holdout_start`, `root`, `budget_minutes` (240), `notes`.
 **`max_features` is not offered** — the measured cut is the only width rule (§14c).
 
@@ -2070,17 +2072,28 @@ pools leaves the other 21 siblings behind** (CLAUDE.md §5d) — `pool__economy`
 
 ### 15c. ⚠️ GUARD 2 — the cost is quadratic in channels and linear in draws
 
-Fitted to this package's own archived `timings_seconds`: `united_kingdom` at 207
-channels took 8.7 min and `usa` at 1,458 took **428.4 min**, and
-`(1458/207)^k = 428.4/8.7` gives **k = 2.00**. So `minutes ≈ (channels/207)² × 8.7`,
-times `(1 + null_draws)` because a null re-runs the entire selection per draw. `lasso`
-and `permutation` are **98 %** of the `usa` run and neither has a GPU path.
+The EXPONENT is fitted to this package's own archived `timings_seconds`:
+`united_kingdom` at 207 channels took 8.7 min and `usa` at 1,458 took **428.4 min**,
+and `(1458/207)^k = 428.4/8.7` gives **k = 2.00**. The REFERENCE POINT is the
+post-GPU measurement — the same `vietnam` selection that took 3.7 min on the CPU now
+takes **1.1 min** (§16). So `minutes ≈ (channels/113)² × 1.1`, times `(1 + null_draws)`
+because a null re-runs the entire selection per draw.
 
 | | channels | no null | **20 draws** |
 |---|---|---|---|
-| `vietnam` | 113 | 3.7 min | 0.9 h |
-| `united_kingdom` | 207 | 8.7 min | 3.9 h |
-| **`usa`** | **1,458** | **7.2 h** | **⚠️ 6.3 days** |
+| `vietnam` | 113 | 1.1 min | **24 min** |
+| `united_kingdom` | 207 | 3.8 min | **1.3 h** |
+| **`usa`** | **1,458** | **3.1 h** | **⚠️ 2.7 days** |
+
+⚠️ **The whole 18-country sweep at a full 20-draw null is now ~7 h, down from ~15 h**,
+and that is the practical result of §16 — `EVD-1` says the missing nulls are ~1,000
+CPU-hours, and this is the only lever that has moved that number.
+
+⚠️ **The `usa` row is an EXTRAPOLATION and is deliberately conservative.** The
+exponent is CPU-era and has not been re-fitted on a wide GPU run, because none has
+been done. §16c measured `lasso` 3.1× faster at 8,747 columns and argues the gain on
+real (collinear) data is larger, so the true `usa` cost should be *below* this. A
+guard that over-estimates refuses early, which is the right direction.
 
 `budget_minutes=240` admits every country except `usa` with a full 20-draw null and
 raises on `usa`. ⚠️ **That raise is the feature.** Raise the budget for that one
@@ -2103,3 +2116,369 @@ the "launch it and find out" the 428-minute run already paid for.
   widest search at **8,747 design columns on 4,211 dev samples**. A per-run bar does not
   make a max-over-19 legitimate; that needs a bar over the sweep, which nothing here
   computes.
+
+---
+
+## 16. ⚠️ THE GPU CONVERSION (2026-08-10) — and the two things it measured
+
+**Before this date, no run in the archive had ever used the GPU.** All 22 archived
+`metadata.json` files record `device="cpu"`, because that was the default in
+`run.py`. Five of the six rankers already had CUDA paths and none of them had run.
+
+⚠️ **AND TURNING IT ON MADE THINGS WORSE.** Forcing `device="cuda"` on
+`basic+economy_vietnam` (113 channels → 678 design columns), same panel, same seed:
+
+| step | cpu | cuda | |
+|---|---|---|---|
+| `permutation` | 85.3 s | **986.3 s** | **0.1×** |
+| `mutual_info` | 9.5 s | 1.4 s | (warm loky pool, not the GPU) |
+| `lasso` | 27.5 s | 28.5 s | 1.0× — cpu-only |
+| `stability` | 11.4 s | 9.7 s | 1.2× |
+| **whole run** | **154 s** | **1,046 s** | **0.1× — 6.8× SLOWER** |
+
+So "use the GPU" was never a flag; it was three pieces of work.
+
+### 16-result. ⚠️ The same run, after — 1,046 s → 66.9 s
+
+Same panel, same seed, same 113 channels, re-measured end to end:
+
+| | cpu | cuda | |
+|---|---|---|---|
+| before | 154.4 s | 1,046.3 s | cuda **0.1×** |
+| **after** | **95.7 s** | **66.9 s** | cuda **1.4×** |
+| | 1.6× faster | **15.6× faster** | |
+
+Three things worth reading off that table rather than the headline:
+
+⚠️ **The CPU got 1.6× faster too**, from the permutation rewrite alone (85.3 s →
+15.9 s). Most of the original "GPU problem" was an `O(n·p)` copy that was costing the
+host as well — the device just made it visible.
+
+⚠️ **1.4× is the NARROW case and is the least favourable number here.** At 113
+channels the design is 678 columns: under `GPU_LASSO_MIN_COLUMNS`, so `lasso` is
+still sklearn's, and `lasso + validation + stability` are 79 % of what is left. The
+wide pools are where the ladder in §16c applies.
+
+⚠️ **`mutual_info`'s 6.5× in that table is NOT the GPU** — it is sklearn's `loky`
+pool being warm on the second of two runs in one process. It is the same sklearn
+code on both rows. §16d is the honest measurement of that step.
+
+### 16a. `permutation` — the whole of the problem
+
+`sklearn.inspection.permutation_importance` holds an `X.copy()` and rewrites one
+column of a **pandas DataFrame** per draw: an `O(n·p)` copy to change `O(n)` values,
+plus one host→device round trip. That is why the archived `usa` run spent **204
+minutes** here at 8,747 design columns.
+
+`gpu.permutation_importance_batched` keeps the definition, writes one column,
+restores it, and batches the predicts into one `inplace_predict`. Measured at
+n=640, p=300: **49× on cpu, 63× on cuda**.
+
+⚠️ **It is verified against its own noise, not against a tolerance.** The estimator
+is stochastic, so `allclose(sklearn, mine)` would be either vacuous or flaky. At
+`n_repeats=5` this implementation vs sklearn scores rank correlation **0.79** — and
+vs *itself at another seed*, **0.80**. The disagreement is entirely Monte-Carlo, and
+converges (0.93 at 20 repeats, 0.98 at 80).
+
+⚠️ **A finding that fell out of the yardstick: at the repo's default
+`permutation_repeats=10`, this ranker's own seed-to-seed rank correlation is ~0.85.**
+One of the six ensemble members is that noisy by construction, which is §14a's
+"the six rankers agree barely more than chance" seen from the inside.
+
+### 16b. `spearman_vector` — an `O(p²)` matrix to keep one column
+
+`selector.run` calls it on the DESIGN matrix, which is `channels × 6`. At `usa`'s
+8,748 columns the discarded matrix was **584 MB**, with ~10 live temporaries on a
+card with 3.3 GB free. Rewritten to compute the vector directly — algebraically the
+last column of the same formula, so **`max abs diff` is 0.0, not "close"**:
+
+| width | cpu before | cpu after | cuda before | cuda after |
+|---|---|---|---|---|
+| 300 | 0.14 s | 0.14 s | 0.57 s | **0.02 s** |
+| 2,000 | 1.48 s | 1.07 s | 1.49 s | **0.16 s** |
+| **8,748** | 18.18 s | 5.19 s | **31.93 s** | **1.13 s — 28×** |
+
+Note the `cuda before` column: **the GPU was slower than the host at every width.**
+
+### 16c. `lasso` — a different optimiser, the same objective
+
+`LassoCV` is CPU-only and cuML has no Windows wheel, so `gpu_rankers.lasso_cv`
+solves the same problem by FISTA on the same alpha path and the same **purged**
+folds. Measured at n=4,211 against `LassoCV`, selected alpha and `|coef|` ranking
+**identical at every width**:
+
+| p | sklearn | FISTA cpu | FISTA cuda | vs sklearn | rank corr | alpha |
+|---|---|---|---|---|---|---|
+| 700 | 0.6 s | ~5 s | — | 0.1× | 1.00000 | exact |
+| 2,000 | 9.0 s | 20.7 s | **7.4 s** | 1.2× | 1.00000 | exact |
+| 5,000 | 42.0 s | 112.4 s | **21.2 s** | 2.0× | 1.00000 | exact |
+| **8,747** | 94.1 s | 223.7 s | **30.6 s** | **3.1×** | **1.00000** | **exact** |
+
+⚠️ **Below ~2,000 design columns coordinate descent WINS and is kept**
+(`gpu.GPU_LASSO_MIN_COLUMNS`). Warm-started CD is very hard to beat while the active
+set is small; FISTA pays a full `n × p` matmul per iteration whatever the sparsity.
+
+⚠️ **`tol=1e-4` and `n_alphas=100` are both load-bearing, in opposite directions.**
+Tightening tol to 1e-7 costs 16× the time and changes nothing. **Shortening the alpha
+path is the false economy** — 30 alphas is twice as fast again and selects a
+*different penalty* (0.974× the right one), which changes the coefficients this
+ranker contributes. `test_gpu_rankers.py` pins both.
+
+⚠️ **The one honest caveat.** CD and FISTA minimise the same convex objective, so
+they agree wherever the minimiser is unique — and with `p > n`, which is every wide
+pool here, it need not be. The tests assert on the selected alpha, the objective
+value and the ranking, never element-wise on coefficients.
+
+⚠️ **The table above is SYNTHETIC i.i.d. Gaussian data and understates the real
+win.** sklearn takes 94 s at p=8,747 there but took **12,901 s on the real `usa`
+design matrix** — 137× more — because real windowed macro columns are massively
+collinear and coordinate descent struggles. FISTA's cost is a fixed matmul per
+iteration and is indifferent to that. **This is an extrapolation, not a measurement,
+and is flagged as one until a real `usa` run is done.**
+
+### 16d. ⚠️ `mutual_info` — CONVERTED, VERIFIED, AND DELIBERATELY NOT USED
+
+`gpu_rankers.mutual_info` is the same Kraskov estimator as sklearn's — the same
+`ψ(k) + ψ(n) − ⟨ψ(nₓ+1) + ψ(n_y+1)⟩`, the same per-column `scale(with_mean=False)`,
+the same tie-breaking noise drawn from the same legacy `RandomState`. It agrees to
+**8.9e-16**.
+
+Its compute is **4-8× slower**, at n=4,211 with a **warm** sklearn pool:
+
+| columns | sklearn (KDTree) | GPU (brute force) | ratio |
+|---|---|---|---|
+| 200 | 1.0 s | 7.6 s | **0.13×** |
+| 678 | 3.5 s | 14.5 s | **0.24×** |
+
+Kraskov needs the k-th nearest neighbour; sklearn gets it from a KDTree at
+`O(n log n)` per column, and a joint-distance matrix is `O(n²)` however fast the
+hardware. **The better ALGORITHM beats the better hardware** — the same lesson §2 of
+`gpu.py` records for the correlation matrix, pointing the other way.
+
+⚠️ **AND THAT BENCHMARK OVERSTATED SKLEARN, BECAUSE IT WARMED THE POOL FIRST.** On
+the real japan run's FIRST pass — a cold process, which is what a scripted run
+actually is — the same step measured **41.8 s on sklearn against 22.4 s on the GPU**:
+the GPU is **1.9× FASTER**. sklearn's compute is genuinely quicker, but on Windows it
+pays ~35 s to spawn a `loky` pool, and the pool is cold exactly once per process.
+
+⚠️ **Both numbers are real and they answer different questions.** Within one
+`run_selection` the pool is warm for the 20 null draws that follow, so sklearn's
+AMORTISED cost over a 21-pass run is still lower — roughly 162 s against the GPU's
+470 s, i.e. **GPU `mutual_info` costs about +5 minutes per country run**. It is used
+anyway (2026-08-10, second pass): `device` now means the device, and that +5 min is
+paid out of the ~10 min `lasso` saves and the ~10 min the other GPU steps save.
+Quote the warm-pool table when comparing ESTIMATORS and the cold-process number when
+comparing RUNS.
+
+### 16e. What this does NOT change
+
+⚠️ **`device` is still part of the SETUP, not a performance knob.** §1 of `gpu.py`
+stands: XGBoost's row and column subsampling draws from a different RNG stream on the
+GPU, so `cpu` and `cuda` select **different feature sets**. Measured again on
+`basic+economy_vietnam`: 56 of 64 kept channels in common, ensemble rank correlation
+0.87. Set `subsample=1.0, colsample_bytree=1.0` for cross-device reproducibility, or
+pin the device before quoting a selection. **Every archived run is `device="cpu"`, so
+a GPU re-run is not a reproduction of one.**
+
+⚠️ **None of this touches §2's verdict.** It makes the sweep affordable; it does not
+make any of it evidence. `EVD-1` (the missing nulls) is a compute problem and this
+helps with it — `NUL-1` (no null prices in the search) is not, and does not move.
+
+### 16f. ⚠️ THE SEED IS 18, AND A GPU RUN IS BIT-REPRODUCIBLE (2026-08-10)
+
+`random_state` defaults to **18** in `run_selection`, `FeatureSelector`,
+`--random-state` and the Dagster asset. ⚠️ **`NULL_SEED = 7` is unchanged and stays
+separate** — the bar must not move when the selector's seed does, or the null and the
+number it judges stop being comparable (`run.py`).
+
+**Reproducibility was measured, not assumed.** `basic+economy_vietnam` on `cuda`,
+seed 18, run twice from a **cold interpreter** — two separate processes, so no shared
+CUDA context, cuBLAS workspace or module state — and fingerprinted with sha256 over
+the **raw float64 bytes** of every artefact:
+
+| artefact | cuda, seed 18, run #1 | run #2 | cuda, seed 19 |
+|---|---|---|---|
+| `scores` | `8dad3fb2d4a7c891` | **`8dad3fb2d4a7c891`** | `9cc82a3319afd8a5` |
+| `ranks` | `868f85c2cf911059` | **`868f85c2cf911059`** | `893d58aa5c7f9753` |
+| `target_corr` | `b82f5aa97806a737` | **`b82f5aa97806a737`** | `37ee0c09a574c9c9` |
+| `corr` | `ba8a3737d6ad21e1` | **`ba8a3737d6ad21e1`** | `941d5de5ea2a3980` |
+| `stability` | `f1ffdcdd7ce996f1` | **`f1ffdcdd7ce996f1`** | `f295d9ae01cec4d3` |
+| `validation` | `5b8f963895f9b61d` | **`5b8f963895f9b61d`** | `3f74e7207cc41a24` |
+| `kept` (61 channels) | — | **identical, order included** | different |
+
+The two JSON fingerprint files are **byte-for-byte equal**. Per-fold validation IC is
+identical to every printed digit (`+0.141681, +0.097288, +0.041886, …`).
+
+**The host does the same**, run twice from cold at seed 18: byte-for-byte equal. So
+determinism is a property of both devices, not a lucky one:
+
+| | two cold runs, same device | cpu vs cuda, same seed |
+|---|---|---|
+| `scores` | **identical** | `2b2afbb29fb72e04` vs `8dad3fb2d4a7c891` |
+| `ranks` | **identical** | differ |
+| `stability` | **identical** | differ |
+| `validation` | **identical** | differ |
+| `kept` | **identical** | **60 vs 61 channels, 53 in common of 68** |
+
+⚠️ **That last cell is the cost of the device being part of the setup**, measured on
+one narrow pool: the two devices agree on 53 of the 68 channels either of them keeps.
+Not a rounding difference — a different answer to "which features matter".
+
+⚠️ **The seed-19 column is what stops this being a vacuous test.** A pipeline that
+ignored `random_state` would pass every equality above. It changes all six hashes and
+the kept list, so the fingerprint demonstrably responds to the seed.
+
+⚠️ **`target_corr` and `corr` change with the seed for a boring reason** — both are
+stored **ordered by ensemble rank**, and the ensemble moves with the seed. The
+correlation VALUES are seed-independent by construction (`spearman_vector` and
+`spearman_matrix` take no seed); it is the row order that differs. Do not read that
+row as "the correlations changed".
+
+**What is deterministic, and why it was worth checking each one:** the batched
+permutation loop (a CUDA RNG *inside* the loop), the rank transform
+(`scatter_reduce`, which torch documents as non-deterministic for some reduce modes),
+the FISTA path (thousands of chained cuBLAS matmuls), and XGBoost's `hist` on GPU.
+`test_gpu_determinism.py` pins each component, plus the seed-response test.
+
+⚠️ **AND THE COMPONENT TESTS CAUGHT ONE THE WHOLE-RUN FINGERPRINT COULD NOT.**
+`gpu_rankers._lipschitz` seeded its power-iteration start vector on the host and
+**not on CUDA**, so the GPU LASSO was not reproducible — and because the Lipschitz
+constant IS the FISTA step size, the damage was not a rounding difference but
+different iterates, different coefficients, and potentially a different
+CV-selected alpha in a **scored ranker**.
+
+⚠️ **The whole-run fingerprint above did not catch it, and could not have.** That run
+is `basic+economy_vietnam` — 113 channels, **678 design columns**, which is *below*
+`GPU_LASSO_MIN_COLUMNS = 2000`, so its `lasso` ran on sklearn's coordinate descent
+and the FISTA path was never executed. **A green end-to-end fingerprint is evidence
+about the code paths it actually ran**, which on a narrow pool excludes the one piece
+of GPU numerics written for wide ones. That is the same lesson as CLAUDE.md §5
+rule 10 — a green result answers a narrower question than it appears to — and it is
+why the per-component tests exist beside the end-to-end one rather than instead of
+it. Fixed and pinned by `test_lasso_is_bit_identical[cuda]`.
+
+⚠️ **THIS IS NOT §16e, AND THE TWO ARE EASY TO CONFLATE.** *One device, twice, same
+seed* → **bit-identical** (this section). *Two devices, same seed* → **different
+answers**, because XGBoost's subsampling draws from a different RNG stream on the GPU
+(§16e, and `test_gpu_determinism.py::test_the_two_devices_still_disagree_on_the_trees`
+pins that too). Reproducibility here means "pin the seed AND the device", and both are
+recorded on every run.
+
+⚠️ **CHANGING THE SEED SPLITS THE `final_features` GROUP, ON PURPOSE.**
+`random_state` is in `builder.SETUP_KEYS`, and every one of the 22 archived runs
+records **42**. A seed-18 run therefore forms a *different* `(schema, target, setup)`
+group and will **not** merge into `return_5day__final__d20_h5` with the seed-42 runs.
+That is the STL-1 guard working — mixing two seeds into one table would be exactly the
+silent widening it exists to stop — but it means the archive and anything new are now
+two populations, and a table built from both needs the seed made uniform first.
+
+### 16g. ⚠️ THE FIRST RUN THROUGH THE NEW CHAIN — `japan`, 2026-08-10
+
+`analysis/feature_selection_economy`, partition `japan`, all defaults: seed **18**,
+`device=auto` → **cuda**, `max_features=None`, and the **20-draw null** the 18
+hand-launched country runs never had. Both guards passed; **53.0 min** wall
+(19:55:04 → 20:48:06) against a 78-minute estimate.
+
+**`2026-08-10_204449__vcb__basic+economy_japan__return_5day`** — 4,266 × 223,
+2009-06-30 … **2026-08-07** (the refreshed calendar), 205 channels → 1,230 design
+columns → **122 kept**, shortlist **43**.
+
+| | |
+|---|---|
+| IC (kept) | **+0.0509**, fold sd 0.0343, SE/fold 0.0823 → **t = +0.62** |
+| IC (all channels) | **+0.0813** |
+| hit rate | **0.472** |
+| null | observed +0.0509, p95 bar +0.0415, **null MAX +0.0916**, z **+1.34** |
+| `evidence` | **`cleared_p95_not_a_pass`** |
+
+⚠️ **IT CLEARED ITS p95 BAR AND IT IS NOT A RESULT**, for four separate reasons, any
+one of which is enough:
+
+1. **A shuffled draw beat the real data.** `null_max = +0.0916` against an observed
+   of +0.0509. CLAUDE.md §5 rule 3 exists for exactly this shape.
+2. **The corrected p is 0.0952, not 0.0476.** This run is what found **NUL-4** — the
+   p-value was anti-conservative by one draw. Exactly one draw exceeded the observed
+   (two would have pushed the p95 above it), so `p = 2/21`. It does not clear 0.05.
+3. **`t = +0.62`** against its own per-fold error bar.
+4. ⚠️ **THE SELECTION HURTS.** All 205 channels score **+0.0813**; the 122 kept score
+   **+0.0509**. By §6b's own rule — a selection that helps at one setting and hurts at
+   another is not selecting — pruning is discarding information here. And the hit rate
+   is **below a coin**.
+
+**33 of the 43 shortlisted channels are Japanese macro**, led by `jpwag`, `jpmw`
+(wages), `jpblr`, `jpgfcf`, `jpcap`. 41 of 43 are `specialist`-only; just **2** clear
+the consensus tier. 9 carry `coverage_flag=PARTIAL`.
+
+⚠️ **Nothing here changes §2, and the run's value is procedural.** It is the first
+country selection with a bar at all, the first on the refreshed calendar, the first
+at seed 18, and the first on the GPU — and it produced the measurement that exposed
+NUL-4. The IC is inside its own null once the p is computed correctly.
+
+⚠️ **It will NOT merge with the archive.** `random_state` is in `SETUP_KEYS` and this
+run is seed 18 against the archive's 42, so `final_features` groups it separately
+(§16f).
+
+### 16h. ⚠️ `device="cuda"` NOW MEANS EVERY RANKER — japan re-run (2026-08-10)
+
+§16g's run reported `device=cuda` and spent **67.3 % of its wall clock on the host**:
+a measured width gate kept `lasso` on coordinate descent below 2,000 design columns,
+and `mutual_info` was on sklearn unconditionally. Both dispatches were defensible
+per step and together they made the flag unable to answer "did this run on the GPU?".
+Both are gone; `GPU_LASSO_MIN_COLUMNS` and `AUTO_CUDA_MIN_FEATURES` survive as the
+measured crossovers that `device="cpu"` and `device="auto"` still trade on.
+
+**The same partition, same seed, same data, one selection pass:**
+
+| step | mixed | full cuda | |
+|---|---|---|---|
+| **`lasso`** | **155.4 s** cpu | **0.7 s** cuda | **231.9×** |
+| `mutual_info` | 41.8 s cpu | 22.4 s cuda | 1.9× |
+| `validation` | 39.2 s | 28.4 s | 1.4× |
+| `permutation` | 30.2 s | 17.1 s | 1.8× |
+| `stability` | 19.4 s | 16.3 s | 1.2× |
+| `xgb gain + shap` | 6.9 s | 3.9 s | 1.8× |
+| `window design` | 1.1 s cpu | 0.8 s **cpu** | 1.3× |
+| **selection pass** | **294.4 s** | **89.7 s** | **3.3×** |
+| **on CPU** | 198.2 s — **67.3 %** | 0.8 s — **0.9 %** | |
+| **on CUDA** | 96.1 s — 32.7 % | 88.9 s — **99.1 %** | |
+| **whole run** (1 + 20 draws) | **53.0 min** | **28.9 min** | **1.8×** |
+
+⚠️ **`lasso` 155.4 s → 0.7 s is 232×, and it settles the open question in §16c.**
+That section's synthetic i.i.d. table showed only 1.2-3.1× and flagged, explicitly,
+that real design columns are massively collinear and that coordinate descent would
+suffer far more on them than FISTA — labelled at the time as *"an extrapolation, not
+a measurement"*. It was an understatement: sklearn takes **9.0 s on synthetic data at
+2,000 columns and 155.4 s on real data at 1,230**, while FISTA does not care, because
+its cost is a fixed matmul per iteration whatever the conditioning. **The wide-pool
+projection for `usa` should now be read as conservative by a wide margin.**
+
+⚠️ **The one step still on the host is `window design`, at 0.8 s — 0.9 %.** It is the
+strided reduction that BUILDS the design matrix (`last/mean/slope/sd/min/max`), i.e.
+data preparation feeding all six rankers rather than a ranker itself. Left on the
+host deliberately: GPU float64 reductions sum in a different order, so `nanmean`,
+`nanstd` and `slope` would very likely stop matching the host bit-for-bit — and that
+difference would land in the matrix EVERY ranker reads, including the Spearman steps
+that currently agree across devices to exactly **0.0** (§16b). Trading that for 0.9 %
+is a bad deal; it is recorded here so it is a decision rather than an oversight.
+
+**The result barely moved, which is the reassuring part:**
+
+| | mixed | full cuda |
+|---|---|---|
+| IC (kept) | +0.0509 | **+0.0536** |
+| t | +0.62 | +0.65 |
+| null bar / MAX | +0.0415 / **+0.0916** | +0.0426 / **+0.0916** |
+| z | +1.34 | +1.43 |
+| **p** | 0.0476 ← NUL-4 | **0.0952** ← corrected |
+| kept / shortlist | 122 / 43 | 122 / 46 |
+
+⚠️ **The IC moved by +0.0027 because two rankers changed implementation** — `lasso`
+from coordinate descent to FISTA and `mutual_info` from sklearn's KDTree to the GPU
+Kraskov. Both are verified to agree with what they replace (rank correlation 1.00000
+and 8.9e-16 respectively), so the shift is ensemble-ordering noise, not a different
+answer. It is still a **setup change**: `device` was already part of the setup, and
+these runs are not comparable with the pre-conversion archive.
+
+⚠️ **The verdict is unchanged and the p is now honest.** Same `null_max` of +0.0916
+sitting above the observed, `t = +0.65`, and `p = 0.0952` — the corrected NUL-4
+arithmetic, live in this run. `evidence=cleared_p95_not_a_pass` either way.

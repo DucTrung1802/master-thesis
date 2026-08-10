@@ -145,14 +145,34 @@ class NullResult:
     def p_value(self) -> float:
         """`P[null ≥ observed]`, the empirical one-sided p-value.
 
-        ⚠️ Floored at `1/(n+1)` rather than reported as 0: 20 draws cannot
+        `(k + 1) / (n + 1)` — the standard add-one estimator. It is floored at
+        `1/(n+1)` by construction rather than by a clamp: 20 draws cannot
         distinguish p = 0.05 from p = 0.001, and printing 0.000 would claim they
         can.
+
+        ⚠️ **THIS WAS `max(k, 1) / (n + 1)` UNTIL 2026-08-10, WHICH IS THE SAME
+        NUMBER FOR k = 0 AND k = 1** (issue **NUL-4**). Flooring the COUNT instead of
+        adding one conflated "no shuffled draw beat the real data" with "one did", and
+        was anti-conservative by exactly one draw at every k ≥ 1:
+
+            k (draws >= observed)      was        correct
+            0                       0.0476        0.0476   <- agree
+            1                       0.0476        0.0952   <- reported as significant
+            2                       0.0952        0.1429
+            3                       0.1429        0.1905
+
+        Found by the `basic+economy_japan` run of 2026-08-10, which reported
+        `p = 0.0476` while `null_max = +0.0916` sat well above its own
+        `observed = +0.0509` — a p at the `1/(n+1)` floor is a claim that NO draw
+        beat the observed, and the max said one had. Four of the five archived nulls
+        were affected; only japan's crossed the 0.05 line (0.0476 → 0.0952). The
+        2026-08-10 `vcb__basic` run (z = +2.15) is NOT affected — its `null_max`
+        of +0.0648 is below its observed +0.0783, so k really is 0.
         """
         n = len(self.draws)
         if n == 0:
             return np.nan
-        return max((self.draws >= self.observed).sum(), 1) / (n + 1)
+        return float((self.draws >= self.observed).sum() + 1) / (n + 1)
 
     @property
     def z(self) -> float:

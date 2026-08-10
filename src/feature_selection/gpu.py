@@ -7,15 +7,23 @@
 |---|---|---|
 | `xgb_gain`, `xgb_shap` | ✅ | `XGBRegressor(device="cuda", tree_method="hist")` |
 | SHAP values | ✅ | the booster's own `pred_contribs=True`, not the `shap` package — GPU-side exact tree SHAP, verified equal to `shap.TreeExplainer` to **0.0**, and faster (0.06 s vs 0.10 s on 4,230 × 27) |
-| `permutation` | ✅ | the fitted model is on the GPU, so every one of its `n_repeats × n_features` predictions is |
+| `permutation` | ✅ | `permutation_importance_batched` — GPU-resident, one column written per draw, predicts batched. **49× (cpu) / 63× (cuda)** against sklearn's |
 | stability, validation | ✅ | same models, same device |
 | feature↔feature Spearman | ✅ | rank-transform + five matmuls in torch — **the step that dominates a wide pool**, though see §2 on how much of that win is the GPU |
-| feature↔target Spearman | ✅ | the same code path, so the sign on the chart and the magnitude in the ensemble cannot disagree |
-| `mutual_info` | ❌ | sklearn's kNN (Kraskov) estimator is CPU-only. A GPU reimplementation would be a *different estimator*, and quietly swapping the definition to win a benchmark is not a speedup |
-| `lasso` | ❌ | `LassoCV` is CPU-only in sklearn, and cuML — which has a GPU LASSO — ships no Windows wheel (RAPIDS is Linux-only) |
+| feature↔target Spearman | ✅ | `spearman_vector`, a vector not a p × p matrix — **28× on cuda at 8,748 columns**, and exact against the old path |
+| `lasso` | ✅ | `gpu_rankers.lasso_cv` — FISTA on the same alpha path and the same purged folds. Same selected alpha, `|coef|` rank correlation **1.00000** |
+| `mutual_info` | ✅ | `gpu_rankers.mutual_info` — the SAME Kraskov estimator, agreeing with sklearn to **8.9e-16**. ⚠️ Slower than sklearn's KDTree on this hardware; see §5 |
 
-Five of the six rankers and every model fit go to the GPU; the two that do not are
-the two whose *definition* lives in a CPU-only library.
+⚠️ **`device="cuda"` MEANS EVERY RANKER, WITH NO WIDTH GATE AND NO SILENT HOST
+DISPATCH** (2026-08-10, second pass). It did not mean that for most of that day: a
+measured threshold kept `lasso` on coordinate descent below 2,000 design columns and
+`mutual_info` on sklearn always, which was defensible per-step and produced a run
+that reported `device=cuda` while spending **67 % of its wall clock on the host** —
+`lasso` alone was 52.8 % of it. A flag that means "the device, sometimes" cannot
+answer "did this run on the GPU?", so it now means the device. `AUTO_CUDA_MIN_FEATURES`
+and `GPU_LASSO_MIN_COLUMNS` survive as the measured crossovers that `device="auto"`
+and `device="cpu"` still trade on. §4 has what the conversion moved; **§5 has what it
+costs**, because on this hardware the answer is not free.
 
 ## ⚠️ 1. THE DEVICE CAN CHANGE THE ANSWER — and the cause is STOCHASTIC SAMPLING
 
@@ -116,10 +124,70 @@ host array copies once per fit and measured *faster* than handing it a
 4,230 × 27) — the copy is not the bottleneck, and a host array keeps the frames
 usable by the sklearn steps without a round trip. XGBoost warns once about the
 device mismatch on `predict`; it is the copy, and it is the cheap side of the
-trade.
+trade. ⚠️ **`permutation_importance_batched` is the exception and does hand it a
+resident tensor**, because there the copy happens once per PERMUTATION rather than
+once per fit.
+
+## ⚠️ 4. THE 2026-08-10 CONVERSION — what moved, and the two things that did not
+
+Before this date **no run in the archive had ever used the GPU**: all 22 recorded
+`device="cpu"`, because that was the default in `run.py` and in the Dagster asset.
+Forcing `device="cuda"` was then measured on `basic+economy_vietnam` and made the
+whole run **6.8× SLOWER** (154 s → 1,046 s). So "turn the GPU on" was never a
+one-line change, and the conversion is three separate pieces of work:
+
+| | before | after | why |
+|---|---|---|---|
+| `permutation` | 85 s cpu / **986 s cuda** | **1.9 s** | sklearn copied the whole DataFrame per draw and round-tripped to the host; this writes one column and batches the predicts |
+| feature↔target Spearman | 18.2 s cpu / **31.9 s cuda** @ 8,748 cols | **1.1 s** | it was building a 584 MB p × p matrix to keep one column |
+| `lasso` | **215 min** on `usa`, cpu-only | GPU above 2,000 cols | FISTA on the same objective and folds |
+
+## ⚠️ 5. WHAT `device="cuda"` COSTS, NOW THAT IT MEANS EVERY RANKER
+
+The first pass of the conversion left two width-gated dispatches to the host. They
+were each defensible and together they produced a run reporting `device=cuda` that
+spent **67.3 %** of its wall clock on the CPU. Removed. Measured on `japan` (205
+channels, 1,230 design columns), one selection pass, before and after:
+
+| step | width-gated | every ranker on cuda | |
+|---|---|---|---|
+| **`lasso`** | **155.4 s** cpu | **0.7 s** cuda | **231.9×** |
+| `mutual_info` | 41.8 s cpu | 22.4 s cuda | 1.9× |
+| everything else | 96.1 s cuda | 65.7 s cuda | 1.5× |
+| **pass** | **294.4 s** | **89.7 s** | **3.3×** |
+| **share on CPU** | **67.3 %** | **0.9 %** | |
+| whole run, 1 + 20 null draws | 53.0 min | **28.9 min** | 1.8× |
+
+⚠️ **`lasso` at 232× is the headline and it is a lesson about benchmarks.** §4's
+synthetic i.i.d. table put FISTA at 1.2-3.1× and said so was an extrapolation to real
+data. Real design columns are windowed macro series and are massively collinear;
+coordinate descent degrades badly on them (**9.0 s synthetic at 2,000 columns vs
+155.4 s real at 1,230**) and FISTA does not, because its cost is a fixed matmul per
+iteration regardless of conditioning.
+
+⚠️ **`mutual_info` is the honest counterweight: it is SLOWER, and it runs anyway.**
+Its compute genuinely loses to a KDTree (§4's warm-pool table). The 1.9× above is a
+COLD process, where sklearn pays ~35 s of `loky` spawn; within a 21-pass run the pool
+warms and sklearn's amortised cost is lower — GPU `mutual_info` costs roughly
+**+5 minutes per country run**, paid out of the ~10 minutes `lasso` saves. It is used
+because `device` must mean the device; `device="cpu"` remains the fast path for it.
+
+⚠️ **`window design` is the one step still on the host** — 0.8 s, **0.9 %**. It is the
+strided reduction that BUILDS the design matrix, i.e. data preparation rather than a
+ranker. GPU float64 reductions sum in a different order, so `nanmean`/`nanstd`/`slope`
+would likely stop matching the host bit-for-bit, and that difference would enter the
+matrix every ranker reads — including the Spearman steps that agree across devices to
+exactly **0.0** today (§1). Not worth 0.9 %.
+
+⚠️ **The conversion changed no ranker's DEFINITION.** `spearman` and `permutation`
+were already ours and are unchanged; `lasso` is the same objective under a different
+optimiser (see `gpu_rankers`, and note the `p > n` non-uniqueness caveat there);
+`mutual_info` still runs sklearn's own code. What changed is where the arithmetic
+happens — except in `permutation`, where the repeats are now independent draws
+rather than sklearn's chained ones, which `test_gpu_permutation.py` justifies.
 """
 
-from typing import Dict, Optional, Tuple
+from typing import Callable, Dict, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -138,6 +206,22 @@ AUTO_CUDA_MIN_FEATURES = 200
 # single-process. Spawning a loky pool costs ~20 s on Windows, which is 150× the
 # 0.15 s that `mutual_info_regression` needs on a 27-column pool.
 PARALLEL_MIN_FEATURES = 100
+
+# ⚠️ Below this many DESIGN columns the GPU LASSO LOSES, so `gpu_rankers.lasso_cv`
+# is not used under it. Measured at n=4,211 against `LassoCV`, on i.i.d. Gaussian
+# columns and with the selected alpha and `|coef|` ranking IDENTICAL at every width:
+#
+#     p        sklearn      gpu_rankers/cuda     ratio
+#     700         0.6 s              ~5 s        0.1x   <- sklearn wins
+#     2,000       9.0 s               7.4 s      1.2x   <- crossover
+#     5,000      42.0 s              21.2 s      2.0x
+#
+# Coordinate descent with warm starts is very hard to beat while the active set is
+# small; FISTA pays a full 4,211 x p matmul per iteration whatever the sparsity, and
+# only wins once that matmul is what a GPU is for. The design matrix is
+# `channels x 6`, so this threshold is crossed at ~333 channels — `basic+economy_usa`
+# (8,748 columns) is well past it and every other country pool is well under.
+GPU_LASSO_MIN_COLUMNS = 2000
 
 
 def n_jobs_for(n_features: int) -> Optional[int]:
@@ -367,20 +451,89 @@ def spearman_matrix(frame: pd.DataFrame, device: str = "cpu") -> pd.DataFrame:
     )
 
 
+def _pearson_against_last(ranks: np.ndarray, xp, device: str):
+    """The LAST column of `_pairwise_pearson`, without forming the other p².
+
+    Same five sums and the same pairwise deletion — every one specialised to
+    `j = last`, so each `p × p` product collapses to a `p`-vector. Algebraically a
+    strict subset of `_pairwise_pearson`, which is why the two agree to **0.0**
+    rather than merely closely (asserted in `test_gpu_spearman.py`).
+    """
+    features, tgt = ranks[:, :-1], ranks[:, -1:]
+    present = xp.isfinite(features)
+    tgt_present = xp.isfinite(tgt)
+
+    mask = present.astype(xp.float64) if device == "cpu" else present.double()
+    tmask = tgt_present.astype(xp.float64) if device == "cpu" else tgt_present.double()
+    x = xp.where(present, features, xp.zeros_like(features))
+    y = xp.where(tgt_present, tgt, xp.zeros_like(tgt))
+
+    # Every term is masked by BOTH columns, which is the pairwise deletion.
+    both = mask * tmask                      # n x p
+    n = both.sum(0)
+    sum_x = (x * tmask).sum(0)
+    sum_y = (y * mask).sum(0)
+    sum_xy = (x * y).sum(0)
+    sum_xx = (x * x * tmask).sum(0)
+    sum_yy = (y * y * mask).sum(0)
+
+    cov = n * sum_xy - sum_x * sum_y
+    var_x = n * sum_xx - sum_x * sum_x
+    var_y = n * sum_yy - sum_y * sum_y
+    denominator = xp.sqrt(xp.clip(var_x * var_y, 0.0, None))
+    with np.errstate(invalid="ignore", divide="ignore"):
+        corr = cov / denominator
+    return xp.where(denominator > 0, corr, xp.zeros_like(corr))
+
+
 def spearman_vector(
     frame: pd.DataFrame, target: pd.Series, device: str = "cpu"
 ) -> pd.Series:
     """Spearman ρ of every column against one target, in one pass.
 
-    Built by correlating `[features | target]` and taking the last column, so it
-    is the same code path — and therefore the same tie and NaN handling — as the
-    matrix above.
+    Ranks are computed by the same helpers as `spearman_matrix`, so the tie and NaN
+    conventions are shared by construction and the two functions cannot drift.
+
+    ⚠️ **THIS USED TO CALL `spearman_matrix` AND THROW AWAY ALL BUT ONE COLUMN**, and
+    on a wide DESIGN matrix that is not a tidy shortcut but the dominant cost of the
+    step. `selector.run` calls this on the design matrix, which is `channels × 6`
+    stats: for `basic+economy_usa` that is **8,748 columns**, so the discarded matrix
+    was 8,748² float64 = **584 MB**, with ~10 live temporaries inside
+    `_pairwise_pearson` on a card that has 3.3 GB free. Measured on this machine,
+    4,211 rows, 15 % NaN, a constant column and a 1,000-row tie block:
+
+    | width | cpu before | cpu after | cuda before | cuda after |
+    |---|---|---|---|---|
+    | 300 | 0.14 s | 0.14 s | 0.57 s | **0.02 s** — 23× |
+    | 2,000 | 1.48 s | 1.07 s | 1.49 s | **0.16 s** — 9× |
+    | **8,748** (`usa`) | 18.18 s | 5.19 s | **31.93 s** | **1.13 s** — 28× |
+
+    ⚠️ **Note the `before` column for cuda: the GPU was SLOWER than the host at every
+    width**, because a p² matmul in float64 is the one thing a consumer GeForce is bad
+    at (§2). The vector form is what makes this step a GPU win at all. It also takes
+    the peak working set from ~5.8 GB of p² temporaries to the 295 MB of the ranks,
+    which is what kept a 4 GB card one bad allocation from an OOM at a width the
+    country sweep reaches routinely — so this is a correctness fix and not only a
+    speed one. **`max abs diff` against the old path is 0.0 at every width above, on
+    both devices.**
     """
     joined = frame.copy()
     name = "__target__"
     joined[name] = target.to_numpy(np.float64)
-    corr = spearman_matrix(joined, device=device)
-    return corr[name].drop(index=name).rename("spearman_vs_target")
+
+    if device == "cuda":
+        torch = _torch()
+        values = torch.as_tensor(
+            joined.to_numpy(np.float64), device="cuda", dtype=torch.float64
+        )
+        ranks = _average_ranks_torch(values, torch.isfinite(values))
+        corr = _pearson_against_last(ranks, torch, "cuda").cpu().numpy()
+    else:
+        corr = _pearson_against_last(_average_ranks_numpy(joined), np, "cpu")
+
+    return pd.Series(
+        np.clip(corr, -1.0, 1.0), index=frame.columns, name="spearman_vs_target"
+    )
 
 
 # --------------------------------------------------------------- xgboost + shap
@@ -389,6 +542,152 @@ def spearman_vector(
 def xgb_params(device: str) -> Dict[str, object]:
     """The device-dependent half of every XGBoost model built in this package."""
     return {"device": device, "tree_method": "hist"}
+
+
+def _as_device_matrix(frame: pd.DataFrame, device: str):
+    """`frame` as the array type this device predicts from, float32, contiguous."""
+    values = np.ascontiguousarray(frame.to_numpy(np.float32))
+    if device != "cuda":
+        return values
+    torch = _torch()
+    return torch.as_tensor(values, device="cuda")
+
+
+def permutation_batch_size(n_rows: int, n_cols: int, device: str) -> int:
+    """How many permuted copies fit in one predict, from the FREE memory now.
+
+    ⚠️ Sized against `mem_get_info` rather than a constant, because this card has
+    4 GB total and whatever else is resident (the fitted booster, the design matrix,
+    the rank buffers) is not knowable from here. A quarter of free VRAM, floored at
+    one copy so the function degrades to the unbatched loop instead of raising.
+    """
+    per_copy = n_rows * n_cols * 4  # float32
+    if device == "cuda":
+        torch = _torch()
+        free, _total = torch.cuda.mem_get_info()
+        budget = int(free * 0.25)
+    else:
+        budget = 512 * 1024**2
+    return int(max(1, min(64, budget // max(per_copy, 1))))
+
+
+def permutation_importance_batched(
+    model,
+    X: pd.DataFrame,
+    score: Callable[[np.ndarray], float],
+    *,
+    n_repeats: int = 10,
+    random_state: int = 0,
+    device: str = "cpu",
+) -> np.ndarray:
+    """Permutation importance that never leaves the device and never copies `X`.
+
+    Returns `importances_mean`, one value per column of `X`, on the same definition
+    `sklearn.inspection.permutation_importance` uses: for each column and repeat,
+    permute that column and take `baseline - permuted_score`, then average over
+    repeats. `score` takes a prediction vector and returns the number the selection
+    is judged on — the caller closes it over the right `y`, so a cross-sectional run
+    keeps its per-date IC.
+
+    ## ⚠️ Why this replaced sklearn's, which was ALREADY the GPU's biggest loss
+
+    Measured on `basic+economy_vietnam` (113 channels → 678 design columns), one
+    whole selection:
+
+    | step | cpu | cuda (sklearn loop) |
+    |---|---|---|
+    | permutation | 85.3 s | **986.3 s** |
+    | whole run | 154 s | **1,046 s** |
+
+    Forcing the GPU made the run **6.8× slower**, and permutation was all of it.
+    Two causes, and the GPU is not really either:
+
+    1. **sklearn copies the whole `X` per permutation.** `_calculate_permutation_scores`
+       holds an `X.copy()` and rewrites one column of a **pandas DataFrame** — an
+       `O(n·p)` copy plus pandas indexing overhead to change `O(n)` values. That cost
+       scales with WIDTH, which is why the archived `usa` run (8,747 design columns)
+       spent **204 minutes** here. This function writes one column and restores it.
+    2. **One host→device round trip per permutation.** With `device="cuda"` sklearn
+       hands XGBoost a host array 6,780 times. Measured on this card: `predict` on a
+       host array is 14.2 ms and `inplace_predict` on a resident tensor is 11.9 ms —
+       so the trip is real but small. **Batching is the larger win**: stacking copies
+       into one `inplace_predict` took a 40-feature case from 9.6 to 2.2 ms per
+       permutation, 8× against sklearn, and the margin grows with `p`.
+
+    ⚠️ **ONE IMPLEMENTATION FOR BOTH DEVICES, on purpose.** `xp` is numpy or torch and
+    nothing else differs, so `cpu` and `cuda` cannot drift on this step the way they
+    legitimately do on the tree methods (§1). It also means the host gets the same
+    algorithmic win, which is most of it.
+
+    ⚠️ **ONE DELIBERATE DIFFERENCE FROM SKLEARN.** sklearn re-shuffles the ALREADY
+    PERMUTED column on each repeat, so its draws are a chained composition; this
+    permutes the ORIGINAL column every time, so the repeats are independent draws.
+    Both are uniform over permutations and have the same expectation — the mean over
+    repeats estimates the same quantity — but chaining creates a sequential dependency
+    that cannot be batched. The independent draws are also the better estimator. Agreement
+    with sklearn is therefore statistical, not bit-exact, and `test_gpu_permutation.py`
+    asserts it against the Monte-Carlo spread rather than against a tolerance.
+    """
+    columns = list(X.columns)
+    n_rows, n_cols = X.shape
+    booster = model.get_booster()
+    if device == "cuda":
+        booster.set_param({"device": "cuda"})
+
+    xp = _torch() if device == "cuda" else np
+    base = _as_device_matrix(X, device)
+
+    def predict(matrix) -> np.ndarray:
+        # ⚠️ `inplace_predict` RETURNS WHAT IT WAS GIVEN, ON THAT DEVICE. Handed a
+        # `torch.cuda` tensor it returns a **cupy** array, which refuses implicit
+        # `np.asarray` conversion ("Please use .get()") — so the three array types
+        # are handled by name rather than hoped through a single cast.
+        out = booster.inplace_predict(matrix)
+        if hasattr(out, "get"):          # cupy
+            out = out.get()
+        elif hasattr(out, "cpu"):        # torch
+            out = out.cpu().numpy()
+        return np.asarray(out, dtype=np.float64)
+
+    baseline = score(predict(base))
+
+    batch = permutation_batch_size(n_rows, n_cols, device)
+    # The work list is every (column, repeat) pair; batching across BOTH means a
+    # narrow pool with few repeats still fills a batch.
+    jobs = [(j, r) for j in range(n_cols) for r in range(n_repeats)]
+
+    if device == "cuda":
+        torch = xp
+        stacked = base.repeat(batch, 1).contiguous()
+        generator = torch.Generator(device="cuda")
+        generator.manual_seed(int(random_state))
+    else:
+        stacked = np.tile(base, (batch, 1))
+        generator = np.random.default_rng(random_state)
+
+    drops = np.zeros((n_cols, n_repeats), dtype=np.float64)
+    for start in range(0, len(jobs), batch):
+        chunk = jobs[start : start + batch]
+        for slot, (j, _r) in enumerate(chunk):
+            lo = slot * n_rows
+            if device == "cuda":
+                order = torch.randperm(n_rows, device="cuda", generator=generator)
+            else:
+                order = generator.permutation(n_rows)
+            stacked[lo : lo + n_rows, j] = base[order, j]
+
+        predictions = predict(stacked[: len(chunk) * n_rows])
+
+        for slot, (j, r) in enumerate(chunk):
+            lo = slot * n_rows
+            drops[j, r] = baseline - score(predictions[lo : lo + n_rows])
+            # ⚠️ RESTORE BEFORE THE NEXT BATCH. The slot is reused by a different
+            # column, and a left-over permutation there would silently score every
+            # later job against a corrupted matrix — the failure would look like
+            # noise, not like a bug.
+            stacked[lo : lo + n_rows, j] = base[:, j]
+
+    return drops.mean(axis=1)
 
 
 def tree_shap(model, X: pd.DataFrame) -> np.ndarray:

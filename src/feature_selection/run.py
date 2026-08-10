@@ -98,8 +98,8 @@ def run_selection(
     corr_threshold: float = 0.9,
     n_splits: int = 5,
     min_train: int = 500,
-    device: str = "cpu",
-    random_state: int = 42,
+    device: str = "cuda",
+    random_state: int = 18,
     stability: bool = True,
     null_draws: int = 20,
     holdout_start: Optional[str] = None,
@@ -359,8 +359,20 @@ def main(argv: Optional[Sequence[str]] = None):
     parser.add_argument("--corr-threshold", type=float, default=0.9)
     parser.add_argument("--n-splits", type=int, default=5)
     parser.add_argument("--min-train", type=int, default=500)
-    parser.add_argument("--device", default="cpu", help="cpu | cuda | auto — part of the setup")
-    parser.add_argument("--random-state", type=int, default=42)
+    parser.add_argument(
+        "--device",
+        default="cuda",
+        help="cuda | cpu | auto. Default cuda = EVERY ranker on the GPU (raises if "
+             "there is none). auto keeps narrow pools on the host, which left 14 of "
+             "19 country pools on the CPU. Part of the setup - see gpu.py section 1",
+    )
+    parser.add_argument(
+        "--random-state",
+        type=int,
+        default=18,
+        help="the SELECTOR's seed. Separate from NULL_SEED on purpose - see this "
+             "module's NULL_SEED comment",
+    )
     parser.add_argument("--no-stability", action="store_true")
     # ⚠️ ASCII only in `help=` — argparse PRINTS these, and a Windows console is cp1252,
     # so a `⚠️` here turns `--help` itself into a UnicodeEncodeError traceback

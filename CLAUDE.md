@@ -192,9 +192,21 @@ dagster asset materialize -f src/orchestration/definitions.py `
   --select "analysis/feature_selection_economy" --partition vietnam
 ```
 
-⚠️ **`usa` raises at the default budget and is meant to.** 1,458 channels is 7.2 h with
-no null and 6.3 days at 20 draws; override `budget_minutes` for that ONE partition
-rather than lowering the default. `feature_selection/CONTEXT.md` §15c.
+⚠️ **`usa` raises at the default budget and is meant to.** ~1,458 channels is ~3.1 h
+with no null and ~2.7 days at 20 draws; override `budget_minutes` for that ONE
+partition rather than lowering the default. `feature_selection/CONTEXT.md` §15c.
+
+⚠️ **THE SELECTION RUNS ON THE GPU NOW, AND `device` IS PART OF THE SETUP** (2026-08-10).
+Every one of the 22 archived runs recorded `device="cpu"` — the GPU had never been used —
+and simply forcing `cuda` made a run **6.8× SLOWER**, because sklearn's
+`permutation_importance` copied a whole DataFrame per draw and the feature↔target
+Spearman built a 584 MB p×p matrix to keep one column. Both were rewritten and `lasso`
+was reimplemented (FISTA, same objective, same purged folds, identical selected alpha);
+the same run is now **1,046 s → 66.9 s** and the default is `device="auto"`. ⚠️ **A GPU
+re-run does NOT reproduce an archived one** — XGBoost subsamples from a different RNG
+stream per device, so the kept set moves (58 of 62 in common). `feature_selection/CONTEXT.md`
+§16, and §16d for the one step that was converted, verified exact, measured 4-8× SLOWER
+and deliberately left on the host.
 
 ⚠️ **NEVER `Materialize all` / `*` / a bare backfill.** With every partition live that
 takes `raw/cafef_pdfs` (100 tickers × ~1-1.7 GB), `raw/trading_view@stocks` (777 tickers,
@@ -444,7 +456,7 @@ is structurally weak, `DRF-1` 18 channels put 100% of test beyond 5 train-sigmas
 | [src/orchestration/CONTEXT.md](src/orchestration/CONTEXT.md) | 25k | touching Dagster, `config.json`, any asset, any bronze/silver/gold table, the browser budget, or a scrape |
 | [src/orchestration/preprocessor/CONTEXT.md](src/orchestration/preprocessor/CONTEXT.md) | 17k | changing HOW a table is built — the `_ingest_*` / `_helper_*` transform library the assets wrap |
 | [src/web_scraper/CONTEXT.md](src/web_scraper/CONTEXT.md) | 22k | touching a scraper, the PDF/OCR statement parser, or `raw_data/` layout |
-| [src/feature_selection/CONTEXT.md](src/feature_selection/CONTEXT.md) | 25k | running or reading a selection, or quoting any IC / null / bar number. **§15a is the STEP-BY-STEP UI GUIDE** for the country sweep (§15a-cli is the same in PowerShell); §15b-§15d the two guards and the cost table; §14c is the measured cut that replaced `max_features=12` |
+| [src/feature_selection/CONTEXT.md](src/feature_selection/CONTEXT.md) | 25k | running or reading a selection, or quoting any IC / null / bar number. **§15a is the STEP-BY-STEP UI GUIDE** for the country sweep (§15a-cli is the same in PowerShell); §15b-§15d the two guards and the cost table; **§16 is the GPU conversion** — what moved, what was measured slower and left alone; §14c is the measured cut that replaced `max_features=12` |
 | [src/final_features/CONTEXT.md](src/final_features/CONTEXT.md) | 3k | building or rebuilding a `__final__` table |
 | [src/train_test_creator/CONTEXT.md](src/train_test_creator/CONTEXT.md) | 3k | building a dataset, or asking about the purge/impute/scale/window steps |
 | **[src/model/CONTEXT.md](src/model/CONTEXT.md)** | **9k** | training, adding a model type, or quoting any run's numbers. **§1a is the RUN STANDARD** (naming/input/output, enforced); §7 the new-model recipe; **§13–§16 are today's results** — CNN, Tier 1, Tier 2, the bank panel; §10–§11 the older research log ⚠️ now a citation without its evidence (RPR-1) |

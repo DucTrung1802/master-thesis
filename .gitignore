@@ -120,6 +120,21 @@ experiment/experiment_10/_cache/
 !reports/feature_selection_basic/
 !reports/feature_selection_basic/**
 #
+# `_economy` is the COUNTRY SWEEP — `pool__basic + pool__economy_<country>`, and the
+# default root of `analysis/feature_selection_economy`. It needs its own root for a
+# second reason beyond the scoping one above: the sweep runs at `random_state=18`
+# while every run under `reports/feature_selection/` is 42, and `random_state` IS a
+# SETUP_KEY — so both wanted the name `return_5day__final__d20_h5` and
+# `final_features` refused to plan at all until they were separated.
+!reports/feature_selection_economy/
+!reports/feature_selection_economy/**
+#
+# `_superseded` is read by NO stage — it is where a redone run goes so that it stops
+# being unioned into the table its replacement builds. Tracked because the runs in it
+# are evidence (see its README), ignored by every root.
+!reports/feature_selection_superseded/
+!reports/feature_selection_superseded/**
+#
 # ⚠️ They are not small. The archive is ~120 MB across 22 runs, and `channel_correlation.csv`
 # alone reached 40.0 MB on a 1,458-channel pool — it is the full N×N pairwise matrix.
 # Before committing a new WIDE-pool run, check that one file: the deliverables are

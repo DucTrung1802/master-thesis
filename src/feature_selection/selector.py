@@ -58,11 +58,10 @@ import pandas as pd
 from scipy import stats
 from sklearn.exceptions import ConvergenceWarning
 from sklearn.feature_selection import mutual_info_regression
-from sklearn.inspection import permutation_importance
 from sklearn.linear_model import LassoCV
 from sklearn.preprocessing import StandardScaler
 
-from feature_selection import gpu, windows
+from feature_selection import gpu, gpu_rankers, windows
 from feature_selection.windows import WINDOW_STATS
 
 # The ensemble members, in the order they appear in the score table.
@@ -319,7 +318,7 @@ class FeatureSelector:
         horizon: int = 5,
         n_splits: int = 5,
         min_train: int = 500,
-        random_state: int = 42,
+        random_state: int = 18,
         device: str = "auto",
         subsample: float = 0.8,
         colsample_bytree: float = 0.8,
@@ -584,14 +583,33 @@ class FeatureSelector:
         scores["spearman"] = target_corr.reindex(Xi.columns).abs()
 
         # 2. Mutual information — catches dependence a rank correlation misses.
-        #    ⚠️ CPU-bound by definition: sklearn's Kraskov kNN estimator has no
-        #    GPU implementation, and substituting a histogram estimator to win a
-        #    benchmark would silently change what the column means. Threaded.
+        #    ⚠️ **ON THE GPU WHENEVER `device="cuda"` (2026-08-10).**
+        #    `gpu_rankers.mutual_info` is the SAME Kraskov estimator, not a histogram
+        #    substitute — same formula, same per-column `scale`, same tie-breaking
+        #    noise from the same legacy `RandomState` — verified equal to sklearn's
+        #    to **8.9e-16** in `test_gpu_rankers.py`.
+        #    ⚠️ It is also SLOWER on this hardware: sklearn reaches the k-th
+        #    neighbour through a KDTree at O(n log n) per column, while the joint
+        #    distance matrix is O(n²). Measured at n=4,211 with a warm loky pool:
+        #    200 cols 1.0 s vs 7.6 s, 678 cols 3.5 s vs 14.5 s. It runs on the GPU
+        #    anyway because `device` means the device — a flag that silently kept
+        #    two of six rankers on the host was the thing that made "is the economy
+        #    run on the GPU?" unanswerable. Pass `device="cpu"` for the fast path.
         started = time.perf_counter()
-        scores["mutual_info"] = mutual_info_regression(
-            Xi, y, random_state=self.random_state, n_jobs=gpu.n_jobs_for(Xi.shape[1])
-        )
-        self.timings["mutual_info (cpu)"] = time.perf_counter() - started
+        if self.device == "cuda":
+            scores["mutual_info"] = gpu_rankers.mutual_info(
+                Xi.to_numpy(np.float64),
+                y.to_numpy(np.float64),
+                random_state=self.random_state,
+                device="cuda",
+            )
+            self.timings["mutual_info (cuda)"] = time.perf_counter() - started
+        else:
+            scores["mutual_info"] = mutual_info_regression(
+                Xi, y, random_state=self.random_state,
+                n_jobs=gpu.n_jobs_for(Xi.shape[1]),
+            )
+            self.timings["mutual_info (cpu)"] = time.perf_counter() - started
 
         # 3-4. XGBoost gain and SHAP, from one fit — both on the GPU when there
         #      is one, including the SHAP values (see `gpu.tree_shap`).
@@ -613,32 +631,59 @@ class FeatureSelector:
         #    leaked score. Handing it the purged walk-forward folds costs nothing
         #    and removes the leak.
         #
-        #    ⚠️ Also CPU-bound: sklearn's coordinate descent has no GPU path, and
-        #    cuML — which does — has no Windows wheel. Threaded across the folds.
+        #    ⚠️ **NO LONGER UNCONDITIONALLY CPU-BOUND** (2026-08-10).
+        #    `gpu_rankers.lasso_cv` solves the SAME objective on the SAME purged
+        #    folds by FISTA instead of coordinate descent, and beats sklearn above
+        #    `gpu.GPU_LASSO_MIN_COLUMNS` design columns — 2.0× at 5,000, and the
+        #    archived `usa` run spent **215 minutes** here at 8,747. Below that
+        #    threshold coordinate descent wins and is kept; the dispatch is measured,
+        #    not assumed, and both paths select the same alpha (see
+        #    `test_gpu_rankers.py`).
         started = time.perf_counter()
         purged = self._splits(Xi.index)
         scaled = StandardScaler().fit_transform(Xi)
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always", ConvergenceWarning)
-            lasso = LassoCV(
-                cv=purged,
-                random_state=self.random_state,
-                max_iter=5000,
-                n_jobs=gpu.n_jobs_for(Xi.shape[1]),
-            ).fit(scaled, y)
-        self.lasso_converged = not any(
-            issubclass(w.category, ConvergenceWarning) for w in caught
-        )
-        scores["lasso"] = np.abs(lasso.coef_)
-        self.timings["lasso (cpu)"] = time.perf_counter() - started
+        # ⚠️ **NO WIDTH GATE ANY MORE (2026-08-10).** This used to be
+        # `device == "cuda" and Xi.shape[1] >= gpu.GPU_LASSO_MIN_COLUMNS`, which kept
+        # 18 of the 19 country pools on sklearn's coordinate descent — `lasso` was
+        # then **52.8 %** of the japan run's wall clock while the run reported
+        # `device=cuda`. The threshold was measured and honest (CD beats FISTA below
+        # ~2,000 design columns) and it made `device` mean "the device, sometimes".
+        # `device="cuda"` now means every ranker; `GPU_LASSO_MIN_COLUMNS` is kept as
+        # the documented crossover and is what `device="cpu"`/`"auto"` still trade on.
+        use_gpu_lasso = self.device == "cuda"
+        if use_gpu_lasso:
+            coef, _alpha, converged = gpu_rankers.lasso_cv(
+                scaled, y.to_numpy(np.float64), purged, device=self.device
+            )
+            self.lasso_converged = converged
+            scores["lasso"] = np.abs(coef)
+            self.timings["lasso (cuda)"] = time.perf_counter() - started
+        else:
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always", ConvergenceWarning)
+                lasso = LassoCV(
+                    cv=purged,
+                    random_state=self.random_state,
+                    max_iter=5000,
+                    n_jobs=gpu.n_jobs_for(Xi.shape[1]),
+                ).fit(scaled, y)
+            self.lasso_converged = not any(
+                issubclass(w.category, ConvergenceWarning) for w in caught
+            )
+            scores["lasso"] = np.abs(lasso.coef_)
+            self.timings["lasso (cpu)"] = time.perf_counter() - started
 
         # 6. Permutation importance, OUT OF SAMPLE on the last walk-forward fold.
         #    The only member that answers "does this generalise".
         #
-        #    ⚠️ `n_jobs=1` on CUDA, and that is not a pessimisation. sklearn
-        #    parallelises by FORKING the fitted model into worker processes, and
-        #    each copy would claim its own slab of a 4 GB card; the predictions
-        #    themselves already run on the GPU inside one process.
+        #    ⚠️ **NOT `sklearn.inspection.permutation_importance` ANY MORE** (2026-08-10).
+        #    That function holds an `X.copy()` and rewrites one column of a pandas
+        #    DataFrame per permutation — an O(n·p) copy to change O(n) values — and on
+        #    `device="cuda"` it also made one host→device round trip per permutation.
+        #    Measured on `basic+economy_vietnam`, forcing the GPU made the WHOLE RUN
+        #    6.8× slower and this step was all of it (85 s → 986 s).
+        #    `gpu.permutation_importance_batched` keeps the definition, writes one
+        #    column, and batches the predicts: **49× faster on cpu, 63× on cuda**.
         started = time.perf_counter()
         train_idx, test_idx = self._splits(Xi.index)[-1]
         X_tr, X_te = self._impute(X.iloc[train_idx], X.iloc[test_idx])
@@ -650,23 +695,25 @@ class FeatureSelector:
         # not to decide on.
         #
         # ⚠️ It goes through `self._ic`, so a cross-sectional run permutes against a
-        # PER-DATE IC. sklearn hands the scorer the permuted `X` as a DataFrame with
-        # its index intact, which is what lets `_ic` recover each row's date.
-        def scorer(estimator, X_scored, y_scored):
-            return self._ic(estimator.predict(X_scored), y_scored)
+        # PER-DATE IC. `_ic` recovers each row's date from `y_test.index`, so the
+        # scorer closes over the UNPERMUTED y — the permutation moves a feature
+        # column, never a label or its index.
+        y_test = y.iloc[test_idx]
 
-        perm = permutation_importance(
+        def score(prediction: np.ndarray) -> float:
+            return self._ic(prediction, y_test)
+
+        importances = gpu.permutation_importance_batched(
             fold_model,
             X_te,
-            y.iloc[test_idx],
+            score,
             n_repeats=self.permutation_repeats,
             random_state=self.random_state,
-            scoring=scorer,
-            n_jobs=1 if self.device == "cuda" else gpu.n_jobs_for(X.shape[1]),
+            device=self.device,
         )
         # Negative = permuting it HELPED, i.e. it hurt out of sample. Clipped to 0
         # so it contributes nothing rather than a negative weight.
-        scores["permutation"] = np.clip(perm.importances_mean, 0.0, None)
+        scores["permutation"] = np.clip(importances, 0.0, None)
         self.timings[f"permutation ({self.device})"] = time.perf_counter() - started
 
         return scores[list(METHODS)]
