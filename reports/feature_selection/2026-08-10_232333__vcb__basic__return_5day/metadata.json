@@ -1,0 +1,235 @@
+{
+  "report_schema_version": "1.0",
+  "generated_at": "2026-08-10T16:23:36.885302+00:00",
+  "git_commit": "dfef91f7+dirty",
+  "environment": {
+    "python": "3.12.10",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "numpy": "2.2.6",
+    "pandas": "2.3.3",
+    "scipy": "1.17.1",
+    "sklearn": "1.7.2",
+    "xgboost": "2.1.1",
+    "matplotlib": "3.10.8"
+  },
+  "input": {
+    "database": "database_main_v2",
+    "schema": "unified_schema_vcb",
+    "tables": [
+      "pool__basic",
+      "pool__targets"
+    ],
+    "join_log": [
+      {
+        "table": "pool__targets",
+        "join_keys": "date, exchange, ticker",
+        "how": "inner",
+        "rows_before": 4266,
+        "rows_after": 4266,
+        "columns_added": 4,
+        "duplicate_columns_dropped": ""
+      }
+    ],
+    "panel_rows": 4266,
+    "panel_columns": 42,
+    "first_date": "2009-06-30",
+    "last_date": "2026-08-07",
+    "sessions": 4266,
+    "tickers": 1
+  },
+  "target": {
+    "name": "return_5day",
+    "horizon_days": 5,
+    "definition": "forward 5-session return on close_adjust",
+    "labelled_rows": 4261,
+    "unlabelled_rows": 5,
+    "mean": 0.0031487324557093873,
+    "sd": 0.04302677388046952,
+    "min": -0.1875968992248062,
+    "max": 0.2914485165794066
+  },
+  "setup": {
+    "target": "return_5day",
+    "horizon_h": 5,
+    "lookback_d": 20,
+    "normalize": "none",
+    "purge_gap_rows": 24,
+    "window_stats": "last, mean, slope, sd, min, max",
+    "dropped_by_normalize": 0,
+    "dev_samples": 4242,
+    "holdout_start": "—",
+    "holdout_rows": 0,
+    "purged_at_boundary": 0,
+    "channels": 27,
+    "design_columns": 162,
+    "kept": 14,
+    "device": "cuda",
+    "max_features": null,
+    "corr_threshold": 0.9,
+    "n_splits": 5,
+    "min_train": 500,
+    "random_state": 18,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "permutation_repeats": 10,
+    "device_preference": "cuda",
+    "selector_class": "FeatureSelector",
+    "panel_col": null,
+    "feature_normalize": null
+  },
+  "results": {
+    "n_channels": 27,
+    "n_kept": 14,
+    "kept": [
+      "foreign_room_left",
+      "volume_negotiated",
+      "close_adjust",
+      "foreign_own",
+      "close_raw",
+      "value_matched",
+      "sell_order_vol",
+      "avg_vol_per_buy_order",
+      "foreign_sell_value",
+      "avg_vol_per_sell_order",
+      "foreign_buy_value",
+      "prop_buy_val",
+      "foreign_net_value",
+      "prop_sell_val"
+    ],
+    "dropped_constant": [],
+    "dropped_correlated": {
+      "high": "close_raw",
+      "volume_matched": "value_matched",
+      "low": "close_raw",
+      "buy_order_vol": "sell_order_vol",
+      "n_sell_orders": "value_matched",
+      "open": "close_raw",
+      "n_buy_orders": "value_matched",
+      "foreign_sell_volume": "foreign_sell_value",
+      "value_negotiated": "volume_negotiated",
+      "foreign_net_volume": "foreign_net_value",
+      "foreign_buy_volume": "foreign_buy_value",
+      "prop_buy_vol": "prop_buy_val",
+      "prop_sell_vol": "prop_sell_val"
+    },
+    "dead_methods": [],
+    "top_10_by_ensemble": [
+      "foreign_room_left",
+      "volume_negotiated",
+      "close_adjust",
+      "foreign_own",
+      "close_raw",
+      "high",
+      "value_matched",
+      "sell_order_vol",
+      "volume_matched",
+      "low"
+    ],
+    "timings_seconds": {
+      "window design (cpu)": 0.16,
+      "spearman vs target (cuda)": 0.24,
+      "mutual_info (cuda)": 3.76,
+      "xgb gain + shap (cuda)": 1.38,
+      "lasso (cuda)": 0.96,
+      "permutation (cuda)": 3.54,
+      "channel corr matrix (cuda)": 0.02,
+      "stability (cuda)": 5.77,
+      "validation (cuda)": 9.92
+    },
+    "ic_summary": {
+      "folds": 5.0,
+      "ic_mean": 0.06447402714584305,
+      "ic_trend_per_fold": -0.021323175810945186,
+      "ic_min": -0.007645996667917728,
+      "ic_max": 0.16657773179914703,
+      "ic_fold_sd": 0.06813309422881707,
+      "hit_rate": 0.4714951702936071,
+      "n_test_rows": 743.0,
+      "n_eff_per_fold": 148.6,
+      "se_ic_per_fold": 0.0823
+    },
+    "ic_summary_all_channels": {
+      "folds": 5.0,
+      "ic_mean": 0.05457105874301728,
+      "ic_trend_per_fold": -0.027032896189782447,
+      "ic_min": -0.01675957321405344,
+      "ic_max": 0.11232035591495762,
+      "ic_fold_sd": 0.053662946107759964,
+      "hit_rate": 0.4798245645686821,
+      "n_test_rows": 743.0,
+      "n_eff_per_fold": 148.6,
+      "se_ic_per_fold": 0.0823
+    }
+  },
+  "null": null,
+  "holdout": null,
+  "notes": "",
+  "run_id": "2026-08-10_232333__vcb__basic__return_5day",
+  "artifacts": [
+    {
+      "file": "feature_importance.csv",
+      "bytes": 5384
+    },
+    {
+      "file": "design_scores.csv",
+      "bytes": 18136
+    },
+    {
+      "file": "validation.csv",
+      "bytes": 1078
+    },
+    {
+      "file": "target_correlation.csv",
+      "bytes": 1034
+    },
+    {
+      "file": "channel_correlation.csv",
+      "bytes": 14732
+    },
+    {
+      "file": "stability.csv",
+      "bytes": 1100
+    },
+    {
+      "file": "coverage.csv",
+      "bytes": 822
+    },
+    {
+      "file": "figures/01_ensemble_ranking.png",
+      "bytes": 127619
+    },
+    {
+      "file": "figures/02_method_heatmap.png",
+      "bytes": 236540
+    },
+    {
+      "file": "figures/03_target_correlation.png",
+      "bytes": 117742
+    },
+    {
+      "file": "figures/04_channel_correlation.png",
+      "bytes": 220413
+    },
+    {
+      "file": "figures/05_stat_profile.png",
+      "bytes": 172804
+    },
+    {
+      "file": "figures/06_validation.png",
+      "bytes": 41975
+    },
+    {
+      "file": "figures/07_stability.png",
+      "bytes": 146871
+    },
+    {
+      "file": "figures/08_coverage.png",
+      "bytes": 78159
+    },
+    {
+      "file": "figures/09_target_distribution.png",
+      "bytes": 40628
+    }
+  ],
+  "report_seconds": 3.47
+}

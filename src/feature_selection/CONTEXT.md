@@ -1093,6 +1093,18 @@ reports/feature_selection/<date>_<HHMMSS>__<ticker>__<pools>__<target>/
                            validation, stability, coverage, target dist, null
 ```
 
+⚠️ **A RELATIVE `root` IS ANCHORED TO THE REPO, NOT THE CWD — and it was not, until
+2026-08-10.** `DEFAULT_REPORT_ROOT` has always been absolute, but a caller-supplied
+`root` was joined as given. The notebook passes `REPORT_ROOT = "reports/feature_selection"`
+and **Jupyter's CWD is the notebook's own folder**, so the first run after the root merge
+wrote a complete, correct archive to `src/feature_selection/reports/feature_selection/` —
+where `outstanding`, `final_features` and `pipeline` do not look, all three truthfully
+reporting that no run existed. Nothing was corrupt and nothing warned; the run was simply
+somewhere else. `write_report` now resolves a relative root against `REPO_ROOT`, which
+also closes it for `run.py --root` and the Dagster asset. **The trap survived 22 runs
+because every one of them was launched from the repo root** — the bug was in the CWD, not
+the path, so only the notebook could reach it.
+
 ### 10a. ⚠️ The folder name carries the INPUT and the TARGET — renamed 2026-08-09
 
 `report.default_run_id` builds `<date>_<HHMMSS>__<ticker>__<pools>__<target>`:

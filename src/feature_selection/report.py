@@ -623,6 +623,18 @@ def write_report(
 
     if run_id is None:
         run_id = default_run_id(schema, tables, result.target)
+    # ⚠️ **A RELATIVE ROOT IS ANCHORED TO THE REPO, NEVER TO THE CWD.** `DEFAULT_REPORT_ROOT`
+    # is absolute for exactly this reason (see its comment), but a CALLER-supplied root is
+    # a plain string and `os.path.join` would resolve it against whatever directory the
+    # process happens to be in. Measured 2026-08-10: the notebook passes
+    # `REPORT_ROOT = "reports/feature_selection"` and Jupyter's CWD is the notebook's own
+    # folder, so a complete run landed in `src/feature_selection/reports/feature_selection/`
+    # — invisible to `outstanding`, to `final_features` and to `pipeline`, all of which
+    # scan the repo-level root and correctly reported that no run existed. The same string
+    # from `python -m feature_selection.run` at the repo root had always worked, which is
+    # why this survived 22 runs: the bug is in the CWD, not the path.
+    if not os.path.isabs(root):
+        root = os.path.join(REPO_ROOT, root)
     path = os.path.join(root, run_id)
     figures_dir = os.path.join(path, "figures")
     os.makedirs(path, exist_ok=True)
