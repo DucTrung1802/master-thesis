@@ -1,0 +1,267 @@
+{
+  "report_schema_version": "1.0",
+  "generated_at": "2026-08-12T06:06:10.976585+00:00",
+  "git_commit": "55a0072c+dirty",
+  "environment": {
+    "python": "3.12.10",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "numpy": "2.2.6",
+    "pandas": "2.3.3",
+    "scipy": "1.17.1",
+    "sklearn": "1.7.2",
+    "xgboost": "2.1.1",
+    "matplotlib": "3.10.8"
+  },
+  "input": {
+    "database": "database_main_v2",
+    "schema": "unified_schema_vcb",
+    "tables": [
+      "pool__economy_vietnam",
+      "pool__targets"
+    ],
+    "join_log": [
+      {
+        "table": "pool__targets",
+        "join_keys": "date, exchange, ticker",
+        "how": "inner",
+        "rows_before": 4266,
+        "rows_after": 4266,
+        "columns_added": 6,
+        "duplicate_columns_dropped": ""
+      }
+    ],
+    "panel_rows": 4266,
+    "panel_columns": 67,
+    "first_date": "2009-06-30",
+    "last_date": "2026-08-07",
+    "sessions": 4266,
+    "tickers": 1
+  },
+  "target": {
+    "name": "close_adjust_5day",
+    "horizon_days": 5,
+    "definition": "close_adjust_5day (see cross_sectional.py / DataPreprocessor for the definition)",
+    "labelled_rows": 4261,
+    "unlabelled_rows": 5,
+    "mean": 27692.290542126262,
+    "sd": 20542.148182098284,
+    "min": 4400.0,
+    "max": 76000.0
+  },
+  "setup": {
+    "target": "close_adjust_5day",
+    "horizon_h": 5,
+    "lookback_d": 20,
+    "normalize": "none",
+    "purge_gap_rows": 24,
+    "window_stats": "last, mean, slope, sd, min, max",
+    "dropped_by_normalize": 0,
+    "dev_samples": 4242,
+    "holdout_start": "—",
+    "holdout_rows": 0,
+    "purged_at_boundary": 0,
+    "channels": 56,
+    "design_columns": 336,
+    "kept": 29,
+    "device": "cuda",
+    "max_features": null,
+    "corr_threshold": 0.9,
+    "n_splits": 5,
+    "min_train": 500,
+    "random_state": 18,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "permutation_repeats": 10,
+    "device_preference": "cuda",
+    "selector_class": "FeatureSelector",
+    "panel_col": null,
+    "feature_normalize": null
+  },
+  "results": {
+    "n_channels": 56,
+    "n_kept": 29,
+    "kept": [
+      "vietnam__economy__labor__economics__vnwag",
+      "vietnam__economy__money__economics__vnfer",
+      "vietnam__economy__business__economics__vncar",
+      "vietnam__economy__trade__economics__vncop",
+      "vietnam__economy__labor__economics__vnemp",
+      "vietnam__economy__trade__economics__vnbot",
+      "vietnam__economy__trade__economics__vnfdi",
+      "vietnam__economy__prices__economics__vniryy",
+      "vietnam__economy__prices__economics__vnfi",
+      "vietnam__economy__consumer__economics__vnrsyy",
+      "vietnam__economy__trade__economics__vnca",
+      "vietnam__economy__trade__economics__vnti",
+      "vietnam__economy__business__economics__vnipyy",
+      "vietnam__economy__government__economics__vngdg",
+      "vietnam__economy__money__economics__vninbr",
+      "vietnam__economy__prices__economics__vnirmm",
+      "vietnam__economy__gdp__economics__vngdpyy",
+      "vietnam__economy__trade__economics__vncag",
+      "vietnam__economy__money__economics__vndir",
+      "vietnam__economy__labor__economics__vnur",
+      "vietnam__economy__trade__economics__vntot",
+      "vietnam__economy__labor__economics__vnup",
+      "vietnam__economy__business__economics__vnedbr",
+      "vietnam__economy__government__economics__vngbp",
+      "vietnam__economy__taxes__economics__vnctr",
+      "vietnam__economy__government__economics__vngbv",
+      "vietnam__economy__prices__economics__vnep",
+      "vietnam__economy__money__economics__vnm1",
+      "vietnam__economy__taxes__economics__vnpitr"
+    ],
+    "dropped_constant": [
+      "vietnam__economy__business__economics__vncorr",
+      "vietnam__economy__taxes__economics__vnstr"
+    ],
+    "dropped_correlated": {
+      "vietnam__economy__prices__economics__vncpi": "vietnam__economy__labor__economics__vnwag",
+      "vietnam__economy__trade__economics__vnimp": "vietnam__economy__labor__economics__vnwag",
+      "vietnam__economy__business__economics__vnic": "vietnam__economy__labor__economics__vnwag",
+      "vietnam__economy__trade__economics__vnexp": "vietnam__economy__labor__economics__vnwag",
+      "vietnam__economy__gdp__economics__vngfcf": "vietnam__economy__money__economics__vnfer",
+      "vietnam__economy__business__economics__vnelp": "vietnam__economy__labor__economics__vnwag",
+      "vietnam__economy__government__economics__vnme": "vietnam__economy__labor__economics__vnwag",
+      "vietnam__economy__labor__economics__vnmw": "vietnam__economy__labor__economics__vnwag",
+      "vietnam__economy__gdp__economics__vngdppcp": "vietnam__economy__labor__economics__vnwag",
+      "vietnam__economy__gdp__economics__vngdp": "vietnam__economy__labor__economics__vnwag",
+      "vietnam__economy__money__economics__vnintr": "vietnam__economy__money__economics__vnfer",
+      "vietnam__economy__trade__economics__vned": "vietnam__economy__labor__economics__vnwag",
+      "vietnam__economy__consumer__economics__vncs": "vietnam__economy__labor__economics__vnwag",
+      "vietnam__economy__business__economics__vncorpi": "vietnam__economy__labor__economics__vnwag",
+      "vietnam__economy__government__economics__vngsp": "vietnam__economy__labor__economics__vnwag",
+      "vietnam__economy__gdp__economics__vngnp": "vietnam__economy__labor__economics__vnwag",
+      "vietnam__economy__money__economics__vnm2": "vietnam__economy__labor__economics__vnwag",
+      "vietnam__economy__money__economics__vnm0": "vietnam__economy__labor__economics__vnwag",
+      "vietnam__economy__taxes__economics__vnssr": "vietnam__economy__labor__economics__vnwag",
+      "vietnam__economy__gdp__economics__vngdppc": "vietnam__economy__labor__economics__vnwag",
+      "vietnam__economy__labor__economics__vnpop": "vietnam__economy__labor__economics__vnwag",
+      "vietnam__economy__government__economics__vnfe": "vietnam__economy__labor__economics__vnwag",
+      "vietnam__economy__government__economics__vngr": "vietnam__economy__labor__economics__vnwag",
+      "vietnam__economy__prices__economics__vngdpd": "vietnam__economy__labor__economics__vnwag",
+      "vietnam__economy__prices__economics__vnipri": "vietnam__economy__prices__economics__vnep",
+      "vietnam__economy__taxes__economics__vnssrc": "vietnam__economy__taxes__economics__vnctr",
+      "vietnam__economy__taxes__economics__vnssre": "vietnam__economy__money__economics__vnfer"
+    },
+    "dead_methods": [],
+    "top_10_by_ensemble": [
+      "vietnam__economy__labor__economics__vnwag",
+      "vietnam__economy__prices__economics__vncpi",
+      "vietnam__economy__trade__economics__vnimp",
+      "vietnam__economy__business__economics__vnic",
+      "vietnam__economy__trade__economics__vnexp",
+      "vietnam__economy__money__economics__vnfer",
+      "vietnam__economy__gdp__economics__vngfcf",
+      "vietnam__economy__business__economics__vncar",
+      "vietnam__economy__trade__economics__vncop",
+      "vietnam__economy__labor__economics__vnemp"
+    ],
+    "timings_seconds": {
+      "window design (cpu)": 0.21,
+      "spearman vs target (cuda)": 0.11,
+      "mutual_info (cuda)": 6.55,
+      "xgb gain + shap (cuda)": 1.3,
+      "lasso (cuda)": 499.08,
+      "permutation (cuda)": 6.86,
+      "channel corr matrix (cuda)": 0.02,
+      "stability (cuda)": 7.25,
+      "validation (cuda)": 12.61
+    },
+    "ic_summary": {
+      "folds": 5.0,
+      "ic_mean": -0.034364813028132726,
+      "ic_trend_per_fold": -0.10123447240187332,
+      "ic_min": -0.3064179889912754,
+      "ic_max": 0.22742444861818759,
+      "ic_fold_sd": 0.24748280230618977,
+      "hit_rate": 1.0,
+      "n_test_rows": 743.0,
+      "n_eff_per_fold": 148.6,
+      "se_ic_per_fold": 0.0823
+    },
+    "ic_summary_all_channels": {
+      "folds": 5.0,
+      "ic_mean": 0.016597423492234524,
+      "ic_trend_per_fold": -0.104045698002861,
+      "ic_min": -0.18190199474889357,
+      "ic_max": 0.1763934896444703,
+      "ic_fold_sd": 0.1783679599465739,
+      "hit_rate": 1.0,
+      "n_test_rows": 743.0,
+      "n_eff_per_fold": 148.6,
+      "se_ic_per_fold": 0.0823
+    }
+  },
+  "null": null,
+  "holdout": null,
+  "notes": "vietnam macro pool ONLY (no pool__basic); forward PRICE LEVEL target; no null - evidence=no_null",
+  "run_id": "2026-08-12_130605__vcb__economy_vietnam__close_adjust_5day",
+  "artifacts": [
+    {
+      "file": "feature_importance.csv",
+      "bytes": 13514
+    },
+    {
+      "file": "design_scores.csv",
+      "bytes": 44576
+    },
+    {
+      "file": "validation.csv",
+      "bytes": 925
+    },
+    {
+      "file": "target_correlation.csv",
+      "bytes": 3585
+    },
+    {
+      "file": "channel_correlation.csv",
+      "bytes": 65287
+    },
+    {
+      "file": "stability.csv",
+      "bytes": 3867
+    },
+    {
+      "file": "coverage.csv",
+      "bytes": 3016
+    },
+    {
+      "file": "figures/01_ensemble_ranking.png",
+      "bytes": 257152
+    },
+    {
+      "file": "figures/02_method_heatmap.png",
+      "bytes": 377632
+    },
+    {
+      "file": "figures/03_target_correlation.png",
+      "bytes": 246622
+    },
+    {
+      "file": "figures/04_channel_correlation.png",
+      "bytes": 486481
+    },
+    {
+      "file": "figures/05_stat_profile.png",
+      "bytes": 227694
+    },
+    {
+      "file": "figures/06_validation.png",
+      "bytes": 44021
+    },
+    {
+      "file": "figures/07_stability.png",
+      "bytes": 288464
+    },
+    {
+      "file": "figures/08_coverage.png",
+      "bytes": 123072
+    },
+    {
+      "file": "figures/09_target_distribution.png",
+      "bytes": 49973
+    }
+  ],
+  "report_seconds": 5.85
+}

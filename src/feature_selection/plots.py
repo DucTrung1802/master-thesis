@@ -209,10 +209,22 @@ def _colorbar(ax, mesh, label: str):
     ⚠️ `shrink` is what keeps it from becoming a second visual element on a tall
     heatmap — an unshrunk bar beside 27 rows is taller than most of the figures in
     this module and reads as a chart of its own.
+
+    ⚠️ **It is ANCHORED TO THE TOP, not centred, and that is a layout fix.** A
+    shrunk colourbar defaults to `anchor=(0.5, 0.5)`, which floats it at the
+    vertical middle of a tall heatmap with a large gap above and below — it read as
+    a detached third element rather than a legend for the cells. Pinning it to the
+    top aligns its cap with the first row of the matrix and with the title block,
+    so the eye meets the scale before the data instead of hunting for it.
+
+    ⚠️ `shrink` is also FLOORED. On a 30-row heatmap the old expression returned
+    ~0.15, a stub about six cells tall with its ticks crowded into a thumbnail.
     """
+    height_in = max(1e-9, ax.bbox.height / 72)
     bar = ax.figure.colorbar(
-        mesh, ax=ax, fraction=0.022, pad=0.015, shrink=min(1.0, 6.0 / max(1e-9, ax.bbox.height / 72)),
-        aspect=22,
+        mesh, ax=ax, fraction=0.022, pad=0.015,
+        shrink=float(np.clip(6.0 / height_in, 0.34, 1.0)),
+        aspect=22, anchor=(0.0, 1.0), panchor=(0.0, 1.0),
     )
     bar.set_label(label, color=INK_SECONDARY, fontsize=9)
     bar.outline.set_visible(False)
@@ -306,6 +318,70 @@ def _span(values, baseline=0.0):
     return (min(finite + [baseline]), max(finite + [baseline])) if finite else (0.0, 1.0)
 
 
+# ------------------------------------------------------- channel-name shortening
+
+
+def _plus(subtitle: str, note: str) -> str:
+    """Append a `_shorten` note to a subtitle, or leave it alone when there is none."""
+    return f"{subtitle} · {note}" if note else subtitle
+
+
+def _shorten(labels, min_saved: int = 6):
+    """`(short_labels, note)` — strip the `__`-token prefix/suffix EVERY label shares.
+
+    ⚠️ **The shared part of a name carries no information ON THIS CHART.** A
+    `pool__economy_vietnam` run labels 30 rows
+    `vietnam__economy__labor__economics__vnwag`, of which `vietnam__economy__` is
+    identical on every row — it spent 18 of 41 characters, and the axis it forced
+    was wider than the plot. What distinguishes the rows is the tail. The stripped
+    affix is returned so the caller can put it in the SUBTITLE once, which is where
+    a constant belongs.
+
+    ⚠️ **Tokens, never characters.** A character-wise common prefix would cut
+    `vietnam__economy__gdp…` and `vietnam__economy__government…` at
+    `vietnam__economy__g`, inventing names that match nothing in the CSV. Splitting
+    on `__` first means every shortened label is still a suffix of the real channel
+    name, so it can be pasted back into a lookup.
+
+    ⚠️ **No-ops rather than mangles.** A `pool__basic` panel (`close_adjust`,
+    `close_raw`, …) shares no leading token, and a set of one label shares
+    everything with itself — both return the labels untouched. `min_saved` stops it
+    firing for a saving too small to be worth a subtitle clause.
+    """
+    original = [str(x) for x in labels]
+    if len(original) < 2:
+        return original, ""
+    split = [name.split("__") for name in original]
+    # Never consume a whole label: a name reduced to "" is worse than a long one.
+    limit = min(len(parts) for parts in split) - 1
+    if limit < 1:
+        return original, ""
+
+    head = 0
+    while head < limit and len({parts[head] for parts in split}) == 1:
+        head += 1
+    tail = 0
+    while tail < limit - head and len({parts[-1 - tail] for parts in split}) == 1:
+        tail += 1
+
+    if not head and not tail:
+        return original, ""
+    # `head + tail <= limit` guarantees at least one token survives on the
+    # SHORTEST label, so this slice is never empty.
+    short = ["__".join(parts[head: len(parts) - tail]) for parts in split]
+    saved = len(original[0]) - len(short[0])
+    if saved < min_saved:
+        return original, ""
+
+    note = ""
+    if head:
+        note = "__".join(split[0][:head]) + "__*"
+    if tail:
+        suffix = "*__" + "__".join(split[0][len(split[0]) - tail:])
+        note = f"{note} and {suffix}" if note else suffix
+    return short, f"names trimmed of {note}"
+
+
 def _pad_limits(lo: float, hi: float, pad: float = 0.06):
     span = (hi - lo) or 1.0
     return lo - span * pad, hi + span * pad
@@ -327,8 +403,9 @@ def plot_coverage(coverage: pd.Series, threshold: float = 1.0, ax=None):
     if ax is None:
         _, ax = plt.subplots(figsize=(8, max(2.4, 0.34 * len(incomplete))))
     y = np.arange(len(incomplete))
+    labels, note = _shorten(incomplete.index)
     ax.set_yticks(y)
-    ax.set_yticklabels(incomplete.index)
+    ax.set_yticklabels(labels)
     ax.set_ylim(-0.6, len(incomplete) - 0.4)
     ax.set_xlim(0, 1)
     _bars(ax, y, incomplete.values, [SERIES[0]] * len(incomplete))
@@ -341,10 +418,32 @@ def plot_coverage(coverage: pd.Series, threshold: float = 1.0, ax=None):
     _titles(
         ax,
         "Feature coverage",
-        f"non-null share of labelled rows · {len(incomplete)} incomplete "
-        f"column(s) · worst: {worst}",
+        _plus(
+            f"non-null share of labelled rows · {len(incomplete)} incomplete "
+            f"column(s) · worst: {worst}",
+            note,
+        ),
     )
     return ax
+
+
+def _value_fmt(values) -> str:
+    """A `format()` spec for one label column, chosen from its MAGNITUDE.
+
+    ⚠️ **Never a percent.** This axis carries the target in the target's OWN units,
+    and the module cannot know what those are — `return_5day` is a ratio, but
+    `close_adjust_5day` is a price in VND. The old code hard-coded
+    `PercentFormatter`, which rendered VCB's mean forward close of 27,692 VND as
+    **"+2769229.05%"** and the x-axis as `1000000%` … `7000000%`. A number that is
+    wrong by a factor of 100 and labelled with the wrong unit is worse than an
+    unformatted one, so the unit annotation is gone and only the DIGITS adapt.
+    """
+    scale = float(np.nanmax(np.abs(np.asarray(values, dtype=float)))) if len(values) else 0.0
+    if scale >= 1000:
+        return ",.0f"          # prices, volumes — separators, no false precision
+    if scale >= 1:
+        return ",.2f"
+    return ".4f"               # returns and ranks — 0.0312, not 3.12%
 
 
 def plot_target_distribution(y: pd.Series, target: str, ax=None):
@@ -352,6 +451,11 @@ def plot_target_distribution(y: pd.Series, target: str, ax=None):
 
     Zero is the only reference that matters on a forward return: the mass either
     side of it is what a directional model is trying to separate.
+
+    ⚠️ **Zero is marked only when it is INSIDE the data.** On a price-level target
+    every value is ~10,000-70,000 and a zero line would sit far off the left edge,
+    dragging the x-limits out and squashing the entire histogram into the right
+    margin to reference a value the series never takes.
     """
     if ax is None:
         _, ax = plt.subplots(figsize=(8.5, 3.6))
@@ -364,24 +468,40 @@ def plot_target_distribution(y: pd.Series, target: str, ax=None):
     # A 2px surface GAP between neighbouring bars, not a stroke around each.
     _bars(ax, centres, counts, [SERIES[0]] * len(counts), horizontal=False,
           thickness=width * 0.82, radius_pt=1.5)
+    fmt = _value_fmt(values)
     # ⚠️ The two references sit at almost the same x on a near-zero-mean return,
     # so they are staggered vertically and kept clear of the top spine.
-    ax.axvline(0, color=AXIS, linewidth=1.2, zorder=1)
-    ax.annotate("zero", xy=(0, counts.max() * 0.94), xytext=(5, 0),
-                textcoords="offset points", fontsize=9, color=INK_SECONDARY)
+    if edges[0] <= 0 <= edges[-1]:
+        ax.axvline(0, color=AXIS, linewidth=1.2, zorder=1)
+        ax.annotate("zero", xy=(0, counts.max() * 0.94), xytext=(5, 0),
+                    textcoords="offset points", fontsize=9, color=INK_SECONDARY)
     mean = float(values.mean())
     ax.axvline(mean, color=SERIES[1], linewidth=1.6, zorder=3)
-    ax.annotate(f"mean {mean:+.2%}", xy=(mean, counts.max() * 1.08), xytext=(5, 0),
-                textcoords="offset points", fontsize=9, color=INK_SECONDARY)
-    ax.xaxis.set_major_formatter(mpl.ticker.PercentFormatter(xmax=1))
+    ax.annotate(f"mean {format(mean, fmt)}", xy=(mean, counts.max() * 1.08),
+                xytext=(5, 0), textcoords="offset points",
+                fontsize=9, color=INK_SECONDARY)
+    # ⚠️ The TICKS trim trailing zeros; the SUMMARY above does not. One spec has to
+    # serve both, and they want opposite things: the summary reports `sd 0.0430`,
+    # where the last digit is information, while the axis put `-0.1000` and
+    # `0.0000` under a chart whose ticks land on tenths. Trimming is safe because
+    # it only ever removes zeros — `,.0f` has no decimal point to touch.
+    ax.xaxis.set_major_formatter(
+        mpl.ticker.FuncFormatter(
+            lambda v, _pos: (
+                format(v, fmt).rstrip("0").rstrip(".") if "." in format(v, fmt)
+                else format(v, fmt)
+            )
+        )
+    )
     ax.grid(axis="x", visible=False)
     ax.set_xlabel(target)
     ax.set_ylabel("sessions")
     _titles(
         ax,
         f"Distribution of {target}",
-        f"n = {len(values):,} labelled sessions · mean {values.mean():+.2%} · "
-        f"sd {values.std():.2%} · {(values > 0).mean():.1%} positive",
+        f"n = {len(values):,} labelled sessions · mean {format(mean, fmt)} · "
+        f"sd {format(float(values.std()), fmt)} · min {format(float(values.min()), fmt)} "
+        f"· max {format(float(values.max()), fmt)}",
     )
     return ax
 
@@ -405,8 +525,9 @@ def plot_target_correlation(target_corr: pd.Series, target: str, top: int = 25, 
     y = np.arange(len(ordered))
     colours = [POS_FILL if v >= 0 else NEG_FILL for v in ordered.values]
     lo, hi = _span(ordered.values)
+    labels, note = _shorten(ordered.index)
     ax.set_yticks(y)
-    ax.set_yticklabels(ordered.index)
+    ax.set_yticklabels(labels)
     ax.set_ylim(-0.7, len(ordered) - 0.3)
     limit = max(abs(lo), abs(hi))
     ax.set_xlim(-limit * 1.25, limit * 1.25)
@@ -434,23 +555,41 @@ def plot_target_correlation(target_corr: pd.Series, target: str, top: int = 25, 
     _titles(
         ax,
         f"Association with {target}",
-        f"top {len(ordered)} by |ρ| · a forward return is mostly noise, so read "
-        f"the SCALE before the ranking",
+        # ⚠️ The caveat used to read "a forward return is mostly noise". It is
+        # printed under whatever target the run chose, and on `close_adjust_5day`
+        # — a forward PRICE — it named the wrong quantity while every bar sat at
+        # ρ ≈ 0.95. The warning is worth keeping; asserting the target's type is
+        # not, since this function is handed a name and never learns its units.
+        _plus(
+            f"top {len(ordered)} by |ρ| · read the SCALE before the order — a "
+            f"column of near-equal bars is one effect, not a ranking",
+            note,
+        ),
     )
     return ax
 
 
 def _heatmap(ax, data: pd.DataFrame, cmap, vmin: float, vmax: float,
              annotate: bool, fmt: str, cbar_label: str, mask=None):
-    """Shared heatmap body: cells, hairline separators, optional value labels."""
+    """Shared heatmap body: cells, hairline separators, optional value labels.
+
+    Returns the `_shorten` note for the ROW labels, for the caller's subtitle.
+    """
     values = np.array(data.values, dtype=float)
     if mask is not None:
         values = np.where(mask, np.nan, values)
     mesh = ax.imshow(values, cmap=cmap, vmin=vmin, vmax=vmax, aspect="auto")
+    rows, note = _shorten(data.index)
+    # ⚠️ The COLUMNS are shortened against their own set, not the rows'. On the
+    # correlation heatmap both axes are the same channels and share one affix; on
+    # the method heatmap the columns are `spearman`/`lasso`/… and share nothing,
+    # and folding them into one call would find no common affix and shorten
+    # neither axis.
+    columns, _ = _shorten(data.columns)
     ax.set_xticks(range(data.shape[1]))
-    ax.set_xticklabels(data.columns, rotation=45, ha="right")
+    ax.set_xticklabels(columns, rotation=45, ha="right")
     ax.set_yticks(range(data.shape[0]))
-    ax.set_yticklabels(data.index)
+    ax.set_yticklabels(rows)
     # A 2px surface gap between cells, not a border drawn around each mark.
     ax.set_xticks(np.arange(-0.5, data.shape[1], 1), minor=True)
     ax.set_yticks(np.arange(-0.5, data.shape[0], 1), minor=True)
@@ -475,7 +614,7 @@ def _heatmap(ax, data: pd.DataFrame, cmap, vmin: float, vmax: float,
                         fontsize=7.5, color=colour)
 
     _colorbar(ax, mesh, cbar_label)
-    return mesh
+    return note
 
 
 def plot_method_heatmap(scores: pd.DataFrame, top: int = 25, ax=None):
@@ -490,7 +629,7 @@ def plot_method_heatmap(scores: pd.DataFrame, top: int = 25, ax=None):
         _, ax = plt.subplots(
             figsize=(1.0 * ordered.shape[1] + 4.8, max(3, 0.34 * len(ordered)))
         )
-    _heatmap(
+    note = _heatmap(
         ax, ordered, SEQUENTIAL_BLUE, 0.0, 1.0,
         annotate=len(ordered) <= 30, fmt=".2f",
         cbar_label="normalised importance",
@@ -498,8 +637,11 @@ def plot_method_heatmap(scores: pd.DataFrame, top: int = 25, ax=None):
     _titles(
         ax,
         "Importance by method",
-        f"top {len(ordered)} features by ensemble rank · each column min-max "
-        f"normalised to 0-1, so read ACROSS a row, not down a column",
+        _plus(
+            f"top {len(ordered)} features by ensemble rank · each column min-max "
+            f"normalised to 0-1, so read ACROSS a row, not down a column",
+            note,
+        ),
     )
     return ax
 
@@ -519,7 +661,7 @@ def plot_correlation_heatmap(corr: pd.DataFrame, top: int = 25, ax=None):
         size = max(4.8, 0.36 * len(subset))
         _, ax = plt.subplots(figsize=(size + 2.2, size))
     mask = np.triu(np.ones(subset.shape, dtype=bool), k=1)
-    _heatmap(
+    note = _heatmap(
         ax, subset, DIVERGING_BLUE_RED, -1.0, 1.0,
         annotate=len(subset) <= 18, fmt=".1f",
         cbar_label="Spearman ρ", mask=mask,
@@ -527,8 +669,11 @@ def plot_correlation_heatmap(corr: pd.DataFrame, top: int = 25, ax=None):
     _titles(
         ax,
         "Feature redundancy",
-        f"top {len(subset)} features, ordered by ensemble rank · lower triangle "
-        f"only (the matrix is symmetric) · dark blocks are what the prune removes",
+        _plus(
+            f"top {len(subset)} features, ordered by ensemble rank · lower triangle "
+            f"only (the matrix is symmetric) · dark blocks are what the prune removes",
+            note,
+        ),
     )
     return ax
 
@@ -553,10 +698,11 @@ def plot_stability_heatmap(stability: pd.DataFrame, top: int = 25, ax=None):
         inverted.values, cmap=SEQUENTIAL_BLUE, aspect="auto",
         vmin=1, vmax=inverted.values.max(),
     )
+    rows, note = _shorten(subset.index)
     ax.set_xticks(range(subset.shape[1]))
     ax.set_xticklabels(subset.columns, rotation=0)
     ax.set_yticks(range(subset.shape[0]))
-    ax.set_yticklabels(subset.index)
+    ax.set_yticklabels(rows)
     ax.set_xticks(np.arange(-0.5, subset.shape[1], 1), minor=True)
     ax.set_yticks(np.arange(-0.5, subset.shape[0], 1), minor=True)
     ax.grid(which="minor", color=SURFACE, linewidth=2)
@@ -573,8 +719,11 @@ def plot_stability_heatmap(stability: pd.DataFrame, top: int = 25, ax=None):
     _titles(
         ax,
         "Rank stability across walk-forward folds",
-        "SHAP rank within each expanding training window · a row that jumps is a "
-        "regime, not a feature",
+        _plus(
+            "SHAP rank within each expanding training window · a row that jumps is "
+            "a regime, not a feature",
+            note,
+        ),
     )
     return ax
 
@@ -610,8 +759,9 @@ def plot_ensemble_ranking(result, top: int = 25, ax=None):
     # version flipped the axis to put the best on the right and produced a scale
     # that counted downwards, which reads as a rendering fault.
     left = best - span * 0.10
+    labels, note = _shorten(ordered.index)
     ax.set_yticks(y)
-    ax.set_yticklabels(ordered.index)
+    ax.set_yticklabels(labels)
     ax.set_ylim(-0.8, len(ordered) - 0.2)
     ax.set_xlim(left, worst + span * 0.16)
 
@@ -639,9 +789,12 @@ def plot_ensemble_ranking(result, top: int = 25, ax=None):
     _titles(
         ax,
         f"Ensemble feature ranking for {result.target}",
-        f"{len(result.features)} candidates · {len(result.dropped_correlated)} "
-        f"dropped as redundant at |ρ| ≥ {result.corr_threshold} · "
-        f"{len(result.dropped_constant)} constant columns never scored",
+        _plus(
+            f"{len(result.features)} candidates · {len(result.dropped_correlated)} "
+            f"dropped as redundant at |ρ| ≥ {result.corr_threshold} · "
+            f"{len(result.dropped_constant)} constant columns never scored",
+            note,
+        ),
     )
     return ax
 
@@ -661,7 +814,7 @@ def plot_stat_profile(result, method: str = "xgb_shap", top: int = 20, ax=None):
         _, ax = plt.subplots(
             figsize=(1.0 * profile.shape[1] + 4.8, max(3, 0.34 * len(profile)))
         )
-    _heatmap(
+    note = _heatmap(
         ax, profile, SEQUENTIAL_BLUE, 0.0, 1.0,
         annotate=len(profile) <= 25, fmt=".2f",
         cbar_label=f"normalised {method}",
@@ -669,8 +822,11 @@ def plot_stat_profile(result, method: str = "xgb_shap", top: int = 20, ax=None):
     _titles(
         ax,
         f"How each channel carries its signal (d = {result.lookback})",
-        f"top {len(profile)} channels by ensemble rank · {method} per "
-        f"(channel, window statistic), normalised across the whole design matrix",
+        _plus(
+            f"top {len(profile)} channels by ensemble rank · {method} per "
+            f"(channel, window statistic), normalised across the whole design matrix",
+            note,
+        ),
     )
     return ax
 
