@@ -1,6 +1,6 @@
 # Feature-importance run — `close_adjust_5day`
 
-*Generated 2026-08-12T05:04:34.872988+00:00 at commit `ddc7e1f4+dirty`.*
+*Generated 2026-08-12T14:24:12.293440+00:00 at commit `88fa8327+dirty`.*
 
 ## Input
 
@@ -70,7 +70,3 @@
 - `figures/08_coverage.png`
 - `figures/09_target_distribution.png`
 - `metadata.json`
-
-## Notes
-
-forward PRICE LEVEL target (close_adjust[t+5]); no null - evidence=no_null

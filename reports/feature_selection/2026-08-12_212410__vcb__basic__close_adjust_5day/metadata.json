@@ -1,7 +1,7 @@
 {
   "report_schema_version": "1.0",
-  "generated_at": "2026-08-12T05:04:34.872988+00:00",
-  "git_commit": "ddc7e1f4+dirty",
+  "generated_at": "2026-08-12T14:24:12.293440+00:00",
+  "git_commit": "88fa8327+dirty",
   "environment": {
     "python": "3.12.10",
     "platform": "Windows-11-10.0.26200-SP0",
@@ -114,15 +114,15 @@
       "avg_vol_per_buy_order"
     ],
     "timings_seconds": {
-      "window design (cpu)": 0.07,
-      "spearman vs target (cuda)": 0.14,
-      "mutual_info (cuda)": 2.05,
-      "xgb gain + shap (cuda)": 1.12,
-      "lasso (cuda)": 365.84,
-      "permutation (cuda)": 2.72,
+      "window design (cpu)": 0.08,
+      "spearman vs target (cuda)": 0.24,
+      "mutual_info (cuda)": 2.21,
+      "xgb gain + shap (cuda)": 1.0,
+      "lasso (cuda)": 156.53,
+      "permutation (cuda)": 1.91,
       "channel corr matrix (cuda)": 0.01,
-      "stability (cuda)": 5.14,
-      "validation (cuda)": 8.84
+      "stability (cuda)": 4.03,
+      "validation (cuda)": 7.42
     },
     "ic_summary": {
       "folds": 5.0,
@@ -151,8 +151,8 @@
   },
   "null": null,
   "holdout": null,
-  "notes": "forward PRICE LEVEL target (close_adjust[t+5]); no null - evidence=no_null",
-  "run_id": "2026-08-12_120431__vcb__basic__close_adjust_5day",
+  "notes": "",
+  "run_id": "2026-08-12_212410__vcb__basic__close_adjust_5day",
   "artifacts": [
     {
       "file": "feature_importance.csv",
@@ -184,23 +184,23 @@
     },
     {
       "file": "figures/01_ensemble_ranking.png",
-      "bytes": 86579
+      "bytes": 58811
     },
     {
       "file": "figures/02_method_heatmap.png",
-      "bytes": 135079
+      "bytes": 135038
     },
     {
       "file": "figures/03_target_correlation.png",
-      "bytes": 78849
+      "bytes": 79295
     },
     {
       "file": "figures/04_channel_correlation.png",
-      "bytes": 179981
+      "bytes": 179803
     },
     {
       "file": "figures/05_stat_profile.png",
-      "bytes": 102686
+      "bytes": 102611
     },
     {
       "file": "figures/06_validation.png",
@@ -208,7 +208,7 @@
     },
     {
       "file": "figures/07_stability.png",
-      "bytes": 89809
+      "bytes": 89841
     },
     {
       "file": "figures/08_coverage.png",
@@ -216,8 +216,8 @@
     },
     {
       "file": "figures/09_target_distribution.png",
-      "bytes": 49973
+      "bytes": 45467
     }
   ],
-  "report_seconds": 3.56
+  "report_seconds": 1.63
 }

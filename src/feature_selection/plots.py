@@ -182,8 +182,8 @@ def _titles(ax, title: str, subtitle: str = "") -> None:
 
 
 def _legend(ax, handles, where: str = "below", ncol: Optional[int] = None,
-            pad: float = 0.09):
-    """A legend OUTSIDE the axes, centred BELOW the plot.
+            pad: float = 0.09, gap_pt: float = 13.0):
+    """A legend OUTSIDE the axes, centred BELOW the plot and CLEAR of the x-axis.
 
     ⚠️ **Always below, never above.** The first version placed short wide charts'
     legends on the subtitle line at the top right, and on `plot_validation` — whose
@@ -192,15 +192,44 @@ def _legend(ax, handles, where: str = "below", ncol: Optional[int] = None,
     caveat, so the legend is what moves. Below the x-axis is free space on every
     chart in this module.
 
-    `where` is kept for callers that want extra clearance on a chart with tick
-    labels and an axis label beneath it.
+    ⚠️ **THE DROP IS MEASURED, NOT GUESSED, AND THAT IS THE 2026-08-12 FIX.** The
+    anchor was `-pad` in AXES FRACTION with `pad` a hand-tuned 0.09 — the exact
+    mistake `_titles` documents at the top of the figure, made again at the bottom.
+    The thing the legend has to clear is the x tick labels plus the axis label, and
+    those are sized in POINTS: they do not grow with the axes. So 0.09 was too much
+    room on a tall heatmap and **too little on a short chart**, where the legend
+    landed on top of the axis label — `01_ensemble_ranking` at 15 rows printed
+    "mean rank across the 6 methods (lower is better)" straight through
+    "kept (7) · pruned". Measuring the x-axis's own rendered extent makes one rule
+    correct at every figure size, so no caller has to tune a number.
+
+    `pad` survives as the FALLBACK for a backend with no renderer, and `where`
+    for callers that want the old extra clearance in that case.
     """
-    return ax.legend(
+    legend = ax.legend(
         handles=handles, loc="upper center",
         bbox_to_anchor=(0.5, -(pad if where == "below" else pad * 1.9)),
         ncol=ncol or len(handles), frameon=False,
         handlelength=1.1, handleheight=1.1, columnspacing=1.8, borderpad=0.0,
     )
+
+    figure = ax.figure
+    try:
+        figure.canvas.draw()
+        renderer = figure.canvas.get_renderer()
+        # Everything the x-axis draws — tick labels AND the axis label — in
+        # display pixels. `get_tightbbox` returns None when the axis draws
+        # nothing, which is a chart with no x labels at all and needs no drop.
+        box = ax.xaxis.get_tightbbox(renderer)
+        if box is None or not np.isfinite(box.y0):
+            return legend
+        drop = (ax.bbox.y0 - box.y0) + gap_pt * figure.dpi / 72.0
+        legend.set_bbox_to_anchor(
+            (0.5, -max(drop, 0.0) / ax.bbox.height), transform=ax.transAxes
+        )
+    except Exception:  # noqa: BLE001 — a backend without a renderer keeps `pad`
+        pass
+    return legend
 
 
 def _colorbar(ax, mesh, label: str):
