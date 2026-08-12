@@ -6019,10 +6019,26 @@ class DataPreprocessor:
     def _ingest_unified_pool_targets(self, ticker: str) -> None:
         """`unified_schema_<ticker>.pool__basic` → `…​.pool__targets`.
 
-        `UNIFIED_PRIMARY_KEY` — `(date, exchange, ticker)` — plus **two columns per
+        `UNIFIED_PRIMARY_KEY` — `(date, exchange, ticker)` — plus **three columns per
         horizon in `UNIFIED_TARGET_HORIZONS`**: `return_{h}day`, the forward simple
-        return `close[t+h] / close[t] - 1` on the SPLIT-ADJUSTED close, and
-        `return_rel_{h}day`, the same minus the benchmark's return over that window.
+        return `close[t+h] / close[t] - 1` on the SPLIT-ADJUSTED close,
+        `return_rel_{h}day`, the same minus the benchmark's return over that window,
+        and `close_adjust_{h}day`, the forward adjusted close `close[t+h]` itself.
+
+        ⚠️ **`close_adjust_{h}day` IS A LABEL, NOT A FEATURE** (added 2026-08-12). It is
+        `LEAD(close_adjust, h)` — the same lead `return_{h}day` divides by `close[t]` —
+        so it is the answer in price units rather than in return units, for a model
+        asked to predict a level. It reads like a `pool__basic` column and it is not
+        one: anything that joins `pool__basic ⋈ pool__targets` and treats every
+        non-key column as a candidate feature has just been handed the target.
+        `feature_selection.run.ALL_TARGETS` names it for exactly that reason.
+
+        ⚠️ **No `NULLIF` on the price column, deliberately.** `return_{h}day` guards
+        `close[t] = 0` because it divides by it; a forward LEVEL has no denominator, so
+        a zero close would come through as the zero it is. The tail assertion below is
+        still `h × series` exactly, and it is not a weaker check than the return's: a
+        return tail of exactly `h × series` already proves no `close_adjust` in the pool
+        is NULL or zero outside the tail.
 
         ⚠️ **`exchange` and `ticker` are carried even though they never vary here.**
         This table was keyed on `date` alone, which made every join to it a special
@@ -6075,6 +6091,10 @@ class DataPreprocessor:
             )
         target_cols = {h: f"return_{h}day" for h in horizons}
         relative_cols = {h: f"return_rel_{h}day" for h in horizons}
+        # ⚠️ Derived from the SAME `horizons` tuple as the two return families, so the
+        # three cannot drift apart: adding a horizon adds three columns, and there is no
+        # way to end up with a `return_5day` whose forward price is the 10-day one.
+        price_cols = {h: f"close_adjust_{h}day" for h in horizons}
         longest = max(horizons)
         self._logger.log_info(
             f"Ingesting unified {schema}.pool__targets (from {schema}.pool__basic)..."
@@ -6154,6 +6174,15 @@ class DataPreprocessor:
                     f"::double precision AS {col}"
                     for h, col in relative_cols.items()
                 ]
+                # ⚠️ Cast to `double precision` like its two siblings rather than kept
+                # at `pool__basic.close_adjust`'s own type. psycopg2 hands `numeric`
+                # back as `Decimal`, which pandas carries as dtype `object` — a
+                # forward PRICE is the one column here a reader is most likely to do
+                # arithmetic on, so it arrives as a float or not at all.
+                + [
+                    f"(LEAD(px, {h}) OVER w)::double precision AS {col}"
+                    for h, col in price_cols.items()
+                ]
             )
             # Dropped as late as possible: a failure above leaves the old table intact.
             #
@@ -6182,16 +6211,20 @@ class DataPreprocessor:
             )
             self._helper_unified_primary_key(cur, schema, "pool__targets")
 
-            counts = ", ".join(
-                f"COUNT({col})"
-                for col in list(target_cols.values()) + list(relative_cols.values())
+            # ⚠️ Counted by COLUMN NAME, not by position within a per-family slice.
+            # With two families the slice arithmetic was already the fiddliest line
+            # here; with three it would be the kind of off-by-one that reports another
+            # column's NULL count and passes.
+            ordered = (
+                list(target_cols.values())
+                + list(relative_cols.values())
+                + list(price_cols.values())
             )
+            counts = ", ".join(f"COUNT({col})" for col in ordered)
             cur.execute(f"SELECT COUNT(*), {counts} FROM {schema}.pool__targets")
             row = [int(x) for x in cur.fetchone()]
             written = row[0]
-            n = len(horizons)
-            labelled = dict(zip(horizons, row[1 : 1 + n]))
-            labelled_rel = dict(zip(horizons, row[1 + n :]))
+            labelled_by_col = dict(zip(ordered, row[1:]))
 
         if written != available:
             raise PipelineError(
@@ -6203,16 +6236,23 @@ class DataPreprocessor:
         # on the universe pool the expected NULL count is `h × series`, not `h`. A
         # check against `h` alone would pass only on a single-ticker schema and would
         # have failed the universe build for being correct.
-        for h, col in target_cols.items():
-            unlabelled = written - labelled[h]
-            expected_tail = h * series
-            if unlabelled != expected_tail:
-                raise PipelineError(
-                    f"{schema}.pool__targets has {unlabelled} NULL {col} values; "
-                    f"exactly {expected_tail} ({h} per series × {series} series, the "
-                    f"tail with no future) were expected. Check "
-                    f"`pool__basic.close_adjust` for NULLs or zeros."
-                )
+        #
+        # ⚠️ `close_adjust_{h}day` is checked by the SAME rule and the same number. It
+        # is the numerator of `return_{h}day` with no denominator, so its NULLs are the
+        # tail and nothing else; a disagreement between the two would mean the LEAD ran
+        # over a different row ordering, which is the one failure the shared `WINDOW w`
+        # is supposed to make impossible.
+        for h in horizons:
+            for col in (target_cols[h], price_cols[h]):
+                unlabelled = written - labelled_by_col[col]
+                expected_tail = h * series
+                if unlabelled != expected_tail:
+                    raise PipelineError(
+                        f"{schema}.pool__targets has {unlabelled} NULL {col} values; "
+                        f"exactly {expected_tail} ({h} per series × {series} series, "
+                        f"the tail with no future) were expected. Check "
+                        f"`pool__basic.close_adjust` for NULLs or zeros."
+                    )
         # ⚠️ The relative column loses its own tail PLUS every row a benchmark gap
         # touches: a missing `B[t]` kills row `t`, and a missing `B[t+h]` kills row
         # `t-h`. One gap DATE therefore costs up to `h + 1` rows IN EVERY SERIES. The
@@ -6220,7 +6260,7 @@ class DataPreprocessor:
         # each other overlap — but it still fails loudly if the benchmark is broadly
         # absent instead of merely pitted.
         for h, col in relative_cols.items():
-            unlabelled = written - labelled_rel[h]
+            unlabelled = written - labelled_by_col[col]
             floor = h * series
             allowed = floor + benchmark_gaps * (h + 1) * series
             if not floor <= unlabelled <= allowed:
@@ -6232,9 +6272,9 @@ class DataPreprocessor:
                     f"{self.UNIFIED_BENCHMARK_TABLE}.{self.UNIFIED_BENCHMARK_COLUMN})."
                 )
         summary = "; ".join(
-            f"{target_cols[h]} {labelled[h]} labelled / {written - labelled[h]} null, "
-            f"{relative_cols[h]} {labelled_rel[h]} / {written - labelled_rel[h]} null"
-            for h in horizons
+            f"{col} {labelled_by_col[col]} labelled / "
+            f"{written - labelled_by_col[col]} null"
+            for col in ordered
         )
         self._logger.log_info(
             f"{schema}.pool__targets: {written} rows over {series} series, "

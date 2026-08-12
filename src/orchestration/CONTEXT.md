@@ -1718,6 +1718,10 @@ varies in a one-company schema. Verified 2026-08-04: both tables
 
 #### `pool__targets` — the key + one column per horizon (2026-08-04: now **5 AND 10**)
 
+⚠️ **The shapes recorded in this section are the 2026-08-04 measurement and the table
+is now 9 columns wide, not 7** — `close_adjust_{h}day` was added 2026-08-12 and has its
+own subsection at the end of this one. The `7`s and the `4,235`s below are history.
+
 `return_{h}day = close[t+h] / close[t] - 1`, the forward simple return, computed
 server-side with `LEAD(close_adjust, h) OVER (ORDER BY date)`. `pool__basic` is one row
 per session, so a ROW offset is a trading-day offset and no calendar arithmetic is
@@ -1760,6 +1764,43 @@ silently re-defining it.
 be, as written: it subtracted the VNINDEX return read from `gold.indices`, which was
 **retired and dropped on 2026-08-01**. Its replacement is
 `gold.stock_market.hose__vnindex__close_adjust`.
+
+#### `close_adjust_{h}day` — the forward PRICE (added 2026-08-12), so the table is **9** columns
+
+`close_adjust_{h}day = close_adjust[t+h]`, plain `LEAD(close_adjust, h) OVER w` — the
+same lead `return_{h}day` divides by `close[t]`, kept in price units for a model asked to
+predict a LEVEL rather than a return. Built from the same `horizons` tuple as the two
+return families and emitted last, so the column order is now keys, `return_{h}day`×2,
+`return_rel_{h}day`×2, `close_adjust_{h}day`×2. The asset's column check is an EQUALITY,
+so a family appended anywhere else fails a correct table.
+
+⚠️ **IT IS A LABEL AND IT DOES NOT LOOK LIKE ONE.** `return_5day` announces itself; a
+column named `close_adjust_5day` sitting beside `pool__basic`'s `close_adjust` reads like
+a price feature. `UnifiedSchemaReader.join` brings the whole label table in, so anything
+that treats every non-key column of the joined panel as a candidate feature has been
+handed the answer — it would not fail, it would report an IC near 1.
+**`feature_selection.run.ALL_TARGETS` and the `OTHER_TARGETS` cell of
+`RUN__feature_importance_report.ipynb` both name it, and must stay in step.**
+
+⚠️ **No `NULLIF` on it, deliberately.** `return_{h}day` guards `close[t] = 0` because it
+divides by it; a forward level has no denominator, so a zero or negative close comes
+through as the number it is. That is visible in the numbers below — and it is the
+`close_adjust` defect the return columns were hiding inside a ratio.
+
+Verified 2026-08-12, all three partitions, against an independently computed
+`ROW_NUMBER()`-offset self-join of `pool__basic` (`rn = rn + h`):
+
+| schema | rows | `h=5` rows with a future | mismatches | NULL tail | `close_adjust_5day` range |
+|---|---|---|---|---|---|
+| `unified_schema_vcb` | 4,266 | 4,261 | **0** | 5 = 5×1 | 4,400 → 76,000 |
+| `unified_schema_bank` | 54,528 | 54,428 | **0** | 100 = 5×20 | 960 → 76,800 |
+| `unified_schema_all` | 2,388,975 | 2,385,070 | **0** | 3,905 = 5×781 | **−10** → 377,040 |
+
+⚠️ **That `−10` is real and it is `VNX`.** Its silver `close_adjust` is NEGATIVE for 968
+sessions — a data defect already known (`feature_selection.cross_sectional` excludes
+`VNX` by default because it makes `return_5day` reach −781). The forward-price column
+puts it in plain sight instead of inside a ratio. Anything fitting on
+`close_adjust_{h}day` over `ALL` must exclude `VNX` the same way.
 
 ## 2a. Cost of a full materialize (2026-07-31)
 

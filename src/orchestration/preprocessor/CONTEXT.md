@@ -879,10 +879,19 @@ DTO helpers come from
     notebook-only; see `train_test_creator/unified_schema_creator.ipynb`.
 
 - **`_ingest_unified_pool_targets(ticker)`** — `pool__basic` → `pool__targets`, same
-  PK, plus two columns per horizon in `UNIFIED_TARGET_HORIZONS = (5, 10)`:
-  `return_{h}day` (forward simple return on `close_adjust`) and `return_rel_{h}day`
+  PK, plus **three** columns per horizon in `UNIFIED_TARGET_HORIZONS = (5, 10)`:
+  `return_{h}day` (forward simple return on `close_adjust`), `return_rel_{h}day`
   (the same minus the VNINDEX return over the window, from
-  `gold_schema.stock_market.hose__vnindex__close_adjust`).
+  `gold_schema.stock_market.hose__vnindex__close_adjust`) and **`close_adjust_{h}day`**
+  (the forward adjusted close itself — added 2026-08-12, so the table is 9 columns).
+  - ⚠️ **`close_adjust_{h}day` IS A LABEL and its name does not say so.** It is
+    `LEAD(close_adjust, h)` — `return_{h}day`'s numerator, kept in price units for a
+    model asked to predict a level — and it sits in a joined panel looking exactly like
+    `pool__basic.close_adjust`. Every consumer that excludes labels by an explicit list
+    must name it; `feature_selection.run.ALL_TARGETS` does.
+  - ⚠️ **All three families are derived from the SAME `horizons` tuple**, so adding a
+    horizon adds three columns and there is no way to pair a `return_5day` with a
+    10-day forward price.
   - ⚠️ **The `LEAD` is `PARTITION BY exchange, ticker` — always, not only on the
     universe build.** Unpartitioned, it walks off the end of one company's history
     into the next one's, so the label at every series boundary would be another

@@ -569,7 +569,7 @@ assertions that had to become series-aware.
 | pool | columns | is |
 |---|---|---|
 | `pool__basic` | 38 | the price/flow panel |
-| `pool__targets` | 7 | the labels |
+| `pool__targets` | 7 → **9** (2026-08-12) | the labels. ⚠️ The two new columns are `close_adjust_{h}day` = `LEAD(close_adjust, h)`, the forward PRICE. It is a label whose NAME reads like a `pool__basic` feature, so it is on `run.ALL_TARGETS` and on the notebook's `OTHER_TARGETS` — off either list it becomes a candidate channel and the run reports an IC near 1 |
 | **`pool__ta`** | **924** | the technical block — ~226 moving-average columns, 121 oscillator, 120 price-transform, 90 Hilbert, 58 volatility, 50 volume, 45 RSI, 28 SAR, 26 stochastic, 23 Bollinger, 20 MACD |
 | **`pool__fa`** | **207** | the fundamental block — 93 balance-sheet, 50 cash-flow, 29 income-statement line items, 17 ratios (`roe`, `roa`, `nim`, `pe_ttm`, `pb`, `ldr`, …), 4 YoY growth, 4 per-share/TTM, 4 share counts |
 

@@ -1,0 +1,16 @@
+channel,fold 1,fold 2,fold 3,fold 4,fold 5
+close_adjust,1.0,1.0,1.0,1.0,1.0
+close_raw,3.0,8.0,13.0,2.0,2.0
+low,2.0,2.0,9.0,4.0,4.0
+n_sell_orders,5.0,15.0,10.0,9.0,10.0
+high,7.0,14.0,2.0,3.0,3.0
+value_matched,9.0,11.0,6.0,8.0,9.0
+sell_order_vol,15.0,13.0,15.0,14.0,11.0
+open,4.0,6.0,4.0,5.0,5.0
+n_buy_orders,6.0,7.0,3.0,10.0,12.0
+avg_vol_per_buy_order,14.0,3.0,5.0,7.0,7.0
+avg_vol_per_sell_order,8.0,12.0,12.0,6.0,6.0
+volume_negotiated,10.0,5.0,7.0,11.0,14.0
+value_negotiated,13.0,9.0,11.0,15.0,8.0
+volume_matched,11.0,10.0,14.0,12.0,15.0
+buy_order_vol,12.0,4.0,8.0,13.0,13.0

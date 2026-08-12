@@ -54,7 +54,11 @@ from feature_selection import cross_sectional as cs
 from feature_selection import evaluation, outstanding, report, windows
 from feature_selection.cross_sectional import CrossSectionalSelector, read_universe_panel
 from feature_selection.selector import FeatureSelector
-from feature_selection.unified_reader import UnifiedSchemaReader, unified_schema_name
+from feature_selection.unified_reader import (
+    KEY_COLS,
+    UnifiedSchemaReader,
+    unified_schema_name,
+)
 
 # ⚠️ Identity and taxonomy columns are never candidates. On a single-ticker panel they
 # are constant and would be dropped anyway; naming them keeps that a decision rather
@@ -73,9 +77,23 @@ IDENTITY = [
     "sub_industry_code",
 ]
 
-# Every label in `pool__targets`. Whichever is not the target is excluded — a second
-# label as a feature is the most direct leak available.
-ALL_TARGETS = ["return_5day", "return_10day", "return_rel_5day", "return_rel_10day"]
+# Every non-key column of `pool__targets`. Whichever is not the target is excluded — a
+# second label as a feature is the most direct leak available.
+#
+# ⚠️ **`close_adjust_{h}day` IS ON THIS LIST AND MUST STAY ON IT** (added 2026-08-12).
+# It is `LEAD(close_adjust, h)` — the forward price the run is trying to predict — and
+# unlike the four return columns its NAME reads like a `pool__basic` price feature.
+# `UnifiedSchemaReader.join` brings the whole label table in, so anything absent from
+# this list is handed to `FeatureSelector` as a candidate CHANNEL: leaving it off would
+# not fail, it would produce a shortlist headed by the answer and an IC near 1.
+ALL_TARGETS = [
+    "return_5day",
+    "return_10day",
+    "return_rel_5day",
+    "return_rel_10day",
+    "close_adjust_5day",
+    "close_adjust_10day",
+]
 
 # The label table. Always joined, never named in the run id — the target is already the
 # last segment of the folder name (`report.default_run_id`).
@@ -172,6 +190,26 @@ def run_selection(
             panel = reader.join(pools)
             join_log = reader.join_log
             schema_name, database = reader.schema, reader.database
+            # ⚠️ **ALL_TARGETS IS CHECKED AGAINST THE TABLE, NOT TRUSTED.** `join`
+            # brings every non-key column of `pool__targets` into the panel, and
+            # anything this module does not KNOW is a label is offered to
+            # `FeatureSelector` as a candidate channel. That failure is silent and it
+            # looks like success — a shortlist headed by the answer and an IC near 1.
+            # A hand-maintained list drifts the moment the table gains a column, which
+            # is exactly what happened on 2026-08-12 (`close_adjust_{h}day`), so the
+            # list is verified against `information_schema` while a cursor is open.
+            unlisted = [
+                c
+                for c in reader.column_types(TARGETS_TABLE)
+                if c not in KEY_COLS and c not in ALL_TARGETS
+            ]
+        if unlisted:
+            raise ValueError(
+                f"{schema_name}.{TARGETS_TABLE} holds label column(s) {unlisted} that "
+                f"feature_selection.run.ALL_TARGETS does not name. They would be "
+                f"selected over as FEATURES. Add them to ALL_TARGETS (and to the "
+                f"OTHER_TARGETS cell of RUN__feature_importance_report.ipynb)."
+            )
 
     n_tickers = panel["ticker"].nunique() if "ticker" in panel.columns else 1
     print(

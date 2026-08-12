@@ -218,6 +218,14 @@ So the stored target is *the one column that is neither a key, nor a channel, no
 absent from `pool__targets`*. Exactly one on both current tables; `resolve_target`
 raises rather than choosing when it is not.
 
+⚠️ **`pool__targets` gained `close_adjust_5day` / `close_adjust_10day` on 2026-08-12** —
+the forward adjusted close, `LEAD(close_adjust, h)`. The label set this method matches
+against is therefore six columns wide, not four. It does not change any current
+resolution: a `__final__` table carries ONE stored target, and the forward price cannot
+arrive as a channel because the selection excludes it (`feature_selection.run.
+ALL_TARGETS`, which now verifies itself against the table). It DOES mean a table built
+for `close_adjust_5day` resolves through the same path with no special case.
+
 ⚠️ **`outstanding.csv`'s own `target` column is NOT the stored column and cannot be.**
 It reads `cs_rank_5day` for the bank runs — a rank is computed within a date across a
 chosen universe and is deliberately never stored. That value is what the channels were

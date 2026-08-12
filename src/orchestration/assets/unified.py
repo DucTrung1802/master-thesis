@@ -6,7 +6,8 @@ Where bronze / silver / gold each hold the whole market in one table, a unified 
 holds ONE UNIVERSE cut into the FEATURE GROUPS a model selects over:
 
     pool__basic      the price/flow panel, every column of silver.stocks_basic
-    pool__targets    the labels — forward returns, absolute and index-relative
+    pool__targets    the labels — forward returns (absolute and index-relative) and
+                     the forward adjusted close itself
     pool__economy    all country macro panels, already causal in gold
     pool__ta         the ~920-column technical block
     pool__fa         the ~200-column fundamental block
@@ -243,13 +244,17 @@ def unified_pool_basic(
     deps=[AssetKey(["unified", "pool__basic"])],
     description=(
         "pool__basic → pool__targets: PK (date, exchange, ticker) — the same key as "
-        "every other pool, so a join needs no special case — plus TWO COLUMNS PER "
+        "every other pool, so a join needs no special case — plus THREE COLUMNS PER "
         "HORIZON in DataPreprocessor.UNIFIED_TARGET_HORIZONS: `return_{h}day`, the "
-        "forward simple return close[t+h]/close[t]-1 on the SPLIT-ADJUSTED close, and "
+        "forward simple return close[t+h]/close[t]-1 on the SPLIT-ADJUSTED close, "
         "`return_rel_{h}day`, the same minus the VNINDEX return over that window "
-        "(gold_schema.stock_market.hose__vnindex__close_adjust). ⚠️ The relative "
-        "target exists because a single stock's ABSOLUTE forward return is dominated "
-        "by the market factor, which no company-level feature predicts. ⚠️ Sourced "
+        "(gold_schema.stock_market.hose__vnindex__close_adjust), and "
+        "`close_adjust_{h}day`, the forward adjusted close close[t+h] itself. ⚠️ The "
+        "relative target exists because a single stock's ABSOLUTE forward return is "
+        "dominated by the market factor, which no company-level feature predicts. "
+        "⚠️ `close_adjust_{h}day` IS A LABEL — it is LEAD(close_adjust, h), the answer "
+        "in price units — and it reads like a pool__basic column, so anything joining "
+        "pool__basic ⋈ pool__targets must exclude it from its features. ⚠️ Sourced "
         "from pool__basic, not gold.stocks, so features and labels share one calendar "
         "by construction. ⚠️ Each column's last h rows are NULL (their future does not "
         "exist yet) and are KEPT so the table still joins."
@@ -267,21 +272,28 @@ def unified_pool_targets(
         horizons = tuple(prep.UNIFIED_TARGET_HORIZONS)
         target_cols = {h: f"return_{h}day" for h in horizons}
         relative_cols = {h: f"return_rel_{h}day" for h in horizons}
-        # Keyed so absolute and relative never collide: `h` for absolute, `-h` for
-        # the relative twin.
-        all_targets = {**target_cols, **{-h: c for h, c in relative_cols.items()}}
+        price_cols = {h: f"close_adjust_{h}day" for h in horizons}
+        # ⚠️ Keyed by COLUMN NAME, in the builder's own emission order. It used to be
+        # keyed by horizon with the relative twin under `-h`, which worked for exactly
+        # two families and had no room for a third — `close_adjust_{h}day` would have
+        # needed a second escape convention to avoid colliding with `return_{h}day`.
+        all_targets = {
+            c: h
+            for group in (target_cols, relative_cols, price_cols)
+            for h, c in group.items()
+        }
         expected_key = tuple(prep.UNIFIED_PRIMARY_KEY)
         benchmark = f"{prep.UNIFIED_BENCHMARK_TABLE}.{prep.UNIFIED_BENCHMARK_COLUMN}"
 
         with prep._database_driver._cursor_ctx() as cur:
             stats = {}
-            for h, target_col in all_targets.items():
+            for target_col in all_targets:
                 cur.execute(
                     f"SELECT COUNT({target_col}), MIN({target_col}), "
                     f"       MAX({target_col}), AVG({target_col}) "
                     f"FROM {schema}.pool__targets"
                 )
-                stats[h] = cur.fetchone()
+                stats[target_col] = cur.fetchone()
             cur.execute(
                 f"SELECT COUNT(*), COUNT(DISTINCT ticker), MIN(date), MAX(date) "
                 f"FROM {schema}.pool__targets"
@@ -317,9 +329,11 @@ def unified_pool_targets(
             f"{schema}.pool__targets primary key is {primary_key}, expected "
             f"{expected_key} — order is part of the contract."
         )
-    expected = list(expected_key) + list(target_cols.values()) + list(
-        relative_cols.values()
-    )
+    # ⚠️ The ORDER is the builder's `CREATE TABLE AS` select list, not an alphabetical
+    # or a per-horizon grouping: keys, then every `return_{h}day`, then every
+    # `return_rel_{h}day`, then every `close_adjust_{h}day`. This is an equality check,
+    # so a family appended in a different place here fails a correct table.
+    expected = list(expected_key) + list(all_targets)
     if columns != expected:
         raise ValueError(
             f"{schema}.pool__targets should hold exactly {expected}, got {columns}."
@@ -338,16 +352,22 @@ def unified_pool_targets(
     # h × the number of tickers — a single check against `h` would fail on `ALL` for a
     # table that is perfectly correct. On one company the two are the same number,
     # which is exactly why the old check looked right.
-    for h, target_col in target_cols.items():
-        tail = rows - int(stats[h][0])
-        expected_tail = h * tickers
-        if tail != expected_tail:
-            raise ValueError(
-                f"{schema}.pool__targets.{target_col} has a {tail}-row unlabelled "
-                f"tail; expected {expected_tail} ({h} per series × {tickers} "
-                f"series). More would mean NULL or zero closes putting silent holes "
-                f"in the labels."
-            )
+    #
+    # ⚠️ `close_adjust_{h}day` is held to the SAME exact tail. It is `return_{h}day`'s
+    # numerator with no denominator to guard, so any NULL outside the tail means the
+    # forward price itself is missing — and a model predicting a LEVEL would train on
+    # whatever the imputer put there.
+    for h in horizons:
+        for target_col in (target_cols[h], price_cols[h]):
+            tail = rows - int(stats[target_col][0])
+            expected_tail = h * tickers
+            if tail != expected_tail:
+                raise ValueError(
+                    f"{schema}.pool__targets.{target_col} has a {tail}-row unlabelled "
+                    f"tail; expected {expected_tail} ({h} per series × {tickers} "
+                    f"series). More would mean NULL or zero closes putting silent "
+                    f"holes in the labels."
+                )
 
     context.log.info(
         f"{schema}.pool__targets: {rows} rows / {tickers} ticker(s) ({first} → {last})"
@@ -363,8 +383,8 @@ def unified_pool_targets(
         "date_range": MetadataValue.text(f"{first} → {last}"),
         "table": MetadataValue.text(f"{schema}.pool__targets"),
     }
-    for key, target_col in all_targets.items():
-        labelled, lo, hi, mean = stats[key]
+    for target_col in all_targets:
+        labelled, lo, hi, mean = stats[target_col]
         metadata[f"{target_col}__labelled"] = int(labelled)
         metadata[f"{target_col}__unlabelled_tail"] = rows - int(labelled)
         if labelled:
