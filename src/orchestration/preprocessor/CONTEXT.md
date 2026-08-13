@@ -992,9 +992,10 @@ with no business being interpolated.
 protocol on it: `z = +0.11`, 11 of 20 shuffled draws beat the real data. Banks are
 VN's largest GICS industry at 20 names, against a resolvability threshold of ~100.
 
-#### `_ingest_unified_pool_forex` / `_ingest_unified_pool_funds` (2026-08-13)
+#### `_ingest_unified_pool_forex` / `_funds` / `_bonds` (2026-08-13)
 
-Two wide, `date`-keyed gold panels on the unified spine. Both are thin wrappers over
+Three wide, `date`-keyed gold panels on the unified spine — the same three TradingView
+asset classes gold builds from one spec table. All three are thin wrappers over
 **`_helper_unified_pool_on_date_spine`** — the same split `_ingest_unified_pool_ta` /
 `_fa` have over `_helper_unified_pool_from_source`, and for the same reason: the ⚠️
 knowledge is per source, the body is not.
@@ -1003,8 +1004,9 @@ knowledge is per source, the body is not.
 |---|---|---|---|
 | `pool__forex` | `gold_schema.forex` (358 cols, 357 pairs) | **4,266 × 360** in 852 ms | **0 mismatches** / 357 series |
 | `pool__funds` | `gold_schema.funds` (390 cols, 21 ETFs) | **4,266 × 392** in 1.01 s | **0 mismatches** / 389 columns |
+| `pool__bonds` | `gold_schema.bonds` (118 cols, 9 tenors) | **4,266 × 120** in 672 ms | **0 mismatches** / 117 columns |
 
-⚠️ **THESE ARE THE ECONOMY SHAPE, AND THE SOURCE'S KEY IS WHAT DECIDES THAT.** Both
+⚠️ **THESE ARE THE ECONOMY SHAPE, AND THE SOURCE'S KEY IS WHAT DECIDES THAT.** All three
 sources are keyed on `date` ALONE, so the helper LEFT JOINs on `date` and **broadcasts**
 one row across every ticker of the day — like `_ingest_unified_pool_economy`, unlike
 `_helper_unified_pool_from_source`, which INNER JOINs a source already keyed
@@ -1019,18 +1021,29 @@ source does not cover — **1,351 of 4,266 rows for `gold.funds`**, which starts
 2014-10-06 against a 2009 spine — and produce a pool that looks clean and has quietly
 changed the calendar under its own primary key.
 
-⚠️ **ONE table each where economy is 19** — 360 and 392 columns, inside the 1,600
-ceiling; a broker is not a country and neither is an ETF.
+⚠️ **ONE table each where economy is 19** — 360, 392 and 120 columns, inside the 1,600
+ceiling; a broker is not a country and neither is an ETF or a tenor.
 
-⚠️ **NEITHER IS FORWARD-FILLED.** A NULL means the source had no value that day; filling
+⚠️ **NONE IS FORWARD-FILLED.** A NULL means the source had no value that day; filling
 would invent a price. Per-column coverage on VCB's spine: forex **min 4.3% / median
-67.0% / max 97.5%**, funds **min 0.05% / median 17.7% / max 67.7%**, none all-NULL in
-either.
+67.0% / max 97.5%**, funds **min 0.05% / median 17.7% / max 67.7%**, bonds **min 37.1% /
+median 75.9% / max 76.1%**, none all-NULL in any of them.
 
-⚠️ **BOTH SOURCES ARE FROZEN BY THE SAME `skip_existing=True` SCRAPE.** 328 of 357 FX
-series stop at 2026-06-08/09; **19 of 21 funds stop at 2026-06-26**, and the two
-reaching 2026-08-04 are the two new listings that scrape picked up (38 of 389 fund
-columns carry anything after 2026-06-26). `MAX(date)` reads 2026-08-07 on both.
+⚠️ **ALL THREE SOURCES ARE FROZEN BY THE SAME `skip_existing=True` SCRAPE**, and bonds
+is the cleanest case because it is UNIFORM: 328 of 357 FX series stop at 2026-06-08/09;
+**19 of 21 funds stop at 2026-06-26** (the two reaching August are the two new listings
+that scrape picked up — 38 of 389 fund columns carry anything after 2026-06-26); and
+**every bond tenor stops at 2026-06-08**, the scrape having queued 0 bond data tasks at
+all. `MAX(date)` reads 2026-08-07 on all three.
+
+⚠️ **`pool__bonds`: THE SLOPE IS THE SIGNAL AND IT IS NOT A COLUMN.**
+`tvc__vn10y__value − tvc__vn02y__value` is the 10s2s, and the slope is what carries
+macro information rather than any single tenor's level. The wide shape makes it a
+subtraction (gold.bonds' own reason for existing) but nothing computes it —
+`FeatureSelector` scores the columns it is given. Measured on the built pool: mean
+**+1.204**, min **−0.828**, max **+3.618**, so it inverts and is a real series. ⚠️ Its
+9 tenors are 18 TradingView spellings collapsed in gold after asserting the twins agree
+(0 differing values), and the 15y/20y/30y only start in 2018.
 
 ⚠️ **`pool__funds` carries a MEASURE SUFFIX and `pool__forex` does not** — gold's
 naming, not a choice here: 19 measures per fund against one per pair. 21 × 19 = 399

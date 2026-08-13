@@ -11,17 +11,18 @@ holds ONE UNIVERSE cut into the FEATURE GROUPS a model selects over:
     pool__economy    all country macro panels, already causal in gold
     pool__forex      357 broker-quoted FX pairs, one `value` column each
     pool__funds      21 HOSE ETFs × up to 19 measures
+    pool__bonds      9 VN government tenors × 13 measures — the yield curve
     pool__ta         the ~920-column technical block
     pool__fa         the ~200-column fundamental block
 
 ⚠️ **TWO JOIN SHAPES, and which one a pool uses is decided by its SOURCE's key.**
 `pool__ta` / `pool__fa` come from tables already keyed `(date, exchange, ticker)` and
-INNER JOIN the spine on all three. `pool__economy`, `pool__forex` and `pool__funds` come
-from tables keyed on `date` ALONE, so they LEFT JOIN on `date` and BROADCAST one row
-across every ticker of that day — which is why their row count must EQUAL the spine's,
-while a per-ticker pool is allowed to cover a subset.
+INNER JOIN the spine on all three. `pool__economy`, `pool__forex`, `pool__funds` and
+`pool__bonds` come from tables keyed on `date` ALONE, so they LEFT JOIN on `date` and
+BROADCAST one row across every ticker of that day — which is why their row count must
+EQUAL the spine's, while a per-ticker pool is allowed to cover a subset.
 
-⚠️ **THE PARTITION IS THE UNIVERSE, and all seven pools share it** (2026-08-05). Until
+⚠️ **THE PARTITION IS THE UNIVERSE, and all eight pools share it** (2026-08-05). Until
 then this module was hard-coded to `UNIFIED_TICKER = "VCB"` and the asset keys carried
 the ticker (`unified_vcb/pool__basic`), which meant `unified_schema_all` and
 `unified_schema_bank` — 4.9 M rows between them — existed in the database but were
@@ -487,13 +488,14 @@ def unified_pool_economy(
     )
 
 
-# ── The two DATE-BROADCAST pools: pool__forex and pool__funds ────────────────────
+# ── The three DATE-BROADCAST pools: pool__forex, pool__funds, pool__bonds ────────
 #
 # One wide, `date`-keyed gold panel each, LEFT JOINed onto `pool__basic` and broadcast
-# across its tickers. They are a spec table rather than two copies for the reason
+# across its tickers. They are a spec table rather than three copies for the reason
 # `bronze.py` and `gold.py` give — near-identical assets drift — and because the
 # differences that matter (the source, and the ⚠️ each one carries) are visible here in
-# a row instead of buried in two near-identical bodies.
+# a row instead of buried in three near-identical bodies. They mirror the three wide
+# TradingView panels gold already builds from one spec table.
 #
 # ⚠️ THE ROW ASSERTION IS EQUALITY, NOT THE SUBSET `pool__ta`/`pool__fa` GET. Those are
 # limited by their source's TICKER coverage, which is legitimately narrow. These join
@@ -537,6 +539,22 @@ DATE_SPINE_POOLS: list[tuple[str, str, str, str]] = [
         "2009-06-30, so 1,351 of 4,266 rows (31.7%) are NULL by construction and "
         "median column coverage is 17.7%. ⚠️ E1VFVN30 IS THE VN30 INDEX wearing a "
         "ticker — an ETF close is the market factor that return_rel_{h}day subtracts.",
+    ),
+    (
+        "pool__bonds",
+        "bonds",
+        "tenor series",
+        "9 VN government tenors × 13 measures = 117 columns, named "
+        "{exchange}__{ticker}__{measure} (e.g. `tvc__vn10y__value`). ⚠️ THE SLOPE IS "
+        "THE SIGNAL AND IT IS NOT A COLUMN — vn10y minus vn02y is the 10s2s slope, "
+        "and the slope is what carries macro information, not any single tenor's "
+        "level. The wide shape makes that a subtraction; computing it is the "
+        "consumer's job. ⚠️ 9 tenors from 18 TradingView spellings, collapsed in gold "
+        "after asserting the twins agree (0 differing values, 2026-08-05). ⚠️ THE "
+        "WHOLE SOURCE STOPS 2026-06-08 UNIFORMLY — the scrape queued 0 bond data "
+        "tasks, so the last 43 spine rows are entirely NULL. ⚠️ The 15y/20y/30y "
+        "tenors start in 2018 and gold.bonds has no row for 1,017 of 4,266 VCB spine "
+        "dates, so coverage is min 37.1% / median 75.9% / max 76.1%.",
     ),
 ]
 

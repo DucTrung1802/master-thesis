@@ -21,7 +21,7 @@ to prove, which is mostly negative and deliberately so.
 | | |
 |---|---|
 | database | PostgreSQL `database_main_v2`, schemas `bronze_schema` / `silver_schema` / `gold_schema` / `unified_schema_<universe>`. Creds in repo `.env` (`POSTGRES_*`) |
-| orchestrator | **Dagster, 77 assets** — `src/orchestration/` is THE entry point |
+| orchestrator | **Dagster, 78 assets** — `src/orchestration/` is THE entry point |
 | universe | 781 VN tickers (HOSE/HNX/UPCOM); VCB is the single-name focus, VN30/VN100/LIQUID301/ALL/BANK the cross-sections |
 | model | LSTM (2×128, ~276k params) and **CNN** (`Conv1d` over time) + the chain in §3b. `model/common/engine.py` is the shared engine — a model package is a `model.py` + a ~30-line binding, **never a copy of `train.py`** |
 | interpreter | `mt_env` venv (`d:/GIT/master-thesis/mt_env`), Python 3.12.10, Windows, RTX 3050 4 GB |
@@ -92,7 +92,7 @@ Three things this ladder means:
 
 ## 3. The pipeline, end to end
 
-### 3a. Data — Dagster, 77 assets, `src/orchestration/`
+### 3a. Data — Dagster, 78 assets, `src/orchestration/`
 
 ```
 raw_data/<source>/            19 landing assets   scrapers: TradingView (universe+OHLCV,
@@ -107,32 +107,36 @@ silver_schema                 20 assets                 canonical, cross-source 
 gold_schema                   10 assets                 + features (TA battery ~900 cols,
       │                                                 returns, vol, as-of macro)
       ▼
-unified_schema_<universe>      7 assets × 3 partitions  pool__basic / __targets /
+unified_schema_<universe>      8 assets × 3 partitions  pool__basic / __targets /
                                                         __economy_<country>×19 /
-                                                        __forex / __funds / __ta / __fa
+                                                        __forex / __funds / __bonds /
+                                                        __ta / __fa
                               partitions: VCB | BANK | ALL
       ▼
 reports/feature_selection/     1 asset × 19 partitions   analysis/feature_selection_economy
                               partitions: the 19 countries — ⚠️ writes NO table
 ```
 
-⚠️ **`unified/pool__forex` and `unified/pool__funds` are new (2026-08-13)**, built for
-**VCB** so far and generated from ONE spec table (`DATE_SPINE_POOLS`). Both are the
-`pool__economy` shape — a `date`-only gold source LEFT JOINed and BROADCAST across
-tickers, so the row count must EQUAL the spine's — not the `pool__ta` one.
+⚠️ **THREE DATE-BROADCAST POOLS ARE NEW (2026-08-13)**, built for **VCB** so far and
+generated from ONE spec table (`DATE_SPINE_POOLS`). All three are the `pool__economy`
+shape — a `date`-only gold source LEFT JOINed and BROADCAST across tickers, so the row
+count must EQUAL the spine's — not the `pool__ta` one. Each: PK verified from
+`pg_index`, **0 round-trip mismatches** against gold, 0 unaligned keys.
 
-| pool | source | VCB | every cell vs gold | column coverage |
+| pool | source | VCB | col coverage | source ends |
 |---|---|---|---|---|
-| `pool__forex` | `gold.forex`, 357 broker pairs | 4,266 × 360 | **0 mismatches** | median **67%** |
-| `pool__funds` | `gold.funds`, 21 HOSE ETFs × ≤19 measures | 4,266 × 392 | **0 mismatches** | median **17.7%** |
+| `pool__forex` | `gold.forex`, 357 broker pairs | 4,266 × 360 | median **67.0%** | 29 of 357 in Aug, **328 at 2026-06-08/09** |
+| `pool__funds` | `gold.funds`, 21 HOSE ETFs × ≤19 measures | 4,266 × 392 | median **17.7%** | 2 of 21 in Aug, **19 at 2026-06-26** |
+| `pool__bonds` | `gold.bonds`, 9 tenors × 13 measures | 4,266 × 120 | median **75.9%** | **all 9 at 2026-06-08** |
 
-⚠️ **BOTH SOURCES ARE FROZEN AND `MAX(date)` HIDES IT** — the `skip_existing=True`
-scrape of 2026-08-05. 328 of 357 FX series stop at 2026-06-08/09; **19 of 21 funds stop
-at 2026-06-26** and the two that reach August are the two new listings. ⚠️ `pool__funds`
-is additionally **31.7% NULL by construction** (`gold.funds` starts 2014-10-06, the spine
-starts 2009-06-30), and its widest column, `hose__e1vfvn30__close`, IS the VN30 index —
-the market factor `return_rel_{h}day` subtracts. `orchestration/CONTEXT.md`
-§"`pool__forex`" / §"`pool__funds`".
+⚠️ **ALL THREE SOURCES ARE FROZEN AND `MAX(date)` HIDES IT** — the `skip_existing=True`
+scrape of 2026-08-05, which queued **0 bond data tasks at all**. ⚠️ `pool__funds` is
+additionally **31.7% NULL by construction** (`gold.funds` starts 2014-10-06, the spine
+starts 2009-06-30) and its widest column `hose__e1vfvn30__close` IS the VN30 index — the
+market factor `return_rel_{h}day` subtracts. ⚠️ On `pool__bonds` **the slope is the
+signal and it is not a column**: `vn10y − vn02y` must be derived, and the 15y/20y/30y
+tenors only start in 2018. `orchestration/CONTEXT.md` §"`pool__forex`" / §"`pool__funds`"
+/ §"`pool__bonds`".
 
 ⚠️ **One asset writes no database table.** `analysis/feature_selection_economy`
 (2026-08-10) runs the selection over `pool__basic + pool__economy_<country>` and
@@ -251,7 +255,7 @@ dagster dev                                             # UI at localhost:3000
 dagster asset materialize -f src/orchestration/definitions.py --select "group:bronze"
 dagster asset materialize -f src/orchestration/definitions.py --select "+bronze/trading_view_economy"
 dagster asset materialize -f src/orchestration/definitions.py --select "group:unified" --partition VCB
-dagster definitions validate                            # sanity check: 77 assets, no run
+dagster definitions validate                            # sanity check: 78 assets, no run
 
 # --- model chain ---
 python -m pipeline                                      # what's stale; writes nothing

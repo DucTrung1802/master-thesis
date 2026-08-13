@@ -5868,25 +5868,27 @@ class DataPreprocessor:
         )
         return panels
 
-    # ── The DATE-BROADCAST pools: pool__forex and pool__funds ───────────────────
+    # ── The DATE-BROADCAST pools: pool__forex, pool__funds, pool__bonds ─────────
     #
     # ⚠️ THESE ARE THE ECONOMY SHAPE, NOT THE TA/FA ONE, AND THE SOURCE'S KEY IS WHAT
-    # DECIDES THAT. `gold.forex` and `gold.funds` are keyed on `date` ALONE — one row
-    # per trading day, one column per `{exchange}__{ticker}[__{measure}]` — so they join
-    # the spine on `date` and BROADCAST across tickers, exactly like a macro panel and
-    # unlike `gold.stocks_ta`, which already carries `(date, exchange, ticker)` and is
-    # INNER JOINed on all three by `_helper_unified_pool_from_source`.
+    # DECIDES THAT. `gold.forex` / `gold.funds` / `gold.bonds` are keyed on `date`
+    # ALONE — one row per trading day, one column per `{exchange}__{ticker}[__{measure}]`
+    # — so they join the spine on `date` and BROADCAST across tickers, exactly like a
+    # macro panel and unlike `gold.stocks_ta`, which already carries
+    # `(date, exchange, ticker)` and is INNER JOINed on all three by
+    # `_helper_unified_pool_from_source`.
     #
     # The assertion differs with the shape, which is the reason the two families do not
     # share a body: a broadcast pool must hold EXACTLY the spine's rows, where a
     # per-ticker pool is allowed the one-sided subset (its source may cover fewer
     # TICKERS than the universe).
     #
-    # Both stay ONE table where economy is 19 — 360 and 392 columns, well inside
-    # PostgreSQL's 1,600 — and neither has a natural split key anyway: a broker is not a
-    # country, and neither is an ETF.
+    # All three stay ONE table where economy is 19 — 360, 392 and 120 columns, well
+    # inside PostgreSQL's 1,600 — and none has a natural split key anyway: a broker is
+    # not a country, and neither is an ETF or a tenor.
     UNIFIED_FOREX_SOURCE = f"{GOLD_SCHEMA}.forex"
     UNIFIED_FUNDS_SOURCE = f"{GOLD_SCHEMA}.funds"
+    UNIFIED_BONDS_SOURCE = f"{GOLD_SCHEMA}.bonds"
 
     def _ingest_unified_pool_forex(self, ticker: str) -> dict:
         """`gold.forex` → `unified_schema_<ticker>.pool__forex` — the FX block.
@@ -5959,6 +5961,49 @@ class DataPreprocessor:
         """
         return self._helper_unified_pool_on_date_spine(
             ticker, "pool__funds", self.UNIFIED_FUNDS_SOURCE, noun="fund series"
+        )
+
+    def _ingest_unified_pool_bonds(self, ticker: str) -> dict:
+        """`gold.bonds` → `unified_schema_<ticker>.pool__bonds` — the yield curve.
+
+        **9 VN government tenors × 13 measures = 117 columns**, named
+        `{exchange}__{ticker}__{measure}` (`tvc__vn10y__value`,
+        `tvc__vn02y__volatility_21`), keyed `(date, exchange, ticker)` on
+        `pool__basic`'s calendar. Returns a metadata dict.
+
+        ⚠️ **THE SLOPE IS THE SIGNAL AND IT IS NOT A COLUMN.** A yield CURVE is read
+        ACROSS tenors on one day — `tvc__vn10y__value − tvc__vn02y__value` is the
+        10s2s slope, and the slope is the series that carries macro information, not
+        any single tenor's level. The wide shape is what makes that a subtraction
+        instead of a self-join (`gold.bonds`' own reason for existing), but nothing
+        here computes it: `FeatureSelector` scores the columns it is given. A pool of
+        levels is the raw material for that feature, not the feature.
+
+        ⚠️ **9 TENORS FROM 18 SPELLINGS, COLLAPSED UPSTREAM.** TradingView exposes
+        `TVC:VN01` and `TVC:VN01Y` as separate symbols and the scraper collected both —
+        66,100 silver rows for 33,050 observations. `_helper_bonds_drop_duplicate_tenors`
+        collapses them in gold, having ASSERTED per pair that they agree (measured
+        2026-08-05: **0 differing values** on every shared date). Nothing to redo here;
+        it is worth knowing the tenor set is 9 and not 18 before counting columns.
+
+        ⚠️ **THE WHOLE SOURCE STOPS 2026-06-08, UNIFORMLY.** The 2026-08-05 scrape
+        queued **0 data tasks** for bonds — not "some series moved" as with forex and
+        funds, but none — so every tenor ends on the same day and the last **43 spine
+        rows are entirely NULL**. That uniformity is the one mercy: there is no
+        per-series staleness to unpick, just one date to compare against.
+
+        ⚠️ **The 15y/20y/30y tenors begin in 2018**, and `gold.bonds` has no row at all
+        for 1,017 of the 4,266 VCB spine dates (VN traded, TVC did not quote), so
+        per-column coverage runs **min 37.1%, median 75.9%, max 76.1%**. The long end
+        of the curve simply does not exist before 2018 — a slope built across it is a
+        2018-onward feature whatever its NULL policy.
+
+        ⚠️ **These are LEVELS, in percent.** Same trap as `pool__forex` and
+        `pool__economy`: a yield level against a forward stock return. The
+        representation is the selection step's decision; this method copies as-is.
+        """
+        return self._helper_unified_pool_on_date_spine(
+            ticker, "pool__bonds", self.UNIFIED_BONDS_SOURCE, noun="tenor series"
         )
 
     def _helper_unified_pool_on_date_spine(
