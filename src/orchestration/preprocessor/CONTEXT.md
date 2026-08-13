@@ -992,6 +992,31 @@ with no business being interpolated.
 protocol on it: `z = +0.11`, 11 of 20 shuffled draws beat the real data. Banks are
 VN's largest GICS industry at 20 names, against a resolvability threshold of ~100.
 
+#### `_ingest_unified_pool_forex` (2026-08-13)
+
+`gold.forex` → `unified_schema_<ticker>.pool__forex` — **357 broker-quoted FX pairs,
+one `value` column each**, named `{exchange}__{ticker}` (`saxo__eurusd`). VCB is
+**4,266 × 360** in 852 ms; every cell round-tripped against `gold.forex`, **0
+mismatches** over all 357 series.
+
+⚠️ **IT IS THE ECONOMY SHAPE, AND THE SOURCE'S KEY IS WHAT DECIDES THAT.** `gold.forex`
+is keyed on `date` ALONE, so this LEFT JOINs on `date` and **broadcasts** one row across
+every ticker of the day — like `_ingest_unified_pool_economy`, unlike
+`_helper_unified_pool_from_source`, which INNER JOINs a source already keyed
+`(date, exchange, ticker)`. The assertion differs with the shape: a broadcast pool must
+hold **exactly** the spine's rows (symmetric `EXCEPT` = 0), where a per-ticker pool is
+allowed the one-sided subset. It also preflights `COUNT(*) = COUNT(DISTINCT date)` on
+the source, because two rows for one date would fan out rather than broadcast.
+
+⚠️ **ONE table where economy is 19** — 357 + 3 = 360 columns, inside the 1,600 ceiling,
+and a broker is not a country so there is no natural split key.
+
+⚠️ **NOT forward-filled.** A NULL means that broker did not quote that pair that day;
+filling would invent a price. Per-series coverage on VCB's spine: **min 4.3%, median
+67.0%, max 97.5%**, none all-NULL. ⚠️ And **328 of 357 series stop at 2026-06-08/09**
+(the `skip_existing=True` scrape), so 43 spine days sit almost entirely NULL under a
+`MAX(date)` of 2026-08-07.
+
 #### `_ingest_unified_pool_ta` / `_ingest_unified_pool_fa` (2026-08-04)
 
 The remaining two feature groups. Both follow `pool__basic`'s contract exactly —

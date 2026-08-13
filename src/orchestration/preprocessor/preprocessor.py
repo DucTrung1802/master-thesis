@@ -5868,6 +5868,177 @@ class DataPreprocessor:
         )
         return panels
 
+    # ⚠️ FOREX IS THE ECONOMY SHAPE, NOT THE TA/FA ONE. `gold.forex` is keyed on `date`
+    # alone — one row per quote-day, one column per `{broker}__{pair}` — so it joins the
+    # spine on `date` and BROADCASTS across tickers, exactly like a macro panel and
+    # unlike `gold.stocks_ta`, which already carries `(date, exchange, ticker)`.
+    #
+    # It stays ONE table where economy is 19: 357 series + 3 key columns is 360, well
+    # inside PostgreSQL's 1,600, and there is no natural key to split on anyway — a
+    # broker is not a country.
+    UNIFIED_FOREX_SOURCE = f"{GOLD_SCHEMA}.forex"
+
+    def _ingest_unified_pool_forex(self, ticker: str) -> dict:
+        """`gold.forex` → `unified_schema_<ticker>.pool__forex` — the FX block.
+
+        **357 broker-quoted pairs, one `value` column each**, named
+        `{exchange}__{ticker}` (e.g. `saxo__eurusd`) with no measure suffix, keyed
+        `(date, exchange, ticker)` on `pool__basic`'s calendar. Returns a metadata dict.
+
+        ⚠️ **NOT FORWARD-FILLED, and the NULLs are the honest answer.** `gold.forex` is
+        unfilled by construction — a NULL means that broker did not quote that pair that
+        day — and filling one here would invent a price. Median coverage on VCB's
+        4,266-row spine is **67%** (min 4.3%, max 97.5%; 250 of 357 series above 50%),
+        so a consumer must decide how to impute rather than discover the table already
+        did. `train_test_creator` imputes with the TRAIN-slice median for exactly this.
+
+        ⚠️ **THE 9 EXCHANGES ARE 9 BROKERS AND MUST NOT BE COLLAPSED.** 99 distinct
+        pairs are quoted 357 times between them, and SAXO vs JFX disagree on 160,781 of
+        161,816 shared ticker-days (measured 2026-08-05). Deduplicating by pair name
+        would be picking one broker's book at random.
+
+        ⚠️ **MOST OF THE SOURCE IS STALE, and the table's MAX(date) hides it.** The
+        2026-08-05 scrape ran with `skip_existing=True`: 29 series reach 2026-08-04 and
+        **328 stop at 2026-06-08/09**. On VCB's spine that leaves 43 trading days on
+        which 328 of 357 columns are NULL. The pool is correct; the source is behind.
+        Re-scrape with `TradingViewDataConfig.skip_existing=False` before leaning on the
+        recent tail.
+
+        ⚠️ **These are LEVELS.** An FX rate against a forward stock return is the same
+        trap `close_adjust` is — a level "predicts" a level at ρ≈0.996 — so the
+        representation (`diff` / `zscore` / returns) belongs to the selection step, the
+        way it does for `pool__economy`. This method copies values as-is.
+        """
+        schema = self._helper_unified_schema(ticker)
+        source = self.UNIFIED_FOREX_SOURCE
+        source_schema, source_table = source.split(".", 1)
+
+        if not self._helper_column_types(schema, "pool__basic"):
+            raise MissingSourceDataError(
+                f"`{schema}.pool__basic` does not exist — build it first; it is the "
+                "calendar spine for every unified feature pool."
+            )
+
+        source_types = self._helper_column_types(source_schema, source_table)
+        if not source_types:
+            raise MissingSourceDataError(
+                f"`{source}` does not exist — build gold `forex` first."
+            )
+        if "date" not in source_types:
+            raise MissingSourceDataError(
+                f"`{source}` has no `date` column, so it cannot join the unified "
+                "trading-day spine."
+            )
+        pair_columns = [column for column in source_types if column != "date"]
+        if not pair_columns:
+            raise MissingSourceDataError(f"`{source}` contains no FX pair columns.")
+        duplicate_keys = set(pair_columns) & set(self.UNIFIED_PRIMARY_KEY)
+        if duplicate_keys:
+            raise PipelineError(
+                f"`{source}` reuses unified key column(s) {sorted(duplicate_keys)}. "
+                "An FX panel may contribute only feature columns beside `date`."
+            )
+
+        self._logger.log_info(
+            f"Ingesting unified {schema}.pool__forex (from {source})..."
+        )
+
+        with self._database_driver._cursor_ctx() as cur:
+            cur.execute(f"SELECT COUNT(*) FROM {schema}.pool__basic")
+            spine_rows = int(cur.fetchone()[0])
+            if not spine_rows:
+                raise MissingSourceDataError(
+                    f"`{schema}.pool__basic` is empty, so the FX pool would have no "
+                    "calendar to join."
+                )
+
+            cur.execute(f"SELECT COUNT(*), COUNT(DISTINCT date) FROM {source}")
+            source_rows, source_dates = (int(value) for value in cur.fetchone())
+            if not source_rows:
+                raise MissingSourceDataError(f"`{source}` is empty.")
+            # ⚠️ One row per date is what makes the join a BROADCAST rather than a
+            # fan-out. Two rows for one date would silently double every spine row —
+            # and the row-count check below would catch it, but only after writing a
+            # table twice the size of the spine.
+            if source_rows != source_dates:
+                raise PipelineError(
+                    f"`{source}` has {source_rows} rows over {source_dates} dates. It "
+                    "must be one row per date before joining a unified pool."
+                )
+
+            cur.execute(
+                f"SELECT COUNT(*) FROM {schema}.pool__basic b "
+                f"JOIN {source} f ON f.date = b.date"
+            )
+            matched_rows = int(cur.fetchone()[0])
+            if not matched_rows:
+                raise MissingSourceDataError(
+                    f"`{source}` shares no dates with `{schema}.pool__basic`."
+                )
+
+            selected = ", ".join(f"f.{column}" for column in pair_columns)
+            any_value = " OR ".join(f"{column} IS NOT NULL" for column in pair_columns)
+
+            # Dropped as late as possible: a failure above leaves the old table intact.
+            cur.execute(f"DROP TABLE IF EXISTS {schema}.pool__forex")
+            cur.execute(
+                f"CREATE TABLE {schema}.pool__forex AS "
+                f"SELECT b.date, b.exchange, b.ticker, {selected} "
+                f"FROM {schema}.pool__basic b "
+                f"LEFT JOIN {source} f ON f.date = b.date"
+            )
+            self._helper_unified_primary_key(cur, schema, "pool__forex")
+
+            cur.execute(f"SELECT COUNT(*) FROM {schema}.pool__forex")
+            written = int(cur.fetchone()[0])
+            cur.execute(
+                f"SELECT COUNT(*) FROM {schema}.pool__forex WHERE {any_value}"
+            )
+            populated_rows = int(cur.fetchone()[0])
+            cur.execute(
+                f"SELECT COUNT(*) FROM ("
+                f"  (SELECT date, exchange, ticker FROM {schema}.pool__forex "
+                f"   EXCEPT SELECT date, exchange, ticker FROM {schema}.pool__basic) "
+                f"  UNION ALL "
+                f"  (SELECT date, exchange, ticker FROM {schema}.pool__basic "
+                f"   EXCEPT SELECT date, exchange, ticker FROM {schema}.pool__forex)"
+                f") unaligned"
+            )
+            unaligned = int(cur.fetchone()[0])
+
+        # ⚠️ EQUALITY, not the one-sided allowance `pool__ta`/`pool__fa` get. Those are
+        # LEFT-limited by their SOURCE's ticker coverage; this one is a LEFT JOIN from
+        # the spine, so every spine row must survive it. Fewer rows here means the join
+        # itself went wrong, not that the source is narrow.
+        if written != spine_rows:
+            raise PipelineError(
+                f"{schema}.pool__forex wrote {written} rows against pool__basic's "
+                f"{spine_rows}. An FX pool adds columns, never rows."
+            )
+        if unaligned:
+            raise PipelineError(
+                f"{schema}.pool__forex disagrees with pool__basic on {unaligned} "
+                "unified key(s). Every pool must share the spine exactly."
+            )
+        if not populated_rows:
+            raise MissingSourceDataError(
+                f"{schema}.pool__forex has no populated FX value on pool__basic's "
+                "calendar."
+            )
+
+        coverage = 100.0 * populated_rows / max(written, 1)
+        self._logger.log_info(
+            f"{schema}.pool__forex: {written} rows x {len(pair_columns)} FX series "
+            f"({coverage:.1f}% of rows carry at least one quote)."
+        )
+        return {
+            "source": source,
+            "table": "pool__forex",
+            "rows": written,
+            "features": len(pair_columns),
+            "populated_rows": populated_rows,
+        }
+
     def _ingest_unified_pool_basic(self, ticker: str) -> None:
         """`silver.stocks_basic` (one ticker) → `unified_schema_<ticker>.pool__basic`.
 

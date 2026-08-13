@@ -21,7 +21,7 @@ to prove, which is mostly negative and deliberately so.
 | | |
 |---|---|
 | database | PostgreSQL `database_main_v2`, schemas `bronze_schema` / `silver_schema` / `gold_schema` / `unified_schema_<universe>`. Creds in repo `.env` (`POSTGRES_*`) |
-| orchestrator | **Dagster, 75 assets** — `src/orchestration/` is THE entry point |
+| orchestrator | **Dagster, 76 assets** — `src/orchestration/` is THE entry point |
 | universe | 781 VN tickers (HOSE/HNX/UPCOM); VCB is the single-name focus, VN30/VN100/LIQUID301/ALL/BANK the cross-sections |
 | model | LSTM (2×128, ~276k params) and **CNN** (`Conv1d` over time) + the chain in §3b. `model/common/engine.py` is the shared engine — a model package is a `model.py` + a ~30-line binding, **never a copy of `train.py`** |
 | interpreter | `mt_env` venv (`d:/GIT/master-thesis/mt_env`), Python 3.12.10, Windows, RTX 3050 4 GB |
@@ -92,7 +92,7 @@ Three things this ladder means:
 
 ## 3. The pipeline, end to end
 
-### 3a. Data — Dagster, 75 assets, `src/orchestration/`
+### 3a. Data — Dagster, 76 assets, `src/orchestration/`
 
 ```
 raw_data/<source>/            19 landing assets   scrapers: TradingView (universe+OHLCV,
@@ -107,15 +107,24 @@ silver_schema                 20 assets                 canonical, cross-source 
 gold_schema                   10 assets                 + features (TA battery ~900 cols,
       │                                                 returns, vol, as-of macro)
       ▼
-unified_schema_<universe>      5 assets × 3 partitions  pool__basic / __targets /
-                                                        __economy_<country>×19 / __ta / __fa
+unified_schema_<universe>      6 assets × 3 partitions  pool__basic / __targets /
+                                                        __economy_<country>×19 / __forex /
+                                                        __ta / __fa
                               partitions: VCB | BANK | ALL
       ▼
 reports/feature_selection/     1 asset × 19 partitions   analysis/feature_selection_economy
                               partitions: the 19 countries — ⚠️ writes NO table
 ```
 
-⚠️ **The 75th asset writes no database table.** `analysis/feature_selection_economy`
+⚠️ **`unified/pool__forex` is new (2026-08-13)** — `gold.forex` → `pool__forex`, 357
+broker-quoted FX pairs on `pool__basic`'s spine, built for **VCB** so far
+(4,266 × 360, every cell round-tripped against gold, 0 mismatches). It is the
+`pool__economy` shape — a `date`-only source LEFT JOINed and BROADCAST across tickers —
+not the `pool__ta` one. ⚠️ **Median series coverage is 67% and 328 of 357 series stop at
+2026-06-08/09**, so the last 43 spine days are mostly NULL under a `MAX(date)` of
+2026-08-07. `orchestration/CONTEXT.md` §"`pool__forex`".
+
+⚠️ **One asset writes no database table.** `analysis/feature_selection_economy`
 (2026-08-10) runs the selection over `pool__basic + pool__economy_<country>` and
 archives a run folder; `feature_selection` is read-only by design. It defaults to a
 **20-draw null** (the 18 hand-launched country runs all used 0) and **raises** both when
@@ -174,7 +183,7 @@ dagster dev                                             # UI at localhost:3000
 dagster asset materialize -f src/orchestration/definitions.py --select "group:bronze"
 dagster asset materialize -f src/orchestration/definitions.py --select "+bronze/trading_view_economy"
 dagster asset materialize -f src/orchestration/definitions.py --select "group:unified" --partition VCB
-dagster definitions validate                            # sanity check: 75 assets, no run
+dagster definitions validate                            # sanity check: 76 assets, no run
 
 # --- model chain ---
 python -m pipeline                                      # what's stale; writes nothing

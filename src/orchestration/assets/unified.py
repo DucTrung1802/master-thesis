@@ -9,10 +9,18 @@ holds ONE UNIVERSE cut into the FEATURE GROUPS a model selects over:
     pool__targets    the labels — forward returns (absolute and index-relative) and
                      the forward adjusted close itself
     pool__economy    all country macro panels, already causal in gold
+    pool__forex      357 broker-quoted FX pairs, one `value` column each
     pool__ta         the ~920-column technical block
     pool__fa         the ~200-column fundamental block
 
-⚠️ **THE PARTITION IS THE UNIVERSE, and all five pools share it** (2026-08-05). Until
+⚠️ **TWO JOIN SHAPES, and which one a pool uses is decided by its SOURCE's key.**
+`pool__ta` / `pool__fa` come from tables already keyed `(date, exchange, ticker)` and
+INNER JOIN the spine on all three. `pool__economy` and `pool__forex` come from tables
+keyed on `date` ALONE, so they LEFT JOIN on `date` and BROADCAST one row across every
+ticker of that day — which is why their row count must EQUAL the spine's, while a
+per-ticker pool is allowed to cover a subset.
+
+⚠️ **THE PARTITION IS THE UNIVERSE, and all six pools share it** (2026-08-05). Until
 then this module was hard-coded to `UNIFIED_TICKER = "VCB"` and the asset keys carried
 the ticker (`unified_vcb/pool__basic`), which meant `unified_schema_all` and
 `unified_schema_bank` — 4.9 M rows between them — existed in the database but were
@@ -478,6 +486,97 @@ def unified_pool_economy(
     )
 
 
+@asset(
+    name="pool__forex",
+    key_prefix=["unified"],
+    group_name="unified",
+    compute_kind="postgres",
+    partitions_def=UNIFIED_PARTITIONS,
+    deps=[
+        AssetKey(["gold", "forex"]),
+        AssetKey(["unified", "pool__basic"]),
+    ],
+    description=(
+        "gold.forex → unified_schema_<universe>.pool__forex: 357 broker-quoted FX "
+        "pairs, ONE `value` column each named {exchange}__{ticker} (e.g. "
+        "`saxo__eurusd`), on pool__basic's (date, exchange, ticker) spine. ⚠️ The "
+        "source is keyed on `date` ALONE, so the join BROADCASTS one FX row across "
+        "every ticker of the day — the pool__economy shape, not the pool__ta one. "
+        "⚠️ NOT forward-filled: a NULL means that broker did not quote that pair that "
+        "day, and filling it would invent a price. ⚠️ THE 9 EXCHANGES ARE 9 BROKERS "
+        "and must not be collapsed — SAXO and JFX disagree on 160,781 of 161,816 "
+        "shared ticker-days. ⚠️ 328 of 357 series stop at 2026-06-08/09 (a "
+        "skip_existing=True scrape), so the recent tail is mostly NULL however healthy "
+        "MAX(date) looks."
+    ),
+)
+def unified_pool_forex(
+    context: AssetExecutionContext, preprocessor: PreprocessorResource
+) -> MaterializeResult:
+    universe = context.partition_key
+    schema = _schema_of(universe)
+
+    with preprocessor.session(schema=schema) as prep:
+        panel = prep._ingest_unified_pool_forex(universe)
+        expected_key = tuple(prep.UNIFIED_PRIMARY_KEY)
+
+        with prep._database_driver._cursor_ctx() as cur:
+            cur.execute(
+                f"SELECT COUNT(*), COUNT(DISTINCT ticker), MIN(date), MAX(date) "
+                f"FROM {schema}.pool__forex"
+            )
+            rows, tickers, first, last = cur.fetchone()
+            rows, tickers = int(rows), int(tickers)
+            cur.execute(f"SELECT COUNT(*) FROM {schema}.pool__basic")
+            basic_rows = int(cur.fetchone()[0])
+            primary_key = _primary_key(cur, schema, "pool__forex")
+            # ⚠️ The LAST date carrying a quote, not MAX(date) — those are different
+            # numbers here and the difference is the whole staleness story. A pool
+            # built on a spine that runs 2 months past its source looks perfectly
+            # healthy on MAX(date) and is NULL for every one of those rows.
+            cur.execute(
+                f"SELECT MAX(date) FROM {schema}.pool__forex f "
+                f"WHERE EXISTS (SELECT 1 FROM {prep.UNIFIED_FOREX_SOURCE} g "
+                f"              WHERE g.date = f.date)"
+            )
+            last_quoted = cur.fetchone()[0]
+
+    if primary_key != expected_key:
+        raise ValueError(
+            f"{schema}.pool__forex primary key is {primary_key}, expected "
+            f"{expected_key} — order is part of the contract."
+        )
+    if rows != basic_rows:
+        raise ValueError(
+            f"{schema}.pool__forex has {rows} rows against pool__basic's "
+            f"{basic_rows}. An FX pool adds columns, never rows."
+        )
+
+    coverage = 100.0 * panel["populated_rows"] / max(rows, 1)
+    context.log.info(
+        f"{schema}.pool__forex: {rows} rows × {panel['features']} FX series, "
+        f"{tickers} ticker(s) ({first} → {last}) — {coverage:.1f}% of rows carry at "
+        f"least one quote; last spine date with any FX row is {last_quoted}"
+    )
+    return MaterializeResult(
+        metadata={
+            "rows": rows,
+            "columns": panel["features"] + len(expected_key),
+            "features": panel["features"],
+            "tickers": tickers,
+            "pool__basic_rows": basic_rows,
+            "populated_rows": panel["populated_rows"],
+            "row_coverage_pct": MetadataValue.float(round(coverage, 2)),
+            "universe": MetadataValue.text(universe),
+            "primary_key": MetadataValue.text(", ".join(primary_key)),
+            "source": MetadataValue.text(panel["source"]),
+            "date_range": MetadataValue.text(f"{first} → {last}"),
+            "last_date_with_fx_row": MetadataValue.text(str(last_quoted)),
+            "table": MetadataValue.text(f"{schema}.pool__forex"),
+        }
+    )
+
+
 # ── The two FEATURE pools: pool__ta and pool__fa ─────────────────────────────────
 #
 # Both are one gold table sliced to this universe and re-keyed onto `pool__basic`'s
@@ -652,5 +751,6 @@ assets: List[Callable] = [
     unified_pool_basic,
     unified_pool_targets,
     unified_pool_economy,
+    unified_pool_forex,
     *feature_pool_assets,
 ]
