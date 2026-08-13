@@ -1,0 +1,295 @@
+{
+  "report_schema_version": "1.0",
+  "generated_at": "2026-08-12T19:34:30.764845+00:00",
+  "git_commit": "a4dd2306+dirty",
+  "environment": {
+    "python": "3.12.10",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "numpy": "2.2.6",
+    "pandas": "2.3.3",
+    "scipy": "1.17.1",
+    "sklearn": "1.7.2",
+    "xgboost": "2.1.1",
+    "matplotlib": "3.10.8"
+  },
+  "input": {
+    "database": "database_main_v2",
+    "schema": "unified_schema_vcb",
+    "tables": [
+      "pool__economy_indonesia",
+      "pool__targets"
+    ],
+    "join_log": [
+      {
+        "table": "pool__targets",
+        "join_keys": "date, exchange, ticker",
+        "how": "inner",
+        "rows_before": 4266,
+        "rows_after": 4266,
+        "columns_added": 6,
+        "duplicate_columns_dropped": ""
+      }
+    ],
+    "panel_rows": 4266,
+    "panel_columns": 95,
+    "first_date": "2009-06-30",
+    "last_date": "2026-08-07",
+    "sessions": 4266,
+    "tickers": 1
+  },
+  "target": {
+    "name": "close_adjust_5day",
+    "horizon_days": 5,
+    "definition": "close_adjust_5day (see cross_sectional.py / DataPreprocessor for the definition)",
+    "labelled_rows": 4261,
+    "unlabelled_rows": 5,
+    "mean": 27692.290542126262,
+    "sd": 20542.148182098284,
+    "min": 4400.0,
+    "max": 76000.0
+  },
+  "setup": {
+    "target": "close_adjust_5day",
+    "horizon_h": 5,
+    "lookback_d": 20,
+    "normalize": "none",
+    "purge_gap_rows": 24,
+    "window_stats": "last, mean, slope, sd, min, max",
+    "dropped_by_normalize": 0,
+    "dev_samples": 4242,
+    "holdout_start": "—",
+    "holdout_rows": 0,
+    "purged_at_boundary": 0,
+    "channels": 85,
+    "design_columns": 510,
+    "kept": 51,
+    "device": "cuda",
+    "max_features": null,
+    "corr_threshold": 0.9,
+    "n_splits": 5,
+    "min_train": 500,
+    "random_state": 18,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "permutation_repeats": 10,
+    "device_preference": "cuda",
+    "selector_class": "FeatureSelector",
+    "panel_col": null,
+    "feature_normalize": null
+  },
+  "results": {
+    "n_channels": 85,
+    "n_kept": 51,
+    "kept": [
+      "indonesia__economy__money__economics__idm0",
+      "indonesia__economy__prices__economics__idiryy",
+      "indonesia__economy__prices__economics__idcir",
+      "indonesia__economy__prices__economics__idcpihu",
+      "indonesia__economy__consumer__economics__idcci",
+      "indonesia__economy__trade__economics__idca",
+      "indonesia__economy__prices__economics__idppiyy",
+      "indonesia__economy__money__economics__idinbr",
+      "indonesia__economy__trade__economics__idimp",
+      "indonesia__economy__trade__economics__idbot",
+      "indonesia__economy__business__economics__idcli",
+      "indonesia__economy__consumer__economics__idrsyy",
+      "indonesia__economy__trade__economics__idexpyy",
+      "indonesia__economy__money__economics__idlg",
+      "indonesia__economy__business__economics__idmbks",
+      "indonesia__economy__labor__economics__idur",
+      "indonesia__economy__housing__economics__idhpiyy",
+      "indonesia__economy__gdp__economics__idgdpqq",
+      "indonesia__economy__government__economics__idgsp",
+      "indonesia__economy__prices__economics__idppi",
+      "indonesia__economy__prices__economics__idfi",
+      "indonesia__economy__prices__economics__idgdpd",
+      "indonesia__economy__government__economics__idgdg",
+      "indonesia__economy__prices__economics__idirmm",
+      "indonesia__economy__business__economics__idcar",
+      "indonesia__economy__gdp__economics__idgdpyy",
+      "indonesia__economy__business__economics__idbcoi",
+      "indonesia__economy__consumer__economics__idrsmm",
+      "indonesia__economy__money__economics__iddir",
+      "indonesia__economy__business__economics__idcorpi",
+      "indonesia__economy__business__economics__idcu",
+      "indonesia__economy__taxes__economics__idssre",
+      "indonesia__economy__business__economics__idgp",
+      "indonesia__economy__business__economics__idcp",
+      "indonesia__economy__business__economics__idic",
+      "indonesia__economy__trade__economics__idcag",
+      "indonesia__economy__money__economics__idlr",
+      "indonesia__economy__trade__economics__idgres",
+      "indonesia__economy__gdp__economics__idfygdpg",
+      "indonesia__economy__consumer__economics__idhdg",
+      "indonesia__economy__business__economics__idipmm",
+      "indonesia__economy__labor__economics__idup",
+      "indonesia__economy__business__economics__idcap",
+      "indonesia__economy__money__economics__idcrr",
+      "indonesia__economy__taxes__economics__idpitr",
+      "indonesia__economy__taxes__economics__idstr",
+      "indonesia__economy__labor__economics__idlfpr",
+      "indonesia__economy__taxes__economics__idctr",
+      "indonesia__economy__government__economics__idgbp",
+      "indonesia__economy__taxes__economics__idssr",
+      "indonesia__economy__taxes__economics__idssrc"
+    ],
+    "dropped_constant": [
+      "indonesia__economy__business__economics__idcorr"
+    ],
+    "dropped_correlated": {
+      "indonesia__economy__consumer__economics__idccr": "indonesia__economy__money__economics__idm0",
+      "indonesia__economy__money__economics__idm1": "indonesia__economy__money__economics__idm0",
+      "indonesia__economy__money__economics__idm3": "indonesia__economy__money__economics__idm0",
+      "indonesia__economy__prices__economics__idccp": "indonesia__economy__money__economics__idm0",
+      "indonesia__economy__money__economics__idfer": "indonesia__economy__money__economics__idm0",
+      "indonesia__economy__money__economics__idm2": "indonesia__economy__money__economics__idm0",
+      "indonesia__economy__trade__economics__ided": "indonesia__economy__money__economics__idm0",
+      "indonesia__economy__labor__economics__idwm": "indonesia__economy__money__economics__idm0",
+      "indonesia__economy__prices__economics__idep": "indonesia__economy__money__economics__idm0",
+      "indonesia__economy__money__economics__idlps": "indonesia__economy__money__economics__idm0",
+      "indonesia__economy__prices__fred__idncpiallminmei": "indonesia__economy__money__economics__idm0",
+      "indonesia__economy__prices__economics__idcpi": "indonesia__economy__money__economics__idm0",
+      "indonesia__economy__trade__economics__idcop": "indonesia__economy__money__economics__idm0",
+      "indonesia__economy__prices__economics__idipri": "indonesia__economy__money__economics__idm0",
+      "indonesia__economy__gdp__economics__idgdpcp": "indonesia__economy__money__economics__idm0",
+      "indonesia__economy__health__economics__idhb": "indonesia__economy__money__economics__idm0",
+      "indonesia__economy__gdp__economics__idgfcf": "indonesia__economy__money__economics__idm0",
+      "indonesia__economy__trade__economics__idexp": "indonesia__economy__trade__economics__idimp",
+      "indonesia__economy__housing__economics__idrpp": "indonesia__economy__housing__economics__idhpiyy",
+      "indonesia__economy__government__economics__idgr": "indonesia__economy__money__economics__idm0",
+      "indonesia__economy__prices__economics__idcpit": "indonesia__economy__prices__economics__idcpihu",
+      "indonesia__economy__gdp__economics__idgdppcp": "indonesia__economy__money__economics__idm0",
+      "indonesia__economy__labor__economics__idram": "indonesia__economy__money__economics__idm0",
+      "indonesia__economy__business__economics__idedbr": "indonesia__economy__money__economics__idm0",
+      "indonesia__economy__money__economics__idintr": "indonesia__economy__money__economics__iddir",
+      "indonesia__economy__labor__economics__idraw": "indonesia__economy__money__economics__idm0",
+      "indonesia__economy__government__economics__idfe": "indonesia__economy__money__economics__idm0",
+      "indonesia__economy__government__economics__idme": "indonesia__economy__money__economics__idm0",
+      "indonesia__economy__labor__economics__idemp": "indonesia__economy__money__economics__idm0",
+      "indonesia__economy__labor__economics__idpop": "indonesia__economy__money__economics__idm0",
+      "indonesia__economy__gdp__economics__idgdp": "indonesia__economy__money__economics__idm0",
+      "indonesia__economy__gdp__economics__idgdppc": "indonesia__economy__money__economics__idm0",
+      "indonesia__economy__government__economics__idgbv": "indonesia__economy__money__economics__idm0",
+      "indonesia__economy__gdp__economics__idgnp": "indonesia__economy__money__economics__idm0"
+    },
+    "dead_methods": [],
+    "top_10_by_ensemble": [
+      "indonesia__economy__money__economics__idm0",
+      "indonesia__economy__consumer__economics__idccr",
+      "indonesia__economy__money__economics__idm1",
+      "indonesia__economy__money__economics__idm3",
+      "indonesia__economy__prices__economics__idccp",
+      "indonesia__economy__money__economics__idfer",
+      "indonesia__economy__money__economics__idm2",
+      "indonesia__economy__trade__economics__ided",
+      "indonesia__economy__labor__economics__idwm",
+      "indonesia__economy__prices__economics__idep"
+    ],
+    "timings_seconds": {
+      "window design (cpu)": 0.35,
+      "spearman vs target (cuda)": 0.11,
+      "mutual_info (cuda)": 9.93,
+      "xgb gain + shap (cuda)": 1.87,
+      "lasso (cuda)": 556.32,
+      "permutation (cuda)": 7.25,
+      "channel corr matrix (cuda)": 0.01,
+      "stability (cuda)": 7.97,
+      "validation (cuda)": 14.38
+    },
+    "ic_summary": {
+      "folds": 5.0,
+      "ic_mean": -0.22981080908566648,
+      "ic_trend_per_fold": -0.07816284105727611,
+      "ic_min": -0.6672231107627262,
+      "ic_max": 0.37977574904993666,
+      "ic_fold_sd": 0.4194253821086164,
+      "hit_rate": 1.0,
+      "n_test_rows": 743.0,
+      "n_eff_per_fold": 148.6,
+      "se_ic_per_fold": 0.0823
+    },
+    "ic_summary_all_channels": {
+      "folds": 5.0,
+      "ic_mean": -0.1578726786150275,
+      "ic_trend_per_fold": -0.09748739499773651,
+      "ic_min": -0.4914220924349654,
+      "ic_max": 0.39332838698926714,
+      "ic_fold_sd": 0.3389485289766214,
+      "hit_rate": 1.0,
+      "n_test_rows": 743.0,
+      "n_eff_per_fold": 148.6,
+      "se_ic_per_fold": 0.0823
+    }
+  },
+  "null": null,
+  "holdout": null,
+  "notes": "indonesia macro pool ONLY (no pool__basic); forward PRICE LEVEL target; no null - evidence=no_null",
+  "run_id": "2026-08-13_023427__vcb__economy_indonesia__close_adjust_5day",
+  "artifacts": [
+    {
+      "file": "feature_importance.csv",
+      "bytes": 20884
+    },
+    {
+      "file": "design_scores.csv",
+      "bytes": 71560
+    },
+    {
+      "file": "validation.csv",
+      "bytes": 927
+    },
+    {
+      "file": "target_correlation.csv",
+      "bytes": 5636
+    },
+    {
+      "file": "channel_correlation.csv",
+      "bytes": 149820
+    },
+    {
+      "file": "stability.csv",
+      "bytes": 6063
+    },
+    {
+      "file": "coverage.csv",
+      "bytes": 4572
+    },
+    {
+      "file": "figures/01_ensemble_ranking.png",
+      "bytes": 184619
+    },
+    {
+      "file": "figures/02_method_heatmap.png",
+      "bytes": 311800
+    },
+    {
+      "file": "figures/03_target_correlation.png",
+      "bytes": 173913
+    },
+    {
+      "file": "figures/04_channel_correlation.png",
+      "bytes": 322243
+    },
+    {
+      "file": "figures/05_stat_profile.png",
+      "bytes": 191091
+    },
+    {
+      "file": "figures/06_validation.png",
+      "bytes": 44463
+    },
+    {
+      "file": "figures/07_stability.png",
+      "bytes": 223349
+    },
+    {
+      "file": "figures/08_coverage.png",
+      "bytes": 93698
+    },
+    {
+      "file": "figures/09_target_distribution.png",
+      "bytes": 45467
+    }
+  ],
+  "report_seconds": 3.57
+}

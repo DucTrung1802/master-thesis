@@ -1,0 +1,338 @@
+{
+  "report_schema_version": "1.0",
+  "generated_at": "2026-08-12T20:10:02.240349+00:00",
+  "git_commit": "a4dd2306+dirty",
+  "environment": {
+    "python": "3.12.10",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "numpy": "2.2.6",
+    "pandas": "2.3.3",
+    "scipy": "1.17.1",
+    "sklearn": "1.7.2",
+    "xgboost": "2.1.1",
+    "matplotlib": "3.10.8"
+  },
+  "input": {
+    "database": "database_main_v2",
+    "schema": "unified_schema_vcb",
+    "tables": [
+      "pool__economy_netherlands",
+      "pool__targets"
+    ],
+    "join_log": [
+      {
+        "table": "pool__targets",
+        "join_keys": "date, exchange, ticker",
+        "how": "inner",
+        "rows_before": 4266,
+        "rows_after": 4266,
+        "columns_added": 6,
+        "duplicate_columns_dropped": ""
+      }
+    ],
+    "panel_rows": 4266,
+    "panel_columns": 138,
+    "first_date": "2009-06-30",
+    "last_date": "2026-08-07",
+    "sessions": 4266,
+    "tickers": 1
+  },
+  "target": {
+    "name": "close_adjust_5day",
+    "horizon_days": 5,
+    "definition": "close_adjust_5day (see cross_sectional.py / DataPreprocessor for the definition)",
+    "labelled_rows": 4261,
+    "unlabelled_rows": 5,
+    "mean": 27692.290542126262,
+    "sd": 20542.148182098284,
+    "min": 4400.0,
+    "max": 76000.0
+  },
+  "setup": {
+    "target": "close_adjust_5day",
+    "horizon_h": 5,
+    "lookback_d": 20,
+    "normalize": "none",
+    "purge_gap_rows": 24,
+    "window_stats": "last, mean, slope, sd, min, max",
+    "dropped_by_normalize": 0,
+    "dev_samples": 4242,
+    "holdout_start": "—",
+    "holdout_rows": 0,
+    "purged_at_boundary": 0,
+    "channels": 127,
+    "design_columns": 762,
+    "kept": 75,
+    "device": "cuda",
+    "max_features": null,
+    "corr_threshold": 0.9,
+    "n_splits": 5,
+    "min_train": 500,
+    "random_state": 18,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "permutation_repeats": 10,
+    "device_preference": "cuda",
+    "selector_class": "FeatureSelector",
+    "panel_col": null,
+    "feature_normalize": null
+  },
+  "results": {
+    "n_channels": 127,
+    "n_kept": 75,
+    "kept": [
+      "netherlands__economy__money__economics__nlm0",
+      "netherlands__economy__housing__economics__nlhpi",
+      "netherlands__economy__labor__economics__nlwm",
+      "netherlands__economy__money__economics__nlcbbs",
+      "netherlands__economy__trade__economics__nlngi",
+      "netherlands__economy__prices__economics__nlcpit",
+      "netherlands__economy__housing__economics__nlrpp",
+      "netherlands__economy__labor__economics__nlyur",
+      "netherlands__economy__money__economics__nllps",
+      "netherlands__economy__money__economics__nlinbr",
+      "netherlands__economy__business__economics__nlbr",
+      "netherlands__economy__housing__economics__nlprr",
+      "netherlands__economy__trade__economics__nlca",
+      "netherlands__economy__business__economics__nlelp",
+      "netherlands__economy__consumer__economics__nlblr",
+      "netherlands__economy__prices__economics__nlipri",
+      "netherlands__economy__government__economics__nlfe",
+      "netherlands__economy__prices__economics__nlfi",
+      "netherlands__economy__housing__economics__nlbp",
+      "netherlands__economy__government__economics__nlaa",
+      "netherlands__economy__labor__economics__nllfpr",
+      "netherlands__economy__labor__economics__nlwg",
+      "netherlands__economy__gdp__economics__nlgdpu",
+      "netherlands__economy__gdp__economics__nlgdppa",
+      "netherlands__economy__money__economics__nlfer",
+      "netherlands__economy__trade__economics__nled",
+      "netherlands__economy__business__economics__nlcar",
+      "netherlands__economy__money__economics__nlbbs",
+      "netherlands__economy__business__economics__nlmip",
+      "netherlands__economy__labor__economics__nlup",
+      "netherlands__economy__business__economics__nlic",
+      "netherlands__economy__prices__economics__nlppiyy",
+      "netherlands__economy__trade__economics__nltot",
+      "netherlands__economy__business__economics__nlbcoi",
+      "netherlands__economy__business__economics__nlmpryy",
+      "netherlands__economy__housing__economics__nlcout",
+      "netherlands__economy__labor__economics__nlemc",
+      "netherlands__economy__labor__economics__nlprod",
+      "netherlands__economy__gdp__economics__nlgdpt",
+      "netherlands__economy__gdp__economics__nlgdpqq",
+      "netherlands__economy__trade__economics__nlcf",
+      "netherlands__economy__prices__economics__nlhiryy",
+      "netherlands__economy__trade__economics__nlrem",
+      "netherlands__economy__consumer__economics__nlcci",
+      "netherlands__economy__trade__economics__nlcop",
+      "netherlands__economy__trade__economics__nlcoir",
+      "netherlands__economy__business__economics__nlnpcryy",
+      "netherlands__economy__prices__economics__nlcir",
+      "netherlands__economy__business__economics__nlcu",
+      "netherlands__economy__government__economics__nlgbv",
+      "netherlands__economy__trade__economics__nlfdi",
+      "netherlands__economy__business__economics__nlipyy",
+      "netherlands__economy__consumer__economics__nlcs",
+      "netherlands__economy__gdp__economics__nlgdpyy",
+      "netherlands__economy__taxes__economics__nlssr",
+      "netherlands__economy__business__economics__nlipmm",
+      "netherlands__economy__prices__economics__nlhirmm",
+      "netherlands__economy__labor__economics__nlpte",
+      "netherlands__economy__trade__economics__nlcag",
+      "netherlands__economy__gdp__economics__nlgfcf",
+      "netherlands__economy__government__economics__nlgbp",
+      "netherlands__economy__business__economics__nlmprmm",
+      "netherlands__economy__government__economics__nlgd",
+      "netherlands__economy__trade__economics__nlti",
+      "netherlands__economy__housing__economics__nlhor",
+      "netherlands__economy__trade__economics__nlwes",
+      "netherlands__economy__business__economics__nlsp",
+      "netherlands__economy__business__economics__nledbr",
+      "netherlands__economy__taxes__economics__nlpitr",
+      "netherlands__economy__prices__economics__nlrinf",
+      "netherlands__economy__business__economics__nlno",
+      "netherlands__economy__taxes__economics__nlstr",
+      "netherlands__economy__taxes__economics__nlssrc",
+      "netherlands__economy__health__economics__nlicub",
+      "netherlands__economy__taxes__economics__nlctr"
+    ],
+    "dropped_constant": [
+      "netherlands__economy__business__economics__nlcorr",
+      "netherlands__economy__trade__economics__nlgres"
+    ],
+    "dropped_correlated": {
+      "netherlands__economy__money__economics__nlm2": "netherlands__economy__money__economics__nlm0",
+      "netherlands__economy__consumer__economics__nlccr": "netherlands__economy__money__economics__nlm0",
+      "netherlands__economy__prices__economics__nlcpihu": "netherlands__economy__money__economics__nlm0",
+      "netherlands__economy__government__economics__nlgsp": "netherlands__economy__housing__economics__nlhpi",
+      "netherlands__economy__prices__economics__nlgdpd": "netherlands__economy__money__economics__nlm0",
+      "netherlands__economy__money__economics__nlm3": "netherlands__economy__money__economics__nlm0",
+      "netherlands__economy__trade__economics__nlbot": "netherlands__economy__money__economics__nlm0",
+      "netherlands__economy__prices__economics__nlcpi": "netherlands__economy__money__economics__nlm0",
+      "netherlands__economy__prices__economics__nlhicp": "netherlands__economy__money__economics__nlm0",
+      "netherlands__economy__trade__economics__nlimp": "netherlands__economy__money__economics__nlm0",
+      "netherlands__economy__prices__economics__nlccp": "netherlands__economy__money__economics__nlm0",
+      "netherlands__economy__business__economics__nlcorpi": "netherlands__economy__money__economics__nlm0",
+      "netherlands__economy__labor__economics__nlmw": "netherlands__economy__money__economics__nlm0",
+      "netherlands__economy__labor__economics__nlemp": "netherlands__economy__money__economics__nlm0",
+      "netherlands__economy__consumer__economics__nlhdg": "netherlands__economy__money__economics__nlm0",
+      "netherlands__economy__money__economics__nlm1": "netherlands__economy__money__economics__nlm0",
+      "netherlands__economy__gdp__economics__nlgdpmin": "netherlands__economy__money__economics__nlm0",
+      "netherlands__economy__prices__economics__nlppi": "netherlands__economy__prices__economics__nlipri",
+      "netherlands__economy__labor__economics__nlpop": "netherlands__economy__money__economics__nlm0",
+      "netherlands__economy__trade__economics__nlexp": "netherlands__economy__money__economics__nlm0",
+      "netherlands__economy__government__economics__nlgr": "netherlands__economy__money__economics__nlm0",
+      "netherlands__economy__gdp__economics__nlgdpman": "netherlands__economy__money__economics__nlm0",
+      "netherlands__economy__labor__economics__nllc": "netherlands__economy__government__economics__nlfe",
+      "netherlands__economy__gdp__economics__nlgdpcp": "netherlands__economy__money__economics__nlm0",
+      "netherlands__economy__gdp__economics__nlgdpc": "netherlands__economy__housing__economics__nlhpi",
+      "netherlands__economy__labor__economics__nlemr": "netherlands__economy__housing__economics__nlhpi",
+      "netherlands__economy__health__economics__nlhb": "netherlands__economy__money__economics__nlm0",
+      "netherlands__economy__gdp__economics__nlgdps": "netherlands__economy__money__economics__nlm0",
+      "netherlands__economy__labor__economics__nlur": "netherlands__economy__labor__economics__nlyur",
+      "netherlands__economy__gdp__economics__nlgnp": "netherlands__economy__money__economics__nlm0",
+      "netherlands__economy__labor__economics__nlltur": "netherlands__economy__housing__economics__nlhpi",
+      "netherlands__economy__labor__economics__nljv": "netherlands__economy__housing__economics__nlhpi",
+      "netherlands__economy__gdp__economics__nlgdppc": "netherlands__economy__labor__economics__nlwg",
+      "netherlands__economy__prices__economics__nlep": "netherlands__economy__prices__economics__nlipri",
+      "netherlands__economy__government__economics__nlgdg": "netherlands__economy__housing__economics__nlhpi",
+      "netherlands__economy__government__economics__nlme": "netherlands__economy__housing__economics__nlprr",
+      "netherlands__economy__taxes__economics__nlssre": "netherlands__economy__money__economics__nlm0",
+      "netherlands__economy__prices__economics__nliryy": "netherlands__economy__prices__economics__nlhiryy",
+      "netherlands__economy__gdp__economics__nlgdppcp": "netherlands__economy__labor__economics__nlwg",
+      "netherlands__economy__labor__economics__nljvr": "netherlands__economy__housing__economics__nlhpi",
+      "netherlands__economy__consumer__economics__nldpi": "netherlands__economy__money__economics__nlm0",
+      "netherlands__economy__labor__economics__nlfte": "netherlands__economy__housing__economics__nlhpi",
+      "netherlands__economy__government__economics__nlgsg": "netherlands__economy__government__economics__nlgbp",
+      "netherlands__economy__prices__economics__nlirmm": "netherlands__economy__prices__economics__nlhirmm",
+      "netherlands__economy__labor__economics__nlwag": "netherlands__economy__money__economics__nlm0",
+      "netherlands__economy__health__economics__nlhosp": "netherlands__economy__money__economics__nlm0",
+      "netherlands__economy__health__economics__nlnurs": "netherlands__economy__money__economics__nlm0",
+      "netherlands__economy__labor__economics__nlram": "netherlands__economy__money__economics__nlm0",
+      "netherlands__economy__money__economics__nlpdg": "netherlands__economy__housing__economics__nlprr",
+      "netherlands__economy__labor__economics__nlraw": "netherlands__economy__money__economics__nlm0",
+      "netherlands__economy__money__economics__nlintr": "netherlands__economy__money__economics__nlinbr",
+      "netherlands__economy__health__economics__nlmd": "netherlands__economy__money__economics__nlm0"
+    },
+    "dead_methods": [],
+    "top_10_by_ensemble": [
+      "netherlands__economy__money__economics__nlm0",
+      "netherlands__economy__housing__economics__nlhpi",
+      "netherlands__economy__labor__economics__nlwm",
+      "netherlands__economy__money__economics__nlcbbs",
+      "netherlands__economy__trade__economics__nlngi",
+      "netherlands__economy__money__economics__nlm2",
+      "netherlands__economy__consumer__economics__nlccr",
+      "netherlands__economy__prices__economics__nlcpihu",
+      "netherlands__economy__government__economics__nlgsp",
+      "netherlands__economy__prices__economics__nlgdpd"
+    ],
+    "timings_seconds": {
+      "window design (cpu)": 0.44,
+      "spearman vs target (cuda)": 0.11,
+      "mutual_info (cuda)": 14.59,
+      "xgb gain + shap (cuda)": 2.46,
+      "lasso (cuda)": 698.53,
+      "permutation (cuda)": 10.55,
+      "channel corr matrix (cuda)": 0.02,
+      "stability (cuda)": 10.46,
+      "validation (cuda)": 18.49
+    },
+    "ic_summary": {
+      "folds": 5.0,
+      "ic_mean": 0.04886605880726787,
+      "ic_trend_per_fold": -0.09179365956260928,
+      "ic_min": -0.3766917082612199,
+      "ic_max": 0.6759768431012417,
+      "ic_fold_sd": 0.4817495851682483,
+      "hit_rate": 1.0,
+      "n_test_rows": 743.0,
+      "n_eff_per_fold": 148.6,
+      "se_ic_per_fold": 0.0823
+    },
+    "ic_summary_all_channels": {
+      "folds": 5.0,
+      "ic_mean": 0.09384552234957202,
+      "ic_trend_per_fold": -0.13115124952531196,
+      "ic_min": -0.32998427856972895,
+      "ic_max": 0.5970492533834901,
+      "ic_fold_sd": 0.424757749168649,
+      "hit_rate": 1.0,
+      "n_test_rows": 743.0,
+      "n_eff_per_fold": 148.6,
+      "se_ic_per_fold": 0.0823
+    }
+  },
+  "null": null,
+  "holdout": null,
+  "notes": "netherlands macro pool ONLY (no pool__basic); forward PRICE LEVEL target; no null - evidence=no_null",
+  "run_id": "2026-08-13_030958__vcb__economy_netherlands__close_adjust_5day",
+  "artifacts": [
+    {
+      "file": "feature_importance.csv",
+      "bytes": 31348
+    },
+    {
+      "file": "design_scores.csv",
+      "bytes": 106387
+    },
+    {
+      "file": "validation.csv",
+      "bytes": 927
+    },
+    {
+      "file": "target_correlation.csv",
+      "bytes": 8613
+    },
+    {
+      "file": "channel_correlation.csv",
+      "bytes": 328896
+    },
+    {
+      "file": "stability.csv",
+      "bytes": 9440
+    },
+    {
+      "file": "coverage.csv",
+      "bytes": 7073
+    },
+    {
+      "file": "figures/01_ensemble_ranking.png",
+      "bytes": 178728
+    },
+    {
+      "file": "figures/02_method_heatmap.png",
+      "bytes": 307642
+    },
+    {
+      "file": "figures/03_target_correlation.png",
+      "bytes": 173163
+    },
+    {
+      "file": "figures/04_channel_correlation.png",
+      "bytes": 332166
+    },
+    {
+      "file": "figures/05_stat_profile.png",
+      "bytes": 179104
+    },
+    {
+      "file": "figures/06_validation.png",
+      "bytes": 44240
+    },
+    {
+      "file": "figures/07_stability.png",
+      "bytes": 222193
+    },
+    {
+      "file": "figures/08_coverage.png",
+      "bytes": 116844
+    },
+    {
+      "file": "figures/09_target_distribution.png",
+      "bytes": 45467
+    }
+  ],
+  "report_seconds": 3.5
+}

@@ -1,0 +1,296 @@
+{
+  "report_schema_version": "1.0",
+  "generated_at": "2026-08-12T19:57:15.314960+00:00",
+  "git_commit": "a4dd2306+dirty",
+  "environment": {
+    "python": "3.12.10",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "numpy": "2.2.6",
+    "pandas": "2.3.3",
+    "scipy": "1.17.1",
+    "sklearn": "1.7.2",
+    "xgboost": "2.1.1",
+    "matplotlib": "3.10.8"
+  },
+  "input": {
+    "database": "database_main_v2",
+    "schema": "unified_schema_vcb",
+    "tables": [
+      "pool__economy_malaysia",
+      "pool__targets"
+    ],
+    "join_log": [
+      {
+        "table": "pool__targets",
+        "join_keys": "date, exchange, ticker",
+        "how": "inner",
+        "rows_before": 4266,
+        "rows_after": 4266,
+        "columns_added": 6,
+        "duplicate_columns_dropped": ""
+      }
+    ],
+    "panel_rows": 4266,
+    "panel_columns": 96,
+    "first_date": "2009-06-30",
+    "last_date": "2026-08-07",
+    "sessions": 4266,
+    "tickers": 1
+  },
+  "target": {
+    "name": "close_adjust_5day",
+    "horizon_days": 5,
+    "definition": "close_adjust_5day (see cross_sectional.py / DataPreprocessor for the definition)",
+    "labelled_rows": 4261,
+    "unlabelled_rows": 5,
+    "mean": 27692.290542126262,
+    "sd": 20542.148182098284,
+    "min": 4400.0,
+    "max": 76000.0
+  },
+  "setup": {
+    "target": "close_adjust_5day",
+    "horizon_h": 5,
+    "lookback_d": 20,
+    "normalize": "none",
+    "purge_gap_rows": 24,
+    "window_stats": "last, mean, slope, sd, min, max",
+    "dropped_by_normalize": 0,
+    "dev_samples": 4242,
+    "holdout_start": "—",
+    "holdout_rows": 0,
+    "purged_at_boundary": 0,
+    "channels": 86,
+    "design_columns": 516,
+    "kept": 59,
+    "device": "cuda",
+    "max_features": null,
+    "corr_threshold": 0.9,
+    "n_splits": 5,
+    "min_train": 500,
+    "random_state": 18,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "permutation_repeats": 10,
+    "device_preference": "cuda",
+    "selector_class": "FeatureSelector",
+    "panel_col": null,
+    "feature_normalize": null
+  },
+  "results": {
+    "n_channels": 86,
+    "n_kept": 59,
+    "kept": [
+      "malaysia__economy__money__economics__mym3",
+      "malaysia__economy__trade__economics__mycop",
+      "malaysia__economy__consumer__economics__mycci",
+      "malaysia__economy__money__economics__myfer",
+      "malaysia__economy__trade__economics__myfdi",
+      "malaysia__economy__trade__economics__mybot",
+      "malaysia__economy__business__economics__mycep",
+      "malaysia__economy__money__economics__mycbbs",
+      "malaysia__economy__business__economics__mycar",
+      "malaysia__economy__government__economics__mygr",
+      "malaysia__economy__prices__economics__mycpit",
+      "malaysia__economy__trade__economics__myta",
+      "malaysia__economy__trade__economics__myca",
+      "malaysia__economy__prices__economics__myppiyy",
+      "malaysia__economy__trade__economics__myexpyy",
+      "malaysia__economy__business__economics__mycap",
+      "malaysia__economy__prices__economics__myppi",
+      "malaysia__economy__business__economics__mylei",
+      "malaysia__economy__taxes__economics__myctr",
+      "malaysia__economy__labor__economics__myup",
+      "malaysia__economy__government__economics__myfe",
+      "malaysia__economy__gdp__economics__mygfcf",
+      "malaysia__economy__business__economics__mympryy",
+      "malaysia__economy__trade__economics__mytot",
+      "malaysia__economy__trade__economics__myimpyy",
+      "malaysia__economy__prices__economics__myep",
+      "malaysia__economy__prices__economics__myiryy",
+      "malaysia__economy__business__economics__myic",
+      "malaysia__economy__consumer__economics__myblr",
+      "malaysia__economy__housing__economics__myrpp",
+      "malaysia__economy__money__economics__myoiar",
+      "malaysia__economy__government__economics__mygbv",
+      "malaysia__economy__business__economics__mybcoi",
+      "malaysia__economy__government__economics__mygsp",
+      "malaysia__economy__government__economics__mygdg",
+      "malaysia__economy__business__economics__myipyy",
+      "malaysia__economy__prices__economics__myirmm",
+      "malaysia__economy__business__economics__myedbr",
+      "malaysia__economy__labor__economics__myjv",
+      "malaysia__economy__money__economics__myinbr",
+      "malaysia__economy__business__economics__myipmm",
+      "malaysia__economy__trade__economics__mycf",
+      "malaysia__economy__money__economics__mydir",
+      "malaysia__economy__taxes__economics__mypitr",
+      "malaysia__economy__government__economics__myme",
+      "malaysia__economy__gdp__economics__mygdpyy",
+      "malaysia__economy__money__economics__mycrr",
+      "malaysia__economy__consumer__economics__myhdg",
+      "malaysia__economy__trade__economics__myti",
+      "malaysia__economy__government__economics__mygbp",
+      "malaysia__economy__business__economics__mycorpi",
+      "malaysia__economy__gdp__economics__mygdpqq",
+      "malaysia__economy__trade__economics__mygres",
+      "malaysia__economy__labor__economics__myur",
+      "malaysia__economy__trade__economics__mytr",
+      "malaysia__economy__business__economics__mybr",
+      "malaysia__economy__business__economics__mycu",
+      "malaysia__economy__labor__economics__myram",
+      "malaysia__economy__taxes__economics__mystr"
+    ],
+    "dropped_constant": [
+      "malaysia__economy__business__economics__mycorr"
+    ],
+    "dropped_correlated": {
+      "malaysia__economy__money__economics__mym1": "malaysia__economy__money__economics__mym3",
+      "malaysia__economy__money__economics__mylps": "malaysia__economy__money__economics__mym3",
+      "malaysia__economy__business__economics__mycind": "malaysia__economy__money__economics__mym3",
+      "malaysia__economy__consumer__economics__mycs": "malaysia__economy__money__economics__mym3",
+      "malaysia__economy__money__economics__mym0": "malaysia__economy__money__economics__mym3",
+      "malaysia__economy__prices__economics__mycpi": "malaysia__economy__money__economics__mym3",
+      "malaysia__economy__housing__fred__qmyr628bis": "malaysia__economy__money__economics__mym3",
+      "malaysia__economy__housing__economics__myhpi": "malaysia__economy__money__economics__mym3",
+      "malaysia__economy__trade__economics__myimp": "malaysia__economy__money__economics__mym3",
+      "malaysia__economy__labor__economics__myemp": "malaysia__economy__money__economics__mym3",
+      "malaysia__economy__trade__economics__myed": "malaysia__economy__money__economics__mym3",
+      "malaysia__economy__money__economics__mym2": "malaysia__economy__money__economics__mym3",
+      "malaysia__economy__trade__economics__myexp": "malaysia__economy__money__economics__mym3",
+      "malaysia__economy__prices__economics__mycpihu": "malaysia__economy__money__economics__mym3",
+      "malaysia__economy__labor__economics__mylfpr": "malaysia__economy__money__economics__mym3",
+      "malaysia__economy__gdp__economics__mygdpcp": "malaysia__economy__money__economics__mym3",
+      "malaysia__economy__gdp__economics__mygdppc": "malaysia__economy__money__economics__mym3",
+      "malaysia__economy__prices__economics__myipri": "malaysia__economy__money__economics__mym3",
+      "malaysia__economy__prices__economics__mygdpd": "malaysia__economy__money__economics__mym3",
+      "malaysia__economy__gdp__economics__mygnp": "malaysia__economy__money__economics__mym3",
+      "malaysia__economy__gdp__economics__mygdppcp": "malaysia__economy__money__economics__mym3",
+      "malaysia__economy__housing__economics__myhpiyy": "malaysia__economy__housing__economics__myrpp",
+      "malaysia__economy__labor__economics__mypop": "malaysia__economy__money__economics__mym3",
+      "malaysia__economy__gdp__economics__mygdp": "malaysia__economy__money__economics__mym3",
+      "malaysia__economy__money__economics__myintr": "malaysia__economy__money__economics__myoiar",
+      "malaysia__economy__trade__economics__mycag": "malaysia__economy__gdp__economics__mygfcf",
+      "malaysia__economy__labor__economics__myraw": "malaysia__economy__labor__economics__myram"
+    },
+    "dead_methods": [],
+    "top_10_by_ensemble": [
+      "malaysia__economy__money__economics__mym3",
+      "malaysia__economy__money__economics__mym1",
+      "malaysia__economy__money__economics__mylps",
+      "malaysia__economy__business__economics__mycind",
+      "malaysia__economy__consumer__economics__mycs",
+      "malaysia__economy__money__economics__mym0",
+      "malaysia__economy__prices__economics__mycpi",
+      "malaysia__economy__housing__fred__qmyr628bis",
+      "malaysia__economy__housing__economics__myhpi",
+      "malaysia__economy__trade__economics__myimp"
+    ],
+    "timings_seconds": {
+      "window design (cpu)": 0.37,
+      "spearman vs target (cuda)": 0.11,
+      "mutual_info (cuda)": 9.93,
+      "xgb gain + shap (cuda)": 1.79,
+      "lasso (cuda)": 549.24,
+      "permutation (cuda)": 7.48,
+      "channel corr matrix (cuda)": 0.01,
+      "stability (cuda)": 8.09,
+      "validation (cuda)": 14.85
+    },
+    "ic_summary": {
+      "folds": 5.0,
+      "ic_mean": -0.15847133027062088,
+      "ic_trend_per_fold": -0.11180944339919721,
+      "ic_min": -0.4989602668624731,
+      "ic_max": 0.3402862942477117,
+      "ic_fold_sd": 0.3526845102468595,
+      "hit_rate": 1.0,
+      "n_test_rows": 743.0,
+      "n_eff_per_fold": 148.6,
+      "se_ic_per_fold": 0.0823
+    },
+    "ic_summary_all_channels": {
+      "folds": 5.0,
+      "ic_mean": -0.01722217492703148,
+      "ic_trend_per_fold": -0.05405812552329912,
+      "ic_min": -0.4891225242367349,
+      "ic_max": 0.4112181278332679,
+      "ic_fold_sd": 0.3260378955715254,
+      "hit_rate": 1.0,
+      "n_test_rows": 743.0,
+      "n_eff_per_fold": 148.6,
+      "se_ic_per_fold": 0.0823
+    }
+  },
+  "null": null,
+  "holdout": null,
+  "notes": "malaysia macro pool ONLY (no pool__basic); forward PRICE LEVEL target; no null - evidence=no_null",
+  "run_id": "2026-08-13_025711__vcb__economy_malaysia__close_adjust_5day",
+  "artifacts": [
+    {
+      "file": "feature_importance.csv",
+      "bytes": 21056
+    },
+    {
+      "file": "design_scores.csv",
+      "bytes": 72991
+    },
+    {
+      "file": "validation.csv",
+      "bytes": 925
+    },
+    {
+      "file": "target_correlation.csv",
+      "bytes": 5615
+    },
+    {
+      "file": "channel_correlation.csv",
+      "bytes": 153961
+    },
+    {
+      "file": "stability.csv",
+      "bytes": 6046
+    },
+    {
+      "file": "coverage.csv",
+      "bytes": 4653
+    },
+    {
+      "file": "figures/01_ensemble_ranking.png",
+      "bytes": 190788
+    },
+    {
+      "file": "figures/02_method_heatmap.png",
+      "bytes": 318260
+    },
+    {
+      "file": "figures/03_target_correlation.png",
+      "bytes": 183338
+    },
+    {
+      "file": "figures/04_channel_correlation.png",
+      "bytes": 335403
+    },
+    {
+      "file": "figures/05_stat_profile.png",
+      "bytes": 187184
+    },
+    {
+      "file": "figures/06_validation.png",
+      "bytes": 43547
+    },
+    {
+      "file": "figures/07_stability.png",
+      "bytes": 228155
+    },
+    {
+      "file": "figures/08_coverage.png",
+      "bytes": 132825
+    },
+    {
+      "file": "figures/09_target_distribution.png",
+      "bytes": 45467
+    }
+  ],
+  "report_seconds": 3.64
+}

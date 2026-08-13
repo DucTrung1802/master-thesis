@@ -1,0 +1,297 @@
+{
+  "report_schema_version": "1.0",
+  "generated_at": "2026-08-12T19:07:37.960172+00:00",
+  "git_commit": "a4dd2306+dirty",
+  "environment": {
+    "python": "3.12.10",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "numpy": "2.2.6",
+    "pandas": "2.3.3",
+    "scipy": "1.17.1",
+    "sklearn": "1.7.2",
+    "xgboost": "2.1.1",
+    "matplotlib": "3.10.8"
+  },
+  "input": {
+    "database": "database_main_v2",
+    "schema": "unified_schema_vcb",
+    "tables": [
+      "pool__economy_hong_kong_china",
+      "pool__targets"
+    ],
+    "join_log": [
+      {
+        "table": "pool__targets",
+        "join_keys": "date, exchange, ticker",
+        "how": "inner",
+        "rows_before": 4266,
+        "rows_after": 4266,
+        "columns_added": 6,
+        "duplicate_columns_dropped": ""
+      }
+    ],
+    "panel_rows": 4266,
+    "panel_columns": 97,
+    "first_date": "2009-06-30",
+    "last_date": "2026-08-07",
+    "sessions": 4266,
+    "tickers": 1
+  },
+  "target": {
+    "name": "close_adjust_5day",
+    "horizon_days": 5,
+    "definition": "close_adjust_5day (see cross_sectional.py / DataPreprocessor for the definition)",
+    "labelled_rows": 4261,
+    "unlabelled_rows": 5,
+    "mean": 27692.290542126262,
+    "sd": 20542.148182098284,
+    "min": 4400.0,
+    "max": 76000.0
+  },
+  "setup": {
+    "target": "close_adjust_5day",
+    "horizon_h": 5,
+    "lookback_d": 20,
+    "normalize": "none",
+    "purge_gap_rows": 24,
+    "window_stats": "last, mean, slope, sd, min, max",
+    "dropped_by_normalize": 0,
+    "dev_samples": 4242,
+    "holdout_start": "—",
+    "holdout_rows": 0,
+    "purged_at_boundary": 0,
+    "channels": 85,
+    "design_columns": 510,
+    "kept": 54,
+    "device": "cuda",
+    "max_features": null,
+    "corr_threshold": 0.9,
+    "n_splits": 5,
+    "min_train": 500,
+    "random_state": 18,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "permutation_repeats": 10,
+    "device_preference": "cuda",
+    "selector_class": "FeatureSelector",
+    "panel_col": null,
+    "feature_normalize": null
+  },
+  "results": {
+    "n_channels": 85,
+    "n_kept": 54,
+    "kept": [
+      "hong_kong_china__economy__money__economics__hkm1",
+      "hong_kong_china__economy__trade__economics__hkexp",
+      "hong_kong_china__economy__prices__economics__hkppi",
+      "hong_kong_china__economy__gdp__economics__hkgdppa",
+      "hong_kong_china__economy__housing__economics__hkhpi",
+      "hong_kong_china__economy__money__economics__hkintr",
+      "hong_kong_china__economy__labor__economics__hklfpr",
+      "hong_kong_china__economy__gdp__economics__hkgdpc",
+      "hong_kong_china__economy__trade__economics__hkbot",
+      "hong_kong_china__economy__business__economics__hkbr",
+      "hong_kong_china__economy__gdp__economics__hkgdps",
+      "hong_kong_china__economy__trade__economics__hkca",
+      "hong_kong_china__economy__prices__economics__hkfi",
+      "hong_kong_china__economy__gdp__economics__hkgdpa",
+      "hong_kong_china__economy__trade__economics__hkta",
+      "hong_kong_china__economy__gdp__economics__hkgfcf",
+      "hong_kong_china__economy__consumer__economics__hkrsyy",
+      "hong_kong_china__economy__business__economics__hkedbr",
+      "hong_kong_china__economy__consumer__economics__hkcs",
+      "hong_kong_china__economy__business__economics__hkcar",
+      "hong_kong_china__economy__business__economics__hkic",
+      "hong_kong_china__economy__gdp__economics__hkgdppc",
+      "hong_kong_china__economy__consumer__economics__hkrsmm",
+      "hong_kong_china__economy__labor__economics__hkyur",
+      "hong_kong_china__economy__gdp__economics__hkgdpt",
+      "hong_kong_china__economy__trade__economics__hkexpyy",
+      "hong_kong_china__economy__labor__economics__hkur",
+      "hong_kong_china__economy__trade__economics__hkcf",
+      "hong_kong_china__economy__government__economics__hkgbp",
+      "hong_kong_china__economy__trade__economics__hktot",
+      "hong_kong_china__economy__business__economics__hkbcoi",
+      "hong_kong_china__economy__housing__economics__hkrpp",
+      "hong_kong_china__economy__prices__economics__hkppiyy",
+      "hong_kong_china__economy__labor__economics__hkemp",
+      "hong_kong_china__economy__prices__economics__hkiryy",
+      "hong_kong_china__economy__business__economics__hkipyy",
+      "hong_kong_china__economy__gdp__economics__hkgdpyy",
+      "hong_kong_china__economy__gdp__economics__hkgdpman",
+      "hong_kong_china__economy__government__economics__hkgr",
+      "hong_kong_china__economy__gdp__economics__hkgdpu",
+      "hong_kong_china__economy__consumer__economics__hkps",
+      "hong_kong_china__economy__prices__economics__hkirmm",
+      "hong_kong_china__economy__housing__economics__hkhor",
+      "hong_kong_china__economy__gdp__economics__hkfygdpg",
+      "hong_kong_china__economy__consumer__economics__hkblr",
+      "hong_kong_china__economy__consumer__economics__hkcci",
+      "hong_kong_china__economy__trade__economics__hkcag",
+      "hong_kong_china__economy__labor__economics__hkjv",
+      "hong_kong_china__economy__gdp__economics__hkgdpqq",
+      "hong_kong_china__economy__government__economics__hkgbv",
+      "hong_kong_china__economy__money__economics__hkdir",
+      "hong_kong_china__economy__business__economics__hkcorpi",
+      "hong_kong_china__economy__government__economics__hkgdg",
+      "hong_kong_china__economy__taxes__economics__hkpitr"
+    ],
+    "dropped_constant": [
+      "hong_kong_china__economy__business__economics__hkcorr",
+      "hong_kong_china__economy__taxes__economics__hkctr",
+      "hong_kong_china__economy__trade__economics__hkgres"
+    ],
+    "dropped_correlated": {
+      "hong_kong_china__economy__money__economics__hkbbs": "hong_kong_china__economy__money__economics__hkm1",
+      "hong_kong_china__economy__money__economics__hkm2": "hong_kong_china__economy__money__economics__hkm1",
+      "hong_kong_china__economy__money__economics__hkm0": "hong_kong_china__economy__money__economics__hkm1",
+      "hong_kong_china__economy__money__economics__hkfer": "hong_kong_china__economy__money__economics__hkm1",
+      "hong_kong_china__economy__consumer__economics__hkhdg": "hong_kong_china__economy__money__economics__hkm1",
+      "hong_kong_china__economy__money__economics__hkm3": "hong_kong_china__economy__money__economics__hkm1",
+      "hong_kong_china__economy__government__economics__hkgsp": "hong_kong_china__economy__money__economics__hkm1",
+      "hong_kong_china__economy__trade__economics__hkimp": "hong_kong_china__economy__trade__economics__hkexp",
+      "hong_kong_china__economy__prices__economics__hkcpi": "hong_kong_china__economy__money__economics__hkm1",
+      "hong_kong_china__economy__government__economics__hkfe": "hong_kong_china__economy__money__economics__hkm1",
+      "hong_kong_china__economy__labor__economics__hkwag": "hong_kong_china__economy__money__economics__hkm1",
+      "hong_kong_china__economy__prices__economics__hkipri": "hong_kong_china__economy__gdp__economics__hkgdppa",
+      "hong_kong_china__economy__prices__economics__hkgdpd": "hong_kong_china__economy__money__economics__hkm1",
+      "hong_kong_china__economy__money__economics__hklps": "hong_kong_china__economy__money__economics__hkm1",
+      "hong_kong_china__economy__trade__economics__hked": "hong_kong_china__economy__money__economics__hkm1",
+      "hong_kong_china__economy__money__economics__hkinbr": "hong_kong_china__economy__money__economics__hkintr",
+      "hong_kong_china__economy__prices__economics__hkcpit": "hong_kong_china__economy__gdp__economics__hkgdppa",
+      "hong_kong_china__economy__prices__economics__hkep": "hong_kong_china__economy__gdp__economics__hkgdppa",
+      "hong_kong_china__economy__labor__economics__hkwm": "hong_kong_china__economy__money__economics__hkm1",
+      "hong_kong_china__economy__housing__fred__qhkr628bis": "hong_kong_china__economy__housing__economics__hkhpi",
+      "hong_kong_china__economy__gdp__economics__hkgdpcp": "hong_kong_china__economy__gdp__economics__hkgdps",
+      "hong_kong_china__economy__gdp__economics__hkgnp": "hong_kong_china__economy__gdp__economics__hkgdppa",
+      "hong_kong_china__economy__labor__economics__hkup": "hong_kong_china__economy__labor__economics__hkur",
+      "hong_kong_china__economy__trade__economics__hkfdi": "hong_kong_china__economy__money__economics__hkm1",
+      "hong_kong_china__economy__consumer__economics__hkgasp": "hong_kong_china__economy__prices__economics__hkppi",
+      "hong_kong_china__economy__trade__economics__hkimpyy": "hong_kong_china__economy__trade__economics__hkexpyy",
+      "hong_kong_china__economy__labor__economics__hkpop": "hong_kong_china__economy__gdp__economics__hkgdppa",
+      "hong_kong_china__economy__gdp__economics__hkgdppcp": "hong_kong_china__economy__gdp__economics__hkgdppa",
+      "hong_kong_china__economy__labor__economics__hklc": "hong_kong_china__economy__gdp__economics__hkgdpc",
+      "hong_kong_china__economy__gdp__economics__hkgdp": "hong_kong_china__economy__money__economics__hkm1",
+      "hong_kong_china__economy__labor__economics__hkprod": "hong_kong_china__economy__gdp__economics__hkgdppa"
+    },
+    "dead_methods": [],
+    "top_10_by_ensemble": [
+      "hong_kong_china__economy__money__economics__hkm1",
+      "hong_kong_china__economy__money__economics__hkbbs",
+      "hong_kong_china__economy__money__economics__hkm2",
+      "hong_kong_china__economy__money__economics__hkm0",
+      "hong_kong_china__economy__money__economics__hkfer",
+      "hong_kong_china__economy__trade__economics__hkexp",
+      "hong_kong_china__economy__consumer__economics__hkhdg",
+      "hong_kong_china__economy__money__economics__hkm3",
+      "hong_kong_china__economy__prices__economics__hkppi",
+      "hong_kong_china__economy__government__economics__hkgsp"
+    ],
+    "timings_seconds": {
+      "window design (cpu)": 0.46,
+      "spearman vs target (cuda)": 0.15,
+      "mutual_info (cuda)": 10.85,
+      "xgb gain + shap (cuda)": 2.22,
+      "lasso (cuda)": 1156.1,
+      "permutation (cuda)": 9.89,
+      "channel corr matrix (cuda)": 0.03,
+      "stability (cuda)": 10.26,
+      "validation (cuda)": 19.11
+    },
+    "ic_summary": {
+      "folds": 5.0,
+      "ic_mean": -0.1973100648310841,
+      "ic_trend_per_fold": -0.10453454669211332,
+      "ic_min": -0.5913738338107916,
+      "ic_max": 0.2735856543785948,
+      "ic_fold_sd": 0.33493063922637795,
+      "hit_rate": 1.0,
+      "n_test_rows": 743.0,
+      "n_eff_per_fold": 148.6,
+      "se_ic_per_fold": 0.0823
+    },
+    "ic_summary_all_channels": {
+      "folds": 5.0,
+      "ic_mean": -0.18134233693753515,
+      "ic_trend_per_fold": -0.05312158167968648,
+      "ic_min": -0.4464911026164408,
+      "ic_max": 0.2875211283845348,
+      "ic_fold_sd": 0.2774972716955833,
+      "hit_rate": 1.0,
+      "n_test_rows": 743.0,
+      "n_eff_per_fold": 148.6,
+      "se_ic_per_fold": 0.0823
+    }
+  },
+  "null": null,
+  "holdout": null,
+  "notes": "hong_kong_china macro pool ONLY (no pool__basic); forward PRICE LEVEL target; no null - evidence=no_null",
+  "run_id": "2026-08-13_020732__vcb__economy_hong_kong_china__close_adjust_5day",
+  "artifacts": [
+    {
+      "file": "feature_importance.csv",
+      "bytes": 21724
+    },
+    {
+      "file": "design_scores.csv",
+      "bytes": 76202
+    },
+    {
+      "file": "validation.csv",
+      "bytes": 915
+    },
+    {
+      "file": "target_correlation.csv",
+      "bytes": 6112
+    },
+    {
+      "file": "channel_correlation.csv",
+      "bytes": 150822
+    },
+    {
+      "file": "stability.csv",
+      "bytes": 6548
+    },
+    {
+      "file": "coverage.csv",
+      "bytes": 5057
+    },
+    {
+      "file": "figures/01_ensemble_ranking.png",
+      "bytes": 185176
+    },
+    {
+      "file": "figures/02_method_heatmap.png",
+      "bytes": 316836
+    },
+    {
+      "file": "figures/03_target_correlation.png",
+      "bytes": 174551
+    },
+    {
+      "file": "figures/04_channel_correlation.png",
+      "bytes": 334322
+    },
+    {
+      "file": "figures/05_stat_profile.png",
+      "bytes": 182167
+    },
+    {
+      "file": "figures/06_validation.png",
+      "bytes": 43301
+    },
+    {
+      "file": "figures/07_stability.png",
+      "bytes": 227197
+    },
+    {
+      "file": "figures/08_coverage.png",
+      "bytes": 60994
+    },
+    {
+      "file": "figures/09_target_distribution.png",
+      "bytes": 45467
+    }
+  ],
+  "report_seconds": 5.16
+}

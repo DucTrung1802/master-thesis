@@ -1,0 +1,343 @@
+{
+  "report_schema_version": "1.0",
+  "generated_at": "2026-08-12T19:47:12.164623+00:00",
+  "git_commit": "a4dd2306+dirty",
+  "environment": {
+    "python": "3.12.10",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "numpy": "2.2.6",
+    "pandas": "2.3.3",
+    "scipy": "1.17.1",
+    "sklearn": "1.7.2",
+    "xgboost": "2.1.1",
+    "matplotlib": "3.10.8"
+  },
+  "input": {
+    "database": "database_main_v2",
+    "schema": "unified_schema_vcb",
+    "tables": [
+      "pool__economy_mainland_china",
+      "pool__targets"
+    ],
+    "join_log": [
+      {
+        "table": "pool__targets",
+        "join_keys": "date, exchange, ticker",
+        "how": "inner",
+        "rows_before": 4266,
+        "rows_after": 4266,
+        "columns_added": 6,
+        "duplicate_columns_dropped": ""
+      }
+    ],
+    "panel_rows": 4266,
+    "panel_columns": 143,
+    "first_date": "2009-06-30",
+    "last_date": "2026-08-07",
+    "sessions": 4266,
+    "tickers": 1
+  },
+  "target": {
+    "name": "close_adjust_5day",
+    "horizon_days": 5,
+    "definition": "close_adjust_5day (see cross_sectional.py / DataPreprocessor for the definition)",
+    "labelled_rows": 4261,
+    "unlabelled_rows": 5,
+    "mean": 27692.290542126262,
+    "sd": 20542.148182098284,
+    "min": 4400.0,
+    "max": 76000.0
+  },
+  "setup": {
+    "target": "close_adjust_5day",
+    "horizon_h": 5,
+    "lookback_d": 20,
+    "normalize": "none",
+    "purge_gap_rows": 24,
+    "window_stats": "last, mean, slope, sd, min, max",
+    "dropped_by_normalize": 0,
+    "dev_samples": 4242,
+    "holdout_start": "—",
+    "holdout_rows": 0,
+    "purged_at_boundary": 0,
+    "channels": 131,
+    "design_columns": 786,
+    "kept": 69,
+    "device": "cuda",
+    "max_features": null,
+    "corr_threshold": 0.9,
+    "n_splits": 5,
+    "min_train": 500,
+    "random_state": 18,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "permutation_repeats": 10,
+    "device_preference": "cuda",
+    "selector_class": "FeatureSelector",
+    "panel_col": null,
+    "feature_normalize": null
+  },
+  "results": {
+    "n_channels": 131,
+    "n_kept": 69,
+    "kept": [
+      "mainland_china__economy__money__economics__cnm1",
+      "mainland_china__economy__consumer__economics__cnrsyy",
+      "mainland_china__economy__trade__economics__cnftca",
+      "mainland_china__economy__consumer__economics__cncci",
+      "mainland_china__economy__trade__economics__cncf",
+      "mainland_china__economy__business__economics__cncap",
+      "mainland_china__economy__money__fred__rbcnbis",
+      "mainland_china__economy__money__economics__cncrr",
+      "mainland_china__economy__prices__economics__cnfi",
+      "mainland_china__economy__trade__economics__cnftr",
+      "mainland_china__economy__trade__economics__cnimp",
+      "mainland_china__economy__taxes__economics__cnstr",
+      "mainland_china__economy__housing__economics__cnnhs",
+      "mainland_china__economy__money__fred__dexchus",
+      "mainland_china__economy__labor__economics__cnur",
+      "mainland_china__economy__trade__economics__cnbot",
+      "mainland_china__economy__gdp__economics__cngdpa",
+      "mainland_china__economy__housing__economics__cnprin",
+      "mainland_china__economy__business__economics__cnsp",
+      "mainland_china__economy__gdp__economics__cngdpyy",
+      "mainland_china__economy__trade__economics__cnca",
+      "mainland_china__economy__trade__economics__cntot",
+      "mainland_china__economy__money__fred__qcnpam770a",
+      "mainland_china__economy__government__economics__cnfe",
+      "mainland_china__economy__trade__economics__cnimpyy",
+      "mainland_china__economy__money__economics__cnfer",
+      "mainland_china__economy__trade__economics__cnft",
+      "mainland_china__economy__business__economics__cnedbr",
+      "mainland_china__economy__prices__economics__cnep",
+      "mainland_china__economy__prices__fred__chntot",
+      "mainland_china__economy__trade__economics__cnti",
+      "mainland_china__economy__trade__economics__cncop",
+      "mainland_china__economy__consumer__economics__cnblr",
+      "mainland_china__economy__trade__economics__cnexpyy",
+      "mainland_china__economy__labor__economics__cnup",
+      "mainland_china__economy__prices__economics__cnrinf",
+      "mainland_china__economy__government__economics__cngr",
+      "mainland_china__economy__business__economics__cnipyy",
+      "mainland_china__economy__business__economics__cncli",
+      "mainland_china__economy__government__economics__cngbv",
+      "mainland_china__economy__prices__economics__cnipri",
+      "mainland_china__economy__gdp__fred__chnlorsgpnostsam",
+      "mainland_china__economy__trade__economics__cnfdi",
+      "mainland_china__economy__prices__economics__cnppiyy",
+      "mainland_china__economy__government__economics__cngbp",
+      "mainland_china__economy__gdp__economics__cnfygdpg",
+      "mainland_china__economy__business__economics__cncep",
+      "mainland_china__economy__money__economics__cninbr",
+      "mainland_china__economy__prices__economics__cniryy",
+      "mainland_china__economy__trade__economics__cndil",
+      "mainland_china__economy__business__economics__cnno",
+      "mainland_china__economy__housing__economics__cnhst",
+      "mainland_china__economy__prices__economics__cnirmm",
+      "mainland_china__economy__prices__fred__qcnr628bis",
+      "mainland_china__economy__trade__economics__cncag",
+      "mainland_china__economy__prices__economics__cnccp",
+      "mainland_china__economy__prices__fred__fpcpitotlzgchn",
+      "mainland_china__economy__labor__economics__cnjv",
+      "mainland_china__economy__prices__economics__cncirmm",
+      "mainland_china__economy__prices__economics__cngdpd",
+      "mainland_china__economy__money__economics__cndir",
+      "mainland_china__economy__business__economics__cnic",
+      "mainland_china__economy__gdp__economics__cngdpmin",
+      "mainland_china__economy__trade__economics__cnwes",
+      "mainland_china__economy__money__fred__intdsrcnm193n",
+      "mainland_china__economy__trade__economics__cnta",
+      "mainland_china__economy__taxes__economics__cnssre",
+      "mainland_china__economy__labor__economics__cnraw",
+      "mainland_china__economy__labor__economics__cnram"
+    ],
+    "dropped_constant": [
+      "mainland_china__economy__business__economics__cncorr",
+      "mainland_china__economy__taxes__economics__cnctr",
+      "mainland_china__economy__taxes__economics__cnpitr"
+    ],
+    "dropped_correlated": {
+      "mainland_china__economy__money__economics__cnm2": "mainland_china__economy__money__economics__cnm1",
+      "mainland_china__economy__money__economics__cnlb": "mainland_china__economy__money__economics__cnm1",
+      "mainland_china__economy__money__economics__cnlps": "mainland_china__economy__money__economics__cnm1",
+      "mainland_china__economy__business__economics__cnlei": "mainland_china__economy__money__economics__cnm1",
+      "mainland_china__economy__money__economics__cncbbs": "mainland_china__economy__money__economics__cnm1",
+      "mainland_china__economy__consumer__economics__cnccr": "mainland_china__economy__money__economics__cnm1",
+      "mainland_china__economy__money__economics__cnbbs": "mainland_china__economy__money__economics__cnm1",
+      "mainland_china__economy__money__economics__cnm0": "mainland_china__economy__money__economics__cnm1",
+      "mainland_china__economy__consumer__economics__cnhdg": "mainland_china__economy__money__economics__cnm1",
+      "mainland_china__economy__prices__fred__chncpiallminmei": "mainland_china__economy__money__economics__cnm1",
+      "mainland_china__economy__money__economics__cnm3": "mainland_china__economy__money__economics__cnm1",
+      "mainland_china__economy__trade__economics__cnftw": "mainland_china__economy__money__economics__cnm1",
+      "mainland_china__economy__trade__fred__xtexva01cnm667s": "mainland_china__economy__money__economics__cnm1",
+      "mainland_china__economy__trade__economics__cnexp": "mainland_china__economy__money__economics__cnm1",
+      "mainland_china__economy__business__economics__cnelp": "mainland_china__economy__money__economics__cnm1",
+      "mainland_china__economy__trade__economics__cngres": "mainland_china__economy__money__economics__cnm1",
+      "mainland_china__economy__business__economics__cntvs": "mainland_china__economy__business__economics__cncap",
+      "mainland_china__economy__labor__economics__cnwag": "mainland_china__economy__money__economics__cnm1",
+      "mainland_china__economy__money__fred__myagm1cnm189n": "mainland_china__economy__money__economics__cnm1",
+      "mainland_china__economy__money__fred__myagm2cnm189n": "mainland_china__economy__money__economics__cnm1",
+      "mainland_china__economy__money__economics__cnfai": "mainland_china__economy__consumer__economics__cnrsyy",
+      "mainland_china__economy__labor__economics__cnmw": "mainland_china__economy__money__economics__cnm1",
+      "mainland_china__economy__business__economics__cncpr": "mainland_china__economy__housing__economics__cnnhs",
+      "mainland_china__economy__money__economics__cnlg": "mainland_china__economy__money__economics__cnm1",
+      "mainland_china__economy__gdp__fred__chngdpnqdsmei": "mainland_china__economy__money__economics__cnm1",
+      "mainland_china__economy__trade__economics__cntr": "mainland_china__economy__money__economics__cnm1",
+      "mainland_china__economy__trade__economics__cnfth": "mainland_china__economy__trade__economics__cnft",
+      "mainland_china__economy__gdp__economics__cngdpc": "mainland_china__economy__gdp__economics__cngdpa",
+      "mainland_china__economy__money__fred__tresegcnm052n": "mainland_china__economy__money__economics__cnfer",
+      "mainland_china__economy__gdp__economics__cngdppcp": "mainland_china__economy__money__economics__cnm1",
+      "mainland_china__economy__government__fred__gggdtacna188n": "mainland_china__economy__money__economics__cnm1",
+      "mainland_china__economy__business__economics__cncar": "mainland_china__economy__business__economics__cncap",
+      "mainland_china__economy__business__fred__rtfpnacna632nrug": "mainland_china__economy__money__economics__cnm1",
+      "mainland_china__economy__gdp__economics__cngdps": "mainland_china__economy__gdp__economics__cngdpa",
+      "mainland_china__economy__business__economics__cncorpi": "mainland_china__economy__money__economics__cnm1",
+      "mainland_china__economy__gdp__economics__cngdpcp": "mainland_china__economy__gdp__economics__cngdpa",
+      "mainland_china__economy__trade__economics__cned": "mainland_china__economy__money__economics__cnm1",
+      "mainland_china__economy__gdp__economics__cngdpman": "mainland_china__economy__gdp__economics__cngdpa",
+      "mainland_china__economy__business__economics__cnbcoi": "mainland_china__economy__business__economics__cnno",
+      "mainland_china__economy__business__fred__chnpieati01gym": "mainland_china__economy__prices__economics__cnppiyy",
+      "mainland_china__economy__gdp__fred__nygdppcapkdchn": "mainland_china__economy__money__economics__cnm1",
+      "mainland_china__economy__gdp__economics__cngdppc": "mainland_china__economy__money__economics__cnm1",
+      "mainland_china__economy__money__fred__ir3tts01cnm156n": "mainland_china__economy__money__economics__cninbr",
+      "mainland_china__economy__government__economics__cngdg": "mainland_china__economy__money__economics__cnm1",
+      "mainland_china__economy__labor__economics__cnemp": "mainland_china__economy__trade__economics__cnti",
+      "mainland_china__economy__consumer__economics__cndpi": "mainland_china__economy__money__economics__cnm1",
+      "mainland_china__economy__government__economics__cngsp": "mainland_china__economy__money__economics__cnm1",
+      "mainland_china__economy__labor__economics__cnwm": "mainland_china__economy__money__economics__cnm1",
+      "mainland_china__economy__government__economics__cnme": "mainland_china__economy__money__economics__cnm1",
+      "mainland_china__economy__gdp__economics__cngnp": "mainland_china__economy__money__economics__cnm1",
+      "mainland_china__economy__gdp__economics__cngfcf": "mainland_china__economy__money__economics__cnm1",
+      "mainland_china__economy__consumer__economics__cnps": "mainland_china__economy__gdp__fred__chnlorsgpnostsam",
+      "mainland_china__economy__gdp__economics__cngdp": "mainland_china__economy__money__economics__cnm1",
+      "mainland_china__economy__gdp__fred__mktgdpcna646nwdb": "mainland_china__economy__money__economics__cnm1",
+      "mainland_china__economy__prices__economics__cncir": "mainland_china__economy__prices__economics__cnccp",
+      "mainland_china__economy__consumer__economics__cncs": "mainland_china__economy__money__economics__cnm1",
+      "mainland_china__economy__gdp__economics__cngdpt": "mainland_china__economy__gdp__economics__cngdpa",
+      "mainland_china__economy__taxes__economics__cnssr": "mainland_china__economy__money__economics__cnm1",
+      "mainland_china__economy__gdp__fred__rgdpnacna666nrug": "mainland_china__economy__money__economics__cnm1",
+      "mainland_china__economy__labor__economics__cnpop": "mainland_china__economy__money__economics__cnm1",
+      "mainland_china__economy__taxes__economics__cnssrc": "mainland_china__economy__money__economics__cnm1",
+      "mainland_china__economy__money__economics__cnlr": "mainland_china__economy__consumer__economics__cnblr"
+    },
+    "dead_methods": [],
+    "top_10_by_ensemble": [
+      "mainland_china__economy__money__economics__cnm1",
+      "mainland_china__economy__money__economics__cnm2",
+      "mainland_china__economy__money__economics__cnlb",
+      "mainland_china__economy__money__economics__cnlps",
+      "mainland_china__economy__business__economics__cnlei",
+      "mainland_china__economy__money__economics__cncbbs",
+      "mainland_china__economy__consumer__economics__cnrsyy",
+      "mainland_china__economy__consumer__economics__cnccr",
+      "mainland_china__economy__money__economics__cnbbs",
+      "mainland_china__economy__money__economics__cnm0"
+    ],
+    "timings_seconds": {
+      "window design (cpu)": 0.45,
+      "spearman vs target (cuda)": 0.12,
+      "mutual_info (cuda)": 14.98,
+      "xgb gain + shap (cuda)": 2.51,
+      "lasso (cuda)": 692.48,
+      "permutation (cuda)": 10.64,
+      "channel corr matrix (cuda)": 0.02,
+      "stability (cuda)": 10.91,
+      "validation (cuda)": 18.54
+    },
+    "ic_summary": {
+      "folds": 5.0,
+      "ic_mean": -0.1543768005470465,
+      "ic_trend_per_fold": -0.08499592059298143,
+      "ic_min": -0.27176462181929883,
+      "ic_max": 0.060356764651718325,
+      "ic_fold_sd": 0.1467866484870427,
+      "hit_rate": 1.0,
+      "n_test_rows": 743.0,
+      "n_eff_per_fold": 148.6,
+      "se_ic_per_fold": 0.0823
+    },
+    "ic_summary_all_channels": {
+      "folds": 5.0,
+      "ic_mean": -0.2714974496099888,
+      "ic_trend_per_fold": -0.06279617132450303,
+      "ic_min": -0.6119806669946438,
+      "ic_max": -0.062240319934953416,
+      "ic_fold_sd": 0.21863761150610023,
+      "hit_rate": 1.0,
+      "n_test_rows": 743.0,
+      "n_eff_per_fold": 148.6,
+      "se_ic_per_fold": 0.0823
+    }
+  },
+  "null": null,
+  "holdout": null,
+  "notes": "mainland_china macro pool ONLY (no pool__basic); forward PRICE LEVEL target; no null - evidence=no_null",
+  "run_id": "2026-08-13_024708__vcb__economy_mainland_china__close_adjust_5day",
+  "artifacts": [
+    {
+      "file": "feature_importance.csv",
+      "bytes": 32806
+    },
+    {
+      "file": "design_scores.csv",
+      "bytes": 110606
+    },
+    {
+      "file": "validation.csv",
+      "bytes": 933
+    },
+    {
+      "file": "target_correlation.csv",
+      "bytes": 9318
+    },
+    {
+      "file": "channel_correlation.csv",
+      "bytes": 349094
+    },
+    {
+      "file": "stability.csv",
+      "bytes": 10161
+    },
+    {
+      "file": "coverage.csv",
+      "bytes": 7999
+    },
+    {
+      "file": "figures/01_ensemble_ranking.png",
+      "bytes": 189431
+    },
+    {
+      "file": "figures/02_method_heatmap.png",
+      "bytes": 316391
+    },
+    {
+      "file": "figures/03_target_correlation.png",
+      "bytes": 187736
+    },
+    {
+      "file": "figures/04_channel_correlation.png",
+      "bytes": 333286
+    },
+    {
+      "file": "figures/05_stat_profile.png",
+      "bytes": 179569
+    },
+    {
+      "file": "figures/06_validation.png",
+      "bytes": 45844
+    },
+    {
+      "file": "figures/07_stability.png",
+      "bytes": 232398
+    },
+    {
+      "file": "figures/08_coverage.png",
+      "bytes": 210748
+    },
+    {
+      "file": "figures/09_target_distribution.png",
+      "bytes": 45467
+    }
+  ],
+  "report_seconds": 3.64
+}
