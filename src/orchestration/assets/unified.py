@@ -10,17 +10,18 @@ holds ONE UNIVERSE cut into the FEATURE GROUPS a model selects over:
                      the forward adjusted close itself
     pool__economy    all country macro panels, already causal in gold
     pool__forex      357 broker-quoted FX pairs, one `value` column each
+    pool__funds      21 HOSE ETFs × up to 19 measures
     pool__ta         the ~920-column technical block
     pool__fa         the ~200-column fundamental block
 
 ⚠️ **TWO JOIN SHAPES, and which one a pool uses is decided by its SOURCE's key.**
 `pool__ta` / `pool__fa` come from tables already keyed `(date, exchange, ticker)` and
-INNER JOIN the spine on all three. `pool__economy` and `pool__forex` come from tables
-keyed on `date` ALONE, so they LEFT JOIN on `date` and BROADCAST one row across every
-ticker of that day — which is why their row count must EQUAL the spine's, while a
-per-ticker pool is allowed to cover a subset.
+INNER JOIN the spine on all three. `pool__economy`, `pool__forex` and `pool__funds` come
+from tables keyed on `date` ALONE, so they LEFT JOIN on `date` and BROADCAST one row
+across every ticker of that day — which is why their row count must EQUAL the spine's,
+while a per-ticker pool is allowed to cover a subset.
 
-⚠️ **THE PARTITION IS THE UNIVERSE, and all six pools share it** (2026-08-05). Until
+⚠️ **THE PARTITION IS THE UNIVERSE, and all seven pools share it** (2026-08-05). Until
 then this module was hard-coded to `UNIFIED_TICKER = "VCB"` and the asset keys carried
 the ticker (`unified_vcb/pool__basic`), which meant `unified_schema_all` and
 `unified_schema_bank` — 4.9 M rows between them — existed in the database but were
@@ -486,95 +487,153 @@ def unified_pool_economy(
     )
 
 
-@asset(
-    name="pool__forex",
-    key_prefix=["unified"],
-    group_name="unified",
-    compute_kind="postgres",
-    partitions_def=UNIFIED_PARTITIONS,
-    deps=[
-        AssetKey(["gold", "forex"]),
-        AssetKey(["unified", "pool__basic"]),
-    ],
-    description=(
-        "gold.forex → unified_schema_<universe>.pool__forex: 357 broker-quoted FX "
-        "pairs, ONE `value` column each named {exchange}__{ticker} (e.g. "
-        "`saxo__eurusd`), on pool__basic's (date, exchange, ticker) spine. ⚠️ The "
-        "source is keyed on `date` ALONE, so the join BROADCASTS one FX row across "
-        "every ticker of the day — the pool__economy shape, not the pool__ta one. "
-        "⚠️ NOT forward-filled: a NULL means that broker did not quote that pair that "
-        "day, and filling it would invent a price. ⚠️ THE 9 EXCHANGES ARE 9 BROKERS "
-        "and must not be collapsed — SAXO and JFX disagree on 160,781 of 161,816 "
-        "shared ticker-days. ⚠️ 328 of 357 series stop at 2026-06-08/09 (a "
-        "skip_existing=True scrape), so the recent tail is mostly NULL however healthy "
-        "MAX(date) looks."
+# ── The two DATE-BROADCAST pools: pool__forex and pool__funds ────────────────────
+#
+# One wide, `date`-keyed gold panel each, LEFT JOINed onto `pool__basic` and broadcast
+# across its tickers. They are a spec table rather than two copies for the reason
+# `bronze.py` and `gold.py` give — near-identical assets drift — and because the
+# differences that matter (the source, and the ⚠️ each one carries) are visible here in
+# a row instead of buried in two near-identical bodies.
+#
+# ⚠️ THE ROW ASSERTION IS EQUALITY, NOT THE SUBSET `pool__ta`/`pool__fa` GET. Those are
+# limited by their source's TICKER coverage, which is legitimately narrow. These join
+# from the spine outward, so every spine row must survive — fewer means the join went
+# wrong, not that the source is thin. A source that covers only part of the CALENDAR
+# (gold.funds starts 2014, the VCB spine starts 2009) produces NULLs, never lost rows.
+#
+# ⚠️ `last_date_with_data` IS REPORTED BESIDE `date_range`, and it is the metric that
+# matters on both. A pool built on a spine running months past its source looks
+# perfectly healthy on MAX(date) and is NULL for every one of those rows — which is
+# exactly the state `gold.forex` is in (328 of 357 series stopped 2026-06-08/09).
+#
+# (asset name, gold source asset, entity noun, what it is)
+DATE_SPINE_POOLS: list[tuple[str, str, str, str]] = [
+    (
+        "pool__forex",
+        "forex",
+        "FX pair",
+        "357 broker-quoted FX pairs, ONE `value` column each named "
+        "{exchange}__{ticker} (e.g. `saxo__eurusd`) with no measure suffix — gold "
+        "carries one measure, so a suffix would say `value` 357 times. ⚠️ NOT "
+        "forward-filled: a NULL means that broker did not quote that pair that day, "
+        "and filling it would invent a price (median series coverage on VCB's spine "
+        "is 67%). ⚠️ THE 9 EXCHANGES ARE 9 BROKERS and must not be collapsed — SAXO "
+        "and JFX disagree on 160,781 of 161,816 shared ticker-days. ⚠️ 328 of 357 "
+        "series stop at 2026-06-08/09 (a skip_existing=True scrape), so the recent "
+        "tail is mostly NULL however healthy MAX(date) looks.",
     ),
-)
-def unified_pool_forex(
-    context: AssetExecutionContext, preprocessor: PreprocessorResource
-) -> MaterializeResult:
-    universe = context.partition_key
-    schema = _schema_of(universe)
+    (
+        "pool__funds",
+        "funds",
+        "fund series",
+        "21 HOSE-listed ETFs × up to 19 measures = 389 columns, named "
+        "{exchange}__{ticker}__{measure} (e.g. `hose__e1vfvn30__close`). The measure "
+        "suffix is present here and absent on pool__forex because gold.funds carries "
+        "19 measures per fund and gold.forex carries one; 21 × 19 = 399 minus 10 "
+        "never written, because FUEBFVND's 3 rows cannot fill a 5- or 21-day window. "
+        "⚠️ EVERY MEASURE IS TRAILING — pct_change / shift(1) / bare rolling(w), "
+        "verified in ta/ta_functions.py, so nothing here is a label wearing a "
+        "feature's name. ⚠️ The source starts 2014-10-06 against a VCB spine starting "
+        "2009-06-30, so 1,351 of 4,266 rows (31.7%) are NULL by construction and "
+        "median column coverage is 17.7%. ⚠️ E1VFVN30 IS THE VN30 INDEX wearing a "
+        "ticker — an ETF close is the market factor that return_rel_{h}day subtracts.",
+    ),
+]
 
-    with preprocessor.session(schema=schema) as prep:
-        panel = prep._ingest_unified_pool_forex(universe)
-        expected_key = tuple(prep.UNIFIED_PRIMARY_KEY)
 
-        with prep._database_driver._cursor_ctx() as cur:
-            cur.execute(
-                f"SELECT COUNT(*), COUNT(DISTINCT ticker), MIN(date), MAX(date) "
-                f"FROM {schema}.pool__forex"
-            )
-            rows, tickers, first, last = cur.fetchone()
-            rows, tickers = int(rows), int(tickers)
-            cur.execute(f"SELECT COUNT(*) FROM {schema}.pool__basic")
-            basic_rows = int(cur.fetchone()[0])
-            primary_key = _primary_key(cur, schema, "pool__forex")
-            # ⚠️ The LAST date carrying a quote, not MAX(date) — those are different
-            # numbers here and the difference is the whole staleness story. A pool
-            # built on a spine that runs 2 months past its source looks perfectly
-            # healthy on MAX(date) and is NULL for every one of those rows.
-            cur.execute(
-                f"SELECT MAX(date) FROM {schema}.pool__forex f "
-                f"WHERE EXISTS (SELECT 1 FROM {prep.UNIFIED_FOREX_SOURCE} g "
-                f"              WHERE g.date = f.date)"
-            )
-            last_quoted = cur.fetchone()[0]
-
-    if primary_key != expected_key:
-        raise ValueError(
-            f"{schema}.pool__forex primary key is {primary_key}, expected "
-            f"{expected_key} — order is part of the contract."
-        )
-    if rows != basic_rows:
-        raise ValueError(
-            f"{schema}.pool__forex has {rows} rows against pool__basic's "
-            f"{basic_rows}. An FX pool adds columns, never rows."
-        )
-
-    coverage = 100.0 * panel["populated_rows"] / max(rows, 1)
-    context.log.info(
-        f"{schema}.pool__forex: {rows} rows × {panel['features']} FX series, "
-        f"{tickers} ticker(s) ({first} → {last}) — {coverage:.1f}% of rows carry at "
-        f"least one quote; last spine date with any FX row is {last_quoted}"
+def _build_unified_date_spine_pool(name: str, gold_source: str, noun: str, what: str):
+    @asset(
+        name=name,
+        key_prefix=["unified"],
+        group_name="unified",
+        compute_kind="postgres",
+        partitions_def=UNIFIED_PARTITIONS,
+        deps=[
+            AssetKey(["gold", gold_source]),
+            AssetKey(["unified", "pool__basic"]),
+        ],
+        description=(
+            f"gold.{gold_source} → unified_schema_<universe>.{name}, PK "
+            f"(date, exchange, ticker), on pool__basic's calendar. ⚠️ The source is "
+            f"keyed on `date` ALONE, so the join BROADCASTS one row across every "
+            f"ticker of that day — the pool__economy shape, not the pool__ta one. "
+            f"{what}"
+        ),
     )
-    return MaterializeResult(
-        metadata={
-            "rows": rows,
-            "columns": panel["features"] + len(expected_key),
-            "features": panel["features"],
-            "tickers": tickers,
-            "pool__basic_rows": basic_rows,
-            "populated_rows": panel["populated_rows"],
-            "row_coverage_pct": MetadataValue.float(round(coverage, 2)),
-            "universe": MetadataValue.text(universe),
-            "primary_key": MetadataValue.text(", ".join(primary_key)),
-            "source": MetadataValue.text(panel["source"]),
-            "date_range": MetadataValue.text(f"{first} → {last}"),
-            "last_date_with_fx_row": MetadataValue.text(str(last_quoted)),
-            "table": MetadataValue.text(f"{schema}.pool__forex"),
-        }
-    )
+    def _date_spine_pool(
+        context: AssetExecutionContext, preprocessor: PreprocessorResource
+    ) -> MaterializeResult:
+        universe = context.partition_key
+        schema = _schema_of(universe)
+
+        with preprocessor.session(schema=schema) as prep:
+            panel = getattr(prep, f"_ingest_unified_{name.replace('__', '_')}")(
+                universe
+            )
+            expected_key = tuple(prep.UNIFIED_PRIMARY_KEY)
+            source = panel["source"]
+
+            with prep._database_driver._cursor_ctx() as cur:
+                cur.execute(
+                    f"SELECT COUNT(*), COUNT(DISTINCT ticker), MIN(date), MAX(date) "
+                    f"FROM {schema}.{name}"
+                )
+                rows, tickers, first, last = cur.fetchone()
+                rows, tickers = int(rows), int(tickers)
+                cur.execute(f"SELECT COUNT(*) FROM {schema}.pool__basic")
+                basic_rows = int(cur.fetchone()[0])
+                primary_key = _primary_key(cur, schema, name)
+                # ⚠️ The last spine date the SOURCE actually has a row for, not
+                # MAX(date). See the block comment above: these are different numbers
+                # and the difference is the whole staleness story.
+                cur.execute(
+                    f"SELECT MAX(date) FROM {schema}.{name} p "
+                    f"WHERE EXISTS (SELECT 1 FROM {source} g WHERE g.date = p.date)"
+                )
+                last_with_data = cur.fetchone()[0]
+
+        if primary_key != expected_key:
+            raise ValueError(
+                f"{schema}.{name} primary key is {primary_key}, expected "
+                f"{expected_key} — order is part of the contract."
+            )
+        if rows != basic_rows:
+            raise ValueError(
+                f"{schema}.{name} has {rows} rows against pool__basic's "
+                f"{basic_rows}. A date-keyed panel adds columns, never rows."
+            )
+
+        coverage = 100.0 * panel["populated_rows"] / max(rows, 1)
+        context.log.info(
+            f"{schema}.{name}: {rows} rows × {panel['features']} {noun} columns, "
+            f"{tickers} ticker(s) ({first} → {last}) — {coverage:.1f}% of rows carry "
+            f"at least one value; last spine date present in {source} is "
+            f"{last_with_data}"
+        )
+        return MaterializeResult(
+            metadata={
+                "rows": rows,
+                "columns": panel["features"] + len(expected_key),
+                "features": panel["features"],
+                "tickers": tickers,
+                "pool__basic_rows": basic_rows,
+                "populated_rows": panel["populated_rows"],
+                "row_coverage_pct": MetadataValue.float(round(coverage, 2)),
+                "universe": MetadataValue.text(universe),
+                "primary_key": MetadataValue.text(", ".join(primary_key)),
+                "source": MetadataValue.text(source),
+                "date_range": MetadataValue.text(f"{first} → {last}"),
+                "last_date_with_data": MetadataValue.text(str(last_with_data)),
+                "table": MetadataValue.text(f"{schema}.{name}"),
+            }
+        )
+
+    return _date_spine_pool
+
+
+date_spine_pool_assets: List[Callable] = [
+    _build_unified_date_spine_pool(*spec) for spec in DATE_SPINE_POOLS
+]
 
 
 # ── The two FEATURE pools: pool__ta and pool__fa ─────────────────────────────────
@@ -751,6 +810,6 @@ assets: List[Callable] = [
     unified_pool_basic,
     unified_pool_targets,
     unified_pool_economy,
-    unified_pool_forex,
+    *date_spine_pool_assets,
     *feature_pool_assets,
 ]

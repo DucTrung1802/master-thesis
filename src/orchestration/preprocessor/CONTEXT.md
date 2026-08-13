@@ -992,30 +992,54 @@ with no business being interpolated.
 protocol on it: `z = +0.11`, 11 of 20 shuffled draws beat the real data. Banks are
 VN's largest GICS industry at 20 names, against a resolvability threshold of ~100.
 
-#### `_ingest_unified_pool_forex` (2026-08-13)
+#### `_ingest_unified_pool_forex` / `_ingest_unified_pool_funds` (2026-08-13)
 
-`gold.forex` → `unified_schema_<ticker>.pool__forex` — **357 broker-quoted FX pairs,
-one `value` column each**, named `{exchange}__{ticker}` (`saxo__eurusd`). VCB is
-**4,266 × 360** in 852 ms; every cell round-tripped against `gold.forex`, **0
-mismatches** over all 357 series.
+Two wide, `date`-keyed gold panels on the unified spine. Both are thin wrappers over
+**`_helper_unified_pool_on_date_spine`** — the same split `_ingest_unified_pool_ta` /
+`_fa` have over `_helper_unified_pool_from_source`, and for the same reason: the ⚠️
+knowledge is per source, the body is not.
 
-⚠️ **IT IS THE ECONOMY SHAPE, AND THE SOURCE'S KEY IS WHAT DECIDES THAT.** `gold.forex`
-is keyed on `date` ALONE, so this LEFT JOINs on `date` and **broadcasts** one row across
-every ticker of the day — like `_ingest_unified_pool_economy`, unlike
+| pool | source | VCB result | round-trip vs gold |
+|---|---|---|---|
+| `pool__forex` | `gold_schema.forex` (358 cols, 357 pairs) | **4,266 × 360** in 852 ms | **0 mismatches** / 357 series |
+| `pool__funds` | `gold_schema.funds` (390 cols, 21 ETFs) | **4,266 × 392** in 1.01 s | **0 mismatches** / 389 columns |
+
+⚠️ **THESE ARE THE ECONOMY SHAPE, AND THE SOURCE'S KEY IS WHAT DECIDES THAT.** Both
+sources are keyed on `date` ALONE, so the helper LEFT JOINs on `date` and **broadcasts**
+one row across every ticker of the day — like `_ingest_unified_pool_economy`, unlike
 `_helper_unified_pool_from_source`, which INNER JOINs a source already keyed
 `(date, exchange, ticker)`. The assertion differs with the shape: a broadcast pool must
 hold **exactly** the spine's rows (symmetric `EXCEPT` = 0), where a per-ticker pool is
-allowed the one-sided subset. It also preflights `COUNT(*) = COUNT(DISTINCT date)` on
-the source, because two rows for one date would fan out rather than broadcast.
+allowed the one-sided subset. The helper also preflights
+`COUNT(*) = COUNT(DISTINCT date)` on the source, because two rows for one date would fan
+out rather than broadcast.
 
-⚠️ **ONE table where economy is 19** — 357 + 3 = 360 columns, inside the 1,600 ceiling,
-and a broker is not a country so there is no natural split key.
+⚠️ **LEFT JOIN, NEVER INNER.** An INNER JOIN would silently DROP every spine date the
+source does not cover — **1,351 of 4,266 rows for `gold.funds`**, which starts
+2014-10-06 against a 2009 spine — and produce a pool that looks clean and has quietly
+changed the calendar under its own primary key.
 
-⚠️ **NOT forward-filled.** A NULL means that broker did not quote that pair that day;
-filling would invent a price. Per-series coverage on VCB's spine: **min 4.3%, median
-67.0%, max 97.5%**, none all-NULL. ⚠️ And **328 of 357 series stop at 2026-06-08/09**
-(the `skip_existing=True` scrape), so 43 spine days sit almost entirely NULL under a
-`MAX(date)` of 2026-08-07.
+⚠️ **ONE table each where economy is 19** — 360 and 392 columns, inside the 1,600
+ceiling; a broker is not a country and neither is an ETF.
+
+⚠️ **NEITHER IS FORWARD-FILLED.** A NULL means the source had no value that day; filling
+would invent a price. Per-column coverage on VCB's spine: forex **min 4.3% / median
+67.0% / max 97.5%**, funds **min 0.05% / median 17.7% / max 67.7%**, none all-NULL in
+either.
+
+⚠️ **BOTH SOURCES ARE FROZEN BY THE SAME `skip_existing=True` SCRAPE.** 328 of 357 FX
+series stop at 2026-06-08/09; **19 of 21 funds stop at 2026-06-26**, and the two
+reaching 2026-08-04 are the two new listings that scrape picked up (38 of 389 fund
+columns carry anything after 2026-06-26). `MAX(date)` reads 2026-08-07 on both.
+
+⚠️ **`pool__funds` carries a MEASURE SUFFIX and `pool__forex` does not** — gold's
+naming, not a choice here: 19 measures per fund against one per pair. 21 × 19 = 399
+minus **10 never written**, FUEBFVND having 3 rows and landing with 9 columns.
+
+⚠️ **EVERY FUND MEASURE IS TRAILING — verified.** `pct_change()`, `shift(1)`, bare
+`rolling(w)` with no `center=True` (`ta/ta_functions.py:2685-2745`). Checked rather than
+assumed because `return_simple` is precisely the column name a forward-looking measure
+would hide behind.
 
 #### `_ingest_unified_pool_ta` / `_ingest_unified_pool_fa` (2026-08-04)
 

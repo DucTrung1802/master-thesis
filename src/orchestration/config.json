@@ -6,9 +6,9 @@
     "// COMMENTS": "Any key starting with // is a comment and is ignored, the same convention switch_config.json uses. JSON has no comment syntax; this is the substitute.",
     "// A TYPO IS AN ERROR": "A key naming no asset and no partition RAISES at load time, listing the valid ones. A silently-ignored key is the exact failure switch_config.json's trailing-slash bug had: the file said a thing was off, the loader never matched it, and it ran anyway.",
     "// PARTITIONS ARE SUB-MODULES": "A partition that is not true is REMOVED from the asset's PartitionsDefinition: it cannot be materialized, cannot be backfilled, is not in the UI, and --partition <it> fails with DagsterUnknownPartitionError before any work starts. Stronger than not selecting it, and it is what stops a backfill taking everything. NOTE the one asymmetry: absent-inside-a-listed-owner is OFF, but an owner mentioned NOWHERE is 'no opinion' and keeps all its partitions -- otherwise raw/cafef_pdfs' 100 unlisted tickers would resolve to zero partitions and raise at import.",
-    "// PARTITION OWNERS": "The key under `partitions` is the partition set's OWNER, which is not always an asset. Assets sharing one PartitionsDefinition share its toggles: `raw/trading_view` covers trading_view_links AND trading_view_data (the data step reads the link CSV its own partition wrote, so they cannot disagree), and `unified` covers all five pool__* assets. Sets owned by a single asset keep that asset's key: raw/cafef_pdfs, raw/cafef_financials. Owners not listed here have every partition enabled.",
+    "// PARTITION OWNERS": "The key under `partitions` is the partition set's OWNER, which is not always an asset. Assets sharing one PartitionsDefinition share its toggles: `raw/trading_view` covers trading_view_links AND trading_view_data (the data step reads the link CSV its own partition wrote, so they cannot disagree), and `unified` covers all seven pool__* assets. Sets owned by a single asset keep that asset's key: raw/cafef_pdfs, raw/cafef_financials. Owners not listed here have every partition enabled.",
     "// YOU CANNOT DISABLE THEM ALL": "If every partition of one owner is false the load RAISES: an asset with zero partitions is unmaterializable in a way that reads as a Dagster bug. To switch the whole thing off, use its `assets` key.",
-    "// EVERYTHING IS ON (2026-08-06)": "All 76 assets and all partitions are true, so every module is visible and selectable in the UI. This is the file doing its intended job: SELECTION is the run plan (level 1 of `Turning things off`), and hard-disabling here is reserved for `must never load in this repo`. What you do not select does not run.",
+    "// EVERYTHING IS ON (2026-08-06)": "All 77 assets and all partitions are true, so every module is visible and selectable in the UI. This is the file doing its intended job: SELECTION is the run plan (level 1 of `Turning things off`), and hard-disabling here is reserved for `must never load in this repo`. What you do not select does not run.",
     "// ...WHICH RE-ARMS ONE FOOTGUN": "`Materialize all`, `*`, or a backfill over a partitioned asset now takes EVERY partition -- raw/cafef_pdfs is 100 tickers at ~1-1.7 GB each, raw/trading_view @stocks is 777 tickers at ~10 h, raw/cafef_financials is ~2.4 h per ticker. Materialize a GROUP or a named asset, never the whole graph. If a backfill does run away, set the partitions false here: that removes them from the PartitionsDefinition entirely, which is the only lever that stops it before any work starts.",
     "assets": {
         "// ---- trading_view ----": "TRADINGVIEW - the universe (links) then the OHLCV (data). 9 asset-class partitions; see `partitions` for which are on.",
@@ -166,7 +166,9 @@
             "// unified/pool__economy": "All 19 gold.economy_<country> macro panels on pool__basic's trading-day spine; one unified pool table per country because the combined 3,784-series panel exceeds PostgreSQL's 1,600-column limit",
             "unified/pool__economy": true,
             "// unified/pool__forex": "357 broker-quoted FX pairs from gold.forex on pool__basic's trading-day spine, ONE table (360 columns, inside the 1,600 limit). Same date-only join as pool__economy. NOT forward-filled - median series coverage on VCB's spine is 67%, and 328 of 357 series stop at 2026-06-08/09 until the source is re-scraped with skip_existing=false.",
-            "unified/pool__forex": true
+            "unified/pool__forex": true,
+            "// unified/pool__funds": "21 HOSE ETFs x up to 19 trailing measures = 389 columns from gold.funds, same date-only broadcast join. The source starts 2014-10-06 against a 2009 spine, so 31.7% of VCB rows are NULL by construction and median column coverage is 17.7%. E1VFVN30 is the VN30 index wearing a ticker.",
+            "unified/pool__funds": true
         },
         "// ---- analysis ----": "ANALYSIS - unified_schema_<universe> -> reports/. The only group here that writes NO database table: feature_selection is read-only by package design, so its output is a run folder on disk that final_features later reads.",
         "analysis": {
@@ -203,7 +205,7 @@
             "HOSE_VCB": true,
             "HOSE_ACB": true
         },
-        "// unified": "The three universes of the unified schema, shared by all five pool__* assets. Same rule: the group's `enabled` is the off switch, not setting all three false.",
+        "// unified": "The three universes of the unified schema, shared by all seven pool__* assets. Same rule: the group's `enabled` is the off switch, not setting all three false.",
         "unified": {
             "VCB": true,
             "ALL": true,

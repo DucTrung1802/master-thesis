@@ -21,7 +21,7 @@ to prove, which is mostly negative and deliberately so.
 | | |
 |---|---|
 | database | PostgreSQL `database_main_v2`, schemas `bronze_schema` / `silver_schema` / `gold_schema` / `unified_schema_<universe>`. Creds in repo `.env` (`POSTGRES_*`) |
-| orchestrator | **Dagster, 76 assets** — `src/orchestration/` is THE entry point |
+| orchestrator | **Dagster, 77 assets** — `src/orchestration/` is THE entry point |
 | universe | 781 VN tickers (HOSE/HNX/UPCOM); VCB is the single-name focus, VN30/VN100/LIQUID301/ALL/BANK the cross-sections |
 | model | LSTM (2×128, ~276k params) and **CNN** (`Conv1d` over time) + the chain in §3b. `model/common/engine.py` is the shared engine — a model package is a `model.py` + a ~30-line binding, **never a copy of `train.py`** |
 | interpreter | `mt_env` venv (`d:/GIT/master-thesis/mt_env`), Python 3.12.10, Windows, RTX 3050 4 GB |
@@ -92,7 +92,7 @@ Three things this ladder means:
 
 ## 3. The pipeline, end to end
 
-### 3a. Data — Dagster, 76 assets, `src/orchestration/`
+### 3a. Data — Dagster, 77 assets, `src/orchestration/`
 
 ```
 raw_data/<source>/            19 landing assets   scrapers: TradingView (universe+OHLCV,
@@ -107,22 +107,32 @@ silver_schema                 20 assets                 canonical, cross-source 
 gold_schema                   10 assets                 + features (TA battery ~900 cols,
       │                                                 returns, vol, as-of macro)
       ▼
-unified_schema_<universe>      6 assets × 3 partitions  pool__basic / __targets /
-                                                        __economy_<country>×19 / __forex /
-                                                        __ta / __fa
+unified_schema_<universe>      7 assets × 3 partitions  pool__basic / __targets /
+                                                        __economy_<country>×19 /
+                                                        __forex / __funds / __ta / __fa
                               partitions: VCB | BANK | ALL
       ▼
 reports/feature_selection/     1 asset × 19 partitions   analysis/feature_selection_economy
                               partitions: the 19 countries — ⚠️ writes NO table
 ```
 
-⚠️ **`unified/pool__forex` is new (2026-08-13)** — `gold.forex` → `pool__forex`, 357
-broker-quoted FX pairs on `pool__basic`'s spine, built for **VCB** so far
-(4,266 × 360, every cell round-tripped against gold, 0 mismatches). It is the
-`pool__economy` shape — a `date`-only source LEFT JOINed and BROADCAST across tickers —
-not the `pool__ta` one. ⚠️ **Median series coverage is 67% and 328 of 357 series stop at
-2026-06-08/09**, so the last 43 spine days are mostly NULL under a `MAX(date)` of
-2026-08-07. `orchestration/CONTEXT.md` §"`pool__forex`".
+⚠️ **`unified/pool__forex` and `unified/pool__funds` are new (2026-08-13)**, built for
+**VCB** so far and generated from ONE spec table (`DATE_SPINE_POOLS`). Both are the
+`pool__economy` shape — a `date`-only gold source LEFT JOINed and BROADCAST across
+tickers, so the row count must EQUAL the spine's — not the `pool__ta` one.
+
+| pool | source | VCB | every cell vs gold | column coverage |
+|---|---|---|---|---|
+| `pool__forex` | `gold.forex`, 357 broker pairs | 4,266 × 360 | **0 mismatches** | median **67%** |
+| `pool__funds` | `gold.funds`, 21 HOSE ETFs × ≤19 measures | 4,266 × 392 | **0 mismatches** | median **17.7%** |
+
+⚠️ **BOTH SOURCES ARE FROZEN AND `MAX(date)` HIDES IT** — the `skip_existing=True`
+scrape of 2026-08-05. 328 of 357 FX series stop at 2026-06-08/09; **19 of 21 funds stop
+at 2026-06-26** and the two that reach August are the two new listings. ⚠️ `pool__funds`
+is additionally **31.7% NULL by construction** (`gold.funds` starts 2014-10-06, the spine
+starts 2009-06-30), and its widest column, `hose__e1vfvn30__close`, IS the VN30 index —
+the market factor `return_rel_{h}day` subtracts. `orchestration/CONTEXT.md`
+§"`pool__forex`" / §"`pool__funds`".
 
 ⚠️ **One asset writes no database table.** `analysis/feature_selection_economy`
 (2026-08-10) runs the selection over `pool__basic + pool__economy_<country>` and
@@ -132,14 +142,18 @@ the country pool is behind `pool__basic`'s calendar and when its fitted cost est
 exceeds `budget_minutes` — `usa` is 1,458 channels, 7.2 h with no null and **6.3 days**
 at 20 draws. `feature_selection/CONTEXT.md` §15.
 
-### 3b. Model — SIX stages, each `python -m <pkg>`, dry-run by default
+### 3b. Model — EIGHT stages, each `python -m <pkg>`, dry-run by default
 
 ```
 raw_data/ → bronze → silver → unified pool__*     data               ⚠️ NEW 2026-08-10, ⚠️ the network
    ▼  python -m feature_selection.run --pools pool__basic --null-draws 20
-reports/feature_selection/<run>/outstanding.csv   feature_selection  ⚠️ MANUAL for the WIDE pools
-   ▼  python -m final_features --apply
-unified_schema_<t>.<target>__final__d<d>_h<h>     final_features     ⚠️ the ONE stage that writes the DB
+reports/feature_selection/<run>/outstanding.csv   selection          ⚠️ MANUAL for the WIDE pools
+   ▼  python -m final_features --apply --shape shortlist
+unified_schema_<t>.pool__shortlist__<tgt>__d<d>_h<h>  shortlist_pool ⚠️ writes the DB — §3c
+   ▼  python -m feature_selection.run --pools pool__shortlist__<tgt>__d<d>_h<h>
+reports/feature_selection/<run>/outstanding.csv   selection_2        ⚠️ MANUAL — the ONE run where
+   ▼  python -m final_features --apply                                  the channels compete
+unified_schema_<t>.<target>__final__d<d>_h<h>     final_features     ⚠️ writes the DB (same package)
    ▼  python -m train_test_creator --save
 src/train_test_set/<dataset>/                     train_test_creator  X/y tensors + scalers + metadata
    ▼  python -m model.lstm --config <cfg>   |   python -m model.cnn --config <cfg>
@@ -168,6 +182,60 @@ that group; `--scope basic` names its table `…__d20_h5__basic`. Both are neede
 ⚠️ **`d` and `h` come from the source TABLE NAME**, never a parameter. They flow
 `return_5day__final__d20_h5` → dataset `metadata.json` → asserted against the model config.
 
+### 3c. ⚠️ TWO selection layers, and the pool between them (NEW 2026-08-13)
+
+**The layer-1 union is not a consensus.** 725 of 750 channels in the old VCB table were
+chosen by exactly one run — arithmetic, not agreement: each run saw `pool__basic + one`
+macro block, so a macro channel *could not* be a candidate twice. `final_features`
+§6 called the fix "ONE selection run over the joined pool"; the pre-final pool is the
+cheap version — the one run over the 889 **survivors** instead of ~3,000 candidates.
+
+- **`pool__shortlist__<target>__d<d>_h<h>`** — `--shape shortlist`. Keys + channels,
+  **no label column** (`pool__targets` is joined by whoever reads it, as for any pool).
+  The `pool__` prefix is load-bearing: `--pools`, `UnifiedSchemaReader.pools()`, the
+  pipeline calendar check and the run-folder scope all key on it, so it needed no new code.
+- **The target is IN the name** because this pool, unlike every raw one, is
+  **target-conditioned** — its channels were kept *using* that label at that window.
+  Selecting over it for another target is leakage.
+- ⚠️ **Never name a shape with a `__final__` SEGMENT.** `FINAL_TABLE`'s target group
+  permits underscores, so `…__pre__final__d20_h5` parses, yielding `target='…__pre'` — a
+  column that exists nowhere, found stages later. `__prefinal__` was rejected for this.
+- **A run is layer 2 iff its `outstanding.csv` says `source_table=pool__shortlist__*`** —
+  a fact about the run, not a flag. `final_features --shape final` then builds from
+  layer 2 **whenever any exists**, else unions everything as before. The switch shows up
+  in the printed plan, in the table `COMMENT` (`Selection layer N:`) and in the
+  fingerprint, so a stale table reports STALE rather than being accepted.
+- ⚠️ **`--apply` stops at `shortlist_pool`**: the layer-2 run must exist before
+  `final_features` can use it, and that run is manual. `selection_2` reports
+  `MANUAL — cannot be produced here`. `final_features/CONTEXT.md` §8.
+
+**First build, 2026-08-13**: `pool__shortlist__close_adjust_5day__d20_h5`, **4,266 × 892**
+(889 channels + 3 keys), all 20 source pools on one calendar so the INNER join loses 0
+rows, `evidence=no_null=20`.
+
+**And the first layer-2 run through it, same day — 58.5 min on the GPU, `--null-draws 0`:**
+
+| | layer 1 (20 runs, unioned) | layer 2 (1 run, competing) |
+|---|---|---|
+| shortlisted | **889** | **59** |
+| `ic_mean` selected | +0.2505 … −0.2618 per run | **+0.0324** |
+| `ic_trend_per_fold` | negative in 15 of 20 | **−0.1594** |
+| evidence | `no_null=20` | `no_null` |
+
+⚠️ **The mechanism works — 889 collapse to 59 once they compete — and the result is still
+nothing.** The +0.0324 is two folds out of five (**+0.489, +0.527, −0.677, −0.265,
++0.088**), `close_adjust` ranks 1st again (the price level "predicting" the price level at
+ρ 0.996), `hit_rate` is 1.000 and R² −8.11 because the target is a price LEVEL, and no
+null was paid for. The 59 spread over 17 countries with 2 price channels — what a
+selection returns when there is nothing to find. **Fixing the union did not fix the
+target**; the next run worth doing is this one on `return_5day`. `final_features/CONTEXT.md`
+§8f.
+
+⚠️ **The cost model in `feature_selection/CONTEXT.md` §15c was re-fitted on this run**
+(§15c-refit): across 21 GPU runs, `minutes ≈ 0.364 × channels^0.77`, R² 0.87 — **not**
+the CPU-era `k = 2.00`, which under-predicts narrow runs ~5× and over-predicts wide ones
+~35%. A wide run with no null is ~1 h, not 3.
+
 ---
 
 ## 4. Run it
@@ -183,7 +251,7 @@ dagster dev                                             # UI at localhost:3000
 dagster asset materialize -f src/orchestration/definitions.py --select "group:bronze"
 dagster asset materialize -f src/orchestration/definitions.py --select "+bronze/trading_view_economy"
 dagster asset materialize -f src/orchestration/definitions.py --select "group:unified" --partition VCB
-dagster definitions validate                            # sanity check: 76 assets, no run
+dagster definitions validate                            # sanity check: 77 assets, no run
 
 # --- model chain ---
 python -m pipeline                                      # what's stale; writes nothing
