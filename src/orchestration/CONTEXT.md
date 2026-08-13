@@ -178,8 +178,8 @@ PARTITIONS of two assets, not 320 assets. The remaining 61 map to ~55-65 assets.
 
 ## 2. What exists — LANDING + BRONZE complete, silver started (2026-08-01)
 
-**78 assets: 19 landing + 20 bronze + 20 silver + 10 gold + 8 unified + 1 analysis** (was 75
-until `pool__forex`, `pool__funds` and `pool__bonds` were added 2026-08-13). Every scraper
+**79 assets: 19 landing + 20 bronze + 20 silver + 10 gold + 9 unified + 1 analysis** (was 75
+until the four date-broadcast pools were added 2026-08-13). Every scraper
 lands to `raw_data/` as an asset ([assets/scrape.py](assets/scrape.py)); every
 bronze ingest leaf is an asset ([assets/bronze.py](assets/bronze.py), 20 leaves → 25
 tables); silver has twenty ([assets/silver.py](assets/silver.py)), gold ten
@@ -236,7 +236,7 @@ raw/cafef_financials[t] ─► bronze/cafef_financials ─► silver/cafef_finan
 | `bronze` | **all 20 ingest leaves** (25 tables) | — |
 | `silver` | `economy` (long fact), `economy_series` (dimension), `bonds`/`funds`/`forex` (TradingView projections), `stock_market` (4 index tabs), `stocks_basic` (6 sources), `cafef_financials_bank` (quarterly), `stocks_basic_financials_bank` (as-of daily), `…_fa` (+26 indicators) | — |
 | `gold` | `economy` (wide, as-of), `bonds`/`funds`/`forex` (wide, unfilled), `stock_market` (wide, unfilled), `stocks` (price panel, no features), `stocks_ta` (+ the ~900-column TA block), `stocks_financials_bank_fa` (feature panel), `news_{weekly,daily}_panel` | — |
-| `unified` | `pool__basic`, `pool__targets`, `pool__economy` (19 country tables), `pool__forex` + `pool__funds` + `pool__bonds` (2026-08-13, one spec table), `pool__ta`, `pool__fa` | **3** — `VCB` / `BANK` / `ALL`, the universe |
+| `unified` | `pool__basic`, `pool__targets`, `pool__economy` (19 country tables), `pool__forex` + `pool__funds` + `pool__bonds` + `pool__stock_market` (2026-08-13, one spec table), `pool__ta`, `pool__fa` | **3** — `VCB` / `BANK` / `ALL`, the universe |
 
 ### ⚠️ The edges, read out of the code (2026-07-31 correction)
 
@@ -449,7 +449,7 @@ split across the two modules.
 
 | claim | how it was checked | result |
 |---|---|---|
-| the flat `src/` layout can be imported by Dagster | `dagster definitions validate` | passes, **78 assets** (19 landing + 20 bronze + 20 silver + 10 gold + 8 unified + 1 analysis), all code locations OK — 75 until the three date-broadcast pools landed 2026-08-13 |
+| the flat `src/` layout can be imported by Dagster | `dagster definitions validate` | passes, **79 assets** (19 landing + 20 bronze + 20 silver + 10 gold + 9 unified + 1 analysis), all code locations OK — 75 until the four date-broadcast pools landed 2026-08-13 |
 | partitions resolve | reading the definitions back | TV **9**, pdfs **100**, financials **2** (`HOSE_VCB`, `HOSE_ACB`) |
 | the index scrape assets run | `--select "group:cafef_index"` | 4/4 green |
 | the TradingView path works incl. `build_unblocked` | `--select "raw/trading_view_collected_links"` | green, rewrote `all_links_2026-06-26.csv` (313 KB) |
@@ -844,7 +844,7 @@ this for "must never load in this repo".
 }
 ```
 
-All 78 assets are listed in the file as a menu, grouped by the asset's own Dagster group
+All 79 assets are listed in the file as a menu, grouped by the asset's own Dagster group
 (trading_view, cafef, cafef_index, cafef_filings, simplize, gics, bronze, silver, gold,
 unified), with `//` comment keys
 marking the expensive ones (same comment convention as `switch_config.json`).
@@ -854,7 +854,7 @@ default the change was made to remove.
 
 ### ⚠️ Everything is ON as of 2026-08-06, and that is the intended resting state
 
-**All 78 assets and every partition are `true`.** The file spent 2026-08-05 with one
+**All 79 assets and every partition are `true`.** The file spent 2026-08-05 with one
 group and one partition enabled, which is a fine way to keep a specific run honest and a
 bad way to leave a repo: the UI showed one asset, and "which module do I want today" had
 no answer without a config edit first. Level 1 is the lever — *selection is the run
@@ -925,7 +925,7 @@ Behaviour, all verified:
 | **every partition of one owner `false`** | **raises** — zero partitions is unmaterialisable; disable the ASSET instead |
 | **`--partition stocks` when `@stocks` is false** | `DagsterUnknownPartitionError`, before any work |
 | malformed JSON | **raises** — never read as "disable everything" |
-| file absent | all 78 assets, all partitions — absent means "no opinion", not "all off" |
+| file absent | all 79 assets, all partitions — absent means "no opinion", not "all off" |
 | file with a **BOM** | handled (`utf-8-sig`) |
 
 The last three are direct lessons from `switch_config.json`:
@@ -968,7 +968,7 @@ RUN_SUCCESS
 ```
 
 **Sanity check without running anything:** `dagster definitions validate` (it should
-report 78 assets and "All code locations passed validation").
+report 79 assets and "All code locations passed validation").
 
 ### ✅ Phase 1a — the whole BRONZE layer, 20 assets (2026-08-01)
 
@@ -1754,6 +1754,72 @@ across it is a 2018-onward feature whatever its NULL policy.
 
 ⚠️ **These are LEVELS, in percent** — same trap as `pool__forex` and `pool__economy`.
 
+#### ✅ `pool__stock_market` — the index panel, and it contains the TARGET'S BENCHMARK (2026-08-13)
+
+`gold.stock_market` → `unified_schema_<universe>.pool__stock_market`. **6 VN indices ×
+27 measures = 162 columns**, named `{exchange}__{index}__{measure}`: `hose__vnindex`,
+`hose__vn30index`, `hose__vn100_index`, `hnx__hnx_index`, `hnx__hnx30_index`,
+`upcom__upcom_index`.
+
+⚠️ **THE PIVOT ALREADY HAPPENED IN GOLD.** `gold.stock_market` is the four CafeF index
+tabs (price / order stats / foreign / prop trading) joined and pivoted to **one row per
+date, 6,339 × 163** — every index is already its own set of channels. The pool copies
+them onto the spine; there is no pivot to redo.
+
+**Built for `VCB` 2026-08-13, 569 ms:**
+
+| check | result |
+|---|---|
+| shape | **4,266 rows × 165 columns**, 1 ticker, 2009-06-30 → 2026-08-07 |
+| PK, read back from `pg_index.indkey` | `(date, exchange, ticker)` |
+| types | **162 `numeric`** + 2 varchar + 1 date |
+| every cell vs `gold.stock_market`, all 162 columns | **0 mismatches** |
+| rows vs `pool__basic`, symmetric `EXCEPT` | 4,266 = 4,266, 0 unaligned |
+| rows carrying ≥1 value | 4,260 of 4,266 (**99.9%**) |
+| coverage per column | min 0.02%, median **83.1%**, max 99.8%, none all-NULL |
+
+##### ⚠️ `hose__vnindex__close_adjust` IS `UNIFIED_BENCHMARK_COLUMN`
+
+It is the series `pool__targets` subtracts to build the relative target:
+
+```
+return_rel_h[t] = return_h[t] − (bm[t+h] / bm[t] − 1)
+```
+
+**This pool carries `bm[t]` and its trailing history, NEVER `bm[t+h]`.** Checked, not
+assumed, 2026-08-13: the benchmark column matches gold on its own date with **0
+mismatches**, and **0 rows** hold a future benchmark value in place of their own. So
+there is no leakage — nothing here is dated after the row it sits on.
+
+**What IS true is that the target's own DENOMINATOR is now a feature.** A model fitting
+`return_rel_{h}day` with this pool joined can see `bm[t]`, the quantity its label is
+divided by. That is legitimate and it is not nothing; quote it beside any result this
+pool contributes to.
+
+⚠️ **AND FOR THE ABSOLUTE TARGET THE INDEX CLOSE IS THE MARKET FACTOR ITSELF.** §2's
+whole reason for `return_rel_{h}day` existing is that a single stock's absolute forward
+return is dominated by the market. Handing a model the index's contemporaneous level is
+the level-predicts-level trap in its purest form.
+
+⚠️ **THE ORDER-FLOW MEASURES ARE THE HALF OF THIS POOL THAT IS NOT THAT**, and they are
+the most interesting thing in it. `n_buy_orders`, `n_sell_orders`,
+`avg_vol_per_{buy,sell}_order`, `buy_order_vol`, `sell_order_vol`,
+`foreign_net_{value,volume}`, `prop_{buy,sell}_{val,vol}` are market-wide FLOW rather
+than price — **the closest anything already in this database gets to §2d's top-ranked
+lever** (aggressor buy/sell imbalance, which properly needs intraday tick). ⚠️ The four
+`prop_*` measures cover only **5.8%** of the spine — that CafeF tab starts late — so
+they are effectively a recent-years feature.
+
+⚠️ **Coverage per index is the launch date, not a gap**: `vnindex` 84.1%, `hnx_index`
+80.7%, `upcom_index` 80.2%, `vn30index` 67.9%, `hnx30_index` 62.0%, `vn100_index`
+51.3%.
+
+⚠️ **The source ends 2026-07-30 against a 2026-08-07 spine — 6 NULL rows — and the cause
+is DIFFERENT from the TradingView trio.** This is a CafeF chain
+(`raw/cafef_index_*` → `bronze.cafef_index_*` → `silver.stock_market` → gold), so it is
+refreshed by materialising that chain, not by a `skip_existing=False` TradingView
+scrape.
+
 **The date-broadcast family, side by side (VCB, all measured 2026-08-13):**
 
 | pool | source | shape | ≥1 value | col coverage | source ends |
@@ -1761,9 +1827,11 @@ across it is a 2018-onward feature whatever its NULL policy.
 | `pool__forex` | `gold.forex`, 357 pairs | 4,266 × 360 | 99.9% | median 67.0% | 29 of 357 at 2026-08-04, **328 at 2026-06-08/09** |
 | `pool__funds` | `gold.funds`, 21 ETFs | 4,266 × 392 | 68.3% | median 17.7% | 2 of 21 at 2026-08-04, **19 at 2026-06-26** |
 | `pool__bonds` | `gold.bonds`, 9 tenors | 4,266 × 120 | 76.2% | median 75.9% | **all 9 at 2026-06-08** |
+| `pool__stock_market` | `gold.stock_market`, 6 indices | 4,266 × 165 | 99.9% | median **83.1%** | 2026-07-30 (CafeF chain, not TV) |
 
-All three: PK `(date, exchange, ticker)` verified from `pg_index`, 0 round-trip
-mismatches against gold, 0 unaligned keys, row count equal to the spine's.
+All four: PK `(date, exchange, ticker)` verified from `pg_index`, 0 round-trip
+mismatches against gold, 0 unaligned keys, row count equal to the spine's. Adding the
+fourth was **one row in `DATE_SPINE_POOLS` plus a wrapper method**.
 
 ⚠️ **`CREATE TABLE AS`, not a pandas round-trip, and that is type fidelity not taste.**
 psycopg2 returns a PostgreSQL `numeric` as a Python `Decimal`, which lands in a DataFrame

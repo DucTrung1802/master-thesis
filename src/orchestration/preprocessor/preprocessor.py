@@ -5889,6 +5889,7 @@ class DataPreprocessor:
     UNIFIED_FOREX_SOURCE = f"{GOLD_SCHEMA}.forex"
     UNIFIED_FUNDS_SOURCE = f"{GOLD_SCHEMA}.funds"
     UNIFIED_BONDS_SOURCE = f"{GOLD_SCHEMA}.bonds"
+    UNIFIED_STOCK_MARKET_SOURCE = f"{GOLD_SCHEMA}.stock_market"
 
     def _ingest_unified_pool_forex(self, ticker: str) -> dict:
         """`gold.forex` → `unified_schema_<ticker>.pool__forex` — the FX block.
@@ -6004,6 +6005,68 @@ class DataPreprocessor:
         """
         return self._helper_unified_pool_on_date_spine(
             ticker, "pool__bonds", self.UNIFIED_BONDS_SOURCE, noun="tenor series"
+        )
+
+    def _ingest_unified_pool_stock_market(self, ticker: str) -> dict:
+        """`gold.stock_market` → `…​.pool__stock_market` — the index panel.
+
+        **6 indices × 27 measures = 162 columns**, named
+        `{exchange}__{index}__{measure}` — `hose__vnindex`, `hose__vn30index`,
+        `hose__vn100_index`, `hnx__hnx_index`, `hnx__hnx30_index`,
+        `upcom__upcom_index` — keyed `(date, exchange, ticker)` on `pool__basic`'s
+        calendar. Returns a metadata dict.
+
+        ⚠️ **THE PIVOT ALREADY HAPPENED IN GOLD.** `gold.stock_market` is the four
+        CafeF index tabs (price / order stats / foreign / prop trading) joined and
+        pivoted to one row per date, so every index is already its own set of channels
+        and this method copies them. There is no pivot to redo here — asking for one
+        would mean re-deriving a table that exists.
+
+        ## ⚠️ `hose__vnindex__close_adjust` IS THE TARGET'S OWN BENCHMARK
+
+        It is `UNIFIED_BENCHMARK_COLUMN` — the series `_ingest_unified_pool_targets`
+        subtracts to build `return_rel_{h}day`:
+
+            return_rel_h[t] = return_h[t] − (bm[t+h] / bm[t] − 1)
+
+        This pool carries **bm[t] and its trailing history, never bm[t+h]**, so there
+        is NO leakage: nothing here is dated after the row it sits on. What IS true is
+        that the target's own DENOMINATOR is now a feature, and a model fitting
+        `return_rel` can see it. That is legitimate and it is not nothing — quote it
+        beside any result this pool contributes to.
+
+        ⚠️ **AND FOR THE ABSOLUTE TARGET IT IS THE MARKET FACTOR ITSELF.** A single
+        stock's absolute forward return is dominated by the market, which is the whole
+        reason `return_rel_{h}day` exists. Handing a model the index's contemporaneous
+        level is the level-predicts-level trap in its purest form; the order-flow and
+        foreign-flow measures below are the part of this pool that is not that.
+
+        ⚠️ **THE ORDER-FLOW MEASURES ARE THE INTERESTING HALF.** `n_buy_orders`,
+        `n_sell_orders`, `avg_vol_per_{buy,sell}_order`, `buy_order_vol`,
+        `sell_order_vol`, `foreign_net_{value,volume}`, `prop_{buy,sell}_{val,vol}` are
+        market-wide flow, not price — the closest anything already in this database gets
+        to the top-ranked lever in the hub's §2d (aggressor buy/sell imbalance, which
+        properly needs intraday tick). ⚠️ The four `prop_*` measures cover **5.8%** of
+        the spine: that CafeF tab starts late, so they are effectively a recent-years
+        feature.
+
+        ⚠️ **Coverage is the WIDEST of the date-broadcast pools — median 83.1%** (min
+        0.02%, max 99.8%, none all-NULL), because an index quotes when the market is
+        open and the spine is VN trading days. Per index the mean runs `vnindex` 84.1%,
+        `hnx_index` 80.7%, `upcom_index` 80.2%, `vn30index` 67.9%, `hnx30_index` 62.0%,
+        `vn100_index` 51.3% — the later launches, not gaps.
+
+        ⚠️ **The source ends 2026-07-30 against a 2026-08-07 spine**, so the last **6
+        rows are NULL**. Different cause from the TradingView trio: this is a CafeF
+        chain (`raw/cafef_index_*` → `bronze.cafef_index_*` → `silver.stock_market`),
+        so it is re-freshed by materialising that chain, not by a `skip_existing=False`
+        TradingView scrape.
+        """
+        return self._helper_unified_pool_on_date_spine(
+            ticker,
+            "pool__stock_market",
+            self.UNIFIED_STOCK_MARKET_SOURCE,
+            noun="index series",
         )
 
     def _helper_unified_pool_on_date_spine(

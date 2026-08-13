@@ -12,17 +12,18 @@ holds ONE UNIVERSE cut into the FEATURE GROUPS a model selects over:
     pool__forex      357 broker-quoted FX pairs, one `value` column each
     pool__funds      21 HOSE ETFs × up to 19 measures
     pool__bonds      9 VN government tenors × 13 measures — the yield curve
+    pool__stock_market  6 VN indices × 27 measures — price, order flow, foreign, prop
     pool__ta         the ~920-column technical block
     pool__fa         the ~200-column fundamental block
 
 ⚠️ **TWO JOIN SHAPES, and which one a pool uses is decided by its SOURCE's key.**
 `pool__ta` / `pool__fa` come from tables already keyed `(date, exchange, ticker)` and
-INNER JOIN the spine on all three. `pool__economy`, `pool__forex`, `pool__funds` and
-`pool__bonds` come from tables keyed on `date` ALONE, so they LEFT JOIN on `date` and
-BROADCAST one row across every ticker of that day — which is why their row count must
-EQUAL the spine's, while a per-ticker pool is allowed to cover a subset.
+INNER JOIN the spine on all three. `pool__economy`, `pool__forex`, `pool__funds`,
+`pool__bonds` and `pool__stock_market` come from tables keyed on `date` ALONE, so they
+LEFT JOIN on `date` and BROADCAST one row across every ticker of that day — which is why
+their row count must EQUAL the spine's, while a per-ticker pool is allowed a subset.
 
-⚠️ **THE PARTITION IS THE UNIVERSE, and all eight pools share it** (2026-08-05). Until
+⚠️ **THE PARTITION IS THE UNIVERSE, and all nine pools share it** (2026-08-05). Until
 then this module was hard-coded to `UNIFIED_TICKER = "VCB"` and the asset keys carried
 the ticker (`unified_vcb/pool__basic`), which meant `unified_schema_all` and
 `unified_schema_bank` — 4.9 M rows between them — existed in the database but were
@@ -488,14 +489,15 @@ def unified_pool_economy(
     )
 
 
-# ── The three DATE-BROADCAST pools: pool__forex, pool__funds, pool__bonds ────────
+# ── The DATE-BROADCAST pools: forex, funds, bonds, stock_market ──────────────────
 #
 # One wide, `date`-keyed gold panel each, LEFT JOINed onto `pool__basic` and broadcast
-# across its tickers. They are a spec table rather than three copies for the reason
+# across its tickers. They are a spec table rather than four copies for the reason
 # `bronze.py` and `gold.py` give — near-identical assets drift — and because the
 # differences that matter (the source, and the ⚠️ each one carries) are visible here in
-# a row instead of buried in three near-identical bodies. They mirror the three wide
-# TradingView panels gold already builds from one spec table.
+# a row instead of buried in four near-identical bodies. Three mirror the wide
+# TradingView panels gold already builds from one spec table; the fourth is the CafeF
+# index chain.
 #
 # ⚠️ THE ROW ASSERTION IS EQUALITY, NOT THE SUBSET `pool__ta`/`pool__fa` GET. Those are
 # limited by their source's TICKER coverage, which is legitimately narrow. These join
@@ -555,6 +557,26 @@ DATE_SPINE_POOLS: list[tuple[str, str, str, str]] = [
         "tasks, so the last 43 spine rows are entirely NULL. ⚠️ The 15y/20y/30y "
         "tenors start in 2018 and gold.bonds has no row for 1,017 of 4,266 VCB spine "
         "dates, so coverage is min 37.1% / median 75.9% / max 76.1%.",
+    ),
+    (
+        "pool__stock_market",
+        "stock_market",
+        "index series",
+        "6 VN indices × 27 measures = 162 columns, named {exchange}__{index}__"
+        "{measure} — vnindex / vn30index / vn100_index / hnx_index / hnx30_index / "
+        "upcom_index. ⚠️ THE PIVOT ALREADY HAPPENED IN GOLD: gold.stock_market is the "
+        "four CafeF index tabs joined and pivoted to one row per date, so every index "
+        "is already its own set of channels. ⚠️ hose__vnindex__close_adjust IS "
+        "UNIFIED_BENCHMARK_COLUMN — the series pool__targets subtracts to build "
+        "return_rel_{h}day. This pool carries bm[t] and its trailing history, NEVER "
+        "bm[t+h], so there is no leakage; what is true is that the target's own "
+        "denominator is a feature. ⚠️ For the ABSOLUTE target the index close is the "
+        "market factor itself — the level-predicts-level trap in its purest form. The "
+        "order-flow and foreign-flow measures are the half of this pool that is not "
+        "that, and the closest anything in this database gets to §2d's top lever. "
+        "⚠️ Widest coverage of the date-broadcast family, median 83.1%, but the four "
+        "prop_* measures cover only 5.8% and the source ends 2026-07-30 (6 NULL rows "
+        "at the tail).",
     ),
 ]
 

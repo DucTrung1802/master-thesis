@@ -992,10 +992,11 @@ with no business being interpolated.
 protocol on it: `z = +0.11`, 11 of 20 shuffled draws beat the real data. Banks are
 VN's largest GICS industry at 20 names, against a resolvability threshold of ~100.
 
-#### `_ingest_unified_pool_forex` / `_funds` / `_bonds` (2026-08-13)
+#### `_ingest_unified_pool_forex` / `_funds` / `_bonds` / `_stock_market` (2026-08-13)
 
-Three wide, `date`-keyed gold panels on the unified spine — the same three TradingView
-asset classes gold builds from one spec table. All three are thin wrappers over
+Four wide, `date`-keyed gold panels on the unified spine — the three TradingView asset
+classes gold builds from one spec table, plus the CafeF index chain. All four are thin
+wrappers over
 **`_helper_unified_pool_on_date_spine`** — the same split `_ingest_unified_pool_ta` /
 `_fa` have over `_helper_unified_pool_from_source`, and for the same reason: the ⚠️
 knowledge is per source, the body is not.
@@ -1005,8 +1006,9 @@ knowledge is per source, the body is not.
 | `pool__forex` | `gold_schema.forex` (358 cols, 357 pairs) | **4,266 × 360** in 852 ms | **0 mismatches** / 357 series |
 | `pool__funds` | `gold_schema.funds` (390 cols, 21 ETFs) | **4,266 × 392** in 1.01 s | **0 mismatches** / 389 columns |
 | `pool__bonds` | `gold_schema.bonds` (118 cols, 9 tenors) | **4,266 × 120** in 672 ms | **0 mismatches** / 117 columns |
+| `pool__stock_market` | `gold_schema.stock_market` (163 cols, 6 indices) | **4,266 × 165** in 569 ms | **0 mismatches** / 162 columns |
 
-⚠️ **THESE ARE THE ECONOMY SHAPE, AND THE SOURCE'S KEY IS WHAT DECIDES THAT.** All three
+⚠️ **THESE ARE THE ECONOMY SHAPE, AND THE SOURCE'S KEY IS WHAT DECIDES THAT.** All four
 sources are keyed on `date` ALONE, so the helper LEFT JOINs on `date` and **broadcasts**
 one row across every ticker of the day — like `_ingest_unified_pool_economy`, unlike
 `_helper_unified_pool_from_source`, which INNER JOINs a source already keyed
@@ -1021,20 +1023,34 @@ source does not cover — **1,351 of 4,266 rows for `gold.funds`**, which starts
 2014-10-06 against a 2009 spine — and produce a pool that looks clean and has quietly
 changed the calendar under its own primary key.
 
-⚠️ **ONE table each where economy is 19** — 360, 392 and 120 columns, inside the 1,600
-ceiling; a broker is not a country and neither is an ETF or a tenor.
+⚠️ **ONE table each where economy is 19** — 360, 392, 120 and 165 columns, inside the
+1,600 ceiling; a broker is not a country and neither is an ETF, a tenor or an index.
 
 ⚠️ **NONE IS FORWARD-FILLED.** A NULL means the source had no value that day; filling
 would invent a price. Per-column coverage on VCB's spine: forex **min 4.3% / median
 67.0% / max 97.5%**, funds **min 0.05% / median 17.7% / max 67.7%**, bonds **min 37.1% /
-median 75.9% / max 76.1%**, none all-NULL in any of them.
+median 75.9% / max 76.1%**, stock_market **min 0.02% / median 83.1% / max 99.8%**, none
+all-NULL in any of them.
 
-⚠️ **ALL THREE SOURCES ARE FROZEN BY THE SAME `skip_existing=True` SCRAPE**, and bonds
-is the cleanest case because it is UNIFORM: 328 of 357 FX series stop at 2026-06-08/09;
-**19 of 21 funds stop at 2026-06-26** (the two reaching August are the two new listings
-that scrape picked up — 38 of 389 fund columns carry anything after 2026-06-26); and
-**every bond tenor stops at 2026-06-08**, the scrape having queued 0 bond data tasks at
-all. `MAX(date)` reads 2026-08-07 on all three.
+⚠️ **THE THREE TRADINGVIEW SOURCES ARE FROZEN BY THE SAME `skip_existing=True` SCRAPE**,
+and bonds is the cleanest case because it is UNIFORM: 328 of 357 FX series stop at
+2026-06-08/09; **19 of 21 funds stop at 2026-06-26** (the two reaching August are the two
+new listings that scrape picked up — 38 of 389 fund columns carry anything after
+2026-06-26); and **every bond tenor stops at 2026-06-08**, the scrape having queued 0
+bond data tasks at all. `MAX(date)` reads 2026-08-07 on all three. ⚠️ `stock_market` is 6
+days short for a DIFFERENT reason — it is a CafeF chain (`raw/cafef_index_*` → bronze →
+`silver.stock_market` → gold), refreshed by materialising that chain.
+
+⚠️ **`pool__stock_market` CARRIES THE TARGET'S OWN BENCHMARK.**
+`hose__vnindex__close_adjust` is `UNIFIED_BENCHMARK_COLUMN`, the series
+`_ingest_unified_pool_targets` subtracts:
+`return_rel_h[t] = return_h[t] − (bm[t+h]/bm[t] − 1)`. The pool holds **`bm[t]` and
+trailing history, never `bm[t+h]`** — checked 2026-08-13: 0 mismatches against gold on
+its own date, and **0 rows** holding a future benchmark value. No leakage; but the
+target's own DENOMINATOR is a feature, which is worth quoting beside any result. ⚠️ Its
+`n_{buy,sell}_orders` / `avg_vol_per_*_order` / `foreign_net_*` / `prop_*` measures are
+market-wide FLOW rather than price — the closest anything in this database gets to the
+hub's §2d top lever — though the four `prop_*` cover only **5.8%** of the spine.
 
 ⚠️ **`pool__bonds`: THE SLOPE IS THE SIGNAL AND IT IS NOT A COLUMN.**
 `tvc__vn10y__value − tvc__vn02y__value` is the 10s2s, and the slope is what carries
