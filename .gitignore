@@ -111,6 +111,33 @@ experiment/experiment_10/_cache/
 !reports/feature_selection/
 !reports/feature_selection/**
 #
+# ⚠️ **ONE QUARANTINED ROOT, ADDED 2026-08-14, AND IT NEEDS ITS OWN PAIR — WHICH IS THE
+# WHOLE ARGUMENT AGAINST EXTRA ROOTS, PAID ONCE ON PURPOSE.**
+# `reports/feature_selection__forex_return_5day/` holds ONE run: `pool__forex` against
+# `return_5day` at d20/h5, the first selection in this repo to measure a bar on a return
+# target (`evidence=failed_null`, z = +0.12, p = 0.524).
+#
+# It is not in the root above because `final_features` groups by (schema, target, setup)
+# with no term for which pools: it is the only `return_5day` run in the archive, so in
+# the main root it would form a fresh group whose table name is
+# `unified_schema_vcb.return_5day__final__d20_h5` — a table that already exists with 754
+# columns — and propose rebuilding it from 44 forex channels (the STL-1 domino).
+#
+# ⚠️ **RETIRE THIS PAIR when either is true**: a `--scope`-named build makes the
+# collision impossible, or the orphan 754-column table is dropped. Until then, without
+# these two lines the run's CSVs fall straight back into the blanket `*.csv` on line 50
+# and the evidence is lost the way issue RPR-1 lost 29 run folders.
+!reports/feature_selection__forex_return_5day/
+!reports/feature_selection__forex_return_5day/**
+#
+# ⚠️ A LOOSE FILE DIRECTLY UNDER `reports/` NEEDS ITS OWN NEGATION TOO — the two pairs
+# above re-include SUBTREES, and neither matches a file sitting beside them. Added
+# 2026-08-14 for `forex_exchanges.csv`, a generated inventory of the 48 forex exchanges
+# (see `orchestration/CONTEXT.md`). Without this line the blanket `*.csv` on line 50
+# takes it and `git add` reports success while committing nothing — the exact shape of
+# issue GIT-1.
+!reports/*.csv
+#
 # ⚠️ ONE ROOT, and only one, since 2026-08-10. `reports/feature_selection_basic/`,
 # `_economy/` and `_superseded/` were three MORE paths these two rules did not match,
 # each needing its own negation pair or its CSVs fell straight back into the blanket

@@ -1337,6 +1337,25 @@ under another broker's folder, but bronze splits the `symbol` column (`SAXO:EURU
 `:`, so the exchange is always right whatever the folder is called. The folder name is
 cosmetic to the database and load-bearing only for `skip_existing`.
 
+📄 **[`reports/forex_exchanges.csv`](../../reports/forex_exchanges.csv)** — the 48
+exchanges ranked by ticker count, generated from bronze 2026-08-14:
+`rank, exchange, n_tickers, n_rows, first_date, last_date, gold_table, gold_series,
+unified_pool`. `gold_series` is a CROSS-CHECK, not a copy — it is read from
+`information_schema` for that exchange's gold panel and equals `n_tickers` on all 48.
+Regenerate with:
+
+```sql
+SELECT exchange, COUNT(DISTINCT ticker) AS n_tickers, COUNT(*) AS n_rows,
+       MIN(date) AS first_date, MAX(date) AS last_date
+FROM bronze_schema.trading_view_forex GROUP BY exchange
+ORDER BY n_tickers DESC, exchange ASC;
+```
+
+⚠️ It needed its own `.gitignore` negation (`!reports/*.csv`). The two pairs above it
+re-include SUBTREES and neither matches a file sitting loose beside them, so without it
+the blanket `*.csv` takes the file and `git add` reports success while committing
+nothing — issue `GIT-1` exactly.
+
 ⚠️ **3,129 SERIES, NOT THE 3,074 A FILENAME SCAN REPORTS.** Parsing
 `<EXCHANGE>_<SYMBOL>_<start>_<end>.csv` on the first underscore splits `FX_IDC_EURUSD`
 into exchange `FX` and symbol `IDC_EURUSD`, merging one real exchange into a phantom.
