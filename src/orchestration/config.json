@@ -221,6 +221,22 @@
         "// analysis/feature_selection_economy": "19 COUNTRY partitions, NOT listed here for the same reason as raw/cafef_pdfs - and because the list is DERIVED from parameters/trading_view/economy, so listing it again is the drift enabled.py exists to stop. A country enabled for the scrape is a country you can select over. Disable one with \"analysis/feature_selection_economy\": {\"usa\": false} - but note that usa already refuses to run at the default budget_minutes, which is the guard you want rather than making it invisible."
     },
     "parameters": {
+        "// data_only": "THE ONE PLACE LINKS AND DATA MAY DISAGREE, AND ONLY IN THE SAFE DIRECTION (2026-08-14). `trading_view` below is emitted under BOTH phase prefixes, so links and data normally enumerate the same set. This narrows the DATA phase to a subset: links still enumerate everything, only the fetch is restricted. Data may never enable what links does not - the data adder reads the links CSV its own leaf wrote, so a leaf with no CSV is a warning and a silent no-op - and enabled.validate() RAISES on that, on an unknown class, and on an empty list. An absent class means no restriction.",
+        "// data_only/forex": "THE 10 LARGEST BY SYMBOLS TRADINGVIEW LISTS, measured 2026-08-14 off the refreshed links: saxo 438, b2prime 314, ig 294, pepperstone 288, swissquote 269, tastyfx 263, fxpro 248, skilling 248, activtrades 240, oanda 236 = 2,838 symbols. All ten are among the 27 brokers whose UI filter actually works (one exchange in the links CSV, folder name == exchange). The other 19 return a mixed default list of ~8,500-16,700 symbols dominated by FX_IDC - fetching any one of them is a multi-day job for data that is not that broker's book. Enumeration still covers all 47.",
+        "data_only": {
+            "forex": [
+                "saxo",
+                "b2prime",
+                "ig",
+                "pepperstone",
+                "swissquote",
+                "tastyfx",
+                "fxpro",
+                "skilling",
+                "activtrades",
+                "oanda"
+            ]
+        },
         "// WHAT THIS IS": "The TradingView SCRAPE PARAMETERS - which countries, sectors, brokers and categories each asset class enumerates. Moved here from src/switch_config.json on 2026-08-06; that file is DELETED and enabled.py raises if it comes back.",
         "// NOT A RUN PLAN": "These are parameters, not switches over what runs. What runs is asset SELECTION plus the `assets` and `partitions` sections above. A leaf here only narrows what the selected asset enumerates once it is already running.",
         "// ONE TREE FOR LINKS AND DATA": "switch_config.json carried two trees - .../links/... and .../data/... - that were byte-identical at 326 keys each, differing on exactly one value (crypto), which is how the drift got there. They are one tree now, for the same reason raw/trading_view_links and raw/trading_view_data share one PartitionsDefinition: the data step reads the link CSV its own leaf wrote, so they cannot legitimately disagree.",

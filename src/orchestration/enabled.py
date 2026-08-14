@@ -294,11 +294,60 @@ def trading_view_switches() -> Dict[str, bool]:
     return out
 
 
+def data_only_sources() -> Dict[str, List[str]]:
+    """`parameters.data_only`: per asset class, the leaves the DATA phase may fetch.
+
+    ⚠️ **THE ONE PLACE LINKS AND DATA ARE ALLOWED TO DISAGREE, AND ONLY IN ONE
+    DIRECTION** (2026-08-14). `trading_view_switches` emits ONE tree under both phase
+    prefixes, deliberately — two trees is how `switch_config.json` drifted to a
+    one-value difference nobody noticed. That rule stays for the dangerous direction:
+    **data may never enable what links does not**, because the data adder reads the
+    links CSV its own leaf wrote, and a leaf with no CSV is a warning and a silent
+    no-op.
+
+    The SAFE direction is a real requirement. Enumerating a class is cheap (forex:
+    47 brokers, 5.5 MB, minutes); fetching it is not (~50 s per symbol behind a global
+    8-second navigation gate). Wanting the whole universe listed and a subset fetched
+    is the normal case, and before this it had no expression at all — the only lever
+    was switching a broker off in the shared tree, which also stopped its links being
+    collected, so the universe silently shrank to whatever was being fetched.
+
+    An ABSENT class means "no restriction" — every leaf its tree enables is fetched.
+    An EMPTY list is rejected in `validate()`: "fetch nothing" is what the asset-level
+    switch is for, and an empty list here reads as an accident.
+
+    ⚠️ **IT FILTERS THE FIRST LEVEL BELOW THE CLASS ONLY.** `forex/<broker>` is one
+    level and that is what this was built for; `stocks/<country>/<type>/<sector>` would
+    be filtered on `<country>` alone. Deeper selection would need a path prefix, and
+    inventing that before something needs it is how the last config grew to 676 keys.
+    """
+    raw = config().get("parameters", {}).get("data_only", {})
+    if not isinstance(raw, dict):
+        raise ValueError(
+            f"{CONFIG_PATH}: parameters/data_only must be an object mapping an asset "
+            f"class to a list of leaf names, got {type(raw).__name__}."
+        )
+    out: Dict[str, List[str]] = {}
+    for asset_class, leaves in raw.items():
+        if asset_class.startswith("//"):
+            continue
+        if not isinstance(leaves, list) or not all(isinstance(x, str) for x in leaves):
+            raise ValueError(
+                f"{CONFIG_PATH}: parameters/data_only/{asset_class} must be a LIST of "
+                f"leaf names, got {type(leaves).__name__}."
+            )
+        out[asset_class] = list(leaves)
+    return out
+
+
 def trading_view_run_plan_switches(phase: str) -> Dict[str, bool]:
     """The parameter paths PLUS the run-plan ancestors `phase` needs, forced true.
 
     This is what `SwitchConfig.build_trading_view` hands to the scraper, and it replaces
     `build_unblocked`'s four forced prefixes.
+
+    ⚠️ ON THE `data` PHASE, `parameters.data_only` NARROWS THE TREE — see
+    `data_only_sources`. Links still enumerate everything; only the fetch is restricted.
 
     ⚠️ THE ASSET-CLASS PREFIX IS DELIBERATELY *NOT* FORCED, WHICH CLOSES A REAL BUG.
     `build_unblocked` forced `web_scraper/trading_view/<phase>/<asset_class>` true, and
@@ -315,6 +364,20 @@ def trading_view_run_plan_switches(phase: str) -> Dict[str, bool]:
             f"Unknown TradingView phase {phase!r}. Valid: {', '.join(TV_PHASES)}."
         )
     switches = trading_view_switches()
+
+    if phase == "data":
+        for asset_class, allowed in data_only_sources().items():
+            prefix = f"web_scraper/trading_view/data/{asset_class}/"
+            keep = {f"{prefix}{leaf}" for leaf in allowed}
+            for path in list(switches):
+                # ⚠️ `startswith(prefix)` and then the FIRST segment, so a deeper tree
+                # keeps every descendant of an allowed leaf rather than only the leaf.
+                if not path.startswith(prefix):
+                    continue
+                first = path[len(prefix):].split("/", 1)[0]
+                if f"{prefix}{first}" not in keep:
+                    switches[path] = False
+
     switches["web_scraper"] = True
     switches["web_scraper/trading_view"] = True
     switches[f"web_scraper/trading_view/{phase}"] = True
@@ -373,7 +436,37 @@ def validate(all_asset_keys: Iterable[str]) -> None:
     # Its own checks (unknown asset class, a non-bool non-dict node) otherwise fire
     # only when a TradingView asset actually runs — which for a typo'd country means
     # discovering it after the browsers are up.
-    trading_view_switches()
+    switches = trading_view_switches()
+
+    # ⚠️ `data_only` IS CHECKED AGAINST THE LINKS TREE, NOT JUST FOR SPELLING. A leaf
+    # the data phase names and the links phase does not enable would send the adder to
+    # a links folder nobody filled — `log_warning` and 0 tasks, which is the silent
+    # no-op this whole file exists to prevent. Both failures raise here, before a
+    # browser starts.
+    for asset_class, leaves in data_only_sources().items():
+        if asset_class not in TV_ASSET_CLASSES:
+            problems.append(
+                f"parameters/data_only: '{asset_class}' is not a TradingView asset "
+                f"class. Valid: {', '.join(TV_ASSET_CLASSES)}"
+            )
+            continue
+        if not leaves:
+            problems.append(
+                f"parameters/data_only/{asset_class} is EMPTY. An empty list fetches "
+                f"nothing, which reads as an accident — to switch the fetch off, set "
+                f"`raw/trading_view_data` false under `assets`."
+            )
+            continue
+        prefix = f"web_scraper/trading_view/links/{asset_class}/"
+        known = {p[len(prefix):].split("/", 1)[0] for p in switches if p.startswith(prefix)}
+        for leaf in leaves:
+            if leaf not in known:
+                problems.append(
+                    f"parameters/data_only/{asset_class}: '{leaf}' is not enabled under "
+                    f"parameters/trading_view/{asset_class}, so the links phase would "
+                    f"never write its CSV and the data phase would fetch nothing. "
+                    f"Valid: {', '.join(sorted(known))}"
+                )
 
     listed: Set[str] = set()
     for group, block in config().get("assets", {}).items():

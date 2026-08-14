@@ -665,6 +665,41 @@ Each registers its own `SOURCE_NAME` and writes its own folder under `raw_data/c
   stocks 20, funds 21, forex 48, indices 50, economy 32 links; `futures/vietnam/agriculture`
   and `bonds/vietnam/corporate` **0 and legitimately so** (header-only in June too, and
   the empty path no longer raises); crypto and options queue no tasks (see below).
+- **⚠️ THE FOREX BROKER FILTER SILENTLY FAILS FOR 19 OF 47 BROKERS — issue `FLT-1`
+  (measured 2026-08-14).** `build_forex_link_scrape_actions` injects the source into
+  `selectedSearchSources["forex"]` as an UPPERCASE string. For **27 brokers it works**:
+  the links CSV holds exactly one exchange and the folder name matches it. For **19 it
+  does not** — the CSV comes back holding **49 exchanges** dominated by `FX_IDC`, which
+  is TradingView's unfiltered default list. `ibroker` enumerates 0.
+
+  It fails OPEN, which is why nothing raised for months: a broker whose filter did not
+  apply still returns thousands of rows, so every count looks healthy and
+  `_helper_extract_trading_view_links`' emptiness guards never fire.
+
+  The signature is unmistakable once counted — six brokers returned **byte-identical
+  ~16,700-symbol lists** (`velocity_trade` and `wh_selfinvest` identical at 16,748;
+  `interactive_brokers` 16,727; `osmanli_fx` 16,718; `phillip_nova` 16,716;
+  `trade_nation` 16,674), and eight more shared one 8,48x-row list, against a normal
+  broker's 48–169.
+
+  ⚠️ **The consequence lands in `data/`, not `links/`.** `_add_generic_link_data_tasks`
+  fetches whatever that broker's links CSV lists, so a contaminated list makes the DATA
+  folder disagree with its own name: before 2026-08-14, `capital_com/` held
+  `ACTIVTRADES_*` and `SAXO_*` files, and 8 folders held one identical 50-file set.
+  **The folder name tells you nothing; the filename does** — every file is named
+  `<EXCHANGE>_<SYMBOL>_<start>_<end>.csv` and the EXCHANGE in it is correct.
+  ⚠️ It also means a re-scrape of a contaminated broker is a multi-day job for data that
+  is not that broker's book: `parameters.data_only` (see `orchestration/CONTEXT.md`)
+  exists to keep the fetch on the 27 that work while links still enumerate all 47.
+
+- **⚠️ `_add_generic_link_data_tasks` READS ONE LINKS CSV PER LEAF** —
+  `sorted(csv_files, reverse=True)[0]`, the newest by filename. A leaf accumulates one
+  dated CSV per run (forex brokers hold 5), so the fetch plan is the LATEST snapshot,
+  not the union. Measured 2026-08-14 across the 10 fetched brokers: newest 897 symbols
+  vs union 898 — one symbol (`tastyfx:eurdkk`) exists only in an older snapshot, so the
+  cost here is ~0. It is worth knowing anyway: a run that came back short leaves a
+  short newest CSV, and the next data phase inherits it silently.
+
 - **⚠️ `crypto` and `options` are the two asset classes whose switch node is a LEAF** —
   no countries/sources configured beneath them — so `build_unblocked` forcing the
   run-plan ancestor true makes the NODE ITSELF an enabled path, and the adder gets a

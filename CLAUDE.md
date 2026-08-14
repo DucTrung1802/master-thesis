@@ -161,6 +161,39 @@ derived from current GICS and is **not point-in-time** — survivors only.
 today's list with no history), and **`pool__financials` was not built — it is
 `pool__fa`.**
 
+### ⚠️ FOREX: 3,074 series on disk, 357 in the database (2026-08-14)
+
+Re-scraped in two runs, both green, 0 ERROR lines: **links 47 of 47 brokers (1h09m)**,
+**data 10 brokers (2h15m, 668 fetched + 229 skipped)**. Verified symbol-by-symbol
+afterwards rather than from the green run — **897 of 897, 0 missing, 0 empty**, each
+folder single-exchange, fresh to 2026-08-13.
+
+**`parameters.data_only` is new and is the one place links and data may disagree** —
+links enumerate everything, the fetch is restricted to a subset. Data may never enable
+what links does not (the adder reads the links CSV its own leaf wrote); `validate()`
+raises on that, on an empty list and on an unknown class.
+
+| | |
+|---|---|
+| brokers enumerated | 47 of 47 — **27 clean, 19 contaminated, 1 empty** |
+| symbols fetched | 897 of 1,722 addressable = **52%** (10 of 27 clean brokers) |
+| series on disk | **3,074** — 897 fresh + 2,177 stale-but-real in mixed folders |
+| **in bronze** | **300 of 3,074 = 10%**, `MAX(date)` 2026-08-04 |
+
+⚠️ **Two new issue codes, and the blocking one is the cheap one.** **`WID-1`** —
+`gold.forex` is one wide table and 3,074 series needs **3,075 columns against
+PostgreSQL's 1,600**, so 90% of the disk cannot be ingested until it splits per exchange
+the way `gold.economy` splits per country. **No scraping is required to close it.**
+**`FLT-1`** — the forex broker filter fails OPEN for 19 of 47 brokers, returning a
+49-exchange `FX_IDC` default list; six returned byte-identical ~16,700-symbol lists.
+**37 of 47 brokers' own books are unreachable until it is fixed**, and the folder name in
+`data/forex/` tells you nothing — the filename does.
+
+⚠️ **Never sum rows across a leaf's links CSVs.** A broker folder accumulates one dated
+CSV per run (5 now) and the data adder reads only the NEWEST. Summing reads as growth
+that is not there — saxo "269 → 438" where the newest snapshot holds 169 and the union
+of all five also holds 169.
+
 ⚠️ **One asset writes no database table.** `analysis/feature_selection_economy`
 (2026-08-10) runs the selection over `pool__basic + pool__economy_<country>` and
 archives a run folder; `feature_selection` is read-only by design. It defaults to a
@@ -300,6 +333,15 @@ dagster asset materialize -f src/orchestration/definitions.py `
 with no null and ~2.7 days at 20 draws; override `budget_minutes` for that ONE
 partition rather than lowering the default. `feature_selection/CONTEXT.md` §15c.
 
+⚠️ **THE COST MODEL HAS NO TERM FOR THE TARGET AND IT IS WORTH 13.7×** (2026-08-14).
+`minutes ≈ 0.364 × channels^0.77` was fitted on 21 runs, **20 of them on the price
+LEVEL `close_adjust_5day`**. The same 357-channel `pool__forex` panel took **2,016 s**
+on that target and **146 s** on `return_5day`, because `lasso` — the dominant cost —
+zeroes every coefficient on a return and converges at once. **A 20-draw null on a wide
+pool is affordable for a return target** (357 channels + 20 draws = 41 min, measured),
+where the fitted model implies ~12 h. `evidence=no_null` on a return run is now a
+choice, not a budget. `feature_selection/CONTEXT.md` §15c-target.
+
 ⚠️ **THE SELECTION RUNS ON THE GPU NOW, AND `device` IS PART OF THE SETUP** (2026-08-10).
 Every one of the 22 archived runs recorded `device="cpu"` — the GPU had never been used —
 and simply forcing `cuda` made a run **6.8× SLOWER**, because sklearn's
@@ -390,6 +432,24 @@ takes `raw/cafef_pdfs` (100 tickers × ~1-1.7 GB), `raw/trading_view@stocks` (77
     with cwd = repo root.
 20. **Line-buffer anything long and write each unit to disk as it finishes.** A 4-hour null
     run was lost entirely to a `TextIOWrapper` that re-buffered on top of `python -u`.
+
+**A finished run is not a run that checked itself** (added 2026-08-14, all three
+measured on one `pool__forex` selection — `feature_selection/CONTEXT.md` §17)
+
+21. **A metric that CANNOT FAIL is not a pass — withdraw it.** `hit_rate` is
+    `sign(pred) == sign(y)`, and on a price-LEVEL target (`close_adjust_{h}day`) every
+    label is positive, so it is **1.0 by construction**. One run reported `+1.0000`
+    beside `ic_mean −0.1638`. It is `NaN` → `—` now. The same target makes R² −24.9,
+    which is a *measurement* of a bad target and stays.
+22. **Coverage is a scalar and a scalar cannot see a FROZEN SOURCE.** A late starter and
+    a channel dead since June both score 0.67. Read `trailing_null_sessions` beside it —
+    328 of 357 forex channels had carried no value for 40 sessions. This is §5 rule 10's
+    per-series max date, one level down, at the feature.
+23. **An all-NaN train slice is imputed to the constant `0.0` and then RANKED.** There is
+    no median to take, so `_impute` invents one in a unit the channel never had. **197 of
+    357 channels in fold 1**, and **44 of the 66 SELECTED**. `validation.csv` carries
+    `n_dead_train`/`n_dead_test` per fold now. ⚠️ A rising `ic_trend_per_fold` on a ragged
+    pool measures **data arrival**, not a strengthening signal.
 
 ### 5a. ⚠️ RETIRED — do not go looking for these, and do not follow old advice about them
 
@@ -562,10 +622,13 @@ archived runs with them. Nothing is lost: they were force-added on 2026-08-09, s
 Everything downstream inherited that, and the provenance sentence travels verbatim from
 the table `COMMENT` into the dataset `metadata.json` into every run's `lineage`.
 
-**Open issues live in [ISSUES.md](ISSUES.md)** (5 open, 18 resolved, codes permanent).
-Short version: `EVD-1` the missing nulls are ~1,000 CPU-hours, `NUL-1` the evaluator's null
-is structurally weak, `DRF-1` 18 channels put 100% of test beyond 5 train-sigmas, `COV-1`
-248 of 952 shortlisted rows sit below 0.95 coverage, `RPR-1` datasets/runs are git-ignored.
+**Open issues live in [ISSUES.md](ISSUES.md)** (9 open, 28 resolved, codes permanent).
+Short version: ⚠️ **`WID-1` BLOCKING** — `gold.forex` needs 3,075 columns against
+PostgreSQL's 1,600, so **90% of the forex on disk cannot reach the database**; `FLT-1`
+the TradingView forex broker filter fails open for 19 of 47 brokers; `EVD-1` the missing
+nulls are ~1,000 CPU-hours, `NUL-1` the evaluator's null is structurally weak, `DRF-1` 18
+channels put 100% of test beyond 5 train-sigmas, `COV-1` 248 of 952 shortlisted rows sit
+below 0.95 coverage, `RPR-1` datasets/runs are git-ignored.
 
 ---
 
@@ -586,11 +649,14 @@ is structurally weak, `DRF-1` 18 channels put 100% of test beyond 5 train-sigmas
 | [experiment/CONTEXT.md](experiment/CONTEXT.md) | 7k | the 9 exploratory experiments — signal discovery, tradability, point-in-time data, VN OCR |
 | [experiment/experiment_10/CONTEXT.md](experiment/experiment_10/CONTEXT.md) | 36k | writing the literature chapter. **§"Combined reading" (line 2877) is the distillate** — read that alone unless you need a specific paper |
 
-⚠️ **[ISSUES.md](ISSUES.md) (~4k) is the second file to open, not an afterthought.** Seven
-open issues, and three of them change how a number may be read: **NUL-3** (the panel null
-is not label-neutral — on a panel quote the daily-IC t-stat, never `ic_clears`), **NUL-1**
-(no null here prices in selection or architecture search), **RPR-1** (29 run folders were
-deleted 2026-08-10 and are unrecoverable).
+⚠️ **[ISSUES.md](ISSUES.md) (~4k) is the second file to open, not an afterthought.** Nine
+open issues. One BLOCKS work — **WID-1** (`gold.forex` needs 3,075 columns against
+PostgreSQL's 1,600, so 90% of the forex on disk cannot be ingested) — and three change
+how a number may be read: **NUL-3** (the panel null is not label-neutral — on a panel
+quote the daily-IC t-stat, never `ic_clears`), **NUL-1** (no null here prices in
+selection or architecture search), **RPR-1** (29 run folders were deleted 2026-08-10 and
+are unrecoverable). **FLT-1** bounds what forex data can exist at all: 19 of 47 broker
+filters fail open, so 37 brokers' books are unreachable.
 
 Other roots: `THESIS_PROGRESS_2026*.md` /
 `THESIS_SUMMARY_2026_VI.md` (deliverable write-ups), `feature_groups.md`,

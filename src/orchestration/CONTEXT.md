@@ -900,6 +900,39 @@ under a group name; sets owned by one asset keep that asset's key.
 | `raw/cafef_pdfs` | 100 `<EX>_<TICKER>` | itself |
 | `raw/cafef_financials` | `HOSE_VCB`, `HOSE_ACB` | itself |
 
+#### ⚠️ `parameters.data_only` — the ONE place links and data may disagree (2026-08-14)
+
+```jsonc
+"parameters": {
+    "trading_view": { "forex": { "saxo": true, "oanda": true, /* …all 47… */ } },
+    "data_only":    { "forex": [ "saxo", "oanda", /* …10 of them… */ ] }
+}
+```
+
+`trading_view_switches` emits ONE tree under both phase prefixes, deliberately — two
+trees is exactly how `switch_config.json` drifted to a one-value difference nobody
+noticed. **That rule still holds for the dangerous direction: data may never enable what
+links does not**, because the data adder reads the links CSV its own leaf wrote
+(`_add_generic_link_data_tasks` derives `links/<sub_parts>` from the enabled DATA path),
+and a leaf with no CSV is a `log_warning` and a silent no-op.
+
+**The safe direction turned out to be a real requirement.** Enumerating forex is cheap —
+47 brokers, 5.5 MB, minutes — and fetching it is not: ~50 s per symbol behind a global
+8-second navigation gate. Wanting the whole universe LISTED and a subset FETCHED had no
+expression at all before this; the only lever was switching a broker off in the shared
+tree, which also stopped its links being collected, so **the recorded universe silently
+shrank to whatever was being fetched.**
+
+- absent class → no restriction, every leaf its tree enables is fetched
+- **empty list → raises.** "Fetch nothing" is what `assets/raw/trading_view_data: false`
+  is for; an empty list here reads as an accident
+- a leaf not enabled under `parameters/trading_view/<class>` → **raises at
+  definition-validation time**, listing the valid ones, before a browser starts
+- it filters the FIRST level below the class only. `forex/<broker>` is one level and is
+  what this was built for; `stocks/<country>/<type>/<sector>` would filter on
+  `<country>`. Deeper selection needs a path prefix, and inventing that before something
+  needs it is how the last config reached 676 keys
+
 The loading moved out of `definitions.py` into [enabled.py](enabled.py), and that is not
 tidiness: a partition toggle has to be applied where the `PartitionsDefinition` is BUILT
 — inside `assets/scrape.py` and `assets/unified.py`, at import time — which is long
@@ -919,6 +952,9 @@ Behaviour, all verified:
 | a key matching no asset | **raises**, listing the valid keys |
 | **an unknown asset class under `parameters`** | **raises** at definition-validation time, listing the nine |
 | **a `parameters` node that is neither bool nor object** | **raises**, quoting the path *as authored* |
+| **`data_only` naming a leaf `trading_view` does not enable** | **raises** — data without links is a silent no-op |
+| **an empty `data_only` list** | **raises** — "fetch nothing" belongs in `assets`, not here |
+| **`data_only` under an unknown asset class** | **raises**, listing the nine |
 | **a resurrected `src/switch_config.json`** | **raises** — superseded, like the other two |
 | **`"raw/trading_view": {"bnods": false}`** (bad partition) | **raises**, listing that owner's valid partitions |
 | **a partition under the wrong owner** | **raises** — "not a partition set" |
@@ -1245,13 +1281,72 @@ ops:
       skip_existing: false
 ```
 
+#### ✅ THE FOREX RE-SCRAPE — all 47 brokers enumerated, 10 fetched (2026-08-14)
+
+Two runs, both green, **0 ERROR lines**:
+
+| phase | select | result |
+|---|---|---|
+| links | `raw/trading_view_links --partition forex` | 47 tasks, **1h09m**, 47 CSVs |
+| data | `raw/trading_view_data --partition forex` | **668 queued, 229 skipped**, **2h15m** |
+
+**Verified symbol-by-symbol afterwards, not taken from the green run** (§5 rule 10):
+all **897** symbols the ten brokers' newest links CSVs list have a file, **0 missing, 0
+empty**, thinnest series 270 rows, each folder single-exchange with folder name ==
+exchange.
+
+| broker | symbols | last date | | broker | symbols | last date |
+|---|---|---|---|---|---|---|
+| `saxo` | 169 | 2026-08-14 | | `tastyfx` | 81 | 2026-08-13 |
+| `b2prime` | 107 | *2026-08-07* | | `fxpro` | 74 | *2026-08-07* |
+| `ig` | 97 | 2026-08-13 | | `skilling` | 74 | 2026-08-13 |
+| `pepperstone` | 94 | 2026-08-14 | | `activtrades` | 48 | *2026-08-07* |
+| `swissquote` | 85 | 2026-08-13 | | `oanda` | 68 | 2026-08-13 |
+
+⚠️ **The three at 2026-08-07 are the 229 `skip_existing=True` skipped** — and they are
+exactly the three folders whose filter had worked in the earlier scrape, so their files
+were already in the right place. The other seven had their data filed under
+`fp_markets/` and `capital_com/`, which the per-folder glob cannot see, so they
+refetched in full. **`skip_existing` is a per-FOLDER check, not a per-series one.**
+
+⚠️ **THE SELECTION IS `parameters.data_only`, AND THE 10 ARE A MEASUREMENT.** Ranked by
+symbols TradingView lists for each broker whose filter works: saxo 169, b2prime 107, ig
+97, pepperstone 94, swissquote 85, tastyfx 81, fxpro 74, skilling 74, activtrades 48,
+oanda 68. **Every one of the 19 contaminated brokers is excluded by construction** —
+fetching one is 8,500–16,700 symbols of `FX_IDC` that is not that broker's book.
+
+⚠️ **THE LINKS RE-SCRAPE COLLECTED NOTHING NEW, AND A ROW COUNT SAYS OTHERWISE.** Each
+broker folder accumulates one dated CSV per run (5 now), and summing rows across them
+reads as growth — saxo "269 → 438" — while the newest snapshot holds **169** and the
+union of all five holds **169**. Across the ten: newest 897, union 898, the difference
+being one symbol in an older snapshot. **Count symbols from the newest CSV; never sum
+rows across a leaf's history.**
+
+**State of the class after both runs** (measured 2026-08-14):
+
+| | |
+|---|---|
+| brokers enumerated | **47 of 47**; 27 clean, 19 contaminated (`FLT-1`), 1 empty |
+| symbols fetched, clean | **897 of 1,722** addressable = **52%**, 10 of 27 brokers |
+| distinct series on disk | **3,074** across 47 exchanges, 6,189 files |
+| — fresh 2026-08-13, correctly filed | 897 (**29%**) |
+| — stale 2026-08-08, in mixed folders | 2,177 (**71%**) — real data, wrong folder names |
+| **in bronze** | **300 of 3,074 = 10%**; bronze holds 357 series, `MAX(date)` 2026-08-04 |
+
+⚠️ **90% OF WHAT IS ON DISK IS NOT IN THE DATABASE, AND THE INGEST IS BLOCKED, NOT
+MERELY PENDING** — issue `WID-1`. Bronze and silver would load it (both are long), but
+`gold.forex` is ONE wide table and 3,074 series needs **3,075 columns against
+PostgreSQL's 1,600**. It needs the split `gold.economy` already uses. Until then every
+further hour of scraping widens the gap rather than closing it.
+
 ⚠️ **THE MEASURE SET SHRINKS AS THE ENTITY COUNT GROWS, and that is a ceiling talking,
 not taste.** PostgreSQL allows 1,600 columns per table. 9 tenors and 19 ETFs carry the
 full 13-measure feature block comfortably; forex's **328 series would need 4,264
 columns** to do the same. So `gold.forex` carries `value` alone — which is the identical
 trade `gold.economy` already makes at 1,034 series, and it is why that table has no
 features either. Anything derived is one `_helper_transform` away from `silver.forex`,
-which keeps the long grain and every column.
+which keeps the long grain and every column. ⚠️ **At 3,074 series even `value` alone no
+longer fits** — see `WID-1` above.
 
 ⚠️ **`gold.forex`'s columns are `{exchange}__{ticker}` with NO measure suffix.** At one
 measure, `saxo__eurusd__value` says "value" 328 times.
