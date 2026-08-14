@@ -1041,6 +1041,50 @@ bond data tasks at all. `MAX(date)` reads 2026-08-07 on all three. ⚠️ `stock
 days short for a DIFFERENT reason — it is a CafeF chain (`raw/cafef_index_*` → bronze →
 `silver.stock_market` → gold), refreshed by materialising that chain.
 
+#### `_ingest_unified_pool_basic_bank` (2026-08-14)
+
+The fifth date-broadcast pool and **the only one with no table behind it**. There is no
+`gold.stocks_bank_wide`, so it PIVOTS `silver.stocks_basic` (GICS `industry_code
+401010`) on the fly — one `MAX(CASE WHEN exchange = … AND ticker = … THEN <measure> END)`
+per channel, grouped by date — and hands the subquery to
+`_helper_unified_pool_on_date_spine`. **20 banks × 27 measures = 540 channels**; VCB is
+**4,266 × 543** in 8.0 s, **0 mismatches** against silver across all 540.
+
+⚠️ **The helper grew `relation` + `feature_columns` for this**, passed together or not
+at all: a derived panel has no table for `_helper_column_types` to introspect, and a
+relation whose columns were guessed is the failure the pair exists to prevent. Every
+query aliases the relation `f`, which is what lets a bare `schema.table` and a
+parenthesised subquery both sit in FROM position.
+
+⚠️ **`MAX(CASE …)` is only correct because `(date, exchange, ticker)` is
+`silver.stocks_basic`'s PRIMARY KEY** — at most one row matches each CASE, so `MAX`
+picks a value rather than choosing between two.
+
+⚠️ **IT FOUND `pool__basic` 12 COLUMNS BEHIND ITS OWN SOURCE.** 540 channels, not the
+300 predicted from `pool__basic`'s 15 measures, because `silver.stocks_basic` has **38**
+columns and the pool on disk has **26** — missing `foreign_{buy,sell,net}_{value,volume}`,
+`foreign_own`, `foreign_room_left` and `prop_{buy,sell}_{val,vol}`. The `pool__basic`
+asset CTASes `SELECT *` and asserts the column set, so a rebuild widens it 26 → 38
+without changing a row. Until then this pool is the only place in `unified_schema_vcb`
+carrying VCB's own foreign flow.
+
+⚠️ **The schema's own ticker is one of the channels, and the asset ASSERTS it.** On
+`unified_schema_vcb`, `hose__vcb__<m>` must equal `pool__basic.<m>` — 15 mirrored
+measures, **0 mismatches**, and a non-zero count raises because it would mean the pivot
+is reading the wrong row. Kept rather than dropped because a date-broadcast pool's
+column set must not depend on the partition: "self" is meaningless on `BANK` and `ALL`.
+⚠️ The consumer's problem is real — `pool__basic ⋈ pool__basic_bank` holds each VCB
+measure twice.
+
+⚠️ **Membership is DERIVED from the same GICS predicate `unified_schema_bank` uses, and
+is NOT point-in-time**: today's code on every historical row, no delisted name, so these
+are the banks that survived to 2026 carried back to 2009. Per-member coverage is the
+listing date and nothing else (`stb`/`vcb`/`ctg` 79.3% → `abb` 26.5%).
+
+⚠️ **`pool__basic_vn30` was DEFERRED** (2026-08-14): `vn30.csv` is today's list with no
+history at all, strictly worse than a derived predicate. **`pool__financials` was not
+built — it is `pool__fa`.**
+
 ⚠️ **`pool__stock_market` CARRIES THE TARGET'S OWN BENCHMARK.**
 `hose__vnindex__close_adjust` is `UNIFIED_BENCHMARK_COLUMN`, the series
 `_ingest_unified_pool_targets` subtracts:

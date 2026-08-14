@@ -21,7 +21,7 @@ to prove, which is mostly negative and deliberately so.
 | | |
 |---|---|
 | database | PostgreSQL `database_main_v2`, schemas `bronze_schema` / `silver_schema` / `gold_schema` / `unified_schema_<universe>`. Creds in repo `.env` (`POSTGRES_*`) |
-| orchestrator | **Dagster, 79 assets** — `src/orchestration/` is THE entry point |
+| orchestrator | **Dagster, 80 assets** — `src/orchestration/` is THE entry point |
 | universe | 781 VN tickers (HOSE/HNX/UPCOM); VCB is the single-name focus, VN30/VN100/LIQUID301/ALL/BANK the cross-sections |
 | model | LSTM (2×128, ~276k params) and **CNN** (`Conv1d` over time) + the chain in §3b. `model/common/engine.py` is the shared engine — a model package is a `model.py` + a ~30-line binding, **never a copy of `train.py`** |
 | interpreter | `mt_env` venv (`d:/GIT/master-thesis/mt_env`), Python 3.12.10, Windows, RTX 3050 4 GB |
@@ -92,7 +92,7 @@ Three things this ladder means:
 
 ## 3. The pipeline, end to end
 
-### 3a. Data — Dagster, 79 assets, `src/orchestration/`
+### 3a. Data — Dagster, 80 assets, `src/orchestration/`
 
 ```
 raw_data/<source>/            19 landing assets   scrapers: TradingView (universe+OHLCV,
@@ -107,10 +107,11 @@ silver_schema                 20 assets                 canonical, cross-source 
 gold_schema                   10 assets                 + features (TA battery ~900 cols,
       │                                                 returns, vol, as-of macro)
       ▼
-unified_schema_<universe>      9 assets × 3 partitions  pool__basic / __targets /
+unified_schema_<universe>     10 assets × 3 partitions  pool__basic / __targets /
                                                         __economy_<country>×19 / __forex /
                                                         __funds / __bonds /
-                                                        __stock_market / __ta / __fa
+                                                        __stock_market / __basic_bank /
+                                                        __ta / __fa
                               partitions: VCB | BANK | ALL
       ▼
 reports/feature_selection/     1 asset × 19 partitions   analysis/feature_selection_economy
@@ -144,6 +145,21 @@ foreign-flow measures are the closest anything in this database gets to §2d's t
 index. ⚠️ On `pool__bonds` **the slope is the signal and it is not a column**:
 `vn10y − vn02y` must be derived. `orchestration/CONTEXT.md` §"`pool__forex`" /
 §"`pool__funds`" / §"`pool__bonds`" / §"`pool__stock_market`".
+
+⚠️ **`unified/pool__basic_bank` (2026-08-14) is the fifth, and the only one with NO
+TABLE BEHIND IT.** `silver.stocks_basic` filtered to GICS 401010 and **pivoted on the
+fly** to `{exchange}__{ticker}__{measure}` — 20 banks × 27 measures = **540 channels**,
+VCB 4,266 × 543, 0 mismatches against silver. ⚠️ **It found that `pool__basic` is 12
+columns behind its own source**: silver has 38, the pool on disk has 26, and the missing
+twelve are all flow (`foreign_*` ×8, `prop_*` ×4). `unified/pool__basic --partition VCB`
+would widen it 26 → 38 without changing a row; until then `pool__basic_bank` is the only
+place in the schema carrying VCB's own foreign flow. ⚠️ **The schema's own ticker is one
+of the channels** — `hose__vcb__*` IS `pool__basic`'s own columns (asserted, 0 mismatches
+on 15 mirrored measures), so joining both holds each VCB measure twice. ⚠️ Membership is
+derived from current GICS and is **not point-in-time** — survivors only.
+**`pool__basic_vn30` was deferred** for the same reason in its worst form (`vn30.csv` is
+today's list with no history), and **`pool__financials` was not built — it is
+`pool__fa`.**
 
 ⚠️ **One asset writes no database table.** `analysis/feature_selection_economy`
 (2026-08-10) runs the selection over `pool__basic + pool__economy_<country>` and
@@ -262,7 +278,7 @@ dagster dev                                             # UI at localhost:3000
 dagster asset materialize -f src/orchestration/definitions.py --select "group:bronze"
 dagster asset materialize -f src/orchestration/definitions.py --select "+bronze/trading_view_economy"
 dagster asset materialize -f src/orchestration/definitions.py --select "group:unified" --partition VCB
-dagster definitions validate                            # sanity check: 79 assets, no run
+dagster definitions validate                            # sanity check: 80 assets, no run
 
 # --- model chain ---
 python -m pipeline                                      # what's stale; writes nothing

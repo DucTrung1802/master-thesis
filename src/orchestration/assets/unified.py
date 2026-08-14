@@ -13,6 +13,7 @@ holds ONE UNIVERSE cut into the FEATURE GROUPS a model selects over:
     pool__funds      21 HOSE ETFs × up to 19 measures
     pool__bonds      9 VN government tenors × 13 measures — the yield curve
     pool__stock_market  6 VN indices × 27 measures — price, order flow, foreign, prop
+    pool__basic_bank    20 GICS-401010 banks × 27 measures, PIVOTED to peer channels
     pool__ta         the ~920-column technical block
     pool__fa         the ~200-column fundamental block
 
@@ -676,6 +677,138 @@ date_spine_pool_assets: List[Callable] = [
 ]
 
 
+@asset(
+    name="pool__basic_bank",
+    key_prefix=["unified"],
+    group_name="unified",
+    compute_kind="postgres",
+    partitions_def=UNIFIED_PARTITIONS,
+    deps=[
+        AssetKey(["silver", "stocks_basic"]),
+        AssetKey(["unified", "pool__basic"]),
+    ],
+    description=(
+        "silver.stocks_basic (GICS industry_code 401010) PIVOTED to peer channels → "
+        "unified_schema_<universe>.pool__basic_bank: 20 banks × 15 measures = 300 "
+        "columns named {exchange}__{ticker}__{measure}, one row per date, broadcast "
+        "onto pool__basic's spine. ⚠️ THE ONLY DATE-BROADCAST POOL WITH NO TABLE "
+        "BEHIND IT — there is no gold.stocks_bank_wide, so the pivot is built on the "
+        "fly with one MAX(CASE WHEN ticker = …) per channel. ⚠️ Membership is DERIVED "
+        "from the same GICS predicate unified_schema_bank uses, and is NOT "
+        "point-in-time: silver.stocks_basic carries today's code on every historical "
+        "row and holds no delisted name, so these are the banks that SURVIVED to 2026 "
+        "carried back to 2009. ⚠️ THE SCHEMA'S OWN TICKER IS ONE OF THE CHANNELS — on "
+        "unified_schema_vcb, hose__vcb__close_adjust IS pool__basic.close_adjust "
+        "(verified, 0 mismatches on all 15 measures), so a consumer joining both holds "
+        "each VCB measure twice. ⚠️ The 8 GICS identity columns are excluded: constant "
+        "per ticker, so pivoting them would write 160 constant strings."
+    ),
+)
+def unified_pool_basic_bank(
+    context: AssetExecutionContext, preprocessor: PreprocessorResource
+) -> MaterializeResult:
+    universe = context.partition_key
+    schema = _schema_of(universe)
+
+    with preprocessor.session(schema=schema) as prep:
+        panel = prep._ingest_unified_pool_basic_bank(universe)
+        expected_key = tuple(prep.UNIFIED_PRIMARY_KEY)
+
+        with prep._database_driver._cursor_ctx() as cur:
+            cur.execute(
+                f"SELECT COUNT(*), COUNT(DISTINCT ticker), MIN(date), MAX(date) "
+                f"FROM {schema}.pool__basic_bank"
+            )
+            rows, tickers, first, last = cur.fetchone()
+            rows, tickers = int(rows), int(tickers)
+            primary_key = _primary_key(cur, schema, "pool__basic_bank")
+            cur.execute(f"SELECT COUNT(*) FROM {schema}.pool__basic")
+            basic_rows = int(cur.fetchone()[0])
+            # ⚠️ THE SELF-DUPLICATION IS MEASURED, NOT ASSUMED, and only where it is
+            # meaningful: on a single-company schema the spine's own ticker is one of
+            # the peers, so its channels must equal pool__basic's own columns exactly.
+            # If that ever stops holding, the pivot is reading the wrong row.
+            self_duplicated = None
+            if not prep._helper_unified_is_universe(universe):
+                cur.execute(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_schema = %s AND table_name = 'pool__basic' "
+                    "AND column_name NOT IN ('date', 'exchange', 'ticker')",
+                    (schema,),
+                )
+                own = [r[0] for r in cur.fetchall()]
+                cur.execute(
+                    f"SELECT LOWER(exchange), LOWER(ticker) FROM {schema}.pool__basic "
+                    f"LIMIT 1"
+                )
+                ex, tk = cur.fetchone()
+                mirrored = [
+                    (c, f"{ex}__{tk}__{c}")
+                    for c in own
+                    if f"{ex}__{tk}__{c}" in panel["channels"]
+                ]
+                mismatches = 0
+                for own_col, peer_col in mirrored:
+                    cur.execute(
+                        f"SELECT COUNT(*) FROM {schema}.pool__basic b "
+                        f"JOIN {schema}.pool__basic_bank p USING (date, exchange, ticker) "
+                        f'WHERE b."{own_col}" IS DISTINCT FROM p."{peer_col}"'
+                    )
+                    mismatches += int(cur.fetchone()[0])
+                self_duplicated = (len(mirrored), mismatches)
+
+    if primary_key != expected_key:
+        raise ValueError(
+            f"{schema}.pool__basic_bank primary key is {primary_key}, expected "
+            f"{expected_key} — order is part of the contract."
+        )
+    if rows != basic_rows:
+        raise ValueError(
+            f"{schema}.pool__basic_bank has {rows} rows against pool__basic's "
+            f"{basic_rows}. A peer pool adds columns, never rows."
+        )
+    if self_duplicated and self_duplicated[1]:
+        raise ValueError(
+            f"{schema}.pool__basic_bank: {self_duplicated[1]} value(s) of the spine's "
+            f"OWN ticker disagree with pool__basic across {self_duplicated[0]} mirrored "
+            f"measure(s). The pivot is reading the wrong row."
+        )
+
+    coverage = 100.0 * panel["populated_rows"] / max(rows, 1)
+    context.log.info(
+        f"{schema}.pool__basic_bank: {rows} rows × {panel['features']} channels "
+        f"({panel['members']} members × {panel['measures']} measures), {tickers} "
+        f"ticker(s) ({first} → {last}) — {coverage:.1f}% of rows carry at least one "
+        f"value"
+        + (
+            f"; own ticker mirrored on {self_duplicated[0]} measures, 0 mismatches"
+            if self_duplicated
+            else ""
+        )
+    )
+    return MaterializeResult(
+        metadata={
+            "rows": rows,
+            "columns": panel["features"] + len(expected_key),
+            "channels": panel["features"],
+            "members": panel["members"],
+            "measures_per_member": panel["measures"],
+            "tickers": tickers,
+            "pool__basic_rows": basic_rows,
+            "populated_rows": panel["populated_rows"],
+            "row_coverage_pct": MetadataValue.float(round(coverage, 2)),
+            "universe": MetadataValue.text(universe),
+            "primary_key": MetadataValue.text(", ".join(primary_key)),
+            "source": MetadataValue.text(panel["source"]),
+            "date_range": MetadataValue.text(f"{first} → {last}"),
+            "own_ticker_mirrored_measures": (
+                self_duplicated[0] if self_duplicated else 0
+            ),
+            "table": MetadataValue.text(f"{schema}.pool__basic_bank"),
+        }
+    )
+
+
 # ── The two FEATURE pools: pool__ta and pool__fa ─────────────────────────────────
 #
 # Both are one gold table sliced to this universe and re-keyed onto `pool__basic`'s
@@ -851,5 +984,6 @@ assets: List[Callable] = [
     unified_pool_targets,
     unified_pool_economy,
     *date_spine_pool_assets,
+    unified_pool_basic_bank,
     *feature_pool_assets,
 ]

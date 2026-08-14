@@ -6069,14 +6069,184 @@ class DataPreprocessor:
             noun="index series",
         )
 
-    def _helper_unified_pool_on_date_spine(
-        self, ticker: str, pool: str, source: str, noun: str
-    ) -> dict:
-        """Shared body of `_ingest_unified_pool_forex` / `_ingest_unified_pool_funds`.
+    # ⚠️ THE FIRST DATE-BROADCAST POOL WITH NO TABLE BEHIND IT. Every other one copies
+    # a wide gold panel that already exists; there is no `gold.stocks_bank_wide`, so
+    # this one PIVOTS `silver.stocks_basic` on the fly — one `MAX(CASE WHEN ticker = …)`
+    # per (ticker × measure), grouped by date — and hands the subquery to the shared
+    # helper. Server-side throughout: a pandas round-trip would return every `numeric`
+    # as `Decimal`, land it as dtype `object`, and write the whole panel back as VARCHAR.
+    UNIFIED_PEER_SOURCE = f"{SILVER_SCHEMA}.stocks_basic"
 
-        A wide gold panel keyed on `date` ALONE, LEFT JOINed onto `pool__basic` and
+    def _ingest_unified_pool_basic_bank(self, ticker: str) -> dict:
+        """The BANK sector's `pool__basic` measures as PEER CHANNELS on this spine.
+
+        `silver.stocks_basic` filtered to GICS `industry_code = 401010`, pivoted to
+        `{exchange}__{ticker}__{measure}` — one column per bank per measure, one row
+        per date — and LEFT JOINed onto `pool__basic`. **20 banks × 15 measures = 300
+        columns.**
+
+        ⚠️ **MEMBERSHIP IS DERIVED, AND IT IS THE SAME PREDICATE `unified_schema_bank`
+        USES.** It comes from `UNIFIED_MEMBER_FILTERS[UNIFIED_BANK]` — the GICS
+        classification `silver.stocks_basic` already carries — not from a ticker list.
+        A bank listing or being reclassified is picked up by a rebuild.
+
+        ⚠️ **AND IT IS NOT POINT-IN-TIME.** `silver.stocks_basic` holds today's GICS
+        code on every historical row and **no delisted name at all**, so these 20
+        channels are the banks that survived to 2026 carried back to 2009. A bank that
+        listed in 2018 is simply NULL before it; a bank that was delisted is ABSENT.
+        Same survivorship the hub's §2c records for the universe as a whole, and the
+        reason `pool__basic_vn30` was deferred rather than built beside this
+        (2026-08-14 decision — `vn30.csv` is today's list with no history at all,
+        which is strictly worse than a derived GICS predicate).
+
+        ⚠️ **THE SCHEMA'S OWN TICKER IS ONE OF THE CHANNELS.** On
+        `unified_schema_vcb`, `hose__vcb__close_adjust` IS `pool__basic.close_adjust` —
+        verified 2026-08-14, 0 mismatches on all 15 measures. It is kept rather than
+        dropped because the column set of a date-broadcast pool must not depend on
+        which partition is being built: dropping "self" is meaningless on `BANK` (every
+        row has a different self) and on `ALL`. **A consumer joining
+        `pool__basic ⋈ pool__basic_bank` on `unified_schema_vcb` holds each VCB measure
+        twice**, and the correlation prune will spend budget rediscovering that unless
+        the duplicate is excluded up front.
+
+        ⚠️ **IDENTITY COLUMNS ARE EXCLUDED**, as they are from `pool__ta` / `pool__fa`.
+        The 8 GICS columns are constant per ticker, so pivoting them would write 160
+        constant strings — and `FeatureSelector._prepare` would drop every one after
+        paying to read it.
+        """
+        schema = self._helper_unified_schema(ticker)
+        predicate, params = self._helper_unified_member_filter(self.UNIFIED_BANK)
+        source_schema, source_table = self.UNIFIED_PEER_SOURCE.split(".", 1)
+
+        source_types = self._helper_column_types(source_schema, source_table)
+        if not source_types:
+            raise MissingSourceDataError(
+                f"`{self.UNIFIED_PEER_SOURCE}` does not exist — build silver first."
+            )
+        measures = [
+            column
+            for column in source_types
+            if column not in set(self.UNIFIED_PRIMARY_KEY) | set(self.UNIFIED_POOL_IDENTITY)
+        ]
+        if not measures:
+            raise MissingSourceDataError(
+                f"`{self.UNIFIED_PEER_SOURCE}` has no measure columns outside the key "
+                f"and the GICS identity block."
+            )
+
+        with self._database_driver._cursor_ctx() as cur:
+            cur.execute(
+                f"SELECT DISTINCT exchange, ticker FROM {self.UNIFIED_PEER_SOURCE} "
+                f"WHERE {predicate} ORDER BY exchange, ticker",
+                params,
+            )
+            members = [(str(row[0]), str(row[1])) for row in cur.fetchall()]
+
+        if not members:
+            raise MissingSourceDataError(
+                f"The {self.UNIFIED_BANK} predicate ({predicate!r} {params}) matches no "
+                f"row of `{self.UNIFIED_PEER_SOURCE}`, so the peer pool would be empty."
+            )
+        # ⚠️ EVERY PART OF EVERY COLUMN NAME IS AN IDENTIFIER READ OUT OF THE DATABASE,
+        # so it is validated before interpolation — the same rule `_helper_unified_schema`
+        # applies to a ticker, for the same reason. A measure name comes from
+        # information_schema and an exchange/ticker from a data row; neither can be bound.
+        for exchange, member in members:
+            for part in (exchange, member):
+                if not self.UNIFIED_TICKER_PATTERN.match(part):
+                    raise PipelineError(
+                        f"`{self.UNIFIED_PEER_SOURCE}` holds {part!r} in an identifier "
+                        f"position; it cannot safely name a pool column."
+                    )
+
+        # {exchange}__{ticker}__{measure} — the naming every wide gold panel uses, and
+        # the reason the separator is DOUBLE: measures carry single underscores
+        # (`avg_vol_per_buy_order`), so only `__` can be split back.
+        channels: List[str] = []
+        projections: List[str] = []
+        for exchange, member in members:
+            for measure in measures:
+                column = f"{exchange.lower()}__{member.lower()}__{measure}"
+                if len(column) > 63:
+                    raise PipelineError(
+                        f"Pool column {column!r} is {len(column)} characters; "
+                        f"PostgreSQL truncates identifiers at 63, which would silently "
+                        f"collide two channels."
+                    )
+                channels.append(column)
+                projections.append(
+                    f"MAX(CASE WHEN s.exchange = '{exchange}' AND s.ticker = "
+                    f"'{member}' THEN s.{measure} END) AS {column}"
+                )
+
+        # ⚠️ `MAX(CASE …)` is the pivot, and it is only correct because
+        # `(date, exchange, ticker)` is `silver.stocks_basic`'s PRIMARY KEY — at most
+        # one row can match each CASE, so MAX picks a value rather than choosing
+        # between two. A source with duplicate keys would silently publish the larger.
+        #
+        # ⚠️ The WHERE narrows to the SAME members the CASEs already select, so it is a
+        # scan optimisation and not the filter — dropping it would give an identical
+        # table from 2.4 M rows instead of ~55 k. It restricts on the resolved member
+        # list rather than re-stating the GICS predicate, because the predicate is
+        # PARAMETERISED (`_helper_unified_member_filter` keeps a GICS code a value) and
+        # this string reaches `cur.execute` with no params of its own. The literals
+        # below are the same ticker/exchange values already interpolated into the CASE
+        # expressions, and they passed `UNIFIED_TICKER_PATTERN` above — there is no way
+        # to parameterise a CASE-per-member anyway.
+        members_in = ", ".join(
+            f"('{exchange}', '{member}')" for exchange, member in members
+        )
+        relation = (
+            f"(SELECT s.date, {', '.join(projections)} "
+            f"FROM {self.UNIFIED_PEER_SOURCE} s "
+            f"WHERE (s.exchange, s.ticker) IN ({members_in}) "
+            f"GROUP BY s.date)"
+        )
+
+        self._logger.log_info(
+            f"Ingesting unified {schema}.pool__basic_bank: {len(members)} member(s) × "
+            f"{len(measures)} measures = {len(channels)} channels."
+        )
+        result = self._helper_unified_pool_on_date_spine(
+            ticker,
+            "pool__basic_bank",
+            f"{self.UNIFIED_PEER_SOURCE} (industry_code {params[0]}, pivoted)",
+            noun="peer channel",
+            relation=relation,
+            feature_columns=channels,
+        )
+        result["members"] = len(members)
+        result["measures"] = len(measures)
+        result["channels"] = channels
+        return result
+
+    def _helper_unified_pool_on_date_spine(
+        self,
+        ticker: str,
+        pool: str,
+        source: str,
+        noun: str,
+        relation: Optional[str] = None,
+        feature_columns: Optional[Sequence[str]] = None,
+    ) -> dict:
+        """Shared body of every DATE-BROADCAST pool.
+
+        A wide panel keyed on `date` ALONE, LEFT JOINed onto `pool__basic` and
         broadcast across its tickers. Returns a metadata dict; `noun` names the source's
         entity in log lines and error messages.
+
+        `source` is a `schema.table` and, by default, both the thing joined and the
+        thing whose columns are read. ⚠️ **`relation` + `feature_columns` override that
+        for a DERIVED panel** — `_ingest_unified_pool_basic_bank` pivots
+        `silver.stocks_basic` on the fly and has no table for `_helper_column_types` to
+        introspect, so it passes the subquery and the column list it just generated.
+        Both or neither: a relation whose columns were guessed is the failure this pair
+        exists to prevent. `source` stays the human-readable name in every message.
+
+        ⚠️ **EVERY QUERY ALIASES THE RELATION `f`**, which is what lets a bare
+        `schema.table` and a parenthesised subquery both sit in FROM position. A
+        subquery without an alias is a syntax error in PostgreSQL, and one WITH its own
+        alias would collide.
 
         ⚠️ **LEFT JOIN, never INNER.** An INNER JOIN would silently DROP every spine
         date the source does not cover — 1,351 of 4,266 rows for `gold.funds`, which
@@ -6084,7 +6254,14 @@ class DataPreprocessor:
         calendar under its own primary key.
         """
         schema = self._helper_unified_schema(ticker)
-        source_schema, source_table = source.split(".", 1)
+        derived = relation is not None or feature_columns is not None
+        if derived and (relation is None or feature_columns is None):
+            raise PipelineError(
+                f"{pool}: `relation` and `feature_columns` must be given together. A "
+                f"derived panel has no table to introspect, so a relation without an "
+                f"explicit column list would be reading columns off the wrong object."
+            )
+        relation = relation if derived else source
 
         if not self._helper_column_types(schema, "pool__basic"):
             raise MissingSourceDataError(
@@ -6092,17 +6269,25 @@ class DataPreprocessor:
                 "calendar spine for every unified feature pool."
             )
 
-        source_types = self._helper_column_types(source_schema, source_table)
+        if derived:
+            source_types = {"date": "date", **{c: "" for c in feature_columns}}
+        else:
+            source_schema, source_table = source.split(".", 1)
+            source_types = self._helper_column_types(source_schema, source_table)
         if not source_types:
             raise MissingSourceDataError(
-                f"`{source}` does not exist — build gold `{source_table}` first."
+                f"`{source}` does not exist — build it first."
             )
         if "date" not in source_types:
             raise MissingSourceDataError(
                 f"`{source}` has no `date` column, so it cannot join the unified "
                 "trading-day spine."
             )
-        feature_columns = [column for column in source_types if column != "date"]
+        feature_columns = (
+            list(feature_columns)
+            if derived
+            else [column for column in source_types if column != "date"]
+        )
         if not feature_columns:
             raise MissingSourceDataError(f"`{source}` contains no {noun} columns.")
         duplicate_keys = set(feature_columns) & set(self.UNIFIED_PRIMARY_KEY)
@@ -6123,7 +6308,7 @@ class DataPreprocessor:
                     "calendar to join."
                 )
 
-            cur.execute(f"SELECT COUNT(*), COUNT(DISTINCT date) FROM {source}")
+            cur.execute(f"SELECT COUNT(*), COUNT(DISTINCT date) FROM {relation} f")
             source_rows, source_dates = (int(value) for value in cur.fetchone())
             if not source_rows:
                 raise MissingSourceDataError(f"`{source}` is empty.")
@@ -6139,7 +6324,7 @@ class DataPreprocessor:
 
             cur.execute(
                 f"SELECT COUNT(*) FROM {schema}.pool__basic b "
-                f"JOIN {source} f ON f.date = b.date"
+                f"JOIN {relation} f ON f.date = b.date"
             )
             matched_rows = int(cur.fetchone()[0])
             if not matched_rows:
@@ -6158,7 +6343,7 @@ class DataPreprocessor:
                 f"CREATE TABLE {schema}.{pool} AS "
                 f"SELECT b.date, b.exchange, b.ticker, {selected} "
                 f"FROM {schema}.pool__basic b "
-                f"LEFT JOIN {source} f ON f.date = b.date"
+                f"LEFT JOIN {relation} f ON f.date = b.date"
             )
             self._helper_unified_primary_key(cur, schema, pool)
 

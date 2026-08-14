@@ -178,7 +178,7 @@ PARTITIONS of two assets, not 320 assets. The remaining 61 map to ~55-65 assets.
 
 ## 2. What exists — LANDING + BRONZE complete, silver started (2026-08-01)
 
-**79 assets: 19 landing + 20 bronze + 20 silver + 10 gold + 9 unified + 1 analysis** (was 75
+**80 assets: 19 landing + 20 bronze + 20 silver + 10 gold + 10 unified + 1 analysis** (was 75
 until the four date-broadcast pools were added 2026-08-13). Every scraper
 lands to `raw_data/` as an asset ([assets/scrape.py](assets/scrape.py)); every
 bronze ingest leaf is an asset ([assets/bronze.py](assets/bronze.py), 20 leaves → 25
@@ -236,7 +236,7 @@ raw/cafef_financials[t] ─► bronze/cafef_financials ─► silver/cafef_finan
 | `bronze` | **all 20 ingest leaves** (25 tables) | — |
 | `silver` | `economy` (long fact), `economy_series` (dimension), `bonds`/`funds`/`forex` (TradingView projections), `stock_market` (4 index tabs), `stocks_basic` (6 sources), `cafef_financials_bank` (quarterly), `stocks_basic_financials_bank` (as-of daily), `…_fa` (+26 indicators) | — |
 | `gold` | `economy` (wide, as-of), `bonds`/`funds`/`forex` (wide, unfilled), `stock_market` (wide, unfilled), `stocks` (price panel, no features), `stocks_ta` (+ the ~900-column TA block), `stocks_financials_bank_fa` (feature panel), `news_{weekly,daily}_panel` | — |
-| `unified` | `pool__basic`, `pool__targets`, `pool__economy` (19 country tables), `pool__forex` + `pool__funds` + `pool__bonds` + `pool__stock_market` (2026-08-13, one spec table), `pool__ta`, `pool__fa` | **3** — `VCB` / `BANK` / `ALL`, the universe |
+| `unified` | `pool__basic`, `pool__targets`, `pool__economy` (19 country tables), `pool__forex` + `pool__funds` + `pool__bonds` + `pool__stock_market` (2026-08-13, one spec table), `pool__basic_bank` (2026-08-14, pivoted on the fly), `pool__ta`, `pool__fa` | **3** — `VCB` / `BANK` / `ALL`, the universe |
 
 ### ⚠️ The edges, read out of the code (2026-07-31 correction)
 
@@ -449,7 +449,7 @@ split across the two modules.
 
 | claim | how it was checked | result |
 |---|---|---|
-| the flat `src/` layout can be imported by Dagster | `dagster definitions validate` | passes, **79 assets** (19 landing + 20 bronze + 20 silver + 10 gold + 9 unified + 1 analysis), all code locations OK — 75 until the four date-broadcast pools landed 2026-08-13 |
+| the flat `src/` layout can be imported by Dagster | `dagster definitions validate` | passes, **80 assets** (19 landing + 20 bronze + 20 silver + 10 gold + 10 unified + 1 analysis), all code locations OK — 75 until the four date-broadcast pools landed 2026-08-13 |
 | partitions resolve | reading the definitions back | TV **9**, pdfs **100**, financials **2** (`HOSE_VCB`, `HOSE_ACB`) |
 | the index scrape assets run | `--select "group:cafef_index"` | 4/4 green |
 | the TradingView path works incl. `build_unblocked` | `--select "raw/trading_view_collected_links"` | green, rewrote `all_links_2026-06-26.csv` (313 KB) |
@@ -844,7 +844,7 @@ this for "must never load in this repo".
 }
 ```
 
-All 79 assets are listed in the file as a menu, grouped by the asset's own Dagster group
+All 80 assets are listed in the file as a menu, grouped by the asset's own Dagster group
 (trading_view, cafef, cafef_index, cafef_filings, simplize, gics, bronze, silver, gold,
 unified), with `//` comment keys
 marking the expensive ones (same comment convention as `switch_config.json`).
@@ -854,7 +854,7 @@ default the change was made to remove.
 
 ### ⚠️ Everything is ON as of 2026-08-06, and that is the intended resting state
 
-**All 79 assets and every partition are `true`.** The file spent 2026-08-05 with one
+**All 80 assets and every partition are `true`.** The file spent 2026-08-05 with one
 group and one partition enabled, which is a fine way to keep a specific run honest and a
 bad way to leave a repo: the UI showed one asset, and "which module do I want today" had
 no answer without a config edit first. Level 1 is the lever — *selection is the run
@@ -925,7 +925,7 @@ Behaviour, all verified:
 | **every partition of one owner `false`** | **raises** — zero partitions is unmaterialisable; disable the ASSET instead |
 | **`--partition stocks` when `@stocks` is false** | `DagsterUnknownPartitionError`, before any work |
 | malformed JSON | **raises** — never read as "disable everything" |
-| file absent | all 79 assets, all partitions — absent means "no opinion", not "all off" |
+| file absent | all 80 assets, all partitions — absent means "no opinion", not "all off" |
 | file with a **BOM** | handled (`utf-8-sig`) |
 
 The last three are direct lessons from `switch_config.json`:
@@ -968,7 +968,7 @@ RUN_SUCCESS
 ```
 
 **Sanity check without running anything:** `dagster definitions validate` (it should
-report 79 assets and "All code locations passed validation").
+report 80 assets and "All code locations passed validation").
 
 ### ✅ Phase 1a — the whole BRONZE layer, 20 assets (2026-08-01)
 
@@ -1832,6 +1832,94 @@ scrape.
 All four: PK `(date, exchange, ticker)` verified from `pg_index`, 0 round-trip
 mismatches against gold, 0 unaligned keys, row count equal to the spine's. Adding the
 fourth was **one row in `DATE_SPINE_POOLS` plus a wrapper method**.
+
+#### ✅ `pool__basic_bank` — PEER CHANNELS, and the first pool with no table behind it (2026-08-14)
+
+`silver.stocks_basic` filtered to GICS `industry_code = 401010`, **pivoted** to
+`{exchange}__{ticker}__{measure}` — one column per bank per measure, one row per date —
+and broadcast onto `pool__basic`'s spine. **20 banks × 27 measures = 540 channels.**
+
+⚠️ **THERE IS NO `gold.stocks_bank_wide`, SO THE PIVOT IS BUILT ON THE FLY**: one
+`MAX(CASE WHEN exchange = … AND ticker = … THEN <measure> END)` per channel, grouped by
+date, handed to `_helper_unified_pool_on_date_spine` as a subquery. The helper grew a
+`relation` + `feature_columns` pair for exactly this — a derived panel has no table for
+`_helper_column_types` to introspect — and they must be passed together, because a
+relation whose columns were guessed is the failure the pair exists to prevent.
+
+⚠️ **`MAX(CASE …)` is only correct because `(date, exchange, ticker)` is
+`silver.stocks_basic`'s PRIMARY KEY.** At most one row matches each CASE, so `MAX`
+picks a value rather than choosing between two; a source with duplicate keys would
+silently publish the larger.
+
+**Built for `VCB` 2026-08-14, 8.0 s:**
+
+| check | result |
+|---|---|
+| shape | **4,266 rows × 543 columns**, 1 ticker, 2009-06-30 → 2026-08-07 |
+| PK, read back from `pg_index.indkey` | `(date, exchange, ticker)` |
+| types | 300 `numeric` + **240 `bigint`** + 2 varchar + 1 date — silver's own types |
+| every cell vs `silver.stocks_basic`, all 540 channels | **0 mismatches** |
+| rows vs `pool__basic`, symmetric `EXCEPT` | 4,266 = 4,266, 0 unaligned |
+| rows carrying ≥1 value | **100.0%** |
+| coverage per channel | min 0.87%, median 47.5%, max 100.0%, none all-NULL |
+
+##### ⚠️ IT FOUND THAT `pool__basic` IS 12 COLUMNS BEHIND ITS OWN SOURCE
+
+The channel count came out **540, not the 300** predicted from `pool__basic`'s 15
+measures — because `silver.stocks_basic` has **38 columns and
+`unified_schema_vcb.pool__basic` has 26**. Missing, all of them flow:
+
+```
+foreign_buy_value  foreign_buy_volume  foreign_net_value  foreign_net_volume
+foreign_own        foreign_room_left   foreign_sell_value foreign_sell_volume
+prop_buy_val       prop_buy_vol        prop_sell_val      prop_sell_vol
+```
+
+The `pool__basic` asset asserts *"every column of `silver.stocks_basic` is present"* and
+would pass on a rebuild — it CTASes `SELECT *`. So the table on disk simply predates
+silver gaining those 12, and **`unified/pool__basic --partition VCB` would widen it 26 →
+38 without changing a single row.** Nothing downstream is wrong; it is narrower than it
+should be. ⚠️ Until that rebuild, `pool__basic_bank` is the ONLY place in
+`unified_schema_vcb` carrying VCB's own foreign flow and prop trading —
+`hose__vcb__foreign_net_value` exists, `pool__basic.foreign_net_value` does not.
+
+##### ⚠️ THE SCHEMA'S OWN TICKER IS ONE OF THE CHANNELS
+
+`hose__vcb__*` is in the 20. On `unified_schema_vcb` those channels ARE `pool__basic`'s
+own columns — **asserted by the asset, not assumed**: 15 mirrored measures (the 15
+`pool__basic` still has), **0 mismatches**, and a non-zero count raises, because it
+would mean the pivot is reading the wrong row.
+
+It is kept rather than dropped because **the column set of a date-broadcast pool must
+not depend on which partition is being built.** Dropping "self" is meaningless on `BANK`
+(every row has a different self) and on `ALL`. ⚠️ The consequence is real and belongs to
+the consumer: **`pool__basic ⋈ pool__basic_bank` on this schema holds each VCB measure
+twice**, and the correlation prune will spend budget rediscovering that unless the
+duplicate is excluded up front — the same trap `pool__fa` avoids by excluding the TA
+block by name intersection.
+
+##### ⚠️ MEMBERSHIP IS DERIVED, AND IT IS NOT POINT-IN-TIME
+
+The predicate is `UNIFIED_MEMBER_FILTERS[UNIFIED_BANK]` — the same GICS code
+`unified_schema_bank` uses — so a bank listing or being reclassified is picked up by a
+rebuild rather than by editing a list. **But `silver.stocks_basic` carries today's GICS
+code on every historical row and holds no delisted name**, so these 20 channels are the
+banks that SURVIVED to 2026, carried back to 2009. A bank that listed in 2018 is NULL
+before it; a bank that was delisted is absent entirely. Per-member coverage is that
+listing date and nothing else — `stb`/`vcb`/`ctg` 79.3% down to `abb` 26.5%.
+
+⚠️ **`pool__basic_vn30` was DEFERRED on the same reasoning (2026-08-14 decision).**
+Its only membership source is repo-root `vn30.csv`, which is today's list with **no
+history at all** — strictly worse than a derived GICS predicate. It waits for
+point-in-time membership, which is §2d's #4 lever.
+
+⚠️ **`pool__financials` was NOT built — it is `pool__fa`.** `gold.stocks_financials_bank_fa`
+is already pooled at 196 columns; a second table over the same statements would be a
+duplicate wearing a different name.
+
+⚠️ **The 8 GICS identity columns are excluded**, as they are from `pool__ta` / `pool__fa`:
+constant per ticker, so pivoting them would write **160 constant strings** that
+`FeatureSelector._prepare` drops after paying to read.
 
 ⚠️ **`CREATE TABLE AS`, not a pandas round-trip, and that is type fidelity not taste.**
 psycopg2 returns a PostgreSQL `numeric` as a Python `Decimal`, which lands in a DataFrame
