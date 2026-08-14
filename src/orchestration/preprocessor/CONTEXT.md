@@ -1003,7 +1003,7 @@ knowledge is per source, the body is not.
 
 | pool | source | VCB result | round-trip vs gold |
 |---|---|---|---|
-| `pool__forex` | `gold_schema.forex` (358 cols, 357 pairs) | **4,266 × 360** in 852 ms | **0 mismatches** / 357 series |
+| ~~`pool__forex`~~ | ⚠️ **SPLIT 2026-08-14** — see below; it is now 48 `pool__forex_<exchange>` tables and is no longer a single date-spine pool | — | — |
 | `pool__funds` | `gold_schema.funds` (390 cols, 21 ETFs) | **4,266 × 392** in 1.01 s | **0 mismatches** / 389 columns |
 | `pool__bonds` | `gold_schema.bonds` (118 cols, 9 tenors) | **4,266 × 120** in 672 ms | **0 mismatches** / 117 columns |
 | `pool__stock_market` | `gold_schema.stock_market` (163 cols, 6 indices) | **4,266 × 165** in 569 ms | **0 mismatches** / 162 columns |
@@ -1040,6 +1040,22 @@ new listings that scrape picked up — 38 of 389 fund columns carry anything aft
 bond data tasks at all. `MAX(date)` reads 2026-08-07 on all three. ⚠️ `stock_market` is 6
 days short for a DIFFERENT reason — it is a CafeF chain (`raw/cafef_index_*` → bronze →
 `silver.stock_market` → gold), refreshed by materialising that chain.
+
+#### `_ingest_unified_pool_forex` — SPLIT to 48 tables (2026-08-14)
+
+`gold.forex_<exchange>` → `pool__forex_<exchange>`, one pool per exchange on
+`pool__basic`'s spine. **48 pools × 4,266 rows, 3,129 pairs total** for VCB in 4.0 s,
+71.3% panel-row coverage, 0 unaligned keys, `saxo__eurusd` round-trips against gold with
+0 mismatches.
+
+It was ONE table (`pool__forex`, 357 pairs) until the 2026-08-14 re-scrape took forex to
+3,129 series and `gold.forex` split per exchange to stay under PostgreSQL's 1,600
+columns (`WID-1`). This followed exactly as `pool__economy_<country>` follows
+`gold.economy_<country>`. ⚠️ **The pre-split `pool__forex` is DROPPED**, last and on
+success only, for the reason `_ingest_gold_forex` drops its own: the un-suffixed name is
+what every pre-2026-08-14 consumer reads. **`UnifiedSchemaReader.join(["pool__forex"])`
+now names a table that does not exist**; the shape is
+`join(["pool__forex_saxo", "pool__forex_oanda", …])`.
 
 #### `_ingest_unified_pool_basic_bank` (2026-08-14)
 

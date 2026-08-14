@@ -722,62 +722,139 @@ class DataPreprocessor:
             dtype_overrides={"date": DataType.DATE()},
         )
 
+    # ⚠️ HOW MANY CSVs ARE READ INTO MEMORY AT ONCE BY `_ingest_bronze_forex`.
+    #
+    # The forex folder reached **6,189 files / 2.19 GB / ~29.6 M rows** on 2026-08-14,
+    # and the read-everything-then-concat shape every other bronze ingest uses needs
+    # ~10-15 GB for that — against 3.6 GB free on this machine. Batching bounds it: 300
+    # files is ~1.4 M rows, and the writer is an UPSERT (`ON CONFLICT`) over
+    # `CREATE TABLE IF NOT EXISTS`, so calling it once per batch accumulates exactly as
+    # one call would.
+    #
+    # ⚠️ Only FOREX is batched. Its siblings read tens or hundreds of files and the
+    # unbatched shape is easier to read; converting them for a problem they do not have
+    # would be five more places to keep in step.
+    BRONZE_FOREX_BATCH_FILES = 300
+
     def _ingest_bronze_forex(self) -> None:
+        """`raw_data/trading_view/data/forex/**` → `bronze.trading_view_forex`.
+
+        ⚠️ **READ IN BATCHES, NOT ALL AT ONCE** — see `BRONZE_FOREX_BATCH_FILES`.
+
+        ⚠️ **AND THE BATCHING CHANGES WHICH DUPLICATE WINS, DELIBERATELY.** The folder
+        holds the same series many times over: 6,189 files carry 3,074 distinct series
+        (2026-08-14), one of them stored 12 times, because `skip_existing=False` lands a
+        re-fetch BESIDE the previous file and a broken broker filter wrote the same
+        symbols under several folders. The unbatched shape deduped with `keep="first"`
+        in glob order, which sorts the OLDER end-date first — so **where an old and a new
+        file disagreed on a date's value, the STALE one won** (documented in
+        `orchestration/CONTEXT.md`). Upserting batch by batch makes the LAST write win,
+        so the files are sorted by name — the name ends in the fetch date — and **the
+        NEWEST file now wins**. That is the behaviour the old comment warned about,
+        inverted on purpose.
+        """
         self._logger.log_info("Ingesting bronze forex data...")
 
         forex_dir = os.path.join(TRADING_VIEW_RAW_DATA_DIR, "data", "forex")
-        csv_files = glob(os.path.join(forex_dir, "**", "*.csv"), recursive=True)
+        # ⚠️ SORTED, and the sort is load-bearing: `<EXCHANGE>_<SYMBOL>_<start>_<end>.csv`
+        # ends in the fetch date, so ascending order writes the oldest first and lets
+        # every newer file overwrite it.
+        csv_files = sorted(glob(os.path.join(forex_dir, "**", "*.csv"), recursive=True))
 
         if not csv_files:
             raise MissingSourceDataError(
                 f'No forex CSV files found in "{forex_dir}".'
             )
 
-        dataframes = []
-        for fp in csv_files:
-            df = pd.read_csv(fp, encoding="utf-8")
-            if not df.empty and not df.dropna(how="all").empty:
-                dataframes.append(df)
+        batch_size = self.BRONZE_FOREX_BATCH_FILES
+        batches = [
+            csv_files[start : start + batch_size]
+            for start in range(0, len(csv_files), batch_size)
+        ]
+        self._logger.log_info(
+            f"Forex: {len(csv_files)} CSV file(s) in {len(batches)} batch(es) of "
+            f"{batch_size}."
+        )
 
-        if not dataframes:
+        total_rows = 0
+        for index, batch in enumerate(batches, start=1):
+            dataframes = []
+            for fp in batch:
+                df = pd.read_csv(fp, encoding="utf-8")
+                if not df.empty and not df.dropna(how="all").empty:
+                    dataframes.append(df)
+            if not dataframes:
+                continue
+
+            df = pd.concat(dataframes, ignore_index=True).drop_duplicates()
+            del dataframes
+
+            # ⚠️ SPLIT ON READ. `symbol` ("ECONOMICS:VNCPI") is the RAW CSV's key; the
+            # bronze convention is (exchange, ticker), so it is split here and every
+            # clean, order and dedupe below keys on the real stored columns. It used to
+            # be split LAST, which left `symbol` as the working key through the whole
+            # method — and is why five silver ingests still reach for a column no bronze
+            # table has ever held.
+            df = self._helper_split_symbol_column(df)
+
+            # ⚠️ THE SCRAPER WRITES TWO FILE SHAPES AND ONLY ONE WAS EVER INGESTED.
+            # `_scrape_data_trading_view_link` detects OHLC per series and writes either
+            # `(date, open, high, low, close, volume)` or `(date, value)` — 4,402 files
+            # against 1,787 on 2026-08-14. Every clean below filters on `value`, so for
+            # years **71% of the forex folder was read and silently discarded**: the
+            # unbatched concat produced a `value` column from the OTHER files, and
+            # `REMOVE_RECORD_IF_COLUMN_IS_NULL` then dropped every OHLC row. Batching
+            # turned that into a visible `KeyError` on the first batch with no
+            # value-shaped file in it, which is how it was found.
+            #
+            # ⚠️ `value` IS `close` — not approximately, identically. The extraction JS
+            # pushes `[date, v[1], v[2], v[3], v[4], v[5]]` when a series is OHLC and
+            # `[date, v[4]]` when it is not (`trading_view_scraper.py`, the `bulk_js`
+            # block): **the same slot 4 of the same array**, labelled `close` in one
+            # branch and `value` in the other. No series on disk carries both shapes, so
+            # this cannot be confirmed by overlap — it is confirmed by the code that
+            # wrote them.
+            if "value" not in df.columns:
+                df["value"] = pd.NA
+            if "close" in df.columns:
+                df["value"] = df["value"].where(df["value"].notna(), df["close"])
+
+            df = self._helper_clean(
+                df,
+                [
+                    CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("exchange"),
+                    CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("ticker"),
+                    CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("date"),
+                    CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("value"),
+                    CleanLayer.REMOVE_IF_ALL_COLUMNS_ARE_NULL(),
+                    CleanLayer.ORDER_BY(["exchange", "ticker", "date"]),
+                ],
+            )
+
+            df = self._helper_cast_columns(df, decimal_cols=["value"], bigint_cols=[])
+
+            df["date"] = pd.to_datetime(df["date"]).dt.date
+
+            df = self._helper_remove_duplicates(
+                df, primary_keys=["exchange", "ticker", "date"]
+            )
+
+            self._helper_save_pandas_table_to_database(
+                schema_name=BRONZE_SCHEMA,
+                table_name="trading_view_forex",
+                primary_keys=["exchange", "ticker", "date"],
+                df=df,
+                dtype_overrides={"date": DataType.DATE()},
+            )
+            total_rows += len(df)
+            self._logger.log_info(
+                f"Forex batch {index}/{len(batches)}: {len(df)} row(s) upserted "
+                f"({total_rows} so far)."
+            )
+            del df
+
+        if not total_rows:
             raise MissingSourceDataError("No valid forex CSV data found.")
-
-        df = pd.concat(dataframes, ignore_index=True).drop_duplicates()
-
-        # ⚠️ SPLIT ON READ. `symbol` ("ECONOMICS:VNCPI") is the RAW CSV's key; the bronze
-        # convention is (exchange, ticker), so it is split here and every clean, order
-        # and dedupe below keys on the real stored columns. It used to be split LAST,
-        # which left `symbol` as the working key through the whole method — and is why
-        # five silver ingests still reach for a column no bronze table has ever held.
-        df = self._helper_split_symbol_column(df)
-
-        df = self._helper_clean(
-            df,
-            [
-                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("exchange"),
-                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("ticker"),
-                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("date"),
-                CleanLayer.REMOVE_RECORD_IF_COLUMN_IS_NULL("value"),
-                CleanLayer.REMOVE_IF_ALL_COLUMNS_ARE_NULL(),
-                CleanLayer.ORDER_BY(["exchange", "ticker", "date"]),
-            ],
-        )
-
-        df = self._helper_cast_columns(df, decimal_cols=["value"], bigint_cols=[])
-
-        df["date"] = pd.to_datetime(df["date"]).dt.date
-
-        df = self._helper_remove_duplicates(
-            df, primary_keys=["exchange", "ticker", "date"]
-        )
-
-        self._helper_save_pandas_table_to_database(
-            schema_name=BRONZE_SCHEMA,
-            table_name="trading_view_forex",
-            primary_keys=["exchange", "ticker", "date"],
-            df=df,
-            dtype_overrides={"date": DataType.DATE()},
-        )
 
     def _ingest_bronze_funds(self) -> None:
         self._logger.log_info("Ingesting bronze funds data...")
@@ -5242,15 +5319,36 @@ class DataPreprocessor:
     # each is its own series and picking one would be picking a number, not a fix.
     GOLD_FOREX_NAME_SEP = "__"
 
-    def _ingest_gold_forex(self) -> None:
-        """`silver.forex` -> `gold.forex`: **one row per DATE**, PK `date`, one column
-        per series named `{exchange}__{ticker}` — 328 broker-quoted currency pairs on
-        the calendar the data itself defines.
+    # ⚠️ ONE TABLE PER EXCHANGE, AS `gold.economy` IS ONE PER COUNTRY (2026-08-14).
+    # The 2026-08-14 re-scrape took the folder from 357 series to **3,074**, and a
+    # single wide panel would need 3,075 columns against PostgreSQL's 1,600 — issue
+    # `WID-1`. The lever this table already spent (carry `value` alone instead of 13
+    # measures) bought room for 328 series and cannot be spent twice, so the split is
+    # the same one economy made at 1,034 series and for the identical reason.
+    #
+    # ⚠️ The EXCHANGE is the split key because it is the only one that divides the
+    # series set cleanly and is already in the name (`saxo__eurusd`), so a column keeps
+    # its meaning whichever table it lands in.
+    GOLD_FOREX_TABLE_PREFIX = "forex_"
+
+    # PostgreSQL's hard maximum columns per table. Named rather than inlined because
+    # it is the number three separate designs here have had to bend around —
+    # `gold.economy` (3,852 series), `gold.forex` (3,074), `gold.funds`' measure set.
+    GOLD_MAX_TABLE_COLUMNS = 1_600
+
+    def _ingest_gold_forex(self) -> List[dict]:
+        """`silver.forex` -> `gold.forex_<exchange>`: **one row per DATE**, PK `date`,
+        one column per series named `{exchange}__{ticker}`. Returns one dict per panel.
+
+        ⚠️ **ONE TABLE PER EXCHANGE** — see `GOLD_FOREX_TABLE_PREFIX`. 47 panels /
+        3,074 series on 2026-08-14, the widest being `forex_fx_idc` at 697 series.
+        The un-suffixed `gold.forex` is DROPPED at the end of a successful run, because
+        two answers to "what is gold forex" is worse than one migration.
 
         ⚠️ **No measure in the column name**, unlike `gold.bonds`/`gold.funds`. The
         panel carries exactly one measure, so `saxo__eurusd__value` would repeat
-        "value" 328 times; `_helper_gold_wide_panel(include_measure=False)` enforces
-        that the frame really does have only one.
+        "value" for every series; `_helper_gold_wide_panel(include_measure=False)`
+        enforces that the frame really does have only one.
 
         ⚠️ **NO as-of fill**, the same call `stock_market`/`bonds`/`funds` make. A gap
         means that broker did not quote that pair that day — B2PRIME starts in 2015,
@@ -5266,39 +5364,107 @@ class DataPreprocessor:
         self._logger.log_info("Ingesting gold forex (wide, 1 row per date)...")
 
         KEYS = ["exchange", "ticker", "date"]
+        panels: List[dict] = []
 
-        df = self._helper_select(
-            schema_name=SILVER_SCHEMA,
-            table_name="forex",
-            order_by=KEYS,
-        )
-        if df.empty:
+        with self._database_driver._cursor_ctx() as cur:
+            cur.execute(
+                f"SELECT exchange, COUNT(DISTINCT ticker) FROM {SILVER_SCHEMA}.forex "
+                f"GROUP BY exchange ORDER BY exchange"
+            )
+            members = [(str(row[0]), int(row[1])) for row in cur.fetchall()]
+
+        if not members:
             raise MissingSourceDataError(
                 f"{SILVER_SCHEMA}.forex is empty — run the silver forex ingest first."
             )
 
-        df["date"] = pd.to_datetime(df["date"]).dt.date
-        # The driver hands `numeric` back as `Decimal` (object dtype); an object column
-        # melted into the panel would land in gold as VARCHAR.
-        df["value"] = pd.to_numeric(df["value"], errors="coerce")
+        # ⚠️ THE CEILING IS CHECKED BEFORE A SINGLE TABLE IS WRITTEN, not discovered by
+        # PostgreSQL halfway through. The split buys a lot of room (widest exchange is
+        # FX_IDC at 697 series on 2026-08-14, against 3,074 in total) but it is not
+        # unlimited, and the next thing to breach it should say so in these terms.
+        over = [(e, n) for e, n in members if n + 1 > self.GOLD_MAX_TABLE_COLUMNS]
+        if over:
+            raise PipelineError(
+                f"{SILVER_SCHEMA}.forex exchange(s) {[e for e, _ in over]} need "
+                f"{[n + 1 for _, n in over]} columns against PostgreSQL's "
+                f"{self.GOLD_MAX_TABLE_COLUMNS}. The per-exchange split is already "
+                f"spent; the next lever is a per-(exchange, base-currency) split or a "
+                f"long gold table."
+            )
 
-        wide = self._helper_gold_wide_panel(
-            df[KEYS + ["value"]],
-            table_name="forex",
-            sep=self.GOLD_FOREX_NAME_SEP,
-            keys=KEYS,
-            include_measure=False,
+        self._logger.log_info(
+            f"Gold forex: {len(members)} exchange panel(s), "
+            f"{sum(n for _, n in members)} series total."
         )
 
+        for exchange, series_count in members:
+            if not self.UNIFIED_TICKER_PATTERN.match(exchange):
+                raise PipelineError(
+                    f"{SILVER_SCHEMA}.forex holds exchange {exchange!r}, which cannot "
+                    f"safely name a gold table."
+                )
+            table = f"{self.GOLD_FOREX_TABLE_PREFIX}{exchange.lower()}"
+
+            # ⚠️ ONE EXCHANGE AT A TIME, and that is the memory shape as much as the
+            # column shape: the old build read all of `silver.forex` — 12 M rows once
+            # the 2026-08-14 scrape landed — into one frame before pivoting.
+            df = self._helper_select(
+                schema_name=SILVER_SCHEMA,
+                table_name="forex",
+                conditions=[
+                    Condition(
+                        column="exchange",
+                        operator=SqlOperator.EQUAL_TO,
+                        value=exchange,
+                        data_type=DataType.VARCHAR(),
+                    )
+                ],
+                order_by=KEYS,
+            )
+            if df.empty:
+                raise MissingSourceDataError(
+                    f"{SILVER_SCHEMA}.forex returned no rows for exchange "
+                    f"{exchange!r}, which its own DISTINCT said has {series_count} "
+                    f"series."
+                )
+
+            df["date"] = pd.to_datetime(df["date"]).dt.date
+            # The driver hands `numeric` back as `Decimal` (object dtype); an object
+            # column melted into the panel would land in gold as VARCHAR.
+            df["value"] = pd.to_numeric(df["value"], errors="coerce")
+
+            wide = self._helper_gold_wide_panel(
+                df[KEYS + ["value"]],
+                table_name=table,
+                sep=self.GOLD_FOREX_NAME_SEP,
+                keys=KEYS,
+                include_measure=False,
+            )
+
+            self._database_driver.drop_table(GOLD_SCHEMA, table)
+            self._helper_save_pandas_table_to_database(
+                schema_name=GOLD_SCHEMA,
+                table_name=table,
+                primary_keys=["date"],
+                df=wide,
+                dtype_overrides={"date": DataType.DATE()},
+                chunk_size=1_000,
+            )
+            panels.append(
+                {"table": table, "series": series_count, "rows": len(wide)}
+            )
+            del df, wide
+
+        # ⚠️ THE OLD SINGLE TABLE IS DROPPED LAST, after every panel is written. It is
+        # the same name minus a suffix, so leaving it would give two answers to "what is
+        # gold forex" — and the one with no suffix is the one every pre-2026-08-14
+        # consumer reaches for.
         self._database_driver.drop_table(GOLD_SCHEMA, "forex")
-        self._helper_save_pandas_table_to_database(
-            schema_name=GOLD_SCHEMA,
-            table_name="forex",
-            primary_keys=["date"],
-            df=wide,
-            dtype_overrides={"date": DataType.DATE()},
-            chunk_size=1_000,
+        self._logger.log_info(
+            f"gold.{self.GOLD_FOREX_TABLE_PREFIX}*: {len(panels)} panel(s), "
+            f"{sum(p['series'] for p in panels)} series."
         )
+        return panels
 
     def _helper_gold_wide_panel(
         self,
@@ -5891,12 +6057,20 @@ class DataPreprocessor:
     UNIFIED_BONDS_SOURCE = f"{GOLD_SCHEMA}.bonds"
     UNIFIED_STOCK_MARKET_SOURCE = f"{GOLD_SCHEMA}.stock_market"
 
-    def _ingest_unified_pool_forex(self, ticker: str) -> dict:
-        """`gold.forex` → `unified_schema_<ticker>.pool__forex` — the FX block.
+    def _ingest_unified_pool_forex(self, ticker: str) -> List[dict]:
+        """`gold.forex_<exchange>` → `…​.pool__forex_<exchange>` — the FX block.
 
-        **357 broker-quoted pairs, one `value` column each**, named
-        `{exchange}__{ticker}` (e.g. `saxo__eurusd`) with no measure suffix, keyed
-        `(date, exchange, ticker)` on `pool__basic`'s calendar. Returns a metadata dict.
+        **One pool per exchange**, each holding that broker's pairs as
+        `{exchange}__{ticker}` columns (e.g. `saxo__eurusd`) with no measure suffix,
+        keyed `(date, exchange, ticker)` on `pool__basic`'s calendar. Returns one
+        metadata dict per panel.
+
+        ⚠️ **IT WAS ONE TABLE UNTIL 2026-08-14** (`pool__forex`, 357 pairs). The
+        re-scrape took forex to 3,074 series, gold split per exchange to stay under
+        PostgreSQL's 1,600 columns (`WID-1`), and this followed — exactly as
+        `pool__economy_<country>` follows `gold.economy_<country>`, and for the same
+        reason. **A caller still naming `pool__forex` is naming a table that no longer
+        exists**; `UnifiedSchemaReader.join(["pool__forex_saxo", …])` is the new shape.
 
         ⚠️ **NOT FORWARD-FILLED, and the NULLs are the honest answer.** `gold.forex` is
         unfilled by construction — a NULL means that broker did not quote that pair that
@@ -5922,9 +6096,54 @@ class DataPreprocessor:
         representation (`diff` / `zscore` / returns) belongs to the selection step, the
         way it does for `pool__economy`. This method copies values as-is.
         """
-        return self._helper_unified_pool_on_date_spine(
-            ticker, "pool__forex", self.UNIFIED_FOREX_SOURCE, noun="FX pair"
+        prefix = self.GOLD_FOREX_TABLE_PREFIX
+        with self._database_driver._cursor_ctx() as cur:
+            cur.execute(
+                "SELECT table_name FROM information_schema.tables "
+                "WHERE table_schema = %s AND table_type = 'BASE TABLE' "
+                "AND LEFT(table_name, CHAR_LENGTH(%s)) = %s ORDER BY table_name",
+                (GOLD_SCHEMA, prefix, prefix),
+            )
+            sources = [str(row[0]) for row in cur.fetchall()]
+
+        if not sources:
+            raise MissingSourceDataError(
+                f"`{GOLD_SCHEMA}.{prefix}<exchange>` panels do not exist — build gold "
+                f"`forex` first. ⚠️ The single `{GOLD_SCHEMA}.forex` table was SPLIT "
+                f"per exchange on 2026-08-14 (issue WID-1); a chain still expecting it "
+                f"is reading a name that no longer exists."
+            )
+
+        panels: List[dict] = []
+        for source_table in sources:
+            exchange = source_table.removeprefix(prefix)
+            if not self.UNIFIED_TICKER_PATTERN.match(exchange):
+                raise PipelineError(
+                    f"Gold forex table {source_table!r} has an unsafe exchange suffix "
+                    f"{exchange!r}; it cannot safely name a unified pool."
+                )
+            panels.append(
+                self._helper_unified_pool_on_date_spine(
+                    ticker,
+                    f"pool__forex_{exchange}",
+                    f"{GOLD_SCHEMA}.{source_table}",
+                    noun="FX pair",
+                )
+            )
+        # ⚠️ THE PRE-SPLIT `pool__forex` IS DROPPED LAST, after every panel is written,
+        # for the reason `_ingest_gold_forex` drops its own: the un-suffixed name is
+        # what every pre-2026-08-14 consumer reaches for, and a stale 357-column table
+        # sitting beside 48 fresh ones answers the same question two ways. Dropping it
+        # only on success means a failed rebuild leaves the old table intact.
+        schema = self._helper_unified_schema(ticker)
+        with self._database_driver._cursor_ctx() as cur:
+            cur.execute(f"DROP TABLE IF EXISTS {schema}.pool__forex")
+
+        self._logger.log_info(
+            f"{schema}.pool__forex_*: {len(panels)} exchange panels, "
+            f"{sum(p['features'] for p in panels)} pairs total."
         )
+        return panels
 
     def _ingest_unified_pool_funds(self, ticker: str) -> dict:
         """`gold.funds` → `unified_schema_<ticker>.pool__funds` — the VN ETF block.

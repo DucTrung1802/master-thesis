@@ -596,16 +596,143 @@ WIDE_PANELS: list[tuple[str, str, str]] = [
         "21-day window and an all-NULL column is not written. ⚠️ REPLACES the long "
         "18,662 × 22 feature table the generic builder used to write.",
     ),
-    (
-        "forex",
-        "quote-days",
-        "328 broker-quoted pairs, ONE `value` column each, named `{exchange}__"
-        "{ticker}` with no measure suffix. ⚠️ No features: 328 × 13 measures is 4,264 "
-        "columns against PostgreSQL's 1,600 ceiling, so the measure set gives way — "
-        "the same trade `gold.economy` makes. ⚠️ The 9 exchanges are 9 BROKERS and "
-        "disagree on 95-99.9% of shared ticker-days, so they are not duplicates.",
-    ),
 ]
+
+# ⚠️ `forex` LEFT THIS SPEC TABLE ON 2026-08-14 — it is `gold/forex` below, one asset
+# writing MANY tables, because the 2026-08-14 re-scrape took it from 328 series to
+# 3,074 and a single panel would need 3,075 columns against PostgreSQL's 1,600
+# (issue `WID-1`). Its shape is now `gold.economy`'s, not `gold.bonds`', and the
+# generic builder above asserts things that are true of a single table and false of a
+# family — one row count, one column count, one date range.
+
+
+@asset(
+    name="forex",
+    key_prefix=["gold"],
+    group_name="gold",
+    compute_kind="postgres",
+    deps=[AssetKey(["silver", "forex"])],
+    description=(
+        "silver.forex → gold.forex_<exchange>: ONE TABLE PER EXCHANGE, one row per "
+        "quote-day (PK `date`), one column per pair named `{exchange}__{ticker}` with "
+        "no measure suffix — the panel carries exactly one measure, so a suffix would "
+        "repeat `value` for every series. ⚠️ IT IS MANY TABLES because the 2026-08-14 "
+        "re-scrape took forex from 328 series to 3,074, and one panel would need 3,075 "
+        "columns against PostgreSQL's 1,600 (issue WID-1). Same split gold.economy "
+        "makes per country, for the identical reason. ⚠️ The exchanges are BROKERS and "
+        "disagree on 95-99.9% of shared ticker-days, so they are not duplicates — "
+        "which is also why these panels do NOT share one calendar, unlike economy's. "
+        "⚠️ NOT as-of filled: a gap means that broker did not quote that pair that day."
+    ),
+)
+def gold_forex(
+    context: AssetExecutionContext, preprocessor: PreprocessorResource
+) -> MaterializeResult:
+    with preprocessor.session(schema="gold_schema") as prep:
+        panels = prep._ingest_gold_forex()
+        prefix = prep.GOLD_FOREX_TABLE_PREFIX
+
+        with prep._database_driver._cursor_ctx() as cur:
+            cur.execute(
+                "SELECT t.table_name, "
+                "  (SELECT COUNT(*) FROM information_schema.columns c "
+                "   WHERE c.table_schema = t.table_schema "
+                "     AND c.table_name = t.table_name) "
+                "FROM information_schema.tables t "
+                "WHERE t.table_schema = 'gold_schema' AND t.table_type = 'BASE TABLE' "
+                "  AND LEFT(t.table_name, CHAR_LENGTH(%s)) = %s "
+                "ORDER BY 2 DESC",
+                (prefix, prefix),
+            )
+            actual = [(str(n), int(c) - 1) for n, c in cur.fetchall()]
+
+            stats = {}
+            for name, _series in actual:
+                cur.execute(
+                    f'SELECT COUNT(*), COUNT(DISTINCT date), MIN(date), MAX(date) '
+                    f'FROM gold_schema."{name}"'
+                )
+                stats[name] = cur.fetchone()
+
+            cur.execute(
+                "SELECT COUNT(*), COUNT(DISTINCT date), COUNT(DISTINCT exchange), "
+                "       COUNT(DISTINCT (exchange, ticker)) FROM silver_schema.forex"
+            )
+            silver_rows, silver_dates, silver_exchanges, silver_series = (
+                int(v) for v in cur.fetchone()
+            )
+            # ⚠️ The pre-split table must be GONE, not merely unused. Two answers to
+            # "what is gold forex" is the STL-1 shape, and the un-suffixed name is the
+            # one every pre-2026-08-14 consumer reaches for.
+            cur.execute(
+                "SELECT COUNT(*) FROM information_schema.tables "
+                "WHERE table_schema = 'gold_schema' AND table_name = 'forex'"
+            )
+            legacy = int(cur.fetchone()[0])
+
+    if not actual:
+        raise RuntimeError(
+            f"gold forex wrote no {prefix}<exchange> table. Expected one per exchange "
+            f"in silver.forex."
+        )
+    if len(actual) != silver_exchanges:
+        raise RuntimeError(
+            f"gold forex wrote {len(actual)} panel(s) against silver.forex's "
+            f"{silver_exchanges} exchange(s)."
+        )
+    if legacy:
+        raise RuntimeError(
+            "gold_schema.forex still exists beside the per-exchange panels. The "
+            "un-suffixed name must not survive the split — it is what every "
+            "pre-2026-08-14 consumer reads."
+        )
+
+    # ⚠️ ONE ROW PER DATE IS ASSERTED PER PANEL; ONE SHARED CALENDAR IS NOT, and that
+    # is the difference from `gold.economy`. Economy reindexes every country onto one
+    # business-day range, so equal row counts are a real invariant there. Brokers quote
+    # what they quote — B2PRIME starts in 2015, fifteen years after SAXO — so equal row
+    # counts here would be a bug, not a guarantee.
+    for name, _series in actual:
+        rows, dates, _first, _last = stats[name]
+        if int(rows) != int(dates):
+            raise ValueError(
+                f"gold.{name} is not one row per date: {rows} rows over {dates} "
+                f"distinct dates."
+            )
+
+    total_series = sum(series for _n, series in actual)
+    if total_series != silver_series:
+        raise ValueError(
+            f"gold.{prefix}* holds {total_series} series against silver.forex's "
+            f"{silver_series}. A pivot that lost a series would look like a perfectly "
+            f"healthy narrower table."
+        )
+
+    widest, widest_series = actual[0]
+    all_dates = {d for _r, _d, lo, hi in stats.values() for d in (lo, hi)}
+    context.log.info(
+        f"gold.{prefix}*: {len(actual)} exchange panels, {total_series} series total "
+        f"(silver.forex holds {silver_rows} observations over {silver_dates} dates); "
+        f"widest {widest} at {widest_series} series; spans "
+        f"{min(all_dates)} → {max(all_dates)}"
+    )
+    return MaterializeResult(
+        metadata={
+            "panels": len(actual),
+            "series_total": total_series,
+            "widest_panel": MetadataValue.text(f"{widest} ({widest_series} series)"),
+            "silver_quote_days": silver_rows,
+            "silver_dates": silver_dates,
+            "date_range": MetadataValue.text(f"{min(all_dates)} → {max(all_dates)}"),
+            "column_ceiling": MetadataValue.text(
+                f"widest panel {widest_series + 1} cols vs PostgreSQL's 1,600"
+            ),
+            "tables": MetadataValue.text(
+                ", ".join(f"{n} ({s})" for n, s in actual[:8])
+                + (f", +{len(actual) - 8} more" if len(actual) > 8 else "")
+            ),
+        }
+    )
 
 
 def _build_gold_wide_panel(name: str, noun: str, shape: str):
@@ -687,6 +814,7 @@ wide_panel_assets: List[Callable] = [
 
 assets: List[Callable] = [
     gold_economy,
+    gold_forex,
     *wide_panel_assets,
     gold_stock_market,
     gold_stocks,

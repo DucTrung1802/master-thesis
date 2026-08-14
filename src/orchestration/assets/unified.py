@@ -514,20 +514,6 @@ def unified_pool_economy(
 # (asset name, gold source asset, entity noun, what it is)
 DATE_SPINE_POOLS: list[tuple[str, str, str, str]] = [
     (
-        "pool__forex",
-        "forex",
-        "FX pair",
-        "357 broker-quoted FX pairs, ONE `value` column each named "
-        "{exchange}__{ticker} (e.g. `saxo__eurusd`) with no measure suffix — gold "
-        "carries one measure, so a suffix would say `value` 357 times. ⚠️ NOT "
-        "forward-filled: a NULL means that broker did not quote that pair that day, "
-        "and filling it would invent a price (median series coverage on VCB's spine "
-        "is 67%). ⚠️ THE 9 EXCHANGES ARE 9 BROKERS and must not be collapsed — SAXO "
-        "and JFX disagree on 160,781 of 161,816 shared ticker-days. ⚠️ 328 of 357 "
-        "series stop at 2026-06-08/09 (a skip_existing=True scrape), so the recent "
-        "tail is mostly NULL however healthy MAX(date) looks.",
-    ),
-    (
         "pool__funds",
         "funds",
         "fund series",
@@ -675,6 +661,103 @@ def _build_unified_date_spine_pool(name: str, gold_source: str, noun: str, what:
 date_spine_pool_assets: List[Callable] = [
     _build_unified_date_spine_pool(*spec) for spec in DATE_SPINE_POOLS
 ]
+
+
+@asset(
+    name="pool__forex",
+    key_prefix=["unified"],
+    group_name="unified",
+    compute_kind="postgres",
+    partitions_def=UNIFIED_PARTITIONS,
+    deps=[
+        AssetKey(["gold", "forex"]),
+        AssetKey(["unified", "pool__basic"]),
+    ],
+    description=(
+        "gold.forex_<exchange> → unified_schema_<universe>.pool__forex_<exchange>: "
+        "ONE POOL PER EXCHANGE, each on pool__basic's (date, exchange, ticker) spine, "
+        "columns named {exchange}__{ticker} with no measure suffix. ⚠️ IT WAS ONE "
+        "TABLE UNTIL 2026-08-14 — the re-scrape took forex from 357 series to 3,074, "
+        "gold split per exchange to stay under PostgreSQL's 1,600 columns (WID-1), and "
+        "this followed, exactly as pool__economy_<country> follows "
+        "gold.economy_<country>. A caller still naming `pool__forex` is naming a table "
+        "that no longer exists. ⚠️ The source is keyed on `date` ALONE, so each join "
+        "BROADCASTS one row across every ticker of that day and the row count must "
+        "EQUAL the spine's. ⚠️ NOT forward-filled: a NULL means that broker did not "
+        "quote that pair that day. ⚠️ The exchanges are BROKERS and must not be "
+        "collapsed — SAXO and JFX disagree on 160,781 of 161,816 shared ticker-days."
+    ),
+)
+def unified_pool_forex(
+    context: AssetExecutionContext, preprocessor: PreprocessorResource
+) -> MaterializeResult:
+    universe = context.partition_key
+    schema = _schema_of(universe)
+
+    with preprocessor.session(schema=schema) as prep:
+        panels = prep._ingest_unified_pool_forex(universe)
+        expected_key = tuple(prep.UNIFIED_PRIMARY_KEY)
+
+        with prep._database_driver._cursor_ctx() as cur:
+            cur.execute(
+                "SELECT table_name FROM information_schema.tables "
+                "WHERE table_schema = %s AND table_type = 'BASE TABLE' "
+                "AND LEFT(table_name, CHAR_LENGTH(%s)) = %s ORDER BY table_name",
+                (schema, "pool__forex_", "pool__forex_"),
+            )
+            actual_tables = [str(row[0]) for row in cur.fetchall()]
+            cur.execute(f"SELECT COUNT(*) FROM {schema}.pool__basic")
+            basic_rows = int(cur.fetchone()[0])
+            for panel in panels:
+                primary_key = _primary_key(cur, schema, panel["table"])
+                if primary_key != expected_key:
+                    raise ValueError(
+                        f"{schema}.{panel['table']} primary key is {primary_key}, "
+                        f"expected {expected_key} — order is part of the contract."
+                    )
+                if panel["rows"] != basic_rows:
+                    raise ValueError(
+                        f"{schema}.{panel['table']} has {panel['rows']} rows against "
+                        f"pool__basic's {basic_rows}. An FX pool adds columns, never "
+                        f"rows."
+                    )
+
+    expected_tables = sorted(panel["table"] for panel in panels)
+    if actual_tables != expected_tables:
+        raise ValueError(
+            f"{schema}.pool__forex_* tables are {actual_tables}, expected "
+            f"{expected_tables}. A stale or missing exchange panel is not a complete "
+            f"FX pool."
+        )
+
+    total_pairs = sum(panel["features"] for panel in panels)
+    populated = sum(panel["populated_rows"] for panel in panels)
+    coverage = 100.0 * populated / max(len(panels) * basic_rows, 1)
+    widest = max(panels, key=lambda p: p["features"])
+    context.log.info(
+        f"{schema}.pool__forex_*: {len(panels)} exchange panels, {total_pairs} pairs "
+        f"total on {basic_rows} spine rows each; widest {widest['table']} at "
+        f"{widest['features']} pairs; {coverage:.1f}% panel-row coverage"
+    )
+    return MaterializeResult(
+        metadata={
+            "exchange_panels": len(panels),
+            "rows_per_panel": basic_rows,
+            "pairs_total": total_pairs,
+            "populated_panel_rows": populated,
+            "panel_row_coverage_pct": MetadataValue.float(round(coverage, 2)),
+            "universe": MetadataValue.text(universe),
+            "primary_key": MetadataValue.text(", ".join(expected_key)),
+            "source": MetadataValue.text("gold_schema.forex_<exchange>"),
+            "widest_panel": MetadataValue.text(
+                f"{widest['table']} ({widest['features']} pairs)"
+            ),
+            "tables": MetadataValue.text(
+                ", ".join(expected_tables[:8])
+                + (f", +{len(expected_tables) - 8} more" if len(panels) > 8 else "")
+            ),
+        }
+    )
 
 
 @asset(
@@ -983,6 +1066,7 @@ assets: List[Callable] = [
     unified_pool_basic,
     unified_pool_targets,
     unified_pool_economy,
+    unified_pool_forex,
     *date_spine_pool_assets,
     unified_pool_basic_bank,
     *feature_pool_assets,

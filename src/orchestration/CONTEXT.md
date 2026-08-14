@@ -236,7 +236,7 @@ raw/cafef_financials[t] ─► bronze/cafef_financials ─► silver/cafef_finan
 | `bronze` | **all 20 ingest leaves** (25 tables) | — |
 | `silver` | `economy` (long fact), `economy_series` (dimension), `bonds`/`funds`/`forex` (TradingView projections), `stock_market` (4 index tabs), `stocks_basic` (6 sources), `cafef_financials_bank` (quarterly), `stocks_basic_financials_bank` (as-of daily), `…_fa` (+26 indicators) | — |
 | `gold` | `economy` (wide, as-of), `bonds`/`funds`/`forex` (wide, unfilled), `stock_market` (wide, unfilled), `stocks` (price panel, no features), `stocks_ta` (+ the ~900-column TA block), `stocks_financials_bank_fa` (feature panel), `news_{weekly,daily}_panel` | — |
-| `unified` | `pool__basic`, `pool__targets`, `pool__economy` (19 country tables), `pool__forex` + `pool__funds` + `pool__bonds` + `pool__stock_market` (2026-08-13, one spec table), `pool__basic_bank` (2026-08-14, pivoted on the fly), `pool__ta`, `pool__fa` | **3** — `VCB` / `BANK` / `ALL`, the universe |
+| `unified` | `pool__basic`, `pool__targets`, `pool__economy` (19 country tables), `pool__forex` (**48 exchange tables** since 2026-08-14), `pool__funds` + `pool__bonds` + `pool__stock_market` (one spec table), `pool__basic_bank` (pivoted on the fly), `pool__ta`, `pool__fa` | **3** — `VCB` / `BANK` / `ALL`, the universe |
 
 ### ⚠️ The edges, read out of the code (2026-07-31 correction)
 
@@ -1328,16 +1328,75 @@ rows across a leaf's history.**
 |---|---|
 | brokers enumerated | **47 of 47**; 27 clean, 19 contaminated (`FLT-1`), 1 empty |
 | symbols fetched, clean | **897 of 1,722** addressable = **52%**, 10 of 27 brokers |
-| distinct series on disk | **3,074** across 47 exchanges, 6,189 files |
-| — fresh 2026-08-13, correctly filed | 897 (**29%**) |
-| — stale 2026-08-08, in mixed folders | 2,177 (**71%**) — real data, wrong folder names |
-| **in bronze** | **300 of 3,074 = 10%**; bronze holds 357 series, `MAX(date)` 2026-08-04 |
+| files on disk | **6,189 / 2.19 GB**, 48% of them duplicate copies |
+| **distinct series** | **3,129 across 48 exchanges** — bronze's count, which is authoritative |
+| **all of it ingested** | bronze 13,662,058 rows, 2000-01-02 → 2026-08-14 |
 
-⚠️ **90% OF WHAT IS ON DISK IS NOT IN THE DATABASE, AND THE INGEST IS BLOCKED, NOT
-MERELY PENDING** — issue `WID-1`. Bronze and silver would load it (both are long), but
-`gold.forex` is ONE wide table and 3,074 series needs **3,075 columns against
-PostgreSQL's 1,600**. It needs the split `gold.economy` already uses. Until then every
-further hour of scraping widens the gap rather than closing it.
+⚠️ **THE 2,177 SERIES IN MIS-NAMED FOLDERS INGESTED FINE.** `FLT-1` puts a broker's data
+under another broker's folder, but bronze splits the `symbol` column (`SAXO:EURUSD`) on
+`:`, so the exchange is always right whatever the folder is called. The folder name is
+cosmetic to the database and load-bearing only for `skip_existing`.
+
+⚠️ **3,129 SERIES, NOT THE 3,074 A FILENAME SCAN REPORTS.** Parsing
+`<EXCHANGE>_<SYMBOL>_<start>_<end>.csv` on the first underscore splits `FX_IDC_EURUSD`
+into exchange `FX` and symbol `IDC_EURUSD`, merging one real exchange into a phantom.
+**Count series from bronze, never from filenames.**
+
+#### ✅ THE SPLIT THAT UNBLOCKED IT — `WID-1`, opened and cleared 2026-08-14
+
+`gold.forex` needed **3,130 columns against PostgreSQL's 1,600**. It now splits per
+exchange exactly as `gold.economy` splits per country:
+
+| stage | result | time |
+|---|---|---|
+| `bronze/trading_view_forex` | 357 → **3,129 series**, 1.4 M → **13,662,058 rows**, 21 batches | 27m16s |
+| `silver/forex` | 13,662,058 rows, 3,129 series, 2000-01-02 → 2026-08-14 | 14m38s |
+| `gold/forex` | **48 panels summing to 3,129 series**, widest `forex_fx_idc` at **648 cols** | 3m56s |
+| `unified/pool__forex` (VCB) | **48 pools × 4,266 rows**, 71.3% panel-row coverage | 4.0s |
+
+Verified independently: gold's series total equals silver's exactly, `saxo__eurusd`
+round-trips gold↔silver and pool↔gold with **0 mismatches**, 0 unaligned keys against
+`pool__basic`, and **the pre-split `gold.forex` and `pool__forex` are both gone**.
+
+⚠️ **THE UN-SUFFIXED TABLES ARE DROPPED LAST, ON SUCCESS ONLY.** Two answers to "what is
+gold forex" is the STL-1 shape, and the name with no suffix is the one every
+pre-2026-08-14 consumer reads. Dropping only after every panel is written means a failed
+rebuild leaves the old table intact. **Anything naming `gold.forex` or `pool__forex` is
+naming a dropped table.**
+
+⚠️ **`gold/forex` LEFT `WIDE_PANELS`.** That generic builder asserts one row count, one
+column count and one date range — all true of a single table and false of a family.
+
+⚠️ **THESE PANELS DO NOT SHARE A CALENDAR, AND THAT IS NOT ASSERTED — the opposite of
+`gold.economy`.** Economy reindexes every country onto one business-day range, so equal
+row counts are a real invariant there. Brokers quote what they quote: `forex_saxo` runs
+to 2026-08-14 and `forex_fx_idc` to 2026-08-06. Equal row counts here would be a bug.
+
+#### ⚠️ AND THE BLOCK WAS HIDING A SILENT DROP — `SHP-1`
+
+The scraper writes **two file shapes**, and only one was ever ingested: OHLC detection in
+`bulk_js` produces either `(date, open, high, low, close, volume)` or `(date, value)` —
+**4,402 files against 1,787**. Every clean layer in `_ingest_bronze_forex` filters on
+`value`, so the old all-files `pd.concat` produced a `value` column from the OTHER files
+and `REMOVE_RECORD_IF_COLUMN_IS_NULL("value")` dropped every OHLC row **without a word**.
+**That is the whole reason bronze held 357 series while the disk held 3,129.**
+
+It surfaced only because batching turned the silent drop into a `KeyError` on the first
+batch containing no value-shaped file. ⚠️ **The fix is justified by the extraction code,
+not by overlap**: no series on disk carries both shapes, so nothing could be compared —
+but `bulk_js` pushes `[date, v[1], v[2], v[3], v[4], v[5]]` when a series is OHLC and
+`[date, v[4]]` when it is not, i.e. **the same slot 4 of the same array**, labelled
+`close` in one branch and `value` in the other.
+
+⚠️ **`bonds`, `funds`, `economy` and `indices` carry the same `value`-only filter and
+have never been counted for this.**
+
+⚠️ **THE BRONZE FOREX INGEST READS IN BATCHES OF 300 FILES**, and only forex does. 6,189
+files / 2.19 GB / ~29.6 M rows needs 10-15 GB unbatched, against **3.6 GB free**; batched
+it held **0.55 GB**. ⚠️ It also inverts which duplicate wins: `keep="first"` in glob
+order let the **stale** file win (the trap §"`skip_existing=False` DOES NOT DELETE THE
+OLD FILE" documents), while batched upserts in name order — the name ends in the fetch
+date — let the **newest** win.
 
 ⚠️ **THE MEASURE SET SHRINKS AS THE ENTITY COUNT GROWS, and that is a ceiling talking,
 not taste.** PostgreSQL allows 1,600 columns per table. 9 tenors and 19 ETFs carry the
@@ -1603,7 +1662,7 @@ point of the housekeeping.
 | `news_weekly_panel` | 429,052 × 28 | **asset** only | current |
 | `news_daily_panel` | 2,058,604 × 26 | **asset** only | current |
 | `bonds` | 4,642 × 118 | **asset** + leaf | current (wide, unfilled) |
-| `forex` | **7,910 × 329** | **asset** + leaf | current — WIDE, 1 row per date, value only (2026-08-05) |
+| ~~`forex`~~ → `forex_<exchange>` | **48 panels, 3,129 series** | **asset** + leaf | current — SPLIT per exchange 2026-08-14 (`WID-1`); widest `forex_fx_idc` 648 cols. The un-suffixed table is DROPPED |
 | `funds` | **2,894 × 352** | **asset** + leaf | current — WIDE, 1 row per trading day (2026-08-05) |
 | ~~`indices`~~ | ~~24,095 × 22~~ | — | **RETIRED + DROPPED 2026-08-01** |
 

@@ -161,7 +161,39 @@ derived from current GICS and is **not point-in-time** — survivors only.
 today's list with no history), and **`pool__financials` was not built — it is
 `pool__fa`.**
 
-### ⚠️ FOREX: 3,074 series on disk, 357 in the database (2026-08-14)
+### ✅ FOREX: 357 → 3,129 series, ingested end to end (2026-08-14)
+
+`bronze 13,662,058 rows / 3,129 series / 48 exchanges / 2000-01-02 → 2026-08-14` →
+`silver.forex` (same) → **`gold.forex_<exchange>`, 48 panels summing to 3,129** →
+**`unified_schema_vcb.pool__forex_<exchange>`, 48 pools × 4,266 spine rows**.
+Round-tripped at every hop, 0 mismatches; the pre-split `gold.forex` and `pool__forex`
+are dropped, on success only.
+
+⚠️ **`gold.forex` IS MANY TABLES NOW (`WID-1`, resolved same day).** 3,129 series is
+3,130 columns against PostgreSQL's 1,600, so it took the split `gold.economy` makes per
+country — widest panel `forex_fx_idc` at **648 columns**. `gold/forex` left the
+`WIDE_PANELS` spec table (that builder asserts one row count, one column count, one date
+range — true of a table, false of a family) and `pool__forex` followed to
+`pool__forex_<exchange>`. **Anything naming `gold.forex` or `pool__forex` is naming a
+dropped table.** ⚠️ Unlike economy these panels do **not** share a calendar and it is not
+asserted: brokers quote what they quote (B2PRIME starts 2015, SAXO 2000).
+
+⚠️ **AND CLEARING IT EXPOSED `SHP-1`: 71% OF THE FOREX FOLDER HAD BEEN SILENTLY
+DISCARDED ON EVERY PREVIOUS RUN.** The scraper writes two file shapes — OHLCV or
+`value`, **4,402 files against 1,787** — and every clean layer filters on `value`, so the
+old all-files `pd.concat` produced a `value` column from the *other* files and dropped
+every OHLC row without a word. That is the whole reason bronze held 357 series. `value`
+is now coalesced from `close`, justified by the extraction JS rather than by overlap
+(no series carries both shapes): it pushes `v[4]` as `close` in one branch and `v[4]` as
+`value` in the other — **the same slot of the same array**. ⚠️ **`bonds`, `funds`,
+`economy` and `indices` have the same filter and have never been counted.**
+
+⚠️ **The bronze forex ingest reads in BATCHES of 300 files** (6,189 files / 2.19 GB /
+29.6 M rows would need 10-15 GB against 3.6 GB free). That also inverts which duplicate
+wins: the old `keep="first"` in glob order let the **stale** file win, batched upserts in
+name order let the **newest** win.
+
+### ⚠️ How the forex got there — the scrape (2026-08-14)
 
 Re-scraped in two runs, both green, 0 ERROR lines: **links 47 of 47 brokers (1h09m)**,
 **data 10 brokers (2h15m, 668 fetched + 229 skipped)**. Verified symbol-by-symbol
@@ -177,17 +209,14 @@ raises on that, on an empty list and on an unknown class.
 |---|---|
 | brokers enumerated | 47 of 47 — **27 clean, 19 contaminated, 1 empty** |
 | symbols fetched | 897 of 1,722 addressable = **52%** (10 of 27 clean brokers) |
-| series on disk | **3,074** — 897 fresh + 2,177 stale-but-real in mixed folders |
-| **in bronze** | **300 of 3,074 = 10%**, `MAX(date)` 2026-08-04 |
+| series on disk | 6,189 files / 2.19 GB → **3,129 series, 48 exchanges** (all ingested) |
 
-⚠️ **Two new issue codes, and the blocking one is the cheap one.** **`WID-1`** —
-`gold.forex` is one wide table and 3,074 series needs **3,075 columns against
-PostgreSQL's 1,600**, so 90% of the disk cannot be ingested until it splits per exchange
-the way `gold.economy` splits per country. **No scraping is required to close it.**
-**`FLT-1`** — the forex broker filter fails OPEN for 19 of 47 brokers, returning a
+⚠️ **`FLT-1` — the forex broker filter fails OPEN for 19 of 47 brokers**, returning a
 49-exchange `FX_IDC` default list; six returned byte-identical ~16,700-symbol lists.
 **37 of 47 brokers' own books are unreachable until it is fixed**, and the folder name in
-`data/forex/` tells you nothing — the filename does.
+`data/forex/` tells you nothing — the filename does. The 2,177 series that came from
+those mixed folders are real data under wrong folder names, and they ingested fine:
+bronze splits `symbol` on `:`, so the exchange is always correct.
 
 ⚠️ **Never sum rows across a leaf's links CSVs.** A broker folder accumulates one dated
 CSV per run (5 now) and the data adder reads only the NEWEST. Summing reads as growth
@@ -622,10 +651,13 @@ archived runs with them. Nothing is lost: they were force-added on 2026-08-09, s
 Everything downstream inherited that, and the provenance sentence travels verbatim from
 the table `COMMENT` into the dataset `metadata.json` into every run's `lineage`.
 
-**Open issues live in [ISSUES.md](ISSUES.md)** (9 open, 28 resolved, codes permanent).
-Short version: ⚠️ **`WID-1` BLOCKING** — `gold.forex` needs 3,075 columns against
-PostgreSQL's 1,600, so **90% of the forex on disk cannot reach the database**; `FLT-1`
-the TradingView forex broker filter fails open for 19 of 47 brokers; `EVD-1` the missing
+**Open issues live in [ISSUES.md](ISSUES.md)** (9 open, 29 resolved, codes permanent).
+Short version: ⚠️ **`SHP-1`** the forex scraper writes two file shapes and only one was
+ever ingested — 71% of the folder was silently discarded until 2026-08-14, and **the
+same `value`-only filter sits unchecked on `bonds`/`funds`/`economy`/`indices`**;
+`FLT-1` the TradingView forex broker filter fails open for 19 of 47 brokers
+(**`WID-1` — the 1,600-column block — was opened and cleared the same day**);
+`EVD-1` the missing
 nulls are ~1,000 CPU-hours, `NUL-1` the evaluator's null is structurally weak, `DRF-1` 18
 channels put 100% of test beyond 5 train-sigmas, `COV-1` 248 of 952 shortlisted rows sit
 below 0.95 coverage, `RPR-1` datasets/runs are git-ignored.
@@ -650,13 +682,14 @@ below 0.95 coverage, `RPR-1` datasets/runs are git-ignored.
 | [experiment/experiment_10/CONTEXT.md](experiment/experiment_10/CONTEXT.md) | 36k | writing the literature chapter. **§"Combined reading" (line 2877) is the distillate** — read that alone unless you need a specific paper |
 
 ⚠️ **[ISSUES.md](ISSUES.md) (~4k) is the second file to open, not an afterthought.** Nine
-open issues. One BLOCKS work — **WID-1** (`gold.forex` needs 3,075 columns against
-PostgreSQL's 1,600, so 90% of the forex on disk cannot be ingested) — and three change
-how a number may be read: **NUL-3** (the panel null is not label-neutral — on a panel
-quote the daily-IC t-stat, never `ic_clears`), **NUL-1** (no null here prices in
-selection or architecture search), **RPR-1** (29 run folders were deleted 2026-08-10 and
-are unrecoverable). **FLT-1** bounds what forex data can exist at all: 19 of 47 broker
-filters fail open, so 37 brokers' books are unreachable.
+open issues. **SHP-1** is the one to read first — a `value`-only filter silently
+discarded 71% of the forex folder for as long as that ingest existed, and the same
+filter sits unchecked on four sibling ingests. Three change how a number may be read:
+**NUL-3** (the panel null is not label-neutral — on a panel quote the daily-IC t-stat,
+never `ic_clears`), **NUL-1** (no null here prices in selection or architecture search),
+**RPR-1** (29 run folders were deleted 2026-08-10 and are unrecoverable). **FLT-1**
+bounds what forex data can exist at all: 19 of 47 broker filters fail open, so 37
+brokers' books are unreachable.
 
 Other roots: `THESIS_PROGRESS_2026*.md` /
 `THESIS_SUMMARY_2026_VI.md` (deliverable write-ups), `feature_groups.md`,
