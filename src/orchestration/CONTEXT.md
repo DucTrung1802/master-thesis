@@ -1841,12 +1841,79 @@ the real price.** One cell. Remove it and both numbers collapse.
 
 Market-wide, **77 of 73,044** `prop_buy_val` and **1,182 of 1,240,032**
 `foreign_buy_value` rows exceed ten times their own day's turnover (~0.1% each) — so
-`foreign_*` carries the same defect. ⚠️ **Not winsorised.** Cleaning belongs to the
-layer that owns the column, and clipping a source value inside a feature expression is
-how a data defect stops being visible. Anything selecting on these channels should look
-at their extremes first. ⚠️ The scale itself is fine — implied price on the *normal*
-rows is 87,596 against a `close_raw` of 87,500, and the foreign block matches too; this
-is outliers, not units.
+`foreign_*` carries the same defect. ⚠️ The scale itself is fine — implied price on the
+*normal* rows is 87,596 against a `close_raw` of 87,500, and the foreign block matches
+too; this is outliers, not units.
+
+✅ **FIXED 2026-08-16 in SILVER, not here** — `_helper_screen_flow_outliers`. Cleaning
+belongs to the layer that owns the column; clipping a source value inside a feature
+expression is how a data defect stops being visible to every other consumer of it.
+
+⚠️ **It took THREE rules, and the two wrong intermediate versions are the lesson.**
+
+| # | rule | what it alone misses |
+|---|---|---|
+| 1 | implied price `\|value\|/\|volume\|` off `close_raw` by >100× | rows where value AND volume are corrupt together — `STB 2025-12-30` carries **1.5e13 shares** with a value to match, so its implied price is a plausible 9.9× |
+| 2 | flow volume >100× the day's total volume | rows with a huge value and a NULL/zero volume — neither rule works without a volume. `SHB 2025-10-30` slipped through and left `drv_prop_participation` at **57,644** against a p99 of 0.269 |
+| 3 | flow value >100× total turnover (VND) | nothing — flow is a SUBSET of trading, so this is true by definition and 100× is enormous slack |
+
+**Thresholds were read off the distribution, not chosen:** 99.5% of flow rows imply a
+price within **2×** of `close_raw`, 99.8% within 10×, **99.98% within 100×**. Result:
+**611 of 2,388,975 rows (0.0256%)** NULLed — never winsorised, because the corruption
+factor is not constant (1e7 on VCB, 1e8 on HPG/TPB) so there is nothing to divide out
+and NULL is the only honest encoding. Row count unchanged.
+
+⚠️ **Two intermediate versions each deleted the wrong data, and neither was caught by the
+run going green — only by re-measuring.** Without `total_vol > 0` on rule 2, a no-trade
+day makes the right-hand side 0 and any flow trips it: **2,818 rows**. Without
+`value > 0` on rule 1, a zero value gives ratio 0 and trips the low side: **2,849
+pairs**, five times the real defect, mostly ordinary trades the source rounds to 0
+(`PVC 2025-11-25` sells **4 shares**). A cleaning step flagging 5× more than the defect
+it targets is not being conservative — it is a second, unexamined rule wearing the
+first one's justification.
+
+⚠️ **TWO CLASSES REMAIN, REPORTED AND NOT SCREENED**, because for both, which side is
+wrong is undetermined: **2,844 pairs hold a real volume with a ZERO value** — and this
+class is **MIXED, not rounding**, which an earlier draft of this note got wrong: 362 of
+857 `prop_sell` rows imply <100 M VND but **305 imply ≥1 BN**, the largest 1.73e13. VCB
+2026-01-05 is one (buy pair NULLed, sell pair survives as `val=0, vol=165,300`). And
+**196 rows carry flow volume on a day with no traded volume at all.**
+
+**What it bought, on VCB:**
+
+| | before | after |
+|---|---|---|
+| `corr(prop_net, prop_participation)` | **+1.000000** | +0.3270 |
+| `pearson(prop_net, forward 5d)` | **+0.2658** | +0.0280 |
+| `spearman(prop_net, forward 5d)` | +0.0008 | −0.0049 |
+| sd of the channel | 65,385 | 0.165 |
+
+##### ⚠️ And a defect in THIS block, found in the same pass
+
+The flow ratios divided by **matched** turnover. Foreign and proprietary desks trade in
+the **negotiated** channel too, so a block trade lands in `value_negotiated` while
+`value_matched` stays small — `ABB 2026-06-26` has **19.07 bn matched against 392.62 bn
+negotiated**, `LPB 2026-06-19` **75 bn against 1,558 bn**. Those rows were inflated ~20×.
+`_val_tot_vnd` (matched + negotiated) is now the denominator for every flow ratio, for
+`drv_amihud_*` and for `drv_cs_pct_turnover`. ⚠️ `drv_vwap_raw` and `drv_close_vs_vwap`
+deliberately keep **matched** — a matched VWAP is exactly what
+`value_matched / volume_matched` means.
+
+| channel, BANK panel | matched denominator | total denominator |
+|---|---|---|
+| `drv_foreign_net_value_ratio` | [−239.6, +75.0], 63 rows outside ±2 | **[−4.87, +2.27]**, 4 rows |
+| `drv_prop_net_value_ratio` | [−115,288, +8,023] | **[−84.95, +2.08]**, p1/p99 ∓0.29 |
+| `drv_prop_participation` | max 57,644 | **max 42.5**, p99 **0.269** |
+
+⚠️ **The residual tail is REAL, not corruption, and it does not go away.** On `ALL`,
+p1/p99 sit inside ±1 for every flow channel while the extremes reach **|85| on
+`drv_foreign_net_value_ratio` and 1,469 on `drv_foreign_flow_ratio_21`** — the latter a
+21-day sum of flow over a 21-day sum of turnover, on a name that barely traded for a
+month. A ratio with a near-zero denominator is a large number, not a wrong one.
+Winsorising it is a **modelling** choice belonging to `train_test_creator` (whose
+`StandardScaler` is the thing that suffers), not a data fix belonging here — and the
+distinction matters, because the same instinct applied one layer lower is what the two
+wrong intermediate screens above did.
 
 ##### ⚠️ Two things that are deliberately not uniform across partitions
 

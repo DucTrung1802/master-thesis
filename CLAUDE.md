@@ -197,16 +197,44 @@ differing from pandas' sample-corrected form by design), **0 name collisions** w
 test — the whole block rebuilt on data truncated at 2026-06-15 reproduces all 58 columns
 on 4,227 shared rows at **max abs diff exactly 0.0**.
 
-⚠️ **NEW ISSUE `OUT-1`: one corrupt source cell manufactures a finding.**
-`silver.stocks_basic` VCB **2026-01-05** carries `prop_buy_val = 4.001e17` against that
-day's whole turnover of 2.06e11 — an implied 5.7e11 VND/share, ten million times the
-real price. That single cell drives `corr(drv_prop_net_value_ratio,
-drv_prop_participation)` to **exactly +1.0** and manufactures a **+0.266** correlation
-against the forward 5-day return. Market-wide, **77 of 73,044** `prop_buy_val` and
-**1,182 of 1,240,032** `foreign_buy_value` rows exceed ten times their own day's
-turnover. **Not winsorised** — cleaning belongs to the layer that owns the column. The
-*scale* is fine (implied price 87,596 vs `close_raw` 87,500 on normal rows); this is
-outliers.
+⚠️ **`OUT-1`: one corrupt source cell manufactured a finding — FIXED 2026-08-16 in
+silver.** `silver.stocks_basic` VCB **2026-01-05** carried `prop_buy_val = 4.001e17`
+against that day's whole turnover of 2.06e11 — an implied 5.7e11 VND/share. That single
+cell drove `corr(drv_prop_net_value_ratio, drv_prop_participation)` to **exactly +1.0**
+and manufactured a **+0.266** correlation against the forward 5-day return.
+
+`_helper_screen_flow_outliers` NULLs a flow value/volume pair (never winsorises — the
+corruption factor is not constant, so there is nothing to divide out) on **three** rules,
+and it took three because each of the first two has a blind spot: **implied price** off
+`close_raw` by >100× (99.5% of flow rows sit within **2×**, 99.98% within 100×);
+**flow volume** >100× the day's total, for rows where value *and* volume are corrupt
+together so the price looks fine (`STB` carries 1.5e13 shares); and **flow value** >100×
+turnover, the only rule that works when the volume is NULL — `SHB 2025-10-30` slipped
+past the first two that way. **611 of 2,388,975 rows (0.0256%)**, row count unchanged.
+On VCB the two symptoms go **+1.000000 → +0.3270** and **+0.2658 → +0.0280**.
+
+⚠️ **A second defect, in the derived block itself, found in the same pass**: the flow
+ratios divided by MATCHED turnover, but flow trades in the negotiated channel too
+(`ABB 2026-06-26`: 19 bn matched against **393 bn negotiated**). The denominator is now
+matched + negotiated, taking `drv_foreign_net_value_ratio` from **[−239.6, +75.0]** to
+**[−4.87, +2.27]**. ⚠️ **Two classes remain unscreened and reported**: 2,844 pairs with
+a real volume and a ZERO value (mixed — 305 of 857 `prop_sell` imply ≥1 BN VND, so *not*
+just rounding), and 196 rows with flow on a no-trade day.
+
+⚠️ **NEW ISSUE `STA-1`: `gold.stocks_ta` was not built by the current builder.** It
+carries **13 legacy column names** (`val_matched_bn`, `f_net_val`, `vol_matched`, …) and
+**zero** of silver's, holds **2,678,167 rows against silver's 2,388,975**, and stops at
+2026-06-26. Nothing in the repo produces those names. So rebuilding it is not
+maintenance — it renames 13 columns and moves 289 k rows, and `pool__ta` inherits all of
+it. That is why the 1e9 fix below shipped as code **without** the rebuild.
+
+⚠️ **The same 1e9 unit bug was found in `gold.stocks_ta.foreign_net_val_ratio`** —
+`ta_functions.py:2773` and `sentiment_features.py:142` divided VND by billions of VND.
+median(stored ÷ honest) = **999,999,998.1** over 769,188 rows; 46% of 1.67 M rows hold a
+"ratio" above 10. **Both fixed.** It changed no result and that is worth stating: an
+exact constant multiplier is rank-preserving (`Spearman = 1.0000000000`), every ranker
+here is rank-based, and `StandardScaler` removes a constant scale — wrong **units**, not
+wrong **ordering**. The table on disk still holds the old values (STA-1).
 
 ### ✅ FOREX: 357 → 3,129 series, ingested end to end (2026-08-14)
 
@@ -771,7 +799,7 @@ archived runs with them. Nothing is lost: they were force-added on 2026-08-09, s
 Everything downstream inherited that, and the provenance sentence travels verbatim from
 the table `COMMENT` into the dataset `metadata.json` into every run's `lineage`.
 
-**Open issues live in [ISSUES.md](ISSUES.md)** (10 open, 29 resolved, codes permanent).
+**Open issues live in [ISSUES.md](ISSUES.md)** (11 open, 29 resolved, codes permanent).
 Short version: ⚠️ **`SHP-1`** the forex scraper writes two file shapes and only one was
 ever ingested — 71% of the folder was silently discarded until 2026-08-14, and **the
 same `value`-only filter sits unchecked on `bonds`/`funds`/`economy`/`indices`**;

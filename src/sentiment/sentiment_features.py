@@ -138,7 +138,18 @@ def _price_technical(
         vol = g["volume_matched"]
         g["vol_ratio"] = vol / vol.rolling(20).mean()
     if {"foreign_net_value", "value_matched"} <= set(g.columns):
-        val = g["value_matched"].replace(0, np.nan)
+        # ⚠️ `value_matched` is BILLIONS of VND, `foreign_net_value` is plain VND — a
+        # CafeF API inconsistency carried faithfully through bronze and silver. This
+        # divided one by the other until 2026-08-16 and was 1e9 too large; the same
+        # bug, found first in `ta.ta_functions.add_foreign_net_val_ratio`, which
+        # carries the measurement. `foreign_buy_ratio` below needs no fix — both its
+        # terms are foreign VND, so the unit cancels.
+        #
+        # ⚠️ The 1e9 is INLINED rather than imported from `ta.ta_functions`, which
+        # owns the canonical `VALUE_MATCHED_VND_SCALE`: that module imports TA-Lib,
+        # and this one is deliberately importable by a sentiment-only model that has
+        # no TA dependency. If the scale ever changes, both places change.
+        val = (g["value_matched"] * 1e9).replace(0, np.nan)
         g["foreign_net_val_ratio"] = g["foreign_net_value"] / val
     if {"foreign_buy_value", "foreign_sell_value"} <= set(g.columns):
         fb, fs = g["foreign_buy_value"], g["foreign_sell_value"]

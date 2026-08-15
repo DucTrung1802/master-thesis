@@ -2760,17 +2760,47 @@ def add_foreign_buy_pressure(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+# ⚠️ **CafeF REPORTS MATCHED TURNOVER IN BILLIONS OF VND AND FOREIGN/PROP FLOW IN
+# PLAIN VND, AND BOTH ARE CARRIED FAITHFULLY** through bronze into
+# `silver.stocks_basic`. Measured 2026-08-16, VCB 2026-08-07: `value_matched` =
+# **392.54** against `volume_matched × close_raw` = **389,375,340,000** — a ratio of
+# 1.0e9, market-wide median 1.0007e9. `foreign_buy_value` on the same row is
+# **70,742,630,000**. The inconsistency is the source API's (`GiaTriKhopLenh` vs
+# `GtMua`), not this repo's, but any ratio mixing the two must undo it here.
+VALUE_MATCHED_VND_SCALE = 1e9
+
+
 def add_foreign_net_val_ratio(df: pd.DataFrame) -> pd.DataFrame:
-    """Foreign net value relative to matched turnover = foreign_net_value / value_matched.
+    """Foreign net value relative to matched turnover = foreign_net_value / value_matched,
+    **both in VND**.
 
     Stock-only. Returns df unchanged if the required columns are absent.
+
+    ⚠️ **THIS DIVIDED VND BY BILLIONS OF VND UNTIL 2026-08-16**, so every value it
+    produced was 1e9 times too large: `gold.stocks_ta` holds -137,171,310 for VCB
+    2026-06-25 where the honest ratio is **-0.137171**, and **46% of its 1.67 M rows
+    carry a "ratio" whose absolute value exceeds 10**. See `VALUE_MATCHED_VND_SCALE`.
+
+    ⚠️ **It changed no result, and that is worth stating so nobody re-derives it.**
+    The error is an exact CONSTANT multiplier, so it is rank-preserving —
+    `Spearman(stored, honest) = 1.0000000000` over 200,000 rows, max rank displacement
+    5 (float noise). Every ranker downstream is rank-based (Spearman IC, the Spearman
+    correlation prune, tree splits) and `train_test_creator` standardises with
+    `StandardScaler`, which removes a constant scale outright. It was wrong UNITS, not
+    wrong ORDERING. ⚠️ `gold.stocks_ta` on disk still carries the old values — it is
+    independently stale (legacy column names, 2026-06-26) and rebuilding it is a
+    separate decision.
+
+    `add_foreign_buy_pressure` needs no such fix: both its terms are foreign VND, so
+    the unit cancels (verified, stored/recomputed = 1.0000).
     """
     if not {"foreign_net_value", "value_matched"}.issubset(df.columns):
         return df
     df = df.copy()
     net = pd.to_numeric(df["foreign_net_value"], errors="coerce")
     matched = pd.to_numeric(df["value_matched"], errors="coerce")
-    df["foreign_net_val_ratio"] = net / matched.replace(0, np.nan)
+    matched_vnd = (matched * VALUE_MATCHED_VND_SCALE).replace(0, np.nan)
+    df["foreign_net_val_ratio"] = net / matched_vnd
     return df
 
 

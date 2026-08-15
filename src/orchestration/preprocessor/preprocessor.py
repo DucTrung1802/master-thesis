@@ -3613,6 +3613,10 @@ class DataPreprocessor:
             bigint_cols=[c for c in bigint_cols if c in df.columns],
         )
 
+        # ⚠️ Run AFTER the cast — the screen does arithmetic, and before the cast these
+        # columns are `object`-dtype Decimals.
+        df = self._helper_screen_flow_outliers(df)
+
         # Attach the full GICS classification tree, merged per ticker (constant per
         # (exchange, ticker)) from bronze `simplize_industry` × `gics`. Placed right
         # after the keys; left-join so a ticker with no GICS crosswalk keeps its rows
@@ -3639,6 +3643,211 @@ class DataPreprocessor:
             df=df,
             dtype_overrides={"date": DataType.DATE()},
         )
+
+    # ── The flow-plausibility screen (issue OUT-1, 2026-08-16) ───────────────────
+    #
+    # ⚠️ **ONE CORRUPT CELL IS ENOUGH TO MANUFACTURE A FINDING.** `VCB 2026-01-05`
+    # arrived from CafeF with `prop_buy_val = 4.001e17` — 400 quadrillion VND —
+    # against that day's whole turnover of 2.06e11, on `prop_buy_vol = 697,000` shares
+    # at a close of 57,100: an implied **5.7e11 VND per share**, ten million times the
+    # real price. That single cell drove `corr(prop_net_ratio, prop_participation)` to
+    # exactly +1.0 and manufactured a **+0.266** correlation against the forward
+    # 5-day return.
+    #
+    # ⚠️ **THE DAMAGE PATH IS `StandardScaler`, NOT THE RANKERS.** Selection is
+    # rank-based end to end and never saw it (Spearman +0.0008 against the same label
+    # where Pearson read +0.266). But `train_test_creator` standardises with mean/std,
+    # which is not robust: one such cell took a channel's sd from 0.165 to 65,385 and
+    # squeezed all 877 genuine observations into a z-range of **0.0001** instead of
+    # **21.6**. The channel becomes a constant plus one spike.
+    #
+    # ⚠️ **NULL, NOT WINSORISED, and not repaired.** The corruption factor is not
+    # constant (1e7 on VCB, 1e8 on HPG/TPB), so there is nothing to divide out — the
+    # true value is simply unknown, and NULL is the only honest encoding of that.
+    # Every pool downstream already handles NULLs.
+    #
+    # ⚠️ **AND IT IS DONE HERE, IN SILVER, NOT IN A FEATURE EXPRESSION.** Silver is the
+    # canonical cross-source layer, so a cross-field invariant (`value ≈ volume ×
+    # price`) is exactly its business. Clipping inside a derived feature — the
+    # alternative considered on 2026-08-16 — would have hidden the defect from every
+    # other consumer of the same column while looking clean.
+    #
+    # **The thresholds were read off the distribution, not chosen.** Measured over
+    # 2,388,975 rows: 99.5% of flow rows imply a price within **2×** of `close_raw`,
+    # 99.8% within 10×, **99.98% within 100×**. The cliff is far below the cut, so
+    # 100× flags only the unambiguous corruption.
+    #
+    # **TWO rules, because one is not enough.** Some rows have value AND volume
+    # corrupt by similar factors — `STB 2025-12-30` carries 1.5e13 shares (the whole
+    # market's daily volume is ~1e9) with a value to match, so its implied price is a
+    # plausible 9.9× and the price test misses it entirely. The volume rule catches it.
+    FLOW_PLAUSIBILITY_PRICE_FACTOR = 100.0
+    FLOW_PLAUSIBILITY_VOLUME_FACTOR = 100.0
+    # ⚠️ Flow is a SUBSET of the day's trading, so a ratio above 1.0 is already
+    # impossible. 100x is chosen to match its siblings and to stay far away from any
+    # legitimate reporting slack — it is not a claim that 99x would be plausible.
+    FLOW_PLAUSIBILITY_VALUE_FACTOR = 100.0
+    # If more than this fraction is flagged, the SOURCE changed and a screen tuned to
+    # 0.016% is the wrong tool — raise instead of silently deleting a scrape.
+    FLOW_PLAUSIBILITY_MAX_FLAGGED = 0.01
+
+    # (value column, volume column) — the five independently-scraped flow pairs.
+    FLOW_VALUE_VOLUME_PAIRS = (
+        ("foreign_buy_value", "foreign_buy_volume"),
+        ("foreign_sell_value", "foreign_sell_volume"),
+        ("foreign_net_value", "foreign_net_volume"),
+        ("prop_buy_val", "prop_buy_vol"),
+        ("prop_sell_val", "prop_sell_vol"),
+    )
+
+    def _helper_screen_flow_outliers(self, df: pd.DataFrame) -> pd.DataFrame:
+        """NULL the flow value/volume pairs that cannot be reconciled with the day's
+        own price and volume. Returns the frame; logs a count per column.
+
+        A pair is implausible when EITHER
+          * its implied price `|value| / |volume|` differs from `close_raw` by more
+            than `FLOW_PLAUSIBILITY_PRICE_FACTOR` in either direction, or
+          * its volume exceeds the day's total traded volume (matched + negotiated)
+            by more than `FLOW_PLAUSIBILITY_VOLUME_FACTOR`.
+
+        ⚠️ **BOTH members of a failing pair are NULLed**, because the test cannot say
+        which of the two is wrong — only that they disagree with the price. `net` is
+        screened on absolute values (it is signed on both legs) and independently of
+        buy/sell, since CafeF scrapes it as its own field rather than deriving it.
+        """
+        close = pd.to_numeric(df.get("close_raw"), errors="coerce")
+        if close is None or close.isna().all():
+            return df
+        total_vol = pd.to_numeric(
+            df.get("volume_matched"), errors="coerce"
+        ).fillna(0) + pd.to_numeric(df.get("volume_negotiated"), errors="coerce").fillna(0)
+        # ⚠️ In VND. `value_matched` / `value_negotiated` are BILLIONS of VND while
+        # every flow value column is plain VND — the same source inconsistency
+        # `ta.ta_functions.VALUE_MATCHED_VND_SCALE` documents. Comparing the two
+        # without this factor would make the value rule 1e9 times too loose, i.e. dead.
+        total_vol_value = (
+            pd.to_numeric(df.get("value_matched"), errors="coerce").fillna(0)
+            + pd.to_numeric(df.get("value_negotiated"), errors="coerce").fillna(0)
+        ) * 1e9
+
+        flagged: Dict[str, int] = {}
+        any_flag = pd.Series(False, index=df.index)
+        for value_col, volume_col in self.FLOW_VALUE_VOLUME_PAIRS:
+            if not {value_col, volume_col}.issubset(df.columns):
+                continue
+            value = pd.to_numeric(df[value_col], errors="coerce").abs()
+            volume = pd.to_numeric(df[volume_col], errors="coerce").abs()
+
+            # ⚠️ `value > 0` IS LOAD-BEARING TOO, and it is the second thing this
+            # screen got wrong before it was measured. A row with a real volume and a
+            # value of ZERO gives ratio 0, which trips the low side — and there are
+            # **2,849** of them, against the 576 the screen is actually for. They are
+            # not all corruption: `PVC 2025-11-25` sells **4 shares** at 10,800, which
+            # the source rounds to 0 in its own value unit. The 99.98%-within-100x
+            # cliff these thresholds come from was measured on strictly-positive
+            # pairs, so the rule must be too.
+            #
+            # ⚠️ **AND THEY ARE NOT ALL ROUNDING — an earlier version of this comment
+            # said they were, and the data says otherwise.** Of the 857 `prop_sell`
+            # rows with a zero value and a real volume, **362 imply under 100 M VND
+            # (rounding) but 305 imply 1 BN VND or more**, the largest 1.73e13. VCB
+            # 2026-01-05 — the row that opened OUT-1 — is one of them: its buy pair was
+            # NULLed and its sell pair survives as `val=0, vol=165,300`. So this class
+            # is MIXED, it is still unscreened, and the counter below reports it rather
+            # than characterising it.
+            plausible = (value > 0) & (volume > 0) & (close > 0)
+            implied = value / volume.where(volume > 0)
+            ratio = implied / close.where(close > 0)
+            bad_price = plausible & (
+                (ratio > self.FLOW_PLAUSIBILITY_PRICE_FACTOR)
+                | (ratio < 1.0 / self.FLOW_PLAUSIBILITY_PRICE_FACTOR)
+            )
+            # ⚠️ `total_vol > 0` IS LOAD-BEARING, and leaving it out cost a wrong
+            # number on the first run. Without it a day with NO traded volume at all
+            # makes the right-hand side 0, so any non-zero flow volume trips the rule:
+            # the screen NULLed **2,818 rows (0.118%)** against the 2,818−378 = 2,440
+            # it was documented to. Those extra rows are a DIFFERENT defect —
+            # 14,056 rows across 457 tickers carry flow on a day the price table
+            # records no turnover — and folding a second, unexamined invariant into a
+            # screen justified by a price-distribution cliff is how a cleaning step
+            # starts deleting data nobody agreed to delete. Counted below, not NULLed.
+            bad_volume = (total_vol > 0) & (
+                volume > total_vol * self.FLOW_PLAUSIBILITY_VOLUME_FACTOR
+            )
+            # ⚠️ **THE THIRD RULE, AND THE ONLY ONE THAT WORKS WITHOUT A VOLUME.**
+            # Both rules above need `volume > 0`, so a huge VALUE carrying a NULL or
+            # zero volume passes them untouched — which is exactly what `SHB
+            # 2025-10-30` did, surviving the first fix and leaving
+            # `drv_prop_participation` with a maximum of **57,644** against a p99 of
+            # 0.269. A desk's flow is a SUBSET of the day's trading, so flow value
+            # cannot exceed total turnover at all; the same 100x factor is therefore
+            # enormously generous and still catches it.
+            bad_value = (total_vol_value > 0) & (
+                value > total_vol_value * self.FLOW_PLAUSIBILITY_VALUE_FACTOR
+            )
+            bad = (bad_price | bad_volume | bad_value).fillna(False)
+            if not bad.any():
+                continue
+            df.loc[bad, [value_col, volume_col]] = np.nan
+            flagged[f"{value_col}/{volume_col}"] = int(bad.sum())
+            any_flag |= bad
+
+        # ⚠️ REPORTED, NOT NULLED — a separate invariant this screen deliberately does
+        # not enforce. Flow recorded on a day whose price table shows no turnover at
+        # all is internally inconsistent, but whether the fault is the flow tab or the
+        # price tab has not been established, and 14,056 rows is far too many to
+        # delete on a guess. Surfaced here so it stays visible until someone decides.
+        no_trade_with_flow = 0
+        zero_value_with_volume = 0
+        flow_present = pd.Series(False, index=df.index)
+        for value_col, volume_col in self.FLOW_VALUE_VOLUME_PAIRS:
+            if volume_col not in df.columns:
+                continue
+            vol = pd.to_numeric(df[volume_col], errors="coerce").fillna(0).abs()
+            flow_present |= vol != 0
+            if value_col in df.columns:
+                val = pd.to_numeric(df[value_col], errors="coerce").abs()
+                zero_value_with_volume += int(((val == 0) & (vol > 0)).sum())
+        no_trade_with_flow = int(((total_vol <= 0) & flow_present).sum())
+        if no_trade_with_flow or zero_value_with_volume:
+            self._logger.log_warning(
+                f"Flow plausibility screen, REPORTED NOT SCREENED: "
+                f"{no_trade_with_flow} row(s) carry flow volume on a day with no "
+                f"traded volume; {zero_value_with_volume} pair(s) carry a real volume "
+                f"with a ZERO value — a MIXED class, part source rounding of a "
+                f"few-share trade and part genuinely missing value on a large one "
+                f"(measured 2026-08-16: 362 of 857 prop_sell rows imply <100M VND, "
+                f"305 imply >=1BN). Both are separate invariants from the one this "
+                f"screen enforces. See ISSUES.md OUT-1."
+            )
+
+        rows = int(any_flag.sum())
+        if not rows:
+            self._logger.log_info(
+                "Flow plausibility screen: 0 implausible value/volume pairs."
+            )
+            return df
+
+        share = rows / max(len(df), 1)
+        # ⚠️ A ceiling, not a target. 0.016% is the measured rate; a jump to 1% means
+        # the SOURCE changed shape and this screen would be quietly deleting a scrape.
+        if share > self.FLOW_PLAUSIBILITY_MAX_FLAGGED:
+            raise PipelineError(
+                f"Flow plausibility screen flagged {rows} of {len(df)} rows "
+                f"({100 * share:.3f}%), above the {100 * self.FLOW_PLAUSIBILITY_MAX_FLAGGED:.1f}% "
+                f"ceiling. That is a source change, not outliers — inspect "
+                f"bronze.cafef_foreign / cafef_prop_trading before re-running. "
+                f"Per pair: {flagged}"
+            )
+        self._logger.log_warning(
+            f"Flow plausibility screen: NULLed {rows} row(s) of {len(df)} "
+            f"({100 * share:.4f}%) whose flow value/volume disagrees with the day's "
+            f"price by >{self.FLOW_PLAUSIBILITY_PRICE_FACTOR:.0f}x or whose flow "
+            f"volume exceeds the day's total by >"
+            f"{self.FLOW_PLAUSIBILITY_VOLUME_FACTOR:.0f}x. Per pair: {flagged}. "
+            f"See ISSUES.md OUT-1."
+        )
+        return df
 
     # Full GICS hierarchy columns carried on every silver.stocks_basic row (English
     # snake_case names + codes, sourced entirely from bronze.gics).
@@ -6787,12 +6996,12 @@ class DataPreprocessor:
         # ── E. Foreign and proprietary flow ──
         (
             "drv_foreign_net_value_ratio",
-            '"foreign_net_value"::double precision / NULLIF("_val_vnd", 0)',
+            '"foreign_net_value"::double precision / NULLIF("_val_tot_vnd", 0)',
         ),
         (
             "drv_foreign_participation",
             '("foreign_buy_value"::double precision + "foreign_sell_value") '
-            '/ NULLIF(2.0 * "_val_vnd", 0)',
+            '/ NULLIF(2.0 * "_val_tot_vnd", 0)',
         ),
         # Ownership DRIFT, not the level — the level is already a silver column and is
         # near-constant week to week.
@@ -6826,12 +7035,12 @@ class DataPreprocessor:
         (
             "drv_prop_net_value_ratio",
             '("prop_buy_val"::double precision - "prop_sell_val") '
-            '/ NULLIF("_val_vnd", 0)',
+            '/ NULLIF("_val_tot_vnd", 0)',
         ),
         (
             "drv_prop_participation",
             '("prop_buy_val"::double precision + "prop_sell_val") '
-            '/ NULLIF(2.0 * "_val_vnd", 0)',
+            '/ NULLIF(2.0 * "_val_tot_vnd", 0)',
         ),
     )
 
@@ -6941,11 +7150,11 @@ class DataPreprocessor:
         # from every pool in this database.
         (
             "drv_amihud_21",
-            'AVG(ABS("drv_ret_1d") / NULLIF("_val_vnd", 0)) OVER w21 * 1e9',
+            'AVG(ABS("drv_ret_1d") / NULLIF("_val_tot_vnd", 0)) OVER w21 * 1e9',
         ),
         (
             "drv_amihud_63",
-            'AVG(ABS("drv_ret_1d") / NULLIF("_val_vnd", 0)) OVER w63 * 1e9',
+            'AVG(ABS("drv_ret_1d") / NULLIF("_val_tot_vnd", 0)) OVER w63 * 1e9',
         ),
         # 21% of market-wide rows are no-trade sessions, so staleness is a real feature
         # on `ALL` and a constant 0 on VCB.
@@ -6955,11 +7164,11 @@ class DataPreprocessor:
         # raw cumulative VND figure is neither stationary nor comparable across tickers.
         (
             "drv_foreign_flow_ratio_5",
-            'SUM("foreign_net_value") OVER w5 / NULLIF(SUM("_val_vnd") OVER w5, 0)',
+            'SUM("foreign_net_value") OVER w5 / NULLIF(SUM("_val_tot_vnd") OVER w5, 0)',
         ),
         (
             "drv_foreign_flow_ratio_21",
-            'SUM("foreign_net_value") OVER w21 / NULLIF(SUM("_val_vnd") OVER w21, 0)',
+            'SUM("foreign_net_value") OVER w21 / NULLIF(SUM("_val_tot_vnd") OVER w21, 0)',
         ),
         # ── D. Order flow, windowed. The daily imbalance is noisy (VCB sd 0.225,
         # range −0.59…+0.98, measured 2026-08-16); the trailing mean is the signal
@@ -7024,8 +7233,8 @@ class DataPreprocessor:
         ),
         (
             "drv_cs_pct_turnover",
-            'CASE WHEN "_val_vnd" IS NOT NULL THEN PERCENT_RANK() OVER '
-            '(PARTITION BY "date" ORDER BY "_val_vnd" NULLS LAST) END',
+            'CASE WHEN "_val_tot_vnd" IS NOT NULL THEN PERCENT_RANK() OVER '
+            '(PARTITION BY "date" ORDER BY "_val_tot_vnd" NULLS LAST) END',
         ),
         (
             "drv_cs_pct_range",
@@ -7149,7 +7358,21 @@ class DataPreprocessor:
             # `value_negotiated` are billions of VND; `foreign_*_value` and `prop_*_val`
             # are plain VND. See the block comment above `UNIFIED_DERIVED_PREFIX`.
             f'         ("value_matched" * 1e9)::double precision AS "_val_vnd",'
-            f'         ("value_negotiated" * 1e9)::double precision AS "_val_neg_vnd"'
+            f'         ("value_negotiated" * 1e9)::double precision AS "_val_neg_vnd",'
+            # ⚠️ **TOTAL TURNOVER IS THE DENOMINATOR FOR EVERY FLOW RATIO, and using
+            # matched alone was a real bug** (found 2026-08-16, after the OUT-1 fix
+            # had already run). Foreign and proprietary desks trade in BOTH the
+            # matched and the negotiated channel, so a block trade lands in
+            # `value_negotiated` while `value_matched` stays small: ABB 2026-06-26 has
+            # **19.07 bn matched against 392.62 bn negotiated**, LPB 2026-06-19 has
+            # **75 bn against 1,558 bn**. Dividing flow by the matched leg alone
+            # inflated those rows ~20x. Measured on the BANK panel, switching to
+            # total takes `drv_foreign_net_value_ratio` from **[-239.6, +75.0]** with
+            # 63 rows outside ±2 to **[-4.87, +2.27]** with 4, and puts
+            # `drv_prop_participation`'s p99 at **0.269**.
+            f'         (COALESCE("value_matched", 0) * 1e9'
+            f'          + COALESCE("value_negotiated", 0) * 1e9)'
+            f'           ::double precision AS "_val_tot_vnd"'
             f"  FROM src s"
             f"), "
             f"l1 AS ("
