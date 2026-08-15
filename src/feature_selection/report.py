@@ -68,6 +68,7 @@ import numpy as np
 import pandas as pd
 
 from feature_selection import plots
+from utils import runtime
 
 # Where a report lands unless the caller says otherwise. Anchored to the REPO ROOT,
 # not the CWD — a notebook in `src/feature_selection` and a script at the root must
@@ -336,12 +337,21 @@ def build_metadata(
     universe: Optional[Sequence[str]] = None,
     notes: str = "",
     extra: Optional[Dict] = None,
+    columns_by_table: Optional[Dict[str, Sequence[str]]] = None,
+    execution: Optional[Dict] = None,
 ) -> Dict:
     """Everything about the run, as a JSON-serialisable dict.
 
     ⚠️ `null=None` becomes `"null": null` in the file — **an absent null is recorded
     as absent.** It is never omitted, because a missing key reads as "not applicable"
     and a null that was never computed is not the same as one that was not needed.
+
+    ⚠️ `columns_by_table` is `UnifiedSchemaReader.columns_by_table` — which pool each
+    channel was read from. It lands in `input.columns_by_table` and is what
+    `feature_selection.outstanding` fills `source_table` from. Omitting it does not
+    fail here; it fails one stage later, where the pool has to be GUESSED from the
+    channel name and `final_features` gets `unknown` for every pool built since
+    2026-08-10 (`contract.py`, and its measured table).
     """
     from feature_selection import evaluation
 
@@ -355,6 +365,15 @@ def build_metadata(
         "join_log": join_log or [],
         "panel_rows": int(len(panel)) if panel is not None else None,
         "panel_columns": int(panel.shape[1]) if panel is not None else None,
+        # ⚠️ `{pool: [channels it contributed]}`. See the docstring — this is a FACT
+        # recorded where it is known, replacing a guess made three stages later.
+        # `null` (rather than absent) when the caller did not supply it, so a consumer
+        # can tell "this run predates the map" from "this run had an empty one".
+        "columns_by_table": (
+            {str(k): [str(c) for c in v] for k, v in columns_by_table.items()}
+            if columns_by_table is not None
+            else None
+        ),
     }
     if panel is not None and date_col in panel.columns:
         panel_info["first_date"] = str(pd.Timestamp(panel[date_col].min()).date())
@@ -431,9 +450,16 @@ def build_metadata(
 
     metadata = {
         "report_schema_version": REPORT_SCHEMA_VERSION,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": runtime.iso(),
         "git_commit": _git_commit(),
         "environment": _versions(),
+        # ⚠️ **WHEN IT RAN, ON WHAT, AND FOR HOW LONG** (added 2026-08-15). `device` is
+        # part of the setup here — the same selection on `cuda` and on `cpu` keeps a
+        # different feature set (`gpu.py` §1) — and the runtime is what the cost model
+        # in CONTEXT §15c is fitted on. Both were previously visible only in whatever
+        # console the run happened to print to. `null` when the caller did not time
+        # the run; `utils.runtime.RunTimer.summary()` is what fills it.
+        "execution": _json_safe(execution) if execution else None,
         "input": panel_info,
         "target": target_info,
         "setup": setup,
@@ -590,6 +616,8 @@ def write_report(
     universe: Optional[Sequence[str]] = None,
     notes: str = "",
     extra: Optional[Dict] = None,
+    columns_by_table: Optional[Dict[str, Sequence[str]]] = None,
+    execution: Optional[Dict] = None,
     root: str = DEFAULT_REPORT_ROOT,
     run_id: Optional[str] = None,
     figures: bool = True,
@@ -606,6 +634,14 @@ def write_report(
         schema, tables, database, join_log: where the data came from. `join_log`
             comes straight off `UnifiedSchemaReader.join_log` and records **which
             keys each merge actually used** — the thing §3 says not to assume.
+        columns_by_table: `UnifiedSchemaReader.columns_by_table` — which pool each
+            channel came from. ⚠️ **Pass it.** Without it the next stage guesses the
+            pool from the channel name and hands `final_features` `unknown` for
+            every pool built since 2026-08-10 (`contract.py`).
+        execution: `utils.runtime.RunTimer.summary()` — when the run started, how
+            long it took, and which GPU was in the box. ⚠️ Safe to pass mid-run:
+            `summary()` reads a live elapsed time, which it has to, because this
+            function is what writes the file it goes into.
         null: an `evaluation.NullResult`, if one was computed. ⚠️ Omitting it is
             recorded as "no null was computed", not as a pass.
         holdout: `selector.score_holdout(result)` output, if it was run.
@@ -689,6 +725,7 @@ def write_report(
         result, selector=selector, panel=panel, schema=schema, tables=tables,
         database=database, join_log=join_log, null=null, holdout=holdout,
         universe=universe, notes=notes, extra=extra,
+        columns_by_table=columns_by_table, execution=execution,
     )
     metadata["run_id"] = run_id
     metadata["artifacts"] = [

@@ -61,6 +61,7 @@ from model.common.trainer import (
 from result_evaluator import metrics as M
 from result_evaluator.evaluator import evaluate_run
 from result_evaluator.index import index_row
+from utils import runtime
 
 _SRC = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -116,7 +117,9 @@ def load_config(path: str) -> Dict:
     # `_legacy/` is exempt: those 27 configs predate the convention, their datasets no
     # longer exist (issue RPR-1), and renaming dead files would be churn. They are
     # quarantined by directory, which is the record that they are not current.
-    if stem != config["run_name"] and "_legacy" not in path.replace("\\", "/").split("/"):
+    if stem != config["run_name"] and "_legacy" not in path.replace("\\", "/").split(
+        "/"
+    ):
         raise ValueError(
             f"config filename {stem!r} != run_name {config['run_name']!r}. A run has "
             f"ONE name: rename the file to {config['run_name']}.yaml. See "
@@ -152,7 +155,10 @@ def _verify(config: Dict, dataset) -> Dict:
             f"{dataset.name} declares lookback_d={declared} but its tensors are "
             f"{dataset.lookback} deep — the dataset is inconsistent with itself."
         )
-    for key, actual in (("lookback", dataset.lookback), ("n_features", dataset.n_features)):
+    for key, actual in (
+        ("lookback", dataset.lookback),
+        ("n_features", dataset.n_features),
+    ):
         stated = config.get(key)
         if stated is not None and int(stated) != int(actual):
             raise ValueError(
@@ -178,7 +184,9 @@ def _verify(config: Dict, dataset) -> Dict:
         "horizon_h": (meta.get("target") or {}).get("horizon_h"),
         "lookback_d": declared or dataset.lookback,
         "purge_gap_rows": (meta.get("split") or {}).get("purge_gap_rows"),
-        "features_dropped": list((meta.get("features") or {}).get("dropped_columns", {})),
+        "features_dropped": list(
+            (meta.get("features") or {}).get("dropped_columns", {})
+        ),
         "evidence": meta.get("evidence"),
     }
 
@@ -215,8 +223,10 @@ def train(
     print(f"dataset   {dataset.name}  ({dataset.hash})")
     print(f"source    {lineage['schema']}.{lineage['table']}")
     print(f"window    d={dataset.lookback}  h={horizon}  features={dataset.n_features}")
-    print(f"samples   train {len(dataset.y_train)} | val {len(dataset.y_val)} "
-          f"| test {len(dataset.y_test)}")
+    print(
+        f"samples   train {len(dataset.y_train)} | val {len(dataset.y_val)} "
+        f"| test {len(dataset.y_test)}"
+    )
     if dry_run:
         print("\ndry run — nothing trained, nothing written")
         return None, None
@@ -278,8 +288,11 @@ def train(
             "batch_size": train_cfg.batch_size,
             "lookback": dataset.lookback,
         },
-        {f"test_{k}": v for k, v in scored.get("test", {}).items()
-         if isinstance(v, (int, float)) and not isinstance(v, bool)},
+        {
+            f"test_{k}": v
+            for k, v in scored.get("test", {}).items()
+            if isinstance(v, (int, float)) and not isinstance(v, bool)
+        },
     )
     trainer.close()
 
@@ -338,8 +351,10 @@ def train_estimator(
     print(f"dataset   {dataset.name}  ({dataset.hash})")
     print(f"source    {lineage['schema']}.{lineage['table']}")
     print(f"window    d={dataset.lookback}  h={horizon}  features={dataset.n_features}")
-    print(f"samples   train {len(dataset.y_train)} | val {len(dataset.y_val)} "
-          f"| test {len(dataset.y_test)}")
+    print(
+        f"samples   train {len(dataset.y_train)} | val {len(dataset.y_val)} "
+        f"| test {len(dataset.y_test)}"
+    )
     if dry_run:
         print("\ndry run — nothing fitted, nothing written")
         return None, None
@@ -397,6 +412,15 @@ def train_estimator(
     return run.dir, table
 
 
+def _cli_label(model_type: str, config: Dict, argv: Sequence[str]) -> str:
+    """`model.<type>  <run_name>[  --dry-run]` — the one banner label both CLI
+    entry points print, so `run_cli` and `run_estimator_cli` say the same thing
+    for the same reason a run has ONE name (see `load_config`).
+    """
+    dry = "  --dry-run" if "--dry-run" in argv else ""
+    return f"model.{model_type.lower()}  {config.get('run_name', '?')}{dry}"
+
+
 def run_estimator_cli(
     model_module,
     model_type: str,
@@ -404,21 +428,29 @@ def run_estimator_cli(
     default_config: str,
     argv: Optional[Sequence[str]] = None,
 ):
-    """`run_cli` for the estimator path."""
+    """`run_cli` for the estimator path.
+
+    ⚠️ Wrapped in the same `runtime.RunTimer` as `run_cli`. A baseline's fit is
+    fast enough that the banner might look like overkill, but the whole point of
+    `train_estimator` is that a baseline is scored by the same code as a network
+    (see its docstring) — exempting its CLI wrapper from the same runtime banner
+    would make baseline rows the one kind of run without a `started`/`finished`/
+    `gpu` line in the log.
+    """
     argv = list(sys.argv[1:] if argv is None else argv)
     path = argv[argv.index("--config") + 1] if "--config" in argv else default_config
     if not os.path.isabs(path) and not os.path.exists(path):
         path = os.path.join(config_dir, os.path.basename(path))
     config = load_config(path)
-    return train_estimator(
-        config,
-        model_module=model_module,
-        # ⚠️ The baseline package holds several estimators, so the type is read from
-        # the config's `kind` when the caller does not pin one. Unlike an architecture,
-        # `kind` genuinely selects the model, so it belongs in the YAML.
-        model_type=model_type or str(config["model"].get("kind", "")).upper(),
-        dry_run="--dry-run" in argv,
-    )
+    resolved_type = model_type or str(config["model"].get("kind", "")).upper()
+
+    with runtime.RunTimer(_cli_label(resolved_type, config, argv), device="cpu"):
+        return train_estimator(
+            config,
+            model_module=model_module,
+            model_type=resolved_type,
+            dry_run="--dry-run" in argv,
+        )
 
 
 def _write_predictions(predict, dataset, run, task) -> None:
@@ -507,14 +539,30 @@ def run_cli(
     default_config: str,
     argv: Optional[Sequence[str]] = None,
 ):
-    """`python -m model.<name> [--config PATH] [--dry-run]`, for any model package."""
+    """`python -m model.<name> [--config PATH] [--dry-run]`, for any model package.
+
+    ⚠️ **The banner is here, not in the six bindings.** `model/lstm/train.py` and its
+    five siblings are ~30 lines each that name a model module and a config directory
+    (`model/CONTEXT.md` §7); anything they would all have to repeat belongs in the
+    engine, which is the same rule that put `_verify` and `_write_predictions` here.
+    """
     argv = list(sys.argv[1:] if argv is None else argv)
     path = argv[argv.index("--config") + 1] if "--config" in argv else default_config
     if not os.path.isabs(path) and not os.path.exists(path):
         path = os.path.join(config_dir, os.path.basename(path))
-    return train(
-        load_config(path),
-        model_module=model_module,
-        model_type=model_type,
-        dry_run="--dry-run" in argv,
-    )
+    config = load_config(path)
+
+    # ⚠️ The device is `config["device"]` — a PREFERENCE, usually `auto` — and it is
+    # printed here as one. `train` resolves it and prints the resolved device on its
+    # own `device …  parameters …` line; the finish banner then repeats the request.
+    # Both are true and they are different facts (`utils/runtime.gpu_report`).
+    with runtime.RunTimer(
+        _cli_label(model_type, config, argv),
+        device=str(config.get("device", "auto")),
+    ):
+        return train(
+            config,
+            model_module=model_module,
+            model_type=model_type,
+            dry_run="--dry-run" in argv,
+        )

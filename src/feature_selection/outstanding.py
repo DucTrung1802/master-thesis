@@ -65,20 +65,34 @@ channel in a run that was never shown to beat noise. Twelve of the 952 rows are
 import json
 import os
 import sys
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Sequence
 
 import pandas as pd
 
-from feature_selection import selection_cut
+from feature_selection import contract, selection_cut
+from feature_selection.contract import UNKNOWN_SOURCE
 from feature_selection.report import DEFAULT_REPORT_ROOT
+from utils import runtime
 
-OUTSTANDING_FILENAME = "outstanding.csv"
+# ⚠️ One definition, in `contract.py`, imported by both sides of the handoff. The name
+# `OUTSTANDING_FILENAME` is unchanged because `pipeline.stages` and
+# `train_test_creator.dataset` import it from here.
+OUTSTANDING_FILENAME = contract.SHORTLIST_FILENAME
 CORRELATION_FILENAME = "channel_correlation.csv"
 
-# A channel carries no note of where it came from, but the pools are DISJOINT (verified
-# across the archive: basic ∩ fa = basic ∩ ta = fa ∩ ta = ∅) and the economy columns are
-# self-identifying by prefix. So the source table is derivable from the archive alone,
-# with no database connection — which matters because this has to run on a checkout.
+# ⚠️ **THE FALLBACK ONLY.** The authority is `metadata.json`'s
+# `input.columns_by_table`, recorded by `UnifiedSchemaReader.join` at read time; this
+# name-based guess runs only for run folders archived before that existed (the 19
+# country runs of 2026-08-12/13). It cannot be extended to cover the pools built since
+# — `pool__forex_<exchange>`, `pool__funds`, `pool__bonds`, `pool__stock_market`,
+# `pool__basic_bank` are all `{exchange}__{ticker}__{measure}` and share one shape —
+# and `contract.py` has the measured table of what it returns for each.
+#
+# A channel carries no note of where it came from, but the pools it DOES cover are
+# disjoint (verified across the archive: basic ∩ fa = basic ∩ ta = fa ∩ ta = ∅) and
+# the economy columns are self-identifying by prefix. So the source table is derivable
+# from the archive alone, with no database connection — which matters because this has
+# to run on a checkout.
 POOL_BASIC_CHANNELS = frozenset({
     "avg_vol_per_buy_order", "avg_vol_per_sell_order", "buy_order_vol", "close_adjust",
     "close_raw", "foreign_buy_value", "foreign_buy_volume", "foreign_net_value",
@@ -95,6 +109,11 @@ COLUMNS = [
     "kept_by", "consensus_p", "tie_group_size", "beat_in_tie",
     "absorbed_as_redundant", "n_candidates",
     "run_id", "target", "horizon_h", "lookback_d", "evidence",
+    # ⚠️ `metadata` = the pool was READ from `input.columns_by_table`; `heuristic` =
+    # it was guessed from the channel name because the run predates that map. A
+    # consumer reading `heuristic` is reading an inference, and on any pool built
+    # since 2026-08-10 that inference is `unknown` (see `source_table`).
+    "source_table_from",
     # ⚠️ How much of the sample the channel actually EXISTS for (issue COV-1).
     # `prop_buy_vol` was shortlisted at 0.20 coverage — empty until 2023 — and the
     # ranking that chose it was computed on the fifth of history where it exists.
@@ -119,13 +138,32 @@ COVERAGE_FLOOR = 0.95
 COVERAGE_FILENAME = "coverage.csv"
 
 
-def source_table(channel: str, tables: List[str]) -> str:
-    """Which `pool__*` a channel came from, from the channel name and the run's tables.
+def source_table(
+    channel: str,
+    tables: List[str],
+    columns_by_table: Optional[Dict[str, Sequence[str]]] = None,
+) -> str:
+    """Which `pool__*` a channel came from — read from the run's map, or guessed.
 
-    ⚠️ Falls back to `unknown` rather than guessing. A wrong table here sends the next
-    module to read a column that is not there, which fails loudly — but a SILENT wrong
-    guess on a column name that exists in two pools would not, so it is not attempted.
+    ⚠️ **`columns_by_table` is the answer and the rest is an inference.** It comes
+    from `UnifiedSchemaReader.join`, which is the only code that saw both the pool and
+    the column. When it is present nothing is guessed: a channel that is not in it is
+    `unknown`, because a channel the join did not produce is not a channel of this
+    panel at all.
+
+    ⚠️ The fallback below falls back to `unknown` rather than guessing further. A
+    wrong table sends the next module to read a column that is not there, which fails
+    loudly — but a SILENT wrong guess on a column name that exists in two pools would
+    not. It happens anyway, in one direction this cannot see: with `pool__ta` in the
+    run, ANY unrecognised channel is attributed to it, which is how a forex channel
+    came out labelled `pool__ta` (`contract.py`). That is the reason the map exists.
     """
+    if columns_by_table:
+        for table, columns in columns_by_table.items():
+            if channel in columns:
+                return table
+        return UNKNOWN_SOURCE
+
     if channel in POOL_BASIC_CHANNELS:
         return "pool__basic"
     for table in tables:
@@ -136,7 +174,7 @@ def source_table(channel: str, tables: List[str]) -> str:
     for table in ("pool__ta", "pool__fa"):
         if table in tables:
             return table
-    return "unknown"
+    return UNKNOWN_SOURCE
 
 
 def _evidence(meta: Dict) -> str:
@@ -220,6 +258,10 @@ def build_one(folder: str, **cut_kwargs) -> pd.DataFrame:
     meta = json.load(open(os.path.join(folder, "metadata.json"), encoding="utf-8"))
     full = pd.read_csv(os.path.join(folder, "feature_importance.csv"))
     tables = meta["input"]["tables"]
+    # ⚠️ Absent on every run archived before 2026-08-15, present on every run since.
+    # The two are different KINDS of answer, so which one was used is recorded on
+    # every row rather than left to be inferred from the run's date.
+    recorded = meta["input"].get("columns_by_table")
 
     out = break_ties(
         selection_cut.suitable(
@@ -227,7 +269,8 @@ def build_one(folder: str, **cut_kwargs) -> pd.DataFrame:
         )
     )
     out["schema"] = meta["input"]["schema"]
-    out["source_table"] = [source_table(c, tables) for c in out["channel"]]
+    out["source_table"] = [source_table(c, tables, recorded) for c in out["channel"]]
+    out["source_table_from"] = "metadata" if recorded else "heuristic"
     out["grain"] = _grain(meta)
     out["best_stat"] = out.get("best_stat__permutation")
     out["run_id"] = meta["run_id"]
@@ -250,29 +293,76 @@ def build_one(folder: str, **cut_kwargs) -> pd.DataFrame:
 
 
 def main(
-    root: str = DEFAULT_REPORT_ROOT, write: bool = True, **cut_kwargs
+    root: str = DEFAULT_REPORT_ROOT,
+    write: bool = True,
+    strict: bool = True,
+    **cut_kwargs,
 ) -> Dict[str, pd.DataFrame]:
-    """Write one `outstanding.csv` into every run folder under `root`."""
+    """Write one `outstanding.csv` into every run folder under `root`.
+
+    ⚠️ **A shortlist `final_features` cannot read is NOT written** (2026-08-15). Every
+    file is checked against `contract.validate_shortlist` first — the columns the next
+    stage reads, the SQL-identifier rule it interpolates them under, and above all
+    that no channel carries `source_table='unknown'`. A file that fails is skipped,
+    named, and re-raised at the END, after every other run has been written: the same
+    rule as CLAUDE.md §5 rule 20, one level up. Writing it instead would move the
+    failure to `python -m final_features`, hours and two stages later, where the run
+    that caused it is no longer the thing being run.
+
+    `strict=False` reports the problems and writes nothing bad, but does not raise —
+    for a caller that wants the good files and will read `problems` itself.
+    """
     built: Dict[str, pd.DataFrame] = {}
-    for name in sorted(os.listdir(root)):
+    problems: List[str] = []
+    for name in contract.run_folders(root):
         folder = os.path.join(root, name)
-        if not os.path.exists(os.path.join(folder, "metadata.json")):
-            continue
         table = build_one(folder, **cut_kwargs)
+        found = contract.validate_shortlist(
+            table, setup=contract.read_setup(root, name), label=name
+        )
+        if found:
+            problems.extend(found)
+            for problem in found:
+                print(f"WARNING: {problem}")
+            print(f"WARNING: {name}/{OUTSTANDING_FILENAME} was NOT written.")
+            continue
         if write:
             table.to_csv(os.path.join(folder, OUTSTANDING_FILENAME), index=False)
         built[name] = table
+
+    if problems and strict:
+        raise ValueError(
+            f"{len(problems)} problem(s) in the feature_selection -> final_features "
+            f"handoff; {len(built)} good run(s) were written first:\n  "
+            + "\n  ".join(problems)
+        )
     return built
 
 
 if __name__ == "__main__":
-    results = main(write="--dry-run" not in sys.argv)
-    for run, table in results.items():
-        unknown = int((table["source_table"] == "unknown").sum())
-        consensus = int(table["kept_by"].str.contains("consensus").sum())
+    write = "--dry-run" not in sys.argv
+    with runtime.RunTimer("feature_selection.outstanding"):
+        results = main(write=write)
+        for run, table in results.items():
+            unknown = int((table["source_table"] == UNKNOWN_SOURCE).sum())
+            consensus = int(table["kept_by"].str.contains("consensus").sum())
+            source = table["source_table_from"].iloc[0]
+            print(
+                f"{len(table):>4} channels  {consensus:>2} consensus  "
+                f"{table['evidence'].iloc[0]:<24}{source:<11}"
+                f"{'  ⚠️ %d unknown' % unknown if unknown else '':<16}{run}"
+            )
         print(
-            f"{len(table):>4} channels  {consensus:>2} consensus  "
-            f"{table['evidence'].iloc[0]:<22}"
-            f"{'  ⚠️ %d unknown' % unknown if unknown else '':<16}{run}"
+            f"\n{len(results)} runs, {sum(len(t) for t in results.values())} rows "
+            f"{'written' if write else 'built (--dry-run: nothing written)'}"
         )
-    print(f"\n{len(results)} runs, {sum(len(t) for t in results.values())} rows written")
+        # ⚠️ A run folder with no shortlist is INVISIBLE to `final_features`, and was
+        # invisible here too until this printed it: `main` only ever reported the
+        # files it wrote. Two finished runs sat in this state on 2026-08-15.
+        missing = contract.missing_shortlists(root=DEFAULT_REPORT_ROOT)
+        if missing:
+            print(
+                f"WARNING: {len(missing)} run folder(s) still carry no "
+                f"{OUTSTANDING_FILENAME} and final_features cannot see them: "
+                f"{missing}"
+            )

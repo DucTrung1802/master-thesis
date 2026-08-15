@@ -45,8 +45,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-import time
-from typing import List, Optional, Sequence
+from typing import Dict, List, Optional, Sequence
 
 import pandas as pd
 
@@ -59,6 +58,7 @@ from feature_selection.unified_reader import (
     UnifiedSchemaReader,
     unified_schema_name,
 )
+from utils import runtime
 
 # ⚠️ Identity and taxonomy columns are never candidates. On a single-ticker panel they
 # are constant and would be dropped anyway; naming them keeps that a decision rather
@@ -160,221 +160,276 @@ def run_selection(
     # observations (issue **PNL-1**, at the selection stage instead of the scoring one).
     cross = target.startswith("cs_")
 
-    started = time.time()
-    if cross:
-        # `read_universe_panel` joins `pool__basic ⋈ pool__targets` in SQL and adds the
-        # `cs_rank_{h}day` columns. ⚠️ It reads those two pools ONLY, so a
-        # cross-sectional run is `pool__basic`-scoped by construction; `--pools` is
-        # accepted and recorded but cannot widen it.
-        if set(pools) - {"pool__basic", TARGETS_TABLE}:
-            raise ValueError(
-                f"a cross-sectional target reads pool__basic ⋈ {TARGETS_TABLE} only; "
-                f"got pools={pools}. Widening needs read_universe_panel to join more."
-            )
-        panel = read_universe_panel(
-            horizons=(horizon,), min_width=min_ic_width, schema_ticker=ticker
-        )
-        schema_name = unified_schema_name(ticker)
-        with UnifiedSchemaReader(ticker) as reader:
-            database = reader.database
-        join_log = [
-            {
-                "table": TARGETS_TABLE,
-                "join_keys": "date, exchange, ticker",
-                "how": "inner",
-                "note": "read_universe_panel, server-side; cs_rank_* derived after",
-            }
-        ]
-    else:
-        with UnifiedSchemaReader(ticker) as reader:
-            panel = reader.join(pools)
-            join_log = reader.join_log
-            schema_name, database = reader.schema, reader.database
-            # ⚠️ **ALL_TARGETS IS CHECKED AGAINST THE TABLE, NOT TRUSTED.** `join`
-            # brings every non-key column of `pool__targets` into the panel, and
-            # anything this module does not KNOW is a label is offered to
-            # `FeatureSelector` as a candidate channel. That failure is silent and it
-            # looks like success — a shortlist headed by the answer and an IC near 1.
-            # A hand-maintained list drifts the moment the table gains a column, which
-            # is exactly what happened on 2026-08-12 (`close_adjust_{h}day`), so the
-            # list is verified against `information_schema` while a cursor is open.
-            unlisted = [
-                c
-                for c in reader.column_types(TARGETS_TABLE)
-                if c not in KEY_COLS and c not in ALL_TARGETS
-            ]
-        if unlisted:
-            raise ValueError(
-                f"{schema_name}.{TARGETS_TABLE} holds label column(s) {unlisted} that "
-                f"feature_selection.run.ALL_TARGETS does not name. They would be "
-                f"selected over as FEATURES. Add them to ALL_TARGETS (and to the "
-                f"OTHER_TARGETS cell of RUN__feature_importance_report.ipynb)."
-            )
+    # ⚠️ The timer starts before the READ, not before the fit — a wide pool spends
+    # minutes in PostgreSQL and that time is part of what a run costs. `device` is the
+    # PREFERENCE at this point; `selector.device` replaces it below once the selector
+    # has resolved one, because `auto` is not an answer and the two differ on 14 of the
+    # 19 country pools (`gpu.py` §1).
+    with runtime.RunTimer(
+        f"feature_selection.run  {ticker} / {'+'.join(pools)} -> {target} "
+        f"(d={lookback}, h={horizon}, null_draws={null_draws})",
+        device=device,
+    ) as timer:
 
-    n_tickers = panel["ticker"].nunique() if "ticker" in panel.columns else 1
-    print(
-        f"{schema_name}: {panel.shape[0]:,} rows x {panel.shape[1]} columns "
-        f"({panel['date'].min():%Y-%m-%d} -> {panel['date'].max():%Y-%m-%d}), "
-        f"{n_tickers} ticker(s), grain={'panel' if cross else 'series'}"
-    )
-    if target not in panel.columns:
-        raise ValueError(f"target {target!r} is not in the joined panel.")
-    if cross and n_tickers < 2:
-        raise ValueError(
-            f"target {target!r} is cross-sectional but the panel holds {n_tickers} "
-            f"ticker(s). A rank within a date needs a cross-section to rank across."
-        )
-
-    exclude = IDENTITY + [c for c in ALL_TARGETS if c != target]
-
-    def build(frame: pd.DataFrame, holdout: Optional[str]) -> FeatureSelector:
-        """One selector, built the same way for the run and for every draw.
-
-        ⚠️ The null must be the SAME procedure as the thing it judges, or the bar is
-        measuring a different pipeline (CONTEXT §9d). The only differences permitted
-        are `stability` (a diagnostic, not part of the score) and the holdout, which
-        the draws do not score.
-
-        ⚠️ `CrossSectionalSelector` RE-IMPLEMENTS NO RANKER — it overrides six hooks on
-        `FeatureSelector` and inherits the six rankers, the ensemble, the correlation
-        prune and the holdout protocol unchanged. That is deliberate: the two studies
-        have to be the same procedure on differently-shaped panels, or §9's numbers
-        cannot be set beside §6's.
-        """
-        common = dict(
-            panel=frame,
-            target=target,
-            exclude=exclude,
-            max_features=max_features,
-            corr_threshold=corr_threshold,
-            horizon=horizon,
-            lookback=lookback,
-            window_stats=windows.WINDOW_STATS,
-            normalize=normalize,
-            n_splits=n_splits,
-            min_train=min_train,
-            device=device,
-            random_state=random_state,
-            holdout_start=holdout,
-        )
         if cross:
-            # ⚠️ `min_train` and `n_splits` count SESSIONS here, not rows.
-            return CrossSectionalSelector(
-                feature_normalize=feature_normalize,
-                min_ic_width=min_ic_width,
-                **common,
+            # `read_universe_panel` joins `pool__basic ⋈ pool__targets` in SQL and adds the
+            # `cs_rank_{h}day` columns. ⚠️ It reads those two pools ONLY, so a
+            # cross-sectional run is `pool__basic`-scoped by construction; `--pools` is
+            # accepted and recorded but cannot widen it.
+            if set(pools) - {"pool__basic", TARGETS_TABLE}:
+                raise ValueError(
+                    f"a cross-sectional target reads pool__basic ⋈ {TARGETS_TABLE} only; "
+                    f"got pools={pools}. Widening needs read_universe_panel to join more."
+                )
+            panel = read_universe_panel(
+                horizons=(horizon,), min_width=min_ic_width, schema_ticker=ticker
             )
-        return FeatureSelector(**common)
+            schema_name = unified_schema_name(ticker)
+            with UnifiedSchemaReader(ticker) as reader:
+                database = reader.database
+                # ⚠️ The cross-sectional read is ONE hand-written SQL join, so there is
+                # no `reader.join()` to record the channel→pool map and it is rebuilt
+                # here from the two tables' own columns. `cs_rank_{h}day` is deliberately
+                # absent: it is DERIVED after the read (`cross_sectional_rank`) and
+                # belongs to no table — which is the same reason `final_features` cannot
+                # store it (`final_features/CONTEXT.md` §5).
+                columns_by_table = {
+                    table: [
+                        c
+                        for c in reader.column_types(table)
+                        if c not in KEY_COLS and c in panel.columns
+                    ]
+                    for table in ("pool__basic", TARGETS_TABLE)
+                }
+            join_log = [
+                {
+                    "table": TARGETS_TABLE,
+                    "join_keys": "date, exchange, ticker",
+                    "how": "inner",
+                    "note": "read_universe_panel, server-side; cs_rank_* derived after",
+                }
+            ]
+        else:
+            with UnifiedSchemaReader(ticker) as reader:
+                panel = reader.join(pools)
+                join_log = reader.join_log
+                # ⚠️ **THE ONLY PLACE THAT KNOWS WHICH POOL EACH CHANNEL CAME FROM.**
+                # Recorded into `metadata.json` and read back by
+                # `feature_selection.outstanding` to fill `source_table`. Before this,
+                # the pool was inferred from the channel NAME one stage later, which
+                # returns `unknown` for every pool built since 2026-08-10 and silently
+                # names `pool__ta` for a forex channel (`contract.py`).
+                columns_by_table = dict(reader.columns_by_table)
+                schema_name, database = reader.schema, reader.database
+                # ⚠️ **ALL_TARGETS IS CHECKED AGAINST THE TABLE, NOT TRUSTED.** `join`
+                # brings every non-key column of `pool__targets` into the panel, and
+                # anything this module does not KNOW is a label is offered to
+                # `FeatureSelector` as a candidate channel. That failure is silent and it
+                # looks like success — a shortlist headed by the answer and an IC near 1.
+                # A hand-maintained list drifts the moment the table gains a column, which
+                # is exactly what happened on 2026-08-12 (`close_adjust_{h}day`), so the
+                # list is verified against `information_schema` while a cursor is open.
+                unlisted = [
+                    c
+                    for c in reader.column_types(TARGETS_TABLE)
+                    if c not in KEY_COLS and c not in ALL_TARGETS
+                ]
+            if unlisted:
+                raise ValueError(
+                    f"{schema_name}.{TARGETS_TABLE} holds label column(s) {unlisted} that "
+                    f"feature_selection.run.ALL_TARGETS does not name. They would be "
+                    f"selected over as FEATURES. Add them to ALL_TARGETS (and to the "
+                    f"OTHER_TARGETS cell of RUN__feature_importance_report.ipynb)."
+                )
 
-    selector = build(panel, holdout_start)
-    result = selector.run(stability=stability)
-    summary = evaluation.ic_summary(result.validation, horizon)
-    print(
-        f"kept {len(result.kept)} channels; ic_mean {summary['ic_mean']:+.4f}, "
-        f"trend {summary['ic_trend_per_fold']:+.4f}"
-    )
-    if result.dead_methods:
-        # ⚠️ `WARNING:` and not `⚠️`. A Windows console and a redirected stdout are both
-        # cp1252, which has no code point for U+26A0 — the print itself raises
-        # UnicodeEncodeError (CLAUDE.md §5 rule 18). This branch is not hypothetical:
-        # on `pool__basic`, `LassoCV` zeroes every coefficient, so `lasso` contributes a
-        # constant to the blend and `dead_methods` names it (CONTEXT §4).
-        print(f"WARNING: dead methods (separated nothing): {result.dead_methods}")
-
-    null = None
-    if null_draws > 0:
-        print(f"null: {null_draws} block-shuffled draws, selection re-run inside each...")
-        common = dict(
-            panel=panel,
-            target=target,
-            factory=lambda frame: build(frame, None).run(stability=False),
-            observed=summary["ic_mean"],
-            horizon=horizon,
-            lookback=lookback,
-            n_draws=null_draws,
-            seed=NULL_SEED,
-            label=f"{schema_name} / {target}",
-        )
-        # ⚠️ **A PANEL NEEDS A PANEL-AWARE SHUFFLE.** `evaluation.block_shuffle` permutes
-        # ROWS, which on an N × T panel tears each date's cross-section apart and
-        # destroys the very structure the target is computed within — the null then
-        # measures a different procedure and comes out far too easy.
-        # `cross_sectional_null`'s `date_block` mode pivots the label to `date × ticker`
-        # and permutes blocks of DATES, so each stock keeps its own labels and the
-        # autocorrelation survives (§9d). It is also the conservative choice: on a
-        # ragged panel a draw loses rows, which biases toward a false positive.
-        try:
-            null = (cs.cross_sectional_null if cross else evaluation.null_distribution)(
-                **common
-            )
-        except Exception as error:  # noqa: BLE001 — see below
-            # ⚠️ **A FAILED NULL MUST NOT DISCARD THE OBSERVED RUN.** The report is
-            # written after the null because it embeds it, so anything raising here
-            # threw away a completed selection — measured twice on 2026-08-10, once on
-            # a `KeyError` in a summary f-string and once on a wrong function name, each
-            # costing the whole run. The selection is the expensive artefact; the null
-            # is an addition to it. An absent null is recorded as ABSENT, which is the
-            # rule §10 already states — `evidence=no_null`, never an implied pass.
-            print(f"WARNING: the null FAILED and was not computed: {error}")
-            print("WARNING: the report will record evidence=no_null. Re-run the null.")
-            null = None
-    else:
-        print("WARNING: --null-draws 0: this run will record that NO bar was computed.")
-
-    holdout = selector.score_holdout(result) if holdout_start else None
-
-    # ⚠️ **THE REPORT IS WRITTEN BEFORE ANYTHING IS PRINTED ABOUT IT.** The null is the
-    # expensive artefact — 20 draws re-run the whole selection — and the first version of
-    # this function formatted a summary line first. It read `null.summary()["bar"]`, the
-    # Series key is `null_p95_BAR`, and a `KeyError` in that f-string discarded twenty
-    # completed draws. Same class of loss as CLAUDE.md §5 rule 20: finish the unit, put
-    # it on disk, and only then describe it.
-    written = report.write_report(
-        result,
-        selector=selector,
-        panel=panel,
-        schema=schema_name,
-        tables=pools,
-        database=database,
-        join_log=join_log,
-        null=null,
-        holdout=holdout,
-        notes=notes,
-        top=top,
-        root=root,
-    )
-    print(f"\nreport: {written.path}  ({time.time() - started:.1f}s)")
-
-    if null is not None:
-        # Read off the ATTRIBUTES, not the summary Series. The attributes are the
-        # object's interface; the Series is a display format whose key names have
-        # already changed once.
+        n_tickers = panel["ticker"].nunique() if "ticker" in panel.columns else 1
         print(
-            f"observed {null.observed:+.4f} | null mean {null.draws.mean():+.4f} "
-            f"| p95 bar {null.bar:+.4f} | null MAX {null.draws.max():+.4f} "
-            f"| z {null.z:+.2f} | p {null.p_value:.4f} "
-            f"| {'CLEARS' if null.clears else 'FAILS'}"
+            f"{schema_name}: {panel.shape[0]:,} rows x {panel.shape[1]} columns "
+            f"({panel['date'].min():%Y-%m-%d} -> {panel['date'].max():%Y-%m-%d}), "
+            f"{n_tickers} ticker(s), grain={'panel' if cross else 'series'}"
         )
-        # ⚠️ `clears_bar` is the wrong summary whenever the null MAX exceeds the
-        # observed — one shuffled draw beating the real data is the fact that matters
-        # and a boolean hides it (CLAUDE.md §5 rule 3).
-        if null.draws.max() >= null.observed:
-            print(
-                f"WARNING: a shuffled draw reached {null.draws.max():+.4f}, at or above "
-                f"the observed {null.observed:+.4f} - quote the max beside the bar."
+        if target not in panel.columns:
+            raise ValueError(f"target {target!r} is not in the joined panel.")
+        if cross and n_tickers < 2:
+            raise ValueError(
+                f"target {target!r} is cross-sectional but the panel holds {n_tickers} "
+                f"ticker(s). A rank within a date needs a cross-section to rank across."
             )
 
-    # The shortlist is what every downstream stage reads, so it is written here rather
-    # than left for a second command — a report folder without an `outstanding.csv` is
-    # invisible to `final_features.plan_from_reports`.
-    shortlists = outstanding.main(root=root)
-    for name, table in shortlists.items():
-        if name == os.path.basename(written.path):
-            print(
-                f"shortlist: {len(table)} channels, evidence="
-                f"{table['evidence'].iloc[0]}"
+        exclude = IDENTITY + [c for c in ALL_TARGETS if c != target]
+
+        def build(frame: pd.DataFrame, holdout: Optional[str]) -> FeatureSelector:
+            """One selector, built the same way for the run and for every draw.
+
+            ⚠️ The null must be the SAME procedure as the thing it judges, or the bar is
+            measuring a different pipeline (CONTEXT §9d). The only differences permitted
+            are `stability` (a diagnostic, not part of the score) and the holdout, which
+            the draws do not score.
+
+            ⚠️ `CrossSectionalSelector` RE-IMPLEMENTS NO RANKER — it overrides six hooks on
+            `FeatureSelector` and inherits the six rankers, the ensemble, the correlation
+            prune and the holdout protocol unchanged. That is deliberate: the two studies
+            have to be the same procedure on differently-shaped panels, or §9's numbers
+            cannot be set beside §6's.
+            """
+            common = dict(
+                panel=frame,
+                target=target,
+                exclude=exclude,
+                max_features=max_features,
+                corr_threshold=corr_threshold,
+                horizon=horizon,
+                lookback=lookback,
+                window_stats=windows.WINDOW_STATS,
+                normalize=normalize,
+                n_splits=n_splits,
+                min_train=min_train,
+                device=device,
+                random_state=random_state,
+                holdout_start=holdout,
             )
-    return written
+            if cross:
+                # ⚠️ `min_train` and `n_splits` count SESSIONS here, not rows.
+                return CrossSectionalSelector(
+                    feature_normalize=feature_normalize,
+                    min_ic_width=min_ic_width,
+                    **common,
+                )
+            return FeatureSelector(**common)
+
+        selector = build(panel, holdout_start)
+        result = selector.run(stability=stability)
+        # ⚠️ The RESOLVED device, not the preference. `auto` sends a narrow pool to the
+        # host and a wide one to the GPU, and the two do not produce the same kept set
+        # (`gpu.py` §1) — so the banner and `metadata.json` must report what ran, not
+        # what was asked for. This is CLAUDE.md §5 rule 10 at the hardware: a request
+        # is not evidence of what happened.
+        timer.set_device(selector.device)
+        summary = evaluation.ic_summary(result.validation, horizon)
+        print(
+            f"kept {len(result.kept)} channels; ic_mean {summary['ic_mean']:+.4f}, "
+            f"trend {summary['ic_trend_per_fold']:+.4f}"
+        )
+        if result.dead_methods:
+            # ⚠️ `WARNING:` and not `⚠️`. A Windows console and a redirected stdout are both
+            # cp1252, which has no code point for U+26A0 — the print itself raises
+            # UnicodeEncodeError (CLAUDE.md §5 rule 18). This branch is not hypothetical:
+            # on `pool__basic`, `LassoCV` zeroes every coefficient, so `lasso` contributes a
+            # constant to the blend and `dead_methods` names it (CONTEXT §4).
+            print(f"WARNING: dead methods (separated nothing): {result.dead_methods}")
+
+        null = None
+        if null_draws > 0:
+            print(f"null: {null_draws} block-shuffled draws, selection re-run inside each...")
+            common = dict(
+                panel=panel,
+                target=target,
+                factory=lambda frame: build(frame, None).run(stability=False),
+                observed=summary["ic_mean"],
+                horizon=horizon,
+                lookback=lookback,
+                n_draws=null_draws,
+                seed=NULL_SEED,
+                label=f"{schema_name} / {target}",
+            )
+            # ⚠️ **A PANEL NEEDS A PANEL-AWARE SHUFFLE.** `evaluation.block_shuffle` permutes
+            # ROWS, which on an N × T panel tears each date's cross-section apart and
+            # destroys the very structure the target is computed within — the null then
+            # measures a different procedure and comes out far too easy.
+            # `cross_sectional_null`'s `date_block` mode pivots the label to `date × ticker`
+            # and permutes blocks of DATES, so each stock keeps its own labels and the
+            # autocorrelation survives (§9d). It is also the conservative choice: on a
+            # ragged panel a draw loses rows, which biases toward a false positive.
+            try:
+                null = (cs.cross_sectional_null if cross else evaluation.null_distribution)(
+                    **common
+                )
+            except Exception as error:  # noqa: BLE001 — see below
+                # ⚠️ **A FAILED NULL MUST NOT DISCARD THE OBSERVED RUN.** The report is
+                # written after the null because it embeds it, so anything raising here
+                # threw away a completed selection — measured twice on 2026-08-10, once on
+                # a `KeyError` in a summary f-string and once on a wrong function name, each
+                # costing the whole run. The selection is the expensive artefact; the null
+                # is an addition to it. An absent null is recorded as ABSENT, which is the
+                # rule §10 already states — `evidence=no_null`, never an implied pass.
+                print(f"WARNING: the null FAILED and was not computed: {error}")
+                print("WARNING: the report will record evidence=no_null. Re-run the null.")
+                null = None
+        else:
+            print("WARNING: --null-draws 0: this run will record that NO bar was computed.")
+
+        holdout = selector.score_holdout(result) if holdout_start else None
+
+        # ⚠️ **THE REPORT IS WRITTEN BEFORE ANYTHING IS PRINTED ABOUT IT.** The null is the
+        # expensive artefact — 20 draws re-run the whole selection — and the first version of
+        # this function formatted a summary line first. It read `null.summary()["bar"]`, the
+        # Series key is `null_p95_BAR`, and a `KeyError` in that f-string discarded twenty
+        # completed draws. Same class of loss as CLAUDE.md §5 rule 20: finish the unit, put
+        # it on disk, and only then describe it.
+        written = report.write_report(
+            result,
+            selector=selector,
+            panel=panel,
+            schema=schema_name,
+            tables=pools,
+            database=database,
+            join_log=join_log,
+            null=null,
+            holdout=holdout,
+            notes=notes,
+            top=top,
+            root=root,
+            # ⚠️ The two facts a run folder could not previously state about itself:
+            # which pool each channel came from, and what the run cost on what hardware.
+            columns_by_table=columns_by_table,
+            # `summary()` reads a LIVE elapsed time on purpose — this call is what
+            # writes the file the block goes into, so waiting for the finish banner
+            # would record a zero.
+            execution=timer.summary(),
+        )
+        print(
+            f"\nreport: {written.path}  "
+            f"({runtime.format_duration(timer.elapsed)})"
+        )
+
+        if null is not None:
+            # Read off the ATTRIBUTES, not the summary Series. The attributes are the
+            # object's interface; the Series is a display format whose key names have
+            # already changed once.
+            print(
+                f"observed {null.observed:+.4f} | null mean {null.draws.mean():+.4f} "
+                f"| p95 bar {null.bar:+.4f} | null MAX {null.draws.max():+.4f} "
+                f"| z {null.z:+.2f} | p {null.p_value:.4f} "
+                f"| {'CLEARS' if null.clears else 'FAILS'}"
+            )
+            # ⚠️ `clears_bar` is the wrong summary whenever the null MAX exceeds the
+            # observed — one shuffled draw beating the real data is the fact that matters
+            # and a boolean hides it (CLAUDE.md §5 rule 3).
+            if null.draws.max() >= null.observed:
+                print(
+                    f"WARNING: a shuffled draw reached {null.draws.max():+.4f}, at or above "
+                    f"the observed {null.observed:+.4f} - quote the max beside the bar."
+                )
+
+        # The shortlist is what every downstream stage reads, so it is written here rather
+        # than left for a second command — a report folder without an `outstanding.csv` is
+        # invisible to `final_features.plan_from_reports`.
+        #
+        # ⚠️ **THIS CAN RAISE, AND THE REPORT ABOVE SURVIVES IT.** `outstanding.main` now
+        # checks each shortlist against `contract.validate_shortlist` and refuses to write
+        # one `final_features` could not read — most often a channel whose pool could not
+        # be named. The selection itself is already on disk by this line, so the cost of
+        # failing here is a re-run of a two-second CSV write, against a `final_features`
+        # build hours later that fails on data it did not produce.
+        shortlists = outstanding.main(root=root)
+        for name, table in shortlists.items():
+            if name == os.path.basename(written.path):
+                print(
+                    f"shortlist: {len(table)} channels, evidence="
+                    f"{table['evidence'].iloc[0]}, "
+                    f"source_table from {table['source_table_from'].iloc[0]}"
+                )
+        return written
 
 
 def main(argv: Optional[Sequence[str]] = None):

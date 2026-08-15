@@ -42,6 +42,7 @@ import numpy as np
 import pandas as pd
 
 from result_evaluator import metrics as M
+from utils import runtime
 
 # The label table every schema has. Same constant as `final_features.builder` and
 # `train_test_creator.dataset` — the authoritative record of what a return IS.
@@ -487,6 +488,21 @@ def main(argv: Optional[Sequence[str]] = None) -> pd.DataFrame:
     def option(flag: str, default=None):
         return argv[argv.index(flag) + 1] if flag in argv else default
 
+    # ⚠️ `show_gpu=False`: scoring is numpy over `predictions_*.csv`, which is why
+    # `--rescore` re-scores 29 runs without a GPU at all. The RUNTIME is the number
+    # that matters here — the block-shuffled null is `draws` re-scorings per run, and
+    # that is the whole cost of the stage.
+    with runtime.RunTimer(
+        f"result_evaluator  {os.path.basename(str(option('--runs', DEFAULT_RUNS_DIR)))}"
+        f"{'  --rescore' if '--rescore' in argv else ''}"
+        f"{'  --rebuild-index' if '--rebuild-index' in argv else ''}"
+        f"  draws={option('--draws', M.NULL_DRAWS)}",
+        show_gpu=False,
+    ):
+        return _main(argv, option)
+
+
+def _main(argv: Sequence[str], option) -> pd.DataFrame:
     runs_dir = option("--runs", DEFAULT_RUNS_DIR)
     if "--rebuild-index" in argv:
         path = rebuild_index(runs_dir, draws=int(option("--draws", M.NULL_DRAWS)))

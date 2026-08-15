@@ -87,6 +87,7 @@ from sklearn.preprocessing import StandardScaler
 from feature_selection.outstanding import OUTSTANDING_FILENAME
 from feature_selection.report import DEFAULT_REPORT_ROOT
 from feature_selection.unified_reader import KEY_COLS, UnifiedSchemaReader
+from utils import runtime
 
 # The tables `final_features` builds. ⚠️ `d` and `h` are parsed OUT of this, never
 # passed alongside it — see the module docstring.
@@ -782,7 +783,12 @@ class TrainTestCreator:
         """Everything needed to rebuild this dataset, and to know what it is not."""
         return {
             "dataset_name": data.name,
-            "created_at": pd.Timestamp.now().strftime("%Y-%m-%d"),
+            # ⚠️ A DATE, and it always was — the day is what distinguishes two builds
+            # of the same table. `runtime.now()` only fixes WHICH day: this used to be
+            # `pd.Timestamp.now()`, the machine's local clock, while the database it
+            # reads runs on Asia/Bangkok. `created_at_tz` is the unambiguous form.
+            "created_at": runtime.now().strftime("%Y-%m-%d"),
+            "created_at_tz": runtime.iso(),
             "source": {
                 "schema": data.schema,
                 "table": data.table,
@@ -879,6 +885,20 @@ def main(argv: Optional[Sequence[str]] = None) -> WindowedDataset:
     def option(flag: str, default: str) -> str:
         return argv[argv.index(flag) + 1] if flag in argv else default
 
+    # ⚠️ `show_gpu=False`: this stage is pandas and numpy. It reads a table, windows it
+    # and writes tensors — nothing here dispatches to CUDA, and saying otherwise in a
+    # banner would be the same error `device=cpu` in 22 archived selections was, in the
+    # opposite direction.
+    with runtime.RunTimer(
+        f"train_test_creator  {option('--ticker', 'vcb')} / "
+        f"{option('--table', 'return_5day__final__d20_h5')}"
+        f"{'  --save' if '--save' in argv else '  (plan only)'}",
+        show_gpu=False,
+    ):
+        return _main(argv, option)
+
+
+def _main(argv: Sequence[str], option) -> WindowedDataset:
     creator = TrainTestCreator(
         ticker=option("--ticker", "vcb"),
         table=option("--table", "return_5day__final__d20_h5"),

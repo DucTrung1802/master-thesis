@@ -79,33 +79,30 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 import pandas as pd
 
+from feature_selection import contract
+from feature_selection.contract import (
+    CUT_KEYS,
+    IDENTIFIER,
+    MAX_IDENTIFIER_BYTES,
+    SETUP_FROM_SHORTLIST,
+    SETUP_KEYS,
+)
 from feature_selection.outstanding import OUTSTANDING_FILENAME
 from feature_selection.report import DEFAULT_REPORT_ROOT
 from feature_selection.unified_reader import KEY_COLS, UnifiedSchemaReader
+from utils import runtime
 
 # The table the label is read from. Every `unified_schema_*` has one.
 TARGETS_TABLE = "pool__targets"
 
-# What makes two runs "the same setup". ⚠️ Every knob here can move a selection, so a
-# difference in any of them means the two runs are not the same experiment and their
-# chosen channels do not belong in one table.
-SETUP_KEYS: Tuple[str, ...] = (
-    "lookback_d", "horizon_h", "normalize", "feature_normalize",
-    "corr_threshold", "n_splits", "min_train", "random_state", "selector_class",
-)
-
-# ⚠️ **`max_features` was REMOVED from `SETUP_KEYS` on 2026-08-09** (issue STL-1).
-# It is still `12` in every run's `metadata.json`, and it has not determined a
-# shortlist since `selection_cut` replaced the fixed cap with a per-run measured cut —
-# the same runs now keep between 10 and 236 channels. Grouping and naming on it was
-# recording a number that is no longer true of anything. The parameters that DO
-# determine the cut are stamped into `outstanding.csv` by
-# `feature_selection.outstanding` and are read from there:
-CUT_KEYS: Tuple[str, ...] = ("cut_fdr_q", "cut_corr_threshold")
-
-# Setup keys read from `outstanding.csv` rather than from `metadata.json`, because
-# they describe the CUT (which rebuilt the shortlist) and not the selector run.
-SETUP_FROM_SHORTLIST: Tuple[str, ...] = CUT_KEYS
+# ⚠️ **`SETUP_KEYS`, `CUT_KEYS`, `IDENTIFIER` AND THE 63-BYTE LIMIT NOW LIVE IN
+# `feature_selection/contract.py`** (2026-08-15) and are imported above, unchanged
+# and under their old names. They describe a HANDOFF — what a selection run must
+# write for this module to read it — and they were previously declared here alone,
+# where the module that has to satisfy them could not see them. `contract.py` carries
+# the reasoning that used to sit in these comments, including why `max_features` is
+# not a setup key and why the two cut parameters come from the shortlist rather than
+# from `metadata.json`.
 
 # How many hex characters of the shortlist digest go into the table COMMENT. 12 is
 # ~48 bits — far past collision risk for a few dozen tables, and short enough to read.
@@ -118,11 +115,6 @@ FINGERPRINT_RE = re.compile(
     r"over (?P<n>\d+) channel"
 )
 
-# Anything interpolated into SQL as an identifier is matched against this first —
-# schema, table and column names cannot be bound parameters. Same reasoning as
-# `unified_reader.TICKER_PATTERN`.
-IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
-
 # How a `None` setup value is carried through `groupby`, which drops None keys.
 NOT_SET = "not_set"
 
@@ -130,20 +122,11 @@ NOT_SET = "not_set"
 # schema already names the cross-section. See `table_name`.
 CS_PREFIX = "cs_"
 
-# PostgreSQL truncates identifiers past this silently, which would collide two tables
-# into one. Checked rather than trusted.
-MAX_IDENTIFIER_BYTES = 63
-
 
 def _identifier(name: str, what: str) -> str:
-    if not IDENTIFIER.match(name or ""):
-        raise ValueError(f"{what} {name!r} is not a bare SQL identifier.")
-    if len(name.encode()) > MAX_IDENTIFIER_BYTES:
-        raise ValueError(
-            f"{what} {name!r} is {len(name.encode())} bytes; PostgreSQL truncates "
-            f"past {MAX_IDENTIFIER_BYTES} and two truncated names can collide."
-        )
-    return name
+    """`name`, or a `ValueError`. The rule is `contract.identifier`'s — one copy, and
+    the producer checks its own output against the same one before writing it."""
+    return contract.identifier(name, what)
 
 
 def fingerprint(columns_by_table: Dict[str, List[str]]) -> str:
@@ -300,7 +283,23 @@ def _read_outstanding(root: str) -> pd.DataFrame:
     shortlist happens to carry would silently merge runs differing in `normalize`,
     `max_features` or `random_state`, and §8 of `feature_selection/CONTEXT.md` is a
     list of what that costs. `metadata.json` is the authority and records all 27 knobs.
+
+    ⚠️ **A RUN FOLDER WITH NO `outstanding.csv` NOW RAISES** (2026-08-15). It used to
+    be skipped, which meant a finished selection could be absent from every plan this
+    module makes and nothing would say so — measured that day on the two newest runs,
+    both merged back from `kaggle_gpu`, which writes the folder and prints a reminder
+    rather than the shortlist. The plan came out over 19 runs, reported no error, and
+    was wrong about which experiment it described. Same rule as CLAUDE.md §5 rule 12:
+    silence is never how something gets left out.
     """
+    absent = contract.missing_shortlists(root)
+    if absent:
+        raise FileNotFoundError(
+            f"{len(absent)} run folder(s) under {root} have a metadata.json and no "
+            f"{OUTSTANDING_FILENAME}, so they would be SILENTLY excluded from every "
+            f"plan: {absent}. Run `python -m feature_selection.outstanding` first."
+        )
+
     frames = []
     for name in sorted(os.listdir(root)):
         path = os.path.join(root, name, OUTSTANDING_FILENAME)
@@ -595,6 +594,20 @@ def main(argv: Optional[Sequence[str]] = None) -> pd.DataFrame:
     root = _flag_value(argv, "--root") or DEFAULT_REPORT_ROOT
     scope = _flag_value(argv, "--scope")
 
+    # ⚠️ `show_gpu=False`: this stage is SQL from end to end. `runtime.gpu_report`
+    # would answer from `nvidia-smi`, truthfully and irrelevantly, and a banner that
+    # reports hardware no step here can use teaches the reader to skip banners.
+    with runtime.RunTimer(
+        f"final_features  root={os.path.basename(root)}"
+        f"{f' scope={scope}' if scope else ''}"
+        f"{'  --apply' if apply else '  (plan only)'}"
+        f"{'  --replace' if replace else ''}",
+        show_gpu=False,
+    ):
+        return _main(root=root, scope=scope, apply=apply, replace=replace)
+
+
+def _main(root: str, scope: Optional[str], apply: bool, replace: bool) -> pd.DataFrame:
     plans = plan_from_reports(root, scope)
     for plan in plans:
         print(f"\n{'=' * 78}\n{plan.schema}.{plan.table}")

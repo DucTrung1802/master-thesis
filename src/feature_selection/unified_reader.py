@@ -135,6 +135,15 @@ class UnifiedSchemaReader:
         # keys are derived from the frames, so this is the only record of whether
         # `ticker` took part in a given join or `date` carried it alone.
         self.join_log: List[Dict] = []
+        # ⚠️ **WHICH POOL EACH CHANNEL CAME FROM — the only place that knows.**
+        # `{table: [non-key columns it contributed]}`, filled by `join()`. Downstream
+        # this is the difference between a fact and a guess: `feature_selection.
+        # outstanding` used to infer the pool from the channel NAME, which returns
+        # `unknown` for every pool added since 2026-08-10 (forex, funds, bonds,
+        # stock_market, basic_bank) and, worse, silently names `pool__ta` for a forex
+        # channel in a run that joined both. `feature_selection/contract.py` has the
+        # measured table. `report.write_report` records this into `metadata.json`.
+        self.columns_by_table: Dict[str, List[str]] = {}
 
     # ---------------------------------------------------------------- lifecycle
 
@@ -308,8 +317,12 @@ class UnifiedSchemaReader:
         if len(tables) < 1:
             raise ValueError("join() needs at least one table.")
         self.join_log = []
+        self.columns_by_table = {}
 
         panel = self.read(tables[0])
+        self.columns_by_table[tables[0]] = [
+            c for c in panel.columns if c not in KEY_COLS
+        ]
         for table in tables[1:]:
             right = self.read(table)
             keys = [k for k in KEY_COLS if k in panel.columns and k in right.columns]
@@ -337,6 +350,14 @@ class UnifiedSchemaReader:
             ]
             if overlap:
                 right = right.drop(columns=overlap)
+
+            # ⚠️ Recorded AFTER the overlap drop, so a column two pools both carry is
+            # attributed to the pool it is actually READ FROM — the left one. Recording
+            # it before would name a table whose copy of the column the panel does not
+            # hold, and `final_features` would then SELECT the wrong pool's version.
+            self.columns_by_table[table] = [
+                c for c in right.columns if c not in keys
+            ]
 
             before = len(panel)
             panel = panel.merge(right, on=keys, how=how, validate="one_to_one")
