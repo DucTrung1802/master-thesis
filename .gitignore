@@ -72,6 +72,11 @@ experiment/experiment_7/pdf_pages/
 !/THESIS_*.pdf
 
 *.txt
+# ⚠️ ...but a dependency list is CODE, not a scraped artefact. `*.txt` swallowed
+# src/kaggle_gpu/requirements.txt silently: `git add` reported success and
+# committed nothing, which is the same failure this file warns about below for
+# loose files under reports/.
+!src/kaggle_gpu/requirements.txt
 
 # Model run outputs (checkpoints, tensorboard, plots) — reproducible, data referenced
 src/model/runs/*/

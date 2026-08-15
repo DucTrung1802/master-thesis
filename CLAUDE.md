@@ -325,6 +325,58 @@ target**; the next run worth doing is this one on `return_5day`. `final_features
 the CPU-era `k = 2.00`, which under-predicts narrow runs ~5× and over-predicts wide ones
 ~35%. A wide run with no null is ~1 h, not 3.
 
+### 3d. ⚠️ THE SELECTION CAN RUN ON A KAGGLE T4 NOW — `src/kaggle_gpu/` (2026-08-15)
+
+`kgpu` runs **an unmodified repo notebook** on Kaggle's free GPUs (30 GPU-h/week,
+2×T4 **15 GiB** against this machine's 4 GiB) and merges the run folder back into
+`reports/feature_selection/`, where `outstanding`, `final_features` and `pipeline`
+already look for it. `RUN__feature_importance_report.ipynb` is not edited — the
+copy in `.build/` is.
+
+```powershell
+cd src\kaggle_gpu
+python -m kgpu plan     feature-selection   # what would run; touches nothing
+python -m kgpu data     feature-selection   # DB -> parquet -> private dataset
+python -m kgpu rehearse feature-selection   # the WORKER side, locally, no quota
+python -m kgpu run      feature-selection   # push, wait, download, merge
+```
+
+⚠️ **The worker cannot reach `database_main_v2`**, so the pools travel as parquet
+in a private dataset and `UnifiedSchemaReader` is swapped for a **subclass** whose
+`read`/`column_types`/`tables`/`overview` come from that payload. **`join()` is
+inherited, not re-implemented** — the one-to-one validation and the `join_log` in
+the report are the same code that runs here.
+
+⚠️ **Parameters are rewritten IN PLACE in the notebook's own parameter cell, never
+appended after it.** That cell ends with `EXCLUDE = IDENTITY + [c for c in
+ALL_TARGETS if c != TARGET]`; an override cell placed after it leaves `EXCLUDE`
+excluding the OLD target, which hands the run's own label to `FeatureSelector` as
+a candidate feature. It does not raise — it reports an IC near 1.
+
+⚠️ **Two things measured on the first real round trip (2026-08-15), both of which
+had passed every local check:** Kaggle **unpacks `source.zip` into `source/` and
+deletes the archive**, so the uploaded payload and the mounted payload are
+different shapes; and `dataset_status` returns **`ready` immediately** on a new
+version of an existing dataset, so a kernel pushed on that answer mounts the
+PREVIOUS version and completes normally on stale data. `wait_ready` now requires
+the version NUMBER to move. `rehearse` runs both payload shapes.
+
+⚠️ **A T4 run does not reproduce an RTX 3050 run, and the LIBRARY STACK differs
+too.** XGBoost subsamples from a different RNG stream per device
+(`feature_selection/CONTEXT.md` §16), and Kaggle's image is **xgboost 3.2.0 /
+sklearn 1.6.1 / numpy 2.0.2** against `mt_env`'s **2.1.1 / 1.7.2 / 2.2.6**
+(measured 2026-08-15 from the two `environment` blocks) — a major version of the
+ranker itself. A Kaggle run is a different **procedure**, not the same one on
+faster hardware. The commit is pinned into the report from the export, because the
+worker has no repo and `report._git_commit()` would otherwise write `null`.
+
+**First run through it, 2026-08-15** — `pool__basic + pool__targets`, `return_5day`,
+`d=20 h=5`, `device=cuda`, **20 null draws, 3.7 min end to end** (the same pool with
+no null was ~390 s locally). 7 of 15 channels kept; `ic_mean` **+0.0494** against a
+p95 bar of **+0.0510** — **does not clear**, z = +1.60, p = 0.1429, null max
+**+0.0714** (above the observed, so rule 3 applies). §2 stands: the affordable null
+is now the point, not the result.
+
 ---
 
 ## 4. Run it
@@ -678,6 +730,7 @@ below 0.95 coverage, `RPR-1` datasets/runs are git-ignored.
 | [src/result_evaluator/CONTEXT.md](src/result_evaluator/CONTEXT.md) | 3k | scoring, the metric set, or panel-vs-series grain. ⚠️ **STALE — it predates `index.py`, the `rebuild_index` schema change and issue NUL-3.** Nothing in it is false; it is silent about all three |
 | [src/pipeline/CONTEXT.md](src/pipeline/CONTEXT.md) | **3.5k** | the **six**-stage chain, staleness, `--root`/`--scope`, `--rescrape`, adding a stage or a second target |
 | [src/sentiment/CONTEXT.md](src/sentiment/CONTEXT.md) | 2.5k | anything news/text/PhoBERT |
+| [src/kaggle_gpu/README.md](src/kaggle_gpu/README.md) | 4k | running a repo notebook on a Kaggle T4 — the payload dataset, the parameter patcher, `rehearse`, and §7's four measured traps (all four are "a green step is not evidence") |
 | [experiment/CONTEXT.md](experiment/CONTEXT.md) | 7k | the 9 exploratory experiments — signal discovery, tradability, point-in-time data, VN OCR |
 | [experiment/experiment_10/CONTEXT.md](experiment/experiment_10/CONTEXT.md) | 36k | writing the literature chapter. **§"Combined reading" (line 2877) is the distillate** — read that alone unless you need a specific paper |
 

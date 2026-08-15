@@ -1,0 +1,46 @@
+{
+  "defaults": {
+    "accelerator": "NvidiaTeslaT4",
+    "enable_gpu": true,
+    "is_private": true,
+    "enable_internet": false,
+    "timeout_seconds": 0,
+    "poll_seconds": 15,
+    "max_wait_minutes": 720
+  },
+  "jobs": {
+    "feature-selection": {
+      "id": "lyductrung/mt-feature-selection",
+      "title": "MT feature selection",
+      "notebook": "src/feature_selection/RUN__feature_importance_report.ipynb",
+      "results_into": "reports/feature_selection",
+      "data": {
+        "id": "lyductrung/mt-unified-vcb",
+        "title": "master-thesis unified schema payload (VCB)",
+        "ticker": "VCB",
+        "source_dirs": ["src/feature_selection"]
+      },
+      "parameters": {
+        "TICKER": "VCB",
+        "POOLS": ["pool__basic", "pool__targets"],
+        "TARGET": "close_adjust_5day",
+        "HORIZON": 5,
+        "LOOKBACK": 20,
+        "DEVICE": "cuda",
+        "RUN_STABILITY": true,
+        "RUN_NULL": true,
+        "N_NULL": 20,
+        "RUN_HOLDOUT": false,
+        "REPORT_ROOT": "reports/feature_selection",
+        "NOTES": "run on a Kaggle T4 via kgpu; data shipped as a parquet payload"
+      }
+    },
+
+    "smoke": {
+      "id": "lyductrung/local-gpu-training",
+      "title": "Local GPU Training",
+      "notebook": "src/kaggle_gpu/notebooks/train.ipynb",
+      "parameters": {}
+    }
+  }
+}

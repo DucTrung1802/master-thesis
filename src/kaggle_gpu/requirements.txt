@@ -1,0 +1,14 @@
+# kgpu's own dependencies. Install them into the REPO's venv (mt_env), not a
+# second one — the export step imports `feature_selection.unified_reader`, which
+# needs psycopg2 and the rest of the repo:
+#
+#     .\mt_env\Scripts\Activate.ps1
+#     python -m pip install -r src/kaggle_gpu/requirements.txt
+#
+# ⚠️ Nothing that runs ON Kaggle is listed here. torch, xgboost, scikit-learn,
+# scipy and matplotlib are preinstalled on Kaggle's GPU image; the payload ships
+# this repo's source and nothing else.
+kaggle>=2.2.4
+python-dotenv>=1.0
+nbformat>=5.10
+pyarrow>=14.0        # the payload format; pandas needs it for to_parquet/read_parquet
