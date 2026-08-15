@@ -255,8 +255,17 @@ Consequences worth knowing:
    folder is immutable by repo convention, so a collision is reported and skipped;
    `--force` is for re-downloading the same run, not for a second one.
 
-After the merge the run is a normal archived run — `python -m feature_selection.outstanding`
-and `final_features` see it like any local one.
+After the merge the run is a normal archived run and `final_features` sees it like any
+local one.
+
+⚠️ **IT DID NOT USED TO CARRY `outstanding.csv`, AND NOTHING SAID SO.** The notebook
+wrote a report folder and stopped, one file short — and `final_features.plan_from_reports`
+**skips a folder with no shortlist without a word**. Measured 2026-08-15: the two runs
+produced through this command were both in that state, and `final_features` planned 19
+runs and reported no error (`feature_selection/contract.py` §2). The notebook writes and
+validates the shortlist itself since 2026-08-16 (`feature_selection/CONTEXT.md` §18), so
+`merge_results` now **checks** what came home rather than printing a reminder to go and
+do it by hand — a merged run without one is named as a WARNING.
 
 The mirrored source is deleted from `/kaggle/working` by an injected final cell, so
 the download is the report and nothing else.

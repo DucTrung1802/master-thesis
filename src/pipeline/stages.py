@@ -57,10 +57,13 @@ import os
 import re
 import subprocess
 import sys
+import time
 from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional, Sequence
 
 import pandas as pd
+
+from utils import runtime
 
 _SRC = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _REPO = os.path.dirname(_SRC)
@@ -713,14 +716,36 @@ def run(
         state = stage.status()
         chosen = stage in selected
         action = "—"
+        # ⚠️ **A STAGE THAT DID NOT RUN HAS NO RUNTIME, AND THAT IS NOT `0`.** The
+        # column is empty for `skip (ready)` and for a plan, because a zero there reads
+        # as "ran instantly" — the same rule §10 applies to an absent null, one level
+        # down: an absent measurement is recorded as absent.
+        elapsed = ""
         if chosen and apply:
             if state.ready and not only:
                 action = "skip (ready)"
             elif stage.apply is None:
                 action = "MANUAL"
             else:
-                print(f"\n{'=' * 78}\n▶ {stage.name}  —  {stage.describe}\n")
-                stage.apply()
+                print(f"\n{'=' * 78}\n▶ {stage.name}  —  {stage.describe}")
+                print(f"  started {runtime.stamp()}\n")
+                # ⚠️ **THE STAGES ARE CALLED IN-PROCESS, NOT AS `python -m <stage>`**
+                # (`apply_final_features` imports `build_all`, `apply_model` imports the
+                # binding's `train`) — so each module's OWN `runtime.RunTimer` banner
+                # lives in its `main()` and never fires here. Without this clock a
+                # `--apply` run printed no per-stage timing at all, and the only thing
+                # anyone could budget from was a wall clock and a memory of when they
+                # pressed enter.
+                clock = time.perf_counter()
+                try:
+                    stage.apply()
+                finally:
+                    # ⚠️ `finally`: a stage that dies after two hours must still say it
+                    # spent two hours. CLAUDE.md §5 rule 20 — finish the unit, write it
+                    # down, and only then describe it.
+                    elapsed = runtime.format_duration(time.perf_counter() - clock)
+                    print(f"\n  {stage.name} finished {runtime.stamp()}   "
+                          f"runtime {elapsed}")
                 state = stage.status()
                 # ⚠️ A manual stage's `apply` refreshes what already exists; it
                 # cannot create the input from nothing, and saying plain "ran"
@@ -734,9 +759,10 @@ def run(
         row = state.row()
         row["action"] = action
         row["manual"] = stage.manual
+        row["runtime"] = elapsed
         rows.append(row)
 
     frame = pd.DataFrame(rows)
-    lead = ["stage", "ready", "manual", "action", "detail", "output"]
+    lead = ["stage", "ready", "manual", "action", "runtime", "detail", "output"]
     frame = frame[lead + [c for c in frame.columns if c not in lead]]
     return frame

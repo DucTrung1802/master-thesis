@@ -271,6 +271,27 @@ that group; `--scope basic` names its table `…__d20_h5__basic`. Both are neede
 ⚠️ **`d` and `h` come from the source TABLE NAME**, never a parameter. They flow
 `return_5day__final__d20_h5` → dataset `metadata.json` → asserted against the model config.
 
+⚠️ **THE NOTEBOOK AND `feature_selection.run` PRODUCE THE SAME ARTEFACT SINCE
+2026-08-16 — AND DID NOT BEFORE.** `RUN__feature_importance_report.ipynb` recorded no
+`input.columns_by_table` (so the next stage GUESSED each channel's pool, which returns
+`unknown` for every pool built since 2026-08-10 and silently names `pool__ta` for a forex
+channel), no `execution` block, and **no `outstanding.csv` at all** — and a run folder
+without one is skipped by `final_features.plan_from_reports` **without a word**. Measured
+2026-08-15: the two newest runs, both produced through `kaggle_gpu`, were in exactly that
+state while `final_features` planned 19 runs and reported no error. The notebook now
+writes and validates the shortlist (`contract.validate_shortlist`) and prints
+`contract.describe()` — the handoff as the next stage will see it.
+`feature_selection/CONTEXT.md` §18.
+
+⚠️ **EVERY ENTRY POINT PRINTS ITS GPU AND ITS RUNTIME NOW** (`utils/runtime.py`, one
+clock and one GPU probe, GMT+7). `pipeline` and `kgpu` were the two that were left and
+they are the two that run longest. **`pipeline` needed a SECOND clock, per stage**: it
+calls the stages IN-PROCESS, so each module's own banner lives in its `main()` and never
+fires — a `--apply` run printed no per-stage timing at all. Its `runtime` column is
+**empty, never `0`**, for a skipped or planned stage. **`kgpu` prints no GPU on purpose**:
+the card that matters is a Kaggle T4, and its clock is the ROUND TRIP, not the selection.
+`feature_selection/CONTEXT.md` §18a.
+
 ### 3c. ⚠️ TWO selection layers, and the pool between them (NEW 2026-08-13)
 
 **The layer-1 union is not a consensus.** 725 of 750 channels in the old VCB table were

@@ -187,7 +187,7 @@ windows whose first days belong to one company and last days to another.
 as the unsuffixed table. The suffix names the **feature block** a table was built from —
 `pool__basic` alone, rather than the archive's union of 19 shortlists — and it exists
 because `final_features` groups on `(schema, target, setup)`, a key with no term for
-*which pools* (`final_features/CONTEXT.md` §0). Without it the narrow build and the wide
+*which pools* (`final_features/CONTEXT.md` §0a). Without it the narrow build and the wide
 build collide on one name and the narrow one can only be created by DROPPING the wide.
 
 ⚠️ **Nothing in this module branches on it.** `d` and `h` still come from the same place,

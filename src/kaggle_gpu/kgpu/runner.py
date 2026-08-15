@@ -30,7 +30,22 @@ from .config import (
     RESULTS_DIR,
     JobConfig,
     load_credentials,
+    repo_src_on_path,
 )
+
+
+def _shortlist_filename() -> str:
+    """`outstanding.csv`, from the module that DEFINES the handoff.
+
+    ⚠️ Not a literal here, and not imported at module scope. `feature_selection.contract`
+    is the one place that string is spelled — a rename must not leave this checker
+    looking for a file that no longer exists while reporting that everything is fine —
+    but it pulls in pandas, and `python -m kgpu jobs` has no business paying for that.
+    """
+    repo_src_on_path()
+    from feature_selection.contract import SHORTLIST_FILENAME
+
+    return SHORTLIST_FILENAME
 
 # Statuses that mean the worker is no longer going to make progress.
 TERMINAL = {"COMPLETE", "ERROR", "CANCEL_REQUESTED", "CANCEL_ACKNOWLEDGED"}
@@ -290,9 +305,26 @@ def merge_results(cfg: JobConfig, force: bool = False) -> List[Path]:
     if merged:
         print(
             f"\n{len(merged)} run folder(s) are now in the repo's report root — "
-            f"`python -m feature_selection.outstanding` and `final_features` "
-            f"will see them like any local run."
+            f"`final_features` will see them like any local run."
         )
+        # ⚠️ **A MERGED RUN WITH NO SHORTLIST IS INVISIBLE, AND NOTHING USED TO SAY SO.**
+        # `final_features.plan_from_reports` skips a folder carrying no `outstanding.csv`
+        # without a word; measured 2026-08-15, the two newest runs — both produced through
+        # this command, back when the notebook wrote a report and stopped — sat in exactly
+        # that state while `final_features` planned 19 runs and reported no error
+        # (`feature_selection/contract.py` §2). The notebook writes the shortlist itself
+        # since 2026-08-16, so this is now a CHECK of what came home rather than a
+        # reminder to go and do it by hand.
+        shortlist = _shortlist_filename()
+        without = [m.name for m in merged if not (m / shortlist).exists()]
+        if without:
+            print(
+                f"WARNING: {len(without)} merged run(s) carry no {shortlist} and "
+                f"final_features cannot see them: {without}\n"
+                f"WARNING: run `python -m feature_selection.outstanding` to build it from "
+                f"the archived feature_importance.csv, and check the execution log for "
+                f"why the notebook's own shortlist cell did not."
+            )
     return merged
 
 

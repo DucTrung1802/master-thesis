@@ -24,6 +24,7 @@ from pipeline.stages import (
     DEFAULT_TICKER,
     run,
 )
+from utils import runtime
 
 
 def main(argv=None):
@@ -35,6 +36,21 @@ def main(argv=None):
     pd.set_option("display.width", 200)
     pd.set_option("display.max_colwidth", 60)
 
+    # ⚠️ `show_gpu` is ON here, unlike the SQL and numpy stages, because this driver
+    # calls `apply_model` IN-PROCESS — the chain's one CUDA stage runs inside this
+    # process, so the card in the box is a fact about this run. The per-stage clock
+    # is in `stages.run`; this is the total, and the two disagree by exactly the
+    # `status()` calls, which is the point of printing both.
+    with runtime.RunTimer(
+        f"pipeline  {option('--ticker', DEFAULT_TICKER)} / "
+        f"{option('--table', DEFAULT_TABLE)}"
+        f"{'  --apply' if '--apply' in argv else '  (plan only)'}"
+        f"{'  --rescrape' if '--rescrape' in argv else ''}",
+    ):
+        return _main(argv, option)
+
+
+def _main(argv, option):
     frame = run(
         apply="--apply" in argv,
         start=option("--from", None),

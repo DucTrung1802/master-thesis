@@ -93,8 +93,14 @@
 >
 > It re-implements nothing — same `FeatureSelector`, same
 > `evaluation.null_distribution`, same `report.write_report`, and it writes the
-> `outstanding.csv` before returning. Two differences from the notebook, both
-> deliberate:
+> `outstanding.csv` before returning.
+>
+> ⚠️ **THE TWO PATHS PRODUCE THE SAME ARTEFACT SINCE 2026-08-16, AND DID NOT BEFORE**
+> — §18. The notebook recorded no `input.columns_by_table`, no `execution` block and
+> **no shortlist at all**, so a run done interactively was invisible to
+> `final_features` while the identical run done through this CLI was not.
+>
+> Two differences from the notebook remain, both deliberate:
 >
 > 1. ⚠️ **`--null-draws` defaults to 20, where `RUN_NULL` defaults to `False`.** A
 >    scripted run has no human at the keyboard to read the "no bar was computed"
@@ -105,7 +111,7 @@
 >    `(schema, target, setup)`** — a key with no term for *which pools*. A new
 >    `pool__basic` run archived beside a country run joins it behind
 >    `return_5day__final__d20_h5` and silently widens that table. See
->    `final_features/CONTEXT.md` §0.
+>    `final_features/CONTEXT.md` §0a.
 >
 >    ⚠️ **`--root` no longer separates anything by default (2026-08-10).** The three
 >    extra roots (`_basic`, `_economy`, `_superseded`) were merged into
@@ -141,6 +147,114 @@
 >
 > The modules hold nothing notebook-specific, so the same runs script.
 
+## 0. ⚠️ THE INTERFACE — the only two files that cross into `final_features`
+
+> **This section is normative and it is MIRRORED in
+> [`final_features/CONTEXT.md` §0](../final_features/CONTEXT.md).** This is the
+> PRODUCER's half: what this package promises to write. That file is the CONSUMER's
+> half: what the next stage promises to read. Neither may be changed alone — the
+> definition they both import is [contract.py](contract.py), and a column added on
+> one side and not the other is an **import error**, not a discovery three stages
+> later.
+
+**A run of this package is a folder. Two of its files are the interface; the other
+ten are evidence for a human and are free to change.**
+
+```
+reports/feature_selection/<run_id>/
+  ⭐ metadata.json          the run's own record        → SETUP_KEYS
+  ⭐ outstanding.csv        the shortlist                → the channels, and CUT_KEYS
+     feature_importance.csv, channel_correlation.csv, validation.csv,
+     target_correlation.csv, design_scores.csv, stability.csv, coverage.csv,
+     null_draws.csv, holdout.csv, figures/*.png, README.md
+```
+
+⚠️ **`final_features` OPENS NOTHING ELSE, and it must not be made to.** The other ten
+are how a run is READ BACK and re-cut — `outstanding.py` rebuilds the shortlist from
+`feature_importance.csv` + `channel_correlation.csv` + `coverage.csv` — but a consumer
+that reached into them would be re-deciding the cut, which is this package's job and
+was already done, per run, with the parameters stamped into the shortlist.
+
+### The shortlist — what `outstanding.csv` promises
+
+One row per shortlisted channel. **25 columns are written** (`outstanding.COLUMNS`);
+**10 of them are the contract** (`contract.REQUIRED_SHORTLIST_COLUMNS`, verified
+2026-08-16) and the other 15 are diagnostics that may change without notice.
+
+| column | the consumer uses it for |
+|---|---|
+| `channel` | a column of the generated `SELECT` |
+| `source_table` | the `FROM` it is read out of |
+| `schema` | `unified_schema_<t>` — in and out, nothing crosses schemas |
+| `target` | the grouping key, and the table NAME |
+| `lookback_d`, `horizon_h` | the `__d20_h5` in that name |
+| `run_id`, `evidence` | the provenance `COMMENT ON TABLE` |
+| `cut_fdr_q`, `cut_corr_threshold` | `CUT_KEYS` — **part of the setup, and stored NOWHERE ELSE** |
+
+⚠️ **`source_table` may never be `'unknown'`.** It is interpolated into SQL, so a
+guess that happens to name a real table produces SQL that RUNS and reads a channel out
+of the wrong pool — a silent data error. `contract.UNKNOWN_SOURCE` exists so the build
+raises instead. The value is RECORDED, not inferred: `UnifiedSchemaReader.join` is the
+only code that ever saw both the pool and the column, and it writes
+`input.columns_by_table` into `metadata.json`. The name-based guess in
+`outstanding.source_table` is the fallback for folders archived before 2026-08-15 and
+covers four pool families out of nine.
+
+⚠️ **`channel`, `source_table` and `schema` must be bare SQL identifiers ≤ 63 bytes.**
+Checked, never trusted: past 63 bytes PostgreSQL truncates **silently** and two
+truncated names collide into one table.
+
+⚠️ **A run is ONE schema and ONE target.** Two distinct values of either in one file
+means it describes more than one experiment, and the consumer would split it across
+groups without saying so.
+
+### The setup — what `metadata.json` promises
+
+The `setup` block must carry all nine of `lookback_d, horizon_h, normalize,
+feature_normalize, corr_threshold, n_splits, min_train, random_state,
+selector_class`. They are what makes two runs THE SAME EXPERIMENT, and therefore what
+the consumer groups on.
+
+⚠️ **The setup is deliberately SPLIT ACROSS THE TWO FILES.** `metadata.json` describes
+the SELECTOR run — but the cut runs *after* it is written (`selection_cut`), so the two
+parameters that decide the shortlist are stamped into the SHORTLIST. Reading them from
+`metadata.json` would read a knob that no longer determines anything, which is exactly
+what `max_features: 12` was in twenty archived runs whose shortlists held 10–236
+channels (STL-1). `max_features` is in neither list, on purpose.
+
+⚠️ **A `None` setup value is a REAL value** — `feature_normalize` is `None` on every
+non-cross-sectional run — and `groupby` drops `None` keys. The consumer carries it as
+an ASCII `NOT_SET` sentinel.
+
+### The two failure modes this replaced, both measured
+
+| | what happened | now |
+|---|---|---|
+| **a folder with no `outstanding.csv`** | skipped SILENTLY. 2026-08-15: the two newest runs had none, `final_features` planned 19 runs and reported no error | `contract.missing_shortlists` finds them and the read **raises** |
+| **`source_table` guessed from the channel name** | `unknown` for the five pool families built since 2026-08-10 — and worse, a forex channel came out labelled `pool__ta`, a table that exists and does not hold it | the map is RECORDED at read time; `unknown` **raises** |
+
+**Both are the same rule** (CLAUDE.md §5 rule 12): silence is never how something gets
+left out.
+
+### Who writes it, and when
+
+Every entry point writes the shortlist itself — a report folder without one is not a
+finished run:
+
+| entry point | writes `outstanding.csv` |
+|---|---|
+| `python -m feature_selection.run` | ✅ always, before returning |
+| `RUN__feature_importance_report.ipynb` §4a | ✅ since 2026-08-16 (§18) |
+| `python -m kgpu run` (which runs that notebook) | ✅ via the notebook; `merge_results` re-checks what came home |
+| `python -m feature_selection.outstanding` | ✅ rebuilds every run under a root — the repair path |
+| `python -m pipeline` `selection` stage | ✅ the same rebuild; ⚠️ it cannot perform a RUN (PIP-1) |
+
+⚠️ **A shortlist `final_features` could not read is NOT WRITTEN.** `outstanding.main`
+checks each one against `contract.validate_shortlist` first, skips the bad ones, names
+them, and re-raises at the END so the nineteen good files are on disk first. Writing it
+anyway would move the failure to `python -m final_features`, hours and two stages later,
+where the run that caused it is no longer the thing being run.
+
 ## 1. What is here
 
 | file | does |
@@ -156,6 +270,7 @@
 | **[report.py](report.py)** | **one run → one self-describing folder** — CSVs, PNGs and a `metadata.json` that records what may be compared with what (§10) |
 | **[outstanding.py](outstanding.py)** | **one run → its final feature list** — kept channels only, ties broken, each mapped back to the pool table it must be read from (§14) |
 | **[selection_cut.py](selection_cut.py)** | **how many channels a run supports** — a shuffled-methods null + a per-method knee, replacing `max_features=12` (§14c) |
+| **[contract.py](contract.py)** | ⚠️ **THE INTERFACE TO `final_features`, DEFINED ONCE AND IMPORTED BY BOTH SIDES** — the two filenames, the keys, the required columns, and the two checks. §0 below |
 
 ### Downstream of here
 
@@ -2549,3 +2664,101 @@ line prints are the numbers already in `self.timings`, not a second measurement.
 ⚠️ **`run()`'s last two phases were HOISTED out of the `SelectionResult(...)` call** to
 be announceable — `stability` and `validate` were inline expressions in the
 constructor. Same order, same arguments, same results; they are locals now.
+
+## 18. ⚠️ THE NOTEBOOK AND THE CLI PRODUCE THE SAME ARTEFACT (2026-08-16)
+
+`RUN__feature_importance_report.ipynb` is the package's operational entry point and
+`run.py` is "the parameter cell plus an `argparse`" (its own docstring). They were not
+the same thing. Three of the CLI's outputs had no counterpart in the notebook, and each
+absence is silent in a different way:
+
+| what | the CLI wrote | the notebook wrote | what the absence did |
+|---|---|---|---|
+| `input.columns_by_table` | ✅ from `reader.columns_by_table` | ❌ dropped on the floor | `outstanding.source_table` fell back to guessing the pool from the channel NAME |
+| `execution` block | ✅ `RunTimer.summary()` | ❌ absent | the run recorded no device, no runtime and no host |
+| `outstanding.csv` | ✅ `outstanding.main(root)` | ❌ **never written** | the run was INVISIBLE to `final_features` |
+
+**The third is the one that had already fired.** `final_features.plan_from_reports`
+skips a folder with no shortlist and says nothing about it — measured 2026-08-15, the
+two newest runs carried none and `final_features` planned 19 runs and reported no error
+(`contract.py` §2). Both of those runs came back through `kaggle_gpu`, which runs **this
+notebook**; the CLI has never left a run in that state.
+
+⚠️ **The first is the one that would have fired next.** The name-based guess covers
+`pool__basic`, `pool__economy_<country>`, `pool__ta` and `pool__fa` and nothing else, so
+every pool built since 2026-08-10 — `pool__bonds`, `pool__forex_<exchange>`,
+`pool__funds`, `pool__stock_market`, `pool__basic_bank` — comes back `unknown` and
+`final_features` refuses to build a FROM clause. The silent case is worse: with
+`pool__ta` in the run the guess **names `pool__ta`** for a forex channel, which is a
+table that exists and does not hold the column, and the error arrives from PostgreSQL
+two stages later at `--apply`.
+
+**What the notebook does now**, in the order the cells run:
+
+- **§0** starts a `utils.runtime.RunTimer` **before the read** — a wide pool spends
+  minutes in PostgreSQL and that time is part of what a run costs. Prints the wall
+  clock in GMT+7, the device asked for, and the GPU in the box.
+- **§1** keeps `columns_by_table = dict(reader.columns_by_table)` and prints the channel
+  count per pool.
+- **§2** calls `timer.set_device(selector.device)` — the **resolved** device, not the
+  preference. `auto` is not an answer, and 22 archived selections recorded `device=cpu`
+  while everyone believed the GPU was busy (§16, `gpu.py` §4).
+- **§4** passes `columns_by_table=` and `execution=timer.summary()` to `write_report`.
+- **§4a** writes the shortlist and checks it against `contract.validate_shortlist`,
+  then **stops the timer** — the run is over at that cell and everything below reads
+  back what it wrote.
+- **§4b** prints `contract.describe(RUN_ROOT)`: one row per run folder under the root
+  and whether it satisfies the handoff, which is what the next `python -m final_features`
+  will see without running it.
+
+⚠️ **`outstanding.main` TAKES THE ROOT `write_report` RESOLVED, NOT `REPORT_ROOT`.**
+`REPORT_ROOT` is relative and `write_report` anchors it to the REPO; `outstanding.main`
+would join it against the CWD, which in Jupyter is this notebook's own folder. Passing
+the string scans `src/feature_selection/reports/feature_selection/`, finds no run and
+**reports success having written nothing** — the same CWD trap that sent a complete run
+into the wrong tree on 2026-08-10 (§10). The cell uses
+`RUN_ROOT = os.path.dirname(written.path)`.
+
+⚠️ **`strict=False`, then a check on THIS run.** `outstanding.main` writes every good
+sibling and names every bad one; the cell raises only when the run that just finished
+has no shortlist. A sibling's broken file is a real finding and must not raise in the
+middle of reporting on a run that is already on disk — CLAUDE.md §5 rule 20, one level
+up.
+
+⚠️ **The parameter cell was NOT touched, and that is load-bearing.**
+`kaggle_gpu.kgpu.notebook.patch_parameters` rewrites twelve top-level assignments in it
+**in place**, because the cell ends with a DERIVED `EXCLUDE = IDENTITY + [c for c in
+ALL_TARGETS if c != TARGET]` and an override cell placed after it would leave `EXCLUDE`
+excluding the OLD target — handing the run's own label to `FeatureSelector` as a
+candidate feature, which does not raise and reports an IC near 1. Verified after the
+change: `describe_patches` still resolves all twelve.
+
+### 18a. The banner is now on every entry point
+
+`utils/runtime.py` (2026-08-15) is one clock and one GPU probe. What was left after that
+commit were the two DRIVERS, and they are the two that run the longest:
+
+| entry point | banner | `show_gpu` | why |
+|---|---|---|---|
+| `feature_selection.run` / `.outstanding` | ✅ 2026-08-15 | on | the selection dispatches to CUDA |
+| `final_features`, `train_test_creator`, `result_evaluator` | ✅ 2026-08-15 | **off** | SQL / pandas / numpy — a banner naming hardware no step can use teaches the reader to skip banners |
+| `model.<arch>` (all six, via `common/engine`) | ✅ 2026-08-15 | on | |
+| **`RUN__feature_importance_report.ipynb`** | ✅ **2026-08-16** | on | |
+| **`python -m pipeline`** | ✅ **2026-08-16** | on | ⚠️ it calls `apply_model` **in-process**, so the chain's one CUDA stage runs inside this process |
+| **`python -m kgpu`** | ✅ **2026-08-16** | **off** | ⚠️ the GPU that matters is a Kaggle T4, not the card in this box |
+
+⚠️ **`pipeline` needed a SECOND clock, per stage, and it is not decoration.** The stages
+are called in-process — `apply_final_features` imports `build_all`, `apply_model` imports
+the binding's `train` — so each module's own `RunTimer` lives in its `main()` and **never
+fires** under `python -m pipeline`. Before this, a `--apply` run printed no per-stage
+timing at all. The `runtime` column is **empty, never `0`**, for a stage that was skipped
+or planned: a zero there reads as "ran instantly", which is the same error as recording
+an absent null as a pass. The per-stage clock is in a `finally`, so a stage that dies
+after two hours still says it spent two hours.
+
+⚠️ **`kgpu`'s clock measures the ROUND TRIP, not the selection.** Export, upload, queue,
+execute, download — the number that decides whether `kgpu` is worth using. The run's own
+runtime comes from the notebook's banner, in the execution log and in the merged
+`metadata.json`. Printing the local RTX 3050 above a T4 run would be worse than printing
+nothing: a T4 run is a different **procedure**, not the same one on faster hardware
+(different xgboost RNG stream, different library stack — CLAUDE.md §3d).

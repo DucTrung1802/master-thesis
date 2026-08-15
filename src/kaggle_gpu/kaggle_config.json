@@ -28,7 +28,7 @@
         "LOOKBACK": 20,
         "DEVICE": "cuda",
         "RUN_STABILITY": true,
-        "RUN_NULL": true,
+        "RUN_NULL": false,
         "N_NULL": 20,
         "RUN_HOLDOUT": false,
         "REPORT_ROOT": "reports/feature_selection",

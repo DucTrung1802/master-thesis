@@ -19,7 +19,16 @@ import argparse
 import sys
 
 from . import runner
-from .config import JobConfig, job_names, load_job
+from .config import JobConfig, job_names, load_job, repo_src_on_path
+
+# ⚠️ **`python -m kgpu` RUNS FROM `src/kaggle_gpu/`, so the repo's `src` IS NOT ON THE
+# PATH** — hence the insert before the import. The banner is shared code and has to come
+# from the one module that defines it: a second copy here would be a second clock, a
+# second timezone decision and a second GPU probe, all free to drift from the ones every
+# other `python -m <stage>` prints.
+repo_src_on_path()
+
+from utils import runtime  # noqa: E402  — needs the path insert above
 
 COMMANDS = {
     "run": "export? -> push -> wait -> download -> merge into the repo (default)",
@@ -95,6 +104,22 @@ def main(argv: list[str] | None = None) -> int:
 
     cfg: JobConfig = load_job(args.job)
 
+    # ⚠️ **`show_gpu=False` — THE GPU THAT MATTERS IS NOT IN THIS BOX.** `runtime.
+    # gpu_report()` would answer from the local `nvidia-smi` and print an RTX 3050
+    # above a run that executes on a Kaggle T4, which is worse than printing nothing:
+    # a T4 run is a different PROCEDURE, not the same one on faster hardware (a
+    # different xgboost RNG stream and a different library stack — CLAUDE.md §3d), and
+    # the run's OWN banner, from the notebook's `RunTimer`, is in the execution log and
+    # in the merged `metadata.json`. What this clock measures is the ROUND TRIP —
+    # export, upload, queue, execute, download — which is the number that decides
+    # whether `kgpu` is worth using at all, and it is not the runtime of the selection.
+    with runtime.RunTimer(
+        f"kgpu {args.command}  {cfg.name}", show_gpu=False
+    ):
+        return _dispatch(args, cfg)
+
+
+def _dispatch(args, cfg: JobConfig) -> int:
     if args.command == "run":
         return runner.run(cfg, refresh_data=args.data, force=args.force)
     if args.command == "rehearse":

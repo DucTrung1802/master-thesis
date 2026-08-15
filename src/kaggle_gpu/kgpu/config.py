@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -31,6 +32,20 @@ from dotenv import load_dotenv
 # `<repo>/src/kaggle_gpu/kgpu/config.py` -> the package root, then the repo root.
 PKG_ROOT = Path(__file__).resolve().parent.parent
 REPO_ROOT = PKG_ROOT.parent.parent
+
+
+def repo_src_on_path() -> None:
+    """Put the repo's `src` on `sys.path`.
+
+    ⚠️ **`python -m kgpu` runs from `src/kaggle_gpu/`, so the repo's `src` is NOT
+    importable by default** — this tool ships repo modules to a worker and reads the
+    artefacts they write, so it needs `feature_selection`, `utils` and friends. It
+    lived in `export.py` as `_repo_src_on_path` and three other modules now want it;
+    one definition beside `REPO_ROOT` is where it belongs.
+    """
+    src = str(REPO_ROOT / "src")
+    if src not in sys.path:
+        sys.path.insert(0, src)
 
 CONFIG_PATH = PKG_ROOT / "kaggle_config.json"
 BUILD_DIR = PKG_ROOT / ".build"  # the notebook staged for upload

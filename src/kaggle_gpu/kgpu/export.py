@@ -37,7 +37,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List
 
-from .config import REPO_ROOT, JobConfig
+from .config import REPO_ROOT, JobConfig, repo_src_on_path
 
 # The remote-side files, shipped flat beside the parquet.
 REMOTE_DIR = Path(__file__).resolve().parent / "remote"
@@ -53,10 +53,9 @@ SOURCE_EXCLUDE_DIRS = {"__pycache__", ".ipynb_checkpoints", ".git", "runs"}
 MANIFEST = "manifest.json"
 
 
-def _repo_src_on_path() -> None:
-    src = str(REPO_ROOT / "src")
-    if src not in sys.path:
-        sys.path.insert(0, src)
+# Moved to `config.py` (2026-08-16) — `runner` and `__main__` want it too, and three
+# copies of one `sys.path.insert` is three places for the repo layout to be wrong.
+_repo_src_on_path = repo_src_on_path
 
 
 def git_commit() -> str | None:

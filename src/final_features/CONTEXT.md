@@ -20,7 +20,92 @@ python -m final_features --apply --replace   # ⚠️ DROP an existing table fir
 python -m final_features --apply --scope basic   # root: reports/feature_selection
 ```
 
-## 0. ⚠️ `--root` and `--scope` — the grouping key has no term for "which pools"
+## 0. ⚠️ THE INTERFACE — the only two files this module may open
+
+> **This section is normative and it is MIRRORED in
+> [`feature_selection/CONTEXT.md` §0](../feature_selection/CONTEXT.md).** That file is
+> the PRODUCER's half: what a selection promises to write. This is the CONSUMER's
+> half: what this module promises to read, and nothing beyond it. Neither may be
+> changed alone — the definition they both import is
+> [`feature_selection/contract.py`](../feature_selection/contract.py), and a column
+> added on one side and not the other is an **import error**, not a discovery three
+> stages later.
+
+`plan_from_reports` walks every folder under `--root` that holds a `metadata.json`, and
+opens **two files in each**:
+
+```
+reports/feature_selection/<run_id>/
+  ⭐ metadata.json     → setup[SETUP_KEYS]        the grouping key
+  ⭐ outstanding.csv   → REQUIRED_SHORTLIST_COLUMNS + CUT_KEYS
+     everything else — feature_importance.csv, channel_correlation.csv, validation.csv,
+     coverage.csv, stability.csv, figures/ — IS NOT READ HERE AND MUST NOT BE
+```
+
+⚠️ **Reaching into the rest would be re-deciding the cut.** How many channels a run
+supports is measured *per run* by `feature_selection.selection_cut`, from a
+shuffled-methods null and a per-method knee, with the parameters it used stamped into
+the shortlist. This module's job starts after that decision. A second opinion formed
+here from `feature_importance.csv` would be a second cut with no null behind it.
+
+### The shortlist — what is read out of `outstanding.csv`
+
+`REQUIRED_SHORTLIST_COLUMNS` is **10 of the 25 columns the producer writes** (verified
+2026-08-16), and being a subset is deliberate: the other 15 are diagnostics
+(`coverage`, `kept_by`, `beat_in_tie`, `consensus_p`, `tie_group_size`,
+`source_table_from`, …) that must stay free to change without breaking the handoff.
+
+| column | what this module does with it |
+|---|---|
+| `channel` | one column of the generated `SELECT` |
+| `source_table` | the `FROM` it is read out of — §4's server-side join |
+| `schema` | the schema in AND out; **nothing crosses schemas** (§2) |
+| `target` | the grouping key and the table NAME (§3) |
+| `lookback_d`, `horizon_h` | the `__d<d>_h<h>` in that name — ⚠️ the ONLY source of the window and horizon downstream (§6a) |
+| `run_id`, `evidence` | the provenance `COMMENT ON TABLE` (§6) |
+| `cut_fdr_q`, `cut_corr_threshold` | `CUT_KEYS`, part of the grouping setup — ⚠️ they are **in no other file** (§5a) |
+
+⚠️ **`source_table == 'unknown'` RAISES, and a guess would be worse than the raise.**
+These names are interpolated into SQL, so a wrong table that *exists* produces SQL that
+runs and reads a channel out of the wrong pool — silent bad data, discovered nowhere.
+Every `channel`, `source_table` and `schema` is matched against `contract.IDENTIFIER`
+and the 63-byte limit first, because past 63 bytes PostgreSQL truncates **silently**
+and two truncated names collide into one table.
+
+### The setup — what is read out of `metadata.json`
+
+`setup[SETUP_KEYS]` — all nine of `lookback_d, horizon_h, normalize,
+feature_normalize, corr_threshold, n_splits, min_train, random_state,
+selector_class`. A run missing any of them **raises**: it predates those keys and
+cannot be grouped with runs that have them.
+
+⚠️ **The setup comes from `metadata.json`, the CUT keys from `outstanding.csv`, and
+that split is not an accident** (§5a). The shortlist carries only `lookback_d` and
+`horizon_h` — enough to read a row, not enough to decide two runs are the same
+experiment; grouping on what it happens to carry would silently merge runs differing in
+`normalize` or `random_state`. But `metadata.json` describes the SELECTOR run, and the
+shortlist is rebuilt after it by `selection_cut` — so the two parameters that determine
+the cut have to come from the file the cut wrote. `max_features` is in neither list, on
+purpose (§5a).
+
+### A run folder with no `outstanding.csv` RAISES
+
+⚠️ **It used to be skipped, and that is the failure this interface exists to prevent.**
+Measured 2026-08-15: the two newest runs — both merged back from `kaggle_gpu`, which at
+the time wrote the report folder and printed a reminder instead of the shortlist —
+carried none. `plan_from_reports` planned **19 runs, reported no error, and was wrong
+about which experiment it described.** `contract.missing_shortlists` now finds them and
+`_read_outstanding` raises, naming the folders and the command that fixes them. Same
+rule as CLAUDE.md §5 rule 12: silence is never how something gets left out.
+
+The repair is always the same one command, and it is safe to re-run:
+
+```powershell
+python -m feature_selection.outstanding      # rebuild every shortlist under the root
+python -m final_features                     # then look at the plan
+```
+
+## 0a. ⚠️ `--root` and `--scope` — the grouping key has no term for "which pools"
 
 Added 2026-08-10. §2's rule is one table per `(schema, target, setup)`, and **none of
 those three says which feature blocks a run ranked**. That is correct for the archive,
