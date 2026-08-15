@@ -860,10 +860,30 @@ DTO helpers come from
 
 ### Unified (`_ingest_unified_*`) — one ticker, cut into feature groups
 
-- **`_ingest_unified_pool_basic(ticker)` (2026-08-03)** — `silver.stocks_basic` filtered
-  to one ticker → `unified_schema_<ticker>.pool__basic`: **every column of the silver
-  table with silver's own types**, PK `(exchange, ticker, date)`. VCB is 4,235 × 38.
-  Creates the schema if absent and REPLACES the table, so it is re-runnable.
+- **`_ingest_unified_pool_basic(ticker)` (2026-08-03, derived block 2026-08-16)** —
+  `silver.stocks_basic` filtered to one ticker → `unified_schema_<ticker>.pool__basic`:
+  **every column of the silver table with silver's own types**, PK
+  `(exchange, ticker, date)`, **plus ~58 `drv_*` derived channels**. VCB is
+  **4,266 × 96** (38 silver + 58 derived), BANK and ALL 101 (63 derived — 5 of them
+  cross-sectional, universe partitions only). Creates the schema if absent and REPLACES
+  the table, so it is re-runnable. Returns a dict the asset asserts against.
+  - ⚠️ **IT STOPPED BEING A FAITHFUL COPY.** The spec is `UNIFIED_DERIVED_L1` /
+    `_L1_HELPERS` / `_L2` / `_L2_HELPERS` / `_L3` / `_CS`, and the block comment above
+    them carries the warnings. The contract that survives is the SUBSET one — every
+    silver column present, silver's type, silver's value — and the derived set is
+    asserted as an **equality**, so a leaked CTE helper raises rather than becoming a
+    candidate feature. Full write-up, including the five measured traps and the
+    causality test, in `orchestration/CONTEXT.md`.
+  - ⚠️ **The bar is split-adjusted BEFORE anything reads it.** Silver's
+    `open`/`high`/`low` are RAW and track `close_raw` (`close_raw BETWEEN low AND high`
+    on 4,266 of 4,266 VCB rows; `close_adjust` on 248) — the same fact
+    `_helper_adjust_ohlc` records for gold. The `px` CTE rebuilds them with
+    `close_adjust / close_raw`.
+  - ⚠️ **`value_matched` is BILLIONS of VND; `foreign_*_value` and `prop_*_val` are
+    plain VND.** `_val_vnd` in the `px` CTE is the one place the 1e9 lives.
+  - ⚠️ **Every level-2 channel carries a `COUNT(*) OVER wN = N` full-frame guard.**
+    Without it PostgreSQL computes partial frames and a 252-day channel is a 10-day
+    channel for the first year of every series — 188,737 rows of `ALL` before the fix.
   - ⚠️ **`CREATE TABLE AS`, not a pandas round-trip.** psycopg2 hands back `numeric` as
     `Decimal` → DataFrame dtype `object` → `_helper_infer_sql_type` → **VARCHAR**. A
     round-trip would turn every price column into text while looking like it worked —
@@ -1082,7 +1102,8 @@ columns and the pool on disk has **26** — missing `foreign_{buy,sell,net}_{val
 `foreign_own`, `foreign_room_left` and `prop_{buy,sell}_{val,vol}`. The `pool__basic`
 asset CTASes `SELECT *` and asserts the column set, so a rebuild widens it 26 → 38
 without changing a row. Until then this pool is the only place in `unified_schema_vcb`
-carrying VCB's own foreign flow.
+carrying VCB's own foreign flow. ✅ **Rebuilt on all three partitions 2026-08-16** —
+all now carry silver's 38, and the sentence above is history.
 
 ⚠️ **The schema's own ticker is one of the channels, and the asset ASSERTS it.** On
 `unified_schema_vcb`, `hose__vcb__<m>` must equal `pool__basic.<m>` — 15 mirrored

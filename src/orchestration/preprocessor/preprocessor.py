@@ -6614,11 +6614,594 @@ class DataPreprocessor:
             "populated_rows": populated_rows,
         }
 
-    def _ingest_unified_pool_basic(self, ticker: str) -> None:
+    # ── DERIVED FEATURES on `pool__basic` (2026-08-16) ───────────────────────────
+    #
+    # `pool__basic` used to be `SELECT *` and nothing else — a faithful copy of
+    # `silver.stocks_basic`. It now carries a block of TRAILING derived channels named
+    # `drv_*`, computed in SQL inside the same `CREATE TABLE AS`.
+    #
+    # ⚠️ **WHY A PREFIX.** These names must not collide with `pool__ta` (935 columns),
+    # `pool__fa`, `pool__targets` or any date-broadcast pool — `UnifiedSchemaReader.join`
+    # would produce `_x`/`_y` pairs and silently drop one copy. `drv_` guarantees that,
+    # makes "silver column or derived column?" answerable by name alone, and lets the
+    # asset assert the exact column set. It also keeps `_ingest_unified_pool_fa`'s
+    # `basic_columns` exclusion correct without change: that reads `silver.stocks_basic`,
+    # which no `drv_*` name is ever in.
+    #
+    # ⚠️ **THE ADJUSTMENT FACTOR IS APPLIED FIRST, AND THIS IS THE TRAP.**
+    # `silver.stocks_basic.open/high/low` are RAW — they track `close_raw`, not
+    # `close_adjust`. Measured 2026-08-16: `close_raw BETWEEN low AND high` on 4,266 of
+    # VCB's 4,266 rows, `close_adjust` on 248; market-wide 2,383,827 against 546,358.
+    # `_helper_adjust_ohlc` says the same thing for gold and names the row that proves
+    # it — VCB 2009-06-30, `open=high=low=close_raw=60,000` while `close_adjust=9,130`.
+    # So every expression below reads `_o/_h/_l/_c`, the OHLC set rebuilt with today's
+    # factor `close_adjust / close_raw`, never the source columns. Same-day RATIOS are
+    # factor-invariant and would survive either way; anything spanning days is not, and
+    # `drv_gap_open_pct` on raw prices would read every split as an overnight crash.
+    #
+    # ⚠️ **EVERY WINDOW IS `PARTITION BY exchange, ticker`, AND IT IS NOT OPTIONAL.**
+    # The same warning `_ingest_unified_pool_targets` carries: without it a window walks
+    # off the end of one company's history into the next one's, and on `ALL` (781
+    # tickers) that is 780 corrupted boundaries per column. On a single-ticker pool the
+    # partition is a no-op, so one statement is correct for every universe and there is
+    # no second code path to keep in step.
+    #
+    # ⚠️ **EVERY FRAME ENDS AT `CURRENT ROW`. There is no `FOLLOWING` anywhere in this
+    # block**, and a reviewer should be able to confirm that by grepping for it. These
+    # are features; a frame reaching forward would be a label wearing a feature's name,
+    # which is the failure `pool__funds`' docstring records for the TA battery.
+    #
+    # ⚠️ **NULLIF ON EVERY DIVISOR, because the degenerate rows are not rare.** Measured
+    # 2026-08-16 market-wide: 809,252 of 2,388,975 rows have `high = low` (34%) and
+    # 511,322 have zero or NULL matched volume (21%). On VCB only 5 rows do — so a
+    # divisor that looks safe on the single-name chain divides by zero a third of the
+    # time on `ALL`.
+    #
+    # ⚠️ **FLOATS ONLY, NO BOOLEANS.** `FeatureSelector._prepare` excludes bool dtypes,
+    # which is why ~207 of `pool__ta`'s columns are stored but never scored. Anything
+    # here that wants to be a flag is emitted as a count or a ratio instead.
+    #
+    # ⚠️ **TWO VALUE COLUMNS ARE IN BILLIONS AND FOUR ARE NOT.** Measured 2026-08-16 on
+    # VCB 2026-08-07: `value_matched` = **392.54** while `volume_matched × close_raw` =
+    # **389,375,340,000**, a ratio of 1.0e9 (market-wide median 1.0007e9) — so
+    # `value_matched` / `value_negotiated` are **billions of VND**, exactly as
+    # `gold.stocks_ta` says with its `val_matched_bn` name. `foreign_buy_value` (VCB
+    # same day: 70,742,630,000) and `prop_buy_val` (37,325,880,000) are **plain VND**.
+    # The first draft of this block divided one by the other and produced a "foreign
+    # participation ratio" of 215,150,099. Every expression below therefore reads
+    # `_val_vnd`, one column defined once in the `px` CTE, so the 1e9 appears in exactly
+    # one place with this paragraph attached to it.
+    #
+    # ⚠️ **INTEGER DIVISION IS THE OTHER ONE.** `volume_matched` is `bigint`, so
+    # `(volume - MIN(volume) OVER w) / (MAX(volume) OVER w - MIN(volume) OVER w)`
+    # divides int by int and returns **0** — measured, against 0.2038 for the float
+    # form. `render()` casts every finished expression to `double precision`, but that
+    # is applied AFTER the division, so any expression dividing two integer columns
+    # casts its own numerator.
+    #
+    # Coverage of the source blocks, measured 2026-08-16 (VCB / market-wide): OHLCV
+    # 100% / 100%, order stats 96.4% / 97.3% (from 2010-01-04), foreign 72.6% / 74.2%
+    # (from 2012-01-03), prop 20.7% / 3.1% (from 2023-01-03). ⚠️ The prop block is thin
+    # enough that its two channels are mostly NULL on `ALL` — rule 22's
+    # `trailing_null_sessions` problem, visible here as a low `drv_*` populated count.
+    UNIFIED_DERIVED_PREFIX = "drv_"
+
+    # Level 1 — per-row expressions and one-step LAGs over `wbase`. Helpers first
+    # (leading underscore, consumed by later levels and NEVER written to the table),
+    # then the output channels.
+    UNIFIED_DERIVED_L1_HELPERS: Tuple[Tuple[str, str], ...] = (
+        # Parkinson / Garman-Klass / Rogers-Satchell per-bar variance contributions.
+        # Guarded rather than NULLIF'd: LN of a non-positive number RAISES in
+        # PostgreSQL, where a division by zero here would only produce a NULL.
+        ("_ln_hl2", 'CASE WHEN "_h" > 0 AND "_l" > 0 THEN LN("_h"/"_l") * LN("_h"/"_l") END'),
+        (
+            "_gk_var",
+            'CASE WHEN "_h" > 0 AND "_l" > 0 AND "_c" > 0 AND "_o" > 0 THEN '
+            '0.5 * LN("_h"/"_l") * LN("_h"/"_l") '
+            '- (2.0 * LN(2.0) - 1.0) * LN("_c"/"_o") * LN("_c"/"_o") END',
+        ),
+        (
+            "_rs_var",
+            'CASE WHEN "_h" > 0 AND "_l" > 0 AND "_c" > 0 AND "_o" > 0 THEN '
+            'LN("_h"/"_c") * LN("_h"/"_o") + LN("_l"/"_c") * LN("_l"/"_o") END',
+        ),
+        # A no-trade session, as a 0/1 number so it can be SUMmed over a window. NULL
+        # volume counts as no trade — on `ALL` the two are the same event.
+        (
+            "_no_trade",
+            'CASE WHEN COALESCE("volume_matched", 0) = 0 THEN 1.0 ELSE 0.0 END',
+        ),
+    )
+
+    UNIFIED_DERIVED_L1: Tuple[Tuple[str, str], ...] = (
+        # ── A. Bar shape and intraday range ──
+        ("drv_range_hl_pct", '("_h" - "_l") / NULLIF("_c", 0)'),
+        ("drv_body_pct", '("_c" - "_o") / NULLIF("_o", 0)'),
+        # Close Location Value, −1 (closed on the low) … +1 (closed on the high). The
+        # sibling of `pool__ta`'s `bop`, which divides the OPEN-to-close move by the
+        # range; this one places the CLOSE between the extremes and is not in that pool.
+        ("drv_clv", '(("_c" - "_l") - ("_h" - "_c")) / NULLIF("_h" - "_l", 0)'),
+        ("drv_upper_shadow", '("_h" - GREATEST("_o", "_c")) / NULLIF("_h" - "_l", 0)'),
+        ("drv_lower_shadow", '(LEAST("_o", "_c") - "_l") / NULLIF("_h" - "_l", 0)'),
+        # ⚠️ The overnight jump — the ONLY piece of non-intraday information the daily
+        # bar carries, and `gold.stocks_ta` has nothing like it (0 hits for "gap" across
+        # its 935 columns). Adjusted on both sides, so a split is not a crash.
+        ("drv_gap_open_pct", '"_o" / NULLIF(LAG("_c") OVER wbase, 0) - 1.0'),
+        ("drv_intraday_pct", '"_c" / NULLIF("_o", 0) - 1.0'),
+        ("drv_ret_1d", '"_c" / NULLIF(LAG("_c") OVER wbase, 0) - 1.0'),
+        (
+            "drv_ret_log_1d",
+            'CASE WHEN "_c" > 0 AND LAG("_c") OVER wbase > 0 '
+            'THEN LN("_c" / LAG("_c") OVER wbase) END',
+        ),
+        # ── F. Liquidity, per-row half ──
+        # ⚠️ RAW ON RAW ON PURPOSE. `_val_vnd` is VND actually paid and
+        # `volume_matched` shares actually traded, so their ratio is a RAW average
+        # traded price and must be compared against `close_raw`, not `_c`. It is the
+        # one derived channel here that does not live on the adjusted scale.
+        ("drv_vwap_raw", '"_val_vnd" / NULLIF("volume_matched", 0)'),
+        (
+            "drv_close_vs_vwap",
+            '"close_raw"::double precision '
+            '/ NULLIF("_val_vnd" / NULLIF("volume_matched", 0), 0) - 1.0',
+        ),
+        # Both sides are billions, so the unit cancels — but written against the VND
+        # pair anyway so no reader has to work out which columns share a scale.
+        (
+            "drv_negotiated_value_share",
+            '"_val_neg_vnd" / NULLIF("_val_vnd" + "_val_neg_vnd", 0)',
+        ),
+        # ── D. Order-flow imbalance — §2d's top lever, at daily grain ──
+        # ⚠️ `avg_vol_per_buy_order` IS `buy_order_vol / n_buy_orders` — verified
+        # 2026-08-16, 0 of 2,071,153 rows differ by more than half a share. So a
+        # per-side size channel would be a pure duplicate; only the CROSS-SIDE ratio
+        # below is new information.
+        (
+            "drv_order_count_imb",
+            '("n_buy_orders"::double precision - "n_sell_orders") '
+            '/ NULLIF("n_buy_orders"::double precision + "n_sell_orders", 0)',
+        ),
+        (
+            "drv_order_vol_imb",
+            '("buy_order_vol"::double precision - "sell_order_vol") '
+            '/ NULLIF("buy_order_vol"::double precision + "sell_order_vol", 0)',
+        ),
+        (
+            "drv_log_order_size_ratio",
+            'CASE WHEN "avg_vol_per_buy_order" > 0 AND "avg_vol_per_sell_order" > 0 '
+            'THEN LN("avg_vol_per_buy_order"::double precision '
+            '        / "avg_vol_per_sell_order") END',
+        ),
+        (
+            "drv_avg_order_size",
+            '("buy_order_vol"::double precision + "sell_order_vol") '
+            '/ NULLIF("n_buy_orders"::double precision + "n_sell_orders", 0)',
+        ),
+        # How much of the day's posted intent actually traded. Above 1 is normal — a
+        # share can change hands more than once against standing interest.
+        (
+            "drv_order_fill_ratio",
+            '"volume_matched"::double precision '
+            '/ NULLIF(("buy_order_vol"::double precision + "sell_order_vol") / 2.0, 0)',
+        ),
+        # ── E. Foreign and proprietary flow ──
+        (
+            "drv_foreign_net_value_ratio",
+            '"foreign_net_value"::double precision / NULLIF("_val_vnd", 0)',
+        ),
+        (
+            "drv_foreign_participation",
+            '("foreign_buy_value"::double precision + "foreign_sell_value") '
+            '/ NULLIF(2.0 * "_val_vnd", 0)',
+        ),
+        # Ownership DRIFT, not the level — the level is already a silver column and is
+        # near-constant week to week.
+        (
+            "drv_foreign_own_chg_5",
+            '"foreign_own"::double precision - LAG("foreign_own", 5) OVER wbase',
+        ),
+        (
+            "drv_foreign_own_chg_21",
+            '"foreign_own"::double precision - LAG("foreign_own", 21) OVER wbase',
+        ),
+        # ⚠️ 20.7% covered on VCB and 3.1% market-wide, from 2023-01-03. Kept because
+        # proprietary desks are the other half of the flow story and the block is 4
+        # columns wide; read `drv_*` populated counts before trusting either.
+        #
+        # ⚠️ **AND THE SOURCE HAS CORRUPT ROWS THAT THESE RATIOS AMPLIFY** (measured
+        # 2026-08-16, issue OUT-1). `silver.stocks_basic` VCB 2026-01-05 carries
+        # `prop_buy_val = 4.001e17` — 400 quadrillion VND — against a whole-day
+        # turnover of 2.06e11, on `prop_buy_vol = 697,000` shares at a close of
+        # 57,100: an implied 5.7e11 VND per share, ten million times the real price.
+        # That ONE row is enough to drive `corr(drv_prop_net_value_ratio,
+        # drv_prop_participation)` to exactly +1.0 and to manufacture a +0.266
+        # correlation against the forward 5-day return, which is the shape of a
+        # finding and is a single bad cell. Market-wide, 77 of 73,044 `prop_buy_val`
+        # and 1,182 of 1,240,032 `foreign_buy_value` rows exceed ten times their own
+        # day's turnover (~0.1% each) — so `foreign_*` carries the same defect.
+        # ⚠️ NOT winsorised here. Cleaning belongs to the layer that owns the column,
+        # and silently clipping a source value inside a feature expression is how a
+        # data defect stops being visible. Anything selecting on these four channels
+        # should look at their extremes first.
+        (
+            "drv_prop_net_value_ratio",
+            '("prop_buy_val"::double precision - "prop_sell_val") '
+            '/ NULLIF("_val_vnd", 0)',
+        ),
+        (
+            "drv_prop_participation",
+            '("prop_buy_val"::double precision + "prop_sell_val") '
+            '/ NULLIF(2.0 * "_val_vnd", 0)',
+        ),
+    )
+
+    # Level 2 — trailing windows over level 1. `{w}` is substituted with the frame
+    # alias, so a window appears in exactly one place per channel.
+    #
+    # Helpers again first: the four raw moments of the 63-day return distribution,
+    # from which level 3 builds skewness and excess kurtosis (PostgreSQL has no window
+    # skew/kurt aggregate, and the moment form needs only one pass).
+    UNIFIED_DERIVED_L2_HELPERS: Tuple[Tuple[str, str], ...] = (
+        ("_m1_63", 'AVG("drv_ret_1d") OVER w63'),
+        ("_m2_63", 'AVG("drv_ret_1d" * "drv_ret_1d") OVER w63'),
+        ("_m3_63", 'AVG("drv_ret_1d" * "drv_ret_1d" * "drv_ret_1d") OVER w63'),
+        (
+            "_m4_63",
+            'AVG("drv_ret_1d" * "drv_ret_1d" * "drv_ret_1d" * "drv_ret_1d") OVER w63',
+        ),
+    )
+
+    UNIFIED_DERIVED_L2: Tuple[Tuple[str, str], ...] = (
+        # ── B. Range-based volatility estimators ──
+        # ⚠️ None of these exist anywhere in the repo. They use the whole bar rather
+        # than the close alone, which is why they are several times more efficient per
+        # observation than a close-to-close standard deviation — the thing that matters
+        # most here, where `n_eff` is `n_dates/h` and never larger (rule 7).
+        ("drv_parkinson_5", 'SQRT(AVG("_ln_hl2") OVER w5 / (4.0 * LN(2.0)))'),
+        ("drv_parkinson_21", 'SQRT(AVG("_ln_hl2") OVER w21 / (4.0 * LN(2.0)))'),
+        # GREATEST(…, 0): both estimators are unbiased but not non-negative in small
+        # samples, and SQRT of a negative RAISES.
+        ("drv_garman_klass_5", 'SQRT(GREATEST(AVG("_gk_var") OVER w5, 0))'),
+        ("drv_garman_klass_21", 'SQRT(GREATEST(AVG("_gk_var") OVER w21, 0))'),
+        ("drv_rogers_satchell_5", 'SQRT(GREATEST(AVG("_rs_var") OVER w5, 0))'),
+        ("drv_rogers_satchell_21", 'SQRT(GREATEST(AVG("_rs_var") OVER w21, 0))'),
+        # `pool__ta` has `volatility_5` / `volatility_21`; these are the two horizons it
+        # does NOT have, chosen so the pair also gives a fast/slow ratio at level 3.
+        ("drv_realized_vol_10", 'STDDEV_SAMP("drv_ret_log_1d") OVER w10'),
+        ("drv_realized_vol_63", 'STDDEV_SAMP("drv_ret_log_1d") OVER w63'),
+        (
+            "drv_downside_vol_21",
+            'STDDEV_SAMP(CASE WHEN "drv_ret_1d" < 0 THEN "drv_ret_1d" END) OVER w21',
+        ),
+        # ── C. Distributional / normalisation — the "mean, max, quantile" block ──
+        # ⚠️ THIS IS THE ANSWER TO THE LEVEL-PREDICTS-LEVEL TRAP. A raw `close_adjust`
+        # ranks first in any selection against a price-level target at ρ 0.996 and means
+        # nothing (hub §3c). `drv_close_z_*` and `drv_close_pos_*` say where today sits
+        # in its OWN trailing distribution, which is bounded, stationary and comparable
+        # across tickers and across decades.
+        (
+            "drv_close_z_21",
+            '("_c" - AVG("_c") OVER w21) / NULLIF(STDDEV_SAMP("_c") OVER w21, 0)',
+        ),
+        (
+            "drv_close_z_63",
+            '("_c" - AVG("_c") OVER w63) / NULLIF(STDDEV_SAMP("_c") OVER w63, 0)',
+        ),
+        # ⚠️ A MIN-MAX POSITION, NOT A TRUE PERCENTILE, and the name says so.
+        # `PERCENT_RANK` is a rank window function and cannot take a ROWS frame, and
+        # `PERCENTILE_CONT` is an ordered-set aggregate and is not windowable at all —
+        # so a genuine trailing quantile needs a correlated subquery, which is O(n·w)
+        # and would be ~600 M row comparisons on `ALL` per column. This is the bounded
+        # 0–1 statistic that IS computable in one pass.
+        (
+            "drv_close_pos_21",
+            '("_c" - MIN("_c") OVER w21) '
+            '/ NULLIF(MAX("_c") OVER w21 - MIN("_c") OVER w21, 0)',
+        ),
+        (
+            "drv_close_pos_63",
+            '("_c" - MIN("_c") OVER w63) '
+            '/ NULLIF(MAX("_c") OVER w63 - MIN("_c") OVER w63, 0)',
+        ),
+        (
+            "drv_close_pos_252",
+            '("_c" - MIN("_c") OVER w252) '
+            '/ NULLIF(MAX("_c") OVER w252 - MIN("_c") OVER w252, 0)',
+        ),
+        ("drv_dist_from_high_21", '"_c" / NULLIF(MAX("_h") OVER w21, 0) - 1.0'),
+        ("drv_dist_from_high_63", '"_c" / NULLIF(MAX("_h") OVER w63, 0) - 1.0'),
+        ("drv_dist_from_high_252", '"_c" / NULLIF(MAX("_h") OVER w252, 0) - 1.0'),
+        ("drv_dist_from_low_21", '"_c" / NULLIF(MIN("_l") OVER w21, 0) - 1.0'),
+        ("drv_dist_from_low_63", '"_c" / NULLIF(MIN("_l") OVER w63, 0) - 1.0'),
+        # Volume and turnover surprise. `gold.stocks_ta` normalises no volume series at
+        # all, so a 935-column pool cannot say "today's volume is unusual".
+        (
+            "drv_volume_z_21",
+            '("volume_matched" - AVG("volume_matched") OVER w21) '
+            '/ NULLIF(STDDEV_SAMP("volume_matched") OVER w21, 0)',
+        ),
+        # ⚠️ The numerator casts ITSELF. `volume_matched` is bigint, and bigint/bigint
+        # is integer division — this expression returned a flat 0 until 2026-08-16.
+        # `render()`'s outer cast happens after the division and cannot save it.
+        (
+            "drv_volume_pos_63",
+            '("volume_matched" - MIN("volume_matched") OVER w63)::double precision '
+            '/ NULLIF(MAX("volume_matched") OVER w63 '
+            '         - MIN("volume_matched") OVER w63, 0)',
+        ),
+        (
+            "drv_value_z_21",
+            '("_val_vnd" - AVG("_val_vnd") OVER w21) '
+            '/ NULLIF(STDDEV_SAMP("_val_vnd") OVER w21, 0)',
+        ),
+        # ── F. Liquidity, windowed half ──
+        # ⚠️ Amihud illiquidity — mean over the window of |return| per BILLION VND
+        # traded (the ×1e9 undoes `_val_vnd`, giving ~3e-5 for VCB and larger for a
+        # thin name). Price impact per unit of money, the standard measure, and absent
+        # from every pool in this database.
+        (
+            "drv_amihud_21",
+            'AVG(ABS("drv_ret_1d") / NULLIF("_val_vnd", 0)) OVER w21 * 1e9',
+        ),
+        (
+            "drv_amihud_63",
+            'AVG(ABS("drv_ret_1d") / NULLIF("_val_vnd", 0)) OVER w63 * 1e9',
+        ),
+        # 21% of market-wide rows are no-trade sessions, so staleness is a real feature
+        # on `ALL` and a constant 0 on VCB.
+        ("drv_no_trade_days_21", 'SUM("_no_trade") OVER w21'),
+        # ── E. Foreign flow, windowed ──
+        # ⚠️ A RATIO OF SUMS, not a sum of VND. Persistent flow is what matters and a
+        # raw cumulative VND figure is neither stationary nor comparable across tickers.
+        (
+            "drv_foreign_flow_ratio_5",
+            'SUM("foreign_net_value") OVER w5 / NULLIF(SUM("_val_vnd") OVER w5, 0)',
+        ),
+        (
+            "drv_foreign_flow_ratio_21",
+            'SUM("foreign_net_value") OVER w21 / NULLIF(SUM("_val_vnd") OVER w21, 0)',
+        ),
+        # ── D. Order flow, windowed. The daily imbalance is noisy (VCB sd 0.225,
+        # range −0.59…+0.98, measured 2026-08-16); the trailing mean is the signal
+        # anyone would actually trade, and the z-score is today against that. ──
+        ("drv_order_count_imb_5", 'AVG("drv_order_count_imb") OVER w5'),
+        ("drv_order_count_imb_21", 'AVG("drv_order_count_imb") OVER w21'),
+        ("drv_order_vol_imb_5", 'AVG("drv_order_vol_imb") OVER w5'),
+        ("drv_order_vol_imb_21", 'AVG("drv_order_vol_imb") OVER w21'),
+        (
+            "drv_order_count_imb_z21",
+            '("drv_order_count_imb" - AVG("drv_order_count_imb") OVER w21) '
+            '/ NULLIF(STDDEV_SAMP("drv_order_count_imb") OVER w21, 0)',
+        ),
+    )
+
+    # Level 3 — plain row expressions over level 2. No windows, so this rides along on
+    # the final SELECT and costs no extra sort.
+    UNIFIED_DERIVED_L3: Tuple[Tuple[str, str], ...] = (
+        # Fast vol against slow vol: above 1 is a volatility expansion.
+        (
+            "drv_vol_ratio_10_63",
+            '"drv_realized_vol_10" / NULLIF("drv_realized_vol_63", 0)',
+        ),
+        # Skewness and EXCESS kurtosis from the raw moments carried up from level 2.
+        (
+            "drv_ret_skew_63",
+            '("_m3_63" - 3.0 * "_m1_63" * ("_m2_63" - "_m1_63" * "_m1_63") '
+            '        - "_m1_63" * "_m1_63" * "_m1_63") '
+            '/ NULLIF(POWER(GREATEST("_m2_63" - "_m1_63" * "_m1_63", 0), 1.5), 0)',
+        ),
+        (
+            "drv_ret_kurt_63",
+            '("_m4_63" - 4.0 * "_m1_63" * "_m3_63" '
+            '        + 6.0 * "_m1_63" * "_m1_63" * "_m2_63" '
+            '        - 3.0 * "_m1_63" * "_m1_63" * "_m1_63" * "_m1_63") '
+            '/ NULLIF(POWER(GREATEST("_m2_63" - "_m1_63" * "_m1_63", 0), 2), 0) - 3.0',
+        ),
+    )
+
+    # Level 3, CROSS-SECTIONAL — `PARTITION BY date`, i.e. across the tickers of one
+    # session rather than along one ticker's history.
+    #
+    # ⚠️ **EMITTED ONLY ON A UNIVERSE PARTITION, and that is a deliberate exception to
+    # "the column set must not depend on the partition".** On `unified_schema_vcb` there
+    # is exactly one row per date, so `PERCENT_RANK` is 0.0 and a cross-sectional
+    # demean is 0.0, on every row, forever. `_ingest_unified_pool_basic_bank`'s identity
+    # exclusion makes the same call for the same reason — a column known to be constant
+    # before it is written costs selection budget and buys nothing. `pool__basic` on VCB
+    # is therefore 5 columns narrower than on `ALL`/`BANK`, and the asset reports which.
+    #
+    # ⚠️ **NULLS ARE NULLED, not ranked.** `PERCENT_RANK` sorts NULLs last, which would
+    # hand a ticker with no return that day a rank of 1.0 — the top of the cross-section.
+    #
+    # ⚠️ **THIS IS THE ONLY BLOCK THE REPO HAS EVER MEASURED SOMETHING IN.** Hub §2b:
+    # single-name prediction fails four independent ways, and the cross-sectional
+    # relative rank at 100+ names is what survives its null.
+    UNIFIED_DERIVED_CS: Tuple[Tuple[str, str], ...] = (
+        (
+            "drv_cs_pct_ret_1d",
+            'CASE WHEN "drv_ret_1d" IS NOT NULL THEN PERCENT_RANK() OVER '
+            '(PARTITION BY "date" ORDER BY "drv_ret_1d" NULLS LAST) END',
+        ),
+        (
+            "drv_cs_pct_turnover",
+            'CASE WHEN "_val_vnd" IS NOT NULL THEN PERCENT_RANK() OVER '
+            '(PARTITION BY "date" ORDER BY "_val_vnd" NULLS LAST) END',
+        ),
+        (
+            "drv_cs_pct_range",
+            'CASE WHEN "drv_range_hl_pct" IS NOT NULL THEN PERCENT_RANK() OVER '
+            '(PARTITION BY "date" ORDER BY "drv_range_hl_pct" NULLS LAST) END',
+        ),
+        # The market factor removed by subtraction rather than by regression — the same
+        # thing `return_rel_{h}day` does to the label, applied to the feature.
+        (
+            "drv_cs_ret_demeaned",
+            '"drv_ret_1d" - AVG("drv_ret_1d") OVER (PARTITION BY "date")',
+        ),
+        # And the same against the GICS industry, so a bank is compared to banks.
+        # ⚠️ `industry_code` is NOT point-in-time (silver carries today's code on every
+        # historical row), so this is the survivors' industry carried backwards.
+        (
+            "drv_cs_ret_vs_industry",
+            '"drv_ret_1d" - AVG("drv_ret_1d") OVER '
+            '(PARTITION BY "date", "industry_code")',
+        ),
+    )
+
+    # The trailing frames, all sharing one PARTITION BY / ORDER BY so PostgreSQL sorts
+    # once and reuses it for every frame. ⚠️ `w{n}` spans n rows ENDING AT CURRENT ROW.
+    UNIFIED_DERIVED_FRAMES: Tuple[int, ...] = (5, 10, 21, 63, 252)
+
+    def _helper_unified_derived_sql(self, ticker: str) -> Tuple[str, List[str]]:
+        """The derived-feature CTE chain and the output column names, in order.
+
+        Returns `(cte_sql, columns)` where `cte_sql` is everything between `WITH` and
+        the final `SELECT`, and `columns` is the `drv_*` list the final `SELECT` must
+        emit — which is also what the Dagster asset asserts against the built table.
+
+        ⚠️ The cross-sectional block is included only for a universe partition; see
+        `UNIFIED_DERIVED_CS` for why a constant column is worse than a missing one.
+        """
+        universe = self._helper_unified_is_universe(ticker)
+
+        # ⚠️ ONE CAST, APPLIED TO EVERY FINISHED EXPRESSION. Without it the block's
+        # output types follow whatever PostgreSQL inferred — `STDDEV_SAMP` over a
+        # bigint returns `numeric`, which psycopg2 hands back as `Decimal` and pandas
+        # carries as dtype `object`: rule 15's degraded-VARCHAR trap arriving through
+        # the derived half of a table that was written as a CTAS precisely to avoid it.
+        # ⚠️ It is applied AFTER the expression, so it cannot rescue an integer
+        # division inside one — see `drv_volume_pos_63`.
+        def render(specs: Sequence[Tuple[str, str]]) -> str:
+            return "".join(
+                f', ({sql})::double precision AS "{name}"' for name, sql in specs
+            )
+
+        # ⚠️ **A PARTIAL FRAME IS A MISLABELLED CHANNEL, and PostgreSQL gives you one
+        # by default.** `ROWS BETWEEN 251 PRECEDING AND CURRENT ROW` computes over
+        # whatever rows exist, so `drv_close_pos_252` was non-NULL from the SECOND row
+        # of every series — a "position in the trailing 252 days" measured over ten
+        # days. Measured 2026-08-16 before this guard: **188,737 of `ALL`'s 2,388,975
+        # rows** (7.9%) carried a 252-day channel computed on a shorter window, and
+        # every series was affected for its own first year. pandas' `rolling(w)`
+        # defaults to `min_periods=w` and does NOT do this, which is why the pandas
+        # cross-check could not see it.
+        #
+        # ⚠️ It matters beyond tidiness: a channel whose MEANING changes over the first
+        # year of a series is the ragged-pool problem rule 23 records — a fold-over-fold
+        # trend that measures data arrival rather than signal.
+        #
+        # The frame is read back out of the SQL rather than declared a second time in
+        # the spec, and **exactly one frame per expression is asserted** — two would
+        # make "is the window full?" ambiguous, and the guard would silently pick one.
+        #
+        # ⚠️ **`COUNT(*)` asserts a full FRAME — N rows — not N non-NULL inputs**, and
+        # for the nine channels built on a lagged return that is a visible one-row
+        # difference from pandas. `drv_realized_vol_63` is defined from row 63, where
+        # the frame holds 63 rows but only 62 returns (row 1 has no predecessor);
+        # `rolling(63).std()` needs 63 non-NaN values and starts at row 64. Frame
+        # fullness is the property being asserted, and it is the only one that is
+        # well defined for a multi-column expression — `drv_amihud_63` reads both
+        # `drv_ret_1d` and `_val_vnd`, so "N non-NULL inputs" would have to pick one.
+        # One row per series, against the 188,737 the guard removes.
+        def render_windowed(specs: Sequence[Tuple[str, str]]) -> str:
+            out = []
+            for name, sql in specs:
+                used = sorted(set(re.findall(r"\bOVER (w\d+)\b", sql)))
+                if len(used) != 1:
+                    raise PipelineError(
+                        f"Derived channel {name!r} uses {len(used)} window frames "
+                        f"({used}); the full-frame guard needs exactly one. Split it "
+                        f"into two channels or move it to level 3."
+                    )
+                frame = used[0]
+                out.append(
+                    f", (CASE WHEN COUNT(*) OVER {frame} = {int(frame[1:])} "
+                    f"THEN ({sql}) END)::double precision AS \"{name}\""
+                )
+            return "".join(out)
+
+        # One base window definition, inherited by every frame. PostgreSQL only allows
+        # inheritance from a window that does not itself specify a frame, which is
+        # exactly what `wbase` is.
+        frames = ", ".join(
+            f'w{n} AS (wbase ROWS BETWEEN {n - 1} PRECEDING AND CURRENT ROW)'
+            for n in self.UNIFIED_DERIVED_FRAMES
+        )
+        wbase = 'wbase AS (PARTITION BY "exchange", "ticker" ORDER BY "date")'
+
+        l1 = self.UNIFIED_DERIVED_L1_HELPERS + self.UNIFIED_DERIVED_L1
+        l2 = self.UNIFIED_DERIVED_L2_HELPERS + self.UNIFIED_DERIVED_L2
+
+        cte = (
+            # `px` rebuilds the SPLIT-ADJUSTED bar before anything reads it — the
+            # `_helper_adjust_ohlc` step, expressed in SQL so the CTAS never has to
+            # materialise a Python value (rule 15).
+            f"px AS ("
+            f'  SELECT s.*,'
+            f'         ("open"  * ("close_adjust" / NULLIF("close_raw", 0)))'
+            f'           ::double precision AS "_o",'
+            f'         ("high"  * ("close_adjust" / NULLIF("close_raw", 0)))'
+            f'           ::double precision AS "_h",'
+            f'         ("low"   * ("close_adjust" / NULLIF("close_raw", 0)))'
+            f'           ::double precision AS "_l",'
+            f'         "close_adjust"::double precision AS "_c",'
+            # ⚠️ THE 1e9 LIVES HERE AND NOWHERE ELSE. `value_matched` /
+            # `value_negotiated` are billions of VND; `foreign_*_value` and `prop_*_val`
+            # are plain VND. See the block comment above `UNIFIED_DERIVED_PREFIX`.
+            f'         ("value_matched" * 1e9)::double precision AS "_val_vnd",'
+            f'         ("value_negotiated" * 1e9)::double precision AS "_val_neg_vnd"'
+            f"  FROM src s"
+            f"), "
+            f"l1 AS ("
+            f"  SELECT px.*{render(l1)} FROM px WINDOW {wbase}"
+            f"), "
+            f"l2 AS ("
+            f"  SELECT l1.*{render_windowed(l2)} FROM l1 WINDOW {wbase}, {frames}"
+            f")"
+        )
+
+        columns = [name for name, _ in self.UNIFIED_DERIVED_L1]
+        columns += [name for name, _ in self.UNIFIED_DERIVED_L2]
+        columns += [name for name, _ in self.UNIFIED_DERIVED_L3]
+        if universe:
+            columns += [name for name, _ in self.UNIFIED_DERIVED_CS]
+        return cte, columns
+
+    def _helper_unified_derived_select(self, ticker: str) -> str:
+        """The `drv_*` half of the final SELECT list — level 1 and 2 carried through
+        from `l2`, level 3 and the cross-section computed here."""
+        universe = self._helper_unified_is_universe(ticker)
+        specs = list(self.UNIFIED_DERIVED_L3)
+        if universe:
+            specs += list(self.UNIFIED_DERIVED_CS)
+        carried = [name for name, _ in self.UNIFIED_DERIVED_L1]
+        carried += [name for name, _ in self.UNIFIED_DERIVED_L2]
+        # Same cast as `render()`, for the same reason — level 3 and the cross-section
+        # are computed here rather than in a CTE, so they miss that helper.
+        return "".join(f', l2."{c}"' for c in carried) + "".join(
+            f', ({sql})::double precision AS "{name}"' for name, sql in specs
+        )
+
+    def _ingest_unified_pool_basic(self, ticker: str) -> dict:
         """`silver.stocks_basic` (one ticker) → `unified_schema_<ticker>.pool__basic`.
 
         **Every column of `silver.stocks_basic`, with silver's own types**, PK
-        `(date, exchange, ticker)` — see `UNIFIED_PRIMARY_KEY` for why in that order.
+        `(date, exchange, ticker)` — see `UNIFIED_PRIMARY_KEY` for why in that order —
+        **plus the `drv_*` derived block**.
+
+        ⚠️ **THIS TABLE STOPPED BEING A FAITHFUL COPY ON 2026-08-16.** It was
+        `SELECT *` and nothing else for the whole of its life, and three CONTEXT files
+        described it that way. It is now `SELECT *` **plus ~58 trailing derived
+        channels** computed in SQL — bar shape, range-based volatility, trailing
+        normalisation, order-flow imbalance, foreign/prop flow and liquidity — and 5
+        more cross-sectional ones on a universe partition. The contract that survives
+        is the SUBSET one: every silver column is still present, with silver's type
+        and silver's value. `UNIFIED_DERIVED_L1` and its siblings are the spec, and
+        the block comment above them carries the six warnings that shaped it.
+
+        ⚠️ **The derived columns are `double precision`, the silver ones are not.**
+        Nothing casts `numeric` here; the derived expressions cast their own inputs,
+        so `close_adjust` stays `numeric` and `drv_ret_1d` arrives as a float.
 
         ⚠️ **`CREATE TABLE AS`, not a pandas round-trip, and the reason is type
         fidelity.** psycopg2 hands a PostgreSQL `numeric` back as a Python `Decimal`,
@@ -6684,12 +7267,25 @@ class DataPreprocessor:
                     f"classification, or rebuild silver `stocks_basic`."
                 )
 
+            # ⚠️ THE SILVER HALF OF THE SELECT LIST IS EXPLICIT, NOT `l2.*`. The CTE
+            # chain carries helper columns (`_o`, `_h`, `_gk_var`, `_m3_63`, …) that
+            # must never reach the table, and naming the silver columns from
+            # `information_schema` is what guarantees both that every one of them
+            # survives and that no helper does. Referencing a column preserves its
+            # type, so this is still the type-faithful CTAS the docstring describes.
+            silver_select = ", ".join(f'l2."{c}"' for c in source_types)
+            derived_cte, derived_columns = self._helper_unified_derived_sql(ticker)
+            derived_select = self._helper_unified_derived_select(ticker)
+
             # Dropped as late as possible, so a failure above leaves the old table intact
             # — the same ordering `_ingest_gold_table` uses.
             cur.execute(f"DROP TABLE IF EXISTS {schema}.pool__basic")
             cur.execute(
                 f"CREATE TABLE {schema}.pool__basic AS "
-                f"SELECT * FROM {SILVER_SCHEMA}.stocks_basic{where}",
+                f"WITH src AS ("
+                f"  SELECT * FROM {SILVER_SCHEMA}.stocks_basic{where}"
+                f"), {derived_cte} "
+                f"SELECT {silver_select}{derived_select} FROM l2",
                 params,
             )
             # CTAS copies types but never constraints, so the grain is asserted here.
@@ -6698,6 +7294,16 @@ class DataPreprocessor:
                 f"SELECT COUNT(*), COUNT(DISTINCT ticker) FROM {schema}.pool__basic"
             )
             written, series = (int(x) for x in cur.fetchone())
+
+            # ⚠️ Counted, not assumed. A derived channel whose whole source block is
+            # absent — `prop_*` before 2023, `foreign_*` before 2012 — is legitimately
+            # all-NULL, and the only way that is visible downstream is if somebody
+            # writes the number down. This is rule 22 at the feature, one level below
+            # the pool-level coverage every other pool reports.
+            populated = ", ".join(f'COUNT("{c}")' for c in derived_columns)
+            cur.execute(f"SELECT {populated} FROM {schema}.pool__basic")
+            counts = dict(zip(derived_columns, (int(x) for x in cur.fetchone())))
+            empty = sorted(c for c, n in counts.items() if n == 0)
 
         if written != available:
             raise PipelineError(
@@ -6733,10 +7339,34 @@ class DataPreprocessor:
                 f"sector schema is a CROSS-SECTION, and one company is not one. "
                 f"Check the classification in `{SILVER_SCHEMA}.stocks_basic`."
             )
+        # ⚠️ AN EMPTY DERIVED CHANNEL IS REPORTED, NEVER RAISED. `prop_*` is 3.1%
+        # covered market-wide and starts 2023-01-03, so a universe or a date range that
+        # predates it produces two legitimately all-NULL columns. Raising would make a
+        # correct table unbuildable — the `pool__fa` coverage decision of 2026-08-05,
+        # reached again for the same reason. It is a WARNING because the alternative is
+        # a channel that reaches the selector as pure imputed constant (rule 23).
+        if empty:
+            self._logger.log_warning(
+                f"{schema}.pool__basic: {len(empty)} derived channel(s) are entirely "
+                f"NULL — {empty}. Their source block is absent for this universe or "
+                f"date range; they will be imputed to a constant and ranked if they "
+                f"reach a selection."
+            )
         self._logger.log_info(
-            f"{schema}.pool__basic: {written} rows x {len(source_types)} columns, "
-            f"{series} ticker(s)."
+            f"{schema}.pool__basic: {written} rows x "
+            f"{len(source_types) + len(derived_columns)} columns "
+            f"({len(source_types)} from silver + {len(derived_columns)} derived, "
+            f"{len(empty)} of them empty), {series} ticker(s)."
         )
+        return {
+            "rows": written,
+            "series": series,
+            "source_columns": list(source_types),
+            "derived_columns": derived_columns,
+            "derived_populated": counts,
+            "derived_empty": empty,
+            "cross_sectional": universe,
+        }
 
     # The label horizons, in TRADING DAYS — `pool__basic` is one row per session, so a
     # row offset IS a trading-day offset and no calendar arithmetic is involved.

@@ -107,7 +107,8 @@ silver_schema                 20 assets                 canonical, cross-source 
 gold_schema                   10 assets                 + features (TA battery ~900 cols,
       │                                                 returns, vol, as-of macro)
       ▼
-unified_schema_<universe>     10 assets × 3 partitions  pool__basic / __targets /
+unified_schema_<universe>     10 assets × 3 partitions  pool__basic (⚠️ 38 silver +
+                                                        58 drv_*, 2026-08-16) / __targets /
                                                         __economy_<country>×19 / __forex /
                                                         __funds / __bonds /
                                                         __stock_market / __basic_bank /
@@ -149,17 +150,63 @@ index. ⚠️ On `pool__bonds` **the slope is the signal and it is not a column*
 ⚠️ **`unified/pool__basic_bank` (2026-08-14) is the fifth, and the only one with NO
 TABLE BEHIND IT.** `silver.stocks_basic` filtered to GICS 401010 and **pivoted on the
 fly** to `{exchange}__{ticker}__{measure}` — 20 banks × 27 measures = **540 channels**,
-VCB 4,266 × 543, 0 mismatches against silver. ⚠️ **It found that `pool__basic` is 12
-columns behind its own source**: silver has 38, the pool on disk has 26, and the missing
-twelve are all flow (`foreign_*` ×8, `prop_*` ×4). `unified/pool__basic --partition VCB`
-would widen it 26 → 38 without changing a row; until then `pool__basic_bank` is the only
-place in the schema carrying VCB's own foreign flow. ⚠️ **The schema's own ticker is one
+VCB 4,266 × 543, 0 mismatches against silver. ⚠️ **It found that `pool__basic` was 12
+columns behind its own source**: silver has 38, the pool on disk had 26, the missing
+twelve all flow (`foreign_*` ×8, `prop_*` ×4) — ✅ **fixed 2026-08-16, all three
+partitions rebuilt.** ⚠️ **The schema's own ticker is one
 of the channels** — `hose__vcb__*` IS `pool__basic`'s own columns (asserted, 0 mismatches
 on 15 mirrored measures), so joining both holds each VCB measure twice. ⚠️ Membership is
 derived from current GICS and is **not point-in-time** — survivors only.
 **`pool__basic_vn30` was deferred** for the same reason in its worst form (`vn30.csv` is
 today's list with no history), and **`pool__financials` was not built — it is
 `pool__fa`.**
+
+### ⚠️ `pool__basic` CARRIES DERIVED FEATURES NOW (2026-08-16) — it is not a copy
+
+It was `SELECT *` over `silver.stocks_basic` for its whole life. It is now that **plus
+58 trailing `drv_*` channels** computed in SQL in the same CTAS — **63 on a universe
+partition**, where 5 cross-sectional ones are added. VCB **4,266 × 96**, BANK
+**54,528 × 101**, ALL **2,388,975 × 101** (11m8s). The surviving contract is the SUBSET
+one and it is still asserted: every silver column, silver's type, silver's value. The
+derived set is asserted as an **equality**, so a leaked CTE helper raises.
+
+Seven blocks, chosen against `gold.stocks_ta`'s 935 columns to avoid duplicating it:
+**bar shape** (7 — incl. `gap_open_pct`, the only overnight information a daily bar
+has), **range volatility** (9 — Parkinson / Garman-Klass / Rogers-Satchell, none of
+which existed anywhere), **normalisation** (13 — `close_z_*`, `close_pos_*`,
+`dist_from_high_*`, skew/kurt), **order flow** (10 — §2d's top lever at daily grain;
+`pool__ta` has 0 hits for "order" or "imbalance"), **foreign/prop** (8), **liquidity**
+(7 — Amihud, VWAP), **cross-sectional** (5, universe only — per §2b the one block
+anything has ever survived a null in).
+
+⚠️ **Five traps, all measured** (`orchestration/CONTEXT.md`): silver's `open/high/low`
+are **RAW** and track `close_raw` (4,266/4,266 vs 248 on VCB), so the bar is
+split-adjusted first; **`value_matched` is BILLIONS of VND** while `foreign_*_value` /
+`prop_*_val` are plain VND (the first draft reported a participation ratio of
+215,150,099); **bigint/bigint is integer division** (a channel returned a flat 0);
+`STDDEV_SAMP` over bigint returns `numeric` → the rule-15 `Decimal`→`object` trap; and
+**PostgreSQL computes PARTIAL frames by default**, so a 252-day channel was a 10-day
+channel for every series' first year — 188,737 rows of `ALL`. ⚠️ **pandas could not see
+that last one**: `rolling(w)` defaults to `min_periods=w`, so the cross-check compared
+only where both were defined.
+
+✅ **Verified**: 20 channels against an independent pandas recomputation (16 at ≤9.5e-13;
+skew/kurt are the **population** estimators, matching `scipy…(bias=True)` at 2e-15 and
+differing from pandas' sample-corrected form by design), **0 name collisions** with
+`pool__ta`/`pool__fa`, **0 history bleed** across all 781 `ALL` series, and a causality
+test — the whole block rebuilt on data truncated at 2026-06-15 reproduces all 58 columns
+on 4,227 shared rows at **max abs diff exactly 0.0**.
+
+⚠️ **NEW ISSUE `OUT-1`: one corrupt source cell manufactures a finding.**
+`silver.stocks_basic` VCB **2026-01-05** carries `prop_buy_val = 4.001e17` against that
+day's whole turnover of 2.06e11 — an implied 5.7e11 VND/share, ten million times the
+real price. That single cell drives `corr(drv_prop_net_value_ratio,
+drv_prop_participation)` to **exactly +1.0** and manufactures a **+0.266** correlation
+against the forward 5-day return. Market-wide, **77 of 73,044** `prop_buy_val` and
+**1,182 of 1,240,032** `foreign_buy_value` rows exceed ten times their own day's
+turnover. **Not winsorised** — cleaning belongs to the layer that owns the column. The
+*scale* is fine (implied price 87,596 vs `close_raw` 87,500 on normal rows); this is
+outliers.
 
 ### ✅ FOREX: 357 → 3,129 series, ingested end to end (2026-08-14)
 
@@ -724,7 +771,7 @@ archived runs with them. Nothing is lost: they were force-added on 2026-08-09, s
 Everything downstream inherited that, and the provenance sentence travels verbatim from
 the table `COMMENT` into the dataset `metadata.json` into every run's `lineage`.
 
-**Open issues live in [ISSUES.md](ISSUES.md)** (9 open, 29 resolved, codes permanent).
+**Open issues live in [ISSUES.md](ISSUES.md)** (10 open, 29 resolved, codes permanent).
 Short version: ⚠️ **`SHP-1`** the forex scraper writes two file shapes and only one was
 ever ingested — 71% of the folder was silently discarded until 2026-08-14, and **the
 same `value`-only filter sits unchecked on `bonds`/`funds`/`economy`/`indices`**;
@@ -755,13 +802,16 @@ below 0.95 coverage, `RPR-1` datasets/runs are git-ignored.
 | [experiment/CONTEXT.md](experiment/CONTEXT.md) | 7k | the 9 exploratory experiments — signal discovery, tradability, point-in-time data, VN OCR |
 | [experiment/experiment_10/CONTEXT.md](experiment/experiment_10/CONTEXT.md) | 36k | writing the literature chapter. **§"Combined reading" (line 2877) is the distillate** — read that alone unless you need a specific paper |
 
-⚠️ **[ISSUES.md](ISSUES.md) (~4k) is the second file to open, not an afterthought.** Nine
+⚠️ **[ISSUES.md](ISSUES.md) (~4k) is the second file to open, not an afterthought.** Ten
 open issues. **SHP-1** is the one to read first — a `value`-only filter silently
 discarded 71% of the forex folder for as long as that ingest existed, and the same
-filter sits unchecked on four sibling ingests. Three change how a number may be read:
+filter sits unchecked on four sibling ingests. **Four** change how a number may be read:
 **NUL-3** (the panel null is not label-neutral — on a panel quote the daily-IC t-stat,
 never `ic_clears`), **NUL-1** (no null here prices in selection or architecture search),
-**RPR-1** (29 run folders were deleted 2026-08-10 and are unrecoverable). **FLT-1**
+**RPR-1** (29 run folders were deleted 2026-08-10 and are unrecoverable), and
+**OUT-1** (one corrupt cell — VCB 2026-01-05, `prop_buy_val` 4.001e17 — manufactures a
++0.266 forward correlation, and ~0.1% of `foreign_*` rows carry the same defect: check
+the extremes before selecting on any foreign or prop channel). **FLT-1**
 bounds what forex data can exist at all: 19 of 47 broker filters fail open, so 37
 brokers' books are unreachable.
 

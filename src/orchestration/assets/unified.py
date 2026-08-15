@@ -144,7 +144,21 @@ def _member_count(prep, cur, universe: str) -> int:
         "silver.stocks_basic (this partition's universe) → "
         "unified_schema_<universe>.pool__basic: EVERY column of the silver table, with "
         "silver's own types, PK (date, exchange, ticker) — DataPreprocessor."
-        "UNIFIED_PRIMARY_KEY, and the ORDER is asserted. ⚠️ Built with CREATE TABLE "
+        "UNIFIED_PRIMARY_KEY, and the ORDER is asserted — PLUS the drv_* derived "
+        "block. ⚠️ IT STOPPED BEING A FAITHFUL COPY ON 2026-08-16: ~58 trailing "
+        "derived channels are now computed in SQL beside the silver columns (bar "
+        "shape, range-based volatility, trailing normalisation, order-flow imbalance, "
+        "foreign/prop flow, liquidity), plus 5 cross-sectional ones on a universe "
+        "partition only — PERCENT_RANK over one ticker is 0.0 forever, and a column "
+        "known to be constant before it is written is worse than a missing one. The "
+        "contract that survives is the SUBSET one, and it is still asserted: every "
+        "silver column present, silver's type, silver's value. ⚠️ EVERY WINDOW IS "
+        "PARTITION BY exchange, ticker AND EVERY FRAME ENDS AT CURRENT ROW — there is "
+        "no FOLLOWING in the block, and on ALL a missing partition would corrupt 780 "
+        "series boundaries per column. ⚠️ THE BAR IS SPLIT-ADJUSTED FIRST: silver's "
+        "open/high/low are RAW and track close_raw (VCB 2009-06-30 is open=high=low="
+        "close_raw=60,000 against close_adjust=9,130), so every expression reads the "
+        "OHLC set rebuilt with close_adjust/close_raw. ⚠️ Built with CREATE TABLE "
         "AS, not a pandas round-trip: psycopg2 returns `numeric` as Decimal, which a "
         "DataFrame carries as dtype `object` and the writer maps to VARCHAR — a "
         "round-trip would silently turn every price column into TEXT. ⚠️ Creates the "
@@ -159,9 +173,11 @@ def unified_pool_basic(
 
     # ⚠️ `session(schema=...)` is what CREATES the schema — see the module docstring.
     with preprocessor.session(schema=schema) as prep:
-        prep._ingest_unified_pool_basic(universe)
+        panel = prep._ingest_unified_pool_basic(universe)
         is_universe = prep._helper_unified_is_universe(universe)
         expected_key = tuple(prep.UNIFIED_PRIMARY_KEY)
+        derived_expected = list(panel["derived_columns"])
+        prefix = prep.UNIFIED_DERIVED_PREFIX
 
         with prep._database_driver._cursor_ctx() as cur:
             cur.execute(
@@ -195,6 +211,21 @@ def unified_pool_basic(
             )
             missing = [r[0] for r in cur.fetchall()]
             primary_key = _primary_key(cur, schema, "pool__basic")
+            # ⚠️ The derived set is checked in BOTH directions, unlike the silver one.
+            # Silver is a SUBSET contract ("every silver column survives"); the derived
+            # block is an EQUALITY contract, because a stray column here is a CTE
+            # helper (`_o`, `_gk_var`, `_m3_63`) that leaked past the explicit select
+            # list — an internal of the SQL becoming a candidate feature.
+            cur.execute(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_schema = %s AND table_name = 'pool__basic' "
+                "AND column_name NOT IN ("
+                "  SELECT column_name FROM information_schema.columns "
+                "  WHERE table_schema = 'silver_schema' AND table_name = 'stocks_basic'"
+                ") ORDER BY ordinal_position",
+                (schema,),
+            )
+            derived_actual = [r[0] for r in cur.fetchall()]
 
     # ⚠️ The key ORDER is asserted, not just its membership. `ADD PRIMARY KEY`
     # accepts any ordering of the same three columns, and only a leading `date`
@@ -208,6 +239,26 @@ def unified_pool_basic(
         raise ValueError(
             f"{schema}.pool__basic is missing {len(missing)} column(s) of "
             f"silver.stocks_basic: {sorted(missing)}"
+        )
+    # ⚠️ EQUALITY, and ordered. A missing name means a derived expression silently
+    # failed to reach the select list; an extra one means a CTE helper leaked and is
+    # about to be offered to a selector as a feature.
+    if derived_actual != derived_expected:
+        raise ValueError(
+            f"{schema}.pool__basic derived columns are {derived_actual}, expected "
+            f"{derived_expected}. Extra names are CTE helpers that escaped the "
+            f"explicit select list; missing ones are expressions that never landed."
+        )
+    # ⚠️ EVERY DERIVED NAME CARRIES THE PREFIX, checked rather than trusted. It is what
+    # keeps this block from colliding with pool__ta's 935 columns when
+    # UnifiedSchemaReader.join puts the two side by side — a collision there produces
+    # _x/_y and one copy is dropped without a word.
+    unprefixed = [c for c in derived_actual if not c.startswith(prefix)]
+    if unprefixed:
+        raise ValueError(
+            f"{schema}.pool__basic has {len(unprefixed)} derived column(s) without the "
+            f"{prefix!r} prefix: {unprefixed}. The prefix is what stops a join against "
+            f"pool__ta from silently dropping a column."
         )
     if rows != silver_rows:
         raise ValueError(
@@ -229,9 +280,19 @@ def unified_pool_basic(
             f"member filter matched almost nothing."
         )
 
+    # ⚠️ COVERAGE PER DERIVED CHANNEL, not one scalar for the block. Rule 22: a scalar
+    # cannot tell a late starter from a dead source, and this block spans four source
+    # blocks with wildly different histories — OHLCV from 2009, order stats from 2010,
+    # foreign from 2012, prop from 2023 at 3.1% market-wide. The worst three are named
+    # in the metadata so a thin channel is visible without querying the table.
+    populated = panel["derived_populated"]
+    thinnest = sorted(populated.items(), key=lambda kv: kv[1])[:3]
     context.log.info(
-        f"{schema}.pool__basic: {rows} rows × {columns} columns, {tickers} ticker(s) "
-        f"({first} → {last}), every column of silver.stocks_basic present"
+        f"{schema}.pool__basic: {rows} rows × {columns} columns "
+        f"({silver_columns} from silver + {len(derived_actual)} derived"
+        + (", cross-sectional included" if is_universe else ", no cross-sectional block")
+        + f"), {tickers} ticker(s) ({first} → {last}); thinnest derived channels "
+        + ", ".join(f"{c} {100.0 * n / max(rows, 1):.1f}%" for c, n in thinnest)
     )
     return MaterializeResult(
         metadata={
@@ -239,6 +300,20 @@ def unified_pool_basic(
             "columns": columns,
             "tickers": tickers,
             "silver_columns": silver_columns,
+            "derived_columns": len(derived_actual),
+            "derived_empty": len(panel["derived_empty"]),
+            "cross_sectional_block": MetadataValue.bool(bool(panel["cross_sectional"])),
+            "derived_min_coverage_pct": MetadataValue.float(
+                round(100.0 * min(populated.values()) / max(rows, 1), 2)
+            ),
+            "derived_thinnest": MetadataValue.text(
+                ", ".join(
+                    f"{c} ({100.0 * n / max(rows, 1):.1f}%)" for c, n in thinnest
+                )
+            ),
+            "derived_empty_channels": MetadataValue.text(
+                ", ".join(panel["derived_empty"]) or "none"
+            ),
             "universe": MetadataValue.text(universe),
             "primary_key": MetadataValue.text(", ".join(primary_key)),
             "date_range": MetadataValue.text(f"{first} → {last}"),

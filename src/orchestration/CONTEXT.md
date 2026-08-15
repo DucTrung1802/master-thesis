@@ -1714,7 +1714,8 @@ identical. `gold.stocks` has none of them by design — that is the split.
 slice, cut into the **feature groups a model selects over**:
 
 ```
-silver/stocks_basic ──► unified_vcb/pool__basic     4,235 × 38, PK (date, exchange, ticker)
+silver/stocks_basic ──► unified_vcb/pool__basic     4,266 × 96, PK (date, exchange, ticker)
+                                                    ⚠️ 38 silver + 58 drv_* since 2026-08-16
                               └──► unified_vcb/pool__targets   4,235 × 7, PK (date, exchange, ticker)
 gold/economy_<country> ──► unified_vcb/pool__economy_<country> ×19, PK (date, exchange, ticker)
                         pool__ta / pool__macro / pool__calendar   ⚠️ NOT ASSETS YET
@@ -1739,6 +1740,136 @@ dagster asset materialize -f src/orchestration/definitions.py --select "group:un
 `ingest_bronze_data` runs — so naming `unified_schema_vcb` there is what brings it into
 existence. `_ingest_unified_pool_basic` creates it too, so the method is still correct
 from a notebook or `main.py`.
+
+#### ⚠️ `pool__basic` CARRIES DERIVED FEATURES NOW, AND STOPPED BEING A COPY (2026-08-16)
+
+The table above — *"column name + type + ORDER vs `silver.stocks_basic`: identical, all
+38"* — **is history**. `pool__basic` is still `SELECT *` over silver, but now with a
+block of **58 trailing derived channels** beside it (63 on a universe partition), all
+named `drv_*` and all computed in SQL inside the same `CREATE TABLE AS`.
+
+| partition | rows × columns | silver | derived | cross-sectional | build |
+|---|---|---|---|---|---|
+| `VCB` | **4,266 × 96** | 38 | 58 | ✗ | 1.2 s |
+| `BANK` | **54,528 × 101** | 38 | 63 | ✓ | 1.4 s |
+| `ALL` | 2,388,975 × 101 | 38 | 63 | ✓ | see below |
+
+**The contract that survives is the SUBSET one, and it is still asserted:** every silver
+column present, silver's type, silver's value. The derived set is asserted as an
+**equality** in the asset, in declared order — an extra name there is a CTE helper
+(`_o`, `_h`, `_val_vnd`, `_gk_var`, `_m3_63`) that leaked past the explicit select list
+and is about to be offered to a selector as a feature.
+
+**The seven blocks**, `DataPreprocessor.UNIFIED_DERIVED_L1` / `_L2` / `_L3` / `_CS`:
+
+| block | n | what | why it is not already in `pool__ta` |
+|---|---|---|---|
+| A. bar shape | 7 | `range_hl_pct`, `body_pct`, `clv`, the two shadows, **`gap_open_pct`**, `intraday_pct` | 0 hits for "gap" or "clv" across `gold.stocks_ta`'s 935 columns; the gap is the only overnight information a daily bar has |
+| B. range volatility | 9 | Parkinson / Garman-Klass / Rogers-Satchell at 5 and 21, `realized_vol_{10,63}`, `downside_vol_21` | none exist anywhere in the repo; they use the whole bar, so they are several times more efficient per observation than close-to-close — which is what matters where `n_eff` is `n_dates/h` |
+| C. normalisation | 13 | `close_z_{21,63}`, `close_pos_{21,63,252}`, `dist_from_{high,low}_*`, `volume_z_21`, `volume_pos_63`, `value_z_21`, `ret_skew_63`, `ret_kurt_63` | `pool__ta` has only `close_roll_{mean,max,min,std}_{5,21}` and normalises no volume series at all |
+| D. order flow | 10 | `order_{count,vol}_imb` + 5/21 means + z, `log_order_size_ratio`, `avg_order_size`, `order_fill_ratio` | **0 hits for "order" or "imbalance"** in 935 columns — and this is hub §2d's top lever, at daily grain |
+| E. foreign / prop | 8 | `foreign_net_value_ratio`, `foreign_participation`, `foreign_flow_ratio_{5,21}`, `foreign_own_chg_{5,21}`, 2 prop | `pool__ta` has 3 thin foreign columns and **no prop at all** |
+| F. liquidity | 7 | **`amihud_{21,63}`**, **`vwap_raw`**, `close_vs_vwap`, `negotiated_value_share`, `no_trade_days_21` | 0 hits for amihud / vwap / turnover / illiq |
+| G. cross-sectional | 5 | `cs_pct_{ret_1d,turnover,range}`, `cs_ret_demeaned`, `cs_ret_vs_industry` | **universe partitions only** — and per hub §2b the only block anything has ever survived a null in |
+
+##### ⚠️ The five traps this cost, all measured
+
+1. **Silver's `open`/`high`/`low` are RAW; `close_adjust` is not.** `close_raw BETWEEN
+   low AND high` holds on **4,266 of 4,266** VCB rows, `close_adjust` on **248**;
+   market-wide 2,383,827 against 546,358. `_helper_adjust_ohlc` says the same for gold
+   and names the row that proves it (VCB 2009-06-30, `open=high=low=close_raw=60,000`
+   against `close_adjust=9,130`). Every expression reads the OHLC set rebuilt with
+   `close_adjust/close_raw`. Same-day ratios are factor-invariant either way; **anything
+   spanning days is not**, and `gap_open_pct` on raw prices reads every split as a crash.
+2. **`value_matched` is in BILLIONS of VND and `foreign_*_value` / `prop_*_val` are
+   not.** VCB 2026-08-07: `value_matched` = **392.54** against `volume_matched ×
+   close_raw` = **389,375,340,000** — ratio 1.0e9, market-wide median 1.0007e9. The
+   first draft divided one by the other and reported a foreign participation ratio of
+   **215,150,099**. The 1e9 now lives in exactly one place, `_val_vnd` in the `px` CTE.
+3. **bigint / bigint is integer division.** `drv_volume_pos_63` returned a flat **0**
+   where the float form gives **0.2038**. The block-wide `::double precision` cast in
+   `render()` is applied *after* the division and cannot save it — such an expression
+   casts its own numerator.
+4. **`STDDEV_SAMP` over a bigint returns `numeric`**, which psycopg2 hands back as
+   `Decimal` and pandas carries as dtype `object` — rule 15's degraded-VARCHAR trap
+   arriving through the derived half of a table written as a CTAS to avoid exactly that.
+   Every finished expression is cast to `double precision`; all 58 columns read back
+   `float64`.
+5. **A PARTIAL FRAME IS A MISLABELLED CHANNEL, and PostgreSQL hands you one by
+   default.** `ROWS BETWEEN 251 PRECEDING AND CURRENT ROW` computes over whatever rows
+   exist, so `drv_close_pos_252` was non-NULL from the **second row of every series** —
+   a "position in the trailing 252 days" measured over ten days. **188,737 of `ALL`'s
+   2,388,975 rows** (7.9%) carried a 252-day channel computed on a shorter window, and
+   every series was affected for its own first year. ⚠️ **The pandas cross-check could
+   not see this** — `rolling(w)` defaults to `min_periods=w`, so the comparison was
+   silently restricted to the region where both were defined. It took a separate
+   question ("is this NULL before it can be defined?") to find it. Every level-2
+   channel now carries a `COUNT(*) OVER wN = N` guard, and the frame is read back out
+   of the SQL with exactly one frame per expression asserted. ⚠️ The guard asserts a
+   full **frame** (N rows), not N non-NULL inputs — so the nine channels built on a
+   lagged return are defined from row N, computed from N−1 returns, where pandas'
+   `min_periods` starts them at N+1. One row per series, deliberate: frame fullness is
+   the only property well defined for a multi-column expression like `drv_amihud_63`,
+   which reads two.
+
+##### ✅ How it was verified — 20 columns against pandas, and one causality test
+
+The SQL was cross-checked against an independent pandas/numpy recomputation of the same
+definitions on VCB, so an error had to be duplicated in numpy to pass:
+
+| | |
+|---|---|
+| 16 of 20 columns | max **relative** diff ≤ 9.5e-13 |
+| `drv_clv`, `drv_gap_open_pct` | flagged on relative error, **absolute** diff 6.2e-14 / 2.2e-16 — the artifact of a denominator crossing zero, not a defect |
+| `drv_ret_skew_63`, `drv_ret_kurt_63` | match `scipy.stats.{skew,kurtosis}(bias=True)` to **2.2e-15 / 1.6e-14**. ⚠️ They are the **population** moment estimators, and differ from pandas' sample-corrected `rolling().skew()/.kurt()` by 0.067 / 1.23 — a definition, not a bug |
+| **causality** | the whole block rebuilt on data **truncated at 2026-06-15** reproduces all 58 columns on the 4,227 shared rows with **max abs diff exactly 0.0** |
+
+That last row is the one that matters. A feature reaching forward would *change* when
+the future is deleted; none of them move. There is also no `FOLLOWING` anywhere in the
+generated SQL — grep for it.
+
+##### ⚠️ OUT-1 — one corrupt source row manufactures a finding
+
+Probing the block for forward-looking correlation flagged `drv_prop_net_value_ratio`
+and `drv_prop_participation` at **|corr| = 0.266** against the forward 5-day return,
+with `corr(net, participation)` **exactly +1.0**. Neither is signal:
+
+`silver.stocks_basic`, **VCB 2026-01-05**, carries `prop_buy_val = 4.001e17` — 400
+quadrillion VND — against that day's whole turnover of 2.06e11, on `prop_buy_vol =
+697,000` shares at a close of 57,100. **Implied 5.7e11 VND per share, ten million times
+the real price.** One cell. Remove it and both numbers collapse.
+
+Market-wide, **77 of 73,044** `prop_buy_val` and **1,182 of 1,240,032**
+`foreign_buy_value` rows exceed ten times their own day's turnover (~0.1% each) — so
+`foreign_*` carries the same defect. ⚠️ **Not winsorised.** Cleaning belongs to the
+layer that owns the column, and clipping a source value inside a feature expression is
+how a data defect stops being visible. Anything selecting on these channels should look
+at their extremes first. ⚠️ The scale itself is fine — implied price on the *normal*
+rows is 87,596 against a `close_raw` of 87,500, and the foreign block matches too; this
+is outliers, not units.
+
+##### ⚠️ Two things that are deliberately not uniform across partitions
+
+- **The cross-sectional block is universe-only.** On `unified_schema_vcb` there is one
+  row per date, so `PERCENT_RANK` is 0.0 and a cross-sectional demean is 0.0, on every
+  row forever. `_ingest_unified_pool_basic_bank` excludes the GICS identity columns for
+  the same reason — a column known to be constant before it is written costs selection
+  budget and buys nothing. This is a considered exception to *"the column set must not
+  depend on which partition is being built"*; the asset reports which side it took in
+  `cross_sectional_block`.
+- **On `BANK`, `drv_cs_ret_vs_industry` IS `drv_cs_ret_demeaned`** — that universe is a
+  single GICS industry, so demeaning by date and by (date, industry) are the same
+  operation. On `ALL` they differ. Expected, not a fault.
+
+##### Coverage is per channel, not one scalar
+
+Rule 22, one level down. The block spans four source blocks with very different
+histories — OHLCV from 2009, order stats from 2010 (96.4% / 97.3%), foreign from 2012
+(72.6% / 74.2%), prop from 2023 (**20.7% VCB / 3.1% market-wide**). The asset reports
+`derived_min_coverage_pct`, names the three thinnest channels, and lists any that are
+**entirely** NULL. An all-empty channel is a WARNING and never a raise: it is the
+`pool__fa` coverage decision of 2026-08-05 reached again — raising would make a correct
+table unbuildable for a universe whose date range predates a source block.
 
 ✅ **`pool__economy` is a Dagster asset (2026-08-07).** It materialises all nineteen
 `pool__economy_<country>` tables from the matching causal, as-of-filled
@@ -2055,6 +2186,11 @@ silver gaining those 12, and **`unified/pool__basic --partition VCB` would widen
 should be. ⚠️ Until that rebuild, `pool__basic_bank` is the ONLY place in
 `unified_schema_vcb` carrying VCB's own foreign flow and prop trading —
 `hose__vcb__foreign_net_value` exists, `pool__basic.foreign_net_value` does not.
+
+✅ **RESOLVED 2026-08-16.** All three partitions were re-materialised as part of the
+derived-feature work below, and all three now carry silver's full 38. The paragraph
+above stands as the history of how the gap was found — by a sibling asset counting
+channels, not by any check on `pool__basic` itself.
 
 ##### ⚠️ THE SCHEMA'S OWN TICKER IS ONE OF THE CHANNELS
 
