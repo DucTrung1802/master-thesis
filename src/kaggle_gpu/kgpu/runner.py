@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import sys
 import time
 from pathlib import Path
 from typing import List
@@ -144,30 +145,52 @@ def status(cfg: JobConfig) -> str:
 def wait(cfg: JobConfig) -> str:
     """Poll until the run reaches a terminal state. Returns the final status.
 
-    ⚠️ Bounded by `max_wait_minutes`. An unbounded poll on a hung worker is a
-    process that never returns and a quota that keeps draining.
+    ⚠️ **KAGGLE REPORTS NO PROGRESS, SO THE PERCENTAGE HERE IS AGAINST THE LAST
+    COMPLETED RUN OF THIS JOB AND SAYS SO ON EVERY LINE.** There is no completion
+    fraction in `kernels_status` — only QUEUED / RUNNING / COMPLETE — so anything
+    presented as "42% done" would be invented. What IS knowable is how long this
+    same job took last time, which is recorded on every COMPLETE. With no
+    baseline yet, the elapsed time is printed and no percentage is.
+
+    Bounded by `max_wait_minutes`: an unbounded poll on a hung worker is a process
+    that never returns and a quota that keeps draining.
     """
     api = _api()
     start = time.perf_counter()
     deadline = start + cfg.max_wait_minutes * 60
-    last = None
+    baseline = last_duration(cfg)
+    tty = sys.stdout.isatty()
+    last_state, last_bucket = None, None
+
+    if baseline:
+        print(f"baseline: last COMPLETE run took {baseline / 60:.1f} min")
+    else:
+        print("baseline: none yet — no percentage until this job completes once")
 
     while True:
         response = _fetch_status(api, cfg)
         name = _status_name(response.status)
         elapsed = time.perf_counter() - start
-
-        if name != last:
-            print(f"\n[{elapsed / 60:5.1f} min] {name}", end="", flush=True)
-            last = name
-        else:
-            print(".", end="", flush=True)
+        pct = f"{elapsed / baseline:>4.0%} of last" if baseline else "  no baseline"
+        line = f"[{elapsed / 60:5.1f} min] {name:<9} {pct}"
 
         if name in TERMINAL:
-            print()
+            print(f"\r{line}{' ' * 12}" if tty else line, flush=True)
+            if name == "COMPLETE":
+                _record_duration(cfg, elapsed)
             if response.failure_message:
                 print(f"failure: {response.failure_message}")
             return name
+
+        # ⚠️ A terminal rewrites in place; a PIPE or a log file must not collect
+        # 2,880 lines from a 12-hour poll, so redirected output prints only when
+        # the state changes or the percentage crosses a 5-point step.
+        bucket = int(elapsed / baseline * 20) if baseline else int(elapsed / 300)
+        if tty:
+            print(f"\r{line}", end="", flush=True)
+        elif name != last_state or bucket != last_bucket:
+            print(line, flush=True)
+        last_state, last_bucket = name, bucket
 
         if time.perf_counter() > deadline:
             print()
@@ -177,6 +200,30 @@ def wait(cfg: JobConfig) -> str:
                 f"python -m kgpu status {cfg.name}"
             )
         time.sleep(cfg.poll_seconds)
+
+
+def _state_file(cfg: JobConfig) -> Path:
+    return PKG_ROOT / ".state" / f"{cfg.name}.json"
+
+
+def last_duration(cfg: JobConfig) -> float | None:
+    """Seconds the last COMPLETE run of this job took, if one is on record."""
+    path = _state_file(cfg)
+    if not path.exists():
+        return None
+    try:
+        return float(json.loads(path.read_text(encoding="utf-8"))["seconds"])
+    except (ValueError, KeyError, OSError):
+        return None
+
+
+def _record_duration(cfg: JobConfig, seconds: float) -> None:
+    path = _state_file(cfg)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps({"seconds": round(seconds, 1), "at": time.strftime("%Y-%m-%dT%H:%M:%S")}),
+        encoding="utf-8",
+    )
 
 
 def download(cfg: JobConfig) -> List[str]:
@@ -194,9 +241,12 @@ def download(cfg: JobConfig) -> List[str]:
         return []
 
     print(f"downloaded {len(files)} file(s) to {RESULTS_DIR}:")
-    for path in sorted(files)[:20]:
+    for index, path in enumerate(sorted(files)[:20], start=1):
         size = Path(path).stat().st_size / 1024
-        print(f"  {str(Path(path).relative_to(RESULTS_DIR)):<52} {size:>9.1f} KiB")
+        print(
+            f"  [{index:>2}/{len(files)} {index / len(files):>4.0%}] "
+            f"{str(Path(path).relative_to(RESULTS_DIR)):<52} {size:>9.1f} KiB"
+        )
     if len(files) > 20:
         print(f"  … and {len(files) - 20} more")
     return files

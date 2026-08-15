@@ -7,6 +7,9 @@
 .payload/
 .rehearsal/
 results/
+# How long the last COMPLETE run of each job took — the only denominator `wait`
+# has for a percentage, since Kaggle reports no progress. Local timing, not data.
+.state/
 local_runs/
 *.log
 

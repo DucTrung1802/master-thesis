@@ -196,7 +196,7 @@ def export(cfg: JobConfig, quiet: bool = False) -> Path:
             overview.to_json(orient="records", date_format="iso")
         )
 
-        for table in tables:
+        for index, table in enumerate(tables, start=1):
             frame = reader.read(table)
             types = reader.column_types(table)
             path = folder / f"{table}.parquet"
@@ -212,10 +212,14 @@ def export(cfg: JobConfig, quiet: bool = False) -> Path:
                 "bytes": path.stat().st_size,
             }
             if not quiet:
+                # A count of TABLES, not of bytes — one wide pool can be 100x
+                # another, so this is a position in the list, not a time estimate.
                 print(
-                    f"  {table:<44} {len(frame):>7,} x {frame.shape[1]:>5}  "
+                    f"  [{index}/{len(tables)} {index / len(tables):>4.0%}] "
+                    f"{table:<40} {len(frame):>7,} x {frame.shape[1]:>5}  "
                     f"{path.stat().st_size / 1024**2:>7.1f} MB  "
-                    f"-> {frame['date'].max():%Y-%m-%d}"
+                    f"-> {frame['date'].max():%Y-%m-%d}",
+                    flush=True,
                 )
 
     # ⚠️ THE CALENDAR CHECK, HERE AS WELL AS IN THE NOTEBOOK. The notebook's guard

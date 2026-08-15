@@ -133,6 +133,25 @@ rather than a re-creation of it.
 and `rehearse` refuses until you re-`export` — otherwise it would rehearse code that
 is not the code that gets uploaded.
 
+### ⚠️ What the percentages mean — each has a different denominator
+
+Three progress readouts, and **only one of them predicts time**:
+
+| where | line | denominator |
+|---|---|---|
+| `wait` | `[  1.2 min] RUNNING    32% of last` | the **last COMPLETE run of this job**, recorded in `.state/`. Kaggle's `kernels_status` returns QUEUED/RUNNING/COMPLETE and **no completion fraction**, so any "42% done" would be invented. With no baseline yet it prints `no baseline` and the elapsed time only. |
+| `export` | `[1/2  50%] pool__basic …` | **tables**, not bytes. One wide pool can be 100× another. |
+| the null loop | `draw   7/20  35% … [2.1 min elapsed, ~3.9 min left]` | **the real one.** Every draw is the same procedure on the same panel, so the fraction is a fraction of the work and the ETA is a genuine extrapolation. |
+| a selection | `[4/9 phases  44%] rank (6 methods)   2.1s` | **phases completed**, and the line says so. The phases are wildly unequal — `permutation` alone is 12,255 s at 1,458 channels — so this is a position in the run, never a time estimate. |
+
+In a terminal `wait` rewrites one line in place; redirected to a pipe or a file it
+prints only when the state changes or the percentage crosses a 5-point step, so a
+12-hour poll does not leave 2,880 lines in a log.
+
+Cost, measured rather than asserted: nine `_tick` calls per selection are
+**0.010 ms**, or 4.3e-8 of the 3.7-minute run and 7.8e-10 of one wide-pool
+permutation step.
+
 ### Commands
 
 | Command | Use it when |

@@ -36,6 +36,7 @@ overfit, so the bar rises with it. A null computed for 27 channels says nothing
 about a run over `pool__ta`'s 900.
 """
 
+import time
 from dataclasses import dataclass, field
 from typing import Callable, List, Optional, Sequence
 
@@ -240,22 +241,47 @@ def null_distribution(
     block = lookback + horizon
     draws: List[float] = []
     failures = 0
+
+    # ⚠️ **THE ONE PERCENTAGE HERE THAT PREDICTS TIME.** The draws are the SAME
+    # procedure on the same panel, so `done/n_draws` is a real fraction of the
+    # work and the remaining time is a real extrapolation — unlike a count of
+    # unequal phases. Cost: two `perf_counter()` calls per draw, each of which
+    # is a whole selection.
+    #
+    # ⚠️ The per-draw selection is SILENCED while this runs. Without it a 20-draw
+    # null prints its inner phase progress 21 times and the draw counter — the
+    # only line that says how far along the run actually is — is lost in it.
+    from feature_selection import selector as _selector
+
+    started = time.perf_counter()
+
+    def _report(i: int, message: str) -> None:
+        if not progress:
+            return
+        done = i + 1
+        elapsed = time.perf_counter() - started
+        remaining = elapsed / done * (n_draws - done)
+        print(
+            f"  draw {done:>3}/{n_draws} {done / n_draws:>4.0%}  {message}"
+            f"   [{elapsed / 60:.1f} min elapsed, ~{remaining / 60:.1f} min left]",
+            flush=True,
+        )
+
     for i in range(n_draws):
         shuffled = panel.copy()
         shuffled[target] = block_shuffle(panel[target], block, rng)
         try:
-            result = factory(shuffled)
+            with _selector.silenced():
+                result = factory(shuffled)
             rows = result.validation
             draws.append(
                 float(rows[rows["feature_set"] == feature_set]["ic"].mean())
             )
         except Exception as error:  # noqa: BLE001 - reported, not swallowed
             failures += 1
-            if progress:
-                print(f"  draw {i + 1}/{n_draws}: FAILED — {error}")
+            _report(i, f"FAILED — {error}")
             continue
-        if progress:
-            print(f"  draw {i + 1}/{n_draws}: null mean IC {draws[-1]:+.4f}")
+        _report(i, f"null mean IC {draws[-1]:+.4f}")
     return NullResult(
         draws=np.array(draws), observed=observed, block=block,
         failures=failures, label=label,

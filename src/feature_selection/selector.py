@@ -50,6 +50,7 @@ value is not weakly predictive, it is not a feature. They are reported in
 
 import time
 import warnings
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Tuple
 
@@ -66,6 +67,43 @@ from feature_selection.windows import WINDOW_STATS
 
 # The ensemble members, in the order they appear in the score table.
 METHODS = ("spearman", "mutual_info", "xgb_gain", "xgb_shap", "lasso", "permutation")
+
+# ── progress ──────────────────────────────────────────────────────────────────
+# ⚠️ **A MODULE FLAG, NOT A CONSTRUCTOR ARGUMENT, AND DELIBERATELY SO.** A knob on
+# `FeatureSelector` invites being recorded in `SelectionResult.setup` — and `setup`
+# is two thirds of the key `final_features.plan_from_reports` groups runs by. One
+# extra entry there moves every existing table's fingerprint and reports the whole
+# chain below it STALE (the STL-1 domino), for a change that alters no number.
+# Progress is an output-formatting choice; it must not be able to reach the record.
+PROGRESS = True
+
+# The phases `run()` announces, in order. ⚠️ The percentage is a fraction of PHASES
+# COMPLETED and says so on every line — the phases are NOT equal in cost
+# (`permutation` alone is 12,255 s at 1,458 channels), so this is a position in the
+# run, never an estimate of time remaining. The honest time fraction in this package
+# is the null's draw counter, where every unit is the same procedure.
+_RUN_PHASES = (
+    "prepare + coverage",
+    "window design",
+    "spearman vs target",
+    "rank (6 methods)",
+    "aggregate + blend",
+    "channel corr matrix",
+    "prune",
+    "stability",
+    "walk-forward",
+)
+
+
+@contextmanager
+def silenced():
+    """Suppress phase progress inside this block — used per null draw."""
+    global PROGRESS
+    previous, PROGRESS = PROGRESS, False
+    try:
+        yield
+    finally:
+        PROGRESS = previous
 
 
 def pooled_ic(prediction: np.ndarray, y: pd.Series) -> float:
@@ -954,10 +992,31 @@ class FeatureSelector:
 
     # ------------------------------------------------------------------- run
 
+    def _tick(self, done: int) -> None:
+        """Announce a completed phase. One line per phase, `PROGRESS` permitting.
+
+        ⚠️ Costs two `perf_counter()` calls and one `print` per PHASE — nine per
+        run, against phases that are seconds to hours. It cannot show up in a
+        timing, which is the whole requirement: the `seconds` it prints are the
+        same numbers already collected in `self.timings`, not a second measurement.
+        """
+        if not PROGRESS:
+            return
+        now = time.perf_counter()
+        seconds, self._phase_t0 = now - self._phase_t0, now
+        total = len(_RUN_PHASES)
+        print(
+            f"  [{done}/{total} phases {done / total:>4.0%}] "
+            f"{_RUN_PHASES[done - 1]:<22} {seconds:8.1f}s",
+            flush=True,
+        )
+
     def run(self, validate: bool = True, stability: bool = True) -> SelectionResult:
         """Do the whole thing and return a `SelectionResult`."""
+        self._phase_t0 = time.perf_counter()
         X, y, dropped_constant, coverage = self._prepare()
         channels = list(X.columns)
+        self._tick(1)
 
         # ── the windowed design matrix ─────────────────────────────────────────
         # `design` is what every MODEL sees: one column per (channel, stat). `X`
@@ -982,6 +1041,7 @@ class FeatureSelector:
         # labels have no sample. Align y to the design's own index.
         y_windowed = y.loc[design.index]
         self.timings["window design (cpu)"] = time.perf_counter() - started
+        self._tick(2)
 
         self.device = gpu.resolve_device(
             self.device_preference, n_features=design.shape[1]
@@ -995,8 +1055,10 @@ class FeatureSelector:
         self.timings[f"spearman vs target ({self.device})"] = (
             time.perf_counter() - started
         )
+        self._tick(3)
 
         raw_design = self._score_methods(design, y_windowed, design_corr)
+        self._tick(4)
         # ⚠️ Aggregated to CHANNELS before anything ranks. Scoring, ranking and
         # pruning all happen at channel level because that is the unit the model
         # consumes; `raw_design` is kept for the per-stat diagnostics.
@@ -1014,6 +1076,7 @@ class FeatureSelector:
         ranks["ensemble"] = ranks[list(METHODS)].mean(axis=1)
 
         order = ranks["ensemble"].sort_values().index.tolist()
+        self._tick(5)
         # ⚠️ The single most expensive step on a wide pool, and the reason `gpu.py`
         # has a hand-written rank-correlation at all: this is O(p²). Computed on the
         # CHANNEL panel, not the design matrix — `p` is 27, not 162.
@@ -1022,7 +1085,9 @@ class FeatureSelector:
         self.timings[f"channel corr matrix ({self.device})"] = (
             time.perf_counter() - started
         )
+        self._tick(6)
         kept, dropped_correlated = self._prune(order, corr)
+        self._tick(7)
 
         # The signed association a reader looks at stays defined on the channel's
         # value at day N (`last`), so a lookback=20 chart is comparable with a
@@ -1045,6 +1110,23 @@ class FeatureSelector:
             }
         )
 
+        # ⚠️ Hoisted out of the `SelectionResult(...)` call, where they used to be
+        # inline expressions. Same order, same arguments, same results — but the
+        # two most expensive optional steps in the run are now separately
+        # announceable instead of disappearing into a constructor.
+        stability_frame = (
+            self._stability(design, y_windowed, channels).loc[order]
+            if stability
+            else pd.DataFrame()
+        )
+        self._tick(8)
+        validation_frame = (
+            self._validate(design, y_windowed, kept, channels)
+            if validate
+            else pd.DataFrame()
+        )
+        self._tick(9)
+
         return SelectionResult(
             target=self.target,
             features=order,
@@ -1055,16 +1137,8 @@ class FeatureSelector:
             dropped_correlated=dropped_correlated,
             corr=corr,
             target_corr=target_corr,
-            stability=(
-                self._stability(design, y_windowed, channels).loc[order]
-                if stability
-                else pd.DataFrame()
-            ),
-            validation=(
-                self._validate(design, y_windowed, kept, channels)
-                if validate
-                else pd.DataFrame()
-            ),
+            stability=stability_frame,
+            validation=validation_frame,
             n_rows=len(design),
             corr_threshold=self.corr_threshold,
             coverage=coverage,

@@ -2511,3 +2511,41 @@ these runs are not comparable with the pre-conversion archive.
 ⚠️ **The verdict is unchanged and the p is now honest.** Same `null_max` of +0.0916
 sitting above the observed, `t = +0.65`, and `p = 0.0952` — the corrected NUL-4
 arithmetic, live in this run. `evidence=cleared_p95_not_a_pass` either way.
+
+---
+
+## 17. Progress output (2026-08-15) — three percentages, one honest denominator
+
+A wide-pool run printed **nothing** between "started" and "finished" — `pool__basic +
+economy_usa` is 1,458 channels and hours of GPU with no sign it was alive. `run()` now
+announces each phase and `null_distribution` each draw. What matters is that the two
+readouts are not the same KIND of number and are labelled accordingly.
+
+| line | denominator | predicts time? |
+|---|---|---|
+| `[4/9 phases  44%] rank (6 methods)   2.1s` | phases COMPLETED | ❌ — the phases are wildly unequal (`permutation` alone is 12,255 s at 1,458 channels). It is a position in the run. |
+| `draw   7/20  35%  null mean IC +0.0123   [2.1 min elapsed, ~3.9 min left]` | draws completed | ✅ — every draw is the same procedure on the same panel, so the fraction is a fraction of the work and the ETA is a real extrapolation. |
+
+⚠️ **`PROGRESS` IS A MODULE FLAG, NOT A CONSTRUCTOR ARGUMENT, AND THAT IS THE WHOLE
+POINT.** A knob on `FeatureSelector` invites being recorded in
+`SelectionResult.setup` — and `setup` is two thirds of the key
+`final_features.plan_from_reports` groups runs by. One extra entry there moves every
+existing table's fingerprint and reports the whole chain below it STALE (the STL-1
+domino), for a change that alters no number. Verified after the change: the keys of
+`SelectionResult.setup` are unchanged, and `report.write_report` adds its eleven
+extra setup keys from an explicit hardcoded `getattr` list that no new attribute can
+join by accident.
+
+⚠️ **The per-draw selection is SILENCED** (`selector.silenced()`, a context manager
+`null_distribution` wraps each `factory` call in). Without it a 20-draw null prints
+its inner phase progress 21 times and the draw counter — the only line that says how
+far along the run actually is — is lost in it.
+
+**Cost, measured 2026-08-15 rather than asserted**: nine `_tick` calls per run are
+**0.010 ms** (1,000 runs' worth timed at 9.6 ms) — 4.3e-8 of the 3.7-minute Kaggle
+run in §"kaggle", 7.8e-10 of one wide-pool `permutation` step. The `seconds` each
+line prints are the numbers already in `self.timings`, not a second measurement.
+
+⚠️ **`run()`'s last two phases were HOISTED out of the `SelectionResult(...)` call** to
+be announceable — `stability` and `validate` were inline expressions in the
+constructor. Same order, same arguments, same results; they are locals now.
