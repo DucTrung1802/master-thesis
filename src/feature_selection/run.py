@@ -52,6 +52,7 @@ import pandas as pd
 from feature_selection import cross_sectional as cs
 from feature_selection import evaluation, outstanding, report, windows
 from feature_selection.cross_sectional import CrossSectionalSelector, read_universe_panel
+from feature_selection import selector as selector_methods
 from feature_selection.selector import FeatureSelector
 from feature_selection.unified_reader import (
     KEY_COLS,
@@ -126,6 +127,7 @@ def run_selection(
     top: int = 30,
     feature_normalize: str = "cs_rank",
     min_ic_width: int = 5,
+    methods: Sequence[str] = selector_methods.METHODS,
 ):
     """Read the panel, rank it, measure the bar, and archive one run folder.
 
@@ -276,6 +278,7 @@ def run_selection(
                 panel=frame,
                 target=target,
                 exclude=exclude,
+                methods=methods,
                 max_features=max_features,
                 corr_threshold=corr_threshold,
                 horizon=horizon,
@@ -498,6 +501,16 @@ def main(argv: Optional[Sequence[str]] = None):
         choices=["none", "cs_rank"],
         help="cross-sectional runs only: rank features within each date, or not",
     )
+    # ⚠️ The ensemble's MEMBERSHIP changes the answer (CONTEXT section 19), so it is a
+    # flag rather than a constant: `--methods all` reproduces a pre-2026-08-16 run, which
+    # is the only way to compare one with a run made since.
+    parser.add_argument(
+        "--methods",
+        default=",".join(selector_methods.METHODS),
+        help="comma-separated rankers, or 'all'. Default is the measured three; 'all' is "
+             "the pre-2026-08-16 six. WARNING: lasso alone was 87 percent of every "
+             "archived run's wall clock - see CONTEXT section 19",
+    )
     parser.add_argument(
         "--min-ic-width",
         type=int,
@@ -527,6 +540,11 @@ def main(argv: Optional[Sequence[str]] = None):
         top=args.top,
         feature_normalize=args.feature_normalize,
         min_ic_width=args.min_ic_width,
+        methods=(
+            selector_methods.ALL_METHODS
+            if args.methods.strip().lower() == "all"
+            else [m.strip() for m in args.methods.split(",") if m.strip()]
+        ),
     )
 
 

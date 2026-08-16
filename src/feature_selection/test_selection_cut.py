@@ -103,16 +103,31 @@ def test_knee_returns_one_on_a_straight_line():
 
 def test_specialist_keeps_a_channel_only_one_method_likes():
     """The reason the ensemble alone is not enough: a mean rank buries a channel
-    that one method is certain about and five have no opinion on."""
+    that one method is certain about and the rest have no opinion on.
+
+    ⚠️ **Written against `len(METHODS)`, never against a fixed six or a fixed column
+    index** (2026-08-16). It used to assert `scores[0, 2]` was the `xgb_gain` column
+    and that a channel top on one of SIX was the ensemble's last — both are facts
+    about the size and order of the default ensemble, which narrowed to three that
+    day (CONTEXT §19). The behaviour under test is neither: it is that the
+    specialist tier keeps what a mean rank buries.
+
+    ⚠️ It also measures the real consequence of the narrowing: one method's opinion
+    is worth `1/len(METHODS)` of the blend, so at three members a single champion
+    lifts a channel twice as far as it did at six. That is why the ensemble's own
+    verdict on `ch000` is only asserted to be POOR, not last.
+    """
     rng = np.random.default_rng(5)
     scores = rng.random((40, len(METHODS))) * 0.6
     scores[0, :] = 0.0
-    scores[0, 2] = 1.0                # top on xgb_gain, last on everything else
+    champion = METHODS[-1]              # top on exactly one method, last on the rest
+    scores[0, len(METHODS) - 1] = 1.0
     frame = _importance(scores)
-    assert frame["ensemble"].idxmax() == 0          # the ensemble ranks it LAST
+    # Buried by the blend: worse than the median channel, on any ensemble size.
+    assert frame["ensemble"][0] > frame["ensemble"].median()
     kept, knees = cut.specialist_tier(frame)
     assert "ch000" in kept
-    assert knees["xgb_gain"] >= 1
+    assert knees[champion] >= 1
 
 
 # --------------------------------------------------------------------- prune

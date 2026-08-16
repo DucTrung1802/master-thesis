@@ -519,6 +519,28 @@ pool is affordable for a return target** (357 channels + 20 draws = 41 min, meas
 where the fitted model implies ~12 h. `evidence=no_null` on a return run is now a
 choice, not a budget. `feature_selection/CONTEXT.md` §15c-target.
 
+⚠️ **AND THE 13.7× WAS `lasso`, WHICH IS OUT OF THE DEFAULT ENSEMBLE SINCE 2026-08-16.**
+The six rankers were chosen in 2026-08-03 for what each one SEES and **had never been
+measured against each other**. They now have been (`feature_selection/CONTEXT.md` §19 —
+two targets × two widths, each method's own top-k scored out of sample against a 40-draw
+random-k control), and **`METHODS` is now `spearman, xgb_shap, permutation`**:
+
+| dropped from the default | measured |
+|---|---|
+| **`lasso`** | **87.2 % of the average archived run's wall clock** (90-96 % of every country run) — while ranking at CHANCE, and on a return target its column is a CONSTANT, so the ensemble was bit-identical without it |
+| **`mutual_info`** | the **worst standalone ranker measured** (35.5th percentile, min 7.5th — below chance), and the dearest once lasso is gone (46 % of ranking time) |
+| **`xgb_gain`** | ρ = **0.864** with `xgb_shap` **from the same fit** — one model held 2 of 6 votes; second worst standalone (42nd percentile) |
+
+⚠️ **`permutation` is load-bearing and the only member that is:** every other
+leave-one-out subset scored at or ABOVE the full six; dropping this one put the blend at
+the 55th percentile against chance's 50th, in all four cells. ⚠️ **Nothing was deleted** —
+`ALL_METHODS` still holds all six and `methods=ALL_METHODS` reproduces an older run; all
+19 archived shortlists were verified to rebuild identically. ⚠️ **An mRMR member was
+tested and REJECTED** — 100th percentile on one target, 50th on the other (§19f). ⚠️ **New
+issue MTH-1**: `methods` is recorded in `metadata.json` but is NOT in
+`contract.SETUP_KEYS`, so a pre- and a post-2026-08-16 run can be unioned into one table
+with nothing saying so.
+
 ⚠️ **THE SELECTION RUNS ON THE GPU NOW, AND `device` IS PART OF THE SETUP** (2026-08-10).
 Every one of the 22 archived runs recorded `device="cpu"` — the GPU had never been used —
 and simply forcing `cuda` made a run **6.8× SLOWER**, because sklearn's

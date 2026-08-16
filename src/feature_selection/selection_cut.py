@@ -75,7 +75,7 @@ from typing import Callable, Dict, List, Optional, Sequence, Set, Tuple
 import numpy as np
 import pandas as pd
 
-from feature_selection.selector import METHODS
+from feature_selection.selector import ALL_METHODS, METHODS
 
 # Pooled null values to draw. The bar is a quantile of `draws x p` numbers, so the
 # draw count scales DOWN with the pool width — 274 draws on 1,458 channels is the
@@ -92,8 +92,15 @@ def live_methods(importance: pd.DataFrame) -> List[str]:
 
     Mirrors `selector.run`'s `dead_methods` rule so a method dead in the run is dead
     here too, rather than contributing a knee over a flat curve.
+
+    ⚠️ **ITERATES `ALL_METHODS`, NOT THE CURRENT DEFAULT `METHODS`** (2026-08-16). This
+    function reads a file some past run WROTE, and the default ensemble narrowed from
+    six rankers to three that day (CONTEXT §19). Iterating the default would silently
+    ignore the `mutual_info`, `xgb_gain` and `lasso` columns of all 21 archived runs —
+    re-cutting them against half the evidence they were produced with, and changing
+    every one of their shortlists without a word. The run's own columns decide.
     """
-    return [m for m in METHODS if m in importance and importance[m].nunique() > 1]
+    return [m for m in ALL_METHODS if m in importance and importance[m].nunique() > 1]
 
 
 def method_ranks(importance: pd.DataFrame) -> pd.DataFrame:
@@ -104,7 +111,11 @@ def method_ranks(importance: pd.DataFrame) -> pd.DataFrame:
     computed — verified across all 20 archived runs, where the rebuilt mean rank
     reproduces the stored `ensemble` to 2.8e-14.
     """
-    return importance[live_methods(importance) or list(METHODS)].rank(
+    # ⚠️ The fallback is the columns the FILE has, not the current default — same
+    # reason as `live_methods`. A run written with three members has no
+    # `mutual_info` column and asking for one would raise on a file that is fine.
+    fallback = [m for m in ALL_METHODS if m in importance] or list(METHODS)
+    return importance[live_methods(importance) or fallback].rank(
         ascending=False, method="min"
     )
 

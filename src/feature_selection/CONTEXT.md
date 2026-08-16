@@ -398,16 +398,28 @@ arrive looking like a string column. `read()` casts by the SQL type read from
 `orchestration/assets/unified.py` documents for the other direction (a pandas
 round-trip turning every price column into VARCHAR).
 
-## 4. The six rankers
+## 4. The rankers — six implemented, THREE in the default ensemble
 
-| method | sees | blind to | GPU |
-|---|---|---|---|
-| `spearman` | monotone rank association | interactions, non-monotone shapes | ✅ |
-| `mutual_info` | any dependence | direction | ❌ |
-| `xgb_gain` | interactions, thresholds | correlated features split credit arbitrarily | ✅ |
-| `xgb_shap` | the same, attributed per sample | the same, less arbitrarily | ✅ |
-| `lasso` | linear signal, redundancy priced in | non-linearity | ❌ |
-| `permutation` | **out-of-sample** contribution | features the model never used | ✅ |
+⚠️ **The default narrowed from six to three on 2026-08-16, and it was MEASURED — §19.**
+This table lists what each one SEES, which is why it was written; §19 is what each one
+was WORTH, which is a different claim and had never been tested. Everything below is
+still implemented and nothing was deleted: `FeatureSelector(..., methods=ALL_METHODS)`
+reproduces a pre-2026-08-16 run.
+
+| method | in the default | sees | blind to | GPU |
+|---|---|---|---|---|
+| `spearman` | ✅ | monotone rank association | interactions, non-monotone shapes | ✅ |
+| `xgb_shap` | ✅ | interactions and thresholds, attributed per sample | correlated features share credit | ✅ |
+| `permutation` | ✅ **load-bearing** | **out-of-sample** contribution | features the model never used | ✅ |
+| `mutual_info` | ❌ §19 | any dependence | direction | ❌ |
+| `xgb_gain` | ❌ §19 | the same as `xgb_shap`, from the same fit (rho 0.864) | correlated features split credit arbitrarily | ✅ |
+| `lasso` | ❌ §19 | linear signal, redundancy priced in | non-linearity | ❌ |
+
+⚠️ **`permutation` is the one that cannot be dropped**: every other leave-one-out subset
+scored at or above the full six, and removing this one put the blend at the 55th
+percentile against chance's 50th, in all four measured cells. ⚠️ **`lasso` was 87.2 % of
+the average archived run's wall clock** while ranking at chance — and on a return target
+its column is a CONSTANT, so the ensemble was bit-identical without it (§19c).
 
 `permutation` is the only one measured out of sample and is the one to believe when
 it disagrees. The ensemble is a **rank** average, not a score average — `xgb_gain`
@@ -2762,3 +2774,185 @@ runtime comes from the notebook's banner, in the execution log and in the merged
 `metadata.json`. Printing the local RTX 3050 above a T4 run would be worse than printing
 nothing: a T4 run is a different **procedure**, not the same one on faster hardware
 (different xgboost RNG stream, different library stack — CLAUDE.md §3d).
+
+## 19. ⚠️ THE RANKERS, EVALUATED — six became three (2026-08-16)
+
+§4 has listed six rankers since 2026-08-03 and **not one of them had ever been measured
+against the others.** They were chosen for what they *see* — a coherent argument, and a
+different kind of claim from "this one picks channels that generalise". This section is
+that measurement, and it removed half the ensemble.
+
+### 19a. How it was measured
+
+The selection was run ONCE per target on `unified_schema_vcb.pool__basic + pool__targets`
+(**84 channels**, `d=20, h=5`, `device=cuda`, seed 18). Then each method's own **top-k**
+was scored out of sample on the SAME purged walk-forward folds, with the SAME model, via
+the selector's own `_splits` / `_impute` / `_xgb` / `_ic`.
+
+⚠️ **The null is RANDOM-k, not shuffled labels, and that is the correct null for this
+question.** Whether the pool predicts at all is settled (CLAUDE.md §2: it does not). The
+question here is narrower — *does ranker M choose better than chance* — and the control
+for that is chance: **40 random draws of k channels** from the same list, per k.
+
+Two targets (`return_5day`, `return_rel_5day`) x two widths (k=10, k=20) = **four cells**,
+and nothing is reported below that survives fewer than all four.
+
+### 19b. The result — percentile against the random-k control, all four cells
+
+| selector | ret k10 | ret k20 | rel k10 | rel k20 | mean | min |
+|---|---|---|---|---|---|---|
+| **`spearman+xgb_shap+permutation`** — THE NEW DEFAULT | **97.5** | **67.5** | **100** | **97.5** | **90.6** | 67.5 |
+| `shap+perm` | 92.5 | 72.5 | 100 | 100 | 91.3 | 72.5 |
+| `ensemble -spearman` | 95.0 | 100 | 72.5 | 82.5 | 84.5 | 72.5 |
+| **`permutation` alone** | 75.0 | 82.5 | 100 | 82.5 | **83.0** | 75.0 |
+| `ensemble -mutual_info` | 100 | 67.5 | 95.0 | 77.5 | 81.5 | 67.5 |
+| `ensemble -xgb_shap` | 87.5 | 100 | 70.0 | 75.0 | 80.5 | 70.0 |
+| `ensemble -xgb_gain` | 82.5 | 85.0 | 75.0 | 77.5 | 79.0 | 75.0 |
+| **`ENSEMBLE (6)`** | 87.5 | 65.0 | 87.5 | 80.0 | **77.0** | 65.0 |
+| `ensemble -lasso` | 87.5 | 65.0 | 87.5 | 80.0 | 77.0 | 65.0 |
+| `xgb_shap` alone | 55.0 | 42.5 | 100 | 97.5 | 67.5 | 42.5 |
+| `spearman` alone | 82.5 | 55.0 | 35.0 | 97.5 | 61.0 | 35.0 |
+| **`ensemble -permutation`** | 55.0 | 65.0 | 50.0 | 55.0 | **55.0** | 50.0 |
+| *RANDOM* | *50* | *50* | *50* | *50* | *50* | *50* |
+| `lasso` alone | 92.5 | **2.5** | 82.5 | 80.0 | 52.0 | 2.5 |
+| `xgb_gain` alone | 65.0 | 65.0 | 25.0 | 30.0 | 42.0 | 25.0 |
+| `mutual_info` alone | 42.5 | 25.0 | 95.0 | **7.5** | 35.5 | 7.5 |
+
+**Four things replicate across every cell:**
+
+1. ⚠️ **EVERY leave-one-out subset scored at or above the full six — except one.**
+   Dropping `spearman`, `mutual_info`, `xgb_shap`, `xgb_gain` or `lasso` left the blend
+   no worse. Dropping **`permutation`** put it at the 55th percentile against chance's
+   50th. It is the only member the ensemble cannot do without, and it is the only one
+   measured **out of sample**.
+2. ⚠️ **`mutual_info` and `xgb_gain` rank BELOW CHANCE as standalone selectors** (35.5
+   and 42.0 mean, with minima of 7.5 and 25.0).
+3. ⚠️ **`lasso` is at chance (52.0) and its removal changes NOTHING.** `ensemble -lasso`
+   is identical to `ENSEMBLE (6)` in all four cells — not approximately, identically. On
+   a return target it zeroes every coefficient, so its rank column is a CONSTANT, and a
+   constant added to a mean does not change an order. It has been an ensemble member
+   that cannot vote.
+4. **`permutation` alone (83.0) beats the ensemble of six (77.0).**
+
+⚠️ **The new default was measured as a set BEFORE it was adopted, not read off this
+table.** `spearman + xgb_shap + permutation` scores **90.6** against the six's 80.0 and
+clears the random p95 bar in three cells of four. It is statistically tied with
+`shap+perm` (91.3) — well inside the noise of §19e — and `spearman` was kept on the
+principle in §19d, not on the score: it is free, and without it the ensemble is one
+XGBoost fit looked at twice.
+
+⚠️ **A structural check over the whole archive agrees, and is not a 5-fold number.**
+Across all 21 archived runs, the rank correlation between the full blend and the blend
+without each member is **0.952-0.971** — every member moves the blend by about the same
+tiny amount, and none is decorative. Except where `lasso` is dead: there it is **0.998,
+0.999, 0.999, 0.999**. And `xgb_gain` vs `xgb_shap` correlate at **rho = 0.864**, against
+0.15-0.50 for every other pair — they describe one booster, from one fit.
+
+### 19c. ⚠️ And the cost — `lasso` was 87 % of every run
+
+Measured from the 21 archived `metadata.json` `timings_seconds` blocks:
+
+| member | mean share of a run's wall clock |
+|---|---|
+| **`lasso`** | **87.2 %** — 90-96 % on all 19 country runs |
+| `permutation` | 2.7 % |
+| `mutual_info` | 2.4 % (but **46 %** once lasso is cheap — see below) |
+| `xgb_gain` + `xgb_shap` | 0.7 %, from ONE fit |
+
+⚠️ **This is the whole of the 13.7x target-cost gap in CLAUDE.md §15c-target.** On a
+price LEVEL the solver keeps working (`...basic__close_adjust_5day`: lasso 92.5 % of
+163 s); on a RETURN it collapses to zero coefficients at once
+(`...basic__return_5day`: lasso 4.9 % of 13 s). The cost model had no term for the target
+because the *target* was never the term — `lasso` was.
+
+**The direct A/B, same data, same seed, 2026-08-16** — `python -m feature_selection.run
+--pools pool__basic --target close_adjust_5day --null-draws 0`, once with `--methods all`
+and once with the new default (VCB, 99 channels, `d=20 h=5`, cuda):
+
+| | ranking phase | whole run | `lasso` share |
+|---|---|---|---|
+| six rankers (`--methods all`) | **376.3 s** | **411.8 s** | **355.8 s = 87.4 %** |
+| three (the new default) | **10.2 s** | **44.8 s** | — |
+| | **36.9× faster** | **9.2× faster** | |
+
+⚠️ **87.4 % on this run against 87.2 % as the archive mean — the same number twice, from
+two independent measurements.** Both runs kept **57 channels**; their shortlists share 16
+(Jaccard 0.70) and their `ic_mean` differ by 0.011 (+0.2295 vs +0.2182). The selection is
+NOT the same — it cannot be, the blend changed — but it is the same size and mostly the
+same channels, at a ninth of the cost.
+
+⚠️ **And once lasso is gone, `mutual_info` is the expensive one.** On the two probe runs
+here it was **9.0-9.3 s of ~19.4 s of ranking**. §16 already measured that its GPU path
+is **4-8x SLOWER** than sklearn's KDTree and kept it only because `device` must mean the
+device — so the ensemble's worst-ranking member was also, after lasso, its dearest.
+
+### 19d. What changed, and what deliberately did not
+
+**`METHODS` is now `("spearman", "xgb_shap", "permutation")`.** `ALL_METHODS` still holds
+all six and **nothing was deleted** — `FeatureSelector(..., methods=ALL_METHODS)`
+reproduces a pre-2026-08-16 run exactly.
+
+- ⚠️ **Skipping a member skips its COST.** `_score_methods` computes only what
+  `self.methods` asks for; `xgb_gain` and `xgb_shap` still share one fit.
+- ⚠️ **`spearman` was kept although it is unstable standalone** (61.0 mean, 35.0 min).
+  It is **free** — `target_corr` is computed regardless, because the SIGN goes in every
+  report — and it is the only model-free member left. Dropping it would leave an
+  ensemble that is one XGBoost fit looked at twice.
+- ⚠️ **The blend was NOT weighted.** A weight is a fitted parameter and this measurement
+  cannot support one (§19e). Membership is a decision; a weight would be a model.
+- ⚠️ **`selection_cut.live_methods` now iterates `ALL_METHODS`, not the default.** It
+  reads a file a past run WROTE. Iterating the current default would silently ignore the
+  `mutual_info`, `xgb_gain` and `lasso` columns of all 21 archived runs and re-cut them
+  against half their own evidence. **Verified after the change: all 19 archived
+  shortlists rebuild identically — same channels, same order.**
+- ⚠️ **One member's opinion is now worth 1/3 of the blend, not 1/6.** A channel that one
+  method is certain about and the others ignore is lifted twice as far as before. That is
+  a real behavioural change, and `test_specialist_keeps_a_channel_only_one_method_likes`
+  was rewritten around `len(METHODS)` because it had been asserting the six-member
+  arithmetic as if it were the behaviour.
+
+### 19e. ⚠️ What this measurement does NOT establish
+
+- **Not that any of them works.** The control is random-k, so a 100th-percentile selector
+  is one that beats *chance at picking channels*, on a pool whose own null CLAUDE.md §2
+  says it does not clear. Nothing here is evidence of predictive skill.
+- **Not a ranking of the survivors.** 21 selectors x 2 k x 2 targets = **84 tests**, so
+  ~4.2 false 95th-percentile passes are expected and 3-5 were seen. The IC span across
+  selectors is 5-6 x the fold SE, so the *ends* of the table are separable and **adjacent
+  rows are not**. `shap+perm` topping it is not evidence that it beats
+  `spearman+shap+perm`.
+- **One pool, one ticker, one window.** 84 channels of `pool__basic`, VCB, `d=20 h=5`. A
+  1,458-channel macro pool may behave differently, and `mutual_info` is exactly the member
+  whose case ("catches dependence a rank correlation misses") would be strongest there.
+- **The removals are DEFAULTS, not verdicts.** The three that left are the three that were
+  at-or-below chance *and* expensive *and* redundant. Two of those three findings are
+  structural rather than statistical — `lasso`'s constant column and `xgb_gain`'s
+  rho = 0.864 with `xgb_shap` from the same fit — which is why they are acted on at all.
+
+### 19f. The addition that was tested and REJECTED — mRMR
+
+Every one of the six scores a channel **in isolation**; redundancy is handled afterwards
+by a hard |rho| >= 0.9 prune. mRMR prices it *at ranking time* and needs **no new
+computation** — relevance is the `spearman` column, redundancy the channel correlation
+matrix the prune already builds. Three variants were measured.
+
+⚠️ **It did not replicate, and on one target it looked like the best thing in the table.**
+`+mrmr(shap)` scored **100 / 100** on `return_rel_5day` and **50.0 / 52.5** on
+`return_5day`; `ensemble+mrmr` (69.0 mean) was *below* the plain ensemble. Adding it on
+the strength of the first target alone would have shipped noise as a feature — which is
+what the second target is for, and is the same lesson §6b teaches about a positive IC.
+
+**Not added.** Kept here as a measured negative so the next person does not re-derive it.
+
+### 19g. ⚠️ Issue MTH-1 — the ensemble's membership is not in the grouping key
+
+`self.methods` is recorded in `SelectionResult.setup`, and travels into `metadata.json`
+and the report README. It is **NOT** in `contract.SETUP_KEYS`, and it should be: two runs
+with different members are not the same experiment, exactly as §8 means it.
+
+It is not there because adding a key to `SETUP_KEYS` makes every run archived without it
+**ungroupable** — `contract.validate_shortlist` raises on all 21, `final_features` cannot
+plan, and every table below goes stale (the STL-1 domino). So: **a run from before
+2026-08-16 and a run from after can currently be unioned into one table without anything
+saying so.** Read `setup.methods` in `metadata.json` before combining runs across that
+date. The right time to close this is the next archive rebuild.

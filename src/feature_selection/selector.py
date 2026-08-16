@@ -65,8 +65,43 @@ from sklearn.preprocessing import StandardScaler
 from feature_selection import gpu, gpu_rankers, windows
 from feature_selection.windows import WINDOW_STATS
 
-# The ensemble members, in the order they appear in the score table.
-METHODS = ("spearman", "mutual_info", "xgb_gain", "xgb_shap", "lasso", "permutation")
+# ── the rankers ───────────────────────────────────────────────────────────────
+# Every ranker implemented here. ⚠️ **NOT the default ensemble** — `METHODS` is, and
+# it is a MEASURED SUBSET (§19). This tuple exists so a run archived under a different
+# default is still read with ITS OWN columns: `selection_cut.live_methods` iterates
+# this, not the default, because a `mutual_info` column in a 2026-08 run folder is a
+# method that ran and must not be silently ignored by a later, narrower default.
+ALL_METHODS = (
+    "spearman", "mutual_info", "xgb_gain", "xgb_shap", "lasso", "permutation",
+)
+
+# ⚠️ **THE DEFAULT ENSEMBLE — THREE MEMBERS SINCE 2026-08-16, MEASURED (§19).** It was
+# all six of `ALL_METHODS` from 2026-08-03. Three were dropped from the DEFAULT, none
+# deleted: pass `methods=ALL_METHODS` to reproduce an older run exactly.
+#
+#   dropped        why, measured on VCB pool__basic (84 channels), return_5day AND
+#                  return_rel_5day, k=10 and k=20, against a 40-draw random-k control
+#   ─────────────  ──────────────────────────────────────────────────────────────────
+#   lasso          **87.2 % of the average archived run's wall clock** (90-96 % on the
+#                  19 country runs) — and it ranks at CHANCE (52nd percentile, min
+#                  2.5th). On a return target it zeroes every coefficient, so its rank
+#                  column is a CONSTANT and `ensemble` is bit-identical with and
+#                  without it. It is the whole of the 13.7x target-cost gap in
+#                  CLAUDE.md §15c-target.
+#   mutual_info    the WORST standalone ranker measured (35.5th percentile mean, 7.5th
+#                  min — below chance) and the most expensive once lasso is gone
+#                  (46 % of ranking time on a return target). Its unique claim, "any
+#                  dependence, model-free", is largely covered by the tree members.
+#   xgb_gain       a STRUCTURAL DUPLICATE of `xgb_shap` — rho = 0.864 across the
+#                  archive, from THE SAME FIT — so the blend gave one model 2 of 6
+#                  votes. Second worst standalone (42nd percentile, 25th min), and §4
+#                  already said gain splits credit arbitrarily where SHAP does not.
+#
+# ⚠️ **`permutation` is the one member that cannot be dropped.** Every other
+# leave-one-out subset scored at or ABOVE the full six; `ensemble - permutation` was
+# the only one clearly below it, at the 55th percentile against chance's 50th, in all
+# four target x k cells.
+METHODS = ("spearman", "xgb_shap", "permutation")
 
 # ── progress ──────────────────────────────────────────────────────────────────
 # ⚠️ **A MODULE FLAG, NOT A CONSTRUCTOR ARGUMENT, AND DELIBERATELY SO.** A knob on
@@ -86,7 +121,7 @@ _RUN_PHASES = (
     "prepare + coverage",
     "window design",
     "spearman vs target",
-    "rank (6 methods)",
+    "rank (the ensemble's methods)",
     "aggregate + blend",
     "channel corr matrix",
     "prune",
@@ -209,8 +244,8 @@ class SelectionResult:
 
     target: str
     features: List[str]
-    scores: pd.DataFrame  # index=feature, columns=METHODS (0-1 normalised)
-    ranks: pd.DataFrame  # index=feature, columns=METHODS + "ensemble"
+    scores: pd.DataFrame  # index=feature, columns=`methods` (0-1 normalised)
+    ranks: pd.DataFrame  # index=feature, columns=`methods` + "ensemble"
     kept: List[str]
     dropped_constant: List[str]
     dropped_correlated: Dict[str, str]  # dropped feature -> the one it duplicated
@@ -221,6 +256,11 @@ class SelectionResult:
     n_rows: int = 0
     corr_threshold: float = 0.9
     coverage: pd.Series = field(default_factory=pd.Series, repr=False)
+    # ⚠️ The ensemble's MEMBERSHIP, recorded because it changes the answer. The
+    # default narrowed from six rankers to three on 2026-08-16 (CONTEXT §19), so a
+    # result that does not say which members voted cannot be compared with one from
+    # before or after. Read this, never the module's current `METHODS`.
+    methods: List[str] = field(default_factory=lambda: list(METHODS))
     # Methods whose raw scores were identical for every feature — they separated
     # nothing and contributed a constant to the ensemble. Reported rather than
     # dropped: "LASSO zeroed every coefficient" is a finding about the data (no
@@ -265,6 +305,10 @@ class SelectionResult:
                 "design_columns": self.design_scores.shape[0],
                 "kept": len(self.kept),
                 "device": self.device,
+                # ⚠️ In `setup` because it changes the answer; NOT in
+                # `contract.SETUP_KEYS`, because adding a key there makes every run
+                # archived without it ungroupable (issue MTH-1).
+                "methods": ", ".join(self.methods),
             },
             name="setup",
         )
@@ -365,7 +409,22 @@ class FeatureSelector:
         normalize: str = "none",
         holdout_start: Optional[str] = None,
         permutation_repeats: int = 10,
+        methods: Sequence[str] = METHODS,
     ):
+        # ⚠️ **THE ENSEMBLE'S MEMBERSHIP CHANGES THE ANSWER, so it is recorded** — in
+        # `SelectionResult.setup`, and from there into `metadata.json` and the report
+        # README. It is NOT in `contract.SETUP_KEYS`: adding a key there makes every
+        # run archived without it ungroupable and fails `validate_shortlist` on all 21
+        # (the STL-1 domino, `final_features/CONTEXT.md` §5a). Tracked as **MTH-1**.
+        self.methods = tuple(methods)
+        if not self.methods:
+            raise ValueError("methods must name at least one ranker.")
+        unknown = [m for m in self.methods if m not in ALL_METHODS]
+        if unknown:
+            raise ValueError(
+                f"unknown ranker(s) {unknown}; implemented: {list(ALL_METHODS)}. "
+                f"Pass methods=ALL_METHODS to reproduce a pre-2026-08-16 run."
+            )
         self.lasso_converged: Optional[bool] = None
         # ⚠️ Only validated here — `"auto"` decides on the CANDIDATE COUNT, which is
         # not known until the constant and non-numeric columns have been dropped,
@@ -611,14 +670,24 @@ class FeatureSelector:
     def _score_methods(
         self, X: pd.DataFrame, y: pd.Series, target_corr: pd.Series
     ) -> pd.DataFrame:
-        """Raw (un-normalised, non-negative) importance per method."""
+        """Raw (un-normalised, non-negative) importance per method.
+
+        ⚠️ **Only the methods in `self.methods` are COMPUTED**, not computed and then
+        dropped. That is the whole point of the default narrowing to three (§19): on
+        the 19 archived country runs `lasso` alone was 90-96 % of the wall clock, so
+        skipping a member has to skip its cost, or the change is cosmetic.
+        """
         Xi = self._impute(X)[0]
         scores = pd.DataFrame(index=X.columns, dtype=float)
+        wanted = set(self.methods)
 
         # 1. Spearman — monotone association, magnitude only. The signed version
         #    is computed once in `run()` (on the GPU) and reused here; the sign
         #    belongs in `target_corr`, the magnitude in the ensemble.
-        scores["spearman"] = target_corr.reindex(Xi.columns).abs()
+        #    ⚠️ Free: `target_corr` is computed by `run()` regardless, because the
+        #    SIGN goes in the report whether or not `spearman` is in the ensemble.
+        if "spearman" in wanted:
+            scores["spearman"] = target_corr.reindex(Xi.columns).abs()
 
         # 2. Mutual information — catches dependence a rank correlation misses.
         #    ⚠️ **ON THE GPU WHENEVER `device="cuda"` (2026-08-10).**
@@ -633,32 +702,44 @@ class FeatureSelector:
         #    anyway because `device` means the device — a flag that silently kept
         #    two of six rankers on the host was the thing that made "is the economy
         #    run on the GPU?" unanswerable. Pass `device="cpu"` for the fast path.
-        started = time.perf_counter()
-        if self.device == "cuda":
-            scores["mutual_info"] = gpu_rankers.mutual_info(
-                Xi.to_numpy(np.float64),
-                y.to_numpy(np.float64),
-                random_state=self.random_state,
-                device="cuda",
-            )
-            self.timings["mutual_info (cuda)"] = time.perf_counter() - started
-        else:
-            scores["mutual_info"] = mutual_info_regression(
-                Xi, y, random_state=self.random_state,
-                n_jobs=gpu.n_jobs_for(Xi.shape[1]),
-            )
-            self.timings["mutual_info (cpu)"] = time.perf_counter() - started
+        #    ⚠️ Out of the DEFAULT ensemble since 2026-08-16 — worst standalone ranker
+        #    measured and the most expensive once `lasso` is gone (§19).
+        if "mutual_info" in wanted:
+            started = time.perf_counter()
+            if self.device == "cuda":
+                scores["mutual_info"] = gpu_rankers.mutual_info(
+                    Xi.to_numpy(np.float64),
+                    y.to_numpy(np.float64),
+                    random_state=self.random_state,
+                    device="cuda",
+                )
+                self.timings["mutual_info (cuda)"] = time.perf_counter() - started
+            else:
+                scores["mutual_info"] = mutual_info_regression(
+                    Xi, y, random_state=self.random_state,
+                    n_jobs=gpu.n_jobs_for(Xi.shape[1]),
+                )
+                self.timings["mutual_info (cpu)"] = time.perf_counter() - started
 
-        # 3-4. XGBoost gain and SHAP, from one fit — both on the GPU when there
+        # 3-4. XGBoost gain and SHAP, from ONE fit — both on the GPU when there
         #      is one, including the SHAP values (see `gpu.tree_shap`).
-        started = time.perf_counter()
-        model = self._xgb().fit(Xi, y)
-        booster_gain = model.get_booster().get_score(importance_type="gain")
-        scores["xgb_gain"] = [booster_gain.get(c, 0.0) for c in Xi.columns]
-        scores["xgb_shap"] = gpu.tree_shap(model, Xi)
-        self.timings[f"xgb gain + shap ({self.device})"] = (
-            time.perf_counter() - started
-        )
+        #
+        #      ⚠️ **`xgb_gain` LEFT THE DEFAULT AND `xgb_shap` DID NOT** (2026-08-16).
+        #      They are rho = 0.864 across the archive because they describe the same
+        #      booster, so carrying both gave one model 2 of 6 votes in the blend for
+        #      no extra information. The fit is shared, so the cost of dropping gain is
+        #      zero either way — this is about the WEIGHTING, not the wall clock.
+        if {"xgb_gain", "xgb_shap"} & wanted:
+            started = time.perf_counter()
+            model = self._xgb().fit(Xi, y)
+            if "xgb_gain" in wanted:
+                booster_gain = model.get_booster().get_score(importance_type="gain")
+                scores["xgb_gain"] = [booster_gain.get(c, 0.0) for c in Xi.columns]
+            if "xgb_shap" in wanted:
+                scores["xgb_shap"] = gpu.tree_shap(model, Xi)
+            self.timings[f"xgb gain + shap ({self.device})"] = (
+                time.perf_counter() - started
+            )
 
         # 5. LASSO on standardised inputs — |coef| is comparable across columns
         #    only after scaling, and prices and order counts differ by ~1e6 here.
@@ -677,9 +758,35 @@ class FeatureSelector:
         #    threshold coordinate descent wins and is kept; the dispatch is measured,
         #    not assumed, and both paths select the same alpha (see
         #    `test_gpu_rankers.py`).
-        started = time.perf_counter()
-        purged = self._splits(Xi.index)
-        scaled = StandardScaler().fit_transform(Xi)
+        #
+        #    ⚠️ **AND IT LEFT THE DEFAULT ENSEMBLE ON 2026-08-16 BECAUSE OF THAT COST.**
+        #    Measured over the 21 archived runs: `lasso` is **87.2 % of the average
+        #    run's wall clock** and 90-96 % of every country run — while ranking at
+        #    CHANCE (52nd percentile against a random-k control) and, on a return
+        #    target, zeroing every coefficient so that its rank column is CONSTANT and
+        #    the ensemble is bit-identical without it. It is also the entire 13.7x
+        #    target-cost gap in CLAUDE.md §15c-target: a level target keeps the solver
+        #    working, a return target collapses it. §19.
+        if "lasso" in wanted:
+            started = time.perf_counter()
+            purged = self._splits(Xi.index)
+            scaled = StandardScaler().fit_transform(Xi)
+            scores["lasso"] = self._lasso_scores(scaled, y, purged, Xi.shape[1], started)
+
+        # 6. Permutation importance, OUT OF SAMPLE on the last walk-forward fold.
+        #    The only member that answers "does this generalise".
+        #
+        #    ⚠️ **THE ONE MEMBER THAT CANNOT BE DROPPED** (measured 2026-08-16, §19).
+        #    Every other leave-one-out subset scored at or above the full six;
+        #    `ensemble - permutation` was the only one clearly below it — 55th
+        #    percentile against chance's 50th — in all four target x k cells.
+        if "permutation" in wanted:
+            scores["permutation"] = self._permutation_scores(X, Xi, y)
+
+        return scores[list(self.methods)]
+
+    def _lasso_scores(self, scaled, y, purged, n_columns: int, started: float):
+        """|coef| from a cross-validated LASSO on the purged folds."""
         # ⚠️ **NO WIDTH GATE ANY MORE (2026-08-10).** This used to be
         # `device == "cuda" and Xi.shape[1] >= gpu.GPU_LASSO_MIN_COLUMNS`, which kept
         # 18 of the 19 country pools on sklearn's coordinate descent — `lasso` was
@@ -694,34 +801,34 @@ class FeatureSelector:
                 scaled, y.to_numpy(np.float64), purged, device=self.device
             )
             self.lasso_converged = converged
-            scores["lasso"] = np.abs(coef)
             self.timings["lasso (cuda)"] = time.perf_counter() - started
-        else:
-            with warnings.catch_warnings(record=True) as caught:
-                warnings.simplefilter("always", ConvergenceWarning)
-                lasso = LassoCV(
-                    cv=purged,
-                    random_state=self.random_state,
-                    max_iter=5000,
-                    n_jobs=gpu.n_jobs_for(Xi.shape[1]),
-                ).fit(scaled, y)
-            self.lasso_converged = not any(
-                issubclass(w.category, ConvergenceWarning) for w in caught
-            )
-            scores["lasso"] = np.abs(lasso.coef_)
-            self.timings["lasso (cpu)"] = time.perf_counter() - started
+            return np.abs(coef)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always", ConvergenceWarning)
+            lasso = LassoCV(
+                cv=purged,
+                random_state=self.random_state,
+                max_iter=5000,
+                n_jobs=gpu.n_jobs_for(n_columns),
+            ).fit(scaled, y)
+        self.lasso_converged = not any(
+            issubclass(w.category, ConvergenceWarning) for w in caught
+        )
+        self.timings["lasso (cpu)"] = time.perf_counter() - started
+        return np.abs(lasso.coef_)
 
-        # 6. Permutation importance, OUT OF SAMPLE on the last walk-forward fold.
-        #    The only member that answers "does this generalise".
-        #
-        #    ⚠️ **NOT `sklearn.inspection.permutation_importance` ANY MORE** (2026-08-10).
-        #    That function holds an `X.copy()` and rewrites one column of a pandas
-        #    DataFrame per permutation — an O(n·p) copy to change O(n) values — and on
-        #    `device="cuda"` it also made one host→device round trip per permutation.
-        #    Measured on `basic+economy_vietnam`, forcing the GPU made the WHOLE RUN
-        #    6.8× slower and this step was all of it (85 s → 986 s).
-        #    `gpu.permutation_importance_batched` keeps the definition, writes one
-        #    column, and batches the predicts: **49× faster on cpu, 63× on cuda**.
+    def _permutation_scores(self, X: pd.DataFrame, Xi: pd.DataFrame, y: pd.Series):
+        """Out-of-sample importance on the last walk-forward fold.
+
+        ⚠️ **NOT `sklearn.inspection.permutation_importance` ANY MORE** (2026-08-10).
+        That function holds an `X.copy()` and rewrites one column of a pandas
+        DataFrame per permutation — an O(n·p) copy to change O(n) values — and on
+        `device="cuda"` it also made one host→device round trip per permutation.
+        Measured on `basic+economy_vietnam`, forcing the GPU made the WHOLE RUN
+        6.8× slower and this step was all of it (85 s → 986 s).
+        `gpu.permutation_importance_batched` keeps the definition, writes one
+        column, and batches the predicts: **49× faster on cpu, 63× on cuda**.
+        """
         started = time.perf_counter()
         train_idx, test_idx = self._splits(Xi.index)[-1]
         X_tr, X_te = self._impute(X.iloc[train_idx], X.iloc[test_idx])
@@ -749,12 +856,10 @@ class FeatureSelector:
             random_state=self.random_state,
             device=self.device,
         )
+        self.timings[f"permutation ({self.device})"] = time.perf_counter() - started
         # Negative = permuting it HELPED, i.e. it hurt out of sample. Clipped to 0
         # so it contributes nothing rather than a negative weight.
-        scores["permutation"] = np.clip(importances, 0.0, None)
-        self.timings[f"permutation ({self.device})"] = time.perf_counter() - started
-
-        return scores[list(METHODS)]
+        return np.clip(importances, 0.0, None)
 
     @staticmethod
     def _normalise(scores: pd.DataFrame) -> pd.DataFrame:
@@ -1067,13 +1172,13 @@ class FeatureSelector:
         # A method whose raw scores are all equal ranked nothing. It still enters
         # the blend as a constant (harmless), but the caller has to be told —
         # otherwise "the ensemble of six" quietly became an ensemble of five.
-        dead_methods = [m for m in METHODS if raw[m].nunique() <= 1]
+        dead_methods = [m for m in self.methods if raw[m].nunique() <= 1]
         scores = self._normalise(raw)
         ranks = scores.rank(ascending=False, method="min")
         # The ensemble is a RANK average, not a score average: one method with a
         # long-tailed raw scale (xgb_gain routinely spans 3 orders of magnitude)
         # would otherwise decide the blend on its own after min-max.
-        ranks["ensemble"] = ranks[list(METHODS)].mean(axis=1)
+        ranks["ensemble"] = ranks[list(self.methods)].mean(axis=1)
 
         order = ranks["ensemble"].sort_values().index.tolist()
         self._tick(5)
@@ -1106,7 +1211,7 @@ class FeatureSelector:
                 method: windows.best_stat_per_channel(
                     normalised_design, order, method
                 )
-                for method in METHODS
+                for method in self.methods
             }
         )
 
@@ -1142,6 +1247,7 @@ class FeatureSelector:
             n_rows=len(design),
             corr_threshold=self.corr_threshold,
             coverage=coverage,
+            methods=list(self.methods),
             dead_methods=dead_methods,
             device=self.device,
             timings=dict(self.timings),
