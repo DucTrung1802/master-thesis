@@ -416,10 +416,10 @@ reproduces a pre-2026-08-16 run.
 | `lasso` | ❌ §19 | linear signal, redundancy priced in | non-linearity | ❌ |
 
 ⚠️ **`permutation` is the one that cannot be dropped**: every other leave-one-out subset
-scored at or above the full six, and removing this one put the blend at the 55th
-percentile against chance's 50th, in all four measured cells. ⚠️ **`lasso` was 87.2 % of
-the average archived run's wall clock** while ranking at chance — and on a return target
-its column is a CONSTANT, so the ensemble was bit-identical without it (§19c).
+scored at or above the full six (80.0), and removing this one put the blend at **56.2**
+against chance's 50, in all four measured cells. ⚠️ **`lasso` was 87.2 % of the average
+archived run's wall clock** — and on both measured targets it zeroed every coefficient,
+so its column is a CONSTANT and the ensemble was bit-identical without it (§19b, §19c).
 
 `permutation` is the only one measured out of sample and is the one to believe when
 it disagrees. The ensemble is a **rank** average, not a score average — `xgb_gain`
@@ -2801,43 +2801,63 @@ and nothing is reported below that survives fewer than all four.
 
 | selector | ret k10 | ret k20 | rel k10 | rel k20 | mean | min |
 |---|---|---|---|---|---|---|
-| **`spearman+xgb_shap+permutation`** — THE NEW DEFAULT | **97.5** | **67.5** | **100** | **97.5** | **90.6** | 67.5 |
-| `shap+perm` | 92.5 | 72.5 | 100 | 100 | 91.3 | 72.5 |
-| `ensemble -spearman` | 95.0 | 100 | 72.5 | 82.5 | 84.5 | 72.5 |
-| **`permutation` alone** | 75.0 | 82.5 | 100 | 82.5 | **83.0** | 75.0 |
-| `ensemble -mutual_info` | 100 | 67.5 | 95.0 | 77.5 | 81.5 | 67.5 |
-| `ensemble -xgb_shap` | 87.5 | 100 | 70.0 | 75.0 | 80.5 | 70.0 |
-| `ensemble -xgb_gain` | 82.5 | 85.0 | 75.0 | 77.5 | 79.0 | 75.0 |
-| **`ENSEMBLE (6)`** | 87.5 | 65.0 | 87.5 | 80.0 | **77.0** | 65.0 |
-| `ensemble -lasso` | 87.5 | 65.0 | 87.5 | 80.0 | 77.0 | 65.0 |
-| `xgb_shap` alone | 55.0 | 42.5 | 100 | 97.5 | 67.5 | 42.5 |
-| `spearman` alone | 82.5 | 55.0 | 35.0 | 97.5 | 61.0 | 35.0 |
-| **`ensemble -permutation`** | 55.0 | 65.0 | 50.0 | 55.0 | **55.0** | 50.0 |
+| **`spearman+xgb_shap+permutation`** — THE NEW DEFAULT | 97.5 | 67.5 | 100 | 97.5 | **90.6** | 67.5 |
+| `shap+perm` | 92.5 | 72.5 | 100 | 100 | 91.2 | 72.5 |
+| `ensemble -spearman` | 95.0 | 100 | 72.5 | 82.5 | 87.5 | 72.5 |
+| **`permutation` alone** | 75.0 | 82.5 | 100 | 82.5 | **85.0** | 75.0 |
+| `ensemble -mutual_info` | 100 | 67.5 | 95.0 | 77.5 | 85.0 | 67.5 |
+| `ensemble -xgb_shap` | 87.5 | 100 | 70.0 | 75.0 | 83.1 | 70.0 |
+| `ensemble -xgb_gain` | 82.5 | 85.0 | 75.0 | 77.5 | 80.0 | 75.0 |
+| **`ENSEMBLE (6)`** | 87.5 | 65.0 | 87.5 | 80.0 | **80.0** | 65.0 |
+| `ensemble -lasso` | 87.5 | 65.0 | 87.5 | 80.0 | 80.0 | 65.0 |
+| `xgb_shap` alone | 55.0 | 42.5 | 100 | 97.5 | 73.8 | 42.5 |
+| `spearman` alone | 82.5 | 55.0 | 35.0 | 97.5 | 67.5 | 35.0 |
+| **`ensemble -permutation`** | 55.0 | 65.0 | 50.0 | 55.0 | **56.2** | 50.0 |
 | *RANDOM* | *50* | *50* | *50* | *50* | *50* | *50* |
-| `lasso` alone | 92.5 | **2.5** | 82.5 | 80.0 | 52.0 | 2.5 |
-| `xgb_gain` alone | 65.0 | 65.0 | 25.0 | 30.0 | 42.0 | 25.0 |
-| `mutual_info` alone | 42.5 | 25.0 | 95.0 | **7.5** | 35.5 | 7.5 |
+| `lasso` alone ⚠️ WITHDRAWN | 92.5 | 2.5 | 82.5 | 80.0 | *(64.4)* | *(2.5)* |
+| `xgb_gain` alone | 65.0 | 65.0 | 25.0 | 30.0 | 46.2 | 25.0 |
+| `mutual_info` alone | 42.5 | 25.0 | 95.0 | 7.5 | 42.5 | 7.5 |
+
+⚠️ **CORRECTED 2026-08-16, same day.** The `mean` column was first published biased LOW:
+the `min` column was added to the frame before `mean(axis=1)` ran, so every mean was an
+average over the four cells **and its own minimum**. Recomputed over the four cells only
+(`rebuild_table.py`), which moves every row by 2-12 points. The ORDERING and all four
+conclusions below survive it; one claim did not, and is corrected in item 3.
+
+⚠️ **`lasso`'s standalone row is WITHDRAWN, not merely low.** Its raw scores were ALL
+ZERO in all four cells — `zero share: lasso 1.00` on both targets — so `rank(method=
+"min")` gave every channel the same rank and `sort_values()` returned them in **pool
+column order**. Its "top-k" is the first k columns of the pool, which is not a selection.
+The number is an artefact of column order and cannot be read as skill in either
+direction; it is kept struck through because deleting it would invite someone to
+re-measure it. Same rule as CLAUDE.md §5 rule 21, mirrored: a metric computed on a
+non-ranking is not a measurement.
 
 **Four things replicate across every cell:**
 
 1. ⚠️ **EVERY leave-one-out subset scored at or above the full six — except one.**
-   Dropping `spearman`, `mutual_info`, `xgb_shap`, `xgb_gain` or `lasso` left the blend
-   no worse. Dropping **`permutation`** put it at the 55th percentile against chance's
-   50th. It is the only member the ensemble cannot do without, and it is the only one
+   Dropping `spearman` (87.5), `mutual_info` (85.0), `xgb_shap` (83.1), `xgb_gain`
+   (80.0) or `lasso` (80.0) left the blend at or above the full six's **80.0**. Dropping
+   **`permutation`** put it at **56.2** against chance's 50. It is the only member the ensemble cannot do without, and it is the only one
    measured **out of sample**.
-2. ⚠️ **`mutual_info` and `xgb_gain` rank BELOW CHANCE as standalone selectors** (35.5
-   and 42.0 mean, with minima of 7.5 and 25.0).
-3. ⚠️ **`lasso` is at chance (52.0) and its removal changes NOTHING.** `ensemble -lasso`
-   is identical to `ENSEMBLE (6)` in all four cells — not approximately, identically. On
-   a return target it zeroes every coefficient, so its rank column is a CONSTANT, and a
-   constant added to a mean does not change an order. It has been an ensemble member
-   that cannot vote.
-4. **`permutation` alone (83.0) beats the ensemble of six (77.0).**
+2. ⚠️ **`mutual_info` and `xgb_gain` rank BELOW CHANCE as standalone selectors** —
+   **42.5** and **46.2** against chance's 50, with minima of **7.5** and **25.0**. They
+   are the only two members of which that is true.
+3. ⚠️ **`lasso` DID NOT RANK AT ALL, and its removal changes NOTHING.** It zeroed
+   every coefficient in all four cells, so its rank column is a CONSTANT — which is why
+   `ensemble -lasso` is identical to `ENSEMBLE (6)` in every cell, not approximately but
+   identically: a constant added to a mean does not change an order. It has been an
+   ensemble member that cannot vote. ⚠️ **Its standalone score is therefore withdrawn
+   rather than reported as good or bad** (see the note above the table) — the original
+   claim here, "at chance (52.0)", was wrong twice over: the arithmetic was biased and
+   the quantity was not a measurement.
+4. **`permutation` alone (85.0) beats the ensemble of six (80.0)** — and is the only
+   member whose worst cell (75.0) is still above chance.
 
 ⚠️ **The new default was measured as a set BEFORE it was adopted, not read off this
 table.** `spearman + xgb_shap + permutation` scores **90.6** against the six's 80.0 and
 clears the random p95 bar in three cells of four. It is statistically tied with
-`shap+perm` (91.3) — well inside the noise of §19e — and `spearman` was kept on the
+`shap+perm` (91.2) — well inside the noise of §19e — and `spearman` was kept on the
 principle in §19d, not on the score: it is free, and without it the ensemble is one
 XGBoost fit looked at twice.
 
@@ -2894,7 +2914,7 @@ reproduces a pre-2026-08-16 run exactly.
 
 - ⚠️ **Skipping a member skips its COST.** `_score_methods` computes only what
   `self.methods` asks for; `xgb_gain` and `xgb_shap` still share one fit.
-- ⚠️ **`spearman` was kept although it is unstable standalone** (61.0 mean, 35.0 min).
+- ⚠️ **`spearman` was kept although it is unstable standalone** (67.5 mean, 35.0 min).
   It is **free** — `target_corr` is computed regardless, because the SIGN goes in every
   report — and it is the only model-free member left. Dropping it would leave an
   ensemble that is one XGBoost fit looked at twice.
@@ -2928,6 +2948,9 @@ reproduces a pre-2026-08-16 run exactly.
   at-or-below chance *and* expensive *and* redundant. Two of those three findings are
   structural rather than statistical — `lasso`'s constant column and `xgb_gain`'s
   rho = 0.864 with `xgb_shap` from the same fit — which is why they are acted on at all.
+- **`lasso` is removed on COST and INERTNESS, never on skill.** Nothing here measured
+  whether a cross-validated LASSO ranks well, because on both targets it produced no
+  ranking. On a level target it does rank — and costs 87 % of the run to do it.
 
 ### 19f. The addition that was tested and REJECTED — mRMR
 

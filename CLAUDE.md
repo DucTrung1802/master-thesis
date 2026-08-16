@@ -527,13 +527,13 @@ random-k control), and **`METHODS` is now `spearman, xgb_shap, permutation`**:
 
 | dropped from the default | measured |
 |---|---|
-| **`lasso`** | **87.2 % of the average archived run's wall clock** (90-96 % of every country run) — while ranking at CHANCE, and on a return target its column is a CONSTANT, so the ensemble was bit-identical without it |
-| **`mutual_info`** | the **worst standalone ranker measured** (35.5th percentile, min 7.5th — below chance), and the dearest once lasso is gone (46 % of ranking time) |
-| **`xgb_gain`** | ρ = **0.864** with `xgb_shap` **from the same fit** — one model held 2 of 6 votes; second worst standalone (42nd percentile) |
+| **`lasso`** | **87.2 % of the average archived run's wall clock** (90-96 % of every country run) — and on BOTH measured targets it zeroed every coefficient, so its column is a CONSTANT and the ensemble was bit-identical without it. Removed on cost and inertness; its standalone score is withdrawn, not low (§19b) |
+| **`mutual_info`** | the **worst standalone ranker measured** (42.5th percentile, min 7.5th — below chance), and the dearest once lasso is gone (46 % of ranking time) |
+| **`xgb_gain`** | ρ = **0.864** with `xgb_shap` **from the same fit** — one model held 2 of 6 votes; second worst standalone (46.2nd percentile, also below chance) |
 
 ⚠️ **`permutation` is load-bearing and the only member that is:** every other
-leave-one-out subset scored at or ABOVE the full six; dropping this one put the blend at
-the 55th percentile against chance's 50th, in all four cells. ⚠️ **Nothing was deleted** —
+leave-one-out subset scored at or ABOVE the full six (80.0); dropping this one put the
+blend at **56.2** against chance's 50, in all four cells. ⚠️ **Nothing was deleted** —
 `ALL_METHODS` still holds all six and `methods=ALL_METHODS` reproduces an older run; all
 19 archived shortlists were verified to rebuild identically. ⚠️ **An mRMR member was
 tested and REJECTED** — 100th percentile on one target, 50th on the other (§19f). ⚠️ **New

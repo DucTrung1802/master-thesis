@@ -5,22 +5,26 @@ The output is a `SelectionResult`: a per-method score table, an ensemble ranking
 the kept feature list, and the walk-forward evidence for whether keeping them was
 worth anything.
 
-Six rankers, chosen so that no single model's inductive bias decides the answer:
+Six rankers are implemented (`ALL_METHODS`), chosen so that no single model's
+inductive bias decides the answer. ⚠️ **THREE are in the default ensemble
+(`METHODS`) since 2026-08-16**, and which three was MEASURED — see the comment on
+those two constants below, and CONTEXT §19.
 
-| method | sees | blind to |
-|---|---|---|
-| `spearman` | monotone rank association | interactions, non-monotone shapes |
-| `mutual_info` | any dependence, including non-monotone | direction |
-| `xgb_gain` | interactions, thresholds | correlated features share credit arbitrarily |
-| `xgb_shap` | the same, attributed per sample | the same correlation problem, less arbitrarily |
-| `lasso` | linear signal, with redundancy already priced in | non-linearity |
-| `permutation` | out-of-sample contribution to a fitted model | features the model never used |
+| method | in the default | sees | blind to |
+|---|---|---|---|
+| `spearman` | ✅ | monotone rank association | interactions, non-monotone shapes |
+| `xgb_shap` | ✅ | interactions and thresholds, attributed per sample | correlated features share credit |
+| `permutation` | ✅ | out-of-sample contribution to a fitted model | features the model never used |
+| `mutual_info` | ❌ | any dependence, including non-monotone | direction |
+| `xgb_gain` | ❌ | the same as `xgb_shap`, from the same fit | correlated features share credit arbitrarily |
+| `lasso` | ❌ | linear signal, with redundancy already priced in | non-linearity |
 
-⚠️ **`permutation` is the only one measured OUT OF SAMPLE**, and it is the one to
-believe when it disagrees. The other five are fitted on the whole labelled sample
-and answer "what does this data support", not "what generalises". They are kept
-because on ~4k rows an out-of-sample-only ranking is noisy, and the ensemble is a
-rank average — a feature that only one method likes does not survive it.
+⚠️ **`permutation` is the only one measured OUT OF SAMPLE**, it is the one to
+believe when it disagrees, and it is the only member whose removal measurably hurt
+the blend. The others are fitted on the whole labelled sample and answer "what does
+this data support", not "what generalises". Two are kept anyway, because on ~4k rows
+an out-of-sample-only ranking is noisy and the ensemble is a rank average — a
+feature that only one method likes does not survive it.
 
 ## The three things that make this correct rather than plausible
 
@@ -83,24 +87,27 @@ ALL_METHODS = (
 #                  return_rel_5day, k=10 and k=20, against a 40-draw random-k control
 #   ─────────────  ──────────────────────────────────────────────────────────────────
 #   lasso          **87.2 % of the average archived run's wall clock** (90-96 % on the
-#                  19 country runs) — and it ranks at CHANCE (52nd percentile, min
-#                  2.5th). On a return target it zeroes every coefficient, so its rank
+#                  19 country runs) — for a member that DID NOT RANK AT ALL on either
+#                  measured target: it zeroes every coefficient there, so its rank
 #                  column is a CONSTANT and `ensemble` is bit-identical with and
-#                  without it. It is the whole of the 13.7x target-cost gap in
+#                  without it. Removed on COST and INERTNESS, never on skill: its
+#                  standalone score is an artefact of pool column order, withdrawn in
+#                  §19b. It is the whole of the 13.7x target-cost gap in
 #                  CLAUDE.md §15c-target.
-#   mutual_info    the WORST standalone ranker measured (35.5th percentile mean, 7.5th
+#   mutual_info    the WORST standalone ranker measured (42.5th percentile mean, 7.5th
 #                  min — below chance) and the most expensive once lasso is gone
 #                  (46 % of ranking time on a return target). Its unique claim, "any
 #                  dependence, model-free", is largely covered by the tree members.
 #   xgb_gain       a STRUCTURAL DUPLICATE of `xgb_shap` — rho = 0.864 across the
 #                  archive, from THE SAME FIT — so the blend gave one model 2 of 6
-#                  votes. Second worst standalone (42nd percentile, 25th min), and §4
-#                  already said gain splits credit arbitrarily where SHAP does not.
+#                  votes. Second worst standalone (46.2nd percentile, 25th min — also
+#                  below chance), and §4 already said gain splits credit arbitrarily
+#                  where SHAP does not.
 #
 # ⚠️ **`permutation` is the one member that cannot be dropped.** Every other
-# leave-one-out subset scored at or ABOVE the full six; `ensemble - permutation` was
-# the only one clearly below it, at the 55th percentile against chance's 50th, in all
-# four target x k cells.
+# leave-one-out subset scored at or ABOVE the full six (80.0); `ensemble - permutation`
+# was the only one clearly below it, at 56.2 against chance's 50, in all four
+# target x k cells.
 METHODS = ("spearman", "xgb_shap", "permutation")
 
 # ── progress ──────────────────────────────────────────────────────────────────
@@ -761,10 +768,10 @@ class FeatureSelector:
         #
         #    ⚠️ **AND IT LEFT THE DEFAULT ENSEMBLE ON 2026-08-16 BECAUSE OF THAT COST.**
         #    Measured over the 21 archived runs: `lasso` is **87.2 % of the average
-        #    run's wall clock** and 90-96 % of every country run — while ranking at
-        #    CHANCE (52nd percentile against a random-k control) and, on a return
-        #    target, zeroing every coefficient so that its rank column is CONSTANT and
-        #    the ensemble is bit-identical without it. It is also the entire 13.7x
+        #    run's wall clock** and 90-96 % of every country run — for a member that
+        #    produced NO RANKING AT ALL on either measured target: it zeroes every
+        #    coefficient there, so its rank column is CONSTANT and the ensemble is
+        #    bit-identical without it. It is also the entire 13.7x
         #    target-cost gap in CLAUDE.md §15c-target: a level target keeps the solver
         #    working, a return target collapses it. §19.
         if "lasso" in wanted:
