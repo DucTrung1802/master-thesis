@@ -133,13 +133,12 @@ src/model/
 │   │                     the return for regression / the logit for a classifier)
 │   ├── train.py          the LSTM BINDING — names the model module, the model_type
 │   │                     string and its configs/. No training logic (see common/engine)
-│   ├── configs/          vcb__return_5day__final__d20_h5.yaml         ← the wide chain
-│   │                     vcb__return_5day__final__d20_h5__basic.yaml  ← the basic chain
-│   │                     bank__rank_5day__final__d20_h5.yaml          ← the panel chain
+│   ├── configs/          lstm__vcb__close_adjust_5day__final__d20_h5.yaml ← the DEFAULT
+│   │                     lstm__vcb__return_5day__final__d20_h5.yaml
+│   │                     lstm__vcb__return_5day__final__d20_h5__basic.yaml
+│   │                     lstm__bank__rank_5day__final__d20_h5.yaml     ← the panel chain
 │   │                     _legacy/  27 pre-2026-08-09 sweep configs
-│   ├── RUN__lstm.ipynb            the notebook meant to be run (calls train.py)
-│   ├── lstm_return_5day.ipynb     legacy; reads the pre-2026-08-09 dataset names
-│   └── lstm_direction_5day.ipynb  legacy; same
+│   └── RUN__lstm.ipynb            the ONE notebook meant to be run (calls train.py)
 ├── cnn/                  ← second architecture, added 2026-08-10 (§13)
 │   ├── model.py          CNNRegressor — Conv1d over the TIME axis + global avg pool
 │   ├── train.py          the CNN binding, same shape as lstm/train.py
@@ -740,11 +739,24 @@ on an unknown one.
   run's `dataset_hash` is currently unverifiable. **31 run folders DO survive** under
   `src/model/runs/`, and `result_evaluator --rescore` reads them from
   `predictions_*.csv` without any dataset.
-- **The legacy notebooks** (`lstm_return_5day.ipynb`, `lstm_direction_5day.ipynb`)
-  and the 27 legacy configs still **resolve**. ⚠️ But they write runs scored by the OLD path
-  (metrics computed in-notebook, no null), so a run produced that way lands in
-  `index.csv` with the core columns blank until `python -m result_evaluator --rescore`
-  fills them. `RUN__lstm.ipynb` + `train.py` is the path that scores as it goes.
+- ⚠️ **The two legacy notebooks were DELETED 2026-08-16** — `lstm_return_5day.ipynb` and
+  `lstm_direction_5day.ipynb`. They are tracked, so `git checkout f12ef091 --
+  src/model/lstm/lstm_return_5day.ipynb` brings either back. The text they replaced read:
+
+  > *"The legacy notebooks … and the 27 legacy configs still **resolve**. ⚠️ But they
+  > write runs scored by the OLD path (metrics computed in-notebook, no null), so a run
+  > produced that way lands in `index.csv` with the core columns blank until
+  > `python -m result_evaluator --rescore` fills them."*
+
+  That was the argument for deleting them: a second way to produce a run folder, which
+  scores it by a path that carries **no null**. `RUN__lstm.ipynb` + `train.py` scores as
+  it goes, and is now the only way in. **The 27 legacy configs still resolve** and were
+  left alone.
+
+  ⚠️ **Two functions in `model/common/metrics.py` are now dead** — its docstring says
+  they are "kept so the existing notebooks keep running unchanged", and those notebooks
+  are gone. Left in place deliberately: this was a notebook removal, not a code change,
+  and `model/common/trainer.py:81` still cites one of them in a comment.
 - The `mt_env` virtualenv is the interpreter for all notebooks/scripts
   (`d:/GIT/master-thesis/mt_env`).
 - **Ephemeral scripts must load `.env` by explicit path**: they live in the session
