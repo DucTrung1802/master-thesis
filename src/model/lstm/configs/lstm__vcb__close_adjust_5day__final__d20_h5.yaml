@@ -1,0 +1,71 @@
+# LSTM on the final feature table — one file fully describes one run.
+#
+# The dataset is REFERENCED by folder name under src/train_test_set/, built by
+#   python -m train_test_creator --table close_adjust_5day__final__d20_h5 --save
+# from unified_schema_vcb.close_adjust_5day__final__d20_h5, which final_features
+# built from ONE layer-2 selection run (2026-08-16).
+#
+# WARNING: `lookback` and `n_features` below are ASSERTIONS, not settings. train.py
+# raises if the dataset disagrees with them — the dataset is the authority, and a
+# config that quietly wins that argument trains a d=20 architecture on d=5 windows.
+#
+# ⚠️ READ THIS BEFORE QUOTING ANY NUMBER THIS RUN PRODUCES.
+#
+# 1. The selection behind these 35 channels FAILED its own null (2026-08-16):
+#    observed IC -0.0608 against a p95 bar of +0.0853 over 10 draws, null mean
+#    -0.0123, z = -0.61, p = 0.7273. The table's evidence is `failed_null=1`, not
+#    `no_null` — a measurement, not an unknown (CLAUDE.md §5 rule 2).
+# 2. `close_adjust_5day` is a price LEVEL, not a return. Every label is positive,
+#    so `hit_rate` is 1.0 by construction (§5 rule 21) and R2 on the selection's
+#    fold 5 was -41.78. Treat `ic` as the only readable metric here, and read it
+#    against its null.
+# 3. The top-ranked channels are co-trending levels, not signal: rank 1 was
+#    `russia__economy__money__economics__rulps` at spearman 0.967 to the target,
+#    and it absorbed `close_adjust` itself as redundant.
+# 4. 8 of these 35 channels put >1% of the TEST set beyond 5 train-sigmas and one
+#    (`australia__economy__prices__economics__auipri`) puts ALL of it there — see
+#    `drift.csv` in the dataset folder. That is issue DRF-1, and on a level target
+#    it is expected rather than surprising.
+#
+# This run exists to exercise the chain end to end on a known-dead target. The
+# run worth doing for a RESULT is the same chain on `return_5day` (CLAUDE.md §3c).
+
+run_name: lstm__vcb__close_adjust_5day__final__d20_h5
+dataset: vcb__close_adjust_5day__final__d20_h5__tr70_val15_test15__std
+task: regression
+
+# Asserted against the dataset's metadata.json at load time.
+lookback: 20
+# All 35 selected channels survived; 0 dropped for zero train-slice coverage.
+n_features: 35
+
+# ⚠️ 2x128 is the ~276k-parameter architecture CLAUDE.md §6 ran on 724 channels.
+# On 35 channels and 2,939 training windows that is still far more capacity than
+# the data supports — §5c measured an LSTM flipping the sign of its own IC on
+# hidden_size alone (h=32 -> -0.0345, h=8 -> +0.0346), which is noise, not tuning.
+# Left at the repo default so this run is comparable to the archived ones; if you
+# sweep it, sweep `hidden_size` and read the spread as one error bar.
+model:
+  type: LSTM
+  hidden_size: 128
+  num_layers: 2
+  dropout: 0.2
+
+train:
+  batch_size: 64
+  lr: 0.001
+  weight_decay: 0.00001
+  max_epochs: 150
+  patience: 20
+  grad_clip: 1.0
+  lr_factor: 0.5
+  lr_patience: 5
+  log_every: 10
+
+# Draws in result_evaluator's block-shuffled null. 200 resolves p to ~0.005.
+# ⚠️ NUL-1: this null prices in neither the feature selection nor the architecture
+# choice. A run that fails it is dead; a run that clears it is not yet alive.
+null_draws: 200
+
+seed: 42
+device: auto

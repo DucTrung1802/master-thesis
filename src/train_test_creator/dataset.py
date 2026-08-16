@@ -87,7 +87,7 @@ from sklearn.preprocessing import StandardScaler
 from feature_selection.outstanding import OUTSTANDING_FILENAME
 from feature_selection.report import DEFAULT_REPORT_ROOT
 from feature_selection.unified_reader import KEY_COLS, UnifiedSchemaReader
-from utils import runtime
+from utils import chain, runtime
 
 # The tables `final_features` builds. ⚠️ `d` and `h` are parsed OUT of this, never
 # passed alongside it — see the module docstring.
@@ -103,6 +103,71 @@ FINAL_TABLE = re.compile(
     r"^(?P<target>[a-z][a-z0-9_]*?)__final__d(?P<lookback>\d+)_h(?P<horizon>\d+)"
     r"(?:__(?P<scope>[a-z][a-z0-9_]*))?$"
 )
+
+# ⚠️ **THESE TWO NOTES WERE CONSTANT STRINGS UNTIL 2026-08-16, AND ONE OF THEM WAS A
+# FALSE CLAIM ON EVERY DATASET THIS MODULE HAS EVER BUILT.** `metadata.json` asserted
+# "the channels come from runs that computed no null … no bar was cleared" whatever
+# the table's provenance actually said — so a table built from a run that FAILED its
+# null (a measurement) was recorded as `no_null` (an unknown), which is exactly the
+# distinction CLAUDE.md §5 rule 2 exists to protect. `final_features` already writes
+# the truth into the table's `COMMENT`; both notes now quote it.
+#
+# ⚠️ An unparsable comment yields "unrecorded", never a guess. A table built before
+# `final_features` wrote these clauses genuinely does not say, and saying so is the
+# whole point — see `contract.LEGACY_SETUP_DEFAULTS` for the same choice upstream.
+_EVIDENCE_CLAUSE = re.compile(r"Run evidence:\s*(?P<evidence>[^.]+)\.")
+_LAYER_CLAUSE = re.compile(r"Selection layer\s*(?P<layer>\d+)\s*:")
+
+_EVIDENCE_GLOSS = {
+    "no_null": (
+        "⚠️ no bar was computed for that run — a ranking without a null is "
+        "descriptive, not evidence (feature_selection/CONTEXT.md §14b)"
+    ),
+    "failed_null": (
+        "⚠️ that run was measured against a shuffled-label null AND DID NOT CLEAR IT. "
+        "This is a measurement, not an unknown (CLAUDE.md §5 rule 2) — the channels "
+        "below are what a run that found nothing ranked highest"
+    ),
+    "clears_bar": (
+        "that run cleared its own p95 bar. ⚠️ Quote the null MAX beside it whenever "
+        "the max exceeds the observed (CLAUDE.md §5 rule 3)"
+    ),
+}
+
+
+def _evidence_note(comment: str) -> str:
+    """What the SOURCE TABLE says about the null behind its channels, verbatim + gloss."""
+    match = _EVIDENCE_CLAUSE.search(comment or "")
+    if not match:
+        return (
+            "unrecorded — the source table's COMMENT names no run evidence. Absent is "
+            "absent, not a pass (CLAUDE.md §5 rule 2); read the run folders named in "
+            "the comment before quoting any number from a model trained on this."
+        )
+    evidence = match.group("evidence").strip()
+    for key, gloss in _EVIDENCE_GLOSS.items():
+        if evidence.startswith(key):
+            return f"{evidence} — {gloss}"
+    return evidence
+
+
+def _selection_note(comment: str) -> str:
+    """Whether the channels COMPETED (layer 2) or were UNIONED (layer 1)."""
+    match = _LAYER_CLAUSE.search(comment or "")
+    layer = int(match.group("layer")) if match else 1
+    if layer >= 2:
+        return (
+            f"done upstream by feature_selection, selection layer {layer}: the channels "
+            "COMPETED in one run over pool__shortlist__* (final_features/CONTEXT.md §8). "
+            "Nothing is selected here."
+        )
+    return (
+        "done upstream by feature_selection, selection layer 1: this table is the UNION "
+        "of its runs' shortlists (final_features/CONTEXT.md §6), which is arithmetic and "
+        "not consensus — a channel one run never saw could not be chosen twice. Nothing "
+        "is selected here."
+    )
+
 
 # The six tensors `model/common/data.py` loads by name, plus what it optionally
 # loads. ⚠️ These filenames are a CONTRACT with the model stage — `load_dataset`
@@ -836,11 +901,7 @@ class TrainTestCreator:
                 "scaled_columns": data.scaled_columns,
                 "bounded_columns": data.bounded_columns,
                 "dropped_columns": data.dropped_columns,
-                "selection": (
-                    "done upstream by feature_selection; this table is the union of "
-                    "its runs' shortlists (final_features/CONTEXT.md §6). Nothing is "
-                    "selected here."
-                ),
+                "selection": _selection_note(data.source_comment),
             },
             "imputation": {
                 "features": "train-slice median, matching FeatureSelector._impute",
@@ -856,11 +917,7 @@ class TrainTestCreator:
             # to find out here, rather than from a plot, that part of its input was
             # never inside the range it was trained on. See `_drift`.
             "drift": self.drift_summary(data),
-            "evidence": (
-                "⚠️ The channels in this dataset come from runs that computed no null "
-                "(feature_selection/CONTEXT.md §14b). They are what some run ranked "
-                "highly; no bar was cleared."
-            ),
+            "evidence": _evidence_note(data.source_comment),
         }
 
 
@@ -890,8 +947,8 @@ def main(argv: Optional[Sequence[str]] = None) -> WindowedDataset:
     # banner would be the same error `device=cpu` in 22 archived selections was, in the
     # opposite direction.
     with runtime.RunTimer(
-        f"train_test_creator  {option('--ticker', 'vcb')} / "
-        f"{option('--table', 'return_5day__final__d20_h5')}"
+        f"train_test_creator  {option('--ticker', chain.DEFAULT_TICKER)} / "
+        f"{option('--table', chain.final_table())}"
         f"{'  --save' if '--save' in argv else '  (plan only)'}",
         show_gpu=False,
     ):
@@ -899,9 +956,13 @@ def main(argv: Optional[Sequence[str]] = None) -> WindowedDataset:
 
 
 def _main(argv: Sequence[str], option) -> WindowedDataset:
+    # ⚠️ DEFAULTS COME FROM `utils/chain.py` SINCE 2026-08-16. They were literals
+    # naming `return_5day`, while `pipeline` planned `close_adjust_5day` and printed
+    # `python -m train_test_creator --save` as the next step — so following the
+    # pipeline's own instruction died with "table does not exist".
     creator = TrainTestCreator(
-        ticker=option("--ticker", "vcb"),
-        table=option("--table", "return_5day__final__d20_h5"),
+        ticker=option("--ticker", chain.DEFAULT_TICKER),
+        table=option("--table", chain.final_table()),
         train_ratio=float(option("--train", "0.70")),
         val_ratio=float(option("--val", "0.15")),
         purge="--no-purge" not in argv,

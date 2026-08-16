@@ -1,5 +1,11 @@
 # src\pipeline\stages.py
-"""The five stages, in order, and what each one hands the next.
+"""The eight stages, in order, and what each one hands the next.
+
+⚠️ **It was six until 2026-08-16.** `shortlist_pool` and `selection_2` split what used
+to be one hop from the archive to the final table, because those were two different
+claims wearing one name: a UNION of per-pool runs and a run in which the channels
+COMPETED. Both selection stages are `manual` — this module materialises the tables
+between them and checks that each still matches the shortlists it came from.
 
     python -m pipeline                    # print the plan and every stage's state
     python -m pipeline --apply            # run every stage that is not up to date
@@ -10,11 +16,17 @@
 
 ```
 reports/feature_selection/<run>/         feature_selection   (runs are produced by hand;
-    outstanding.csv                                           this stage only refreshes
+    outstanding.csv                       LAYER 1             this stage only refreshes
                                                               the per-run shortlist)
         ↓
-unified_schema_<t>.<target>__final__d<d>_h<h>    final_features   ⚠️ writes the DATABASE
+unified_schema_<t>.pool__shortlist__<target>__d<d>_h<h>   shortlist_pool  ⚠️ writes the DB
+        ↓                                                 the layer-1 UNION, no label
+reports/feature_selection/<run>/         selection_2         ⚠️ MANUAL — the one run in
+    outstanding.csv                       LAYER 2             which the channels COMPETE
         ↓
+unified_schema_<t>.<target>__final__d<d>_h<h>    final_features   ⚠️ writes the DATABASE
+        ↓                                        from layer 2 when it exists, else the
+        ↓                                        layer-1 union as before
 src/train_test_set/<dataset>/            train_test_creator
         ↓
 src/model/runs/<run_id>/                 model.lstm
@@ -63,16 +75,27 @@ from typing import Callable, Dict, List, Optional, Sequence
 
 import pandas as pd
 
-from utils import runtime
+from utils import chain, runtime
 
 _SRC = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _REPO = os.path.dirname(_SRC)
 
 # The one dataset and config the chain is wired for today. All of these are arguments
 # rather than constants everywhere below, so a second target is a flag and not an edit.
-DEFAULT_TICKER = "vcb"
-DEFAULT_TABLE = "return_5day__final__d20_h5"
-DEFAULT_CONFIG = "lstm__vcb__return_5day__final__d20_h5.yaml"
+DEFAULT_TICKER = chain.DEFAULT_TICKER
+# ⚠️ **THE CHAIN IS WIRED TO `close_adjust_5day` AS OF 2026-08-16, AND THE TARGET IS A
+# PRICE LEVEL.** That is a measurement problem the pipeline cannot fix and must not
+# hide: `hit_rate` is 1.0 by construction on a level (CLAUDE.md §5 rule 21), R² goes
+# deeply negative, and `close_adjust` ranks itself first at ρ 0.996. The chain is
+# standardised on it because it is what the archive selected for end to end; the next
+# run worth doing is the same chain on `return_5day`, which is one `--table` away.
+#
+# ⚠️ DERIVED, NOT SPELLED, since 2026-08-16. These three lines used to be literals, and
+# `train_test_creator` and `model.lstm` carried literals of their own that said
+# `return_5day` — so the command this module PRINTS as the next step went looking for a
+# table this module was not building. `utils/chain.py` is the single name now.
+DEFAULT_TABLE = chain.final_table()
+DEFAULT_CONFIG = chain.config_name("lstm")
 DEFAULT_ROOT = None  # None → feature_selection.report.DEFAULT_REPORT_ROOT
 DEFAULT_SCOPE = None  # None → the table name carries no feature-block suffix
 
@@ -370,6 +393,111 @@ def apply_selection(root: Optional[str] = DEFAULT_ROOT) -> None:
     outstanding.main(root=root or _report_root())
 
 
+# ------------------------------------------------------- 1a. the shortlist pool
+#
+# ⚠️ **TWO SELECTION LAYERS, AND THE POOL BETWEEN THEM** (2026-08-16). Layer 1 is N
+# runs over `pool__basic + one` other pool, and its output is a UNION, not a consensus:
+# a macro channel offered to one run could never be a candidate in another, so
+# agreement was never available to measure. Layer 2 is the ONE run in which the
+# survivors compete, and this stage builds its input.
+#
+#     selection      N runs  -> shortlist_pool -> selection_2  1 run -> final_features
+#     (manual)                 (this module)     (MANUAL)              (this module)
+#
+# ⚠️ **`selection_2` cannot be performed here and says so.** Both selection stages are
+# `manual=True` with no `apply`, for the same reason: a run is GPU time and a judgement
+# about which pools to join. What this module can do is materialise the two tables and
+# check that each still matches the shortlists it came from.
+
+
+def _shortlist_table(table: str = DEFAULT_TABLE, scope: Optional[str] = None) -> str:
+    """The shortlist pool that feeds the layer-2 run that produces `table`.
+
+    ⚠️ Derived from the FINAL table's name, never typed twice: `parse_final_table` is
+    already the single source of `d` and `h` downstream, so the two names cannot drift
+    apart into a pipeline that checks one window and builds another.
+    """
+    from final_features.builder import SHAPE_SHORTLIST, table_name
+    from train_test_creator.dataset import parse_final_table
+
+    target, lookback, horizon = parse_final_table(table)
+    return table_name(target, lookback, horizon, scope, SHAPE_SHORTLIST)
+
+
+def _layer2_runs(root: Optional[str] = DEFAULT_ROOT) -> List[str]:
+    """The run folders whose channels came OUT of a shortlist pool — layer 2.
+
+    ⚠️ Read off `outstanding.csv`'s `source_table`, exactly as `final_features` does.
+    A second implementation of "which layer is this" is a second answer waiting to
+    disagree with the one that builds the table.
+    """
+    from feature_selection.outstanding import OUTSTANDING_FILENAME
+    from final_features.builder import SHORTLIST_POOL_PREFIX
+
+    root = root or _report_root()
+    if not os.path.isdir(root):
+        return []
+    found = []
+    for name in sorted(os.listdir(root)):
+        path = os.path.join(root, name, OUTSTANDING_FILENAME)
+        if not os.path.exists(path):
+            continue
+        sources = pd.read_csv(path, usecols=["source_table"])["source_table"]
+        if sources.astype(str).str.startswith(SHORTLIST_POOL_PREFIX).any():
+            found.append(name)
+    return found
+
+
+def status_shortlist_pool(
+    ticker: str = DEFAULT_TICKER,
+    table: str = DEFAULT_TABLE,
+    root: Optional[str] = DEFAULT_ROOT,
+    scope: Optional[str] = DEFAULT_SCOPE,
+):
+    from final_features.builder import SHAPE_SHORTLIST
+
+    return _status_built_table(
+        "shortlist_pool", ticker, _shortlist_table(table, scope), root, scope,
+        SHAPE_SHORTLIST,
+    )
+
+
+def apply_shortlist_pool(
+    root: Optional[str] = DEFAULT_ROOT, scope: Optional[str] = DEFAULT_SCOPE
+) -> None:
+    from final_features.builder import SHAPE_SHORTLIST, build_all
+
+    build_all(
+        root=root or _report_root(), apply=True, replace=False, scope=scope,
+        shape=SHAPE_SHORTLIST,
+    )
+
+
+def status_selection_2(root: Optional[str] = DEFAULT_ROOT, table: str = DEFAULT_TABLE,
+                       scope: Optional[str] = DEFAULT_SCOPE):
+    """Has the ONE run where the channels compete happened yet?
+
+    ⚠️ **Its absence is not an error and not a warning — it is the state "layer 1
+    only".** `final_features` still builds a table without it, from the union, and says
+    so in the COMMENT. This stage exists so that "which of the two tables am I looking
+    at" is answered by the pipeline rather than by reading a `COMMENT` in psql.
+    """
+    runs = _layer2_runs(root)
+    pool = _shortlist_table(table, scope)
+    return StageState(
+        "selection_2",
+        ready=bool(runs),
+        detail=(
+            f"{len(runs)} layer-2 run(s) over {pool}"
+            + (f"; latest {runs[-1]}" if runs else
+               f" — MANUAL: python -m feature_selection.run --pools {pool} "
+               f"(cannot be produced here)")
+        ),
+        output=root or _report_root(),
+        counts={"runs": len(runs)},
+    )
+
+
 # --------------------------------------------------------------- 2. final_features
 
 
@@ -379,6 +507,21 @@ def status_final_features(
     root: Optional[str] = DEFAULT_ROOT,
     scope: Optional[str] = DEFAULT_SCOPE,
 ):
+    from final_features.builder import SHAPE_FINAL
+
+    return _status_built_table(
+        "final_features", ticker, table, root, scope, SHAPE_FINAL
+    )
+
+
+def _status_built_table(
+    name: str,
+    ticker: str,
+    table: str,
+    root: Optional[str],
+    scope: Optional[str],
+    shape: str,
+):
     """Does the table exist — AND does it still match the shortlists it came from?
 
     ⚠️ **"Exists" was the only check this made until 2026-08-09, and that is issue
@@ -386,6 +529,11 @@ def status_final_features(
     been regenerated under a new cut) and the stage kept reporting "ready". A table now
     carries a `fingerprint` of its exact `(source_table, channel)` set in its
     `COMMENT`; this compares that against the set the current reports would produce.
+
+    ⚠️ **ONE function for both shapes, on purpose** (2026-08-16). The shortlist pool
+    goes stale exactly the way the final table does — a new layer-1 run changes the
+    union and the pool built before it is then a different channel set wearing the same
+    name — so it needs the same fingerprint check, not a weaker "does it exist".
     """
     from final_features.builder import fingerprint_of_comment, plan_from_reports
     from feature_selection.unified_reader import UnifiedSchemaReader
@@ -406,17 +554,17 @@ def status_final_features(
                     )
                     row = cur.fetchone()
                     comment = row[0] if row and row[0] else ""
-        plans = plan_from_reports(root or _report_root(), scope)
+        plans = plan_from_reports(root or _report_root(), scope, shape)
         wanted = next(
             (p for p in plans if p.schema.endswith(ticker) and p.table == table),
             None,
         )
     except Exception as error:  # noqa: BLE001 — a dead database is a stage state
-        return StageState("final_features", False, f"{type(error).__name__}: {error}")
+        return StageState(name, False, f"{type(error).__name__}: {error}")
 
     if not present:
         return StageState(
-            "final_features",
+            name,
             False,
             f"MISSING in unified_schema_{ticker}",
             f"unified_schema_{ticker}.{table}",
@@ -431,9 +579,17 @@ def status_final_features(
         detail = f"orphan — fingerprint {stored}, but no current plan builds this table"
         ready = False
     elif stored != current:
+        # ⚠️ Computed rather than the literal `4` this used to subtract: a shortlist
+        # pool stores 3 keys and NO label, so the final table's `3 + 1` would report one
+        # channel too few and send a reader hunting for a channel that never existed.
+        from feature_selection.unified_reader import KEY_COLS
+        from final_features.builder import SHAPE_FINAL
+
+        overhead = len(KEY_COLS) + (1 if shape == SHAPE_FINAL else 0)
         detail = (
             f"STALE — table {stored} vs shortlists {current} "
-            f"({wanted.n_features} channels selected now, {columns - 4} in the table)"
+            f"({wanted.n_features} channels selected now, "
+            f"{columns - overhead} in the table)"
         )
         ready = False
     else:
@@ -441,7 +597,7 @@ def status_final_features(
         ready = True
 
     return StageState(
-        "final_features",
+        name,
         ready=ready,
         detail=detail,
         output=f"unified_schema_{ticker}.{table}",
@@ -656,8 +812,25 @@ def stages(
             manual=True,
         ),
         Stage(
+            "shortlist_pool",
+            "materialise pool__shortlist__<target>__d<d>_h<h> — layer 2's input",
+            lambda: status_shortlist_pool(ticker, table, root, scope),
+            lambda: apply_shortlist_pool(root, scope),
+        ),
+        Stage(
+            "selection_2",
+            "the ONE run where the surviving channels compete — MANUAL",
+            lambda: status_selection_2(root, table, scope),
+            # ⚠️ No `apply`, and not for want of a wrapper: this is the run that
+            # decides which of layer 1's survivors are real, and running it is GPU
+            # time plus a decision about the null. `--apply` reports MANUAL rather
+            # than doing something cheaper that looks the same (issue PIP-1).
+            None,
+            manual=True,
+        ),
+        Stage(
             "final_features",
-            "materialise <target>__final__d<d>_h<h> from every shortlist",
+            "materialise <target>__final__d<d>_h<h> — from layer 2 if it exists",
             lambda: status_final_features(ticker, table, root, scope),
             lambda: apply_final_features(root, scope),
         ),

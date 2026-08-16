@@ -274,3 +274,75 @@ def test_columns_in_no_shortlist_are_reported_as_stale_not_raised():
     columns = ["date", "exchange", "ticker", "return_2day", "f0", "dropped_last_week"]
     assert creator.resolve_target(columns, LABELS) == "return_2day"
     assert creator.stale_channels == ["dropped_last_week"]
+
+
+# ---------------------------------------------------------------- provenance notes
+# ⚠️ Added 2026-08-16. `metadata.json`'s `evidence` and `features.selection` were
+# CONSTANT STRINGS until then, so every dataset this stage ever wrote claimed its
+# channels came from runs that "computed no null" — including tables built from a
+# run that HAD been nulled and had FAILED. That is §5 rule 2's unknown-vs-measurement
+# distinction erased at the one hop the model stage reads it from.
+
+from train_test_creator.dataset import _evidence_note, _selection_note  # noqa: E402
+
+_LAYER2 = (
+    "Final feature table built by final_features from 1 feature-selection run(s). "
+    "Selection layer 2: the channels COMPETED - one run over pool__shortlist__*. "
+    "Run evidence: failed_null=1. Source runs: 2026-08-16_144315__vcb__shortlist"
+)
+_LAYER1 = (
+    "Final feature table built by final_features from 19 feature-selection run(s). "
+    "Run evidence: no_null=19. Source runs: 2026-08-12_130605__vcb__economy_vietnam"
+)
+
+
+def test_a_failed_null_is_recorded_as_a_measurement_not_as_no_null():
+    note = _evidence_note(_LAYER2)
+    assert "failed_null=1" in note
+    assert "DID NOT CLEAR" in note
+    # The exact wrong claim this function replaced.
+    assert "computed no null" not in note
+
+
+def test_an_absent_null_is_still_recorded_as_absent():
+    note = _evidence_note(_LAYER1)
+    assert "no_null=19" in note
+    assert "descriptive, not evidence" in note
+
+
+def test_a_comment_with_no_evidence_clause_says_unrecorded_and_never_guesses():
+    note = _evidence_note("a table someone created by hand")
+    assert note.startswith("unrecorded")
+    assert "no_null" not in note and "failed_null" not in note
+
+
+def test_layer_2_is_reported_as_competed_and_layer_1_as_unioned():
+    assert "COMPETED" in _selection_note(_LAYER2)
+    assert "UNION" in _selection_note(_LAYER1)
+    # An absent layer clause is layer 1 — that is what every pre-2026-08-13 table is.
+    assert "UNION" in _selection_note("")
+
+
+# ------------------------------------------------------------------ chain defaults
+# ⚠️ The regression this pins: on 2026-08-16 `pipeline` planned `close_adjust_5day`
+# while this module and `model.lstm` both defaulted to `return_5day`, so following
+# the pipeline's own printed next step died with "table does not exist".
+
+
+def test_every_stage_defaults_to_the_same_experiment():
+    import os
+
+    from model.lstm.train import DEFAULT_CONFIG
+    # ⚠️ `from pipeline import stages` binds the FUNCTION `pipeline.stages.stages`,
+    # which `pipeline/__init__.py` re-exports over the module of the same name.
+    from pipeline.stages import DEFAULT_TABLE, DEFAULT_TICKER
+    from utils import chain
+
+    assert DEFAULT_TABLE == chain.final_table()
+    assert DEFAULT_TICKER == chain.DEFAULT_TICKER
+    assert os.path.basename(DEFAULT_CONFIG) == chain.config_name("lstm")
+    assert os.path.exists(DEFAULT_CONFIG), (
+        f"the chain's default config does not exist: {DEFAULT_CONFIG}"
+    )
+    # The dataset folder the model config names must be the one this stage builds.
+    assert chain.dataset_name().startswith(f"{chain.DEFAULT_TICKER}__{chain.final_table()}")

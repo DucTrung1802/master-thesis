@@ -33,11 +33,15 @@ from typing import Dict, Optional, Sequence
 from model.common import engine
 from model.common.engine import CRITERIA, RUNS_DIR, load_config  # re-exported
 from model.lstm import model as lstm_model
+from utils import chain
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 
 CONFIG_DIR = os.path.join(_HERE, "configs")
-DEFAULT_CONFIG = os.path.join(CONFIG_DIR, "lstm__vcb__return_5day__final__d20_h5.yaml")
+# ⚠️ DERIVED from `utils/chain.py`, not spelled. Until 2026-08-16 this literal said
+# `return_5day` while `pipeline/stages.py` planned `close_adjust_5day`, so the two
+# entry points to the same stage defaulted to different experiments.
+DEFAULT_CONFIG = os.path.join(CONFIG_DIR, chain.config_name("lstm"))
 
 # What lands in `index.csv`'s `model_type` and in the run's `metadata.json`.
 MODEL_TYPE = "LSTM"
