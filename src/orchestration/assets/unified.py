@@ -621,6 +621,31 @@ DATE_SPINE_POOLS: list[tuple[str, str, str, str]] = [
         "dates, so coverage is min 37.1% / median 75.9% / max 76.1%.",
     ),
     (
+        "pool__market_breadth",
+        "market_breadth",
+        "market series",
+        "8 date-keyed channels compressing the WHOLE 781-name cross-section to one row "
+        "per session — mkt_xs_disp5 / mkt_xs_skew5 / mkt_xs_kurt5 / mkt_xs_mean5 "
+        "(dispersion), mkt_hhi_turnover (concentration), mkt_log_turnover / "
+        "mkt_turnover_z (flow), mkt_n_names (the width it was computed over). ⚠️ THIS "
+        "IS THE ANSWER TO \"PUT THE WHOLE MARKET IN\" THAT ACTUALLY FITS. Pivoting 781 "
+        "tickers × 27 measures is 21,087 columns against PostgreSQL's 1,600 limit "
+        "(WID-1), and VCB has n_eff = 852 independent observations — §5c measured 202 "
+        "channels at test IC −0.011 against 724 at −0.072 on the same ticker and "
+        "splits, so width is the enemy here, not the goal. ⚠️ THE CHANNEL SET WAS "
+        "CHOSEN BY MEASUREMENT (2026-08-16, 826 non-overlapping observations against "
+        "VCB's forward 5-day return): the dispersion/flow family is kept (xs_skew5 "
+        "t = −2.29, xs_disp5 t = +1.64, turnover_z t = −1.46) and the BREADTH family "
+        "was dropped — breadth_pos5 t = +0.21, above_ma20 t = +0.29, n_active "
+        "t = +0.34, all ≈ 0 and all near-duplicates of the index level pool__stock_market "
+        "already carries. ⚠️ NOT ONE CLEARS MULTIPLE TESTING: seven tests puts the "
+        "Bonferroni bar at |t| > 2.69 and the best is −2.29. They are here as the "
+        "least-bad candidates at a cost of 8 columns, not as a demonstrated signal — "
+        "and the row of that table that matters most is VCB's OWN past 5-day return at "
+        "t = −0.31. ⚠️ Survivorship: silver holds no delisted name, so early dispersion "
+        "is computed over the companies that survived to 2026 and is biased downward.",
+    ),
+    (
         "pool__stock_market",
         "stock_market",
         "index series",
@@ -998,6 +1023,24 @@ FEATURE_POOLS: list[tuple[str, str, str]] = [
         "their slopes, crossings and boolean flags. ⚠️ ~207 are BOOLEAN and "
         "FeatureSelector._prepare excludes bool dtypes, so they are stored but not "
         "scored until someone decides how to encode them.",
+    ),
+    (
+        "pool__news_daily",
+        "news_daily_panel",
+        "~18 news and disclosure EVENT columns at a daily grain — n_docs_{5,10}d, "
+        "n_editorial_*, n_docs_named_*, n_earnings_*, relevance_max_*, if_news_*, "
+        "if_editorial_*. ⚠️ THIS IS NOT THE SENTIMENT THREAD. CLAUDE.md §2a records "
+        "that news SENTIMENT found nothing and made price/TA models worse (QWK 0.175 "
+        "→ 0.045); this pool carries no sentiment at all, only counts of what happened "
+        "and when it was disclosed, which §2d lists separately as the third-ranked "
+        "remaining lever. ⚠️ NINE PRICE COLUMNS ARE DROPPED (UNIFIED_NEWS_PRICE_DUPES) "
+        "— the panel re-derives its own returns and turnover to stand alone, and one "
+        "of them is a second close_adjust in a panel whose label comes from the first. "
+        "⚠️ ret_5d is TRAILING (verified 2026-08-16: corr +1.000000 with the trailing "
+        "5-day return, −0.006 with the forward one), so it is excluded as a DUPLICATE, "
+        "not as a leak. ⚠️ The corpus starts 2013-01-02 against a 2009 spine and ends "
+        "2026-07-08, ~16 sessions behind it — VCB has 3,355 rows against 4,266, so "
+        "read coverage AND trailing_null_sessions.",
     ),
     (
         "pool__fa",

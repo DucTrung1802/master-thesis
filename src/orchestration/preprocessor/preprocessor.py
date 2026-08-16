@@ -5183,6 +5183,157 @@ class DataPreprocessor:
             dtype_overrides={"week_start": DataType.DATE()},
         )
 
+    def _ingest_gold_market_breadth(self) -> None:
+        """The whole cross-section compressed to ONE ROW PER SESSION — `gold.market_breadth`.
+
+        `silver.stocks_basic` over every ticker → 8 date-keyed channels describing what
+        the market as a whole was doing. It exists so a SINGLE-COMPANY study can carry
+        market information without carrying the market's COLUMNS.
+
+        ⚠️ **THIS IS A DELIBERATE REJECTION OF THE PIVOT, AND THE ARITHMETIC IS WHY.**
+        The obvious way to give VCB "the whole market" is `pool__basic_bank`'s shape —
+        pivot each ticker's measures into columns. At 781 tickers × 27 measures that is
+        **21,087 columns against PostgreSQL's 1,600 limit** (issue `WID-1`, met before
+        on forex), so it is not merely wide, it is impossible. And it would be wrong
+        even if it fit: VCB has 4,261 labels, i.e. `n_eff = 852` independent
+        observations, and CLAUDE.md §5c measured what width costs on exactly that
+        sample — 202 channels gave test IC −0.011, 724 channels gave **−0.072** on the
+        same ticker, target and splits. Compression is not a shortcut here; it is the
+        only shape the sample size permits.
+
+        ⚠️ **THE CHANNEL SET IS THE ONE THAT MEASURED NON-ZERO, not the one that is
+        conventional.** Seven candidate market features were scored against VCB's
+        forward 5-day return on 826 NON-OVERLAPPING observations (2026-08-16):
+
+        | feature | Spearman | t | kept |
+        |---|---|---|---|
+        | `xs_skew5` | −0.0794 | **−2.29** | ✅ |
+        | `xs_disp5` | +0.0571 | +1.64 | ✅ |
+        | `turnover_z` | −0.0507 | −1.46 | ✅ |
+        | `n_active` | +0.0119 | +0.34 | ❌ |
+        | `xs_mean5` | +0.0109 | +0.31 | ❌ |
+        | `above_ma20` | +0.0101 | +0.29 | ❌ |
+        | `breadth_pos5` | +0.0072 | +0.21 | ❌ |
+
+        The four dropped are the BREADTH family, and they were dropped for a reason
+        beyond their t-stats: they are near-duplicates of the index level, which
+        `pool__stock_market` already carries as `hose__vnindex__*`. The three kept are
+        the DISPERSION/FLOW family — they describe how the cross-section is spread and
+        where the money went, which no index level contains.
+
+        ⚠️ **NOT ONE OF THEM CLEARS MULTIPLE TESTING.** Seven tests puts the Bonferroni
+        bar at |t| > 2.69 and the best is −2.29. These are kept because they are the
+        least-bad candidates and because they cost 8 columns, NOT because anything here
+        was demonstrated. The honest reading of that table is in its last row: VCB's own
+        past 5-day return scored **t = −0.31** — the market tells you at least as much
+        about VCB as VCB's own history does, which is a statement about how little
+        either says.
+
+        ⚠️ **EVERY CHANNEL IS TRAILING OR CONTEMPORANEOUS.** `xs_*` are computed from
+        the 5-day return ENDING at the row's date; `turnover_z` is a 5-day log change
+        ending at it. Nothing reads `t+1`. This is asserted the only way it can be —
+        by construction, since every window closes on the row's own date.
+
+        ⚠️ **Survivorship, unavoidable and stated**: `silver.stocks_basic` holds no
+        delisted name, so a breadth number for 2012 is computed over the companies that
+        survived to 2026. Dispersion is biased DOWNWARD by that (the failures are
+        missing from the tails); §2c records the same limitation for the universe.
+        """
+        self._logger.log_info("Ingesting gold.market_breadth (from silver.stocks_basic)...")
+
+        with self._database_driver._cursor_ctx() as cur:
+            cur.execute("DROP TABLE IF EXISTS gold_schema.market_breadth")
+            cur.execute(
+                """
+                CREATE TABLE gold_schema.market_breadth AS
+                WITH base AS (
+                    SELECT date, ticker,
+                           close_adjust::double precision AS px,
+                           COALESCE(value_matched, 0)::double precision AS turnover
+                    FROM silver_schema.stocks_basic
+                    WHERE close_adjust IS NOT NULL AND close_adjust > 0
+                ),
+                -- ⚠️ PARTITION BY ticker: a LAG down a (date, ticker) frame without it
+                -- reads the previous COMPANY, not the previous day. Same defect class
+                -- as PNL-2 one layer down.
+                lagged AS (
+                    SELECT date, ticker, turnover,
+                           px / NULLIF(LAG(px, 5) OVER (
+                               PARTITION BY ticker ORDER BY date), 0) - 1.0 AS ret5
+                    FROM base
+                ),
+                -- ⚠️ Screened at ±50%: silver carries a handful of corrupt cells whose
+                -- implied 5-day return reaches -781 (VNX, close_adjust negative for 968
+                -- sessions). One such row would set the skew for its whole date.
+                clean AS (
+                    SELECT * FROM lagged WHERE ret5 IS NOT NULL AND ABS(ret5) <= 0.5
+                ),
+                -- ⚠️ TWO PASSES, and it is not a style choice: PostgreSQL rejects
+                -- `AVG(POWER(x - AVG(x) OVER (...), 3))` with "aggregate function
+                -- calls cannot contain window function calls". The centre has to be
+                -- computed and joined back before the third and fourth moments can
+                -- be taken against it.
+                per_date AS (
+                    SELECT date,
+                           COUNT(*)                AS n_names,
+                           STDDEV_SAMP(ret5)       AS xs_disp5,
+                           AVG(ret5)               AS xs_mean5,
+                           STDDEV_POP(ret5)        AS sd_pop,
+                           SUM(turnover)           AS turnover_total,
+                           SUM(POWER(turnover, 2)) AS turnover_sq
+                    FROM clean GROUP BY date
+                ),
+                -- Fisher-Pearson skew and EXCESS kurtosis from the population
+                -- moments, because PostgreSQL has no SKEW/KURT aggregate.
+                moments AS (
+                    SELECT c.date,
+                           AVG(POWER(c.ret5 - p.xs_mean5, 3)) AS m3,
+                           AVG(POWER(c.ret5 - p.xs_mean5, 4)) AS m4
+                    FROM clean c JOIN per_date p ON p.date = c.date
+                    GROUP BY c.date
+                ),
+                shaped AS (
+                    SELECT p.date, p.n_names, p.xs_disp5, p.xs_mean5, p.turnover_total,
+                           CASE WHEN p.sd_pop > 0 THEN m.m3 / POWER(p.sd_pop, 3) END AS xs_skew5,
+                           CASE WHEN p.sd_pop > 0 THEN m.m4 / POWER(p.sd_pop, 4) - 3.0 END AS xs_kurt5,
+                           CASE WHEN p.turnover_total > 0
+                                THEN p.turnover_sq / POWER(p.turnover_total, 2) END AS hhi_turnover
+                    FROM per_date p JOIN moments m ON m.date = p.date
+                )
+                SELECT date,
+                       n_names                                       AS mkt_n_names,
+                       xs_disp5                                      AS mkt_xs_disp5,
+                       xs_skew5                                      AS mkt_xs_skew5,
+                       xs_kurt5                                      AS mkt_xs_kurt5,
+                       xs_mean5                                      AS mkt_xs_mean5,
+                       hhi_turnover                                  AS mkt_hhi_turnover,
+                       LN(1.0 + turnover_total)                      AS mkt_log_turnover,
+                       LN(1.0 + turnover_total) - LAG(LN(1.0 + turnover_total), 5)
+                           OVER (ORDER BY date)                      AS mkt_turnover_z
+                FROM shaped ORDER BY date
+                """
+            )
+            cur.execute(
+                "ALTER TABLE gold_schema.market_breadth ADD PRIMARY KEY (date)"
+            )
+            cur.execute("SELECT COUNT(*), MIN(date), MAX(date) FROM gold_schema.market_breadth")
+            rows, first, last = cur.fetchone()
+            cur.execute(
+                "SELECT MIN(mkt_n_names), PERCENTILE_DISC(0.5) WITHIN GROUP "
+                "(ORDER BY mkt_n_names) FROM gold_schema.market_breadth"
+            )
+            narrowest, median_width = cur.fetchone()
+
+        if not rows:
+            raise PipelineError(
+                "gold.market_breadth is EMPTY — silver.stocks_basic produced no "
+                "(date, ret5) pair. Build silver first."
+            )
+        self._logger.log_info(
+            f"gold.market_breadth: {rows} sessions ({first} → {last}), "
+            f"cross-section width min {narrowest} / median {median_width}."
+        )
+
     def _ingest_gold_news_daily_panel(self) -> None:
         """Gold `news_daily_panel` — one row per `(exchange, ticker, date)`, PK the same.
 
@@ -6265,6 +6416,7 @@ class DataPreprocessor:
     UNIFIED_FUNDS_SOURCE = f"{GOLD_SCHEMA}.funds"
     UNIFIED_BONDS_SOURCE = f"{GOLD_SCHEMA}.bonds"
     UNIFIED_STOCK_MARKET_SOURCE = f"{GOLD_SCHEMA}.stock_market"
+    UNIFIED_MARKET_BREADTH_SOURCE = f"{GOLD_SCHEMA}.market_breadth"
 
     def _ingest_unified_pool_forex(self, ticker: str) -> List[dict]:
         """`gold.forex_<exchange>` → `…​.pool__forex_<exchange>` — the FX block.
@@ -6433,6 +6585,52 @@ class DataPreprocessor:
         """
         return self._helper_unified_pool_on_date_spine(
             ticker, "pool__bonds", self.UNIFIED_BONDS_SOURCE, noun="tenor series"
+        )
+
+    def _ingest_unified_pool_market_breadth(self, ticker: str) -> dict:
+        """`gold.market_breadth` → `…​.pool__market_breadth` — the market, COMPRESSED.
+
+        **8 date-keyed channels** describing the whole 781-name cross-section, LEFT
+        JOINed onto `pool__basic` and broadcast across its tickers. Returns a metadata
+        dict.
+
+        ⚠️ **THIS POOL IS THE ANSWER TO "PUT THE WHOLE MARKET IN" THAT ACTUALLY FITS.**
+        The instinct is `pool__basic_bank`'s shape — pivot every ticker's measures into
+        columns. At 781 × 27 that is **21,087 columns against PostgreSQL's 1,600 limit**
+        (issue `WID-1`), so it cannot be built; and VCB has `n_eff = 852` independent
+        observations, where §5c measured 202 channels at test IC −0.011 against 724 at
+        **−0.072** on the same ticker and splits. Eight columns is not a compromise
+        here, it is the only shape the sample size allows.
+
+        ⚠️ **THE CHANNELS WERE CHOSEN BY MEASUREMENT, and the ones that were dropped
+        are the informative part of the story.** Seven candidates were scored against
+        VCB's forward 5-day return over 826 NON-OVERLAPPING observations (2026-08-16).
+        The dispersion/flow family survived — `xs_skew5` t = −2.29, `xs_disp5`
+        t = +1.64, `turnover_z` t = −1.46 — and the BREADTH family did not:
+        `breadth_pos5` t = +0.21, `above_ma20` t = +0.29, `n_active` t = +0.34. Breadth
+        was dropped for two reasons, not one: it measured ≈ 0, AND it is a restatement
+        of the index level that `pool__stock_market` already carries as
+        `hose__vnindex__*`.
+
+        ⚠️ **NOTHING HERE CLEARS MULTIPLE TESTING.** Seven tests puts the Bonferroni
+        bar at |t| > 2.69 and the best is −2.29. These are the least-bad candidates at a
+        cost of 8 columns, not a demonstrated signal. The row of that table that matters
+        most is the baseline: **VCB's own past 5-day return scored t = −0.31**, so the
+        market says at least as much about VCB as VCB's own history does — which is a
+        statement about how little either says.
+
+        ⚠️ **`mkt_n_names` is the WIDTH, and it is a feature about the DATA, not the
+        market.** It rises from ~380 in 2009 to ~771 today because tickers were listed
+        and because silver holds no delisted name. A tree splitting on it is reading the
+        calendar, exactly as `close_adjust` does on a level target. It is carried so the
+        other seven can be read against the width they were computed over — consider
+        excluding it before ranking.
+        """
+        return self._helper_unified_pool_on_date_spine(
+            ticker,
+            "pool__market_breadth",
+            self.UNIFIED_MARKET_BREADTH_SOURCE,
+            noun="market series",
         )
 
     def _ingest_unified_pool_stock_market(self, ticker: str) -> dict:
@@ -7889,6 +8087,25 @@ class DataPreprocessor:
 
     UNIFIED_TA_SOURCE = f"{GOLD_SCHEMA}.stocks_ta"
     UNIFIED_FA_SOURCE = f"{GOLD_SCHEMA}.stocks_financials_bank_fa"
+    UNIFIED_NEWS_SOURCE = f"{GOLD_SCHEMA}.news_daily_panel"
+
+    # ⚠️ COLUMNS `gold.news_daily_panel` CARRIES THAT ARE PRICE, NOT NEWS. The panel
+    # was built to be self-contained for the costed walk-forward, so it re-derives its
+    # own returns and turnover beside the event counts — `pool__basic` already owns
+    # every one of them, under these exact names or as a `drv_*` twin. Letting them
+    # through would hand the correlation prune eight duplicates to rediscover, and
+    # would put a SECOND `close_adjust` in a panel whose target is derived from the
+    # first. What is left is the ~18 columns that are actually news.
+    #
+    # ⚠️ `ret_5d` IS TRAILING, verified 2026-08-16 on VCB: corr(+1.000000) against
+    # `close_adjust.pct_change(5)` and corr(−0.006) against the FORWARD 5-day return.
+    # It is excluded as a duplicate, NOT as a leak — the distinction matters, because
+    # a leak would mean `gold.news_daily_panel` is unusable rather than merely wide.
+    UNIFIED_NEWS_PRICE_DUPES = (
+        "close_adjust", "value_matched",
+        "ret_1d", "ret_5d", "ret_10d", "ret_20d", "ret_60d",
+        "vol_20d", "log_value_20d",
+    )
 
     # ⚠️ COLUMNS THE FEATURE POOLS MUST NOT RE-CARRY. Identity and taxonomy belong to
     # `pool__basic`; duplicating them here would make every join produce `_x`/`_y`
@@ -7938,6 +8155,7 @@ class DataPreprocessor:
         pool: str,
         source: str,
         exclude: Sequence[str],
+        spine_outward: bool = False,
     ) -> Tuple[int, int]:
         """Shared body of `_ingest_unified_pool_ta` / `_ingest_unified_pool_fa`.
 
@@ -7947,6 +8165,21 @@ class DataPreprocessor:
         against `pool__basic`'s 4,235 — the exact mismatch that made the dropped
         `pool__targets` unjoinable (see `_ingest_unified_pool_targets`). Joining to
         the spine makes one calendar structural instead of hoped for.
+
+        ⚠️ **`spine_outward=True` FLIPS THE JOIN TO `spine LEFT JOIN source`**, which
+        is the right shape when the SOURCE covers only part of the CALENDAR rather
+        than only part of the universe. Added 2026-08-16 for `pool__news_daily`: the
+        news corpus starts 2013-01-02 against a VCB spine starting 2009-06-30, so the
+        INNER join wrote 3,355 rows and the asset's own "a partial calendar means days
+        went missing" assertion caught it — correctly. A missing DAY must become a row
+        of NULLs, never a missing row, or the pool silently changes the calendar under
+        its own primary key. This is the same rule the date-broadcast pools already
+        state: LEFT JOIN, never INNER.
+
+        ⚠️ The default stays INNER, because for `pool__ta` / `pool__fa` it is load-
+        bearing: `gold.stocks_ta` runs one session PAST `pool__basic`, and an outward
+        join there would keep the spine's calendar while an inward one proves the two
+        agree. Two sources, two shapes, one flag that says which.
 
         Returns `(rows, columns)`.
         """
@@ -7961,18 +8194,32 @@ class DataPreprocessor:
             )
 
         columns = self._helper_unified_pool_columns(source_schema, source_table, exclude)
-        selected = ", ".join(f"s.{c}" for c in columns)
+        # ⚠️ On the outward join the KEY must come from the spine, not the source: the
+        # source row is NULL wherever the corpus does not reach, and a key of NULLs is
+        # not a key. Everything else still comes from `s`.
+        key = set(self.UNIFIED_PRIMARY_KEY)
+        selected = ", ".join(
+            (f"b.{c}" if spine_outward and c in key else f"s.{c}") for c in columns
+        )
         where = "" if universe else " AND s.ticker = %s"
         params = () if universe else (ticker,)
+        if spine_outward:
+            join = (
+                f"FROM {schema}.pool__basic b LEFT JOIN {source} s "
+                f"ON b.date = s.date AND b.exchange = s.exchange "
+                f"AND b.ticker = s.ticker"
+            )
+            filter_sql = "" if universe else " WHERE b.ticker = %s"
+        else:
+            join = (
+                f"FROM {source} s JOIN {schema}.pool__basic b "
+                f"ON b.date = s.date AND b.exchange = s.exchange "
+                f"AND b.ticker = s.ticker"
+            )
+            filter_sql = "" if universe else " WHERE TRUE AND s.ticker = %s"
 
         with self._database_driver._cursor_ctx() as cur:
-            cur.execute(
-                f"SELECT COUNT(*) FROM {source} s "
-                f"JOIN {schema}.pool__basic b ON b.date = s.date "
-                f" AND b.exchange = s.exchange AND b.ticker = s.ticker"
-                f"{'' if universe else ' WHERE TRUE' + where}",
-                params,
-            )
+            cur.execute(f"SELECT COUNT(*) {join}{filter_sql}", params)
             available = int(cur.fetchone()[0])
             if not available:
                 raise MissingSourceDataError(
@@ -7985,11 +8232,7 @@ class DataPreprocessor:
             # Dropped as late as possible: a failure above leaves the old table intact.
             cur.execute(f"DROP TABLE IF EXISTS {schema}.{pool}")
             cur.execute(
-                f"CREATE TABLE {schema}.{pool} AS "
-                f"SELECT {selected} FROM {source} s "
-                f"JOIN {schema}.pool__basic b ON b.date = s.date "
-                f" AND b.exchange = s.exchange AND b.ticker = s.ticker"
-                f"{'' if universe else ' WHERE TRUE' + where}",
+                f"CREATE TABLE {schema}.{pool} AS SELECT {selected} {join}{filter_sql}",
                 params,
             )
             self._helper_unified_primary_key(cur, schema, pool)
@@ -8071,6 +8314,88 @@ class DataPreprocessor:
             exclude=self.UNIFIED_POOL_IDENTITY + self.UNIFIED_POOL_PRICE_DUPES,
         )
         self._logger.log_info(f"{schema}.pool__ta: {rows} rows x {columns} columns.")
+
+    def _ingest_unified_pool_news_daily(self, ticker: str) -> None:
+        """`gold.news_daily_panel` → `…​.pool__news_daily` — the EVENT block.
+
+        ~18 columns of news and disclosure COUNTS at a daily grain, keyed
+        `(date, exchange, ticker)` and on `pool__basic`'s calendar: `n_docs_{5,10}d`,
+        `n_editorial_*`, `n_docs_named_*`, `n_earnings_*`, `relevance_max_*`,
+        `if_news_*`, `if_editorial_*`.
+
+        ⚠️ **THIS IS NOT THE SENTIMENT THREAD, AND THE DISTINCTION IS THE WHOLE REASON
+        IT IS BEING BUILT.** CLAUDE.md §2a records that news *sentiment* found no
+        signal on 3 tickers and made price/TA models WORSE (QWK 0.175 → 0.045). This
+        pool carries no sentiment at all — it is counts of things that happened and
+        when they were disclosed, which §2d lists SEPARATELY as the third-ranked
+        remaining lever ("news+disclosure event dates"). A negative result on the
+        first says nothing about the second.
+
+        ⚠️ **NINE PRICE COLUMNS ARE DROPPED** — see `UNIFIED_NEWS_PRICE_DUPES`. The
+        panel re-derives its own returns and turnover so it can stand alone; joined
+        onto `pool__basic` they are duplicates, and one of them is a second
+        `close_adjust` in a panel whose label is built from the first.
+
+        ⚠️ **COVERAGE IS PARTIAL BY CONSTRUCTION AND THAT IS NOT A DEFECT.** The
+        source starts 2013-01-02 against a VCB spine starting 2009-06-30, and it
+        carries a row only where the corpus does — VCB has 3,355 rows against a 4,266
+        spine (78.6%). A LEFT JOIN makes the rest NULL rather than dropping them, and
+        `feature_selection`'s `coverage` column is where a consumer reads that. ⚠️ But
+        read `trailing_null_sessions` beside it (rule 22): the corpus ends 2026-07-08,
+        which is ~16 sessions behind the spine's 2026-08-07.
+
+        ⚠️ **A ZERO IS A MEASUREMENT HERE, NOT A GAP.** `n_docs_5d = 0` means the
+        corpus was searched and found nothing that window; NULL means the day is
+        outside the corpus entirely. `_impute` fills NULL with the train median and
+        cannot tell the two apart, so a channel that is mostly zeros will impute to
+        zero and look well-covered. That is why the row count is asserted against the
+        source, not against the spine.
+        """
+        schema = self._helper_unified_schema(ticker)
+        self._logger.log_info(
+            f"Ingesting unified {schema}.pool__news_daily "
+            f"(from {self.UNIFIED_NEWS_SOURCE})..."
+        )
+
+        exclude = (
+            self.UNIFIED_POOL_IDENTITY
+            + self.UNIFIED_POOL_PRICE_DUPES
+            + self.UNIFIED_NEWS_PRICE_DUPES
+        )
+        # ⚠️ `spine_outward=True`: the corpus starts 2013 and the spine starts 2009, so
+        # an INNER join would DROP 911 VCB rows rather than NULL them — a pool that
+        # silently changes the calendar under its own primary key.
+        rows, columns = self._helper_unified_pool_from_source(
+            ticker,
+            "pool__news_daily",
+            self.UNIFIED_NEWS_SOURCE,
+            exclude=exclude,
+            spine_outward=True,
+        )
+
+        with self._database_driver._cursor_ctx() as cur:
+            # ⚠️ ASSERTED: not one surviving column may be a price. The exclusion list
+            # is hand-maintained and `gold.news_daily_panel` is a young table — a
+            # column added upstream would otherwise arrive silently, and the one class
+            # that must never arrive is another copy of the series the label is
+            # derived from.
+            cur.execute(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_schema = %s AND table_name = 'pool__news_daily'",
+                (schema,),
+            )
+            present = {r[0] for r in cur.fetchall()}
+        leaked = sorted(present & set(self.UNIFIED_NEWS_PRICE_DUPES))
+        if leaked:
+            raise PipelineError(
+                f"{schema}.pool__news_daily carries price column(s) {leaked}, which "
+                f"`pool__basic` already owns. Joined together a model sees the series "
+                f"twice, and `close_adjust` is the series `pool__targets` derives the "
+                f"label from. Add them to UNIFIED_NEWS_PRICE_DUPES."
+            )
+        self._logger.log_info(
+            f"{schema}.pool__news_daily: {rows} rows x {columns} columns."
+        )
 
     def _ingest_unified_pool_fa(self, ticker: str) -> None:
         """`gold.stocks_financials_bank_fa` → `…​.pool__fa` — the fundamental block.

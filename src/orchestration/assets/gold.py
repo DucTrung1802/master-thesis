@@ -374,6 +374,73 @@ def gold_news_weekly_panel(
 
 
 @asset(
+    name="market_breadth",
+    key_prefix=["gold"],
+    group_name="gold",
+    compute_kind="postgres",
+    deps=[AssetKey(["silver", "stocks_basic"])],
+    description=(
+        "silver.stocks_basic over EVERY ticker -> gold.market_breadth, PK (date). The "
+        "whole cross-section compressed to one row per session: 8 channels describing "
+        "dispersion (xs_disp5 / xs_skew5 / xs_kurt5 / xs_mean5), concentration "
+        "(hhi_turnover) and flow (log_turnover, turnover_z), plus the width it was "
+        "computed over (n_names). It exists so a SINGLE-COMPANY study can carry market "
+        "information without carrying the market's COLUMNS. "
+        "⚠️ THE PIVOT IS REJECTED DELIBERATELY: 781 tickers x 27 measures is "
+        "21,087 columns against PostgreSQL's 1,600 limit (issue WID-1), and it would be "
+        "wrong even if it fit - VCB has n_eff = 852 independent observations, and "
+        "CLAUDE.md 5c measured 202 channels giving test IC -0.011 against 724 giving "
+        "-0.072 on the same ticker and splits. "
+        "⚠️ THE CHANNEL SET IS THE ONE THAT MEASURED NON-ZERO (2026-08-16, 826 "
+        "non-overlapping observations vs VCB's forward 5-day return): the dispersion/flow "
+        "family is kept (xs_skew5 t=-2.29, xs_disp5 t=+1.64, turnover_z t=-1.46) and the "
+        "BREADTH family is dropped (breadth_pos5 t=+0.21, above_ma20 t=+0.29, n_active "
+        "t=+0.34) because it measured ~0 AND duplicates the index level pool__stock_market "
+        "already carries. "
+        "⚠️ NOT ONE CLEARS MULTIPLE TESTING - seven tests puts the Bonferroni bar "
+        "at |t| > 2.69 and the best is -2.29. Kept because they are the least-bad "
+        "candidates at a cost of 8 columns, not because anything was demonstrated. "
+        "⚠️ Every channel is TRAILING: each window closes on the row's own date. "
+        "⚠️ Survivorship - silver holds no delisted name, so 2012's dispersion is "
+        "computed over the companies that survived to 2026, biasing it downward."
+    ),
+)
+def gold_market_breadth(
+    context: AssetExecutionContext, preprocessor: PreprocessorResource
+) -> MaterializeResult:
+    with preprocessor.session(schema="gold_schema") as prep:
+        prep._ingest_gold_market_breadth()
+        with prep._database_driver._cursor_ctx() as cur:
+            cur.execute("SELECT COUNT(*), MIN(date), MAX(date) FROM gold_schema.market_breadth")
+            rows, first, last = cur.fetchone()
+            cur.execute(
+                "SELECT COUNT(*) FROM information_schema.columns "
+                "WHERE table_schema = 'gold_schema' AND table_name = 'market_breadth'"
+            )
+            columns = int(cur.fetchone()[0])
+            cur.execute(
+                "SELECT MIN(mkt_n_names), PERCENTILE_DISC(0.5) WITHIN GROUP "
+                "(ORDER BY mkt_n_names), MAX(mkt_n_names) FROM gold_schema.market_breadth"
+            )
+            narrowest, median_width, widest = cur.fetchone()
+    context.log.info(
+        f"gold.market_breadth: {rows} sessions x {columns} columns ({first} -> {last}), "
+        f"cross-section width min {narrowest} / median {median_width} / max {widest}"
+    )
+    return MaterializeResult(
+        metadata={
+            "rows": MetadataValue.int(int(rows)),
+            "columns": MetadataValue.int(columns),
+            "date_range": MetadataValue.text(f"{first} -> {last}"),
+            "cross_section_width": MetadataValue.text(
+                f"min {narrowest} / median {median_width} / max {widest}"
+            ),
+            "source": MetadataValue.text("silver_schema.stocks_basic (all tickers)"),
+        }
+    )
+
+
+@asset(
     name="news_daily_panel",
     key_prefix=["gold"],
     group_name="gold",
@@ -822,4 +889,5 @@ assets: List[Callable] = [
     gold_stocks_financials_bank_fa,
     gold_news_weekly_panel,
     gold_news_daily_panel,
+    gold_market_breadth,
 ]
