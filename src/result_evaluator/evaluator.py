@@ -492,6 +492,17 @@ def main(argv: Optional[Sequence[str]] = None) -> pd.DataFrame:
     # `--rescore` re-scores 29 runs without a GPU at all. The RUNTIME is the number
     # that matters here — the block-shuffled null is `draws` re-scorings per run, and
     # that is the whole cost of the stage.
+    # ⚠️ **THIS FUNCTION PRINTS `⚠️`, AND A WINDOWS CONSOLE IS cp1252, WHICH HAS NO CODE
+    # POINT FOR IT.** Measured 2026-08-16: `python -m result_evaluator` died with
+    # `UnicodeEncodeError` at the closing summary — AFTER scoring every run and writing
+    # `index.csv`, so the work was done and only the report was lost. That is CLAUDE.md
+    # §5 rule 18, and the identical guard has been in `train_test_creator.main` since
+    # 2026-08-10; this entry point simply never got it. `errors="replace"` degrades the
+    # glyph to `?` on a console that cannot show it rather than discarding the output.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="replace")
+
     with runtime.RunTimer(
         f"result_evaluator  {os.path.basename(str(option('--runs', DEFAULT_RUNS_DIR)))}"
         f"{'  --rescore' if '--rescore' in argv else ''}"
