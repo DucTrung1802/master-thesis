@@ -143,6 +143,23 @@ experiment/experiment_10/_cache/
 # issue GIT-1.
 !reports/*.csv
 #
+# ⚠️ **AND THE RANKER EVALUATION NEEDS ITS OWN PAIR TOO** (added 2026-08-16). The
+# `reports/ranker_evaluation/` folder is what `python -m feature_selection.ranker_eval`
+# writes — `scorecard.csv`, `advantage.csv`, `runtime_shares.csv`, `cost.csv` — and it is
+# the evidence behind `feature_selection/RANKER_COMPARISON.md` and CONTEXT §19, i.e. the
+# measurement that removed three of six rankers. `git check-ignore` confirms the blanket
+# `*.csv` on line 50 takes every one of those files, so without this pair `git add` would
+# report success and commit an `evaluation.json` with no numbers beside it: issue GIT-1
+# exactly, one root later.
+#
+# ⚠️ It is a SEPARATE ROOT from `reports/feature_selection/` on purpose and must stay one:
+# `contract.run_folders` calls any directory holding a `metadata.json` a selection run, so
+# an evaluation archived in there would enter `final_features.plan_from_reports` as a run
+# whose channels belong in a `__final__` table. (The writer also names its record
+# `evaluation.json` rather than `metadata.json`, so the two guards are independent.)
+!reports/ranker_evaluation/
+!reports/ranker_evaluation/**
+#
 # ⚠️ ONE ROOT, and only one, since 2026-08-10. `reports/feature_selection_basic/`,
 # `_economy/` and `_superseded/` were three MORE paths these two rules did not match,
 # each needing its own negation pair or its CSVs fell straight back into the blanket

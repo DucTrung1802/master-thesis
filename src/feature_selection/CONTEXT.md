@@ -270,6 +270,7 @@ where the run that caused it is no longer the thing being run.
 | **[report.py](report.py)** | **one run → one self-describing folder** — CSVs, PNGs and a `metadata.json` that records what may be compared with what (§10) |
 | **[outstanding.py](outstanding.py)** | **one run → its final feature list** — kept channels only, ties broken, each mapped back to the pool table it must be read from (§14) |
 | **[selection_cut.py](selection_cut.py)** | **how many channels a run supports** — a shuffled-methods null + a per-method knee, replacing `max_features=12` (§14c) |
+| **[ranker_eval.py](ranker_eval.py)** | **what each ranker is WORTH** — advantage vs a random-k control, cost from the archive's own timings, necessity by leave-one-out. The module behind §19; the long form is [RANKER_COMPARISON.md](RANKER_COMPARISON.md) |
 | **[contract.py](contract.py)** | ⚠️ **THE INTERFACE TO `final_features`, DEFINED ONCE AND IMPORTED BY BOTH SIDES** — the two filenames, the keys, the required columns, and the two checks. §0 below |
 
 ### Downstream of here
@@ -2777,6 +2778,12 @@ nothing: a T4 run is a different **procedure**, not the same one on faster hardw
 
 ## 19. ⚠️ THE RANKERS, EVALUATED — six became three (2026-08-16)
 
+> 📄 **The long form is [RANKER_COMPARISON.md](RANKER_COMPARISON.md)** — the full
+> scorecard, the correlation matrix, both cost regimes, the rejected addition and the
+> two errors the measurement itself had to correct. This section is the summary.
+> The measurement is code: `python -m feature_selection.ranker_eval --cost-only`
+> reproduces the cost half in 0.1 s, `--apply` the whole thing in ~16 min.
+
 §4 has listed six rankers since 2026-08-03 and **not one of them had ever been measured
 against the others.** They were chosen for what they *see* — a coherent argument, and a
 different kind of claim from "this one picks channels that generalise". This section is
@@ -2814,7 +2821,7 @@ and nothing is reported below that survives fewer than all four.
 | `spearman` alone | 82.5 | 55.0 | 35.0 | 97.5 | 67.5 | 35.0 |
 | **`ensemble -permutation`** | 55.0 | 65.0 | 50.0 | 55.0 | **56.2** | 50.0 |
 | *RANDOM* | *50* | *50* | *50* | *50* | *50* | *50* |
-| `lasso` alone ⚠️ WITHDRAWN | 92.5 | 2.5 | 82.5 | 80.0 | *(64.4)* | *(2.5)* |
+| `lasso` alone ⚠️ WITHDRAWN | *(92.5)* | *(2.5)* | *(82.5)* | *(80.0)* | — | — |
 | `xgb_gain` alone | 65.0 | 65.0 | 25.0 | 30.0 | 46.2 | 25.0 |
 | `mutual_info` alone | 42.5 | 25.0 | 95.0 | 7.5 | 42.5 | 7.5 |
 
@@ -2824,14 +2831,17 @@ average over the four cells **and its own minimum**. Recomputed over the four ce
 (`rebuild_table.py`), which moves every row by 2-12 points. The ORDERING and all four
 conclusions below survive it; one claim did not, and is corrected in item 3.
 
-⚠️ **`lasso`'s standalone row is WITHDRAWN, not merely low.** Its raw scores were ALL
-ZERO in all four cells — `zero share: lasso 1.00` on both targets — so `rank(method=
-"min")` gave every channel the same rank and `sort_values()` returned them in **pool
-column order**. Its "top-k" is the first k columns of the pool, which is not a selection.
-The number is an artefact of column order and cannot be read as skill in either
-direction; it is kept struck through because deleting it would invite someone to
-re-measure it. Same rule as CLAUDE.md §5 rule 21, mirrored: a metric computed on a
-non-ranking is not a measurement.
+⚠️ **`lasso`'s standalone row is WITHDRAWN, not merely low.** Its raw scores are
+effectively zero in all four cells (`zero share: lasso 1.00` on both targets), so it
+ranked nothing — and it does so in **two different ways**: on `return_5day` LassoCV
+returns byte-identical zeros, so `sort_values()` returns **pool column order**; on
+`return_rel_5day` it returns values all ≤ 1e-12 that differ in their last bits, so it
+sorts **floating-point noise** and scores a respectable-looking 81.25th percentile. The
+second is the more dangerous because it does not look degenerate, and the first version
+of the withdrawal rule (`nunique() <= 1`) missed it entirely. Neither number can be read
+as skill in either direction; both are struck through rather than deleted, so nobody
+re-measures them. Same rule as CLAUDE.md §5 rule 21, mirrored: a metric computed on a
+non-ranking is not a measurement. `RANKER_COMPARISON.md` §4b has the table.
 
 **Four things replicate across every cell:**
 
@@ -2843,8 +2853,9 @@ non-ranking is not a measurement.
 2. ⚠️ **`mutual_info` and `xgb_gain` rank BELOW CHANCE as standalone selectors** —
    **42.5** and **46.2** against chance's 50, with minima of **7.5** and **25.0**. They
    are the only two members of which that is true.
-3. ⚠️ **`lasso` DID NOT RANK AT ALL, and its removal changes NOTHING.** It zeroed
-   every coefficient in all four cells, so its rank column is a CONSTANT — which is why
+3. ⚠️ **`lasso` DID NOT RANK AT ALL, and its removal changes NOTHING.** Its coefficients
+   are effectively zero in all four cells, so its rank column carries no information —
+   which is why
    `ensemble -lasso` is identical to `ENSEMBLE (6)` in every cell, not approximately but
    identically: a constant added to a mean does not change an order. It has been an
    ensemble member that cannot vote. ⚠️ **Its standalone score is therefore withdrawn
