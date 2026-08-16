@@ -113,6 +113,7 @@ def run_selection(
     lookback: int = 20,
     horizon: int = 5,
     normalize: str = "none",
+    design_dtype: str = "float64",
     max_features: Optional[int] = None,
     corr_threshold: float = 0.9,
     n_splits: int = 5,
@@ -285,6 +286,7 @@ def run_selection(
                 lookback=lookback,
                 window_stats=windows.WINDOW_STATS,
                 normalize=normalize,
+                design_dtype=design_dtype,
                 n_splits=n_splits,
                 min_train=min_train,
                 device=device,
@@ -476,6 +478,16 @@ def main(argv: Optional[Sequence[str]] = None):
              "module's NULL_SEED comment",
     )
     parser.add_argument("--no-stability", action="store_true")
+    parser.add_argument(
+        "--design-dtype",
+        default="float64",
+        choices=["float64", "float32"],
+        help="design matrix element type. float64 is what every archived run "
+             "used. float32 halves the memory and exists for the UNIVERSE panel: "
+             "windowing costs a measured 4.03 GB per million rows, so ALL needs "
+             "9.6 GB at float64. It is part of the SETUP, so runs at the two "
+             "dtypes group into different tables.",
+    )
     # ⚠️ ASCII only in `help=` — argparse PRINTS these, and a Windows console is cp1252,
     # so a `⚠️` here turns `--help` itself into a UnicodeEncodeError traceback
     # (CLAUDE.md §5 rule 18). The warnings live in the module docstring instead.
@@ -540,6 +552,7 @@ def main(argv: Optional[Sequence[str]] = None):
         top=args.top,
         feature_normalize=args.feature_normalize,
         min_ic_width=args.min_ic_width,
+        design_dtype=args.design_dtype,
         methods=(
             selector_methods.ALL_METHODS
             if args.methods.strip().lower() == "all"

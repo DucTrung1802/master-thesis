@@ -98,6 +98,7 @@ def window_design(
     lookback: int,
     stats: Sequence[str] = WINDOW_STATS,
     normalize: str = "none",
+    dtype: np.dtype = np.float64,
 ) -> pd.DataFrame:
     """Summarise each column over its trailing `lookback`-day window.
 
@@ -119,6 +120,16 @@ def window_design(
         lookback: `d`, in ROWS. `pool__basic` is one row per session, so a row
             offset is a trading-day offset.
         stats: which summaries to compute; a subset of `WINDOW_STATS`.
+        dtype: the design's element type. ⚠️ **`float64` is the default and every
+            archived run used it — do not change it to make a run reproduce.**
+            `float32` exists for one reason: a UNIVERSE panel. Measured 2026-08-16,
+            this function costs a linear **4.03 GB per million rows** at 90 channels
+            × 6 stats (0.70 GB at 174,275 rows, 1.40 GB at 348,440 — exactly
+            linear), so `unified_schema_all` at 2,388,975 rows needs **9.6 GB**
+            against 7.1 GB of free RAM. `float32` halves it and fits.
+            The precision loss is nominal here: every ranker in `METHODS` is either
+            rank-based (`spearman`, `permutation`) or XGBoost, which casts its input
+            to `float32` internally regardless.
 
     Raises:
         ValueError: unknown stat, `lookback < 1`, or a frame shorter than the
@@ -148,7 +159,11 @@ def window_design(
         # path free of a pointless copy.
         return frame.rename(columns={c: design_column(c, "last") for c in frame})
 
-    values = frame.to_numpy(np.float64)
+    # ⚠️ `dtype` is applied HERE, at the source, not to the result. Casting the
+    # finished design would peak at float64 first and save nothing — the whole cost
+    # is the six `(n_windows, n_channels)` reductions plus the `column_stack` copy,
+    # and every one of them inherits its type from this array.
+    values = frame.to_numpy(dtype)
     # (n_windows, lookback, n_channels) — a VIEW, so nothing is copied here. Each
     # reduction below streams over it and materialises only its own (n_windows,
     # n_channels) result.
@@ -156,7 +171,9 @@ def window_design(
         values, window_shape=lookback, axis=0
     ).transpose(0, 2, 1)
 
-    ramp = np.arange(lookback, dtype=np.float64)
+    # ⚠️ Matched to `dtype` so the `slope` einsum below does not silently upcast its
+    # output back to float64 — which would restore the peak this option exists to cut.
+    ramp = np.arange(lookback, dtype=dtype)
     centred = ramp - ramp.mean()
     denominator = float((centred**2).sum()) or np.nan
 

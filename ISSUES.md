@@ -5,7 +5,7 @@ Stable codes for the
 chain. **Codes are permanent**: a resolved issue keeps its code and its row, never
 renumbered and never reused, so an old message that says "BNK-1" still resolves.
 
-## Open (11)
+## Open (14)
 
 | code | severity | issue | lives in |
 |---|---|---|---|
@@ -20,6 +20,9 @@ renumbered and never reused, so an old message that says "BNK-1" still resolves.
 | **DRF-1** | substantive | **Worse after the STL-1 rebuild**: 126 of 721 VCB channels put >1% of the test set beyond 5 train-sigmas and **18 put 100% of it there** (was 48 and 4 at 203 channels). The tail is also far more extreme than the old "+9 to +13 sigma" — `european_union__…__euestr` sits at **+885 sigma** and `usa__…__resppllopnww` at **−282**. Monotone macro levels. Reported in `drift.csv`, acted on by nothing. The fix belongs upstream — differenced channels, not a silent drop here. | `train_test_creator` → `drift.csv` |
 | **COV-1** | substantive | Channels were *selected* despite barely existing. **Far wider than first recorded**: 26 on the VCB table have zero TRAIN coverage (all four `prop_*` plus 22 late-starting macro series), and across the archive **248 of 952 shortlisted rows — 26% — sit below 0.95 coverage**, the worst at **0.024**. **Partly addressed 2026-08-09**: `outstanding.csv` now carries `coverage` + a `PARTIAL` flag (§14d), so the fetch list states the risk instead of a later stage discovering it. It **flags, it does not filter** — the archive cannot see where the train/test cut falls, and dropping 248 rows would change the fingerprint set and trigger the STL-1 domino. The defect itself is unchanged: the selection still ranks these channels on the fraction of history where they exist. | `train_test_creator/dataset.py::_screen`, `feature_selection/outstanding.py` |
 | **RPR-1** | reproducibility | `src/train_test_set/` and `src/model/runs/*/` are git-ignored (they are large). A fresh clone has no datasets and no runs. Most project history is re-derivable, not reproducible. A design trade-off, not a bug — recorded so it is a choice rather than a surprise. ⚠️ **It stopped being hypothetical on 2026-08-10**: the 29 pre-existing run folders were **deleted on request**, and because they were git-ignored they are gone for good. That includes the 27-run lookback sweep behind `CLAUDE.md` §2a and the two 2026-08-09 runs behind §6 — the only panel-grain run among them. Their METRICS survive as text in `model/CONTEXT.md` §10, in the hub, and in `index.csv`'s git history; **not one of them can be rescored or re-verified again**. `src/train_test_set/` likewise holds exactly one dataset. Treat §10's research log as a citation without its evidence. | `.gitignore`; `runs/` holds 7 |
+| **PNL-2** | substantive | ⚠️ **THE SELECTION STAGE PICKS SERIES-VS-PANEL FROM THE TARGET'S NAME, NOT THE PANEL'S SHAPE** — `cross = target.startswith("cs_")` (`feature_selection/run.py`). So `--ticker ALL --target return_5day` runs a **781-ticker, 2.39 M-row panel through the single-series path**: one pooled Spearman over `N × T` rows, row-block CV that splits mid-day, and `n_eff = n/h` counting 781 stocks on one Tuesday as 781 observations instead of one. It does not warn — the only guard is the reverse direction (`cs_` target on a 1-ticker panel raises). ⚠️ **This is ~~PNL-1~~ one stage earlier, and PNL-1's resolution is the fix that was never applied here**: the scorer detects grain from the `ticker` column, *never* a config flag or a name. Found 2026-08-16 when a cross-sectional sweep was requested on `unified_schema_all`. | `feature_selection/run.py:163` |
+| **CSP-1** | substantive | ⚠️ **A CROSS-SECTIONAL SELECTION CAN READ EXACTLY ONE POOL, SO NO LAYER-1 SWEEP IS POSSIBLE ON A UNIVERSE.** `read_universe_panel` joins `pool__basic ⋈ pool__targets` in hand-written SQL, and `run_selection` **raises** on any other `--pools` value for a `cs_` target. The consequence: the whole two-layer architecture of §3c — N layer-1 runs over `pool__basic + <each macro pool>`, then one layer-2 run over the survivors — **exists only for single-ticker studies**. `unified_schema_all` carries 23 pools including `pool__ta` (922 cols) and 19 economy pools; a cross-sectional run can see **none of them**. Since §2b's ladder makes width the only thing that has ever cleared a null, the one grain that works is also the one that cannot be swept. Found 2026-08-16. | `feature_selection/cross_sectional.py::read_universe_panel`; `run.py:176-186` |
+| **MEM-1** | substantive | ⚠️ **THE WINDOWED DESIGN IS BUILT DENSE AND WHOLE, SO THE UNIVERSE PANEL DOES NOT FIT IN RAM.** Measured 2026-08-16 at 90 channels × 6 stats: **4.03 GB per million rows**, exactly linear (0.70 GB at 174,275 rows; 1.40 GB at 348,440). `unified_schema_all` at 2,388,975 rows therefore needs **9.6 GB against 7.1 GB free** of 15.6 GB total, and `panel_window_design` peaks near 2× because it holds every per-ticker block *and* the `pd.concat` result. Build time is ~2.8 min per design, and a null re-runs it per draw — 21 builds ≈ 1 h of pure windowing before any ranker. ⚠️ **Partially mitigated the same day, NOT closed**: `--design-dtype float32` halves it to ~4.8 GB and is recorded as a SETUP key so the two dtypes cannot union into one table — but it is **UNVERIFIED** (the float64-vs-float32 agreement probe was killed mid-read and produced no output), and it does not address the 2× concat peak, the absence of chunking, or the fact that the largest training fold (~1.9 M × 540 float32 ≈ 4.1 GB) still exceeds the RTX 3050's **4 GB of VRAM**. | `feature_selection/windows.py::window_design`; `cross_sectional.py::panel_window_design` |
 
 ## Resolved (30)
 
@@ -68,6 +71,34 @@ silent one, and 71% of the folder had been discarded on every previous run.
 been counted. The forex number was 4,402 files of 6,189. **`FLT-1` is the wider prize and
 the harder one**: 37 of 47 brokers' books are unreachable until a Selenium filter
 injection is diagnosed, and no amount of re-running reaches them.
+
+⚠️ **THE THREE OPENED 2026-08-16 (`PNL-2`, `CSP-1`, `MEM-1`) ALL BLOCK THE SAME RUN**,
+and they were found together when a cross-sectional layer-1 sweep was requested on
+`unified_schema_all`. Read them as one wall rather than three items: §2b's ladder says
+width is the only thing that has ever cleared a null, and **every path to a wide run is
+closed** — the grain is chosen by a name (`PNL-2`), the one correct grain can read one
+pool (`CSP-1`), and the panel that grain needs does not fit in memory (`MEM-1`).
+
+Their fixes are cheap, medium and structural in that order:
+
+- **`PNL-2`** is the cheapest fix in the register: derive `cross` from the panel's own
+  `ticker` count, the way ~~`PNL-1`~~ already made the SCORER do it, and raise when a
+  multi-ticker panel meets a non-`cs_` target instead of silently pooling it. Half a day
+  including a test.
+- **`CSP-1`** is a real but bounded change: give `read_universe_panel` the `UnifiedSchemaReader.join()`
+  the single-ticker path already uses, so `--pools` means the same thing at both grains.
+  ⚠️ It makes `MEM-1` worse by exactly the width of whatever is joined — `pool__ta` at
+  922 channels would be ~10× the design.
+- **`MEM-1`** is the structural one and the only one worth doing carefully. `float32`
+  bought a factor of two and is **unverified**; the real fix is to stop materialising the
+  whole design — window per fold, or per ticker-chunk, and never hold the blocks and the
+  concat at once. Until then the honest options are a narrower universe
+  (`read_universe_panel` already takes a `tickers` list and filters in SQL, so the top-300
+  by turnover is a CLI flag away, ~1.3 M rows) or a machine with more than 15.6 GB.
+
+⚠️ **The cheap first step is the measurement nobody has**: `read_universe_panel(tickers=<top 300>)`
+with `cs_rank_5day` fits today, needs none of the three fixed, and would put a real number
+against §2b's `ALL` row — which currently reads **"never ran — ⚠️ unverified"**.
 
 The four older substantive ones are all upstream of the code:
 **EVD-1** and **NUL-1** are about what a null can prove, **DRF-1** and **COV-1** are

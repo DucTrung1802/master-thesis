@@ -386,6 +386,7 @@ def panel_window_design(
     lookback: int,
     stats_: Sequence[str],
     normalize: str,
+    dtype: np.dtype = np.float64,
 ) -> pd.DataFrame:
     """`windows.window_design` PER SERIES, reassembled on the original index.
 
@@ -403,7 +404,9 @@ def panel_window_design(
         block = frame.loc[positions]
         if len(block) < lookback:
             continue
-        blocks.append(windows.window_design(block, lookback, stats_, normalize))
+        blocks.append(
+            windows.window_design(block, lookback, stats_, normalize, dtype=dtype)
+        )
     if not blocks:
         raise ValueError(
             f"no series has {lookback} rows — every window would be empty."
@@ -634,7 +637,12 @@ class CrossSectionalSelector(FeatureSelector):
         if self.feature_normalize == "cs_rank":
             block = cross_sectional_normalize(X, dates.loc[X.index])
         return panel_window_design(
-            block, ids.loc[X.index], self.lookback, self.window_stats, self.normalize
+            block,
+            ids.loc[X.index],
+            self.lookback,
+            self.window_stats,
+            self.normalize,
+            dtype=self.design_dtype,
         )
 
     def _splits(self, index: pd.Index) -> List[Tuple[np.ndarray, np.ndarray]]:

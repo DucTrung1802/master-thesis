@@ -416,6 +416,7 @@ class FeatureSelector:
         lookback: int = 1,
         window_stats: Sequence[str] = WINDOW_STATS,
         normalize: str = "none",
+        design_dtype: str = "float64",
         holdout_start: Optional[str] = None,
         permutation_repeats: int = 10,
         methods: Sequence[str] = METHODS,
@@ -459,6 +460,19 @@ class FeatureSelector:
             ("last",) if lookback == 1 else tuple(window_stats)
         )
         self.normalize = normalize
+        # ⚠️ **`float64` is the default and every archived run used it.** `float32`
+        # exists for the UNIVERSE panel and nothing else: `windows.window_design`
+        # costs a measured 4.03 GB per million rows at 90 channels × 6 stats, so
+        # `unified_schema_all`'s 2.39 M rows need 9.6 GB against 7.1 GB free.
+        # It is part of the SETUP, not a performance knob — a run that used it is a
+        # different procedure from one that did not, and `contract.SETUP_KEYS` has
+        # to say so or two of them could be unioned into one table (issue MTH-1's
+        # shape exactly).
+        if design_dtype not in ("float64", "float32"):
+            raise ValueError(
+                f"design_dtype must be 'float64' or 'float32', got {design_dtype!r}"
+            )
+        self.design_dtype = np.dtype(design_dtype)
         # ⚠️ Rows on or after this date are removed from EVERYTHING the selection
         # touches — ranking, pruning, the walk-forward CV. They are scored exactly
         # once, by `score_holdout`. See `_prepare`.
@@ -589,7 +603,8 @@ class FeatureSelector:
         `_on_development`.
         """
         return windows.window_design(
-            X, self.lookback, self.window_stats, self.normalize
+            X, self.lookback, self.window_stats, self.normalize,
+            dtype=self.design_dtype,
         )
 
     def _splits(self, index: pd.Index) -> List[Tuple[np.ndarray, np.ndarray]]:

@@ -425,6 +425,9 @@ def build_metadata(
                 # single time series, which is the difference §9b turns on.
                 "panel_col": getattr(selector, "panel_col", None),
                 "feature_normalize": getattr(selector, "feature_normalize", None),
+                # ⚠️ A SETUP key, not a performance note — `float32` and `float64`
+                # are different procedures and must not group into one table.
+                "design_dtype": str(getattr(selector, "design_dtype", "float64")),
             }
         )
 

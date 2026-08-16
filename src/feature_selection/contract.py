@@ -79,7 +79,7 @@ METADATA_FILENAME = "metadata.json"
 SETUP_KEYS: Tuple[str, ...] = (
     "lookback_d", "horizon_h", "normalize", "feature_normalize",
     "corr_threshold", "n_splits", "min_train", "random_state", "selector_class",
-    "methods",
+    "methods", "design_dtype",
 )
 
 # ⚠️ **`methods` JOINED THIS TUPLE 2026-08-16 — issue MTH-1, and it is the reason
@@ -104,6 +104,13 @@ METHODS_UNRECORDED = "unrecorded"
 # and still correct — it rejects the archive loudly rather than grouping it wrongly.
 LEGACY_SETUP_DEFAULTS: Dict[str, object] = {
     "methods": METHODS_UNRECORDED,
+    # ⚠️ `design_dtype` joined SETUP_KEYS 2026-08-16 alongside the universe run that
+    # needed `float32` (`windows.window_design`: 4.03 GB per million rows measured,
+    # so ALL's 2.39 M rows need 9.6 GB against 7.1 GB free). Unlike `methods`, the
+    # absent value here IS inferable and is inferred: `float64` was not merely the
+    # default before that day, it was the ONLY thing the code could produce — there
+    # was no parameter. Recording a fact the code made certain is not a guess.
+    "design_dtype": "float64",
 }
 
 
