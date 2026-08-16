@@ -229,6 +229,11 @@ def evaluate_run(
                 y_label=y_label,
                 draws=draws,
                 seed=seed,
+                # ⚠️ For the `lag_h` naive baseline (metrics.py block B), which reads
+                # `y_true[i - h]` as the value observable at sample `i`. That identity
+                # needs the rows to be consecutive in date order; passing the dates is
+                # what lets `accuracy_vs_naive` CHECK it instead of assuming it.
+                dates=frame["date"] if "date" in frame.columns else None,
             )
         # ⚠️ Carried into metrics.json so a number can never be read without knowing
         # which of its inputs were guessed from a folder name.

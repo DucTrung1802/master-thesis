@@ -67,6 +67,48 @@ regression, `log_loss` / `brier` / `pr_auc` / `base_rate` for classification. RM
 meaningless for a classifier and `log_loss` is meaningless for a regressor, so neither
 pretends to be shared.
 
+## 2a. ⚠️ THREE BLOCKS WERE ADDED 2026-08-16, AND ONE OF THEM CHANGES A VERDICT
+
+The set above answers **ranking** and nothing else. A time-series forecast has to answer
+two more questions, and the first is the one `experiment/experiment_10` found missing
+from **all 23 papers it reviewed**.
+
+| block | metrics | reads |
+|---|---|---|
+| **B — vs a naive forecast** | `mase`, `rmsse`, `skill_score`, `beats_naive`, `naive_kind`, `naive_contiguous` | `mase < 1` beats doing nothing |
+| **C — calibration** | `calibration_slope`, `calibration_intercept`, `pred_sd_ratio` | slope 1.0 = magnitudes right |
+| **E — degeneracy** | `target_single_signed` + the withdrawals it forces | True ⇒ the direction metrics are NaN, not passes |
+
+### ⚠️ `RMSE_zero_baseline` is not a naive baseline, and it manufactured a pass
+
+The zero baseline predicts a return of **0**. On a level target that is *zero dong*, and
+nothing can lose to it. Measured on `lstm__vcb__close_adjust_5day…20260816-165606`:
+
+| column | said | block B says |
+|---|---|---|
+| `beats_zero_baseline` | **True** | `mase` **21.36** — 21× WORSE than persistence |
+| `r2` | −85.61 | `skill_score` **−167.0** |
+| `ic` / `ic_clears` | +0.4880 / **True** | unchanged — and now beside `ic_t` = +5.5 |
+
+**The same run clears its IC bar and loses to a random walk by a factor of 21.** Those
+are not in conflict: `ic` is scale-free and measures *order*, `mase` measures *distance*,
+and on a trending level a model can track the order while being hopeless at the value.
+Block B is what makes the second half of that sentence a column instead of a footnote.
+
+⚠️ **The naive is chosen from the DATA, never the target's name**: single-signed ⇒
+`lag_h` (persistence, `y_true[i−h]`, which for a level *is* the value observable at the
+sample's own date); two-signed ⇒ `zero`. `naive_kind` always says which, because the
+same `mase` means two different claims under the two baselines.
+
+### ⚠️ Block E ships CLAUDE.md §5 rule 21, which had been documented but not coded
+
+The hub has said since 2026-08-14 that `hit_rate` "is `NaN` → `—` now" on a level
+target. It was not — `selector.py` and this module both still computed a bare mean of
+sign matches, and every README on a level target printed `+1.0000`. Now
+`sign_accuracy`, `hit_rate_pos`, core `hit_rate` and `beats_zero_baseline` are withdrawn
+to NaN whenever every label shares a sign. `r2` is **not** withdrawn: it is a
+measurement of a bad fit, and a bad measurement is still a measurement.
+
 ## 3. ⚠️ Every core metric carries a bar, and the bar is not zero
 
 `feature_selection/CONTEXT.md` §10 and `final_features/CONTEXT.md` §6 make the same

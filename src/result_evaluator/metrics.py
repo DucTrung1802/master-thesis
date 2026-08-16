@@ -43,6 +43,59 @@ fails this bar is dead; a run that clears it is not yet alive.**
 ⚠️ **The shuffle is by BLOCKS**, reusing `feature_selection.evaluation.block_shuffle`.
 A row-wise permutation destroys the label's own autocorrelation, the null comes out far
 tighter than reality, and a worthless run clears a bar that was never there.
+
+## The five blocks, added 2026-08-16 — one question each
+
+The three-metric core above answers *ranking*, and for three years of this project that
+was the only question asked. It is not the only question a time-series forecast has to
+answer, and the two that were missing are the two the literature chapter says nobody
+reports (`experiment/experiment_10`: **not one of 23 papers reports a naive baseline**).
+
+| block | question | metrics | fails when |
+|---|---|---|---|
+| **A. ranking** | does a higher score mean a higher return? | `ic`, `dir_auc`, `hit_rate`, `long_short`, each with a null bar; `ic_se`, `ic_t` | `ic_clears` False |
+| **B. vs naive** | is it better than doing nothing? | `mase`, `rmsse`, `skill_score`, `beats_naive`, `naive_kind` | `mase ≥ 1` |
+| **C. calibration** | are the magnitudes right, not just the order? | `r2`, `RMSE`, `MAE`, `calibration_slope`, `calibration_intercept`, `pred_sd_ratio` | slope ≠ 1 |
+| **D. task extras** | probability quality / error size | `log_loss`, `brier`, `pr_auc`… or `RMSE`… | task-specific |
+| **E. degeneracy** | which of the above CANNOT fail on this target? | `target_single_signed`, and the withdrawals it forces | — |
+
+### ⚠️ B is the block that was missing, and `RMSE_zero_baseline` is not it
+
+The zero baseline predicts a return of **0**. On a return target that IS the naive
+forecast and the two agree. On a **price-LEVEL** target it predicts *zero dong*, which
+nothing can lose to: on 2026-08-16 an LSTM with **R² = −85.6** reported
+`beats_zero_baseline = True`. That is CLAUDE.md §5 rule 21 — a metric that cannot fail
+is not a pass.
+
+The honest baseline for an h-step forecast is **persistence**: the last value actually
+observable at prediction time. This module derives it from `y_true` itself, because for
+a level target `y_true[i - h]` *is* the level at the sample's own date — no extra data
+needed, and `naive_kind` always says which baseline was used:
+
+| target | `naive_kind` | naive forecast |
+|---|---|---|
+| single-signed (a LEVEL) | `lag_h` | `y_true[i - h]` — the random walk |
+| two-signed (a RETURN) | `zero` | `0.0` — no change |
+
+`mase` is the standard scaled error (**MAE ÷ naive MAE**); `< 1` beats the naive, `≥ 1`
+does not. `rmsse` is the same ratio on squared error, and `skill_score = 1 − MSE/MSE_naive`
+puts it on an R²-like scale where 0 = "exactly the naive" and negative = worse.
+
+### ⚠️ C separates ranking from calibration, which this project has measured apart
+
+`model/CONTEXT.md` §14 and CLAUDE.md §5c both record the same thing: **the models that
+rank best are the ones whose magnitudes are most wrong** (`GBT` cleared its IC bar at
+R² = −2.11). `calibration_slope` is the OLS slope of realised on predicted — 1.0 is
+perfect, 0 means the prediction carries no magnitude information, and a slope far from 1
+beside a good `ic` is the signature of a model that orders well and predicts badly.
+
+### ⚠️ E withdraws rather than reports, and that is deliberate
+
+On a single-signed target every label is positive, so `sign_accuracy` and `hit_rate_pos`
+are **1.0 by construction**, core `hit_rate` is pinned at the fraction of scores above
+their own median (≈ 0.5 whatever the model does), and `beats_zero_baseline` cannot be
+False. All four become `NaN` — CLAUDE.md §5 rule 21, finally shipped: the rule has been
+written in the hub since 2026-08-14 while the code still printed `+1.0000`.
 """
 
 from __future__ import annotations
@@ -144,9 +197,45 @@ def long_short(y_true: np.ndarray, score: np.ndarray, q: float = LONG_SHORT_Q) -
     return float(y_true[order[-k:]].mean() - y_true[order[:k]].mean())
 
 
+def _ic_uncertainty(value, n_eff) -> Dict[str, float]:
+    """`se(ic) ≈ 1/√(n_eff − 1)` and the t-stat that follows from it.
+
+    ⚠️ `n_eff`, never `n`. Consecutive samples share `h − 1` of their `h` label days, so
+    640 test rows carry ~128 independent observations and the SE computed on `n` is
+    **2.2× too small** at h=5 — which is the difference between a t of 1.4 and a t of
+    3.2 on the same number. Matches `feature_selection.evaluation.ic_summary`'s
+    `se_ic_per_fold`, so the selection stage and this one can be read side by side.
+    """
+    try:
+        value, n_eff = float(value), float(n_eff)
+    except (TypeError, ValueError):
+        return {"ic_se": float("nan"), "ic_t": float("nan")}
+    if not (value == value) or n_eff <= 1:
+        return {"ic_se": float("nan"), "ic_t": float("nan")}
+    se = 1.0 / np.sqrt(n_eff - 1.0)
+    return {"ic_se": round(float(se), 4), "ic_t": round(float(value / se), 2)}
+
+
+def single_signed(y_true: np.ndarray) -> bool:
+    """Is every non-zero label the same sign? Then the direction metrics cannot fail.
+
+    ⚠️ This is the guard CLAUDE.md §5 rule 21 has asked for since 2026-08-14. It is a
+    property of the TARGET, measured, not of the target's NAME — `close_adjust_5day`
+    happens to be a level, but so is anything else someone points this at, and a name
+    check would miss it. Zeros are ignored so a return series with an unchanged day is
+    still two-signed.
+    """
+    y_true = np.asarray(y_true, dtype=float).ravel()
+    y_true = y_true[np.isfinite(y_true) & (y_true != 0)]
+    if len(y_true) == 0:
+        return True
+    return bool(np.all(y_true > 0) or np.all(y_true < 0))
+
+
 def core_metrics(y_true: np.ndarray, score: np.ndarray) -> Dict[str, float]:
     """The three-plus-one block every task reports. `y_true` is the realised return."""
     y_true, score, dropped = _clean(y_true, score)
+    degenerate = single_signed(y_true)
     return {
         "n": int(len(y_true)),
         "n_dropped_nonfinite": dropped,
@@ -154,8 +243,21 @@ def core_metrics(y_true: np.ndarray, score: np.ndarray) -> Dict[str, float]:
         "dir_auc": dir_auc(y_true, score),
         # At the score's own median, not at 0 — see CORE_METRICS.
         # `regression_extras.sign_accuracy` is the 0-threshold version.
-        "hit_rate": float(np.mean((score > np.median(score)) == (y_true > 0))),
+        # ⚠️ WITHDRAWN when every label shares a sign: `(y_true > 0)` is then a constant
+        # and this collapses to "what fraction of scores exceed their own median" ≈ 0.5
+        # for every model ever scored. A number that cannot move is not a measurement.
+        "hit_rate": (
+            float("nan")
+            if degenerate
+            else float(np.mean((score > np.median(score)) == (y_true > 0)))
+        ),
+        # ⚠️ NOT withdrawn, and it is the one direction-ish metric that survives: a
+        # spread of top minus bottom quintile can still come out negative on a
+        # single-signed target. But it is then in the TARGET'S units (dong, not
+        # return), so it must not be read as a tradeable spread — `target_single_signed`
+        # beside it is what says so.
         "long_short": long_short(y_true, score),
+        "target_single_signed": bool(degenerate),
     }
 
 
@@ -364,6 +466,17 @@ def panel_core_metrics(
         spreads.append(float(y_row[order[-k:]].mean() - y_row[order[:k]].mean()))
         hits.append(float(np.mean((s_row > np.median(s_row)) == up)))
 
+    # ⚠️ **ISSUE NUL-3: ON A PANEL, THIS t IS THE VERDICT AND `ic_clears` IS NOT.**
+    # The evaluator's panel null is not label-neutral — its centre moved with the MODEL
+    # across three runs (−0.0171 / +0.0076 / +0.0109) and it got both ends wrong,
+    # manufacturing a clear for the weakest model and failing the strongest
+    # (`model/CONTEXT.md` §16). The daily IC series needs no null: each date is one
+    # cross-sectional observation, so its own spread IS the error bar. It was computed
+    # inside this function all along and thrown away at the `np.mean` — reported since
+    # 2026-08-16.
+    daily = np.array(ics, dtype=float)
+    sd = float(daily.std(ddof=1)) if len(daily) > 1 else float("nan")
+    se = sd / np.sqrt(len(daily)) if len(daily) > 1 and sd == sd else float("nan")
     return {
         "ic": float(np.mean(ics)) if ics else float("nan"),
         "dir_auc": float(np.mean(aucs)) if aucs else float("nan"),
@@ -373,6 +486,11 @@ def panel_core_metrics(
         "n_dates": int(usable.sum()),
         "n_tickers": int(Y.shape[1]),
         "ic_days_positive": float(np.mean(np.array(ics) > 0)) if ics else float("nan"),
+        "ic_daily_sd": round(sd, 4) if sd == sd else float("nan"),
+        "ic_se": round(float(se), 4) if se == se else float("nan"),
+        "ic_t": (
+            round(float(np.mean(daily) / se), 2) if se == se and se > 0 else float("nan")
+        ),
     }
 
 
@@ -462,6 +580,137 @@ def evaluate_panel(
     return out
 
 
+NAIVE_ZERO = "zero"
+NAIVE_LAG_H = "lag_h"
+
+
+def naive_forecast(
+    y_true: np.ndarray, horizon: int, kind: Optional[str] = None
+) -> tuple:
+    """The forecast a person makes with no model, and the name of which one it is.
+
+    Returns `(naive, kind)` where `naive` is NaN wherever the baseline is undefined —
+    the first `h` samples of a `lag_h` baseline have nothing behind them.
+
+    ⚠️ **`lag_h` is `y_true[i - h]`, and that is the value observable at sample `i`'s
+    own date, not a peek forward.** For a level target `y_true[i]` is the price `h`
+    steps AFTER date `i`, so `y_true[i - h]` is the price at date `i` itself. This
+    identity is why the naive baseline needs no extra column — but it holds only while
+    the rows are consecutive samples in date order, which is how every
+    `predictions_<split>.csv` in this repo is written (`evaluator._read_predictions`
+    sorts by date). Hand it a shuffled frame and the baseline is wrong without saying
+    so, so callers pass `dates` and `accuracy_vs_naive` checks them.
+    """
+    y_true = np.asarray(y_true, dtype=float).ravel()
+    if kind is None:
+        kind = NAIVE_LAG_H if single_signed(y_true) else NAIVE_ZERO
+    if kind == NAIVE_ZERO:
+        return np.zeros_like(y_true), NAIVE_ZERO
+    if kind != NAIVE_LAG_H:
+        raise ValueError(f"naive kind must be {NAIVE_ZERO!r} or {NAIVE_LAG_H!r}, got {kind!r}")
+    naive = np.full_like(y_true, np.nan)
+    if horizon < len(y_true):
+        naive[horizon:] = y_true[:-horizon]
+    return naive, NAIVE_LAG_H
+
+
+def accuracy_vs_naive(
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    horizon: int,
+    kind: Optional[str] = None,
+    dates: Optional[Sequence] = None,
+) -> Dict[str, float]:
+    """⚠️ **Block B — is the forecast better than doing nothing?**
+
+    `mase < 1` beats the naive; `skill_score > 0` is the same statement on an R²-like
+    scale. This is the block `experiment_10` found missing from **all 23 papers** it
+    reviewed, and the one `RMSE_zero_baseline` only pretends to be on a level target.
+
+    ⚠️ `dates` is validated, not trusted: a `lag_h` baseline read off non-consecutive
+    rows silently compares against the wrong day. If the gaps are irregular the block
+    still computes but `naive_contiguous` is False, and that flag is the thing to read
+    before quoting `mase`.
+    """
+    y_true = np.asarray(y_true, dtype=float).ravel()
+    y_pred = np.asarray(y_pred, dtype=float).ravel()
+    naive, kind = naive_forecast(y_true, horizon, kind)
+
+    usable = np.isfinite(y_true) & np.isfinite(y_pred) & np.isfinite(naive)
+    out: Dict[str, float] = {
+        "naive_kind": kind,
+        "n_vs_naive": int(usable.sum()),
+        # ⚠️ Only meaningful for `lag_h`; a zero baseline needs no ordering at all.
+        "naive_contiguous": _contiguous(dates) if kind == NAIVE_LAG_H else True,
+    }
+    if usable.sum() < 3:
+        return {**out, "mase": float("nan"), "rmsse": float("nan"),
+                "skill_score": float("nan"), "beats_naive": False}
+
+    err = np.abs(y_pred[usable] - y_true[usable])
+    naive_err = np.abs(naive[usable] - y_true[usable])
+    sq, naive_sq = err ** 2, naive_err ** 2
+    mae_naive, mse_naive = float(naive_err.mean()), float(naive_sq.mean())
+
+    # ⚠️ A zero-error naive is not a division to guess at. It happens when the target
+    # is a constant, and the honest answer is that the comparison is undefined.
+    mase = float(err.mean() / mae_naive) if mae_naive > 0 else float("nan")
+    rmsse = float(np.sqrt(sq.mean() / mse_naive)) if mse_naive > 0 else float("nan")
+    return {
+        **out,
+        "mase": mase,
+        "rmsse": rmsse,
+        "skill_score": float(1.0 - sq.mean() / mse_naive) if mse_naive > 0 else float("nan"),
+        "beats_naive": bool(mase == mase and mase < 1.0),
+    }
+
+
+def _contiguous(dates: Optional[Sequence]) -> bool:
+    """Are these dates a single run of consecutive observations, evenly spaced?"""
+    if dates is None:
+        return True
+    try:
+        stamps = pd.to_datetime(pd.Series(list(dates))).sort_values()
+    except (TypeError, ValueError):
+        return True
+    gaps = stamps.diff().dropna()
+    if gaps.empty:
+        return True
+    # Daily bars skip weekends and holidays, so "consecutive" cannot mean a constant
+    # gap. It means no gap large enough to be a missing block — 5 sessions.
+    return bool(gaps.max() <= pd.Timedelta(days=7))
+
+
+def calibration_extras(y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, float]:
+    """⚠️ **Block C — are the magnitudes right, or only the order?**
+
+    `calibration_slope` is the OLS slope of realised on predicted. 1.0 is perfect; 0
+    means the prediction's SIZE carries nothing even if its ORDER does; > 1 means the
+    model under-shoots the spread and < 1 that it over-shoots.
+
+    This exists because this project has repeatedly measured the two apart: CLAUDE.md
+    §5c's `GBT` had the board's best IC (+0.1263, and it cleared its bar) with
+    R² = −2.11, and `ridge_stats` ranked second at R² = −5.19. A model can be worth
+    trading on rank and worthless as a forecast, and one column cannot say both.
+    """
+    y_true, y_pred, _ = _clean(y_true, y_pred)
+    if len(y_true) < 3 or np.std(y_pred) == 0:
+        return {
+            "calibration_slope": float("nan"),
+            "calibration_intercept": float("nan"),
+            "pred_sd_ratio": float("nan"),
+        }
+    slope, intercept = np.polyfit(y_pred, y_true, 1)
+    sd_true = float(np.std(y_true))
+    return {
+        "calibration_slope": float(slope),
+        "calibration_intercept": float(intercept),
+        # sd(prediction) / sd(outcome). A shrunk forecast — the usual outcome of
+        # training on noise — sits far below 1 while its `ic` is unaffected.
+        "pred_sd_ratio": float(np.std(y_pred) / sd_true) if sd_true > 0 else float("nan"),
+    }
+
+
 def regression_extras(y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, float]:
     """Error magnitude, and the zero-return baseline it has to beat.
 
@@ -481,19 +730,28 @@ def regression_extras(y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, float
     rmse = float(np.sqrt(np.mean(err ** 2)))
     zero = float(np.sqrt(np.mean(y_true ** 2)))
     positive = y_pred > 0
+    # ⚠️ Block E. On a single-signed target these three are 1.0 / 1.0 / True whatever
+    # the model does — measured 2026-08-16 on a run with R² = −85.6 that reported all
+    # three as perfect. `RMSE_zero_baseline` itself stays: it is a NUMBER, and a number
+    # that is merely weak is not the same as a verdict that cannot be False.
+    degenerate = single_signed(y_true)
     return {
         "RMSE": rmse,
         "MAE": float(np.mean(np.abs(err))),
         "RMSE_zero_baseline": zero,
-        "beats_zero_baseline": bool(rmse < zero),
+        "beats_zero_baseline": float("nan") if degenerate else bool(rmse < zero),
         "r2": (1.0 - sse / sst) if sst > 0 else float("nan"),
         # The 0-threshold sign hit rate, kept beside the core's median-threshold one:
         # for a return regressor 0 IS the natural threshold and the two differ
         # whenever the predictions are biased.
-        "sign_accuracy": float(np.mean(np.sign(y_pred) == np.sign(y_true))),
-        "hit_rate_pos": float(np.mean(y_true[positive] > 0))
-        if positive.any()
-        else float("nan"),
+        "sign_accuracy": (
+            float("nan") if degenerate else float(np.mean(np.sign(y_pred) == np.sign(y_true)))
+        ),
+        "hit_rate_pos": (
+            float("nan")
+            if degenerate or not positive.any()
+            else float(np.mean(y_true[positive] > 0))
+        ),
     }
 
 
@@ -542,6 +800,7 @@ def evaluate(
     y_label: Optional[np.ndarray] = None,
     draws: int = NULL_DRAWS,
     seed: int = 0,
+    dates: Optional[Sequence] = None,
 ) -> Dict[str, float]:
     """The full metric block for one split of one run.
 
@@ -582,9 +841,19 @@ def evaluate(
     out.update(
         null_metrics(y_true, score, block=lookback + horizon, draws=draws, seed=seed)
     )
+    # ⚠️ The error bar on `ic`, reported rather than left to be recomputed by hand.
+    # CLAUDE.md §5c had to state "the whole spread is one error bar" in prose because
+    # no column carried it: 9 models spanned IC −0.100…+0.126 against SE 0.197, and the
+    # largest |t| on that board was +1.42. `n_eff`, not `n` — see below.
+    out.update(_ic_uncertainty(out.get("ic"), out.get("n_eff")))
 
     if task == REGRESSION:
-        out.update(regression_extras(y_true, score if y_pred is None else y_pred))
+        predicted = score if y_pred is None else y_pred
+        out.update(regression_extras(y_true, predicted))
+        # Blocks B and C. Both need predictions in the TARGET'S units, so neither runs
+        # for a classifier — `P(up)` is not a forecast of anything RMSE can read.
+        out.update(accuracy_vs_naive(y_true, predicted, horizon, dates=dates))
+        out.update(calibration_extras(y_true, predicted))
     elif task == CLASSIFICATION:
         label = (np.asarray(y_true, float).ravel() > 0) if y_label is None else y_label
         out.update(classification_extras(label, score))

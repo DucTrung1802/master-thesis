@@ -279,3 +279,125 @@ def test_a_ragged_panel_is_scored_on_the_cells_that_exist():
     assert valid.sum() == len(frame)
     out = M.panel_core_metrics(Y, S, valid)
     assert out["n"] == len(frame) and np.isfinite(out["ic"])
+
+
+# ============================================================ the 2026-08-16 blocks
+# ⚠️ Every test below names a way the OLD metric set said "pass" where nothing had
+# been measured. They are regression tests for CLAUDE.md §5 rule 21 and for the
+# missing naive baseline `experiment_10` found absent from all 23 reviewed papers.
+
+import numpy as _np  # noqa: E402
+
+from result_evaluator.metrics import (  # noqa: E402
+    accuracy_vs_naive,
+    calibration_extras,
+    core_metrics,
+    naive_forecast,
+    regression_extras,
+    single_signed,
+)
+
+
+def _level_series(n=300, start=50_000.0, step=25.0):
+    """A price LEVEL: strictly positive, trending — the `close_adjust_5day` shape."""
+    return start + step * _np.arange(n, dtype=float)
+
+
+def test_a_price_level_is_detected_as_single_signed_and_a_return_is_not():
+    assert single_signed(_level_series()) is True
+    rng = _np.random.default_rng(0)
+    assert single_signed(rng.normal(0, 0.02, 300)) is False
+    # A return series with an unchanged day is still two-signed — zeros are ignored.
+    mixed = _np.array([0.01, 0.0, -0.01, 0.0])
+    assert single_signed(mixed) is False
+
+
+def test_the_metrics_that_cannot_fail_are_withdrawn_on_a_level_target():
+    """The exact 2026-08-16 defect: R2 = -85.6 reported sign_accuracy 1.0."""
+    y = _level_series()
+    pred = y * 0.6                      # badly wrong magnitudes, right order, positive
+    extras = regression_extras(y, pred)
+    assert extras["sign_accuracy"] != extras["sign_accuracy"], "must be NaN"
+    assert extras["hit_rate_pos"] != extras["hit_rate_pos"], "must be NaN"
+    assert extras["beats_zero_baseline"] != extras["beats_zero_baseline"], "must be NaN"
+    # r2 is a MEASUREMENT of a bad fit and must survive the withdrawal.
+    assert extras["r2"] < 0
+    core = core_metrics(y, pred)
+    assert core["target_single_signed"] is True
+    assert core["hit_rate"] != core["hit_rate"], "median-threshold hit_rate must be NaN"
+
+
+def test_the_same_metrics_survive_on_a_two_signed_return_target():
+    rng = _np.random.default_rng(1)
+    y = rng.normal(0, 0.02, 400)
+    pred = y * 0.3 + rng.normal(0, 0.01, 400)
+    extras = regression_extras(y, pred)
+    assert 0.0 <= extras["sign_accuracy"] <= 1.0
+    assert isinstance(extras["beats_zero_baseline"], bool)
+    assert core_metrics(y, pred)["target_single_signed"] is False
+
+
+def test_the_naive_baseline_is_persistence_on_a_level_and_zero_on_a_return():
+    level = _level_series(n=50)
+    naive, kind = naive_forecast(level, horizon=5)
+    assert kind == "lag_h"
+    assert _np.isnan(naive[:5]).all(), "the first h samples have nothing behind them"
+    # ⚠️ The identity the block rests on: y_true[i-h] is the value observable at i.
+    assert naive[5] == level[0]
+    rng = _np.random.default_rng(2)
+    _, kind = naive_forecast(rng.normal(0, 0.02, 50), horizon=5)
+    assert kind == "zero"
+
+
+def test_a_model_worse_than_the_random_walk_does_not_beat_the_naive():
+    """The whole point of block B: `beats_zero_baseline` said True here."""
+    y = _level_series()
+    pred = y * 0.6                      # 40% low — hopeless as a forecast
+    out = accuracy_vs_naive(y, pred, horizon=5)
+    assert out["naive_kind"] == "lag_h"
+    assert out["mase"] > 1.0, "must LOSE to persistence"
+    assert out["beats_naive"] is False
+    assert out["skill_score"] < 0
+    # ... while the old column it replaces still says the model is fine:
+    assert _np.sqrt(_np.mean((pred - y) ** 2)) < _np.sqrt(_np.mean(y ** 2))
+
+
+def test_a_near_perfect_forecast_beats_the_naive():
+    y = _level_series()
+    rng = _np.random.default_rng(3)
+    pred = _np.concatenate([[y[0]] * 5, y[5:]]) + rng.normal(0, 1.0, len(y))
+    out = accuracy_vs_naive(y, pred, horizon=5)
+    assert out["mase"] < 1.0 and out["beats_naive"] is True and out["skill_score"] > 0
+
+
+def test_non_contiguous_dates_are_flagged_rather_than_silently_scored():
+    y = _level_series(n=40)
+    dates = pd.date_range("2024-01-01", periods=40, freq="D").tolist()
+    assert accuracy_vs_naive(y, y * 1.01, 5, dates=dates)["naive_contiguous"] is True
+    dates[20] = dates[20] + pd.Timedelta(days=60)     # a hole the lag would cross
+    assert accuracy_vs_naive(y, y * 1.01, 5, dates=dates)["naive_contiguous"] is False
+
+
+def test_calibration_separates_a_good_ranker_from_a_good_forecaster():
+    """CLAUDE.md §5c: the models that rank best have the most wrong magnitudes."""
+    rng = _np.random.default_rng(4)
+    y = rng.normal(0, 0.02, 500)
+    # Perfect ORDER, magnitudes 10x too small — ic is 1.0, calibration is not.
+    shrunk = calibration_extras(y, y * 0.1)
+    assert abs(shrunk["calibration_slope"] - 10.0) < 0.01
+    assert abs(shrunk["pred_sd_ratio"] - 0.1) < 0.01
+    perfect = calibration_extras(y, y)
+    assert abs(perfect["calibration_slope"] - 1.0) < 1e-6
+    assert abs(perfect["pred_sd_ratio"] - 1.0) < 1e-6
+
+
+def test_ic_carries_its_own_error_bar_computed_on_n_eff_not_n():
+    from result_evaluator.metrics import _ic_uncertainty
+
+    out = _ic_uncertainty(0.4880, 128.0)
+    assert abs(out["ic_se"] - 1 / _np.sqrt(127.0)) < 1e-4
+    assert abs(out["ic_t"] - 0.4880 / (1 / _np.sqrt(127.0))) < 0.05
+    # n = 640 would give an SE 2.2x too small at h=5 — the difference between t=5.5
+    # and t=12.3 on the same IC.
+    assert _ic_uncertainty(0.4880, 640.0)["ic_se"] < out["ic_se"]
+    assert _np.isnan(_ic_uncertainty(float("nan"), 128.0)["ic_t"])

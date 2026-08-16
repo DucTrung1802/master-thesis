@@ -46,6 +46,21 @@ INDEX_COLUMNS: List[str] = [
     "test_ic", "test_ic_p", "test_ic_bar", "test_ic_clears",
     "test_dir_auc", "test_dir_auc_p", "test_dir_auc_bar", "test_dir_auc_clears",
     "test_hit_rate", "test_long_short",
+    # --- the error bar on `ic`, and the panel verdict (added 2026-08-16) --------
+    # ⚠️ `test_ic_t` is THE column to read on a PANEL grain: issue NUL-3 says the
+    # evaluator's panel null is not label-neutral, so `test_ic_clears` is not
+    # trustworthy there while the daily-IC t-stat needs no null at all.
+    "test_ic_se", "test_ic_t",
+    # --- vs a naive forecast, block B (added 2026-08-16) -----------------------
+    # ⚠️ `test_mase < 1` is the first column that asks whether the model beats DOING
+    # NOTHING. `experiment_10` reviewed 23 papers and not one reported this.
+    "test_naive_kind", "test_mase", "test_rmsse", "test_skill_score", "test_beats_naive",
+    # --- calibration, block C (added 2026-08-16) -------------------------------
+    "test_calibration_slope", "test_pred_sd_ratio",
+    # --- degeneracy, block E (added 2026-08-16) --------------------------------
+    # ⚠️ True means the direction metrics above were WITHDRAWN to NaN because every
+    # label shares a sign — they could not have failed (CLAUDE.md §5 rule 21).
+    "test_target_single_signed",
     # --- regression extras -----------------------------------------------------
     "test_RMSE", "test_RMSE_zero_baseline", "test_beats_zero_baseline", "test_r2",
     # --- classification extras -------------------------------------------------
@@ -134,6 +149,19 @@ def index_row(
         "test_dir_auc_clears": _flag(test, "dir_auc_clears"),
         "test_hit_rate": _number(test, "hit_rate"),
         "test_long_short": _number(test, "long_short", 6),
+        "test_ic_se": _number(test, "ic_se"),
+        "test_ic_t": _number(test, "ic_t", 2),
+        # ⚠️ A STRING, not a number — `zero` or `lag_h`. `mase` cannot be read without
+        # it: the same 0.87 means "beats no-change" on a return and "beats the random
+        # walk" on a level, and those are very different claims.
+        "test_naive_kind": test.get("naive_kind", ""),
+        "test_mase": _number(test, "mase"),
+        "test_rmsse": _number(test, "rmsse"),
+        "test_skill_score": _number(test, "skill_score"),
+        "test_beats_naive": _flag(test, "beats_naive"),
+        "test_calibration_slope": _number(test, "calibration_slope"),
+        "test_pred_sd_ratio": _number(test, "pred_sd_ratio"),
+        "test_target_single_signed": _flag(test, "target_single_signed"),
         "test_RMSE": _number(test, "RMSE", 6),
         "test_RMSE_zero_baseline": _number(test, "RMSE_zero_baseline", 6),
         "test_beats_zero_baseline": _flag(test, "beats_zero_baseline"),
