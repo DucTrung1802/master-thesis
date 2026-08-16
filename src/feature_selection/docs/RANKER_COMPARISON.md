@@ -1,8 +1,8 @@
 # The six rankers, compared — advantage, cost, necessity, efficiency
 
-> Written 2026-08-16 against [selector.py](selector.py), [ranker_eval.py](ranker_eval.py)
+> Written 2026-08-16 against [selector.py](../selector.py), [ranker_eval.py](../ranker_eval.py)
 > and the 21 run folders in `reports/feature_selection/`. Depth behind
-> [CONTEXT.md](CONTEXT.md) §4 and §19, and behind the one-line entry in CLAUDE.md §4.
+> [CONTEXT.md](../CONTEXT.md) §4 and §19, and behind the one-line entry in CLAUDE.md §4.
 >
 > **Every number here was measured in this repo.** None is illustrative. Reproduce the
 > cost half in 0.1 s with `python -m feature_selection.ranker_eval --cost-only`, and the
@@ -30,7 +30,7 @@ after    spearman                         xgb_shap         permutation      44.8
 
 ## 2. Why this had never been measured
 
-§4 of [CONTEXT.md](CONTEXT.md) has listed the six since 2026-08-03 with a column headed
+§4 of [CONTEXT.md](../CONTEXT.md) has listed the six since 2026-08-03 with a column headed
 **"sees"**: `spearman` sees monotone association, `mutual_info` sees any dependence,
 `xgb_shap` sees interactions, and so on. That is a coherent argument, and it is an
 argument about **inductive bias** — about what each method is *capable* of noticing.
@@ -66,7 +66,7 @@ folds, same model" is therefore an identity, not a promise.
 ### 3b. ⚠️ The null is RANDOM-k, not shuffled labels — and that is deliberate
 
 Whether this pool predicts anything is a **different question and it is already settled**:
-CLAUDE.md §2 says it does not, and §6b of [CONTEXT.md](CONTEXT.md) measured a positive
+CLAUDE.md §2 says it does not, and §6b of [CONTEXT.md](../CONTEXT.md) measured a positive
 out-of-sample IC on shuffled labels. Re-testing that here would answer nothing new.
 
 The question here is narrower — **does ranker M choose better channels than chance?** —
@@ -180,7 +180,7 @@ archived runs they correlate at **ρ = 0.864**, against 0.15–0.50 for every ot
 | lasso | −0.068 | 0.049 | 0.111 | 0.156 | 1.000 | 0.135 |
 | permutation | −0.160 | 0.306 | 0.225 | 0.333 | 0.135 | 1.000 |
 
-So the blend gave **one model 2 of 6 votes**. §4 of [CONTEXT.md](CONTEXT.md) already said
+So the blend gave **one model 2 of 6 votes**. §4 of [CONTEXT.md](../CONTEXT.md) already said
 gain "splits credit arbitrarily among correlated features" where SHAP does so "less
 arbitrarily" — the module's own documentation said which of the two was worse, and both
 were kept anyway.
@@ -223,7 +223,7 @@ RETURN collapses it to zero coefficients at once, so the same 357-channel panel 
 
 ⚠️ **And once `lasso` is gone, `mutual_info` is the expensive one** — 36.5 % of the
 ranking phase on a return target, and 9.0–9.3 s of ~19.4 s on the two probe runs here. §16
-of [CONTEXT.md](CONTEXT.md) had already measured that its GPU path is **4–8× SLOWER** than
+of [CONTEXT.md](../CONTEXT.md) had already measured that its GPU path is **4–8× SLOWER** than
 sklearn's KDTree, and kept it because `device` must mean the device. So the worst-ranking
 member was also, after lasso, the dearest.
 
@@ -329,7 +329,7 @@ the only stage that writes tables (CLAUDE.md §8).
 
 Both were published on 2026-08-16 and corrected the same day. They are recorded here rather
 than quietly fixed, because both are reasons the measurement now lives in
-[ranker_eval.py](ranker_eval.py) with tests instead of in a scratchpad script.
+[ranker_eval.py](../ranker_eval.py) with tests instead of in a scratchpad script.
 
 1. **The `mean` column averaged its own `min`.** `min` was written into the frame before
    `mean(axis=1)` ran, so every published mean was an average over the four measured cells

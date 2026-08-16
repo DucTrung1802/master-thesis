@@ -536,10 +536,23 @@ leave-one-out subset scored at or ABOVE the full six (80.0); dropping this one p
 blend at **56.2** against chance's 50, in all four cells. ⚠️ **Nothing was deleted** —
 `ALL_METHODS` still holds all six and `methods=ALL_METHODS` reproduces an older run; all
 19 archived shortlists were verified to rebuild identically. ⚠️ **An mRMR member was
-tested and REJECTED** — 100th percentile on one target, 50th on the other (§19f). ⚠️ **New
-issue MTH-1**: `methods` is recorded in `metadata.json` but is NOT in
-`contract.SETUP_KEYS`, so a pre- and a post-2026-08-16 run can be unioned into one table
-with nothing saying so.
+tested and REJECTED** — 100th percentile on one target, 50th on the other (§19f).
+
+✅ **`MTH-1` RESOLVED the same day.** `methods` was recorded in `metadata.json` but not
+in `contract.SETUP_KEYS`, so a pre- and a post-2026-08-16 run could be unioned into one
+table with nothing saying so. It is in `SETUP_KEYS` now, and **the archive did not have
+to be invalidated to get there** — which is what had blocked the fix, since an absent
+SETUP_KEY raises. `contract.LEGACY_SETUP_DEFAULTS` gives a run that recorded no ensemble
+the reading **`"unrecorded"`**, so the 19 archived runs still validate and still plan
+while grouping apart from both the three-ranker default and a deliberate
+`methods=ALL_METHODS` reproduction. ⚠️ **`"unrecorded"` is deliberately not read as "the
+six"** even though those runs used six — §5 rule 2, an absent measurement is absent, not
+inferred. ⚠️ **Grouping is order-insensitive** (`contract.canonical_methods` sorts): the
+ensemble is a MEAN over its members, so order cannot change the answer and must not
+split a table. ⚠️ **Expect this on the next run** — a new three-ranker `vcb__basic` run
+and the 19 archived runs are two groups that still want ONE table name, so
+`plan_from_reports` **raises on the collision rather than unioning**. Pass
+`--scope basic`. Pinned by `feature_selection/tests/test_contract.py` (19 tests).
 
 ⚠️ **THE SELECTION RUNS ON THE GPU NOW, AND `device` IS PART OF THE SETUP** (2026-08-10).
 Every one of the 22 archived runs recorded `device="cpu"` — the GPU had never been used —
@@ -821,7 +834,7 @@ archived runs with them. Nothing is lost: they were force-added on 2026-08-09, s
 Everything downstream inherited that, and the provenance sentence travels verbatim from
 the table `COMMENT` into the dataset `metadata.json` into every run's `lineage`.
 
-**Open issues live in [ISSUES.md](ISSUES.md)** (11 open, 29 resolved, codes permanent).
+**Open issues live in [ISSUES.md](ISSUES.md)** (11 open, 30 resolved, codes permanent).
 Short version: ⚠️ **`SHP-1`** the forex scraper writes two file shapes and only one was
 ever ingested — 71% of the folder was silently discarded until 2026-08-14, and **the
 same `value`-only filter sits unchecked on `bonds`/`funds`/`economy`/`indices`**;
@@ -842,7 +855,7 @@ below 0.95 coverage, `RPR-1` datasets/runs are git-ignored.
 | [src/orchestration/preprocessor/CONTEXT.md](src/orchestration/preprocessor/CONTEXT.md) | 17k | changing HOW a table is built — the `_ingest_*` / `_helper_*` transform library the assets wrap |
 | [src/web_scraper/CONTEXT.md](src/web_scraper/CONTEXT.md) | 22k | touching a scraper, the PDF/OCR statement parser, or `raw_data/` layout |
 | [src/feature_selection/CONTEXT.md](src/feature_selection/CONTEXT.md) | 25k | running or reading a selection, or quoting any IC / null / bar number. **§15a is the STEP-BY-STEP UI GUIDE** for the country sweep (§15a-cli is the same in PowerShell); §15b-§15d the two guards and the cost table; **§16 is the GPU conversion** — what moved, what was measured slower and left alone; §14c is the measured cut that replaced `max_features=12` |
-| [src/feature_selection/RANKER_COMPARISON.md](src/feature_selection/RANKER_COMPARISON.md) | 4k | asking which ranker to keep, drop or add, or quoting any per-ranker cost. The full scorecard behind `feature_selection` §19 — advantage vs a random-k control, both cost regimes, the ρ=0.864 duplicate pair, the REJECTED mRMR addition, and the two errors the measurement had to correct |
+| [src/feature_selection/docs/RANKER_COMPARISON.md](src/feature_selection/docs/RANKER_COMPARISON.md) | 4k | asking which ranker to keep, drop or add, or quoting any per-ranker cost. The full scorecard behind `feature_selection` §19 — advantage vs a random-k control, both cost regimes, the ρ=0.864 duplicate pair, the REJECTED mRMR addition, and the two errors the measurement had to correct |
 | [src/final_features/CONTEXT.md](src/final_features/CONTEXT.md) | 3k | building or rebuilding a `__final__` table |
 | [src/train_test_creator/CONTEXT.md](src/train_test_creator/CONTEXT.md) | 3k | building a dataset, or asking about the purge/impute/scale/window steps |
 | **[src/model/CONTEXT.md](src/model/CONTEXT.md)** | **9k** | training, adding a model type, or quoting any run's numbers. **§1a is the RUN STANDARD** (naming/input/output, enforced); §7 the new-model recipe; **§13–§16 are today's results** — CNN, Tier 1, Tier 2, the bank panel; §10–§11 the older research log ⚠️ now a citation without its evidence (RPR-1) |

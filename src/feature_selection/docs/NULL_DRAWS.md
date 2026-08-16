@@ -1,8 +1,8 @@
 # What `--null-draws 20` is, and why the run is worthless without it
 
-> Written 2026-08-15 against [evaluation.py](evaluation.py), [run.py](run.py),
-> [cross_sectional.py](cross_sectional.py) and [outstanding.py](outstanding.py).
-> Depth behind one line of [CONTEXT.md](CONTEXT.md) §6b and CLAUDE.md §5 rule 1.
+> Written 2026-08-15 against [evaluation.py](../evaluation.py), [run.py](../run.py),
+> [cross_sectional.py](../cross_sectional.py) and [outstanding.py](../outstanding.py).
+> Depth behind one line of [CONTEXT.md](../CONTEXT.md) §6b and CLAUDE.md §5 rule 1.
 >
 > Every number quoted here was measured in this repo. None is illustrative.
 
@@ -34,7 +34,7 @@ was measured.**
 still picks the best-fitting channels — there are always some — and then reports how
 well they fit. The selection step **manufactures a positive IC out of noise.**
 
-Measured on `pool__basic`, VCB, `d=20, h=5` ([CONTEXT.md](CONTEXT.md) §6b):
+Measured on `pool__basic`, VCB, `d=20, h=5` ([CONTEXT.md](../CONTEXT.md) §6b):
 
 | | |
 |---|---|
@@ -116,7 +116,7 @@ observed IC.
 
 **20 draws buys a p-value resolution of ~0.05 and a usable z.** The p-value is floored at
 `1/(n+1)`, so 20 draws **cannot distinguish p = 0.05 from p = 0.001** — which is why
-every conclusion in [CONTEXT.md](CONTEXT.md) is stated as a **z**, not a p.
+every conclusion in [CONTEXT.md](../CONTEXT.md) is stated as a **z**, not a p.
 
 - **Fewer than ~10** and the sd is too poorly estimated for the z to mean anything.
 - **More than 20** only helps a result that is genuinely borderline. Nothing in this
@@ -137,7 +137,7 @@ dominates wall-clock. Measured:
 ⚠️ **Target choice moves the null's cost by 13.7×.** `lasso` dominates the bill and
 zeroes every coefficient on a return target, converging at once — the same 357-channel
 panel takes 2,016 s on `close_adjust_5day` and 146 s on `return_5day`
-([CONTEXT.md](CONTEXT.md) §15c-target). **On a return target a 20-draw null is
+([CONTEXT.md](../CONTEXT.md) §15c-target). **On a return target a 20-draw null is
 affordable even on a wide pool**, so `--null-draws 0` there is a choice, not a budget.
 
 ---
@@ -170,7 +170,7 @@ and never implied to be a pass.** The three values `evidence` can take are
 ⚠️ **`evidence` and `kept_by` answer different questions and neither substitutes for the
 other.** `evidence` is the RUN's verdict against shuffled **labels** — does this pool
 predict this target at all. `kept_by=consensus` is a CHANNEL's verdict against shuffled
-**methods** ([selection_cut.py](selection_cut.py)) — does this channel stand out *within*
+**methods** ([selection_cut.py](../selection_cut.py)) — does this channel stand out *within*
 the run. A row can read `kept_by=consensus, evidence=no_null`: the six rankers agree
 about a channel in a run that was never shown to beat noise.
 

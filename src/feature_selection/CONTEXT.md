@@ -131,10 +131,10 @@
 >
 > | study notebook | one sample is | established |
 > |---|---|---|
-> | [study_1__vcb_unwindowed.ipynb](study_1__vcb_unwindowed.ipynb) | one row → `y_N` | a per-row model. `lookback=1`. §6 |
-> | [study_2__vcb_windowed.ipynb](study_2__vcb_windowed.ipynb) | a `(d, n)` window → `y_N` | **a sequence model.** `d=20`, `h ∈ {5, 10}`. §6a |
-> | [study_3__null_and_holdout.ipynb](study_3__null_and_holdout.ipynb) | — | **whether either result is real.** It is not: §6b-6d |
-> | **[study_4__cross_sectional.ipynb](study_4__cross_sectional.ipynb)** | a `(d, n)` window → **`y` = the stock's RANK on day `N`** | **the one that works.** §9 |
+> | [study_1__vcb_unwindowed.ipynb](studies/study_1__vcb_unwindowed.ipynb) | one row → `y_N` | a per-row model. `lookback=1`. §6 |
+> | [study_2__vcb_windowed.ipynb](studies/study_2__vcb_windowed.ipynb) | a `(d, n)` window → `y_N` | **a sequence model.** `d=20`, `h ∈ {5, 10}`. §6a |
+> | [study_3__null_and_holdout.ipynb](studies/study_3__null_and_holdout.ipynb) | — | **whether either result is real.** It is not: §6b-6d |
+> | **[study_4__cross_sectional.ipynb](studies/study_4__cross_sectional.ipynb)** | a `(d, n)` window → **`y` = the stock's RANK on day `N`** | **the one that works.** §9 |
 >
 > **Read study 4, then study 3.**
 >
@@ -270,8 +270,31 @@ where the run that caused it is no longer the thing being run.
 | **[report.py](report.py)** | **one run → one self-describing folder** — CSVs, PNGs and a `metadata.json` that records what may be compared with what (§10) |
 | **[outstanding.py](outstanding.py)** | **one run → its final feature list** — kept channels only, ties broken, each mapped back to the pool table it must be read from (§14) |
 | **[selection_cut.py](selection_cut.py)** | **how many channels a run supports** — a shuffled-methods null + a per-method knee, replacing `max_features=12` (§14c) |
-| **[ranker_eval.py](ranker_eval.py)** | **what each ranker is WORTH** — advantage vs a random-k control, cost from the archive's own timings, necessity by leave-one-out. The module behind §19; the long form is [RANKER_COMPARISON.md](RANKER_COMPARISON.md) |
+| **[ranker_eval.py](ranker_eval.py)** | **what each ranker is WORTH** — advantage vs a random-k control, cost from the archive's own timings, necessity by leave-one-out. The module behind §19; the long form is [RANKER_COMPARISON.md](docs/RANKER_COMPARISON.md) |
 | **[contract.py](contract.py)** | ⚠️ **THE INTERFACE TO `final_features`, DEFINED ONCE AND IMPORTED BY BOTH SIDES** — the two filenames, the keys, the required columns, and the two checks. §0 below |
+| **[run.py](run.py)** | **the scripted entry point** — `python -m feature_selection.run --pools … --null-draws …`. The same run the notebook does, without the notebook. ⚠️ It was missing from this table until 2026-08-16 |
+
+### Layout (2026-08-16)
+
+The fourteen modules above are the whole of the importable package; everything else
+was moved down one level, so the top level is now what you run and what you import:
+
+| folder | holds | importable? |
+|---|---|---|
+| [tests/](tests/) | the 8 test modules, **85 tests**. ⚠️ `tests/__init__.py` is load-bearing — it keeps pytest's package import mode, so a same-named test in another package cannot shadow one of these | no |
+| [studies/](studies/) | the four finished `study_*.ipynb` write-ups — the record, not entry points | no |
+| [docs/](docs/) | [RANKER_COMPARISON.md](docs/RANKER_COMPARISON.md), [NULL_DRAWS.md](docs/NULL_DRAWS.md), [NULL_DRAWS_VI.md](docs/NULL_DRAWS_VI.md) | no |
+
+⚠️ **`CONTEXT.md` deliberately did NOT move** — every package in this repo keeps its
+CONTEXT.md at its root and CLAUDE.md §7 links them all by that path.
+
+⚠️ **Nine of the fourteen modules are imported BY NAME from outside this package** and
+their paths are therefore API, not an internal detail: `unified_reader`, `report`,
+`outstanding`, `contract` (by `final_features` / `pipeline` / `train_test_creator` /
+`kaggle_gpu`), `evaluation`, `plots` (by `result_evaluator`), `selector`, `windows`
+(by `kaggle_gpu`) and `run` (by `orchestration`). Renaming one is a six-package
+change. The five that are free to move are `gpu`, `gpu_rankers`, `cross_sectional`,
+`selection_cut` and `ranker_eval`.
 
 ### Downstream of here
 
@@ -295,8 +318,24 @@ each split boundary, so the CV here and the split there agree about what a leak 
 copied into the table `COMMENT` by `final_features`, into the dataset's
 `metadata.json` by `train_test_creator`, and into each run's `lineage` by
 `model/lstm/train.py`.
-| [test_selection_cut.py](test_selection_cut.py) | **13 tests, no database, ~15 s** — one per way the cut could manufacture a list |
-| **[test_cross_sectional.py](test_cross_sectional.py)** | **13 tests, no database, ~2 min** — one per way of faking a cross-sectional result |
+
+### The tests
+
+⚠️ **These two rows were ORPHANED until 2026-08-16** — a headerless table fragment
+stranded after the paragraph above, rendering as broken markdown. Here is the whole
+set, counted from `--collect-only` rather than from memory:
+**85 tests, no database, 189 s** (`src/feature_selection/tests/`, measured 2026-08-16).
+
+| file | n | pins |
+|---|---|---|
+| [test_gpu_rankers.py](tests/test_gpu_rankers.py) | 14 | the two rankers `gpu_rankers.py` reimplements, against the sklearn originals they replace (§16) |
+| [test_selection_cut.py](tests/test_selection_cut.py) | 13 | one per way the cut could manufacture a list (§14c) |
+| **[test_cross_sectional.py](tests/test_cross_sectional.py)** | 13 | one per way of faking a cross-sectional result |
+| [test_ranker_eval.py](tests/test_ranker_eval.py) | 11 | the §19 scorecard — and keeps `ranker_eval.ALL_TARGETS` in step with `run.py` rather than by hand |
+| [test_gpu_determinism.py](tests/test_gpu_determinism.py) | 11 | each component's bit-identity, plus **the two devices still disagreeing on the trees** (§16e) |
+| [test_gpu_permutation.py](tests/test_gpu_permutation.py) | 9 | the batched permutation loop vs sklearn's chained one — statistical, not bit-exact, and it says why |
+| [test_gpu_spearman.py](tests/test_gpu_spearman.py) | 7 | that the GPU Spearman matches `scipy` **exactly**, not merely closely |
+| [test_evaluation_null.py](tests/test_evaluation_null.py) | 7 | **NUL-4** — the add-one p-value estimator, after the floor read as significant |
 
 ⚠️ **`cross_sectional.py` re-implements NO ranker.** `CrossSectionalSelector`
 overrides six hooks on `FeatureSelector` — `_design`, `_splits`, `_ic`,
@@ -2778,7 +2817,7 @@ nothing: a T4 run is a different **procedure**, not the same one on faster hardw
 
 ## 19. ⚠️ THE RANKERS, EVALUATED — six became three (2026-08-16)
 
-> 📄 **The long form is [RANKER_COMPARISON.md](RANKER_COMPARISON.md)** — the full
+> 📄 **The long form is [RANKER_COMPARISON.md](docs/RANKER_COMPARISON.md)** — the full
 > scorecard, the correlation matrix, both cost regimes, the rejected addition and the
 > two errors the measurement itself had to correct. This section is the summary.
 > The measurement is code: `python -m feature_selection.ranker_eval --cost-only`
@@ -2978,15 +3017,39 @@ what the second target is for, and is the same lesson §6b teaches about a posit
 
 **Not added.** Kept here as a measured negative so the next person does not re-derive it.
 
-### 19g. ⚠️ Issue MTH-1 — the ensemble's membership is not in the grouping key
+### 19g. ✅ Issue MTH-1 — the ensemble's membership IS in the grouping key (fixed 2026-08-16)
 
-`self.methods` is recorded in `SelectionResult.setup`, and travels into `metadata.json`
-and the report README. It is **NOT** in `contract.SETUP_KEYS`, and it should be: two runs
-with different members are not the same experiment, exactly as §8 means it.
+`self.methods` is recorded in `SelectionResult.setup` and travels into `metadata.json`
+and the report README. It is now **also** in `contract.SETUP_KEYS`, so `final_features`
+groups on it: two runs with different members are not the same experiment, exactly as §8
+means it, and they no longer land in one table.
 
-It is not there because adding a key to `SETUP_KEYS` makes every run archived without it
-**ungroupable** — `contract.validate_shortlist` raises on all 21, `final_features` cannot
-plan, and every table below goes stale (the STL-1 domino). So: **a run from before
-2026-08-16 and a run from after can currently be unioned into one table without anything
-saying so.** Read `setup.methods` in `metadata.json` before combining runs across that
-date. The right time to close this is the next archive rebuild.
+**What had blocked it, and how it was got around.** Adding a key to `SETUP_KEYS` makes
+every run archived without it **ungroupable** — `validate_shortlist` raises on all of
+them, `final_features` cannot plan, and every table below goes stale (the STL-1 domino).
+So the key came with `contract.LEGACY_SETUP_DEFAULTS`, one table of "SETUP_KEYS a
+pre-existing run may legitimately omit, and what to read instead". A run that recorded no
+ensemble reads as **`"unrecorded"`**. The 19 archived country runs validate and plan
+unchanged; nothing was invalidated.
+
+| a run recording… | groups as | why |
+|---|---|---|
+| nothing (pre-2026-08-16) | `unrecorded` | ⚠️ **NOT "the six"**, though they used six — §5 rule 2: an absent measurement is recorded as absent, never inferred. Writing "the six" would also merge these with a genuine `methods=ALL_METHODS` reproduction, and those two are distinguishable |
+| the measured three | `permutation, spearman, xgb_shap` | the default since 2026-08-16 |
+| `methods=ALL_METHODS` | all six, sorted | a deliberate reproduction of an old run — its own group |
+
+⚠️ **The comparison is order-insensitive and the record is not.** `metadata.json` keeps
+the order the run used; `contract.canonical_methods` sorts at grouping time. The ensemble
+is `ranks[methods].mean(axis=1)`, so member order cannot change the answer — comparing
+raw strings would split one experiment into two tables and report a difference that does
+not exist.
+
+⚠️ **What to expect on the next run, measured 2026-08-16.** The archive alone plans **1
+group, 19 runs, 885 features**. Add one three-ranker run and it becomes **two groups that
+still want one table name** (`close_adjust_5day__final__d20_h5`), so `plan_from_reports`
+**raises on the collision instead of unioning** — the guard working, not a regression.
+Pass `--scope basic`, which is what §5c of `pipeline/CONTEXT.md` already prescribes.
+
+Pinned by `tests/test_contract.py` (19 tests), including that a genuinely missing
+SETUP_KEY is still reported — the defaults table papers over exactly one thing and no
+more.

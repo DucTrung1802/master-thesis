@@ -308,6 +308,11 @@ def _read_outstanding(root: str) -> pd.DataFrame:
             continue
         frame = pd.read_csv(path)
         setup = json.load(open(meta_path, encoding="utf-8"))["setup"]
+        # ⚠️ **MTH-1.** Fills the SETUP_KEYS a pre-2026-08-16 run legitimately omits
+        # (`methods`) and sorts the ensemble membership so member ORDER cannot split
+        # one experiment into two tables. Defined in `feature_selection.contract`
+        # because both sides of the handoff must agree on it — see `normalise_setup`.
+        setup = contract.normalise_setup(setup)
         # ⚠️ `CUT_KEYS` describe the cut and are stamped into `outstanding.csv` by
         # `feature_selection.outstanding`; they are NOT in `metadata.json`, which
         # records the selector run. A shortlist written before they existed is

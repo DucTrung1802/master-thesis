@@ -312,9 +312,11 @@ class SelectionResult:
                 "design_columns": self.design_scores.shape[0],
                 "kept": len(self.kept),
                 "device": self.device,
-                # ⚠️ In `setup` because it changes the answer; NOT in
-                # `contract.SETUP_KEYS`, because adding a key there makes every run
-                # archived without it ungroupable (issue MTH-1).
+                # ⚠️ In `setup` because it changes the answer, and since 2026-08-16 in
+                # `contract.SETUP_KEYS` too, so `final_features` GROUPS on it (MTH-1).
+                # Written in the order the run used — the honest record. The sort that
+                # makes the comparison order-insensitive happens at grouping time, in
+                # `contract.canonical_methods`, not here.
                 "methods": ", ".join(self.methods),
             },
             name="setup",
@@ -420,9 +422,11 @@ class FeatureSelector:
     ):
         # ⚠️ **THE ENSEMBLE'S MEMBERSHIP CHANGES THE ANSWER, so it is recorded** — in
         # `SelectionResult.setup`, and from there into `metadata.json` and the report
-        # README. It is NOT in `contract.SETUP_KEYS`: adding a key there makes every
-        # run archived without it ungroupable and fails `validate_shortlist` on all 21
-        # (the STL-1 domino, `final_features/CONTEXT.md` §5a). Tracked as **MTH-1**.
+        # README. ✅ **MTH-1 RESOLVED 2026-08-16: it is now in `contract.SETUP_KEYS`**,
+        # so `final_features` groups on it and a three-ranker run can no longer be
+        # unioned into a six-ranker table. The archive did not have to be orphaned to
+        # get there — `contract.LEGACY_SETUP_DEFAULTS` gives a run that recorded no
+        # ensemble the reading `"unrecorded"`, which groups apart from both.
         self.methods = tuple(methods)
         if not self.methods:
             raise ValueError("methods must name at least one ranker.")

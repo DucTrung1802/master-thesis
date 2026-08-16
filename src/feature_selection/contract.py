@@ -79,7 +79,74 @@ METADATA_FILENAME = "metadata.json"
 SETUP_KEYS: Tuple[str, ...] = (
     "lookback_d", "horizon_h", "normalize", "feature_normalize",
     "corr_threshold", "n_splits", "min_train", "random_state", "selector_class",
+    "methods",
 )
+
+# ⚠️ **`methods` JOINED THIS TUPLE 2026-08-16 — issue MTH-1, and it is the reason
+# `LEGACY_SETUP_DEFAULTS` below exists.** The default ensemble narrowed from six
+# rankers to three that day (CONTEXT §19), which changes which channels a run keeps —
+# so two runs from opposite sides of the change are NOT the same experiment. It was
+# left out of this tuple until now for one good reason: every run archived before the
+# change records no `methods` at all, and an absent SETUP_KEY raises. That is what the
+# defaults table solves, so the key can be grouped on without orphaning the archive.
+
+# The value a run that never recorded its ensemble reads as. ⚠️ **NOT the six.** Those
+# runs did use all six — that was the default — but CLAUDE.md §5 rule 2 is that an
+# absent measurement is recorded as absent, never inferred. Writing "the six" here
+# would turn a reasonable guess into a fact on disk that nothing measured, and would
+# silently merge a legacy run with a deliberate `methods=ALL_METHODS` reproduction.
+# Those two are distinguishable and must stay so.
+METHODS_UNRECORDED = "unrecorded"
+
+# SETUP_KEYS a pre-existing run may legitimately omit, and what to read instead. ⚠️
+# Anything added here weakens the grouping for old runs, so it takes a measured reason
+# and a comment. Adding a key to SETUP_KEYS WITHOUT an entry here is still the default
+# and still correct — it rejects the archive loudly rather than grouping it wrongly.
+LEGACY_SETUP_DEFAULTS: Dict[str, object] = {
+    "methods": METHODS_UNRECORDED,
+}
+
+
+def canonical_methods(value: object) -> str:
+    """`methods` as a sorted, comma-joined string — the form the grouping compares.
+
+    ⚠️ **Sorted because the ensemble is order-insensitive and the grouping must be
+    too.** `FeatureSelector` combines its rankers as `ranks[methods].mean(axis=1)`
+    (`selector.py`), so `("spearman", "xgb_shap")` and `("xgb_shap", "spearman")`
+    produce bit-identical output — they are one experiment. Comparing the raw strings
+    would split them into two tables and report a difference that does not exist.
+
+    `metadata.json` keeps the ORDER THE RUN USED, which is the honest record; the sort
+    happens here, at the comparison, not at the write.
+    """
+    if value is None:
+        return METHODS_UNRECORDED
+    if isinstance(value, str):
+        parts = [p.strip() for p in value.split(",")]
+    else:
+        parts = [str(p).strip() for p in value]
+    parts = [p for p in parts if p]
+    return ", ".join(sorted(parts)) if parts else METHODS_UNRECORDED
+
+
+def normalise_setup(setup: Dict) -> Dict:
+    """One run's `setup`, with legacy gaps filled and `methods` canonicalised.
+
+    ⚠️ **Both sides of the handoff must call this before comparing two setups** —
+    `final_features` groups on the result and `validate_shortlist` checks it. Doing it
+    in one place is the whole point of this module: the alternative is `final_features`
+    filling a default that `feature_selection` does not know about.
+
+    Does not mutate the caller's dict, and never invents a value for a key that is
+    absent from `LEGACY_SETUP_DEFAULTS` — those still surface as missing.
+    """
+    filled = dict(setup or {})
+    for key, default in LEGACY_SETUP_DEFAULTS.items():
+        if filled.get(key) is None:
+            filled[key] = default
+    if "methods" in filled:
+        filled["methods"] = canonical_methods(filled["methods"])
+    return filled
 
 # ⚠️ **`max_features` is deliberately NOT here** (removed 2026-08-09, issue STL-1).
 # It was `12` in every pre-2026-08-10 `metadata.json` and it has not determined a
@@ -213,7 +280,10 @@ def validate_shortlist(
             )
 
     if setup is not None:
-        absent = [k for k in SETUP_KEYS if k not in setup]
+        # ⚠️ Normalised FIRST, so a key with a documented legacy default (`methods`,
+        # issue MTH-1) is not reported as broken — it has a defined reading. Every
+        # other absence still surfaces here, which is the point.
+        absent = [k for k in SETUP_KEYS if k not in normalise_setup(setup)]
         if absent:
             problems.append(
                 f"{label}: metadata.json setup is missing {absent}, which "
