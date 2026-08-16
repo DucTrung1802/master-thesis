@@ -367,7 +367,15 @@ fires — a `--apply` run printed no per-stage timing at all. Its `runtime` colu
 the card that matters is a Kaggle T4, and its clock is the ROUND TRIP, not the selection.
 `feature_selection/CONTEXT.md` §18a.
 
-### 3c. ⚠️ TWO selection layers, and the pool between them (NEW 2026-08-13)
+### 3c. ⚠️ TWO selection layers, and the pool between them (2026-08-13, REBUILT 2026-08-16)
+
+⚠️ **THE CODE BELOW WAS DOCUMENTED HERE FOR THREE DAYS WITHOUT EXISTING.** It was
+written and RUN on 2026-08-13 — `pool__shortlist__close_adjust_5day__d20_h5` (4,266 ×
+892) sat in the database with its source runs named in its own `COMMENT` — and **never
+committed**: `git log --all -S"Pre-final shortlist"` finds no commit, `final_features`
+on disk had no `--shape` flag, and the `final_features/CONTEXT.md §8` this section
+cites did not exist. Rewritten 2026-08-16 from that table's `COMMENT` and this section.
+**A documented feature is not a shipped one, and the check that catches it is `grep`.**
 
 **The layer-1 union is not a consensus.** 725 of 750 channels in the old VCB table were
 chosen by exactly one run — arithmetic, not agreement: each run saw `pool__basic + one`

@@ -18,6 +18,7 @@ python -m final_features                     # print the plan, touch nothing
 python -m final_features --apply             # create the tables
 python -m final_features --apply --replace   # ⚠️ DROP an existing table first
 python -m final_features --apply --scope basic   # root: reports/feature_selection
+python -m final_features --apply --shape shortlist   # the layer-2 INPUT pool — §8
 ```
 
 ## 0. ⚠️ THE INTERFACE — the only two files this module may open
@@ -342,3 +343,83 @@ current reports would build and reports `STALE — table <a> vs shortlists <b>`.
 not automatic: rebuilding drops the table, changes every dataset hash below it and
 orphans the runs that referenced them. It is a decision, and the check exists so it is
 a decision rather than a surprise.
+
+## 8. ⚠️ TWO SHAPES, because there are TWO SELECTION LAYERS (2026-08-16)
+
+> ⚠️ **This section was cited by CLAUDE.md §3b/§3c from 2026-08-13 and did not exist.**
+> The machinery it described was written, RUN — `unified_schema_vcb.pool__shortlist__close_adjust_5day__d20_h5`
+> (4,266 × 892) is still in the database, built from 20 runs, and its `COMMENT` names
+> them — and then **never committed**. `git log --all -S"Pre-final shortlist"` finds no
+> commit; the module on disk had no `--shape` flag. Rewritten 2026-08-16 from that
+> table's own `COMMENT` and from §3c. ⚠️ **A documented feature is not a shipped one:
+> the check that would have caught this is `grep`, and it costs seconds.**
+
+```
+shape=shortlist   pool__shortlist__<target>__d<d>_h<h>   keys + channels, NO label
+shape=final       <target>__final__d<d>_h<h>             + the target column
+```
+
+**Why a second layer at all — §6 is the argument.** The layer-1 union is not a
+consensus and cannot be made into one: each run ranks `pool__basic + one` other pool,
+so a macro channel is offered to exactly one run and agreement was never available to
+measure. Requiring `≥2 runs` collapses 750 channels to 25, all of them `pool__basic`,
+**by construction rather than by evidence**. §6 named the coherent alternative — "ONE
+selection run over the joined pool" — and called it expensive. The shortlist pool is
+the cheap version of it: one run over the few hundred **survivors** rather than over
+every candidate.
+
+```
+layer 1   N runs over pool__basic + <each pool>   →  shortlist pool   (this module)
+layer 2   1 run  over the shortlist pool          →  final table      (this module)
+```
+
+### The rules, and what each one is preventing
+
+- ⚠️ **The `pool__` prefix is load-bearing.** `feature_selection.run --pools`,
+  `UnifiedSchemaReader.pools()`, the pipeline's calendar check and the run-folder scope
+  all key on it — so the pool needed **no new code anywhere** to be selectable over. It
+  simply *is* a pool as far as every consumer is concerned.
+- ⚠️ **The target is IN the name because this pool is TARGET-CONDITIONED.** Its
+  channels were kept *using* that label at that window. A raw `pool__basic` may be
+  selected over for anything; this one may not, and doing so is leakage. The `COMMENT`
+  says so in the same words.
+- ⚠️ **It stores NO label**, exactly like every raw `pool__*` — `pool__targets` is
+  joined by whoever reads it. Storing one would make this the single pool that could
+  hand a selector its own answer through `--pools`.
+- ⚠️ **Never name a shape with a `__final__` SEGMENT.** `train_test_creator.FINAL_TABLE`
+  permits underscores in the target group, so `…__pre__final__d20_h5` PARSES, yielding
+  `target='…__pre'` — a column that exists nowhere, discovered stages later.
+  `__prefinal__` was rejected for this, and `SHAPES` is a closed set so the mistake is
+  not reachable from the CLI.
+- ⚠️ **A run is layer 2 iff its `outstanding.csv` says `source_table=pool__shortlist__*`**
+  — a fact about what it RANKED, not a flag. A flag would let a layer-1 run claim
+  layer 2 and the claim would travel into the `COMMENT` unchallenged.
+
+### Which layer each shape reads, and why it is not symmetric
+
+| shape | reads | because |
+|---|---|---|
+| `shortlist` | layer-1 runs **only** | feeding layer 2's output back into its own input is circular — the pool would be conditioned on a selection made over itself. Raises if every run is layer 2 |
+| `final` | layer-2 runs **whenever any exists**, else every run | the competing run is strictly better evidence than the union that fed it |
+
+⚠️ **`final` does not UNION the layers.** A layer-1 shortlist and a layer-2 one are not
+two shards of one candidate set — the second *is* the first, re-ranked with the channels
+competing. Unioning them would put back exactly the channels the competing run
+**rejected**, and the table would be the union again wearing layer 2's name. The switch
+shows up in the printed plan, in the `COMMENT` (`Selection layer N:`) and — because the
+channel sets differ — in the **fingerprint**, so a stale table reports STALE rather than
+being accepted.
+
+⚠️ **`--apply --shape shortlist` cannot be followed straight by `--shape final`.** The
+layer-2 run has to happen in between and it is manual:
+
+```powershell
+python -m final_features --apply --shape shortlist
+python -m feature_selection.run --pools pool__shortlist__<target>__d<d>_h<h> `
+       --target <target> --lookback 20 --horizon 5 --null-draws 10
+python -m final_features --apply --shape final --replace
+```
+
+`python -m pipeline` reports both as stages (`shortlist_pool`, `selection_2`), and
+`selection_2` prints `MANUAL — cannot be produced here` rather than doing something
+cheaper that looks the same.

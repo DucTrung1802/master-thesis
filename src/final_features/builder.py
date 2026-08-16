@@ -5,6 +5,33 @@
     python -m final_features --apply         # create the tables
     python -m final_features --apply --replace   # ⚠️ drop an existing table first
     python -m final_features --apply --scope basic   # root: reports/feature_selection
+    python -m final_features --apply --shape shortlist   # the layer-2 INPUT pool
+
+## ⚠️ TWO SHAPES, because there are two selection layers
+
+    shape=shortlist   pool__shortlist__<target>__d<d>_h<h>   keys + channels, NO label
+    shape=final       <target>__final__d<d>_h<h>             + the target column
+
+**The layer-1 union is not a consensus and cannot be made into one.** Each layer-1 run
+ranks `pool__basic + one` other pool, so a macro channel is offered to exactly one run
+and agreement was never available to measure — 725 of the old 750-channel table's
+channels were "chosen by one run" as arithmetic (§6). Requiring ≥2 runs collapses it to
+25 by construction rather than by evidence. The coherent alternative is ONE run in which
+the survivors compete, and the shortlist pool is its input: the cheap version of "one
+selection over the joined pool", over the few hundred SURVIVORS instead of every
+candidate.
+
+    layer 1  N runs  over pool__basic + <each pool>   ->  shortlist pool  (this module)
+    layer 2  1 run   over the shortlist pool          ->  final table     (this module)
+
+⚠️ **A run is layer 2 iff its `outstanding.csv` says `source_table=pool__shortlist__*`**
+— a fact about what it ranked, never a flag. `--shape final` then builds from the
+layer-2 runs whenever any exist, and unions everything as before when none do.
+
+⚠️ **`--apply --shape shortlist` cannot be followed straight by `--shape final`.** The
+layer-2 selection has to be RUN in between, and running one is manual:
+
+    python -m feature_selection.run --pools pool__shortlist__<target>__d<d>_h<h> ...
 
 ## The grouping rule
 
@@ -122,6 +149,25 @@ NOT_SET = "not_set"
 # schema already names the cross-section. See `table_name`.
 CS_PREFIX = "cs_"
 
+# ── THE TWO SHAPES, and why there are exactly two ────────────────────────────────
+#
+# ⚠️ **THE SHAPES ARE A CLOSED SET, NOT A STRING.** Naming a shape is naming a table,
+# and `FINAL_TABLE`'s target group in `train_test_creator` permits underscores — so a
+# shape called `pre_final` would produce `close_adjust_5day__pre__final__d20_h5`, which
+# PARSES, yielding `target='close_adjust_5day__pre'`: a column that exists nowhere,
+# discovered two stages later. `__prefinal__` was rejected for the same reason. The
+# names live in `SHAPES` and anything else raises at the CLI.
+SHAPE_FINAL = "final"
+SHAPE_SHORTLIST = "shortlist"
+SHAPES = (SHAPE_FINAL, SHAPE_SHORTLIST)
+
+# The prefix a pre-final pool's name carries. ⚠️ **`pool__` is load-bearing.**
+# `feature_selection.run --pools`, `UnifiedSchemaReader.pools()`, the pipeline's
+# calendar check and the run-folder scope all key on it, so a shortlist pool needed no
+# new code anywhere to be selectable over — it simply IS a pool as far as they are
+# concerned.
+SHORTLIST_POOL_PREFIX = "pool__shortlist__"
+
 
 def _identifier(name: str, what: str) -> str:
     """`name`, or a `ValueError`. The rule is `contract.identifier`'s — one copy, and
@@ -157,9 +203,28 @@ def fingerprint_of_comment(comment: Optional[str]) -> Optional[str]:
 
 
 def table_name(
-    target: str, lookback: int, horizon: int, scope: Optional[str] = None
+    target: str,
+    lookback: int,
+    horizon: int,
+    scope: Optional[str] = None,
+    shape: str = SHAPE_FINAL,
 ) -> str:
     """`<target>__final__d<lookback>_h<horizon>[__<scope>]`, minus any `cs_` prefix.
+
+    ## The two shapes
+
+        shape="final"      <target>__final__d20_h5             the model's input table
+        shape="shortlist"  pool__shortlist__<target>__d20_h5   layer 2's INPUT pool
+
+    ⚠️ **The target is IN the shortlist pool's name because that pool, unlike every raw
+    one, is TARGET-CONDITIONED**: its channels were kept *using* that label at that
+    window. `pool__basic` may be selected over for any target; this one may not, and
+    selecting over it for a different one is leakage the name is there to prevent.
+
+    ⚠️ **A shortlist pool carries NO `__final__` segment and that is not cosmetic.**
+    `train_test_creator.FINAL_TABLE` permits underscores in the target group, so
+    `…__pre__final__d20_h5` parses to `target='…__pre'` — a column that exists nowhere,
+    found stages later. That is why the shapes are a closed set (`SHAPES`).
 
     ⚠️ **`cs_rank_5day` names its table `rank_5day__final__*`.** The `cs_` marks a
     CROSS-SECTIONAL target, and a cross-section is a set of tickers — which is what the
@@ -193,8 +258,15 @@ def table_name(
     UNIONED. Name each build's block (`--scope basic`, `--scope economy_japan`) or
     accept that union deliberately.
     """
+    if shape not in SHAPES:
+        raise ValueError(f"shape {shape!r} is not one of {SHAPES}.")
     stem = target[len(CS_PREFIX):] if target.startswith(CS_PREFIX) else target
-    name = f"{stem}__final__d{int(lookback)}_h{int(horizon)}"
+    window = f"d{int(lookback)}_h{int(horizon)}"
+    name = (
+        f"{stem}__final__{window}"
+        if shape == SHAPE_FINAL
+        else f"{SHORTLIST_POOL_PREFIX}{stem}__{window}"
+    )
     if scope:
         # Validated separately so the error names the SCOPE rather than the whole
         # table it was interpolated into.
@@ -214,6 +286,13 @@ class FinalTablePlan:
     columns_by_table: Dict[str, List[str]]
     runs: List[str] = field(default_factory=list)
     evidence: Dict[str, int] = field(default_factory=dict)
+    # `final` (the model's input, target column included) or `shortlist` (layer 2's
+    # input pool, features only). See `table_name`.
+    shape: str = SHAPE_FINAL
+    # Which SELECTION LAYER the source runs are. ⚠️ This is a FACT ABOUT THE RUNS, read
+    # off `source_table`, never a flag: a run whose channels came out of a
+    # `pool__shortlist__*` is layer 2 by definition, because that is what it ranked.
+    layer: int = 1
 
     @property
     def n_features(self) -> int:
@@ -227,6 +306,29 @@ class FinalTablePlan:
     @property
     def source_tables(self) -> List[str]:
         return sorted(self.columns_by_table)
+
+    def layer_sentence(self) -> str:
+        """What the SELECTION LAYER of the source runs means for reading this table.
+
+        ⚠️ **Layer 1 is a UNION and cannot be read as a consensus.** Each layer-1 run
+        saw `pool__basic + one` macro block, so a macro channel could never be a
+        candidate twice — 725 of the old table's 750 channels were "chosen by exactly
+        one run" as ARITHMETIC, not as disagreement (§6). Layer 2 is the run where the
+        survivors finally compete against each other in one pool, and that difference
+        is the only thing separating two tables that otherwise look alike.
+        """
+        if self.layer >= 2:
+            return (
+                "Selection layer 2: the channels COMPETED — one run over "
+                f"{SHORTLIST_POOL_PREFIX}* where every survivor of layer 1 was a "
+                "candidate at once. "
+            )
+        return (
+            "Selection layer 1: ⚠️ a UNION of per-pool runs, NOT a consensus - a "
+            "channel offered to one run could never be a candidate in another, so "
+            "agreement was not available to measure "
+            "(final_features/CONTEXT.md section 6). "
+        )
 
     def comment(self) -> str:
         """The provenance sentence attached to the table with `COMMENT ON`."""
@@ -243,6 +345,20 @@ class FinalTablePlan:
                 f"instead and the reader re-ranks with "
                 f"cross_sectional.cross_sectional_rank."
             )
+        if self.shape == SHAPE_SHORTLIST:
+            # ⚠️ Two facts a reader of this pool cannot get from its columns. The first
+            # is a shape: no label is stored, exactly as for any raw `pool__*`. The
+            # second is the one that makes this pool different from every raw one, and
+            # it is a LEAKAGE warning, not a note about provenance.
+            note += (
+                " ⚠️ PRE-FINAL POOL: features only, no target column — join "
+                f"{TARGETS_TABLE} for the label, as with any pool__* here."
+                f" ⚠️ Its channel SET is TARGET-CONDITIONED: every channel was kept by "
+                f"a selection run against {self.target!r} at "
+                f"d={self.setup['lookback_d']}, h={self.setup['horizon_h']}. Selecting "
+                f"over it for a DIFFERENT target is leakage — the candidates were "
+                f"already filtered with a label correlated to the new one."
+            )
         if self.evidence.get("no_null"):
             note += (
                 " ⚠️ evidence=no_null means no bar was computed for that run — a "
@@ -256,8 +372,13 @@ class FinalTablePlan:
             f"{k}={v.item() if hasattr(v, 'item') else v}"
             for k, v in ((k, self.setup[k]) for k in SETUP_KEYS)
         )
+        headline = (
+            "Pre-final shortlist pool (layer 2 input)"
+            if self.shape == SHAPE_SHORTLIST
+            else "Final feature table"
+        )
         return (
-            f"Final feature table built by final_features from {len(self.runs)} "
+            f"{headline} built by final_features from {len(self.runs)} "
             f"feature-selection run(s) sharing target={self.target!r} and setup "
             f"[{setup}]. "
             # ⚠️ The fingerprint is what lets a later `status` call tell whether the
@@ -265,6 +386,7 @@ class FinalTablePlan:
             # the only check anything made — see `fingerprint`.
             f"{FINGERPRINT_LABEL}: {self.fingerprint} over {self.n_features} channels. "
             f"{self.n_features} channels from {len(self.columns_by_table)} pool(s). "
+            f"{self.layer_sentence()}"
             f"Run evidence: {evidence}.{note} Source runs: "
             f"{'; '.join(sorted(self.runs))}"
         )
@@ -334,6 +456,15 @@ def _read_outstanding(root: str) -> pd.DataFrame:
             # because this prints to a cp1252 console on Windows.
             frame[key] = NOT_SET if setup[key] is None else setup[key]
         frame["folder"] = name
+        # ⚠️ **THE LAYER IS READ, NOT DECLARED.** A run is layer 2 iff the pool it
+        # ranked was a `pool__shortlist__*` — a fact about what it saw, recorded in the
+        # shortlist it wrote. A flag would let a layer-1 run claim to be layer 2 and
+        # the claim would travel into the table COMMENT unchallenged.
+        frame["layer"] = (
+            2
+            if frame["source_table"].astype(str).str.startswith(SHORTLIST_POOL_PREFIX).any()
+            else 1
+        )
         frames.append(frame)
     if not frames:
         raise FileNotFoundError(
@@ -360,7 +491,9 @@ def _stored_target(target: str, available: Sequence[str], horizon: int) -> Optio
 
 
 def plan_from_reports(
-    root: str = DEFAULT_REPORT_ROOT, scope: Optional[str] = None
+    root: str = DEFAULT_REPORT_ROOT,
+    scope: Optional[str] = None,
+    shape: str = SHAPE_FINAL,
 ) -> List[FinalTablePlan]:
     """Group every run's `outstanding.csv` into one plan per (schema, target, setup).
 
@@ -369,8 +502,33 @@ def plan_from_reports(
     term for "which pools", so two runs over different feature blocks at the same target
     and knobs are one group. Keeping a scoped run under its own root is what keeps it
     out of the archive's union (`table_name`). `scope` then names the table it builds.
+
+    ## ⚠️ Which LAYER's runs each shape reads, and why it is not symmetric
+
+    | shape | reads | because |
+    |---|---|---|
+    | `shortlist` | layer-1 runs only | feeding a layer-2 run's output back into its own input pool is circular — the pool would be conditioned on a selection made over itself |
+    | `final` | layer-2 runs **whenever any exists**, else every run | the competing run is strictly better evidence than the union that fed it (§6), so the moment one exists it is what the model should be trained on |
+
+    The switch is visible in the printed plan, in the table `COMMENT`
+    (`layer_sentence`) and — because the channel sets differ — in the fingerprint, so a
+    table built from the union reports STALE against a plan built from layer 2 rather
+    than being silently accepted.
     """
+    if shape not in SHAPES:
+        raise ValueError(f"shape {shape!r} is not one of {SHAPES}.")
     rows = _read_outstanding(root)
+
+    if shape == SHAPE_SHORTLIST:
+        # Safe to filter globally: a layer-2 run can never feed a shortlist pool in ANY
+        # group, because the pool it ranked IS that group's shortlist pool.
+        rows = rows[rows["layer"] == 1]
+        if rows.empty:
+            raise ValueError(
+                f"every run under {root} is layer 2 (its channels came out of a "
+                f"{SHORTLIST_POOL_PREFIX}* pool), so there is no layer-1 union to build "
+                f"a shortlist pool FROM — that would be circular."
+            )
     for column in ("channel", "source_table", "schema"):
         for value in rows[column].unique():
             _identifier(str(value), column)
@@ -379,6 +537,19 @@ def plan_from_reports(
     group_keys = ["schema", "target"] + [k for k in SETUP_KEYS if k in rows.columns]
     for key, group in rows.groupby(group_keys, dropna=False):
         setup = dict(zip(group_keys, key))
+        # ⚠️ **PER GROUP, NEVER GLOBALLY.** Filtering the whole frame to layer 2 would
+        # delete every OTHER experiment's plan the moment one experiment reached layer
+        # 2 — a VCB layer-2 run would silently drop the BANK table from the plan, and a
+        # plan that is missing a table reports no error anywhere. The layer is a fact
+        # about one (schema, target, setup), so it is resolved inside that group.
+        if shape == SHAPE_FINAL and (group["layer"] == 2).any():
+            # ⚠️ Not a union across layers. A layer-1 shortlist and a layer-2 one are
+            # not two shards of one candidate set: the second IS the first, re-ranked
+            # with the channels competing. Unioning them would put back exactly the
+            # channels the competing run REJECTED, and the table would be the union
+            # again wearing layer 2's name.
+            group = group[group["layer"] == 2]
+        layer = int(group["layer"].iloc[0])
         columns_by_table: Dict[str, List[str]] = {}
         for source, sub in group.groupby("source_table"):
             if source == "unknown":
@@ -391,7 +562,11 @@ def plan_from_reports(
             FinalTablePlan(
                 schema=setup["schema"],
                 table=table_name(
-                    setup["target"], setup["lookback_d"], setup["horizon_h"], scope
+                    setup["target"],
+                    setup["lookback_d"],
+                    setup["horizon_h"],
+                    scope,
+                    shape,
                 ),
                 target=setup["target"],
                 stored_target=None,  # resolved in build_all, which can see the database
@@ -399,6 +574,8 @@ def plan_from_reports(
                 columns_by_table=columns_by_table,
                 runs=sorted(set(group["run_id"])),
                 evidence=group.groupby("evidence")["run_id"].nunique().to_dict(),
+                shape=shape,
+                layer=layer,
             )
         )
 
@@ -464,9 +641,10 @@ def build_all(
     apply: bool = False,
     replace: bool = False,
     scope: Optional[str] = None,
+    shape: str = SHAPE_FINAL,
 ) -> pd.DataFrame:
     """Plan every table and, with `apply=True`, create it. Returns one row per plan."""
-    plans = plan_from_reports(root, scope)
+    plans = plan_from_reports(root, scope, shape)
     results = []
 
     by_schema: Dict[str, List[FinalTablePlan]] = {}
@@ -482,7 +660,16 @@ def build_all(
                 plan.stored_target = _stored_target(
                     plan.target, available, plan.setup["horizon_h"]
                 )
-                if plan.stored_target is None:
+                if plan.shape == SHAPE_SHORTLIST:
+                    # ⚠️ **A POOL CARRIES NO LABEL.** The target was validated just
+                    # above — a shortlist pool for a target that is not a column of
+                    # `pool__targets` is still an error — and then DISCARDED, because
+                    # every `pool__*` in this schema is joined to `pool__targets` by
+                    # whoever reads it. Storing the label here would make this the one
+                    # pool `--pools` could hand a selector with its own answer in it.
+                    plan.stored_target = None
+                    plan.target_derived = False
+                elif plan.stored_target is None:
                     plan.target_derived = True
                     fallback = f"return_{int(plan.setup['horizon_h'])}day"
                     if fallback not in available:
@@ -598,32 +785,44 @@ def main(argv: Optional[Sequence[str]] = None) -> pd.DataFrame:
     replace = "--replace" in argv
     root = _flag_value(argv, "--root") or DEFAULT_REPORT_ROOT
     scope = _flag_value(argv, "--scope")
+    shape = _flag_value(argv, "--shape") or SHAPE_FINAL
+    if shape not in SHAPES:
+        raise SystemExit(f"--shape must be one of {SHAPES}, not {shape!r}")
 
     # ⚠️ `show_gpu=False`: this stage is SQL from end to end. `runtime.gpu_report`
     # would answer from `nvidia-smi`, truthfully and irrelevantly, and a banner that
     # reports hardware no step here can use teaches the reader to skip banners.
     with runtime.RunTimer(
-        f"final_features  root={os.path.basename(root)}"
+        f"final_features  root={os.path.basename(root)}  shape={shape}"
         f"{f' scope={scope}' if scope else ''}"
         f"{'  --apply' if apply else '  (plan only)'}"
         f"{'  --replace' if replace else ''}",
         show_gpu=False,
     ):
-        return _main(root=root, scope=scope, apply=apply, replace=replace)
+        return _main(root=root, scope=scope, apply=apply, replace=replace, shape=shape)
 
 
-def _main(root: str, scope: Optional[str], apply: bool, replace: bool) -> pd.DataFrame:
-    plans = plan_from_reports(root, scope)
+def _main(
+    root: str,
+    scope: Optional[str],
+    apply: bool,
+    replace: bool,
+    shape: str = SHAPE_FINAL,
+) -> pd.DataFrame:
+    plans = plan_from_reports(root, scope, shape)
     for plan in plans:
         print(f"\n{'=' * 78}\n{plan.schema}.{plan.table}")
-        print(f"  target   {plan.target}")
+        print(f"  target   {plan.target}"
+              + ("  (NOT stored — this is a pool)" if plan.shape == SHAPE_SHORTLIST
+                 else ""))
         print(f"  setup    " + ", ".join(f"{k}={plan.setup[k]}" for k in SETUP_KEYS))
-        print(f"  runs     {len(plan.runs)}  evidence={plan.evidence}")
+        print(f"  runs     {len(plan.runs)}  evidence={plan.evidence}  "
+              f"selection layer {plan.layer}")
         print(f"  features {plan.n_features} from {len(plan.columns_by_table)} pool(s)")
         for table in plan.source_tables:
             print(f"      {len(plan.columns_by_table[table]):>3}  {table}")
 
-    result = build_all(root=root, apply=apply, replace=replace, scope=scope)
+    result = build_all(root=root, apply=apply, replace=replace, scope=scope, shape=shape)
     print(f"\n{'=' * 78}")
     pd.set_option("display.width", 200)
     print(result.to_string(index=False))

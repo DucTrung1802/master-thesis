@@ -4,8 +4,9 @@
 > (verdict, chain, standing rules, routing). Read that first; this file is the depth
 > behind one stage.
 
-> The five stages as one chain, and the one question none of them could answer:
-> **which stage is stale?** Built 2026-08-09.
+> The eight stages as one chain, and the one question none of them could answer:
+> **which stage is stale?** Built 2026-08-09; the two selection layers split apart
+> 2026-08-16.
 
 ```
 python -m pipeline                      # what exists, what is stale — writes nothing
@@ -15,14 +16,18 @@ python -m pipeline --only model --apply # force one stage
 python -m pipeline --ticker bank --table rank_5day__final__d20_h5
 ```
 
-## 1. The chain — SIX stages as of 2026-08-10
+## 1. The chain — EIGHT stages as of 2026-08-16
 
 ```
 raw_data/ → bronze → silver → unified_schema_<t>.pool__*   data   ⚠️ NEW, ⚠️ the network
         ↓
-reports/feature_selection/<run>/outstanding.csv        feature_selection
-        ↓
-unified_schema_<t>.<target>__final__d<d>_h<h>          final_features   ⚠️ writes the DB
+reports/feature_selection/<run>/outstanding.csv        selection      LAYER 1 ⚠️ MANUAL
+        ↓                                                             N runs, one per pool
+unified_schema_<t>.pool__shortlist__<target>__d<d>_h<h> shortlist_pool ⚠️ writes the DB
+        ↓                                                             the union, NO label
+reports/feature_selection/<run>/outstanding.csv        selection_2    LAYER 2 ⚠️ MANUAL
+        ↓                                                             1 run, they COMPETE
+unified_schema_<t>.<target>__final__d<d>_h<h>          final_features ⚠️ writes the DB
         ↓
 src/train_test_set/<dataset>/                          train_test_creator
         ↓
@@ -30,6 +35,27 @@ src/model/runs/<run_id>/                               model.lstm
         ↓
 results/metrics.json + runs/index.csv                  result_evaluator
 ```
+
+### 1b. ⚠️ Why the middle hop was split in two (2026-08-16)
+
+It was ONE stage from the archive to the final table, and that hop was making **two
+different claims under one name**. Layer 1 is N runs over `pool__basic + one` other
+pool, so its output is a UNION — a macro channel offered to one run could never be a
+candidate in another, and 725 of the old table's 750 channels were "chosen by exactly
+one run" as arithmetic (`final_features/CONTEXT.md` §6). Layer 2 is the one run in
+which the survivors compete. A table built from each is a different object, and the
+chain now says which one it is looking at.
+
+⚠️ **BOTH selection stages are `manual` and `selection_2` has NO apply at all.** The
+run that decides which of layer 1's survivors are real is GPU time plus a decision
+about the null; `--apply` reports `MANUAL — cannot be produced here` rather than doing
+something cheaper that looks the same. `shortlist_pool` between them is SQL and runs
+here.
+
+⚠️ **The shortlist pool gets the SAME fingerprint check as the final table**, from the
+same function — a new layer-1 run changes the union, and a pool built before it is a
+different channel set wearing the same name. "Does it exist" was the check that let the
+final table drift 26 columns (STL-1); it is not good enough one stage up either.
 
 ### 1a. ⚠️ The `data` stage, and the two rules it is built out of
 
