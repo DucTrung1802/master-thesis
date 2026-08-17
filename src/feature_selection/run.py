@@ -90,10 +90,13 @@ IDENTITY = [
 ALL_TARGETS = [
     "return_5day",
     "return_10day",
+    "return_20day",
     "return_rel_5day",
     "return_rel_10day",
+    "return_rel_20day",
     "close_adjust_5day",
     "close_adjust_10day",
+    "close_adjust_20day",
 ]
 
 # The label table. Always joined, never named in the run id — the target is already the

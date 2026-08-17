@@ -7832,7 +7832,14 @@ class DataPreprocessor:
     # meaning. That is why this is a tuple and not the scalar it started as — a model
     # comparing h=5 against h=10 needs both labels on one calendar, and deriving the
     # second one anywhere else would put the label definition in two places.
-    UNIFIED_TARGET_HORIZONS = (5, 10)
+    # ⚠️ 20 ADDED 2026-08-17 for the 4-WEEK experiment (TODO P2-1 v2). CLAUDE.md
+    # §2a-bis is the one measurement that varied the HORIZON rather than the
+    # features, and it found VN giving signal at 4-13 weeks and none at 5-10
+    # sessions. Adding a horizon costs 3 columns per h and no recomputation of the
+    # others; ⚠️ but it also costs `h` more NULL rows at the tail of the panel, and
+    # `n_eff = n/h` falls to 213 on VCB — which is why the experiment this was
+    # added for is CROSS-SECTIONAL, where width buys back precision per observation.
+    UNIFIED_TARGET_HORIZONS = (5, 10, 20)
 
     # The market benchmark for the RELATIVE targets, `return_rel_{h}day`.
     #
@@ -7950,26 +7957,48 @@ class DataPreprocessor:
             # universe pool the binding constraint is the shortest series, not the
             # total: a freshly-listed ticker with 3 sessions would be entirely
             # unlabelled and would quietly shift every tail assertion below.
+            # ⚠️ **EVERY SERIES' LENGTH, not just the shortest (changed 2026-08-17).**
+            # This used to fetch `MIN(rows)` and RAISE if any series was shorter than the
+            # longest horizon, on the reasoning that such a series is entirely unlabelled
+            # and "would quietly shift every tail assertion below". The reasoning was
+            # right and the remedy was wrong: adding `h=20` for the 4-week experiment made
+            # **one** series of 781 too short — `SDA`, 19 rows — and that single ticker
+            # blocked the whole universe from gaining a horizon it can carry for the other
+            # 780.
+            #
+            # A series shorter than `h` is not an error, it is a young listing. What it
+            # breaks is the ASSUMPTION `expected_tail = h × series`, so the assertion is
+            # generalised instead of the input being filtered: a series of `n` rows
+            # contributes `min(h, n)` unlabelled rows, exactly. That is still an EQUALITY,
+            # not a loosened bound — it is the same check, correct for the general case.
             cur.execute(
-                f"SELECT COUNT(*), MIN(rows) "
-                f"FROM (SELECT COUNT(*) AS rows FROM {schema}.pool__basic "
-                f"      GROUP BY exchange, ticker) s"
+                f"SELECT COUNT(*) AS rows FROM {schema}.pool__basic "
+                f"GROUP BY exchange, ticker"
             )
-            series, shortest = (int(x) for x in cur.fetchone())
-            cur.execute(f"SELECT COUNT(*) FROM {schema}.pool__basic")
-            available = int(cur.fetchone()[0])
+            series_rows = [int(row[0]) for row in cur.fetchall()]
+            series = len(series_rows)
+            shortest = min(series_rows) if series_rows else 0
+            available = sum(series_rows)
             if available <= longest:
                 raise MissingSourceDataError(
                     f"`{schema}.pool__basic` holds {available} rows, which is not more "
                     f"than the longest {longest}-day horizon — every label would be "
                     f"NULL."
                 )
-            if shortest <= longest:
+            too_short = [n for n in series_rows if n <= longest]
+            if len(too_short) == series:
                 raise MissingSourceDataError(
-                    f"`{schema}.pool__basic` has a series with only {shortest} rows, "
-                    f"which is not more than the longest {longest}-day horizon — that "
-                    f"series would be entirely unlabelled. Filter the universe before "
-                    f"building the pool."
+                    f"`{schema}.pool__basic`: EVERY one of its {series} series is "
+                    f"{longest} rows or shorter, so no row would carry a "
+                    f"{longest}-day label at all."
+                )
+            if too_short:
+                # Reported, never silent: these series contribute zero labels at the
+                # longest horizon and are simply absent from its cross-sections.
+                self._logger.log_info(
+                    f"{schema}.pool__targets: {len(too_short)} of {series} series are "
+                    f"<= {longest} rows (shortest {shortest}) and carry NO "
+                    f"{longest}-day label. They still carry the shorter horizons."
                 )
 
             # How many pool__basic SESSIONS (distinct dates) have no benchmark close. A
@@ -8074,15 +8103,20 @@ class DataPreprocessor:
         # tail and nothing else; a disagreement between the two would mean the LEAD ran
         # over a different row ordering, which is the one failure the shared `WINDOW w`
         # is supposed to make impossible.
+        # ⚠️ `min(h, n)` PER SERIES, not `h × series` (generalised 2026-08-17). A series
+        # of `n` rows with `n <= h` has no future for ANY of its rows, so it contributes
+        # `n` NULLs, not `h`. Still an EQUALITY — the same check, correct for a universe
+        # that contains a young listing. On `unified_schema_all` at h=20 exactly one
+        # series (`SDA`, 19 rows) makes the two formulas differ, and the old one raised.
         for h in horizons:
+            expected_tail = sum(min(h, n) for n in series_rows)
             for col in (target_cols[h], price_cols[h]):
                 unlabelled = written - labelled_by_col[col]
-                expected_tail = h * series
                 if unlabelled != expected_tail:
                     raise PipelineError(
                         f"{schema}.pool__targets has {unlabelled} NULL {col} values; "
-                        f"exactly {expected_tail} ({h} per series × {series} series, "
-                        f"the tail with no future) were expected. Check "
+                        f"exactly {expected_tail} (sum of min({h}, series length) over "
+                        f"{series} series, the tail with no future) were expected. Check "
                         f"`pool__basic.close_adjust` for NULLs or zeros."
                     )
         # ⚠️ The relative column loses its own tail PLUS every row a benchmark gap
@@ -8093,7 +8127,7 @@ class DataPreprocessor:
         # absent instead of merely pitted.
         for h, col in relative_cols.items():
             unlabelled = written - labelled_by_col[col]
-            floor = h * series
+            floor = sum(min(h, n) for n in series_rows)
             allowed = floor + benchmark_gaps * (h + 1) * series
             if not floor <= unlabelled <= allowed:
                 raise PipelineError(

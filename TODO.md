@@ -186,13 +186,52 @@ Spearman per date, so ranking `return_5day` within a date is the same metric as
 
 ## P2 — new measurements worth having
 
-### P2-1 · ⚠️ Run the chain at a 4-WEEK horizon ⏱ ~2 h
+### ⚠️ P2-1 · REWRITTEN 2026-08-17 — the first version was a bad experiment
 
-**The highest-value untried experiment in the repo, and it was buried in a todo file.**
-CLAUDE.md §2a-bis: the `controls` block loses to its benchmark at `rel5`/`rel10` and beats
-it by **30.39% vs 18.07% CAGR at 4 weeks (Sharpe 1.10)**, positive in 30 of 30 folds. Four
-independent threads have failed at `h=5`; **nothing has ever been run end to end at
-`h≈20`.** Needs `pool__targets` to carry a 20-session horizon (`UNIFIED_TARGET_HORIZONS`).
+**What it said:** "run the chain at a 4-week horizon", where *the chain* is the VCB
+single-stock chain. **That does not reproduce the evidence it cites.** CLAUDE.md §2a-bis
+measured `controls` on **top-30 / top-100 CROSS-SECTIONS rebalanced weekly**, not on one
+stock as a time series.
+
+And it makes the binding constraint worse. `n_eff = n/h` on VCB:
+
+| horizon | `n_eff` | purge gap |
+|---|---|---|
+| h=5 | 852 | 24 rows |
+| h=10 | 426 | 29 rows |
+| **h=20** | **213** | 39 rows |
+
+`feature_selection` §6d priced the single-ticker study at ~850 independent observations
+and said **1,500 were needed**. Running VCB at h=20 takes the constraint that is already
+binding and tightens it **4×**, to test a result measured under a different design.
+
+### ✅ P2-1 (v2) · `cs_rank_20day` on the top ~300 by turnover ⏱ ~3-4 h
+
+At h=20 the independent count is 213 **at either grain** — what differs is the QUALITY of
+each observation:
+
+| | one observation is | its sd |
+|---|---|---|
+| VCB, h=20 | one stock's ±1 sign | ~1.0 |
+| top-300 cross-section, h=20 | an IC over ~300 names on one date | **~0.06** |
+
+That is §2b's mechanism exactly: width buys **precision per observation**, `1/√N`, not
+more observations. So h=20 kills the single-stock study and does **not** kill the
+cross-section.
+
+It combines the four things separate measurements have each pointed at:
+
+- the **horizon** §2a-bis says works (4-13 weeks, not 5-10 sessions);
+- the **grain** §2b says is the only one that ever cleared a null (≥100 names);
+- the **liquidity tier** the 2026-08-17 reversal probe says is the real variable
+  (t = −18.60 all names → −10.43 top 300 → **−1.96** top 100);
+- and it **fits in memory today** (~1.3 M rows), needing none of `PNL-2` / `CSP-1` /
+  `MEM-1` fixed — `cs_rank_20day` carries the `cs_` prefix so it takes the correct path
+  regardless of `PNL-2`.
+
+⚠️ **The universe must be chosen from data available BEFORE the evaluation window**, or
+"top 300 by turnover" is look-ahead: picking today's liquid names and applying them to
+2010 is the same defect as a point-in-time index list, which §2c already records.
 
 ### P2-2 · `cs_rank_5day` on the top ~300 by turnover ⏱ ~1 h
 

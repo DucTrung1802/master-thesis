@@ -444,16 +444,30 @@ def unified_pool_targets(
     # numerator with no denominator to guard, so any NULL outside the tail means the
     # forward price itself is missing — and a model predicting a LEVEL would train on
     # whatever the imputer put there.
+    #
+    # ⚠️ **AND IT IS `min(h, n)` PER SERIES, not `h × tickers` (fixed 2026-08-17).** A
+    # series SHORTER than `h` has no future for any of its rows, so it contributes `n`
+    # NULLs rather than `h`. Adding the 4-week horizon exposed this: on
+    # `unified_schema_all` exactly one series of 781 — `SDA`, 19 rows — makes the two
+    # formulas differ by 1, and `h × tickers` failed a table that was perfectly correct.
+    # ⚠️ The same rule lives in `_ingest_unified_pool_targets`; both had to be fixed,
+    # which is the cost of stating one invariant in two places.
+    with preprocessor.session(schema=schema) as prep:
+        with prep._database_driver._cursor_ctx() as cur:
+            cur.execute(
+                f"SELECT COUNT(*) FROM {schema}.pool__basic GROUP BY exchange, ticker"
+            )
+            series_rows = [int(row[0]) for row in cur.fetchall()]
     for h in horizons:
+        expected_tail = sum(min(h, n) for n in series_rows)
         for target_col in (target_cols[h], price_cols[h]):
             tail = rows - int(stats[target_col][0])
-            expected_tail = h * tickers
             if tail != expected_tail:
                 raise ValueError(
                     f"{schema}.pool__targets.{target_col} has a {tail}-row unlabelled "
-                    f"tail; expected {expected_tail} ({h} per series × {tickers} "
-                    f"series). More would mean NULL or zero closes putting silent "
-                    f"holes in the labels."
+                    f"tail; expected {expected_tail} (sum of min({h}, series length) "
+                    f"over {tickers} series). More would mean NULL or zero closes "
+                    f"putting silent holes in the labels."
                 )
 
     context.log.info(
