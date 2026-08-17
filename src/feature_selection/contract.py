@@ -79,7 +79,7 @@ METADATA_FILENAME = "metadata.json"
 SETUP_KEYS: Tuple[str, ...] = (
     "lookback_d", "horizon_h", "normalize", "feature_normalize",
     "corr_threshold", "n_splits", "min_train", "random_state", "selector_class",
-    "methods", "design_dtype",
+    "methods", "design_dtype", "env_fingerprint",
 )
 
 # ⚠️ **`methods` JOINED THIS TUPLE 2026-08-16 — issue MTH-1, and it is the reason
@@ -104,6 +104,18 @@ METHODS_UNRECORDED = "unrecorded"
 # and still correct — it rejects the archive loudly rather than grouping it wrongly.
 LEGACY_SETUP_DEFAULTS: Dict[str, object] = {
     "methods": METHODS_UNRECORDED,
+    # ⚠️ `env_fingerprint` joined SETUP_KEYS 2026-08-17, and unlike `design_dtype` its
+    # absent value is genuinely UNKNOWN rather than inferable. A pre-2026-08-17 run
+    # records an `environment` block but no `torch` version at all, so the fingerprint
+    # cannot be reconstructed from it — and inventing one would merge runs that may have
+    # differed. §5 rule 2: absent is absent.
+    #
+    # ⚠️ **Expect this to split the archive from every future run**, and that is the
+    # point: 28 archived runs read "unrecorded" while anything new carries a real hash,
+    # so `plan_from_reports` raises on the collision instead of unioning a local run with
+    # a Kaggle T4 run whose torch is 2.10.0+cu128 against this machine's 2.5.1+cu121.
+    # Pass `--scope` to build them apart.
+    "env_fingerprint": METHODS_UNRECORDED,
     # ⚠️ `design_dtype` joined SETUP_KEYS 2026-08-16 alongside the universe run that
     # needed `float32` (`windows.window_design`: 4.03 GB per million rows measured,
     # so ALL's 2.39 M rows need 9.6 GB against 7.1 GB free). Unlike `methods`, the

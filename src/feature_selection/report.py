@@ -53,6 +53,7 @@ An absent null is reported as absent, never as a pass — §8's whole point.
 so a report costs seconds and can be produced for a run that already happened.
 """
 
+import hashlib
 import json
 import os
 import platform
@@ -106,16 +107,52 @@ def _git_commit() -> Optional[str]:
     return None
 
 
+# ⚠️ **THE LIBRARIES THAT CAN MOVE A NUMBER, and only those.** This tuple is the input
+# to `env_fingerprint`, so adding a library here re-partitions every future run's setup
+# group — `matplotlib` is deliberately absent from it (it draws, it does not rank), and
+# `torch` is deliberately present: `gpu.py` computes the Spearman and the permutation
+# importance in torch, so a torch upgrade can move a ranking without touching a ranker.
+FINGERPRINTED_LIBRARIES = ("numpy", "scipy", "sklearn", "xgboost", "torch")
+
+
 def _versions() -> Dict[str, str]:
     """The libraries whose behaviour can move a number here."""
     out = {"python": sys.version.split()[0], "platform": platform.platform()}
-    for name in ("numpy", "pandas", "scipy", "sklearn", "xgboost", "matplotlib"):
+    for name in ("numpy", "pandas", "scipy", "sklearn", "xgboost", "matplotlib", "torch"):
         try:
             module = __import__(name)
             out[name] = getattr(module, "__version__", "?")
         except ImportError:
             out[name] = "not installed"
     return out
+
+
+def env_fingerprint() -> str:
+    """A short, stable hash of the library stack that decides a ranking.
+
+    ⚠️ **THIS EXISTS BECAUSE A KAGGLE RUN AND A LOCAL RUN WERE GROUPABLE INTO ONE
+    TABLE.** Measured 2026-08-17: this machine runs torch 2.5.1+cu121 while Kaggle's GPU
+    image runs **torch 2.10.0+cu128**, and `feature_selection/CONTEXT.md` §16 records
+    xgboost/sklearn/numpy differing too. CLAUDE.md §3d already states the conclusion —
+    *"A Kaggle run is a different PROCEDURE, not the same one on faster hardware"* — but
+    `contract.SETUP_KEYS` did not know it, so `final_features` would have unioned the two
+    into one `__final__` table with nothing saying so. Exactly `MTH-1`'s shape, and
+    `design_dtype`'s.
+
+    ⚠️ **Chasing binary parity was the alternative and it was rejected.** Kaggle's image
+    has no internet by default, so pinning would mean shipping ~2.5 GB of CUDA wheels in
+    the payload and installing over a driver they were not built for — and the image
+    moves again next month. Recording the difference is cheap, exact, and does not
+    require owning the other machine.
+
+    Returns 12 hex characters of a SHA-256 over `name==version` pairs, sorted, so the
+    value is stable across processes and platforms.
+    """
+    versions = _versions()
+    material = ";".join(
+        f"{name}=={versions.get(name, 'absent')}" for name in sorted(FINGERPRINTED_LIBRARIES)
+    )
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()[:12]
 
 
 def _json_safe(value):
@@ -428,6 +465,10 @@ def build_metadata(
                 # ⚠️ A SETUP key, not a performance note — `float32` and `float64`
                 # are different procedures and must not group into one table.
                 "design_dtype": str(getattr(selector, "design_dtype", "float64")),
+                # ⚠️ Likewise: a Kaggle T4 run and a local run differ in torch, xgboost,
+                # sklearn and numpy, and CLAUDE.md §3d already calls that a different
+                # PROCEDURE. This is what stops the two being unioned into one table.
+                "env_fingerprint": env_fingerprint(),
             }
         )
 

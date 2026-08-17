@@ -153,3 +153,38 @@ def test_a_genuinely_missing_key_is_still_reported():
     setup.pop("n_splits")
     problems = contract.validate_shortlist(_shortlist(), setup)
     assert len(problems) == 1 and "n_splits" in problems[0]
+
+
+# ------------------------------------------------- env_fingerprint, added 2026-08-17
+# ⚠️ Pins the fix for the gap CLAUDE.md §3d described in prose but SETUP_KEYS did not
+# know: a Kaggle T4 run (torch 2.10.0+cu128) and a local run (2.5.1+cu121) were
+# groupable into one __final__ table with nothing saying so.
+
+from feature_selection import contract as _contract  # noqa: E402
+from feature_selection.report import (  # noqa: E402
+    FINGERPRINTED_LIBRARIES,
+    env_fingerprint,
+)
+
+
+def test_env_fingerprint_is_a_setup_key():
+    assert "env_fingerprint" in _contract.SETUP_KEYS
+
+
+def test_env_fingerprint_is_stable_within_one_environment():
+    assert env_fingerprint() == env_fingerprint()
+    assert len(env_fingerprint()) == 12
+
+
+def test_the_fingerprint_covers_the_rankers_and_not_the_plotter():
+    """matplotlib draws, it does not rank — an upgrade must not re-partition runs."""
+    assert set(FINGERPRINTED_LIBRARIES) == {"numpy", "scipy", "sklearn", "xgboost", "torch"}
+    assert "matplotlib" not in FINGERPRINTED_LIBRARIES
+    # torch IS included: gpu.py computes the Spearman and permutation in torch.
+    assert "torch" in FINGERPRINTED_LIBRARIES
+
+
+def test_an_archived_run_without_a_fingerprint_reads_as_unrecorded_not_as_this_machine():
+    """§5 rule 2 — inventing a fingerprint would merge runs that may have differed."""
+    assert _contract.LEGACY_SETUP_DEFAULTS["env_fingerprint"] == _contract.METHODS_UNRECORDED
+    assert _contract.LEGACY_SETUP_DEFAULTS["env_fingerprint"] != env_fingerprint()
