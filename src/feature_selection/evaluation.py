@@ -64,6 +64,33 @@ def block_shuffle(y: pd.Series, block: int, rng: np.random.Generator) -> pd.Seri
     return pd.Series(shuffled, index=y.index, name=y.name)
 
 
+def sign_hit_rate(prediction: np.ndarray, y: np.ndarray) -> float:
+    """`mean(sign(pred) == sign(y))`, or **NaN when every label shares a sign**.
+
+    ⚠️ **CLAUDE.md §5 rule 21, finally shipped on this side (2026-08-17).** The hub has
+    said since 2026-08-14 that this metric is withdrawn on a single-signed target; the
+    scoring stage got the fix on 2026-08-16 and the SELECTION stage did not, so every
+    archived run on a price LEVEL still prints `hit_rate +1.0000` beside a deeply negative
+    R². One such run reported `+1.0000` next to `ic_mean −0.1638`.
+
+    On a level target every label is positive, so a model whose predictions are also all
+    positive scores exactly 1.0 whatever it has learned. **A metric that cannot fail is
+    not a pass** — it is reported as absent.
+
+    ⚠️ Zeros are ignored when deciding, so a return series containing an unchanged day is
+    still two-signed and keeps its hit rate. ⚠️ This is the twin of
+    `result_evaluator.metrics.single_signed`, duplicated rather than imported because the
+    dependency runs the other way — `model.common.engine` imports `result_evaluator`,
+    never the reverse, and `feature_selection` is upstream of both.
+    """
+    prediction = np.asarray(prediction, dtype=float).ravel()
+    y = np.asarray(y, dtype=float).ravel()
+    finite = np.isfinite(y) & (y != 0)
+    if not finite.any() or np.all(y[finite] > 0) or np.all(y[finite] < 0):
+        return float("nan")
+    return float(np.mean(np.sign(prediction) == np.sign(y)))
+
+
 def effective_sample(n_rows: int, horizon: int) -> float:
     """`n / h` — independent observations behind `n` overlapping ones.
 

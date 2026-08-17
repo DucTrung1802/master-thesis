@@ -83,3 +83,46 @@ def test_clears_bar_can_be_true_while_a_draw_beat_the_observed():
     assert result.draws.max() > result.observed
     # ...and the p-value is the honest summary that says so.
     assert result.p_value == pytest.approx(2 / 21)
+
+
+# ------------------------------------------------- rule 21, shipped 2026-08-17
+# ⚠️ CLAUDE.md §5 rule 21 claimed since 2026-08-14 that `hit_rate` is withdrawn on a
+# single-signed target. The SCORING stage got it 2026-08-16; this stage did not, so
+# every archived selection run on a price LEVEL printed `hit_rate +1.0000` beside a
+# deeply negative R². These pin the fix.
+
+import numpy as _np  # noqa: E402
+
+from feature_selection.evaluation import sign_hit_rate  # noqa: E402
+
+
+def test_hit_rate_is_withdrawn_when_every_label_is_positive():
+    """A price LEVEL: all labels positive, all predictions positive -> cannot fail."""
+    y = 50_000 + 25.0 * _np.arange(300)
+    pred = y * 0.6                      # 40% low: hopeless, and still all positive
+    value = sign_hit_rate(pred, y)
+    assert value != value, "must be NaN, not 1.0"
+
+
+def test_hit_rate_is_withdrawn_when_every_label_is_negative():
+    y = -(50_000 + 25.0 * _np.arange(300))
+    assert sign_hit_rate(y * 0.6, y) != sign_hit_rate(y * 0.6, y) or True
+    assert _np.isnan(sign_hit_rate(y * 0.6, y))
+
+
+def test_hit_rate_survives_on_a_two_signed_return_target():
+    rng = _np.random.default_rng(0)
+    y = rng.normal(0, 0.02, 400)
+    value = sign_hit_rate(y * 0.3 + rng.normal(0, 0.01, 400), y)
+    assert 0.0 <= value <= 1.0 and value == value
+
+
+def test_a_zero_label_does_not_make_a_return_series_single_signed():
+    """An unchanged day is not a sign — it must not withdraw the metric."""
+    y = _np.array([0.01, 0.0, -0.01, 0.02, 0.0, -0.03])
+    assert sign_hit_rate(y, y) == 1.0
+
+
+def test_an_all_zero_label_is_withdrawn_rather_than_scored():
+    y = _np.zeros(50)
+    assert _np.isnan(sign_hit_rate(_np.ones(50), y))

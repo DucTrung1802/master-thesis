@@ -66,7 +66,9 @@ from sklearn.feature_selection import mutual_info_regression
 from sklearn.linear_model import LassoCV
 from sklearn.preprocessing import StandardScaler
 
-from feature_selection import gpu, gpu_rankers, windows
+# ⚠️ `evaluation` imports `selector` back, but LAZILY inside `null_distribution` — so this
+# module-level import is safe in this direction only. Do not "tidy" that lazy import.
+from feature_selection import evaluation, gpu, gpu_rankers, windows
 from feature_selection.windows import WINDOW_STATS
 
 # ── the rankers ───────────────────────────────────────────────────────────────
@@ -1018,7 +1020,9 @@ class FeatureSelector:
                             - np.sum((y_te - pred) ** 2)
                             / np.sum((y_te - y_te.mean()) ** 2)
                         ),
-                        "hit_rate": float(np.mean(np.sign(pred) == np.sign(y_te))),
+                        # ⚠️ NaN on a single-signed target — §5 rule 21. See
+                        # `evaluation.sign_hit_rate`.
+                        "hit_rate": evaluation.sign_hit_rate(pred, y_te),
                     }
                 )
         self.timings[f"validation ({self.device})"] = time.perf_counter() - started
@@ -1114,9 +1118,7 @@ class FeatureSelector:
                             self._effective_n(hold_y, dates=hold_dates), 1
                         ),
                         "ic": float(ic),
-                        "hit_rate": float(
-                            np.mean(np.sign(pred) == np.sign(hold_y))
-                        ),
+                        "hit_rate": evaluation.sign_hit_rate(pred, hold_y),
                     }
                 )
         return pd.DataFrame(rows)
