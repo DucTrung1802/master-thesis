@@ -332,7 +332,71 @@ def device_report() -> Dict[str, object]:
 # ----------------------------------------------------------------- rank helpers
 
 
-def _average_ranks_torch(values, mask):
+# ⚠️ **THE RANK STEP NEEDS ~10× ITS INPUT IN VRAM, AND THAT IS WHAT KILLED THE FIRST
+# UNIVERSE-PANEL RUN** (Kaggle T4, 2026-08-17). Counted off `_average_ranks_torch`'s own
+# body, every one an `n × p` allocation live at the same time: `values`, `filled`,
+# `sorted_values`, `order` (int64), `positions`, `local` (int64), `flat_ids` (int64),
+# `ranks_sorted`, `ranks` — nine, plus two boolean masks. At 1.247 M rows × ~536 float64
+# columns the input alone is 4.98 GiB, so the working set is ~50 GiB against a T4's
+# 14.56, and it OOMed inside `torch.sort` with 10.70 GiB already in use.
+#
+# ⚠️ **The multiple is a COUNT of the tensors above, not a fitted fudge factor** — if
+# that body gains an `n × p` temporary, raise it. It is deliberately not measured by
+# probing `torch.cuda.memory_allocated`: a budget that depends on when the allocator
+# last released is a budget that changes between two runs of the same code.
+RANK_WORKING_MULTIPLE = 10
+
+# How much of the FREE VRAM one block may claim. Not all of it: the caller's own frame,
+# the target ranks and the correlation temporaries live alongside, and an allocator that
+# has just freed a block does not always hand the same address back (fragmentation).
+RANK_BUDGET_FRACTION = 0.35
+
+# The floor, for a card whose free memory cannot be read. 512 MiB of working set is the
+# 4 GB RTX 3050 with room to spare, and every archived run is far below one block anyway.
+RANK_FALLBACK_BUDGET = 512 * 1024**2
+
+
+def rank_block_columns(rows: int, columns: int, device: str) -> int:
+    """How many columns may be ranked at once. `columns` (i.e. one block) unless VRAM says no.
+
+    ⚠️ **A NARROW OR SHORT PANEL TAKES EXACTLY ONE BLOCK, so every archived run's code
+    path is unchanged** — VCB's 4,266 rows put the whole design in one block on any card,
+    and a single block calls the same dense body that has always run. Chunking only
+    engages where the dense form could not have run at all.
+    """
+    if device != "cuda" or columns <= 1:
+        return columns
+    per_column = max(1, rows * 8 * RANK_WORKING_MULTIPLE)
+    try:
+        free = _torch().cuda.mem_get_info()[0]
+        budget = int(free * RANK_BUDGET_FRACTION)
+    except Exception:  # noqa: BLE001 — an unreadable card is not a failed ranking
+        budget = RANK_FALLBACK_BUDGET
+    return int(max(1, min(columns, budget // per_column)))
+
+
+def _average_ranks_torch(values, mask, block_columns: Optional[int] = None):
+    """Average ranks per column, NaNs excluded, in blocks of `block_columns`.
+
+    ⚠️ **BLOCKING IS EXACT, NOT AN APPROXIMATION.** A rank is computed within its own
+    column and reads nothing from any other, so a block boundary cannot move a number —
+    which is the whole reason this is the answer here and `float32` is not (`float32`
+    changed a measured `ic_mean` by 52 %, TODO P0-3). `test_gpu_spearman.py` asserts
+    blocked and dense agree at **0.0**, not merely closely.
+    """
+    if block_columns is not None and 0 < block_columns < values.shape[1]:
+        torch = _torch()
+        out = torch.empty_like(values)
+        for start in range(0, values.shape[1], block_columns):
+            stop = min(start + block_columns, values.shape[1])
+            out[:, start:stop] = _average_ranks_dense_torch(
+                values[:, start:stop].contiguous(), mask[:, start:stop].contiguous()
+            )
+        return out
+    return _average_ranks_dense_torch(values, mask)
+
+
+def _average_ranks_dense_torch(values, mask):
     """Average ranks per column, NaNs excluded, vectorised over all columns.
 
     Ties take the mean of the ranks they span — the same convention as
@@ -439,7 +503,17 @@ def spearman_matrix(frame: pd.DataFrame, device: str = "cpu") -> pd.DataFrame:
         values = torch.as_tensor(
             frame.to_numpy(np.float64), device="cuda", dtype=torch.float64
         )
-        ranks = _average_ranks_torch(values, torch.isfinite(values))
+        # ⚠️ The RANKING is blocked; `_pairwise_pearson` is not, because it needs every
+        # column against every other and a blocked form would be a block-pair loop, not
+        # a slice. That is fine at the width this function is called on — the channel
+        # correlation matrix, ~100 channels, not the ~536-column design — and it is why
+        # `spearman_vector` (which IS called on the design) got the full treatment.
+        ranks = _average_ranks_torch(
+            values,
+            torch.isfinite(values),
+            rank_block_columns(*frame.shape, "cuda"),
+        )
+        del values
         corr = _pairwise_pearson(ranks, torch, "cuda").cpu().numpy()
     else:
         corr = _pairwise_pearson(_average_ranks_numpy(frame), np, "cpu")
@@ -517,23 +591,71 @@ def spearman_vector(
     speed one. **`max abs diff` against the old path is 0.0 at every width above, on
     both devices.**
     """
-    joined = frame.copy()
-    name = "__target__"
-    joined[name] = target.to_numpy(np.float64)
-
     if device == "cuda":
-        torch = _torch()
-        values = torch.as_tensor(
-            joined.to_numpy(np.float64), device="cuda", dtype=torch.float64
-        )
-        ranks = _average_ranks_torch(values, torch.isfinite(values))
-        corr = _pearson_against_last(ranks, torch, "cuda").cpu().numpy()
+        corr = _spearman_vector_cuda(frame, target)
     else:
+        joined = frame.copy()
+        joined["__target__"] = target.to_numpy(np.float64)
         corr = _pearson_against_last(_average_ranks_numpy(joined), np, "cpu")
 
     return pd.Series(
         np.clip(corr, -1.0, 1.0), index=frame.columns, name="spearman_vs_target"
     )
+
+
+def _spearman_vector_cuda(frame: pd.DataFrame, target: pd.Series) -> np.ndarray:
+    """The cuda path, one COLUMN BLOCK at a time — host to device, ρ, discard.
+
+    ⚠️ **THIS IS WHY THE FIRST UNIVERSE-PANEL RUN DIED, AND CHUNKING THE RANK HELPER
+    ALONE WOULD NOT HAVE SAVED IT.** The old body moved the whole design to the device in
+    one `as_tensor` (4.98 GiB at 1.247 M × 536), ranked it (~10× that, see
+    `RANK_WORKING_MULTIPLE`), and then handed the full `n × p` rank matrix to
+    `_pearson_against_last`, which builds `present`, `mask`, `x`, `both` and one product
+    temporary — five more `n × p` allocations. Every stage is `O(n × p)`, so every stage
+    had to become `O(n × block)`, not just the loudest one. Measured on a Kaggle T4:
+    OOM at `torch.sort` asking 4.98 GiB with 10.70 GiB of 14.56 already in use.
+
+    ⚠️ **EXACT, and it has to be**: each ρ is computed from its own column and the target
+    alone — `_pearson_against_last` specialises every sum to `j = last` — so a block
+    boundary changes no number. `float32` would also have fitted and is forbidden for a
+    quotable run (TODO P0-3: 52 % relative change in `ic_mean`).
+
+    ⚠️ **THE TARGET IS RANKED ONCE**, outside the loop. Re-ranking it per block would be
+    identical arithmetic and pure waste — and, less obviously, it is the one column whose
+    ranks must not be blocked, because the pairwise deletion in `_pearson_against_last`
+    reads it against every feature.
+    """
+    torch = _torch()
+    rows, columns = frame.shape
+    block = rank_block_columns(rows, columns, "cuda")
+
+    y = torch.as_tensor(
+        np.ascontiguousarray(target.to_numpy(np.float64)).reshape(-1, 1),
+        device="cuda", dtype=torch.float64,
+    )
+    y_ranks = _average_ranks_torch(y, torch.isfinite(y))
+    del y
+
+    parts = []
+    for start in range(0, columns, block):
+        stop = min(start + block, columns)
+        values = torch.as_tensor(
+            np.ascontiguousarray(frame.iloc[:, start:stop].to_numpy(np.float64)),
+            device="cuda", dtype=torch.float64,
+        )
+        ranks = _average_ranks_torch(values, torch.isfinite(values))
+        del values
+        stacked = torch.cat([ranks, y_ranks], dim=1)
+        del ranks
+        parts.append(_pearson_against_last(stacked, torch, "cuda").cpu().numpy())
+        del stacked
+        # ⚠️ Between blocks, not inside: the allocator caches freed blocks and a run of
+        # differently-shaped allocations fragments it. Once per block is ~1 ms against a
+        # sort of millions of rows; once per tensor would be a real cost.
+        if block < columns:
+            torch.cuda.empty_cache()
+
+    return np.concatenate(parts) if len(parts) > 1 else parts[0]
 
 
 # --------------------------------------------------------------- xgboost + shap

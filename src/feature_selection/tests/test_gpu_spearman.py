@@ -91,6 +91,67 @@ def test_vector_keeps_column_order_and_name():
     assert "__target__" not in out.index
 
 
+# ──────────────────────────────────────────────── blocking (TODO P1-4, MEM-1)
+
+
+def test_one_block_is_the_default_for_anything_that_used_to_fit():
+    """⚠️ **THE PROPERTY THAT PROTECTS EVERY ARCHIVED RUN**: a panel that could be
+    ranked densely still is, so the code path does not move under runs whose numbers
+    are already quoted. VCB is 4,266 rows — three orders below the budget."""
+    assert gpu.rank_block_columns(4_266, 600, "cuda") == 600
+    assert gpu.rank_block_columns(400, 40, "cpu") == 40           # cpu never blocks
+    assert gpu.rank_block_columns(4_266, 1, "cuda") == 1
+
+
+def test_the_universe_panel_is_blocked_and_the_budget_is_the_reason():
+    """1.247 M rows x 536 float64 columns is the shape that OOMed a T4 (MEM-1).
+
+    The exact block count depends on free VRAM, so this asserts the DIRECTION — it
+    must not be one block — and the arithmetic the choice rests on.
+    """
+    block = gpu.rank_block_columns(1_247_098, 536, "cuda")
+    assert 1 <= block < 536, block
+    per_column = 1_247_098 * 8 * gpu.RANK_WORKING_MULTIPLE
+    assert per_column > 90 * 1024**2  # ~100 MB of working set per column, at this height
+
+
+@needs_cuda
+def test_blocked_ranks_equal_dense_ranks():
+    """⚠️ 0.0, not 'close'. A rank is computed within its own column and reads nothing
+    from any other, so a block boundary that changed a number would mean the blocking
+    had introduced cross-column state. This is what makes chunking the honest answer to
+    an OOM where `float32` is not (P0-3: a 52 % relative change in `ic_mean`)."""
+    import torch
+
+    frame = _awkward_frame(rows=500, cols=37)
+    values = torch.as_tensor(
+        frame.to_numpy(np.float64), device="cuda", dtype=torch.float64
+    )
+    mask = torch.isfinite(values)
+    dense = gpu._average_ranks_torch(values, mask).cpu().numpy()
+    for block in (1, 2, 5, 36, 37, 100):
+        blocked = gpu._average_ranks_torch(values, mask, block).cpu().numpy()
+        assert np.array_equal(
+            np.nan_to_num(dense, nan=-1.0), np.nan_to_num(blocked, nan=-1.0)
+        ), block
+
+
+@needs_cuda
+def test_blocked_spearman_vector_equals_the_unblocked_one(monkeypatch):
+    """The whole cuda path, forced into blocks of one column at a time.
+
+    ⚠️ The block size is forced rather than waited for: this machine's card is 4 GiB
+    and the frame that would block naturally is 1.25 M rows, which does not fit on it
+    at all — the shape that needs this cannot be tested on the hardware that has it.
+    """
+    frame, target = _awkward_frame(rows=500, cols=37), _target(rows=500)
+    whole = gpu.spearman_vector(frame, target, device="cuda").to_numpy()
+    for block in (1, 3, 16):
+        monkeypatch.setattr(gpu, "rank_block_columns", lambda *a, _b=block, **k: _b)
+        blocked = gpu.spearman_vector(frame, target, device="cuda").to_numpy()
+        assert np.nanmax(np.abs(whole - blocked)) == 0.0, block
+
+
 # ─────────────────────────────────────────────────────── agreement with pandas
 
 def test_matches_pandas_when_there_are_no_gaps():
