@@ -37,17 +37,17 @@
     },
 
     "cross-sectional": {
-      "id": "lyductrung/mt-cross-sectional-selection-top-300-panel",
-      "title": "MT cross-sectional selection (top-300 panel)",
+      "id": "lyductrung/mt-cross-sectional-selection-top-150-panel",
+      "title": "MT cross-sectional selection (top-150 panel)",
       "notebook": "src/feature_selection/RUN__cross_sectional_panel.ipynb",
       "results_into": "reports/feature_selection",
       "data": {
-        "id": "lyductrung/mt-panel-top300",
-        "title": "MT cross-sectional panel (top 300, h=20)",
+        "id": "lyductrung/mt-panel-top150",
+        "title": "MT cross-sectional panel (top 150, h=20)",
         "ticker": "ALL",
         "source_dirs": ["src/feature_selection", "src/utils"],
         "panel": {
-          "top_n": 300,
+          "top_n": 150,
           "liquidity_before": "2014-01-01",
           "horizons": [20],
           "min_width": 5
@@ -66,7 +66,7 @@
         "N_NULL": 20,
         "HOLDOUT_START": null,
         "REPORT_ROOT": "reports/feature_selection",
-        "NOTES": "TODO P2-1 v2: cs_rank_20day over the top 300 by pre-2014 median turnover, on a Kaggle T4 via kgpu panel mode. The local card OOMed at 4 GiB."
+        "NOTES": "TODO P2-1 v2: cs_rank_20day over the top 150 by pre-2014 median turnover, on a Kaggle T4. 150 and not 300 because the top-300 design wants ~39 GB of host RAM against the box's ~29-30 (MEM-1/P3-2): n_eff stays 218 since the dates are unchanged, and the daily-IC sd goes ~0.058 to ~0.082, so z scales by ~0.71 and the universe is still above section 2b's ~100-name threshold."
       }
     },
 

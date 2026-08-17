@@ -344,6 +344,18 @@ lesson is the section's own: a green step is not evidence — and here there was
 green step, only two days of nobody looking. **`rehearse` before every run, not only
 before the first one.**
 
+### ⚠️ A fifth, and it fired AFTER a 23-minute run had COMPLETED
+
+`kgpu pull` raised `UnicodeEncodeError: 'charmap' codec can't encode character '⋈'`
+(2026-08-18). The run was fine; the DOWNLOAD was not. `kernels_output` writes the run log
+to disk with the process's default encoding — cp1252 on Windows — and the log carries the
+worker's stdout, which included a `⋈` this package had put in the panel's provenance note.
+
+⚠️ **CLAUDE.md §5 rule 18, one step further out: it is not enough for OUR writers to use
+utf-8, because a third party's writer handles this text too.** The note is ASCII now. If
+you meet it on an existing artefact, `PYTHONUTF8=1 python -m kgpu pull <job>` gets the run
+home — the fix is in the text, not in the retry.
+
 ### ⚠️ Two more from the first panel push, both "Kaggle substitutes and carries on"
 
 Measured 2026-08-17, adding the `cross-sectional` job. Both are now rejected locally by

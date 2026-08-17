@@ -1140,12 +1140,27 @@ class FeatureSelector:
         One `psutil` call and one torch query per PHASE, nine per run, against phases
         that are seconds to hours. `psutil` is on the Kaggle image and in `mt_env`; if
         it is not, the note is empty rather than the run being different.
+
+        ⚠️ **`rss` IS SAMPLED BETWEEN PHASES AND THEREFORE MISSES WHAT KILLS A RUN.**
+        Measured 2026-08-18: the top-150 panel ended phase 4 at 11.0 GB, and a straight
+        line through that and the 30-name point predicts **20.6 GB** for the top-300
+        panel — which had already been killed on a ~29-30 GB box. The peak that mattered
+        lived *inside* `permutation`, between two prints. `peak` is the high-water mark
+        the OS kept (`peak_wset` on Windows, `ru_maxrss` on Linux), and it is the number
+        to read; `rss` only says where the run had settled when the phase ended.
         """
         parts = []
         try:
             import psutil
 
-            parts.append(f"rss={psutil.Process().memory_info().rss / 1024**3:.1f}G")
+            info = psutil.Process().memory_info()
+            parts.append(f"rss={info.rss / 1024**3:.1f}G")
+            peak = getattr(info, "peak_wset", None)
+            if peak is None:
+                import resource  # Linux/macOS: KB there, bytes on macOS
+
+                peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * 1024
+            parts.append(f"peak={peak / 1024**3:.1f}G")
         except Exception:  # noqa: BLE001 — a probe must never fail a run
             pass
         try:

@@ -227,9 +227,16 @@ def _export_panel(cfg, folder: Path, manifest: dict, quiet: bool = False) -> Non
             ]
             for table, types in source_types.items()
         },
+        # ⚠️ **ASCII ONLY, AND THE REASON IS MEASURED.** This string is printed by the
+        # worker notebook, so it lands in Kaggle's run log — and `kernels_output` writes
+        # that log to disk with the process's default encoding, which on Windows is
+        # cp1252. A `⋈` here made `kgpu pull` raise `UnicodeEncodeError: 'charmap' codec
+        # can't encode character '⋈'` AFTER a 23-minute run had COMPLETED
+        # (2026-08-18). CLAUDE.md §5 rule 18 one step further out: it is not enough for
+        # OUR writers to use utf-8, because a third party's writer handles this text too.
         "join": (
             f"read_universe_panel over the top {top_n} names by {cutoff}-cutoff median "
-            f"turnover; pool__basic ⋈ pool__targets server-side, cs_rank_* derived "
+            f"turnover; pool__basic JOIN pool__targets server-side, cs_rank_* derived "
             f"after, joined locally at export because a Kaggle worker has no database"
         ),
     }

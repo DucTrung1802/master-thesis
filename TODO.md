@@ -177,11 +177,19 @@ inference — which §5 rule 2 forbids leaving as one. `selector._tick` now prin
 
 ### P1-4b · Cut the host-side peak so the top-300 panel fits ⏱ see P3-2
 
-**The extrapolation, from the probe above**: ~1.5 GB of the smoke run's RSS is data, over
-48,521 rows. The top-300 panel is **25.7× the rows** → ~**39 GB** against a Kaggle T4
-box's ~29-30 GB. That is consistent with a phase-4 kill and says the panel needs roughly a
-**2× reduction, not a 10%** one. Inverting it: ~810 k rows fit, which at 4,368 dates is
-**~185 names**.
+⚠️ **THE FIRST EXTRAPOLATION HERE WAS WRONG AND THE SECOND MEASUREMENT KILLED IT.** It
+read *"~1.5 GB of the smoke run's RSS is data over 48,521 rows, so the top-300 panel is
+25.7× the rows → ~39 GB"*. The top-150 run then ended phase 4 at **11.0 GB on 624,448
+rows**, and a straight line through both points predicts **20.6 GB** for top-300 — under
+the box, not 10 GB over it. **One point does not fit a line**, and scaling a peak from a
+tiny panel treats a large fixed cost as if it were per-row.
+
+⚠️ **AND THE SECOND FIT IS NOT TO BE TRUSTED EITHER, FOR A DIFFERENT REASON: `rss` is
+sampled BETWEEN phases.** The top-300 run died *inside* phase 4, so whatever killed it
+was never printed. `selector._tick` now also reports `peak=` — the OS high-water mark
+(`peak_wset` / `ru_maxrss`) — which is the number that decides whether a run survives.
+**Until a run reports `peak`, the top-300 ceiling is unmeasured**, and the honest
+statement is that top-300 died at ~29-30 GB while top-150 settled at 11.0 GB.
 
 ### ~~P1-4 · Chunk the GPU rank step~~ — **promoted from P3-2 by measurement** ⏱ done
 
@@ -359,7 +367,36 @@ against the smoke run, then one more T4 round trip.
 ⚠️ **Panel mode is NOT what failed and must not be re-opened.** Everything `kgpu` adds ran
 on the worker; what died is a ranker step at a width no single-ticker run has ever reached.
 
-### ⚠️ SECOND ATTEMPT, 2026-08-18 — one wall further, and a DECISION is now needed
+### ⚠️ THIRD ATTEMPT, 2026-08-18 — **IT RAN**, top-150, and the result has NO BAR
+
+`2026-08-17_235146__all__basic__cs_rank_20day`, Tesla T4, **22m 53s**, 624,448 × 104,
+150 tickers, 4,368 sessions, `n_eff = 218`, 90 channels → **61 kept**, shortlist 13.
+
+| fold | 1 | 2 | 3 | 4 | 5 | mean |
+|---|---|---|---|---|---|---|
+| IC (selected) | +0.060 | +0.124 | **+0.153** | +0.104 | +0.097 | **+0.1075** |
+| R² | −0.038 | +0.007 | +0.021 | +0.007 | +0.012 | — |
+
+`ic_trend_per_fold` **+0.0054** (flat, not decaying — §5 rule 5), `hit_rate` 0.536,
+`ic_fold_sd` 0.0342. **All five folds positive**, and R² is positive in four of five —
+which §5c's eleven single-stock models never managed once.
+
+⚠️ **AND `null: None`.** Rule 2: `evidence=no_null` is an **unknown, not a pass**, and
+§2b's whole finding is that the observed IC barely moves while the noise floor collapses
+— so the bar is the entire question and this run does not answer it. ⚠️ **Do not read
++0.1075 against §2b's bars** (VN100 +0.0117, LIQUID301 +0.0245): those were measured at
+`h=5`, and at `h=20` each fold carries `n_eff = 38.1`, so this run's own null will be
+**wider**. It must be its own.
+
+**The null is now priced, which is what this run bought.** One pass 1,355 s, of which
+`stability` 187 s is skipped by a draw → **~19.5 min per draw, ~6.5 h for 20**. Against
+Kaggle's 12 h session cap and 27.6 h of weekly quota, that is **affordable in one
+session** — the first time a 20-draw null on a real cross-section has been.
+
+⚠️ **`permutation` is 726 s, 54 % of the run**, and §19 measured it as the one
+load-bearing ensemble member, so it cannot be dropped to buy the null.
+
+### ⚠️ SECOND ATTEMPT, 2026-08-18 — one wall further, and a DECISION was needed
 
 With P1-4's chunking, the same job on the same payload got **past** the step that killed
 it: `spearman vs target` **12.3 s** where it had OOMed. `window design` 198.1 s. Then
