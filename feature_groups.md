@@ -1,5 +1,9 @@
 # Feature Groups (standardized)
 
+> ⚠️ **Reference table, not an operating document.** Root registers:
+> [CLAUDE.md](CLAUDE.md) (map) · [RUNBOOK.md](RUNBOOK.md) (run) ·
+> [ISSUES.md](ISSUES.md) (broken) · [TODO.md](TODO.md) (next).
+
 Canonical taxonomy for every feature produced by `train_test_creator` (the assembled
 `feature_df`, ~1,250 columns before selection). Group names are `snake_case`; the
 `ta_*` prefix namespaces all technical-indicator families (so "all TA" = name starts

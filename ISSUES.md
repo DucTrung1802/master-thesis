@@ -5,6 +5,22 @@ Stable codes for the
 chain. **Codes are permanent**: a resolved issue keeps its code and its row, never
 renumbered and never reused, so an old message that says "BNK-1" still resolves.
 
+> ### The four root registers — one job each, no overlap
+>
+> | file | answers | when you touch it |
+> |---|---|---|
+> | **[CLAUDE.md](CLAUDE.md)** | *what is this, and what has it PROVED?* | auto-loaded every session; the map and the verdict |
+> | **[RUNBOOK.md](RUNBOOK.md)** | *how do I RUN it?* | commands, stage order, the flags that destroy things |
+> | **[ISSUES.md](ISSUES.md)** | *what is BROKEN?* | permanent codes; a code is never renumbered or reused |
+> | **[TODO.md](TODO.md)** | *what is NEXT?* | priority-ordered, every item with a measured cost |
+>
+> Movement between them is one-way and worth knowing: a TODO item that turns out to be a
+> defect **graduates to ISSUES.md with a code**; an ISSUES entry that gets fixed keeps its
+> row and is struck through; a TODO item that gets done leaves its measurement in CLAUDE.md
+> or a `CONTEXT.md` and is **deleted, not ticked**. Anything a future session must not
+> rediscover belongs in CLAUDE.md, not here.
+
+
 ## Open (14)
 
 | code | severity | issue | lives in |

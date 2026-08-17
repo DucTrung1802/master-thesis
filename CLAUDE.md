@@ -8,6 +8,21 @@
 > ⚠️ **Everything here is a claim that was MEASURED.** This repo's convention is that a
 > number without a null is descriptive, not evidence. Keep it: verify before acting, and
 > when you measure something new, write the measurement down where it was made.
+>
+> ### The four root registers — one job each, no overlap
+>
+> | file | answers | when you touch it |
+> |---|---|---|
+> | **[CLAUDE.md](CLAUDE.md)** | *what is this, and what has it PROVED?* | auto-loaded every session; the map and the verdict |
+> | **[RUNBOOK.md](RUNBOOK.md)** | *how do I RUN it?* | commands, stage order, the flags that destroy things |
+> | **[ISSUES.md](ISSUES.md)** | *what is BROKEN?* | permanent codes; a code is never renumbered or reused |
+> | **[TODO.md](TODO.md)** | *what is NEXT?* | priority-ordered, every item with a measured cost |
+>
+> Movement between them is one-way and worth knowing: a TODO item that turns out to be a
+> defect **graduates to ISSUES.md with a code**; an ISSUES entry that gets fixed keeps its
+> row and is struck through; a TODO item that gets done leaves its measurement in CLAUDE.md
+> or a `CONTEXT.md` and is **deleted, not ticked**. Anything a future session must not
+> rediscover belongs in CLAUDE.md, not here.
 
 ---
 
@@ -917,9 +932,21 @@ the extremes before selecting on any foreign or prop channel). **FLT-1**
 bounds what forex data can exist at all: 19 of 47 broker filters fail open, so 37
 brokers' books are unreachable.
 
-Other roots: `THESIS_PROGRESS_2026*.md` /
-`THESIS_SUMMARY_2026_VI.md` (deliverable write-ups), `feature_groups.md`,
-`vn30.csv` / `vn100.csv` (index membership — ⚠️ current, not point-in-time).
+### The other root files
+
+| file | what it is | read it when |
+|---|---|---|
+| **[RUNBOOK.md](RUNBOOK.md)** | the operating guide — 8 stages with MEASURED runtimes, the two flags that destroy things, the target-switch leakage trap, and §10's list of what is deliberately not standardized | you are about to run something |
+| **[ISSUES.md](ISSUES.md)** | 14 open / 30 resolved, permanent codes | before quoting any number — four of them change how a number may be READ |
+| **[TODO.md](TODO.md)** | the one backlog, priority-ordered, every item costed | deciding what to do next |
+| `README.md` | the front door; routes here | — |
+| `THESIS_PROGRESS_2026*.md`, `THESIS_SUMMARY_2026_VI.md` | deliverable write-ups (EN + VI) | writing the thesis, not running the pipeline |
+| `feature_groups.md` | canonical feature taxonomy | naming a feature group |
+| `vn30.csv` / `vn100.csv` | index membership — ⚠️ **current, not point-in-time** | never as a historical universe |
+
+⚠️ **`TODO.md` absorbed `src/orchestration/todo.md` on 2026-08-17** (28 items, Vietnamese).
+If an older message or `CONTEXT.md` points at that path, it is a history reference —
+`git show 6059c183^:src/orchestration/todo.md` is the file.
 
 **Working preferences** (test.py usage, notebook DataFrame display, the paper-analysis
 workflow, log truncation) live in the auto-loaded memory index and are not duplicated here.

@@ -3,9 +3,23 @@
 > Written 2026-08-16 against commit `af348b78`+. Every runtime below was **measured on
 > this machine today**, not estimated — see §8 for why that distinction matters here.
 >
-> This file is the **operating** guide. [CLAUDE.md](CLAUDE.md) is the **map** (what the
-> project is, what it has proved); [ISSUES.md](ISSUES.md) is the open-defect list. When
-> they disagree with this file about a command, this file is the one that was run.
+> ### The four root registers — one job each, no overlap
+>
+> | file | answers | when you touch it |
+> |---|---|---|
+> | **[CLAUDE.md](CLAUDE.md)** | *what is this, and what has it PROVED?* | auto-loaded every session; the map and the verdict |
+> | **[RUNBOOK.md](RUNBOOK.md)** | *how do I RUN it?* | commands, stage order, the flags that destroy things |
+> | **[ISSUES.md](ISSUES.md)** | *what is BROKEN?* | permanent codes; a code is never renumbered or reused |
+> | **[TODO.md](TODO.md)** | *what is NEXT?* | priority-ordered, every item with a measured cost |
+>
+> Movement between them is one-way and worth knowing: a TODO item that turns out to be a
+> defect **graduates to ISSUES.md with a code**; an ISSUES entry that gets fixed keeps its
+> row and is struck through; a TODO item that gets done leaves its measurement in CLAUDE.md
+> or a `CONTEXT.md` and is **deleted, not ticked**. Anything a future session must not
+> rediscover belongs in CLAUDE.md, not here.
+>
+> ⚠️ **When another register disagrees with this file about a COMMAND, this file wins** —
+> it is the one whose commands were actually run.
 
 ---
 
@@ -39,9 +53,20 @@ cd src                                                # every `python -m` below 
 
 ## 3. The chain, and what each stage costs
 
-The current experiment is **`vcb` / `close_adjust_5day` / `d=20, h=5`**, named in exactly
-one place: [src/utils/chain.py](src/utils/chain.py). Every stage derives its default from
-there.
+The chain's DEFAULT is **`vcb` / `close_adjust_5day` / `d=20, h=5`**, named in exactly one
+place: [src/utils/chain.py](src/utils/chain.py). Every stage derives from there.
+
+⚠️ **The default is not the live experiment, and knowing which is which matters.** Both
+chains are built in the database as of 2026-08-17:
+
+| target | table | evidence | verdict |
+|---|---|---|---|
+| `close_adjust_5day` *(the default)* | `…__final__d20_h5`, 35 ch | `failed_null=1` | ❌ **a price LEVEL — R² −85.6, MASE 21.4, ROC AUC undefined.** Do not start new work here |
+| **`return_5day`** | `…__final__d20_h5`, 66 ch | `cleared_p95_not_a_pass` | ⚠️ layer 2 "clears" but see **TODO P0-1** — four measured reasons the bar is too low |
+
+Use `--table return_5day__final__d20_h5` explicitly, or move `DEFAULT_TARGET`. The default
+was left on `close_adjust_5day` only because moving it is a behaviour change nobody asked
+for yet.
 
 | # | stage | command (from `src\`) | writes | measured |
 |---|---|---|---|---|
@@ -74,9 +99,9 @@ below it. Read the fingerprints it prints before adding `--replace`.
 
 ---
 
-## 5. Today's run, end to end — copy this
+## 5. A full run, end to end — copy this
 
-This is literally what produced the current state, in order:
+⚠️ The block below is the `close_adjust_5day` chain as run 2026-08-16, kept because every command in it was executed. **For a new experiment substitute `return_5day`** and read §6 first — the shortlist pool is target-conditioned and cannot be reused.
 
 ```powershell
 cd src

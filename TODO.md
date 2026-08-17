@@ -4,10 +4,20 @@
 > (28 numbered items, deleted in the same commit — `git show HEAD~1:src/orchestration/todo.md`
 > brings it back). **Everything here carries a measured cost or a measured symptom.**
 >
-> Three registers, no overlap: [ISSUES.md](ISSUES.md) is what is **broken**,
-> [RUNBOOK.md](RUNBOOK.md) is how to **run** things, this is what is **next**. An item
-> that turns out to be a defect graduates to ISSUES.md with a permanent code; a finished
-> item leaves a measurement behind and is **deleted**, not ticked.
+> ### The four root registers — one job each, no overlap
+>
+> | file | answers | when you touch it |
+> |---|---|---|
+> | **[CLAUDE.md](CLAUDE.md)** | *what is this, and what has it PROVED?* | auto-loaded every session; the map and the verdict |
+> | **[RUNBOOK.md](RUNBOOK.md)** | *how do I RUN it?* | commands, stage order, the flags that destroy things |
+> | **[ISSUES.md](ISSUES.md)** | *what is BROKEN?* | permanent codes; a code is never renumbered or reused |
+> | **[TODO.md](TODO.md)** | *what is NEXT?* | priority-ordered, every item with a measured cost |
+>
+> Movement between them is one-way and worth knowing: a TODO item that turns out to be a
+> defect **graduates to ISSUES.md with a code**; an ISSUES entry that gets fixed keeps its
+> row and is struck through; a TODO item that gets done leaves its measurement in CLAUDE.md
+> or a `CONTEXT.md` and is **deleted, not ticked**. Anything a future session must not
+> rediscover belongs in CLAUDE.md, not here.
 >
 > ⚠️ Costs are measured on this machine (RTX 3050 4 GB, 15.6 GB RAM), three rankers, GPU
 > — not the stale fitted models in `feature_selection/CONTEXT.md` §15c, which **P1-1** is
