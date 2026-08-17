@@ -1,0 +1,24 @@
+{
+  "observed_ic": 0.1369,
+  "n_draws": 10,
+  "null_mean": 0.02026092409974651,
+  "null_sd": 0.02809724436185046,
+  "null_p95_BAR": 0.05649070475888707,
+  "null_max": 0.05683198254362887,
+  "draws_at_or_above_observed": 0,
+  "p_value": 0.09090909090909091,
+  "clears_bar": true,
+  "draws": [
+    -0.0122,
+    -0.007239,
+    0.034254,
+    0.056074,
+    0.037253,
+    0.056832,
+    -0.012257,
+    0.030196,
+    0.030069,
+    -0.010372
+  ],
+  "what_this_prices_in": "BOTH selection layers, re-run inside every draw \u2014 unlike the run's own null, which re-runs layer 2 only and inherits layer 1's pre-selection."
+}

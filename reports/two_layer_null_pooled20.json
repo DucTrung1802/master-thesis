@@ -1,0 +1,40 @@
+{
+  "observed_ic": 0.1369,
+  "n_draws": 20,
+  "seeds": [
+    18,
+    19
+  ],
+  "null_mean": 0.01557,
+  "null_sd": 0.03140192318280757,
+  "null_p95_BAR": 0.05737210000000001,
+  "null_max": 0.067634,
+  "draws_at_or_above_observed": 0,
+  "p_value": 0.047619047619047616,
+  "p_value_floor": 0.047619047619047616,
+  "z_vs_null": 3.8637760908359806,
+  "clears_bar": true,
+  "draws": [
+    -0.041351,
+    -0.03782,
+    -0.014958,
+    -0.012257,
+    -0.0122,
+    -0.010372,
+    -0.007239,
+    0.000938,
+    0.010774,
+    0.013987,
+    0.029155,
+    0.030069,
+    0.030196,
+    0.034254,
+    0.035845,
+    0.037253,
+    0.044586,
+    0.056074,
+    0.056832,
+    0.067634
+  ],
+  "what_this_prices_in": "BOTH selection layers, re-run inside every draw. Two independent seeds (18, 19) pooled; the pool carried mkt_n_names for both, matching the observed run."
+}

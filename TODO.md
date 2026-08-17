@@ -34,18 +34,29 @@ for runs that are currently blocked anyway.
 
 ### ✅ P0-1 · DONE 2026-08-17 — the two-layer null CLEARS, and **my recorded prediction was wrong**
 
-`feature_selection/studies/two_layer_null.py`, 10 draws, 1 h 50 m. Each draw shuffles the
+`feature_selection/studies/two_layer_null.py`, **20 draws across two seeds**, 3 h 39 m total (1h50m + 1h48m). Each draw shuffles the
 label ONCE and re-runs **both** layers on it — six layer-1 selections, the union of their
 survivors, one layer-2 selection.
 
-| | layer-2 only *(the run's own null)* | **BOTH layers** *(honest)* |
+| | layer-2 only *(the run's own null)* | **BOTH layers, 20 draws** *(honest)* |
 |---|---|---|
-| null mean | +0.0023 | +0.0109 |
-| null sd | 0.0300 | 0.0353 |
-| **p95 BAR** | **+0.0428** | **+0.0573** |
+| draws | 10 | **20** (seeds 18 + 19, pooled) |
+| null mean | +0.0023 | +0.0156 |
+| null sd | 0.0300 | 0.0314 |
+| **p95 BAR** | **+0.0428** | **+0.0574** |
 | null MAX | +0.0577 | +0.0676 |
-| z | +4.48 | **+3.57** |
+| z | +4.48 | **+3.86** |
+| p | 0.0909 | **0.0476** (the 1/21 floor) |
 | observed | +0.1369 | +0.1369 |
+
+⚠️ **The two seeds agree to the third decimal on the bar** — +0.0573 (seed 18) vs +0.0565
+(seed 19) — which is the reassuring part, and more useful than the p-value. `SE(sd)` fell
+from 0.0083 to 0.0051, so `z = +3.86` now rests on a stable dispersion estimate.
+
+⚠️ **20 draws does not escape the floor, it moves it.** `p = 0.0476` is exactly `1/21`:
+**0 of 20** draws reached the observed, so the p-value is again pinned at its minimum and
+says "no draw beat it", not "p is small". Real resolution needs 50 draws (floor 0.0196,
+~9 h) or 100 (0.0099, ~18 h). **Read `z`, which has no floor.**
 
 **The criticism was right about the direction and wrong about the outcome.** Pricing in
 layer 1 raises the bar **34%** — so the run's own null *was* too easy, exactly as argued.
@@ -62,8 +73,9 @@ wider candidate set and has *more* room to overfit noise, pushing the null up.
 
 **What this does NOT settle** — three of the four original objections are untouched:
 
-1. `p = 0.0909` is **still the 1/(n+1) floor** at 10 draws. To claim p < 0.05 needs ≥ 20
-   draws — another ~1.8 h. This test cannot distinguish p = 0.09 from p = 0.001.
+1. `p = 0.0476` is **still the floor**, now at 1/21. Raising 10 → 20 draws bought a
+   stable `sd` (SE 0.0083 → 0.0051) and a trustworthy `z = +3.86`; it did **not** buy
+   p-value resolution, and 50-100 draws (9-18 h) is what would.
 2. The fold trend `+0.125 / −0.017 / +0.142 / +0.127 / +0.306` is untested here, and rule
    23's data-arrival reading still fits a pool whose news channels are NULL before 2013.
 3. 9 of 66 channels are constant across the train slice.
