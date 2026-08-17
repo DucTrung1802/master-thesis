@@ -1,13 +1,40 @@
 # LSTM on the final feature table — one file fully describes one run.
 #
 # The dataset is REFERENCED by folder name under src/train_test_set/, built by
-#   python -m train_test_creator --save
-# from unified_schema_vcb.return_5day__final__d20_h5, which final_features built from
-# 19 feature-selection runs.
+#   python -m train_test_creator --table return_5day__final__d20_h5 --save
+# from unified_schema_vcb.return_5day__final__d20_h5.
 #
 # WARNING: `lookback` and `n_features` below are ASSERTIONS, not settings. train.py
 # raises if the dataset disagrees with them — the dataset is the authority, and a
 # config that quietly wins that argument trains a d=20 architecture on d=5 windows.
+#
+# ⚠️ THIS FILE DESCRIBED A DIFFERENT EXPERIMENT UNTIL 2026-08-17. It asserted
+# `n_features: 724`, from the 750-channel table the STL-1 rebuild produced and which no
+# longer exists. The assertion did its job: it raised rather than training on a dataset
+# it did not describe. The current table is the 2026-08-17 two-layer chain.
+#
+# ── What this run is, and what it is not ─────────────────────────────────────────────
+#
+# ⚠️ THIS IS THE FIRST MODEL IN THIS REPO TRAINED ON A SHORTLIST THAT CLEARED AN HONEST
+# NULL. The 66 channels come from a layer-2 selection whose bar was recomputed by
+# re-running BOTH selection layers inside every shuffled draw (TODO P0-1,
+# feature_selection/studies/two_layer_null.py):
+#
+#     observed ic_mean +0.1369   p95 bar +0.0574 (20 draws, two seeds)   z +3.86
+#     0 of 20 draws reached the observed; null max +0.0676 stays below it
+#
+# ⚠️ AND THREE OBJECTIONS SURVIVE THAT TEST, so the shortlist is not clean:
+#   1. p = 0.0476 is the 1/21 FLOOR — it says "no draw beat it", not "p is small".
+#      Read z, which has no floor.
+#   2. The selection's fold ICs run +0.125 / -0.017 / +0.142 / +0.127 / +0.306, trend
+#      +0.0507. On a pool whose news channels are entirely NULL before 2013 that is
+#      rule 23's DATA-ARRIVAL signature, not necessarily a strengthening signal.
+#   3. 9 of the 66 channels were constant across the train slice and train_test_creator
+#      dropped them — hence 57 features, not 66.
+#
+# ⚠️ AND A CLEARED SELECTION BAR HAS NEVER SURVIVED DOWNSTREAM HERE. CLAUDE.md §5d:
+# "The selection cleared its bar; the model did not clear its own." That is the single
+# question this run exists to answer.
 
 run_name: lstm__vcb__return_5day__final__d20_h5
 dataset: vcb__return_5day__final__d20_h5__tr70_val15_test15__std
@@ -15,9 +42,14 @@ task: regression
 
 # Asserted against the dataset's metadata.json at load time.
 lookback: 20
-# 724 of 750 selected channels; 26 dropped for zero train-slice coverage.
-n_features: 724
+# 57 of the table's 66 channels; 9 dropped for being constant across the train slice.
+n_features: 57
 
+# ⚠️ 2x128 is the repo default and it is kept so this run is comparable to the archived
+# ones — NOT because it is right for the data. It is ~217k parameters against 2,921
+# training windows. §5c measured an LSTM flipping the SIGN of its own IC on hidden_size
+# alone (h=32 -> -0.0345, h=8 -> +0.0346), which is noise, not tuning: if you sweep this,
+# read the spread as one error bar rather than as a ranking.
 model:
   type: LSTM
   hidden_size: 128
@@ -36,6 +68,8 @@ train:
   log_every: 10
 
 # Draws in result_evaluator's block-shuffled null. 200 resolves p to ~0.005.
+# ⚠️ NUL-1: this null prices in neither the feature selection nor the architecture
+# choice. A run that fails it is dead; a run that clears it is not yet alive.
 null_draws: 200
 
 seed: 42
