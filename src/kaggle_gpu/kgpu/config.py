@@ -68,6 +68,10 @@ ACCELERATORS = {
 }
 
 
+# The single artefact a panel job ships, and the key it takes in the manifest.
+PANEL_TABLE = "panel"
+
+
 @dataclass(frozen=True)
 class DataConfig:
     """The payload dataset: repo source + unified-schema tables as parquet.
@@ -82,13 +86,35 @@ class DataConfig:
     ticker: str = "VCB"
     tables: List[str] = field(default_factory=list)
     source_dirs: List[str] = field(default_factory=lambda: ["src/feature_selection"])
+    # ⚠️ **PANEL MODE — the only way a CROSS-SECTIONAL target can run on Kaggle.**
+    # `read_universe_panel` joins `pool__basic ⋈ pool__targets` with ONE hand-written
+    # SQL statement and derives `cs_rank_{h}day` from it, so it reaches for
+    # `reader.driver._cursor_ctx()` — and `ParquetSchemaReader.driver` raises
+    # "there is no database on a Kaggle worker". No `--pools` value and no notebook
+    # parameter can route around that: the cross-sectional read bypasses every
+    # abstraction the payload replaces. This is `CSP-1` in its second form.
+    #
+    # So the join happens HERE, where the database is, and the worker receives the
+    # finished panel — `cs_rank` already derived, so the within-date rank is computed
+    # on the full universe before anything is shipped.
+    #
+    # {"top_n": 300, "liquidity_before": "2014-01-01", "horizons": [20], "min_width": 5}
+    panel: Optional[dict] = None
 
     @property
     def slug(self) -> str:
         return self.id.split("/", 1)[1]
 
+    @property
+    def is_panel(self) -> bool:
+        return bool(self.panel)
+
     def resolved_tables(self, pools: Optional[List[str]]) -> List[str]:
         """The tables to export: explicit `tables`, else the job's POOLS, + targets."""
+        if self.is_panel:
+            # A panel job ships ONE artefact, already joined. Naming pools here would
+            # promise a shape the worker never sees.
+            return [PANEL_TABLE]
         chosen = list(self.tables) or list(pools or [])
         if not chosen:
             raise ValueError(

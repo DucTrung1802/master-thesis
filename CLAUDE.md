@@ -556,6 +556,52 @@ p95 bar of **+0.0510** — **does not clear**, z = +1.60, p = 0.1429, null max
 **+0.0714** (above the observed, so rule 3 applies). §2 stands: the affordable null
 is now the point, not the result.
 
+**Measured round trip, `smoke` job, 2026-08-17** — 8m 15s end to end, of which
+**5.2 min was QUEUED**. ⚠️ **The queue is the floor, not the compute.** A job that
+runs in 90 s still costs ~7 min wall clock, so batching one large run beats
+several small ones, and `rehearse` (the worker side, locally, no quota) is where
+iteration belongs.
+
+### ⚠️ 3d-bis. PANEL MODE — half shipped 2026-08-17, and it is `CSP-1` in a SECOND form
+
+**A cross-sectional target cannot run on Kaggle through the pool payload at all**, and
+the reason is structural rather than a missing parameter. `feature_selection.
+cross_sectional.read_universe_panel` builds `pool__basic ⋈ pool__targets` with **one
+hand-written SQL statement** and derives `cs_rank_{h}day` from it, so it reaches for
+`reader.driver._cursor_ctx()` — and `ParquetSchemaReader.driver` raises *"there is no
+database on a Kaggle worker"*. The cross-sectional read **bypasses every abstraction the
+parquet payload replaces**. No `--pools` value, no notebook parameter and no config key
+routes around it.
+
+**So the join moves to where the database is.** `DataConfig.panel` (`kgpu/config.py`) and
+`export._export_panel` rank the universe by median `value_matched`, call
+`read_universe_panel` **here**, and ship one finished `panel.parquet` — `cs_rank` already
+derived. `resolved_tables()` returns `["panel"]` in this mode, because naming pools would
+promise the worker a shape it never sees.
+
+| measured 2026-08-17 | |
+|---|---|
+| payload, top-300 × h=20 | **1,247,098 × 104**, 4,388 dates, 300 tickers, `cs_rank_20day` ✅ |
+| parquet | **477 MB** (88 s to read, 5 s to write) |
+| in memory | **1.57 GB** |
+| this machine | **4.0 GiB VRAM ❌**, 7.1 GB RAM free ❌ — the local pilot **CUDA-OOMed** asking for 1.01 GiB |
+| Kaggle T4 | **14.6 GiB VRAM ✅**, ~29 GB RAM ✅ |
+
+⚠️ **`liquidity_before` is REQUIRED and has no default.** Ranking turnover over the whole
+sample is look-ahead — it picks the names that *turned out* to be liquid, the same defect
+§2c records for non-point-in-time index membership. A silent default would make that
+invisible in the artefact, so the exporter raises instead.
+
+⚠️ **The shipped `cs_rank` is a rank within the 300 shipped names, not within all 781.**
+That is the intended experiment (a tradeable liquid cross-section) and it is written into
+the manifest so a later reader cannot mistake it for the full-universe rank.
+
+⚠️ **NOT FINISHED — do not assume a cross-sectional job runs.** Shipped: `config.py`,
+`export.py` (syntax-checked; `kgpu plan feature-selection` still clean, so no regression to
+the existing job). **Remaining: a worker notebook that reads `panel.parquet` into
+`CrossSectionalSelector(panel=...)`, a `cross-sectional` job in `kaggle_config.json`, then
+`rehearse`, then `run`.** TODO **P1-3** carries the step list.
+
 ---
 
 ## 4. Run it
@@ -635,7 +681,18 @@ ensemble is a MEAN over its members, so order cannot change the answer and must 
 split a table. ⚠️ **Expect this on the next run** — a new three-ranker `vcb__basic` run
 and the 19 archived runs are two groups that still want ONE table name, so
 `plan_from_reports` **raises on the collision rather than unioning**. Pass
-`--scope basic`. Pinned by `feature_selection/tests/test_contract.py` (19 tests).
+`--scope basic`. Pinned by `feature_selection/tests/test_contract.py` (**23 tests**).
+
+⚠️ **`SETUP_KEYS` GREW TWICE MORE, 2026-08-17 — `design_dtype` and `env_fingerprint`.**
+Both exist because a run's number now depends on something `methods` does not capture.
+**`design_dtype`**: `float32` does *not* reproduce `float64` — measured at a **52%
+relative change in `ic_mean`** on one panel (TODO P0-3), so the two dtypes must never
+union. **`env_fingerprint`** (`report.FINGERPRINTED_LIBRARIES` — numpy/scipy/sklearn/
+xgboost/torch, hashed to 12 chars; this machine is `cf51e65b3a15`): §3d already records
+that Kaggle ships **xgboost 3.2.0 / sklearn 1.6.1** against `mt_env`'s **2.1.1 / 1.7.2** —
+a major version of the ranker itself — so a Kaggle run and a local run were two procedures
+that could silently land in ONE table. `LEGACY_SETUP_DEFAULTS` reads both as
+`"unrecorded"` for the archive, on the same rule-2 grounds as `methods`.
 
 ⚠️ **THE SELECTION RUNS ON THE GPU NOW, AND `device` IS PART OF THE SETUP** (2026-08-10).
 Every one of the 22 archived runs recorded `device="cpu"` — the GPU had never been used —
@@ -873,10 +930,10 @@ number here disagrees with the database, the database is right and this section 
 
 | | VCB | BANK |
 |---|---|---|
-| selection runs | **28** run folders in `reports/feature_selection/` | (shared) |
+| selection runs | **29** run folders in `reports/feature_selection/` | (shared) |
 | `final_features` | `close_adjust_5day__final__d20_h5` 4,266 × 39 (35 ch) · **`return_5day__final__d20_h5` 4,235 × 70 (66 ch)** | `rank_5day__final__d20_h5` 53,921 × 18 · `…__basic` 54,528 × 16 |
-| datasets on disk | 3 (incl. both VCB targets) | 1 |
-| model runs | **1** — `lstm__vcb__close_adjust_5day…20260816-165606` | 0 |
+| datasets on disk | **3 VCB** (`close_adjust_5day`, `return_5day`, `return_5day__basic`) | 1 |
+| model runs | **2** — `lstm__vcb__close_adjust_5day…20260816-165606`, **`lstm__vcb__return_5day…20260817-205952`** (TODO P2-3) | 0 |
 
 ⚠️ **The 16 pre-2026-08-16 model runs were deleted on request** and archived to
 `D:\GIT\_archive\master-thesis\model_runs_2026-08-16.zip` (2.2 MB, outside the repo,

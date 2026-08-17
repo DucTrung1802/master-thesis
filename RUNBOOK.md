@@ -187,6 +187,38 @@ near 1 without raising.
 
 ---
 
+## 7a. Running on a Kaggle T4 — when the local card is too small
+
+```powershell
+cd src\kaggle_gpu
+python -m kgpu plan     feature-selection   # what would run; touches nothing
+python -m kgpu data     feature-selection   # DB -> parquet -> private dataset
+python -m kgpu rehearse feature-selection   # the WORKER side, locally, NO QUOTA
+python -m kgpu run      feature-selection   # push, wait, download, merge
+```
+
+**Iterate in `rehearse`, not in `run`.** Measured 2026-08-17 on the `smoke` job: 8m 15s end
+to end, of which **5.2 min was QUEUED**. ⚠️ **The queue is the floor, not the compute** — a
+90-second job still costs ~7 minutes, so batch one large run rather than several small ones.
+
+| | this machine | Kaggle T4 |
+|---|---|---|
+| VRAM | **4.0 GiB** | **14.6 GiB** |
+| RAM free | ~7 GB | ~29 GB |
+| quota | — | 30 GPU-h/week |
+
+⚠️ **A Kaggle run is a different PROCEDURE, not the same run on a faster card.** Its image
+ships **xgboost 3.2.0 / sklearn 1.6.1 / numpy 2.0.2** against `mt_env`'s **2.1.1 / 1.7.2 /
+2.2.6**, and XGBoost subsamples from a different RNG stream per device. Since 2026-08-17
+`contract.SETUP_KEYS` carries `env_fingerprint`, so the two **cannot be unioned into one
+table by accident** — expect a group collision instead, and pass `--scope`.
+
+⚠️ **A CROSS-SECTIONAL target does not run there yet.** Panel mode is half shipped —
+CLAUDE.md §3d-bis for why (`read_universe_panel` needs a live database, which the worker
+does not have) and TODO **P1-3** for the steps left.
+
+---
+
 ## 8. Before you quote any number this chain produces
 
 1. **`python -m pipeline` must show `up to date` for every stage below the one you are
@@ -235,9 +267,11 @@ Honest list, so you do not go looking for a switch that is not there:
   dropped 2026-08-16. The guard over-predicts by **4–13×** — it predicted 393 min for a
   run that took **29m 44s** — so `budget_minutes` now raises on runs you can afford.
   Until it is re-fitted, treat the raise as advisory and read §3's measured column.
-- **`hit_rate` is not withdrawn on level targets.** CLAUDE.md §5 rule 21 says it is; the
-  code still computes a bare mean of sign matches, so every README on a level target
-  prints `+1.0000`. Ignore that cell.
+- ~~**`hit_rate` is not withdrawn on level targets.**~~ ✅ **Fixed 2026-08-17** (TODO
+  P0-2). `selector.py` calls `evaluation.sign_hit_rate`, which returns NaN when every
+  non-zero label shares a sign, and `report.py`'s formatter now tests `v != v` so the
+  README prints **`—`** rather than a bare `nan`. Verified end to end on a fresh
+  level-target run. A `—` in that cell is the deliberate absence, not a defect.
 - **The 19 archived country runs group as `methods="unrecorded"`.** They still plan and
   still validate, but they will not union with a new three-ranker run — that is `MTH-1`
   working, not a bug. Pass `--scope` if you hit the collision.

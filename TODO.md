@@ -182,6 +182,40 @@ branch reads via `reader.join(pools)`, so `--ticker ALL --pools pool__basic,pool
 Spearman per date, so ranking `return_5day` within a date is the same metric as
 `cs_rank_5day`; only the ranker *fit* differs.
 
+### ⚠️ P1-3 · IN PROGRESS — finish Kaggle **panel mode**, the only route to P2-1 v2 ⏱ ~2 h left
+
+**This is the item to pick up first in a new session.** Two files are edited and
+uncommitted-work-turned-committed; two artefacts do not exist yet.
+
+**Why it exists at all:** `read_universe_panel` is one hand-written SQL statement and
+reaches for `reader.driver`, which `ParquetSchemaReader` answers with *"there is no
+database on a Kaggle worker"*. **No parameter routes around it** — the cross-sectional
+read bypasses every abstraction the parquet payload replaces. `CSP-1` in a second form.
+So the join runs locally and the worker receives a finished panel. CLAUDE.md §3d-bis.
+
+| ✅ done | measured |
+|---|---|
+| `kgpu/config.py` — `PANEL_TABLE`, `DataConfig.panel`, `is_panel`, `resolved_tables → ["panel"]` | — |
+| `kgpu/export.py` — `_export_panel()`; the pool body moved under `if is_panel / else` | syntax OK; `kgpu plan feature-selection` still clean, **no regression to the existing job** |
+| the payload itself, probed end to end | **1,247,098 × 104**, 4,388 dates, 300 tickers, `cs_rank_20day` ✅, **477 MB** parquet, 1.57 GB in memory, 88 s to read |
+
+**Left to do, in order:**
+
+1. **A worker notebook** — reads `panel.parquet` → `CrossSectionalSelector(panel=…,
+   target="cs_rank_20day")` → the shared `write_report`. ⚠️ **A separate small notebook,
+   NOT a branch inside `RUN__feature_importance_report.ipynb`** (2.3 MB): the panel path
+   needs no reader and no DB, and sharing `write_report` means no logic is duplicated.
+2. **A `cross-sectional` job** in `kaggle_config.json` — ticker `ALL`, `data.panel =
+   {"top_n": 300, "liquidity_before": "2014-01-01", "horizons": [20], "min_width": 5}`.
+3. **`kgpu rehearse`** — the worker side, locally, **no quota**. Do this before touching
+   Kaggle; §7a's measured queue is 5.2 min per round trip regardless of compute.
+4. **`kgpu run`** — the 477 MB upload will be the longest part.
+
+⚠️ **`liquidity_before` is required and deliberately has no default** — ranking turnover
+over the whole sample is look-ahead, and a silent default would hide it in the artefact.
+⚠️ The shipped `cs_rank` is a rank **within the 300 shipped names**, not within 781; that
+is the intended experiment and the manifest says so.
+
 ---
 
 ## P2 — new measurements worth having
@@ -205,7 +239,7 @@ And it makes the binding constraint worse. `n_eff = n/h` on VCB:
 and said **1,500 were needed**. Running VCB at h=20 takes the constraint that is already
 binding and tightens it **4×**, to test a result measured under a different design.
 
-### ✅ P2-1 (v2) · `cs_rank_20day` on the top ~300 by turnover ⏱ ~3-4 h
+### ⚠️ P2-1 (v2) · `cs_rank_20day` on the top ~300 by turnover — **NOT RUN**, blocked on P1-3
 
 At h=20 the independent count is 213 **at either grain** — what differs is the QUALITY of
 each observation:
@@ -225,18 +259,33 @@ It combines the four things separate measurements have each pointed at:
 - the **grain** §2b says is the only one that ever cleared a null (≥100 names);
 - the **liquidity tier** the 2026-08-17 reversal probe says is the real variable
   (t = −18.60 all names → −10.43 top 300 → **−1.96** top 100);
-- and it **fits in memory today** (~1.3 M rows), needing none of `PNL-2` / `CSP-1` /
-  `MEM-1` fixed — `cs_rank_20day` carries the `cs_` prefix so it takes the correct path
-  regardless of `PNL-2`.
+- and `cs_rank_20day` carries the `cs_` prefix, so it takes the correct path regardless of
+  `PNL-2`.
 
 ⚠️ **The universe must be chosen from data available BEFORE the evaluation window**, or
 "top 300 by turnover" is look-ahead: picking today's liquid names and applying them to
 2010 is the same defect as a point-in-time index list, which §2c already records.
 
+⚠️ **THE FOURTH CLAIM — "it fits in memory today" — IS FALSIFIED, and it was checked
+wrong.** I checked RAM. **VRAM is the binding constraint**: the local pilot CUDA-OOMed in
+`gpu.spearman_vector`, asking for **1.01 GiB on a 4.00 GiB card**. That is `MEM-1` on the
+device side, and it is why this item now routes through Kaggle:
+
+| | this machine | Kaggle T4 |
+|---|---|---|
+| VRAM | 4.0 GiB ❌ | **14.6 GiB** ✅ |
+| RAM free | ~7 GB ❌ | ~29 GB ✅ |
+| the design, 1.25 M × 104, float64 | ~12.8 GB | fits |
+
+**So P2-1 v2 is blocked on P1-3, not on `MEM-1`.** ⚠️ Do **not** buy it back with
+`float32` — P0-3 measured a **52% relative change in `ic_mean`** from that dtype alone,
+and this run's whole purpose is to produce a number worth quoting.
+
 ### P2-2 · `cs_rank_5day` on the top ~300 by turnover ⏱ ~1 h
 
-Fits today with **none of C fixed** — `read_universe_panel` already takes a `tickers` list
-and filters in SQL, so this is a CLI flag, not a new schema. ~1.3 M rows. Puts a number
+`read_universe_panel` already takes a `tickers` list and filters in SQL, so this is a CLI
+flag, not a new schema. ~1.3 M rows — ⚠️ **the same width as P2-1 v2, so assume the same
+4 GiB VRAM ceiling and the same P1-3 dependency** until measured otherwise. Puts a number
 against §2b's `ALL` row, which reads **"never ran — ⚠️ unverified"** at IC +0.109.
 ⚠️ Today's measurement says liquidity is the variable: the 5-day cross-sectional reversal
 runs `t = −18.60` over all names, `−10.43` at top 300, **`−1.96` at top 100**.

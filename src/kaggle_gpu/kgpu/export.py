@@ -37,7 +37,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List
 
-from .config import REPO_ROOT, JobConfig, repo_src_on_path
+from .config import PANEL_TABLE, REPO_ROOT, JobConfig, repo_src_on_path
 
 # The remote-side files, shipped flat beside the parquet.
 REMOTE_DIR = Path(__file__).resolve().parent / "remote"
@@ -134,6 +134,96 @@ def _payload_hash(folder: Path) -> str:
     return digest.hexdigest()[:16]
 
 
+def _export_panel(cfg, folder: Path, manifest: dict, quiet: bool = False) -> None:
+    """Join the universe panel HERE and ship it as one parquet.
+
+    ⚠️ **This is the whole reason panel mode exists.** `feature_selection.
+    cross_sectional.read_universe_panel` builds `pool__basic ⋈ pool__targets` with one
+    hand-written SQL statement and derives `cs_rank_{h}day` from it, so it reaches for
+    `reader.driver._cursor_ctx()` — and on a Kaggle worker `ParquetSchemaReader.driver`
+    raises *"there is no database on a Kaggle worker"*. No `--pools` value, no notebook
+    parameter and no config key routes around that: the cross-sectional read bypasses
+    every abstraction the parquet payload replaces. `CSP-1` in its second form.
+
+    ⚠️ **THE UNIVERSE IS RANKED ON DATA BEFORE THE EVALUATION WINDOW.** "Top N by
+    turnover" over the whole sample is look-ahead — it selects the names that turned out
+    to be liquid, the same defect §2c records for non-point-in-time index membership.
+    `liquidity_before` is REQUIRED rather than defaulted: a silent default would be
+    invisible in the artefact.
+
+    ⚠️ The derived `cs_rank` is a rank within the SHIPPED universe, not within all 781.
+    That is the intended experiment — a tradeable liquid cross-section — and it is
+    recorded in the manifest so a reader cannot mistake it for the full-universe rank.
+    """
+    spec = dict(cfg.data.panel or {})
+    top_n = int(spec.get("top_n", 0))
+    cutoff = spec.get("liquidity_before")
+    horizons = [int(h) for h in spec.get("horizons", [])]
+    min_width = int(spec.get("min_width", 5))
+    if not (top_n and cutoff and horizons):
+        raise ValueError(
+            f"job {cfg.name!r}: data.panel needs top_n, liquidity_before and horizons. "
+            f"liquidity_before has no default on purpose — ranking liquidity over the "
+            f"whole sample is look-ahead, and a silent default would hide it."
+        )
+
+    from feature_selection.cross_sectional import read_universe_panel
+    from feature_selection.unified_reader import UnifiedSchemaReader
+
+    with UnifiedSchemaReader(cfg.data.ticker) as reader:
+        schema = reader.schema
+        with reader.driver._cursor_ctx() as cur:
+            cur.execute(
+                f"SELECT ticker FROM {schema}.pool__basic "
+                f"WHERE date < %s AND value_matched IS NOT NULL GROUP BY ticker "
+                f"ORDER BY PERCENTILE_DISC(0.5) WITHIN GROUP "
+                f"(ORDER BY value_matched) DESC",
+                (cutoff,),
+            )
+            ranked = [row[0] for row in cur.fetchall()]
+    if len(ranked) < top_n:
+        raise ValueError(
+            f"only {len(ranked)} tickers have turnover before {cutoff}; {top_n} asked."
+        )
+    universe = ranked[:top_n]
+
+    frame = read_universe_panel(
+        tickers=universe, horizons=tuple(horizons), min_width=min_width,
+        schema_ticker=cfg.data.ticker,
+    )
+    path = folder / f"{PANEL_TABLE}.parquet"
+    frame.to_parquet(path, index=False)
+
+    manifest["panel"] = {
+        "top_n": top_n,
+        "liquidity_before": cutoff,
+        "liquidity_rule": "median value_matched over dates strictly before the cutoff",
+        "horizons": horizons,
+        "min_width": min_width,
+        "universe": universe,
+        "cs_rank_scope": (
+            f"within-date rank over the {top_n} SHIPPED names, not over all 781"
+        ),
+    }
+    manifest["tables"][PANEL_TABLE] = {
+        "file": path.name,
+        "rows": int(len(frame)),
+        "columns": int(frame.shape[1]),
+        "column_types": {c: str(t) for c, t in frame.dtypes.items()},
+        "first_date": str(frame["date"].min().date()),
+        "last_date": str(frame["date"].max().date()),
+        "bytes": path.stat().st_size,
+    }
+    if not quiet:
+        print(
+            f"  panel {len(frame):>9,} x {frame.shape[1]:>4}  "
+            f"{path.stat().st_size / 1024**2:>7.1f} MB  "
+            f"{frame['ticker'].nunique()} tickers, {frame['date'].nunique():,} dates "
+            f"-> {frame['date'].max():%Y-%m-%d}",
+            flush=True,
+        )
+
+
 def export(cfg: JobConfig, quiet: bool = False) -> Path:
     """Read the job's tables out of PostgreSQL and stage the whole payload.
 
@@ -176,50 +266,59 @@ def export(cfg: JobConfig, quiet: bool = False) -> Path:
         manifest["schema"] = reader.schema
         manifest["database"] = reader.database
 
-        available = set(reader.pools())
-        missing = [t for t in tables if t not in available and not t.startswith("_")]
-        if missing:
-            raise ValueError(
-                f"{reader.schema} has no table(s) {missing}. Materialise them first:\n"
-                f'  dagster asset materialize -f src/orchestration/definitions.py '
-                f'--select "group:unified" --partition {cfg.data.ticker}'
+        # ⚠️ **PANEL MODE — the join happens HERE because the worker cannot do it.**
+        # `read_universe_panel` is one hand-written SQL statement and reaches for
+        # `reader.driver`, which `ParquetSchemaReader` answers with "there is no
+        # database on a Kaggle worker". No parameter routes around that, so a
+        # cross-sectional job ships the FINISHED panel: `cs_rank_{h}day` is derived
+        # on the full universe before anything leaves this machine.
+        if cfg.data.is_panel:
+            _export_panel(cfg, folder, manifest, quiet=quiet)
+        else:
+            available = set(reader.pools())
+            missing = [t for t in tables if t not in available and not t.startswith("_")]
+            if missing:
+                raise ValueError(
+                    f"{reader.schema} has no table(s) {missing}. Materialise them first:\n"
+                    f'  dagster asset materialize -f src/orchestration/definitions.py '
+                    f'--select "group:unified" --partition {cfg.data.ticker}'
+                )
+
+            # ⚠️ The FULL schema overview travels, not just the shipped tables'. The
+            # notebook prints it as its orientation table, and an overview showing
+            # only what was shipped would hide that 74 other pools exist — the exact
+            # information a reader uses to notice a pool was left behind.
+            overview = reader.overview()
+            overview["shipped"] = overview["table"].isin(tables)
+            manifest["overview"] = json.loads(
+                overview.to_json(orient="records", date_format="iso")
             )
 
-        # ⚠️ The FULL schema overview travels, not just the shipped tables'. The
-        # notebook prints it as its orientation table, and an overview showing
-        # only what was shipped would hide that 74 other pools exist — the exact
-        # information a reader uses to notice a pool was left behind.
-        overview = reader.overview()
-        overview["shipped"] = overview["table"].isin(tables)
-        manifest["overview"] = json.loads(
-            overview.to_json(orient="records", date_format="iso")
-        )
+            for index, table in enumerate(tables, start=1):
+                frame = reader.read(table)
+                types = reader.column_types(table)
+                path = folder / f"{table}.parquet"
+                frame.to_parquet(path, index=False)
 
-        for index, table in enumerate(tables, start=1):
-            frame = reader.read(table)
-            types = reader.column_types(table)
-            path = folder / f"{table}.parquet"
-            frame.to_parquet(path, index=False)
-
-            manifest["tables"][table] = {
-                "file": path.name,
-                "rows": int(len(frame)),
-                "columns": int(frame.shape[1]),
-                "column_types": types,
-                "first_date": str(frame["date"].min().date()),
-                "last_date": str(frame["date"].max().date()),
-                "bytes": path.stat().st_size,
-            }
-            if not quiet:
-                # A count of TABLES, not of bytes — one wide pool can be 100x
-                # another, so this is a position in the list, not a time estimate.
-                print(
-                    f"  [{index}/{len(tables)} {index / len(tables):>4.0%}] "
-                    f"{table:<40} {len(frame):>7,} x {frame.shape[1]:>5}  "
-                    f"{path.stat().st_size / 1024**2:>7.1f} MB  "
-                    f"-> {frame['date'].max():%Y-%m-%d}",
-                    flush=True,
-                )
+                manifest["tables"][table] = {
+                    "file": path.name,
+                    "rows": int(len(frame)),
+                    "columns": int(frame.shape[1]),
+                    "column_types": types,
+                    "first_date": str(frame["date"].min().date()),
+                    "last_date": str(frame["date"].max().date()),
+                    "bytes": path.stat().st_size,
+                }
+                if not quiet:
+                    # A count of TABLES, not of bytes — one wide pool can be 100x
+                    # another, so this is a position in the list, not a time estimate.
+                    print(
+                        f"  [{index}/{len(tables)} {index / len(tables):>4.0%}] "
+                        f"{table:<40} {len(frame):>7,} x {frame.shape[1]:>5}  "
+                        f"{path.stat().st_size / 1024**2:>7.1f} MB  "
+                        f"-> {frame['date'].max():%Y-%m-%d}",
+                        flush=True,
+                    )
 
     # ⚠️ THE CALENDAR CHECK, HERE AS WELL AS IN THE NOTEBOOK. The notebook's guard
     # cell raises on the worker — after the queue, the upload and the startup. The
