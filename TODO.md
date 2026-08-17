@@ -202,13 +202,38 @@ against §2b's `ALL` row, which reads **"never ran — ⚠️ unverified"** at I
 ⚠️ Today's measurement says liquidity is the variable: the 5-day cross-sectional reversal
 runs `t = −18.60` over all names, `−10.43` at top 300, **`−1.96` at top 100**.
 
-### P2-3 · Train the LSTM on the `return_5day` dataset ⏱ ~5 min
+### ✅ P2-3 · DONE 2026-08-17 — the selection cleared its bar; **the model did not**
 
-`vcb__return_5day__final__d20_h5__tr70_val15_test15__std`, 2,921 / 611 / 636 × 20 × 57.
-**Do P0-1 first** — a model trained on a shortlist whose bar is in question inherits the
-question.
+`lstm__vcb__return_5day__final__d20_h5__20260817-205952`, 6.0 s, 228,225 parameters,
+57 features × 20 × 2,921 training windows.
 
----
+| | val | test |
+|---|---|---|
+| `ic` | +0.0611 | **+0.0858** |
+| `ic_bar` (200 draws) | +0.1124 | **+0.1232** ❌ |
+| `ic_p` | 0.184 | 0.109 |
+| **`dir_auc`** | 0.5276 | **0.4974** — a coin |
+| **`mase`** | 1.073 | **1.068** — LOSES to the naive |
+| `skill_score` | −0.073 | −0.029 |
+| `r2` | −0.081 | −0.031 |
+| `calibration_slope` | 0.252 | 0.408 |
+| best epoch | **1 of 21** | val loss rose from the first epoch on |
+
+**This answers the question the run existed to ask.** The shortlist behind it cleared a
+bar that priced in BOTH selection layers (P0-1, z = +3.86) — the strongest selection
+evidence this repo has produced — and the model built on it shows **no skill on either
+split**, loses to a zero-return naive on `mase`, and never beat its own first epoch.
+CLAUDE.md §5d's sentence reproduced on better evidence: *"The selection cleared its bar;
+the model did not clear its own."*
+
+⚠️ **Two things ARE better than the `close_adjust_5day` chain, and both are about the
+TARGET, not the model.** Both splits now agree in SIGN (+0.061 / +0.086) where the level
+target gave −0.459 / +0.488 — one error bar straddling zero. And `dir_auc`, `hit_rate`
+and `mase` are all **readable** here because a return is two-signed; on the level target
+ROC AUC did not exist at all.
+
+⚠️ **`mase > 1` on both splits is the line to quote.** A model trained on the best
+shortlist this project has assembled does not beat "predict no change".
 
 ## P3 — structural code, only pays off for runs currently blocked
 
