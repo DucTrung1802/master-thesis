@@ -213,9 +213,32 @@ ships **xgboost 3.2.0 / sklearn 1.6.1 / numpy 2.0.2** against `mt_env`'s **2.1.1
 `contract.SETUP_KEYS` carries `env_fingerprint`, so the two **cannot be unioned into one
 table by accident** — expect a group collision instead, and pass `--scope`.
 
-⚠️ **A CROSS-SECTIONAL target does not run there yet.** Panel mode is half shipped —
-CLAUDE.md §3d-bis for why (`read_universe_panel` needs a live database, which the worker
-does not have) and TODO **P1-3** for the steps left.
+### A CROSS-SECTIONAL target — the `cross-sectional` job (panel mode, 2026-08-17)
+
+```powershell
+cd src\kaggle_gpu
+python -m kgpu export   cross-sectional   # DB -> ONE panel.parquet   measured 2m 04s / 477 MB
+python -m kgpu rehearse cross-sectional   # both mount layouts        measured 16.0 s
+python -m kgpu data     cross-sectional   # the same export, then UPLOAD it
+python -m kgpu run      cross-sectional
+```
+
+⚠️ **The join happens HERE, not on the worker, and that is structural.**
+`read_universe_panel` is one hand-written SQL statement reaching for `reader.driver`, so
+`ParquetSchemaReader` answers *"there is no database on a Kaggle worker"* whatever
+parameters it is given (`CSP-1` in its second form). The worker gets a finished panel with
+`cs_rank` already derived — CLAUDE.md §3d-bis.
+
+⚠️ **`data.panel.liquidity_before` is REQUIRED and has no default.** Ranking turnover over
+the whole sample picks the names that *turned out* to be liquid — the same look-ahead §2c
+records for non-point-in-time index membership — so the exporter raises rather than
+defaulting silently. ⚠️ The shipped `cs_rank` is a rank **within the shipped names**.
+
+⚠️ **`rehearse` does NOT run the notebook's own cells** — it drives cell 0 and then
+re-creates the panel path itself. To exercise the notebook, point `PANEL_PAYLOAD` at a
+staged `.payload/<job>/` folder and run it locally; on a full 1.25 M-row panel that needs
+more than this machine's 4 GiB card, so cut the payload down first and treat the result as
+a smoke test, never a number.
 
 ---
 

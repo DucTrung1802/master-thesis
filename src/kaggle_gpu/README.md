@@ -327,6 +327,40 @@ And one found by reading the client rather than by losing a run: **`kernels_push
 returns `invalidDatasetSources` and succeeds anyway**, leaving a kernel that starts
 with nothing mounted. `push` raises on it.
 
+### ⚠️ The fourth, measured 2026-08-17 — `KGP-1`, and it had been live for two days
+
+**A stub that shadows a package which was never shipped is worse than a missing one.**
+`_install_stubs` fakes `utils` for one constant (`utils.constants.DATABASE_MAIN_V2`), and
+a stub module has `__path__ = []`, so every real submodule under it is unreachable.
+`feature_selection/report.py` gained `from utils import runtime` on **2026-08-15 — the day
+after this integration's only green round trip** — and from that moment every job would
+have died on the worker at `import feature_selection.report`, after the queue and the
+upload. Nothing detected it because nothing had rehearsed since. The first rehearsal of the
+panel work reproduced it in **3.6 s**.
+
+Fixed two ways, both needed: `src/utils` is in both jobs' `source_dirs`, and a stub is
+installed **only when `importlib.util.find_spec` cannot find the real module**. ⚠️ The
+lesson is the section's own: a green step is not evidence — and here there was not even a
+green step, only two days of nobody looking. **`rehearse` before every run, not only
+before the first one.**
+
+### ⚠️ Two more from the first panel push, both "Kaggle substitutes and carries on"
+
+Measured 2026-08-17, adding the `cross-sectional` job. Both are now rejected locally by
+`config._validate`, for the reason the accelerator already was.
+
+1. **A dataset title must be 6-50 characters, and Kaggle only says so after the upload
+   call.** A 62-character title cost a whole `kgpu data` — **1m 51s** of export and
+   parquet write — before `dataset_create_version` raised.
+2. **⚠️ THE KERNEL SLUG COMES FROM THE TITLE, NOT FROM `id`.** Title
+   `MT cross-sectional selection (top-300 panel)` with id `…/mt-cross-sectional`
+   created `…/mt-cross-sectional-selection-top-300-panel`. `kernels_push` **warns in
+   prose and pushes anyway**, so the push reported success and the kernel ran on a T4 —
+   while `status`, `wait` and `pull` every one raised *"Kaggle has no kernel you can
+   read"* against the id that was asked for. The run is not lost; it is simply
+   unreachable until the id is corrected. `config.kaggle_slug()` reproduces Kaggle's
+   rule and `_validate` refuses a job whose two halves disagree.
+
 The shape of all four is the same, and it is the repo's standing rule 10 in a new
 place: **a green step is not evidence that the step did what it said.**
 
@@ -347,6 +381,54 @@ place: **a green step is not evidence that the step did what it said.**
 `QUEUED` before `RUNNING` is normal and can take minutes.
 
 ---
+
+## 7b. ⚠️ PANEL MODE — the one job that does NOT ship pools
+
+`cross-sectional` ships **one `panel.parquet`**, not a set of pools, and the reason is
+structural rather than a missing parameter. Every other notebook reaches the database
+through `UnifiedSchemaReader`, which is exactly why `ParquetSchemaReader` can stand in
+for it. `feature_selection.cross_sectional.read_universe_panel` does not: it is one
+hand-written SQL statement reaching for `reader.driver`, so on a worker it hits *"there
+is no database on a Kaggle worker"* whatever it is given. **No `--pools` value, no
+notebook parameter and no config key routes around that** — the cross-sectional read
+bypasses every abstraction the payload replaces (`CSP-1` in its second form).
+
+So the join runs at EXPORT time, here, and the worker receives the finished panel with
+`cs_rank_{h}day` already derived:
+
+```jsonc
+"data": {
+  "id": "<user>/mt-panel-top300",
+  "ticker": "ALL",
+  "source_dirs": ["src/feature_selection", "src/utils"],
+  "panel": { "top_n": 300, "liquidity_before": "2014-01-01",
+             "horizons": [20], "min_width": 5 }
+}
+```
+
+`resolved_tables()` returns `["panel"]` in this mode — naming pools would promise the
+worker a shape it never sees. ⚠️ **`liquidity_before` is REQUIRED and has no default**:
+ranking turnover over the whole sample picks the names that *turned out* to be liquid,
+and a silent default would make that invisible in the artefact. ⚠️ The derived `cs_rank`
+is a rank **within the shipped names**, recorded in the manifest as such.
+
+The worker notebook (`src/feature_selection/RUN__cross_sectional_panel.ipynb`)
+re-implements nothing: `kgpu_remote_reader.load_panel()` returns a
+`feature_selection.run.ProvidedPanel` and `run_selection(provided_panel=…)` does the
+rest. ⚠️ **The provenance travels with the frame** — schema, database, universe and the
+**channel→pool map**, without which `outstanding` cannot fill `source_table`,
+`contract.validate_shortlist` refuses the shortlist, and the run comes home invisible to
+`final_features`.
+
+⚠️ **`rehearse` DOES NOT RUN THE NOTEBOOK'S OWN CELLS.** It executes cell 0 — where every
+defect this integration has had actually lived — and then drives the panel path itself.
+To cover the notebook, cut a payload down (a handful of tickers) and run the built copy
+with `KGPU_INPUT_DIR` / `KGPU_WORK_DIR` pointed at it, which is the same seam. Measured
+2026-08-17: 30 names × 48,521 rows, 2m 11s end to end, `source_table from metadata`. **A
+cut-down panel is a smoke test and never a measurement.**
+
+Measured on the real payload, 2026-08-17: `export` **2m 04s** → 1,247,098 × 104,
+**477.4 MB**, 300 tickers, 4,388 dates; `rehearse` **16.0 s**, both layouts, `n_eff = 218`.
 
 ## 8. Adding another notebook
 

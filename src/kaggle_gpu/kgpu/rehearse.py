@@ -95,6 +95,106 @@ def main(payload_dir: str, work_dir: str, notebook: str | None = None) -> int:
         raise AssertionError("UnifiedSchemaReader was not swapped for the parquet one")
 
     manifest = json.loads((payload / "manifest.json").read_text(encoding="utf-8"))
+
+    # ⚠️ **A PANEL PAYLOAD IS A DIFFERENT WORKER SIDE, AND THE MANIFEST SAYS WHICH.**
+    # A cross-sectional job ships ONE finished `panel.parquet` because
+    # `read_universe_panel` needs a database the worker does not have (`CSP-1` in its
+    # second form), so there are no pools to join and `reader.join` is not the code
+    # under test. Everything above this line — discovery, unpacking, the stubs, the
+    # report root, the pinned commit — is shared, and it is where every defect this
+    # integration has had actually lived.
+    if manifest.get("panel"):
+        return _rehearse_panel(payload, manifest)
+    return _rehearse_pools(payload, manifest)
+
+
+def _rehearse_panel(payload, manifest: dict) -> int:
+    """The panel job: the shipped frame loads, agrees with its manifest, and selects.
+
+    ⚠️ **CONSTRUCTING THE SELECTOR IS THE POINT, not a formality.** It is where the
+    panel is sorted `(date, ticker)` — a full copy of a ~1.6 GB frame — and where the
+    exclude list, the by-date CV and the `cs_` target all have to agree. Failing here
+    costs seconds; failing there costs the queue, the upload and the GPU session.
+    """
+    import kgpu_remote_reader
+
+    from feature_selection import cross_sectional, windows
+    from feature_selection.cross_sectional import CrossSectionalSelector
+    from feature_selection.run import ProvidedPanel
+
+    spec = manifest["panel"]
+    provided = kgpu_remote_reader.load_panel(payload)
+    if not isinstance(provided, ProvidedPanel):
+        raise AssertionError("load_panel did not return a run.ProvidedPanel")
+    panel = provided.frame
+
+    horizon = int(spec["horizons"][0])
+    target = f"cs_rank_{horizon}day"
+    if target not in panel.columns:
+        raise AssertionError(
+            f"the shipped panel has no {target} — export derives it from "
+            f"return_{horizon}day, so the horizons in data.panel and the notebook's "
+            f"TARGET disagree. Columns like it: "
+            f"{[c for c in panel.columns if c.startswith('cs_rank')]}"
+        )
+    print(
+        f"  panel loaded                 : {len(panel):,} x {panel.shape[1]} "
+        f"({panel['date'].min():%Y-%m-%d} -> {panel['date'].max():%Y-%m-%d})"
+    )
+    print(f"  shape agrees with manifest   : OK ({spec['top_n']} names asked)")
+    print(
+        f"  universe                     : {panel['ticker'].nunique()} tickers, "
+        f"ranked by {spec['liquidity_rule']} before {spec['liquidity_before']}"
+    )
+    print(f"  cs_rank scope                : {spec['cs_rank_scope']}")
+
+    # ⚠️ Without this map `outstanding` cannot name a channel's pool,
+    # `contract.validate_shortlist` refuses the shortlist, and the run comes home
+    # invisible to `final_features` — the 2026-08-15 defect, which passed every check
+    # that existed at the time.
+    mapped = {c for cols in provided.columns_by_table.values() for c in cols}
+    unmapped = [
+        c
+        for c in panel.columns
+        if c not in mapped
+        and not c.startswith(("cs_rank_", "return_"))
+        and c not in ("date", "exchange", "ticker")
+    ]
+    if unmapped:
+        raise AssertionError(
+            f"{len(unmapped)} panel column(s) belong to no pool in "
+            f"columns_by_table: {unmapped[:8]} — a shortlist naming one of them "
+            f"would be refused by contract.validate_shortlist."
+        )
+    print(
+        "  channel -> pool map          : OK ("
+        + ", ".join(f"{t} {len(c)}" for t, c in provided.columns_by_table.items())
+        + ")"
+    )
+
+    summary = cross_sectional.panel_summary(panel, target)
+    print(
+        f"  labelled                     : {summary['labelled_rows']:,} rows over "
+        f"{summary['dates']:,} dates -> n_eff = {summary['dates'] / horizon:.0f}"
+    )
+
+    CrossSectionalSelector(
+        panel=panel,
+        target=target,
+        horizon=horizon,
+        lookback=20,
+        window_stats=windows.WINDOW_STATS,
+        device="cpu",
+    )
+    print("  CrossSectionalSelector       : OK")
+    print("\nrehearsal passed — the worker side of this panel loads and selects.")
+    return 0
+
+
+def _rehearse_pools(payload, manifest: dict) -> int:
+    """The pool job: the shipped pools share a calendar, join, and build a selector."""
+    from feature_selection.unified_reader import UnifiedSchemaReader
+
     pools = [t for t in manifest["tables"] if t != "pool__targets"]
     pools.append("pool__targets")
 

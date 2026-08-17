@@ -18,7 +18,7 @@
         "id": "lyductrung/mt-unified-vcb",
         "title": "master-thesis unified schema payload (VCB)",
         "ticker": "VCB",
-        "source_dirs": ["src/feature_selection"]
+        "source_dirs": ["src/feature_selection", "src/utils"]
       },
       "parameters": {
         "TICKER": "VCB",
@@ -33,6 +33,40 @@
         "RUN_HOLDOUT": false,
         "REPORT_ROOT": "reports/feature_selection",
         "NOTES": "run on a Kaggle T4 via kgpu; data shipped as a parquet payload"
+      }
+    },
+
+    "cross-sectional": {
+      "id": "lyductrung/mt-cross-sectional-selection-top-300-panel",
+      "title": "MT cross-sectional selection (top-300 panel)",
+      "notebook": "src/feature_selection/RUN__cross_sectional_panel.ipynb",
+      "results_into": "reports/feature_selection",
+      "data": {
+        "id": "lyductrung/mt-panel-top300",
+        "title": "MT cross-sectional panel (top 300, h=20)",
+        "ticker": "ALL",
+        "source_dirs": ["src/feature_selection", "src/utils"],
+        "panel": {
+          "top_n": 300,
+          "liquidity_before": "2014-01-01",
+          "horizons": [20],
+          "min_width": 5
+        }
+      },
+      "parameters": {
+        "TICKER": "ALL",
+        "TARGET": "cs_rank_20day",
+        "HORIZON": 20,
+        "LOOKBACK": 20,
+        "DEVICE": "cuda",
+        "DESIGN_DTYPE": "float64",
+        "MIN_IC_WIDTH": 5,
+        "RUN_STABILITY": true,
+        "RUN_NULL": false,
+        "N_NULL": 20,
+        "HOLDOUT_START": null,
+        "REPORT_ROOT": "reports/feature_selection",
+        "NOTES": "TODO P2-1 v2: cs_rank_20day over the top 300 by pre-2014 median turnover, on a Kaggle T4 via kgpu panel mode. The local card OOMed at 4 GiB."
       }
     },
 

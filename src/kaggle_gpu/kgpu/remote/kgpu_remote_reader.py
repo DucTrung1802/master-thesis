@@ -37,6 +37,73 @@ from feature_selection.unified_reader import (
 # and must not have to know they are on a worker.
 DEFAULT_DATA_DIR: Optional[Path] = None
 
+# The single artefact a PANEL payload ships. Kept in step with `kgpu.config.PANEL_TABLE`,
+# which is unreachable from here: `kgpu` is not shipped, these files travel flat.
+PANEL_TABLE = "panel"
+
+
+def load_panel(data_dir: Optional[str | Path] = None):
+    """The finished cross-sectional panel, as `feature_selection.run.ProvidedPanel`.
+
+    ⚠️ **PANEL MODE EXISTS BECAUSE THE CROSS-SECTIONAL READ CANNOT BE SWAPPED.** Every
+    other notebook reaches the database through `UnifiedSchemaReader`, which is why
+    `ParquetSchemaReader` above can stand in for it. `read_universe_panel` does not: it
+    is one hand-written SQL statement reaching for `reader.driver`, so on a worker it
+    hits *"there is no database on a Kaggle worker"* whatever parameters it is given
+    (`CSP-1` in its second form). The join therefore runs at EXPORT time and this
+    function only hands the result over — with the schema, the channel→pool map and the
+    universe the local reader would have supplied.
+
+    ⚠️ **THE SHIPPED FRAME IS CHECKED AGAINST THE MANIFEST, not trusted.** A partial
+    upload or a mounted PREVIOUS dataset version both produce a readable parquet with
+    the wrong number of rows, and both have precedent here (§7 of the README). A shape
+    that disagrees is raised on, not selected over.
+
+    ⚠️ Read with `pd.read_parquet` rather than through `ParquetSchemaReader.read`, which
+    caches the frame and then returns a `.copy()` of it — three simultaneous copies of a
+    1.6 GB panel, for no gain: the parquet was typed at export.
+    """
+    folder = Path(data_dir) if data_dir is not None else DEFAULT_DATA_DIR
+    if folder is None:
+        raise RuntimeError(
+            "load_panel has no data directory — call kgpu_bootstrap.setup() first, "
+            "or pass the mounted payload directory explicitly."
+        )
+    folder = Path(folder)
+    manifest = json.loads((folder / "manifest.json").read_text(encoding="utf-8"))
+
+    spec = manifest.get("panel")
+    entry = manifest.get("tables", {}).get(PANEL_TABLE)
+    if spec is None or entry is None:
+        raise ValueError(
+            f"this payload ships no panel — it holds {sorted(manifest.get('tables', {}))}.\n"
+            f"  A cross-sectional job needs a `data.panel` block in kaggle_config.json; "
+            f"re-run `python -m kgpu data <job>` after adding one."
+        )
+
+    frame = pd.read_parquet(folder / entry["file"])
+    if (len(frame), frame.shape[1]) != (entry["rows"], entry["columns"]):
+        raise ValueError(
+            f"{entry['file']} is {len(frame):,} x {frame.shape[1]} but the manifest "
+            f"exported {entry['rows']:,} x {entry['columns']}. The mounted dataset is "
+            f"not the one this manifest describes — a version still processing mounts "
+            f"the PREVIOUS one and completes normally (README §7)."
+        )
+
+    from feature_selection.run import ProvidedPanel
+
+    return ProvidedPanel(
+        frame=frame,
+        schema=manifest["schema"],
+        database=manifest.get("database", ""),
+        columns_by_table=spec["columns_by_table"],
+        universe=spec.get("universe"),
+        note=(
+            f"{spec.get('join', 'joined at export')} "
+            f"[exported {manifest.get('exported_at')} @ {manifest.get('git_commit')}]"
+        ),
+    )
+
 
 class ParquetSchemaReader(UnifiedSchemaReader):
     """Read one exported `unified_schema_<ticker>` payload from disk."""

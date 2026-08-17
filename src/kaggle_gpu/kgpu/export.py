@@ -168,10 +168,21 @@ def _export_panel(cfg, folder: Path, manifest: dict, quiet: bool = False) -> Non
         )
 
     from feature_selection.cross_sectional import read_universe_panel
-    from feature_selection.unified_reader import UnifiedSchemaReader
+    from feature_selection.unified_reader import KEY_COLS, UnifiedSchemaReader
 
     with UnifiedSchemaReader(cfg.data.ticker) as reader:
         schema = reader.schema
+        # ⚠️ **THE CHANNEL→POOL MAP IS CAPTURED HERE OR NOWHERE.** `read_universe_panel`
+        # is one hand-written SQL join, so there is no `reader.join_log` and no
+        # `reader.columns_by_table` behind the finished frame — and on the worker there
+        # is no `information_schema` to ask. Without it `outstanding` cannot fill
+        # `source_table`, `contract.validate_shortlist` refuses the shortlist, and the
+        # run comes home invisible to `final_features` (the 2026-08-15 defect, one layer
+        # down). Read while the cursor is open; filtered against the frame below.
+        source_types = {
+            table: reader.column_types(table)
+            for table in ("pool__basic", "pool__targets")
+        }
         with reader.driver._cursor_ctx() as cur:
             cur.execute(
                 f"SELECT ticker FROM {schema}.pool__basic "
@@ -203,6 +214,23 @@ def _export_panel(cfg, folder: Path, manifest: dict, quiet: bool = False) -> Non
         "universe": universe,
         "cs_rank_scope": (
             f"within-date rank over the {top_n} SHIPPED names, not over all 781"
+        ),
+        # The two pools the panel is made of, each restricted to the columns the frame
+        # actually carries. ⚠️ `cs_rank_{h}day` belongs to NEITHER: it is derived after
+        # the read, which is the same reason `final_features` cannot store it
+        # (`final_features/CONTEXT.md` §5). It is the target, never a candidate.
+        "columns_by_table": {
+            table: [
+                c
+                for c in types
+                if c not in KEY_COLS and c in frame.columns
+            ]
+            for table, types in source_types.items()
+        },
+        "join": (
+            f"read_universe_panel over the top {top_n} names by {cutoff}-cutoff median "
+            f"turnover; pool__basic ⋈ pool__targets server-side, cs_rank_* derived "
+            f"after, joined locally at export because a Kaggle worker has no database"
         ),
     }
     manifest["tables"][PANEL_TABLE] = {

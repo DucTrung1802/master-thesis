@@ -182,39 +182,40 @@ branch reads via `reader.join(pools)`, so `--ticker ALL --pools pool__basic,pool
 Spearman per date, so ranking `return_5day` within a date is the same metric as
 `cs_rank_5day`; only the ranker *fit* differs.
 
-### ⚠️ P1-3 · IN PROGRESS — finish Kaggle **panel mode**, the only route to P2-1 v2 ⏱ ~2 h left
+### ✅ P1-3 · DONE 2026-08-17 — panel mode runs, and the FIRST rehearsal found the existing job broken
 
-**This is the item to pick up first in a new session.** Two files are edited and
-uncommitted-work-turned-committed; two artefacts do not exist yet.
+The worker side is `src/feature_selection/RUN__cross_sectional_panel.ipynb` + the
+`cross-sectional` job. It re-implements no selection: it loads `panel.parquet` and calls
+`feature_selection.run.run_selection` through a new `provided_panel` argument
+(`run.ProvidedPanel`), which replaces **the read and nothing else**.
 
-**Why it exists at all:** `read_universe_panel` is one hand-written SQL statement and
-reaches for `reader.driver`, which `ParquetSchemaReader` answers with *"there is no
-database on a Kaggle worker"*. **No parameter routes around it** — the cross-sectional
-read bypasses every abstraction the parquet payload replaces. `CSP-1` in a second form.
-So the join runs locally and the worker receives a finished panel. CLAUDE.md §3d-bis.
-
-| ✅ done | measured |
+| measured, before any quota was spent | |
 |---|---|
-| `kgpu/config.py` — `PANEL_TABLE`, `DataConfig.panel`, `is_panel`, `resolved_tables → ["panel"]` | — |
-| `kgpu/export.py` — `_export_panel()`; the pool body moved under `if is_panel / else` | syntax OK; `kgpu plan feature-selection` still clean, **no regression to the existing job** |
-| the payload itself, probed end to end | **1,247,098 × 104**, 4,388 dates, 300 tickers, `cs_rank_20day` ✅, **477 MB** parquet, 1.57 GB in memory, 88 s to read |
+| `kgpu export cross-sectional` | **2m 04s** → 1,247,098 × 104, **477.4 MB**, 300 tickers, 4,388 dates |
+| `kgpu rehearse cross-sectional` | **16.0 s**, both mount layouts, `n_eff = 218` |
+| the notebook's OWN cells, end to end | ✅ 30 names / 48,521 rows, through the real bootstrap: **2m 11s**, 60 kept, shortlist 22, `source_table from metadata` |
+| `feature_selection` tests | 113 passed |
 
-**Left to do, in order:**
+⚠️ **THE REHEARSAL NEVER RUNS THE NOTEBOOK'S OWN CELLS** — it drives cell 0 and then
+re-creates the panel path itself, so a defect in the notebook would have surfaced only
+after the queue. Hence the third row: the built notebook was executed against a cut-down
+payload with `KGPU_INPUT_DIR` / `KGPU_WORK_DIR` set — the same seam `rehearse` uses. ⚠️ A
+cut-down panel is a **smoke test and never a measurement**; its `cs_rank` is still the
+rank over the 300 exported names.
 
-1. **A worker notebook** — reads `panel.parquet` → `CrossSectionalSelector(panel=…,
-   target="cs_rank_20day")` → the shared `write_report`. ⚠️ **A separate small notebook,
-   NOT a branch inside `RUN__feature_importance_report.ipynb`** (2.3 MB): the panel path
-   needs no reader and no DB, and sharing `write_report` means no logic is duplicated.
-2. **A `cross-sectional` job** in `kaggle_config.json` — ticker `ALL`, `data.panel =
-   {"top_n": 300, "liquidity_before": "2014-01-01", "horizons": [20], "min_width": 5}`.
-3. **`kgpu rehearse`** — the worker side, locally, **no quota**. Do this before touching
-   Kaggle; §7a's measured queue is 5.2 min per round trip regardless of compute.
-4. **`kgpu run`** — the 477 MB upload will be the longest part.
+⚠️ **`KGP-1`, found in 3.6 s by the first rehearsal and fixed:** the payload never shipped
+`src/utils` because `kgpu_bootstrap` **stubs** `utils`, and `report.py` gained
+`from utils import runtime` on 2026-08-15 — **after this integration's only green round
+trip**. The `feature-selection` job had been broken on the worker for two days with
+nothing saying so. A stub is now installed only when the real module is **not importable**.
 
-⚠️ **`liquidity_before` is required and deliberately has no default** — ranking turnover
-over the whole sample is look-ahead, and a silent default would hide it in the artefact.
-⚠️ The shipped `cs_rank` is a rank **within the 300 shipped names**, not within 781; that
-is the intended experiment and the manifest says so.
+⚠️ **One more, unrelated to Kaggle and found by the test suite:** `ranker_eval.ALL_TARGETS`
+never received the three `*_20day` labels `run.ALL_TARGETS` gained with the 4-week horizon
+(`e87a3fa7`), so a scorecard run could have offered `return_20day` as a candidate FEATURE.
+The two lists are one list now.
+
+**What is left is the RUN, not the mode:** `kgpu data cross-sectional` (477 MB upload),
+then `kgpu run cross-sectional`. That is P2-1 v2.
 
 ---
 
@@ -277,9 +278,35 @@ device side, and it is why this item now routes through Kaggle:
 | RAM free | ~7 GB ❌ | ~29 GB ✅ |
 | the design, 1.25 M × 104, float64 | ~12.8 GB | fits |
 
-**So P2-1 v2 is blocked on P1-3, not on `MEM-1`.** ⚠️ Do **not** buy it back with
-`float32` — P0-3 measured a **52% relative change in `ic_mean`** from that dtype alone,
-and this run's whole purpose is to produce a number worth quoting.
+### ⚠️ P2-1 v2 · RUN AND FAILED 2026-08-17 — the T4 OOMed, and **the fifth claim was checked wrong too**
+
+Uploaded (477 MB, dataset v1) and pushed with `RUN_NULL=false`. It reached the GPU and
+died at **3m 28s**:
+
+| phase, on the T4 | |
+|---|---|
+| payload mount + source unpack + reader swap | ✅ |
+| `panel.parquet` loaded | 1,247,098 × 104, 1.57 GB, 300 tickers, **`n_eff = 218`**, density 0.947 |
+| `prepare + coverage` | 6.4 s |
+| **`window design`** | **189.3 s** |
+| `spearman vs target` | ❌ **CUDA OOM: tried to allocate 4.98 GiB, 3.86 GiB free, 10.70 GiB already in use of 14.56** |
+
+⚠️ **"The design is ~12.8 GB, so a 14.6 GiB T4 fits" priced the DESIGN and not the STEP.**
+`gpu._average_ranks_torch` holds `values` + `filled` + a mask — 10.58 GiB at ~536 float64
+columns × 1.247 M rows — and *then* `torch.sort` asks for its own output plus an int64
+`order`, roughly another 10 GiB. **The step needs ~4× the design, so no card this side of
+an A100 80 GB runs it as written.** That is the same error as the RAM-not-VRAM one
+recorded above, one level down: I checked the wrong quantity again.
+
+**The fix is exact, not approximate: rank in COLUMN BLOCKS.** Ranks are per-column
+independent, so chunking `spearman_vector` changes no number — unlike `float32`, which
+P0-3 measured at a **52% relative change in `ic_mean`** and which is forbidden here. It is
+`MEM-1` on the device side and it is now the only thing between this repo and the
+measurement §2a-bis has been pointing at since 2026-08-03. ⏱ ~2 h to chunk and re-verify
+against the smoke run, then one more T4 round trip.
+
+⚠️ **Panel mode is NOT what failed and must not be re-opened.** Everything `kgpu` adds ran
+on the worker; what died is a ranker step at a width no single-ticker run has ever reached.
 
 ### P2-2 · `cs_rank_5day` on the top ~300 by turnover ⏱ ~1 h
 

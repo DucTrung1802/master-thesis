@@ -562,7 +562,7 @@ runs in 90 s still costs ~7 min wall clock, so batching one large run beats
 several small ones, and `rehearse` (the worker side, locally, no quota) is where
 iteration belongs.
 
-### ⚠️ 3d-bis. PANEL MODE — half shipped 2026-08-17, and it is `CSP-1` in a SECOND form
+### ⚠️ 3d-bis. PANEL MODE — SHIPPED 2026-08-17, and it is `CSP-1` in a SECOND form
 
 **A cross-sectional target cannot run on Kaggle through the pool payload at all**, and
 the reason is structural rather than a missing parameter. `feature_selection.
@@ -585,7 +585,7 @@ promise the worker a shape it never sees.
 | parquet | **477 MB** (88 s to read, 5 s to write) |
 | in memory | **1.57 GB** |
 | this machine | **4.0 GiB VRAM ❌**, 7.1 GB RAM free ❌ — the local pilot **CUDA-OOMed** asking for 1.01 GiB |
-| Kaggle T4 | **14.6 GiB VRAM ✅**, ~29 GB RAM ✅ |
+| Kaggle T4 | RAM ~29 GB ✅ — but **14.6 GiB VRAM is ❌ TOO, measured 2026-08-17**: OOM asking for 4.98 GiB with 10.70 GiB already in use (see below) |
 
 ⚠️ **`liquidity_before` is REQUIRED and has no default.** Ranking turnover over the whole
 sample is look-ahead — it picks the names that *turned out* to be liquid, the same defect
@@ -596,11 +596,72 @@ invisible in the artefact, so the exporter raises instead.
 That is the intended experiment (a tradeable liquid cross-section) and it is written into
 the manifest so a later reader cannot mistake it for the full-universe rank.
 
-⚠️ **NOT FINISHED — do not assume a cross-sectional job runs.** Shipped: `config.py`,
-`export.py` (syntax-checked; `kgpu plan feature-selection` still clean, so no regression to
-the existing job). **Remaining: a worker notebook that reads `panel.parquet` into
-`CrossSectionalSelector(panel=...)`, a `cross-sectional` job in `kaggle_config.json`, then
-`rehearse`, then `run`.** TODO **P1-3** carries the step list.
+**The worker side is `RUN__cross_sectional_panel.ipynb` + the `cross-sectional` job, and
+it does NOT re-implement a selection.** It loads `panel.parquet` and hands it to
+`feature_selection.run.run_selection` through a new `provided_panel` argument
+(`run.ProvidedPanel`), which replaces **the read and nothing else** — the selector, the
+by-date purged CV, the panel-aware `date_block` null, `write_report` and the
+`outstanding.csv` handoff are the same code `python -m feature_selection.run` runs here.
+That is what makes a T4 panel run comparable with a local one at all. ⚠️ It is refused for
+a non-`cs_` target: the single-series path checks `pool__targets` against
+`information_schema` for labels `ALL_TARGETS` does not name, and a provided panel cannot
+run that check.
+
+⚠️ **`ProvidedPanel` CARRIES PROVENANCE, NOT JUST A FRAME**, because a worker cannot
+re-derive any of it: the schema, the `database`, the **channel→pool map** and the
+**universe**. The map is the one that bites — without it `outstanding` cannot fill
+`source_table`, `contract.validate_shortlist` refuses the shortlist, and the run comes
+home **invisible to `final_features`** (the measured 2026-08-15 defect). It is captured at
+export while a cursor is open and travels in `manifest.json`.
+
+| measured 2026-08-17, before any quota was spent | |
+|---|---|
+| `kgpu export cross-sectional` | **2m 04s** → 1,247,098 × 104, **477.4 MB**, 300 tickers, 4,388 dates |
+| `kgpu rehearse cross-sectional` | **16.0 s**, both mount layouts, `n_eff = 218` |
+| the notebook's OWN cells, end to end | ✅ on a 30-name / 48,521-row cut, through the real bootstrap: 2m 11s, 60 kept, shortlist 22, **`source_table from metadata`** |
+
+⚠️ **THE REHEARSAL DRIVES CELL 0 AND THEN RE-CREATES THE PANEL PATH ITSELF** — it never
+runs the notebook's own load or run cells. That gap is why the last row above exists: the
+built notebook was executed against a cut-down payload with `KGPU_INPUT_DIR` /
+`KGPU_WORK_DIR` set, which is the same seam `rehearse` uses, so discovery, the source
+unpack, the stubs and the reader swap were the shipping code. **A cut-down panel is a
+smoke test and never a measurement** — its `cs_rank` is still the rank over the 300
+exported names.
+
+⚠️ **AND THE FIRST REHEARSAL OF THE EXISTING JOB FAILED IN 3.6 s — `KGP-1`.** The payload
+never shipped `src/utils`, because `kgpu_bootstrap` **stubs** `utils` for
+`utils.constants.DATABASE_MAIN_V2` alone; `feature_selection/report.py` gained
+`from utils import runtime` on 2026-08-15, **after this integration's only green round
+trip**, and the stub's `__path__ = []` made that raise. So the `feature-selection` job had
+been broken on the worker for two days with nothing saying so. Fixed both ways: `src/utils`
+is in `source_dirs`, and a stub is now installed **only when the real module is not
+importable** — a stub that shadows a shipped package fails at the import that needs it,
+not at the one that is absent.
+
+### ⚠️ AND THE FIRST REAL T4 RUN OOMed — "it fits on a T4" was never measured either
+
+Pushed 2026-08-17, `RUN_NULL=false`. **Panel mode itself worked end to end on the
+worker**: payload mounted, 34 source files unpacked, reader swapped, `panel.parquet`
+loaded (1,247,098 × 104, 1.57 GB, 300 tickers, `n_eff = 218`), `run_selection` dispatched
+on the panel path, `prepare + coverage` 6.4 s, **`window design` 189.3 s**. Then, at
+**3m 28s**, inside `gpu.spearman_vector → _average_ranks_torch → torch.sort`:
+
+> `CUDA out of memory. Tried to allocate 4.98 GiB. GPU 0 has 14.56 GiB of which 3.86 GiB
+> is free; this process has 10.70 GiB in use.`
+
+⚠️ **THE STEP NEEDS ~4× THE DESIGN IN VRAM, NOT 1×.** The design is ~536 float64 columns
+over 1.247 M rows ≈ **4.98 GiB**, and that function holds `values` + `filled` + the mask
+(10.58 GiB) before `torch.sort` asks for its own output and an int64 `order` — another
+~10 GiB. 14.6 GiB was never going to be enough, and **the "~12.8 GB, fits" line in TODO
+P2-1 v2 was an estimate of the DESIGN, not of this step**. Two claims corrected by one
+run: it is `MEM-1` on the device side again, one card larger.
+
+⚠️ **This is not a panel-mode defect and must not be read as one.** Everything `kgpu`
+adds ran; what failed is a ranker step whose memory is quadratic in nothing and linear in
+`rows × columns`, at a width no single-ticker run has ever reached. `float32` would halve
+it and is **forbidden** for a number that will be quoted (P0-3). The fix is to rank in
+COLUMN BLOCKS — ranks are per-column independent, so a chunked loop is exact, not an
+approximation. TODO **P2-1 v2**.
 
 ---
 
@@ -981,7 +1042,7 @@ dataset both end 2026-06-25 rather than 2026-08-07.
 `final_features` groups on `(schema, target, setup)` — **no term for which pools** — so a
 `pool__basic`-only run and a `basic + X` run are ONE group and get unioned.
 
-**Open issues live in [ISSUES.md](ISSUES.md)** (**14 open**, 30 resolved, codes permanent).
+**Open issues live in [ISSUES.md](ISSUES.md)** (**14 open**, 31 resolved, codes permanent).
 Short version: ⚠️ **`SHP-1`** the forex scraper writes two file shapes and only one was
 ever ingested — 71% of the folder was silently discarded until 2026-08-14, and **the
 same `value`-only filter sits unchecked on `bonds`/`funds`/`economy`/`indices`**;
@@ -1009,7 +1070,7 @@ below 0.95 coverage, `RPR-1` datasets/runs are git-ignored.
 | [src/result_evaluator/CONTEXT.md](src/result_evaluator/CONTEXT.md) | 3k | scoring, the metric set, or panel-vs-series grain. ⚠️ **STALE — it predates `index.py`, the `rebuild_index` schema change and issue NUL-3.** Nothing in it is false; it is silent about all three |
 | [src/pipeline/CONTEXT.md](src/pipeline/CONTEXT.md) | **3.5k** | the **six**-stage chain, staleness, `--root`/`--scope`, `--rescrape`, adding a stage or a second target |
 | [src/sentiment/CONTEXT.md](src/sentiment/CONTEXT.md) | 2.5k | anything news/text/PhoBERT |
-| [src/kaggle_gpu/README.md](src/kaggle_gpu/README.md) | 4k | running a repo notebook on a Kaggle T4 — the payload dataset, the parameter patcher, `rehearse`, and §7's four measured traps (all four are "a green step is not evidence") |
+| [src/kaggle_gpu/README.md](src/kaggle_gpu/README.md) | 5k | running a repo notebook on a Kaggle T4 — the payload dataset, the parameter patcher, `rehearse`, **§7b PANEL MODE** (the one job that ships no pools), and §7's five measured traps (all five are "a green step is not evidence"; the fifth, `KGP-1`, had no green step at all) |
 | [experiment/CONTEXT.md](experiment/CONTEXT.md) | 7k | the 9 exploratory experiments — signal discovery, tradability, point-in-time data, VN OCR |
 | [experiment/experiment_10/CONTEXT.md](experiment/experiment_10/CONTEXT.md) | 36k | writing the literature chapter. **§"Combined reading" (line 2877) is the distillate** — read that alone unless you need a specific paper |
 
@@ -1031,7 +1092,7 @@ brokers' books are unreachable.
 | file | what it is | read it when |
 |---|---|---|
 | **[RUNBOOK.md](RUNBOOK.md)** | the operating guide — 8 stages with MEASURED runtimes, the two flags that destroy things, the target-switch leakage trap, and §10's list of what is deliberately not standardized | you are about to run something |
-| **[ISSUES.md](ISSUES.md)** | 14 open / 30 resolved, permanent codes | before quoting any number — four of them change how a number may be READ |
+| **[ISSUES.md](ISSUES.md)** | 14 open / 31 resolved, permanent codes | before quoting any number — four of them change how a number may be READ |
 | **[TODO.md](TODO.md)** | the one backlog, priority-ordered, every item costed | deciding what to do next |
 | `README.md` | the front door; routes here | — |
 | `THESIS_PROGRESS_2026*.md`, `THESIS_SUMMARY_2026_VI.md` | deliverable write-ups (EN + VI) | writing the thesis, not running the pipeline |

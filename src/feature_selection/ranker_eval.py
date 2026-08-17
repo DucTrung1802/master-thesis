@@ -100,16 +100,18 @@ ZERO_TOL = 1e-12
 K_VALUES = (10, 20)
 
 # Every non-key column of `pool__targets`; whichever is not the target is excluded.
-# ⚠️ Kept in step with `run.ALL_TARGETS` by `test_ranker_eval.py`, not by hand.
-ALL_TARGETS = [
-    "return_5day", "return_10day", "return_rel_5day", "return_rel_10day",
-    "close_adjust_5day", "close_adjust_10day",
-]
-IDENTITY = [
-    "exchange", "ticker", "sector", "sector_code", "industry_group",
-    "industry_group_code", "industry", "industry_code", "sub_industry",
-    "sub_industry_code",
-]
+#
+# ⚠️ **IT WAS A SECOND HAND-MAINTAINED COPY AND IT DRIFTED — measured 2026-08-17.** The
+# h=20 labels (`return_20day`, `return_rel_20day`, `close_adjust_20day`) were added to
+# `run.ALL_TARGETS` when the 4-week horizon landed (commit `e87a3fa7`) and not here, so
+# a `return_5day` scorecard run against a pool carrying them would have offered
+# `return_20day` to the rankers as a candidate FEATURE. That does not raise; it reports
+# a near-perfect score for the ranker that found the answer. `test_ranker_eval.py`
+# caught it, which is the test working — but a test that reports drift every time the
+# list moves is worse than one list, so this is now an ALIAS and cannot drift again.
+# `IDENTITY` came along for the same reason: it had NOT drifted, and one copy is how it
+# stays that way.
+from feature_selection.run import ALL_TARGETS, IDENTITY  # noqa: E402 (re-exported)
 
 # `timings_seconds` keys, per method. ⚠️ `xgb_gain` and `xgb_shap` share ONE fit and one
 # timer, so their cost is that timer halved — neither can be removed to save all of it.

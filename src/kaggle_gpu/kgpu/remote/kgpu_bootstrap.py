@@ -123,10 +123,36 @@ def find_payload() -> Path | None:
     return None
 
 
+def _importable(name: str) -> bool:
+    """Is the REAL module reachable — i.e. did it travel in `source.zip`?
+
+    ⚠️ **A STUB THAT SHADOWS A SHIPPED PACKAGE IS WORSE THAN A MISSING ONE**, because
+    it fails at the import that needs it rather than at the import that is absent.
+    Measured 2026-08-17 by `kgpu rehearse feature-selection`, in 3.6 s: `utils` is on
+    `_STUBS` for `utils.constants.DATABASE_MAIN_V2` alone, and the stub's `__path__ =
+    []` made `from utils import runtime` — added to `feature_selection/report.py` on
+    2026-08-15, after this integration's only green round trip — raise *"cannot import
+    name 'runtime' from 'utils' (unknown location)"*. The fix is to ship `src/utils`
+    AND to stop the stub winning over it.
+
+    `find_spec` is used rather than an import so nothing is executed here, and a
+    ModuleNotFoundError from an absent PARENT (`logger.logger` under a stubbed
+    `logger`) is the answer "no", not an error.
+    """
+    import importlib.util
+
+    try:
+        return importlib.util.find_spec(name) is not None
+    except (ImportError, ValueError):
+        return False
+
+
 def _install_stubs() -> list:
     installed = []
     for name, attrs in _STUBS.items():
         if name in sys.modules:
+            continue
+        if _importable(name):  # the real one travelled — never shadow it
             continue
         module = types.ModuleType(name)
         module.__kgpu_stub__ = True

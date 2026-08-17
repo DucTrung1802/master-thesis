@@ -45,6 +45,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence
 
 import pandas as pd
@@ -109,6 +110,46 @@ TARGETS_TABLE = "pool__targets"
 NULL_SEED = 7
 
 
+@dataclass(frozen=True)
+class ProvidedPanel:
+    """A panel joined somewhere ELSE, carrying the provenance a reader would have given.
+
+    ⚠️ **THE ONE CASE THIS EXISTS FOR IS A KAGGLE WORKER, AND IT IS STRUCTURAL RATHER
+    THAN A MISSING PARAMETER.** `cross_sectional.read_universe_panel` builds
+    `pool__basic ⋈ pool__targets` with one hand-written SQL statement and derives
+    `cs_rank_{h}day` from it, so it reaches for `reader.driver._cursor_ctx()` — and
+    `ParquetSchemaReader.driver` answers *"there is no database on a Kaggle worker"*.
+    The cross-sectional read bypasses every abstraction the parquet payload replaces
+    (`CSP-1` in its second form), so no `--pools` value and no notebook parameter can
+    route around it. The join therefore runs where the database is and the worker
+    receives the finished panel.
+
+    ⚠️ **WHAT TRAVELS WITH THE FRAME IS THE POINT.** A panel alone would produce a run
+    folder that could not say which schema it came from or which pool each channel
+    belongs to — and `columns_by_table` is the field `feature_selection.outstanding`
+    reads to fill `source_table`, without which `contract.validate_shortlist` refuses
+    the shortlist and `final_features` cannot see the run at all.
+
+    Attributes:
+        frame: the joined panel, sorted `(date, ticker)`, `cs_rank_*` already derived.
+        schema, database: where it was read from — recorded, never re-derived here.
+        columns_by_table: `{pool: [channel, ...]}`, restricted to columns the frame
+            actually carries. Its keys become the run's `tables`, so they decide the
+            run-folder name as well as the shortlist's `source_table`.
+        universe: the tickers the panel covers. ⚠️ Record it — the shipped `cs_rank`
+            is a rank within THESE names, not within all 781, and `metadata.json` is
+            the only place a later reader can tell the two apart.
+        note: one sentence naming where and when the join ran, for the `join_log`.
+    """
+
+    frame: "pd.DataFrame"
+    schema: str
+    database: str = ""
+    columns_by_table: Dict[str, List[str]] = field(default_factory=dict)
+    universe: Optional[List[str]] = None
+    note: str = ""
+
+
 def run_selection(
     ticker: str = "VCB",
     pools: Sequence[str] = ("pool__basic",),
@@ -132,6 +173,7 @@ def run_selection(
     feature_normalize: str = "cs_rank",
     min_ic_width: int = 5,
     methods: Sequence[str] = selector_methods.METHODS,
+    provided_panel: Optional[ProvidedPanel] = None,
 ):
     """Read the panel, rank it, measure the bar, and archive one run folder.
 
@@ -152,10 +194,25 @@ def run_selection(
     dropped. A root is a GROUP for `final_features`, so two runs that share
     `(schema, target, setup)` under it are unioned into ONE table: separate a narrow
     build from a country build with `--scope`, not with a second root.
+
+    ⚠️ **`provided_panel` SKIPS THE READ, NOT THE PROCEDURE.** Everything after the
+    read — the selector, the CV, the null, the report, the shortlist — is the same
+    code on the same frame, which is the whole reason a Kaggle panel run and a local
+    one can be set beside each other at all. See `ProvidedPanel`.
     """
     pools = list(pools)
     if TARGETS_TABLE not in pools:
         pools = pools + [TARGETS_TABLE]
+
+    # ⚠️ **ANCHORED HERE AS WELL AS IN `write_report`, AND FOR A DIFFERENT CONSUMER.**
+    # `write_report` resolves a relative root against the REPO (its own §), but
+    # `outstanding.main(root=root)` at the end of this function joins it against the
+    # CWD — so a caller passing `"reports/feature_selection"` from a notebook would
+    # write the report to the right place and then scan the wrong one, finding no run
+    # and reporting success. That is the 2026-08-10 trap one level down; resolving once
+    # here means both consumers see the same absolute path.
+    if not os.path.isabs(root):
+        root = os.path.normpath(os.path.join(report.REPO_ROOT, root))
 
     # ⚠️ **THE TARGET DECIDES THE PROCEDURE, not a flag.** A `cs_` prefix marks a
     # CROSS-SECTIONAL target — a rank within a date across the schema's universe — and
@@ -177,7 +234,59 @@ def run_selection(
         device=device,
     ) as timer:
 
-        if cross:
+        universe: Optional[List[str]] = None
+
+        if provided_panel is not None:
+            # ⚠️ **PANEL MODE — THE JOIN ALREADY HAPPENED, WHERE THE DATABASE WAS.**
+            # Nothing is read here and nothing is re-derived: the schema, the database
+            # and the channel→pool map are RECORDED values, because the process running
+            # this branch cannot see the schema they describe (`ProvidedPanel`).
+            if not cross:
+                raise ValueError(
+                    f"provided_panel is accepted for a CROSS-SECTIONAL target only; "
+                    f"target={target!r} has no `cs_` prefix. The single-series path "
+                    f"checks pool__targets against information_schema for label columns "
+                    f"ALL_TARGETS does not name, and a provided panel cannot run that "
+                    f"check — an unlisted label would be offered as a feature."
+                )
+            panel = provided_panel.frame
+            schema_name = provided_panel.schema
+            database = provided_panel.database
+            # ⚠️ The caller's `ticker` is not decorative here — it is the only thing
+            # naming the universe in the printed banner, and the run FOLDER takes its
+            # ticker segment from the schema. A notebook left on one universe while the
+            # payload holds another would report the wrong one on every line, which is
+            # the guard `ParquetSchemaReader.__init__` already makes for pools.
+            if unified_schema_name(ticker) != schema_name:
+                raise ValueError(
+                    f"ticker={ticker!r} means {unified_schema_name(ticker)}, but this "
+                    f"panel was joined from {schema_name}. Set them to the same "
+                    f"universe — the panel is what it is, so the ticker is what is wrong."
+                )
+            columns_by_table = {
+                table: list(channels)
+                for table, channels in provided_panel.columns_by_table.items()
+            }
+            universe = (
+                list(provided_panel.universe)
+                if provided_panel.universe is not None
+                else None
+            )
+            # ⚠️ The POOLS COME FROM THE PANEL, never from the caller's `--pools`. They
+            # name the run folder and land in `metadata.json` as the run's inputs, so a
+            # value the shipped frame does not support would be a claim about data that
+            # never travelled.
+            pools = list(columns_by_table) or pools
+            join_log = [
+                {
+                    "table": TARGETS_TABLE,
+                    "join_keys": "date, exchange, ticker",
+                    "how": "inner",
+                    "note": provided_panel.note
+                    or "joined before this process ran; cs_rank_* derived there",
+                }
+            ]
+        elif cross:
             # `read_universe_panel` joins `pool__basic ⋈ pool__targets` in SQL and adds the
             # `cs_rank_{h}day` columns. ⚠️ It reads those two pools ONLY, so a
             # cross-sectional run is `pool__basic`-scoped by construction; `--pools` is
@@ -249,6 +358,12 @@ def run_selection(
                 )
 
         n_tickers = panel["ticker"].nunique() if "ticker" in panel.columns else 1
+        # ⚠️ The universe is RECORDED for a cross-sectional run, because the target is
+        # a rank WITHIN it: the same `cs_rank_20day` over 300 liquid names and over all
+        # 781 are two different labels, and `metadata.json` is the only place a later
+        # reader can tell which one a number describes.
+        if cross and universe is None and "ticker" in panel.columns:
+            universe = sorted(panel["ticker"].unique())
         print(
             f"{schema_name}: {panel.shape[0]:,} rows x {panel.shape[1]} columns "
             f"({panel['date'].min():%Y-%m-%d} -> {panel['date'].max():%Y-%m-%d}), "
@@ -384,6 +499,7 @@ def run_selection(
             join_log=join_log,
             null=null,
             holdout=holdout,
+            universe=universe,
             notes=notes,
             top=top,
             root=root,

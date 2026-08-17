@@ -212,11 +212,42 @@ class JobConfig:
 # ------------------------------------------------------------------- loading
 
 
+def kaggle_slug(title: str) -> str:
+    """Kaggle's own slug rule: lower-case, every other character to `-`, collapsed.
+
+    Verified 2026-08-17 against three live kernels — `MT feature selection` →
+    `mt-feature-selection`, `Local GPU Training` → `local-gpu-training`, and
+    `MT cross-sectional selection (top-300 panel)` →
+    `mt-cross-sectional-selection-top-300-panel`.
+    """
+    slug = "".join(c if c.isalnum() else "-" for c in title.lower())
+    while "--" in slug:
+        slug = slug.replace("--", "-")
+    return slug.strip("-")
+
+
 def _validate(cfg: JobConfig) -> JobConfig:
     if cfg.id.count("/") != 1 or "YOUR_" in cfg.id:
         raise ValueError(
             f"job {cfg.name!r}: 'id' must be '<kaggle-username>/<kernel-slug>', "
             f"got {cfg.id!r}"
+        )
+    # ⚠️ **KAGGLE DERIVES THE KERNEL SLUG FROM THE TITLE AND IGNORES A DISAGREEING
+    # `id` — IT WARNS IN PROSE AND PUSHES ANYWAY.** Measured 2026-08-17: title
+    # `MT cross-sectional selection (top-300 panel)` with id `.../mt-cross-sectional`
+    # created `.../mt-cross-sectional-selection-top-300-panel`, so the push reported
+    # success, the kernel ran on a T4 — and `status`, `wait` and `pull` all raised
+    # "Kaggle has no kernel you can read" against the id that was asked for. The run
+    # is not lost, but nothing can reach it until the id is corrected. This is the
+    # accelerator trap's exact shape: Kaggle silently substitutes and carries on.
+    expected = kaggle_slug(cfg.title)
+    if cfg.id.split("/", 1)[1] != expected:
+        raise ValueError(
+            f"job {cfg.name!r}: Kaggle will create the kernel at "
+            f"'{cfg.id.split('/', 1)[0]}/{expected}' — the slug of the TITLE — not at "
+            f"{cfg.id!r}, and it will only warn.\n"
+            f"  Fix EITHER side: set 'id' to that slug, or rename 'title' so it "
+            f"slugs to the id you want."
         )
     if not cfg.notebook_path.exists():
         raise FileNotFoundError(
@@ -240,6 +271,18 @@ def _validate(cfg: JobConfig) -> JobConfig:
             raise ValueError(
                 f"job {cfg.name!r}: data.id must be "
                 f"'<kaggle-username>/<dataset-slug>', got {cfg.data.id!r}"
+            )
+        # ⚠️ **KAGGLE ENFORCES 6-50 CHARACTERS ON A DATASET TITLE AND SAYS SO ONLY AFTER
+        # THE UPLOAD CALL.** Measured 2026-08-17: a 62-character title cost a full
+        # `kgpu data` — 1m 51s of export and parquet write — before
+        # `dataset_create_version` raised. Same class as the accelerator check above:
+        # anything Kaggle validates server-side is validated here, where it is free.
+        title = cfg.data.title or f"{cfg.title} payload"
+        if not 6 <= len(title) <= 50:
+            raise ValueError(
+                f"job {cfg.name!r}: data.title is {len(title)} characters "
+                f"({title!r}); Kaggle requires 6-50 and rejects it only after the "
+                f"whole payload has been exported and uploaded."
             )
         for rel in cfg.data.source_dirs:
             if not (REPO_ROOT / rel).is_dir():
