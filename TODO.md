@@ -60,13 +60,31 @@ CLAUDE.md §5 rule 21 has claimed since 2026-08-14 that this is withdrawn to `Na
 not — **every archived selection README on a level target prints `hit_rate +1.0000`**.
 Shipped in `result_evaluator` on 2026-08-16; the selection stage never got it.
 
-### P0-3 · Verify `float32` reproduces `float64` ⏱ ~30 min
+### ✅ P0-3 · DONE 2026-08-17 — `float32` does **NOT** reproduce `float64`
 
-⚠️ `--design-dtype float32` shipped 2026-08-16 **UNVERIFIED** — the agreement probe was
-killed mid-read and produced no output. It is `MEM-1`'s only mitigation, and the claim
-"the precision loss is nominal because every ranker is rank-based or XGBoost" is an
-argument, not a measurement. Run a small cross-sectional selection at both dtypes;
-compare kept sets and `ic_mean`.
+Measured on two panels, both dtypes, **both on CPU** so XGBoost's per-device RNG could not
+confound the dtype:
+
+| panel | kept | shared | Jaccard | `ic_mean` float64 → float32 |
+|---|---|---|---|---|
+| `basic + market_breadth` | 64 vs 64 | 59 | 0.855 | +0.0275 → +0.0317 |
+| `basic + stock_market` | 123 vs 123 | 115 | 0.878 | +0.0322 → **+0.0490** |
+
+The second is a **52% relative change in the measured IC** — the same order as the effects
+this package exists to detect. ⚠️ **The docstring shipped on 2026-08-16 claimed the
+opposite** ("the precision loss is nominal…"); that claim is withdrawn and the measurement
+is in its place.
+
+⚠️ **What it swaps is not random, and that is the useful half.** Every differing channel
+trades for its NEAR-TWIN — `foreign_sell_value`↔`foreign_sell_volume`,
+`prop_sell_val`↔`prop_sell_vol`, `drv_parkinson_21`↔`drv_garman_klass_21`,
+`drv_close_pos_63`↔`drv_close_z_63`, `…volume_negotiated`↔`…value_negotiated`. `float32`
+is **breaking ties the correlation prune considers interchangeable**, not scrambling the
+selection.
+
+**Standing rule now:** never use `float32` for a run whose number will be quoted. It is
+for the case where the alternative is not running at all (`MEM-1`'s universe panel), and
+`contract.SETUP_KEYS` already carries `design_dtype` so the two can never be unioned.
 
 ### P0-4 · Drop or exclude `mkt_n_names` ⏱ ~5 min
 

@@ -127,9 +127,33 @@ def window_design(
             × 6 stats (0.70 GB at 174,275 rows, 1.40 GB at 348,440 — exactly
             linear), so `unified_schema_all` at 2,388,975 rows needs **9.6 GB**
             against 7.1 GB of free RAM. `float32` halves it and fits.
-            The precision loss is nominal here: every ranker in `METHODS` is either
-            rank-based (`spearman`, `permutation`) or XGBoost, which casts its input
-            to `float32` internally regardless.
+            ⚠️ **AND IT DOES NOT REPRODUCE `float64`. Measured 2026-08-17 (TODO P0-3),
+            after this docstring asserted the opposite for a day.** The withdrawn claim
+            was that "the precision loss is nominal because every ranker is rank-based
+            or XGBoost, which casts to float32 anyway". Two panels, both dtypes, both on
+            CPU so the device RNG could not confound it:
+
+            | panel | kept | shared | Jaccard | `ic_mean` |
+            |---|---|---|---|---|
+            | `basic + market_breadth` | 64 vs 64 | 59 | 0.855 | +0.0275 → +0.0317 |
+            | `basic + stock_market` | 123 vs 123 | 115 | 0.878 | +0.0322 → **+0.0490** |
+
+            The second is a **52% relative change in the measured IC** — the same order
+            as the effects this package exists to detect.
+
+            ⚠️ **But WHAT it swaps is not random, and that is the useful half.** Every
+            differing channel trades for its NEAR-TWIN:
+            `foreign_sell_value`↔`foreign_sell_volume`, `prop_sell_val`↔`prop_sell_vol`,
+            `drv_parkinson_21`↔`drv_garman_klass_21`, `drv_close_pos_63`↔`drv_close_z_63`,
+            `…volume_negotiated`↔`…value_negotiated`. `float32` is not scrambling the
+            selection; it is **breaking ties between channels the correlation prune
+            considers interchangeable**, and at ~7 decimal digits a near-tie resolves
+            differently.
+
+            **So: never use `float32` for a run whose number will be quoted.** It is for
+            the case where the alternative is not running at all (`MEM-1`'s universe
+            panel), and `contract.SETUP_KEYS` already carries `design_dtype`, so a
+            `float32` run and a `float64` run can never be unioned into one table.
 
     Raises:
         ValueError: unknown stat, `lookback < 1`, or a frame shorter than the
