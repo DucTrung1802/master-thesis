@@ -151,6 +151,25 @@ how an excluded column comes back after an upstream rename.
 
 ## P1 — unblocks hours of other work
 
+### ⚠️ P1-4 · Chunk the GPU rank step — **promoted from P3-2 by measurement** ⏱ ~2 h + one T4 round trip
+
+**The one thing between this repo and P2-1 v2 / P2-2.** It was structural code under P3
+until 2026-08-17, when the T4 run made it the binding constraint on the only two
+measurements left worth making. The priority rule at the top of this file promotes it:
+*a thing that unblocks hours of other work outranks a thing that is only itself.*
+
+`gpu._average_ranks_torch` holds `values` + `filled` + a mask (**10.58 GiB** at ~536
+float64 columns × 1.247 M rows) and then `torch.sort` asks for its own output plus an
+int64 `order` — **~4× the design**, against a T4's 14.56 GiB. Rank in **column blocks**:
+ranks are per-column independent, so the result is bit-identical, which `float32` is not
+(P0-3, 52% relative change in `ic_mean`).
+
+⚠️ **Do not promise that this alone unblocks the run.** The T4 died in phase 3 of 9; the
+next phase, `rank (the ensemble's methods)`, has never been reached at this width and
+`permutation` is the member that puts the design on the device. Expect to chunk twice.
+Verify against the 30-name smoke payload — a chunked ranking that changes a number is a
+bug, and that run's `ic_mean +0.0263 / 60 kept` is the reference.
+
 ### P1-1 · Re-fit the cost model into ONE function ⏱ ~2 h
 
 Two models exist, disagree, and were both fitted with `lasso` — dropped 2026-08-16:
@@ -355,7 +374,7 @@ shortlist this project has assembled does not beat "predict no change".
 | item | what | note |
 |---|---|---|
 | **P3-1** | `CSP-1` — give `read_universe_panel` the `UnifiedSchemaReader.join()` the single-ticker path uses | ⚠️ makes `MEM-1` worse by the width joined; `pool__ta` at 922 channels is ~10× the design |
-| **P3-2** | `MEM-1` — stop materialising the whole design; window per fold or per ticker-chunk, never holding the blocks and the `pd.concat` result at once | 4.03 GB per million rows, measured |
+| **P3-2** | `MEM-1`, **host half only** — stop materialising the whole design; window per fold or per ticker-chunk, never holding the blocks and the `pd.concat` result at once | 4.03 GB per million rows, measured. ⚠️ **The DEVICE half was promoted to P1-4**; and on a T4's ~29 GB of RAM this host half did **not** bite — the 1.25 M-row design built in 189.3 s |
 | **P3-3** | `_ingest_gold_stocks` still carries a legacy column (`close`/`volume` check: 1 of 2 present) | ⚠️ Fixing it redefines `gold.stocks`' OHLC as adjusted and commits to a ~2.4 M × ~900 col rebuild. Its own decision, not a side effect. Related to `STA-1` |
 
 ---
