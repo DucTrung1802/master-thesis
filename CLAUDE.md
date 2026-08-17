@@ -36,7 +36,7 @@ to prove, which is mostly negative and deliberately so.
 | | |
 |---|---|
 | database | PostgreSQL `database_main_v2`, schemas `bronze_schema` / `silver_schema` / `gold_schema` / `unified_schema_<universe>`. Creds in repo `.env` (`POSTGRES_*`) |
-| orchestrator | **Dagster, 80 assets** — `src/orchestration/` is THE entry point |
+| orchestrator | **Dagster, 83 assets** — `src/orchestration/` is THE entry point |
 | universe | 781 VN tickers (HOSE/HNX/UPCOM); VCB is the single-name focus, VN30/VN100/LIQUID301/ALL/BANK the cross-sections |
 | model | LSTM (2×128, ~276k params) and **CNN** (`Conv1d` over time) + the chain in §3b. `model/common/engine.py` is the shared engine — a model package is a `model.py` + a ~30-line binding, **never a copy of `train.py`** |
 | interpreter | `mt_env` venv (`d:/GIT/master-thesis/mt_env`), Python 3.12.10, Windows, RTX 3050 4 GB |
@@ -137,7 +137,7 @@ Three things this ladder means:
 
 ## 3. The pipeline, end to end
 
-### 3a. Data — Dagster, 80 assets, `src/orchestration/`
+### 3a. Data — Dagster, 83 assets, `src/orchestration/`
 
 ```
 raw_data/<source>/            19 landing assets   scrapers: TradingView (universe+OHLCV,
@@ -149,15 +149,17 @@ bronze_schema                 20 assets → 25 tables     raw-faithful, one per 
 silver_schema                 20 assets                 canonical, cross-source merged,
       │                                                 GICS tree attached
       ▼
-gold_schema                   10 assets                 + features (TA battery ~900 cols,
+gold_schema                   11 assets                 + features (TA battery ~900 cols,
       │                                                 returns, vol, as-of macro)
       ▼
-unified_schema_<universe>     10 assets × 3 partitions  pool__basic (⚠️ 38 silver +
+unified_schema_<universe>     12 assets × 3 partitions  pool__basic (⚠️ 38 silver +
                                                         58 drv_*, 2026-08-16) / __targets /
                                                         __economy_<country>×19 / __forex /
                                                         __funds / __bonds /
                                                         __stock_market / __basic_bank /
-                                                        __ta / __fa
+                                                        __ta / __fa /
+                                                        __news_daily / __market_breadth
+                                                        (last two NEW 2026-08-17, VCB only)
                               partitions: VCB | BANK | ALL
       ▼
 reports/feature_selection/     1 asset × 19 partitions   analysis/feature_selection_economy
@@ -176,6 +178,34 @@ count must EQUAL the spine's — not the `pool__ta` one. Each: PK verified from
 | `pool__funds` | `gold.funds`, 21 HOSE ETFs × ≤19 measures | 4,266 × 392 | median **17.7%** | 2 of 21 in Aug, **19 at 2026-06-26** |
 | `pool__bonds` | `gold.bonds`, 9 tenors × 13 measures | 4,266 × 120 | median **75.9%** | **all 9 at 2026-06-08** |
 | `pool__stock_market` | `gold.stock_market`, 6 indices × 27 measures | 4,266 × 165 | median **83.1%** | 2026-07-30 (CafeF chain) |
+
+### ⚠️ TWO MORE POOLS, 2026-08-17 — and both REFUSE to pivot the market into columns
+
+Built for **VCB only** so far. Together they are the answer to "how do I feed one stock
+more than that stock?", and the answer is **compression, not width** — VCB has
+`n_eff = 852` independent observations, and §5c measured 202 channels at test IC −0.011
+against 724 at **−0.072** on the same splits.
+
+| pool | shape | source | what it is |
+|---|---|---|---|
+| `pool__news_daily` | 4,266 × 17 | `gold.news_daily_panel` | **14 event channels** — `n_docs`, `n_editorial`, `n_docs_named`, `n_earnings`, `relevance_max`, `if_news`, `if_editorial`, each at 5d and 10d. §2d's third-ranked lever, wired in at last |
+| `pool__market_breadth` | 4,266 × 11 | `gold.market_breadth` (NEW) | **8 channels compressing all 781 names to one row per session** — dispersion (`xs_disp5/skew5/kurt5/mean5`), concentration (`hhi_turnover`), flow (`log_turnover`, `turnover_z`), width (`n_names`) |
+
+⚠️ **`pool__news_daily` IS NOT THE SENTIMENT THREAD.** §2a's negative was about PhoBERT
+tone scores; this carries no tone at all, only counts. Nine price columns are dropped
+because `pool__basic` owns them — and `ret_5d` was verified **trailing** (corr +1.000000
+against the trailing 5-day return, −0.006 against the forward one), so it is excluded as a
+DUPLICATE, not as a leak. ⚠️ Coverage **78.6%** (corpus starts 2013 against a 2009 spine)
+and **31 trailing NULL sessions** — rule 22 says read both.
+
+⚠️ **THE PIVOT IS IMPOSSIBLE, NOT MERELY UNWISE**: 781 tickers × 27 measures is **21,087
+columns against PostgreSQL's 1,600** (`WID-1`). ⚠️ `pool__market_breadth`'s channel set was
+chosen by MEASUREMENT over 826 non-overlapping observations — the dispersion/flow family
+kept (`xs_skew5` t = −2.29), the breadth family dropped (t = +0.21…+0.34, and it restates
+the index level `pool__stock_market` already carries). **Not one clears Bonferroni**
+(|t| > 2.69), and at layer 1 the whole pool landed **below its null's mean** (§6).
+⚠️ `mkt_n_names` rises 380 → 771 across the sample and is a **calendar proxy** — exclude it
+before ranking (TODO P0-4).
 
 ⚠️ **THE THREE TRADINGVIEW SOURCES ARE FROZEN AND `MAX(date)` HIDES IT** — the
 `skip_existing=True` scrape of 2026-08-05, which queued **0 bond data tasks at all**.
@@ -541,7 +571,7 @@ dagster dev                                             # UI at localhost:3000
 dagster asset materialize -f src/orchestration/definitions.py --select "group:bronze"
 dagster asset materialize -f src/orchestration/definitions.py --select "+bronze/trading_view_economy"
 dagster asset materialize -f src/orchestration/definitions.py --select "group:unified" --partition VCB
-dagster definitions validate                            # sanity check: 80 assets, no run
+dagster definitions validate                            # sanity check: 83 assets, no run
 
 # --- model chain ---
 python -m pipeline                                      # what's stale; writes nothing
@@ -833,61 +863,68 @@ R² −0.90 → −0.059 on the same ticker, target and splits, at 4,961 paramet
 `pool__basic` build; a rebuild of the 750-channel table would INNER-join back down to
 2026-06-25 **and look unchanged**. `status_data` reports it as `pools_behind`.
 
-## 6. State today (2026-08-09/10)
+## 6. State today (2026-08-17)
 
-| stage | VCB chain | BANK chain |
+⚠️ **This section was 7 days stale until 2026-08-17** — it described an empty archive, a
+750-channel VCB table and a missing `src/train_test_set/`, none of which is true. If a
+number here disagrees with the database, the database is right and this section is the bug.
+
+### What exists right now
+
+| | VCB | BANK |
 |---|---|---|
-| selection | ⚠️ **EMPTY — all 22 runs deleted 2026-08-10** (see below) | (shared) |
-| `final_features` | `return_5day__final__d20_h5` — 4,235 × 754 (750 ch), `505fbe21a1f0` | `rank_5day__final__d20_h5` — 53,921 × 18 (14 ch), `f5615a68f556` |
-| `train_test_creator` | 2,918 / 610 / 635 × 20 × **724** | 26,964 / 12,524 / 13,028 × 20 × 13 |
-| `model` | best epoch **7** | best epoch **1** (never beat its init) |
-| `result_evaluator` | series grain — **no skill** | panel grain — **no skill** |
+| selection runs | **28** run folders in `reports/feature_selection/` | (shared) |
+| `final_features` | `close_adjust_5day__final__d20_h5` 4,266 × 39 (35 ch) · **`return_5day__final__d20_h5` 4,235 × 70 (66 ch)** | `rank_5day__final__d20_h5` 53,921 × 18 · `…__basic` 54,528 × 16 |
+| datasets on disk | 3 (incl. both VCB targets) | 1 |
+| model runs | **1** — `lstm__vcb__close_adjust_5day…20260816-165606` | 0 |
 
-| | test IC | test bar | test R² |
-|---|---|---|---|
-| VCB, series | **−0.0721** | +0.118 ❌ (p 0.88) | **−0.90** |
-| BANK, panel | **−0.0209** | +0.0158 ❌ (p 0.84) | −0.018 |
+⚠️ **The 16 pre-2026-08-16 model runs were deleted on request** and archived to
+`D:\GIT\_archive\master-thesis\model_runs_2026-08-16.zip` (2.2 MB, outside the repo,
+untracked). `src/model/runs/*/` is gitignored (`RPR-1`), so **that zip is the only copy**
+of the numbers §5c and §5d quote.
 
-**29/29 runs scored; 6 clearing split-metrics across 5 runs, none of them current, and
-`model` §11 already recorded why those are not trustworthy.**
+### The two VCB chains, and which to start new work on
 
-⚠️ **`src/train_test_set/` DOES NOT EXIST ON DISK** (checked 2026-08-10). The table above
-is what the chain produced; the tensors are gone. It is gitignored, so this is issue
-**RPR-1** rather than a fault — but it means `python -m pipeline` reports
-`train_test_creator` as **not ready**, every past run's `dataset_hash` is currently
-unverifiable, and the two rows above cannot be reproduced without re-running
-`python -m train_test_creator --save` first. ⚠️ **`model/CONTEXT.md` §12 still claims "all
-33 pre-2026-08-09 dataset folders are on disk and every config resolves" — that is no
-longer true.** 29 run folders DO survive under `src/model/runs/`, and `result_evaluator`
-can rescore them from `predictions_*.csv` without any dataset.
+| target | evidence | verdict |
+|---|---|---|
+| `close_adjust_5day` *(still the `chain.py` default)* | `failed_null=1` | ❌ a price **LEVEL**. Its LSTM: R² **−85.6**, MASE **21.36** (21× worse than a random walk), ROC AUC **undefined**, and the whole test range sits **above** the training maximum |
+| **`return_5day`** | `cleared_p95_not_a_pass` | ⚠️ layer 2 "clears" at z = +4.48 — **do not quote it**, see TODO **P0-1** |
 
-⚠️ **The STL-1 rebuild made VCB WORSE, and that is the expected result, not a regression.**
-Replacing `max_features=12` with a measured per-run cut took the table 203 → 750 channels
-and the dataset 202 → 724 features; test IC went −0.011 → −0.072. Handing an LSTM 724
-channels on 2,918 training windows is the whole explanation.
+### ⚠️ The 2026-08-17 return_5day sweep — six pools, real nulls, all six FAIL
 
-⚠️ **THE REPORT ROOTS WERE MERGED AND THE ARCHIVE DROPPED (2026-08-10).** There is now
-**one** folder, `reports/feature_selection/`, holding **no runs** —
-`feature_selection_basic`, `_economy` and `_superseded` are gone as paths, and all 22
-archived runs with them. Nothing is lost: they were force-added on 2026-08-09, so
-`git checkout 884bae0e -- reports/` restores the whole archive. Consequences to hold:
+The first time this chain has ever run layer 1 with nulls on a **return** target.
 
-- **`python -m pipeline` now reports `selection` as not ready**, and every stage below it
-  has no live shortlist to check against. The study restarts at
-  `vcb__basic__return_5day`, then the country sweep.
-- ⚠️ **`--scope` is now the ONLY thing keeping two experiments off one table name.** A
-  root is a `final_features` GROUP over `(schema, target, setup)` — no term for *which
-  pools* — and every entry point seeds at 18, so a `pool__basic` run and a
-  `basic+economy_<country>` run in this root are ONE group and get unioned into
-  `return_5day__final__d20_h5`. Build with `--scope basic` / `--scope economy_<country>`.
-- **The numbers in §2, §5c, §5d and the tables above stand as measurements**; their run
-  folders no longer stand as files. Any claim quoting a run path is a history reference.
+| pool | kept | `ic_mean` | null p95 | null MAX | z | p |
+|---|---|---|---|---|---|---|
+| `pool__fa` | 137 | +0.0564 | +0.0592 | +0.0794 | +1.24 | 0.182 |
+| `pool__ta` | 473 | +0.0434 | +0.0603 | +0.0673 | +0.78 | 0.364 |
+| `pool__stock_market` | 125 | +0.0386 | +0.0631 | +0.0672 | +0.48 | 0.364 |
+| `pool__news_daily` | 69 | +0.0285 | +0.0443 | +0.0469 | +0.53 | 0.455 |
+| `pool__bonds` | 99 | +0.0121 | +0.0339 | +0.0373 | +0.19 | 0.545 |
+| `pool__market_breadth` | 64 | +0.0196 | +0.0645 | +0.0745 | **−0.22** | 0.727 |
 
-⚠️ **Not one of those runs cleared anything** — 18 computed no null, 2 failed their own.
-Everything downstream inherited that, and the provenance sentence travels verbatim from
-the table `COMMENT` into the dataset `metadata.json` into every run's `lineage`.
+⚠️ **In all six the null MAX exceeds the observed** — rule 3 applies to every row.
+⚠️ `pool__market_breadth` lands **below its null's mean**: its 8 channels were picked by
+measuring 7 candidates and keeping 3, and under a real null the advantage is gone. The
+selection-on-the-same-data lesson, demonstrated by a pool built to demonstrate something
+else. ⚠️ `pool__news_daily` did **not** fail for want of data (z = +0.53, mid-pack) — §2d's
+third lever is now measured and it says nothing.
 
-**Open issues live in [ISSUES.md](ISSUES.md)** (11 open, 30 resolved, codes permanent).
+**Layer 2** then reports `ic_mean +0.1369` vs a p95 bar of +0.0428, z = +4.48. Four
+measured reasons that is not a result — the null does not price in layer 1, `p = 0.0909`
+is the 1/(n+1) floor, the fold trend is rule 23's data-arrival signature, and 9 of 66
+channels are constant in train — are in **TODO P0-1**, with a written prediction that a
+two-layer null will not clear it.
+
+⚠️ **`STA-1` costs this chain its last 31 sessions.** `pool__ta` stops 2026-06-26, and the
+INNER join drops the whole `return_5day` chain from 4,266 to **4,235 rows** — table and
+dataset both end 2026-06-25 rather than 2026-08-07.
+
+⚠️ **`--scope` is still the only thing keeping two experiments off one table name.**
+`final_features` groups on `(schema, target, setup)` — **no term for which pools** — so a
+`pool__basic`-only run and a `basic + X` run are ONE group and get unioned.
+
+**Open issues live in [ISSUES.md](ISSUES.md)** (**14 open**, 30 resolved, codes permanent).
 Short version: ⚠️ **`SHP-1`** the forex scraper writes two file shapes and only one was
 ever ingested — 71% of the folder was silently discarded until 2026-08-14, and **the
 same `value`-only filter sits unchecked on `bonds`/`funds`/`economy`/`indices`**;
