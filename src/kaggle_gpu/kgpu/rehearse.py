@@ -84,8 +84,20 @@ def main(payload_dir: str, work_dir: str, notebook: str | None = None) -> int:
     print(f"\n  report root under output dir : OK ({root})")
 
     # 2. The provenance the worker cannot compute for itself.
+    # ⚠️ **A MISMATCH HERE IS A STALE PAYLOAD, NOT AN UNPINNED COMMIT — and the old
+    # message said the second, which cost a minute of looking in the wrong place
+    # (2026-08-18).** The bootstrap pins the commit the NOTEBOOK was built at, while the
+    # manifest carries the one the PAYLOAD was exported at. They agree only while
+    # `source.zip` is the working tree, so a disagreement means the rehearsal is about to
+    # exercise code that is not the code on disk — which is the one thing a rehearsal
+    # must never do quietly.
     if fs_report._git_commit() != report.get("git_commit"):
-        raise AssertionError("git commit was not pinned into feature_selection.report")
+        raise AssertionError(
+            f"the build pinned {fs_report._git_commit()!r} but the staged payload was "
+            f"exported at {report.get('git_commit')!r} — THE PAYLOAD PREDATES THE "
+            f"WORKING TREE, so its source.zip is older code.\n"
+            f"  Re-stage it: python -m kgpu export <job>  (or `data`, which uploads too)"
+        )
     print(f"  git commit pinned            : OK ({fs_report._git_commit()})")
 
     # 3. The reader: the notebook's own construction, guard cell and join.

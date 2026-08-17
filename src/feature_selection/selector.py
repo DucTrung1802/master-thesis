@@ -1125,6 +1125,40 @@ class FeatureSelector:
 
     # ------------------------------------------------------------------- run
 
+    @staticmethod
+    def _memory_note() -> str:
+        """`rss=… vram=…` for the phase line — or `""` when neither can be read.
+
+        ⚠️ **THIS EXISTS BECAUSE A KAGGLE KERNEL DIED WITH NO TRACEBACK** (2026-08-18,
+        the top-300 panel, phase 4 of 9). A CUDA OOM raises a catchable Python error and
+        names the allocation, which is how the phase-3 failure was diagnosed the day
+        before; a HOST OOM is a SIGKILL from the cgroup, so `nbclient` reports only
+        *"DeadKernelError: Kernel died"* and the log ends mid-phase. Nothing in the run
+        said how much memory it was using, so the diagnosis had to be an inference —
+        and §5 rule 2 says an absent measurement is absent, not inferred.
+
+        One `psutil` call and one torch query per PHASE, nine per run, against phases
+        that are seconds to hours. `psutil` is on the Kaggle image and in `mt_env`; if
+        it is not, the note is empty rather than the run being different.
+        """
+        parts = []
+        try:
+            import psutil
+
+            parts.append(f"rss={psutil.Process().memory_info().rss / 1024**3:.1f}G")
+        except Exception:  # noqa: BLE001 — a probe must never fail a run
+            pass
+        try:
+            import torch
+
+            if torch.cuda.is_available():
+                parts.append(
+                    f"vram={torch.cuda.max_memory_allocated() / 1024**3:.1f}G"
+                )
+        except Exception:  # noqa: BLE001
+            pass
+        return ("  " + " ".join(parts)) if parts else ""
+
     def _tick(self, done: int) -> None:
         """Announce a completed phase. One line per phase, `PROGRESS` permitting.
 
@@ -1140,7 +1174,7 @@ class FeatureSelector:
         total = len(_RUN_PHASES)
         print(
             f"  [{done}/{total} phases {done / total:>4.0%}] "
-            f"{_RUN_PHASES[done - 1]:<22} {seconds:8.1f}s",
+            f"{_RUN_PHASES[done - 1]:<22} {seconds:8.1f}s{self._memory_note()}",
             flush=True,
         )
 

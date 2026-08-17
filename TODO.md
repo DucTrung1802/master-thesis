@@ -151,7 +151,39 @@ how an excluded column comes back after an upstream rename.
 
 ## P1 — unblocks hours of other work
 
-### ⚠️ P1-4 · Chunk the GPU rank step — **promoted from P3-2 by measurement** ⏱ ~2 h + one T4 round trip
+### ✅ P1-4 · DONE 2026-08-18 — the VRAM half is fixed; **the next wall is HOST RAM**
+
+Shipped: `gpu.rank_block_columns` + a blocked `_average_ranks_torch` + a blocked
+`_spearman_vector_cuda`. ⚠️ **Chunking the rank helper alone would not have been enough**
+— the old path also handed a full `n × p` rank matrix to `_pearson_against_last`, which
+builds five more `n × p` tensors. Every stage is `O(n × p)`, so every stage had to become
+`O(n × block)`.
+
+| verified three ways | |
+|---|---|
+| 4 new tests (11 in the file) | blocked == dense at **0.0**, blocks of 1/2/5/36/37/100 and the whole vector path at 1/3/16 |
+| the 30-name smoke run, **through 2 blocks** | reproduces exactly: 60 kept, `ic_mean +0.0263`, trend +0.0297, shortlist 22 — and 0.6 s against 0.7 s, so blocking is free |
+| `rank_block_columns(4_266, 600)` | **1 block** — every archived run keeps the dense path |
+
+**On the T4 it worked**: phase 3 went from an OOM to **12.3 s**. Then the kernel **died in
+phase 4 with no traceback** — `DeadKernelError: Kernel died`, which is a SIGKILL from the
+cgroup, not a catchable CUDA error. So the binding constraint moved from VRAM to **host
+RAM**, which is `MEM-1`'s original half (**P3-2**).
+
+⚠️ **AND NOTHING IN THE RUN SAID HOW MUCH MEMORY IT WAS USING**, so the diagnosis was an
+inference — which §5 rule 2 forbids leaving as one. `selector._tick` now prints
+`rss=… vram=…` per phase (one `psutil` call per phase, nine per run). Measured on the
+30-name smoke panel, 48,521 rows: RSS **0.8 → 2.3 GB**, peaking at `stability`.
+
+### P1-4b · Cut the host-side peak so the top-300 panel fits ⏱ see P3-2
+
+**The extrapolation, from the probe above**: ~1.5 GB of the smoke run's RSS is data, over
+48,521 rows. The top-300 panel is **25.7× the rows** → ~**39 GB** against a Kaggle T4
+box's ~29-30 GB. That is consistent with a phase-4 kill and says the panel needs roughly a
+**2× reduction, not a 10%** one. Inverting it: ~810 k rows fit, which at 4,368 dates is
+**~185 names**.
+
+### ~~P1-4 · Chunk the GPU rank step~~ — **promoted from P3-2 by measurement** ⏱ done
 
 **The one thing between this repo and P2-1 v2 / P2-2.** It was structural code under P3
 until 2026-08-17, when the T4 run made it the binding constraint on the only two
@@ -326,6 +358,24 @@ against the smoke run, then one more T4 round trip.
 
 ⚠️ **Panel mode is NOT what failed and must not be re-opened.** Everything `kgpu` adds ran
 on the worker; what died is a ranker step at a width no single-ticker run has ever reached.
+
+### ⚠️ SECOND ATTEMPT, 2026-08-18 — one wall further, and a DECISION is now needed
+
+With P1-4's chunking, the same job on the same payload got **past** the step that killed
+it: `spearman vs target` **12.3 s** where it had OOMed. `window design` 198.1 s. Then
+phase 4 of 9 — `rank (the ensemble's methods)` — took the kernel down with
+`DeadKernelError` and no traceback: a host-RAM kill, ~39 GB wanted against ~29-30 GB.
+
+**Two honest ways forward, and they are not equivalent:**
+
+| | cost | what it costs the RESULT |
+|---|---|---|
+| **(a) top-150 by turnover**, everything else identical | one round trip, today | `n_eff` stays **218** — dates are unchanged. Daily-IC sd goes ~0.058 → ~0.082, so **z scales by ~0.71**. Still above §2b's ~100-name threshold |
+| **(b) fix `P3-2` first**, then run top-300 | ~a day of streaming work | nothing — full power, `z` as designed |
+
+⚠️ **Halving the DATES instead would cost exactly the same `z` (both scale it by √½), and
+would cost `n_eff` as well** — 218 → 109. Prefer cutting names; they are the axis that
+buys precision, not independence.
 
 ### P2-2 · `cs_rank_5day` on the top ~300 by turnover ⏱ ~1 h
 
