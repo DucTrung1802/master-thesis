@@ -565,7 +565,15 @@ def _readme(metadata: Dict, result, files: Sequence[str]) -> str:
         other = res.get("ic_summary_all_channels") or {}
         for key in ("ic_mean", "ic_trend_per_fold", "hit_rate", "n_eff_per_fold"):
             a, b = ic.get(key), other.get(key)
-            fmt = lambda v: "—" if v is None else f"{v:+.4f}" if abs(v) < 10 else f"{v:.1f}"
+            # ⚠️ `v != v` is the NaN test, and it is here for `hit_rate`. Since
+            # 2026-08-17 that metric is WITHDRAWN to NaN on a single-signed target
+            # (§5 rule 21, `evaluation.sign_hit_rate`) — rendering it as a bare `nan`
+            # would read as a defect rather than as the deliberate absence it is.
+            # `abs(nan) < 10` is False, so without this it fell through to `f"{v:.1f}"`.
+            fmt = (
+                lambda v: "—" if v is None or v != v
+                else f"{v:+.4f}" if abs(v) < 10 else f"{v:.1f}"
+            )
             lines.append(f"| `{key}` | {fmt(a)} | {fmt(b)} |")
 
     lines += ["", "## The bar", ""]
@@ -590,7 +598,10 @@ def _readme(metadata: Dict, result, files: Sequence[str]) -> str:
         for row in metadata["holdout"]:
             lines.append(
                 f"| {row.get('feature_set')} | {row.get('labels')} | "
-                f"{row.get('ic', float('nan')):+.4f} | {row.get('hit_rate', float('nan')):.4f} |"
+                f"{row.get('ic', float('nan')):+.4f} | "
+                # ⚠️ Same withdrawal as the table above: NaN means the metric could not
+                # fail on this target, not that it is missing.
+                f"{'—' if (row.get('hit_rate') is None or row.get('hit_rate') != row.get('hit_rate')) else format(row['hit_rate'], '.4f')} |"
             )
 
     lines += ["", "## Files", ""]

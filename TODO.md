@@ -84,12 +84,29 @@ wider candidate set and has *more* room to overfit noise, pushing the null up.
 "The selection cleared its bar; the model did not clear its own." **P2-3** is now worth
 running, and that is a change from this morning.
 
-### P0-2 · Ship rule 21's `hit_rate` withdrawal in `feature_selection` ⏱ ~1 h + test
+### ✅ P0-2 · DONE 2026-08-17 — rule 21 shipped, **and the report had to be fixed too**
 
-`selector.py:1006` and `:1102` still compute a bare `np.mean(np.sign(pred) == np.sign(y))`.
-CLAUDE.md §5 rule 21 has claimed since 2026-08-14 that this is withdrawn to `NaN`. It is
-not — **every archived selection README on a level target prints `hit_rate +1.0000`**.
-Shipped in `result_evaluator` on 2026-08-16; the selection stage never got it.
+`selector.py:1021` and `:1117` now call `evaluation.sign_hit_rate`, which returns **NaN
+when every non-zero label shares a sign**. Implemented in `feature_selection` rather than
+imported from `result_evaluator`, because the dependency runs the other way.
+
+⚠️ **Shipping the metric was not enough, and this is the part that nearly slipped.** A
+withdrawn `hit_rate` is NaN, and `report.py`'s formatter tested only `v is None`:
+`abs(nan) < 10` is False, so it fell through to `f"{v:.1f}"` and the README printed a
+bare **`nan`** — which reads as a defect rather than as the deliberate absence it is.
+Both the summary table and the holdout table now test `v != v` and print `—`.
+
+**Verified end to end, not just by unit test**, on a fresh level-target run
+(`vcb__basic+market_breadth__close_adjust_5day`, 48.6 s):
+
+```
+README.md:47   | `hit_rate` | — | — |
+validation.csv  hit_rate NaN in all 10 rows
+```
+
+5 unit tests besides, including the two edge cases that matter: an **all-negative** label
+must withdraw too, and a single unchanged day (`0.0`) must **not** make a return series
+single-signed — otherwise one flat session silently deletes the metric for a whole run.
 
 ### ✅ P0-3 · DONE 2026-08-17 — `float32` does **NOT** reproduce `float64`
 
