@@ -41,7 +41,37 @@ four independent times.** The one thing that survives its own null is the
 | LSTM sweeps, 9 lookbacks × 3 targets (27 runs) | `return_5day`, `direction_5day`, `probability_gain_5pct_5day` | **no lookback beats the zero-baseline**; `dir_auc` ≈ 0.5 throughout | `model` §10 |
 | feature selection, VCB, 5 configs | `return_5day` / `return_rel_5day` × 3 representations | **every one inside its own shuffled-label null** | `feature_selection` §6b–6d |
 | news sentiment, 3 tickers | price level / direction / ≥5% jump / price-defined sentiment | no signal — and adding sentiment **makes price/TA models worse** (QWK 0.175 → 0.045) | `sentiment` §6, §6a |
+| news EVENTS (not tone), 777 tickers | `rel5` / `rel10` / 1-13 weeks, paired by fold | **7 paired tests, every \|t\| < 1.3**, folds won 2-4 of 6, signs mixed. §6a reproduced at 259× the width | `orchestration/todo.md` (retired 2026-08-17) |
 | literature, 23 papers | others' claims | **not one reports a naive baseline**; reported skill tracks test-set size (0.90@10d → 0.56@100d in one paper's own table); best honestly-run paper gets MCC 0.069 | `experiment_10` |
+
+### ⚠️ 2a-bis. THE HORIZON IS THE VARIABLE NOBODY CONTROLLED FOR — and `h=5` is the worst of it
+
+Measured 2026-08-03 on the weekly/daily news panels and **recovered 2026-08-17 from a
+retired todo file, where it was the only copy.** The `controls` block — momentum
+1/4/12/26 weeks plus liquidity, no text at all — is the one thing in that study that
+worked, and whether it works **depends entirely on the horizon**:
+
+| horizon | universe | `controls` CAGR | benchmark | verdict |
+|---|---|---|---|---|
+| **rel5** (5 sessions) | top-100 | **−2.78%** | 9.75% | ❌ loses |
+| **rel5** | top-30 | **2.68%** | 16.48% | ❌ loses |
+| rel10 | top-100 | 9.86% | 9.98% | ❌ ties |
+| rel10 | top-30 | 7.69% | 16.74% | ❌ loses |
+| **4 weeks** | top-30 | **30.39%** | 18.07% | ✅ Sharpe 1.10 |
+| **13 weeks** | top-30 | **28.63%** | 19.34% | ✅ Sharpe 1.06 |
+
+**`controls` only beats its benchmark from 4 weeks out.** At 5-10 sessions it loses even
+on the most liquid names — so at `h=5` it is not only news that dies, **momentum dies
+too**. MCC on the full universe was +0.052…+0.061, positive in **30 of 30 folds**, and it
+cost nothing: no corpus, no labelling, no fine-tune.
+
+⚠️ **This bears directly on §2's verdict and on everything run at `d=20, h=5`.** Four
+independent threads failed at a 5-day horizon; this is the one measurement that asked
+whether the HORIZON was the problem rather than the features, and its answer is that VN
+gives signal at 4-13 weeks and not at 5-10 sessions. Two independent sources predicted
+it — the `project-vcb-forecasting-conclusion` memory, and paper 57 (daily news predicts
+1-2 days then stops at t = 1.2; weekly news predicts 13 weeks). **Nothing in this repo
+has yet been run end to end at a 4-week horizon.**
 
 ### 2b. What survived — the width ladder
 
