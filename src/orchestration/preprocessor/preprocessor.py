@@ -6418,6 +6418,13 @@ class DataPreprocessor:
     UNIFIED_STOCK_MARKET_SOURCE = f"{GOLD_SCHEMA}.stock_market"
     UNIFIED_MARKET_BREADTH_SOURCE = f"{GOLD_SCHEMA}.market_breadth"
 
+    # ⚠️ Columns of `gold.market_breadth` that are DIAGNOSTICS, not candidate features.
+    # `mkt_n_names` is the width each date's statistics were computed over; it rises
+    # ~380 → ~771 across the sample purely because tickers listed and because silver
+    # holds no delisted name, so it is a CALENDAR PROXY — `close_adjust`'s trap in a new
+    # column. Kept in gold (a reader needs the width), blocked from the pool.
+    UNIFIED_MARKET_BREADTH_NOT_FEATURES = ("mkt_n_names",)
+
     def _ingest_unified_pool_forex(self, ticker: str) -> List[dict]:
         """`gold.forex_<exchange>` → `…​.pool__forex_<exchange>` — the FX block.
 
@@ -6619,18 +6626,46 @@ class DataPreprocessor:
         market says at least as much about VCB as VCB's own history does — which is a
         statement about how little either says.
 
-        ⚠️ **`mkt_n_names` is the WIDTH, and it is a feature about the DATA, not the
-        market.** It rises from ~380 in 2009 to ~771 today because tickers were listed
-        and because silver holds no delisted name. A tree splitting on it is reading the
-        calendar, exactly as `close_adjust` does on a level target. It is carried so the
-        other seven can be read against the width they were computed over — consider
-        excluding it before ranking.
+        ⚠️ **`mkt_n_names` STAYS IN GOLD AND IS BLOCKED FROM THIS POOL (TODO P0-4,
+        2026-08-17).** It is the WIDTH the other seven were computed over — a fact about
+        the DATA, not about the market. It rises ~380 (2009) → ~771 (today) because
+        tickers were listed and because `silver.stocks_basic` holds no delisted name, so
+        a tree splitting on it is **reading the calendar**: exactly the trap
+        `close_adjust` sets on a level target, wearing a new name. Kept in
+        `gold.market_breadth` because a reader needs to know how wide each date's
+        cross-section was; blocked here because a candidate FEATURE is a different thing
+        from a DIAGNOSTIC.
+
+        ⚠️ It did not bite on the run that prompted this: on 2026-08-17's `return_5day`
+        chain **no `mkt_*` channel survived layer 2 at all** — 4 of 208 reached the
+        shortlist pool, 0 of 66 reached the final table. This is a guard against the next
+        run, not a repair of that one.
         """
+        columns = self._helper_column_types(
+            *self.UNIFIED_MARKET_BREADTH_SOURCE.split(".", 1)
+        )
+        if not columns:
+            raise MissingSourceDataError(
+                f"`{self.UNIFIED_MARKET_BREADTH_SOURCE}` does not exist — build "
+                f"gold/market_breadth first."
+            )
+        blocked = set(self.UNIFIED_MARKET_BREADTH_NOT_FEATURES)
+        missing = blocked - set(columns)
+        if missing:
+            # ⚠️ A block-list that silently matches nothing is how an excluded column
+            # comes back: rename it upstream and the guard evaporates without a word.
+            raise PipelineError(
+                f"UNIFIED_MARKET_BREADTH_NOT_FEATURES names {sorted(missing)}, which "
+                f"`{self.UNIFIED_MARKET_BREADTH_SOURCE}` does not have."
+            )
+        features = [c for c in columns if c != "date" and c not in blocked]
         return self._helper_unified_pool_on_date_spine(
             ticker,
             "pool__market_breadth",
             self.UNIFIED_MARKET_BREADTH_SOURCE,
             noun="market series",
+            relation=self.UNIFIED_MARKET_BREADTH_SOURCE,
+            feature_columns=features,
         )
 
     def _ingest_unified_pool_stock_market(self, ticker: str) -> dict:

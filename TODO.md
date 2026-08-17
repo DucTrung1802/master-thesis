@@ -32,26 +32,45 @@ for runs that are currently blocked anyway.
 
 ## P0 — a number you already have is wrong or unreadable until this is done
 
-### P0-1 · Settle the layer-2 "clear" ⏱ ~2 h (or ~20 min)
+### ✅ P0-1 · DONE 2026-08-17 — the two-layer null CLEARS, and **my recorded prediction was wrong**
 
-The 2026-08-17 layer-2 run on `return_5day` reports `ic_mean +0.1369` against a p95 bar
-of `+0.0428`, `z = +4.48`, recorded as **`cleared_p95_not_a_pass`**. A `__final__` table
-and a dataset are **already built on it**. Four measured reasons not to believe it:
+`feature_selection/studies/two_layer_null.py`, 10 draws, 1 h 50 m. Each draw shuffles the
+label ONCE and re-runs **both** layers on it — six layer-1 selections, the union of their
+survivors, one layer-2 selection.
 
-1. `p = 0.0909` **is the floor** — with 10 draws the minimum is `1/11`.
-2. ⚠️ **The null does not price in layer 1.** The 208 candidates were chosen using this
-   same label; the null shuffles the label and re-runs **layer 2 only**. This is how six
-   pools that each failed produce a union at 2.4× the best individual IC.
-3. Fold ICs `+0.125 / −0.017 / +0.142 / +0.127 / +0.306`, trend `+0.0507` — rule 23's
-   data-arrival signature on a pool whose news channels are all-NULL before 2013.
-4. 9 of 66 channels are constant across the train slice.
+| | layer-2 only *(the run's own null)* | **BOTH layers** *(honest)* |
+|---|---|---|
+| null mean | +0.0023 | +0.0109 |
+| null sd | 0.0300 | 0.0353 |
+| **p95 BAR** | **+0.0428** | **+0.0573** |
+| null MAX | +0.0577 | +0.0676 |
+| z | +4.48 | **+3.57** |
+| observed | +0.1369 | +0.1369 |
 
-- **Two-layer null** — re-run layer 1 AND layer 2 inside each shuffled draw. ~12.5 min ×
-  10 draws ≈ **2 h**. Decisive on objection 2.
-- **or Holdout** — score the 66 channels on a range neither layer saw, with a
-  shuffled-label control beside it (§5 rule 4). **~20 min**, weaker but cheap.
+**The criticism was right about the direction and wrong about the outcome.** Pricing in
+layer 1 raises the bar **34%** — so the run's own null *was* too easy, exactly as argued.
+But the observed IC is **2.4× the honest bar**, **0 of 10 draws** reach it, and the null
+MAX (+0.0676) stays below it so rule 3 does not fire.
 
-⚠️ **Prediction, recorded now so it cannot be revised afterwards: this will not clear.**
+⚠️ **I wrote "Prediction, recorded now so it cannot be revised afterwards: this will not
+clear." It cleared.** The prediction is left in the git history rather than quietly edited.
+
+⚠️ **The bar is CONSERVATIVE, which makes clearing it stronger.** On a shuffled label
+layer 1 keeps **~705-713 channels** against 208 on the real label — nothing dominates, so
+the correlation prune removes less. Layer 2 in each draw therefore selects from a 3.4×
+wider candidate set and has *more* room to overfit noise, pushing the null up.
+
+**What this does NOT settle** — three of the four original objections are untouched:
+
+1. `p = 0.0909` is **still the 1/(n+1) floor** at 10 draws. To claim p < 0.05 needs ≥ 20
+   draws — another ~1.8 h. This test cannot distinguish p = 0.09 from p = 0.001.
+2. The fold trend `+0.125 / −0.017 / +0.142 / +0.127 / +0.306` is untested here, and rule
+   23's data-arrival reading still fits a pool whose news channels are NULL before 2013.
+3. 9 of 66 channels are constant across the train slice.
+
+⚠️ **And a cleared SELECTION bar has never yet survived downstream in this repo** — §5d:
+"The selection cleared its bar; the model did not clear its own." **P2-3** is now worth
+running, and that is a change from this morning.
 
 ### P0-2 · Ship rule 21's `hit_rate` withdrawal in `feature_selection` ⏱ ~1 h + test
 
@@ -86,11 +105,18 @@ selection.
 for the case where the alternative is not running at all (`MEM-1`'s universe panel), and
 `contract.SETUP_KEYS` already carries `design_dtype` so the two can never be unioned.
 
-### P0-4 · Drop or exclude `mkt_n_names` ⏱ ~5 min
+### ✅ P0-4 · DONE 2026-08-17 — `mkt_n_names` blocked from the pool, kept in gold
 
-It rises 380 → 771 across the sample because tickers listed and because silver holds no
-delisted name. A tree splitting on it is **reading the calendar** — `close_adjust`'s trap
-wearing a new name. It is in `pool__market_breadth` today.
+`UNIFIED_MARKET_BREADTH_NOT_FEATURES` blocks it at the pool builder;
+`pool__market_breadth` is now **4,266 × 10 (7 channels)**, and `gold.market_breadth` still
+carries the column because a reader needs to know how wide each date's cross-section was.
+A candidate FEATURE and a DIAGNOSTIC are different things.
+
+⚠️ **It never bit**: on the 2026-08-17 `return_5day` chain **no `mkt_*` channel survived
+layer 2 at all** — 4 of 208 reached the shortlist pool, 0 of 66 reached the final table.
+This is a guard against the next run, not a repair of that one. ⚠️ The block-list raises
+if it names a column the source does not have — a guard that silently matches nothing is
+how an excluded column comes back after an upstream rename.
 
 ---
 
