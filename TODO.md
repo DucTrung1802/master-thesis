@@ -47,12 +47,14 @@ below remain the engineering backlog and are unchanged.
 >
 > | | verdict |
 > |---|---|
-> | h=20 model, top-15 of 150, 50 bps | Sharpe **+1.484** test / +1.737 val, z = +4.29/+6.10 ✅ |
-> | h=20 model, ceiling names excluded | **+1.551** test — the band does NOT bite it (below) |
+> | **h=20 model, WALK-FORWARD, 10 folds, top-20, 30 bps** | **Sharpe +1.991** (118 periods, se 0.155), CAGR +47.5 % vs market +0.737/+14.6 %; z = **+12.3**; IC positive **9/10 folds**, beats market **10/10** ✅ |
+> | h=20 model, single split, top-15, 50 bps | Sharpe +1.484 test / +1.737 val, z = +4.29/+6.10 ✅ |
+> | h=20 model, ceiling names excluded | **+1.551** test — the band does NOT bite it (PRF-0) |
 > | h=10 hand screen, k=20, 30 bps | Sharpe **+0.652**, z = +4.72, beats market 0.404 ✅ |
 > | h=5 hand screen, 30 bps | **ties** the market; loses at 50 bps ❌ |
 > | h=3 | worst of all — turnover dominates ❌ |
-> | every cell above, **2022-2026** | flat to negative, indistinguishable from market ⚠️ |
+> | **2022-2026** | ⚠️ **the two disagree and the horizon is why.** The h=5/h=10 HAND screens are flat-to-negative there (`backtest` §8g); the h=20 MODEL is clearly positive in 2023/24/25 (+2.64/+0.90/+1.39) with 2022 the only bad fold, bad for everyone |
+> | the biggest open threat | ⚠️ **PRF-7** — the 13 channels were selected on the WHOLE sample, so every LEVEL above is optimistic by an unmeasured amount. Only the SHAPES are safe |
 
 ### ✅ PRF-0 · DONE 2026-08-19 — the price band does NOT bite the h=20 model
 
@@ -174,7 +176,23 @@ python -m backtest --run <run_id> --top-k 20 --draws 200
 ⚠️ **Add the hand screen as the baseline in the same backtest.** §5 rule 4's shape: a
 model that does not beat three ranked columns has not earned its complexity.
 
-### ⚠️ PRF-3 · The regime question — is the edge gone, or is the FEATURE SET gone? ⏱ ~1 day
+### ⚠️ PRF-3 · The regime question — **PARTLY ANSWERED by PRF-1, and the answer flipped** ⏱ ~1 day
+
+⚠️ **UPDATE 2026-08-19.** This item was written when three independent measurements all
+found the edge dying after 2022. **PRF-1's walk-forward found the opposite at h=20**:
+2023/2024/2025 score **+2.64 / +0.90 / +1.39** against markets of +1.57 / +0.35 / +0.94,
+and 2022 is the only bad fold — a year the equal-weight universe itself ran Sharpe −0.94.
+
+So the break is **not** universal. It is present in the h=5 and h=10 HAND screens and
+absent in the h=20 MODEL. Two candidate reasons, and they are separable: the **horizon**
+(consistent with §2a-bis and with everything else measured this week) or the **feature
+set** (13 selected channels against 3 hand-picked ones). **PRF-2 separates them** — it runs
+the real chain at h=10, holding the feature pipeline fixed and moving only the horizon.
+Run PRF-2 before the training-window experiment below; it is cheaper and it may make it
+unnecessary.
+
+The original framing, still valid for the hand screens:
+
 
 Three independent measurements now find the same break at the same place:
 
@@ -212,6 +230,26 @@ Each is a way the backtest is still kinder than the market. Ordered by expected 
 | **the ATC auction** | signals built from full-day order counts settle only after close; but a partial-day version could be submitted into ATC. That recovers part of the ~19 pp/yr the t+1 lag costs at h=5 | ❌ |
 | **`se_sharpe` on the h=20 cell** | 32 periods, 0.256. PRF-1 fixes this by producing more OOS periods, not by a wider window | ⚠️ known |
 | **max drawdown −55 to −58 %** | at every `k` on the h=10 screen. Statistically tradable ≠ holdable; a vol target or a market-regime filter is the standard answer and neither is tested | ⚠️ known |
+
+### PRF-8 · Test a SMALLER model, not a bigger one ⏱ ~2 h
+
+⚠️ **Nine of ten walk-forward folds stopped at EPOCH 1** (the tenth at epoch 2), val loss
+0.975-1.021 — within ~2 % of the variance of a standardised label. The LSTM takes what it
+can in one pass and overfits from the second. `P2-3` recorded the same on VCB (*"best epoch
+1 of 21"*), and §5c measured eleven architectures spanning 0 to 276 k parameters **inside
+one error bar**, with a 25-parameter ridge among the best.
+
+Three independent observations, one conclusion: **capacity is not the binding constraint.**
+A 205 k-parameter LSTM that converges in one epoch is being paid for and not used.
+
+**Do**: re-run the PRF-1 walk-forward with (a) the LSTM at `hidden_size=16, num_layers=1`
+and (b) `model.gbt`, both on the identical folds, and compare the pooled Sharpe. The fold
+machinery already exists, so this is a config change and one loop.
+
+⚠️ **What would make it worth acting on**: if a model 100× smaller matches the pooled
++1.991, then the result is about the 13 CHANNELS and not about the architecture — which
+also makes PRF-7's look-ahead the whole story rather than part of it. **A cheap model that
+ties an expensive one is evidence about where the signal lives**, not just a saving.
 
 ### PRF-5 · Survivorship — the one bias that flatters a momentum screen ⏱ ~2 days
 
