@@ -195,11 +195,20 @@ do not settle it. This is the first chance to ask it properly: a shortlist of 13
 behind **z = +9.09**, the strongest selection evidence in the repo.
 
 ```powershell
-python -m final_features --apply --scope liquid150      # -> rank_20day__final__d20_h20
+python -m final_features --apply                        # -> rank_20day__final__d20_h20
 python -m train_test_creator --table rank_20day__final__d20_h20 --save
 python -m model.lstm --config configs/lstm__all__rank_20day__final__d20_h20.yaml
 python -m result_evaluator
 ```
+
+⚠️ **NO `--scope`, and an earlier draft of this item was WRONG to say otherwise.**
+`--scope` names EVERY table in the plan, not the one you meant: `--scope liquid150` was
+measured on 2026-08-18 planning `close_adjust_5day__final__d20_h5__liquid150` and
+`return_5day__final__d20_h5__liquid150` as well — two junk duplicates of VCB tables that
+already exist. Plain `--apply` builds only what is missing: the plan reports the two VCB
+tables as `exists=True` and skips them. A scope is for separating two runs that COLLIDE
+on a name, and nothing collides here — `unified_schema_all.rank_20day__final__d20_h20` is
+a name no other group wants.
 
 ⚠️ **On a panel, quote the daily-IC t-stat, never `ic_clears`** — `NUL-3`, the evaluator's
 panel null is not label-neutral. ⚠️ And read `mase` beside it: P2-3's model cleared nothing
