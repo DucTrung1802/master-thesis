@@ -1055,6 +1055,7 @@ prediction and is untouched; this is the other thing, at the grain and horizon �
 | 6 · train_test_creator | `all__rank_20day__final__d20_h20__tr70_val15_test15__std` | 422,251 / 91,462 / 93,224 windows × 20 × 13 |
 | **7 · model** | `lstm__all__rank_20day__final__d20_h20__20260818-195738` | **4m 23s**; test daily IC **+0.0863**, **t = +3.47**, **80.9 % of days positive**; val +0.1282, t = +4.15 |
 | 8 · result_evaluator | ✅ scored and indexed 2026-08-18 | clears its own block-shuffled bar on `ic` and `dir_auc` — ⚠️ a floor, not a result (`NUL-1`) |
+| **9 · backtest** *(NEW 2026-08-18)* | `results/backtest_test.csv` | long-only **top-15 of 150**, 20-session rebalance, **50 bps**: Sharpe **+1.484** (se 0.256), CAGR **+30.5 %** vs an equal-weight universe of +5.96 %. Within-date shuffle null, 200 draws: mean +0.189, p95 bar +0.686, **MAX +1.134 (below observed)**, **z = +4.29** ✅ — and +6.10 on val |
 
 ✅ **`ICT-1` FIXED 2026-08-18, and the `t` above is now the artefact's own.** It read
 `ic_t = 15.50` — overstated by exactly **√h = √20**, because the standard error divided by
@@ -1084,6 +1085,41 @@ constant-predictor 0.29070, so magnitudes are worthless and only the ORDER carri
 selection, architecture search nor early stopping; **(4)** `FNM-1` — the selection scored
 those 13 channels under `feature_normalize=cs_rank` and the dataset feeds them globally
 standardised, so *"built on a shortlist that cleared z = +9.09"* is weaker than it sounds.
+
+### ⚠️ 6-0-bis. AND STAGE 9 ANSWERED THE TRADABILITY QUESTION — portfolio yes, ONE STOCK no
+
+`src/backtest/` (2026-08-18) is the first thing here that charges costs. Two results, and
+the second one matters more for anyone who wants a buy/sell signal on a single name.
+
+**The portfolio works, at this horizon, after costs.** Top-15 of 150, rebalanced every 20
+sessions, 50 bps, long-only (no shorting — HOSE does not offer it): test Sharpe **+1.484**
+/ CAGR **+30.5 %**, val **+1.737** / +69.9 %, clearing a 200-draw within-date shuffle null
+at **z = +4.29** and **+6.10**, null MAX below observed in all four cells. `k` is not a
+knife-edge — Sharpe decays monotonically 1.53 (k=10) → 0.81 (k=75).
+
+⚠️ **This CONTRADICTS §11's regime wall in the direction §2a-bis predicts.** §11 measured
+net@20bps **−0.51 in 2022-26** and called the recent regime unlearnable; this window IS
+2023-26 and returns +1.48 at **50** bps. The two studies differ in the HORIZON — 5 days
+against 20 — which is the variable §2a-bis says nobody controlled for.
+
+⚠️ **VCB, SPECIFICALLY: ZERO TRADES IN 33 PERIODS.** Its median percentile among the 150
+is **0.273**; the maximum it ever reached is **0.826**, so it never touches the 0.90 entry
+band. That is a correct call, not a failure — VCB returned **+1.45 % CAGR** over the test
+window while the universe made 5.96 % and VNINDEX **20.2 %**. Lowering the band until it
+trades gives Sharpe −0.65…+0.38 on 1-12 periods, and none of it beats holding the stock.
+**A correct "do not hold this" is not a tradable signal for that stock.**
+
+⚠️ **THE HORIZON IS ALSO THE COST VARIABLE, and this had never been written down.** At
+turnover 0.70 and 50 bps the annual fee drag is **17.6 % at h=5**, 8.8 % at h=10, **4.4 %
+at h=20** — against a top-100 benchmark CAGR of 9.75 % (§2a-bis). **At h=5 the fees alone
+exceed the market's entire return.** Four single-stock defeats at `h=5` were never going
+to be rescued by a better model. `backtest/CONTEXT.md` §3.
+
+⚠️ **What stage 9 does NOT establish**: `NUL-1` in full force (the null prices in the
+universe, cost, schedule and `k` — never the feature selection, the architecture search or
+the choice of window); **32 periods**, `se_sharpe` 0.256; survivorship protects the z but
+**not** the +30.5 % (§2c); `val` chose the early-stopping epoch; one split, no
+walk-forward.
 
 ⚠️ **It cannot give you a price for one stock, and that is structural.** The label removes
 the market factor by construction, so inverting it needs a 20-day market forecast plus a
@@ -1171,6 +1207,7 @@ below 0.95 coverage, `RPR-1` datasets/runs are git-ignored.
 | [src/final_features/CONTEXT.md](src/final_features/CONTEXT.md) | 3k | building or rebuilding a `__final__` table |
 | [src/train_test_creator/CONTEXT.md](src/train_test_creator/CONTEXT.md) | 3k | building a dataset, or asking about the purge/impute/scale/window steps |
 | **[src/model/CONTEXT.md](src/model/CONTEXT.md)** | **9k** | training, adding a model type, or quoting any run's numbers. **§1a is the RUN STANDARD** (naming/input/output, enforced); §7 the new-model recipe; **§13–§16 are today's results** — CNN, Tier 1, Tier 2, the bank panel; §10–§11 the older research log ⚠️ now a citation without its evidence (RPR-1) |
+| **[src/backtest/CONTEXT.md](src/backtest/CONTEXT.md)** | **5k** | asking whether a signal is TRADABLE — stage 9, the costed non-overlapping backtest. §3 is the cost identity that decides the horizon (h=5 pays **17.6 %/yr** in fees, above the top-100 benchmark's entire return); §4 the first result here to clear a costed null (top-15, z = **+4.29** test / +6.10 val); **§5 is the single-stock answer and it is "no trade"** |
 | [src/result_evaluator/CONTEXT.md](src/result_evaluator/CONTEXT.md) | 3k | scoring, the metric set, or panel-vs-series grain. ⚠️ **STALE — it predates `index.py`, the `rebuild_index` schema change and issue NUL-3.** Nothing in it is false; it is silent about all three |
 | [src/pipeline/CONTEXT.md](src/pipeline/CONTEXT.md) | **3.5k** | the **six**-stage chain, staleness, `--root`/`--scope`, `--rescrape`, adding a stage or a second target |
 | [src/sentiment/CONTEXT.md](src/sentiment/CONTEXT.md) | 2.5k | anything news/text/PhoBERT |

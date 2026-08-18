@@ -416,6 +416,29 @@ then `kgpu run cross-sectional`. That is P2-1 v2.
 
 ---
 
+### ✅ P1-7 · DONE 2026-08-18 — stage 9 exists, and it answered the single-stock question
+
+`src/backtest/`, 14 tests. Full measurement in **`backtest/CONTEXT.md`** and CLAUDE.md
+§6-0-bis; the short version is that the PORTFOLIO clears a costed null (top-15 of 150,
+20-session rebalance, 50 bps, z = **+4.29** test / **+6.10** val) and **VCB alone takes
+zero trades in 33 periods** because the model never ranks it above the 0.826 percentile.
+
+⚠️ **The cost identity is the finding that outlives the run**: at τ=0.70 and 50 bps the
+annual fee drag is **17.6 % at h=5**, 8.8 % at h=10, 4.4 % at h=20, against a top-100
+benchmark CAGR of 9.75 %. **h=5 pays more in fees than the market returns.**
+
+**Left, in order:**
+
+1. **`FNM-1` (P1-6)** — unchanged, and now the last thing between this chain and a claim.
+2. **A WALK-FORWARD**, not one split. §11's regime finding used 28 expanding folds; stage
+   9 has one, and §11 and this run disagree about 2022-26 (see §6-0-bis). One of them is
+   measuring the horizon and one is measuring the window, and only a walk-forward at both
+   horizons separates them. ⏱ model-stage work, not backtest work.
+3. **`h=10` and `h=5` through the identical chain** — the controlled comparison. ⚠️ Read
+   the drag table first: h=10 must beat h=20 by **4.4 pp/yr** just to break even on fees.
+4. **Slippage / ADV cap** — a 15-name book at size moves a top-150 VN name.
+   `pool__basic.value_matched` makes this buildable; stage 9 currently assumes fills.
+
 ## P2 — new measurements worth having
 
 ### ~~P2-1~~ · RETIRED 2026-08-17 — the first version was a bad experiment (kept for the reasoning)

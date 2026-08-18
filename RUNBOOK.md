@@ -78,6 +78,7 @@ for yet.
 | 6 | train_test_creator | `python -m train_test_creator --save` | `src/train_test_set/<dataset>/` | **0.5 s** |
 | 7 | model | `python -m model.lstm` *or* `model/lstm/RUN__lstm.ipynb` | `src/model/runs/<run_id>/` | minutes |
 | 8 | result_evaluator | `python -m result_evaluator` | `results/metrics.json` — ⚠️ **`runs/index.csv` only via `--rebuild-index`** | **41.6 s** `--rescore`, **42.7 s** `--rebuild-index`, 3 runs |
+| 9 | **backtest** | `python -m backtest --run <run_id> --ticker VCB --top-k 15` | `results/backtest_<split>.csv` + `backtest_null_<split>.csv` | **1m 14s** with a 200-draw null |
 
 ⚠️ **Stages 2 and 4 are MANUAL.** `python -m pipeline --apply` stops before each of them
 and prints `MANUAL — cannot be produced here`, because a selection run is the expensive
@@ -111,6 +112,10 @@ python -m model.lstm --config configs/lstm__all__rank_20day__final__d20_h20.yaml
 #     rewrites index.csv.  Neither needs a GPU.
 python -m result_evaluator --rescore         # 41.6 s
 python -m result_evaluator --rebuild-index   # 42.7 s
+
+# 9 — does the ranking pay for its own trading?  ⚠️ PANEL RUNS ONLY.
+python -m backtest --run lstm__all__rank_20day__final__d20_h20__20260818-195738 `
+    --ticker VCB --top-k 15 --draws 200          # 1m 14s
 ```
 
 ⚠️ **`--ticker all` is not optional.** `train_test_creator` defaults to
