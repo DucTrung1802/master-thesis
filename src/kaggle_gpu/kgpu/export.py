@@ -160,6 +160,14 @@ def _export_panel(cfg, folder: Path, manifest: dict, quiet: bool = False) -> Non
     cutoff = spec.get("liquidity_before")
     horizons = [int(h) for h in spec.get("horizons", [])]
     min_width = int(spec.get("min_width", 5))
+    # ⚠️ **THE SELECTION WINDOW, ADDED 2026-08-19 FOR `PRF-7`.** `read_universe_panel`
+    # has always taken `start`/`end`; nothing here passed them, so every panel job saw
+    # the whole sample. PRF-7 needs a run that saw ONLY data an early walk-forward fold
+    # could have seen, to measure how much of the shortlist is selection look-ahead.
+    # ⚠️ Deliberately SEPARATE from `liquidity_before`: the universe must stay identical
+    # between the two runs or the comparison confounds "which names" with "which dates".
+    date_start = spec.get("date_start")
+    date_end = spec.get("date_end")
     if not (top_n and cutoff and horizons):
         raise ValueError(
             f"job {cfg.name!r}: data.panel needs top_n, liquidity_before and horizons. "
@@ -200,7 +208,7 @@ def _export_panel(cfg, folder: Path, manifest: dict, quiet: bool = False) -> Non
 
     frame = read_universe_panel(
         tickers=universe, horizons=tuple(horizons), min_width=min_width,
-        schema_ticker=cfg.data.ticker,
+        schema_ticker=cfg.data.ticker, start=date_start, end=date_end,
     )
     path = folder / f"{PANEL_TABLE}.parquet"
     frame.to_parquet(path, index=False)
@@ -211,6 +219,10 @@ def _export_panel(cfg, folder: Path, manifest: dict, quiet: bool = False) -> Non
         "liquidity_rule": "median value_matched over dates strictly before the cutoff",
         "horizons": horizons,
         "min_width": min_width,
+        # ⚠️ Recorded even when None, so a reader can tell "the whole sample" from
+        # "nobody wrote it down". §5 rule 2 at the manifest.
+        "date_start": date_start,
+        "date_end": date_end,
         "universe": universe,
         "cs_rank_scope": (
             f"within-date rank over the {top_n} SHIPPED names, not over all 781"

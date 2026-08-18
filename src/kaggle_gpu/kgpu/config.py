@@ -266,6 +266,19 @@ def _validate(cfg: JobConfig) -> JobConfig:
             f"  default accelerator, so this is rejected here instead.\n"
             f"  Valid values (or null for the default GPU):\n{options}"
         )
+    # ⚠️ **AND KAGGLE ENFORCES THE SAME 50-CHARACTER CAP ON A KERNEL TITLE, which this
+    # guard did not check until 2026-08-19.** The dataset half was validated here and the
+    # kernel half was not, so a 54-character title passed `plan`, passed `export`, passed
+    # `rehearse`, passed a **4m 41s dataset upload**, and then died on `kernels_push` with
+    # a bare `HTTPError: 400 Bad Request` naming no field. Measured on the PRF-7 job.
+    # Same argument as the dataset check below: anything Kaggle validates server-side is
+    # validated here, where it is free and where the message can say which field.
+    if not 5 <= len(cfg.title) <= 50:
+        raise ValueError(
+            f"job {cfg.name!r}: title is {len(cfg.title)} characters ({cfg.title!r}); "
+            f"Kaggle caps a kernel title at 50 and rejects it with a bare 400 from "
+            f"kernels_push — after the dataset has already been uploaded."
+        )
     if cfg.data is not None:
         if cfg.data.id.count("/") != 1 or "YOUR_" in cfg.data.id:
             raise ValueError(

@@ -18,11 +18,17 @@
         "id": "lyductrung/mt-unified-vcb",
         "title": "master-thesis unified schema payload (VCB)",
         "ticker": "VCB",
-        "source_dirs": ["src/feature_selection", "src/utils"]
+        "source_dirs": [
+          "src/feature_selection",
+          "src/utils"
+        ]
       },
       "parameters": {
         "TICKER": "VCB",
-        "POOLS": ["pool__basic", "pool__targets"],
+        "POOLS": [
+          "pool__basic",
+          "pool__targets"
+        ],
         "TARGET": "close_adjust_5day",
         "HORIZON": 5,
         "LOOKBACK": 20,
@@ -35,7 +41,6 @@
         "NOTES": "run on a Kaggle T4 via kgpu; data shipped as a parquet payload"
       }
     },
-
     "cross-sectional": {
       "id": "lyductrung/mt-cross-sectional-selection-top-150-panel",
       "title": "MT cross-sectional selection (top-150 panel)",
@@ -45,11 +50,16 @@
         "id": "lyductrung/mt-panel-top150",
         "title": "MT cross-sectional panel (top 150, h=20)",
         "ticker": "ALL",
-        "source_dirs": ["src/feature_selection", "src/utils"],
+        "source_dirs": [
+          "src/feature_selection",
+          "src/utils"
+        ],
         "panel": {
           "top_n": 150,
           "liquidity_before": "2014-01-01",
-          "horizons": [20],
+          "horizons": [
+            20
+          ],
           "min_width": 5
         }
       },
@@ -69,12 +79,50 @@
         "NOTES": "TODO P2-1 v2: cs_rank_20day over the top 150 by pre-2014 median turnover, on a Kaggle T4. 150 and not 300 because the top-300 design wants ~39 GB of host RAM against the box's ~29-30 (MEM-1/P3-2): n_eff stays 218 since the dates are unchanged, and the daily-IC sd goes ~0.058 to ~0.082, so z scales by ~0.71 and the universe is still above section 2b's ~100-name threshold."
       }
     },
-
     "smoke": {
       "id": "lyductrung/local-gpu-training",
       "title": "Local GPU Training",
       "notebook": "src/kaggle_gpu/notebooks/train.ipynb",
       "parameters": {}
+    },
+    "cross-sectional-early": {
+      "id": "lyductrung/mt-cross-sectional-selection-pre-2017",
+      "title": "MT cross-sectional selection pre-2017",
+      "notebook": "src/feature_selection/RUN__cross_sectional_panel.ipynb",
+      "results_into": "reports/feature_selection",
+      "data": {
+        "id": "lyductrung/mt-panel-top150-pre2017",
+        "title": "MT panel top150 h20 pre-2017",
+        "ticker": "ALL",
+        "source_dirs": [
+          "src/feature_selection",
+          "src/utils"
+        ],
+        "panel": {
+          "top_n": 150,
+          "liquidity_before": "2014-01-01",
+          "horizons": [
+            20
+          ],
+          "min_width": 5,
+          "date_end": "2017-01-01"
+        }
+      },
+      "parameters": {
+        "TICKER": "ALL",
+        "TARGET": "cs_rank_20day",
+        "HORIZON": 20,
+        "LOOKBACK": 20,
+        "DEVICE": "cuda",
+        "DESIGN_DTYPE": "float64",
+        "MIN_IC_WIDTH": 5,
+        "RUN_STABILITY": true,
+        "RUN_NULL": false,
+        "N_NULL": 0,
+        "HOLDOUT_START": null,
+        "REPORT_ROOT": "reports/feature_selection",
+        "NOTES": "TODO PRF-7, the CHEAP half. Identical to the `cross-sectional` job in every respect except the DATA WINDOW: dates < 2017-01-01, i.e. only what the earliest walk-forward fold could have seen. Same universe (liquidity_before stays 2014-01-01), same target, horizon, lookback, min_width, dtype and ensemble, so the ONLY thing that moves is which dates the selection saw. The question is whether the same channels survive: the full-sample run shortlisted 13 of 90 candidates, and two random 13-subsets of 90 would share 1.9 by chance. NO NULL on purpose - the kept SET is the measurement here, not its bar, and dropping the null takes the run from ~6 h to well under one."
+      }
     }
   }
 }
