@@ -242,6 +242,38 @@ derived target still stores its base column, so the second test is False exactly
 the warning is most needed. That bug shipped in the first build and is why the flag
 exists.
 
+## 5b. ⚠️ THE UNIVERSE TRAVELS NOW — `UNI-1`, fixed 2026-08-18
+
+§5 says a rank depends on which other names are in the panel. That is the argument for
+not storing it — and it is equally an argument that the **names themselves** are part of
+the label. They were not carried: this module built from the pools of
+`unified_schema_<ticker>`, which on `ALL` is **781 names**, so a table built from a
+150-name shortlist would have been ranked over 781 by whoever read it.
+
+Three changes, and the second is the one that matters:
+
+1. `_read_outstanding` reads `metadata.json → input.universe` (recorded by
+   `feature_selection.report` since 2026-08-18) onto every shortlist row.
+2. **It is a GROUP KEY.** Two runs at the same target and the same knobs over different
+   populations are two experiments; unioning them would produce a table whose label is a
+   rank across a population **neither run used**. They now collide on the table name and
+   `plan_from_reports` **raises** — pass `--scope`, exactly as for any other collision.
+3. `build_sql` emits `WHERE base.ticker IN (…)`, and `comment()` records the first eight
+   names plus a sha1 of the sorted set, so a later reader can ask *"is this the same
+   population?"* without diffing prose.
+
+⚠️ **Appended to the group keys here rather than added to `contract.SETUP_KEYS`.** A new
+SETUP_KEY raises on every archived run that predates it (`MTH-1`), and a universe is a
+fact about a CROSS-SECTIONAL run only — this keeps two universes apart without
+invalidating 30 single-ticker runs that never had one.
+
+⚠️ **NOT in the fingerprint.** Adding it would report every existing table STALE at once.
+The collision guard above is what stops the wrong population being built; the fingerprint
+stays a statement about the CHANNEL SET, which is what it has always meant.
+
+⚠️ An empty universe means *"every name in the source pools"* — right for a single-ticker
+chain, and right for `unified_schema_bank`, which IS its universe.
+
 ## 5a. ⚠️ The shortlist fingerprint — how a stale table is detected
 
 Every table's `COMMENT` carries `Shortlist fingerprint: <digest> over <n> channels` —

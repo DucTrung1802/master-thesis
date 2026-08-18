@@ -149,7 +149,7 @@ how an excluded column comes back after an upstream rename.
 
 ---
 
-### ⚠️ P0-5 · `RNK-1` — re-rank at dataset build ⏱ ~half a day
+### ✅ P0-5 · DONE 2026-08-18 — `RNK-1`, the label is reconstituted at dataset build
 
 **The model is trained on a label the selection never scored.** `final_features` stores
 `return_{h}day` because a rank belongs to a run and not to a row (its §5), on the stated
@@ -166,15 +166,21 @@ universe it ranked over in the dataset metadata. ⚠️ Do **not** reach for
 `cross_sectional.cross_sectional_rank` and stop there — `min_width` is part of the label's
 definition and must travel with it.
 
-### ⚠️ P0-6 · `UNI-1` — carry the universe through the handoff ⏱ ~2 h
+### ✅ P0-6 · DONE 2026-08-18 — `UNI-1`, the universe travels and cannot union
 
 `RNK-1`'s sibling: RNK-1 is the wrong COLUMN, this is the wrong POPULATION. The run folder
 already records `input.universe` (150 tickers); `final_features` never reads it and would
 build over `unified_schema_all`'s **781**. Filter the build to it, and put it in the table
 `COMMENT` so a dataset built later cannot silently widen it.
 
-⚠️ **Both are needed before P1-5 means anything**, and neither has produced a wrong number
-yet only because no cross-sectional `__final__` table exists on `ALL`.
+✅ **Both shipped, 151 tests passing across the three affected packages.** `RNK-1`: one
+definition of the label, asserted equal to `cross_sectional_rank` at **atol = 0**; thin
+dates dropped and counted; `metadata.json → target.column` now means what `y` IS.
+`UNI-1`: the universe is a GROUP KEY, so two populations collide on the table name and
+**raise** instead of unioning; `build_sql` emits `WHERE base.ticker IN (…)`; the COMMENT
+carries eight names and a sha1. `final_features` had **no tests at all** and now has seven.
+
+⚠️ **P1-5 is unblocked and has NOT been run** — that was the instruction.
 
 ---
 

@@ -286,6 +286,14 @@ class FinalTablePlan:
     columns_by_table: Dict[str, List[str]]
     runs: List[str] = field(default_factory=list)
     evidence: Dict[str, int] = field(default_factory=dict)
+    # ⚠️ **THE NAMES THE LABEL WAS RANKED ACROSS — `UNI-1`, 2026-08-18.** `cs_rank_{h}day`
+    # is a rank WITHIN a chosen set, so the label means nothing without it. The run folder
+    # has recorded it since 2026-08-18 (`metadata.json → input.universe`) and this module
+    # ignored it: a table built from a 150-name shortlist would be built over
+    # `unified_schema_all`'s 781 and the model trained on a label the selection never
+    # scored. Empty means "every name in the source pools", which is right for a
+    # single-ticker chain and for a schema that IS its universe (`unified_schema_bank`).
+    universe: List[str] = field(default_factory=list)
     # `final` (the model's input, target column included) or `shortlist` (layer 2's
     # input pool, features only). See `table_name`.
     shape: str = SHAPE_FINAL
@@ -342,8 +350,19 @@ class FinalTablePlan:
                 f" ⚠️ Target {self.target!r} is NOT stored: it is ranked within a date "
                 f"across a chosen universe, so it depends on which other names are in "
                 f"the panel rather than on this row — {self.stored_target!r} is stored "
-                f"instead and the reader re-ranks with "
-                f"cross_sectional.cross_sectional_rank."
+                f"instead and train_test_creator._label re-ranks it at dataset "
+                f"build (RNK-1)."
+            )
+        if self.universe:
+            # ⚠️ The NAMES, not just the count: a rank over 150 liquid names and a
+            # rank over 150 different ones are two labels, and a table recording
+            # only "150" cannot tell a later reader which of them it holds.
+            note += (
+                f" ⚠️ UNIVERSE: restricted to the {len(self.universe)} names the "
+                f"selection ranked across, and the label is a rank WITHIN them — "
+                f"{', '.join(sorted(self.universe)[:8])}"
+                + (", …" if len(self.universe) > 8 else "")
+                + f" (sha1 {_universe_digest(self.universe)})."
             )
         if self.shape == SHAPE_SHORTLIST:
             # ⚠️ Two facts a reader of this pool cannot get from its columns. The first
@@ -429,7 +448,15 @@ def _read_outstanding(root: str) -> pd.DataFrame:
         if not (os.path.exists(path) and os.path.exists(meta_path)):
             continue
         frame = pd.read_csv(path)
-        setup = json.load(open(meta_path, encoding="utf-8"))["setup"]
+        meta = json.load(open(meta_path, encoding="utf-8"))
+        setup = meta["setup"]
+        # ⚠️ **A GROUP KEY, NOT A DECORATION (`UNI-1`).** Two runs at the same target and
+        # the same knobs but over DIFFERENT universes are two experiments, and unioning
+        # them would produce a table whose label is a rank across a population neither
+        # run used. Carried as a sorted JSON string so it groups by value; the list
+        # itself is unpacked back onto the plan below.
+        universe = (meta.get("input") or {}).get("universe") or []
+        frame["universe"] = json.dumps(sorted(universe))
         # ⚠️ **MTH-1.** Fills the SETUP_KEYS a pre-2026-08-16 run legitimately omits
         # (`methods`) and sorts the ensemble membership so member ORDER cannot split
         # one experiment into two tables. Defined in `feature_selection.contract`
@@ -535,6 +562,12 @@ def plan_from_reports(
 
     plans: List[FinalTablePlan] = []
     group_keys = ["schema", "target"] + [k for k in SETUP_KEYS if k in rows.columns]
+    # ⚠️ Appended rather than added to `contract.SETUP_KEYS`: a new SETUP_KEY raises on
+    # every archived run that predates it (`MTH-1`), and the universe is a fact about a
+    # CROSS-SECTIONAL run only. Grouping here keeps two universes apart without
+    # invalidating 30 single-ticker runs that never had one.
+    if "universe" in rows.columns:
+        group_keys = group_keys + ["universe"]
     for key, group in rows.groupby(group_keys, dropna=False):
         setup = dict(zip(group_keys, key))
         # ⚠️ **PER GROUP, NEVER GLOBALLY.** Filtering the whole frame to layer 2 would
@@ -576,6 +609,7 @@ def plan_from_reports(
                 evidence=group.groupby("evidence")["run_id"].nunique().to_dict(),
                 shape=shape,
                 layer=layer,
+                universe=json.loads(setup.get("universe") or "[]"),
             )
         )
 
@@ -612,6 +646,18 @@ def build_sql(plan: FinalTablePlan) -> str:
             f"{alias}.{_identifier(c, 'channel')}" for c in plan.columns_by_table[table]
         ]
 
+    # ⚠️ **THE POPULATION IS PART OF THE LABEL (`UNI-1`).** Without this the build
+    # runs over every name in the source pools — 781 on `unified_schema_all` — and
+    # `train_test_creator` then re-ranks over 781 while the shortlist above it was
+    # chosen over 150. The literals are validated as identifiers first: they arrive
+    # from a JSON artefact and are interpolated into DDL.
+    where = ""
+    if plan.universe:
+        names = ", ".join(
+            "'" + _identifier(t, "universe ticker") + "'" for t in sorted(plan.universe)
+        )
+        where = f"WHERE  base.ticker IN ({names})\n"
+
     using = ", ".join(KEY_COLS)
     joins = [
         f"JOIN {schema}.{_identifier(t, 'table')} AS {_alias(t)} USING ({using})"
@@ -627,8 +673,19 @@ def build_sql(plan: FinalTablePlan) -> str:
         f"SELECT {body}\n"
         f"FROM   {schema}.{_identifier(base, 'table')} AS base\n"
         f"{join_sql}\n"
+        f"{where}"
         f"ORDER BY {keys};"
     )
+
+
+def _universe_digest(universe: Sequence[str]) -> str:
+    """A short stable digest of a universe, for the COMMENT.
+
+    A universe can be 300 tickers. A reader needs to answer "is this the same
+    population as that run" without diffing prose, and the first eight names plus
+    this digest do it.
+    """
+    return hashlib.sha1(",".join(sorted(universe)).encode("utf-8")).hexdigest()[:10]
 
 
 def _alias(table: str) -> str:
