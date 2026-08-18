@@ -136,7 +136,7 @@ next model test should be SMALLER, not bigger.**
 
 `src/walkforward/CONTEXT.md` has the full per-fold table.
 
-### ⚠️ PRF-7 · The selection look-ahead is now the biggest open threat ⏱ ~60 GPU-h
+### ✅ PRF-7 · DONE 2026-08-19 — the look-ahead is MILD, and the levels roughly stand
 
 PRF-1 removed the model's look-ahead and left the selection's. The 13 channels behind
 every result in `backtest/CONTEXT.md` §4 and the walk-forward above were chosen **using
@@ -145,6 +145,54 @@ the label over 2009-2026**, i.e. including every test fold.
 **The honest version** re-runs `feature_selection` inside each fold on that fold's train
 window only — ~6 GPU-h per fold on a T4, ~60 h for ten. Affordable on Kaggle's 30 GPU-h/week
 across two weeks, not affordable locally.
+
+**RESULT — `cross-sectional-early` on a Kaggle T4, 10m 34s.** Identical job in every
+respect except the DATA WINDOW: dates < 2017-01-01, exactly what walk-forward fold 0 could
+have seen (its train ends 2016-01-01, its val is 2016). Universe unchanged at 150 names,
+same target/horizon/lookback/min_width/dtype/ensemble. Panel 273,367 × 104 over 1,995
+dates against the full run's 624,448 over 4,368. `RUN_NULL=false` — the kept SET is the
+measurement, not its bar.
+
+| | full sample | pre-2017 | |
+|---|---|---|---|
+| kept | 61 of 90 | 57 of 90 | **overlap 51**, Jaccard **0.761**, **5.8 sd above chance** (38.6 expected) |
+| shortlisted | 13 | 15 | **overlap 8**, chance 2.17 → **4.7 sd** |
+| top 2 channels | `drv_order_vol_imb`, `drv_dist_from_high_252` | the same two, order swapped | ✅ |
+| `ic_mean` | +0.1075 | **+0.0973** | −9.5 % on **44 %** of the data |
+| Spearman of rank among the 8 shared | | | +0.571 |
+
+⚠️ **AND ALL FIVE SHORTLIST "MISSES" HAVE A FAMILY TWIN IN THE EARLY KEPT SET** — which
+makes 8-of-13 an understatement of the agreement:
+
+| full shortlisted, early did not | twin present in early's kept set |
+|---|---|
+| `drv_parkinson_5` | `drv_garman_klass_5` — and the full run's own `outstanding.csv` records it as having ABSORBED that twin |
+| `drv_rogers_satchell_5` | `drv_garman_klass_5` |
+| `drv_order_vol_imb_21` | **itself** — kept, just not shortlisted |
+| `drv_parkinson_21` | `drv_rogers_satchell_21` |
+| `n_sell_orders` | `avg_vol_per_sell_order`, `drv_order_count_imb` |
+
+**This is P0-3's phenomenon with a different cause**: the selection breaks ties among
+channels the correlation prune considers interchangeable, and less data moves which
+representative wins — not which FAMILY wins.
+
+**Reading**: the shortlist is **not period-fitted**. A walk-forward that re-ran the
+selection per fold would have picked substantially the same channels, so the levels in
+`walkforward/CONTEXT.md` §3 roughly stand rather than being an artefact.
+
+⚠️ **What it does NOT prove.** The early run is noisier by construction — `n_eff_per_fold`
+**14.3 against 38.1**, `ic_fold_sd` 0.056 against 0.034, `ic_min` 0.012 against 0.060 — so
+some of the disagreement is sample size and not window. And a stable channel SET does not
+make the measured IC level unbiased; it bounds the problem rather than removing it. **The
+~60 GPU-h per-fold version is no longer worth its cost**, which is what the cheap half was
+for.
+
+⚠️ `close_adjust` survives in BOTH (full #12, early #15), so the price-level-as-size-proxy
+worry is not an artefact of the full-sample window either. It is a real, stable pick.
+
+---
+
+**The original framing, kept:**
 
 **The cheap partial**: run the selection on 2009-2016 alone and compare the kept set with
 the current 13. ⏱ ~6 GPU-h. If the overlap is high the look-ahead is mild and the levels

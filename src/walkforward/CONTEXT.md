@@ -130,9 +130,15 @@ better period, not because the folds leak.**
 
 ## 6. What it still does NOT establish
 
-1. ⚠️ **The selection look-ahead is untouched** (§2). Every fold's LEVEL is optimistic by
-   an unmeasured amount. The apples-to-apples check above does **not** rule this out — the
-   single split shares the same advantage.
+1. ⚠️ **The selection look-ahead is untouched** (§2) — but it has since been **MEASURED
+   and found MILD** (TODO `PRF-7`, 2026-08-19). Re-running the identical selection on
+   dates < 2017-01-01 alone — exactly what fold 0 could have seen — keeps **51 of 61**
+   channels (Jaccard 0.761, **5.8 sd above chance**), shortlists **8 of 13** against a
+   chance of 2.17, picks the **same top two**, and reaches `ic_mean` **+0.0973** against
+   +0.1075 on 44 % of the data. All five shortlist misses have a family twin in the early
+   kept set. So the channel set is **not period-fitted** and the levels below roughly
+   stand. ⚠️ It bounds the bias rather than removing it, and the early run is noisier by
+   construction (`n_eff_per_fold` 14.3 against 38.1).
 2. **13 periods per fold**, `se_sharpe` 0.28-1.04. Individual folds are noisy; the pooled
    118-period figure is the one to quote.
 3. **`NUL-1`** — the null prices in the universe, cost, schedule and `k`, never the feature
