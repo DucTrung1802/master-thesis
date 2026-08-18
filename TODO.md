@@ -423,6 +423,24 @@ against the smoke run, then one more T4 round trip.
 ⚠️ **Panel mode is NOT what failed and must not be re-opened.** Everything `kgpu` adds ran
 on the worker; what died is a ranker step at a width no single-ticker run has ever reached.
 
+### ⚠️ SECOND ATTEMPT, 2026-08-18 — one wall further, and a DECISION was needed
+
+With P1-4's chunking, the same job on the same payload got **past** the step that killed
+it: `spearman vs target` **12.3 s** where it had OOMed. `window design` 198.1 s. Then
+phase 4 of 9 — `rank (the ensemble's methods)` — took the kernel down with
+`DeadKernelError` and no traceback: a host-RAM kill, ~39 GB wanted against ~29-30 GB.
+
+**Two honest ways forward, and they are not equivalent:**
+
+| | cost | what it costs the RESULT |
+|---|---|---|
+| **(a) top-150 by turnover**, everything else identical | one round trip, today | `n_eff` stays **218** — dates are unchanged. Daily-IC sd goes ~0.058 → ~0.082, so **z scales by ~0.71**. Still above §2b's ~100-name threshold |
+| **(b) fix `P3-2` first**, then run top-300 | ~a day of streaming work | nothing — full power, `z` as designed |
+
+⚠️ **Halving the DATES instead would cost exactly the same `z` (both scale it by √½), and
+would cost `n_eff` as well** — 218 → 109. Prefer cutting names; they are the axis that
+buys precision, not independence.
+
 ### ⚠️ THIRD ATTEMPT, 2026-08-18 — **IT RAN**, top-150, and the result has NO BAR
 
 `2026-08-17_235146__all__basic__cs_rank_20day`, Tesla T4, **22m 53s**, 624,448 × 104,
@@ -496,24 +514,6 @@ not `p`**.
 column appears to over-state the error bar by ~√N ≈ 12×. If so it is `PNL-1`'s family at
 the summary instead of the scorer, and it is **conservative** (too wide), which is why it
 has never manufactured a result — but it should not be quoted as this run's error bar.
-
-### ⚠️ SECOND ATTEMPT, 2026-08-18 — one wall further, and a DECISION was needed
-
-With P1-4's chunking, the same job on the same payload got **past** the step that killed
-it: `spearman vs target` **12.3 s** where it had OOMed. `window design` 198.1 s. Then
-phase 4 of 9 — `rank (the ensemble's methods)` — took the kernel down with
-`DeadKernelError` and no traceback: a host-RAM kill, ~39 GB wanted against ~29-30 GB.
-
-**Two honest ways forward, and they are not equivalent:**
-
-| | cost | what it costs the RESULT |
-|---|---|---|
-| **(a) top-150 by turnover**, everything else identical | one round trip, today | `n_eff` stays **218** — dates are unchanged. Daily-IC sd goes ~0.058 → ~0.082, so **z scales by ~0.71**. Still above §2b's ~100-name threshold |
-| **(b) fix `P3-2` first**, then run top-300 | ~a day of streaming work | nothing — full power, `z` as designed |
-
-⚠️ **Halving the DATES instead would cost exactly the same `z` (both scale it by √½), and
-would cost `n_eff` as well** — 218 → 109. Prefer cutting names; they are the axis that
-buys precision, not independence.
 
 ### P2-2 · `cs_rank_5day` on the top ~300 by turnover ⏱ ~1 h
 
