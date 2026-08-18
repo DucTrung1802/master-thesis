@@ -1096,7 +1096,7 @@ dataset both end 2026-06-25 rather than 2026-08-07.
 `final_features` groups on `(schema, target, setup)` — **no term for which pools** — so a
 `pool__basic`-only run and a `basic + X` run are ONE group and get unioned.
 
-**Open issues live in [ISSUES.md](ISSUES.md)** (**14 open**, 33 resolved, codes permanent).
+**Open issues live in [ISSUES.md](ISSUES.md)** (**15 open**, 33 resolved, codes permanent).
 Short version: ⚠️ **`SHP-1`** the forex scraper writes two file shapes and only one was
 ever ingested — 71% of the folder was silently discarded until 2026-08-14, and **the
 same `value`-only filter sits unchecked on `bonds`/`funds`/`economy`/`indices`**;
@@ -1146,7 +1146,7 @@ brokers' books are unreachable.
 | file | what it is | read it when |
 |---|---|---|
 | **[RUNBOOK.md](RUNBOOK.md)** | the operating guide — 8 stages with MEASURED runtimes, the two flags that destroy things, the target-switch leakage trap, and §10's list of what is deliberately not standardized | you are about to run something |
-| **[ISSUES.md](ISSUES.md)** | 14 open / 33 resolved, permanent codes | before quoting any number — four of them change how a number may be READ |
+| **[ISSUES.md](ISSUES.md)** | 15 open / 33 resolved, permanent codes | before quoting any number — four of them change how a number may be READ |
 | **[TODO.md](TODO.md)** | the one backlog, priority-ordered, every item costed | deciding what to do next |
 | `README.md` | the front door; routes here | — |
 | `THESIS_PROGRESS_2026*.md`, `THESIS_SUMMARY_2026_VI.md` | deliverable write-ups (EN + VI) | writing the thesis, not running the pipeline |

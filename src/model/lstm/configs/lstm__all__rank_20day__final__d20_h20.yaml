@@ -1,0 +1,68 @@
+# LSTM on the TOP-150 CROSS-SECTION — 150 tickers, one model over all of them, h=20.
+#
+# Dataset built by
+#   python -m final_features --apply
+#   python -m train_test_creator --ticker all --table rank_20day__final__d20_h20 --save
+# from unified_schema_all.rank_20day__final__d20_h20 (624,448 x 17, 150 names,
+# 2009-01-02 -> 2026-08-07), whose universe is the top 150 by median matched turnover
+# BEFORE 2014-01-01 — chosen on data prior to the evaluation window, not over the
+# whole sample, so "top 150" is not look-ahead.
+#
+# ⚠️ THE LABEL IS A RANK, AND THAT IS NEW. The table stores `return_20day`;
+# `train_test_creator._label` re-ranks it within each date across the 150 shipped
+# names (RNK-1, fixed 2026-08-18). Verified on the tensors rather than asserted:
+# excess kurtosis -1.199 / -1.200, the theoretical value for a UNIFORM distribution,
+# bounded at ±1.720 after standardisation. Every earlier panel run in this repo —
+# including lstm__bank__rank_5day — trained on the absolute return instead, so THIS
+# RUN IS NOT COMPARABLE WITH THOSE.
+#
+# ⚠️ WHAT IT IS TESTING. The shortlist behind it cleared a 20-draw null at z = +9.09
+# (bar +0.0388, null max +0.0410, below the observed) — the strongest selection
+# evidence in the repo. Twice before, a cleared selection bar bought nothing
+# downstream (§5d, P2-3). This asks whether that survives when the model is finally
+# aimed at the label the selection scored.
+#
+# ⚠️ READ ON A PANEL: the daily-IC t-stat, never `ic_clears` — the evaluator's panel
+# null is not label-neutral (NUL-3). And read `mase` beside it: P2-3's model cleared
+# nothing and still lost to "predict no change" at mase 1.068, which was the line
+# that mattered.
+#
+# ⚠️ `lookback` and `n_features` are ASSERTIONS. engine._verify raises if the dataset
+# disagrees — the dataset is the authority.
+
+run_name: lstm__all__rank_20day__final__d20_h20
+dataset: all__rank_20day__final__d20_h20__tr70_val15_test15__std
+task: regression
+
+lookback: 20
+# 13 of 13 selected channels; none dropped for coverage.
+n_features: 13
+
+# Unchanged from the VCB and BANK runs ON PURPOSE. The architecture is the one thing
+# held constant across every LSTM in this repo, so a difference in the result is a
+# difference in the DATA and not in the model (§5c ranked eleven architectures inside
+# one error bar — capacity is not what has been missing).
+model:
+  type: LSTM
+  hidden_size: 128
+  num_layers: 2
+  dropout: 0.2
+
+train:
+  # ⚠️ 422,251 train windows against BANK's 26,964 — 16x. The batch doubles so an
+  # epoch is ~825 steps rather than ~1,650; everything else is BANK's schedule, so
+  # the optimiser is not a second thing that changed.
+  batch_size: 512
+  lr: 0.001
+  weight_decay: 0.00001
+  max_epochs: 100
+  patience: 15
+  grad_clip: 1.0
+  lr_factor: 0.5
+  lr_patience: 5
+  log_every: 5
+
+null_draws: 200
+
+seed: 42
+device: auto
