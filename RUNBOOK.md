@@ -85,6 +85,52 @@ artefact and must be a deliberate act. Everything else `--apply` will do for you
 
 ---
 
+## 3a. ⚠️ THE CROSS-SECTIONAL CHAIN — every command as actually run, 2026-08-18
+
+The chain that produced the repo's first out-of-sample model skill. Copy it; every runtime
+below was measured on this machine, and the two traps in it each cost something today.
+
+```powershell
+cd src
+# 2 — the selection is MANUAL and ran on a Kaggle T4 (6 h 07 m with a 20-draw null).
+#     See §7a. Its run folder is already merged into reports/feature_selection/.
+
+# 5 — the final table.  ⚠️ NO --scope.
+python -m final_features --apply                                   # 7.3 s
+#    -> unified_schema_all.rank_20day__final__d20_h20   624,448 x 17  (13 channels)
+
+# 6 — tensors.  ⚠️ --ticker all IS NOT OPTIONAL.
+python -m train_test_creator --ticker all --table rank_20day__final__d20_h20 --save
+#    -> all__rank_20day__final__d20_h20__tr70_val15_test15__std     10.9 s
+#       train 422,251 | val 91,462 | test 93,224   x 20 x 13
+
+# 7 — train (config must be written FIRST; see below)
+python -m model.lstm --config configs/lstm__all__rank_20day__final__d20_h20.yaml   # 4m 23s
+
+# 8 — score it
+python -m result_evaluator
+```
+
+⚠️ **`--ticker all` is not optional.** `train_test_creator` defaults to
+`chain.DEFAULT_TICKER`, which is `vcb`, and would look for the table in the wrong schema.
+
+⚠️ **NO `--scope`, and an earlier draft of this runbook was wrong to suggest one.**
+`--scope` names EVERY table in the plan: `--scope liquid150` was measured planning
+`close_adjust_5day__final__d20_h5__liquid150` and `return_5day__final__d20_h5__liquid150`
+as well — two junk duplicates of VCB tables that already exist. Plain `--apply` reports
+those two as `exists=True, fingerprint matches` and skips them. A scope separates two
+groups that COLLIDE on a name; nothing collides here.
+
+⚠️ **DO NOT use `python -m pipeline --apply` for this chain.** Its `shortlist_pool` row
+says *"would run"* and `--apply` would build a `pool__shortlist__rank_20day__d20_h20` that
+**nothing can ever select over** — a cross-sectional selection reads `pool__basic ⋈
+pool__targets` only (`CSP-1`), so there is no layer 2 and stages 3-4 do not exist here.
+Its `selection_2` row also reports another chain's runs as `up to date` (`P4-11`).
+
+⚠️ **The model config cannot be written before stage 6 exists.** `n_features` is an
+ASSERTION `engine._verify` raises on, and the surviving channel count is only known once
+the dataset is built. Write it between 6 and 7, filename **equal to `run_name`**.
+
 ## 4. The two flags that decide whether you destroy something
 
 | flag | on | means |
@@ -260,6 +306,15 @@ a smoke test, never a number.
    search (`NUL-1`). *A run that fails it is dead; a run that clears it is not yet alive.*
 5. **On a PANEL (`bank`, `vn30`, …), quote the daily-IC t-stat, never `ic_clears`** — the
    evaluator's panel null is not label-neutral (`NUL-3`).
+6. ⚠️ **AND THAT t-STAT IS ITSELF WRONG UNTIL `ICT-1` IS FIXED.** `metrics.csv`'s `ic_t`
+   divides by `n_dates`, not by `n_eff = n_dates/h`, so it is overstated by **exactly
+   `√h`** — measured 2026-08-18: **15.50 reported against +3.47 honest** at h=20. Until
+   the one-line fix and `--rescore` land, compute it yourself from `predictions_*.csv`:
+   Spearman per date, then `mean / (sd / √(n_dates/h))`. **Every panel run in `index.csv`
+   currently carries the overstated figure.**
+7. **A rank target's `long_short` is NOT money.** The metric is documented "in return
+   units", which holds when the label is a return; on `cs_rank_*` it is a spread of
+   RANKS. The 2026-08-18 run's `+0.0635` is not 6.35 %.
 
 ---
 

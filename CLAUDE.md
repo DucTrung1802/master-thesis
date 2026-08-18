@@ -1035,20 +1035,56 @@ R² −0.90 → −0.059 on the same ticker, target and splits, at 4,961 paramet
 `pool__basic` build; a rebuild of the 750-channel table would INNER-join back down to
 2026-06-25 **and look unchanged**. `status_data` reports it as `pools_behind`.
 
-## 6. State today (2026-08-17)
+## 6. State today (2026-08-18)
 
-⚠️ **This section was 7 days stale until 2026-08-17** — it described an empty archive, a
-750-channel VCB table and a missing `src/train_test_set/`, none of which is true. If a
-number here disagrees with the database, the database is right and this section is the bug.
+⚠️ **If a number here disagrees with the database, the database is right and this section
+is the bug.** It was 7 days stale once already.
+
+### ⚠️ 6-0. THE HEADLINE, and what a new session should read first
+
+**The cross-sectional chain ran end to end for the first time, and the model at the bottom
+of it shows out-of-sample skill that survives an honest error bar.** That has never
+happened in this repo before — §2's verdict is about SINGLE-STOCK SHORT-HORIZON
+prediction and is untouched; this is the other thing, at the grain and horizon §2b and
+§2a-bis pointed to.
+
+| stage | artefact | number |
+|---|---|---|
+| 2 · selection | `2026-08-18_072323__all__basic__cs_rank_20day` | `ic_mean` **+0.1075**, 20-draw null bar **+0.0388**, null max +0.0410 (below observed), **z = +9.09** — §2b-bis |
+| 5 · final_features | `unified_schema_all.rank_20day__final__d20_h20` | 624,448 × 17, **150 names**, 621,448 labelled |
+| 6 · train_test_creator | `all__rank_20day__final__d20_h20__tr70_val15_test15__std` | 422,251 / 91,462 / 93,224 windows × 20 × 13 |
+| **7 · model** | `lstm__all__rank_20day__final__d20_h20__20260818-195738` | **4m 23s**; test daily IC **+0.0863**, **t = +3.47**, **80.9 % of days positive**; val +0.1282, t = +4.15 |
+| 8 · result_evaluator | ⛔ **NOT RUN** | see TODO |
+
+⚠️ **THE `t` ABOVE IS COMPUTED BY HAND AND THE ONE IN THE ARTEFACT IS WRONG.** `metrics.csv`
+reports `ic_t = 15.50`; the honest figure is **+3.47**, overstated by exactly **√h = √20**
+because the standard error divides by `n_dates` and not by `n_eff = n_dates/h`. That is
+`ICT-1`, opened 2026-08-18, and it is the column `NUL-3` tells you to read instead of
+`ic_clears`. **Fix it before quoting anything from a panel run.**
+
+⚠️ **Four things this result does NOT say**, all of them measured or structural:
+**(1)** it ranks, it does not price — R² test **+0.0003**, RMSE 0.29065 against a
+constant-predictor 0.29070, so magnitudes are worthless and only the ORDER carries;
+**(2)** `long_short = +0.0635` is a **rank** spread, not money — the label is a rank;
+**(3)** the evaluator's own `verdict.txt` says its null prices in neither feature
+selection, architecture search nor early stopping; **(4)** `FNM-1` — the selection scored
+those 13 channels under `feature_normalize=cs_rank` and the dataset feeds them globally
+standardised, so *"built on a shortlist that cleared z = +9.09"* is weaker than it sounds.
+
+⚠️ **It cannot give you a price for one stock, and that is structural.** The label removes
+the market factor by construction, so inverting it needs a 20-day market forecast plus a
+cross-sectional dispersion forecast — the two things §2 has failed at four times. What it
+answers is *"where will VCB sit among these 150 over the next 20 sessions"*, and reading
+that requires scoring all 150 on the same date.
 
 ### What exists right now
 
-| | VCB | BANK |
-|---|---|---|
-| selection runs | **29** run folders in `reports/feature_selection/` | (shared) |
-| `final_features` | `close_adjust_5day__final__d20_h5` 4,266 × 39 (35 ch) · **`return_5day__final__d20_h5` 4,235 × 70 (66 ch)** | `rank_5day__final__d20_h5` 53,921 × 18 · `…__basic` 54,528 × 16 |
-| datasets on disk | **3 VCB** (`close_adjust_5day`, `return_5day`, `return_5day__basic`) | 1 |
-| model runs | **2** — `lstm__vcb__close_adjust_5day…20260816-165606`, **`lstm__vcb__return_5day…20260817-205952`** (TODO P2-3) | 0 |
+| | VCB | BANK | **ALL (top-150)** |
+|---|---|---|---|
+| selection runs | **31** run folders in `reports/feature_selection/` | (shared) | 2 of the 31 |
+| `final_features` | `close_adjust_5day__final__d20_h5` 4,266 × 39 (35 ch) · `return_5day__final__d20_h5` 4,235 × 70 (66 ch) | `rank_5day__final__d20_h5` 53,921 × 18 · `…__basic` 54,528 × 16 | **`rank_20day__final__d20_h20` 624,448 × 17 (13 ch)** |
+| datasets on disk | 3 | 1 | **1** |
+| model runs | 2 | 0 | **1** |
 
 ⚠️ **The 16 pre-2026-08-16 model runs were deleted on request** and archived to
 `D:\GIT\_archive\master-thesis\model_runs_2026-08-16.zip` (2.2 MB, outside the repo,

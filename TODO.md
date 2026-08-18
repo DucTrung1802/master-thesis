@@ -182,11 +182,32 @@ carries eight names and a sha1. `final_features` had **no tests at all** and now
 
 ⚠️ **P1-5 is unblocked and has NOT been run** — that was the instruction.
 
+### ⚠️ P0-7 · `ICT-1` — the panel `ic_t` is overstated by exactly √h ⏱ ~30 min
+
+**Do this before quoting any panel run, including the one from 2026-08-18.**
+`result_evaluator/metrics.py:479` divides the daily-IC sd by `sqrt(n_dates)`; line 570
+computes `n_eff = n_dates / horizon` correctly and nothing uses it. Consecutive daily ICs
+share `h-1` label days.
+
+| measured on `lstm__all__rank_20day__final__d20_h20`, test | |
+|---|---|
+| `ic_t` as reported | **15.50** |
+| honest `mean / (sd / √(n_dates/h))` | **+3.47** |
+| ratio | **4.47 = √20** |
+
+⚠️ **`index.py:50` points readers at this exact column** — *"`test_ic_t` is THE column to
+read on a PANEL grain"* — so the documented escape from `NUL-3` is a second broken
+statistic, and every panel run in `index.csv` carries it.
+
+**Fix**: one line, then `python -m result_evaluator --rescore`, which recomputes from
+`predictions_*.csv` and needs no GPU. ⚠️ It rewrites metrics for runs this session did not
+produce — that is the point, and it is why it was left for a deliberate decision.
+
 ---
 
 ## P1 — unblocks hours of other work
 
-### ⚠️ P1-5 · IN PROGRESS — stages 5 and 6 DONE 2026-08-18, the model is next
+### ⚠️ P1-5 · STAGES 5, 6 AND 7 DONE 2026-08-18 — **stage 8 is not run**
 
 **`final_features --apply`** built `unified_schema_all.rank_20day__final__d20_h20` in
 **7.3 s**: 624,448 × 17, **150 tickers**, 2009-01-02 → 2026-08-07, 621,448 labelled. The
@@ -217,9 +238,30 @@ return is strongly leptokurtic. Before the fix `y` would have been that return.
 ⚠️ Read at training time: `evidence = cleared_p95_not_a_pass=1, no_null=1`, and **drift —
 2 of 13 channels put >1 % of the test set beyond 5 train-sigmas** (0 put all of it there).
 
-**Left: `n_features: 13`** into a new `configs/lstm__all__rank_20day__final__d20_h20.yaml`
-— that key is an ASSERTION `train.py` raises on, which is why it could not be written
-before the dataset existed — then `model.lstm`, then `result_evaluator`.
+**Stage 7 ran**: `lstm__all__rank_20day__final__d20_h20__20260818-195738`, **4m 23s**,
+LSTM 2×128 unchanged from the VCB and BANK runs so the difference is the DATA.
+
+| | val | **test** |
+|---|---|---|
+| daily IC | +0.1282 | **+0.0863** |
+| **t** (`n_eff = dates/h`) | **+4.15** | **+3.47** |
+| days with IC > 0 | 78.1 % | **80.9 %** |
+| dates · `n_eff` | 616 · 30.8 | 656 · 32.8 |
+| `dir_auc` · `hit_rate` | 0.560 · 0.543 | 0.540 · 0.531 |
+| R² | +0.0104 | **+0.0003** |
+| RMSE vs constant predictor | 0.28912 / 0.29063 | **0.29065 / 0.29070** |
+
+**This is the first model in the repo whose out-of-sample skill survives an honest error
+bar.** ⚠️ And it RANKS without PRICING: R² ≈ 0 and RMSE is 0.017 % below a constant
+predictor, so only the ORDER carries. ⚠️ `long_short = +0.0635` is a **rank** spread, not
+money. ⚠️ The `t` above is computed by hand — the artefact's own `ic_t` reads 15.50 and is
+wrong by √h (**P0-7 / `ICT-1`**).
+
+**Left, in order:**
+
+1. **`ICT-1` (P0-7)** — fix, then `--rescore`, so the leaderboard stops overstating.
+2. **Stage 8**, `python -m result_evaluator` — the run is self-scored but not indexed.
+3. **`FNM-1` (P1-6)** — measure which side should move.
 
 **Why it is the question this repo has never answered.** Twice now a selection has cleared an honest
 bar and the model below it has shown nothing (§5d, P2-3) — and `RNK-1` says that on a
@@ -248,6 +290,24 @@ a name no other group wants.
 ⚠️ **On a panel, quote the daily-IC t-stat, never `ic_clears`** — `NUL-3`, the evaluator's
 panel null is not label-neutral. ⚠️ And read `mase` beside it: P2-3's model cleared nothing
 and lost to "predict no change" at `mase 1.068`, which is the line that mattered.
+
+### ⚠️ P1-6 · `FNM-1` — decide the feature representation by MEASURING it ⏱ ~1 h GPU
+
+The selection scored the 13 channels under `feature_normalize=cs_rank` (each channel
+ranked within its date before the window); `train_test_creator` feeds the model those
+channels standardised **globally**. Same shape as `RNK-1`, one level over: the label was
+the mismatch there, the FEATURES are the mismatch here.
+
+⚠️ **It does not invalidate the model's own number** — that is measured on its own splits
+under its own representation. It weakens the sentence *"built on a shortlist that cleared
+z = +9.09"*, because §5 rule 1 says a bar computed for one configuration says nothing
+about another.
+
+⚠️ **Which side moves is not obvious**, which is why nothing was changed: per-date ranking
+in `train_test_creator` changes every panel dataset, and dropping it from the selection
+throws away the argument in `cross_sectional.py` §3. **Re-run the selection with
+`feature_normalize=none` and compare the kept set** — if the 13 survive, the question is
+moot and the sentence is safe.
 
 ### ✅ P1-4 · DONE 2026-08-18 — the VRAM half is fixed; **the next wall is HOST RAM**
 
