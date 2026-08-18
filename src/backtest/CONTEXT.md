@@ -360,3 +360,24 @@ equal-weight the top 20; hold 10 sessions.
 
 ⚠️ It is a hand-built 3-channel rank, **not a fitted model** — the ceiling on what a model
 could add is untested, and `NUL-1` applies to the choice of channels, horizon and `k`.
+
+### 8h. ✅ AND THE BAND DOES **NOT** BITE THE h=20 MODEL — checked 2026-08-19
+
+§8f's 2.14× ceiling bias made §4's headline suspect, since that run applied no exclusion.
+Re-measured on `lstm__all__rank_20day__final__d20_h20`:
+
+| | universe at ceiling | model's top-15 | ratio | as reported | **buyable only** |
+|---|---|---|---|---|---|
+| val | 3.76 % | 4.95 % | 1.32× | +1.7367 | **+1.7385** |
+| test | 1.83 % | 2.46 % | 1.34× | +1.4845 | **+1.5512** |
+
+⚠️ **The bias is real but small, and removing it IMPROVES the number** (test +1.484 →
++1.551), so §4 stands as written and is if anything conservative. Two reasons, and both
+are the same point: a 20-day model is not chasing one-day spikes the way a 5-day momentum
+rank is (1.33× against 2.14×), and at k=15 of 150 a ~2 % ceiling rate touches ~0.4 names
+per rebalance. **The price band is a 5-day problem, not a 20-day one** — one more instance
+of the horizon being the variable that decides.
+
+⚠️ **The exclusion is still applied by a PROBE and not by the stage.** `build_panel` does
+not carry `exchange`, so `long_only_top_k` cannot see a ceiling. TODO **PRF-0**'s
+remainder: fold it in so it is the default rather than something a reader must remember.

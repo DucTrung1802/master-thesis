@@ -28,6 +28,165 @@ a thing that would give you a new number; a thing that unblocks hours of other w
 outranks a thing that is only itself; structural code comes last because it only pays off
 for runs that are currently blocked anyway.
 
+⚠️ **THE `PROFIT` SECTION IS FIRST AND IS ORDERED DIFFERENTLY** — by what would change a
+DECISION about trading, not by what makes an existing number wrong. It was added
+2026-08-19, when `src/backtest/` made "does it pay?" askable for the first time. P0-P4
+below remain the engineering backlog and are unchanged.
+
+---
+
+## PROFIT — the track that ends in money, added 2026-08-19
+
+> ⚠️ **This section is ordered by what would CHANGE A DECISION, not by effort.** Everything
+> in it exists because stage 9 (`src/backtest/`) made the question askable for the first
+> time: `result_evaluator` says *does it rank?*, and only a costed backtest says *does it
+> pay?*. Read `backtest/CONTEXT.md` §3 (the cost identity), §4 (the h=20 model result) and
+> §8f-8g (the +5%/5d screen under real market rules) before starting any of it.
+>
+> **What is already measured, so nobody re-measures it:**
+>
+> | | verdict |
+> |---|---|
+> | h=20 model, top-15 of 150, 50 bps | Sharpe **+1.484** test / +1.737 val, z = +4.29/+6.10 ✅ |
+> | h=20 model, ceiling names excluded | **+1.551** test — the band does NOT bite it (below) |
+> | h=10 hand screen, k=20, 30 bps | Sharpe **+0.652**, z = +4.72, beats market 0.404 ✅ |
+> | h=5 hand screen, 30 bps | **ties** the market; loses at 50 bps ❌ |
+> | h=3 | worst of all — turnover dominates ❌ |
+> | every cell above, **2022-2026** | flat to negative, indistinguishable from market ⚠️ |
+
+### ✅ PRF-0 · DONE 2026-08-19 — the price band does NOT bite the h=20 model
+
+Opened because `backtest/CONTEXT.md` §8f measured the hand-built 5-day screen picking
+names at their daily ceiling **2.14× more often than chance**, and excluding them took
+that book from +19.3 % CAGR to +7.2 %. **The stage-9 run on the model applied no such
+exclusion**, so the repo's headline number was suspect.
+
+**It survives.** Measured on `lstm__all__rank_20day__final__d20_h20`, ceiling =
+`day_ret ≥ 0.93 ×` the exchange band (HOSE 7 % / HNX 10 % / UPCOM 15 %):
+
+| | universe at ceiling | model's top-15 | ratio | Sharpe as reported | **buyable only** |
+|---|---|---|---|---|---|
+| val | 3.76 % | 4.95 % | 1.32× | +1.7367 | **+1.7385** |
+| test | 1.83 % | 2.46 % | 1.34× | +1.4845 | **+1.5512** |
+
+⚠️ **The bias is real but small, and removing it IMPROVES the result** (test +1.484 →
++1.551). Two reasons, and both are the point: a 20-day model is not chasing one-day
+spikes the way a 5-day momentum rank is (1.33× against 2.14×), and at k=15 of 150 a ~2 %
+ceiling rate touches ~0.4 names per rebalance. **The band is a 5-day problem, not a
+20-day one** — which is one more instance of the horizon being the variable.
+
+**Left to do**: fold the exclusion into `backtest.portfolio` as an option so it is applied
+by default rather than by a probe. ⏱ ~1 h. Needs `exchange` on the panel, which
+`build_panel` does not currently carry.
+
+### ⚠️ PRF-1 · WALK-FORWARD, or none of the above is a live decision ⏱ ~1 day
+
+**Every number in this section comes from ONE train/val/test split.** §11's regime finding
+used **28 expanding folds**; the h=20 result uses one, and its test window happens to be a
++20.2 %/yr VNINDEX bull market.
+
+The 2022-2026 rows are the reason this is P0-shaped rather than nice-to-have: at h=10 the
+screen scores **+0.011 against a market −0.049**, a gap of 0.06 with an SE of difference
+~0.13. **A single split cannot tell "the edge decayed" from "this split was lucky."**
+
+**Do**: retrain every 6-12 months, expanding window, `d + h − 1` purge at each boundary,
+score each fold's test block, then backtest the concatenated OOS predictions. The stages
+all exist; what is missing is the loop and a run-folder convention for a fold set.
+
+⚠️ **Predict before running** (the P0-1 discipline): if the edge is real and stationary the
+per-fold Sharpe should be positive in most folds with no trend; if it is a pre-2022
+artefact the fold series should decay. **My prediction: it decays, and the post-2022 folds
+straddle zero.** Recorded so being wrong is informative.
+
+### ⚠️ PRF-2 · Run the real chain at `h=10` ⏱ ~1 h GPU + 1 h chain
+
+**The one horizon that is both measured-to-work and unmeasured-by-a-model.** A hand-built
+3-channel rank gets Sharpe **+0.652 at 30 bps** there (z = +4.72, 211 periods, beats the
+market's 0.404 at every cost level). Nobody has run the selection + LSTM chain at `h=10`.
+
+The question it answers: **how much does a fitted model add over three ranked channels?**
+That number is not known at any horizon — at h=20 there is a model result and no hand
+baseline; at h=10 there is a hand baseline and no model.
+
+```powershell
+# selection: cs_rank_10day, top-150 by pre-2014 turnover, 20-draw null (Kaggle T4, ~6 h)
+# then the local chain, which is minutes:
+python -m final_features --apply
+python -m train_test_creator --ticker all --table rank_10day__final__d20_h10 --save
+python -m model.lstm --config configs/lstm__all__rank_10day__final__d20_h10.yaml
+python -m result_evaluator --rescore ; python -m result_evaluator --rebuild-index
+python -m backtest --run <run_id> --top-k 20 --draws 200
+```
+
+⚠️ **Cost drag halves against h=5 and doubles against h=20** — 8.8 %/yr at `τ=0.70`,
+50 bps. That is the whole reason h=10 is worth a run and h=5 is not.
+⚠️ **Add the hand screen as the baseline in the same backtest.** §5 rule 4's shape: a
+model that does not beat three ranked columns has not earned its complexity.
+
+### ⚠️ PRF-3 · The regime question — is the edge gone, or is the FEATURE SET gone? ⏱ ~1 day
+
+Three independent measurements now find the same break at the same place:
+
+| study | pre | post |
+|---|---|---|
+| `model/CONTEXT.md` §11 (h=5, foreign flow, 28 folds) | net@20bps **+1.46** (2017-20) | **−0.51** (2022-26) |
+| the h=5 hand screen, 2026-08-19 | Sharpe **+1.104** (2018-21) | **−0.099** (2022-26) |
+| the h=10 hand screen, 2026-08-19 | **+1.671** (2018-21) | **+0.011** (2022-26) |
+
+⚠️ §11 already tested **rolling vs expanding training at h=5 and it did not help** —
+rolling *lowered* AUC (0.513 vs 0.520). So "stale training data" is not the explanation
+there. **Untested at h=10 and h=20**, which is the gap.
+
+Two hypotheses that make different predictions, which is what makes this worth running:
+
+1. **The market changed** (more retail flow, more index products, tighter spreads) — then
+   *no* feature set trained on 2018-21 works post-2022, and rolling retraining does not
+   rescue it (§11's result, one horizon up).
+2. **The FEATURES decayed** — order-flow imbalance from daily order COUNTS is a crowded,
+   widely-visible signal by 2022. Then a *different* feature set still works, and the
+   answer is §2d's ladder, not a longer training window.
+
+**Distinguishing test**: train on 2022-2026 only and score 2022-2026 by walk-forward. If
+even a model that has only ever seen the new regime cannot find an edge in it, that is
+hypothesis 1 and the honest conclusion is that this data cannot be traded now.
+
+### ⚠️ PRF-4 · Execution realism — the remaining fictions ⏱ ~1 day
+
+Each is a way the backtest is still kinder than the market. Ordered by expected damage:
+
+| gap | why it matters | measured? |
+|---|---|---|
+| **ADV / size cap** | a 20-name book at real size moves a VN mid-cap. `pool__basic.value_matched` is on hand, so cap each position at a fraction of it and re-run | ❌ |
+| **floor days on the SELL side** | the ceiling exclusion covers ENTRY only. A name at its floor on the exit date cannot be sold either, and a loser is exactly when that happens — so this is biased against the strategy in the direction that matters | ❌ |
+| **the ATC auction** | signals built from full-day order counts settle only after close; but a partial-day version could be submitted into ATC. That recovers part of the ~19 pp/yr the t+1 lag costs at h=5 | ❌ |
+| **`se_sharpe` on the h=20 cell** | 32 periods, 0.256. PRF-1 fixes this by producing more OOS periods, not by a wider window | ⚠️ known |
+| **max drawdown −55 to −58 %** | at every `k` on the h=10 screen. Statistically tradable ≠ holdable; a vol target or a market-regime filter is the standard answer and neither is tested | ⚠️ known |
+
+### PRF-5 · Survivorship — the one bias that flatters a momentum screen ⏱ ~2 days
+
+`silver.stocks_basic` holds **no delisted name** (§2c). A screen that buys recent winners
+is the strategy most flattered by that, because the names that crashed out are absent.
+⚠️ **The null is protected** (every shuffled draw picks from the same survivor basket) but
+**the CAGR is not** — so `z = +4.72` stands while `+14.9 %/yr` does not.
+
+Fix is data, not code: a point-in-time listing/delisting table. Related to §2d's
+"point-in-time index membership" lever, and it makes PRF-1's fold series interpretable.
+
+### PRF-6 · New information — the only lever §2d says is left ⏱ months
+
+Ranked by expected impact **on this specific problem**, which differs from §2d's original
+single-stock ranking:
+
+1. **Intraday / tick data.** ⚠️ The measured 5-day signal decays inside ONE SESSION —
+   +24.4 % CAGR same-close against +5.6 % at t+1. Trading it intraday is not an
+   improvement, it is the difference between a strategy and a curiosity. It also gives
+   §2d's true #1, aggressor buy/sell imbalance, of which daily order COUNTS are a proxy.
+2. **Point-in-time listing status** — PRF-5.
+3. **Fundamentals with filing dates** — `experiment_4` already recovered VCB's publish
+   dates, so the method exists for one name and needs scaling.
+4. ~~News / sentiment~~ — **closed**, see the Closed table. `pool__news_daily` measured
+   z = +0.53 at layer 1.
+
 ---
 
 ## P0 — a number you already have is wrong or unreadable until this is done
