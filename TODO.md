@@ -221,20 +221,20 @@ return is strongly leptokurtic. Before the fix `y` would have been that return.
 — that key is an ASSERTION `train.py` raises on, which is why it could not be written
 before the dataset existed — then `model.lstm`, then `result_evaluator`.
 
-### ~~P1-5 · Run the model chain on the top-150 shortlist~~ ⏱ ~1 h, ~~blocked on P0-5 + P0-6~~
-
-**The question this repo has never answered.** Twice now a selection has cleared an honest
+**Why it is the question this repo has never answered.** Twice now a selection has cleared an honest
 bar and the model below it has shown nothing (§5d, P2-3) — and `RNK-1` says that on a
 cross-section the model was aimed at the wrong label both times, so those two data points
 do not settle it. This is the first chance to ask it properly: a shortlist of 13 channels
 behind **z = +9.09**, the strongest selection evidence in the repo.
 
 ```powershell
-python -m final_features --apply                        # -> rank_20day__final__d20_h20
-python -m train_test_creator --table rank_20day__final__d20_h20 --save
-python -m model.lstm --config configs/lstm__all__rank_20day__final__d20_h20.yaml
-python -m result_evaluator
+python -m final_features --apply                                    # ✅ DONE 7.3 s
+python -m train_test_creator --ticker all --table rank_20day__final__d20_h20 --save  # ✅ DONE 10.9 s
+python -m model.lstm --config configs/lstm__all__rank_20day__final__d20_h20.yaml     # ⬅ NEXT (config to write)
+python -m result_evaluator                                          # then this
 ```
+⚠️ **`--ticker all` is not optional** — the stage defaults to `chain.DEFAULT_TICKER`, which
+is `vcb`, and would look for the table in the wrong schema.
 
 ⚠️ **NO `--scope`, and an earlier draft of this item was WRONG to say otherwise.**
 `--scope` names EVERY table in the plan, not the one you meant: `--scope liquid150` was
@@ -296,25 +296,6 @@ shape: 7.3 G settled, **10.8 G peak**. Doubling the rows puts top-300's peak at
 ⚠️ **Both earlier extrapolations were wrong, in opposite directions, and for the same
 reason: each scaled a quantity that was not the binding one** (~39 GB from one tiny panel,
 then ~20.6 GB from settled RSS). **top-300 needs the streaming design (P3-2), not a trim.**
-
-### ~~P1-4 · Chunk the GPU rank step~~ — **promoted from P3-2 by measurement** ⏱ done
-
-**The one thing between this repo and P2-1 v2 / P2-2.** It was structural code under P3
-until 2026-08-17, when the T4 run made it the binding constraint on the only two
-measurements left worth making. The priority rule at the top of this file promotes it:
-*a thing that unblocks hours of other work outranks a thing that is only itself.*
-
-`gpu._average_ranks_torch` holds `values` + `filled` + a mask (**10.58 GiB** at ~536
-float64 columns × 1.247 M rows) and then `torch.sort` asks for its own output plus an
-int64 `order` — **~4× the design**, against a T4's 14.56 GiB. Rank in **column blocks**:
-ranks are per-column independent, so the result is bit-identical, which `float32` is not
-(P0-3, 52% relative change in `ic_mean`).
-
-⚠️ **Do not promise that this alone unblocks the run.** The T4 died in phase 3 of 9; the
-next phase, `rank (the ensemble's methods)`, has never been reached at this width and
-`permutation` is the member that puts the design on the device. Expect to chunk twice.
-Verify against the 30-name smoke payload — a chunked ranking that changes a number is a
-bug, and that run's `ic_mean +0.0263 / 60 kept` is the reference.
 
 ### P1-1 · Re-fit the cost model into ONE function ⏱ ~2 h
 
@@ -386,7 +367,7 @@ then `kgpu run cross-sectional`. That is P2-1 v2.
 
 ## P2 — new measurements worth having
 
-### ⚠️ P2-1 · REWRITTEN 2026-08-17 — the first version was a bad experiment
+### ~~P2-1~~ · RETIRED 2026-08-17 — the first version was a bad experiment (kept for the reasoning)
 
 **What it said:** "run the chain at a 4-week horizon", where *the chain* is the VCB
 single-stock chain. **That does not reproduce the evidence it cites.** CLAUDE.md §2a-bis
@@ -405,7 +386,7 @@ And it makes the binding constraint worse. `n_eff = n/h` on VCB:
 and said **1,500 were needed**. Running VCB at h=20 takes the constraint that is already
 binding and tightens it **4×**, to test a result measured under a different design.
 
-### ⚠️ P2-1 (v2) · `cs_rank_20day` on the top ~300 by turnover — **NOT RUN**, blocked on P1-3
+### ✅ P2-1 v2 · THE DESIGN — why width buys precision, and why 300 became 150
 
 At h=20 the independent count is 213 **at either grain** — what differs is the QUALITY of
 each observation:
@@ -443,7 +424,7 @@ device side, and it is why this item now routes through Kaggle:
 | RAM free | ~7 GB ❌ | ~29 GB ✅ |
 | the design, 1.25 M × 104, float64 | ~12.8 GB | fits |
 
-### ⚠️ P2-1 v2 · RUN AND FAILED 2026-08-17 — the T4 OOMed, and **the fifth claim was checked wrong too**
+### ⚠️ FIRST ATTEMPT, 2026-08-17 — the T4 OOMed, and **the fifth claim was checked wrong too**
 
 Uploaded (477 MB, dataset v1) and pushed with `RUN_NULL=false`. It reached the GPU and
 died at **3m 28s**:
