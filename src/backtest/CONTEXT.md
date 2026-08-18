@@ -186,7 +186,11 @@ Each names a way a backtest flatters itself:
 
 ---
 
-## 8. ⚠️ THE "+5 % IN 5 DAYS" SCREEN — measured 2026-08-19, and the answer is NO
+## 8. ⚠️ THE "+5 % IN 5 DAYS" SCREEN — measured 2026-08-19
+
+> ⚠️ **§8a-8e BELOW ASSUME 50 bps AND MODEL NO PRICE LIMIT. §8f SUPERSEDES THEM** with the
+> real market rules (fee 0.2 %, T+3 settlement, HOSE 7 % / HNX 10 % / UPCOM 15 % bands),
+> supplied 2026-08-19. The verdict changes at 5 days from "no" to "no, but 10 days yes".
 
 Asked whether the market can be screened for names about to gain ≥5 % in 5 sessions.
 Measured with these primitives on `unified_schema_all`, **top liquidity quintile**
@@ -284,3 +288,75 @@ line and by the one-day decay, not by the ranker. ⚠️ **Survivorship cuts the
 here** (§2c): a screen that buys recent winners is the strategy most flattered by a
 universe with no delisted names, so the 2018-21 half is likelier overstated than the
 2022-26 half is understated.
+
+
+### 8f. ⚠️ UNDER THE REAL MARKET RULES — and the price band is the part nobody modelled
+
+Supplied 2026-08-19: **fee 0.2 %**, **T+3 settlement**, **daily price bands HOSE 7 % /
+HNX 10 % / UPCOM 15 %**. All three are now in the measurement.
+
+**THE BAND IS THE FINDING.** A name at its ceiling has no sellers, so a backtest that buys
+it buys a price that was never offered — and a momentum screen walks straight into them:
+
+| at the ceiling on the entry day | |
+|---|---|
+| whole liquid tier | **3.37 %** (HNX 3.74 %, HOSE 3.52 %, UPCOM 0.68 %) |
+| **the screen's own top-10 picks** | **7.12 %** |
+
+⚠️ **The screen is 2.14× more likely than chance to pick a name it cannot buy**, and
+excluding them is expensive — 5-day hold, k=10, 20 bps: **+19.3 % CAGR → +7.2 %**.
+Any backtest of a momentum screen on VN that does not exclude ceiling days is fiction.
+
+⚠️ **T+3 is NOT binding.** It floors the hold at 3 sessions, and 3 is the *worst* horizon
+tested because turnover is highest. Longer is better across the range measured.
+
+⚠️ **The fee has two readings and they do not agree.** "0.2 %" round trip is 20 bps;
+0.2 %/side plus the mandatory **0.1 % sell tax** is 50 bps. The tax is not negotiable, so
+the floor for any VN retail account is **30 bps**. All three are reported.
+
+**Sharpe, buyable names only, t+1 entry, 2018-2026:**
+
+| hold | k | 20 bps | 30 bps | 50 bps | market | `se` |
+|---|---|---|---|---|---|---|
+| 3d | 10 | 0.495 | 0.277 | −0.157 | 0.243 | 0.038 |
+| 5d | 20 | 0.477 | 0.337 | 0.057 | 0.310 | 0.050 |
+| **10d** | **20** | **0.722** | **0.652** | **0.512** | 0.404 | 0.077 |
+
+⚠️ **THE USER'S STATED HORIZON IS THE ONE THAT DOES NOT WORK.** At 5 days and 30 bps the
+screen ties the market; at 50 bps it loses. **At 10 days it beats the market at every cost
+level tested**, and that is the cell to carry forward.
+
+**The 10-day cell against its own null** (within-date shuffle, 200 draws, k=20, 211 periods):
+
+| bps | observed | null mean | p95 bar | null MAX | **z** | vs market |
+|---|---|---|---|---|---|---|
+| 20 | **+0.722** ± 0.077 · CAGR +17.1 % | +0.290 | +0.448 | +0.532 | **+4.65** | ✅ beats 0.404 |
+| 30 | +0.652 ± 0.076 · CAGR +14.9 % | +0.213 | +0.375 | +0.454 | **+4.72** | ✅ |
+| 50 | +0.512 ± 0.073 · CAGR +10.7 % | +0.060 | +0.219 | +0.297 | **+4.87** | ✅ |
+
+Null MAX below observed in all three, so §5 rule 3 does not fire. `k` is flat from 5 to 60
+(0.57–0.65 at 30 bps) — not a knife-edge.
+
+### 8g. ⚠️ AND THE EDGE IS STILL ALMOST ENTIRELY PRE-2022
+
+| hold 10d, k=20 | screen | market | |
+|---|---|---|---|
+| **2018-2021** (n=100), 30 bps | +47.9 % / **+1.671** ± 0.155 | +24.0 % / +0.995 | ✅ |
+| **2022-2026** (n=112), 30 bps | **−3.5 % / +0.011** ± 0.094 | −4.8 % / −0.049 | ⚠️ tie |
+| 2022-2026, 50 bps | −7.2 % / −0.131 | −4.8 % / −0.049 | ❌ |
+
+⚠️ **In the recent regime the screen is INDISTINGUISHABLE FROM THE MARKET, and both are
+flat.** +0.011 against −0.049 is a gap of 0.06 with an SE of difference ~0.13. The full-
+period Sharpe of 0.652 is an average over a regime that worked and one that does not.
+
+⚠️ **Max drawdown is −55 % to −58 % at every `k`.** A concentrated long-only VN book
+through 2022. Statistically tradable is not the same as holdable.
+
+**The rule, stated so it can be implemented or refuted:** universe = top liquidity
+quintile by that date's `value_matched`; **drop any name at its exchange's ceiling**;
+score = mean within-date percentile rank of `drv_order_vol_imb_5`, trailing 5-day return,
+`drv_dist_from_high_63`; signal from the close of `t`, buy at the close of `t+1`;
+equal-weight the top 20; hold 10 sessions.
+
+⚠️ It is a hand-built 3-channel rank, **not a fitted model** — the ceiling on what a model
+could add is untested, and `NUL-1` applies to the choice of channels, horizon and `k`.
