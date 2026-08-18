@@ -346,3 +346,93 @@ def test_every_stage_defaults_to_the_same_experiment():
     )
     # The dataset folder the model config names must be the one this stage builds.
     assert chain.dataset_name().startswith(f"{chain.DEFAULT_TICKER}__{chain.final_table()}")
+
+
+# ------------------------------------------------- RNK-1: the label is re-ranked
+
+
+def _rank_creator(min_width: int = 2, **kwargs):
+    """A creator whose table stores `return_5day` and whose shortlist was selected
+    for `cs_rank_5day` — the bank/universe shape."""
+    creator = TrainTestCreator(
+        ticker="test", table="rank_5day__final__d5_h2", rank_min_width=min_width,
+        **kwargs
+    )
+    return _with_channels(creator, ["f0", "f1", "f2", "f3"], target="cs_rank_5day")
+
+
+def test_y_is_the_rank_and_not_the_stored_return():
+    """⚠️ **RNK-1, and it is the whole point of the fix.** `final_features` stores
+    `return_5day` because a rank belongs to a run and not to a row, on the stated
+    understanding that the reader re-ranks. Nothing re-ranked, so `y` was the raw
+    forward return while the shortlist above it had been chosen against the rank —
+    a swap CLAUDE.md §2b measured at 4x less IC on the same panel and folds."""
+    panel = _panel(n_dates=120, tickers=("AAA", "BBB", "CCC", "DDD"))
+    creator = _rank_creator()
+    # ⚠️ `build(frame=...)` skips `read()`, which is where the stored column and
+    # `selected_for` are resolved against the live table — so the test seam has to
+    # stand in for it. Production never takes this path with an unresolved target.
+    creator.stored_target, creator.selected_for = "return_5day", "cs_rank_5day"
+    data = creator.build(panel.copy())
+
+    assert data.target == "cs_rank_5day"          # what y IS
+    assert data.stored_target == "return_5day"    # what was READ
+    assert data.label_recipe["kind"] == "cross_sectional_rank"
+
+    # A rank over n names lands on the uniform grid of [-0.5, +0.5]; a return does not.
+    y = np.concatenate([data.y[s] for s in ("train", "val", "test")])
+    assert np.isfinite(y).all()
+    if data.target_scaler is None:
+        assert y.min() >= -0.5 - 1e-12 and y.max() <= 0.5 + 1e-12
+
+
+def test_the_rank_matches_cross_sectional_rank_exactly():
+    """One definition of the label, not two. If this drifts, the model is fitted to
+    something `feature_selection` never scored — which is the defect, restated."""
+    from feature_selection.cross_sectional import cross_sectional_rank
+
+    panel = _panel(n_dates=60, tickers=("AAA", "BBB", "CCC"))
+    creator = _rank_creator()
+    labelled = panel.dropna(subset=["return_5day"]).sort_values(
+        ["date", "exchange", "ticker"]
+    ).reset_index(drop=True)
+    creator.stored_target, creator.selected_for = "return_5day", "cs_rank_5day"
+    _, y, recipe = creator._label(labelled)
+
+    expected = cross_sectional_rank(
+        labelled["return_5day"], labelled["date"], min_width=2
+    ).dropna()
+    assert np.allclose(y.to_numpy(), expected.to_numpy(), rtol=0, atol=0)
+    assert recipe["universe_size"] == 3
+
+
+def test_a_date_too_thin_to_rank_is_dropped_and_counted():
+    """⚠️ A "rank" among fewer names than `min_width` is a coin flip wearing the units
+    of a signal, so `cross_sectional_rank` returns NaN and those rows are not training
+    samples. They are counted separately from the unlabelled tail because the causes
+    differ: one is the end of the panel, the other a thin session inside it."""
+    panel = _panel(n_dates=60, tickers=("AAA", "BBB", "CCC"))
+    # One session loses two of its three names.
+    thin = panel["date"] == panel["date"].unique()[10]
+    panel = panel[~(thin & panel["ticker"].isin(["BBB", "CCC"]))].reset_index(drop=True)
+
+    creator = _rank_creator(min_width=3)
+    creator.stored_target, creator.selected_for = "return_5day", "cs_rank_5day"
+    labelled = panel.dropna(subset=["return_5day"]).sort_values(
+        ["date", "exchange", "ticker"]
+    ).reset_index(drop=True)
+    kept, y, recipe = creator._label(labelled)
+
+    assert recipe["rows_unrankable"] == 1
+    assert len(kept) == len(labelled) - 1
+    assert len(y) == len(kept)
+
+
+def test_a_plain_target_is_left_exactly_alone():
+    """The regression guard: every single-ticker chain in the repo stores the label it
+    trains on, and this fix must not touch them."""
+    creator = _with_channels(_creator(), ["f0", "f1", "f2", "f3"], target="return_5day")
+    data = creator.build(_panel(n_dates=120))
+    assert data.target == "return_5day"
+    assert data.stored_target == "return_5day"
+    assert data.label_recipe["kind"] == "stored"

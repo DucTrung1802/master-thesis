@@ -84,6 +84,7 @@ import numpy as np
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
 
+from feature_selection.cross_sectional import cross_sectional_rank
 from feature_selection.outstanding import OUTSTANDING_FILENAME
 from feature_selection.report import DEFAULT_REPORT_ROOT
 from feature_selection.unified_reader import KEY_COLS, UnifiedSchemaReader
@@ -285,6 +286,14 @@ class WindowedDataset:
     source_comment: str = ""
     rows_read: int = 0
     rows_unlabelled: int = 0
+    # ⚠️ `target` is what `y` IS; `stored_target` is the column that was READ. For a
+    # cross-sectional label the two differ — the table stores `return_{h}day` because a
+    # rank belongs to a run and not to a row (`final_features/CONTEXT.md` §5) — and
+    # `label_recipe` is how the first was made from the second. Before RNK-1 was fixed
+    # there was only one field, it held the STORED column, and `y` was that column.
+    stored_target: str = ""
+    label_recipe: Dict = field(default_factory=dict)
+    rows_unrankable: int = 0
 
     @property
     def n_features(self) -> int:
@@ -336,6 +345,7 @@ class TrainTestCreator:
         purge: bool = True,
         report_root: Optional[str] = None,
         output_root: str = DEFAULT_OUTPUT_ROOT,
+        rank_min_width: int = 5,
     ):
         if not 0 < train_ratio < 1 or not 0 < val_ratio < 1:
             raise ValueError("train_ratio and val_ratio must each be in (0, 1).")
@@ -356,6 +366,12 @@ class TrainTestCreator:
         self.on_untrainable = on_untrainable
         self.purge = purge
         self.output_root = output_root
+        # ⚠️ **PART OF THE LABEL'S DEFINITION, NOT A CLEANING KNOB.** A date whose
+        # cross-section is narrower than this contributes no rank at all — a "rank"
+        # among three names is a coin flip wearing the units of a signal. It must match
+        # the `min_ic_width` the SELECTION ran with, or the model is fitted to a label
+        # the shortlist was never scored against.
+        self.rank_min_width = rank_min_width
         self.scaler_tag = "std"
         # ⚠️ **WHICH REPORT ROOT THE TABLE WAS BUILT FROM.** `selection()` reads the
         # shortlists to learn what is a channel and what the channels were selected
@@ -502,6 +518,72 @@ class TrainTestCreator:
         self.selected_for = selected[0] if len(selected) == 1 else ", ".join(selected)
         return frame, comment
 
+    # ------------------------------------------------------------------- label
+
+    def _label(self, labelled: pd.DataFrame):
+        """`(frame, y, recipe)` — the label the channels were SELECTED for.
+
+        ⚠️ **THIS IS `RNK-1`, AND IT IS THE STEP THE DESIGN ASSUMED AND NOBODY BUILT.**
+        `final_features` deliberately does not store `cs_rank_{h}day`: a rank is computed
+        within a date across a chosen universe, so its value depends on which names are
+        in the panel and on `min_width` — properties of the RUN, not of the row (that
+        package's §5). It stores `return_{h}day` instead, *"and the reader re-ranks"*.
+        No reader re-ranked. `y` was the stored return, while the shortlist above it had
+        been chosen against the rank.
+
+        ⚠️ **The cost of that swap was already measured, in CLAUDE.md §2b, on the same
+        panel and the same folds: the IC drops 4x and the hit rate falls below a coin.**
+        So this is not a tidying-up; it is the difference between training the model on
+        the question the selection answered and training it on a different one.
+
+        ⚠️ **Dates too narrow to rank are DROPPED, not filled.** `cross_sectional_rank`
+        returns NaN below `min_width`, and a row with no label is not a training sample.
+        They are counted into `rows_unrankable` rather than folded into the unlabelled
+        tail, because the two have different causes: one is the end of the panel, the
+        other is a thin session in the middle of it.
+        """
+        values = pd.to_numeric(labelled[self.stored_target], errors="coerce")
+        if not self._is_ranked():
+            return labelled, values, {"kind": "stored", "column": self.stored_target}
+
+        ranked = cross_sectional_rank(
+            values, labelled["date"], min_width=self.rank_min_width
+        )
+        keep = ranked.notna().to_numpy()
+        recipe = {
+            "kind": "cross_sectional_rank",
+            "label": self.selected_for,
+            "from_column": self.stored_target,
+            "min_width": self.rank_min_width,
+            "formula": "(rank - 1) / (n - 1) - 0.5, average ranks, within each date",
+            "universe_size": int(labelled.loc[keep, "ticker"].nunique()),
+            "dates": int(labelled.loc[keep, "date"].nunique()),
+            "rows_unrankable": int((~keep).sum()),
+        }
+        if not keep.any():
+            raise ValueError(
+                f"no date in {self.table} has {self.rank_min_width} or more labelled "
+                f"names, so {self.selected_for!r} cannot be reconstituted. Lower "
+                f"rank_min_width, or check the table holds the universe it was "
+                f"selected over (UNI-1)."
+            )
+        return (
+            labelled.loc[keep].reset_index(drop=True),
+            ranked[keep].reset_index(drop=True),
+            recipe,
+        )
+
+    def _is_ranked(self) -> bool:
+        """Is the stored column something the label is DERIVED from, not the label?
+
+        ⚠️ Keyed on the `cs_rank_` prefix of `selected_for`, which is the same switch
+        `feature_selection.run` uses to choose the cross-sectional path — one rule, in
+        two places, rather than two rules. `selected_for` can be a comma-joined list
+        when a table was built from several runs; a mixed list is not a rank target and
+        is left alone rather than guessed at.
+        """
+        return self.selected_for.startswith("cs_rank_") and "," not in self.selected_for
+
     # ------------------------------------------------------------------- build
 
     def build(self, frame: Optional[pd.DataFrame] = None) -> WindowedDataset:
@@ -525,6 +607,11 @@ class TrainTestCreator:
             raise ValueError(
                 f"{self.table} has no labelled rows for {self.stored_target!r}."
             )
+
+        # ⚠️ **BEFORE the bounds, the fit mask and the features** — re-ranking drops
+        # rows, and every one of those is computed off this frame's index.
+        labelled, label_values, label_recipe = self._label(labelled)
+        rows_unrankable = int(label_recipe.get("rows_unrankable", 0))
 
         bounds = self._bounds(labelled["date"])
         feature_cols = [
@@ -559,7 +646,7 @@ class TrainTestCreator:
         if scale_cols:
             features[scale_cols] = feature_scaler.transform(features[scale_cols].values)
 
-        target = pd.to_numeric(labelled[self.stored_target], errors="coerce")
+        target = label_values
         if self.scale_target:
             target_scaler = StandardScaler().fit(
                 target[fit_mask].values.reshape(-1, 1)
@@ -576,7 +663,12 @@ class TrainTestCreator:
             name=self.name,
             schema=f"unified_schema_{self.ticker}",
             table=self.table,
-            target=self.stored_target,
+            # ⚠️ `target` is what `y` IS. On a rank table that is the RANK now, not the
+            # stored return it is computed from — which is the whole of RNK-1.
+            target=(self.selected_for if self._is_ranked() else self.stored_target),
+            stored_target=self.stored_target,
+            label_recipe=label_recipe,
+            rows_unrankable=rows_unrankable,
             selected_for=self.selected_for,
             lookback=self.lookback,
             horizon=self.horizon,
@@ -862,13 +954,16 @@ class TrainTestCreator:
                 "rows_unlabelled_tail": data.rows_unlabelled,
             },
             "target": {
+                # ⚠️ **`column` IS WHAT `y` IS, and that changed with RNK-1** (2026-08-18).
+                # It used to hold the STORED column while `y` was that column and the
+                # shortlist above it had been selected for a RANK — so the model was
+                # aimed at a label the selection never scored. `stored_target` carries
+                # the provenance now and `label_recipe` carries how one became the other.
                 "column": data.target,
-                # ⚠️ What the channels were SELECTED for, which is not always what is
-                # stored: a rank target's table stores the quantity it is ranked from
-                # (final_features/CONTEXT.md §5). A reader that wants the rank
-                # re-ranks with feature_selection.cross_sectional.
+                "stored_target": data.stored_target or data.target,
+                "label_recipe": data.label_recipe,
                 "selected_for": data.selected_for,
-                "derived": data.selected_for != data.target,
+                "derived": (data.stored_target or data.target) != data.target,
                 "horizon_h": data.horizon,
                 "scaled": data.target_scaler is not None,
                 "scaler": "StandardScaler" if data.target_scaler is not None else None,
@@ -969,6 +1064,9 @@ def _main(argv: Sequence[str], option) -> WindowedDataset:
         # ⚠️ Must match the `--root` the table was BUILT with, or every one of its own
         # channels reports as "in no current shortlist". See `TrainTestCreator.__init__`.
         report_root=option("--root", None),
+        # ⚠️ Part of a cross-sectional LABEL's definition, not a cleaning knob — it must
+        # match the `min_ic_width` the selection ran with.
+        rank_min_width=int(option("--rank-min-width", "5")),
     )
 
     print(f"{'=' * 78}\n{creator.schema_table}")
@@ -980,6 +1078,17 @@ def _main(argv: Sequence[str], option) -> WindowedDataset:
     data = creator.build()
     print(f"  target     column {creator.stored_target!r}, selected for "
           f"{creator.selected_for!r}")
+    # ⚠️ Printed AFTER the build on purpose: `selected_for` is resolved inside `read()`
+    # against the table's own columns, so before it there is nothing to report and a
+    # banner line here would be dead code.
+    if data.label_recipe.get("kind") == "cross_sectional_rank":
+        r = data.label_recipe
+        print(
+            f"  label      y is {r['label']!r}, RE-RANKED within each date from "
+            f"{r['from_column']!r} (RNK-1)\n"
+            f"             min_width={r['min_width']}, {r['universe_size']} names x "
+            f"{r['dates']:,} dates, {r['rows_unrankable']:,} rows too thin to rank"
+        )
     if creator.stale_channels:
         # ⚠️ The table holds channels no CURRENT shortlist names, i.e. it predates the
         # last `feature_selection.outstanding` run. It is still readable — but it is

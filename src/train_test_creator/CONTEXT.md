@@ -256,6 +256,39 @@ reader in the repo uses `allow_pickle=False` — the file would exist and be unr
 which is precisely how a 20-ticker panel gets silently scored as one series. Pinned by
 `test_the_ticker_array_is_unicode_not_object`.
 
+## 6a. ⚠️ THE LABEL IS RE-RANKED HERE — `RNK-1`, fixed 2026-08-18
+
+`final_features` does **not** store `cs_rank_{h}day`. A rank is computed within a date
+across a chosen universe, so its value depends on which names are in the panel and on
+`min_width` — properties of the RUN, not of the row (`final_features/CONTEXT.md` §5). It
+stores `return_{h}day` instead, *"and the reader re-ranks"*.
+
+⚠️ **No reader re-ranked.** `y` was the stored return while the shortlist above it had
+been chosen against the rank, so the model was aimed at a label the selection never
+scored. CLAUDE.md §2b measured exactly that swap, on the same panel and the same folds:
+**the IC drops 4× and the hit rate falls below a coin.** It never produced a wrong NUMBER
+— `result_evaluator.daily_ic` is a per-date Spearman, so scoring stayed cross-sectional —
+which is why it survived two universes and a model sweep, and it is a candidate
+explanation for §5d's *"the selection cleared its bar; the model did not clear its own"*.
+
+`_label()` now reconstitutes it, and three things about how:
+
+* **One definition, not two.** It calls `cross_sectional.cross_sectional_rank`, the same
+  function the selection used. A test asserts the two agree at **atol = 0**.
+* **`rank_min_width` is part of the LABEL, not a cleaning knob.** A date with fewer
+  labelled names than this gets no rank at all. It must match the `min_ic_width` the
+  selection ran with, and it is recorded in `metadata.json` under `target.label_recipe`.
+* **Thin dates are DROPPED and counted separately** as `rows_unrankable`, not folded into
+  the unlabelled tail — one is the end of the panel, the other a thin session inside it.
+
+⚠️ **`metadata.json → target.column` CHANGED MEANING.** It is now what `y` IS
+(`cs_rank_20day`); `target.stored_target` carries what was read (`return_20day`). Before
+the fix there was one field, it held the stored column, and `y` was that column.
+
+⚠️ **The universe is still the table's own ticker set** — a table holding 781 names ranks
+over 781 even when the shortlist was selected over 150. That is `UNI-1`, a separate defect
+in a separate package.
+
 ## 7a. Where this sits in the chain
 
 ```
