@@ -79,7 +79,7 @@ ceiling rate touches ~0.4 names per rebalance. **The band is a 5-day problem, no
 by default rather than by a probe. ⏱ ~1 h. Needs `exchange` on the panel, which
 `build_panel` does not currently carry.
 
-### ⚠️ PRF-1 · WALK-FORWARD, or none of the above is a live decision ⏱ ~1 day
+### ✅ PRF-1 · DONE 2026-08-19 — 10 folds, and **my recorded prediction was half wrong**
 
 **Every number in this section comes from ONE train/val/test split.** §11's regime finding
 used **28 expanding folds**; the h=20 result uses one, and its test window happens to be a
@@ -97,6 +97,57 @@ all exist; what is missing is the loop and a run-folder convention for a fold se
 per-fold Sharpe should be positive in most folds with no trend; if it is a pre-2022
 artefact the fold series should decay. **My prediction: it decays, and the post-2022 folds
 straddle zero.** Recorded so being wrong is informative.
+
+**RESULT — `src/walkforward/`, 10 folds (test = calendar 2017…2026), ~35 min:**
+
+| | |
+|---|---|
+| IC positive in | **9 of 10 folds** (only 2026, a 5-period stub, negative) |
+| beats the equal-weight universe in | **10 of 10 folds** |
+| pooled, 2,373 dates / **118 periods** | Sharpe **+1.991** @30 bps (`se` 0.155), CAGR +47.5 %, market +0.737 / +14.6 % |
+| null, 200 within-date shuffles | z = **+12.18 / +12.28 / +12.46** at 20/30/50 bps, null MAX below observed at all three |
+
+⚠️ **DECAY: RIGHT. "STRADDLE ZERO": WRONG.** Sharpe@30 slope **−0.100/fold**, first five
+folds **+2.775** → last five **+1.564** (−44 %). But 2023/2024/2025 are **+2.64 / +0.90 /
++1.39**, all clearly positive and all above their market. **2022 is the only bad fold
+(−0.07) and it is bad for everyone** — the universe itself ran Sharpe −0.94 that year.
+The wrong half is left here rather than edited.
+
+⚠️ **It contradicts the h=5/h=10 hand screens**, which were negative through 2022-2026
+(`backtest/CONTEXT.md` §8g), and §11's regime wall. The variables that differ are the
+HORIZON and 13 selected channels against 3 hand-picked ones.
+
+⚠️ **NO MECHANICAL LEAK** — restricted to the single split's own test window the
+walk-forward gives IC **+0.0849** against its **+0.0863**, agreeing to the third decimal.
+The pooled 2.0 is higher than the split's 1.484 because 2017-2021 was a better period.
+
+⚠️ **WHAT IT DOES NOT FIX: the SELECTION look-ahead.** The 13 channels were chosen on the
+whole sample; only the MODEL's look-ahead is removed. Every fold's LEVEL stays optimistic
+by an unmeasured amount, and the apples-to-apples check cannot rule it out because the
+single split shares the same advantage. **That is now the single largest open threat to
+every number in this repo, and it is PRF-7.**
+
+⚠️ **9 of 10 folds stopped at EPOCH 1** (val loss 0.975-1.021, i.e. within ~2 % of a
+standardised label's variance). With §5c's eleven architectures inside one error bar and
+P2-3's identical observation on VCB: **capacity is not the binding constraint, and the
+next model test should be SMALLER, not bigger.**
+
+`src/walkforward/CONTEXT.md` has the full per-fold table.
+
+### ⚠️ PRF-7 · The selection look-ahead is now the biggest open threat ⏱ ~60 GPU-h
+
+PRF-1 removed the model's look-ahead and left the selection's. The 13 channels behind
+every result in `backtest/CONTEXT.md` §4 and the walk-forward above were chosen **using
+the label over 2009-2026**, i.e. including every test fold.
+
+**The honest version** re-runs `feature_selection` inside each fold on that fold's train
+window only — ~6 GPU-h per fold on a T4, ~60 h for ten. Affordable on Kaggle's 30 GPU-h/week
+across two weeks, not affordable locally.
+
+**The cheap partial**: run the selection on 2009-2016 alone and compare the kept set with
+the current 13. ⏱ ~6 GPU-h. If the overlap is high the look-ahead is mild and the levels
+roughly stand; if it is low, every level in this repo is overstated and only the shapes
+survive. **Do the cheap one first** — it is one run and it bounds the problem.
 
 ### ⚠️ PRF-2 · Run the real chain at `h=10` ⏱ ~1 h GPU + 1 h chain
 
