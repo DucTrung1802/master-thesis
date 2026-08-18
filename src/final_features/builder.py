@@ -84,7 +84,9 @@ The table carries its target beside the features, so the next stage needs one ob
 which other names are in the panel and on `min_width` — properties of the RUN, not of
 the row. Freezing it into a table would bake one universe into data that outlives it.
 Those groups store **`return_5day`**, the quantity the rank is computed FROM, and the
-reader re-ranks. The `target` column of the plan still records what was selected for.
+reader re-ranks — ⚠️ **and for three days no reader did (`RNK-1`)**. `train_test_creator._label` reconstitutes it at dataset build since 2026-08-18; before
+that `y` was the stored return while the shortlist above it had been chosen against the
+rank. The `target` column of the plan still records what was selected for.
 
 ## ⚠️ What this does NOT assert
 

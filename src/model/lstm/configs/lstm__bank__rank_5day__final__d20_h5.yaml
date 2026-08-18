@@ -6,9 +6,14 @@
 #
 # WARNING: the table is named for `rank_5day` but STORES `return_5day` — a rank's
 # value depends on which other names are in the panel, so final_features refuses to
-# freeze one into a table (final_features/CONTEXT.md §5). This run therefore predicts
-# the ABSOLUTE 5-day return of each bank; the cross-sectional reading comes from
-# result_evaluator, which scores per date and averages.
+# freeze one into a table (final_features/CONTEXT.md §5).
+#
+# ⚠️ THIS RUN PREDICTED THE ABSOLUTE 5-DAY RETURN, AND THAT WAS THE DEFECT `RNK-1`.
+# The channels had been selected against `cs_rank_5day`; nothing re-ranked, so the
+# model was aimed at a label the selection never scored — CLAUDE.md §2b measured that
+# exact swap at 4x less IC on the same panel and folds. Since 2026-08-18
+# `train_test_creator._label` reconstitutes the rank, so a dataset REBUILT from this
+# table trains on `cs_rank_5day` and this run is NOT comparable with one made before.
 #
 # WARNING: `lookback` and `n_features` are ASSERTIONS. train.py raises if the dataset
 # disagrees.

@@ -234,7 +234,9 @@ RUN, not of the row.** Freezing it into a table would bake one universe into dat
 outlives it.
 
 So that group stores **`return_5day`**, the quantity the rank is computed from, and the
-reader re-ranks. The plan still records `target = cs_rank_5day`, and the table's
+reader re-ranks — ⚠️ **which nothing did until `RNK-1` was fixed on 2026-08-18**; it is
+`train_test_creator._label` that does it now, and §5b records what else had to travel
+with the label. The plan still records `target = cs_rank_5day`, and the table's
 `COMMENT` says all of this.
 
 ⚠️ **The note is keyed on `target_derived`, not on `stored_target is None`** — a
