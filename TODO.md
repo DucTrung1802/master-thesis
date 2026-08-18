@@ -151,6 +151,74 @@ the current 13. ⏱ ~6 GPU-h. If the overlap is high the look-ahead is mild and 
 roughly stand; if it is low, every level in this repo is overstated and only the shapes
 survive. **Do the cheap one first** — it is one run and it bounds the problem.
 
+### ⚠️ PRF-9 · THE FEATURE SURVEY — 76 gold tables, and only THREE can help ⏱ see below
+
+Surveyed 2026-08-19, because "we have much more data in gold, can it add features?" is
+the obvious next question and the answer is structural rather than a matter of trying.
+
+**⚠️ A CROSS-SECTIONAL RANK CANNOT USE A DATE-ONLY COLUMN.** `cs_rank_{h}day` ranks stocks
+WITHIN a date. A column identical for every ticker on that date has a **constant within-date
+rank**, so it carries no information about WHICH stock to buy. Measured, not argued:
+
+| pool | sampled columns with cross-sectional variation |
+|---|---|
+| `pool__basic` | **12 of 12** ✅ |
+| `pool__ta` | **12 of 12** ✅ |
+| `pool__fa` | 8 of 12 (the misses are `year`, `quarter`) |
+| **`pool__economy_vietnam`** | **0 of 12** ❌ |
+
+**Of 76 gold tables, 71 are date-only** — all 19 `economy_*`, all 48 `forex_*`, `bonds`,
+`funds`, `stock_market`, `market_breadth`. ⚠️ **That is ~4,500 channels that are
+structurally incapable of ranking a cross-section**, and it explains the shortlist
+composition without appealing to their being weak. They can only enter through
+INTERACTIONS (macro × beta, macro × sector), and nothing in the pipeline builds one.
+
+⚠️ **This is consistent with, but not the same as, the 2026-08-17 six-pool sweep.** That
+tested `stock_market`/`bonds`/`news_daily`/`market_breadth` on a SINGLE-SERIES VCB target,
+where a date-only column does vary — over time — and they failed anyway (z = +0.19…+0.53).
+Two different arguments, one conclusion.
+
+**Only five gold tables are PER-TICKER**, and this is the whole candidate list:
+
+| source | shape | status |
+|---|---|---|
+| **`stocks_ta` → `pool__ta`** | **711 numeric channels**, 2,381,858 × 777 tickers | ✅ built on `all`, **0 name collisions** with `pool__basic`, coverage median **0.992** (7 of 40 sampled below 0.95). ⚠️ ends **2026-06-26** (`STA-1`) |
+| `news_daily_panel` | 26 channels, 2.06 M rows, per-ticker | ⚠️ `pool__news_daily` exists **for VCB only** — must be built for `all`. Prior is weak: z = +0.53 at layer 1 |
+| `stocks_financials_bank_fa` → `pool__fa` | 1,150 cols | ⚠️ **banks only** — ~20 of the 150 names, so ~87 % NULL on this universe |
+| `stocks` | 41 cols | already the source of `pool__basic` |
+| `news_weekly_panel` | 28 cols | weekly grain; the news thread is closed |
+
+**So the prize is `pool__ta`: 711 channels against `pool__basic`'s 90, an 8× widening of
+the only feature space that can rank.**
+
+⚠️ **AND IT HAS NEVER BEEN OFFERED TO THE CROSS-SECTIONAL SELECTION — `CSP-1`.**
+`cross_sectional.read_universe_panel` is ONE hand-written SQL statement reading
+`pool__basic ⋈ pool__targets`. No `--pools` value, no notebook parameter and no config key
+routes around it. **The 13 channels are the survivors of 90 candidates, not of 800.**
+
+**Order of work, and each step is a real blocker for the next:**
+
+1. **`P1-2` / `PNL-2` first** ⏱ half a day — derive grain from the panel's own ticker
+   count. CLAUDE.md already states this "partly dissolves `CSP-1` for free": the `else`
+   branch then reads via `reader.join(pools)`, making `--pools pool__basic,pool__ta` a real
+   cross-sectional run.
+2. ⚠️ **`MEM-1` becomes the wall, and P3-1 says so in advance.** 711 + 90 channels over
+   624,448 rows is ~8× the design that already peaked at **16.3 GB host RAM** on 90
+   channels (P1-4b). Straight-lining that is ~130 GB. **The blocked ranker (P1-4) fixed the
+   VRAM half only.** So `pool__ta` must be PRUNED before it is selected over — a coverage
+   screen plus a correlation prune, offline, is the cheap version.
+3. **Then the selection.** At ~800 channels the fitted cost model gives ~5.4× the 90-channel
+   run's 6 h 07 m ≈ **33 h at 20 draws**, above Kaggle's 30 GPU-h/week. **Run 10 draws**
+   (§5's rule: 10 to fail, 20 to pass) ≈ 16 h, and pay for 20 only if it looks like passing.
+
+⚠️ **`STA-1` is the tax on all of it**: `pool__ta` stops 2026-06-26, so an INNER join drops
+the chain's last 31 sessions — the same 4,266 → 4,235 it already costs the VCB chain.
+
+⚠️ **Do `PRF-7` before or alongside this.** Widening the candidate pool from 90 to 800
+makes selection look-ahead WORSE, not better — more channels means more opportunity for the
+selection to have fitted the test folds. Adding features before bounding that is how a
++1.991 becomes a number nobody can defend.
+
 ### ⚠️ PRF-2 · Run the real chain at `h=10` ⏱ ~1 h GPU + 1 h chain
 
 **The one horizon that is both measured-to-work and unmeasured-by-a-model.** A hand-built
