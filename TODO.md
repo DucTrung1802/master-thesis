@@ -188,8 +188,16 @@ tiny panel treats a large fixed cost as if it were per-row.
 sampled BETWEEN phases.** The top-300 run died *inside* phase 4, so whatever killed it
 was never printed. `selector._tick` now also reports `peak=` — the OS high-water mark
 (`peak_wset` / `ru_maxrss`) — which is the number that decides whether a run survives.
-**Until a run reports `peak`, the top-300 ceiling is unmeasured**, and the honest
-statement is that top-300 died at ~29-30 GB while top-150 settled at 11.0 GB.
+✅ **AND THE 2026-08-18 NULL RUN REPORTED IT.** On top-150 the phases read `rss=11.2G`
+but **`peak=16.3G`** — the high-water mark is **45 % above where the run settles**, and it
+is reached inside `rank (the ensemble's methods)`, which is exactly where the top-300 run
+died and exactly what an end-of-phase sample could never see. `window design` has the same
+shape: 7.3 G settled, **10.8 G peak**. Doubling the rows puts top-300's peak at
+**~28-30 GB against a ~29-30 GB box**, so that kill is now explained by a measurement.
+
+⚠️ **Both earlier extrapolations were wrong, in opposite directions, and for the same
+reason: each scaled a quantity that was not the binding one** (~39 GB from one tiny panel,
+then ~20.6 GB from settled RSS). **top-300 needs the streaming design (P3-2), not a trim.**
 
 ### ~~P1-4 · Chunk the GPU rank step~~ — **promoted from P3-2 by measurement** ⏱ done
 
@@ -396,14 +404,30 @@ session** — the first time a 20-draw null on a real cross-section has been.
 ⚠️ **`permutation` is 726 s, 54 % of the run**, and §19 measured it as the one
 load-bearing ensemble member, so it cannot be dropped to buy the null.
 
-### ⏳ THE 20-DRAW NULL — pushed 2026-08-18, ~7 h, and a PREDICTION recorded first
+### ✅ THE 20-DRAW NULL — DONE 2026-08-18, **z = +9.09**, and my prediction was half right
 
 `RUN_NULL=true, N_NULL=20` on the same payload. Each draw shuffles the label in **date
 blocks** (`cross_sectional.shuffle_dates`, `mode="date_block"` — each stock keeps its own
 returns, moved to a different fortnight) and re-runs the whole selection on it.
 
-**Prediction, written before the result so it cannot be revised afterwards: it WILL
-clear, with a p95 bar around +0.02 … +0.05 and z between +2 and +6.** The reasoning, so
+**RESULT — 6 h 07 m on a T4, 0 failed draws:** null mean **+0.0291**, sd **0.0086**, p95
+bar **+0.0388**, null MAX **+0.0410** (below the observed, so rule 3 does not fire),
+**z = +9.09**, p = 0.0476 (the 1/21 floor — read z). **It clears.**
+
+⚠️ **THE PREDICTION WAS RIGHT ON THE BAR AND WRONG ON `z`, and the wrong half is left
+here rather than edited.** Predicted bar +0.02 … +0.05 → actual **+0.0388** ✅. Predicted
+z +2 … +6 → actual **+9.09** ❌ — I hedged the range upward "for safety" while my own
+reasoning in the same paragraph implied a fold noise of ~0.013 and therefore a much
+tighter null. **Padding a prediction is not conservatism; it is a worse prediction.** The
+null sd came in at 0.0086.
+
+⚠️ **And the number to quote is not +0.1075.** The null's mean is +0.0291, so the excess
+over a shuffled label is **+0.078**. See CLAUDE.md §2b-bis for the four things this does
+not settle — chiefly that there is **no holdout**, and that §2c records the VN100 result
+clearing its bar and then failing exactly that test.
+
+*(The original prediction, kept verbatim: "it WILL clear, with a p95 bar around
++0.02 … +0.05 and z between +2 and +6.")* The reasoning, so
 that being wrong is informative:
 
 - a daily IC over 150 names has sd ≈ `1/√150` ≈ **0.082**, and each fold averages ~760 of

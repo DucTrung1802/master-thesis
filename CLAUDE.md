@@ -113,6 +113,42 @@ Three things this ladder means:
 3. **The rank target is the whole result.** Swapping `cs_rank_5day` for raw `return_5day`
    on the same panel and folds drops the IC 4× and pushes the hit rate below a coin.
 
+### ⚠️ 2b-bis. THE WIDTH LADDER MEETS THE HORIZON — `cs_rank_20day`, top-150, **z = +9.09**
+
+Measured 2026-08-18 on a Kaggle T4, **6 h 07 m**, the first time this repo has run a
+cross-section at the horizon §2a-bis pointed to. `unified_schema_all`, top **150** names
+by median matched turnover **before 2014-01-01**, 624,448 rows × 4,368 sessions,
+`d=20 h=20`, `n_eff = 218`, 90 channels → 61 kept.
+
+| | |
+|---|---|
+| observed `ic_mean` | **+0.1075** — folds +0.060 / +0.124 / +0.153 / +0.104 / +0.097, **all five positive** |
+| `ic_trend_per_fold` | +0.0054 — flat, not decaying (rule 5) |
+| null: 20 draws, `date_block`, **the whole selection re-run inside each** | mean **+0.0291**, sd 0.0086 |
+| p95 BAR | **+0.0388** |
+| null MAX | **+0.0410** — *below* the observed, so **rule 3 does not fire** |
+| **z** | **+9.09** · p = 0.0476 (the 1/21 floor — read z) · 0 failed draws |
+
+**This is the strongest selection-stage evidence in the repo**, and the first at a 4-week
+horizon. Four things it does **not** establish, and they are the reason it is filed here
+rather than in a conclusion:
+
+1. ⚠️ **THE NULL'S MEAN IS +0.0291, NOT ZERO.** The procedure earns +0.029 on a shuffled
+   label, so the excess over chance is **+0.078, not +0.1075** — quoting the raw IC as
+   "the skill" overstates it by 37 %.
+2. ⚠️ **NO HOLDOUT.** §2c records exactly this trap: the VN100 result cleared its bar and
+   then the holdout gave +0.011 against a shuffled control of +0.0071. `HOLDOUT_START` was
+   `None` here, so this is cross-validation with an honest bar, **not** an untouched tail.
+3. ⚠️ **The null prices in FEATURE selection, not EXPERIMENT selection.** The universe, the
+   horizon and the target were each chosen using prior evidence (§2a-bis, §2b). That is
+   `NUL-1`'s shape one level up, and no null here prices it.
+4. ⚠️ **A cleared selection bar has never yet survived downstream in this repo** — §5d and
+   TODO P2-3 both. The model stage is the next question and not a formality.
+
+⚠️ **Do not paste this row into §2b's ladder.** That table is `h=5` at one lookback; this
+is `h=20`, a different label, a different `n_eff`, and a universe fixed on pre-2014
+liquidity (**358 of 781 tickers could never enter it**, and it is not point-in-time).
+
 ### 2c. ⚠️ And the honest caveats on the survivor
 
 - **The holdout does NOT confirm it.** +0.011 against a shuffled control of +0.0071, with
