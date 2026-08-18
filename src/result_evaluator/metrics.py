@@ -437,8 +437,17 @@ def panel_core_metrics(
     valid: np.ndarray,
     q: float = LONG_SHORT_Q,
     min_width: int = MIN_PANEL_WIDTH,
+    horizon: int = 1,
 ) -> Dict[str, float]:
-    """The core block computed PER DATE and averaged — the cross-sectional reading."""
+    """The core block computed PER DATE and averaged — the cross-sectional reading.
+
+    ⚠️ `horizon` is not decoration: it is the denominator of `ic_t`. Consecutive daily
+    ICs share `h − 1` of their `h` label days, so the independent count is
+    `n_dates / h`, never `n_dates` — see `_ic_uncertainty`, which has said the same
+    thing on the single-series side since 2026-08-16. The default of 1 means "no label
+    overlap", which is honest for a caller that does not know its horizon and is why
+    `panel_null_metrics` may leave it alone: that path reads only `CORE_METRICS`.
+    """
     width = valid.sum(axis=1)
     usable = width >= min_width
     if not usable.any():
@@ -474,9 +483,15 @@ def panel_core_metrics(
     # cross-sectional observation, so its own spread IS the error bar. It was computed
     # inside this function all along and thrown away at the `np.mean` — reported since
     # 2026-08-16.
+    # ⚠️ **ISSUE ICT-1, fixed 2026-08-18.** This divided by `sqrt(len(daily))` — the
+    # RAW date count — which overstates `ic_t` by exactly `√h`. Measured on
+    # `lstm__all__rank_20day__final__d20_h20`: 15.50 reported against +3.47 honest at
+    # h=20, a ratio of 4.472 = √20. `evaluate_panel` computed `n_eff = n_dates / h`
+    # correctly on the line below and nothing consumed it.
     daily = np.array(ics, dtype=float)
+    n_eff = len(daily) / max(1, int(horizon))
     sd = float(daily.std(ddof=1)) if len(daily) > 1 else float("nan")
-    se = sd / np.sqrt(len(daily)) if len(daily) > 1 and sd == sd else float("nan")
+    se = sd / np.sqrt(n_eff) if n_eff > 1 and sd == sd else float("nan")
     return {
         "ic": float(np.mean(ics)) if ics else float("nan"),
         "dir_auc": float(np.mean(aucs)) if aucs else float("nan"),
@@ -564,7 +579,7 @@ def evaluate_panel(
     evidence twentyfold.
     """
     Y, S, valid = panel_matrices(dates, tickers, y_true, score)
-    out = panel_core_metrics(Y, S, valid)
+    out = panel_core_metrics(Y, S, valid, horizon=horizon)
     out["task"] = task
     out["grain"] = "panel"
     out["n_eff"] = round(max(1.0, out["n_dates"] / max(1, horizon)), 1)

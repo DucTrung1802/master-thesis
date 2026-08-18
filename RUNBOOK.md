@@ -77,7 +77,7 @@ for yet.
 | 5 | final_features | `python -m final_features --apply` | `<target>__final__d20_h5` | **0.8 s** |
 | 6 | train_test_creator | `python -m train_test_creator --save` | `src/train_test_set/<dataset>/` | **0.5 s** |
 | 7 | model | `python -m model.lstm` *or* `model/lstm/RUN__lstm.ipynb` | `src/model/runs/<run_id>/` | minutes |
-| 8 | result_evaluator | `python -m result_evaluator` | `results/metrics.json`, `runs/index.csv` | seconds |
+| 8 | result_evaluator | `python -m result_evaluator` | `results/metrics.json` — ⚠️ **`runs/index.csv` only via `--rebuild-index`** | **41.6 s** `--rescore`, **42.7 s** `--rebuild-index`, 3 runs |
 
 ⚠️ **Stages 2 and 4 are MANUAL.** `python -m pipeline --apply` stops before each of them
 and prints `MANUAL — cannot be produced here`, because a selection run is the expensive
@@ -107,8 +107,10 @@ python -m train_test_creator --ticker all --table rank_20day__final__d20_h20 --s
 # 7 — train (config must be written FIRST; see below)
 python -m model.lstm --config configs/lstm__all__rank_20day__final__d20_h20.yaml   # 4m 23s
 
-# 8 — score it
-python -m result_evaluator
+# 8 — score it.  ⚠️ TWO commands: the first rewrites the run FOLDER, the second
+#     rewrites index.csv.  Neither needs a GPU.
+python -m result_evaluator --rescore         # 41.6 s
+python -m result_evaluator --rebuild-index   # 42.7 s
 ```
 
 ⚠️ **`--ticker all` is not optional.** `train_test_creator` defaults to
@@ -306,13 +308,28 @@ a smoke test, never a number.
    search (`NUL-1`). *A run that fails it is dead; a run that clears it is not yet alive.*
 5. **On a PANEL (`bank`, `vn30`, …), quote the daily-IC t-stat, never `ic_clears`** — the
    evaluator's panel null is not label-neutral (`NUL-3`).
-6. ⚠️ **AND THAT t-STAT IS ITSELF WRONG UNTIL `ICT-1` IS FIXED.** `metrics.csv`'s `ic_t`
-   divides by `n_dates`, not by `n_eff = n_dates/h`, so it is overstated by **exactly
-   `√h`** — measured 2026-08-18: **15.50 reported against +3.47 honest** at h=20. Until
-   the one-line fix and `--rescore` land, compute it yourself from `predictions_*.csv`:
-   Spearman per date, then `mean / (sd / √(n_dates/h))`. **Every panel run in `index.csv`
-   currently carries the overstated figure.**
-7. **A rank target's `long_short` is NOT money.** The metric is documented "in return
+6. ✅ **`ICT-1` FIXED 2026-08-18 — that t-stat is now honest, and you no longer compute
+   it by hand.** `metrics.csv`'s `ic_t` divided by `n_dates` rather than
+   `n_eff = n_dates/h`, overstating it by **exactly `√h`** (15.50 reported against +3.47
+   at h=20). `panel_core_metrics` takes the horizon now and `evaluate_panel` passes it.
+   ⚠️ **A run folder scored BEFORE that date still carries the old number until it is
+   re-scored, and re-scoring takes TWO commands:**
+
+   ```powershell
+   python -m result_evaluator --rescore        # rewrites each run FOLDER   41.6 s
+   python -m result_evaluator --rebuild-index  # rewrites index.csv         42.7 s
+   ```
+
+   ⚠️ **`--rescore` alone does NOT touch `index.csv`** — measured the same day: the
+   folder read +3.47 while the leaderboard still read 15.50. Neither needs a GPU.
+   ⚠️ Only PANEL runs move; a single-series run's `ic_t` comes from `_ic_uncertainty`,
+   which had `n_eff` right all along (the two VCB runs are unchanged at 5.50 / 0.96).
+7. ⚠️ **`mase` DOES NOT EXIST ON A PANEL — do not read a blank as a pass.** Block B is
+   computed in `metrics.evaluate` only, so `evaluate_panel` returns no `mase`, `rmsse`,
+   `skill_score` or `beats_naive`, and `test_mase` is **NaN** for every cross-sectional
+   run. Rule 4 above and P2-3 both say `mase ≥ 1` is the line to quote; on a panel that
+   line is simply **not measured yet** (TODO **P4-12**).
+8. **A rank target's `long_short` is NOT money.** The metric is documented "in return
    units", which holds when the label is a return; on `cs_rank_*` it is a spread of
    RANKS. The 2026-08-18 run's `+0.0635` is not 6.35 %.
 

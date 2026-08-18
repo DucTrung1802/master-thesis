@@ -1054,13 +1054,27 @@ prediction and is untouched; this is the other thing, at the grain and horizon �
 | 5 · final_features | `unified_schema_all.rank_20day__final__d20_h20` | 624,448 × 17, **150 names**, 621,448 labelled |
 | 6 · train_test_creator | `all__rank_20day__final__d20_h20__tr70_val15_test15__std` | 422,251 / 91,462 / 93,224 windows × 20 × 13 |
 | **7 · model** | `lstm__all__rank_20day__final__d20_h20__20260818-195738` | **4m 23s**; test daily IC **+0.0863**, **t = +3.47**, **80.9 % of days positive**; val +0.1282, t = +4.15 |
-| 8 · result_evaluator | ⛔ **NOT RUN** | see TODO |
+| 8 · result_evaluator | ✅ scored and indexed 2026-08-18 | clears its own block-shuffled bar on `ic` and `dir_auc` — ⚠️ a floor, not a result (`NUL-1`) |
 
-⚠️ **THE `t` ABOVE IS COMPUTED BY HAND AND THE ONE IN THE ARTEFACT IS WRONG.** `metrics.csv`
-reports `ic_t = 15.50`; the honest figure is **+3.47**, overstated by exactly **√h = √20**
-because the standard error divides by `n_dates` and not by `n_eff = n_dates/h`. That is
-`ICT-1`, opened 2026-08-18, and it is the column `NUL-3` tells you to read instead of
-`ic_clears`. **Fix it before quoting anything from a panel run.**
+✅ **`ICT-1` FIXED 2026-08-18, and the `t` above is now the artefact's own.** It read
+`ic_t = 15.50` — overstated by exactly **√h = √20**, because the standard error divided by
+`n_dates` and not by `n_eff = n_dates/h` while `evaluate_panel` computed the right `n_eff`
+on the next line and nothing consumed it. `panel_core_metrics` takes a `horizon` now.
+After `--rescore` the folder reads **+3.47** test / **+4.15** val, matching the hand
+computation exactly; the two single-series VCB runs did **not** move (5.50 / 0.96), because
+`_ic_uncertainty` had the formula right all along.
+
+⚠️ **RE-SCORING A PANEL RUN TAKES TWO COMMANDS AND THE REGISTER SAID ONE.**
+`--rescore` rewrites each run FOLDER's `results/metrics.{csv,json}`; `index.csv` is written
+**only** by `--rebuild-index`. Measured: after `--rescore` the folder read +3.47 while the
+leaderboard still read 15.50. Any panel run scored before 2026-08-18 and not put through
+**both** still carries the overstated figure.
+
+⚠️ **AND `mase` IS NOT MEASURED ON A PANEL AT ALL** — block B (`mase`, `rmsse`,
+`skill_score`, `beats_naive`) is computed in `metrics.evaluate`, the series path;
+`evaluate_panel` never calls it, so `test_mase` is **NaN** here while the two VCB runs
+carry 21.36 and 1.068. §5 rule 2: that blank is an **absence**, not a pass — and it is the
+column P2-3 called "the line to quote". TODO **P4-12**.
 
 ⚠️ **Four things this result does NOT say**, all of them measured or structural:
 **(1)** it ranks, it does not price — R² test **+0.0003**, RMSE 0.29065 against a
@@ -1132,7 +1146,7 @@ dataset both end 2026-06-25 rather than 2026-08-07.
 `final_features` groups on `(schema, target, setup)` — **no term for which pools** — so a
 `pool__basic`-only run and a `basic + X` run are ONE group and get unioned.
 
-**Open issues live in [ISSUES.md](ISSUES.md)** (**16 open**, 33 resolved, codes permanent).
+**Open issues live in [ISSUES.md](ISSUES.md)** (**15 open**, 34 resolved, codes permanent).
 Short version: ⚠️ **`SHP-1`** the forex scraper writes two file shapes and only one was
 ever ingested — 71% of the folder was silently discarded until 2026-08-14, and **the
 same `value`-only filter sits unchecked on `bonds`/`funds`/`economy`/`indices`**;
@@ -1182,7 +1196,7 @@ brokers' books are unreachable.
 | file | what it is | read it when |
 |---|---|---|
 | **[RUNBOOK.md](RUNBOOK.md)** | the operating guide — 8 stages with MEASURED runtimes, the two flags that destroy things, the target-switch leakage trap, and §10's list of what is deliberately not standardized | you are about to run something |
-| **[ISSUES.md](ISSUES.md)** | 16 open / 33 resolved, permanent codes | before quoting any number — four of them change how a number may be READ |
+| **[ISSUES.md](ISSUES.md)** | 15 open / 34 resolved, permanent codes | before quoting any number — four of them change how a number may be READ |
 | **[TODO.md](TODO.md)** | the one backlog, priority-ordered, every item costed | deciding what to do next |
 | `README.md` | the front door; routes here | — |
 | `THESIS_PROGRESS_2026*.md`, `THESIS_SUMMARY_2026_VI.md` | deliverable write-ups (EN + VI) | writing the thesis, not running the pipeline |

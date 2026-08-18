@@ -401,3 +401,37 @@ def test_ic_carries_its_own_error_bar_computed_on_n_eff_not_n():
     # and t=12.3 on the same IC.
     assert _ic_uncertainty(0.4880, 640.0)["ic_se"] < out["ic_se"]
     assert _np.isnan(_ic_uncertainty(float("nan"), 128.0)["ic_t"])
+
+
+def test_panel_ic_t_is_scaled_by_sqrt_h_not_by_the_raw_date_count():
+    """⚠️ ISSUE ICT-1. The panel `ic_t` divided the daily-IC sd by `sqrt(n_dates)`,
+    which prices in every date as an independent observation. At h=20 consecutive
+    daily ICs share 19 of their 20 label days, so the honest denominator is
+    `sqrt(n_dates / h)` and the old figure was too big by exactly `sqrt(h)`.
+
+    Measured on `lstm__all__rank_20day__final__d20_h20`: 15.50 reported, +3.47 honest.
+    """
+    # ⚠️ `_panel`'s score is the idiosyncratic part EXACTLY, so its per-date IC is 1.0
+    # on every date and the daily sd is 0 — no error bar to scale. Add noise.
+    dates, tickers, y, score = _panel(n_dates=400, seed=11)
+    rng = _np.random.default_rng(11)
+    score = score + rng.normal(0, 0.04, len(score))
+    Y, S, valid = M.panel_matrices(dates, tickers, y, score)
+
+    h1 = M.panel_core_metrics(Y, S, valid, horizon=1)
+    h20 = M.panel_core_metrics(Y, S, valid, horizon=20)
+
+    # the IC itself is untouched — this is an error bar, not an estimate
+    assert h1["ic"] == h20["ic"]
+    # and the whole change is the one constant. ⚠️ `ic_se` is rounded to 4 dp before it
+    # is returned, so a ratio of two small SEs carries ~0.6 % of rounding — the
+    # tolerance is that, not slack in the claim. `ic_t` is the larger number and is
+    # tighter.
+    assert abs(h20["ic_se"] / h1["ic_se"] - _np.sqrt(20.0)) < 0.05
+    assert abs(h1["ic_t"] / h20["ic_t"] - _np.sqrt(20.0)) < 0.02
+    # horizon=1 is the old behaviour, kept as the honest "no overlap" default
+    assert abs(h1["ic_se"] - h1["ic_daily_sd"] / _np.sqrt(400.0)) < 1e-3
+
+    # and `evaluate_panel` must PASS its horizon through — the bug was that it did not
+    piped = M.evaluate_panel(dates, tickers, y, score, horizon=20, lookback=20, draws=0)
+    assert abs(piped["ic_t"] - h20["ic_t"]) < 1e-9

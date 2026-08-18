@@ -50,6 +50,12 @@ INDEX_COLUMNS: List[str] = [
     # ⚠️ `test_ic_t` is THE column to read on a PANEL grain: issue NUL-3 says the
     # evaluator's panel null is not label-neutral, so `test_ic_clears` is not
     # trustworthy there while the daily-IC t-stat needs no null at all.
+    # ⚠️ **AND THAT COLUMN WAS ITSELF WRONG UNTIL 2026-08-18 (`ICT-1`)** — it divided
+    # the daily-IC sd by `sqrt(n_dates)` rather than `sqrt(n_dates / h)`, overstating
+    # every panel run by exactly `√h` (15.50 against +3.47 at h=20). Fixed in
+    # `metrics.panel_core_metrics`. Any `index.csv` row written before that date and
+    # not re-scored still carries the old figure — `--rescore` rewrites it from
+    # `predictions_*.csv` and needs no GPU.
     "test_ic_se", "test_ic_t",
     # --- vs a naive forecast, block B (added 2026-08-16) -----------------------
     # ⚠️ `test_mase < 1` is the first column that asks whether the model beats DOING

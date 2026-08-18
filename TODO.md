@@ -182,32 +182,9 @@ carries eight names and a sha1. `final_features` had **no tests at all** and now
 
 ⚠️ **P1-5 is unblocked and has NOT been run** — that was the instruction.
 
-### ⚠️ P0-7 · `ICT-1` — the panel `ic_t` is overstated by exactly √h ⏱ ~30 min
-
-**Do this before quoting any panel run, including the one from 2026-08-18.**
-`result_evaluator/metrics.py:479` divides the daily-IC sd by `sqrt(n_dates)`; line 570
-computes `n_eff = n_dates / horizon` correctly and nothing uses it. Consecutive daily ICs
-share `h-1` label days.
-
-| measured on `lstm__all__rank_20day__final__d20_h20`, test | |
-|---|---|
-| `ic_t` as reported | **15.50** |
-| honest `mean / (sd / √(n_dates/h))` | **+3.47** |
-| ratio | **4.47 = √20** |
-
-⚠️ **`index.py:50` points readers at this exact column** — *"`test_ic_t` is THE column to
-read on a PANEL grain"* — so the documented escape from `NUL-3` is a second broken
-statistic, and every panel run in `index.csv` carries it.
-
-**Fix**: one line, then `python -m result_evaluator --rescore`, which recomputes from
-`predictions_*.csv` and needs no GPU. ⚠️ It rewrites metrics for runs this session did not
-produce — that is the point, and it is why it was left for a deliberate decision.
-
----
-
 ## P1 — unblocks hours of other work
 
-### ⚠️ P1-5 · STAGES 5, 6 AND 7 DONE 2026-08-18 — **stage 8 is not run**
+### ⚠️ P1-5 · STAGES 5-8 ALL DONE 2026-08-18 — only **`FNM-1`** is left
 
 **`final_features --apply`** built `unified_schema_all.rank_20day__final__d20_h20` in
 **7.3 s**: 624,448 × 17, **150 tickers**, 2009-01-02 → 2026-08-07, 621,448 labelled. The
@@ -257,11 +234,24 @@ predictor, so only the ORDER carries. ⚠️ `long_short = +0.0635` is a **rank*
 money. ⚠️ The `t` above is computed by hand — the artefact's own `ic_t` reads 15.50 and is
 wrong by √h (**P0-7 / `ICT-1`**).
 
-**Left, in order:**
+**Stage 8 ran, after `ICT-1` was fixed so it could not index the overstated figure.**
+`--rescore` (41.6 s) then `--rebuild-index` (42.7 s), no GPU. The run folder and
+`index.csv` now both read `ic_t = +3.47` test / **+4.15** val — see CLAUDE.md §6-0.
 
-1. **`ICT-1` (P0-7)** — fix, then `--rescore`, so the leaderboard stops overstating.
-2. **Stage 8**, `python -m result_evaluator` — the run is self-scored but not indexed.
-3. **`FNM-1` (P1-6)** — measure which side should move.
+⚠️ **`--rescore` DOES NOT REWRITE `index.csv`, and the register said it did.** It calls
+`evaluate_run(write=True)` per folder, which rewrites `results/metrics.{csv,json}` and
+`verdict.txt`; `index.csv` is written **only** by `rebuild_index`, a different branch of
+`_main`. Measured 2026-08-18: after `--rescore` the folder read +3.47 while `index.csv`
+still read 15.50. **Both flags, in that order, or the leaderboard keeps the old number.**
+
+⚠️ **Block B is absent on a PANEL, so "read `mase` beside it" cannot be done here.**
+`accuracy_vs_naive` is called from `metrics.evaluate` (the series path) only —
+`evaluate_panel` runs `regression_extras` and never the naive comparison, so
+`test_mase` is **NaN** for the top-150 run while the two VCB runs carry 21.36 and 1.068.
+That is not a regression from this fix; it is a gap this fix made visible. New item
+**P4-12**.
+
+**Left:** **`FNM-1` (P1-6)** — measure which side should move.
 
 **Why it is the question this repo has never answered.** Twice now a selection has cleared an honest
 bar and the model below it has shown nothing (§5d, P2-3) — and `RNK-1` says that on a
@@ -272,8 +262,9 @@ behind **z = +9.09**, the strongest selection evidence in the repo.
 ```powershell
 python -m final_features --apply                                    # ✅ DONE 7.3 s
 python -m train_test_creator --ticker all --table rank_20day__final__d20_h20 --save  # ✅ DONE 10.9 s
-python -m model.lstm --config configs/lstm__all__rank_20day__final__d20_h20.yaml     # ⬅ NEXT (config to write)
-python -m result_evaluator                                          # then this
+python -m model.lstm --config configs/lstm__all__rank_20day__final__d20_h20.yaml     # ✅ DONE 4m 23s
+python -m result_evaluator --rescore                                # ✅ DONE 41.6 s
+python -m result_evaluator --rebuild-index                          # ✅ DONE 42.7 s — NOT optional
 ```
 ⚠️ **`--ticker all` is not optional** — the stage defaults to `chain.DEFAULT_TICKER`, which
 is `vcb`, and would look for the table in the wrong schema.
@@ -664,6 +655,7 @@ shortlist this project has assembled does not beat "predict no change".
 |---|---|---|
 | **P4-1** | **`STA-1` costs the chain its last 31 sessions** — `pool__ta` stops 2026-06-26, and the INNER join drops the whole chain 4,266 → **4,235 rows**. The `return_5day` table and dataset end 2026-06-25 | measured 2026-08-17 |
 | **P4-11** | ⚠️ **`pipeline`'s `selection_2` ROW DESCRIBES A DIFFERENT EXPERIMENT AND CALLS IT `up to date`.** Measured 2026-08-18: `python -m pipeline --ticker all --table rank_20day__final__d20_h20` reports *"2 layer-2 run(s) over `pool__shortlist__rank_20day__d20_h20`"* and then names `2026-08-17_011642__vcb__shortlist__return_5day__d20_h5__return_5day` — a different schema, a different target and a different pool. The layer-2 detection is not scoped to the chain being asked about, so a stage that has never run for this chain reads green. ⚠️ Related trap in the same table, working as designed but worth knowing: the **`model` row keys on `--config`, not on `--table`**, so without one it reports the DEFAULT chain's run as up to date — pass `--config` or `--apply` will skip the model stage while saying everything is fine. | measured 2026-08-18 |
+| **P4-12** | ⚠️ **BLOCK B (`mase`, `rmsse`, `skill_score`, `beats_naive`) IS NEVER COMPUTED ON A PANEL.** `metrics.accuracy_vs_naive` is called from `evaluate` only; `evaluate_panel` runs `panel_core_metrics` + `panel_null_metrics` + `regression_extras` and stops. So the top-150 cross-sectional run carries `test_mase = NaN` while both VCB runs carry a number — and **`mase ≥ 1` is the column P2-3 says is the line to quote**, the one that showed the `return_5day` model losing to "predict no change". ⚠️ The fix is not a copy-paste: the `lag_h` naive reads `y_true[i - h]` and assumes rows are **consecutive samples in date order**, which is false on a panel where each date holds N tickers — it would have to be per-ticker. Found 2026-08-18 while fixing `ICT-1`; nothing was broken by that fix, the gap simply became visible once the panel row was read column by column | measured 2026-08-18 |
 | **P4-2** | Confirm `validation.csv` emits **`n_dead_train` / `n_dead_test`** and read them for `pool__news_daily` — rule 23, its channels are entirely NULL before 2013 | the 2026-08-17 layer-2 `validation.csv` showed no such column |
 | **P4-3** | **262 rows in `bronze.cafef_price` have `high < low`** (e.g. ACB 2018-07-31: high 35,800 low 36,500). CafeF's defect, surfaces in gold as a negative `range_hl`. Needs a bronze data-quality screen, not a gold patch | ⚠️ **re-verified 2026-08-17, still 262.** Probably deserves an ISSUES.md code |
 | **P4-4** | XGBoost warns in **every** run: *"Falling back to prediction using DMatrix due to mismatched devices — running on cuda:0, input data on cpu"* | if the design is copied host→device per prediction, the GPU conversion is leaving speed on the table |
