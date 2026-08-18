@@ -396,6 +396,35 @@ session** — the first time a 20-draw null on a real cross-section has been.
 ⚠️ **`permutation` is 726 s, 54 % of the run**, and §19 measured it as the one
 load-bearing ensemble member, so it cannot be dropped to buy the null.
 
+### ⏳ THE 20-DRAW NULL — pushed 2026-08-18, ~7 h, and a PREDICTION recorded first
+
+`RUN_NULL=true, N_NULL=20` on the same payload. Each draw shuffles the label in **date
+blocks** (`cross_sectional.shuffle_dates`, `mode="date_block"` — each stock keeps its own
+returns, moved to a different fortnight) and re-runs the whole selection on it.
+
+**Prediction, written before the result so it cannot be revised afterwards: it WILL
+clear, with a p95 bar around +0.02 … +0.05 and z between +2 and +6.** The reasoning, so
+that being wrong is informative:
+
+- a daily IC over 150 names has sd ≈ `1/√150` ≈ **0.082**, and each fold averages ~760 of
+  them, so even at 20× inflation for label overlap a fold's IC noise is ~0.013 — an order
+  below the observed +0.1075;
+- §2b's ladder is the precedent: LIQUID301 observed +0.0768 against a bar of +0.0245;
+- the selection here keeps **61 of 90** channels, far less aggressive than the two-layer
+  funnel P0-1 had to price in, so there is less selection for the null to absorb.
+
+**What would falsify that reading, and it is not nothing:** rule 23's data-arrival
+signature (this panel starts in 2009 and `drv_*` channels need 252 sessions of history),
+and the fat-tailed nulls §10d records — `p = 1/21` is the floor either way, so **read `z`,
+not `p`**.
+
+⚠️ **A SEPARATE THING TO CHECK IN THAT RUN'S OUTPUT**: `ic_summary.se_ic_per_fold` reads
+**0.1642** ≈ `1/√38.1`, which is the SINGLE-SERIES formula — it assumes a daily IC of sd
+1.0, i.e. one stock's ±1 sign. On a 150-name cross-section the sd is ~0.082, so that
+column appears to over-state the error bar by ~√N ≈ 12×. If so it is `PNL-1`'s family at
+the summary instead of the scorer, and it is **conservative** (too wide), which is why it
+has never manufactured a result — but it should not be quoted as this run's error bar.
+
 ### ⚠️ SECOND ATTEMPT, 2026-08-18 — one wall further, and a DECISION was needed
 
 With P1-4's chunking, the same job on the same payload got **past** the step that killed

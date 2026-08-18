@@ -62,7 +62,7 @@
         "DESIGN_DTYPE": "float64",
         "MIN_IC_WIDTH": 5,
         "RUN_STABILITY": true,
-        "RUN_NULL": false,
+        "RUN_NULL": true,
         "N_NULL": 20,
         "HOLDOUT_START": null,
         "REPORT_ROOT": "reports/feature_selection",
