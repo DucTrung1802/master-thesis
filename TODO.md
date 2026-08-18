@@ -149,7 +149,55 @@ how an excluded column comes back after an upstream rename.
 
 ---
 
+### ⚠️ P0-5 · `RNK-1` — re-rank at dataset build ⏱ ~half a day
+
+**The model is trained on a label the selection never scored.** `final_features` stores
+`return_{h}day` because a rank belongs to a run and not to a row (its §5), on the stated
+understanding that *"the reader re-ranks"* — and no reader does. `train_test_creator`
+builds `y` from the stored column and merely records `selected_for`.
+
+⚠️ **§2b already measured the cost of exactly this swap, on the same panel and folds: the
+IC drops 4× and the hit rate falls below a coin.** So this outranks any new number — it is
+the priority rule's first clause, *a thing that makes a number you already have wrong*.
+
+**Fix**: in `train_test_creator`, when the table's target is `derived`, recompute
+`cross_sectional_rank` within each date over the rows the table holds, and record the
+universe it ranked over in the dataset metadata. ⚠️ Do **not** reach for
+`cross_sectional.cross_sectional_rank` and stop there — `min_width` is part of the label's
+definition and must travel with it.
+
+### ⚠️ P0-6 · `UNI-1` — carry the universe through the handoff ⏱ ~2 h
+
+`RNK-1`'s sibling: RNK-1 is the wrong COLUMN, this is the wrong POPULATION. The run folder
+already records `input.universe` (150 tickers); `final_features` never reads it and would
+build over `unified_schema_all`'s **781**. Filter the build to it, and put it in the table
+`COMMENT` so a dataset built later cannot silently widen it.
+
+⚠️ **Both are needed before P1-5 means anything**, and neither has produced a wrong number
+yet only because no cross-sectional `__final__` table exists on `ALL`.
+
+---
+
 ## P1 — unblocks hours of other work
+
+### ⚠️ P1-5 · Run the model chain on the top-150 shortlist ⏱ ~1 h, **blocked on P0-5 + P0-6**
+
+**The question this repo has never answered.** Twice now a selection has cleared an honest
+bar and the model below it has shown nothing (§5d, P2-3) — and `RNK-1` says that on a
+cross-section the model was aimed at the wrong label both times, so those two data points
+do not settle it. This is the first chance to ask it properly: a shortlist of 13 channels
+behind **z = +9.09**, the strongest selection evidence in the repo.
+
+```powershell
+python -m final_features --apply --scope liquid150      # -> rank_20day__final__d20_h20
+python -m train_test_creator --table rank_20day__final__d20_h20 --save
+python -m model.lstm --config configs/lstm__all__rank_20day__final__d20_h20.yaml
+python -m result_evaluator
+```
+
+⚠️ **On a panel, quote the daily-IC t-stat, never `ic_clears`** — `NUL-3`, the evaluator's
+panel null is not label-neutral. ⚠️ And read `mase` beside it: P2-3's model cleared nothing
+and lost to "predict no change" at `mase 1.068`, which is the line that mattered.
 
 ### ✅ P1-4 · DONE 2026-08-18 — the VRAM half is fixed; **the next wall is HOST RAM**
 
