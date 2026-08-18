@@ -792,6 +792,24 @@ takes `raw/cafef_pdfs` (100 tickers × ~1-1.7 GB), `raw/trading_view@stocks` (77
 5. **Report the IC trend beside the mean.** A mean built from folds decaying to negative
    is not a signal.
 
+⚠️ **HOW MANY DRAWS: 10 to FAIL something, 20 to PASS it** (decided 2026-08-18, on the
+measurements below — not on taste). `p` is **not** the criterion: until a draw beats the
+observed it is pinned at the `1/(n+1)` floor either way, 0.0909 at 10 draws and 0.0476 at
+20, which says "no draw beat it" and never "p is small". **`z` is the statistic, and its
+denominator is the null's `sd`.**
+
+| measured | 10 draws | 20 draws |
+|---|---|---|
+| the p95 BAR | stable — P0-1's two independent 10-draw seeds gave **+0.0573 and +0.0565** | — |
+| **`SE(sd)`** — the denominator of `z` | **0.0083** | **0.0051** |
+
+So a 10-draw bar is already trustworthy; what 20 buys is a `z` you can defend. The rule
+follows from the asymmetry: **when the observed lands below or near the null's mean, 10
+draws settle it** — the 2026-08-17 six-pool sweep failed all six on 10 and needed nothing
+more. **When it lands far above, the whole claim is *how far*, and that is `z`.** Rule 3
+points the same way: quoting the null MAX beside the bar is a statement about the tail,
+and 10 draws sample the tail half as well.
+
 **Leakage & sample size**
 
 6. **THE PURGE GAP IS `d + h − 1`, NOT `h`.** At `d=20, h=5` that is 24 rows. Purging only
