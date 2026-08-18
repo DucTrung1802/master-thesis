@@ -183,3 +183,104 @@ Each names a way a backtest flatters itself:
 | **`h=5` / `h=10` unmeasured** | needs the selection and model stages re-run at those horizons — the cost table in §3 says what they must overcome |
 | **no `mase` equivalent** | `result_evaluator` block B is absent on panels (`P4-12`); here the naive is Buy&Hold, which is the better benchmark anyway |
 | **VN30F futures absent** | would make the relative column tradable. Not in this database — §2b |
+
+---
+
+## 8. ⚠️ THE "+5 % IN 5 DAYS" SCREEN — measured 2026-08-19, and the answer is NO
+
+Asked whether the market can be screened for names about to gain ≥5 % in 5 sessions.
+Measured with these primitives on `unified_schema_all`, **top liquidity quintile**
+(~137 names/date, `ntile(5)` on that date's `value_matched`, so point-in-time),
+2018-01 → 2026-07, **421 non-overlapping periods** — an order of magnitude more sample
+than §4's 32.
+
+**The base rate first**, because a lift means nothing without it. Over all 781 tickers and
+2.39 M rows: **P(`return_5day` ≥ +5 %) = 16.26 %**, P(≤ −5 %) = 14.46 %. By year it runs
+22.78 % (2021) down to **11.65 % (2026)** — ⚠️ the target is getting rarer, so a model
+trained on 2009-21 is miscalibrated for today. Flat across liquidity tiers (15.5 % → 16.7 %).
+
+⚠️ **`return_5day` carries extreme outliers — sd 1.84 over the whole universe.** One row
+in the liquid tier exceeds |100 %| in 5 sessions. Screened out rather than winsorised.
+
+### 8a. Univariate probes — the signal is REAL
+
+Decile of the channel, most-liquid tier, → forward P(≥+5 %):
+
+| decile | `drv_order_vol_imb_5` | trailing 5-day return |
+|---|---|---|
+| 1 (lowest) | 13.78 % | 17.21 % |
+| 10 (highest) | **20.13 %** | **23.23 %** |
+| mean fwd return, d10 | **+0.79 %** | +0.63 % |
+
+The order-flow column is **monotone across all ten deciles** — the shape a real signal
+makes. ⚠️ And the trailing-return column is **momentum at the liquid end**, not the
+reversal CLAUDE.md records at `t = −18.60` all-names: that reversal is a small-cap
+phenomenon and it has already decayed to `t = −1.96` by the top 100.
+
+### 8b. ⚠️ AND THE ONE-SESSION EXECUTION LAG DESTROYS THREE QUARTERS OF IT
+
+Screen = mean within-date rank of (order-flow imbalance 5d, trailing 5d return, distance
+from 63-day high). Top-10, held 5 sessions, 50 bps:
+
+| variant | CAGR | Sharpe | `se` |
+|---|---|---|---|
+| same-close entry *(impossible)* | **+24.4 %** | **+0.880** | 0.057 |
+| **t+1 entry (realistic)** | **+5.6 %** | **+0.333** | 0.050 |
+| **equal-weight liquid tier, NO trading** | **+8.9 %** | **+0.466** | 0.051 |
+
+⚠️ **The honest version LOSES TO DOING NOTHING.** The signal is built from day `t`'s
+closing order counts, so it cannot be traded before `t+1`; that single day costs ~19 pp of
+CAGR. **A signal that decays inside one session is not a screen, it is a latency trade.**
+
+⚠️ **AND IT STILL CLEARS ITS NULL — which is why the null is not the test.** Within-date
+shuffle, 200 draws: observed +0.333 against a null mean of **−0.383**, p95 bar −0.171,
+MAX −0.056, **z = +5.55, CLEARS**. The null is a random 10-name basket paying the same
+20.5 %/yr in fees, so clearing it only means "better than churning at random". **The
+benchmark that decides is Buy&Hold, and it loses to that** — `experiment_10`'s finding
+that not one of 23 papers reports a naive baseline, reproduced from the inside.
+
+### 8c. Cost and regime — both reproduce §11 independently
+
+| bps | 0 | 20 | 30 | **40** | 50 | 70 |
+|---|---|---|---|---|---|---|
+| CAGR | +29.7 % | +19.5 % | +14.7 % | **+10.0 %** | +5.6 % | −2.7 % |
+| Sharpe | 0.99 | 0.73 | 0.60 | **0.465** | 0.33 | 0.07 |
+
+⚠️ **It ties the market at exactly 40 bps and loses above it** — `model/CONTEXT.md` §11
+said "dead at 40 bps" from a different study, a different feature set and a different
+period. Two independent measurements, one threshold.
+
+| t+1 entry, k=10, 50 bps | screen | market | |
+|---|---|---|---|
+| **2018-2021** (n=200) | +40.3 % / **1.24** | +27.0 % / 1.14 | ✅ marginal |
+| **2022-2026** (n=222) | **−11.6 % / −0.25** | −3.8 % / 0.02 | ❌ |
+
+§11 measured net@20bps **+1.46 (2017-20) vs −0.51 (2022-26)**. Same break, same sign,
+different method.
+
+### 8d. A longer hold does not rescue it
+
+Same screen, t+1 entry, 50 bps, Sharpe (market in brackets):
+
+| hold | k=10 | k=20 | fee drag |
+|---|---|---|---|
+| 5d | 0.300 (0.426) | 0.308 (0.426) | 20.6 % |
+| **10d** | 0.394 (0.429) | **0.535** (0.429) | 9.6 % |
+| 20d | 0.176 (0.446) | 0.376 (0.446) | 5.2 % |
+
+The best cell is 10d/k=20 at **+0.11 Sharpe over the market with `se` ≈ 0.074 each** —
+about one SE of the difference. **Not a result.** And in 2022-26 the screen is negative at
+both 5d and 20d.
+
+### 8e. What this settles, and what it does not
+
+**Settled**: the ≥5 %/5d screen finds names **1.25× more likely** to make the move
+(20.85 % against a 16.71 % base), that lift is real (z = +5.55), and it is **not enough to
+pay for the trading** once you enter at a price you could actually get.
+
+**Not settled**: this is a hand-built 3-channel rank, not a fitted model — a model over the
+full `pool__basic` might lift 1.25× to something larger; the ceiling is set by the 40 bps
+line and by the one-day decay, not by the ranker. ⚠️ **Survivorship cuts the wrong way
+here** (§2c): a screen that buys recent winners is the strategy most flattered by a
+universe with no delisted names, so the 2018-21 half is likelier overstated than the
+2022-26 half is understated.
