@@ -186,7 +186,42 @@ carries eight names and a sha1. `final_features` had **no tests at all** and now
 
 ## P1 — unblocks hours of other work
 
-### ⚠️ P1-5 · Run the model chain on the top-150 shortlist ⏱ ~1 h, **blocked on P0-5 + P0-6**
+### ⚠️ P1-5 · IN PROGRESS — stages 5 and 6 DONE 2026-08-18, the model is next
+
+**`final_features --apply`** built `unified_schema_all.rank_20day__final__d20_h20` in
+**7.3 s**: 624,448 × 17, **150 tickers**, 2009-01-02 → 2026-08-07, 621,448 labelled. The
+two VCB tables were reported `exists=True, fingerprint matches` and skipped, which is why
+no `--scope` was needed. ⚠️ **First real exercise of `UNI-1`'s fix**: the plan carried all
+150 names and the DDL emitted `WHERE base.ticker IN (…)` — 624,448 rows and not 2.39 M is
+the proof it fired. The `COMMENT` carries the universe and its sha1 `301aeb491d`.
+
+**`train_test_creator --ticker all --save`** built the dataset in **10.9 s**:
+
+| split | windows | dates |
+|---|---|---|
+| train | 422,251 | 2009-02-05 → 2021-02-01 |
+| val | 91,462 | 2021-04-05 → 2023-09-20 |
+| test | 93,224 | 2023-11-15 → 2026-07-10 |
+
+13 features kept, **0 dropped**; 3,000 unlabelled rows dropped — exactly `150 × 20`, the
+h=20 tail of each ticker, which is the arithmetic check that the tail is per-ticker and
+not global. **0 rows too thin to rank.**
+
+⚠️ **AND THIS IS `RNK-1` PROVEN ON THE ARTEFACT RATHER THAN IN CODE.** The banner printed
+*"y is 'cs_rank_20day', RE-RANKED within each date from 'return_20day'"* — the first time
+that path ran through `read()`, which the unit tests could not reach — and the saved
+tensors settle it: **excess kurtosis −1.199 (train) and −1.200 (test)**, the theoretical
+value for a UNIFORM distribution, bounded at ±1.720 after standardisation. A 20-day
+return is strongly leptokurtic. Before the fix `y` would have been that return.
+
+⚠️ Read at training time: `evidence = cleared_p95_not_a_pass=1, no_null=1`, and **drift —
+2 of 13 channels put >1 % of the test set beyond 5 train-sigmas** (0 put all of it there).
+
+**Left: `n_features: 13`** into a new `configs/lstm__all__rank_20day__final__d20_h20.yaml`
+— that key is an ASSERTION `train.py` raises on, which is why it could not be written
+before the dataset existed — then `model.lstm`, then `result_evaluator`.
+
+### ~~P1-5 · Run the model chain on the top-150 shortlist~~ ⏱ ~1 h, ~~blocked on P0-5 + P0-6~~
 
 **The question this repo has never answered.** Twice now a selection has cleared an honest
 bar and the model below it has shown nothing (§5d, P2-3) — and `RNK-1` says that on a
