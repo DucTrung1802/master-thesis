@@ -1,7 +1,8 @@
 # RUNBOOK — how to run this chain
 
-> Written 2026-08-16 against commit `af348b78`+. Every runtime below was **measured on
-> this machine today**, not estimated — see §8 for why that distinction matters here.
+> Written 2026-08-16, extended 2026-08-19 (`PRF-1`/`PRF-2`/`PRF-8`/`PRF-9` and the
+> tools they needed). Every runtime below was **measured**, not estimated — see §8 for
+> why that distinction matters here.
 >
 > ### The four root registers — one job each, no overlap
 >
@@ -80,6 +81,23 @@ for yet.
 | 8 | result_evaluator | `python -m result_evaluator` | `results/metrics.json` — ⚠️ **`runs/index.csv` only via `--rebuild-index`** | **41.6 s** `--rescore`, **42.7 s** `--rebuild-index`, 3 runs |
 | 9 | **backtest** | `python -m backtest --run <run_id> --ticker VCB --top-k 15` | `results/backtest_<split>.csv` + `backtest_null_<split>.csv` | **1m 14s** with a 200-draw null |
 
+**Four tools added 2026-08-19, none of them a stage — each answers a question the chain
+cannot ask about itself:**
+
+| tool | command | answers | measured |
+|---|---|---|---|
+| **walk-forward** | `python -m walkforward --ticker all --table <T> --config <C> --first-test 2017-01-01` then `python -m walkforward.evaluate --top-k 20 --draws 200 --horizon <h> --universe all` | *is this one lucky split?* 10 expanding folds, one OOS track | **~35 min**, 10 folds |
+| **arms** (`PRF-8`) | `python -m walkforward --out <dir> --arm lstm:<cfgA>.yaml --arm gbt:<cfgB>.yaml` then `python -m walkforward.compare --top-k 20 --draws 200 a=<dirA> b=<dirB>` | *does the ARCHITECTURE matter?* All arms train on ONE build of each fold | **15m 03s**, 10 folds × 2 arms |
+| **hand baseline** (`PRF-2`) | `python -m backtest.handscreen --run <run_id> --top-k 20 --draws 200` | *does the model beat three ranked columns?* | **1m 53s** |
+| **head to head** (`PRF-9`) | `python -m backtest.head2head --a <run_id> --b <run_id> --top-k 15 --draws 200` | *does chain A beat chain B?* Priced on the INTERSECTION, paired | **2m 18s** |
+| **pool prune** (`PRF-9`) | `python -m feature_selection.prune --ticker ALL --pool pool__ta --universe-from <table> --budget 30 --out <json>` | *which channels can a wide pool even OFFER?* ⚠️ LABEL-FREE by construction | ~1 min |
+
+⚠️ **`walkforward.compare` and `backtest.head2head` PAIR the difference, and that is not a
+nicety.** Every arm trades the same dates out of the same panel, so their period returns
+correlate at **ρ 0.74-0.90** and `se_sharpe` ≈ 0.16-0.25 is the error bar on the wrong
+quantity — unpaired, it cannot resolve the gaps these tools exist to measure. CLAUDE.md §5c
+is the cautionary case.
+
 ⚠️ **Stages 2 and 4 are MANUAL.** `python -m pipeline --apply` stops before each of them
 and prints `MANUAL — cannot be produced here`, because a selection run is the expensive
 artefact and must be a deliberate act. Everything else `--apply` will do for you.
@@ -137,6 +155,63 @@ Its `selection_2` row also reports another chain's runs as `up to date` (`P4-11`
 ⚠️ **The model config cannot be written before stage 6 exists.** `n_features` is an
 ASSERTION `engine._verify` raises on, and the surviving channel count is only known once
 the dataset is built. Write it between 6 and 7, filename **equal to `run_name`**.
+
+## 3b. ⚠️ A PROBE MUST NOT LAND IN THE CHAIN'S REPORT ROOT — `PRB-1`
+
+`final_features.plan_from_reports` groups **every run under a root** by
+`(schema, target, SETUP_KEYS)` and builds one table per group. **The data WINDOW is not a
+setup key, and neither is which POOLS a run saw.** So a probe merged into
+`reports/feature_selection/` is treated as a chain input, and it fails one of two ways:
+
+| | |
+|---|---|
+| same setup keys | ⚠️ **SILENTLY UNIONED.** `PRF-7`'s pre-2017 probe (44 % of the dates) grouped with the two full-sample runs and would have merged its 15 channels into `rank_20day__final__d20_h20` on the next rebuild, **reporting success** |
+| a different setup key | LOUD — two groups want one table name, `plan_from_reports` **raises**, and nothing plans at all, including unrelated chains |
+
+⚠️ **`--scope` fixes NEITHER.** The table name is
+`(schema, target, lookback, horizon, scope, shape)` — a scope suffixes *both* groups
+identically. **Only `--root` separates them.**
+
+**So there are three report roots now, and the rule is one sentence:**
+
+| root | holds |
+|---|---|
+| `reports/feature_selection/` | runs that FEED the chain |
+| `reports/feature_selection_probes/` | runs that MEASURE the selection — `PRF-7` (window), `FNM-1` (representation), the `PRF-9` memory pilots |
+| `reports/feature_selection_wide/` | the `PRF-9` wide run, promoted to a chain input for its downstream test |
+
+**A run that measures the SELECTION is not a run that feeds the CHAIN.** Every probe job
+sets `results_into` **and** its `REPORT_ROOT` parameter to the probes root.
+
+⚠️ **To build a table from a probe you need `--root` AND `--scope`** — the root to stop it
+grouping with the others, the scope to stop it claiming a table name the chain already
+holds (`--replace` would destroy that table):
+
+```powershell
+python -m final_features --apply --root ../reports/feature_selection_wide --scope wide
+#    -> unified_schema_all.rank_20day__final__d20_h20__wide   (not …__d20_h20)
+```
+
+---
+
+## 3c. ⚠️ THE CHAIN AT h=10, as run 2026-08-19 (`PRF-2`)
+
+```powershell
+cd src
+# 2 — selection on a Kaggle T4, 20 draws.  6 h 04 m.  See §7a.
+python -m final_features --apply                                            # 5.9 s
+python -m train_test_creator --ticker all --table rank_10day__final__d20_h10 --save
+python -m model.lstm --config configs/lstm__all__rank_10day__final__d20_h10.yaml  # 4m 31s
+python -m result_evaluator --rebuild-index                                  # 8m 51s
+python -m backtest --run <run_id> --ticker VCB --top-k 20 --draws 200
+python -m backtest.handscreen --run <run_id> --top-k 20 --draws 200         # 1m 53s
+```
+
+⚠️ **Run `handscreen` beside the backtest, not instead of it.** §5 rule 4's shape: a model
+that does not beat three ranked columns has not earned its complexity. At h=10 the model
+returns **+2.442** against the hand rule's **−0.263** on one panel (paired `t` = +5.94).
+
+---
 
 ## 4. The two flags that decide whether you destroy something
 
@@ -260,6 +335,26 @@ to end, of which **5.2 min was QUEUED**. ⚠️ **The queue is the floor, not th
 | RAM free | ~7 GB | ~29 GB |
 | quota | — | 30 GPU-h/week |
 
+⚠️ **THE WIDTH CEILING ON A T4 IS ~120 CHANNELS, AND IT IS VRAM — `VRM-1`.** Measured
+2026-08-19: at **140 channels** over 624 k rows the host peaked at **24.5 GB and survived**,
+while XGBoost died in `XGBoosterPredictFromDMatrix` (*free 3.00 GB, requested 3.15 GB*).
+The allocation is `xgb_shap`'s SHAP contributions, `(n_rows, channels × 6 + 1)` — linear in
+the width. **120 channels COMPLETE in 32.6 min; 140 fails.** ⚠️ `selector._tick` cannot see
+it: it reports torch's VRAM (6.2 GB) while XGBoost allocates through its own CUDA allocator.
+Host RAM, for reference: `peak_GB ≈ 1.54 + 0.164 × channels`, fitted on two measured points.
+
+⚠️ **The status poller survives a network blip now, and it did not before.** A six-hour run
+lost its watcher at **355 min** to one `ConnectionError` from `api.kaggle.com` while the
+kernel was still RUNNING — so nothing pulled the results. `_fetch_status` retries a NETWORK
+failure for 30 min but never retries an ANSWER (a `ValueError` means the kernel is missing;
+retrying repeats a wrong request). If it does give up, the kernel is probably still alive:
+
+```powershell
+python -m kgpu status <job>              # is it still RUNNING?
+python -m kgpu wait <job>                # resume the watch
+python -m kgpu pull <job>                # then fetch and merge
+```
+
 ⚠️ **A Kaggle run is a different PROCEDURE, not the same run on a faster card.** Its image
 ships **xgboost 3.2.0 / sklearn 1.6.1 / numpy 2.0.2** against `mt_env`'s **2.1.1 / 1.7.2 /
 2.2.6**, and XGBoost subsamples from a different RNG stream per device. Since 2026-08-17
@@ -352,6 +447,11 @@ a smoke test, never a number.
 | a scrape goes green in 500 ms | `skip_existing=True` — `landed()` asks "is the folder empty?", not "did this run fetch anything?" | check the **per-series max date**, never the asset colour |
 | a rebuilt pool silently loses years of rows | sibling pools on an older calendar, and the join is INNER | `pipeline`'s `data` row reports `pools_behind`; rebuild the siblings first |
 | a run folder is skipped by `final_features` with no message | it has no `outstanding.csv` | `plan_from_reports` ignores such folders — check the folder has one |
+| `final_features` raises *"two different setups both want …"* and plans NOTHING | a PROBE run is sitting in the chain's report root | move it to `reports/feature_selection_probes/` — §3b. ⚠️ `--scope` does **not** fix this |
+| a rebuild quietly gains channels nobody selected | same cause, silent half: the probe shares setup keys, so it is UNIONED rather than colliding | §3b, and check the table's `obj_description` for its `Source runs:` |
+| a Kaggle job "finishes" but no run folder appears | the local WATCHER died on a network error; the kernel is probably still running | `kgpu status <job>`, then `kgpu wait` + `kgpu pull` — §7a |
+| `XGBoostError: … cudaErrorMemoryAllocation` mid-selection | more than ~120 channels on a T4 — the ceiling is VRAM, not host RAM (`VRM-1`) | prune the pool first: `python -m feature_selection.prune` — §7a |
+| `Unknown top-level keys in kaggle_config.json` | a comment or note added at the top level; the schema is closed | put prose in `kaggle_gpu/README.md`, not in the config |
 
 ---
 

@@ -53,49 +53,30 @@ below remain the engineering backlog.
 
 ---
 
-## ⚠️ START HERE — what to run next, 2026-08-19
+## ⚠️ START HERE — what to run next, 2026-08-19 (evening)
 
-> Every row carries the four things you need before starting: **cost**, **where it runs**,
-> **what lands on disk**, and **what blocks it**. Costs are MEASURED where a comparable run
-> exists and marked *est.* where not. ⚠️ **The Kaggle queue is ~5 min of every job**
-> (measured, `smoke` 2026-08-17), so batch, and iterate with `kgpu rehearse`, which spends
-> no quota.
+> ⚠️ **TWO OF THE THREE OBVIOUS LEVERS ARE NOW CLOSED BY MEASUREMENT, AND THAT IS THE MOST
+> IMPORTANT THING ON THIS PAGE.** `PRF-8`: a model **101× smaller** ties the 205 k LSTM
+> (paired |t| < 1). `PRF-9`: **30 more candidate channels** tie (paired t = −0.29, and the
+> wide model is if anything *worse* on money while *better* on IC). **The 13 original
+> channels are the result.** So "try a bigger model" and "add more of this data" are both
+> spent — what is left is honest EXECUTION and NEW INFORMATION.
 
-### ✅ The four CPU items are DONE — 2026-08-19, all four in one pass
+**Closed today** — `PRF-0`, `PRF-1`, `PRF-2`, `PRF-7`, `PRF-8`, `PRF-9`, `P0-7`, `P1-2`
+(`PNL-2`), `P1-6` (`FNM-1`), `P4-12`, `PRB-1`. **Opened**: `VRM-1`.
 
-| # | item | measured | what it produced |
-|---|---|---|---|
-| 1 | ✅ **`P0-7`** — CLAUDE.md §6-0 rewritten | ~1 h | §6-0 now headlines the **walk-forward** (118 periods, `se` 0.155) with the single split kept beside it as the leak check; new §6-0-a (the four 2026-08-19 closures), §6-0-b (`mase`), §6-0-c (what it still does not say); a `walkforward` row in the chain; run counts 1 → **31** |
-| 2 | ✅ **`PRF-4`, ceiling row** — the screen is the DEFAULT | ~1 h | `backtest.build_panel` drops ceiling rows and PRINTS the count. test **+1.4845 → +1.5512**, val +1.7367 → **+1.7385** — ⚠️ both reproduce §8h's probe to four decimals, which is how it was verified. One rule in `backtest.portfolio`, imported by both `walkforward` callers |
-| 3 | ✅ **`P1-2` / `PNL-2`** — grain from the data | ~½ day | `run.resolve_grain(target, n_tickers)`. **`PRF-9` is unblocked.** ⚠️ Verified not to reinterpret history: 3 archived `all` runs stay panel, 30 `vcb` runs stay series |
-| 4 | ✅ **`P4-12`** — Block B on a panel | ~½ day | `metrics.panel_accuracy_vs_naive`. **`test_mase = 0.9937`, `beats_naive = True`** on the headline run — the first thing in this repo to beat "predict no change" |
-
-⚠️ **235 tests pass** across `feature_selection`, `backtest`, `walkforward`,
-`result_evaluator`, `final_features`, `train_test_creator` and `model` — **13 of them new
-today**, and each pins one of the four failures above rather than the feature that
-replaced it.
-
-### The next thing to run
-
-✅ **`P1-6` / `FNM-1` DONE 2026-08-19** — 22m 04s round trip on a T4 against the ~25 min
-estimate. **12 of the 13 channels survive `feature_normalize=none`**, kept-set overlap 53 of
-61 (**+5.90 sd** above chance), same channel at #1. The shortlist is
-**representation-invariant**; ⚠️ the `z = +9.09` remains a `cs_rank` number, because this run
-carries no null. §P1-6 below.
+### What is left, in order
 
 | # | item | ⏱ | where | output |
 |---|---|---|---|---|
-| 1 | **`PRF-2`** — the real chain at `h=10` | **~3-6 h** selection *est.* + **~10 min** chain | **Kaggle T4**, then **local GPU** | `rank_10day__final__d20_h10`, a dataset, a model run, `results/backtest_*.csv`. Answers *how much a fitted model adds over three ranked channels* — unknown at every horizon — and **separates `PRF-3`'s two hypotheses** by moving only the horizon. ⚠️ Run the hand screen as a baseline in the SAME backtest |
-| 2 | **`PRF-9`** — 90 → 800 candidate channels | ~16 h at 10 draws *est.* | **Kaggle T4** | the first cross-sectional selection ever offered `pool__ta`. ⚠️ **`P1-2` SHIPPED 2026-08-19, so the first blocker is GONE.** Still needs `pool__ta` pruned past `pool__ta` past `MEM-1` (711+90 channels is ~8× a design that already peaked at **16.3 GB** host RAM). ⚠️ Re-run `PRF-7`'s pre-2017 check at the new width — more channels is more room for the selection to have fitted the folds |
+| 1 | **the h=10 WALK-FORWARD** — the one run that settles horizon | **~20 min** *est.* | **local GPU** | `PRF-2` measured h=10 at Sharpe **+2.442** against h=20's +1.441 **on one split each**. h=20 has 10 folds behind it; h=10 has none, so the horizon is NOT promoted. `src/walkforward/` runs it in one command and `walkforward.compare` pairs the two tracks |
+| 2 | **`PRF-4`** — execution realism | ~1 day | **CPU** | ADV/size cap, floor days on the SELL side, the ATC auction. ⚠️ These move the LEVELS, and after PRF-8/PRF-9 the levels are the only thing still moving |
+| 3 | **`PRF-5`** — survivorship | ~2 days | **data** | `z` is protected, `+47.5 %/yr` is not. A point-in-time listing table |
+| 4 | **`PRF-3`** — ⚠️ **mostly ANSWERED by `PRF-2`**; what is left is the training-window test | ~1 day | local | PRF-2 showed the post-2022 break is in the FEATURES, not the market (19 selected channels +2.44 vs 3 hand-picked −0.26, same window and horizon). The rolling-vs-expanding half is still untested at h=10/h=20 |
+| 5 | **`PRF-6`** — new information | months | — | ⚠️ **Now the main lever, not the last resort.** Intraday/tick (the 5-day signal decays inside ONE session), point-in-time listing, fundamentals with filing dates |
+| 6 | **`P1-1`** cost model · **`P1-4b`**/`P3-2` streaming · **`VRM-1`** | ~2 h / days | CPU | `VRM-1` is what capped `PRF-9` at 30 of 405 channels. Fixing it (chunk the SHAP predict as `P1-4` chunked the ranker, or drop `xgb_shap` — §19 found only `permutation` load-bearing) is what would let the rest of `pool__ta` be tried |
 
-⚠️ **WHAT IS NO LONGER ON THIS LIST, AND WHY.** *"Try a different model"* — `PRF-8` closed
-it 2026-08-19: 205,441 params, 2,033 params and 1,400 tree nodes all tie on the identical
-folds, paired |t| < 1. What is left is **FEATURES** (#2), the **HORIZON** (#1), honest
-**EXECUTION** (`PRF-4`'s remaining rows, `PRF-5`) and new **DATA** (`PRF-6`).
-
-⚠️ **Nothing below `PRF-2` changes a DECISION about trading.** `PRF-4` and `PRF-5` move the
-LEVELS and not the `z` — they matter the moment a CAGR is quoted to somebody, and not
-before. `PRF-6` is months and is the only item that needs data this repo does not have.
+⚠️ **Kaggle quota used this week: ~8.5 of 30 GPU-h.** Items 1-4 are all local or CPU.
 
 ---
 
