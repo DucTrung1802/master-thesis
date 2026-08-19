@@ -1148,6 +1148,39 @@ representation probe as a hard collision that blocked planning entirely. Probes 
 to `reports/feature_selection_probes/`. **A run that measures the SELECTION is not a run
 that feeds the CHAIN, and only the ROOT separates them.**
 
+### ⚠️ 6-0-quater. PRF-9 — MORE FEATURES DO NOT PAY EITHER, AND THAT CLOSES THE SECOND LEVER
+
+Run 2026-08-19. `pool__ta` is the only widening available at all — `PRF-9`'s survey found
+**71 of 76 gold tables are date-only**, and a column identical for every ticker on a date
+has a constant within-date rank, so ~4,500 channels are *structurally* incapable of ranking
+a cross-section. `pool__ta`'s 711 numeric channels are the exception.
+
+**They were offered, and they did not pay.** 120-channel selection (90 `pool__basic` + 30
+`pool__ta`, the latter chosen LABEL-FREE by `feature_selection.prune`), 22 shortlisted of
+which 6 from `pool__ta`, built into `rank_20day__final__d20_h20__wide` and trained with the
+architecture, schedule, seed and universe copied unchanged. Priced against the narrow chain
+on the **intersection** of their rows (646 dates, 32 periods, top-15):
+
+| | daily IC, same rows | Sharpe@30 | null z |
+|---|---|---|---|
+| wide (22 ch) | **+0.1053** | +1.496 | +4.53 |
+| narrow (13 ch) | +0.0927 | **+1.623** | +5.42 |
+
+Paired, ρ **0.90**: ΔSharpe **−0.126**, `t` = **−0.29**. **The extra channels moved the
+shortlist and not the money.**
+
+⚠️ **WITH `PRF-8`, TWO OF THE THREE OBVIOUS LEVERS ARE NOW CLOSED BY MEASUREMENT.** A model
+101× smaller ties; 30 more candidate channels tie. **The 13 original channels are the
+result.** What remains is honest execution (`PRF-4`/`PRF-5`) and NEW INFORMATION (`PRF-6`,
+§2d) — not a better model and not more of this data.
+
+⚠️ **`VRM-1` bounds how much of `pool__ta` could be tried.** Only **30 of 405** pruned
+channels were offered, because the width ceiling on a T4 is **VRAM** — `xgb_shap`'s SHAP
+contributions, `(n_rows, channels × 6 + 1)` — and not host RAM, which survived 24.5 GB at
+140 channels. So this is *"these 30 did not pay"*, never *"`pool__ta` is useless"*. ⚠️ All
+three of `MEM-1`, `P3-2` and `PRF-9` predicted the host wall and all three were wrong about
+which one binds.
+
 ### ⚠️ 6-0-c. What the headline still does NOT say
 
 **(1)** ⚠️ **It ranks, it does not price.** R² test **+0.0003**, RMSE 0.29065 against a

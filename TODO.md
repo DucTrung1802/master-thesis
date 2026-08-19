@@ -198,7 +198,7 @@ it**, and `src/walkforward/` already does it in one command.
 runs had been merged into the CHAIN's report root, where `final_features` groups them with
 the real runs. `backtest/CONTEXT.md` §9.
 
-### 2 · ⚠️ PRF-9 · WIDENING — machinery SHIPPED and the wall MEASURED 2026-08-19; the answer is not in yet
+### ✅ PRF-9 · DONE 2026-08-19 — `pool__ta` changes the SHORTLIST and not the MONEY
 
 > ⚠️ **BLOCKED, and DEMOTED FROM #1 ON 2026-08-19 FOR THAT REASON.** This is the largest
 > upside left in the repo — the 13 channels are the survivors of **90 candidates, not of
@@ -308,6 +308,47 @@ while `pool__basic`'s 98 arrive raw and lose 38 to the selection's own correlati
 ⚠️ The top **nine** shortlisted channels are all `pool__basic`.
 ⚠️ **`STA-1` cost 30 sessions, measured**: joining `pool__ta` takes the panel from 4,388 dates
 ending 2026-08-07 to **4,358 ending 2026-06-26**.
+
+### ✅ THE DOWNSTREAM TEST — DONE 2026-08-19, and the widening does NOT pay
+
+The cheap route was taken (~35 min local, against ~8 GPU-h for a null that would not have
+isolated `pool__ta` anyway). The 22-channel shortlist was built into
+`rank_20day__final__d20_h20__wide`, trained with the architecture, schedule, seed, universe
+and target **copied unchanged** from the narrow chain, and priced against it by
+`backtest.head2head`.
+
+⚠️ **PRICED ON THE INTERSECTION, WHICH IS THE WHOLE REASON THAT MODULE EXISTS.** `STA-1`
+makes the wide chain's split land on 2023-11-03 → **2026-06-26** against the narrow one's
+2023-11-15 → 2026-07-10, so reading the two `backtest_test.csv` files side by side would
+compare two Sharpes over two different windows. 646 shared dates, 32 periods, top-15:
+
+| | daily IC (shared rows) | Sharpe@30 | null z |
+|---|---|---|---|
+| **wide** — 22 ch, 6 from `pool__ta` | **+0.1053** (`ic_t` 3.97) | **+1.496** | +4.53 |
+| **narrow** — 13 ch, `pool__basic` only | +0.0927 (`ic_t` 4.09) | **+1.623** | +5.42 |
+
+**Paired** (ρ **0.90**): ΔSharpe **−0.126**, `t` = **−0.29** at 30 bps (−0.28/−0.31 at
+20/50).
+
+⚠️ **SO THE EXTRA CHANNELS MOVED THE SHORTLIST AND NOT THE MONEY.** The wide model ranks
+*slightly better* (+0.1053 vs +0.0927 on identical rows) and earns *slightly less*, and both
+gaps are inside the noise. That is a tie, and a tie is the answer: **offering `pool__ta`
+bought nothing tradable.**
+
+⚠️ **READ WITH `PRF-8` — TOGETHER THEY CLOSE TWO OF THE THREE OBVIOUS LEVERS.** A model
+101× smaller ties (PRF-8); 30 more candidate channels tie (here). **The 13 original channels
+are the result**, and what is left is not a better model or more of this data — it is
+`PRF-4`/`PRF-5` (honest execution) and `PRF-6` (new information).
+
+⚠️ **What this does NOT say.** Only **30 of the 405** pruned `pool__ta` channels were
+offered, because `VRM-1` caps a run at ~120 channels — so this is *"these 30 did not pay"*,
+never *"`pool__ta` is useless"*. One split, 32 periods, `se_sharpe` ~0.25. The wide selection
+carries **no null**, so its +0.1285 was never evidence and is not treated as any here.
+
+⚠️ **`--root` + `--scope` were BOTH needed and neither alone would do.** The wide run shares
+setup keys with `PRF-7`'s probe, so a shared root would have UNIONED them (`PRB-1` again);
+and without `--scope wide` the plan wants `rank_20day__final__d20_h20` — the name the
+chain's own table already holds, which `--replace` would have destroyed.
 
 ⚠️ **THE "8× WIDENING" IS NOT AVAILABLE ON A T4 AND THAT IS NOW A MEASUREMENT.** 90 + 405
 pruned channels is ~83 GB of host RAM and blows VRAM long before that. The reachable width is

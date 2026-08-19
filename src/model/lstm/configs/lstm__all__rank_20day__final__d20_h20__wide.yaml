@@ -1,0 +1,58 @@
+# PRF-9 — DOES THE WIDENING PAY? The h=20 chain with pool__ta offered alongside
+# pool__basic, and NOTHING ELSE CHANGED.
+#
+# ⚠️ ONE VARIABLE: the candidate pool the selection saw. Architecture, optimiser
+# schedule, batch size, seed, lookback, universe (the same 150 names) and target are
+# copied UNCHANGED from lstm__all__rank_20day__final__d20_h20.yaml. `n_features` is 22
+# against 13 because the selection kept more when offered more — a RESULT, not a knob.
+#
+# Behind it: 2026-08-19_125826__all__basic+ta__cs_rank_20day, 120 candidate channels
+# (90 pool__basic + 30 pool__ta chosen LABEL-FREE by feature_selection.prune), of which
+# 22 were shortlisted — 16 from pool__basic, 6 from pool__ta, the best of those at
+# rank #10.
+#
+# ⚠️ THE SELECTION BEHIND THIS RUN HAS NO NULL, and that is deliberate rather than
+# sloppy: a bar computed for a 90-channel configuration says nothing about a 120-channel
+# one (§5 rule 1), and a wider pool mechanically has more room to fit, so the null moves
+# UP with width. `evidence=no_null` therefore means UNKNOWN here, not "passed". THIS RUN
+# IS THE TEST — a model built on the wider shortlist, priced against the narrow one on
+# one panel, is what says whether the widening bought anything.
+#
+# ⚠️ ITS TEST WINDOW IS SHORTER, AND THE COMPARISON MUST HANDLE THAT. `pool__ta` stops
+# 2026-06-26 (`STA-1`), so the INNER join takes the panel from 4,388 dates to 4,358 and
+# the ratio split lands on 2023-11-03 -> 2026-06-26 rather than the narrow chain's
+# 2023-11-15 -> 2026-07-10. Comparing the two head to head therefore has to price them
+# on the INTERSECTION of their rows, which `backtest.head2head` asserts rather than
+# assumes.
+#
+# ⚠️ `lookback` and `n_features` are ASSERTIONS. engine._verify raises if the dataset
+# disagrees — the dataset is the authority.
+
+run_name: lstm__all__rank_20day__final__d20_h20__wide
+dataset: all__rank_20day__final__d20_h20__wide__tr70_val15_test15__std
+task: regression
+
+lookback: 20
+n_features: 22
+
+model:
+  type: LSTM
+  hidden_size: 128
+  num_layers: 2
+  dropout: 0.2
+
+train:
+  batch_size: 512
+  lr: 0.001
+  weight_decay: 0.00001
+  max_epochs: 100
+  patience: 15
+  grad_clip: 1.0
+  lr_factor: 0.5
+  lr_patience: 5
+  log_every: 5
+
+null_draws: 200
+
+seed: 42
+device: auto

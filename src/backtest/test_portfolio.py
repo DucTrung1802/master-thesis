@@ -1,4 +1,5 @@
 # src\backtest\test_portfolio.py
+import os
 """What a costed backtest must not get wrong, pinned.
 
 Every test here names a way a backtest flatters itself: overlapping windows, a cost
@@ -304,3 +305,75 @@ def test_a_name_missing_ONE_channel_still_scores_on_the_others():
     out = H.score_frame(basic, tickers, dates)
     aaa = out[out["ticker"] == "AAA"]
     assert aaa["y_pred"].notna().any(), "a name lost every score for one missing channel"
+
+
+# --- PRF-9: the head-to-head comparator -----------------------------------------
+
+
+def _run_folder(tmp_path, name, dates, tickers, seed, horizon=20):
+    """A minimal scored run folder: metadata.json + predictions_test.csv."""
+    import json
+
+    d = tmp_path / name
+    (d / "results").mkdir(parents=True)
+    (d / "metadata.json").write_text(json.dumps({
+        "config": {"horizon": horizon},
+        "lineage": {"schema": "unified_schema_all", "horizon_h": horizon},
+    }), encoding="utf-8")
+    rng = np.random.default_rng(seed)
+    rows = [{"date": dt, "ticker": t, "y_true": rng.normal(), "y_pred": rng.normal()}
+            for dt in dates for t in tickers]
+    pd.DataFrame(rows).to_csv(d / "results" / "predictions_test.csv", index=False)
+    return str(d)
+
+
+def test_two_runs_over_different_windows_are_priced_on_the_INTERSECTION(monkeypatch,
+                                                                       tmp_path):
+    """⚠️ THE DEFECT THIS MODULE EXISTS FOR. `pool__ta` stops 2026-06-26 (STA-1), so a
+    chain that joins it splits on a shorter panel. Reading two `backtest_test.csv` files
+    side by side compares two Sharpes over two different windows."""
+    from backtest import head2head as H
+
+    long_dates = pd.bdate_range("2024-01-01", periods=200)
+    short_dates = long_dates[:150]
+    tickers = [f"T{i}" for i in range(20)]
+    a = _run_folder(tmp_path, "a", short_dates, tickers, 1)
+    b = _run_folder(tmp_path, "b", long_dates, tickers, 2)
+
+    seen = {}
+
+    def fake_build_panel(run_dir, split):
+        frame = pd.read_csv(os.path.join(run_dir, "results", f"predictions_{split}.csv"))
+        frame["date"] = pd.to_datetime(frame["date"])
+        frame["return_20day"] = np.random.default_rng(0).normal(0, 0.05, len(frame))
+        seen[run_dir] = len(frame)
+        return {"panel": frame, "horizon": 20, "universe": "all",
+                "absolute": "return_20day"}
+
+    monkeypatch.setattr("backtest.run.build_panel", fake_build_panel)
+    out = H.compare_runs(a, b, "test", top_k=5, costs=(30,))
+    assert out["rows_shared"] == len(short_dates) * len(tickers)
+    assert out["rows_shared"] < out["rows_b"], "the longer run was not trimmed"
+    assert out["dates_shared"] == len(short_dates)
+
+
+def test_two_horizons_are_refused_rather_than_averaged(monkeypatch, tmp_path):
+    """h is the rebalance period, so two horizons are two schedules AND two cost drags —
+    `backtest/CONTEXT.md` §3 puts the fee difference at 4.4 pp/yr between h=10 and h=20."""
+    from backtest import head2head as H
+
+    dates = pd.bdate_range("2024-01-01", periods=60)
+    tickers = [f"T{i}" for i in range(10)]
+    a = _run_folder(tmp_path, "a", dates, tickers, 1)
+    b = _run_folder(tmp_path, "b", dates, tickers, 2)
+
+    def fake_build_panel(run_dir, split):
+        frame = pd.read_csv(os.path.join(run_dir, "results", f"predictions_{split}.csv"))
+        frame["date"] = pd.to_datetime(frame["date"])
+        frame["return_20day"] = 0.01
+        return {"panel": frame, "horizon": 20 if run_dir == a else 10,
+                "universe": "all", "absolute": "return_20day"}
+
+    monkeypatch.setattr("backtest.run.build_panel", fake_build_panel)
+    with pytest.raises(ValueError, match="two rebalance schedules"):
+        H.compare_runs(a, b, "test", top_k=5, costs=(30,))
