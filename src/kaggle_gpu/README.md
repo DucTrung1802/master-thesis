@@ -457,3 +457,26 @@ to prove auth and the GPU path without touching the pipeline.
 ⚠️ A notebook reading anything **other** than `unified_schema_*` needs its own
 payload shape; the reader swap only covers `UnifiedSchemaReader`. Export the frames
 and read them by path.
+
+## ⚠️ A PROBE MUST NOT LAND IN THE CHAIN'S REPORT ROOT — `PRB-1`, 2026-08-19
+
+`results_into` decides which report root a job's run folder is merged into, and
+`final_features.plan_from_reports` groups **every run under a root** by
+`(schema, target, SETUP_KEYS)` and builds one table per group. **The data WINDOW is not
+a setup key.** So a probe merged into the chain's root is treated as a chain input, and
+it fails in one of two ways:
+
+| probe | how it failed |
+|---|---|
+| `cross-sectional-early` (`PRF-7`, dates < 2017, 44 % of the sample) | ⚠️ **SILENTLY** — same setup keys, so it grouped with the two full-sample runs and would have unioned its 15 channels into `rank_20day__final__d20_h20` on the next rebuild, reporting success |
+| `cross-sectional-fnm` (`FNM-1`, `feature_normalize=none`) | LOUDLY — a different setup key, so two groups wanted one table name and `plan_from_reports` raised, which stopped `final_features` planning **anything**, including an unrelated chain |
+
+⚠️ **`--scope` fixes neither**: the table name is
+`(schema, target, lookback, horizon, scope, shape)`, so a scope suffixes both groups
+identically. **Only the ROOT separates them.**
+
+So every probe job sets `results_into` **and** its `REPORT_ROOT` parameter to
+`reports/feature_selection_probes`. The rule: **a run that measures the SELECTION is not
+a run that feeds the CHAIN.** ⚠️ No number was wrong when this was found — the table on
+disk names its own two source runs — it was the next rebuild that would have been.
+

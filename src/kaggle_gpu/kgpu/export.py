@@ -175,6 +175,8 @@ def _export_panel(cfg, folder: Path, manifest: dict, quiet: bool = False) -> Non
             f"whole sample is look-ahead, and a silent default would hide it."
         )
 
+    import pandas as pd
+
     from feature_selection.cross_sectional import read_universe_panel
     from feature_selection.unified_reader import KEY_COLS, UnifiedSchemaReader
 
@@ -210,6 +212,49 @@ def _export_panel(cfg, folder: Path, manifest: dict, quiet: bool = False) -> Non
         tickers=universe, horizons=tuple(horizons), min_width=min_width,
         schema_ticker=cfg.data.ticker, start=date_start, end=date_end,
     )
+
+    # ⚠️ **EXTRA POOLS, ADDED 2026-08-19 FOR `PRF-9`.** `read_universe_panel` reads
+    # `pool__basic ⋈ pool__targets` only, so the 13 channels behind every cross-sectional
+    # result are the survivors of **90 candidates, not of 800** — and `pool__ta` alone
+    # holds 711 more that CAN rank a cross-section (`PRF-9`'s survey: 71 of 76 gold tables
+    # are date-only and structurally cannot). They join HERE, for the same reason the base
+    # panel does: the worker has no database (`CSP-1`).
+    #
+    # ⚠️ **`channels` IS A LABEL-FREE ALLOWLIST AND MUST STAY ONE.** It exists because of
+    # `MEM-1`, not because of any belief about which channels are good — the design is
+    # `rows × channels × 6 stats` and the box is finite. Choosing the list by correlation
+    # with the TARGET would build `PRF-7`'s bias into the candidate set before the
+    # selection ever ran, and no null downstream could price it. `feature_selection.prune`
+    # is the label-free chooser; anything else here is a defect.
+    extra = spec.get("pools") or {}
+    extra_types: Dict[str, dict] = {}
+    if extra:
+        with UnifiedSchemaReader(cfg.data.ticker) as reader:
+            for table, channels in extra.items():
+                available = reader.column_types(table)
+                unknown = [c for c in channels if c not in available]
+                if unknown:
+                    raise ValueError(
+                        f"{schema}.{table} has no channel(s) {unknown[:6]}"
+                        f"{' …' if len(unknown) > 6 else ''} — an allowlist naming a "
+                        f"column the source does not have is a silent no-op, so it raises."
+                    )
+                wanted = list(KEY_COLS) + [c for c in channels if c not in KEY_COLS]
+                piece = reader.read(table, columns=wanted)
+                piece["date"] = pd.to_datetime(piece["date"])
+                piece["ticker"] = piece["ticker"].astype(str).str.upper()
+                piece = piece[piece["ticker"].isin(set(universe))]
+                before = len(frame)
+                # ⚠️ INNER, matching `read_universe_panel`'s own join and `join_log`. A
+                # LEFT join would invent rows the ranking never saw — and `pool__ta` stops
+                # 2026-06-26 (`STA-1`), so this is exactly where the chain loses its last
+                # sessions rather than silently carrying NULLs into a window design.
+                frame = frame.merge(piece, on=list(KEY_COLS), how="inner")
+                extra_types[table] = {c: available[c] for c in channels}
+                if not quiet:
+                    print(f"  + {table}: {len(channels)} channels, "
+                          f"{before:,} -> {len(frame):,} rows")
+
     path = folder / f"{PANEL_TABLE}.parquet"
     frame.to_parquet(path, index=False)
 
@@ -237,8 +282,12 @@ def _export_panel(cfg, folder: Path, manifest: dict, quiet: bool = False) -> Non
                 for c in types
                 if c not in KEY_COLS and c in frame.columns
             ]
-            for table, types in source_types.items()
+            for table, types in {**source_types, **extra_types}.items()
         },
+        # ⚠️ Recorded so a later reader can tell a 90-channel run from an 800-channel one
+        # without diffing column lists, and so `PRF-9`'s prune is auditable from the
+        # artefact rather than from whoever ran it.
+        "extra_pools": {t: len(c) for t, c in (extra or {}).items()},
         # ⚠️ **ASCII ONLY, AND THE REASON IS MEASURED.** This string is printed by the
         # worker notebook, so it lands in Kaggle's run log — and `kernels_output` writes
         # that log to disk with the process's default encoding, which on Windows is

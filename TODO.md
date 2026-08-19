@@ -198,7 +198,7 @@ it**, and `src/walkforward/` already does it in one command.
 runs had been merged into the CHAIN's report root, where `final_features` groups them with
 the real runs. `backtest/CONTEXT.md` §9.
 
-### 2 · ⚠️ PRF-9 · THE FEATURE SURVEY — 76 gold tables, and only THREE can help ⏱ see below
+### 2 · ⚠️ PRF-9 · WIDENING — machinery SHIPPED and the wall MEASURED 2026-08-19; the answer is not in yet
 
 > ⚠️ **BLOCKED, and DEMOTED FROM #1 ON 2026-08-19 FOR THAT REASON.** This is the largest
 > upside left in the repo — the 13 channels are the survivors of **90 candidates, not of
@@ -268,6 +268,59 @@ routes around it. **The 13 channels are the survivors of 90 candidates, not of 8
 
 ⚠️ **`STA-1` is the tax on all of it**: `pool__ta` stops 2026-06-26, so an INNER join drops
 the chain's last 31 sessions — the same 4,266 → 4,235 it already costs the VCB chain.
+
+### ✅ SHIPPED 2026-08-19 — and BOTH memory walls are now MEASURED, not extrapolated
+
+| shipped | |
+|---|---|
+| `feature_selection/prune.py` | a **LABEL-FREE** chooser: coverage ≥ 0.95, then \|Spearman\| redundancy at 0.90, then a deterministic budget cut. ⚠️ Ranking channels by correlation with the TARGET would build `PRF-7`'s look-ahead into the candidate set *before* the selection ran, where no null could price it — a test pins that adding a label column changes nothing. 8 tests |
+| panel export takes extra pools | `data.panel.pools = {"pool__ta": [...]}`, joined server-side for the same reason the base panel is (`CSP-1`) |
+| `pool__ta` measured | 711 numeric (+208 boolean flags, deliberately not offered) → **671** on coverage → **405** on redundancy @0.90 (284 @0.80) |
+
+**The memory model, fitted on TWO measured points** (90 ch → 16.3 GB, 140 ch → 24.5 GB):
+`peak_host_GB ≈ 1.54 + 0.164 × channels`. ⚠️ P1-4b's rule held — the single-point estimate
+was close on the slope but blind to the **1.54 GB fixed cost**.
+
+⚠️ **BUT HOST RAM IS NOT THE BINDING WALL, AND EVERY PREDICTION IN THIS ITEM SAID IT WAS.**
+Attempt 1 at 140 channels: host peaked at **24.5 GB and SURVIVED**; the run died on **VRAM**
+inside `XGBoosterPredictFromDMatrix` — *free 3.00 GB, requested 3.15 GB* on a 14.6 GiB T4.
+The allocation is **`xgb_shap`'s SHAP contributions, `(n_rows, channels × 6 + 1)`**, so it
+scales with exactly the thing PRF-9 wants to increase. This is `MEM-1` on the device side for
+the **third** time (P1-4 fixed the ranker's half; XGBoost allocates outside torch's
+accounting, which is why `_tick` reported 6.2 GB while ~11.6 GB was in use).
+
+**Attempt 2, 120 channels (90 + 30) — COMPLETE, 32.6 min, and `pool__ta` DOES reach the
+shortlist:**
+
+| | |
+|---|---|
+| kept | **30 of 30** `pool__ta`, 60 of 98 `pool__basic` |
+| shortlist | 22, of which **6 are `pool__ta`** — best at rank **#10** (`close_ema_50_200_direction`) |
+| `ic_mean` | **+0.1285** against the 90-channel reference's +0.1075 |
+
+⚠️ **DO NOT READ +0.1285 > +0.1075 AS "IT HELPS". THERE IS NO NULL.** §5 rule 1: the +9.09
+bar was computed for a 90-channel configuration and says nothing about a 120-channel one — and
+a wider pool mechanically has more room to fit, so the null moves UP with width. **This run is
+descriptive.**
+⚠️ **"30 of 30 kept" is largely an ARTEFACT of the prune**, not a quality signal: the offline
+screen already removed redundancy among the `pool__ta` channels, so they arrive pre-thinned
+while `pool__basic`'s 98 arrive raw and lose 38 to the selection's own correlation prune.
+⚠️ The top **nine** shortlisted channels are all `pool__basic`.
+⚠️ **`STA-1` cost 30 sessions, measured**: joining `pool__ta` takes the panel from 4,388 dates
+ending 2026-08-07 to **4,358 ending 2026-06-26**.
+
+⚠️ **THE "8× WIDENING" IS NOT AVAILABLE ON A T4 AND THAT IS NOW A MEASUREMENT.** 90 + 405
+pruned channels is ~83 GB of host RAM and blows VRAM long before that. The reachable width is
+~120 channels per run, i.e. **~30 of `pool__ta`'s 405**. Finishing PRF-9 therefore needs one
+of:
+
+| route | ⏱ | what it buys |
+|---|---|---|
+| **a 20-draw null at 120 ch** | ~7-8 h Kaggle | turns the +0.1285 into evidence or kills it. Does NOT isolate `pool__ta`'s contribution |
+| **the downstream model test** | ~30 min local | build the 22-channel table → dataset → LSTM → backtest, and pair it against the h=20 model on ONE panel (`backtest.handscreen`'s shape). **Answers the actual question — does the widening pay?** ⚠️ needs the probe promoted to a chain root, or a `--root` run |
+| slices (layer 1 + layer 2, §3c) | ~2 h + ~6 h | offers all 405 across ~13 chunks. ⚠️ §3c's own warning applies: a layer-1 union is arithmetic, not consensus |
+
+---
 
 ⚠️ **`PRF-7` WAS THE PRECONDITION AND IT IS NOW DISCHARGED (2026-08-19)** — but only for
 90 candidates. Widening the pool from 90 to 800 makes selection look-ahead WORSE, not

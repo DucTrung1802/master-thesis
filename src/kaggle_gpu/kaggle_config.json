@@ -8,7 +8,6 @@
     "poll_seconds": 15,
     "max_wait_minutes": 720
   },
-  "_probes_note": "⚠️ A PROBE MUST NOT LAND IN THE CHAIN'S REPORT ROOT. `final_features.plan_from_reports` groups every run under a root by (schema, target, SETUP_KEYS) and builds one table per group — and the DATA WINDOW is not a setup key. So `cross-sectional-early` (PRF-7, dates < 2017, 44% of the sample) grouped SILENTLY with the two full-sample runs and would have unioned its 15 channels into rank_20day__final__d20_h20 on the next rebuild, reporting success; `cross-sectional-fnm` (FNM-1, feature_normalize=none) differed on a setup key instead and produced a hard collision that stopped final_features from planning ANYTHING. Both are measurements ABOUT the selection, not chain inputs, so both write to reports/feature_selection_probes and neither is visible to final_features. Measured 2026-08-19; the table on disk was built before either merged and names its own 2 source runs, so no number was wrong — the NEXT rebuild would have been.",
   "jobs": {
     "feature-selection": {
       "id": "lyductrung/mt-feature-selection",
@@ -200,6 +199,78 @@
         "HOLDOUT_START": null,
         "REPORT_ROOT": "reports/feature_selection",
         "NOTES": "TODO PRF-2. The real chain at h=10 - the one horizon that is measured-to-work and unmeasured-by-a-model. A hand-built 3-channel rank gets Sharpe +0.652 at 30 bps there (backtest/CONTEXT.md 8g); nobody has run the selection + LSTM chain at h=10, so how much a fitted model adds over three ranked columns is unknown at EVERY horizon. It also separates PRF-3's two hypotheses for the post-2022 break by holding the feature pipeline fixed and moving only the horizon. 20 draws and not 10: section 5's rule is 10 to fail and 20 to pass, and the h=20 run cleared at z=+9.09, so a bar this one can be set beside is the point. Everything else is identical to the h=20 job - same universe, lookback, min_width, dtype, ensemble, feature_normalize."
+      }
+    },
+    "cross-sectional-wide-pilot": {
+      "id": "lyductrung/mt-cross-sectional-wide-pilot-ta50",
+      "title": "MT cross-sectional wide pilot ta50",
+      "notebook": "src/feature_selection/RUN__cross_sectional_panel.ipynb",
+      "results_into": "reports/feature_selection_probes",
+      "data": {
+        "id": "lyductrung/mt-panel-top150-ta50",
+        "title": "MT panel top150 h20 plus 50 ta channels",
+        "ticker": "ALL",
+        "source_dirs": [
+          "src/feature_selection",
+          "src/utils"
+        ],
+        "panel": {
+          "top_n": 150,
+          "liquidity_before": "2014-01-01",
+          "horizons": [
+            20
+          ],
+          "min_width": 5,
+          "pools": {
+            "pool__ta": [
+              "ad_direction",
+              "adosc_3_10_direction",
+              "aroon_25_direction",
+              "atr_direction",
+              "avgprice_direction",
+              "bop_direction",
+              "cci_14_direction",
+              "cci_14_extreme",
+              "close",
+              "close_bb_20_position",
+              "close_dema_100_200_bars_since_crossover",
+              "close_dema_100_200_crossover_dn",
+              "close_dema_100_200_crossover_up",
+              "close_dema_100_200_direction",
+              "close_dema_50_100_bars_since_crossover",
+              "close_dema_50_100_crossover_dn",
+              "close_dema_50_100_crossover_up",
+              "close_dema_50_100_direction",
+              "close_dema_50_200_bars_since_crossover",
+              "close_dema_50_200_crossover_dn",
+              "close_dema_50_200_crossover_up",
+              "close_dema_50_200_direction",
+              "close_ema_100_200_direction",
+              "close_ema_50_100_direction",
+              "close_ema_50_200_direction",
+              "close_gt_dema_100",
+              "close_gt_dema_200",
+              "close_gt_dema_50",
+              "close_kama_100_200_direction",
+              "close_kama_50_100_direction"
+            ]
+          }
+        }
+      },
+      "parameters": {
+        "TICKER": "ALL",
+        "TARGET": "cs_rank_20day",
+        "HORIZON": 20,
+        "LOOKBACK": 20,
+        "DEVICE": "cuda",
+        "DESIGN_DTYPE": "float64",
+        "MIN_IC_WIDTH": 5,
+        "RUN_STABILITY": true,
+        "RUN_NULL": false,
+        "N_NULL": 0,
+        "HOLDOUT_START": null,
+        "REPORT_ROOT": "reports/feature_selection_probes",
+        "NOTES": "TODO PRF-9, memory pilot ATTEMPT 2 - 90 pool__basic + 30 pool__ta = 120 channels. ATTEMPT 1 at 140 channels FAILED, and it failed on the wall nobody predicted: host RAM peaked at 24.5 GB and SURVIVED, while XGBoost died on VRAM inside XGBoosterPredictFromDMatrix - free 3.00 GB, requested 3.15 GB on a 14.6 GiB T4. The allocation is xgb_shap's SHAP contributions, (n_rows, design_cols+1), and design_cols is channels x 6 window stats - so it scales with the widening exactly. 120 channels puts that request at ~2.7 GB against a smaller torch footprint. LABEL-FREE prune as before (711 -> 405 -> 30). NO NULL: the measurement is whether it fits and whether any pool__ta channel survives selection at all."
       }
     }
   }
